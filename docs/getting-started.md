@@ -8,7 +8,7 @@ description: Install the ForkLaunch CLI, scaffold your first application, and bu
 
 This guide walks you through installing ForkLaunch, creating an application, and building a working GET and POST endpoint you can test locally. By the end you'll have a running service in Docker with a curl-able API — the full ForkLaunch core loop in one pass.
 
-<!--You can build and run applications locally without an account.--> To deploy to the ForkLaunch platform and access features such as releases and deployments, you will need to log in.
+You can build and run applications locally without an account. To deploy to the ForkLaunch platform and access features such as releases and deployments, you will need to log in.
 
 ## Prerequisites
 
