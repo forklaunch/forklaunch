@@ -52,7 +52,7 @@ This updates artifacts (manifest, docker-compose, workspace, tsconfig) to includ
 
 | Option | Short | Description | Valid Values |
 | :----- | :---- | :---------- | :----------- |
-| `--path` | `-p` | The application path | Any valid directory path |
+| `--path` | `-p` | The application path | Any valid directory path that contains /modules |
 | `--prompts` | `-P` | JSON object with pre-provided answers for worker options (see init options) | JSON string |
 
 ### Init Command Options
@@ -63,6 +63,7 @@ This updates artifacts (manifest, docker-compose, workspace, tsconfig) to includ
 | `--database` | `-d` | The database to use (for database workers) | `postgresql`, `mysql`, `mariadb`, `mssql`, `mongodb`, `libsql`, `sqlite`, `better-sqlite` |
 | `--path` | `-p` | The application path to initialize the worker in | Any valid directory path |
 | `--description` | `-D` | The description of the worker | Any string |
+| `--mappers` |  | Generate mapper files for entity/DTO transformation | Flag (no value) |
 | `--dryrun` | `-n` | Dry run the command | Flag (no value) |
 
 ### Worker Aliases
@@ -134,16 +135,16 @@ A worker follows the standard ForkLaunch service structure:
 
 ```bash
 # Basic database worker
-forklaunch init worker email-processor --type database --database postgresql
+forklaunch init worker email-processor --path ./my-app/src/modules --type database --database postgresql
 
 # Redis worker for real-time tasks
-forklaunch init worker notification-worker --type redis
+forklaunch init worker notification-worker --path ./my-app/src/modules --type redis
 
 # BullMQ worker with advanced features
-forklaunch init worker scheduled-jobs --type bullmq
+forklaunch init worker scheduled-jobs --path ./my-app/src/modules --type bullmq
 
 # Kafka worker for event streaming
-forklaunch init worker analytics-consumer --type kafka
+forklaunch init worker analytics-consumer --path ./my-app/src/modules --type kafka
 
 # Custom path and description
 forklaunch init worker background-tasks --path ./workers --description "Background task processor"

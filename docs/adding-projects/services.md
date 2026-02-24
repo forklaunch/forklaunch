@@ -53,13 +53,13 @@ This updates artifacts (manifest, docker-compose, workspace, SDK, tsconfig) to i
 
 ```bash
 # Basic service (see dice roll example)
-forklaunch init service roll-dice-svc --database postgresql
+forklaunch init service roll-dice-svc --path ./my-app/src/modules --database postgresql
 
 # Service with Redis cache
-forklaunch init service game-stats-svc --database postgresql --infrastructure redis
+forklaunch init service game-stats-svc --path ./my-app/src/modules --database postgresql --infrastructure redis
 
 # Service with multiple infrastructure
-forklaunch init service file-upload-svc --database postgresql --infrastructure redis s3
+forklaunch init service file-upload-svc --path ./my-app/src/modules --database postgresql --infrastructure redis s3
 
 # Custom path and description
 forklaunch init service user-management --path ./user-svc --description "User management service"
@@ -87,6 +87,7 @@ The `service` command has several aliases for convenience:
 | `--infrastructure` | `-i` | Add optional infrastructure (can specify multiple) | `redis`, `s3` |
 | `--path` | `-p` | The path to initialize the service in | Any valid directory path |
 | `--description` | `-D` | The description of the service | Any string |
+| `--mappers` |  | Generate mapper files for entity/DTO transformation | Flag (no value) |
 | `--dryrun` | `-n` | Dry run the command | Flag (no value) |
 
 ### Sync Command Options

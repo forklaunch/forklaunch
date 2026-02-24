@@ -86,16 +86,16 @@ Additionally, the router will edit the following files in the service:
 
 ```bash
 # Basic router in current service
-forklaunch init router products
+forklaunch init router products --path ./my-app/src/modules/my-service
 
 # Router in specific service with path
-forklaunch init router users --path ./user-service
+forklaunch init router users --path ./my-app/src/modules/user-service
 
 # Router with Redis infrastructure
-forklaunch init router orders --path ./commerce-service --infrastructure redis
+forklaunch init router orders --path ./my-app/src/modules/commerce-service --infrastructure redis
 
 # Router with multiple infrastructure
-forklaunch init router files --path ./storage-service --infrastructure redis s3
+forklaunch init router files --path ./my-app/src/modules/storage-service --infrastructure redis s3
 ```
 
 ### Next Steps

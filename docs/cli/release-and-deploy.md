@@ -20,23 +20,35 @@ ForkLaunch provides simple CLI commands to release and deploy your applications 
 
 ## Environment Variables
 
-The CLI supports configuration via environment variables:
+The CLI supports configuration via environment variables.
 
 | Variable | Purpose | Default | Example |
 |----------|---------|---------|---------|
-| `FORKLAUNCH_API_URL` | Platform API endpoint | `https://api.forklaunch.com` | `http://localhost:3001/api/v1` |
-| `FORKLAUNCH_TOKEN` | Auth token (from login) | None | `eyJ0eXAiOiJKV1...` |
+| `FORKLAUNCH_PLATFORM_MANAGEMENT_API_URL` | Platform management API base URL | Installed: `https://platform.forklaunch.com`<br/>Dev build: `http://localhost:8004` | `https://platform.forklaunch.com` |
+| `FORKLAUNCH_IAM_API_URL` | IAM API base URL (used for token refresh) | Installed: `https://iam.forklaunch.com`<br/>Dev build: `http://localhost:8000` | `https://iam.forklaunch.com` |
+| `FORKLAUNCH_PLATFORM_UI_URL` | Platform UI base URL (links in CLI output) | Installed: `https://forklaunch.com`<br/>Dev build: `http://localhost:3001` | `https://forklaunch.com` |
+| `FORKLAUNCH_HMAC_SECRET` | Use HMAC auth mode (CI/CD) instead of user login | None | `super-secret` |
+
+**Auth token**
+
+- For interactive use, `forklaunch login` stores credentials in `~/.forklaunch/token` (you typically do not set a token env var manually).
 
 **Usage:**
 ```bash
 # Point to local development platform
-export FORKLAUNCH_API_URL=http://localhost:3001/api/v1
+export FORKLAUNCH_PLATFORM_MANAGEMENT_API_URL=http://localhost:8004
+export FORKLAUNCH_IAM_API_URL=http://localhost:8000
+export FORKLAUNCH_PLATFORM_UI_URL=http://localhost:3001
 
 # Point to staging platform
-export FORKLAUNCH_API_URL=https://staging-api.forklaunch.io
+export FORKLAUNCH_PLATFORM_MANAGEMENT_API_URL=https://staging-platform.forklaunch.io
+export FORKLAUNCH_IAM_API_URL=https://staging-iam.forklaunch.io
+export FORKLAUNCH_PLATFORM_UI_URL=https://staging.forklaunch.io
 
 # Point to self-hosted enterprise platform
-export FORKLAUNCH_API_URL=https://forklaunch.company.com/api
+export FORKLAUNCH_PLATFORM_MANAGEMENT_API_URL=https://forklaunch.company.com
+export FORKLAUNCH_IAM_API_URL=https://iam.forklaunch.company.com
+export FORKLAUNCH_PLATFORM_UI_URL=https://forklaunch.company.com
 ```
 
 ---
@@ -100,20 +112,30 @@ forklaunch release create --version 1.0.0
 ```
 
 This will:
+- Sync projects with your manifest (non-interactive)
 - Auto-detect git commit and branch
 - Export OpenAPI specifications
 - **Auto-detect required environment variables** (scans all `registrations.ts` files)
 - Generate release manifest with env var requirements
+- Detect runtime dependencies, integrations, and service mesh connections
 - Upload to platform
 
 **Example output:**
 ```
+[INFO] Syncing projects with manifest...
+
+[OK] Sync completed - no changes detected
+
 [INFO] Creating release 1.0.0...
 
   Detecting git metadata... [OK]
 [INFO] Commit: abc12345 (main)
 [INFO] Exporting OpenAPI specifications... [OK] (2 services)
 [INFO] Detecting required environment variables... [OK] (5 variables)
+[INFO] Detecting runtime dependencies... [OK] (3 resources)
+[INFO] Detecting integrations... [OK] (1 integrations)
+[INFO] Detecting worker configurations... [OK] (1 workers)
+[INFO] Detecting service mesh connections... [OK] (2 connections)
 [INFO] Generating release manifest... [OK]
 [INFO] Uploading release to platform... [OK]
 
@@ -201,7 +223,7 @@ forklaunch openapi export [--output <directory>]
 **Options**:
 | Option | Short | Description |
 |--------|-------|-------------|
-| `--output` | `-o` | Output directory (default: `dist`) |
+| `--output` | `-o` | Output directory (default: `.forklaunch/openapi`) |
 | `--path` | `-p` | Application root path (optional) |
 
 **Example**:
@@ -213,20 +235,18 @@ forklaunch openapi export
 ```
 Exporting OpenAPI specifications...
 
-  Exporting iam-base... ✓
-  Exporting billing-base... ✓
+  - iam-base
+  - billing-base
 
-✓ Successfully exported 2 OpenAPI specification(s)
-  Output: /path/to/app/dist
+[OK] Successfully exported 2 OpenAPI specification(s)
+  Output: /path/to/app/.forklaunch/openapi
 ```
 
 **Files Created**:
 ```
-dist/
-├── iam-base/
-│   └── openapi.json
-└── billing-base/
-    └── openapi.json
+.forklaunch/openapi/
+├── iam-base/openapi.json
+└── billing-base/openapi.json
 ```
 
 ---
@@ -247,6 +267,8 @@ forklaunch release create --version <version> [options]
 | `--notes` | `-n` | Release notes (optional) |
 | `--path` | `-p` | Application root path (optional) |
 | `--dry-run` | - | Simulate without uploading |
+| `--local` | - | Package local code and upload to S3 (for CI/CD testing without GitHub) |
+| `--skip-sync` | - | Skip automatic sync of projects with manifest before creating release |
 
 **Example**:
 ```bash
@@ -275,7 +297,7 @@ Next steps:
 forklaunch release create --version 1.0.0 --dry-run
 ```
 
-Generates manifest locally at `dist/release-manifest.json` without uploading.
+Generates manifest locally at `.forklaunch/release-manifest.json` without uploading.
 
 ---
 
@@ -294,6 +316,7 @@ forklaunch deploy create --release <version> --environment <env> --region <regio
 | `--release` | `-r` | Release version to deploy (required) |
 | `--environment` | `-e` | Environment name (required) |
 | `--region` | - | AWS region (required) |
+| `--distribution-config` | - | Distribution strategy (default: `centralized`) |
 | `--path` | `-p` | Application root path (optional) |
 | `--no-wait` | - | Don't wait for deployment to complete |
 
@@ -306,8 +329,8 @@ forklaunch deploy create --release 1.0.0 --environment production --region us-ea
 ```
 Creating deployment: 1.0.0 → production (us-east-1)
 
-  Triggering deployment... ✓
-    Deployment ID: dep-abc123
+[INFO] Triggering deployment... [OK]
+[INFO] Deployment ID: dep-abc123
 
   Validating configuration...
   Provisioning database (RDS PostgreSQL db.t3.micro)...
@@ -316,20 +339,43 @@ Creating deployment: 1.0.0 → production (us-east-1)
   Configuring auto-scaling (1-2 replicas)...
   Setting up monitoring (OTEL, Prometheus, Grafana)...
 
-✓ Deployment successful! 🎉
+[OK] Operation successful!
 
-  API: https://my-app.production.forklaunch.io
-  Docs: https://my-app.production.forklaunch.io/docs
+[INFO] API: https://my-app.production.forklaunch.io
+[INFO] Docs: https://my-app.production.forklaunch.io/docs
 ```
 
 **No-Wait Mode**:
 ```bash
-forklaunch deploy create --release 1.0.0 --environment staging --no-wait
+forklaunch deploy create --release 1.0.0 --environment staging --region us-east-1 --no-wait
 ```
 
 Triggers deployment and returns immediately (check status in Platform UI).
 
 ---
+
+### forklaunch deploy destroy
+
+Destroy infrastructure for an environment and region.
+
+**Usage**:
+```bash
+forklaunch deploy destroy --environment <env> --region <region> [options]
+```
+
+**Options**:
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--environment` | `-e` | Environment name (required) |
+| `--region` | - | AWS region (required) |
+| `--mode` | - | Destroy mode: `all` (default) or `preserve-data` |
+| `--path` | `-p` | Application root path (optional) |
+| `--no-wait` | - | Don't wait for destruction to complete |
+
+**Example**:
+```bash
+forklaunch deploy destroy --environment staging --region us-east-1 --mode preserve-data
+```
 
 ## Common Workflows
 
@@ -337,7 +383,7 @@ Triggers deployment and returns immediately (check status in Platform UI).
 
 ```bash
 # 1. Init app
-forklaunch init application my-app --database postgresql --services iam
+forklaunch init application my-app --path ./my-app --database postgresql --modules iam-base
 cd my-app
 
 # 2. Integrate

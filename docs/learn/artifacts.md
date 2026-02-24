@@ -1,11 +1,21 @@
-### What Gets Created: Application Artifacts
+---
+title: Artifacts
+category: Learn
+description: Application artifacts are the configuration files ForkLaunch generates and updates when you create, change, or delete projects.
+---
 
-When you create an application, ForkLaunch creates **application artifacts** - configuration files that manage your entire application:
+## Overview
+
+When you run `forklaunch init`, `forklaunch change`, `forklaunch sync`, or `forklaunch delete`, ForkLaunch updates a set of **artifacts** — configuration files that keep your application consistent. You do not need to edit these files directly; the CLI manages them for you.
+
+## Application Artifacts
+
+When you create an application, ForkLaunch generates the following artifacts:
 
 | Artifact | Location | Purpose |
 |----------|----------|---------|
 | **Manifest** | `.forklaunch/manifest.toml` | Stores application metadata, project registry, and configuration |
-| **Docker Compose** | `docker-compose.yaml` | Defines monitoring services (Grafana, Prometheus, Loki, Tempo) |
+| **Docker Compose** | `docker-compose.yaml` | Defines containers for all services (starts with monitoring services) |
 | **Runtime Workspace** | `pnpm-workspace.yaml` or `package.json` | Package manager workspace configuration |
 | **Universal SDK** | `modules/universal-sdk/` | Structure for auto-generated API clients (created when services are added) |
 | **TypeScript Config** | `modules/tsconfig.json` | TypeScript project references (created when projects are added) |

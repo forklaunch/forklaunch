@@ -1,36 +1,27 @@
 ---
 title: Getting Started
-category: Guides
-description: Learn how to get started with ForkLaunch.
+category: Get Started
+description: Install the ForkLaunch CLI, scaffold your first application, and build your first API endpoint.
 ---
 
-# Introduction
+## Overview
 
-## Welcome to Forklaunch!
-Launch your apps faster with Forklaunch. 
+This guide walks you through installing ForkLaunch, creating an application, and building a working GET and POST endpoint you can test locally. By the end you'll have a running service in Docker with a curl-able API — the full ForkLaunch core loop in one pass.
 
-Forklaunch provides the scaffolds you need to create your next application in TypeScript. From package.jsons to tsconfigs, we are here to help you launch faster and monitor your apps as you scale your user base.
+<!--You can build and run applications locally without an account.--> To deploy to the ForkLaunch platform and access features such as releases and deployments, you will need to log in.
 
-# QuickStart
+## Prerequisites
 
-## Examples
+Before you begin, make sure you have the following installed:
 
-- **[Dice Roll Tutorial](/docs/examples/dice-roll-node-app.md)** - Complete "Hello World" example: Build a dice roll API with database persistence and statistics
+- **Node.js** version 18 or higher
+- **pnpm** version 8 or higher, or **Bun** version 1.22 or higher
+- **Git** version 2.20 or higher
+- **Docker** version 20.10 or higher — required for local development; all services run in containers by default
 
-# Prerequisites
+## Installation
 
-We're so glad you're here! Before you begin, make sure you have the following installed:
-
-- **`Node.js`** (version 18 or higher)
-- **`pnpm`** (version 8 or higher) or **`bun`** (version 1.22 or higher)
-- **`Git`** (version 2.20 or higher)
-- **`Docker`** (version 20.10 or higher)
-
-# Installation
-
-## Global Installation (Recommended)
-
-`ForkLaunch` can be installed globally using `npm`, `pnpm`, or `bun`. Open your terminal and run one of the following commands:
+Install the ForkLaunch CLI globally using your preferred package manager:
 
 <CodeTabs type="terminal">
   <Tab title="npm">
@@ -56,43 +47,145 @@ We're so glad you're here! Before you begin, make sure you have the following in
   </Tab>
 </CodeTabs>
 
-After installation, you can use `forklaunch` commands directly:
+Verify the installation:
 
 ```bash
-forklaunch init application my-app
-```
-
-## Local Development (Building from Source)
-
-If you're working off the repository and building from source, use `cargo run --release --` from the `cli` directory:
-
-```bash
-cd cli
-cargo build --release
-cargo run --release -- init application my-app
-```
-
-**Note**: The `--` separates cargo arguments from forklaunch command arguments. This is only needed when running from source.
-
-## Verification
-
-To verify your installation:
-
-```bash
-# Check installed version
 forklaunch version
 ```
 
-## Create login
+## Create Your First Application
 
-Once you have verified your installation, log in to your account to get started:
+Run `forklaunch init application` and follow the interactive prompts. The CLI will ask for your project name, output path, repo structure, database, validator, formatter, linter, HTTP framework, runtime, test framework, and optional pre-built modules. 
+
+```bash
+forklaunch init application "hello-world"
+```
+
+Once the prompts complete, ForkLaunch generates your full project structure — services, schemas, a `docker-compose.yaml` for local development, and infrastructure configuration, all wired together based on your initial input. And don't worry, you can make changes to your application anytime with the `change`, `sync`, and `delete` commands.
+
+See [CLI Reference](/docs/cli) for detailed library of commands and optional flags.
+
+## Add a Service
+
+A **service** is an independently deployable unit of your application. It owns its own routes, controllers, database connection, and Docker container. Add one now:
+
+```bash
+forklaunch init service hw-svc -p ./src/modules
+```
+
+ForkLaunch scaffolds the service directory, wires it into your application's `docker-compose.yaml`, updates the manifest workspace, configs, and SDKs, and sets up the folder structure you'll work in next.
+
+## Add a Router
+
+A **router** defines a set of related endpoints within a service. Routers live inside a service and keep your API surface organized as your application grows. Add one to `hw-svc`:
+
+```bash
+forklaunch init router hw-rtr -p ./src/modules/hw-svc
+```
+
+This generates several files, two of which you'll edit in the next step:
+
+- `src/modules/hw-svc/api/controllers/hw-rtr.controllers.ts` — where your endpoint handlers live
+- `src/modules/hw-svc/api/routes/hw-rtr.routes.ts` — where your routes are registered
+
+## Write Your First Endpoints
+
+Open `hw-rtr.controllers.ts` and replace its contents with the following:
+
+```typescript
+// GET endpoint — returns a hello world message
+export const hwRtrGet = handlers.get(
+  schemaValidator,
+  '/',
+  {
+    name: 'Hello World Get',
+    summary: 'Returns a hello world message',
+    responses: {
+      200: HelloWorldResponseSchema
+    }
+  },
+  async (req, res) => {
+    res.status(200).json({
+      message: 'hello, world!'
+    });
+  }
+);
+
+// POST endpoint — returns a hello world message
+export const hwRtrPost = handlers.post(
+  schemaValidator,
+  '/',
+  {
+    name: 'Hello World Post',
+    summary: 'Accepts a request and returns a hello world message',
+    body: HelloWorldRequestSchema,
+    responses: {
+      200: HelloWorldResponseSchema
+    }
+  },
+  async (req, res) => {
+    res.status(200).json({
+      message: 'hello, world!'
+    });
+  }
+);
+```
+
+<!-- TBD: The schemas (`HelloWorldRequestSchema`, `HelloWorldResponseSchema`) are auto-generated by ForkLaunch from your service definition — you don't need to define them manually.-->
+
+Next, open `hw-rtr.routes.ts` and register the routes:
+
+```typescript
+export const hwRtrGetRoute = hwRtrRouter.get('/', hwRtrGet);
+export const hwRtrPostRoute = hwRtrRouter.post('/', hwRtrPost);
+```
+
+## Start Local Development
+
+Install dependencies and start the dev server:
+
+```bash
+pnpm install && pnpm dev
+```
+
+ForkLaunch starts all services via Docker Compose with hot reload enabled. You should see your `hw-svc` service come up in the output.
+
+## Test Your Endpoints
+
+Once the services are running, test your endpoints with curl:
+<!-- TBD
+```bash
+# GET
+curl [PLACEHOLDER: local URL and port]/hw-rtr
+
+# POST
+curl -X POST [PLACEHOLDER: local URL and port]/hw-rtr \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+-->
+Both should return:
+
+```json
+{ "message": "hello, world!" }
+```
+
+Your OpenAPI documentation is also live at `[PLACEHOLDER: docs URL]` — generated automatically from your endpoint definitions, no manual setup required.
+
+## Log In to the Platform
+
+When you're ready to deploy, log in to enable platform features:
+
 ```bash
 forklaunch login
 ```
 
-# Next Steps
+ForkLaunch runs fully locally without an account. Login is only required when you're ready to deploy.
 
-- **[Creating an Application](/docs/creating-an-application.md)** - Create your first application
-- **[Adding Projects](/docs/adding-projects.md)** - Learn how to add services, workers, and libraries
-- **[CLI Reference](/docs/cli.md)** - Complete command reference
+## Next Steps
 
+- [Creating an Application](/docs/creating-an-application) — Full step-by-step walkthrough of building a multi-service system
+- [Adding Projects](/docs/adding-projects) — Add services, workers, libraries, and routers
+- [Local Development](/docs/local-development) — Understand the local dev environment
+- [CLI Reference](/docs/cli) — Complete command reference with all flags
+- [Hello World Example](/docs/examples/hello-world) — The complete example from this guide with a full walkthrough

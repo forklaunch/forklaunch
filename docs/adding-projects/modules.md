@@ -126,19 +126,19 @@ Check the generated `.env.example` file for complete variable lists.
 #### Adding a Billing Module
 ```bash
 # Interactive mode
-forklaunch init module
+forklaunch init module --path ./my-app
 
 # Direct specification
-forklaunch init module billing --module billing-stripe --database postgresql
+forklaunch init module billing --path ./my-app --module billing-stripe --database postgresql
 ```
 
 #### Adding an IAM Module  
 ```bash
 # Base IAM with JWT
-forklaunch init module auth --module iam-base --database postgresql
+forklaunch init module auth --path ./my-app --module iam-base --database postgresql
 
 # BetterAuth implementation
-forklaunch init module auth --module iam-better-auth --database postgresql
+forklaunch init module auth --path ./my-app --module iam-better-auth --database postgresql
 ```
 
 ### Next Steps

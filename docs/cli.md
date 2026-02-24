@@ -73,10 +73,11 @@ For detailed information about specific commands:
 
 **Create New Project:**
 ```bash
-forklaunch init my-app --database postgresql --runtime node
+forklaunch init application my-app --path ./my-app --database postgresql --runtime node
 ```
 
 **Add Components:**
+You can use `forklaunch init` or `forklaunch add` to add projects to your application:
 ```bash
 forklaunch add service billing --database postgresql
 forklaunch add worker email-processor --type bullmq

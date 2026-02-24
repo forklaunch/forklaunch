@@ -86,16 +86,16 @@ A minimal library will have the following structure:
 
 ```bash
 # Basic library (shared utilities for dice roll app)
-forklaunch init library dice-utils
+forklaunch init library dice-utils --path ./my-app/src/modules
 
 # Library with custom description
-forklaunch init library validation --description "Input validation utilities"
+forklaunch init library validation --path ./my-app/src/modules --description "Input validation utilities"
 
 # Library in specific directory
 forklaunch init library api-client --path ./shared
 
 # Statistics calculation library
-forklaunch init library stats-helpers --description "Statistical calculation utilities"
+forklaunch init library stats-helpers --path ./my-app/src/modules --description "Statistical calculation utilities"
 ```
 
 For a complete step-by-step example, see the [Dice Roll Example](/docs/examples/dice-roll-node-app.md).

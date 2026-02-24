@@ -14,6 +14,7 @@ forklaunch init application
 
 # Or with flags (for scripts/AIs)
 forklaunch init application my-app \
+  --path ./my-app \
   --database postgresql \
   --validator zod \
   --http-framework express \

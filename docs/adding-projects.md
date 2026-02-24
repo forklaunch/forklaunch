@@ -18,11 +18,11 @@ Preconfigured, production-ready services that provide common functionality:
 forklaunch init module
 
 # Add billing module
-forklaunch init module billing --module billing-stripe --database postgresql
+forklaunch init module billing --path ./my-app --module billing-stripe --database postgresql
 
 # Add IAM module
-forklaunch init module auth --module iam-base --database postgresql
-forklaunch init module auth --module iam-better-auth --database postgresql
+forklaunch init module auth --path ./my-app --module iam-base --database postgresql
+forklaunch init module auth --path ./my-app --module iam-better-auth --database postgresql
 ```
 
 ### Services
@@ -30,13 +30,13 @@ Self-contained API services that handle specific business domains:
 
 ```bash
 # Basic service
-forklaunch init service users --database postgresql
+forklaunch init service users --path ./my-app/src/modules --database postgresql
 
 # Service with Redis cache
-forklaunch init service products --database postgresql --infrastructure redis
+forklaunch init service products --path ./my-app/src/modules --database postgresql --infrastructure redis
 
 # Service with multiple infrastructure
-forklaunch init service files --database postgresql --infrastructure redis s3
+forklaunch init service files --path ./my-app/src/modules --database postgresql --infrastructure redis s3
 ```
 
 ### Workers
@@ -44,16 +44,16 @@ Background processes for asynchronous job processing:
 
 ```bash
 # Database worker
-forklaunch init worker email-processor --type database --database postgresql
+forklaunch init worker email-processor --path ./my-app/src/modules --type database --database postgresql
 
 # Redis worker
-forklaunch init worker notification-worker --type redis
+forklaunch init worker notification-worker --path ./my-app/src/modules --type redis
 
 # BullMQ worker
-forklaunch init worker scheduled-jobs --type bullmq
+forklaunch init worker scheduled-jobs --path ./my-app/src/modules --type bullmq
 
 # Kafka worker
-forklaunch init worker analytics-consumer --type kafka
+forklaunch init worker analytics-consumer --path ./my-app/src/modules --type kafka
 ```
 
 ### Libraries
@@ -61,10 +61,10 @@ Shared code and utilities used across services and workers:
 
 ```bash
 # Basic library
-forklaunch init library utils
+forklaunch init library utils --path ./my-app/src/modules
 
 # Library with description
-forklaunch init library validation --description "Input validation utilities"
+forklaunch init library validation --path ./my-app/src/modules --description "Input validation utilities"
 ```
 
 ### Routers
@@ -72,10 +72,10 @@ Add new routes and controllers to existing services:
 
 ```bash
 # Basic router
-forklaunch init router products
+forklaunch init router products --path ./my-app/src/modules/my-service
 
 # Router with infrastructure
-forklaunch init router orders --path ./commerce-service --infrastructure redis
+forklaunch init router orders --path ./my-app/src/modules/commerce-service --infrastructure redis
 ```
 
 ### Definitions
