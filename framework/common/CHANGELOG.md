@@ -1,5 +1,11 @@
 # @forklaunch/common
 
+## 0.6.29
+
+### Patch Changes
+
+- WS actually working probably, and package bumps
+
 ## 0.6.28
 
 ### Patch Changes

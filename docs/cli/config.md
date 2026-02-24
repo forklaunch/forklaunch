@@ -6,9 +6,7 @@ description: Learn how to use the forklaunch config command.
 
 ## Overview
 
-THIS COMMAND IS CURRENTLY UNDER DEVELOPMENT AND IS NOT YET AVAILABLE.
-
-The `config` command manages application configuration between your local environment and the ForkLaunch platform. You must be authenticate to use this command.
+The `config` command pulls and pushes environment configuration between your local `.env` files and the ForkLaunch platform. You must be authenticated to use this command.
 
 ## Usage
 
@@ -18,32 +16,87 @@ forklaunch config [COMMAND]
 
 ### Available Commands
 
-| Command     | Description                          | Options                                 |
-| :---------- | :----------------------------------- | :-------------------------------------- |
-| `pull <id>` | Retrieves a configuration from the forklaunch platform | `-o, --output` - Path to the configuration file to push |
-| `push <id>` | Push a configuration to the forklaunch platform | `-i, --input` - Path to the configuration file to push |
+| Command | Description |
+| :------ | :---------- |
+| `pull`  | Pull environment variables from the platform to a local `.env` file |
+| `push`  | Push a local `.env` file to the platform |
 
-### Examples
+---
+
+### `config pull`
 
 ```bash
-# Pull configuration to working directory
-forklaunch config pull my-config-id
-
-# Pull configuration to specific file
-forklaunch config pull my-config-id --output ./config/.env.prod
-
-# Push configuration from working directory
-forklaunch config push my-config-id
-
-# Push configuration from specific file
-forklaunch config push my-config-id --input ./config/.env.prod
+forklaunch config pull -a <APP_ID> -r <REGION> -e <ENV> [-s <SERVICE>] [-o <FILE>]
 ```
 
-### Notes
+| Flag | Short | Required | Description |
+| :--- | :---- | :------- | :---------- |
+| `--app` | `-a` | Yes | Application ID |
+| `--region` | `-r` | Yes | Region (e.g. `us-east-1`) |
+| `--environment` | `-e` | Yes | Environment name (e.g. `production`, `staging`) |
+| `--service` | `-s` | No | Filter to a specific service or worker name |
+| `--output` | `-o` | No | Output file path (defaults to `<environment>.env`) |
 
-- Configuration IDs must be unique within your platform account
-- Default configuration locations are determined by your project structure
-- Use different IDs for different environments (development, staging, production)
+#### Examples
+
+```bash
+# Pull production config to production.env
+forklaunch config pull -a app-123 -r us-east-1 -e production
+
+# Pull staging config for a specific service
+forklaunch config pull -a app-123 -r us-east-1 -e staging -s billing-service
+
+# Pull to a custom file path
+forklaunch config pull -a app-123 -r us-east-1 -e production -o ./config/.env.prod
+```
+
+---
+
+### `config push`
+
+```bash
+forklaunch config push -a <APP_ID> -r <REGION> -e <ENV> [-i <FILE>]
+```
+
+| Flag | Short | Required | Description |
+| :--- | :---- | :------- | :---------- |
+| `--app` | `-a` | Yes | Application ID |
+| `--region` | `-r` | Yes | Region (e.g. `us-east-1`) |
+| `--environment` | `-e` | Yes | Environment name (e.g. `production`, `staging`) |
+| `--input` | `-i` | No | Input file path (defaults to `<environment>.env`) |
+
+#### Examples
+
+```bash
+# Push from production.env
+forklaunch config push -a app-123 -r us-east-1 -e production
+
+# Push from a custom file path
+forklaunch config push -a app-123 -r us-east-1 -e production -i ./config/.env.prod
+```
+
+---
+
+## Environment File Format
+
+The `.env` file uses comment headers to separate variables by source. Application-level variables appear under `# application`, while service- and worker-scoped variables appear under headers with the component name and ID.
+
+```env
+# application
+DATABASE_URL=postgres://...
+REDIS_URL=redis://...
+
+# billing-service (svc-id-123)
+STRIPE_KEY=sk_test_...
+WEBHOOK_SECRET=whsec_...
+
+# email-worker (wkr-id-456)
+SMTP_HOST=smtp.example.com
+```
+
+When pushing, the comment headers determine which service or worker each variable belongs to. The `(id)` portion is used to resolve the target entity.
+
+---
 
 ## Troubleshooting
 
@@ -52,25 +105,26 @@ forklaunch config push my-config-id --input ./config/.env.prod
 - Run `forklaunch login` to authenticate
 - Check session status with `forklaunch whoami`
 
-**Error: "Configuration not found"**
+**Error: "Application not found"**
 
-- Verify the configuration ID exists on the platform
-- Check spelling and case sensitivity
+- Verify the application ID is correct
+- Ensure you have access to the application in your organization
 
-**Error: "Permission denied"**
+**Error: "Environment not found"**
 
-- Ensure you have access to the configuration
-- Contact your organization admin if using team configurations
+- Verify the environment name (e.g. `production`, `staging`, `development`)
+- Check that the environment exists for the given application
+
+**Error: "Failed to pull/push config"**
+
+- Check internet connectivity
+- Ensure the platform API is reachable
+- Verify your authentication token hasn't expired
 
 **Error: "File not found" (push)**
 
 - Verify the input file path exists
 - Check file permissions and accessibility
-
-**Configuration conflicts**
-
-- Review environment-specific configurations
-- Ensure configuration IDs are unique per environment
 
 ## Related Commands
 

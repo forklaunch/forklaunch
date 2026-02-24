@@ -778,6 +778,7 @@ export function serveExpress(
 
         redirect(arg1: number | string, arg2?: string) {
           let code = 302;
+          // eslint-disable-next-line no-useless-assignment
           let location = '';
 
           if (typeof arg1 === 'number') {

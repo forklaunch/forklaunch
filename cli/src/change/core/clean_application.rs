@@ -2,7 +2,7 @@ use std::{io::Write, path::Path, process::Command};
 
 use anyhow::{Result, anyhow};
 use dialoguer::Confirm;
-use termcolor::{Color, ColorSpec, StandardStream, WriteColor};
+use termcolor::{StandardStream, WriteColor};
 
 use crate::constants::Runtime;
 
@@ -26,9 +26,7 @@ pub(crate) fn clean_application(
             Runtime::Node => "pnpm",
             Runtime::Bun => "bun",
         };
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-        writeln!(stdout, "Running {} clean:purge...", command)?;
-        stdout.reset()?;
+        log_warn!(stdout, "Running {} clean:purge...", command);
         let _ = Command::new(command)
             .arg("clean:purge")
             .current_dir(base_path)

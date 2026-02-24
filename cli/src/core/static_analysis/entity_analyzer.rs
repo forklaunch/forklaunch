@@ -116,7 +116,6 @@ impl EntityAnalyzer {
         prop_def: &PropertyDefinition,
         _source: &str,
     ) -> Option<EntityProperty> {
-        // Get property name
         let name = match &prop_def.key {
             PropertyKey::StaticIdentifier(id) => id.name.as_str().to_string(),
             _ => return None,
@@ -125,7 +124,6 @@ impl EntityAnalyzer {
         // Analyze decorators to determine if this is a relation
         let (relation_type, is_nullable) = Self::analyze_decorators(&prop_def.decorators);
 
-        // Extract type information from type annotation or initializer
         let (type_name, is_collection) = if let Some(type_annotation) = &prop_def.type_annotation {
             Self::extract_type_info(&type_annotation.type_annotation)
         } else if let Some(value) = &prop_def.value {

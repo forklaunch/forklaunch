@@ -3,7 +3,7 @@ use std::io::Write;
 use anyhow::{Context, Result, bail};
 use clap::ArgMatches;
 use rustyline::{Editor, history::DefaultHistory};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use crate::{
     constants::ERROR_FAILED_TO_PARSE_MANIFEST,
@@ -49,12 +49,7 @@ pub(crate) fn sync_library_with_cache(
             .iter()
             .find(|p| p.name == library_name)
         {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-            writeln!(
-                stdout,
-                "[WARN] Library directory not found, but exists in manifest"
-            )?;
-            stdout.reset()?;
+            log_warn!(stdout, "[WARN] Library directory not found, but exists in manifest");
 
             let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
             let should_cleanup = prompt_for_confirmation(
@@ -66,9 +61,7 @@ pub(crate) fn sync_library_with_cache(
             )?;
 
             if !should_cleanup {
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-                writeln!(stdout, "[INFO] Skipping cleanup")?;
-                stdout.reset()?;
+                log_warn!(stdout, "[INFO] Skipping cleanup");
                 bail!("Library directory not found: {}", library_path.display());
             }
 
@@ -89,18 +82,10 @@ pub(crate) fn sync_library_with_cache(
                 stdout,
             )?;
 
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "[OK] Removed orphaned library '{}'", library_name)?;
-            stdout.reset()?;
+            log_ok!(stdout, "[OK] Removed orphaned library '{}'", library_name);
             return Ok(());
         } else {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
-            writeln!(
-                stdout,
-                "[ERROR] Library directory not found: {}",
-                library_path.display()
-            )?;
-            stdout.reset()?;
+            log_error!(stdout, "[ERROR] Library directory not found: {}", library_path.display());
             bail!("Library directory not found: {}", library_path.display());
         }
     }
@@ -110,9 +95,7 @@ pub(crate) fn sync_library_with_cache(
         .iter()
         .any(|p| p.name == library_name)
     {
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-        writeln!(stdout, "[INFO] Library '{}' already synced", library_name)?;
-        stdout.reset()?;
+        log_ok!(stdout, "[INFO] Library '{}' already synced", library_name);
         return Ok(());
     }
 
@@ -142,13 +125,7 @@ pub(crate) fn sync_library_with_cache(
         stdout,
     )?;
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-    writeln!(
-        stdout,
-        "[OK] Library '{}' synced successfully",
-        library_name
-    )?;
-    stdout.reset()?;
+    log_ok!(stdout, "[OK] Library '{}' synced successfully", library_name);
 
     Ok(())
 }
@@ -213,7 +190,6 @@ impl crate::CliCommand for LibrarySyncCommand {
             &mut stdout,
         )?;
 
-        // Write the updated manifest back to cache
         rendered_templates_cache.insert(
             manifest_path.to_string_lossy().to_string(),
             crate::core::rendered_template::RenderedTemplate {
@@ -224,7 +200,6 @@ impl crate::CliCommand for LibrarySyncCommand {
             },
         );
 
-        // Collect and write all rendered templates (including manifest)
         let rendered_templates: Vec<_> = rendered_templates_cache
             .drain()
             .map(|(_, template)| template)

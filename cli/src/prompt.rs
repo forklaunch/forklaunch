@@ -9,7 +9,7 @@ use rustyline::{
     history::DefaultHistory,
 };
 use rustyline_derive::{Helper, Highlighter, Hinter, Validator};
-use termcolor::{Color, ColorSpec, StandardStream, WriteColor};
+use termcolor::{StandardStream, WriteColor};
 
 #[derive(Helper, Hinter, Validator, Highlighter)]
 pub(crate) struct ArrayCompleter {
@@ -129,10 +129,7 @@ where
             break Ok(input);
         }
 
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
-        write!(stdout, "{}", error_message(&input))?;
-        stdout.reset()?;
-        writeln!(stdout)?;
+        log_error!(stdout, "{}", error_message(&input));
 
         if !continue_loop {
             bail!(error_message(&input));
@@ -278,27 +275,22 @@ where
     if let Some(project_prompts) = prompts_map.get(project_name) {
         if let Some(pre_answer) = project_prompts.get(matches_key) {
             if validator(pre_answer) {
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-                writeln!(
+                log_ok!(
                     stdout,
                     "Using pre-provided answer for {}: {}",
                     matches_key, pre_answer
-                )?;
-                stdout.reset()?;
+                );
                 return Ok(pre_answer.clone());
             } else {
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-                writeln!(
+                log_warn!(
                     stdout,
                     "Pre-provided answer '{}' for {} is invalid, prompting for input",
                     pre_answer, matches_key
-                )?;
-                stdout.reset()?;
+                );
             }
         }
     }
 
-    // Fall back to normal prompting
     prompt_with_validation(
         line_editor,
         stdout,
@@ -324,18 +316,15 @@ pub(crate) fn prompt_without_validation_with_answers(
     // Check if we have a pre-provided answer for this project and field
     if let Some(project_prompts) = prompts_map.get(project_name) {
         if let Some(pre_answer) = project_prompts.get(matches_key) {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(
+            log_ok!(
                 stdout,
                 "Using pre-provided answer for {}: {}",
                 matches_key, pre_answer
-            )?;
-            stdout.reset()?;
+            );
             return Ok(pre_answer.clone());
         }
     }
 
-    // Fall back to normal prompting
     prompt_without_validation(
         line_editor,
         stdout,
@@ -360,14 +349,12 @@ pub(crate) fn prompt_comma_separated_list_with_answers(
     // Check if we have a pre-provided answer for this project and field
     if let Some(project_prompts) = prompts_map.get(project_name) {
         if let Some(pre_answer) = project_prompts.get(matches_key) {
-            // Parse comma-separated values
             let values: Vec<String> = pre_answer
                 .split(',')
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
                 .collect();
 
-            // Validate that all values are in valid_options
             let invalid_values: Vec<&String> = values
                 .iter()
                 .filter(|v| !valid_options.contains(&v.as_str()))
@@ -379,7 +366,6 @@ pub(crate) fn prompt_comma_separated_list_with_answers(
         }
     }
 
-    // Fall back to normal prompting
     prompt_comma_separated_list(
         line_editor,
         matches_key,

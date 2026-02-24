@@ -2,7 +2,7 @@ use std::{io::Write, thread::sleep, time::Duration};
 
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
-use termcolor::{Color, ColorSpec, StandardStream, WriteColor};
+use termcolor::{Color, StandardStream, WriteColor};
 
 use crate::core::hmac::AuthMode;
 
@@ -16,6 +16,7 @@ pub(crate) struct DeploymentStatus {
     #[allow(dead_code)]
     pub(crate) completed_at: Option<String>,
     pub(crate) endpoints: Option<DeploymentEndpoints>,
+    #[serde(rename = "errorMessage")]
     pub(crate) error: Option<String>,
 }
 
@@ -74,9 +75,7 @@ pub(crate) fn stream_deployment_status(
 
         match status.status.as_str() {
             "completed" => {
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true))?;
-                writeln!(stdout, "\n[OK] Operation successful!")?;
-                stdout.reset()?;
+                log_header!(stdout, Color::Green, "\n[OK] Operation successful!");
 
                 if let Some(endpoints) = status.endpoints {
                     writeln!(stdout)?;
@@ -90,14 +89,19 @@ pub(crate) fn stream_deployment_status(
                 break;
             }
             "failed" => {
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)).set_bold(true))?;
-                writeln!(stdout, "\n[ERROR] Operation failed")?;
-                stdout.reset()?;
+                log_header!(stdout, Color::Red, "\n[ERROR] Operation failed");
 
                 if let Some(error) = status.error {
                     writeln!(stdout, "[ERROR] Error: {}", error)?;
                 }
                 bail!("Operation failed");
+            }
+            "cancelled" => {
+                log_header!(stdout, Color::Yellow, "\n[CANCELLED] Deployment was cancelled");
+                if let Some(error) = status.error {
+                    writeln!(stdout, "[INFO] {}", error)?;
+                }
+                bail!("Deployment cancelled");
             }
             _ => {
                 sleep(Duration::from_secs(3));
@@ -109,7 +113,6 @@ pub(crate) fn stream_deployment_status(
 }
 
 fn display_phase_update(phase: &str, stdout: &mut StandardStream) -> Result<()> {
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
     let message = match phase {
         "validating" => "  Validating configuration...",
         "provisioning_database" => "  Provisioning database (RDS PostgreSQL db.t3.micro)...",
@@ -126,7 +129,6 @@ fn display_phase_update(phase: &str, stdout: &mut StandardStream) -> Result<()> 
         "destroying_database" => "  Destroying database...",
         _ => phase,
     };
-    writeln!(stdout, "{}", message)?;
-    stdout.reset()?;
+    log_info!(stdout, "{}", message);
     Ok(())
 }

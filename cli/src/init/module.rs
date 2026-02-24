@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use convert_case::{Case, Casing};
 use rustyline::{Editor, history::DefaultHistory};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use super::service::generate_service_package_json;
 use crate::{
@@ -389,13 +389,11 @@ impl CliCommand for ModuleCommand {
                 &mut service_data,
                 dryrun,
             )?;
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(
+            log_ok!(
                 stdout,
                 "{} initialized successfully!",
                 get_service_module_name(&module)
-            )?;
-            stdout.reset()?;
+            );
             format_code(&base_path, &service_data.runtime.parse()?);
         }
 

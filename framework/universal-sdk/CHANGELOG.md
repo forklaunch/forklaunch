@@ -1,5 +1,13 @@
 # @forklaunch/universal-sdk
 
+## 0.7.29
+
+### Patch Changes
+
+- WS actually working probably, and package bumps
+- Updated dependencies
+  - @forklaunch/common@0.6.29
+
 ## 0.7.28
 
 ### Patch Changes

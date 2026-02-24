@@ -19,10 +19,11 @@ use sync::SyncCommand;
 
 use crate::sdk::SdkCommand;
 
+mod constants;
+#[macro_use]
+mod core;
 mod change;
 mod config;
-mod constants;
-mod core;
 mod delete;
 mod depcheck;
 mod deploy;

@@ -10,7 +10,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use convert_case::{Case, Casing};
 use rustyline::{Editor, history::DefaultHistory};
 use serde_json::to_string_pretty;
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 use toml::from_str;
 
 use crate::{
@@ -104,7 +104,6 @@ fn generate_basic_service(
     };
 
     let ignore_files = vec![];
-    // Skip mappers directory if with_mappers is false
     let ignore_dirs = if !manifest_data.with_mappers {
         vec!["mappers".to_string()]
     } else {
@@ -828,9 +827,7 @@ impl CliCommand for ServiceCommand {
         .with_context(|| "Failed to create service")?;
 
         if !dryrun {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "{} initialized successfully!", service_name)?;
-            stdout.reset()?;
+            log_ok!(stdout, "{} initialized successfully!", service_name);
             format_code(&base_path, &manifest_data.runtime.parse()?);
         }
 

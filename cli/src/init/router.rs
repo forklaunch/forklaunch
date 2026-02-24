@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use convert_case::{Case, Casing};
 use rustyline::{Editor, history::DefaultHistory};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 use toml::from_str;
 
 use self::database::get_db_driver;
@@ -223,7 +223,6 @@ fn add_router_to_artifacts(
         },
     );
 
-    // Convert cache to Vec for return
     let rendered_templates: Vec<_> = rendered_templates_cache
         .drain()
         .map(|(_, template)| template)
@@ -381,9 +380,7 @@ impl CliCommand for RouterCommand {
             .with_context(|| "Failed to create router")?;
 
             if !dryrun {
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-                writeln!(stdout, "{} initialized successfully!", router_name)?;
-                stdout.reset()?;
+                log_ok!(stdout, "{} initialized successfully!", router_name);
                 format_code(&router_base_path, &manifest_data.runtime.parse()?);
             }
 

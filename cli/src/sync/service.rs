@@ -3,7 +3,7 @@ use std::{collections::HashMap, io::Write};
 use anyhow::{Context, Result, bail};
 use clap::ArgMatches;
 use rustyline::{Editor, history::DefaultHistory};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use crate::{
     constants::ERROR_FAILED_TO_PARSE_MANIFEST,
@@ -52,12 +52,7 @@ pub(crate) fn sync_service_with_cache(
             .iter()
             .find(|p| p.name == service_name)
         {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-            writeln!(
-                stdout,
-                "[WARN] Service directory not found, but exists in manifest"
-            )?;
-            stdout.reset()?;
+            log_warn!(stdout, "[WARN] Service directory not found, but exists in manifest");
 
             let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
             let should_cleanup = prompt_for_confirmation(
@@ -69,9 +64,7 @@ pub(crate) fn sync_service_with_cache(
             )?;
 
             if !should_cleanup {
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-                writeln!(stdout, "[INFO] Skipping cleanup")?;
-                stdout.reset()?;
+                log_warn!(stdout, "[INFO] Skipping cleanup");
                 bail!("Service directory not found: {}", service_path.display());
             }
 
@@ -97,18 +90,10 @@ pub(crate) fn sync_service_with_cache(
                 stdout,
             )?;
 
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "[OK] Removed orphaned service '{}'", service_name)?;
-            stdout.reset()?;
+            log_ok!(stdout, "[OK] Removed orphaned service '{}'", service_name);
             return Ok(());
         } else {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
-            writeln!(
-                stdout,
-                "[ERROR] Service directory not found: {}",
-                service_path.display()
-            )?;
-            stdout.reset()?;
+            log_error!(stdout, "[ERROR] Service directory not found: {}", service_path.display());
             bail!("Service directory not found: {}", service_path.display());
         }
     }
@@ -118,15 +103,11 @@ pub(crate) fn sync_service_with_cache(
         .iter()
         .any(|p| p.name == service_name)
     {
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-        writeln!(stdout, "[INFO] Service '{}' already synced", service_name)?;
-        stdout.reset()?;
+        log_ok!(stdout, "[INFO] Service '{}' already synced", service_name);
         return Ok(());
     }
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-    writeln!(stdout, "[INFO] Detecting configuration from files...")?;
-    stdout.reset()?;
+    log_info!(stdout, "[INFO] Detecting configuration from files...");
 
     let detected = detect_service_config(&service_path)?;
     display_detection_results(&detected, stdout)?;
@@ -171,13 +152,7 @@ pub(crate) fn sync_service_with_cache(
         stdout,
     )?;
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-    writeln!(
-        stdout,
-        "[OK] Service '{}' synced successfully",
-        service_name
-    )?;
-    stdout.reset()?;
+    log_ok!(stdout, "[OK] Service '{}' synced successfully", service_name);
 
     Ok(())
 }
@@ -240,7 +215,6 @@ impl crate::CliCommand for ServiceSyncCommand {
             &mut stdout,
         )?;
 
-        // Write the updated manifest back to cache
         rendered_templates_cache.insert(
             manifest_path.to_string_lossy().to_string(),
             crate::core::rendered_template::RenderedTemplate {
@@ -251,7 +225,6 @@ impl crate::CliCommand for ServiceSyncCommand {
             },
         );
 
-        // Collect and write all rendered templates (including manifest)
         let rendered_templates: Vec<_> = rendered_templates_cache
             .drain()
             .map(|(_, template)| template)

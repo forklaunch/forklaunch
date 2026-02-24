@@ -1,7 +1,6 @@
 use std::{collections::HashMap, path::Path};
 
 use anyhow::Result;
-use convert_case::{Case, Casing};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -115,6 +114,8 @@ pub(crate) struct EnvironmentVariableRequirement {
     pub scope_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub component: Option<EnvironmentVariableComponent>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -376,7 +377,7 @@ pub(crate) fn generate_release_manifest(
                                 .map(|router_name| {
                                     let route_file = service_path.join("api").join("routes").join(format!(
                                         "{}.routes.ts",
-                                        router_name.to_case(Case::Camel)
+                                        router_name
                                     ));
 
                                     // Parse route file to extract routes and handler→source mappings
@@ -410,7 +411,7 @@ pub(crate) fn generate_release_manifest(
                                         .collect();
 
                                     ControllerDefinition {
-                                        id: router_name.clone(),
+                                        id: format!("{}-controller", router_name.to_lowercase().trim_end_matches("controller")),
                                         name: router_name.clone(),
                                         path: format!("/{}", router_name),
                                         routes,
@@ -497,7 +498,7 @@ pub(crate) fn generate_release_manifest(
                                 .map(|router_name| {
                                     let route_file = worker_path.join("api").join("routes").join(format!(
                                         "{}.routes.ts",
-                                        router_name.to_case(Case::Camel)
+                                        router_name
                                     ));
 
                                     let (parsed_routes, handler_sources) = parse_route_file(
@@ -528,7 +529,7 @@ pub(crate) fn generate_release_manifest(
                                         .collect();
 
                                     ControllerDefinition {
-                                        id: router_name.clone(),
+                                        id: format!("{}-controller", router_name.to_lowercase().trim_end_matches("controller")),
                                         name: router_name.clone(),
                                         path: format!("/{}", router_name),
                                         routes,

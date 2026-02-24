@@ -1,12 +1,12 @@
-use std::io::Write;
-
 use anyhow::Result;
 use reqwest::{
     Method,
     blocking::{Client, Response},
 };
 use serde_json::Value;
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use std::io::Write;
+
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use super::hmac::{AuthMode, generate_hmac_auth_header};
 use super::token::{get_token, get_token_path};
@@ -22,14 +22,11 @@ pub fn make_authenticated_request(
     url: &str,
     body: Option<Value>,
 ) -> Result<Response> {
-    // First attempt
     match try_authenticated_request(method.clone(), url, body.clone(), false) {
         Ok(response) => {
             let status = response.status();
 
-            // Check if we got auth error
             if status == 401 || status == 403 {
-                // Try to refresh token and retry ONCE
                 handle_auth_failure_and_retry(method, url, body)
             } else {
                 Ok(response)
@@ -46,9 +43,7 @@ fn try_authenticated_request(
     body: Option<Value>,
     force_refresh: bool,
 ) -> Result<Response> {
-    // Get token (this will auto-refresh if expired)
     let token = if force_refresh {
-        // Delete the token file to force fresh login
         let token_path = get_token_path()?;
         if token_path.exists() {
             std::fs::remove_file(&token_path)?;
@@ -86,25 +81,14 @@ fn handle_auth_failure_and_retry(
         std::fs::remove_file(&token_path)?;
     }
 
-    // Try to get a new token (will use existing session if valid)
     match get_token() {
         Ok(_) => {
-            // Token refresh succeeded, retry the request
             try_authenticated_request(method, url, body, false)
         }
         Err(_) => {
-            // Token refresh failed, trigger auto re-login
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-            writeln!(
-                &mut stdout,
-                "\nAuthentication expired. Please log in again."
-            )?;
-            stdout.reset()?;
+            log_warn!(stdout, "\nAuthentication expired. Please log in again.");
 
-            // Trigger login flow
             crate::login::login()?;
-
-            // Retry request with new token
             try_authenticated_request(method, url, body, false)
         }
     }

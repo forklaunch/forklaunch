@@ -134,8 +134,10 @@ pub fn find_all_service_dependencies(
                 .extension()
                 .map_or(false, |ext| ext == "ts" || ext == "tsx")
                 && !e.path().to_string_lossy().contains("node_modules")
+                && !e.path().to_string_lossy().contains("/dist/")
                 && !e.path().to_string_lossy().contains(".test.")
                 && !e.path().to_string_lossy().contains(".spec.")
+                && !e.path().to_string_lossy().ends_with(".d.ts")
         })
     {
         let file_path = entry.path();

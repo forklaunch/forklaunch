@@ -545,7 +545,6 @@ export class ForklaunchExpressLikeRouter<
       const resEventHandlers: Record<string, ((...args: unknown[]) => void)[]> =
         {};
 
-      // Create mock request with all properties needed for middleware chain
       const req = {
         params: request?.params ?? {},
         query: request?.query ?? {},
@@ -556,7 +555,6 @@ export class ForklaunchExpressLikeRouter<
         originalPath: route,
         method: 'GET',
         version,
-        // Properties needed by middlewares
         schemaValidator: this.schemaValidator,
         contractDetails,
         requestSchema,
@@ -570,7 +568,6 @@ export class ForklaunchExpressLikeRouter<
         _parsedVersions: undefined as unknown
       };
 
-      // Create mock response with all properties needed for middleware chain
       const res = {
         statusCode: 200,
         status: (code: number) => {
@@ -618,7 +615,6 @@ export class ForklaunchExpressLikeRouter<
       const executeMiddlewares = request?.executeMiddlewares ?? false;
 
       if (executeMiddlewares && middlewares.length > 0) {
-        // Execute middleware chain
         const allHandlers = [...middlewares];
         let cursor = allHandlers.shift() as unknown as (
           req_: typeof req,
@@ -647,7 +643,6 @@ export class ForklaunchExpressLikeRouter<
         }
       }
 
-      // Execute controller handler
       const cHandler = controllerHandler as unknown as (
         req_: typeof req,
         resp_: typeof res,

@@ -5,7 +5,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use convert_case::{Case, Casing};
 use rustyline::{Editor, history::DefaultHistory};
 use serde_json::to_string_pretty;
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 use toml::from_str;
 
 use crate::{
@@ -364,9 +364,7 @@ impl CliCommand for LibraryCommand {
         .with_context(|| "Failed to create library")?;
 
         if !dryrun {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "{} initialized successfully!", library_name)?;
-            stdout.reset()?;
+            log_ok!(stdout, "{} initialized successfully!", library_name);
             format_code(&base_path, &manifest_data.runtime.parse()?);
         }
 
