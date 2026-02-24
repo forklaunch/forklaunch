@@ -3,7 +3,7 @@ use std::{fs::read_to_string, io::Write, path::PathBuf};
 use anyhow::{Context, Result};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use serde_json::{from_str as json_from_str, to_string_pretty};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use crate::{
     CliCommand,
@@ -165,7 +165,6 @@ impl CliCommand for ModeCommand {
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-        // Upfront validation
         let (app_root_path, existing_manifest_data) = crate::core::validate::require_manifest(matches)?;
 
         let mode_type = matches.get_one::<String>("type");
@@ -200,9 +199,7 @@ impl CliCommand for ModeCommand {
         remove_template_files(&removal_templates, dryrun, &mut stdout)?;
 
         if !dryrun {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "SDK mode changed successfully!")?;
-            stdout.reset()?;
+            log_ok!(stdout, "SDK mode changed successfully!");
         }
 
         Ok(())

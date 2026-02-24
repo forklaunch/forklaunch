@@ -1,5 +1,15 @@
 # @forklaunch/express
 
+## 0.10.6
+
+### Patch Changes
+
+- WS actually working probably, and package bumps
+- Updated dependencies
+  - @forklaunch/validator@0.10.29
+  - @forklaunch/common@0.6.29
+  - @forklaunch/core@0.18.2
+
 ## 0.10.5
 
 ### Patch Changes

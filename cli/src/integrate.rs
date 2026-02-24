@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Arg, ArgMatches, Command};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 use toml::to_string_pretty;
 
 use crate::{
@@ -58,11 +58,9 @@ impl CliCommand for IntegrateCommand {
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-        // Upfront validation
         let token = crate::core::validate::require_auth()?;
         let (app_root, _manifest) = crate::core::validate::require_manifest(matches)?;
 
-        // Get application ID from args
         let application_id = matches
             .get_one::<String>("app")
             .ok_or_else(|| anyhow::anyhow!("Application ID is required"))?;
@@ -70,9 +68,7 @@ impl CliCommand for IntegrateCommand {
         let manifest_path = app_root.join(".forklaunch").join("manifest.toml");
 
         // Validate application exists on platform
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-        writeln!(stdout, "[INFO] Validating application on platform...")?;
-        stdout.reset()?;
+        log_info!(stdout, "[INFO] Validating application on platform...");
 
         let url = format!(
             "{}/applications/{}",
@@ -98,32 +94,24 @@ impl CliCommand for IntegrateCommand {
             .json()
             .with_context(|| "Failed to parse application response")?;
 
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-        writeln!(stdout, "[OK] Found application: {}", app_data.name)?;
-        stdout.reset()?;
+        log_ok!(stdout, "[OK] Found application: {}", app_data.name);
 
-        // Read current manifest
         let manifest_content = std::fs::read_to_string(&manifest_path)
             .with_context(|| format!("Failed to read manifest at {:?}", manifest_path))?;
 
         let mut manifest: ApplicationManifestData =
             toml::from_str(&manifest_content).with_context(|| "Failed to parse manifest.toml")?;
 
-        // Update manifest with platform integration
         manifest.platform_application_id = Some(application_id.clone());
         manifest.platform_organization_id = Some(app_data.organization_id.clone());
 
-        // Write updated manifest
         let updated_manifest =
             to_string_pretty(&manifest).with_context(|| "Failed to serialize updated manifest")?;
 
         write(&manifest_path, updated_manifest)
             .with_context(|| format!("Failed to write manifest at {:?}", manifest_path))?;
 
-        // Success output
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true))?;
-        writeln!(stdout, "\n[OK] Application integrated successfully!")?;
-        stdout.reset()?;
+        log_header!(stdout, Color::Green, "\n[OK] Application integrated successfully!");
 
         writeln!(stdout, "[INFO] Platform App ID: {}", application_id)?;
         writeln!(stdout, "[INFO] Application Name: {}", app_data.name)?;
@@ -133,9 +121,7 @@ impl CliCommand for IntegrateCommand {
             app_data.organization_id
         )?;
 
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-        writeln!(stdout, "\n[INFO] You can now use:")?;
-        stdout.reset()?;
+        log_info!(stdout, "\n[INFO] You can now use:");
         writeln!(stdout, "  forklaunch release create --version <version>")?;
         writeln!(
             stdout,

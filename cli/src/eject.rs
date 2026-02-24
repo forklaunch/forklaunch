@@ -517,7 +517,6 @@ impl CliCommand for EjectCommand {
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        // Upfront validation — verify manifest exists before proceeding
         let _ = crate::core::validate::require_manifest(matches)?;
 
         let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
@@ -533,9 +532,7 @@ impl CliCommand for EjectCommand {
             )?;
 
             if !continue_eject {
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
-                writeln!(stdout, "Ejection cancelled")?;
-                stdout.reset()?;
+                log_error!(stdout, "Ejection cancelled");
                 return Ok(());
             }
         }
@@ -640,9 +637,7 @@ impl CliCommand for EjectCommand {
         write_rendered_templates(&templates_to_render, dryrun, &mut stdout)?;
 
         if !dryrun {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "Ejected successfully!")?;
-            stdout.reset()?;
+            log_ok!(stdout, "Ejected successfully!");
         }
 
         Ok(())

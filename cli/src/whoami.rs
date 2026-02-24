@@ -25,7 +25,6 @@ impl CliCommand for WhoAmICommand {
 
     fn handler(&self, _matches: &ArgMatches) -> Result<()> {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
-        // Upfront validation
         let token = crate::core::validate::require_auth()?;
         // TODO: parse token and get all relevant user information
         writeln!(stdout, "{}", token)?;

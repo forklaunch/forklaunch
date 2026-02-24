@@ -1,6 +1,60 @@
-use std::{fs::create_dir_all, path::Path, process::Command as ProcessCommand};
+use std::{env, fs::create_dir_all, path::Path, process::Command as ProcessCommand};
 
 use anyhow::{Context, Result, bail};
+
+/// Resolve a command name to its full path by searching PATH.
+/// Falls back to the bare command name if not found (lets the OS try).
+pub(crate) fn resolve_command(name: &str) -> String {
+    if let Ok(path_var) = env::var("PATH") {
+        for dir in env::split_paths(&path_var) {
+            let candidate = dir.join(name);
+            if candidate.is_file() {
+                if let Some(s) = candidate.to_str() {
+                    return s.to_string();
+                }
+            }
+        }
+    }
+
+    // Common install locations as fallback
+    let home = env::var("HOME").unwrap_or_default();
+    let mut fallback_paths = vec![
+        format!("{}/Library/pnpm/{}", home, name),
+        format!("{}/.local/share/pnpm/{}", home, name),
+        format!("{}/.corepack/bin/{}", home, name),
+        format!("/opt/homebrew/bin/{}", name),
+        format!("/usr/local/bin/{}", name),
+        format!("{}/.bun/bin/{}", home, name),
+    ];
+
+    // Check nvm directories for node/npm/npx
+    if let Ok(nvm_dir) = env::var("NVM_DIR").or_else(|_| Ok::<String, ()>(format!("{}/.nvm", home))) {
+        let nvm_versions = Path::new(&nvm_dir).join("versions").join("node");
+        if nvm_versions.is_dir() {
+            // Find the latest installed node version
+            if let Ok(entries) = std::fs::read_dir(&nvm_versions) {
+                let mut versions: Vec<_> = entries
+                    .filter_map(|e| e.ok())
+                    .filter(|e| e.path().is_dir())
+                    .collect();
+                versions.sort_by(|a, b| b.file_name().cmp(&a.file_name()));
+                for version_entry in versions {
+                    fallback_paths.push(
+                        format!("{}/bin/{}", version_entry.path().display(), name)
+                    );
+                }
+            }
+        }
+    }
+
+    for path in &fallback_paths {
+        if Path::new(path).is_file() {
+            return path.clone();
+        }
+    }
+
+    name.to_string()
+}
 
 use crate::{
     constants::Runtime,
@@ -15,7 +69,7 @@ fn generate_dummy_value(var_name: &str, var_type: &str, iam_port: Option<u16>) -
         "string" => {
             if var_name.ends_with("_PATH") || var_name.ends_with("_FILE") {
                 "/dev/null".to_string()
-            } else if var_name.contains("DATABASE_URL") || var_name.contains("DB_URL") {
+            } else if var_name.contains("DB_URL") {
                 "postgresql://dummy:dummy@localhost:5432/dummy".to_string()
             } else if var_name.contains("REDIS_URL") {
                 "redis://localhost:6379".to_string()
@@ -92,37 +146,42 @@ pub(crate) fn export_service_openapi(
 
     let tsconfig_path = service_path.join("tsconfig.json");
 
-    let (package_manager, args) = match runtime.parse::<Runtime>()? {
-        Runtime::Bun => ("bun", vec!["server.ts"]),
+    // Resolve the runtime binary and build the command.
+    // For Node, run node directly with tsx's CLI module to avoid shebang PATH issues
+    // (e.g. `#!/usr/bin/env node` fails when node isn't in PATH).
+    let (resolved_bin, args) = match runtime.parse::<Runtime>()? {
+        Runtime::Bun => {
+            let bun = resolve_command("bun");
+            (bun, vec!["server.ts".to_string()])
+        }
         Runtime::Node => {
-            if service_path.join("../../pnpm-lock.yaml").exists()
-                || service_path.join("../../../pnpm-lock.yaml").exists()
-            {
-                (
-                    "pnpm",
-                    vec![
-                        "exec",
-                        "tsx",
-                        "--tsconfig",
-                        tsconfig_path.to_str().unwrap(),
-                        "server.ts",
-                    ],
-                )
-            } else {
-                (
-                    "npx",
-                    vec![
-                        "tsx",
-                        "--tsconfig",
-                        tsconfig_path.to_str().unwrap(),
-                        "server.ts",
-                    ],
-                )
+            let node = resolve_command("node");
+            let tsx_cli = service_path
+                .join("node_modules/tsx/dist/cli.mjs")
+                .to_string_lossy()
+                .to_string();
+
+            if !Path::new(&tsx_cli).exists() {
+                bail!(
+                    "tsx not found at {} for service {}. Run pnpm install first.",
+                    tsx_cli,
+                    service_name
+                );
             }
+
+            (
+                node,
+                vec![
+                    tsx_cli,
+                    "--tsconfig".to_string(),
+                    tsconfig_path.to_str().unwrap().to_string(),
+                    "server.ts".to_string(),
+                ],
+            )
         }
     };
 
-    let mut cmd = ProcessCommand::new(package_manager);
+    let mut cmd = ProcessCommand::new(&resolved_bin);
     cmd.args(&args)
         .current_dir(service_path)
         .env("FORKLAUNCH_MODE", "openapi")
@@ -135,7 +194,7 @@ pub(crate) fn export_service_openapi(
 
     let output = cmd
         .output()
-        .with_context(|| format!("Failed to run {} command", package_manager))?;
+        .with_context(|| format!("Failed to run {} command", resolved_bin))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);

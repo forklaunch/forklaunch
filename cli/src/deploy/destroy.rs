@@ -3,7 +3,7 @@ use std::io::Write;
 use anyhow::{Context, Result};
 use clap::{Arg, ArgMatches, Command};
 use serde::{Deserialize, Serialize};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 
 use crate::{
     CliCommand,
@@ -72,7 +72,6 @@ impl CliCommand for DestroyCommand {
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-        // Upfront validation
         let auth_mode = crate::core::validate::resolve_auth()?;
         let (_app_root, manifest) = crate::core::validate::require_manifest(matches)?;
         let application_id = crate::core::validate::require_integration(&manifest)?;
@@ -93,13 +92,9 @@ impl CliCommand for DestroyCommand {
 
         let wait = !matches.get_flag("no-wait");
 
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)).set_bold(true))?;
-        writeln!(
-            stdout,
-            "DESTROYING INFRASTRUCTURE: {} ({}) [{}]",
+        log_header!(stdout, Color::Red, "DESTROYING INFRASTRUCTURE: {} ({}) [{}]",
             environment, region, mode
-        )?;
-        stdout.reset()?;
+        );
         writeln!(stdout)?;
 
         // Confirmation prompt?
@@ -118,10 +113,7 @@ impl CliCommand for DestroyCommand {
         // );
         // let client = Client::new();
 
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-        write!(stdout, "[INFO] Triggering destruction...")?;
-        stdout.flush()?;
-        stdout.reset()?;
+        log_progress!(stdout, "[INFO] Triggering destruction...");
 
         let request_body = DestroyDeploymentRequest { mode: mode.clone() };
 
@@ -146,9 +138,7 @@ impl CliCommand for DestroyCommand {
             let deployment: DestroyDeploymentResponse = serde_json::from_str(&response_text)
                 .with_context(|| format!("Failed to parse destroy response: {}", response_text))?;
 
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, " [OK]")?;
-            stdout.reset()?;
+            log_ok_suffix!(stdout);
             writeln!(stdout, "[INFO] Deployment ID: {}", deployment.id)?;
 
             if wait {
@@ -160,23 +150,38 @@ impl CliCommand for DestroyCommand {
                 )?;
             } else {
                 writeln!(stdout)?;
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-                writeln!(stdout, "[INFO] Destruction started. Check status at:")?;
-                stdout.reset()?;
+                log_info!(stdout, "[INFO] Destruction started. Check status at:");
                 writeln!(
                     stdout,
                     "  {}/apps/{}/deployments/{}",
                     get_platform_ui_url(), application_id, deployment.id
                 )?;
             }
+        } else if status.as_u16() == 409 {
+            let error_text = response
+                .text()
+                .unwrap_or_else(|_| "Unknown error".to_string());
+
+            log_error_suffix!(stdout);
+
+            anyhow::bail!(
+                "Deployment conflict: {}. Wait for the current deployment to complete or cancel it first.",
+                error_text
+            );
+        } else if status.as_u16() == 403 {
+            let error_text = response
+                .text()
+                .unwrap_or_else(|_| "Unknown error".to_string());
+
+            log_error_suffix!(stdout);
+
+            anyhow::bail!("{}", error_text);
         } else {
             let error_text = response
                 .text()
                 .unwrap_or_else(|_| "Unknown error".to_string());
 
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
-            writeln!(stdout, " [ERROR]")?;
-            stdout.reset()?;
+            log_error_suffix!(stdout);
 
             anyhow::bail!(
                 "Failed to destroy infrastructure: {} (Status: {})",

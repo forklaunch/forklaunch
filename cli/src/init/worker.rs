@@ -10,7 +10,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use convert_case::{Case, Casing};
 use rustyline::{Editor, history::DefaultHistory};
 use serde_json::to_string_pretty;
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 use toml::from_str;
 
 use crate::{
@@ -121,7 +121,6 @@ fn generate_basic_worker(
     } else {
         vec![]
     };
-    // Skip mappers directory if with_mappers is false
     if !manifest_data.with_mappers {
         ignore_dirs.push("mappers".to_string());
     }
@@ -176,7 +175,6 @@ fn generate_basic_worker(
         None,
     )?;
 
-    // Add project reference to modules tsconfig.json
     let tsconfig_template = add_project_to_modules_tsconfig(base_path, &manifest_data.worker_name)
         .with_context(|| "Failed to add worker to modules tsconfig.json")?;
     rendered_templates_cache.insert(
@@ -923,9 +921,7 @@ impl CliCommand for WorkerCommand {
         .with_context(|| "Failed to create worker")?;
 
         if !dryrun {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "{} initialized successfully!", worker_name)?;
-            stdout.reset()?;
+            log_ok!(stdout, "{} initialized successfully!", worker_name);
         }
 
         Ok(())

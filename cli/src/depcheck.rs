@@ -8,7 +8,7 @@ use std::{
 use anyhow::{Context, Result};
 use clap::{Arg, ArgMatches, Command};
 use serde_json::{Value, from_str, json};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use crate::{
     CliCommand,
@@ -47,7 +47,6 @@ impl CliCommand for DepcheckCommand {
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-        // Upfront validation
         let (app_root_path, manifest_data) = crate::core::validate::require_manifest(matches)?;
 
         manifest_data.project_peer_topology.iter().try_for_each(
@@ -109,22 +108,17 @@ impl CliCommand for DepcheckCommand {
                                         }
                                     });
                             } else {
-                                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-                                writeln!(stdout, "Failed to parse package.json for {}. If the package has been removed, update .forklaunch/manifest.toml.", project)?;
-                                stdout.reset()?;
+                                log_warn!(stdout, "Failed to parse package.json for {}. If the package has been removed, update .forklaunch/manifest.toml.", project);
                             }
                         } else {
-                            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-                            writeln!(stdout, "Failed to read package.json for {}. If the package has been removed, update .forklaunch/manifest.toml.", project)?;
-                            stdout.reset()?;
+                            log_warn!(stdout, "Failed to read package.json for {}. If the package has been removed, update .forklaunch/manifest.toml.", project);
                         }
 
                         Ok(())
                     })?;
 
                 if !conflicting_packages.is_empty() {
-                    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
-                    writeln!(
+                    log_error!(
                         stdout,
                         "Conflicting packages in group {}:\n{}",
                         group_name,
@@ -151,11 +145,9 @@ impl CliCommand for DepcheckCommand {
                             })
                             .collect::<Vec<String>>()
                             .join("\n")
-                    )?;
+                    );
                 } else {
-                    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-                    writeln!(stdout, "No conflicting packages in group {}!", group_name)?;
-                    stdout.reset()?;
+                    log_ok!(stdout, "No conflicting packages in group {}!", group_name);
                 }
 
                 Ok(())

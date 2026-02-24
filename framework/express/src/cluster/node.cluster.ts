@@ -38,6 +38,7 @@ export function startNodeCluster<
         'Failed to load SSL/TLS certificates:',
         error
       );
+      // eslint-disable-next-line preserve-caught-error
       throw new Error('SSL/TLS configuration failed');
     }
   }

@@ -152,15 +152,24 @@ export class ForklaunchWebSocketServer<
     super(options, callback);
     this.schemaValidator = schemaValidator;
     this.eventSchemas = eventSchemas;
+  }
 
-    // Intercept connection events to enhance WebSocket with ForklaunchWebSocket functionality
-    super.on('connection', (ws, request) => {
-      // Enhance the existing WebSocket instance with ForklaunchWebSocket functionality
-      const forklaunchWs = this.enhanceWebSocket(ws);
-
-      // Emit connection with the enhanced WebSocket
-      super.emit('connection', forklaunchWs, request);
-    });
+  /**
+   * Intercepts emit to enhance WebSocket instances on 'connection' events.
+   *
+   * When the ws library internally emits 'connection', we swap the raw WebSocket
+   * for an enhanced ForklaunchWebSocket before listeners receive it. This avoids
+   * infinite recursion that would occur if we used a listener + re-emit pattern.
+   *
+   * @internal
+   */
+  override emit(event: string | symbol, ...args: unknown[]): boolean {
+    if (event === 'connection' && args.length >= 1) {
+      const ws = args[0] as InstanceType<typeof import('ws').WebSocket>;
+      const enhancedWs = this.enhanceWebSocket(ws);
+      return super.emit(event, enhancedWs, ...args.slice(1));
+    }
+    return super.emit(event, ...args);
   }
 
   /**

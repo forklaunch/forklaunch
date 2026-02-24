@@ -317,7 +317,6 @@ export function typedHandler<
     BaseResponse,
     NextFunction
   >[];
-  // If path is not provided
   if (typeof contractMethodOrContractDetails === 'string') {
     if (typeof contractDetailsOrHandler !== 'function') {
       contractDetails = contractDetailsOrHandler;
@@ -325,9 +324,7 @@ export function typedHandler<
       throw new Error('Invalid definition for contract details');
     }
     handlers = handlerArray;
-  }
-  // If path is provided
-  else {
+  } else {
     contractDetails = contractMethodOrContractDetails;
     if (typeof contractDetailsOrHandler === 'function') {
       handlers = [contractDetailsOrHandler, ...handlerArray];

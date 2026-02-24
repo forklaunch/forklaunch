@@ -1,4 +1,6 @@
 #[macro_use]
+pub(crate) mod log;
+#[macro_use]
 pub(crate) mod ast;
 pub(crate) mod base_path;
 pub(crate) mod choices;

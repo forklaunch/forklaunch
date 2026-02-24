@@ -1,5 +1,16 @@
 # @forklaunch/hyper-express
 
+## 0.11.6
+
+### Patch Changes
+
+- WS actually working probably, and package bumps
+- Updated dependencies
+  - @forklaunch/ws@0.2.0
+  - @forklaunch/validator@0.10.29
+  - @forklaunch/common@0.6.29
+  - @forklaunch/core@0.18.2
+
 ## 0.11.5
 
 ### Patch Changes
