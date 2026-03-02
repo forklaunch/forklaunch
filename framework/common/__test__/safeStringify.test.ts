@@ -178,4 +178,29 @@ describe('toPlainString', () => {
     expect(params.get('page')).toBe('1');
     expect(params.get('filter')).toBe('{"status":"active"}');
   });
+
+  it('should handle unserializable values safely', () => {
+    // Circular reference
+    interface CircularObject {
+      self?: CircularObject;
+    }
+    const circular: CircularObject = {};
+    circular.self = circular;
+
+    const circularResult = toPlainString(circular);
+    expect(circularResult).toMatch(/\[Unserializable:/);
+
+    // BigInt
+    const bigIntValue = BigInt(123);
+    const bigIntResult = toPlainString(bigIntValue);
+    expect(bigIntResult).toMatch(/\[Unserializable:/);
+
+    // Object with toJSON that throws
+    const throwingObject = {
+      toJSON() {
+        throw new Error('Cannot serialize');
+      }
+    };
+    expect(toPlainString(throwingObject)).toBe('[Unserializable: Cannot serialize]');
+  });
 });

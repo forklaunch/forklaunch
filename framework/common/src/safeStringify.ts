@@ -26,7 +26,14 @@ export function toPlainString(value: unknown): string {
   if (value == null) {
     return String(value);
   }
-  return JSON.stringify(value);
+  try {
+    return JSON.stringify(value);
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      return `[Unserializable: ${error.message}]`;
+    }
+    return '[Unserializable: Unknown error]';
+  }
 }
 
 /**
