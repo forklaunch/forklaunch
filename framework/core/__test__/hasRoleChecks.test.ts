@@ -49,5 +49,70 @@ describe('hasRoleChecks', () => {
     it('when input is an empty object', () => {
       expect(hasRoleChecks({})).toBe(false);
     });
+
+    it('when allowedRoles is null', () => {
+      const auth = {
+        allowedRoles: null
+      };
+      expect(hasRoleChecks(auth)).toBe(false);
+    });
+
+    it('when allowedRoles is undefined', () => {
+      const auth = {
+        allowedRoles: undefined
+      };
+      expect(hasRoleChecks(auth)).toBe(false);
+    });
+
+    it('when forbiddenRoles is null', () => {
+      const auth = {
+        forbiddenRoles: null
+      };
+      expect(hasRoleChecks(auth)).toBe(false);
+    });
+
+    it('when forbiddenRoles is undefined', () => {
+      const auth = {
+        forbiddenRoles: undefined
+      };
+      expect(hasRoleChecks(auth)).toBe(false);
+    });
+
+    it('when allowedRoles is an empty Set', () => {
+      const auth = {
+        allowedRoles: new Set([])
+      };
+      expect(hasRoleChecks(auth)).toBe(false);
+    });
+
+    it('when forbiddenRoles is an empty Set', () => {
+      const auth = {
+        forbiddenRoles: new Set([])
+      };
+      expect(hasRoleChecks(auth)).toBe(false);
+    });
+
+    it('when allowedRoles is not a Set (array)', () => {
+      const auth = {
+        allowedRoles: ['admin', 'user']
+      };
+      expect(hasRoleChecks(auth)).toBe(false);
+    });
+
+    it('when forbiddenRoles is not a Set (string)', () => {
+      const auth = {
+        forbiddenRoles: 'guest'
+      };
+      expect(hasRoleChecks(auth)).toBe(false);
+    });
+
+    it('when both allowedRoles and forbiddenRoles are empty Sets', () => {
+      const auth = {
+        allowedRoles: new Set([]),
+        forbiddenRoles: new Set([])
+      };
+      expect(hasRoleChecks(auth)).toBe(false);
+    });
+
   });
 });

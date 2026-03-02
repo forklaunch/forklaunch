@@ -47,7 +47,6 @@ pub(crate) fn delete_from_registrations_ts_worker_type<'a>(
     registrations_program: &mut Program<'a>,
 ) {
     let mut used_property_keys = HashSet::new();
-    // First pass: Collect all used property keys from all statements
     for statement in &registrations_program.body {
         let expression = match statement {
             Statement::VariableDeclaration(expr) => expr,
@@ -144,7 +143,6 @@ pub(crate) fn delete_from_registrations_ts_worker_type<'a>(
         }
     }
 
-    // Second pass: Filter properties based on global usage
     for statement in &mut registrations_program.body {
         let expression = match statement {
             Statement::VariableDeclaration(expr) => expr,

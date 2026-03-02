@@ -4,17 +4,23 @@ use anyhow::{Context, Result};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use rustyline::{Editor, history::DefaultHistory};
 use serde_json::from_str as json_from_str;
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use serde_yml::{from_str as yaml_from_str, to_string as yaml_to_string};
+use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 use toml::from_str as toml_from_str;
 
 use crate::{
     CliCommand,
-    constants::{DIRS_TO_IGNORE, ERROR_FAILED_TO_PARSE_MANIFEST, InitializeType},
+    constants::{
+        DIRS_TO_IGNORE, ERROR_FAILED_TO_PARSE_DOCKER_COMPOSE, ERROR_FAILED_TO_PARSE_MANIFEST,
+        InitializeType,
+    },
     core::{
+        ast::infrastructure::env::find_all_env_vars,
         base_path::{RequiredLocation, find_app_root_path},
         command::command,
+        docker::{DockerCompose, sync_docker_compose_env_vars},
         manifest::application::ApplicationManifestData,
-        rendered_template::{RenderedTemplatesCache, write_rendered_templates},
+        rendered_template::{RenderedTemplate, RenderedTemplatesCache, write_rendered_templates},
         sync::{
             artifacts::{ArtifactType, remove_project_from_artifacts},
             detection::detect_project_type,
@@ -48,23 +54,11 @@ pub fn sync_all_projects(
     let mut changes_made = false;
 
     if !modules_path.exists() {
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-        writeln!(
-            stdout,
-            "Modules path does not exist: {}",
-            modules_path.display()
-        )?;
-        stdout.reset()?;
+        log_warn!(stdout, "Modules path does not exist: {}", modules_path.display());
         return Ok(false);
     }
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-    writeln!(
-        stdout,
-        "[INFO] Scanning modules directory: {}",
-        modules_path.display()
-    )?;
-    stdout.reset()?;
+    log_info!(stdout, "[INFO] Scanning modules directory: {}", modules_path.display());
 
     let existing_folders: HashSet<String> = fs::read_dir(&modules_path)?
         .filter_map(|entry| {
@@ -88,13 +82,7 @@ pub fn sync_all_projects(
 
     if !orphaned_projects.is_empty() {
         writeln!(stdout)?;
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-        writeln!(
-            stdout,
-            "[WARN] Found {} orphaned project(s) in manifest:",
-            orphaned_projects.len()
-        )?;
-        stdout.reset()?;
+        log_warn!(stdout, "[WARN] Found {} orphaned project(s) in manifest:", orphaned_projects.len());
         for project_name in &orphaned_projects {
             writeln!(stdout, "  - {}", project_name)?;
         }
@@ -139,18 +127,10 @@ pub fn sync_all_projects(
                 changes_made = true;
             }
 
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(
-                stdout,
-                "[OK] Cleaned up {} orphaned project(s)",
-                orphaned_projects.len()
-            )?;
-            stdout.reset()?;
+            log_ok!(stdout, "[OK] Cleaned up {} orphaned project(s)", orphaned_projects.len());
             writeln!(stdout)?;
         } else {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-            writeln!(stdout, "[INFO] Skipping cleanup of orphaned projects")?;
-            stdout.reset()?;
+            log_warn!(stdout, "[INFO] Skipping cleanup of orphaned projects");
         }
     }
 
@@ -173,65 +153,88 @@ pub fn sync_all_projects(
         }
 
         writeln!(stdout)?;
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-        writeln!(stdout, "[INFO] Processing: {}", project_name)?;
-        stdout.reset()?;
+        log_info!(stdout, "[INFO] Processing: {}", project_name);
 
-        let detected_type = detect_project_type(&project_path)?;
+        // If the project is already in the manifest, use its known type and skip prompts
+        let manifest_project = manifest_data
+            .projects
+            .iter()
+            .find(|p| p.name == project_name);
 
-        let project_type = if let Some(detected) = detected_type {
-            writeln!(stdout, "[INFO] Detected as: {}", detected.to_string())?;
-            detected
+        let project_type = if let Some(existing) = manifest_project {
+            let init_type: InitializeType = match existing.r#type {
+                crate::core::manifest::ProjectType::Service => InitializeType::Service,
+                crate::core::manifest::ProjectType::Worker => InitializeType::Worker,
+                crate::core::manifest::ProjectType::Library => InitializeType::Library,
+            };
+            writeln!(stdout, "[INFO] Known as: {}", init_type.to_string())?;
+            init_type
         } else {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-            writeln!(stdout, "[WARN] Could not auto-detect project type")?;
-            stdout.reset()?;
+            // New folder not in manifest — try to detect, then prompt if needed
+            let detected_type = detect_project_type(&project_path)?;
 
-            if confirm_all {
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-                writeln!(
+            let project_type = if let Some(detected) = detected_type {
+                writeln!(stdout, "[INFO] Detected as: {}", detected.to_string())?;
+                detected
+            } else {
+                log_warn!(stdout, "[WARN] Could not auto-detect project type");
+
+                if confirm_all {
+                    log_warn!(stdout, "[WARN] Skipping '{}' (cannot auto-detect and no interaction allowed)", project_name);
+                    continue;
+                }
+
+                // Include "skip" option to allow excluding non-forklaunch folders
+                const SYNC_TYPE_OPTIONS: &[&str] =
+                    &["service", "library", "worker", "module", "router", "skip"];
+
+                let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
+                let type_str = prompt_with_validation_with_answers(
+                    &mut line_editor,
                     stdout,
-                    "[WARN] Skipping '{}' (cannot auto-detect and no interaction allowed)",
-                    project_name
+                    "category",
+                    &ArgMatches::default(),
+                    &format!(
+                        "Project type for '{}' (or 'skip' to ignore)",
+                        project_name
+                    ),
+                    Some(SYNC_TYPE_OPTIONS),
+                    |input| SYNC_TYPE_OPTIONS.contains(&input),
+                    |_| "Invalid option. Please try again.".to_string(),
+                    &project_name,
+                    prompts_map,
                 )?;
-                stdout.reset()?;
+
+                if type_str == "skip" {
+                    log_warn!(stdout, "[INFO] Skipping '{}' (not a forklaunch project)", project_name);
+                    continue;
+                }
+
+                type_str.parse()?
+            };
+
+            // Only prompt for confirmation on new/unrecognized projects
+            let should_sync = if confirm_all {
+                true
+            } else {
+                let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
+                prompt_for_confirmation(
+                    &mut line_editor,
+                    &format!(
+                        "Sync '{}' as {}? (y/N) ",
+                        project_name,
+                        project_type.to_string()
+                    ),
+                )?
+            };
+
+            if !should_sync {
+                writeln!(stdout, "[INFO] Skipped")?;
                 continue;
             }
 
-            let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
-            let type_str = prompt_with_validation_with_answers(
-                &mut line_editor,
-                stdout,
-                "category",
-                &ArgMatches::default(),
-                &format!("Project type for '{}'", project_name),
-                Some(&InitializeType::VARIANTS),
-                |input| InitializeType::VARIANTS.contains(&input),
-                |_| "Invalid project type. Please try again.".to_string(),
-                &project_name,
-                prompts_map,
-            )?;
-            type_str.parse()?
+            project_type
         };
-
-        let should_sync = if confirm_all {
-            true
-        } else {
-            let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
-            prompt_for_confirmation(
-                &mut line_editor,
-                &format!(
-                    "Sync '{}' as {}? (y/N) ",
-                    project_name,
-                    project_type.to_string()
-                ),
-            )?
-        };
-
-        if !should_sync {
-            writeln!(stdout, "[INFO] Skipped")?;
-            continue;
-        }
 
         // Take a snapshot of the project state before syncing to detect changes
         let project_snapshot_before = manifest_data
@@ -266,9 +269,7 @@ pub fn sync_all_projects(
                         }
                     }
                     Err(e) => {
-                        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
-                        writeln!(stdout, "[ERROR] {}", e)?;
-                        stdout.reset()?;
+                        log_error!(stdout, "[ERROR] {}", e);
                     }
                 }
             }
@@ -297,9 +298,7 @@ pub fn sync_all_projects(
                         }
                     }
                     Err(e) => {
-                        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
-                        writeln!(stdout, "[ERROR] {}", e)?;
-                        stdout.reset()?;
+                        log_error!(stdout, "[ERROR] {}", e);
                     }
                 }
             }
@@ -328,9 +327,7 @@ pub fn sync_all_projects(
                         }
                     }
                     Err(e) => {
-                        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
-                        writeln!(stdout, "[ERROR] {}", e)?;
-                        stdout.reset()?;
+                        log_error!(stdout, "[ERROR] {}", e);
                     }
                 }
             }
@@ -408,7 +405,6 @@ impl CliCommand for SyncAllCommand {
 
         let confirm_all = matches.get_flag("confirm");
 
-        // Call the reusable sync function
         let _changes_made = sync_all_projects(
             &app_root_path,
             &mut manifest_data,
@@ -418,7 +414,6 @@ impl CliCommand for SyncAllCommand {
             &mut stdout,
         )?;
 
-        // Generate .env.template files and sync .env.local
         let modules_path = app_root_path.join(&manifest_data.modules_path);
         crate::core::env_template::generate_env_templates(
             &modules_path,
@@ -432,7 +427,15 @@ impl CliCommand for SyncAllCommand {
             &mut stdout,
         )?;
 
-        // Write the updated manifest back to cache
+        // Sync docker-compose environment sections with discovered env vars
+        sync_docker_compose_with_env_vars(
+            &app_root_path,
+            &modules_path,
+            &manifest_data,
+            &mut rendered_templates_cache,
+            &mut stdout,
+        )?;
+
         rendered_templates_cache.insert(
             manifest_path.to_string_lossy().to_string(),
             crate::core::rendered_template::RenderedTemplate {
@@ -443,7 +446,6 @@ impl CliCommand for SyncAllCommand {
             },
         );
 
-        // Collect and write all rendered templates (including manifest)
         let rendered_templates: Vec<_> = rendered_templates_cache
             .drain()
             .map(|(_, template)| template)
@@ -452,10 +454,68 @@ impl CliCommand for SyncAllCommand {
         write_rendered_templates(&rendered_templates, false, &mut stdout)?;
 
         writeln!(stdout)?;
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true))?;
-        writeln!(stdout, "[OK] Sync all completed")?;
-        stdout.reset()?;
+        log_header!(stdout, Color::Green, "[OK] Sync all completed");
 
         Ok(())
     }
+}
+
+/// Sync docker-compose environment sections with env vars discovered from code scanning.
+fn sync_docker_compose_with_env_vars(
+    app_root_path: &Path,
+    modules_path: &Path,
+    manifest_data: &ApplicationManifestData,
+    rendered_templates_cache: &mut RenderedTemplatesCache,
+    stdout: &mut StandardStream,
+) -> Result<()> {
+    let docker_path = app_root_path.join(
+        manifest_data
+            .docker_compose_path
+            .clone()
+            .unwrap_or_else(|| "docker-compose.yaml".to_string()),
+    );
+
+    if !docker_path.exists() {
+        return Ok(());
+    }
+
+    let docker_content = if let Some(template) = rendered_templates_cache.get(&docker_path)? {
+        template.content.clone()
+    } else {
+        return Ok(());
+    };
+
+    let mut docker_compose: DockerCompose =
+        yaml_from_str(&docker_content).context(ERROR_FAILED_TO_PARSE_DOCKER_COMPOSE)?;
+
+    // Re-discover env vars (uses the same enhanced scanning with process.env)
+    let env_vars_cache = RenderedTemplatesCache::new();
+    let project_env_vars = find_all_env_vars(modules_path, &env_vars_cache)?;
+
+    if project_env_vars.is_empty() {
+        return Ok(());
+    }
+
+    let changes_made = sync_docker_compose_env_vars(
+        &mut docker_compose,
+        &project_env_vars,
+        manifest_data,
+        stdout,
+    )?;
+
+    if changes_made {
+        rendered_templates_cache.insert(
+            docker_path.to_string_lossy().to_string(),
+            RenderedTemplate {
+                path: docker_path.clone(),
+                content: yaml_to_string(&docker_compose)
+                    .context("Failed to serialize docker-compose")?,
+                context: Some("Failed to write docker-compose".to_string()),
+            },
+        );
+
+        log_ok!(stdout, "[OK] Synchronized docker-compose environment variables");
+    }
+
+    Ok(())
 }

@@ -69,7 +69,6 @@ export function safeStringify(arg: unknown): string {
   }
 
   const replacer = (key: string, value: unknown): unknown => {
-    // Handle Error objects
     if (value instanceof Error) {
       return {
         name: value.name,
@@ -79,39 +78,32 @@ export function safeStringify(arg: unknown): string {
       };
     }
 
-    // Handle BigInt
     if (typeof value === 'bigint') {
       return value.toString() + 'n';
     }
 
-    // Handle Functions
     if (typeof value === 'function') {
       return `[Function: ${value.name || 'anonymous'}]`;
     }
 
-    // Handle Symbols
     if (typeof value === 'symbol') {
       return value.toString();
     }
 
-    // Handle special number values
     if (typeof value === 'number') {
       if (Number.isNaN(value)) return 'NaN';
       if (value === Infinity) return 'Infinity';
       if (value === -Infinity) return '-Infinity';
     }
 
-    // Handle Date objects
     if (value instanceof Date) {
       return value.toISOString();
     }
 
-    // Handle RegExp
     if (value instanceof RegExp) {
       return value.toString();
     }
 
-    // Handle Map
     if (value instanceof Map) {
       return {
         __type: 'Map',
@@ -119,7 +111,6 @@ export function safeStringify(arg: unknown): string {
       };
     }
 
-    // Handle Set
     if (value instanceof Set) {
       return {
         __type: 'Set',
@@ -127,7 +118,6 @@ export function safeStringify(arg: unknown): string {
       };
     }
 
-    // Handle TypedArrays
     if (ArrayBuffer.isView(value)) {
       return {
         __type: value.constructor.name,
@@ -135,7 +125,6 @@ export function safeStringify(arg: unknown): string {
       };
     }
 
-    // Handle ArrayBuffer
     if (value instanceof ArrayBuffer) {
       return {
         __type: 'ArrayBuffer',
@@ -149,7 +138,6 @@ export function safeStringify(arg: unknown): string {
   try {
     return JSON.stringify(arg, replacer);
   } catch (error: unknown) {
-    // Fallback for any unexpected serialization errors
     if (error instanceof Error) {
       return `[Unserializable: ${error.message}]`;
     }

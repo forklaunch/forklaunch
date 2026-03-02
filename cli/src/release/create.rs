@@ -9,7 +9,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Arg, ArgMatches, Command};
 use serde::Serialize;
 use serde_json::Value;
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 use toml::to_string_pretty;
 
 use super::{
@@ -105,12 +105,10 @@ impl CliCommand for CreateCommand {
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-        // Upfront validation
         let auth_mode = crate::core::validate::resolve_auth()?;
         let (app_root, manifest) = crate::core::validate::require_manifest(matches)?;
         let application_id = crate::core::validate::require_integration(&manifest)?;
 
-        // Get version
         let version = matches
             .get_one::<String>("release_version")
             .ok_or_else(|| anyhow::anyhow!("Version is required"))?;
@@ -124,9 +122,7 @@ impl CliCommand for CreateCommand {
 
         // Step 0: Sync projects with manifest (unless skipped)
         if !skip_sync {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)).set_bold(true))?;
-            writeln!(stdout, "[INFO] Syncing projects with manifest...")?;
-            stdout.reset()?;
+            log_header!(stdout, Color::Cyan, "[INFO] Syncing projects with manifest...");
             writeln!(stdout)?;
 
             use crate::core::rendered_template::RenderedTemplatesCache;
@@ -143,9 +139,7 @@ impl CliCommand for CreateCommand {
             ) {
                 Ok(changed) => changed,
                 Err(e) => {
-                    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
-                    writeln!(stdout, "[ERROR] Sync failed: {}", e)?;
-                    stdout.reset()?;
+                    log_error!(stdout, "[ERROR] Sync failed: {}", e);
                     bail!("Failed to sync projects with manifest: {}", e);
                 }
             };
@@ -157,32 +151,22 @@ impl CliCommand for CreateCommand {
                 std::fs::write(&manifest_path, updated_manifest_content)
                     .with_context(|| "Failed to write updated manifest")?;
 
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-                writeln!(stdout, "[OK] Sync completed with changes")?;
-                stdout.reset()?;
+                log_ok!(stdout, "[OK] Sync completed with changes");
 
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)).set_bold(true))?;
-                writeln!(stdout, "[WARN] Manifest was updated. Please commit the changes to manifest.toml")?;
-                stdout.reset()?;
+                log_header!(stdout, Color::Yellow, "[WARN] Manifest was updated. Please commit the changes to manifest.toml");
                 writeln!(stdout)?;
             } else {
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-                writeln!(stdout, "[OK] Sync completed - no changes detected")?;
-                stdout.reset()?;
+                log_ok!(stdout, "[OK] Sync completed - no changes detected");
                 writeln!(stdout)?;
             }
         } else {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-            writeln!(stdout, "[INFO] Skipping project sync (--skip-sync flag set)")?;
-            stdout.reset()?;
+            log_warn!(stdout, "[INFO] Skipping project sync (--skip-sync flag set)");
             writeln!(stdout)?;
         }
 
         // Skip git repository check if using local mode
         if !local_mode && manifest.git_repository.is_none() {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-            writeln!(stdout, "[INFO] Git repository URL not set in manifest")?;
-            stdout.reset()?;
+            log_warn!(stdout, "[INFO] Git repository URL not set in manifest");
 
             print!("Enter git repository URL (e.g., https://github.com/user/repo.git): ");
             std::io::stdout().flush()?;
@@ -199,48 +183,30 @@ impl CliCommand for CreateCommand {
                 fs::write(&manifest_path, manifest_str)
                     .with_context(|| "Failed to write manifest")?;
 
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-                writeln!(stdout, "[INFO] Git repository saved to manifest.toml")?;
-                stdout.reset()?;
+                log_ok!(stdout, "[INFO] Git repository saved to manifest.toml");
             }
         }
 
         if local_mode {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-            writeln!(stdout, "[INFO] Using local mode - packaging code directly")?;
-            stdout.reset()?;
+            log_info!(stdout, "[INFO] Using local mode - packaging code directly");
         }
 
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)).set_bold(true))?;
-        writeln!(stdout, "[INFO] Creating release {}...", version)?;
-        stdout.reset()?;
+        log_header!(stdout, Color::Cyan, "[INFO] Creating release {}...", version);
         writeln!(stdout)?;
 
         // Step 1: Detect git metadata
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-        write!(stdout, "  Detecting git metadata...")?;
-        stdout.flush()?;
-        stdout.reset()?;
+        log_progress!(stdout, "  Detecting git metadata...");
 
         let (git_commit, git_branch) = if is_git_repo() {
             let commit = get_git_commit()?;
             let branch = get_git_branch().ok();
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, " [OK]")?;
-            stdout.reset()?;
+            log_ok_suffix!(stdout);
             (commit, branch)
         } else if local_mode {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-            writeln!(
-                stdout,
-                " [WARN] Not a git repository (using local defaults)"
-            )?;
-            stdout.reset()?;
+            log_warn!(stdout, " [WARN] Not a git repository (using local defaults)");
             ("local-build".to_string(), Some("local".to_string()))
         } else {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-            writeln!(stdout, " [WARN] Not a git repository")?;
-            stdout.reset()?;
+            log_warn!(stdout, " [WARN] Not a git repository");
             bail!("Current directory is not a git repository. Initialize git first.");
         };
 
@@ -256,19 +222,14 @@ impl CliCommand for CreateCommand {
         )?;
 
         // Step 2: Export OpenAPI specs
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-        write!(stdout, "[INFO] Exporting OpenAPI specifications...")?;
-        stdout.flush()?;
-        stdout.reset()?;
+        log_progress!(stdout, "[INFO] Exporting OpenAPI specifications...");
 
         let openapi_path = app_root.join(".forklaunch").join("openapi");
         create_dir_all(&openapi_path).with_context(|| "Failed to create openapi directory")?;
 
         let exported_services = export_all_services(&app_root, &manifest, &openapi_path)?;
 
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-        writeln!(stdout, " [OK] ({} services)", exported_services.len())?;
-        stdout.reset()?;
+        log_ok!(stdout, " [OK] ({} services)", exported_services.len());
 
         let mut openapi_specs = HashMap::new();
         for project in &manifest.projects {
@@ -280,10 +241,7 @@ impl CliCommand for CreateCommand {
             }
         }
 
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-        write!(stdout, "[INFO] Detecting required environment variables...")?;
-        stdout.flush()?;
-        stdout.reset()?;
+        log_progress!(stdout, "[INFO] Detecting required environment variables...");
 
         let workspace_root = find_workspace_root(&app_root)?;
         let modules_path = get_modules_path(&workspace_root)?;
@@ -296,12 +254,68 @@ impl CliCommand for CreateCommand {
         let (mut env_var_components, docker_compose_env_vars) =
             build_env_var_component_map(app_root.as_path(), &manifest);
 
+        // Collect all var names from docker-compose before consuming the map
+        let docker_compose_var_names: std::collections::HashSet<String> = docker_compose_env_vars
+            .values()
+            .flat_map(|vars| vars.iter().map(|(k, _)| k.clone()))
+            .collect();
+
         // Add all env vars from docker-compose for each service/worker
         let mut existing_vars: std::collections::HashSet<(String, Option<String>)> =
             scoped_env_vars
                 .iter()
                 .map(|v| (v.name.clone(), v.scope_id.clone()))
                 .collect();
+
+        // Inject platform defaults at APPLICATION scope.
+        // These are hardcoded defaults that apply to all services/workers.
+        // Users can override via config push. NODE_ENV uses {{environment}} template.
+        // Docker-compose values for these keys are ignored (no component overrides).
+        // Platform defaults at APPLICATION scope with hardcoded values.
+        // Empty string = Pulumi injects the real value at deploy time.
+        let platform_defaults: Vec<(&str, &str)> = vec![
+            ("PORT", "8000"),
+            ("HOST", "0.0.0.0"),
+            ("PROTOCOL", "http"),
+            ("VERSION", "v1"),
+            ("DB_SSL", "true"),
+            ("DOCS_PATH", "/docs"),
+            ("OTEL_LEVEL", "info"),
+            ("NODE_ENV", "{{environment}}"),
+            ("IAM_DB_NAME", "iam_database"),
+            // Pulumi-injected app-scoped vars (empty — Pulumi fills at deploy time)
+            ("DB_HOST", ""),
+            ("DB_PORT", ""),
+            ("DB_USER", ""),
+            ("DB_PASSWORD", ""),
+            ("PGSSLMODE", "no-verify"),
+        ];
+        let platform_default_keys: std::collections::HashSet<String> = platform_defaults
+            .iter()
+            .map(|(k, _)| k.to_string())
+            .collect();
+
+        // Component-scoped vars injected by Pulumi at deploy time.
+        // Stay in manifest at service/worker scope but with empty values.
+        let pulumi_injected_component_vars: std::collections::HashSet<&str> = [
+            "REDIS_URL",
+            "DB_NAME",
+            "KAFKA_BROKERS", "KAFKA_BOOTSTRAP_SERVERS",
+        ].iter().copied().collect();
+
+        for (default_key, default_value) in &platform_defaults {
+            let app_key = (default_key.to_string(), None);
+            if !existing_vars.contains(&app_key) {
+                scoped_env_vars.push(crate::core::env_scope::ScopedEnvVar {
+                    name: default_key.to_string(),
+                    scope: crate::core::env_scope::EnvironmentVariableScope::Application,
+                    scope_id: None,
+                    used_by: vec!["platform".to_string()],
+                    value: Some(default_value.to_string()),
+                });
+                existing_vars.insert(app_key);
+            }
+        }
 
         for (service_name, env_vars) in docker_compose_env_vars {
             let project_types: HashMap<String, ProjectType> = manifest
@@ -346,32 +360,90 @@ impl CliCommand for CreateCommand {
                     }
                 };
 
-            for (key, _value) in env_vars {
-                // Skip if already exists
-                if existing_vars.contains(&(key.clone(), scope_id.clone())) {
+            let project_names_for_scope: Vec<String> =
+                manifest.projects.iter().map(|p| p.name.clone()).collect();
+
+            for (key, value) in env_vars {
+                // Skip platform defaults — they're already set at APPLICATION scope
+                // with hardcoded values, no component overrides needed
+                if platform_default_keys.contains(&key.to_ascii_uppercase()) {
                     continue;
                 }
 
-                // Handle PORT specially - ensure passthrough is set to "8000" in component map
-                let key_upper = key.to_ascii_uppercase();
-                if key_upper == "PORT" {
-                    // Update or insert PORT with passthrough "8000"
-                    let property = infer_component_property(&key_upper).unwrap_or_else(|| {
-                        default_component_property(
-                            &EnvironmentVariableComponentType::Service,
-                            &key_upper,
-                        )
-                    });
-                    env_var_components.insert(
-                        key.clone(),
-                        (
-                            EnvironmentVariableComponentType::Service,
-                            property,
-                            None,
-                            None,
-                            Some("8000".to_string()),
-                        ),
-                    );
+                // Pulumi-injected component vars: keep in manifest for component metadata.
+                // DB_NAME is computed from the component name (same logic as Pulumi):
+                //   strip -service/-worker suffix, replace - with _, append _database
+                // Other Pulumi-injected vars get empty values — Pulumi fills at deploy time.
+                let effective_value = if key.eq_ignore_ascii_case("DB_NAME") {
+                    if let Some(ref sid) = scope_id {
+                        let base = sid
+                            .trim_end_matches("-service")
+                            .trim_end_matches("-worker")
+                            .replace('-', "_");
+                        format!("{}_database", base)
+                    } else {
+                        String::new()
+                    }
+                } else if pulumi_injected_component_vars.contains(key.to_ascii_uppercase().as_str()) {
+                    String::new()
+                } else if crate::core::env_scope::is_inter_service_url(&key, &project_names_for_scope) {
+                    // Inter-service URL vars are injected by Pulumi at deploy time
+                    String::new()
+                } else if is_pulumi_injected_url_var(&key) {
+                    // Auth/infrastructure URL vars computed by Pulumi
+                    String::new()
+                } else {
+                    value.clone()
+                };
+
+                let is_app_scoped = crate::core::env_scope::is_application_scoped_var(
+                    &key,
+                    &project_names_for_scope,
+                );
+
+                if is_app_scoped {
+                    // Ensure an APPLICATION-scoped entry exists
+                    let app_key = (key.clone(), None);
+                    if !existing_vars.contains(&app_key) {
+                        scoped_env_vars.push(crate::core::env_scope::ScopedEnvVar {
+                            name: key.clone(),
+                            scope: crate::core::env_scope::EnvironmentVariableScope::Application,
+                            scope_id: None,
+                            used_by: vec![service_name.clone()],
+                            value: Some(effective_value.clone()),
+                        });
+                        existing_vars.insert(app_key);
+                    }
+
+                    // If this component has a different value, add a component-scoped override
+                    let app_value = scoped_env_vars
+                        .iter()
+                        .find(|v| {
+                            v.name == key
+                                && v.scope
+                                    == crate::core::env_scope::EnvironmentVariableScope::Application
+                        })
+                        .and_then(|v| v.value.as_deref());
+
+                    if app_value != Some(effective_value.as_str()) {
+                        let comp_key = (key.clone(), scope_id.clone());
+                        if !existing_vars.contains(&comp_key) {
+                            scoped_env_vars.push(crate::core::env_scope::ScopedEnvVar {
+                                name: key.clone(),
+                                scope: scope.clone(),
+                                scope_id: scope_id.clone(),
+                                used_by: vec![service_name.clone()],
+                                value: Some(effective_value.clone()),
+                            });
+                            existing_vars.insert(comp_key);
+                        }
+                    }
+
+                    continue;
+                }
+
+                if existing_vars.contains(&(key.clone(), scope_id.clone())) {
+                    continue;
                 }
 
                 scoped_env_vars.push(crate::core::env_scope::ScopedEnvVar {
@@ -379,6 +451,7 @@ impl CliCommand for CreateCommand {
                     scope: scope.clone(),
                     scope_id: scope_id.clone(),
                     used_by: vec![service_name.clone()],
+                    value: Some(effective_value.clone()),
                 });
 
                 existing_vars.insert((key, scope_id.clone()));
@@ -429,24 +502,26 @@ impl CliCommand for CreateCommand {
             }
         }
 
+        // Filter out TEST_ prefixed vars (test-only, not needed in deployment)
+        scoped_env_vars.retain(|v| !v.name.starts_with("TEST_"));
+
         // Only keep application-level variables if they match the allowed criteria
+        let project_names_for_retain: Vec<String> =
+            manifest.projects.iter().map(|p| p.name.clone()).collect();
         scoped_env_vars.retain(|v| {
             if v.scope != crate::core::env_scope::EnvironmentVariableScope::Application {
                 return true;
             }
 
-            is_allowed_application_var(&v.name, &env_var_components)
+            is_allowed_application_var(&v.name, &env_var_components, &project_names_for_retain)
         });
 
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-        writeln!(stdout, " [OK] ({} variables)", scoped_env_vars.len())?;
-        stdout.reset()?;
+        // Cross-scope deduplication: remove service/worker copies when an application-scope copy exists
+        deduplicate_cross_scope(&mut scoped_env_vars);
 
-        // Detect runtime dependencies
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-        write!(stdout, "[INFO] Detecting runtime dependencies...")?;
-        stdout.flush()?;
-        stdout.reset()?;
+        log_ok!(stdout, " [OK] ({} variables)", scoped_env_vars.len());
+
+        log_progress!(stdout, "[INFO] Detecting runtime dependencies...");
 
         let all_runtime_deps = find_all_runtime_deps(&modules_path, &rendered_templates_cache)?;
 
@@ -465,28 +540,16 @@ impl CliCommand for CreateCommand {
         }
 
         let total_resources: usize = project_runtime_deps.values().map(|v| v.len()).sum();
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-        writeln!(stdout, " [OK] ({} resources)", total_resources)?;
-        stdout.reset()?;
+        log_ok!(stdout, " [OK] ({} resources)", total_resources);
 
-        // Detect integrations
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-        write!(stdout, "[INFO] Detecting integrations...")?;
-        stdout.flush()?;
-        stdout.reset()?;
+        log_progress!(stdout, "[INFO] Detecting integrations...");
 
         let all_integrations = find_all_integrations(&modules_path, &rendered_templates_cache)?;
 
         let total_integrations: usize = all_integrations.values().map(|v| v.len()).sum();
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-        writeln!(stdout, " [OK] ({} integrations)", total_integrations)?;
-        stdout.reset()?;
+        log_ok!(stdout, " [OK] ({} integrations)", total_integrations);
 
-        // Detect worker configurations
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-        write!(stdout, "[INFO] Detecting worker configurations...")?;
-        stdout.flush()?;
-        stdout.reset()?;
+        log_progress!(stdout, "[INFO] Detecting worker configurations...");
 
         let all_worker_configs =
             crate::core::ast::infrastructure::worker_config::find_all_worker_configs(
@@ -495,23 +558,18 @@ impl CliCommand for CreateCommand {
             )?;
 
         let total_worker_configs = all_worker_configs.len();
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-        writeln!(stdout, " [OK] ({} workers)", total_worker_configs)?;
-        stdout.reset()?;
+        log_ok!(stdout, " [OK] ({} workers)", total_worker_configs);
 
-        // Detect service mesh dependencies (SDK client imports between services)
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-        write!(stdout, "[INFO] Detecting service mesh connections...")?;
-        stdout.flush()?;
-        stdout.reset()?;
+        log_progress!(stdout, "[INFO] Detecting service mesh connections...");
 
         let all_service_deps =
             find_all_service_dependencies(&modules_path, &rendered_templates_cache)?;
 
         let total_service_deps: usize = all_service_deps.values().map(|v| v.len()).sum();
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-        writeln!(stdout, " [OK] ({} connections)", total_service_deps)?;
-        stdout.reset()?;
+        log_ok!(stdout, " [OK] ({} connections)", total_service_deps);
+
+        let project_names_for_origin: Vec<String> =
+            manifest.projects.iter().map(|p| p.name.clone()).collect();
 
         let required_env_vars: Vec<EnvironmentVariableRequirement> = scoped_env_vars
             .iter()
@@ -540,6 +598,18 @@ impl CliCommand for CreateCommand {
                         }
                     },
                 ),
+                origin: if docker_compose_var_names.contains(&v.name)
+                    || env_var_components.contains_key(&v.name)
+                    || crate::core::env_scope::is_application_scoped_var(
+                        &v.name,
+                        &project_names_for_origin,
+                    )
+                    || is_platform_managed_var(&v.name)
+                {
+                    Some("platform".to_string())
+                } else {
+                    Some("user".to_string())
+                },
             })
             .collect();
 
@@ -565,51 +635,31 @@ impl CliCommand for CreateCommand {
             writeln!(stdout, "[INFO] Worker-level: {}", worker_vars)?;
         }
 
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-        write!(stdout, "[INFO] Generating release manifest...")?;
-        stdout.flush()?;
-        stdout.reset()?;
+        log_progress!(stdout, "[INFO] Generating release manifest...");
 
         // Handle local mode: create tarball and upload to S3
         let code_source_url = if local_mode && !dry_run {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-            writeln!(stdout, "\n[INFO] Packaging local code...")?;
-            stdout.reset()?;
+            log_info!(stdout, "\n[INFO] Packaging local code...");
 
-            // Create tarball
             let tarball_path = app_root.join(".forklaunch").join("release-code.tar.gz");
             super::s3_upload::create_app_tarball(&app_root, &tarball_path)?;
 
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "[INFO] Tarball created")?;
-            stdout.reset()?;
+            log_ok!(stdout, "[INFO] Tarball created");
 
             // Get presigned upload URL from platform
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-            write!(stdout, "[INFO] Getting upload URL from platform...")?;
-            stdout.flush()?;
-            stdout.reset()?;
+            log_progress!(stdout, "[INFO] Getting upload URL from platform...");
 
             let upload_response =
                 super::s3_upload::get_presigned_upload_url(&application_id, version, &auth_mode)?;
 
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, " [OK]")?;
-            stdout.reset()?;
+            log_ok_suffix!(stdout);
 
-            // Upload tarball to S3
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-            write!(stdout, "[INFO] Uploading code to S3...")?;
-            stdout.flush()?;
-            stdout.reset()?;
+            log_progress!(stdout, "[INFO] Uploading code to S3...");
 
             super::s3_upload::upload_to_s3(&tarball_path, &upload_response.upload_url)?;
 
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, " [OK]")?;
-            stdout.reset()?;
+            log_ok_suffix!(stdout);
 
-            // Clean up tarball
             std::fs::remove_file(&tarball_path).ok();
 
             Some(upload_response.code_source_url)
@@ -633,14 +683,10 @@ impl CliCommand for CreateCommand {
             &all_service_deps,
         )?;
 
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-        writeln!(stdout, " [OK]")?;
-        stdout.reset()?;
+        log_ok_suffix!(stdout);
 
         if dry_run {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-            writeln!(stdout, "\n  [DRY RUN] Skipping upload to platform")?;
-            stdout.reset()?;
+            log_warn!(stdout, "\n  [DRY RUN] Skipping upload to platform");
 
             let manifest_file = app_root.join(".forklaunch").join("release-manifest.json");
             std::fs::write(
@@ -653,16 +699,11 @@ impl CliCommand for CreateCommand {
                 manifest_file.display()
             )?;
         } else {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-            write!(stdout, "[INFO] Uploading release to platform...")?;
-            stdout.flush()?;
-            stdout.reset()?;
+            log_progress!(stdout, "[INFO] Uploading release to platform...");
 
             upload_release(&application_id, release_manifest, &auth_mode)?;
 
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, " [OK]")?;
-            stdout.reset()?;
+            log_ok_suffix!(stdout);
 
             manifest.release_version = Some(version.clone());
             manifest.release_git_commit = Some(git_commit.clone());
@@ -676,14 +717,10 @@ impl CliCommand for CreateCommand {
         }
 
         writeln!(stdout)?;
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true))?;
-        writeln!(stdout, "[OK] Release {} created successfully!", version)?;
-        stdout.reset()?;
+        log_header!(stdout, Color::Green, "[OK] Release {} created successfully!", version);
 
         if !dry_run {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-            writeln!(stdout, "\n[INFO] Next steps:")?;
-            stdout.reset()?;
+            log_info!(stdout, "\n[INFO] Next steps:");
             writeln!(stdout, "  1. Set environment variables in Platform UI")?;
             writeln!(
                 stdout,
@@ -726,6 +763,9 @@ fn upload_release(
         .unwrap_or_else(|_| serde_json::json!({ "raw": response_body }));
 
     if !status.is_success() {
+        if status.as_u16() == 409 {
+            bail!("Release version already exists. Bump the version in your manifest and try again.");
+        }
         bail!(
             "Failed to create release: {} (Status: {})",
             parsed_response,
@@ -1007,6 +1047,13 @@ fn infer_component_details(
 )> {
     let key_upper = key.to_ascii_uppercase();
 
+    // OTEL_SERVICE_NAME is per-service/worker and must NOT use passthrough.
+    // The platform sets it dynamically per component at deploy time.
+    // Without component metadata, resolveComponentInitialValue returns undefined.
+    if key_upper == "OTEL_SERVICE_NAME" {
+        return None;
+    }
+
     // Special handling for OTEL_EXPORTER_OTLP_ENDPOINT - set target to "otel"
     if key_upper == "OTEL_EXPORTER_OTLP_ENDPOINT" {
         let property = infer_component_property(&key_upper).unwrap_or_else(|| {
@@ -1258,7 +1305,15 @@ fn infer_component_type(
         DATABASE_VALUE_HINTS,
         DATABASE_IMAGE_HINTS,
     ) {
-        return Some((EnvironmentVariableComponentType::Database, None));
+        // Exclude config flags that happen to start with DB_ but aren't database properties
+        // e.g. DB_SSL, DB_TLS, DB_VERIFY, DB_CA_CERT
+        let tokens: Vec<&str> = key_upper.split('_').filter(|s| !s.is_empty()).collect();
+        let has_config_token = tokens
+            .iter()
+            .any(|t| matches!(*t, "SSL" | "TLS" | "CERT" | "CA" | "VERIFY" | "SSLMODE"));
+        if !has_config_token {
+            return Some((EnvironmentVariableComponentType::Database, None));
+        }
     }
 
     const CACHE_KEY_HINTS: &[&str] = &["REDIS", "CACHE", "MEMCACHE", "MEMCACHED"];
@@ -1311,8 +1366,23 @@ fn infer_component_type(
         return Some((EnvironmentVariableComponentType::Queue, None));
     }
 
-    if let Some((component_type, target)) = infer_service_reference(value, service_lookup) {
-        return Some((component_type, target));
+    if let Some((component_type, ref_target)) = infer_service_reference(value, service_lookup) {
+        // For _URL vars, only trust the service reference if the var name prefix
+        // matches the inferred target. This prevents external service URLs
+        // (e.g. LIVEKIT_URL=ws://matching:7880) from being misclassified as
+        // internal service references (target=matching).
+        if key_upper.ends_with("_URL") {
+            let prefix = key_upper
+                .trim_end_matches("_URL")
+                .to_ascii_lowercase()
+                .replace('_', "-");
+            if ref_target.as_deref() == Some(prefix.as_str()) {
+                return Some((component_type, ref_target));
+            }
+            // Name mismatch — skip this inference (e.g. LIVEKIT != matching)
+        } else {
+            return Some((component_type, ref_target));
+        }
     }
 
     let has_generated_port = has_generated_app_port(service_ports);
@@ -1395,6 +1465,11 @@ fn should_passthrough(key: &str, value: &str) -> bool {
         return false;
     }
 
+    // Don't passthrough values containing localhost
+    if value.contains("localhost") {
+        return false;
+    }
+
     let key_upper = key.to_ascii_uppercase();
 
     if infer_key_component_property(&key_upper, value).is_some() {
@@ -1445,7 +1520,13 @@ fn is_allowed_application_var(
             Option<String>,
         ),
     >,
+    project_names: &[String],
 ) -> bool {
+    // Allow all vars that are inherently application-scoped (observability, shared keys, inter-service URLs)
+    if crate::core::env_scope::is_application_scoped_var(var_name, project_names) {
+        return true;
+    }
+
     if let Some((component_type, property, _, _, _)) = components.get(var_name) {
         if matches!(
             component_type,
@@ -1454,15 +1535,6 @@ fn is_allowed_application_var(
         {
             return true;
         }
-    }
-
-    let upper = var_name.to_ascii_uppercase();
-    if upper.contains("HMAC") {
-        return true;
-    }
-
-    if upper.contains("JWKS") && upper.contains("PUBLIC") && upper.contains("KEY") {
-        return true;
     }
 
     false
@@ -1530,6 +1602,195 @@ fn looks_base64(value: &str) -> bool {
     trimmed
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || "+/=_-".contains(c))
+}
+
+/// Cross-scope deduplication: if a var exists at application scope AND at service/worker scope
+/// with the same value (or no value), remove the service/worker copies.
+/// Never promotes service/worker vars to application scope — vars like PORT must stay per-service.
+fn deduplicate_cross_scope(scoped_env_vars: &mut Vec<crate::core::env_scope::ScopedEnvVar>) {
+    use std::collections::HashMap;
+
+    // Group vars by name
+    let mut by_name: HashMap<String, Vec<usize>> = HashMap::new();
+    for (idx, var) in scoped_env_vars.iter().enumerate() {
+        by_name.entry(var.name.clone()).or_default().push(idx);
+    }
+
+    let mut indices_to_remove = std::collections::HashSet::new();
+
+    for (_name, indices) in &by_name {
+        if indices.len() <= 1 {
+            continue;
+        }
+
+        let has_app_scope = indices.iter().any(|&i| {
+            scoped_env_vars[i].scope == crate::core::env_scope::EnvironmentVariableScope::Application
+        });
+
+        if has_app_scope {
+            // Compute the majority value across all service/worker copies.
+            // The app-scope entry gets this value; service/worker copies matching
+            // the majority are removed. Minority diversions are kept as overrides.
+            let app_idx = indices
+                .iter()
+                .find(|&&i| {
+                    scoped_env_vars[i].scope
+                        == crate::core::env_scope::EnvironmentVariableScope::Application
+                })
+                .copied()
+                .unwrap();
+
+            // Count occurrences of each non-empty value across service/worker copies
+            let mut value_counts: HashMap<String, usize> = HashMap::new();
+            for &idx in indices {
+                if scoped_env_vars[idx].scope
+                    != crate::core::env_scope::EnvironmentVariableScope::Application
+                {
+                    if let Some(v) = &scoped_env_vars[idx].value {
+                        let trimmed = v.trim().to_string();
+                        if !trimmed.is_empty() {
+                            *value_counts.entry(trimmed).or_insert(0) += 1;
+                        }
+                    }
+                }
+            }
+
+            // Most common value becomes the application-scope value
+            let majority_value = value_counts
+                .iter()
+                .max_by_key(|(_, count)| *count)
+                .map(|(val, _)| val.clone());
+
+            // Set the app-scope entry's value to the majority
+            if let Some(ref val) = majority_value {
+                scoped_env_vars[app_idx].value = Some(val.clone());
+            }
+
+            // Remove service/worker copies that match the majority.
+            // Keep copies that have no value (they need to be filled per-component)
+            // or that differ from the majority (overrides).
+            for &idx in indices {
+                if scoped_env_vars[idx].scope
+                    != crate::core::env_scope::EnvironmentVariableScope::Application
+                {
+                    let matches_majority = match &scoped_env_vars[idx].value {
+                        None => majority_value.is_none(),
+                        Some(v) => {
+                            let trimmed = v.trim();
+                            if trimmed.is_empty() {
+                                majority_value.is_none()
+                            } else {
+                                majority_value.as_deref() == Some(trimmed)
+                            }
+                        }
+                    };
+                    if matches_majority {
+                        indices_to_remove.insert(idx);
+                    }
+                }
+            }
+        } else if indices.len() >= 2 {
+            // All copies are at service/worker scope (no app entry).
+            // If 2+ copies share the same value, promote to application scope.
+            let mut value_counts: HashMap<String, usize> = HashMap::new();
+            for &idx in indices {
+                if let Some(v) = &scoped_env_vars[idx].value {
+                    let trimmed = v.trim().to_string();
+                    if !trimmed.is_empty() {
+                        *value_counts.entry(trimmed).or_insert(0) += 1;
+                    }
+                }
+            }
+
+            if let Some((majority_val, majority_count)) =
+                value_counts.iter().max_by_key(|(_, count)| *count)
+            {
+                // Only promote if at least 2 copies share the same value
+                if *majority_count >= 2 {
+                    let majority_val = majority_val.clone();
+
+                    // Create an application-scope entry with blank value
+                    // (docker-compose values are dev-only, must not carry over)
+                    let first_idx = indices[0];
+                    let app_entry = crate::core::env_scope::ScopedEnvVar {
+                        name: scoped_env_vars[first_idx].name.clone(),
+                        scope: crate::core::env_scope::EnvironmentVariableScope::Application,
+                        scope_id: None,
+                        used_by: scoped_env_vars[first_idx].used_by.clone(),
+                        value: Some("".to_string()),
+                    };
+                    scoped_env_vars.push(app_entry);
+
+                    // Remove service/worker copies that match the majority value.
+                    // Keep copies with minority values as per-service overrides.
+                    for &idx in indices {
+                        let matches_majority = match &scoped_env_vars[idx].value {
+                            Some(v) => {
+                                let trimmed = v.trim();
+                                !trimmed.is_empty() && trimmed == majority_val
+                            }
+                            None => false,
+                        };
+                        if matches_majority {
+                            indices_to_remove.insert(idx);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Remove in reverse order to preserve indices
+    let mut sorted_removals: Vec<usize> = indices_to_remove.into_iter().collect();
+    sorted_removals.sort_unstable_by(|a, b| b.cmp(a));
+    for idx in sorted_removals {
+        scoped_env_vars.remove(idx);
+    }
+}
+
+/// Auth/infrastructure URL vars that Pulumi computes at deploy time.
+/// These are not inter-service URLs but are still auto-generated.
+fn is_pulumi_injected_url_var(var_name: &str) -> bool {
+    const PULUMI_URL_VARS: &[&str] = &[
+        "JWKS_PUBLIC_KEY_URL",
+        "BETTER_AUTH_BASE_URL",
+    ];
+    let upper = var_name.to_ascii_uppercase();
+    PULUMI_URL_VARS.iter().any(|&v| v == upper)
+}
+
+/// Explicit registry of platform-managed env var names/prefixes.
+/// Fallback for vars that don't match heuristic checks (docker-compose, component, scoped).
+/// Update this list when adding new platform-generated env vars.
+fn is_platform_managed_var(var_name: &str) -> bool {
+    const PLATFORM_VARS: &[&str] = &[
+        "NODE_ENV",
+        "HOST",
+        "PROTOCOL",
+        "VERSION",
+        "DOCS_PATH",
+        "OTEL_LEVEL",
+        "OTEL_SERVICE_NAME",
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "REDIS_URL",
+        "PGSSLMODE",
+        "HMAC_SECRET_KEY",
+        "PASSWORD_ENCRYPTION_SECRET",
+        "JWKS_PUBLIC_KEY_URL",
+        "BETTER_AUTH_SECRET",
+        "BETTER_AUTH_BASE_PATH",
+        "BETTER_AUTH_BASE_URL",
+        "CORS_ORIGINS",
+        "STRIPE_API_KEY",
+        "STRIPE_WEBHOOK_SECRET",
+        "IAM_DB_NAME",
+        "PORT",
+        "REDIS_TLS",
+    ];
+    const PLATFORM_PREFIXES: &[&str] = &["DB_", "S3_", "KAFKA_"];
+    let upper = var_name.to_ascii_uppercase();
+    PLATFORM_VARS.iter().any(|&v| v == upper)
+        || PLATFORM_PREFIXES.iter().any(|p| upper.starts_with(p))
 }
 
 #[cfg(test)]
@@ -1781,6 +2042,7 @@ mod tests {
                     scope: scope.clone(),
                     scope_id: scope_id.clone(),
                     used_by: vec![service_name.clone()],
+                    value: None,
                 });
 
                 existing_vars.insert((key, scope_id.clone()));
@@ -1835,6 +2097,7 @@ mod tests {
             scope: crate::core::env_scope::EnvironmentVariableScope::Service,
             scope_id: Some("my-service".to_string()),
             used_by: vec!["my-service".to_string()],
+            value: None,
         }];
 
         let mut existing_vars: std::collections::HashSet<(String, Option<String>)> =
@@ -1870,6 +2133,7 @@ mod tests {
                     scope: scope.clone(),
                     scope_id: scope_id.clone(),
                     used_by: vec![service_name.clone()],
+                    value: None,
                 });
 
                 existing_vars.insert((key, scope_id.clone()));
@@ -1882,5 +2146,173 @@ mod tests {
 
         // Verify HOST is added
         assert!(scoped_env_vars.iter().any(|v| v.name == "HOST"));
+    }
+
+    #[test]
+    fn test_deduplicate_cross_scope_promotes_same_value_services() {
+        // Two service copies with the same value → promoted to application scope
+        let mut vars = vec![
+            crate::core::env_scope::ScopedEnvVar {
+                name: "S3_BUCKET".to_string(),
+                scope: crate::core::env_scope::EnvironmentVariableScope::Service,
+                scope_id: Some("billing".to_string()),
+                used_by: vec!["billing".to_string()],
+                value: Some("my-bucket".to_string()),
+            },
+            crate::core::env_scope::ScopedEnvVar {
+                name: "S3_BUCKET".to_string(),
+                scope: crate::core::env_scope::EnvironmentVariableScope::Service,
+                scope_id: Some("platform-management".to_string()),
+                used_by: vec!["platform-management".to_string()],
+                value: Some("my-bucket".to_string()),
+            },
+        ];
+
+        deduplicate_cross_scope(&mut vars);
+
+        // Should have one application-scoped entry with blank value
+        assert_eq!(vars.len(), 1, "Expected 1 var after dedup, got {}", vars.len());
+        assert_eq!(vars[0].scope, crate::core::env_scope::EnvironmentVariableScope::Application);
+        assert_eq!(vars[0].scope_id, None);
+        assert_eq!(vars[0].value, Some("".to_string()));
+        assert_eq!(vars[0].name, "S3_BUCKET");
+    }
+
+    #[test]
+    fn test_deduplicate_cross_scope_keeps_different_values() {
+        // Two service copies with different values → kept as-is
+        let mut vars = vec![
+            crate::core::env_scope::ScopedEnvVar {
+                name: "DB_NAME".to_string(),
+                scope: crate::core::env_scope::EnvironmentVariableScope::Service,
+                scope_id: Some("billing".to_string()),
+                used_by: vec!["billing".to_string()],
+                value: Some("billing_db".to_string()),
+            },
+            crate::core::env_scope::ScopedEnvVar {
+                name: "DB_NAME".to_string(),
+                scope: crate::core::env_scope::EnvironmentVariableScope::Service,
+                scope_id: Some("iam".to_string()),
+                used_by: vec!["iam".to_string()],
+                value: Some("iam_db".to_string()),
+            },
+        ];
+
+        deduplicate_cross_scope(&mut vars);
+
+        // Both should remain — no majority (each value appears once)
+        assert_eq!(vars.len(), 2, "Expected 2 vars after dedup, got {}", vars.len());
+        assert!(vars.iter().all(|v| v.scope == crate::core::env_scope::EnvironmentVariableScope::Service));
+    }
+
+    #[test]
+    fn test_deduplicate_cross_scope_existing_app_scope_unchanged() {
+        // Mix of app-scope + service copies → existing behavior (app gets majority, matching service copies removed)
+        let mut vars = vec![
+            crate::core::env_scope::ScopedEnvVar {
+                name: "REDIS_URL".to_string(),
+                scope: crate::core::env_scope::EnvironmentVariableScope::Application,
+                scope_id: None,
+                used_by: vec![],
+                value: None,
+            },
+            crate::core::env_scope::ScopedEnvVar {
+                name: "REDIS_URL".to_string(),
+                scope: crate::core::env_scope::EnvironmentVariableScope::Service,
+                scope_id: Some("billing".to_string()),
+                used_by: vec!["billing".to_string()],
+                value: Some("redis://localhost:6379".to_string()),
+            },
+            crate::core::env_scope::ScopedEnvVar {
+                name: "REDIS_URL".to_string(),
+                scope: crate::core::env_scope::EnvironmentVariableScope::Service,
+                scope_id: Some("iam".to_string()),
+                used_by: vec!["iam".to_string()],
+                value: Some("redis://localhost:6379".to_string()),
+            },
+        ];
+
+        deduplicate_cross_scope(&mut vars);
+
+        // Should have one application-scoped entry with the majority value
+        assert_eq!(vars.len(), 1, "Expected 1 var after dedup, got {}", vars.len());
+        assert_eq!(vars[0].scope, crate::core::env_scope::EnvironmentVariableScope::Application);
+        assert_eq!(vars[0].scope_id, None);
+        // The has_app_scope branch sets the app entry's value to the majority
+        assert_eq!(vars[0].value, Some("redis://localhost:6379".to_string()));
+    }
+
+    #[test]
+    fn test_deduplicate_cross_scope_majority_with_minority_override() {
+        // Three service copies: 2 same, 1 different → promote majority, keep minority
+        let mut vars = vec![
+            crate::core::env_scope::ScopedEnvVar {
+                name: "S3_REGION".to_string(),
+                scope: crate::core::env_scope::EnvironmentVariableScope::Service,
+                scope_id: Some("billing".to_string()),
+                used_by: vec!["billing".to_string()],
+                value: Some("us-east-1".to_string()),
+            },
+            crate::core::env_scope::ScopedEnvVar {
+                name: "S3_REGION".to_string(),
+                scope: crate::core::env_scope::EnvironmentVariableScope::Service,
+                scope_id: Some("iam".to_string()),
+                used_by: vec!["iam".to_string()],
+                value: Some("us-east-1".to_string()),
+            },
+            crate::core::env_scope::ScopedEnvVar {
+                name: "S3_REGION".to_string(),
+                scope: crate::core::env_scope::EnvironmentVariableScope::Service,
+                scope_id: Some("special".to_string()),
+                used_by: vec!["special".to_string()],
+                value: Some("eu-west-1".to_string()),
+            },
+        ];
+
+        deduplicate_cross_scope(&mut vars);
+
+        // Should have: 1 application-scoped (blank) + 1 minority service override
+        assert_eq!(vars.len(), 2, "Expected 2 vars after dedup, got {}", vars.len());
+
+        let app_var = vars.iter().find(|v| v.scope == crate::core::env_scope::EnvironmentVariableScope::Application);
+        assert!(app_var.is_some(), "Should have an application-scoped entry");
+        assert_eq!(app_var.unwrap().value, Some("".to_string()));
+
+        let svc_var = vars.iter().find(|v| v.scope == crate::core::env_scope::EnvironmentVariableScope::Service);
+        assert!(svc_var.is_some(), "Should keep minority service override");
+        assert_eq!(svc_var.unwrap().value, Some("eu-west-1".to_string()));
+        assert_eq!(svc_var.unwrap().scope_id, Some("special".to_string()));
+    }
+
+    #[test]
+    fn test_deduplicate_cross_scope_single_entry_unchanged() {
+        // Single service entry → no promotion
+        let mut vars = vec![
+            crate::core::env_scope::ScopedEnvVar {
+                name: "CUSTOM_VAR".to_string(),
+                scope: crate::core::env_scope::EnvironmentVariableScope::Service,
+                scope_id: Some("billing".to_string()),
+                used_by: vec!["billing".to_string()],
+                value: Some("some-value".to_string()),
+            },
+        ];
+
+        deduplicate_cross_scope(&mut vars);
+
+        assert_eq!(vars.len(), 1);
+        assert_eq!(vars[0].scope, crate::core::env_scope::EnvironmentVariableScope::Service);
+    }
+
+    #[test]
+    fn test_should_passthrough_rejects_localhost() {
+        assert!(!should_passthrough("SOME_VAR", "localhost:3000"));
+        assert!(!should_passthrough("HOST", "http://localhost"));
+        assert!(!should_passthrough("ENDPOINT", "localhost"));
+    }
+
+    #[test]
+    fn test_should_passthrough_allows_non_localhost() {
+        assert!(should_passthrough("SOME_VAR", "production"));
+        assert!(should_passthrough("APP_NAME", "my-app"));
     }
 }

@@ -454,7 +454,6 @@ async function checkAuthorizationToken<
     return invalidAuthorizationMethod;
   }
 
-  // Check subscription requirements if configured
   if (hasSubscriptionChecks(collapsedAuthorizationMethod)) {
     if (!collapsedAuthorizationMethod.surfaceSubscription) {
       return [500, 'No subscription surfacing function provided.'];
@@ -474,18 +473,11 @@ async function checkAuthorizationToken<
       >
     );
 
-    // Validate subscription exists (non-null)
     if (!subscription) {
       return invalidAuthorizationSubscription;
     }
-
-    // Additional validation (status, expiry, etc.) can be done by:
-    // 1. Providing validation in the surfaceSubscription function itself
-    // 2. Using inline checks in individual handlers for specific requirements
-    // 3. Using custom middleware for application-specific subscription rules
   }
 
-  // Check feature requirements if configured
   if (hasFeatureChecks(collapsedAuthorizationMethod)) {
     if (!collapsedAuthorizationMethod.surfaceFeatures) {
       return [500, 'No features surfacing function provided.'];
@@ -506,7 +498,6 @@ async function checkAuthorizationToken<
         >
       );
 
-    // Check if all required features are available
     const requiredFeatures =
       collapsedAuthorizationMethod.requiredFeatures ?? [];
     const missingFeatures = requiredFeatures.filter(

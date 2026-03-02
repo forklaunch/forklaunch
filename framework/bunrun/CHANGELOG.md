@@ -1,5 +1,11 @@
 # @forklaunch/bunrun
 
+## 0.0.23
+
+### Patch Changes
+
+- WS actually working probably, and package bumps
+
 ## 0.0.22
 
 ### Patch Changes

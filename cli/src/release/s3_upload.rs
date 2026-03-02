@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::{fs::File, path::Path};
 
 use anyhow::{Context, Result, bail};
@@ -6,6 +7,7 @@ use ignore::WalkBuilder;
 use reqwest::{blocking::Client, header};
 use serde::Deserialize;
 use tar::Builder;
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use crate::{constants::get_platform_management_api_url, core::hmac::AuthMode};
 
@@ -39,12 +41,10 @@ pub(crate) fn create_app_tarball(app_root: &Path, output_path: &Path) -> Result<
         let entry = entry.with_context(|| "Failed to read directory entry")?;
         let path = entry.path();
 
-        // Skip the .git directory itself
         if path.starts_with(app_root.join(".git")) {
             continue;
         }
 
-        // Skip the tarball output file if it's in the same directory
         if path == output_path {
             continue;
         }
@@ -108,11 +108,9 @@ pub(crate) fn get_presigned_upload_url(
 pub(crate) fn upload_to_s3(file_path: &Path, presigned_url: &str) -> Result<()> {
     let client = Client::new();
 
-    // Open the file for streaming instead of loading into memory
     let file = File::open(file_path)
         .with_context(|| format!("Failed to open tarball file {:?}", file_path))?;
 
-    // Get file size for Content-Length header
     let file_size = file
         .metadata()
         .with_context(|| format!("Failed to get metadata for file {:?}", file_path))?
@@ -138,6 +136,7 @@ pub(crate) fn upload_to_s3(file_path: &Path, presigned_url: &str) -> Result<()> 
         );
     }
 
-    println!("[INFO] Uploaded {} bytes to S3", file_size);
+    let mut stdout = StandardStream::stdout(ColorChoice::Always);
+    log_info!(stdout, "[INFO] Uploaded {} bytes to S3", file_size);
     Ok(())
 }

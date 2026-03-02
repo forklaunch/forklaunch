@@ -50,11 +50,9 @@ export function setupTestEnvironment(config: TestEnvConfig): void {
     customVars = {}
   } = config;
 
-  // Only set database environment variables if database is configured
   if (databaseType) {
     const dbPort = getDatabasePort(databaseType);
 
-    // Database environment variables
     process.env.DB_NAME = 'test_db';
 
     // SQLite databases are file-based, no container needed
@@ -73,14 +71,12 @@ export function setupTestEnvironment(config: TestEnvConfig): void {
     }
   }
 
-  // Redis environment variables (if provided)
   if (redis) {
     process.env.REDIS_URL = `redis://${redis.getHost()}:${redis.getMappedPort(6379)}`;
     process.env.REDIS_HOST = redis.getHost();
     process.env.REDIS_PORT = redis.getMappedPort(6379).toString();
   }
 
-  // Kafka environment variables (if provided)
   if (kafka) {
     const kafkaBroker = `${kafka.getHost()}:${kafka.getMappedPort(9092)}`;
     process.env.KAFKA_BROKERS = kafkaBroker;
@@ -88,7 +84,6 @@ export function setupTestEnvironment(config: TestEnvConfig): void {
     process.env.KAFKA_GROUP_ID = 'test-group';
   }
 
-  // S3/MinIO environment variables (if provided)
   if (s3) {
     process.env.S3_ENDPOINT = `http://${s3.getHost()}:${s3.getMappedPort(9000)}`;
     process.env.S3_ACCESS_KEY_ID = 'minioadmin';
@@ -98,7 +93,6 @@ export function setupTestEnvironment(config: TestEnvConfig): void {
     process.env.S3_FORCE_PATH_STYLE = 'true'; // Required for MinIO
   }
 
-  // Standard test environment variables
   process.env.HMAC_SECRET_KEY = hmacSecret;
   process.env.JWKS_PUBLIC_KEY_URL =
     'http://localhost:3000/.well-known/jwks.json';

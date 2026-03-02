@@ -11,7 +11,7 @@ use std::{
 use anyhow::{Context, Result};
 use clap::ArgMatches;
 use reqwest::blocking::Client;
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use super::base_path::{find_nearest_manifest_from, find_nearest_manifest_root_unbounded};
 use crate::prompt::{ArrayCompleter, prompt_for_confirmation};
@@ -162,13 +162,7 @@ pub(crate) fn precheck_version(
     }
 
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-    writeln!(
-        &mut stdout,
-        "This project requires forklaunch CLI v{}, but you are running v{}.",
-        required_version, current
-    )?;
-    stdout.reset()?;
+    log_warn!(stdout, "This project requires forklaunch CLI v{}, but you are running v{}.", required_version, current);
 
     let mut line_editor =
         rustyline::Editor::<ArrayCompleter, rustyline::history::DefaultHistory>::new()?;
@@ -181,32 +175,13 @@ pub(crate) fn precheck_version(
     }
 
     let platform = platform_triple()?;
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-    writeln!(
-        &mut stdout,
-        "Installing forklaunch CLI v{} for {}...",
-        required_version, platform
-    )?;
-    stdout.reset()?;
+    log_info!(stdout, "Installing forklaunch CLI v{} for {}...", required_version, platform);
 
     let binary_path = download_binary(&required_version)?;
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-    writeln!(
-        &mut stdout,
-        "Installed forklaunch CLI v{} at {}",
-        required_version,
-        binary_path.display()
-    )?;
-    stdout.reset()?;
+    log_ok!(stdout, "Installed forklaunch CLI v{} at {}", required_version, binary_path.display());
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-    writeln!(
-        &mut stdout,
-        "Re-executing your command with forklaunch v{}...",
-        required_version
-    )?;
-    stdout.reset()?;
+    log_info!(stdout, "Re-executing your command with forklaunch v{}...", required_version);
 
     let mut child = OsCommand::new(&binary_path)
         .args(args().skip(1))
@@ -223,14 +198,7 @@ pub(crate) fn precheck_version(
             exit(code);
         }
         None => {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-            writeln!(
-                &mut stdout,
-                "Installed forklaunch v{} at {}. Please re-run your command.",
-                required_version,
-                binary_path.display()
-            )?;
-            stdout.reset()?;
+            log_warn!(stdout, "Installed forklaunch v{} at {}. Please re-run your command.", required_version, binary_path.display());
             Ok(VersionCheckOutcome::ReexecNotSupported)
         }
     }

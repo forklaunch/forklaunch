@@ -8,7 +8,7 @@ use crate::{choice, core::choices::Choice};
 // All URLs can be overridden via environment variables.
 
 const DEV_PLATFORM_MANAGEMENT_API_URL: &str = "http://localhost:8004";
-const DEV_IAM_API_URL: &str = "http://localhost:8000";
+const DEV_IAM_API_URL: &str = "http://localhost:8001";
 const DEV_PLATFORM_UI_URL: &str = "http://localhost:3001";
 
 const PROD_PLATFORM_MANAGEMENT_API_URL: &str = "https://platform.forklaunch.com";

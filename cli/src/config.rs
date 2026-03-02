@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::Result;
 use clap::{ArgMatches, Command};
 use pull::PullCommand;
 use push::PushCommand;
@@ -25,10 +25,13 @@ impl ConfigCommand {
 
 impl CliCommand for ConfigCommand {
     fn command(&self) -> Command {
-        command("config", "Get or set application configuration")
-            .subcommand_required(true)
-            .subcommand(self.pull.command())
-            .subcommand(self.push.command())
+        command(
+            "config",
+            "Pull and push environment configuration for an application",
+        )
+        .subcommand_required(true)
+        .subcommand(self.pull.command())
+        .subcommand(self.push.command())
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
@@ -38,12 +41,4 @@ impl CliCommand for ConfigCommand {
             _ => unreachable!(),
         }
     }
-}
-
-pub(crate) fn unwrap_id(matches: &ArgMatches) -> Result<&String> {
-    let wrapped_id = matches.get_one::<String>("id");
-    Ok(match wrapped_id {
-        None => bail!("Failed to parse id"),
-        Some(id) => id,
-    })
 }

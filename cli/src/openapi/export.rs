@@ -2,7 +2,7 @@ use std::{fs::create_dir_all, io::Write};
 
 use anyhow::{Context, Result};
 use clap::{Arg, ArgMatches, Command};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 
 use crate::{
     CliCommand,
@@ -42,7 +42,6 @@ impl CliCommand for ExportCommand {
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-        // Upfront validation
         let (app_root, manifest) = crate::core::validate::require_manifest(matches)?;
 
         let output_dir = matches.get_one::<String>("output").unwrap();
@@ -51,9 +50,7 @@ impl CliCommand for ExportCommand {
         create_dir_all(&output_path)
             .with_context(|| format!("Failed to create output directory: {:?}", output_path))?;
 
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-        writeln!(stdout, "Exporting OpenAPI specifications...")?;
-        stdout.reset()?;
+        log_info!(stdout, "Exporting OpenAPI specifications...");
         writeln!(stdout)?;
 
         let result = export_all_services(&app_root, &manifest, &output_path);
@@ -62,25 +59,15 @@ impl CliCommand for ExportCommand {
 
         match result {
             Ok(exported_services) => {
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true))?;
-                writeln!(
-                    stdout,
-                    "[OK] Successfully exported {} OpenAPI specification(s)",
-                    exported_services.len()
-                )?;
-                stdout.reset()?;
+                log_header!(stdout, Color::Green, "[OK] Successfully exported {} OpenAPI specification(s)", exported_services.len());
                 writeln!(stdout, "  Output: {}", output_path.display())?;
 
                 for service_name in &exported_services {
-                    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-                    writeln!(stdout, "  - {}", service_name)?;
-                    stdout.reset()?;
+                    log_ok!(stdout, "  - {}", service_name);
                 }
             }
             Err(e) => {
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
-                writeln!(stdout, "[ERROR] Failed to export OpenAPI specifications")?;
-                stdout.reset()?;
+                log_error!(stdout, "[ERROR] Failed to export OpenAPI specifications");
                 return Err(e);
             }
         }

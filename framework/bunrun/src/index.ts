@@ -200,6 +200,7 @@ function readJSON(p: string): PackageJson {
     return pkg as PackageJson;
   } catch (error) {
     if (error instanceof Error) {
+      // eslint-disable-next-line preserve-caught-error
       throw new Error(`Failed to read package.json at ${p}: ${error.message}`);
     }
     throw error;
@@ -278,11 +279,10 @@ function getWorkspaceDirs(rootPkg: PackageJson): string[] {
 
     for (const d of expandGlob(cwd, patt)) {
       try {
-        // only pick folders that contain a package.json
         readJSON(join(d, 'package.json'));
         dirs.push(d);
       } catch {
-        // ignore directories without valid package.json
+        // ignore
       }
     }
   }
@@ -405,7 +405,6 @@ async function runTierParallel(
 async function main(): Promise<void> {
   const opts = parseArgs();
 
-  // Load workspace dirs
   const rootPkg = readJSON(join(cwd, 'package.json'));
   const wsDirs = getWorkspaceDirs(rootPkg);
   if (wsDirs.length === 0) {
@@ -413,7 +412,6 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Load packages
   const pkgs: Pkg[] = wsDirs
     .map((dir): Pkg | null => {
       try {
@@ -434,7 +432,6 @@ async function main(): Promise<void> {
     })
     .filter((p): p is Pkg => p !== null && p.name.length > 0);
 
-  // Selection (only/exclude by name OR path)
   const selected = pkgs.filter((p) => {
     const matchOnly =
       opts.only.length > 0
@@ -471,11 +468,9 @@ async function main(): Promise<void> {
     }
   }
 
-  // Topo tiers
   const nodes = selected.map((p) => p.name);
   const tiers = topoTiers(nodes, edges);
 
-  // Anything to run?
   const hasScript = (name: string): boolean => {
     const pkg = selected.find((p) => p.name === name);
     if (!pkg) {
@@ -485,7 +480,6 @@ async function main(): Promise<void> {
     return Boolean(pkg.scripts[opts.script]);
   };
 
-  // Print diagnostic info in debug mode
   if (opts.debug) {
     console.log(`Script: ${opts.script}`);
     console.log(
@@ -497,7 +491,6 @@ async function main(): Promise<void> {
     console.log('');
   }
 
-  // Prepare run lists
   const tiersDirs: string[][] = tiers.map((tier) =>
     tier.filter(hasScript).map((name) => {
       const pkg = selected.find((p) => p.name === name);
@@ -508,7 +501,6 @@ async function main(): Promise<void> {
     })
   );
 
-  // In sequential mode we flatten the tiers in order
   const seqDirs = tiers
     .flat()
     .filter(hasScript)
@@ -520,7 +512,6 @@ async function main(): Promise<void> {
       return pkg.dir;
     });
 
-  // Print plan in debug mode
   if (opts.debug) {
     if (opts.sequential) {
       console.log('Plan (sequential order):');
@@ -558,8 +549,6 @@ async function main(): Promise<void> {
   }
 
   if (opts.printOnly) return;
-
-  // Execute
 
   if (opts.sequential) {
     await runSequential(seqDirs, opts.script);
