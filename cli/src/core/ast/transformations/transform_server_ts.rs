@@ -39,9 +39,6 @@ pub(crate) fn transform_server_ts(
     let use_injection_text = format!("app.use({router_name_camel_case}Router);",);
     let mut injection_program_ast =
         parse_ast_program(&allocator, &use_injection_text, SourceType::ts());
-    // Newer generated `server.ts` uses `async function startServer()` and scopes `app` inside it.
-    // If we can find that function, inject into its body. Otherwise fall back to top-level injection
-    // (for older templates / customized services).
     let mut injected_into_start_server = false;
     for stmt in server_program.body.iter_mut() {
         let func = match stmt {
@@ -121,12 +118,6 @@ pub(crate) fn transform_server_ts(
             &mut server_program,
             &mut injection_program_ast,
             |statements| {
-                // We prefer to inject after the last `app.use(...)` so new routers are mounted after
-                // existing ones. However, this transform is also used when initializing the *first*
-                // router, where `server.ts` may have no `app.use` yet. In that case we fall back to:
-                // - insert *before* `app.listen(...)` if present
-                // - otherwise insert right after the `app` variable is declared
-                // - otherwise append at end of file
                 let mut last_app_use_pos: Option<usize> = None;
                 let mut first_app_listen_pos: Option<usize> = None;
                 let mut app_declaration_pos: Option<usize> = None;
