@@ -61,7 +61,7 @@ function initStripe(): Stripe {
   }
 
   return new Stripe(apiKey, {
-    apiVersion: '2026-01-28.clover'
+    apiVersion: '2026-02-25.clover'
   });
 }
 
@@ -115,7 +115,7 @@ async function syncProduct(
       existingProduct.name !== productData.name ||
       existingProduct.description !== productData.description ||
       JSON.stringify(existingProduct.metadata) !==
-        JSON.stringify(productData.metadata);
+      JSON.stringify(productData.metadata);
 
     if (!needsUpdate) {
       console.log(`  ✓ Product already up to date: ${planName}`);
