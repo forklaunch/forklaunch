@@ -4,9 +4,17 @@ category: Guides
 description: Learn how to add and configure libraries in your application.
 ---
 
-## Adding a Library
+## Add a Library
 
-To add a library to your application, run the following command:
+A **library** is a shared code package that can be imported and used across multiple services and workers in your application. Unlike services and workers that run independently, libraries are code collections—utilities, helpers, shared business logic, or common types—that get bundled into the projects that use them. Think of it as a toolbox: instead of duplicating dice animation logic in every service, you create a `dice-animations-library` that stores animations for different die types (d4, d6, d12, d20) and can be imported by all services.
+
+In ForkLaunch, libraries are simple TypeScript packages with minimal structure. They're perfect for sharing code, types, utilities, and business logic across your application without the overhead of a full service or worker.
+
+## Getting Started
+
+You can add a library in two ways:
+
+### Using Commands (Recommended)
 
 <CodeTabs type="instantiate">
   <Tab title="init">
@@ -21,15 +29,33 @@ To add a library to your application, run the following command:
   ```bash
   forklaunch add library
   ```
-  
+
   </Tab>
 </CodeTabs>
 
-This adds a new library to your application, with a simple structure for sharing code across services and workers.
+This creates a new library with a simple structure for sharing code across services and workers. All application artifacts are automatically updated.
 
-Since libraries are designed to be shared components, they should contain reusable functionality that can be imported by other projects in your application.
+### Manual Creation with Sync
 
-### Command Options
+If you manually create a library directory, use `forklaunch sync` to register it:
+
+```bash
+# After manually creating the library structure
+forklaunch sync library library-name
+```
+
+This updates artifacts (manifest, workspace, tsconfig) to include your manually created library.
+
+**Note**: Libraries should contain reusable functionality that can be imported by other projects in your application.
+
+### Sync Command Options
+
+| Option | Short | Description | Valid Values |
+| :----- | :---- | :---------- | :----------- |
+| `--path` | `-p` | The application path | Any valid directory path |
+| `--prompts` | `-P` | JSON object with pre-provided answers for library options (see init options) | JSON string |
+
+### Init Command Options
 
 | Option | Short | Description | Valid Values |
 | :----- | :---- | :---------- | :----------- |
@@ -59,18 +85,20 @@ A minimal library will have the following structure:
 ### Usage Examples
 
 ```bash
-# Basic library
-forklaunch init library utils
+# Basic library (shared utilities for dice roll app)
+forklaunch init library dice-utils --path ./my-app/src/modules
 
 # Library with custom description
-forklaunch init library validation --description "Input validation utilities"
+forklaunch init library validation --path ./my-app/src/modules --description "Input validation utilities"
 
 # Library in specific directory
 forklaunch init library api-client --path ./shared
 
-# Data transformation library
-forklaunch init library mappers --description "Data mapping utilities"
+# Statistics calculation library
+forklaunch init library stats-helpers --path ./my-app/src/modules --description "Statistical calculation utilities"
 ```
+
+For a complete step-by-step example, see the [Dice Roll Example](/docs/examples/dice-roll-node-app.md).
 
 ### Next Steps
 

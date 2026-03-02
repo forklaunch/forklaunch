@@ -219,7 +219,7 @@ forklaunch change service --path ./user-service --name authentication-service \
   --description "User authentication and authorization"
 
 # Add new user profile service separately
-forklaunch init service profile-service --database postgresql
+forklaunch init service profile-service --path ./my-app/src/modules --database postgresql
 ```
 
 ## Best Practices

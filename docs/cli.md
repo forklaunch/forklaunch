@@ -16,6 +16,7 @@ The ForkLaunch CLI provides commands for managing your application development.
 | `forklaunch add` | Add new components to existing project | - |
 | `forklaunch change` | Modify existing project components | - |
 | `forklaunch delete` | Delete project components | `del` |
+| `forklaunch sync` | Sync existing project components with artifacts | - |
 
 ## Development Commands
 
@@ -53,10 +54,10 @@ For detailed information about specific commands:
 
 ### Project Management
 - [init](/docs/cli/init.md) - Project initialization
-- [Adding Projects](/docs/adding-projects.md) - Add components to projects
+- [Adding Projects](/docs/adding-projects.md) - Add components to projects, sync existing or new components
 - [Changing Projects](/docs/changing-projects.md) - Modify existing components
 - [delete](/docs/cli/delete.md) - Delete project components
-- [Deleting Projects](/docs/deleting-projects.md) - Comprehensive deletion guide
+- [Deleting Projects](/docs/deleting-projects.md) - Comprehensive deletion guide, clean up project artifacts
 
 ### Development Tools
 - [depcheck](/docs/cli/depcheck.md) - Dependency management
@@ -66,16 +67,17 @@ For detailed information about specific commands:
 ### Authentication & Platform
 - [authentication](/docs/cli/authentication.md) - Login, logout, and user management
 
-## Quick Reference
+## Quickstart Guide
 
 ### Common Workflows
 
 **Create New Project:**
 ```bash
-forklaunch init my-app --database postgresql --runtime node
+forklaunch init application my-app --path ./my-app --database postgresql --runtime node
 ```
 
 **Add Components:**
+You can use `forklaunch init` or `forklaunch add` to add projects to your application:
 ```bash
 forklaunch add service billing --database postgresql
 forklaunch add worker email-processor --type bullmq
@@ -97,6 +99,14 @@ forklaunch delete service old-billing
 forklaunch delete worker deprecated-processor
 forklaunch delete router legacy-api
 forklaunch delete library unused-utils
+```
+
+**Sync Components:**
+```bash
+forklaunch sync all
+forklaunch sync service new-billing
+forklaunch sync worker custom-processer
+forklaunch sync library new-utils
 ```
 
 **Development Utilities:**

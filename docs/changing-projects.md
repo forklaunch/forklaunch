@@ -18,6 +18,29 @@ The `forklaunch change` command family allows you to modify:
 
 All change operations are designed to be safe, reversible, and maintain project integrity.
 
+## How Changes Affect Artifacts
+
+When you change a project, ForkLaunch automatically updates **application artifacts** - configuration files that manage your entire application:
+
+| Artifact | What Gets Updated |
+|----------|-------------------|
+| **Manifest** (`.forklaunch/manifest.toml`) | Project metadata, configuration, and dependencies |
+| **Docker Compose** (`docker-compose.yaml`) | Service definitions, ports, and infrastructure |
+| **Workspace Config** (`pnpm-workspace.yaml` or `package.json`) | Package references and scripts |
+| **Universal SDK** (`modules/universal-sdk/`) | API client generation (for services) |
+| **TypeScript Config** (`modules/tsconfig.json`) | Project references |
+
+**Example**: Changing a service's database from SQLite to PostgreSQL updates:
+- The service's `mikro-orm.config.ts` file
+- Docker Compose to add PostgreSQL container
+- Package dependencies in workspace config
+- Migration scripts in package.json
+
+After making changes, you may need to:
+1. Install updated dependencies: `pnpm install` (or `bun install`)
+2. Run migrations if database changed: `pnpm migrate:init` (or `bun migrate:init`)
+3. Rebuild the project: `pnpm build` (or `bun run build`)
+
 ## Core Principles
 
 ### Safety First
