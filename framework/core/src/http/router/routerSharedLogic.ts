@@ -120,6 +120,7 @@ export function resolveContractDetailsAndHandlers<
     BaseRequest,
     Auth
   >;
+  // eslint-disable-next-line no-useless-assignment
   let handlers: ExpressLikeSchemaHandler<
     SV,
     P,
@@ -136,7 +137,6 @@ export function resolveContractDetailsAndHandlers<
     NextFunction
   >[] = [];
 
-  // Handle typed handler as first argument
   if (
     isTypedHandler<
       SV,
@@ -175,7 +175,6 @@ export function resolveContractDetailsAndHandlers<
         NextFunction
       >[];
   } else {
-    // Check if last element is a typed handler
     const maybeTypedHandler =
       middlewareOrMiddlewareAndTypedHandler[
         middlewareOrMiddlewareAndTypedHandler.length - 1
@@ -312,7 +311,6 @@ export function resolveContractDetailsAndHandlers<
         NextFunction
       >[];
     } else {
-      // Direct contract details
       if (
         isExpressLikeSchemaHandler(contractDetailsOrMiddlewareOrTypedHandler) ||
         isTypedHandler<
@@ -758,7 +756,6 @@ export function resolveRouteMiddlewares<
     NextFunction
   >;
 } {
-  // Extract controller handler - take the last one as the controller
   const handlersCopy = [...params.handlers];
   const controllerHandler = handlersCopy.pop();
 
@@ -768,7 +765,6 @@ export function resolveRouteMiddlewares<
     );
   }
 
-  // Resolve middlewares - combine enrichment middlewares with provided handlers (except the controller)
   const middlewares = [
     ...(params.includeCreateContext !== false ? [createContext] : []),
     enrichDetails<

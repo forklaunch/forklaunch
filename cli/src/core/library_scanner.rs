@@ -81,6 +81,7 @@ pub struct ImportScanner {
     scope_prefix: String,        // e.g., "@forklaunch-platform/"
     #[allow(dead_code)]
     app_name: String,            // e.g., "forklaunch-platform"
+    node_version: Option<String>, // Node.js version from Dockerfile (e.g., "25")
 }
 
 impl ImportScanner {
@@ -111,6 +112,9 @@ impl ImportScanner {
             &canonical_app_root,
         );
 
+        // Parse Node.js version from Dockerfile
+        let node_version = Self::parse_node_version_from_dockerfile(modules_root);
+
         Self {
             modules_root: modules_root.canonicalize().unwrap_or_else(|_| modules_root.to_path_buf()),
             app_root: canonical_app_root,
@@ -125,6 +129,7 @@ impl ImportScanner {
                 format!("@{}/", app_name)
             },
             app_name: app_name.to_string(),
+            node_version,
         }
     }
 
@@ -292,8 +297,12 @@ impl ImportScanner {
             } else {
                 // NPM / Library import — normalize scoped subpaths and capture ALL non-relative imports
                 let pkg_name = Self::normalize_scoped_package(&import);
-                let version = self.lookup_version(&pkg_name, file_dir)
-                    .or_else(|| self.lookup_version(&import, file_dir));
+                let version = if import.starts_with("node:") {
+                    self.node_version.clone()
+                } else {
+                    self.lookup_version(&pkg_name, file_dir)
+                        .or_else(|| self.lookup_version(&import, file_dir))
+                };
 
                 // Classify the import:
                 //   1. api-call: only SdkClient from scoped package
@@ -501,6 +510,20 @@ impl ImportScanner {
             }
         }
 
+        None
+    }
+
+    /// Extract Node.js major version from the Dockerfile's FROM directive.
+    /// Looks for patterns like `FROM node:25-trixie-slim` and extracts "25".
+    fn parse_node_version_from_dockerfile(modules_root: &Path) -> Option<String> {
+        let dockerfile_path = modules_root.join("Dockerfile");
+        let content = fs::read_to_string(&dockerfile_path).ok()?;
+        let from_re = Regex::new(r"(?i)^FROM\s+node:(\d+)").ok()?;
+        for line in content.lines() {
+            if let Some(cap) = from_re.captures(line.trim()) {
+                return cap.get(1).map(|m| m.as_str().to_string());
+            }
+        }
         None
     }
 

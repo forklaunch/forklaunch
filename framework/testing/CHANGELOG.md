@@ -1,5 +1,11 @@
 # @forklaunch/testing
 
+## 0.0.18
+
+### Patch Changes
+
+- WS actually working probably, and package bumps
+
 ## 0.0.17
 
 ### Patch Changes

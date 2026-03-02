@@ -65,7 +65,6 @@ impl SchemaAnalyzer {
         declarator: &VariableDeclarator,
         source: &str,
     ) -> Option<SchemaDefinition> {
-        // Get the variable name
         let name = match &declarator.id.kind {
             BindingPatternKind::BindingIdentifier(id) => id.name.as_str().to_string(),
             _ => return None,
@@ -76,7 +75,6 @@ impl SchemaAnalyzer {
             return None;
         }
 
-        // Extract properties from the initializer
         let properties = if let Some(init) = &declarator.init {
             Self::extract_properties_from_expression(init, source)
         } else {
@@ -139,14 +137,12 @@ impl SchemaAnalyzer {
         obj_prop: &ObjectProperty,
         source: &str,
     ) -> Option<SchemaProperty> {
-        // Get property name
         let name = match &obj_prop.key {
             PropertyKey::StaticIdentifier(id) => id.name.as_str().to_string(),
             PropertyKey::StringLiteral(lit) => lit.value.as_str().to_string(),
             _ => return None,
         };
 
-        // Analyze the property value to determine type
         let (type_name, is_optional, is_array) =
             Self::analyze_property_value(&obj_prop.value, source);
 

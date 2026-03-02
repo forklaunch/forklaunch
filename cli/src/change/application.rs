@@ -15,7 +15,7 @@ use dialoguer::{MultiSelect, theme::ColorfulTheme};
 use glob::Pattern;
 use ramhorns::Template;
 use rustyline::{Editor, history::DefaultHistory};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 use walkdir::WalkDir;
 
 use super::core::clean_application::clean_application;
@@ -1177,13 +1177,7 @@ fn change_runtime(
     })?;
 
     if existing_dockerfile_contents.trim() != watermarked_dockerfile_contents.trim() {
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-        writeln!(
-            stdout,
-            "Warning: Dockerfile is generating from template, you may need to manually migrate changes from Dockerfile.{}",
-            runtime.to_string()
-        )?;
-        stdout.reset()?;
+        log_warn!(stdout, "Warning: Dockerfile is generating from template, you may need to manually migrate changes from Dockerfile.{}", runtime.to_string());
         rendered_templates_cache.insert(
             base_path
                 .join(format!("Dockerfile.{}", runtime.to_string()))
@@ -2001,9 +1995,7 @@ impl CliCommand for ApplicationCommand {
         write_rendered_templates(&rendered_templates, dryrun, &mut stdout)?;
         create_symlinks(&symlink_templates, dryrun, &mut stdout)?;
         if !dryrun {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "{} changed successfully!", &manifest_data.app_name)?;
-            stdout.reset()?;
+            log_ok!(stdout, "{} changed successfully!", &manifest_data.app_name);
             format_code(&app_path, &manifest_data.runtime.parse()?);
         }
 

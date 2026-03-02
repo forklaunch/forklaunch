@@ -241,7 +241,7 @@ export function generateMcpServer<
                         ) {
                           formData.append(
                             key,
-                            new Blob([Buffer.from(body[key])])
+                            new Blob([new Uint8Array(Buffer.from(body[key]))])
                           );
                         } else {
                           formData.append(key, body[key]);

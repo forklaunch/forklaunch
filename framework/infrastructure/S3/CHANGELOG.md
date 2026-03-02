@@ -1,5 +1,14 @@
 # @forklaunch/infrastructure-s3
 
+## 0.4.39
+
+### Patch Changes
+
+- WS actually working probably, and package bumps
+- Updated dependencies
+  - @forklaunch/common@0.6.29
+  - @forklaunch/core@0.18.2
+
 ## 0.4.38
 
 ### Patch Changes

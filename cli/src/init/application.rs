@@ -12,7 +12,7 @@ use convert_case::{Case, Casing};
 use rustyline::{Editor, history::DefaultHistory};
 use serde_json::to_string_pretty;
 use serde_yml::{from_str, to_string};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 use uuid::Uuid;
 
 use super::service::generate_service_package_json;
@@ -99,7 +99,6 @@ fn use_generated_sdk_mode_for_init(
     use crate::core::rendered_template::RenderedTemplatesCache;
     use crate::sdk::mode::apply_generated_sdk_mode_setup;
 
-    // Convert Vec to Cache for processing
     let mut cache = RenderedTemplatesCache::new();
     for template in rendered_templates.drain(..) {
         let path = template.path.to_string_lossy().to_string();
@@ -110,7 +109,6 @@ fn use_generated_sdk_mode_for_init(
     // Skip universal-sdk transformation during init (already in correct format from template)
     apply_generated_sdk_mode_setup(&app_root_path.to_path_buf(), manifest_data, &mut cache)?;
 
-    // Convert Cache back to Vec
     rendered_templates.extend(cache.drain().map(|(_, template)| template));
 
     Ok(())
@@ -448,12 +446,10 @@ impl CliCommand for ApplicationCommand {
         } else if origin_path.join("src").exists() && origin_path.join("src").is_dir() {
             Path::new("src").join("modules")
         } else {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-            writeln!(
+            log_warn!(
                 stdout,
                 "No 'src' folder in project root. Please confirm where project files will be initialized."
-            )?;
-            stdout.reset()?;
+            );
             let modules_path: String = prompt_with_validation(
                 &mut line_editor,
                 &mut stdout,
@@ -541,12 +537,10 @@ impl CliCommand for ApplicationCommand {
                     .parse::<HttpFramework>()?
                     == HttpFramework::HyperExpress
                 {
-                    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-                    writeln!(
+                    log_warn!(
                         stdout,
                         "Incompatible choices: Bun + hyper-express, defaulting to Bun + express.",
-                    )?;
-                    stdout.reset()?;
+                    );
                 }
             }
             HttpFramework::Express
@@ -619,9 +613,7 @@ impl CliCommand for ApplicationCommand {
                 if validate_modules(&modules_to_test, &mut global_module_config).is_ok() {
                     break;
                 } else {
-                    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-                    writeln!(stdout, "Invalid modules combination. Please try again.")?;
-                    stdout.reset()?;
+                    log_warn!(stdout, "Invalid modules combination. Please try again.");
                 }
             }
             modules_to_test
@@ -1267,7 +1259,6 @@ impl CliCommand for ApplicationCommand {
             dryrun,
         )?);
 
-        // Set up generated SDK mode by default
         use_generated_sdk_mode_for_init(
             &origin_path,
             &data,
@@ -1289,9 +1280,7 @@ impl CliCommand for ApplicationCommand {
             })?;
 
         if !dryrun {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "{} initialized successfully!", name)?;
-            stdout.reset()?;
+            log_ok!(stdout, "{} initialized successfully!", name);
             format_code(&Path::new(&application_path), &data.runtime.parse()?);
         }
 

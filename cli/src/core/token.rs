@@ -86,12 +86,10 @@ pub(crate) fn get_token() -> anyhow::Result<String> {
         )
     })?;
 
-    // Check if token is expired
     if is_token_expired(token_data.expires_at) {
         // Try to refresh the token using the refresh token (session token)
         match refresh_token(&token_data.refresh_token) {
             Ok(new_token_data) => {
-                // Save the new tokens
                 save_token_data(&new_token_data)?;
                 token_data = new_token_data;
             }

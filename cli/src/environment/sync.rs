@@ -2,7 +2,7 @@ use std::{collections::HashMap, io::Write, path::Path};
 
 use anyhow::{Context, Result};
 use clap::{ArgMatches, Command};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use crate::{
     CliCommand,
@@ -46,13 +46,9 @@ impl CliCommand for SyncCommand {
         let dry_run = matches.get_flag("dry-run");
 
         if dry_run {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-            writeln!(stdout, "Dry run mode - no changes will be made")?;
-            stdout.reset()?;
+            log_warn!(stdout, "Dry run mode - no changes will be made");
         } else {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-            writeln!(stdout, "Syncing environment variables...")?;
-            stdout.reset()?;
+            log_info!(stdout, "Syncing environment variables...");
         }
 
         let current_dir = std::env::current_dir()?;
@@ -66,15 +62,11 @@ impl CliCommand for SyncCommand {
         let project_env_vars = find_all_env_vars(&modules_path, &rendered_templates_cache)?;
 
         if project_env_vars.is_empty() {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-            writeln!(stdout, "No projects with registrations.ts found")?;
-            stdout.reset()?;
+            log_warn!(stdout, "No projects with registrations.ts found");
             return Ok(());
         }
 
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-        writeln!(stdout, "\nRunning validation first...")?;
-        stdout.reset()?;
+        log_info!(stdout, "\nRunning validation first...");
         let mut missing_vars_by_project = HashMap::new();
 
         for (project_name, env_vars) in &project_env_vars {
@@ -95,9 +87,7 @@ impl CliCommand for SyncCommand {
         }
 
         if missing_vars_by_project.is_empty() {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "No missing environment variables found!")?;
-            stdout.reset()?;
+            log_ok!(stdout, "No missing environment variables found!");
             return Ok(());
         }
 
@@ -128,20 +118,16 @@ impl CliCommand for SyncCommand {
                 .collect();
             write_rendered_templates(&env_templates, false, &mut stdout)?;
 
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "\nEnvironment sync completed!")?;
-            stdout.reset()?;
+            log_ok!(stdout, "\nEnvironment sync completed!");
             writeln!(
                 stdout,
                 "Remember to fill in the actual values for the added variables."
             )?;
         } else {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-            writeln!(
+            log_info!(
                 stdout,
                 "\nThis was a dry run. Use 'forklaunch environment sync' to apply changes."
-            )?;
-            stdout.reset()?;
+            );
         }
 
         Ok(())
@@ -205,9 +191,7 @@ fn create_sync_plan(
 }
 
 fn display_sync_plan(plan: &SyncPlan, stdout: &mut StandardStream) -> Result<()> {
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-    writeln!(stdout, "\nSync Plan")?;
-    stdout.reset()?;
+    log_info!(stdout, "\nSync Plan");
     writeln!(stdout, "{}", "=".repeat(40))?;
 
     if !plan.root_vars.is_empty() {
@@ -218,9 +202,7 @@ fn display_sync_plan(plan: &SyncPlan, stdout: &mut StandardStream) -> Result<()>
         )?;
         writeln!(stdout, "   {}", plan.root_env_file.display())?;
         for var_name in &plan.root_vars {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-            writeln!(stdout, "   - {}", var_name)?;
-            stdout.reset()?;
+            log_info!(stdout, "   - {}", var_name);
         }
     }
 
@@ -231,9 +213,7 @@ fn display_sync_plan(plan: &SyncPlan, stdout: &mut StandardStream) -> Result<()>
                 writeln!(stdout, "\n   {} ({} variables):", project_name, vars.len())?;
                 writeln!(stdout, "   {}", env_file.display())?;
                 for var_name in vars {
-                    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-                    writeln!(stdout, "   - {}", var_name)?;
-                    stdout.reset()?;
+                    log_info!(stdout, "   - {}", var_name);
                 }
             }
         }
@@ -242,17 +222,13 @@ fn display_sync_plan(plan: &SyncPlan, stdout: &mut StandardStream) -> Result<()>
     let total_vars =
         plan.root_vars.len() + plan.project_vars.values().map(|v| v.len()).sum::<usize>();
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-    writeln!(stdout, "\nTotal variables to add: {}", total_vars)?;
-    stdout.reset()?;
+    log_warn!(stdout, "\nTotal variables to add: {}", total_vars);
 
     Ok(())
 }
 
 fn execute_sync_plan(plan: &SyncPlan, stdout: &mut StandardStream) -> Result<()> {
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-    writeln!(stdout, "\nExecuting sync plan...")?;
-    stdout.reset()?;
+    log_info!(stdout, "\nExecuting sync plan...");
 
     if !plan.root_vars.is_empty() {
         writeln!(
@@ -267,13 +243,11 @@ fn execute_sync_plan(plan: &SyncPlan, stdout: &mut StandardStream) -> Result<()>
         }
 
         add_env_vars_to_file(&plan.root_env_file, &root_vars_map)?;
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-        writeln!(
+        log_ok!(
             stdout,
             "   Root variables added to {}",
             plan.root_env_file.display()
-        )?;
-        stdout.reset()?;
+        );
     }
 
     for (project_name, vars) in &plan.project_vars {
@@ -291,9 +265,7 @@ fn execute_sync_plan(plan: &SyncPlan, stdout: &mut StandardStream) -> Result<()>
             }
 
             add_env_vars_to_file(env_file, &project_vars_map)?;
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "   Variables added to {}", env_file.display())?;
-            stdout.reset()?;
+            log_ok!(stdout, "   Variables added to {}", env_file.display());
         }
     }
 

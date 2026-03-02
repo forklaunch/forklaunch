@@ -3,7 +3,7 @@ use std::{collections::HashMap, io::Write};
 use anyhow::{Context, Result, bail};
 use clap::ArgMatches;
 use rustyline::{Editor, history::DefaultHistory};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use crate::{
     constants::{ERROR_FAILED_TO_PARSE_MANIFEST, WorkerType},
@@ -52,12 +52,7 @@ pub(crate) fn sync_worker_with_cache(
             .iter()
             .find(|p| p.name == worker_name)
         {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-            writeln!(
-                stdout,
-                "[WARN] Worker directory not found, but exists in manifest"
-            )?;
-            stdout.reset()?;
+            log_warn!(stdout, "[WARN] Worker directory not found, but exists in manifest");
 
             let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
             let should_cleanup = prompt_for_confirmation(
@@ -66,9 +61,7 @@ pub(crate) fn sync_worker_with_cache(
             )?;
 
             if !should_cleanup {
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-                writeln!(stdout, "[INFO] Skipping cleanup")?;
-                stdout.reset()?;
+                log_warn!(stdout, "[INFO] Skipping cleanup");
                 bail!("Worker directory not found: {}", worker_path.display());
             }
 
@@ -94,35 +87,20 @@ pub(crate) fn sync_worker_with_cache(
                 stdout,
             )?;
 
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "[OK] Removed orphaned worker '{}'", worker_name)?;
-            stdout.reset()?;
+            log_ok!(stdout, "[OK] Removed orphaned worker '{}'", worker_name);
             return Ok(());
         } else {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
-            writeln!(
-                stdout,
-                "[ERROR] Worker directory not found: {}",
-                worker_path.display()
-            )?;
-            stdout.reset()?;
+            log_error!(stdout, "[ERROR] Worker directory not found: {}", worker_path.display());
             bail!("Worker directory not found: {}", worker_path.display());
         }
     }
 
     if manifest_data.projects.iter().any(|p| p.name == worker_name) {
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-        writeln!(stdout, "[INFO] Worker '{}' already synced", worker_name)?;
-        stdout.reset()?;
+        log_ok!(stdout, "[INFO] Worker '{}' already synced", worker_name);
         return Ok(());
     }
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-    writeln!(
-        stdout,
-        "[INFO] Detecting worker configuration from files..."
-    )?;
-    stdout.reset()?;
+    log_info!(stdout, "[INFO] Detecting worker configuration from files...");
 
     let detected = detect_worker_config(&worker_path)?;
     display_detection_results(&detected, stdout)?;
@@ -168,9 +146,7 @@ pub(crate) fn sync_worker_with_cache(
         stdout,
     )?;
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-    writeln!(stdout, "[OK] Worker '{}' synced successfully", worker_name)?;
-    stdout.reset()?;
+    log_ok!(stdout, "[OK] Worker '{}' synced successfully", worker_name);
 
     Ok(())
 }
@@ -230,7 +206,6 @@ impl crate::CliCommand for WorkerSyncCommand {
             &mut stdout,
         )?;
 
-        // Write the updated manifest back to cache
         rendered_templates_cache.insert(
             manifest_path.to_string_lossy().to_string(),
             crate::core::rendered_template::RenderedTemplate {
@@ -241,7 +216,6 @@ impl crate::CliCommand for WorkerSyncCommand {
             },
         );
 
-        // Collect and write all rendered templates (including manifest)
         let rendered_templates: Vec<_> = rendered_templates_cache
             .drain()
             .map(|(_, template)| template)

@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use clap::{Arg, ArgAction, Command};
 use dialoguer::{MultiSelect, theme::ColorfulTheme};
 use rustyline::{Editor, history::DefaultHistory};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use super::core::{
     change_description::change_description as change_description_core,
@@ -288,13 +288,7 @@ impl CliCommand for LibraryCommand {
         move_template_files(&move_templates, dryrun, &mut stdout)?;
 
         if !dryrun {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(
-                stdout,
-                "{} changed successfully!",
-                &manifest_data.library_name
-            )?;
-            stdout.reset()?;
+            log_ok!(stdout, "{} changed successfully!", &manifest_data.library_name);
             format_code(&library_base_path, &manifest_data.runtime.parse()?);
         }
 

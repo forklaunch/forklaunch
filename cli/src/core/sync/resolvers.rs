@@ -4,7 +4,7 @@ use anyhow::{Result, bail};
 use clap::ArgMatches;
 use rustyline::{Editor, history::DefaultHistory};
 use serde_json::from_str as json_from_str;
-use termcolor::{Color, ColorSpec, StandardStream, WriteColor};
+use termcolor::{StandardStream, WriteColor};
 
 use super::detection::{DetectedConfig, detect_description_from_package_json};
 use crate::{
@@ -43,12 +43,7 @@ pub fn resolve_database_config(
         }
     }
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-    writeln!(
-        stdout,
-        "Could not detect database configuration. Please specify:"
-    )?;
-    stdout.reset()?;
+    log_warn!(stdout, "Could not detect database configuration. Please specify:");
 
     let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
     let mut database_options = vec!["none"];
@@ -136,9 +131,7 @@ pub fn resolve_description(
             .and_then(|p| p.get("description"));
 
         if override_value.is_none() {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "[INFO] Detected description: {}", detected)?;
-            stdout.reset()?;
+            log_ok!(stdout, "[INFO] Detected description: {}", detected);
 
             let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
             let override_choice = prompt_with_validation_with_answers(
@@ -182,9 +175,7 @@ pub fn fallback_to_package_json(
     let package_json_path = project_path.join("package.json");
 
     if !package_json_path.exists() {
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
-        writeln!(stdout, "[ERROR] package.json not found")?;
-        stdout.reset()?;
+        log_error!(stdout, "[ERROR] package.json not found");
         bail!("Cannot determine database configuration: package.json not found");
     }
 
@@ -210,30 +201,15 @@ pub fn display_detection_results(
     stdout: &mut StandardStream,
 ) -> Result<()> {
     if let Some(ref db) = detected.database {
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-        writeln!(stdout, "[INFO] Detected database: {}", db.to_string())?;
-        stdout.reset()?;
+        log_ok!(stdout, "[INFO] Detected database: {}", db.to_string());
     }
 
     if !detected.infrastructure.is_empty() {
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-        writeln!(
-            stdout,
-            "Detected infrastructure: {}",
-            detected
-                .infrastructure
-                .iter()
-                .map(|i| i.to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        )?;
-        stdout.reset()?;
+        log_ok!(stdout, "Detected infrastructure: {}", detected.infrastructure.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", "));
     }
 
     if let Some(ref desc) = detected.description {
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-        writeln!(stdout, "[INFO] Detected description: {}", desc)?;
-        stdout.reset()?;
+        log_ok!(stdout, "[INFO] Detected description: {}", desc);
     }
 
     if detected.database.is_none()
@@ -241,9 +217,7 @@ pub fn display_detection_results(
         && detected.description.is_none()
         && detected.worker_type.is_none()
     {
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-        writeln!(stdout, "[INFO] No configuration auto-detected")?;
-        stdout.reset()?;
+        log_warn!(stdout, "[INFO] No configuration auto-detected");
     }
 
     Ok(())
@@ -263,13 +237,7 @@ pub fn resolve_worker_type(
     }
 
     if let Some(detected_type) = &detected.worker_type {
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-        writeln!(
-            stdout,
-            "Detected worker type: {}",
-            detected_type.to_string()
-        )?;
-        stdout.reset()?;
+        log_ok!(stdout, "Detected worker type: {}", detected_type.to_string());
 
         let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
         let override_choice = prompt_with_validation_with_answers(

@@ -98,7 +98,6 @@ export async function setupTestORM(
           })
     };
   } else if (container) {
-    // Container-based databases
     ormConfig = {
       ...mikroOrmConfig,
       dbName: 'test_db',
@@ -126,7 +125,6 @@ export async function setupTestORM(
 
   const orm = await MikroORM.init(ormConfig);
 
-  // Initialize database schema
   if (useMigrations) {
     await orm.getMigrator().up();
   } else {
@@ -145,12 +143,10 @@ export async function clearTestDatabase(options?: {
 }): Promise<void> {
   const { orm, redis } = options || {};
 
-  // Clear Redis if provided
   if (redis) {
     await redis.flushall();
   }
 
-  // Clear all database entities (if ORM is provided)
   if (orm) {
     const em = orm.em.fork();
     const entities = Object.values(orm.getMetadata().getAll());

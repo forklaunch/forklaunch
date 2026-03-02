@@ -1,12 +1,13 @@
-use std::fs::read;
+use std::io::Write;
 
 use anyhow::{Context, Result};
 use clap::{Arg, ArgMatches, Command};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 
-use super::{CliCommand, unwrap_id};
+use super::CliCommand;
 use crate::{
     constants::{ERROR_FAILED_TO_SEND_REQUEST, get_platform_management_api_url},
-    core::command::command,
+    core::{command::command, env::{parse_env_file_items, EnvFileItem}},
 };
 
 #[derive(Debug)]
@@ -20,45 +21,99 @@ impl PushCommand {
 
 impl CliCommand for PushCommand {
     fn command(&self) -> Command {
-        command("push", "Push a configuration to the forklaunch platform")
-            .arg(
-                Arg::new("id")
-                    .required(true)
-                    .help("Retrieves a configuration by a specific identifier"),
-            )
-            .arg(
-                Arg::new("input")
-                    .short('i')
-                    .long("input")
-                    .help("Path to the configuration file to push")
-                    .required(false),
-            )
+        command(
+            "push",
+            "Push environment configuration to the forklaunch platform",
+        )
+        .arg(
+            Arg::new("region")
+                .short('r')
+                .long("region")
+                .required(true)
+                .help("Region (e.g. us-east-1)"),
+        )
+        .arg(
+            Arg::new("environment")
+                .short('e')
+                .long("environment")
+                .required(true)
+                .help("Environment name (e.g. production, staging)"),
+        )
+        .arg(
+            Arg::new("input")
+                .short('i')
+                .long("input")
+                .required(false)
+                .help("Input file path (defaults to <environment>.env)"),
+        )
+        .arg(
+            Arg::new("base_path")
+                .long("path")
+                .short('p')
+                .help("Path to application root (optional)"),
+        )
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        // Upfront validation
         let _token = crate::core::validate::require_auth()?;
+        let (_app_root, manifest) = crate::core::validate::require_manifest(matches)?;
+        let app = crate::core::validate::require_integration(&manifest)?;
 
         use crate::core::http_client;
 
-        let id = unwrap_id(matches)?;
+        let region = matches
+            .get_one::<String>("region")
+            .expect("region is required");
+        let environment = matches
+            .get_one::<String>("environment")
+            .expect("environment is required");
 
-        let input = format!("{}.env", id);
+        let input = format!("{}.env", environment);
         let input = matches.get_one::<String>("input").unwrap_or(&input);
 
-        let url = format!("{}/config/{}", get_platform_management_api_url(), id);
+        let url = format!(
+            "{}/config/push",
+            get_platform_management_api_url()
+        );
 
-        // Read file content and wrap in JSON value
-        let body_bytes = read(input)?;
-        let body_str = String::from_utf8_lossy(&body_bytes).to_string();
-        let body_value = serde_json::json!(body_str);
+        let items = parse_env_file_items(std::path::Path::new(input))
+            .with_context(|| format!("Failed to parse file {}. Please check file permissions.", input))?;
+
+        let content = items
+            .into_iter()
+            .map(|item| match item {
+                EnvFileItem::SectionHeader(line) => format!("{}\n", line),
+                EnvFileItem::KeyValue(key, value) => {
+                    if value.contains('\n') {
+                        format!("{}=\"{}\"\n", key, value)
+                    } else {
+                        format!("{}={}\n", key, value)
+                    }
+                }
+            })
+            .collect::<String>();
+
+        let body = serde_json::json!({
+            "applicationId": app,
+            "region": region,
+            "environment": environment,
+            "content": content
+        });
 
         let response =
-            http_client::post(&url, body_value).with_context(|| ERROR_FAILED_TO_SEND_REQUEST)?;
+            http_client::post(&url, body).with_context(|| ERROR_FAILED_TO_SEND_REQUEST)?;
+
+        let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
         match response.status() {
-            reqwest::StatusCode::OK => println!("Config pushed to {}", id),
-            _ => anyhow::bail!("Failed to push config: {}", response.text()?),
+            reqwest::StatusCode::OK => {
+                log_ok!(stdout, "[OK] Config pushed successfully for {} ({})", environment, region);
+            }
+            _ => {
+                let err_text = response.text()?;
+                log_error!(stdout, "[ERROR] Failed to push config: {}", err_text);
+                anyhow::bail!("Failed to push config: {}", err_text);
+            }
         }
 
         Ok(())

@@ -1,5 +1,14 @@
 # @forklaunch/internal
 
+## 0.3.29
+
+### Patch Changes
+
+- WS actually working probably, and package bumps
+- Updated dependencies
+  - @forklaunch/validator@0.10.29
+  - @forklaunch/common@0.6.29
+
 ## 0.3.28
 
 ### Patch Changes

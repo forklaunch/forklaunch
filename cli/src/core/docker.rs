@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fs::read_to_string,
+    io::Write as IoWrite,
     path::{Path, PathBuf},
 };
 
@@ -8,6 +9,7 @@ use anyhow::{Context, Result};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_yml::{Value, from_str, from_value, to_string};
+use termcolor::{StandardStream, WriteColor};
 use uuid::Uuid;
 use walkdir::WalkDir;
 
@@ -736,7 +738,6 @@ pub(crate) fn add_s3_to_docker_compose<'a>(
         );
     }
 
-    // Add minio-data volume if not present
     if !docker_compose.volumes.contains_key("minio-data") {
         docker_compose.volumes.insert(
             "minio-data".to_string(),
@@ -2085,6 +2086,75 @@ pub(crate) fn update_dockerfile_contents(
     }
 
     Ok(new_dockerfile_contents.join("\n"))
+}
+
+/// Synchronize docker-compose environment sections with env vars discovered from code scanning.
+///
+/// For each service/worker in docker-compose that maps to a known project,
+/// adds only the env vars that the project actually uses in its code.
+/// New vars are added with empty string values so the user can fill them in.
+pub(crate) fn sync_docker_compose_env_vars(
+    docker_compose: &mut DockerCompose,
+    project_env_vars: &HashMap<String, Vec<super::ast::infrastructure::env::EnvVarUsage>>,
+    manifest: &ApplicationManifestData,
+    stdout: &mut StandardStream,
+) -> Result<bool> {
+    let mut changes_made = false;
+
+    let project_types: HashMap<String, super::manifest::ProjectType> = manifest
+        .projects
+        .iter()
+        .map(|p| (p.name.clone(), p.r#type.clone()))
+        .collect();
+
+    // For each docker-compose service, figure out which project it corresponds to
+    let service_keys: Vec<String> = docker_compose.services.keys().cloned().collect();
+
+    for service_key in &service_keys {
+        // Determine the project name this service corresponds to
+        let project_name = if project_types.contains_key(service_key) {
+            Some(service_key.clone())
+        } else {
+            // Check worker aliases: "foo-worker" -> "foo", "foo-service" -> "foo"
+            let mut found = None;
+            for suffix in &["-worker", "-service", "-server"] {
+                if let Some(base) = service_key.strip_suffix(suffix) {
+                    if project_types.contains_key(base) {
+                        found = Some(base.to_string());
+                        break;
+                    }
+                }
+            }
+            found
+        };
+
+        let Some(project_name) = project_name else {
+            continue;
+        };
+
+        let service = docker_compose.services.get_mut(service_key).unwrap();
+        let environment = service.environment.get_or_insert_with(IndexMap::new);
+
+        let mut added_vars = Vec::new();
+
+        // Only add env vars that this project actually uses in its code
+        if let Some(env_vars) = project_env_vars.get(&project_name) {
+            for env_var in env_vars {
+                if !environment.contains_key(&env_var.var_name) {
+                    environment.insert(env_var.var_name.clone(), String::new());
+                    added_vars.push(env_var.var_name.clone());
+                }
+            }
+        }
+
+        if !added_vars.is_empty() {
+            added_vars.sort();
+            changes_made = true;
+            log_info!(stdout, "[INFO] Added {} env var(s) to docker-compose service '{}': {}", added_vars.len(), service_key, added_vars.join(", "));
+        }
+    }
+
+    Ok(changes_made)
 }
 
 #[cfg(test)]
