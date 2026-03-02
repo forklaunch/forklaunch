@@ -7,327 +7,162 @@ status: In Progress
 
 # MCP Autogeneration
 
-> ⚠️ **Development Status**: This feature is currently under active development and not yet available in production releases. API design may change before stable release.
+> ⚠️ **Development Status**: MCP is under active development. APIs and defaults may change before a stable release.
 
 ## Overview
 
-ForkLaunch provides automatic exposure of your API endpoints as Model Context Protocol (MCP) tools through a dedicated `/mcp` endpoint on your running application. This enables AI assistants and other external tools to interact with your application through a standardized interface using Streamable HTTP transport.
+ForkLaunch can expose your HTTP endpoints as **MCP tools** by spinning up a **FastMCP** server (Streamable HTTP / `httpStream` transport) and generating tools from your existing ForkLaunch route contracts.
+
+At a high level:
+
+- A FastMCP server acts as an MCP **control plane**.
+- Each tool invocation proxies to the underlying HTTP route on your application host.
 
 **Prerequisites:**
 - Requires `zod` validator choice (see [Validation](/docs/framework/validation.md))
 - Built on [HTTP Framework](/docs/framework/http.md) contract definitions
-- Integrates with [Authorization](/docs/framework/authorization.md) for security
-
-## What is MCP?
-
-Model Context Protocol (MCP) is an open standard that allows AI systems to securely access data and tools from various sources. ForkLaunch automatically exposes your API endpoints as MCP tools, making your APIs immediately available to AI assistants, development tools, and other MCP-compatible clients.
-
-## Features (Planned)
-
-### Automatic Tool Exposure
-- Expose API endpoints as MCP tools via `/mcp` endpoint
-- Generate tools from ContractDetails objects automatically
-- Support for all HTTP methods and endpoints
-- Type-safe parameter handling from schemas
-- Streamable HTTP transport for real-time communication
-
-### Endpoint-Level Control
-- Opt-out individual endpoints from MCP exposure
-- Configure tool visibility per endpoint
-- Custom tool descriptions and metadata
-- Fine-grained access control
-
-### Integration Features
-- Seamless integration with existing applications
-- No separate server or port required
-- Automatic schema validation for tool parameters
-- Error handling and response formatting
-- Authentication passthrough
+- Integrates with [Authorization](/docs/framework/authorization.md) at both the MCP layer and the underlying route layer
 
 ## Architecture
 
-MCP integration works by:
-1. **Endpoint Registration**: Automatically registers endpoints with ContractDetails as MCP tools
-2. **Transport Layer**: Uses Streamable HTTP transport over the `/mcp` endpoint
-3. **Schema Integration**: Leverages existing ForkLaunch validation schemas
-4. **Opt-out Support**: Respects endpoint-level MCP configuration
+1. **Tool registration**: ForkLaunch walks the router tree and registers one MCP tool per route (and per version, if versioned).
+2. **Schema integration**: Tool input schemas are derived from contract schemas (params/body/query/requestHeaders).
+3. **Execution**: Tool calls proxy to the real HTTP endpoint and normalize the response into MCP content.
+4. **Security**: You can gate access at the MCP transport layer and/or at the HTTP route layer.
 
 ```
-┌─────────────────┐    HTTP/Stream    ┌─────────────────┐
-│   MCP Client    │ ────────────────► │  Your API Host  │
-│ (AI Assistant)  │                   │   GET /mcp      │
-└─────────────────┘                   └─────────────────┘
-                                              │
-                                              ▼
-                                      ┌─────────────────┐
-                                      │ MCP Tool Router │
-                                      │ /users/:id      │
-                                      │ /users (POST)   │
-                                      │ /orders/:id     │
-                                      └─────────────────┘
+┌─────────────────┐    MCP (httpStream)    ┌──────────────────────────┐
+│   MCP Client    │ ─────────────────────► │ FastMCP Server (control)  │
+│ (AI Assistant)  │                        │   POST/STREAM /mcp         │
+└─────────────────┘                        └───────────┬──────────────┘
+                                                        │ proxies
+                                                        ▼
+                                           ┌──────────────────────────┐
+                                           │   Your HTTP API Host      │
+                                           │   GET /users/:id          │
+                                           │   POST /users             │
+                                           └──────────────────────────┘
 ```
 
-## Configuration
+## Configuration (actual)
 
-MCP can be configured through the ForkLaunch application configuration:
+MCP is configured via the application `mcp` options:
+
+- `mcp: false` disables MCP entirely.
+- `mcp: { ... }` configures the FastMCP server (port/path/version/auth/etc).
+
+### Disable MCP
 
 ```typescript
 import { forklaunchExpress } from '@forklaunch/express';
 
 const app = forklaunchExpress(schemaValidator, telemetryCollector, {
-  // ... other options
-  mcp: {
-    enabled: true,
-    endpoint: '/mcp',                    // MCP endpoint path
-    serverName: 'my-api-server',
-    description: 'MCP server for My API',
-    authentication: {
-      required: true,                    // Require auth for MCP access
-      passthrough: true,                 // Pass auth to underlying endpoints
-    },
-  },
+  mcp: false
 });
 ```
 
-### Configuration Options
+### Typical setup (with auth hook)
+
+```typescript
+import { forklaunchExpress } from '@forklaunch/express';
+
+const app = forklaunchExpress(schemaValidator, telemetryCollector, {
+  mcp: {
+    // Defaults:
+    // - port: (appPort + 2000)
+    // - path: '/mcp'
+    // - version: '1.0.0'
+    path: '/mcp',
+    version: '1.0.0',
+
+    /**
+     * Optional: authenticate each MCP request (auth-framework-agnostic).
+     * Return any object to represent the authenticated context, or undefined to deny.
+     */
+    authenticate: async (request) => {
+      const token = request.headers.authorization?.replace('Bearer ', '');
+      if (!token) return undefined;
+
+      // Validate locally (JWT/HMAC/etc) OR via IAM (recommended for centralized OAuth/session management)
+      return { subject: 'user-id-or-email' };
+    }
+  }
+});
+```
+
+### Options table
 
 | Option | Type | Description | Default |
 | :----- | :--- | :---------- | :------ |
-| `enabled` | boolean | Enable MCP endpoint exposure | `false` |
-| `endpoint` | string | Path for the MCP endpoint | `'/mcp'` |
-| `serverName` | string | Name of the MCP server | Application name |
-| `description` | string | Description of the MCP server | Auto-generated |
-| `authentication.required` | boolean | Require authentication for MCP access | `false` |
-| `authentication.passthrough` | boolean | Pass authentication to underlying endpoints | `true` |
+| `mcp` | `false \| object` | Disable or configure MCP | `object` (defaults applied when omitted) |
+| `mcp.port` | `number` | Port for the MCP server | `appPort + 2000` |
+| `mcp.path` | `` `/${string}` `` | MCP endpoint path on the MCP server | `'/mcp'` |
+| `mcp.version` | `` `${number}.${number}.${number}` `` | MCP server version | `'1.0.0'` |
+| `mcp.options` | `FastMCP options` | Passed through to FastMCP constructor | `{}` |
+| `mcp.authenticate` | `(request) => Promise<object \| undefined>` | MCP request auth hook (framework-agnostic) | `undefined` |
+| `mcp.additionalTools` | `(mcpServer) => void` | Register extra tools beyond HTTP routes | `undefined` |
+| `mcp.contentTypeMapping` | `Record<string, string>` | Map contract response content-types to MCP content handling | `undefined` |
 
-## Endpoint-Level Configuration
+## Tool exposure (endpoint/router control)
 
-Control MCP exposure at the individual endpoint level through ContractDetails:
+### Per-endpoint opt-in/opt-out
+
+Route contracts can opt out of MCP tool generation via `contractDetails.options.mcp`:
 
 ```typescript
-// Include in MCP (default when defaultInclude: true)
-const userContractDetails = {
-  name: 'getUser',
-  summary: 'Get user by ID',
-  // ... other contract details
-  mcp: {
-    enabled: true,                       // Explicitly include
-    toolName: 'get_user_by_id',         // Custom tool name
-    description: 'Retrieve user information by user ID',
-  }
-};
-
-// Exclude from MCP
-const adminContractDetails = {
-  name: 'adminOperation',
+const contractDetails = {
+  name: 'AdminOperation',
   summary: 'Admin-only operation',
-  // ... other contract details
-  mcp: {
-    enabled: false,                      // Opt-out from MCP
-  }
-};
-
-// Use defaults
-const publicContractDetails = {
-  name: 'publicEndpoint',
-  summary: 'Public endpoint',
-  // ... other contract details
-  // No mcp config = uses application defaults
+  options: {
+    mcp: false
+  },
+  // ... params/body/query/responses/auth/etc
 };
 ```
 
-### MCP Contract Options
+### Router-level control
 
-| Option | Type | Description | Default |
-| :----- | :--- | :---------- | :------ |
-| `enabled` | boolean | Include this endpoint in MCP | Application default |
-| `toolName` | string | Custom name for the MCP tool | Generated from endpoint |
-| `description` | string | Tool description for MCP clients | Contract summary |
-| `tags` | string[] | Tags for tool categorization | `[]` |
+Routers can also disable MCP tool generation via router options (`routerOptions.mcp`).
 
-## Usage Examples (Planned)
+## Authentication and authorization
 
-### Basic Setup
-```typescript
-// Enable MCP on your application
-const app = forklaunchExpress(schemaValidator, telemetryCollector, {
-  mcp: {
-    enabled: true,
-    serverName: 'user-management-api',
-    description: 'User management and authentication API',
-  },
-});
+ForkLaunch supports authorization at **two layers**:
 
-// Your existing routes automatically become MCP tools
-app.get('/users/:id', {
-  name: 'getUser',
-  summary: 'Get user by ID',
-  params: { id: string },
-  responses: { 200: UserSchema.schema() },
-  mcp: {
-    toolName: 'get_user',
-    description: 'Retrieve detailed user information',
-  }
-}, getUserHandler);
+- **MCP transport auth** via `mcp.authenticate(request)` (gates access to the MCP control plane)
+- **HTTP endpoint auth** via `contractDetails.auth` (JWT/HMAC/Basic + roles/permissions/scopes/features)
 
-app.post('/users', {
-  name: 'createUser',
-  summary: 'Create new user',
-  body: CreateUserSchema.schema(),
-  responses: { 201: UserSchema.schema() },
-  // Uses default MCP settings (included)
-}, createUserHandler);
-```
+These are intentionally separate. Even if MCP transport auth succeeds, the proxied HTTP call may still fail contract-level authorization. See [Authorization](/docs/framework/authorization.md) for details.
 
-### Selective Exposure
-```typescript
-const app = forklaunchExpress(schemaValidator, telemetryCollector, {
-  mcp: {
-    enabled: true,
-  },
-});
+## Calling the MCP endpoint (debug)
 
-// Only expose specific endpoints
-app.get('/users/:id', {
-  // ... contract details
-  mcp: { enabled: true }                 // Explicitly include
-}, getUserHandler);
+Assuming your app is on `:3000`, the default MCP port will be `:5000` and the default path is `/mcp`.
 
-app.delete('/users/:id', {
-  // ... contract details
-  mcp: { enabled: false }                // Explicitly exclude
-}, deleteUserHandler);
+List available tools:
 
-app.get('/internal/health', {
-  // ... contract details
-  // No mcp config + defaultInclude: false = excluded
-}, healthHandler);
-```
-
-## Transport Protocol
-
-ForkLaunch MCP uses Streamable HTTP transport:
-
-```typescript
-// MCP client connection
-const mcpClient = new McpClient({
-  transport: new StreamableHttpTransport({
-    url: 'https://your-api.com/mcp',
-    headers: {
-      'Authorization': 'Bearer your-token',
-    },
-  }),
-});
-
-// Tool invocation
-const result = await mcpClient.callTool('get_user', {
-  id: '123'
-});
-```
-
-## Integration with AI Assistants (Planned)
-
-### Claude Desktop
-```json
-{
-  "mcpServers": {
-    "my-api": {
-      "command": "http",
-      "args": ["https://your-api.com/mcp"],
-      "env": {
-        "API_KEY": "your-api-key"
-      }
-    }
-  }
-}
-```
-
-### Direct HTTP Integration
-```typescript
-// Direct MCP over HTTP
-const response = await fetch('https://your-api.com/mcp', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'Authorization': 'Bearer your-token',
-  },
-  body: JSON.stringify({
-    method: 'tools/call',
-    params: {
-      name: 'get_user',
-      arguments: { id: '123' }
-    }
-  })
-});
-```
-
-## Security Considerations (Planned)
-
-### Authentication
-- Support for API key authentication
-- JWT token validation
-- OAuth 2.0 integration
-- Authentication passthrough to underlying endpoints
-
-### Access Control
-- Endpoint-level MCP visibility control
-- Tool filtering based on client identity
-- Rate limiting for MCP access
-- Audit logging for MCP requests
-
-### Best Practices
-```typescript
-const app = forklaunchExpress(schemaValidator, telemetryCollector, {
-  mcp: {
-    enabled: true,
-    authentication: {
-      required: true,                    // Always require auth
-      passthrough: true,                 // Validate against actual endpoints
-    }
-  },
-});
-```
-
-## Development Workflow (Planned)
-
-1. **Setup**: Enable MCP in your ForkLaunch application configuration
-2. **Configure**: Set endpoint-level MCP options in ContractDetails
-3. **Test**: Connect MCP clients to your `/mcp` endpoint
-4. **Deploy**: Deploy normally - MCP endpoint deploys with your application
-5. **Connect**: Configure AI assistants to use your MCP endpoint
-
-### Debug Endpoints
 ```bash
-# Check available MCP tools
-curl https://your-api.com/mcp -X POST \
+curl http://localhost:5000/mcp -X POST \
   -H "Content-Type: application/json" \
-  -d '{"method": "tools/list"}'
-
-# Validate tool parameters
-curl https://your-api.com/mcp -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"method": "tools/call", "params": {"name": "get_user", "arguments": {"id": "123"}}}'
+  -d '{"method":"tools/list"}'
 ```
 
-## Related Documentation
+Call a tool (example shape):
 
-- **[HTTP Frameworks](/docs/framework/http.md)** - Base HTTP framework configuration and ContractDetails
-- **[Validation](/docs/framework/validation.md)** - Schema validation for MCP tools (zod required)
-- **[Authorization](/docs/framework/authorization.md)** - Authentication and access control for MCP endpoints
-- **[Documentation](/docs/framework/documentation.md)** - OpenAPI generation from the same contracts
-- **[Error Handling](/docs/framework/error-handling.md)** - Standardized error responses for MCP tools
+```bash
+curl http://localhost:5000/mcp -X POST \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{"method":"tools/call","params":{"name":"GetUser","arguments":{"params":{"id":"123"}}}}'
+```
 
-## Roadmap
+## Notes and gotchas
 
-- [ ] Basic MCP endpoint exposure
-- [ ] Streamable HTTP transport implementation
-- [ ] Endpoint-level opt-out configuration
-- [ ] Tool registration and validation
-- [ ] Authentication integration
-- [ ] Real-time streaming support
-- [ ] AI assistant integration guides
-- [ ] Production deployment examples
+- **Zod-only (currently)**: MCP generation requires the Zod schema validator.
+- **Port separation**: The MCP server listens on its own port and proxies to your main HTTP server.
+- **Tool names**: Tool names come from `contractDetails.name`. If a route has multiple versions, the tool name may be suffixed with a version label.
 
----
+## Related documentation
 
-**Note**: This feature is currently in development. The API and configuration options may change before the stable release. Check back for updates or follow the project on GitHub for the latest progress.
+- **[HTTP Frameworks](/docs/framework/http.md)** - Contracts that drive tool generation
+- **[Validation](/docs/framework/validation.md)** - Zod requirement
+- **[Authorization](/docs/framework/authorization.md)** - Endpoint auth and MCP auth hook design
+- **[Error Handling](/docs/framework/error-handling.md)** - Standardized error responses

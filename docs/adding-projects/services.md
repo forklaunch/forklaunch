@@ -4,9 +4,19 @@ category: Guides
 description: Learn how to add and configure services in your application.
 ---
 
-## Adding a Service
+## Add a Service
 
-To add a service to your application, run the following command:
+A **service** is a standalone application that handles a specific business function. It exposes HTTP endpoints, implements business logic, and can use its own database. Think of it as a specialized worker that does one job well—like a `user-service` for managing accounts, a `product-service` for catalog management, or an `order-service` for processing purchases.
+
+In ForkLaunch, each service is independent: it can be developed, tested, and deployed separately, making your application modular and scalable.
+
+## Getting Started
+
+You can add a service in two ways:
+1. [Using Commands](/docs/adding-projects/services.md#using-commands-recommended)
+2. [Manual Creation with Sync](/docs/adding-projects/services.md#manual-creation-with-sync)
+
+### Using Commands (Recommended)
 
 <CodeTabs type="instantiate">
   <Tab title="init">
@@ -25,21 +35,42 @@ To add a service to your application, run the following command:
   </Tab>
 </CodeTabs>
 
-This adds a new service to your application, with a `RCSIDES` (`route`, `controller`, `service`, `interface`, `mappers`, `entity`, `seeder`) stack, along with other configuration needed for the service to run standalone.
+This creates a new service with a complete [RCSIDES](/docs/artifacts.md#rcsides-architecture-pattern) stack and automatically updates all application artifacts.
 
-`ForkLaunch` will automatically add the project to your workspace, docker-compose, and register any necessary scripts.
+### Manual Creation with Sync
 
-By default, you will not need to run any scripts to get going, but if you have added a new database, you may need to run `build` and `install` scripts from the top level of the application.
+If you manually create a service directory, use `forklaunch sync` to register it:
 
-### Command Options
+```bash
+# After manually creating the service structure
+forklaunch sync service email-svc
+```
 
-| Option | Short | Description | Valid Values |
-| :----- | :---- | :---------- | :----------- |
-| `--database` | `-d` | The database to use | `postgresql`, `mysql`, `mariadb`, `mssql`, `mongodb`, `libsql`, `sqlite`, `better-sqlite` |
-| `--infrastructure` | `-i` | Add optional infrastructure (can specify multiple) | `redis`, `s3` |
-| `--path` | `-p` | The path to initialize the service in | Any valid directory path |
-| `--description` | `-D` | The description of the service | Any string |
-| `--dryrun` | `-n` | Dry run the command | Flag (no value) |
+This updates artifacts (manifest, docker-compose, workspace, SDK, tsconfig) to include your manually created service.
+
+
+### Usage Examples
+
+```bash
+# Basic service (see dice roll example)
+forklaunch init service roll-dice-svc --path ./my-app/src/modules --database postgresql
+
+# Service with Redis cache
+forklaunch init service game-stats-svc --path ./my-app/src/modules --database postgresql --infrastructure redis
+
+# Service with multiple infrastructure
+forklaunch init service file-upload-svc --path ./my-app/src/modules --database postgresql --infrastructure redis s3
+
+# Custom path and description
+forklaunch init service user-management --path ./user-svc --description "User management service"
+
+# Sync manually created service
+forklaunch sync service custom-service --path ./custom-svc
+```
+
+For a complete step-by-step example, see the [Dice Roll Example](/docs/examples/dice-roll-node-app.md).
+
+## Learn More
 
 ### Service Aliases
 
@@ -48,9 +79,27 @@ The `service` command has several aliases for convenience:
 - `project` 
 - `proj`
 
+### Init Command Options
+
+| Option | Short | Description | Valid Values |
+| :----- | :---- | :---------- | :----------- |
+| `--database` | `-d` | The database to use | `postgresql`, `mysql`, `mariadb`, `mssql`, `mongodb`, `libsql`, `sqlite`, `better-sqlite` |
+| `--infrastructure` | `-i` | Add optional infrastructure (can specify multiple) | `redis`, `s3` |
+| `--path` | `-p` | The path to initialize the service in | Any valid directory path |
+| `--description` | `-D` | The description of the service | Any string |
+| `--mappers` |  | Generate mapper files for entity/DTO transformation | Flag (no value) |
+| `--dryrun` | `-n` | Dry run the command | Flag (no value) |
+
+### Sync Command Options
+
+| Option | Short | Description | Valid Values |
+| :----- | :---- | :---------- | :----------- |
+| `--path` | `-p` | The application path | Any valid directory path |
+| `--prompts` | `-P` | JSON object with pre-provided answers for service options (see init options) | JSON string |
+
 ### Project Structure
 
-A service follows the standard ForkLaunch RCSIDES structure:
+A service follows the standard ForkLaunch [RCSIDES](/docs/artifacts.md#rcsides-architecture-pattern) structure:
 
 ```bash
 service-name/
@@ -81,8 +130,12 @@ service-name/
 
 ### Service Features
 
+By default, you will not need to run any scripts to get going, but if you have added a 
+new database, you may need to run `build` and `install` scripts from the top level of the 
+application.
+
 Each service includes:
-- **Complete RCSIDES Stack**: Routes, Controllers, Services, Interfaces, Domain, Entities, Seeders
+- **Complete [RCSIDES](/docs/artifacts.md#rcsides-architecture-pattern) Stack**: Routes, Controllers, Services, Interfaces, Domain (schemas/types), Entities, Seeders
 - **Database Integration**: Full ORM setup with migrations and seeders
 - **API Documentation**: OpenAPI/Swagger documentation generation
 - **Validation**: Request/response validation with configurable validators
@@ -92,11 +145,15 @@ Each service includes:
 
 ### Environment Variables
 
-Required environment variables:
+A `.env.local` file is required in your service directory with the following variables:
+
 ```bash
-# Database configuration
-DATABASE_URL=postgresql://user:password@localhost:5432/dbname
-DATABASE_TYPE=postgresql
+# Database configuration (for MikroORM)
+DB_NAME=your_database_name
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=postgres
 
 # Server configuration
 PORT=3000
@@ -109,33 +166,20 @@ AWS_SECRET_ACCESS_KEY=your_secret_key
 S3_BUCKET_NAME=your_bucket_name
 ```
 
-### Usage Examples
+**Note**: MikroORM expects individual `DB_*` environment variables, not a single `DATABASE_URL`. The `.env.local` file is used by migration scripts.
 
-```bash
-# Basic service
-forklaunch init service users --database postgresql
-
-# Service with Redis cache
-forklaunch init service products --database postgresql --infrastructure redis
-
-# Service with multiple infrastructure
-forklaunch init service files --database postgresql --infrastructure redis s3
-
-# Custom path and description
-forklaunch init service orders --path ./services --description "Order management service"
-```
 
 ### Next Steps
 
 After creating a service:
-1. Configure environment variables in `.env.local`
+1. Configure environment variables in `.env.local` (see [Environment Variables](#environment-variables))
 2. Define your data model in the entities
 3. Implement your business logic in the service layer
-4. Set up your API routes and controllers  
-5. Run database migrations: `npm run migrate:up`
-6. Add test data using seeders: `npm run seed`
-7. Start the service: `npm run dev`
-8. Review the API documentation at `/docs`
+4. Set up your API routes and controllers
+5. Run migrations
+6. Build and Install
+
+For database setup, migrations, building, and running the service, see [Local Development](/docs/local-development.md).
 
 ### Common Issues
 
@@ -145,45 +189,17 @@ After creating a service:
 4. **Infrastructure Dependencies**: Ensure Redis/S3 are configured if enabled
 5. **Path Conflicts**: Avoid service names that conflict with existing directories
 
-### Deployment Defaults
+### Deployment
 
-When you deploy a service using `forklaunch deploy`, the platform automatically provisions resources using **AWS Free Tier** defaults to minimize costs:
-
-#### Compute (Per Service)
-- **CPU**: 256m (0.25 vCPU) - Fargate free tier eligible
-- **Memory**: 512Mi (0.5 GB) - Fargate free tier eligible  
-- **Replicas**: 1 minimum, 2 maximum - Auto-scaling enabled
-- **Health Checks**: `/health` endpoint, 30s interval
-
-#### Database (If specified)
-- **PostgreSQL**: db.t3.micro (750 hours/month free)
-- **Storage**: 20 GB (free tier limit)
-- **Backups**: 7 day retention
-- **Availability**: Single AZ (free tier)
-- **Encryption**: Enabled (at rest)
-
-#### Cache (If Redis specified)
-- **Instance**: cache.t3.micro (free tier eligible)
-- **Nodes**: 1 (single node)
-- **Snapshots**: 1 day retention
-- **Encryption**: Disabled (not in free tier)
-
-#### Storage (If S3 specified)
-- **Bucket**: Versioning enabled
-- **Encryption**: AWS managed keys
-- **Lifecycle**: Optional archiving to Glacier after 90 days
-
-**Note**: You can upgrade these defaults via the Platform UI when your application grows. The free tier defaults are designed to keep costs at $0/month for development and small production workloads.
-
-**Cost Estimate**: 
-- Development: $0/month (within free tier)
-- Small Production: $5-15/month (after free tier)
-- Can scale up via Platform UI as needed
+When you're ready to deploy your service, see [Release and Deploy](/docs/cli/release-and-deploy.md) for information about:
+- Deployment commands and workflows
+- Default AWS Free Tier resources
+- Cost estimates and scaling options
 
 ### Best Practices
 
 1. **Single Responsibility**: Keep services focused on one business domain
-2. **RCSIDES Pattern**: Use the full stack for clean architecture
+2. **[RCSIDES Pattern](/docs/artifacts.md#rcsides-architecture-pattern)**: Use the full stack for clean architecture
 3. **Error Handling**: Implement comprehensive error handling in service layer
 4. **Validation**: Use domain schemas for request/response validation
 5. **Testing**: Write tests for business logic and API endpoints

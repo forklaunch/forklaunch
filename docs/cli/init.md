@@ -6,7 +6,7 @@ description: Learn how to use the forklaunch init command.
 
 ## Overview
 
-Create new ForkLaunch resources. For detailed information, see [Adding Projects](/docs/adding-projects).
+Create new application resources with ForkLaunch CLI commands. For detailed information, see [Adding Projects](/docs/adding-projects).
 
 ## Usage
 
@@ -60,8 +60,9 @@ forklaunch init service [OPTIONS] [name]
 | :----- | :---------- | :----- |
 | `-p, --path` | Application path | _string_ |
 | `-d, --database` | Database type | `postgresql`, `mysql`, `mariadb`, `mssql`, `mongodb`, `libsql`, `sqlite`, `better-sqlite` |
-| `-i, --infrastructure` | Infrastructure components | `redis`, `s3` |
+| `-i, --infrastructure` | Infrastructure components (can specify multiple) | `redis`, `s3` |
 | `-D, --description` | Service description | _string_ |
+| `--mappers` | Generate mapper files for entity/DTO transformation | Flag |
 | `-n, --dryrun` | Preview changes | Flag |
 
 ### Initialize Worker
@@ -75,6 +76,7 @@ forklaunch init worker [OPTIONS] [name]
 | `-t, --type` | Worker type | `database`, `redis`, `kafka`, `bullmq` |
 | `-d, --database` | Database type | `postgresql`, `mysql`, `mariadb`, `mssql`, `mongodb`, `libsql`, `sqlite`, `better-sqlite` |
 | `-D, --description` | Worker description | _string_ |
+| `--mappers` | Generate mapper files for entity/DTO transformation | Flag |
 | `-n, --dryrun` | Preview changes | Flag |
 
 ### Initialize Library
@@ -96,14 +98,26 @@ forklaunch init router [OPTIONS] [name]
 | Option | Description | Values |
 | :----- | :---------- | :----- |
 | `-p, --path` | Service path (must be in service directory) | _string_ |
-| `-i, --infrastructure` | Infrastructure components | `redis`, `s3` |
+| `-i, --infrastructure` | Infrastructure components (can specify multiple) | `redis`, `s3` |
 | `-n, --dryrun` | Preview changes | Flag |
+
+## Aliases
+
+Some `init` subcommands have aliases:
+
+- `application`: `app`
+- `module`: `mod`
+- `service`: `svc`, `project`, `proj`
+- `worker`: `wrk`
+- `library`: `lib`
+- `router`: `controller`, `routes`
 
 ## Examples
 
 ```bash
 # Create a new application with full framework stack
 forklaunch init application my-app \
+  --path ./my-app \
   --database postgresql \
   --validator zod \
   --http-framework express \
@@ -114,6 +128,7 @@ forklaunch init application my-app \
 
 # Create application with high-performance setup
 forklaunch init application my-fast-app \
+  --path ./my-fast-app \
   --database postgresql \
   --validator typebox \
   --http-framework hyper-express \
@@ -126,16 +141,16 @@ forklaunch init application my-fast-app \
 forklaunch init module --path ./my-app --module billing-base
 
 # Add a service with Redis caching
-forklaunch init service --path ./my-app --database postgresql --infrastructure redis
+forklaunch init service --path ./my-app/src/modules --database postgresql --infrastructure redis
 
 # Add a worker with BullMQ for advanced queue features
-forklaunch init worker --path ./my-app --type bullmq
+forklaunch init worker --path ./my-app/src/modules --type bullmq
 
 # Add a router with infrastructure support
-forklaunch init router --path ./my-app/services/api --infrastructure redis
+forklaunch init router --path ./my-app/src/modules/api --infrastructure redis
 
 # Preview changes before applying
-forklaunch init service --path ./my-app --database postgresql --infrastructure redis --dryrun
+forklaunch init service --path ./my-app/src/modules --database postgresql --infrastructure redis --dryrun
 ```
 
 ## Troubleshooting
