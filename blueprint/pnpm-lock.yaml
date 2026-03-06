@@ -273,6 +273,9 @@ importers:
       dotenv:
         specifier: ^17.3.1
         version: 17.3.1
+      jose:
+        specifier: ^6.2.0
+        version: 6.2.0
       stripe:
         specifier: ^20.4.0
         version: 20.4.0(@types/node@25.3.5)
