@@ -221,7 +221,9 @@ export class S3ObjectStore implements ObjectStore<S3Client> {
       throw new Error('S3 did not return a stream');
     }
 
-    return Readable.fromWeb(webStream as Parameters<typeof Readable.fromWeb>[0]);
+    return Readable.fromWeb(
+      webStream as Parameters<typeof Readable.fromWeb>[0]
+    );
   }
 
   /**
