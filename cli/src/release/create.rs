@@ -1789,16 +1789,23 @@ fn deduplicate_cross_scope(scoped_env_vars: &mut Vec<ScopedEnvVar>) {
                     }
                 }
             }
-            if let Some((fill_value, _)) = value_counts.iter().max_by_key(|(_, c)| *c) {
-                let fill_value = fill_value.clone();
-                // Fill blank/empty entries with the majority value
-                for &idx in indices {
-                    let is_blank = match &scoped_env_vars[idx].value {
-                        None => true,
-                        Some(v) => v.trim().is_empty(),
-                    };
-                    if is_blank {
-                        scoped_env_vars[idx].value = Some(fill_value.clone());
+            if let Some(&max_count) = value_counts.values().max() {
+                let max_entries: Vec<_> = value_counts
+                    .iter()
+                    .filter(|(_, &c)| c == max_count)
+                    .collect();
+                // Only backfill when there is a single unambiguous majority value
+                if max_entries.len() == 1 {
+                    let fill_value = max_entries[0].0.clone();
+                    // Fill blank/empty entries with the majority value
+                    for &idx in indices {
+                        let is_blank = match &scoped_env_vars[idx].value {
+                            None => true,
+                            Some(v) => v.trim().is_empty(),
+                        };
+                        if is_blank {
+                            scoped_env_vars[idx].value = Some(fill_value.clone());
+                        }
                     }
                 }
             }
