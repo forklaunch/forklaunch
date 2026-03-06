@@ -1792,7 +1792,7 @@ fn deduplicate_cross_scope(scoped_env_vars: &mut Vec<ScopedEnvVar>) {
             if let Some(&max_count) = value_counts.values().max() {
                 let max_entries: Vec<_> = value_counts
                     .iter()
-                    .filter(|(_, &c)| c == max_count)
+                    .filter(|&(_, &c)| c == max_count)
                     .collect();
                 // Only backfill when there is a single unambiguous majority value
                 if max_entries.len() == 1 {
