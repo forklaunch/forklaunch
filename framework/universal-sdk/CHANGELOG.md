@@ -1,5 +1,21 @@
 # @forklaunch/universal-sdk
 
+## 0.7.31
+
+### Patch Changes
+
+- Prevent 404 message hijacking and update packages
+- Updated dependencies
+  - @forklaunch/common@0.6.31
+
+## 0.7.30
+
+### Patch Changes
+
+- Fix multiline config injection and update packages
+- Updated dependencies
+  - @forklaunch/common@0.6.30
+
 ## 0.7.29
 
 ### Patch Changes

@@ -1,5 +1,23 @@
 # @forklaunch/core
 
+## 0.18.4
+
+### Patch Changes
+
+- Prevent 404 message hijacking and update packages
+- Updated dependencies
+  - @forklaunch/validator@0.10.31
+  - @forklaunch/common@0.6.31
+
+## 0.18.3
+
+### Patch Changes
+
+- Fix multiline config injection and update packages
+- Updated dependencies
+  - @forklaunch/validator@0.10.30
+  - @forklaunch/common@0.6.30
+
 ## 0.18.2
 
 ### Patch Changes

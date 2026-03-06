@@ -1,5 +1,23 @@
 # @forklaunch/infrastructure-s3
 
+## 0.4.41
+
+### Patch Changes
+
+- Prevent 404 message hijacking and update packages
+- Updated dependencies
+  - @forklaunch/common@0.6.31
+  - @forklaunch/core@0.18.4
+
+## 0.4.40
+
+### Patch Changes
+
+- Fix multiline config injection and update packages
+- Updated dependencies
+  - @forklaunch/common@0.6.30
+  - @forklaunch/core@0.18.3
+
 ## 0.4.39
 
 ### Patch Changes

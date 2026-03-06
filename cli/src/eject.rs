@@ -32,6 +32,7 @@ use crate::{
         },
         relative_path::get_relative_path,
         rendered_template::{RenderedTemplate, RenderedTemplatesCache, write_rendered_templates},
+        validate::require_manifest,
     },
     prompt::{ArrayCompleter, prompt_comma_separated_list, prompt_for_confirmation},
 };
@@ -517,7 +518,7 @@ impl CliCommand for EjectCommand {
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        let _ = crate::core::validate::require_manifest(matches)?;
+        let _ = require_manifest(matches)?;
 
         let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
         let mut stdout = StandardStream::stdout(ColorChoice::Always);

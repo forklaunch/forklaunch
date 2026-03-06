@@ -118,7 +118,7 @@ pub fn extract_process_env_vars_from_source(source_code: &str) -> Result<Vec<Env
 }
 
 /// Recursively find all `.ts` source files under a directory,
-/// excluding `node_modules`, `.d.ts` files, and `registrations.ts`.
+/// excluding `node_modules`, `.d.ts` files, and test directories.
 fn find_all_source_files(project_path: &Path) -> Result<Vec<std::path::PathBuf>> {
     let mut source_files = Vec::new();
     walk_source_files(project_path, &mut source_files)?;
@@ -158,7 +158,6 @@ fn walk_source_files(dir: &Path, files: &mut Vec<std::path::PathBuf>) -> Result<
 
             if file_name.ends_with(".ts")
                 && !file_name.ends_with(".d.ts")
-                && file_name != "registrations.ts"
             {
                 files.push(path);
             }
@@ -208,13 +207,13 @@ pub fn find_all_env_vars(
     // Step 1: Find vars from registrations.ts files (existing getEnvVar() calls)
     let registrations_files = find_registrations_files(modules_path)?;
 
-    for file_path in registrations_files {
-        let project_name = get_project_name_from_path(&file_path)?;
-        let env_vars = extract_env_vars_from_file(&file_path, rendered_templates_cache)?;
+    for file_path in &registrations_files {
+        let project_name = get_project_name_from_path(file_path)?;
+        let env_vars = extract_env_vars_from_file(file_path, rendered_templates_cache)?;
         all_env_vars.insert(project_name, env_vars);
     }
 
-    // Step 2: Scan all .ts source files for process.env.* usage
+    // Step 2: Scan all .ts source files for process.env.* and getEnvVar() usage
     if modules_path.exists() {
         for entry in fs::read_dir(modules_path)? {
             let entry = entry?;
@@ -227,24 +226,27 @@ pub fn find_all_env_vars(
                     .unwrap_or_default();
 
                 let source_files = find_all_source_files(&path)?;
-                let mut process_env_vars = Vec::new();
+                let mut extra_env_vars = Vec::new();
 
-                for source_file in source_files {
+                for source_file in source_files.iter() {
                     if let Ok(source_code) = fs::read_to_string(&source_file) {
                         if let Ok(vars) = extract_process_env_vars_from_source(&source_code) {
-                            process_env_vars.extend(vars);
+                            extra_env_vars.extend(vars);
+                        }
+                        if let Ok(vars) = extract_env_vars_from_source(&source_code) {
+                            extra_env_vars.extend(vars);
                         }
                     }
                 }
 
-                if !process_env_vars.is_empty() {
+                if !extra_env_vars.is_empty() {
                     let entry = all_env_vars.entry(project_name).or_insert_with(Vec::new);
 
                     // Deduplicate by var name
                     let existing_names: HashSet<String> =
                         entry.iter().map(|v| v.var_name.clone()).collect();
 
-                    for var in process_env_vars {
+                    for var in extra_env_vars {
                         if !existing_names.contains(&var.var_name) {
                             entry.push(var);
                         }

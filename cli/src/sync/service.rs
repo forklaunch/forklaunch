@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::Write};
+use std::{collections::HashMap, io::Write, path::Path};
 
 use anyhow::{Context, Result, bail};
 use clap::ArgMatches;
@@ -6,11 +6,13 @@ use rustyline::{Editor, history::DefaultHistory};
 use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use crate::{
+    CliCommand,
     constants::ERROR_FAILED_TO_PARSE_MANIFEST,
     core::{
         base_path::{RequiredLocation, find_app_root_path},
+        command::command,
         manifest::{ProjectType, application::ApplicationManifestData},
-        rendered_template::{RenderedTemplatesCache, write_rendered_templates},
+        rendered_template::{RenderedTemplate, RenderedTemplatesCache, write_rendered_templates},
         sync::{
             artifacts::{ArtifactType, ProjectSyncMetadata, sync_project_to_artifacts},
             detection::detect_service_config,
@@ -34,7 +36,7 @@ impl ServiceSyncCommand {
 
 pub(crate) fn sync_service_with_cache(
     service_name: &str,
-    app_root_path: &std::path::Path,
+    app_root_path: &Path,
     manifest_data: &mut ApplicationManifestData,
     matches: &ArgMatches,
     prompts_map: &HashMap<String, HashMap<String, String>>,
@@ -157,14 +159,10 @@ pub(crate) fn sync_service_with_cache(
     Ok(())
 }
 
-impl crate::CliCommand for ServiceSyncCommand {
+impl CliCommand for ServiceSyncCommand {
     fn command(&self) -> clap::Command {
         use clap::Arg;
-        crate::core::command::command(
-            "service",
-            "Sync a specific service to application artifacts",
-        )
-        .arg(
+        command("service", "Sync a specific service to application artifacts").arg(
             Arg::new("name")
                 .help("The name of the service")
                 .required(true),
@@ -217,7 +215,7 @@ impl crate::CliCommand for ServiceSyncCommand {
 
         rendered_templates_cache.insert(
             manifest_path.to_string_lossy().to_string(),
-            crate::core::rendered_template::RenderedTemplate {
+            RenderedTemplate {
                 path: manifest_path.clone(),
                 content: toml::to_string_pretty(&manifest_data)
                     .context("Failed to serialize manifest")?,

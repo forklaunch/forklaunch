@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fs, io::Write, path::Path};
+use std::{collections::{HashMap, HashSet}, fs, io::Write, path::Path};
 
 use anyhow::{Context, Result};
 use clap::{Arg, ArgAction, ArgMatches, Command};
@@ -19,7 +19,8 @@ use crate::{
         base_path::{RequiredLocation, find_app_root_path},
         command::command,
         docker::{DockerCompose, sync_docker_compose_env_vars},
-        manifest::application::ApplicationManifestData,
+        env_template::{generate_env_templates, sync_env_local_files},
+        manifest::{ProjectType, application::ApplicationManifestData},
         rendered_template::{RenderedTemplate, RenderedTemplatesCache, write_rendered_templates},
         sync::{
             artifacts::{ArtifactType, remove_project_from_artifacts},
@@ -47,7 +48,7 @@ pub fn sync_all_projects(
     manifest_data: &mut ApplicationManifestData,
     rendered_templates_cache: &mut RenderedTemplatesCache,
     confirm_all: bool,
-    prompts_map: &std::collections::HashMap<String, std::collections::HashMap<String, String>>,
+    prompts_map: &HashMap<String, HashMap<String, String>>,
     stdout: &mut StandardStream,
 ) -> Result<bool> {
     let modules_path = app_root_path.join(&manifest_data.modules_path);
@@ -107,7 +108,7 @@ pub fn sync_all_projects(
                     .find(|p| &p.name == project_name);
                 let project_type = project
                     .map(|p| p.r#type.clone())
-                    .unwrap_or(crate::core::manifest::ProjectType::Library);
+                    .unwrap_or(ProjectType::Library);
 
                 remove_project_from_artifacts(
                     rendered_templates_cache,
@@ -163,9 +164,9 @@ pub fn sync_all_projects(
 
         let project_type = if let Some(existing) = manifest_project {
             let init_type: InitializeType = match existing.r#type {
-                crate::core::manifest::ProjectType::Service => InitializeType::Service,
-                crate::core::manifest::ProjectType::Worker => InitializeType::Worker,
-                crate::core::manifest::ProjectType::Library => InitializeType::Library,
+                ProjectType::Service => InitializeType::Service,
+                ProjectType::Worker => InitializeType::Worker,
+                ProjectType::Library => InitializeType::Library,
             };
             writeln!(stdout, "[INFO] Known as: {}", init_type.to_string())?;
             init_type
@@ -383,14 +384,12 @@ impl CliCommand for SyncAllCommand {
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-        let prompts_map: std::collections::HashMap<
-            String,
-            std::collections::HashMap<String, String>,
-        > = if let Some(prompts_json) = matches.get_one::<String>("prompts") {
-            json_from_str(prompts_json).with_context(|| "Failed to parse prompts JSON")?
-        } else {
-            std::collections::HashMap::new()
-        };
+        let prompts_map: HashMap<String, HashMap<String, String>> =
+            if let Some(prompts_json) = matches.get_one::<String>("prompts") {
+                json_from_str(prompts_json).with_context(|| "Failed to parse prompts JSON")?
+            } else {
+                HashMap::new()
+            };
 
         let (app_root_path, _) = find_app_root_path(matches, RequiredLocation::Application)?;
         let manifest_path = app_root_path.join(".forklaunch").join("manifest.toml");
@@ -415,17 +414,13 @@ impl CliCommand for SyncAllCommand {
         )?;
 
         let modules_path = app_root_path.join(&manifest_data.modules_path);
-        crate::core::env_template::generate_env_templates(
+        generate_env_templates(
             &modules_path,
             &manifest_data,
             &mut rendered_templates_cache,
             &mut stdout,
         )?;
-        crate::core::env_template::sync_env_local_files(
-            &modules_path,
-            &manifest_data,
-            &mut stdout,
-        )?;
+        sync_env_local_files(&modules_path, &manifest_data, &mut stdout)?;
 
         // Sync docker-compose environment sections with discovered env vars
         sync_docker_compose_with_env_vars(
@@ -438,7 +433,7 @@ impl CliCommand for SyncAllCommand {
 
         rendered_templates_cache.insert(
             manifest_path.to_string_lossy().to_string(),
-            crate::core::rendered_template::RenderedTemplate {
+            RenderedTemplate {
                 path: manifest_path.clone(),
                 content: toml::to_string_pretty(&manifest_data)
                     .context("Failed to serialize manifest")?,

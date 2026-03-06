@@ -13,6 +13,7 @@ use crate::{
     core::{
         command::command,
         manifest::application::ApplicationManifestData,
+        validate::{require_auth, require_manifest},
     },
 };
 
@@ -58,8 +59,8 @@ impl CliCommand for IntegrateCommand {
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-        let token = crate::core::validate::require_auth()?;
-        let (app_root, _manifest) = crate::core::validate::require_manifest(matches)?;
+        let token = require_auth()?;
+        let (app_root, _manifest) = require_manifest(matches)?;
 
         let application_id = matches
             .get_one::<String>("app")

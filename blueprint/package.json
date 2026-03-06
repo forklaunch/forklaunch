@@ -41,15 +41,15 @@
     "up:packages": "pnpm -r update --latest"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.4",
-    "@changesets/cli": "^2.29.8",
+    "@biomejs/biome": "2.4.6",
+    "@changesets/cli": "^2.30.0",
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
     "eslint": "^10.0.2",
-    "globals": "^17.3.0",
+    "globals": "^17.4.0",
     "jest": "^30.2.0",
-    "lint-staged": "^16.2.7",
-    "oxlint": "^1.50.0",
+    "lint-staged": "^16.3.2",
+    "oxlint": "^1.51.0",
     "prettier": "^3.8.1",
     "sort-package-json": "^3.6.1",
     "ts-jest": "^29.4.6",
@@ -60,12 +60,12 @@
     "vitest": "^4.0.18"
   },
   "dependencies": {
-    "@forklaunch/common": "^0.6.29",
-    "@forklaunch/core": "^0.18.2",
-    "@forklaunch/express": "^0.10.6",
-    "@forklaunch/hyper-express": "^0.11.6",
-    "@forklaunch/universal-sdk": "^0.7.29",
-    "@forklaunch/validator": "^0.10.29"
+    "@forklaunch/common": "^0.6.31",
+    "@forklaunch/core": "^0.18.4",
+    "@forklaunch/express": "^0.10.8",
+    "@forklaunch/hyper-express": "^0.11.8",
+    "@forklaunch/universal-sdk": "^0.7.31",
+    "@forklaunch/validator": "^0.10.31"
   },
   "pnpm": {
     "patchedDependencies": {

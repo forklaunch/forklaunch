@@ -1,9 +1,10 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use clap::{Arg, ArgMatches, Command};
-use dialoguer::{Select, theme::ColorfulTheme};
+use dialoguer::{Confirm, Select, theme::ColorfulTheme};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
@@ -11,7 +12,14 @@ use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 use crate::{
     CliCommand,
     constants::{ERROR_FAILED_TO_SEND_REQUEST, get_platform_management_api_url, get_platform_ui_url},
-    core::command::command,
+    core::{
+        command::command,
+        env::extract_env_value,
+        env_scope::is_pulumi_injected,
+        http_client,
+        validate::{require_active_account, require_integration, require_manifest, resolve_auth},
+    },
+    deploy::utils::stream_deployment_status,
 };
 
 #[derive(Debug, Serialize)]
@@ -24,6 +32,9 @@ struct CreateDeploymentRequest {
     region: String,
     #[serde(rename = "distributionConfig")]
     distribution_config: Option<String>,
+    #[serde(rename = "forceRefresh")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    force_refresh: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -54,6 +65,8 @@ struct MissingKey {
     #[serde(rename = "key")]
     name: String,
     component: Option<ComponentMetadata>,
+    #[serde(rename = "defaultValue")]
+    default_value: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -61,6 +74,7 @@ struct ComponentMetadata {
     #[serde(rename = "type")]
     component_type: String,
     property: String,
+    passthrough: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -142,6 +156,9 @@ struct EnvironmentVariableUpdate {
     value: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     component: Option<ComponentMetadata>,
+    #[serde(rename = "isUnset")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    is_unset: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -158,8 +175,24 @@ struct EnvironmentVariableCreation {
     required: bool,
     #[serde(rename = "hasValue")]
     has_value: bool,
+    #[serde(rename = "isUnset")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    is_unset: Option<bool>,
 }
 
+
+/// Get a default value for a missing key from defaultValue or passthrough
+fn get_default_value(key: &MissingKey) -> Option<&str> {
+    key.default_value
+        .as_deref()
+        .filter(|v| !v.trim().is_empty())
+        .or_else(|| {
+            key.component
+                .as_ref()
+                .and_then(|c| c.passthrough.as_deref())
+                .filter(|v| !v.trim().is_empty())
+        })
+}
 
 fn hint_for_key(key: &MissingKey) -> String {
     if let Some(ref comp) = key.component {
@@ -181,9 +214,9 @@ fn write_missing_vars_template(
     region: &str,
     release_version: &str,
     application_id: &str,
-    app_var_keys: &std::collections::HashSet<String>,
-    existing_config: &std::collections::HashMap<String, String>,
-) -> Result<std::path::PathBuf> {
+    app_var_keys: &HashSet<String>,
+    existing_config: &HashMap<String, String>,
+) -> Result<PathBuf> {
     let temp_path = std::env::temp_dir()
         .join(format!("forklaunch-env-{}-{}.env", environment, region));
 
@@ -199,7 +232,8 @@ fn write_missing_vars_template(
          # HOW TO USE:\n\
          #   1. Fill in ALL values marked with ⚠ below\n\
          #   2. Pre-filled values are already set — edit only if needed\n\
-         #   3. Save the file, then press Enter in the terminal to continue\n\
+         #   3. Leave a value empty or set to NONE to keep it unset\n\
+         #   4. Save the file, then press Enter in the terminal to continue\n\
          #\n\
          # VALUE FORMAT:\n\
          #   • Simple:    MY_VAR=somevalue\n\
@@ -213,7 +247,7 @@ fn write_missing_vars_template(
     // --- APPLICATION section (shared vars, shown first) ---
     if !app_var_keys.is_empty() {
         // Collect in first-seen order across all details
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = HashSet::new();
         let mut ordered: Vec<&MissingKey> = Vec::new();
         for detail in &blocked_error.details {
             for key in &detail.missing_keys {
@@ -224,18 +258,27 @@ fn write_missing_vars_template(
             }
         }
 
-        let needs_value: Vec<&&MissingKey> = ordered.iter()
-            .filter(|k| !existing_config.contains_key(&k.name))
+        let needs_config: Vec<&&MissingKey> = ordered.iter()
+            .filter(|k| !existing_config.contains_key(&k.name) && get_default_value(k).is_none())
+            .collect();
+        let has_default: Vec<&&MissingKey> = ordered.iter()
+            .filter(|k| !existing_config.contains_key(&k.name) && get_default_value(k).is_some())
             .collect();
         let already_set: Vec<&&MissingKey> = ordered.iter()
             .filter(|k| existing_config.contains_key(&k.name))
             .collect();
 
-        let status_line = match (needs_value.len(), already_set.len()) {
-            (0, s) => format!("{} var(s) already set", s),
-            (n, 0) => format!("{} var(s) need configuration", n),
-            (n, s) => format!("{} var(s) need configuration, {} already set", n, s),
-        };
+        let mut status_parts = Vec::new();
+        if !needs_config.is_empty() {
+            status_parts.push(format!("{} var(s) need configuration", needs_config.len()));
+        }
+        if !has_default.is_empty() {
+            status_parts.push(format!("{} var(s) pre-filled", has_default.len()));
+        }
+        if !already_set.is_empty() {
+            status_parts.push(format!("{} var(s) already set", already_set.len()));
+        }
+        let status_line = status_parts.join(", ");
 
         content.push_str(&format!(
             "#@type=application\n\
@@ -250,6 +293,8 @@ fn write_missing_vars_template(
         for key in &ordered {
             if let Some(existing_val) = existing_config.get(&key.name) {
                 content.push_str(&format!("{}={}\n", key.name, existing_val));
+            } else if let Some(default_val) = get_default_value(key) {
+                content.push_str(&format!("{}={} # default — edit if needed\n", key.name, default_val));
             } else {
                 let hint = hint_for_key(key);
                 content.push_str(&format!("{}= # ⚠ NEEDS CONFIGURATION{}\n", key.name, hint));
@@ -268,30 +313,48 @@ fn write_missing_vars_template(
             .filter(|k| !app_var_keys.contains(&k.name))
             .collect();
 
-        // Only include component-specific vars that need a value from the user
-        let needs_value: Vec<&&MissingKey> = component_keys.iter()
+        // Include vars that need a value or have a default to review
+        let actionable: Vec<&&MissingKey> = component_keys.iter()
             .filter(|k| !existing_config.contains_key(&k.name))
             .collect();
 
-        if needs_value.is_empty() {
+        if actionable.is_empty() {
             continue;
         }
 
+        let needs_config_count = actionable.iter()
+            .filter(|k| get_default_value(k).is_none())
+            .count();
+        let has_default_count = actionable.len() - needs_config_count;
+
         let type_label = detail.component_type.to_uppercase();
+        let mut comp_status_parts = Vec::new();
+        if needs_config_count > 0 {
+            comp_status_parts.push(format!("{} var(s) need configuration", needs_config_count));
+        }
+        if has_default_count > 0 {
+            comp_status_parts.push(format!("{} var(s) pre-filled", has_default_count));
+        }
+        let comp_status = comp_status_parts.join(", ");
+
         content.push_str(&format!(
             "#@type={}\n\
              #@id={}\n\
              #@name={}\n\
              # ══════════════════════════════════════════════════════\n\
-             # [{}] {} — {} var(s) need configuration\n\
+             # [{}] {} — {}\n\
              # ══════════════════════════════════════════════════════\n",
             detail.component_type, detail.id, detail.name,
-            type_label, detail.name, needs_value.len()
+            type_label, detail.name, comp_status
         ));
 
-        for key in needs_value {
-            let hint = hint_for_key(key);
-            content.push_str(&format!("{}= # ⚠ NEEDS CONFIGURATION{}\n", key.name, hint));
+        for key in actionable {
+            if let Some(default_val) = get_default_value(key) {
+                content.push_str(&format!("{}={} # default — edit if needed\n", key.name, default_val));
+            } else {
+                let hint = hint_for_key(key);
+                content.push_str(&format!("{}= # ⚠ NEEDS CONFIGURATION{}\n", key.name, hint));
+            }
         }
         content.push('\n');
     }
@@ -304,16 +367,16 @@ fn write_missing_vars_template(
 
 /// Parses the env template file and returns:
 /// - a map of key → value for all non-empty entries
-/// - a list of keys that are still blank (and should have a value)
+/// - a list of keys marked as unset (empty value or value set to "NONE")
 fn parse_env_template(
-    path: &std::path::Path,
-) -> Result<(std::collections::HashMap<String, String>, Vec<String>)> {
+    path: &Path,
+) -> Result<(HashMap<String, String>, Vec<String>)> {
     let content = std::fs::read_to_string(path)
         .with_context(|| format!("Failed to read env template from {}", path.display()))?;
 
     let lines: Vec<&str> = content.lines().collect();
-    let mut parsed: std::collections::HashMap<String, String> = std::collections::HashMap::new();
-    let mut still_empty: Vec<String> = Vec::new();
+    let mut parsed: HashMap<String, String> = HashMap::new();
+    let mut unset_keys: Vec<String> = Vec::new();
 
     let mut i = 0;
     while i < lines.len() {
@@ -329,9 +392,9 @@ fn parse_env_template(
             let rest = line[eq_pos + 1..].trim();
 
             if !key.is_empty() {
-                let value = crate::core::env::extract_env_value(&lines, &mut i, rest);
-                if value.is_empty() {
-                    still_empty.push(key);
+                let value = extract_env_value(&lines, &mut i, rest);
+                if value.is_empty() || value.eq_ignore_ascii_case("none") {
+                    unset_keys.push(key);
                 } else {
                     parsed.insert(key, value);
                 }
@@ -341,11 +404,11 @@ fn parse_env_template(
         i += 1;
     }
 
-    Ok((parsed, still_empty))
+    Ok((parsed, unset_keys))
 }
 
-fn collect_app_var_keys(blocked_error: &DeploymentBlockedError) -> std::collections::HashSet<String> {
-    let mut app_var_keys = std::collections::HashSet::new();
+fn collect_app_var_keys(blocked_error: &DeploymentBlockedError) -> HashSet<String> {
+    let mut app_var_keys = HashSet::new();
 
     // Explicitly application-type details from the API
     for detail in &blocked_error.details {
@@ -357,7 +420,7 @@ fn collect_app_var_keys(blocked_error: &DeploymentBlockedError) -> std::collecti
     }
 
     // Keys appearing in 2+ component details are application-scoped
-    let mut key_counts: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+    let mut key_counts: HashMap<String, u32> = HashMap::new();
     for detail in &blocked_error.details {
         if detail.component_type != "application" {
             for key in &detail.missing_keys {
@@ -431,6 +494,12 @@ impl CliCommand for CreateCommand {
                     .help("Preview deployment without executing it"),
             )
             .arg(
+                Arg::new("full")
+                    .long("full")
+                    .action(clap::ArgAction::SetTrue)
+                    .help("Force a full deployment with Pulumi state refresh"),
+            )
+            .arg(
                 Arg::new("node-env")
                     .long("node-env")
                     .value_parser(["production", "development"])
@@ -441,9 +510,10 @@ impl CliCommand for CreateCommand {
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-        let auth_mode = crate::core::validate::resolve_auth()?;
-        let (_app_root, manifest) = crate::core::validate::require_manifest(matches)?;
-        let application_id = crate::core::validate::require_integration(&manifest)?;
+        let auth_mode = resolve_auth()?;
+        require_active_account(&auth_mode)?;
+        let (_app_root, manifest) = require_manifest(matches)?;
+        let application_id = require_integration(&manifest)?;
 
         let release_version = matches
             .get_one::<String>("release")
@@ -461,8 +531,6 @@ impl CliCommand for CreateCommand {
         let wait = !matches.get_flag("no-wait");
         let dry_run = matches.get_flag("dry-run");
 
-        use crate::core::http_client;
-
         let config_pull_url = format!(
             "{}/config/pull?applicationId={}&region={}&environment={}",
             get_platform_management_api_url(),
@@ -472,7 +540,7 @@ impl CliCommand for CreateCommand {
         );
         // Fetch all existing non-empty config vars upfront — used for NODE_ENV detection
         // and to avoid re-prompting for vars already set during deploy
-        let existing_config: std::collections::HashMap<String, String> =
+        let existing_config: HashMap<String, String> =
             http_client::get_with_auth(&auth_mode, &config_pull_url)
                 .ok()
                 .and_then(|r| if r.status().is_success() { r.text().ok() } else { None })
@@ -523,6 +591,7 @@ impl CliCommand for CreateCommand {
                         source: "application".to_string(),
                         required: false,
                         has_value: true,
+                        is_unset: None,
                     }],
                 };
                 log_progress!(stdout, "[INFO] Setting NODE_ENV={}...", node_env_value);
@@ -555,6 +624,7 @@ impl CliCommand for CreateCommand {
                     .cloned()
                     .unwrap_or_else(|| "centralized".to_string()),
             ),
+            force_refresh: if matches.get_flag("full") { Some(true) } else { None },
         };
 
         if dry_run {
@@ -805,7 +875,7 @@ impl CliCommand for CreateCommand {
 
                 if wait {
                     writeln!(stdout)?;
-                    crate::deploy::utils::stream_deployment_status(
+                    stream_deployment_status(
                         &auth_mode,
                         &deployment.id,
                         &mut stdout,
@@ -833,6 +903,27 @@ impl CliCommand for CreateCommand {
                             "Deployment failed after {} retries. Please check your environment variable configuration and try again.",
                             MAX_RETRIES
                         );
+                    }
+
+                    // Filter out Pulumi-injected vars (inter-service URLs, auth URLs)
+                    // that the platform will auto-inject at deploy time
+                    let project_names: Vec<String> = manifest.projects.iter().map(|p| p.name.clone()).collect();
+                    let mut blocked_error = blocked_error;
+                    for detail in &mut blocked_error.details {
+                        detail.missing_keys.retain(|k| {
+                            !is_pulumi_injected(&k.name, &project_names)
+                        });
+                    }
+                    blocked_error.details.retain(|d| !d.missing_keys.is_empty());
+
+                    // If all vars were Pulumi-injected, nothing left for the user
+                    if blocked_error.details.is_empty() {
+                        log_info!(stdout, " [OK]");
+                        writeln!(stdout)?;
+                        log_info!(stdout, "[INFO] All missing variables are Pulumi-injected — retrying deployment...");
+                        writeln!(stdout)?;
+                        retry_count += 1;
+                        continue;
                     }
 
                     if auth_mode.is_hmac() {
@@ -872,7 +963,7 @@ impl CliCommand for CreateCommand {
 
                     // Print grouped counts matching the file structure
                     {
-                        let mut seen = std::collections::HashSet::new();
+                        let mut seen = HashSet::new();
                         let app_missing = blocked_error.details.iter()
                             .flat_map(|d| &d.missing_keys)
                             .filter(|k| app_var_keys.contains(&k.name)
@@ -905,41 +996,74 @@ impl CliCommand for CreateCommand {
                     writeln!(stdout)?;
 
                     // Wait for user to edit, then parse and validate
-                    let collected: std::collections::HashMap<String, String> = loop {
+                    let final_unset_keys: Vec<String>;
+                    let collected: HashMap<String, String> = loop {
                         let mut _enter = String::new();
                         std::io::stdin().read_line(&mut _enter)?;
 
-                        let (mut parsed, still_empty) = parse_env_template(&temp_path)?;
+                        let (mut parsed, unset_keys) = parse_env_template(&temp_path)?;
 
-                        if still_empty.is_empty() {
-                            // Merge in existing_config for vars not in the file
-                            for (k, v) in &existing_config {
-                                parsed.entry(k.clone()).or_insert_with(|| v.clone());
+                        // Confirm unset vars with the user before proceeding
+                        if !unset_keys.is_empty() {
+                            writeln!(stdout)?;
+                            log_info!(stdout, "[INFO] The following variables will be marked as UNSET (not sent to deployment):");
+                            for var in &unset_keys {
+                                writeln!(stdout, "  • {}", var)?;
                             }
-                            break parsed;
+                            writeln!(stdout)?;
+
+                            let confirmed = Confirm::with_theme(&ColorfulTheme::default())
+                                .with_prompt("Continue with these variables unset?")
+                                .default(true)
+                                .interact()?;
+
+                            if !confirmed {
+                                log_info!(stdout, "[INFO] Edit the file and press Enter to continue:");
+                                writeln!(stdout, "  {}", temp_path.display())?;
+                                writeln!(stdout)?;
+                                continue;
+                            }
                         }
 
-                        log_error!(stdout, "[ERROR] The following variables are still empty:");
-                        for var in &still_empty {
-                            log_error!(stdout, "  ⚠  {}", var);
+                        final_unset_keys = unset_keys;
+                        // Merge in existing_config for vars not in the file
+                        for (k, v) in &existing_config {
+                            parsed.entry(k.clone()).or_insert_with(|| v.clone());
                         }
-                        writeln!(stdout)?;
-                        log_info!(stdout, "[INFO] Fill in the remaining variables and press Enter:");
-                        writeln!(stdout, "  {}", temp_path.display())?;
-                        writeln!(stdout)?;
+                        break parsed;
                     };
+                    let unset_set: HashSet<String> = final_unset_keys.into_iter().collect();
 
                     // --- Submit phase ---
                     // Post app-scoped vars to the application endpoint
-                    let app_vars: Vec<EnvironmentVariableCreation> = app_var_keys.iter()
-                        .filter_map(|k| collected.get(k).map(|v| EnvironmentVariableCreation {
-                            key: k.clone(),
-                            value: v.clone(),
-                            source: "application".to_string(),
-                            required: false,
-                            has_value: true,
-                        }))
+                    let mut app_vars: Vec<EnvironmentVariableCreation> = app_var_keys.iter()
+                        .filter_map(|k| {
+                            if unset_set.contains(k) {
+                                return None; // handled separately below
+                            }
+                            collected.get(k).map(|v| EnvironmentVariableCreation {
+                                key: k.clone(),
+                                value: v.clone(),
+                                source: "application".to_string(),
+                                required: false,
+                                has_value: true,
+                                is_unset: None,
+                            })
+                        })
                         .collect();
+                    // Add unset app-scoped vars
+                    for k in &unset_set {
+                        if app_var_keys.contains(k) {
+                            app_vars.push(EnvironmentVariableCreation {
+                                key: k.clone(),
+                                value: String::new(),
+                                source: "application".to_string(),
+                                required: false,
+                                has_value: false,
+                                is_unset: Some(true),
+                            });
+                        }
+                    }
                     if !app_vars.is_empty() {
                         let update_url = format!(
                             "{}/applications/{}/environments/{}/variables",
@@ -965,14 +1089,26 @@ impl CliCommand for CreateCommand {
                         if detail.component_type == "application" {
                             continue;
                         }
-                        let vars: Vec<EnvironmentVariableUpdate> = detail.missing_keys.iter()
-                            .filter(|k| !app_var_keys.contains(&k.name))
+                        let mut vars: Vec<EnvironmentVariableUpdate> = detail.missing_keys.iter()
+                            .filter(|k| !app_var_keys.contains(&k.name) && !unset_set.contains(&k.name))
                             .filter_map(|k| collected.get(&k.name).map(|v| EnvironmentVariableUpdate {
                                 key: k.name.clone(),
                                 value: v.clone(),
                                 component: k.component.clone(),
+                                is_unset: None,
                             }))
                             .collect();
+                        // Add unset component-scoped vars
+                        for k in &detail.missing_keys {
+                            if !app_var_keys.contains(&k.name) && unset_set.contains(&k.name) {
+                                vars.push(EnvironmentVariableUpdate {
+                                    key: k.name.clone(),
+                                    value: String::new(),
+                                    component: k.component.clone(),
+                                    is_unset: Some(true),
+                                });
+                            }
+                        }
                         if vars.is_empty() {
                             continue;
                         }

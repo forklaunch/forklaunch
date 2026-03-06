@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::{collections::HashMap, io::Write, path::Path};
 
 use anyhow::{Context, Result, bail};
 use clap::ArgMatches;
@@ -6,11 +6,13 @@ use rustyline::{Editor, history::DefaultHistory};
 use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use crate::{
+    CliCommand,
     constants::ERROR_FAILED_TO_PARSE_MANIFEST,
     core::{
         base_path::{RequiredLocation, find_app_root_path},
+        command::command,
         manifest::{ProjectType, application::ApplicationManifestData},
-        rendered_template::{RenderedTemplatesCache, write_rendered_templates},
+        rendered_template::{RenderedTemplate, RenderedTemplatesCache, write_rendered_templates},
         sync::{
             artifacts::{
                 ArtifactType, ProjectSyncMetadata, remove_project_from_artifacts,
@@ -33,10 +35,10 @@ impl LibrarySyncCommand {
 
 pub(crate) fn sync_library_with_cache(
     library_name: &str,
-    app_root_path: &std::path::Path,
+    app_root_path: &Path,
     manifest_data: &mut ApplicationManifestData,
     matches: &ArgMatches,
-    prompts_map: &std::collections::HashMap<String, std::collections::HashMap<String, String>>,
+    prompts_map: &HashMap<String, HashMap<String, String>>,
     rendered_templates_cache: &mut RenderedTemplatesCache,
     stdout: &mut StandardStream,
 ) -> Result<()> {
@@ -130,14 +132,10 @@ pub(crate) fn sync_library_with_cache(
     Ok(())
 }
 
-impl crate::CliCommand for LibrarySyncCommand {
+impl CliCommand for LibrarySyncCommand {
     fn command(&self) -> clap::Command {
         use clap::Arg;
-        crate::core::command::command(
-            "library",
-            "Sync a specific library to application artifacts",
-        )
-        .arg(
+        command("library", "Sync a specific library to application artifacts").arg(
             Arg::new("name")
                 .help("The name of the library")
                 .required(true),
@@ -160,14 +158,12 @@ impl crate::CliCommand for LibrarySyncCommand {
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let library_name = matches.get_one::<String>("name").unwrap();
 
-        let prompts_map: std::collections::HashMap<
-            String,
-            std::collections::HashMap<String, String>,
-        > = if let Some(prompts_json) = matches.get_one::<String>("prompts") {
-            serde_json::from_str(prompts_json).context("Failed to parse prompts JSON")?
-        } else {
-            std::collections::HashMap::new()
-        };
+        let prompts_map: HashMap<String, HashMap<String, String>> =
+            if let Some(prompts_json) = matches.get_one::<String>("prompts") {
+                serde_json::from_str(prompts_json).context("Failed to parse prompts JSON")?
+            } else {
+                HashMap::new()
+            };
 
         let (app_root_path, _) = find_app_root_path(matches, RequiredLocation::Application)?;
 
@@ -192,7 +188,7 @@ impl crate::CliCommand for LibrarySyncCommand {
 
         rendered_templates_cache.insert(
             manifest_path.to_string_lossy().to_string(),
-            crate::core::rendered_template::RenderedTemplate {
+            RenderedTemplate {
                 path: manifest_path.clone(),
                 content: toml::to_string_pretty(&manifest_data)
                     .context("Failed to serialize manifest")?,

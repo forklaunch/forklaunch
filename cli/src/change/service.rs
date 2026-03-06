@@ -303,6 +303,7 @@ fn change_infrastructure(
                     &manifest_data.app_name,
                     docker_compose,
                     &mut environment,
+                    0,
                 )?;
                 docker_compose
                     .services

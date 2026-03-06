@@ -1,5 +1,21 @@
 # @forklaunch/implementation-worker-redis
 
+## 0.8.15
+
+### Patch Changes
+
+- Update internal package versions
+- Updated dependencies
+  - @forklaunch/interfaces-worker@0.7.15
+
+## 0.8.14
+
+### Patch Changes
+
+- bump package versions
+- Updated dependencies
+  - @forklaunch/interfaces-worker@0.7.14
+
 ## 0.8.13
 
 ### Patch Changes

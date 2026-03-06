@@ -270,6 +270,7 @@ impl CliCommand for ModuleCommand {
                 cache: get_service_module_cache(&module),
                 queue: None,
                 object_store: None,
+                redis_partition: None,
             }),
             get_routers_from_standard_package(module.clone()),
             None,

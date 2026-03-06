@@ -47,7 +47,7 @@ const getHandler = handlers.get(
           ])
           .transform((val) => {
             if (val instanceof Buffer) {
-              return new Blob([val as Buffer<ArrayBuffer>]);
+              return new Blob([new Uint8Array(val as Buffer)]);
             }
             if (val instanceof ArrayBuffer) {
               return new Blob([val]);
@@ -58,7 +58,7 @@ const getHandler = handlers.get(
             if (typeof val === 'string') {
               return new Blob([val]);
             }
-            return new Blob([val as Buffer<ArrayBuffer>]);
+            return new Blob([new Uint8Array(val as Buffer)]);
           })
           .refine((val) => val instanceof Blob, {
             message:

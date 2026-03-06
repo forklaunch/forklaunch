@@ -7,8 +7,12 @@ use serde_json::Value;
 use crate::{
     constants::RELEASE_MANIFEST_SCHEMA_VERSION,
     core::{
+        ast::infrastructure::{
+            integrations::Integration,
+            worker_config::WorkerConfig as AstWorkerConfig,
+        },
         library_scanner::{
-            CodeNode, ImportScanner, LibraryDefinition, parse_route_file,
+            Topology, ImportScanner, LibraryDefinition, parse_route_file,
             scan_project_libraries,
         },
         manifest::{ProjectType, ResourceInventory, application::ApplicationManifestData},
@@ -107,6 +111,18 @@ pub(crate) struct EnvironmentVariableComponent {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct InterServiceUrlInfo {
+    /// Target project/service name (e.g., "matching", "billing")
+    #[serde(rename = "targetService")]
+    pub target_service: String,
+    /// Transport protocol: "http" (default) or "ws"
+    pub transport: String,
+    /// Env var on the target service that provides the port (e.g., "WS_PORT" for ws, "PORT" for http)
+    #[serde(rename = "portEnvVar")]
+    pub port_env_var: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct EnvironmentVariableRequirement {
     pub name: String,
     pub scope: EnvironmentVariableScope,
@@ -116,6 +132,8 @@ pub(crate) struct EnvironmentVariableRequirement {
     pub component: Option<EnvironmentVariableComponent>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub origin: Option<String>,
+    #[serde(rename = "interServiceUrl", skip_serializing_if = "Option::is_none")]
+    pub inter_service_url: Option<InterServiceUrlInfo>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -258,7 +276,7 @@ pub(crate) struct RouteDefinition {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auth: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub topology: Option<CodeNode>,
+    pub topology: Option<Topology>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -319,18 +337,13 @@ pub(crate) fn generate_release_manifest(
     git_branch: Option<String>,
     code_source_url: Option<String>,
     manifest: &ApplicationManifestData,
-    openapi_specs: &std::collections::HashMap<String, Value>,
+    openapi_specs: &HashMap<String, Value>,
     required_env_vars: Vec<EnvironmentVariableRequirement>,
-    project_runtime_deps: &std::collections::HashMap<String, Vec<String>>,
-    project_integrations: &std::collections::HashMap<
-        String,
-        Vec<crate::core::ast::infrastructure::integrations::Integration>,
-    >,
-    worker_configs: &std::collections::HashMap<
-        String,
-        crate::core::ast::infrastructure::worker_config::WorkerConfig,
-    >,
-    service_dependencies: &std::collections::HashMap<String, Vec<(String, String)>>,
+    project_runtime_deps: &HashMap<String, Vec<String>>,
+    project_integrations: &HashMap<String, Vec<Integration>>,
+    worker_configs: &HashMap<String, AstWorkerConfig>,
+    service_dependencies: &HashMap<String, Vec<(String, String)>>,
+    openapi_s3_keys: &HashMap<String, String>,
 ) -> Result<ReleaseManifest> {
     let timestamp = chrono::Utc::now().to_rfc3339();
 
@@ -343,7 +356,11 @@ pub(crate) fn generate_release_manifest(
     let mut services = Vec::new();
     for project in &manifest.projects {
         if project.r#type == ProjectType::Service {
-            let open_api_spec = openapi_specs.get(&project.name).cloned();
+            let open_api_spec = if let Some(s3_key) = openapi_s3_keys.get(&project.name) {
+                Some(Value::String(s3_key.clone()))
+            } else {
+                openapi_specs.get(&project.name).cloned()
+            };
             let runtime_deps = project_runtime_deps.get(&project.name).cloned();
             let deps = service_dependencies.get(&project.name).map(|dep_tuples| {
                 dep_tuples
@@ -486,7 +503,11 @@ pub(crate) fn generate_release_manifest(
                     })
                     .collect()
             });
-            let open_api_spec = openapi_specs.get(&project.name).cloned();
+            let open_api_spec = if let Some(s3_key) = openapi_s3_keys.get(&project.name) {
+                Some(Value::String(s3_key.clone()))
+            } else {
+                openapi_specs.get(&project.name).cloned()
+            };
 
             let worker_path = app_root.join(&manifest.modules_path).join(&project.name);
             let controllers = if worker_path.join("api").join("routes").exists() {
@@ -798,7 +819,9 @@ mod tests {
 
     #[test]
     fn test_route_definition_has_topology_with_versions() {
-        // Verify that RouteDefinition carries per-route topology with npm version info
+        use crate::core::library_scanner::Dependency;
+
+        // Verify that RouteDefinition carries flat topology with deps and source files
         let route = RouteDefinition {
             id: "get-users".to_string(),
             method: "GET".to_string(),
@@ -807,47 +830,37 @@ mod tests {
             middleware: None,
             schema: None,
             auth: None,
-            topology: Some(CodeNode {
-                name: "user.controller".to_string(),
-                node_type: "local".to_string(),
-                version: None,
-                children: Some(vec![
-                    CodeNode {
+            topology: Some(Topology {
+                deps: vec![
+                    Dependency {
                         name: "@forklaunch/core".to_string(),
-                        node_type: "npm".to_string(),
+                        dep_type: "npm".to_string(),
                         version: Some("^0.6.5".to_string()),
-                        children: None,
-                        path: None,
                         target_service: None,
+                        source_files: vec![
+                            "api/controllers/user.controller.ts".to_string(),
+                            "domain/services/user.service.ts".to_string(),
+                        ],
                     },
-                    CodeNode {
+                    Dependency {
                         name: "stripe".to_string(),
-                        node_type: "npm".to_string(),
+                        dep_type: "npm".to_string(),
                         version: Some("^17.7.0".to_string()),
-                        children: None,
-                        path: None,
                         target_service: None,
+                        source_files: vec![
+                            "domain/services/user.service.ts".to_string(),
+                        ],
                     },
-                    CodeNode {
-                        name: "user.service".to_string(),
-                        node_type: "local".to_string(),
-                        version: None,
-                        children: Some(vec![
-                            CodeNode {
-                                name: "@mikro-orm/core".to_string(),
-                                node_type: "npm".to_string(),
-                                version: Some("^6.5.0".to_string()),
-                                children: None,
-                                path: None,
-                                target_service: None,
-                            },
-                        ]),
-                        path: Some("domain/services/user.service.ts".to_string()),
+                    Dependency {
+                        name: "@mikro-orm/core".to_string(),
+                        dep_type: "npm".to_string(),
+                        version: Some("^6.5.0".to_string()),
                         target_service: None,
+                        source_files: vec![
+                            "domain/services/user.service.ts".to_string(),
+                        ],
                     },
-                ]),
-                path: Some("api/controllers/user.controller.ts".to_string()),
-                target_service: None,
+                ],
             }),
         };
 
@@ -856,9 +869,10 @@ mod tests {
 
         let json_str = json.unwrap();
 
-        // Verify route-level topology is present
+        // Verify flat topology structure
         assert!(json_str.contains("\"topology\""), "JSON should contain topology field");
-        assert!(json_str.contains("\"children\""), "JSON should have children array");
+        assert!(json_str.contains("\"deps\""), "JSON should have deps array");
+        assert!(json_str.contains("\"sourceFiles\""), "JSON should have per-dep sourceFiles");
 
         // Verify npm dependencies have versions
         assert!(json_str.contains("\"@forklaunch/core\""), "Should contain npm dependency");
@@ -866,12 +880,12 @@ mod tests {
         assert!(json_str.contains("\"stripe\""), "Should contain stripe dependency");
         assert!(json_str.contains("\"^17.7.0\""), "Should contain version for stripe");
 
-        // Verify local children also have npm deps with versions
+        // Verify nested deps are flattened
         assert!(json_str.contains("\"@mikro-orm/core\""), "Should contain nested npm dep");
-        assert!(json_str.contains("\"^6.5.0\""), "Should contain version for nested dep");
 
-        // Verify local nodes have paths
+        // Verify source files
         assert!(json_str.contains("\"domain/services/user.service.ts\""), "Should have local path");
+        assert!(json_str.contains("\"api/controllers/user.controller.ts\""), "Should have controller path");
     }
 
     #[test]
@@ -889,13 +903,8 @@ mod tests {
                 middleware: None,
                 schema: None,
                 auth: None,
-                topology: Some(CodeNode {
-                    name: "test.controller".to_string(),
-                    node_type: "local".to_string(),
-                    version: None,
-                    children: None,
-                    path: Some("api/controllers/test.controller.ts".to_string()),
-                    target_service: None,
+                topology: Some(Topology {
+                    deps: vec![],
                 }),
             }],
         };
