@@ -117,11 +117,11 @@ impl CliCommand for PushCommand {
 
         match response.status() {
             reqwest::StatusCode::OK => {
-                log_ok!(stdout, "[OK] Config pushed successfully for {} ({})", environment, region);
+                log_ok!(stdout, "Config pushed successfully for {} ({})", environment, region);
             }
             _ => {
                 let err_text = response.text()?;
-                log_error!(stdout, "[ERROR] Failed to push config: {}", err_text);
+                log_error!(stdout, "Failed to push config: {}", err_text);
                 anyhow::bail!("Failed to push config: {}", err_text);
             }
         }

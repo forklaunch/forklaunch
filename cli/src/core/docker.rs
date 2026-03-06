@@ -2172,7 +2172,7 @@ pub(crate) fn sync_docker_compose_env_vars(
         if !added_vars.is_empty() {
             added_vars.sort();
             changes_made = true;
-            log_info!(stdout, "[INFO] Added {} env var(s) to docker-compose service '{}': {}", added_vars.len(), service_key, added_vars.join(", "));
+            log_info!(stdout, "Added {} env var(s) to docker-compose service '{}': {}", added_vars.len(), service_key, added_vars.join(", "));
         }
     }
 

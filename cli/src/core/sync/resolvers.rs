@@ -131,7 +131,7 @@ pub fn resolve_description(
             .and_then(|p| p.get("description"));
 
         if override_value.is_none() {
-            log_ok!(stdout, "[INFO] Detected description: {}", detected);
+            log_ok!(stdout, "Detected description: {}", detected);
 
             let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
             let override_choice = prompt_with_validation_with_answers(
@@ -175,7 +175,7 @@ pub fn fallback_to_package_json(
     let package_json_path = project_path.join("package.json");
 
     if !package_json_path.exists() {
-        log_error!(stdout, "[ERROR] package.json not found");
+        log_error!(stdout, "package.json not found");
         bail!("Cannot determine database configuration: package.json not found");
     }
 
@@ -201,7 +201,7 @@ pub fn display_detection_results(
     stdout: &mut StandardStream,
 ) -> Result<()> {
     if let Some(ref db) = detected.database {
-        log_ok!(stdout, "[INFO] Detected database: {}", db.to_string());
+        log_ok!(stdout, "Detected database: {}", db.to_string());
     }
 
     if !detected.infrastructure.is_empty() {
@@ -209,7 +209,7 @@ pub fn display_detection_results(
     }
 
     if let Some(ref desc) = detected.description {
-        log_ok!(stdout, "[INFO] Detected description: {}", desc);
+        log_ok!(stdout, "Detected description: {}", desc);
     }
 
     if detected.database.is_none()
@@ -217,7 +217,7 @@ pub fn display_detection_results(
         && detected.description.is_none()
         && detected.worker_type.is_none()
     {
-        log_warn!(stdout, "[INFO] No configuration auto-detected");
+        log_warn!(stdout, "No configuration auto-detected");
     }
 
     Ok(())

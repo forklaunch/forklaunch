@@ -594,7 +594,7 @@ impl CliCommand for CreateCommand {
                         is_unset: None,
                     }],
                 };
-                log_progress!(stdout, "[INFO] Setting NODE_ENV={}...", node_env_value);
+                log_progress!(stdout, "Setting NODE_ENV={}...", node_env_value);
                 let node_env_response = http_client::put_with_auth(
                     &auth_mode,
                     &node_env_url,
@@ -648,7 +648,7 @@ impl CliCommand for CreateCommand {
 
             if !response.status().is_success() {
                 let error_text = response.text().unwrap_or_else(|_| "Unknown error".to_string());
-                log_error!(stdout, "[ERROR] Preview failed: {}", error_text);
+                log_error!(stdout, "Preview failed: {}", error_text);
                 bail!("Failed to preview deployment: {}", error_text);
             }
 
@@ -832,10 +832,10 @@ impl CliCommand for CreateCommand {
                 .with_context(|| format!("Failed to write preview file to {}", temp_path.display()))?;
 
             writeln!(stdout)?;
-            log_ok!(stdout, "[OK] Full preview written to: {}", temp_path.display());
+            log_ok!(stdout, "Full preview written to: {}", temp_path.display());
 
             writeln!(stdout)?;
-            log_info!(stdout, "[INFO] This was a dry run. No deployment was created.");
+            log_info!(stdout, "This was a dry run. No deployment was created.");
 
             return Ok(());
         }
@@ -855,7 +855,7 @@ impl CliCommand for CreateCommand {
         const MAX_RETRIES: u32 = 3;
 
         loop {
-            log_progress!(stdout, "[INFO] Triggering deployment...");
+            log_progress!(stdout, "Triggering deployment...");
 
             let response =
                 http_client::post_with_auth(&auth_mode, &url, serde_json::to_value(&request_body)?)
@@ -871,7 +871,7 @@ impl CliCommand for CreateCommand {
                     })?;
 
                 log_ok_suffix!(stdout);
-                writeln!(stdout, "[INFO] Deployment ID: {}", deployment.id)?;
+                log_info!(stdout, "Deployment ID: {}", deployment.id);
 
                 if wait {
                     writeln!(stdout)?;
@@ -882,7 +882,7 @@ impl CliCommand for CreateCommand {
                     )?;
                 } else {
                     writeln!(stdout)?;
-                    log_info!(stdout, "[INFO] Deployment started. Check status at:");
+                    log_info!(stdout, "Deployment started. Check status at:");
                     writeln!(
                         stdout,
                         "  {}/apps/{}/deployments/{}",
@@ -918,9 +918,9 @@ impl CliCommand for CreateCommand {
 
                     // If all vars were Pulumi-injected, nothing left for the user
                     if blocked_error.details.is_empty() {
-                        log_info!(stdout, " [OK]");
+                        log_ok_suffix!(stdout);
                         writeln!(stdout)?;
-                        log_info!(stdout, "[INFO] All missing variables are Pulumi-injected — retrying deployment...");
+                        log_info!(stdout, "All missing variables are Pulumi-injected — retrying deployment...");
                         writeln!(stdout)?;
                         retry_count += 1;
                         continue;
@@ -930,7 +930,7 @@ impl CliCommand for CreateCommand {
                         log_error_suffix!(stdout);
 
                         writeln!(stdout)?;
-                        log_error!(stdout, "[ERROR] Deployment blocked: {}",
+                        log_error!(stdout, "Deployment blocked: {}",
                             blocked_error.message
                         );
 
@@ -991,7 +991,7 @@ impl CliCommand for CreateCommand {
                         &application_id, &app_var_keys, &existing_config,
                     )?;
 
-                    log_info!(stdout, "[INFO] Fill in the required variables, then press Enter to continue:");
+                    log_info!(stdout, "Fill in the required variables, then press Enter to continue:");
                     writeln!(stdout, "  {}", temp_path.display())?;
                     writeln!(stdout)?;
 
@@ -1006,7 +1006,7 @@ impl CliCommand for CreateCommand {
                         // Confirm unset vars with the user before proceeding
                         if !unset_keys.is_empty() {
                             writeln!(stdout)?;
-                            log_info!(stdout, "[INFO] The following variables will be marked as UNSET (not sent to deployment):");
+                            log_info!(stdout, "The following variables will be marked as UNSET (not sent to deployment):");
                             for var in &unset_keys {
                                 writeln!(stdout, "  • {}", var)?;
                             }
@@ -1018,7 +1018,7 @@ impl CliCommand for CreateCommand {
                                 .interact()?;
 
                             if !confirmed {
-                                log_info!(stdout, "[INFO] Edit the file and press Enter to continue:");
+                                log_info!(stdout, "Edit the file and press Enter to continue:");
                                 writeln!(stdout, "  {}", temp_path.display())?;
                                 writeln!(stdout)?;
                                 continue;
@@ -1073,7 +1073,7 @@ impl CliCommand for CreateCommand {
                             region: region.clone(),
                             variables: app_vars,
                         };
-                        log_progress!(stdout, "[INFO] Saving application variables...");
+                        log_progress!(stdout, "Saving application variables...");
                         let resp = http_client::put_with_auth(&auth_mode, &update_url, serde_json::to_value(&update_body)?)
                             .with_context(|| "Failed to save application environment variables")?;
                         if !resp.status().is_success() {
@@ -1121,7 +1121,7 @@ impl CliCommand for CreateCommand {
                             region: region.clone(),
                             variables: vars,
                         };
-                        log_progress!(stdout, "[INFO] Saving variables for {}...", detail.name);
+                        log_progress!(stdout, "Saving variables for {}...", detail.name);
                         let resp = http_client::put_with_auth(&auth_mode, &update_url, serde_json::to_value(&update_body)?)
                             .with_context(|| "Failed to save environment variables")?;
                         if !resp.status().is_success() {
@@ -1132,7 +1132,7 @@ impl CliCommand for CreateCommand {
                     }
 
                     writeln!(stdout)?;
-                    log_info!(stdout, "[INFO] Variables saved. Retrying deployment...");
+                    log_info!(stdout, "Variables saved. Retrying deployment...");
                     writeln!(stdout)?;
                     continue;
                 } else {

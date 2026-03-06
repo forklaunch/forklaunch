@@ -69,7 +69,7 @@ impl CliCommand for IntegrateCommand {
         let manifest_path = app_root.join(".forklaunch").join("manifest.toml");
 
         // Validate application exists on platform
-        log_info!(stdout, "[INFO] Validating application on platform...");
+        log_info!(stdout, "Validating application on platform...");
 
         let url = format!(
             "{}/applications/{}",
@@ -95,7 +95,7 @@ impl CliCommand for IntegrateCommand {
             .json()
             .with_context(|| "Failed to parse application response")?;
 
-        log_ok!(stdout, "[OK] Found application: {}", app_data.name);
+        log_ok!(stdout, "Found application: {}", app_data.name);
 
         let manifest_content = std::fs::read_to_string(&manifest_path)
             .with_context(|| format!("Failed to read manifest at {:?}", manifest_path))?;
@@ -112,17 +112,17 @@ impl CliCommand for IntegrateCommand {
         write(&manifest_path, updated_manifest)
             .with_context(|| format!("Failed to write manifest at {:?}", manifest_path))?;
 
-        log_header!(stdout, Color::Green, "\n[OK] Application integrated successfully!");
+        log_header!(stdout, Color::Green, "\nApplication integrated successfully!");
 
-        writeln!(stdout, "[INFO] Platform App ID: {}", application_id)?;
-        writeln!(stdout, "[INFO] Application Name: {}", app_data.name)?;
+        log_info!(stdout, "Platform App ID: {}", application_id);
+        log_info!(stdout, "Application Name: {}", app_data.name);
         writeln!(
             stdout,
             "[INFO] Organization ID: {}",
             app_data.organization_id
         )?;
 
-        log_info!(stdout, "\n[INFO] You can now use:");
+        log_info!(stdout, "\nYou can now use:");
         writeln!(stdout, "  forklaunch release create --version <version>")?;
         writeln!(
             stdout,

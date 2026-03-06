@@ -54,7 +54,7 @@ pub(crate) fn sync_service_with_cache(
             .iter()
             .find(|p| p.name == service_name)
         {
-            log_warn!(stdout, "[WARN] Service directory not found, but exists in manifest");
+            log_warn!(stdout, "Service directory not found, but exists in manifest");
 
             let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
             let should_cleanup = prompt_for_confirmation(
@@ -66,7 +66,7 @@ pub(crate) fn sync_service_with_cache(
             )?;
 
             if !should_cleanup {
-                log_warn!(stdout, "[INFO] Skipping cleanup");
+                log_warn!(stdout, "Skipping cleanup");
                 bail!("Service directory not found: {}", service_path.display());
             }
 
@@ -92,10 +92,10 @@ pub(crate) fn sync_service_with_cache(
                 stdout,
             )?;
 
-            log_ok!(stdout, "[OK] Removed orphaned service '{}'", service_name);
+            log_ok!(stdout, "Removed orphaned service '{}'", service_name);
             return Ok(());
         } else {
-            log_error!(stdout, "[ERROR] Service directory not found: {}", service_path.display());
+            log_error!(stdout, "Service directory not found: {}", service_path.display());
             bail!("Service directory not found: {}", service_path.display());
         }
     }
@@ -105,11 +105,11 @@ pub(crate) fn sync_service_with_cache(
         .iter()
         .any(|p| p.name == service_name)
     {
-        log_ok!(stdout, "[INFO] Service '{}' already synced", service_name);
+        log_ok!(stdout, "Service '{}' already synced", service_name);
         return Ok(());
     }
 
-    log_info!(stdout, "[INFO] Detecting configuration from files...");
+    log_info!(stdout, "Detecting configuration from files...");
 
     let detected = detect_service_config(&service_path)?;
     display_detection_results(&detected, stdout)?;
@@ -154,7 +154,7 @@ pub(crate) fn sync_service_with_cache(
         stdout,
     )?;
 
-    log_ok!(stdout, "[OK] Service '{}' synced successfully", service_name);
+    log_ok!(stdout, "Service '{}' synced successfully", service_name);
 
     Ok(())
 }

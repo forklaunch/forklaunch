@@ -131,7 +131,7 @@ impl CliCommand for CreateCommand {
 
         // Step 0: Sync projects with manifest (unless skipped)
         if !skip_sync {
-            log_header!(stdout, Color::Cyan, "[INFO] Syncing projects with manifest...");
+            log_header!(stdout, Color::Cyan, "Syncing projects with manifest...");
             writeln!(stdout)?;
 
             let mut rendered_templates_cache = RenderedTemplatesCache::new();
@@ -147,7 +147,7 @@ impl CliCommand for CreateCommand {
             ) {
                 Ok(changed) => changed,
                 Err(e) => {
-                    log_error!(stdout, "[ERROR] Sync failed: {}", e);
+                    log_error!(stdout, "Sync failed: {}", e);
                     bail!("Failed to sync projects with manifest: {}", e);
                 }
             };
@@ -159,22 +159,22 @@ impl CliCommand for CreateCommand {
                 fs::write(&manifest_path, updated_manifest_content)
                     .with_context(|| "Failed to write updated manifest")?;
 
-                log_ok!(stdout, "[OK] Sync completed with changes");
+                log_ok!(stdout, "Sync completed with changes");
 
-                log_header!(stdout, Color::Yellow, "[WARN] Manifest was updated. Please commit the changes to manifest.toml");
+                log_header!(stdout, Color::Yellow, "Manifest was updated. Please commit the changes to manifest.toml");
                 writeln!(stdout)?;
             } else {
-                log_ok!(stdout, "[OK] Sync completed - no changes detected");
+                log_ok!(stdout, "Sync completed - no changes detected");
                 writeln!(stdout)?;
             }
         } else {
-            log_warn!(stdout, "[INFO] Skipping project sync (--skip-sync flag set)");
+            log_info!(stdout, "Skipping project sync (--skip-sync flag set)");
             writeln!(stdout)?;
         }
 
         // Skip git repository check if using local mode
         if !local_mode && manifest.git_repository.is_none() {
-            log_warn!(stdout, "[INFO] Git repository URL not set in manifest");
+            log_info!(stdout, "Git repository URL not set in manifest");
 
             print!("Enter git repository URL (e.g., https://github.com/user/repo.git): ");
             std::io::stdout().flush()?;
@@ -191,15 +191,15 @@ impl CliCommand for CreateCommand {
                 fs::write(&manifest_path, manifest_str)
                     .with_context(|| "Failed to write manifest")?;
 
-                log_ok!(stdout, "[INFO] Git repository saved to manifest.toml");
+                log_ok!(stdout, "Git repository saved to manifest.toml");
             }
         }
 
         if local_mode {
-            log_info!(stdout, "[INFO] Using local mode - packaging code directly");
+            log_info!(stdout, "Using local mode - packaging code directly");
         }
 
-        log_header!(stdout, Color::Cyan, "[INFO] Creating release {}...", version);
+        log_header!(stdout, Color::Cyan, "Creating release {}...", version);
         writeln!(stdout)?;
 
         // Step 1: Detect git metadata
@@ -211,10 +211,10 @@ impl CliCommand for CreateCommand {
             log_ok_suffix!(stdout);
             (commit, branch)
         } else if local_mode {
-            log_warn!(stdout, " [WARN] Not a git repository (using local defaults)");
+            log_warn!(stdout, "Not a git repository (using local defaults)");
             ("local-build".to_string(), Some("local".to_string()))
         } else {
-            log_warn!(stdout, " [WARN] Not a git repository");
+            log_warn!(stdout, "Not a git repository");
             bail!("Current directory is not a git repository. Initialize git first.");
         };
 
@@ -230,14 +230,14 @@ impl CliCommand for CreateCommand {
         )?;
 
         // Step 2: Export OpenAPI specs
-        log_progress!(stdout, "[INFO] Exporting OpenAPI specifications...");
+        log_progress!(stdout, "Exporting OpenAPI specifications...");
 
         let openapi_path = app_root.join(".forklaunch").join("openapi");
         create_dir_all(&openapi_path).with_context(|| "Failed to create openapi directory")?;
 
         let exported_services = export_all_services(&app_root, &manifest, &openapi_path)?;
 
-        log_ok!(stdout, " [OK] ({} services)", exported_services.len());
+        log_ok!(stdout, "({} services)", exported_services.len());
 
         let mut openapi_specs = HashMap::new();
         for project in &manifest.projects {
@@ -249,7 +249,7 @@ impl CliCommand for CreateCommand {
             }
         }
 
-        log_progress!(stdout, "[INFO] Detecting required environment variables...");
+        log_progress!(stdout, "Detecting required environment variables...");
 
         let workspace_root = find_workspace_root(&app_root)?;
         let modules_path = get_modules_path(&workspace_root)?;
@@ -607,9 +607,9 @@ impl CliCommand for CreateCommand {
         // Cross-scope deduplication: remove service/worker copies when an application-scope copy exists
         deduplicate_cross_scope(&mut scoped_env_vars);
 
-        log_ok!(stdout, " [OK] ({} variables)", scoped_env_vars.len());
+        log_ok!(stdout, "({} variables)", scoped_env_vars.len());
 
-        log_progress!(stdout, "[INFO] Detecting runtime dependencies...");
+        log_progress!(stdout, "Detecting runtime dependencies...");
 
         let all_runtime_deps = find_all_runtime_deps(&modules_path, &rendered_templates_cache)?;
 
@@ -628,30 +628,30 @@ impl CliCommand for CreateCommand {
         }
 
         let total_resources: usize = project_runtime_deps.values().map(|v| v.len()).sum();
-        log_ok!(stdout, " [OK] ({} resources)", total_resources);
+        log_ok!(stdout, "({} resources)", total_resources);
 
-        log_progress!(stdout, "[INFO] Detecting integrations...");
+        log_progress!(stdout, "Detecting integrations...");
 
         let all_integrations = find_all_integrations(&modules_path, &rendered_templates_cache)?;
 
         let total_integrations: usize = all_integrations.values().map(|v| v.len()).sum();
-        log_ok!(stdout, " [OK] ({} integrations)", total_integrations);
+        log_ok!(stdout, "({} integrations)", total_integrations);
 
-        log_progress!(stdout, "[INFO] Detecting worker configurations...");
+        log_progress!(stdout, "Detecting worker configurations...");
 
         let all_worker_configs =
             find_all_worker_configs(&modules_path, &rendered_templates_cache)?;
 
         let total_worker_configs = all_worker_configs.len();
-        log_ok!(stdout, " [OK] ({} workers)", total_worker_configs);
+        log_ok!(stdout, "({} workers)", total_worker_configs);
 
-        log_progress!(stdout, "[INFO] Detecting service mesh connections...");
+        log_progress!(stdout, "Detecting service mesh connections...");
 
         let all_service_deps =
             find_all_service_dependencies(&modules_path, &rendered_templates_cache)?;
 
         let total_service_deps: usize = all_service_deps.values().map(|v| v.len()).sum();
-        log_ok!(stdout, " [OK] ({} connections)", total_service_deps);
+        log_ok!(stdout, "({} connections)", total_service_deps);
 
         let project_names_for_origin: Vec<String> =
             manifest.projects.iter().map(|p| p.name.clone()).collect();
@@ -724,33 +724,33 @@ impl CliCommand for CreateCommand {
             .filter(|v| v.scope == EnvScope::Worker)
             .count();
         if app_vars > 0 {
-            writeln!(stdout, "[INFO] Application-level: {}", app_vars)?;
+            log_info!(stdout, "Application-level: {}", app_vars);
         }
         if service_vars > 0 {
-            writeln!(stdout, "[INFO] Service-level: {}", service_vars)?;
+            log_info!(stdout, "Service-level: {}", service_vars);
         }
         if worker_vars > 0 {
-            writeln!(stdout, "[INFO] Worker-level: {}", worker_vars)?;
+            log_info!(stdout, "Worker-level: {}", worker_vars);
         }
 
         // Handle local mode: create tarball and upload to S3
         let code_source_url = if local_mode && !dry_run {
-            log_info!(stdout, "\n[INFO] Packaging local code...");
+            log_info!(stdout, "\nPackaging local code...");
 
             let tarball_path = app_root.join(".forklaunch").join("release-code.tar.gz");
             super::s3_upload::create_app_tarball(&app_root, &modules_path, &tarball_path)?;
 
-            log_ok!(stdout, "[INFO] Tarball created");
+            log_ok!(stdout, "Tarball created");
 
             // Get presigned upload URL from platform
-            log_progress!(stdout, "[INFO] Getting upload URL from platform...");
+            log_progress!(stdout, "Getting upload URL from platform...");
 
             let upload_response =
                 super::s3_upload::get_presigned_upload_url(&application_id, version, &auth_mode)?;
 
             log_ok_suffix!(stdout);
 
-            log_progress!(stdout, "[INFO] Uploading code to S3...");
+            log_progress!(stdout, "Uploading code to S3...");
 
             super::s3_upload::upload_to_s3(&tarball_path, &upload_response.upload_url)?;
 
@@ -767,7 +767,7 @@ impl CliCommand for CreateCommand {
         let openapi_s3_keys: HashMap<String, String> = if !dry_run && !openapi_specs.is_empty() {
             let service_names: Vec<String> = openapi_specs.keys().cloned().collect();
 
-            log_progress!(stdout, "[INFO] Uploading OpenAPI specs to S3...");
+            log_progress!(stdout, "Uploading OpenAPI specs to S3...");
 
             let upload_urls = super::s3_upload::get_openapi_upload_urls(
                 &application_id,
@@ -786,14 +786,14 @@ impl CliCommand for CreateCommand {
                 }
             }
 
-            log_ok!(stdout, " [OK] ({} specs uploaded)", s3_keys.len());
+            log_ok!(stdout, "({} specs uploaded)", s3_keys.len());
 
             s3_keys
         } else {
             HashMap::new()
         };
 
-        log_progress!(stdout, "[INFO] Generating release manifest...");
+        log_progress!(stdout, "Generating release manifest...");
 
         let release_manifest = generate_release_manifest(
             &app_root,
@@ -835,7 +835,7 @@ impl CliCommand for CreateCommand {
                 manifest_json.len()
             );
 
-            log_progress!(stdout, "[INFO] Uploading release to platform...");
+            log_progress!(stdout, "Uploading release to platform...");
 
             upload_release(&application_id, release_manifest, &auth_mode)?;
 
@@ -853,10 +853,10 @@ impl CliCommand for CreateCommand {
         }
 
         writeln!(stdout)?;
-        log_header!(stdout, Color::Green, "[OK] Release {} created successfully!", version);
+        log_header!(stdout, Color::Green, "Release {} created successfully!", version);
 
         if !dry_run {
-            log_info!(stdout, "\n[INFO] Next steps:");
+            log_info!(stdout, "\nNext steps:");
             writeln!(stdout, "  1. Set environment variables in Platform UI")?;
             writeln!(
                 stdout,
@@ -910,9 +910,10 @@ fn upload_release(
     if let Some(warnings) = parsed_response.get("warnings") {
         if let Some(array) = warnings.as_array() {
             if !array.is_empty() {
-                println!("\n[WARN] Release created with warnings:");
+                let mut stdout = StandardStream::stdout(ColorChoice::Always);
+                log_warn!(stdout, "\nRelease created with warnings:");
                 for warning in array {
-                    println!("  - {}", warning);
+                    log_warn!(stdout, "  - {}", warning);
                 }
             }
         }

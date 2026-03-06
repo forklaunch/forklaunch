@@ -59,7 +59,7 @@ pub fn sync_all_projects(
         return Ok(false);
     }
 
-    log_info!(stdout, "[INFO] Scanning modules directory: {}", modules_path.display());
+    log_info!(stdout, "Scanning modules directory: {}", modules_path.display());
 
     let existing_folders: HashSet<String> = fs::read_dir(&modules_path)?
         .filter_map(|entry| {
@@ -83,7 +83,7 @@ pub fn sync_all_projects(
 
     if !orphaned_projects.is_empty() {
         writeln!(stdout)?;
-        log_warn!(stdout, "[WARN] Found {} orphaned project(s) in manifest:", orphaned_projects.len());
+        log_warn!(stdout, "Found {} orphaned project(s) in manifest:", orphaned_projects.len());
         for project_name in &orphaned_projects {
             writeln!(stdout, "  - {}", project_name)?;
         }
@@ -100,7 +100,7 @@ pub fn sync_all_projects(
 
         if should_cleanup {
             for project_name in &orphaned_projects {
-                writeln!(stdout, "[INFO] Removing '{}'...", project_name)?;
+                log_info!(stdout, "Removing '{}'...", project_name);
 
                 let project = manifest_data
                     .projects
@@ -128,10 +128,10 @@ pub fn sync_all_projects(
                 changes_made = true;
             }
 
-            log_ok!(stdout, "[OK] Cleaned up {} orphaned project(s)", orphaned_projects.len());
+            log_ok!(stdout, "Cleaned up {} orphaned project(s)", orphaned_projects.len());
             writeln!(stdout)?;
         } else {
-            log_warn!(stdout, "[INFO] Skipping cleanup of orphaned projects");
+            log_warn!(stdout, "Skipping cleanup of orphaned projects");
         }
     }
 
@@ -154,7 +154,7 @@ pub fn sync_all_projects(
         }
 
         writeln!(stdout)?;
-        log_info!(stdout, "[INFO] Processing: {}", project_name);
+        log_info!(stdout, "Processing: {}", project_name);
 
         // If the project is already in the manifest, use its known type and skip prompts
         let manifest_project = manifest_data
@@ -168,20 +168,20 @@ pub fn sync_all_projects(
                 ProjectType::Worker => InitializeType::Worker,
                 ProjectType::Library => InitializeType::Library,
             };
-            writeln!(stdout, "[INFO] Known as: {}", init_type.to_string())?;
+            log_info!(stdout, "Known as: {}", init_type.to_string());
             init_type
         } else {
             // New folder not in manifest — try to detect, then prompt if needed
             let detected_type = detect_project_type(&project_path)?;
 
             let project_type = if let Some(detected) = detected_type {
-                writeln!(stdout, "[INFO] Detected as: {}", detected.to_string())?;
+                log_info!(stdout, "Detected as: {}", detected.to_string());
                 detected
             } else {
-                log_warn!(stdout, "[WARN] Could not auto-detect project type");
+                log_warn!(stdout, "Could not auto-detect project type");
 
                 if confirm_all {
-                    log_warn!(stdout, "[WARN] Skipping '{}' (cannot auto-detect and no interaction allowed)", project_name);
+                    log_warn!(stdout, "Skipping '{}' (cannot auto-detect and no interaction allowed)", project_name);
                     continue;
                 }
 
@@ -207,7 +207,7 @@ pub fn sync_all_projects(
                 )?;
 
                 if type_str == "skip" {
-                    log_warn!(stdout, "[INFO] Skipping '{}' (not a forklaunch project)", project_name);
+                    log_info!(stdout, "Skipping '{}' (not a forklaunch project)", project_name);
                     continue;
                 }
 
@@ -230,7 +230,7 @@ pub fn sync_all_projects(
             };
 
             if !should_sync {
-                writeln!(stdout, "[INFO] Skipped")?;
+                log_info!(stdout, "Skipped");
                 continue;
             }
 
@@ -246,7 +246,7 @@ pub fn sync_all_projects(
 
         match project_type {
             InitializeType::Service => {
-                writeln!(stdout, "[INFO] Syncing service...")?;
+                log_info!(stdout, "Syncing service...");
 
                 match crate::sync::service::sync_service_with_cache(
                     &project_name,
@@ -270,12 +270,12 @@ pub fn sync_all_projects(
                         }
                     }
                     Err(e) => {
-                        log_error!(stdout, "[ERROR] {}", e);
+                        log_error!(stdout, "{}", e);
                     }
                 }
             }
             InitializeType::Worker => {
-                writeln!(stdout, "[INFO] Syncing worker...")?;
+                log_info!(stdout, "Syncing worker...");
 
                 match crate::sync::worker::sync_worker_with_cache(
                     &project_name,
@@ -299,12 +299,12 @@ pub fn sync_all_projects(
                         }
                     }
                     Err(e) => {
-                        log_error!(stdout, "[ERROR] {}", e);
+                        log_error!(stdout, "{}", e);
                     }
                 }
             }
             InitializeType::Library => {
-                writeln!(stdout, "[INFO] Syncing library...")?;
+                log_info!(stdout, "Syncing library...");
 
                 match crate::sync::library::sync_library_with_cache(
                     &project_name,
@@ -328,7 +328,7 @@ pub fn sync_all_projects(
                         }
                     }
                     Err(e) => {
-                        log_error!(stdout, "[ERROR] {}", e);
+                        log_error!(stdout, "{}", e);
                     }
                 }
             }
@@ -449,7 +449,7 @@ impl CliCommand for SyncAllCommand {
         write_rendered_templates(&rendered_templates, false, &mut stdout)?;
 
         writeln!(stdout)?;
-        log_header!(stdout, Color::Green, "[OK] Sync all completed");
+        log_header!(stdout, Color::Green, "Sync all completed");
 
         Ok(())
     }
@@ -509,7 +509,7 @@ fn sync_docker_compose_with_env_vars(
             },
         );
 
-        log_ok!(stdout, "[OK] Synchronized docker-compose environment variables");
+        log_ok!(stdout, "Synchronized docker-compose environment variables");
     }
 
     Ok(())

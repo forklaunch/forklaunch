@@ -119,7 +119,7 @@ impl CliCommand for DestroyCommand {
         // );
         // let client = Client::new();
 
-        log_progress!(stdout, "[INFO] Triggering destruction...");
+        log_progress!(stdout, "Triggering destruction...");
 
         let request_body = DestroyDeploymentRequest { mode: mode.clone() };
 
@@ -143,7 +143,7 @@ impl CliCommand for DestroyCommand {
                 .with_context(|| format!("Failed to parse destroy response: {}", response_text))?;
 
             log_ok_suffix!(stdout);
-            writeln!(stdout, "[INFO] Deployment ID: {}", deployment.id)?;
+            log_info!(stdout, "Deployment ID: {}", deployment.id);
 
             if wait {
                 writeln!(stdout)?;
@@ -154,7 +154,7 @@ impl CliCommand for DestroyCommand {
                 )?;
             } else {
                 writeln!(stdout)?;
-                log_info!(stdout, "[INFO] Destruction started. Check status at:");
+                log_info!(stdout, "Destruction started. Check status at:");
                 writeln!(
                     stdout,
                     "  {}/apps/{}/deployments/{}",

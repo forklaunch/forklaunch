@@ -54,7 +54,7 @@ pub(crate) fn sync_worker_with_cache(
             .iter()
             .find(|p| p.name == worker_name)
         {
-            log_warn!(stdout, "[WARN] Worker directory not found, but exists in manifest");
+            log_warn!(stdout, "Worker directory not found, but exists in manifest");
 
             let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
             let should_cleanup = prompt_for_confirmation(
@@ -63,7 +63,7 @@ pub(crate) fn sync_worker_with_cache(
             )?;
 
             if !should_cleanup {
-                log_warn!(stdout, "[INFO] Skipping cleanup");
+                log_warn!(stdout, "Skipping cleanup");
                 bail!("Worker directory not found: {}", worker_path.display());
             }
 
@@ -89,20 +89,20 @@ pub(crate) fn sync_worker_with_cache(
                 stdout,
             )?;
 
-            log_ok!(stdout, "[OK] Removed orphaned worker '{}'", worker_name);
+            log_ok!(stdout, "Removed orphaned worker '{}'", worker_name);
             return Ok(());
         } else {
-            log_error!(stdout, "[ERROR] Worker directory not found: {}", worker_path.display());
+            log_error!(stdout, "Worker directory not found: {}", worker_path.display());
             bail!("Worker directory not found: {}", worker_path.display());
         }
     }
 
     if manifest_data.projects.iter().any(|p| p.name == worker_name) {
-        log_ok!(stdout, "[INFO] Worker '{}' already synced", worker_name);
+        log_ok!(stdout, "Worker '{}' already synced", worker_name);
         return Ok(());
     }
 
-    log_info!(stdout, "[INFO] Detecting worker configuration from files...");
+    log_info!(stdout, "Detecting worker configuration from files...");
 
     let detected = detect_worker_config(&worker_path)?;
     display_detection_results(&detected, stdout)?;
@@ -148,7 +148,7 @@ pub(crate) fn sync_worker_with_cache(
         stdout,
     )?;
 
-    log_ok!(stdout, "[OK] Worker '{}' synced successfully", worker_name);
+    log_ok!(stdout, "Worker '{}' synced successfully", worker_name);
 
     Ok(())
 }

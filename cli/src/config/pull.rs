@@ -103,11 +103,11 @@ impl CliCommand for PullCommand {
                 let content = response.text()?;
                 write(output, &content)
                     .with_context(|| error_failed_to_write_file(std::path::Path::new(output)))?;
-                log_ok!(stdout, "[OK] Config pulled to {}", output);
+                log_ok!(stdout, "Config pulled to {}", output);
             }
             _ => {
                 let err_text = response.text()?;
-                log_error!(stdout, "[ERROR] Failed to pull config: {}", err_text);
+                log_error!(stdout, "Failed to pull config: {}", err_text);
                 anyhow::bail!("Failed to pull config: {}", err_text);
             }
         }

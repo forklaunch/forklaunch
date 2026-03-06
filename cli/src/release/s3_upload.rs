@@ -151,7 +151,7 @@ pub(crate) fn upload_to_s3(file_path: &Path, presigned_url: &str) -> Result<()> 
     }
 
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
-    log_info!(stdout, "[INFO] Uploaded {} bytes to S3", file_size);
+    log_info!(stdout, "Uploaded {} bytes to S3", file_size);
     Ok(())
 }
 
