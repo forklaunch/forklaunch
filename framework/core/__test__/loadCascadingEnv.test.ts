@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmdirSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
@@ -22,7 +22,7 @@ describe('loadCascadingEnv', () => {
 
   afterEach(() => {
     if (existsSync(tempDir)) {
-      rmdirSync(tempDir, { recursive: true });
+      rmSync(tempDir, { recursive: true });
     }
   });
 

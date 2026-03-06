@@ -720,6 +720,7 @@ impl CliCommand for ApplicationCommand {
                 cache: get_service_module_cache(&package),
                 queue: None,
                 object_store: None,
+                redis_partition: None,
             }),
             routers: get_routers_from_standard_package(package),
             metadata: None,

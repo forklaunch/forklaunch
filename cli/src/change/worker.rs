@@ -127,6 +127,8 @@ fn change_type(
     rendered_templates_cache: &mut RenderedTemplatesCache,
     removal_templates: &mut Vec<RemovalTemplate>,
 ) -> Result<()> {
+    let next_redis_partition = crate::core::manifest::next_available_redis_partition(&manifest_data.projects);
+
     let project_entry = manifest_data
         .projects
         .iter_mut()
@@ -210,12 +212,14 @@ fn change_type(
                 .unwrap()
                 .ioredis = Some(IOREDIS_VERSION.to_string());
             resources.cache = Some(WorkerType::RedisCache.to_string());
+            resources.redis_partition = Some(next_redis_partition);
             let _ = add_redis_to_docker_compose(
                 &manifest_data.app_name,
                 docker_compose_data,
                 &mut environment,
+                next_redis_partition,
             );
-            env_local_content.redis_url = Some("redis://localhost:6379".to_string());
+            env_local_content.redis_url = Some(format!("redis://localhost:6379/{}", next_redis_partition));
         }
         WorkerType::Database => {
             let db = database.unwrap();
@@ -335,12 +339,14 @@ fn change_type(
                 .unwrap()
                 .ioredis = Some(IOREDIS_VERSION.to_string());
             resources.cache = Some(WorkerType::RedisCache.to_string());
+            resources.redis_partition = Some(next_redis_partition);
             let _ = add_redis_to_docker_compose(
                 &manifest_data.app_name,
                 docker_compose_data,
                 &mut environment,
+                next_redis_partition,
             );
-            env_local_content.redis_url = Some("redis://localhost:6379".to_string());
+            env_local_content.redis_url = Some(format!("redis://localhost:6379/{}", next_redis_partition));
         }
         WorkerType::Kafka => {
             dependencies.forklaunch_implementation_worker_kafka =

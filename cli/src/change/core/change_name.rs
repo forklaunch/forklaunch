@@ -12,7 +12,10 @@ use crate::{
     constants::Runtime,
     core::{
         client_sdk::change_project_in_client_sdk,
-        docker::{Command, DependsOn, DockerBuild, DockerCompose, DockerService, Healthcheck},
+        docker::{
+            Command, DependsOn, DockerBuild, DockerCompose, DockerService, HealthTest,
+            Healthcheck,
+        },
         manifest::{MutableManifestData, ProjectEntry, ProjectType},
         move_template::{MoveTemplate, MoveTemplateType},
         package_json::{
@@ -279,22 +282,27 @@ pub(crate) fn change_name(
                                         .collect(),
                                 ),
                             }),
-                            entrypoint: value.entrypoint.as_ref().map(|entrypoint| {
-                                entrypoint
-                                    .iter()
-                                    .map(|entrypoint| entrypoint.replace(&existing_name, &name))
-                                    .collect()
+                            entrypoint: value.entrypoint.as_ref().map(|entrypoint| match entrypoint {
+                                Command::Simple(s) => {
+                                    Command::Simple(s.replace(&existing_name, &name))
+                                }
+                                Command::Multiple(args) => Command::Multiple(
+                                    args
+                                        .iter()
+                                        .map(|arg| arg.replace(&existing_name, &name))
+                                        .collect(),
+                                ),
                             }),
                             healthcheck: value.healthcheck.as_ref().map(|healthcheck| {
                                 Healthcheck {
                                     test: match &healthcheck.test {
-                                        crate::core::docker::HealthTest::String(s) => {
-                                            crate::core::docker::HealthTest::String(
+                                        HealthTest::String(s) => {
+                                            HealthTest::String(
                                                 s.replace(&existing_name, &name),
                                             )
                                         }
-                                        crate::core::docker::HealthTest::List(list) => {
-                                            crate::core::docker::HealthTest::List(
+                                        HealthTest::List(list) => {
+                                            HealthTest::List(
                                                 list.iter()
                                                     .map(|item| item.replace(&existing_name, &name))
                                                     .collect(),

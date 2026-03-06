@@ -8,7 +8,12 @@ use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 use crate::{
     CliCommand,
     constants::{ERROR_FAILED_TO_SEND_REQUEST, get_platform_management_api_url, get_platform_ui_url},
-    core::command::command,
+    core::{
+        command::command,
+        http_client,
+        validate::{require_active_account, require_integration, require_manifest, resolve_auth},
+    },
+    deploy::utils::stream_deployment_status,
 };
 
 #[derive(Debug, Serialize)]
@@ -72,9 +77,10 @@ impl CliCommand for DestroyCommand {
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-        let auth_mode = crate::core::validate::resolve_auth()?;
-        let (_app_root, manifest) = crate::core::validate::require_manifest(matches)?;
-        let application_id = crate::core::validate::require_integration(&manifest)?;
+        let auth_mode = resolve_auth()?;
+        require_active_account(&auth_mode)?;
+        let (_app_root, manifest) = require_manifest(matches)?;
+        let application_id = require_integration(&manifest)?;
 
         let environment = matches
             .get_one::<String>("environment")
@@ -113,7 +119,7 @@ impl CliCommand for DestroyCommand {
         // );
         // let client = Client::new();
 
-        log_progress!(stdout, "[INFO] Triggering destruction...");
+        log_progress!(stdout, "Triggering destruction...");
 
         let request_body = DestroyDeploymentRequest { mode: mode.clone() };
 
@@ -124,8 +130,6 @@ impl CliCommand for DestroyCommand {
             environment,
             region
         );
-
-        use crate::core::http_client;
 
         let response =
             http_client::post_with_auth(&auth_mode, &url, serde_json::to_value(&request_body)?)
@@ -139,18 +143,18 @@ impl CliCommand for DestroyCommand {
                 .with_context(|| format!("Failed to parse destroy response: {}", response_text))?;
 
             log_ok_suffix!(stdout);
-            writeln!(stdout, "[INFO] Deployment ID: {}", deployment.id)?;
+            log_info!(stdout, "Deployment ID: {}", deployment.id);
 
             if wait {
                 writeln!(stdout)?;
-                crate::deploy::utils::stream_deployment_status(
+                stream_deployment_status(
                     &auth_mode,
                     &deployment.id,
                     &mut stdout,
                 )?;
             } else {
                 writeln!(stdout)?;
-                log_info!(stdout, "[INFO] Destruction started. Check status at:");
+                log_info!(stdout, "Destruction started. Check status at:");
                 writeln!(
                     stdout,
                     "  {}/apps/{}/deployments/{}",

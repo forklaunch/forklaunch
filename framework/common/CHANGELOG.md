@@ -1,5 +1,23 @@
 # @forklaunch/common
 
+## 0.6.32
+
+### Patch Changes
+
+- Small bugs
+
+## 0.6.31
+
+### Patch Changes
+
+- Prevent 404 message hijacking and update packages
+
+## 0.6.30
+
+### Patch Changes
+
+- Fix multiline config injection and update packages
+
 ## 0.6.29
 
 ### Patch Changes

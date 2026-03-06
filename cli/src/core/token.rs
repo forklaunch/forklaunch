@@ -57,9 +57,17 @@ fn refresh_token(current_token: &str) -> Result<TokenData> {
     let jwt_data: JwtTokenResponse = response.json()?;
     let expires_at = chrono::Utc::now().timestamp() + jwt_data.expires_in;
 
+    // Preserve the original session token if the server doesn't return a new refresh token.
+    // Without this, the refresh token becomes empty and subsequent refreshes fail silently,
+    // causing authenticated users to appear as having no subscription.
+    let refresh_token = jwt_data
+        .refresh_token
+        .filter(|t| !t.is_empty())
+        .unwrap_or_else(|| current_token.to_string());
+
     Ok(TokenData {
         access_token: jwt_data.token,
-        refresh_token: jwt_data.refresh_token.unwrap_or_default(),
+        refresh_token,
         expires_at,
     })
 }

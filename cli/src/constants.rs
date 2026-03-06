@@ -15,7 +15,7 @@ const PROD_PLATFORM_MANAGEMENT_API_URL: &str = "https://platform.forklaunch.com"
 const PROD_IAM_API_URL: &str = "https://iam.forklaunch.com";
 const PROD_PLATFORM_UI_URL: &str = "https://forklaunch.com";
 
-fn is_dev_build() -> bool {
+pub(crate) fn is_dev_build() -> bool {
     std::env::current_exe()
         .ok()
         .map(|path| {

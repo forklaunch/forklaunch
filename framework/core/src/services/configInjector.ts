@@ -107,15 +107,18 @@ export class ConfigInjector<
       return {} as ResolvedConfigValidator<SV, CV>[T];
     }
 
-    const injectorArgument = extractArgumentNames(definition.factory)[0];
+    const rawInjectorArgument = extractArgumentNames(definition.factory)[0];
     // short circuit as no args
-    if (!injectorArgument || injectorArgument === '_args') {
+    if (!rawInjectorArgument || rawInjectorArgument === '_args') {
       return definition.factory(
         {} as Omit<ResolvedConfigValidator<SV, CV>, T>,
         this.resolve.bind(this),
         context ?? ({} as Record<string, unknown>)
       );
     }
+
+    // Normalize whitespace to handle both single-line and multiline formatting
+    const injectorArgument = rawInjectorArgument.replace(/\s+/g, '');
 
     if (!injectorArgument.startsWith('{') || !injectorArgument.endsWith('}')) {
       throw new Error(
@@ -126,9 +129,9 @@ export class ConfigInjector<
     }
     const resolvedArguments = Object.fromEntries(
       injectorArgument
-        .replace('{', '')
-        .replace('}', '')
+        .slice(1, -1)
         .split(',')
+        .filter((arg) => arg.length > 0)
         .map((arg) => arg.split(':')[0].trim())
         .map((arg) => {
           const newResolutionPath = [...resolutionPath, token];

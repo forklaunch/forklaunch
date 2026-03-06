@@ -203,6 +203,22 @@ pub(crate) enum Command {
     Multiple(Vec<String>),
 }
 
+impl Command {
+    pub(crate) fn iter(&self) -> Box<dyn Iterator<Item = &String> + '_> {
+        match self {
+            Command::Simple(s) => Box::new(std::iter::once(s)),
+            Command::Multiple(v) => Box::new(v.iter()),
+        }
+    }
+
+    pub(crate) fn iter_mut(&mut self) -> Box<dyn Iterator<Item = &mut String> + '_> {
+        match self {
+            Command::Simple(s) => Box::new(std::iter::once(s)),
+            Command::Multiple(v) => Box::new(v.iter_mut()),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) enum Restart {
     #[serde(rename = "always")]
@@ -257,7 +273,7 @@ pub(crate) struct DockerService {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) working_dir: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) entrypoint: Option<Vec<String>>,
+    pub(crate) entrypoint: Option<Command>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) command: Option<Command>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -623,6 +639,7 @@ pub(crate) fn add_redis_to_docker_compose<'a>(
     app_name: &str,
     docker_compose: &'a mut DockerCompose,
     environment: &mut IndexMap<String, String>,
+    redis_partition: u32,
 ) -> Result<&'a mut DockerCompose> {
     // Ensure the network definition exists
     let network_name = format!("{}-network", app_name);
@@ -636,7 +653,10 @@ pub(crate) fn add_redis_to_docker_compose<'a>(
         );
     }
 
-    environment.insert("REDIS_URL".to_string(), "redis://redis:6379".to_string());
+    environment.insert(
+        "REDIS_URL".to_string(),
+        format!("redis://redis:6379/{}", redis_partition),
+    );
     if !docker_compose.services.contains_key("redis") {
         docker_compose.services.insert(
             "redis".to_string(),
@@ -932,7 +952,7 @@ pub(crate) fn add_kafka_to_docker_compose<'a>(
                 },
             )])),
             networks: Some(vec![format!("{}-network", app_name)]),
-            entrypoint: Some(vec!["/bin/bash".to_string(), "-lc".to_string()]),
+            entrypoint: Some(Command::Multiple(vec!["/bin/bash".to_string(), "-lc".to_string()])),
             command: Some(Command::Simple(format!(
                 r#"set -e
 until kafka-topics --bootstrap-server kafka:29092 --list; do
@@ -1470,7 +1490,7 @@ fn create_base_service(
         networks: Some(vec![format!("{}-network", app_name)]),
         volumes: Some(volumes),
         working_dir: Some(format!("/{}/{}", app_name, component_name)),
-        entrypoint: Some(vec![
+        entrypoint: Some(Command::Multiple(vec![
             match runtime {
                 "node" => "pnpm".to_string(),
                 "bun" => "bun".to_string(),
@@ -1478,7 +1498,7 @@ fn create_base_service(
             },
             "run".to_string(),
             entrypoint_command.to_string(),
-        ]),
+        ])),
         healthcheck: if let Some(port_number) = port_number {
             Some(Healthcheck {
                 test: HealthTest::List(vec![
@@ -1622,6 +1642,7 @@ pub(crate) fn add_service_definition_to_docker_compose(
             &manifest_data.app_name,
             &mut docker_compose,
             &mut environment,
+            0,
         )
         .with_context(|| {
             format!(
@@ -1762,6 +1783,7 @@ pub(crate) fn add_worker_definition_to_docker_compose(
             &manifest_data.app_name,
             &mut docker_compose,
             &mut environment,
+            manifest_data.redis_partition,
         )
         .with_context(|| ERROR_FAILED_TO_ADD_PROJECT_METADATA_TO_DOCKER_COMPOSE)?;
     } else if manifest_data.is_database_enabled {
@@ -2150,7 +2172,7 @@ pub(crate) fn sync_docker_compose_env_vars(
         if !added_vars.is_empty() {
             added_vars.sort();
             changes_made = true;
-            log_info!(stdout, "[INFO] Added {} env var(s) to docker-compose service '{}': {}", added_vars.len(), service_key, added_vars.join(", "));
+            log_info!(stdout, "Added {} env var(s) to docker-compose service '{}': {}", added_vars.len(), service_key, added_vars.join(", "));
         }
     }
 

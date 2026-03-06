@@ -130,6 +130,16 @@ pub(crate) fn determine_env_var_scopes(
     Ok(scoped_vars)
 }
 
+/// Vars that are inherently per-component and must never be promoted to application scope.
+/// Each service/worker has its own distinct value for these.
+const NEVER_APPLICATION_SCOPED: &[&str] = &["QUEUE_NAME", "OTEL_SERVICE_NAME", "REDIS_URL"];
+
+/// Check if a var is inherently per-component and must never be application-scoped.
+pub(crate) fn is_never_application_scoped(var_name: &str) -> bool {
+    let upper = var_name.to_ascii_uppercase();
+    NEVER_APPLICATION_SCOPED.iter().any(|&v| v == upper)
+}
+
 /// Check if a variable should always be application-scoped (never service/worker-scoped).
 /// This covers observability vars, inter-service URLs, HMAC keys, and JWKS keys.
 pub(crate) fn is_application_scoped_var(var_name: &str, project_names: &[String]) -> bool {
@@ -220,9 +230,32 @@ pub(crate) fn is_pulumi_injected(var_name: &str, project_names: &[String]) -> bo
     is_inter_service_url_var(var_name, project_names) || is_pulumi_injected_url(var_name)
 }
 
-/// Check if a var name matches the pattern `{SERVICE_NAME}_{URL|URI|FQDN|HOST}`
-/// where SERVICE_NAME corresponds to a known project (converted from kebab-case to SCREAMING_SNAKE_CASE).
+/// Known infixes for inter-service URL vars mapped to normalized transport.
+/// "http", "api", "service" all resolve to "http". "ws" resolves to "ws".
+const KNOWN_URL_INFIXES: &[(&str, &str)] = &[
+    ("HTTP", "http"),
+    ("WS", "ws"),
+    ("API", "http"),
+    ("SERVICE", "http"),
+    ("GRPC", "grpc"),
+];
+
+/// Check if a var name matches the pattern `{SERVICE_NAME}[_INFIX]_{URL|URI|FQDN|HOST}`
+/// where SERVICE_NAME corresponds to a known project (converted from kebab-case to SCREAMING_SNAKE_CASE)
+/// and INFIX is an optional segment like `SERVICE`, `API`, etc.
 fn is_inter_service_url_var(var_name: &str, project_names: &[String]) -> bool {
+    parse_inter_service_url_var(var_name, project_names).is_some()
+}
+
+/// Parse an inter-service URL var name into (target_service, transport, port_env_var).
+/// Transport is normalized: "api"/"service"/"http" → "http", "ws" → "ws".
+/// port_env_var indicates which env var on the target service provides the port
+/// (e.g. "PORT" for http, "WS_PORT" for ws).
+/// Returns `None` if the var doesn't match the pattern.
+pub(crate) fn parse_inter_service_url_var(
+    var_name: &str,
+    project_names: &[String],
+) -> Option<(String, String, String)> {
     let upper = var_name.to_ascii_uppercase();
 
     const URL_SUFFIXES: &[&str] = &["_URL", "_URI", "_FQDN", "_HOST"];
@@ -232,13 +265,34 @@ fn is_inter_service_url_var(var_name: &str, project_names: &[String]) -> bool {
             for project_name in project_names {
                 let screaming = project_name.to_ascii_uppercase().replace('-', "_");
                 if prefix == screaming {
-                    return true;
+                    // Exact match: e.g. BILLING_URL → http transport, PORT
+                    return Some((project_name.clone(), "http".to_string(), "PORT".to_string()));
+                }
+                if let Some(rest) = prefix.strip_prefix(&screaming) {
+                    if rest.starts_with('_') {
+                        let infix = &rest[1..]; // strip leading '_'
+                        let transport = KNOWN_URL_INFIXES
+                            .iter()
+                            .find(|(k, _)| *k == infix)
+                            .map(|(_, v)| *v)
+                            .unwrap_or("http");
+                        let port_env_var = match transport {
+                            "ws" => "WS_PORT",
+                            "grpc" => "GRPC_PORT",
+                            _ => "PORT",
+                        };
+                        return Some((
+                            project_name.clone(),
+                            transport.to_string(),
+                            port_env_var.to_string(),
+                        ));
+                    }
                 }
             }
         }
     }
 
-    false
+    None
 }
 
 #[cfg(test)]
@@ -282,6 +336,7 @@ mod tests {
                         cache: None,
                         queue: None,
                         object_store: None,
+                        redis_partition: None,
                     }),
                     routers: None,
                     metadata: None,
@@ -403,6 +458,12 @@ mod tests {
         assert!(is_inter_service_url_var("AUTH_URI", &projects));
         assert!(is_inter_service_url_var("BILLING_FQDN", &projects));
         assert!(is_inter_service_url_var("AUTH_HOST", &projects));
+        // Infix variants (e.g. _SERVICE_, _API_)
+        assert!(is_inter_service_url_var("BILLING_SERVICE_URL", &projects));
+        assert!(is_inter_service_url_var("BILLING_API_URL", &projects));
+        assert!(is_inter_service_url_var("AUTH_SERVICE_URI", &projects));
+        assert!(is_inter_service_url_var("PLATFORM_MANAGEMENT_API_URL", &projects));
+        // Non-matches
         assert!(!is_inter_service_url_var("UNKNOWN_URL", &projects));
         assert!(!is_inter_service_url_var("BILLING_PORT", &projects));
     }

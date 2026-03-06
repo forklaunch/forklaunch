@@ -39,7 +39,7 @@ use crate::{
         manifest::{
             ApplicationInitializationMetadata, InitializableManifestConfig,
             InitializableManifestConfigMetadata, ManifestData, ProjectMetadata, ProjectType,
-            ResourceInventory, add_project_definition_to_manifest,
+            ResourceInventory, add_project_definition_to_manifest, next_available_redis_partition,
             application::ApplicationManifestData, worker::WorkerManifestData,
         },
         name::validate_name,
@@ -231,6 +231,11 @@ fn add_worker_to_artifacts(
                 None
             },
             object_store: None,
+            redis_partition: if manifest_data.is_cache_enabled {
+                Some(manifest_data.redis_partition)
+            } else {
+                None
+            },
         }),
         Some(vec![manifest_data.worker_name.clone()]),
         Some(ProjectMetadata {
@@ -902,6 +907,12 @@ impl CliCommand for WorkerCommand {
             },
             is_type_needed: true,
             with_mappers: matches.get_flag("mappers"),
+
+            redis_partition: if r#type == WorkerType::BullMQCache || r#type == WorkerType::RedisCache {
+                next_available_redis_partition(&manifest_data.projects)
+            } else {
+                0
+            },
 
             // These will be properly generated when initialized
             generated_password_encryption_secret: String::new(),

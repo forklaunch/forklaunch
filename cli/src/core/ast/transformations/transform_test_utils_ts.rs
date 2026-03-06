@@ -2,7 +2,10 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use oxc_allocator::Allocator;
-use oxc_ast::ast::SourceType;
+use oxc_ast::ast::{
+    Argument, BindingPatternKind, Declaration, Expression, Program, PropertyKey, SourceType,
+    Statement,
+};
 use oxc_codegen::{Codegen, CodegenOptions};
 
 use crate::{
@@ -266,12 +269,10 @@ pub(crate) fn transform_test_utils_add_router(
 
 fn add_router_entity_to_setup_test_data<'a>(
     allocator: &'a Allocator,
-    test_utils_program: &mut oxc_ast::ast::Program<'a>,
+    test_utils_program: &mut Program<'a>,
     router_name_camel: &str,
     router_name_pascal: &str,
 ) -> Result<()> {
-    use oxc_ast::ast::Statement;
-
     let entity_import = allocator.alloc_str(&format!(
         "const {{ {}Record }} = await import('../persistence/entities/{}Record.entity');",
         router_name_pascal, router_name_camel
@@ -286,15 +287,15 @@ fn add_router_entity_to_setup_test_data<'a>(
 
     for stmt in test_utils_program.body.iter_mut() {
         if let Statement::ExportNamedDeclaration(export_decl) = stmt {
-            if let Some(oxc_ast::ast::Declaration::VariableDeclaration(var_decl)) =
+            if let Some(Declaration::VariableDeclaration(var_decl)) =
                 &mut export_decl.declaration
             {
                 for declarator in var_decl.declarations.iter_mut() {
-                    if let oxc_ast::ast::BindingPatternKind::BindingIdentifier(id) =
+                    if let BindingPatternKind::BindingIdentifier(id) =
                         &declarator.id.kind
                     {
                         if id.name == "setupTestData" {
-                            if let Some(oxc_ast::ast::Expression::ArrowFunctionExpression(
+                            if let Some(Expression::ArrowFunctionExpression(
                                 arrow_fn,
                             )) = &mut declarator.init
                             {
@@ -354,23 +355,21 @@ pub(crate) fn transform_test_utils_remove_router(
 }
 
 fn remove_router_entity_from_setup_test_data<'a>(
-    test_utils_program: &mut oxc_ast::ast::Program<'a>,
+    test_utils_program: &mut Program<'a>,
     router_name_camel: &str,
     router_name_pascal: &str,
 ) -> Result<()> {
-    use oxc_ast::ast::Statement;
-
     for stmt in test_utils_program.body.iter_mut() {
         if let Statement::ExportNamedDeclaration(export_decl) = stmt {
-            if let Some(oxc_ast::ast::Declaration::VariableDeclaration(var_decl)) =
+            if let Some(Declaration::VariableDeclaration(var_decl)) =
                 &mut export_decl.declaration
             {
                 for declarator in var_decl.declarations.iter_mut() {
-                    if let oxc_ast::ast::BindingPatternKind::BindingIdentifier(id) =
+                    if let BindingPatternKind::BindingIdentifier(id) =
                         &declarator.id.kind
                     {
                         if id.name == "setupTestData" {
-                            if let Some(oxc_ast::ast::Expression::ArrowFunctionExpression(
+                            if let Some(Expression::ArrowFunctionExpression(
                                 arrow_fn,
                             )) = &mut declarator.init
                             {
@@ -395,20 +394,18 @@ fn remove_router_entity_from_setup_test_data<'a>(
 }
 
 fn matches_router_entity_statement(
-    stmt: &oxc_ast::ast::Statement,
+    stmt: &Statement,
     _router_name_camel: &str,
     router_name_pascal: &str,
 ) -> bool {
-    use oxc_ast::ast::Statement;
-
     match stmt {
         Statement::VariableDeclaration(var_decl) => {
             for declarator in &var_decl.declarations {
-                if let oxc_ast::ast::BindingPatternKind::ObjectPattern(obj_pattern) =
+                if let BindingPatternKind::ObjectPattern(obj_pattern) =
                     &declarator.id.kind
                 {
                     for prop in &obj_pattern.properties {
-                        if let oxc_ast::ast::PropertyKey::StaticIdentifier(key) = &prop.key {
+                        if let PropertyKey::StaticIdentifier(key) = &prop.key {
                             if key.name == format!("{}Record", router_name_pascal) {
                                 return true;
                             }
@@ -418,13 +415,13 @@ fn matches_router_entity_statement(
             }
         }
         Statement::ExpressionStatement(expr_stmt) => {
-            if let oxc_ast::ast::Expression::CallExpression(call_expr) = &expr_stmt.expression {
-                if let oxc_ast::ast::Expression::StaticMemberExpression(member_expr) =
+            if let Expression::CallExpression(call_expr) = &expr_stmt.expression {
+                if let Expression::StaticMemberExpression(member_expr) =
                     &call_expr.callee
                 {
                     if member_expr.property.name == "create" {
                         if let Some(first_arg) = call_expr.arguments.first() {
-                            if let oxc_ast::ast::Argument::Identifier(id) = &first_arg {
+                            if let Argument::Identifier(id) = &first_arg {
                                 if id.name == format!("{}Record", router_name_pascal) {
                                     return true;
                                 }
@@ -441,20 +438,18 @@ fn matches_router_entity_statement(
 }
 
 fn remove_router_mock_data_export<'a>(
-    test_utils_program: &mut oxc_ast::ast::Program<'a>,
+    test_utils_program: &mut Program<'a>,
     router_name_pascal: &str,
 ) -> Result<()> {
-    use oxc_ast::ast::Statement;
-
     let mock_data_name = format!("mock{}Data", router_name_pascal);
 
     test_utils_program.body.retain(|stmt| {
         if let Statement::ExportNamedDeclaration(export_decl) = stmt {
-            if let Some(oxc_ast::ast::Declaration::VariableDeclaration(var_decl)) =
+            if let Some(Declaration::VariableDeclaration(var_decl)) =
                 &export_decl.declaration
             {
                 for declarator in &var_decl.declarations {
-                    if let oxc_ast::ast::BindingPatternKind::BindingIdentifier(id) =
+                    if let BindingPatternKind::BindingIdentifier(id) =
                         &declarator.id.kind
                     {
                         if id.name == mock_data_name {
@@ -472,7 +467,7 @@ fn remove_router_mock_data_export<'a>(
 
 fn add_router_mock_data_export<'a>(
     allocator: &'a Allocator,
-    test_utils_program: &mut oxc_ast::ast::Program<'a>,
+    test_utils_program: &mut Program<'a>,
     router_name_pascal: &str,
 ) -> Result<()> {
     let mock_data_export = allocator.alloc_str(&format!(

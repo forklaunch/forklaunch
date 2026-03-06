@@ -1,4 +1,4 @@
-use std::{env, fs::create_dir_all, path::Path, process::Command as ProcessCommand};
+use std::{env, fs, io::Read as _, path::Path, process::{Command as ProcessCommand, Stdio}, thread, time::{Duration, Instant}};
 
 use anyhow::{Context, Result, bail};
 
@@ -32,7 +32,7 @@ pub(crate) fn resolve_command(name: &str) -> String {
         let nvm_versions = Path::new(&nvm_dir).join("versions").join("node");
         if nvm_versions.is_dir() {
             // Find the latest installed node version
-            if let Ok(entries) = std::fs::read_dir(&nvm_versions) {
+            if let Ok(entries) = fs::read_dir(&nvm_versions) {
                 let mut versions: Vec<_> = entries
                     .filter_map(|e| e.ok())
                     .filter(|e| e.path().is_dir())
@@ -61,6 +61,7 @@ use crate::{
     core::{
         ast::infrastructure::env::{EnvVarUsage, find_all_env_vars},
         manifest::{ProjectType, application::ApplicationManifestData},
+        rendered_template::RenderedTemplatesCache,
     },
 };
 
@@ -91,10 +92,20 @@ fn generate_dummy_value(var_name: &str, var_type: &str, iam_port: Option<u16>) -
                 "info".to_string()
             } else if var_name == "NODE_ENV" {
                 "development".to_string()
-            } else if var_name.contains("SECRET") || var_name.contains("KEY") {
+            } else if var_name.contains("S3_BUCKET") || var_name.contains("BUCKET_NAME") {
+                "dummy-bucket".to_string()
+            } else if var_name.contains("S3_REGION") || var_name.contains("AWS_REGION") {
+                "us-east-1".to_string()
+            } else if var_name == "JWKS_PUBLIC_KEY_URL" {
+                if let Some(port) = iam_port {
+                    format!("http://localhost:{}/api/auth/jwks", port)
+                } else {
+                    "dummy-jwks-url".to_string()
+                }
+            } else if var_name.contains("URL") {
+                "http://localhost:3000".to_string()
+            } else if var_name.contains("_SECRET") || var_name.contains("_KEY") || var_name.starts_with("SECRET") || var_name.starts_with("KEY") {
                 if var_name == "HMAC_SECRET_KEY" {
-                    // Generate a deterministic HMAC secret
-                    // This ensures consistent values for testing/documentation
                     format!("{:x}", {
                         use std::{
                             collections::hash_map::DefaultHasher,
@@ -107,17 +118,8 @@ fn generate_dummy_value(var_name: &str, var_type: &str, iam_port: Option<u16>) -
                 } else {
                     "dummy-secret-key".to_string()
                 }
-            } else if var_name == "JWKS_PUBLIC_KEY_URL" {
-                if let Some(port) = iam_port {
-                    format!("http://localhost:{}/api/auth/jwks", port)
-                } else {
-                    // Don't generate JWKS URL if no IAM service exists
-                    "dummy-jwks-url".to_string()
-                }
-            } else if var_name.contains("URL") {
-                "http://localhost:3000".to_string()
             } else {
-                "dummy-value".to_string()
+                "1".to_string()
             }
         }
         "number" => {
@@ -128,7 +130,7 @@ fn generate_dummy_value(var_name: &str, var_type: &str, iam_port: Option<u16>) -
             }
         }
         "boolean" => "true".to_string(),
-        _ => "dummy-value".to_string(),
+        _ => "1".to_string(),
     }
 }
 
@@ -192,13 +194,42 @@ pub(crate) fn export_service_openapi(
         cmd.env(&env_var.var_name, &dummy_value);
     }
 
-    let output = cmd
-        .output()
-        .with_context(|| format!("Failed to run {} command", resolved_bin))?;
+    let mut child = cmd
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| format!("Failed to spawn {} command", resolved_bin))?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!("Service {} failed to export: {}", service_name, stderr);
+    let timeout = Duration::from_secs(30);
+    let start = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if !status.success() {
+                    let stderr = child.stderr.take().map(|mut s| {
+                        let mut buf = String::new();
+                        s.read_to_string(&mut buf).ok();
+                        buf
+                    }).unwrap_or_default();
+                    bail!("Service {} failed to export: {}", service_name, stderr);
+                }
+                break;
+            }
+            Ok(None) => {
+                if start.elapsed() > timeout {
+                    let _ = child.kill();
+                    bail!(
+                        "Service {} timed out after {}s during OpenAPI export. \
+                        This usually means server.ts has top-level await calls (e.g. universalSdk, DB connections) \
+                        that block before the FORKLAUNCH_MODE check in listen(). \
+                        Wrap them in a guard: if (process.env.FORKLAUNCH_MODE !== 'openapi') {{ ... }}",
+                        service_name, timeout.as_secs()
+                    );
+                }
+                thread::sleep(Duration::from_millis(100));
+            }
+            Err(e) => bail!("Error waiting for {} subprocess: {}", service_name, e),
+        }
     }
 
     if !output_file.exists() {
@@ -217,8 +248,6 @@ pub(crate) fn export_all_services(
     manifest: &ApplicationManifestData,
     output_dir: &Path,
 ) -> Result<Vec<String>> {
-    use crate::core::rendered_template::RenderedTemplatesCache;
-
     let mut exported_services = Vec::new();
 
     let runtime = manifest.runtime.as_str();
@@ -258,7 +287,7 @@ pub(crate) fn export_all_services(
             // Try to get port from docker-compose by looking at services
             let docker_compose_path = app_root.join("docker-compose.yaml");
             if docker_compose_path.exists() {
-                if let Ok(content) = std::fs::read_to_string(&docker_compose_path) {
+                if let Ok(content) = fs::read_to_string(&docker_compose_path) {
                     if let Ok(compose) = serde_yml::from_str::<serde_yml::Value>(&content) {
                         if let Some(services) = compose.get("services") {
                             if let Some(i_services) = services.as_mapping() {
@@ -285,7 +314,7 @@ pub(crate) fn export_all_services(
         let service_path = app_root.join(&manifest.modules_path).join(&service.name);
         let service_output_dir = output_dir.join(&service.name);
 
-        create_dir_all(&service_output_dir)
+        fs::create_dir_all(&service_output_dir)
             .with_context(|| format!("Failed to create directory: {:?}", service_output_dir))?;
 
         let openapi_file = service_output_dir.join("openapi.json");

@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, hash_map::Entry},
+    collections::{HashMap, HashSet, hash_map::Entry},
     fs::{self, create_dir_all, read_to_string},
     io::Write,
     path::Path,
@@ -29,16 +29,24 @@ use crate::{
             integrations::find_all_integrations,
             runtime_deps::{find_all_runtime_deps, get_unique_resource_types},
             service_dependencies::find_all_service_dependencies,
+            worker_config::find_all_worker_configs,
         },
         command::command,
-        docker::{DockerCompose, find_docker_compose_path},
+        docker::{DockerCompose, DockerService, find_docker_compose_path},
         env::{find_workspace_root, get_modules_path},
-        env_scope::determine_env_var_scopes,
+        env_scope::{
+            EnvironmentVariableScope as EnvScope, ScopedEnvVar, determine_env_var_scopes,
+            is_application_scoped_var, is_inter_service_url, is_never_application_scoped,
+            parse_inter_service_url_var,
+        },
         hmac::AuthMode,
+        http_client,
         manifest::{ProjectType, application::ApplicationManifestData},
         openapi_export::export_all_services,
         rendered_template::RenderedTemplatesCache,
+        validate::{require_active_account, require_integration, require_manifest, resolve_auth},
     },
+    sync::all::sync_all_projects,
 };
 
 #[derive(Debug, Serialize)]
@@ -105,9 +113,10 @@ impl CliCommand for CreateCommand {
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-        let auth_mode = crate::core::validate::resolve_auth()?;
-        let (app_root, manifest) = crate::core::validate::require_manifest(matches)?;
-        let application_id = crate::core::validate::require_integration(&manifest)?;
+        let auth_mode = resolve_auth()?;
+        require_active_account(&auth_mode)?;
+        let (app_root, manifest) = require_manifest(matches)?;
+        let application_id = require_integration(&manifest)?;
 
         let version = matches
             .get_one::<String>("release_version")
@@ -122,24 +131,23 @@ impl CliCommand for CreateCommand {
 
         // Step 0: Sync projects with manifest (unless skipped)
         if !skip_sync {
-            log_header!(stdout, Color::Cyan, "[INFO] Syncing projects with manifest...");
+            log_header!(stdout, Color::Cyan, "Syncing projects with manifest...");
             writeln!(stdout)?;
 
-            use crate::core::rendered_template::RenderedTemplatesCache;
             let mut rendered_templates_cache = RenderedTemplatesCache::new();
 
             // Perform sync with confirm_all=true to avoid prompts during release
-            let changes_made = match crate::sync::all::sync_all_projects(
+            let changes_made = match sync_all_projects(
                 &app_root,
                 &mut manifest,
                 &mut rendered_templates_cache,
                 true, // confirm_all - no interactive prompts
-                &std::collections::HashMap::new(),
+                &HashMap::new(),
                 &mut stdout,
             ) {
                 Ok(changed) => changed,
                 Err(e) => {
-                    log_error!(stdout, "[ERROR] Sync failed: {}", e);
+                    log_error!(stdout, "Sync failed: {}", e);
                     bail!("Failed to sync projects with manifest: {}", e);
                 }
             };
@@ -148,25 +156,25 @@ impl CliCommand for CreateCommand {
                 // Update manifest.toml with synced data
                 let updated_manifest_content = to_string_pretty(&manifest)
                     .with_context(|| "Failed to serialize updated manifest")?;
-                std::fs::write(&manifest_path, updated_manifest_content)
+                fs::write(&manifest_path, updated_manifest_content)
                     .with_context(|| "Failed to write updated manifest")?;
 
-                log_ok!(stdout, "[OK] Sync completed with changes");
+                log_ok!(stdout, "Sync completed with changes");
 
-                log_header!(stdout, Color::Yellow, "[WARN] Manifest was updated. Please commit the changes to manifest.toml");
+                log_header!(stdout, Color::Yellow, "Manifest was updated. Please commit the changes to manifest.toml");
                 writeln!(stdout)?;
             } else {
-                log_ok!(stdout, "[OK] Sync completed - no changes detected");
+                log_ok!(stdout, "Sync completed - no changes detected");
                 writeln!(stdout)?;
             }
         } else {
-            log_warn!(stdout, "[INFO] Skipping project sync (--skip-sync flag set)");
+            log_info!(stdout, "Skipping project sync (--skip-sync flag set)");
             writeln!(stdout)?;
         }
 
         // Skip git repository check if using local mode
         if !local_mode && manifest.git_repository.is_none() {
-            log_warn!(stdout, "[INFO] Git repository URL not set in manifest");
+            log_info!(stdout, "Git repository URL not set in manifest");
 
             print!("Enter git repository URL (e.g., https://github.com/user/repo.git): ");
             std::io::stdout().flush()?;
@@ -183,15 +191,15 @@ impl CliCommand for CreateCommand {
                 fs::write(&manifest_path, manifest_str)
                     .with_context(|| "Failed to write manifest")?;
 
-                log_ok!(stdout, "[INFO] Git repository saved to manifest.toml");
+                log_ok!(stdout, "Git repository saved to manifest.toml");
             }
         }
 
         if local_mode {
-            log_info!(stdout, "[INFO] Using local mode - packaging code directly");
+            log_info!(stdout, "Using local mode - packaging code directly");
         }
 
-        log_header!(stdout, Color::Cyan, "[INFO] Creating release {}...", version);
+        log_header!(stdout, Color::Cyan, "Creating release {}...", version);
         writeln!(stdout)?;
 
         // Step 1: Detect git metadata
@@ -203,10 +211,10 @@ impl CliCommand for CreateCommand {
             log_ok_suffix!(stdout);
             (commit, branch)
         } else if local_mode {
-            log_warn!(stdout, " [WARN] Not a git repository (using local defaults)");
+            log_warn!(stdout, "Not a git repository (using local defaults)");
             ("local-build".to_string(), Some("local".to_string()))
         } else {
-            log_warn!(stdout, " [WARN] Not a git repository");
+            log_warn!(stdout, "Not a git repository");
             bail!("Current directory is not a git repository. Initialize git first.");
         };
 
@@ -222,14 +230,14 @@ impl CliCommand for CreateCommand {
         )?;
 
         // Step 2: Export OpenAPI specs
-        log_progress!(stdout, "[INFO] Exporting OpenAPI specifications...");
+        log_progress!(stdout, "Exporting OpenAPI specifications...");
 
         let openapi_path = app_root.join(".forklaunch").join("openapi");
         create_dir_all(&openapi_path).with_context(|| "Failed to create openapi directory")?;
 
         let exported_services = export_all_services(&app_root, &manifest, &openapi_path)?;
 
-        log_ok!(stdout, " [OK] ({} services)", exported_services.len());
+        log_ok!(stdout, "({} services)", exported_services.len());
 
         let mut openapi_specs = HashMap::new();
         for project in &manifest.projects {
@@ -241,7 +249,7 @@ impl CliCommand for CreateCommand {
             }
         }
 
-        log_progress!(stdout, "[INFO] Detecting required environment variables...");
+        log_progress!(stdout, "Detecting required environment variables...");
 
         let workspace_root = find_workspace_root(&app_root)?;
         let modules_path = get_modules_path(&workspace_root)?;
@@ -251,17 +259,93 @@ impl CliCommand for CreateCommand {
 
         let mut scoped_env_vars = determine_env_var_scopes(&project_env_vars, &manifest)?;
 
+        // For vars that must never be application-scoped, replace the single
+        // application entry with per-component entries for each project that
+        // declares the var in registrations.ts, source files, or .env.local.
+        // The docker-compose loop below may add additional per-component entries.
+        {
+            let never_app_vars: Vec<String> = scoped_env_vars
+                .iter()
+                .filter(|v| {
+                    v.scope == EnvScope::Application && is_never_application_scoped(&v.name)
+                })
+                .map(|v| v.name.clone())
+                .collect();
+
+            scoped_env_vars.retain(|v| {
+                !(v.scope == EnvScope::Application && is_never_application_scoped(&v.name))
+            });
+
+            // Collect .env.local vars per project
+            let mut env_local_vars: HashMap<String, HashSet<String>> = HashMap::new();
+            for project in &manifest.projects {
+                let env_local_path = app_root
+                    .join(&manifest.modules_path)
+                    .join(&project.name)
+                    .join(".env.local");
+                if let Ok(contents) = read_to_string(&env_local_path) {
+                    let vars: HashSet<String> = contents
+                        .lines()
+                        .filter(|line| !line.trim().is_empty() && !line.starts_with('#'))
+                        .filter_map(|line| {
+                            line.split('=').next().map(|k| k.trim().to_string())
+                        })
+                        .collect();
+                    env_local_vars.insert(project.name.clone(), vars);
+                }
+            }
+
+            for var_name in &never_app_vars {
+                for (project_name, env_vars) in &project_env_vars {
+                    let in_source = env_vars.iter().any(|v| v.var_name == *var_name);
+                    let in_env_local = env_local_vars
+                        .get(project_name)
+                        .is_some_and(|vars| vars.contains(var_name));
+
+                    if !in_source && !in_env_local {
+                        continue;
+                    }
+
+                    let project_type = manifest
+                        .projects
+                        .iter()
+                        .find(|p| &p.name == project_name)
+                        .map(|p| &p.r#type);
+
+                    let (scope, scope_id) = match project_type {
+                        Some(ProjectType::Service) => (
+                            EnvScope::Service,
+                            Some(project_name.clone()),
+                        ),
+                        Some(ProjectType::Worker) => (
+                            EnvScope::Worker,
+                            Some(format!("{}-worker", project_name)),
+                        ),
+                        _ => continue,
+                    };
+
+                    scoped_env_vars.push(ScopedEnvVar {
+                        name: var_name.clone(),
+                        scope,
+                        scope_id,
+                        used_by: vec![project_name.clone()],
+                        value: None,
+                    });
+                }
+            }
+        }
+
         let (mut env_var_components, docker_compose_env_vars) =
             build_env_var_component_map(app_root.as_path(), &manifest);
 
         // Collect all var names from docker-compose before consuming the map
-        let docker_compose_var_names: std::collections::HashSet<String> = docker_compose_env_vars
+        let _docker_compose_var_names: HashSet<String> = docker_compose_env_vars
             .values()
             .flat_map(|vars| vars.iter().map(|(k, _)| k.clone()))
             .collect();
 
         // Add all env vars from docker-compose for each service/worker
-        let mut existing_vars: std::collections::HashSet<(String, Option<String>)> =
+        let mut existing_vars: HashSet<(String, Option<String>)> =
             scoped_env_vars
                 .iter()
                 .map(|v| (v.name.clone(), v.scope_id.clone()))
@@ -290,14 +374,14 @@ impl CliCommand for CreateCommand {
             ("DB_PASSWORD", ""),
             ("PGSSLMODE", "no-verify"),
         ];
-        let platform_default_keys: std::collections::HashSet<String> = platform_defaults
+        let platform_default_keys: HashSet<String> = platform_defaults
             .iter()
             .map(|(k, _)| k.to_string())
             .collect();
 
         // Component-scoped vars injected by Pulumi at deploy time.
         // Stay in manifest at service/worker scope but with empty values.
-        let pulumi_injected_component_vars: std::collections::HashSet<&str> = [
+        let pulumi_injected_component_vars: HashSet<&str> = [
             "REDIS_URL",
             "DB_NAME",
             "KAFKA_BROKERS", "KAFKA_BOOTSTRAP_SERVERS",
@@ -306,9 +390,9 @@ impl CliCommand for CreateCommand {
         for (default_key, default_value) in &platform_defaults {
             let app_key = (default_key.to_string(), None);
             if !existing_vars.contains(&app_key) {
-                scoped_env_vars.push(crate::core::env_scope::ScopedEnvVar {
+                scoped_env_vars.push(ScopedEnvVar {
                     name: default_key.to_string(),
-                    scope: crate::core::env_scope::EnvironmentVariableScope::Application,
+                    scope: EnvScope::Application,
                     scope_id: None,
                     used_by: vec!["platform".to_string()],
                     value: Some(default_value.to_string()),
@@ -330,11 +414,11 @@ impl CliCommand for CreateCommand {
                 if let Some((component_type, base_worker_name)) = worker_alias_info {
                     match component_type {
                         EnvironmentVariableComponentType::Service => (
-                            crate::core::env_scope::EnvironmentVariableScope::Service,
+                            EnvScope::Service,
                             Some(format!("{}-service", base_worker_name)),
                         ),
                         EnvironmentVariableComponentType::Worker => (
-                            crate::core::env_scope::EnvironmentVariableScope::Worker,
+                            EnvScope::Worker,
                             Some(format!("{}-worker", base_worker_name)),
                         ),
                         _ => continue,
@@ -348,12 +432,12 @@ impl CliCommand for CreateCommand {
                         .map(|p| &p.r#type);
 
                     match project_type {
-                        Some(crate::core::manifest::ProjectType::Service) => (
-                            crate::core::env_scope::EnvironmentVariableScope::Service,
+                        Some(ProjectType::Service) => (
+                            EnvScope::Service,
                             Some(service_name.clone()),
                         ),
-                        Some(crate::core::manifest::ProjectType::Worker) => (
-                            crate::core::env_scope::EnvironmentVariableScope::Worker,
+                        Some(ProjectType::Worker) => (
+                            EnvScope::Worker,
                             Some(format!("{}-worker", service_name)),
                         ),
                         _ => continue, // Skip if not a service or worker
@@ -386,7 +470,7 @@ impl CliCommand for CreateCommand {
                     }
                 } else if pulumi_injected_component_vars.contains(key.to_ascii_uppercase().as_str()) {
                     String::new()
-                } else if crate::core::env_scope::is_inter_service_url(&key, &project_names_for_scope) {
+                } else if is_inter_service_url(&key, &project_names_for_scope) {
                     // Inter-service URL vars are injected by Pulumi at deploy time
                     String::new()
                 } else if is_pulumi_injected_url_var(&key) {
@@ -396,18 +480,18 @@ impl CliCommand for CreateCommand {
                     value.clone()
                 };
 
-                let is_app_scoped = crate::core::env_scope::is_application_scoped_var(
+                let is_app_scoped = is_application_scoped_var(
                     &key,
                     &project_names_for_scope,
-                );
+                ) && !is_never_application_scoped(&key);
 
                 if is_app_scoped {
                     // Ensure an APPLICATION-scoped entry exists
                     let app_key = (key.clone(), None);
                     if !existing_vars.contains(&app_key) {
-                        scoped_env_vars.push(crate::core::env_scope::ScopedEnvVar {
+                        scoped_env_vars.push(ScopedEnvVar {
                             name: key.clone(),
-                            scope: crate::core::env_scope::EnvironmentVariableScope::Application,
+                            scope: EnvScope::Application,
                             scope_id: None,
                             used_by: vec![service_name.clone()],
                             value: Some(effective_value.clone()),
@@ -421,14 +505,14 @@ impl CliCommand for CreateCommand {
                         .find(|v| {
                             v.name == key
                                 && v.scope
-                                    == crate::core::env_scope::EnvironmentVariableScope::Application
+                                    == EnvScope::Application
                         })
                         .and_then(|v| v.value.as_deref());
 
                     if app_value != Some(effective_value.as_str()) {
                         let comp_key = (key.clone(), scope_id.clone());
                         if !existing_vars.contains(&comp_key) {
-                            scoped_env_vars.push(crate::core::env_scope::ScopedEnvVar {
+                            scoped_env_vars.push(ScopedEnvVar {
                                 name: key.clone(),
                                 scope: scope.clone(),
                                 scope_id: scope_id.clone(),
@@ -446,7 +530,7 @@ impl CliCommand for CreateCommand {
                     continue;
                 }
 
-                scoped_env_vars.push(crate::core::env_scope::ScopedEnvVar {
+                scoped_env_vars.push(ScopedEnvVar {
                     name: key.clone(),
                     scope: scope.clone(),
                     scope_id: scope_id.clone(),
@@ -505,11 +589,15 @@ impl CliCommand for CreateCommand {
         // Filter out TEST_ prefixed vars (test-only, not needed in deployment)
         scoped_env_vars.retain(|v| !v.name.starts_with("TEST_"));
 
+        // Filter out vars that are irrelevant in deployed environments
+        const EXCLUDED_VARS: &[&str] = &["DOTENV_FILE_PATH"];
+        scoped_env_vars.retain(|v| !EXCLUDED_VARS.contains(&v.name.as_str()));
+
         // Only keep application-level variables if they match the allowed criteria
         let project_names_for_retain: Vec<String> =
             manifest.projects.iter().map(|p| p.name.clone()).collect();
         scoped_env_vars.retain(|v| {
-            if v.scope != crate::core::env_scope::EnvironmentVariableScope::Application {
+            if v.scope != EnvScope::Application {
                 return true;
             }
 
@@ -519,9 +607,9 @@ impl CliCommand for CreateCommand {
         // Cross-scope deduplication: remove service/worker copies when an application-scope copy exists
         deduplicate_cross_scope(&mut scoped_env_vars);
 
-        log_ok!(stdout, " [OK] ({} variables)", scoped_env_vars.len());
+        log_ok!(stdout, "({} variables)", scoped_env_vars.len());
 
-        log_progress!(stdout, "[INFO] Detecting runtime dependencies...");
+        log_progress!(stdout, "Detecting runtime dependencies...");
 
         let all_runtime_deps = find_all_runtime_deps(&modules_path, &rendered_templates_cache)?;
 
@@ -540,33 +628,30 @@ impl CliCommand for CreateCommand {
         }
 
         let total_resources: usize = project_runtime_deps.values().map(|v| v.len()).sum();
-        log_ok!(stdout, " [OK] ({} resources)", total_resources);
+        log_ok!(stdout, "({} resources)", total_resources);
 
-        log_progress!(stdout, "[INFO] Detecting integrations...");
+        log_progress!(stdout, "Detecting integrations...");
 
         let all_integrations = find_all_integrations(&modules_path, &rendered_templates_cache)?;
 
         let total_integrations: usize = all_integrations.values().map(|v| v.len()).sum();
-        log_ok!(stdout, " [OK] ({} integrations)", total_integrations);
+        log_ok!(stdout, "({} integrations)", total_integrations);
 
-        log_progress!(stdout, "[INFO] Detecting worker configurations...");
+        log_progress!(stdout, "Detecting worker configurations...");
 
         let all_worker_configs =
-            crate::core::ast::infrastructure::worker_config::find_all_worker_configs(
-                &modules_path,
-                &rendered_templates_cache,
-            )?;
+            find_all_worker_configs(&modules_path, &rendered_templates_cache)?;
 
         let total_worker_configs = all_worker_configs.len();
-        log_ok!(stdout, " [OK] ({} workers)", total_worker_configs);
+        log_ok!(stdout, "({} workers)", total_worker_configs);
 
-        log_progress!(stdout, "[INFO] Detecting service mesh connections...");
+        log_progress!(stdout, "Detecting service mesh connections...");
 
         let all_service_deps =
             find_all_service_dependencies(&modules_path, &rendered_templates_cache)?;
 
         let total_service_deps: usize = all_service_deps.values().map(|v| v.len()).sum();
-        log_ok!(stdout, " [OK] ({} connections)", total_service_deps);
+        log_ok!(stdout, "({} connections)", total_service_deps);
 
         let project_names_for_origin: Vec<String> =
             manifest.projects.iter().map(|p| p.name.clone()).collect();
@@ -576,13 +661,13 @@ impl CliCommand for CreateCommand {
             .map(|v| EnvironmentVariableRequirement {
                 name: v.name.clone(),
                 scope: match v.scope {
-                    crate::core::env_scope::EnvironmentVariableScope::Application => {
+                    EnvScope::Application => {
                         EnvironmentVariableScope::Application
                     }
-                    crate::core::env_scope::EnvironmentVariableScope::Service => {
+                    EnvScope::Service => {
                         EnvironmentVariableScope::Service
                     }
-                    crate::core::env_scope::EnvironmentVariableScope::Worker => {
+                    EnvScope::Worker => {
                         EnvironmentVariableScope::Worker
                     }
                 },
@@ -598,74 +683,117 @@ impl CliCommand for CreateCommand {
                         }
                     },
                 ),
-                origin: if docker_compose_var_names.contains(&v.name)
-                    || env_var_components.contains_key(&v.name)
-                    || crate::core::env_scope::is_application_scoped_var(
+                origin: {
+                    let inter_service = parse_inter_service_url_var(
                         &v.name,
                         &project_names_for_origin,
-                    )
-                    || is_platform_managed_var(&v.name)
-                {
-                    Some("platform".to_string())
-                } else {
-                    Some("user".to_string())
+                    );
+                    if is_platform_managed_var(&v.name)
+                        || is_pulumi_provisioned_component(&v.name, &env_var_components)
+                        || inter_service.is_some()
+                    {
+                        Some("platform".to_string())
+                    } else {
+                        Some("user".to_string())
+                    }
                 },
+                inter_service_url: parse_inter_service_url_var(
+                    &v.name,
+                    &project_names_for_origin,
+                )
+                .map(|(target_service, transport, port_env_var)| {
+                    super::manifest_generator::InterServiceUrlInfo {
+                        target_service,
+                        transport,
+                        port_env_var,
+                    }
+                }),
             })
             .collect();
 
         let app_vars = scoped_env_vars
             .iter()
-            .filter(|v| v.scope == crate::core::env_scope::EnvironmentVariableScope::Application)
+            .filter(|v| v.scope == EnvScope::Application)
             .count();
         let service_vars = scoped_env_vars
             .iter()
-            .filter(|v| v.scope == crate::core::env_scope::EnvironmentVariableScope::Service)
+            .filter(|v| v.scope == EnvScope::Service)
             .count();
         let worker_vars = scoped_env_vars
             .iter()
-            .filter(|v| v.scope == crate::core::env_scope::EnvironmentVariableScope::Worker)
+            .filter(|v| v.scope == EnvScope::Worker)
             .count();
         if app_vars > 0 {
-            writeln!(stdout, "[INFO] Application-level: {}", app_vars)?;
+            log_info!(stdout, "Application-level: {}", app_vars);
         }
         if service_vars > 0 {
-            writeln!(stdout, "[INFO] Service-level: {}", service_vars)?;
+            log_info!(stdout, "Service-level: {}", service_vars);
         }
         if worker_vars > 0 {
-            writeln!(stdout, "[INFO] Worker-level: {}", worker_vars)?;
+            log_info!(stdout, "Worker-level: {}", worker_vars);
         }
-
-        log_progress!(stdout, "[INFO] Generating release manifest...");
 
         // Handle local mode: create tarball and upload to S3
         let code_source_url = if local_mode && !dry_run {
-            log_info!(stdout, "\n[INFO] Packaging local code...");
+            log_info!(stdout, "\nPackaging local code...");
 
             let tarball_path = app_root.join(".forklaunch").join("release-code.tar.gz");
-            super::s3_upload::create_app_tarball(&app_root, &tarball_path)?;
+            super::s3_upload::create_app_tarball(&app_root, &modules_path, &tarball_path)?;
 
-            log_ok!(stdout, "[INFO] Tarball created");
+            log_ok!(stdout, "Tarball created");
 
             // Get presigned upload URL from platform
-            log_progress!(stdout, "[INFO] Getting upload URL from platform...");
+            log_progress!(stdout, "Getting upload URL from platform...");
 
             let upload_response =
                 super::s3_upload::get_presigned_upload_url(&application_id, version, &auth_mode)?;
 
             log_ok_suffix!(stdout);
 
-            log_progress!(stdout, "[INFO] Uploading code to S3...");
+            log_progress!(stdout, "Uploading code to S3...");
 
             super::s3_upload::upload_to_s3(&tarball_path, &upload_response.upload_url)?;
 
             log_ok_suffix!(stdout);
 
-            std::fs::remove_file(&tarball_path).ok();
+            fs::remove_file(&tarball_path).ok();
 
             Some(upload_response.code_source_url)
         } else {
             None
         };
+
+        // Upload OpenAPI specs to S3 (skip for dry-run, specs stay inline)
+        let openapi_s3_keys: HashMap<String, String> = if !dry_run && !openapi_specs.is_empty() {
+            let service_names: Vec<String> = openapi_specs.keys().cloned().collect();
+
+            log_progress!(stdout, "Uploading OpenAPI specs to S3...");
+
+            let upload_urls = super::s3_upload::get_openapi_upload_urls(
+                &application_id,
+                version,
+                &service_names,
+                &auth_mode,
+            )?;
+
+            let mut s3_keys = HashMap::new();
+            for (service_name, spec_value) in &openapi_specs {
+                if let Some(entry) = upload_urls.get(service_name) {
+                    // Wrap the spec as { "v1": specObject } to match the expected Record<string, OpenAPIObject> shape
+                    let wrapped_spec = serde_json::json!({ "v1": spec_value });
+                    super::s3_upload::upload_json_to_s3(&wrapped_spec, &entry.upload_url)?;
+                    s3_keys.insert(service_name.clone(), entry.s3_key.clone());
+                }
+            }
+
+            log_ok!(stdout, "({} specs uploaded)", s3_keys.len());
+
+            s3_keys
+        } else {
+            HashMap::new()
+        };
+
+        log_progress!(stdout, "Generating release manifest...");
 
         let release_manifest = generate_release_manifest(
             &app_root,
@@ -681,6 +809,7 @@ impl CliCommand for CreateCommand {
             &all_integrations,
             &all_worker_configs,
             &all_service_deps,
+            &openapi_s3_keys,
         )?;
 
         log_ok_suffix!(stdout);
@@ -689,7 +818,7 @@ impl CliCommand for CreateCommand {
             log_warn!(stdout, "\n  [DRY RUN] Skipping upload to platform");
 
             let manifest_file = app_root.join(".forklaunch").join("release-manifest.json");
-            std::fs::write(
+            fs::write(
                 &manifest_file,
                 serde_json::to_string_pretty(&release_manifest)?,
             )?;
@@ -699,7 +828,14 @@ impl CliCommand for CreateCommand {
                 manifest_file.display()
             )?;
         } else {
-            log_progress!(stdout, "[INFO] Uploading release to platform...");
+            let manifest_json = serde_json::to_string(&release_manifest)?;
+            log_info!(
+                stdout,
+                "[INFO] Release manifest size: {} bytes",
+                manifest_json.len()
+            );
+
+            log_progress!(stdout, "Uploading release to platform...");
 
             upload_release(&application_id, release_manifest, &auth_mode)?;
 
@@ -712,15 +848,15 @@ impl CliCommand for CreateCommand {
             let updated_manifest = to_string_pretty(&manifest)
                 .with_context(|| "Failed to serialize updated manifest")?;
 
-            std::fs::write(&manifest_path, updated_manifest)
+            fs::write(&manifest_path, updated_manifest)
                 .with_context(|| "Failed to write updated manifest")?;
         }
 
         writeln!(stdout)?;
-        log_header!(stdout, Color::Green, "[OK] Release {} created successfully!", version);
+        log_header!(stdout, Color::Green, "Release {} created successfully!", version);
 
         if !dry_run {
-            log_info!(stdout, "\n[INFO] Next steps:");
+            log_info!(stdout, "\nNext steps:");
             writeln!(stdout, "  1. Set environment variables in Platform UI")?;
             writeln!(
                 stdout,
@@ -750,8 +886,6 @@ fn upload_release(
         format!("{}/releases", get_platform_management_api_url())
     };
 
-    use crate::core::http_client;
-
     let response =
         http_client::post_with_auth(auth_mode, &url, serde_json::to_value(&request_body)?)
             .with_context(|| "Failed to create release")?;
@@ -776,9 +910,10 @@ fn upload_release(
     if let Some(warnings) = parsed_response.get("warnings") {
         if let Some(array) = warnings.as_array() {
             if !array.is_empty() {
-                println!("\n[WARN] Release created with warnings:");
+                let mut stdout = StandardStream::stdout(ColorChoice::Always);
+                log_warn!(stdout, "\nRelease created with warnings:");
                 for warning in array {
-                    println!("  - {}", warning);
+                    log_warn!(stdout, "  - {}", warning);
                 }
             }
         }
@@ -1033,7 +1168,7 @@ fn classify_worker_alias(
 
 fn infer_component_details(
     service_name: &str,
-    service: &crate::core::docker::DockerService,
+    service: &DockerService,
     project_types: &HashMap<String, ProjectType>,
     service_lookup: &HashMap<String, (EnvironmentVariableComponentType, String)>,
     key: &str,
@@ -1054,8 +1189,10 @@ fn infer_component_details(
         return None;
     }
 
-    // Special handling for OTEL_EXPORTER_OTLP_ENDPOINT - set target to "otel"
-    if key_upper == "OTEL_EXPORTER_OTLP_ENDPOINT" {
+    // Pulumi-injected URL vars have known production targets that differ from
+    // docker-compose dev targets. Override the target to reflect the actual
+    // service the URL resolves to in production.
+    if let Some(target) = pulumi_url_var_target(&key_upper) {
         let property = infer_component_property(&key_upper).unwrap_or_else(|| {
             default_component_property(&EnvironmentVariableComponentType::Service, &key_upper)
         });
@@ -1063,10 +1200,31 @@ fn infer_component_details(
         return Some((
             EnvironmentVariableComponentType::Service,
             property,
-            Some("otel".to_string()),
+            Some(target),
             path,
             None,
         ));
+    }
+
+    // Inter-service URL vars: target is the service the URL resolves to,
+    // derived from the var name pattern (e.g. BILLING_URL → "billing").
+    {
+        let project_names: Vec<String> = project_types.keys().cloned().collect();
+        if let Some((target_service, ..)) =
+            parse_inter_service_url_var(key, &project_names)
+        {
+            let property = infer_component_property(&key_upper).unwrap_or_else(|| {
+                default_component_property(&EnvironmentVariableComponentType::Service, &key_upper)
+            });
+            let path = extract_path_from_value(value);
+            return Some((
+                EnvironmentVariableComponentType::Service,
+                property,
+                Some(target_service),
+                path,
+                None,
+            ));
+        }
     }
 
     if !is_url_like(value) && is_cli_generated_key_var(&key_upper) {
@@ -1523,7 +1681,7 @@ fn is_allowed_application_var(
     project_names: &[String],
 ) -> bool {
     // Allow all vars that are inherently application-scoped (observability, shared keys, inter-service URLs)
-    if crate::core::env_scope::is_application_scoped_var(var_name, project_names) {
+    if is_application_scoped_var(var_name, project_names) {
         return true;
     }
 
@@ -1606,9 +1764,54 @@ fn looks_base64(value: &str) -> bool {
 
 /// Cross-scope deduplication: if a var exists at application scope AND at service/worker scope
 /// with the same value (or no value), remove the service/worker copies.
-/// Never promotes service/worker vars to application scope — vars like PORT must stay per-service.
-fn deduplicate_cross_scope(scoped_env_vars: &mut Vec<crate::core::env_scope::ScopedEnvVar>) {
-    use std::collections::HashMap;
+/// Promotes service/worker vars to application scope when 2+ copies share the same value,
+/// keeping minority overrides at service/worker scope.
+fn deduplicate_cross_scope(scoped_env_vars: &mut Vec<ScopedEnvVar>) {
+
+    // Pre-pass: fill in blank/empty values from sibling copies.
+    // If VAR is blank in service A but "abc" in services B and C, set A to "abc".
+    // This ensures consolidation sees consistent values across components.
+    {
+        let mut by_name: HashMap<String, Vec<usize>> = HashMap::new();
+        for (idx, var) in scoped_env_vars.iter().enumerate() {
+            by_name.entry(var.name.clone()).or_default().push(idx);
+        }
+        for (_name, indices) in &by_name {
+            if indices.len() <= 1 {
+                continue;
+            }
+            // Find the majority non-empty value
+            let mut value_counts: HashMap<String, usize> = HashMap::new();
+            for &idx in indices {
+                if let Some(v) = &scoped_env_vars[idx].value {
+                    let trimmed = v.trim().to_string();
+                    if !trimmed.is_empty() {
+                        *value_counts.entry(trimmed).or_insert(0) += 1;
+                    }
+                }
+            }
+            if let Some(&max_count) = value_counts.values().max() {
+                let max_entries: Vec<_> = value_counts
+                    .iter()
+                    .filter(|&(_, &c)| c == max_count)
+                    .collect();
+                // Only backfill when there is a single unambiguous majority value
+                if max_entries.len() == 1 {
+                    let fill_value = max_entries[0].0.clone();
+                    // Fill blank/empty entries with the majority value
+                    for &idx in indices {
+                        let is_blank = match &scoped_env_vars[idx].value {
+                            None => true,
+                            Some(v) => v.trim().is_empty(),
+                        };
+                        if is_blank {
+                            scoped_env_vars[idx].value = Some(fill_value.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     // Group vars by name
     let mut by_name: HashMap<String, Vec<usize>> = HashMap::new();
@@ -1616,7 +1819,7 @@ fn deduplicate_cross_scope(scoped_env_vars: &mut Vec<crate::core::env_scope::Sco
         by_name.entry(var.name.clone()).or_default().push(idx);
     }
 
-    let mut indices_to_remove = std::collections::HashSet::new();
+    let mut indices_to_remove = HashSet::new();
 
     for (_name, indices) in &by_name {
         if indices.len() <= 1 {
@@ -1624,7 +1827,7 @@ fn deduplicate_cross_scope(scoped_env_vars: &mut Vec<crate::core::env_scope::Sco
         }
 
         let has_app_scope = indices.iter().any(|&i| {
-            scoped_env_vars[i].scope == crate::core::env_scope::EnvironmentVariableScope::Application
+            scoped_env_vars[i].scope == EnvScope::Application
         });
 
         if has_app_scope {
@@ -1635,7 +1838,7 @@ fn deduplicate_cross_scope(scoped_env_vars: &mut Vec<crate::core::env_scope::Sco
                 .iter()
                 .find(|&&i| {
                     scoped_env_vars[i].scope
-                        == crate::core::env_scope::EnvironmentVariableScope::Application
+                        == EnvScope::Application
                 })
                 .copied()
                 .unwrap();
@@ -1644,7 +1847,7 @@ fn deduplicate_cross_scope(scoped_env_vars: &mut Vec<crate::core::env_scope::Sco
             let mut value_counts: HashMap<String, usize> = HashMap::new();
             for &idx in indices {
                 if scoped_env_vars[idx].scope
-                    != crate::core::env_scope::EnvironmentVariableScope::Application
+                    != EnvScope::Application
                 {
                     if let Some(v) = &scoped_env_vars[idx].value {
                         let trimmed = v.trim().to_string();
@@ -1666,22 +1869,17 @@ fn deduplicate_cross_scope(scoped_env_vars: &mut Vec<crate::core::env_scope::Sco
                 scoped_env_vars[app_idx].value = Some(val.clone());
             }
 
-            // Remove service/worker copies that match the majority.
-            // Keep copies that have no value (they need to be filled per-component)
-            // or that differ from the majority (overrides).
+            // Remove service/worker copies that match the majority or are blank.
+            // Keep copies that differ from the majority (overrides).
             for &idx in indices {
                 if scoped_env_vars[idx].scope
-                    != crate::core::env_scope::EnvironmentVariableScope::Application
+                    != EnvScope::Application
                 {
                     let matches_majority = match &scoped_env_vars[idx].value {
-                        None => majority_value.is_none(),
+                        None => true,
                         Some(v) => {
                             let trimmed = v.trim();
-                            if trimmed.is_empty() {
-                                majority_value.is_none()
-                            } else {
-                                majority_value.as_deref() == Some(trimmed)
-                            }
+                            trimmed.is_empty() || majority_value.as_deref() == Some(trimmed)
                         }
                     };
                     if matches_majority {
@@ -1691,15 +1889,21 @@ fn deduplicate_cross_scope(scoped_env_vars: &mut Vec<crate::core::env_scope::Sco
             }
         } else if indices.len() >= 2 {
             // All copies are at service/worker scope (no app entry).
-            // If 2+ copies share the same value, promote to application scope.
+            // Skip vars that must never be promoted to application scope.
+            let name = &scoped_env_vars[indices[0]].name;
+            if is_never_application_scoped(name) {
+                continue;
+            }
+            // If 2+ copies share the same value (including empty), promote to application scope.
             let mut value_counts: HashMap<String, usize> = HashMap::new();
             for &idx in indices {
-                if let Some(v) = &scoped_env_vars[idx].value {
-                    let trimmed = v.trim().to_string();
-                    if !trimmed.is_empty() {
-                        *value_counts.entry(trimmed).or_insert(0) += 1;
-                    }
-                }
+                let trimmed = scoped_env_vars[idx]
+                    .value
+                    .as_deref()
+                    .map(|v| v.trim())
+                    .unwrap_or("")
+                    .to_string();
+                *value_counts.entry(trimmed).or_insert(0) += 1;
             }
 
             if let Some((majority_val, majority_count)) =
@@ -1709,27 +1913,27 @@ fn deduplicate_cross_scope(scoped_env_vars: &mut Vec<crate::core::env_scope::Sco
                 if *majority_count >= 2 {
                     let majority_val = majority_val.clone();
 
-                    // Create an application-scope entry with blank value
-                    // (docker-compose values are dev-only, must not carry over)
+                    // Create an application-scope entry with the majority value as hint
+                    // (docker-compose values are dev-only but serve as useful defaults)
                     let first_idx = indices[0];
-                    let app_entry = crate::core::env_scope::ScopedEnvVar {
+                    let app_entry = ScopedEnvVar {
                         name: scoped_env_vars[first_idx].name.clone(),
-                        scope: crate::core::env_scope::EnvironmentVariableScope::Application,
+                        scope: EnvScope::Application,
                         scope_id: None,
                         used_by: scoped_env_vars[first_idx].used_by.clone(),
                         value: Some("".to_string()),
                     };
                     scoped_env_vars.push(app_entry);
 
-                    // Remove service/worker copies that match the majority value.
+                    // Remove service/worker copies that match the majority value or are blank.
                     // Keep copies with minority values as per-service overrides.
                     for &idx in indices {
                         let matches_majority = match &scoped_env_vars[idx].value {
                             Some(v) => {
                                 let trimmed = v.trim();
-                                !trimmed.is_empty() && trimmed == majority_val
+                                trimmed.is_empty() || trimmed == majority_val
                             }
-                            None => false,
+                            None => true,
                         };
                         if matches_majority {
                             indices_to_remove.insert(idx);
@@ -1751,12 +1955,48 @@ fn deduplicate_cross_scope(scoped_env_vars: &mut Vec<crate::core::env_scope::Sco
 /// Auth/infrastructure URL vars that Pulumi computes at deploy time.
 /// These are not inter-service URLs but are still auto-generated.
 fn is_pulumi_injected_url_var(var_name: &str) -> bool {
-    const PULUMI_URL_VARS: &[&str] = &[
-        "JWKS_PUBLIC_KEY_URL",
-        "BETTER_AUTH_BASE_URL",
-    ];
     let upper = var_name.to_ascii_uppercase();
-    PULUMI_URL_VARS.iter().any(|&v| v == upper)
+    pulumi_url_var_target(&upper).is_some()
+}
+
+/// Maps Pulumi-injected URL vars to their production target service.
+/// The target is the service the URL resolves to in production (via ALB),
+/// which may differ from the docker-compose dev service name.
+fn pulumi_url_var_target(key_upper: &str) -> Option<String> {
+    match key_upper {
+        "OTEL_EXPORTER_OTLP_ENDPOINT" => Some("monitoring".to_string()),
+        "JWKS_PUBLIC_KEY_URL" => Some("iam".to_string()),
+        "BETTER_AUTH_BASE_URL" => Some("iam".to_string()),
+        _ => None,
+    }
+}
+
+/// Check if a var belongs to an infrastructure component that Pulumi provisions and injects.
+/// Only Database, Cache, and Queue are provisioned by Pulumi.
+/// ObjectStore (S3), Service, Worker, and Key components are NOT — those vars are user-supplied.
+fn is_pulumi_provisioned_component(
+    var_name: &str,
+    env_var_components: &HashMap<
+        String,
+        (
+            EnvironmentVariableComponentType,
+            EnvironmentVariableComponentProperty,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        ),
+    >,
+) -> bool {
+    if let Some((component_type, ..)) = env_var_components.get(var_name) {
+        matches!(
+            component_type,
+            EnvironmentVariableComponentType::Database
+                | EnvironmentVariableComponentType::Cache
+                | EnvironmentVariableComponentType::Queue
+        )
+    } else {
+        false
+    }
 }
 
 /// Explicit registry of platform-managed env var names/prefixes.
@@ -1764,33 +2004,69 @@ fn is_pulumi_injected_url_var(var_name: &str) -> bool {
 /// Update this list when adding new platform-generated env vars.
 fn is_platform_managed_var(var_name: &str) -> bool {
     const PLATFORM_VARS: &[&str] = &[
+        // CLI-generated: scaffolded with default values during `forklaunch init`
         "NODE_ENV",
         "HOST",
         "PROTOCOL",
+        "PORT",
+        "WS_PORT",
         "VERSION",
         "DOCS_PATH",
-        "OTEL_LEVEL",
+        "QUEUE_NAME",
         "OTEL_SERVICE_NAME",
         "OTEL_EXPORTER_OTLP_ENDPOINT",
-        "REDIS_URL",
-        "PGSSLMODE",
+        "OTEL_EXPORTER_OTLP_PROTOCOL",
+        "BETTER_AUTH_BASE_PATH",
+        // CLI-generated: random secrets produced during `forklaunch init`
         "HMAC_SECRET_KEY",
         "PASSWORD_ENCRYPTION_SECRET",
-        "JWKS_PUBLIC_KEY_URL",
         "BETTER_AUTH_SECRET",
-        "BETTER_AUTH_BASE_PATH",
+        // Pulumi-generated: derived from other vars at deploy time
+        "JWKS_PUBLIC_KEY_URL",
         "BETTER_AUTH_BASE_URL",
-        "CORS_ORIGINS",
-        "STRIPE_API_KEY",
-        "STRIPE_WEBHOOK_SECRET",
+        // Pulumi-generated: IAM-specific database
         "IAM_DB_NAME",
-        "PORT",
+        // Pulumi-generated: database
+        "DB_NAME",
+        "DB_HOST",
+        "DB_PORT",
+        "DB_USER",
+        "DB_PASSWORD",
+        "DB_URL",
+        "DB_SSL",
+        "PGSSLMODE",
+        // Pulumi-generated: redis
+        "REDIS_URL",
+        "REDIS_HOST",
+        "REDIS_PORT",
         "REDIS_TLS",
+        // Pulumi-generated: kafka
+        "KAFKA_BROKERS",
+        "KAFKA_BOOTSTRAP_SERVERS",
+        "KAFKA_BOOTSTRAP_SERVERS_TLS",
+        "KAFKA_ZOOKEEPER_CONNECT",
+        "KAFKA_CLIENT_ID",
+        "KAFKA_GROUP_ID",
+        "KAFKA_SSL",
+        // Pulumi-generated: observability
+        "OTEL_APPLICATION_ID",
+        "OTEL_RESOURCE_ATTRIBUTES",
+        "OTEL_EXPORTER_OTLP_HEADERS",
+        "OTEL_TRACES_EXPORTER",
+        "OTEL_METRICS_EXPORTER",
+        "OTEL_LOGS_EXPORTER",
+        "OTEL_LEVEL",
+        "PROMETHEUS_URL",
+        "LOKI_URL",
+        "TEMPO_URL",
+        "NODE_TLS_REJECT_UNAUTHORIZED",
+        "MONITORING_SECRET",
+        // Pulumi-generated: docs
+        "DOCS_SERVER_URLS",
+        "DOCS_SERVER_DESCRIPTIONS",
     ];
-    const PLATFORM_PREFIXES: &[&str] = &["DB_", "S3_", "KAFKA_"];
     let upper = var_name.to_ascii_uppercase();
     PLATFORM_VARS.iter().any(|&v| v == upper)
-        || PLATFORM_PREFIXES.iter().any(|p| upper.starts_with(p))
 }
 
 #[cfg(test)]
@@ -1836,6 +2112,7 @@ mod tests {
                         cache: None,
                         queue: None,
                         object_store: None,
+                        redis_partition: None,
                     }),
                     routers: None,
                     metadata: None,
@@ -1990,8 +2267,8 @@ mod tests {
 
         // Simulate the logic from the main function
         let mut scoped_env_vars = Vec::new();
-        let mut existing_vars: std::collections::HashSet<(String, Option<String>)> =
-            std::collections::HashSet::new();
+        let mut existing_vars: HashSet<(String, Option<String>)> =
+            HashSet::new();
 
         for (service_name, env_vars) in docker_compose_env_vars {
             let project_type = manifest
@@ -2002,11 +2279,11 @@ mod tests {
 
             let (scope, scope_id) = match project_type {
                 Some(ProjectType::Service) => (
-                    crate::core::env_scope::EnvironmentVariableScope::Service,
+                    EnvScope::Service,
                     Some(service_name.clone()),
                 ),
                 Some(ProjectType::Worker) => (
-                    crate::core::env_scope::EnvironmentVariableScope::Worker,
+                    EnvScope::Worker,
                     Some(format!("{}-worker", service_name)),
                 ),
                 _ => continue,
@@ -2037,7 +2314,7 @@ mod tests {
                     );
                 }
 
-                scoped_env_vars.push(crate::core::env_scope::ScopedEnvVar {
+                scoped_env_vars.push(ScopedEnvVar {
                     name: key.clone(),
                     scope: scope.clone(),
                     scope_id: scope_id.clone(),
@@ -2061,7 +2338,7 @@ mod tests {
         for var in &scoped_env_vars {
             assert_eq!(
                 var.scope,
-                crate::core::env_scope::EnvironmentVariableScope::Service
+                EnvScope::Service
             );
             assert_eq!(var.scope_id, Some("my-service".to_string()));
         }
@@ -2092,15 +2369,15 @@ mod tests {
             build_env_var_component_map(temp_dir.path(), &manifest);
 
         // Simulate existing env vars from code
-        let mut scoped_env_vars = vec![crate::core::env_scope::ScopedEnvVar {
+        let mut scoped_env_vars = vec![ScopedEnvVar {
             name: "PORT".to_string(),
-            scope: crate::core::env_scope::EnvironmentVariableScope::Service,
+            scope: EnvScope::Service,
             scope_id: Some("my-service".to_string()),
             used_by: vec!["my-service".to_string()],
             value: None,
         }];
 
-        let mut existing_vars: std::collections::HashSet<(String, Option<String>)> =
+        let mut existing_vars: HashSet<(String, Option<String>)> =
             scoped_env_vars
                 .iter()
                 .map(|v| (v.name.clone(), v.scope_id.clone()))
@@ -2116,7 +2393,7 @@ mod tests {
 
             let (scope, scope_id) = match project_type {
                 Some(ProjectType::Service) => (
-                    crate::core::env_scope::EnvironmentVariableScope::Service,
+                    EnvScope::Service,
                     Some(service_name.clone()),
                 ),
                 _ => continue,
@@ -2128,7 +2405,7 @@ mod tests {
                     continue;
                 }
 
-                scoped_env_vars.push(crate::core::env_scope::ScopedEnvVar {
+                scoped_env_vars.push(ScopedEnvVar {
                     name: key.clone(),
                     scope: scope.clone(),
                     scope_id: scope_id.clone(),
@@ -2152,16 +2429,16 @@ mod tests {
     fn test_deduplicate_cross_scope_promotes_same_value_services() {
         // Two service copies with the same value → promoted to application scope
         let mut vars = vec![
-            crate::core::env_scope::ScopedEnvVar {
+            ScopedEnvVar {
                 name: "S3_BUCKET".to_string(),
-                scope: crate::core::env_scope::EnvironmentVariableScope::Service,
+                scope: EnvScope::Service,
                 scope_id: Some("billing".to_string()),
                 used_by: vec!["billing".to_string()],
                 value: Some("my-bucket".to_string()),
             },
-            crate::core::env_scope::ScopedEnvVar {
+            ScopedEnvVar {
                 name: "S3_BUCKET".to_string(),
-                scope: crate::core::env_scope::EnvironmentVariableScope::Service,
+                scope: EnvScope::Service,
                 scope_id: Some("platform-management".to_string()),
                 used_by: vec!["platform-management".to_string()],
                 value: Some("my-bucket".to_string()),
@@ -2172,7 +2449,7 @@ mod tests {
 
         // Should have one application-scoped entry with blank value
         assert_eq!(vars.len(), 1, "Expected 1 var after dedup, got {}", vars.len());
-        assert_eq!(vars[0].scope, crate::core::env_scope::EnvironmentVariableScope::Application);
+        assert_eq!(vars[0].scope, EnvScope::Application);
         assert_eq!(vars[0].scope_id, None);
         assert_eq!(vars[0].value, Some("".to_string()));
         assert_eq!(vars[0].name, "S3_BUCKET");
@@ -2182,16 +2459,16 @@ mod tests {
     fn test_deduplicate_cross_scope_keeps_different_values() {
         // Two service copies with different values → kept as-is
         let mut vars = vec![
-            crate::core::env_scope::ScopedEnvVar {
+            ScopedEnvVar {
                 name: "DB_NAME".to_string(),
-                scope: crate::core::env_scope::EnvironmentVariableScope::Service,
+                scope: EnvScope::Service,
                 scope_id: Some("billing".to_string()),
                 used_by: vec!["billing".to_string()],
                 value: Some("billing_db".to_string()),
             },
-            crate::core::env_scope::ScopedEnvVar {
+            ScopedEnvVar {
                 name: "DB_NAME".to_string(),
-                scope: crate::core::env_scope::EnvironmentVariableScope::Service,
+                scope: EnvScope::Service,
                 scope_id: Some("iam".to_string()),
                 used_by: vec!["iam".to_string()],
                 value: Some("iam_db".to_string()),
@@ -2202,30 +2479,30 @@ mod tests {
 
         // Both should remain — no majority (each value appears once)
         assert_eq!(vars.len(), 2, "Expected 2 vars after dedup, got {}", vars.len());
-        assert!(vars.iter().all(|v| v.scope == crate::core::env_scope::EnvironmentVariableScope::Service));
+        assert!(vars.iter().all(|v| v.scope == EnvScope::Service));
     }
 
     #[test]
     fn test_deduplicate_cross_scope_existing_app_scope_unchanged() {
         // Mix of app-scope + service copies → existing behavior (app gets majority, matching service copies removed)
         let mut vars = vec![
-            crate::core::env_scope::ScopedEnvVar {
+            ScopedEnvVar {
                 name: "REDIS_URL".to_string(),
-                scope: crate::core::env_scope::EnvironmentVariableScope::Application,
+                scope: EnvScope::Application,
                 scope_id: None,
                 used_by: vec![],
                 value: None,
             },
-            crate::core::env_scope::ScopedEnvVar {
+            ScopedEnvVar {
                 name: "REDIS_URL".to_string(),
-                scope: crate::core::env_scope::EnvironmentVariableScope::Service,
+                scope: EnvScope::Service,
                 scope_id: Some("billing".to_string()),
                 used_by: vec!["billing".to_string()],
                 value: Some("redis://localhost:6379".to_string()),
             },
-            crate::core::env_scope::ScopedEnvVar {
+            ScopedEnvVar {
                 name: "REDIS_URL".to_string(),
-                scope: crate::core::env_scope::EnvironmentVariableScope::Service,
+                scope: EnvScope::Service,
                 scope_id: Some("iam".to_string()),
                 used_by: vec!["iam".to_string()],
                 value: Some("redis://localhost:6379".to_string()),
@@ -2236,7 +2513,7 @@ mod tests {
 
         // Should have one application-scoped entry with the majority value
         assert_eq!(vars.len(), 1, "Expected 1 var after dedup, got {}", vars.len());
-        assert_eq!(vars[0].scope, crate::core::env_scope::EnvironmentVariableScope::Application);
+        assert_eq!(vars[0].scope, EnvScope::Application);
         assert_eq!(vars[0].scope_id, None);
         // The has_app_scope branch sets the app entry's value to the majority
         assert_eq!(vars[0].value, Some("redis://localhost:6379".to_string()));
@@ -2246,23 +2523,23 @@ mod tests {
     fn test_deduplicate_cross_scope_majority_with_minority_override() {
         // Three service copies: 2 same, 1 different → promote majority, keep minority
         let mut vars = vec![
-            crate::core::env_scope::ScopedEnvVar {
+            ScopedEnvVar {
                 name: "S3_REGION".to_string(),
-                scope: crate::core::env_scope::EnvironmentVariableScope::Service,
+                scope: EnvScope::Service,
                 scope_id: Some("billing".to_string()),
                 used_by: vec!["billing".to_string()],
                 value: Some("us-east-1".to_string()),
             },
-            crate::core::env_scope::ScopedEnvVar {
+            ScopedEnvVar {
                 name: "S3_REGION".to_string(),
-                scope: crate::core::env_scope::EnvironmentVariableScope::Service,
+                scope: EnvScope::Service,
                 scope_id: Some("iam".to_string()),
                 used_by: vec!["iam".to_string()],
                 value: Some("us-east-1".to_string()),
             },
-            crate::core::env_scope::ScopedEnvVar {
+            ScopedEnvVar {
                 name: "S3_REGION".to_string(),
-                scope: crate::core::env_scope::EnvironmentVariableScope::Service,
+                scope: EnvScope::Service,
                 scope_id: Some("special".to_string()),
                 used_by: vec!["special".to_string()],
                 value: Some("eu-west-1".to_string()),
@@ -2274,11 +2551,11 @@ mod tests {
         // Should have: 1 application-scoped (blank) + 1 minority service override
         assert_eq!(vars.len(), 2, "Expected 2 vars after dedup, got {}", vars.len());
 
-        let app_var = vars.iter().find(|v| v.scope == crate::core::env_scope::EnvironmentVariableScope::Application);
+        let app_var = vars.iter().find(|v| v.scope == EnvScope::Application);
         assert!(app_var.is_some(), "Should have an application-scoped entry");
         assert_eq!(app_var.unwrap().value, Some("".to_string()));
 
-        let svc_var = vars.iter().find(|v| v.scope == crate::core::env_scope::EnvironmentVariableScope::Service);
+        let svc_var = vars.iter().find(|v| v.scope == EnvScope::Service);
         assert!(svc_var.is_some(), "Should keep minority service override");
         assert_eq!(svc_var.unwrap().value, Some("eu-west-1".to_string()));
         assert_eq!(svc_var.unwrap().scope_id, Some("special".to_string()));
@@ -2288,9 +2565,9 @@ mod tests {
     fn test_deduplicate_cross_scope_single_entry_unchanged() {
         // Single service entry → no promotion
         let mut vars = vec![
-            crate::core::env_scope::ScopedEnvVar {
+            ScopedEnvVar {
                 name: "CUSTOM_VAR".to_string(),
-                scope: crate::core::env_scope::EnvironmentVariableScope::Service,
+                scope: EnvScope::Service,
                 scope_id: Some("billing".to_string()),
                 used_by: vec!["billing".to_string()],
                 value: Some("some-value".to_string()),
@@ -2300,7 +2577,92 @@ mod tests {
         deduplicate_cross_scope(&mut vars);
 
         assert_eq!(vars.len(), 1);
-        assert_eq!(vars[0].scope, crate::core::env_scope::EnvironmentVariableScope::Service);
+        assert_eq!(vars[0].scope, EnvScope::Service);
+    }
+
+    #[test]
+    fn test_deduplicate_cross_scope_fills_blank_from_siblings() {
+        // Service A has blank value, services B and C have "abc" → blank gets filled,
+        // then all three match and promote to application scope
+        let mut vars = vec![
+            ScopedEnvVar {
+                name: "API_KEY".to_string(),
+                scope: EnvScope::Service,
+                scope_id: Some("billing".to_string()),
+                used_by: vec!["billing".to_string()],
+                value: Some("".to_string()), // blank in docker-compose
+            },
+            ScopedEnvVar {
+                name: "API_KEY".to_string(),
+                scope: EnvScope::Service,
+                scope_id: Some("iam".to_string()),
+                used_by: vec!["iam".to_string()],
+                value: Some("abc123".to_string()),
+            },
+            ScopedEnvVar {
+                name: "API_KEY".to_string(),
+                scope: EnvScope::Service,
+                scope_id: Some("platform-management".to_string()),
+                used_by: vec!["platform-management".to_string()],
+                value: Some("abc123".to_string()),
+            },
+        ];
+
+        deduplicate_cross_scope(&mut vars);
+
+        // All three had the same value after fill-in → promoted to application scope
+        assert_eq!(vars.len(), 1, "Expected 1 var after dedup, got {}", vars.len());
+        assert_eq!(vars[0].scope, EnvScope::Application);
+        assert_eq!(vars[0].name, "API_KEY");
+    }
+
+    #[test]
+    fn test_deduplicate_cross_scope_blank_with_minority_override() {
+        // Service A blank, B and C have "abx", D has "abc"
+        // → blank gets filled with "abx" (majority), D kept as override
+        let mut vars = vec![
+            ScopedEnvVar {
+                name: "SETTING".to_string(),
+                scope: EnvScope::Service,
+                scope_id: Some("svc-a".to_string()),
+                used_by: vec!["svc-a".to_string()],
+                value: Some("".to_string()),
+            },
+            ScopedEnvVar {
+                name: "SETTING".to_string(),
+                scope: EnvScope::Service,
+                scope_id: Some("svc-b".to_string()),
+                used_by: vec!["svc-b".to_string()],
+                value: Some("abx".to_string()),
+            },
+            ScopedEnvVar {
+                name: "SETTING".to_string(),
+                scope: EnvScope::Service,
+                scope_id: Some("svc-c".to_string()),
+                used_by: vec!["svc-c".to_string()],
+                value: Some("abx".to_string()),
+            },
+            ScopedEnvVar {
+                name: "SETTING".to_string(),
+                scope: EnvScope::Service,
+                scope_id: Some("svc-d".to_string()),
+                used_by: vec!["svc-d".to_string()],
+                value: Some("abc".to_string()),
+            },
+        ];
+
+        deduplicate_cross_scope(&mut vars);
+
+        // Should have: 1 application-scoped (blank) + 1 minority service override for svc-d
+        assert_eq!(vars.len(), 2, "Expected 2 vars after dedup, got {}", vars.len());
+
+        let app_var = vars.iter().find(|v| v.scope == EnvScope::Application);
+        assert!(app_var.is_some(), "Should have an application-scoped entry");
+
+        let svc_var = vars.iter().find(|v| v.scope == EnvScope::Service);
+        assert!(svc_var.is_some(), "Should keep minority service override");
+        assert_eq!(svc_var.unwrap().value, Some("abc".to_string()));
+        assert_eq!(svc_var.unwrap().scope_id, Some("svc-d".to_string()));
     }
 
     #[test]

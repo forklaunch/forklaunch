@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::Write};
+use std::{collections::HashMap, io::Write, path::Path};
 
 use anyhow::{Context, Result, bail};
 use clap::ArgMatches;
@@ -6,11 +6,13 @@ use rustyline::{Editor, history::DefaultHistory};
 use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use crate::{
+    CliCommand,
     constants::{ERROR_FAILED_TO_PARSE_MANIFEST, WorkerType},
     core::{
         base_path::{RequiredLocation, find_app_root_path},
+        command::command,
         manifest::{ProjectType, application::ApplicationManifestData},
-        rendered_template::{RenderedTemplatesCache, write_rendered_templates},
+        rendered_template::{RenderedTemplate, RenderedTemplatesCache, write_rendered_templates},
         sync::{
             artifacts::{ArtifactType, ProjectSyncMetadata, sync_project_to_artifacts},
             detection::detect_worker_config,
@@ -34,7 +36,7 @@ impl WorkerSyncCommand {
 
 pub(crate) fn sync_worker_with_cache(
     worker_name: &str,
-    app_root_path: &std::path::Path,
+    app_root_path: &Path,
     manifest_data: &mut ApplicationManifestData,
     matches: &ArgMatches,
     prompts_map: &HashMap<String, HashMap<String, String>>,
@@ -52,7 +54,7 @@ pub(crate) fn sync_worker_with_cache(
             .iter()
             .find(|p| p.name == worker_name)
         {
-            log_warn!(stdout, "[WARN] Worker directory not found, but exists in manifest");
+            log_warn!(stdout, "Worker directory not found, but exists in manifest");
 
             let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
             let should_cleanup = prompt_for_confirmation(
@@ -61,7 +63,7 @@ pub(crate) fn sync_worker_with_cache(
             )?;
 
             if !should_cleanup {
-                log_warn!(stdout, "[INFO] Skipping cleanup");
+                log_warn!(stdout, "Skipping cleanup");
                 bail!("Worker directory not found: {}", worker_path.display());
             }
 
@@ -87,20 +89,20 @@ pub(crate) fn sync_worker_with_cache(
                 stdout,
             )?;
 
-            log_ok!(stdout, "[OK] Removed orphaned worker '{}'", worker_name);
+            log_ok!(stdout, "Removed orphaned worker '{}'", worker_name);
             return Ok(());
         } else {
-            log_error!(stdout, "[ERROR] Worker directory not found: {}", worker_path.display());
+            log_error!(stdout, "Worker directory not found: {}", worker_path.display());
             bail!("Worker directory not found: {}", worker_path.display());
         }
     }
 
     if manifest_data.projects.iter().any(|p| p.name == worker_name) {
-        log_ok!(stdout, "[INFO] Worker '{}' already synced", worker_name);
+        log_ok!(stdout, "Worker '{}' already synced", worker_name);
         return Ok(());
     }
 
-    log_info!(stdout, "[INFO] Detecting worker configuration from files...");
+    log_info!(stdout, "Detecting worker configuration from files...");
 
     let detected = detect_worker_config(&worker_path)?;
     display_detection_results(&detected, stdout)?;
@@ -146,16 +148,15 @@ pub(crate) fn sync_worker_with_cache(
         stdout,
     )?;
 
-    log_ok!(stdout, "[OK] Worker '{}' synced successfully", worker_name);
+    log_ok!(stdout, "Worker '{}' synced successfully", worker_name);
 
     Ok(())
 }
 
-impl crate::CliCommand for WorkerSyncCommand {
+impl CliCommand for WorkerSyncCommand {
     fn command(&self) -> clap::Command {
         use clap::Arg;
-        crate::core::command::command("worker", "Sync a specific worker to application artifacts")
-            .arg(
+        command("worker", "Sync a specific worker to application artifacts").arg(
                 Arg::new("name")
                     .help("The name of the worker")
                     .required(true),
@@ -208,7 +209,7 @@ impl crate::CliCommand for WorkerSyncCommand {
 
         rendered_templates_cache.insert(
             manifest_path.to_string_lossy().to_string(),
-            crate::core::rendered_template::RenderedTemplate {
+            RenderedTemplate {
                 path: manifest_path.clone(),
                 content: toml::to_string_pretty(&manifest_data)
                     .context("Failed to serialize manifest")?,

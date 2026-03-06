@@ -8,7 +8,11 @@ use termcolor::{ColorChoice, StandardStream, WriteColor};
 use super::CliCommand;
 use crate::{
     constants::{ERROR_FAILED_TO_SEND_REQUEST, error_failed_to_write_file, get_platform_management_api_url},
-    core::command::command,
+    core::{
+        command::command,
+        http_client,
+        validate::{require_auth, require_integration, require_manifest},
+    },
 };
 
 #[derive(Debug)]
@@ -63,11 +67,9 @@ impl CliCommand for PullCommand {
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        let _token = crate::core::validate::require_auth()?;
-        let (_app_root, manifest) = crate::core::validate::require_manifest(matches)?;
-        let app = crate::core::validate::require_integration(&manifest)?;
-
-        use crate::core::http_client;
+        let _token = require_auth()?;
+        let (_app_root, manifest) = require_manifest(matches)?;
+        let app = require_integration(&manifest)?;
 
         let region = matches
             .get_one::<String>("region")
@@ -101,11 +103,11 @@ impl CliCommand for PullCommand {
                 let content = response.text()?;
                 write(output, &content)
                     .with_context(|| error_failed_to_write_file(std::path::Path::new(output)))?;
-                log_ok!(stdout, "[OK] Config pulled to {}", output);
+                log_ok!(stdout, "Config pulled to {}", output);
             }
             _ => {
                 let err_text = response.text()?;
-                log_error!(stdout, "[ERROR] Failed to pull config: {}", err_text);
+                log_error!(stdout, "Failed to pull config: {}", err_text);
                 anyhow::bail!("Failed to pull config: {}", err_text);
             }
         }

@@ -1,5 +1,23 @@
 # @forklaunch/bunrun
 
+## 0.0.26
+
+### Patch Changes
+
+- Small bugs
+
+## 0.0.25
+
+### Patch Changes
+
+- Prevent 404 message hijacking and update packages
+
+## 0.0.24
+
+### Patch Changes
+
+- Fix multiline config injection and update packages
+
 ## 0.0.23
 
 ### Patch Changes

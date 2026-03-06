@@ -1,1 +1,16 @@
-../iam-base/.gitignore
+node_modules
+.idea
+.DS_Store
+
+lib
+
+.vscode
+
+*dist
+*lib
+
+temp
+
+.env.local
+public.pem
+private.pem

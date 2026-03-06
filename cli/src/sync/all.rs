@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fs, io::Write, path::Path};
+use std::{collections::{HashMap, HashSet}, fs, io::Write, path::Path};
 
 use anyhow::{Context, Result};
 use clap::{Arg, ArgAction, ArgMatches, Command};
@@ -19,7 +19,8 @@ use crate::{
         base_path::{RequiredLocation, find_app_root_path},
         command::command,
         docker::{DockerCompose, sync_docker_compose_env_vars},
-        manifest::application::ApplicationManifestData,
+        env_template::{generate_env_templates, sync_env_local_files},
+        manifest::{ProjectType, application::ApplicationManifestData},
         rendered_template::{RenderedTemplate, RenderedTemplatesCache, write_rendered_templates},
         sync::{
             artifacts::{ArtifactType, remove_project_from_artifacts},
@@ -47,7 +48,7 @@ pub fn sync_all_projects(
     manifest_data: &mut ApplicationManifestData,
     rendered_templates_cache: &mut RenderedTemplatesCache,
     confirm_all: bool,
-    prompts_map: &std::collections::HashMap<String, std::collections::HashMap<String, String>>,
+    prompts_map: &HashMap<String, HashMap<String, String>>,
     stdout: &mut StandardStream,
 ) -> Result<bool> {
     let modules_path = app_root_path.join(&manifest_data.modules_path);
@@ -58,7 +59,7 @@ pub fn sync_all_projects(
         return Ok(false);
     }
 
-    log_info!(stdout, "[INFO] Scanning modules directory: {}", modules_path.display());
+    log_info!(stdout, "Scanning modules directory: {}", modules_path.display());
 
     let existing_folders: HashSet<String> = fs::read_dir(&modules_path)?
         .filter_map(|entry| {
@@ -82,7 +83,7 @@ pub fn sync_all_projects(
 
     if !orphaned_projects.is_empty() {
         writeln!(stdout)?;
-        log_warn!(stdout, "[WARN] Found {} orphaned project(s) in manifest:", orphaned_projects.len());
+        log_warn!(stdout, "Found {} orphaned project(s) in manifest:", orphaned_projects.len());
         for project_name in &orphaned_projects {
             writeln!(stdout, "  - {}", project_name)?;
         }
@@ -99,7 +100,7 @@ pub fn sync_all_projects(
 
         if should_cleanup {
             for project_name in &orphaned_projects {
-                writeln!(stdout, "[INFO] Removing '{}'...", project_name)?;
+                log_info!(stdout, "Removing '{}'...", project_name);
 
                 let project = manifest_data
                     .projects
@@ -107,7 +108,7 @@ pub fn sync_all_projects(
                     .find(|p| &p.name == project_name);
                 let project_type = project
                     .map(|p| p.r#type.clone())
-                    .unwrap_or(crate::core::manifest::ProjectType::Library);
+                    .unwrap_or(ProjectType::Library);
 
                 remove_project_from_artifacts(
                     rendered_templates_cache,
@@ -127,10 +128,10 @@ pub fn sync_all_projects(
                 changes_made = true;
             }
 
-            log_ok!(stdout, "[OK] Cleaned up {} orphaned project(s)", orphaned_projects.len());
+            log_ok!(stdout, "Cleaned up {} orphaned project(s)", orphaned_projects.len());
             writeln!(stdout)?;
         } else {
-            log_warn!(stdout, "[INFO] Skipping cleanup of orphaned projects");
+            log_warn!(stdout, "Skipping cleanup of orphaned projects");
         }
     }
 
@@ -153,7 +154,7 @@ pub fn sync_all_projects(
         }
 
         writeln!(stdout)?;
-        log_info!(stdout, "[INFO] Processing: {}", project_name);
+        log_info!(stdout, "Processing: {}", project_name);
 
         // If the project is already in the manifest, use its known type and skip prompts
         let manifest_project = manifest_data
@@ -163,24 +164,24 @@ pub fn sync_all_projects(
 
         let project_type = if let Some(existing) = manifest_project {
             let init_type: InitializeType = match existing.r#type {
-                crate::core::manifest::ProjectType::Service => InitializeType::Service,
-                crate::core::manifest::ProjectType::Worker => InitializeType::Worker,
-                crate::core::manifest::ProjectType::Library => InitializeType::Library,
+                ProjectType::Service => InitializeType::Service,
+                ProjectType::Worker => InitializeType::Worker,
+                ProjectType::Library => InitializeType::Library,
             };
-            writeln!(stdout, "[INFO] Known as: {}", init_type.to_string())?;
+            log_info!(stdout, "Known as: {}", init_type.to_string());
             init_type
         } else {
             // New folder not in manifest — try to detect, then prompt if needed
             let detected_type = detect_project_type(&project_path)?;
 
             let project_type = if let Some(detected) = detected_type {
-                writeln!(stdout, "[INFO] Detected as: {}", detected.to_string())?;
+                log_info!(stdout, "Detected as: {}", detected.to_string());
                 detected
             } else {
-                log_warn!(stdout, "[WARN] Could not auto-detect project type");
+                log_warn!(stdout, "Could not auto-detect project type");
 
                 if confirm_all {
-                    log_warn!(stdout, "[WARN] Skipping '{}' (cannot auto-detect and no interaction allowed)", project_name);
+                    log_warn!(stdout, "Skipping '{}' (cannot auto-detect and no interaction allowed)", project_name);
                     continue;
                 }
 
@@ -206,7 +207,7 @@ pub fn sync_all_projects(
                 )?;
 
                 if type_str == "skip" {
-                    log_warn!(stdout, "[INFO] Skipping '{}' (not a forklaunch project)", project_name);
+                    log_info!(stdout, "Skipping '{}' (not a forklaunch project)", project_name);
                     continue;
                 }
 
@@ -229,7 +230,7 @@ pub fn sync_all_projects(
             };
 
             if !should_sync {
-                writeln!(stdout, "[INFO] Skipped")?;
+                log_info!(stdout, "Skipped");
                 continue;
             }
 
@@ -245,7 +246,7 @@ pub fn sync_all_projects(
 
         match project_type {
             InitializeType::Service => {
-                writeln!(stdout, "[INFO] Syncing service...")?;
+                log_info!(stdout, "Syncing service...");
 
                 match crate::sync::service::sync_service_with_cache(
                     &project_name,
@@ -269,12 +270,12 @@ pub fn sync_all_projects(
                         }
                     }
                     Err(e) => {
-                        log_error!(stdout, "[ERROR] {}", e);
+                        log_error!(stdout, "{}", e);
                     }
                 }
             }
             InitializeType::Worker => {
-                writeln!(stdout, "[INFO] Syncing worker...")?;
+                log_info!(stdout, "Syncing worker...");
 
                 match crate::sync::worker::sync_worker_with_cache(
                     &project_name,
@@ -298,12 +299,12 @@ pub fn sync_all_projects(
                         }
                     }
                     Err(e) => {
-                        log_error!(stdout, "[ERROR] {}", e);
+                        log_error!(stdout, "{}", e);
                     }
                 }
             }
             InitializeType::Library => {
-                writeln!(stdout, "[INFO] Syncing library...")?;
+                log_info!(stdout, "Syncing library...");
 
                 match crate::sync::library::sync_library_with_cache(
                     &project_name,
@@ -327,7 +328,7 @@ pub fn sync_all_projects(
                         }
                     }
                     Err(e) => {
-                        log_error!(stdout, "[ERROR] {}", e);
+                        log_error!(stdout, "{}", e);
                     }
                 }
             }
@@ -383,14 +384,12 @@ impl CliCommand for SyncAllCommand {
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-        let prompts_map: std::collections::HashMap<
-            String,
-            std::collections::HashMap<String, String>,
-        > = if let Some(prompts_json) = matches.get_one::<String>("prompts") {
-            json_from_str(prompts_json).with_context(|| "Failed to parse prompts JSON")?
-        } else {
-            std::collections::HashMap::new()
-        };
+        let prompts_map: HashMap<String, HashMap<String, String>> =
+            if let Some(prompts_json) = matches.get_one::<String>("prompts") {
+                json_from_str(prompts_json).with_context(|| "Failed to parse prompts JSON")?
+            } else {
+                HashMap::new()
+            };
 
         let (app_root_path, _) = find_app_root_path(matches, RequiredLocation::Application)?;
         let manifest_path = app_root_path.join(".forklaunch").join("manifest.toml");
@@ -415,17 +414,13 @@ impl CliCommand for SyncAllCommand {
         )?;
 
         let modules_path = app_root_path.join(&manifest_data.modules_path);
-        crate::core::env_template::generate_env_templates(
+        generate_env_templates(
             &modules_path,
             &manifest_data,
             &mut rendered_templates_cache,
             &mut stdout,
         )?;
-        crate::core::env_template::sync_env_local_files(
-            &modules_path,
-            &manifest_data,
-            &mut stdout,
-        )?;
+        sync_env_local_files(&modules_path, &manifest_data, &mut stdout)?;
 
         // Sync docker-compose environment sections with discovered env vars
         sync_docker_compose_with_env_vars(
@@ -438,7 +433,7 @@ impl CliCommand for SyncAllCommand {
 
         rendered_templates_cache.insert(
             manifest_path.to_string_lossy().to_string(),
-            crate::core::rendered_template::RenderedTemplate {
+            RenderedTemplate {
                 path: manifest_path.clone(),
                 content: toml::to_string_pretty(&manifest_data)
                     .context("Failed to serialize manifest")?,
@@ -454,7 +449,7 @@ impl CliCommand for SyncAllCommand {
         write_rendered_templates(&rendered_templates, false, &mut stdout)?;
 
         writeln!(stdout)?;
-        log_header!(stdout, Color::Green, "[OK] Sync all completed");
+        log_header!(stdout, Color::Green, "Sync all completed");
 
         Ok(())
     }
@@ -514,7 +509,7 @@ fn sync_docker_compose_with_env_vars(
             },
         );
 
-        log_ok!(stdout, "[OK] Synchronized docker-compose environment variables");
+        log_ok!(stdout, "Synchronized docker-compose environment variables");
     }
 
     Ok(())

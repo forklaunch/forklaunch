@@ -232,6 +232,51 @@ describe('serviceFactory', () => {
     });
   });
 
+  test('resolve with multiline factory destructuring', () => {
+    const multilineInjector = createConfigInjector(SchemaValidator(), {
+      x: {
+        type: string,
+        lifetime: Lifetime.Singleton,
+        value: 'hello'
+      },
+      y: {
+        type: number,
+        lifetime: Lifetime.Singleton,
+        value: 42
+      },
+      z: {
+        type: string,
+        lifetime: Lifetime.Transient,
+        factory: ({ x, y }: { x: string; y: number }) => `${x}-${y}`
+      }
+    });
+    expect(multilineInjector.resolve('z')).toBe('hello-42');
+  });
+
+  test('resolve with multiline factory destructuring and resolve/context', () => {
+    const multilineInjector = createConfigInjector(SchemaValidator(), {
+      x: {
+        type: string,
+        lifetime: Lifetime.Singleton,
+        value: 'hello'
+      },
+      y: {
+        type: number,
+        lifetime: Lifetime.Transient,
+        factory: (
+          {
+            x
+          }: {
+            x: string;
+          },
+          resolve: (token: string) => unknown,
+          context: Record<string, unknown>
+        ) => x.length + (context.extra as number)
+      }
+    });
+    expect(multilineInjector.resolve('y', { extra: 10 })).toBe(15);
+  });
+
   test('chained config injector', () => {
     expect({
       ...configInjector.instances,

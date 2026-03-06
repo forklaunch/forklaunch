@@ -99,6 +99,20 @@ pub(crate) struct ResourceInventory {
     pub(crate) cache: Option<String>,
     pub(crate) queue: Option<String>,
     pub(crate) object_store: Option<String>,
+    pub(crate) redis_partition: Option<u32>,
+}
+
+pub(crate) fn next_available_redis_partition(projects: &[ProjectEntry]) -> u32 {
+    let used: std::collections::HashSet<u32> = projects
+        .iter()
+        .filter_map(|p| p.resources.as_ref())
+        .filter_map(|r| r.redis_partition)
+        .collect();
+    let mut partition = 0u32;
+    while used.contains(&partition) {
+        partition += 1;
+    }
+    partition
 }
 
 #[derive(Debug, Serialize, Deserialize, Content, Clone)]

@@ -75,31 +75,31 @@ pub(crate) fn stream_deployment_status(
 
         match status.status.as_str() {
             "completed" => {
-                log_header!(stdout, Color::Green, "\n[OK] Operation successful!");
+                log_header!(stdout, Color::Green, "\nOperation successful!");
 
                 if let Some(endpoints) = status.endpoints {
                     writeln!(stdout)?;
                     if let Some(api) = endpoints.api {
-                        writeln!(stdout, "[INFO] API: {}", api)?;
+                        log_info!(stdout, "API: {}", api);
                     }
                     if let Some(docs) = endpoints.docs {
-                        writeln!(stdout, "[INFO] Docs: {}", docs)?;
+                        log_info!(stdout, "Docs: {}", docs);
                     }
                 }
                 break;
             }
             "failed" => {
-                log_header!(stdout, Color::Red, "\n[ERROR] Operation failed");
+                log_header!(stdout, Color::Red, "\nOperation failed");
 
                 if let Some(error) = status.error {
-                    writeln!(stdout, "[ERROR] Error: {}", error)?;
+                    log_error!(stdout, "Error: {}", error);
                 }
                 bail!("Operation failed");
             }
             "cancelled" => {
                 log_header!(stdout, Color::Yellow, "\n[CANCELLED] Deployment was cancelled");
                 if let Some(error) = status.error {
-                    writeln!(stdout, "[INFO] {}", error)?;
+                    log_info!(stdout, "{}", error);
                 }
                 bail!("Deployment cancelled");
             }

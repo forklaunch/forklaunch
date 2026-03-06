@@ -1,5 +1,38 @@
 # @forklaunch/hyper-express
 
+## 0.11.9
+
+### Patch Changes
+
+- Small bugs
+- Updated dependencies
+  - @forklaunch/validator@0.10.32
+  - @forklaunch/common@0.6.32
+  - @forklaunch/core@0.18.5
+  - @forklaunch/ws@0.2.3
+
+## 0.11.8
+
+### Patch Changes
+
+- Prevent 404 message hijacking and update packages
+- Updated dependencies
+  - @forklaunch/validator@0.10.31
+  - @forklaunch/common@0.6.31
+  - @forklaunch/core@0.18.4
+  - @forklaunch/ws@0.2.2
+
+## 0.11.7
+
+### Patch Changes
+
+- Fix multiline config injection and update packages
+- Updated dependencies
+  - @forklaunch/validator@0.10.30
+  - @forklaunch/common@0.6.30
+  - @forklaunch/core@0.18.3
+  - @forklaunch/ws@0.2.1
+
 ## 0.11.6
 
 ### Patch Changes

@@ -2,6 +2,7 @@
 macro_rules! log_info {
     ($out:expr, $($arg:tt)*) => {{
         $out.set_color(::termcolor::ColorSpec::new().set_fg(Some(::termcolor::Color::Cyan)))?;
+        write!($out, "[INFO] ")?;
         writeln!($out, $($arg)*)?;
         $out.reset()?;
     }};
@@ -11,6 +12,7 @@ macro_rules! log_info {
 macro_rules! log_ok {
     ($out:expr, $($arg:tt)*) => {{
         $out.set_color(::termcolor::ColorSpec::new().set_fg(Some(::termcolor::Color::Green)))?;
+        write!($out, "[OK] ")?;
         writeln!($out, $($arg)*)?;
         $out.reset()?;
     }};
@@ -20,6 +22,7 @@ macro_rules! log_ok {
 macro_rules! log_warn {
     ($out:expr, $($arg:tt)*) => {{
         $out.set_color(::termcolor::ColorSpec::new().set_fg(Some(::termcolor::Color::Yellow)))?;
+        write!($out, "[WARN] ")?;
         writeln!($out, $($arg)*)?;
         $out.reset()?;
     }};
@@ -29,6 +32,7 @@ macro_rules! log_warn {
 macro_rules! log_error {
     ($out:expr, $($arg:tt)*) => {{
         $out.set_color(::termcolor::ColorSpec::new().set_fg(Some(::termcolor::Color::Red)))?;
+        write!($out, "[ERROR] ")?;
         writeln!($out, $($arg)*)?;
         $out.reset()?;
     }};

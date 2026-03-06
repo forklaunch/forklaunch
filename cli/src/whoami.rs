@@ -6,7 +6,10 @@ use termcolor::{ColorChoice, StandardStream};
 
 use crate::{
     CliCommand,
-    core::command::command,
+    core::{
+        command::command,
+        validate::require_auth,
+    },
 };
 
 #[derive(Debug)]
@@ -25,7 +28,7 @@ impl CliCommand for WhoAmICommand {
 
     fn handler(&self, _matches: &ArgMatches) -> Result<()> {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
-        let token = crate::core::validate::require_auth()?;
+        let token = require_auth()?;
         // TODO: parse token and get all relevant user information
         writeln!(stdout, "{}", token)?;
         Ok(())

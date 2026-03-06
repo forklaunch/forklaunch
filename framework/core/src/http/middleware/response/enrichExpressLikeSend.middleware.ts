@@ -98,14 +98,6 @@ export function enrichExpressLikeSend<
     return;
   }
 
-  if (res.statusCode === 404) {
-    res.type('text/plain');
-    res.status(404);
-    req.openTelemetryCollector?.error('Not Found');
-    originalSend.call(instance, 'Not Found');
-    errorSent = true;
-  }
-
   let responses;
   if (
     req.contractDetails.responses == null &&

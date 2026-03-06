@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use ignore::gitignore::Gitignore;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
@@ -14,19 +15,36 @@ pub struct LibraryDefinition {
     pub version: String,
 }
 
+/// A dependency discovered during topology scanning (npm package or api-call).
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct CodeNode {
+pub struct Dependency {
     pub name: String,
     #[serde(rename = "type")]
-    pub node_type: String, // "local" | "npm" | "api-call" | "dev-dependency"
+    pub dep_type: String, // "npm" | "api-call" | "dev-dependency"
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub version: Option<String>, // for npm
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub children: Option<Vec<CodeNode>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub path: Option<String>, // absolute or relative path for local files
+    pub version: Option<String>,
     #[serde(rename = "targetService", skip_serializing_if = "Option::is_none")]
-    pub target_service: Option<String>, // for api-call type: target service name
+    pub target_service: Option<String>,
+    /// Local source files that import this dependency.
+    #[serde(rename = "sourceFiles")]
+    pub source_files: Vec<String>,
+}
+
+/// Flat topology for a route/controller: deduplicated deps with per-dep source file lists.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Topology {
+    pub deps: Vec<Dependency>,
+}
+
+/// Internal recursive node used during scanning (not serialized into the manifest).
+#[derive(Debug, Clone)]
+struct CodeNode {
+    name: String,
+    node_type: String, // "local" | "npm" | "api-call" | "dev-dependency"
+    version: Option<String>,
+    children: Option<Vec<CodeNode>>,
+    path: Option<String>,
+    target_service: Option<String>,
 }
 
 pub fn scan_project_libraries(package_json_path: &Path) -> Result<Vec<LibraryDefinition>> {
@@ -61,9 +79,100 @@ pub fn scan_route_topology(
     file_path: &Path,
     modules_root: &Path,
     package_json_path: &Path,
-) -> Result<CodeNode> {
+) -> Result<Topology> {
     let mut scanner = ImportScanner::new(modules_root, package_json_path);
     scanner.scan(file_path)
+}
+
+/// Flatten a CodeNode tree into a Topology with deduplicated deps, each tracking its source files.
+fn flatten_topology(root: &CodeNode) -> Topology {
+    // dep_key → (Dependency, ordered source files)
+    let mut dep_map: HashMap<String, (Dependency, Vec<String>)> = HashMap::new();
+    let mut dep_order: Vec<String> = Vec::new(); // preserve insertion order
+
+    /// Recursively collect deps. `parent_source` is the local file that imports the dep.
+    fn collect(
+        node: &CodeNode,
+        parent_source: Option<&str>,
+        dep_map: &mut HashMap<String, (Dependency, Vec<String>)>,
+        dep_order: &mut Vec<String>,
+        visited: &mut HashSet<String>,
+    ) {
+        match node.node_type.as_str() {
+            "local" => {
+                let source = node.path.as_deref();
+                // Guard against cycles in the tree
+                let visit_key = source.unwrap_or("").to_string();
+                if !visited.insert(visit_key.clone()) {
+                    return;
+                }
+                // Emit local files as deps with version "local"
+                if let Some(path) = source {
+                    let key = format!("local:{}", path);
+                    let entry = dep_map.entry(key.clone()).or_insert_with(|| {
+                        dep_order.push(key.clone());
+                        (
+                            Dependency {
+                                name: path.to_string(),
+                                dep_type: "local".to_string(),
+                                version: Some("local".to_string()),
+                                target_service: None,
+                                source_files: Vec::new(),
+                            },
+                            Vec::new(),
+                        )
+                    });
+                    if let Some(src) = parent_source {
+                        if !entry.1.contains(&src.to_string()) {
+                            entry.1.push(src.to_string());
+                        }
+                    }
+                }
+                if let Some(ref children) = node.children {
+                    for child in children {
+                        collect(child, source, dep_map, dep_order, visited);
+                    }
+                }
+            }
+            "npm" | "api-call" | "dev-dependency" => {
+                let key = format!("{}:{}", node.node_type, node.name);
+                let entry = dep_map.entry(key.clone()).or_insert_with(|| {
+                    dep_order.push(key.clone());
+                    (
+                        Dependency {
+                            name: node.name.clone(),
+                            dep_type: node.node_type.clone(),
+                            version: node.version.clone(),
+                            target_service: node.target_service.clone(),
+                            source_files: Vec::new(),
+                        },
+                        Vec::new(),
+                    )
+                });
+                if let Some(src) = parent_source {
+                    if !entry.1.contains(&src.to_string()) {
+                        entry.1.push(src.to_string());
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let mut visited = HashSet::new();
+    collect(root, None, &mut dep_map, &mut dep_order, &mut visited);
+
+    let deps = dep_order
+        .into_iter()
+        .filter_map(|key| {
+            dep_map.remove(&key).map(|(mut dep, sources)| {
+                dep.source_files = sources;
+                dep
+            })
+        })
+        .collect();
+
+    Topology { deps }
 }
 
 /// Reusable import scanner that caches results across multiple scan() calls.
@@ -82,6 +191,7 @@ pub struct ImportScanner {
     #[allow(dead_code)]
     app_name: String,            // e.g., "forklaunch-platform"
     node_version: Option<String>, // Node.js version from Dockerfile (e.g., "25")
+    flignore: Option<Gitignore>, // .flignore matcher loaded from app_root
 }
 
 impl ImportScanner {
@@ -115,6 +225,15 @@ impl ImportScanner {
         // Parse Node.js version from Dockerfile
         let node_version = Self::parse_node_version_from_dockerfile(modules_root);
 
+        // Load .flignore from app_root (if present)
+        let flignore_path = canonical_app_root.join(".flignore");
+        let flignore = if flignore_path.exists() {
+            let (gi, _err) = Gitignore::new(&flignore_path);
+            Some(gi)
+        } else {
+            None
+        };
+
         Self {
             modules_root: modules_root.canonicalize().unwrap_or_else(|_| modules_root.to_path_buf()),
             app_root: canonical_app_root,
@@ -130,16 +249,20 @@ impl ImportScanner {
             },
             app_name: app_name.to_string(),
             node_version,
+            flignore,
         }
     }
 
-    /// Normalize "@scope/name/subpath" to "@scope/name" for package.json lookup
+    /// Normalize import paths to bare package names for package.json lookup.
+    /// "@scope/name/subpath" → "@scope/name", "zod/v3" → "zod"
     fn normalize_scoped_package(import_path: &str) -> String {
         if import_path.starts_with('@') {
             let parts: Vec<&str> = import_path.split('/').collect();
             if parts.len() >= 2 {
                 return format!("{}/{}", parts[0], parts[1]);
             }
+        } else if let Some(idx) = import_path.find('/') {
+            return import_path[..idx].to_string();
         }
         import_path.to_string()
     }
@@ -246,7 +369,12 @@ impl ImportScanner {
         Ok(result)
     }
 
-    pub fn scan(&mut self, file_path: &Path) -> Result<CodeNode> {
+    pub fn scan(&mut self, file_path: &Path) -> Result<Topology> {
+        let root = self.scan_node(file_path)?;
+        Ok(flatten_topology(&root))
+    }
+
+    fn scan_node(&mut self, file_path: &Path) -> Result<CodeNode> {
         // Canonicalize to ensure cache/visited checks work regardless of ../. in paths
         let file_path = file_path.canonicalize().unwrap_or_else(|_| file_path.to_path_buf());
         let file_path = file_path.as_path();
@@ -256,6 +384,26 @@ impl ImportScanner {
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
+
+        // Skip files excluded by .flignore
+        if let Some(ref gi) = self.flignore {
+            let relative = file_path
+                .strip_prefix(&self.app_root)
+                .unwrap_or(file_path);
+            if gi
+                .matched_path_or_any_parents(relative, false)
+                .is_ignore()
+            {
+                return Ok(CodeNode {
+                    name: file_name,
+                    node_type: "local".to_string(),
+                    version: None,
+                    children: None,
+                    path: Some(relative.to_string_lossy().to_string()),
+                    target_service: None,
+                });
+            }
+        }
 
         // Return cached result if this file was already fully scanned (DAG dedup)
         if let Some(cached) = self.result_cache.get(file_path) {
@@ -284,12 +432,12 @@ impl ImportScanner {
 
         for (import, is_type_only) in imports {
             if import.starts_with(".") {
-                // Local import
+                // Local import — recurse into local files
                 let resolved = self.resolve_local_import(file_dir, &import);
                 if let Some(resolved_path) = resolved {
                     // Only scan if it's inside the modules root to avoid escaping
                     if resolved_path.starts_with(&self.modules_root) {
-                        if let Ok(child_node) = self.scan(&resolved_path) {
+                        if let Ok(child_node) = self.scan_node(&resolved_path) {
                             children.push(child_node);
                         }
                     }
@@ -670,35 +818,24 @@ mod tests {
         let json = serde_json::to_string_pretty(&topology);
         assert!(json.is_ok(), "Should serialize to JSON");
 
-        // Verify root node
-        assert_eq!(topology.name, "sampleWorker.controller");
-        assert_eq!(topology.node_type, "local");
-        assert!(topology.path.is_some());
-
-        // Verify it found dependencies
-        assert!(topology.children.is_some(), "Should have dependencies");
-        let children = topology.children.as_ref().unwrap();
-        assert!(!children.is_empty(), "Should have at least one dependency");
+        // Verify flat topology structure
+        assert!(!topology.deps.is_empty(), "Should have dependencies");
 
         // Print topology for debugging
         println!("=== TOPOLOGY SCAN RESULTS ===");
-        println!("Root: {} (type: {})", topology.name, topology.node_type);
-        println!("Dependencies found: {}", children.len());
+        println!("Dependencies found: {}", topology.deps.len());
 
-        for child in children {
-            println!("  - {} (type: {}, version: {:?})",
-                child.name,
-                child.node_type,
-                child.version
-            );
+        for dep in &topology.deps {
+            println!("  - {} (type: {}, version: {:?}, sourceFiles: {:?})", dep.name, dep.dep_type, dep.version, dep.source_files);
         }
 
-        // Verify we found both npm and local dependencies
-        let has_npm = children.iter().any(|c| c.node_type == "npm");
-        let has_local = children.iter().any(|c| c.node_type == "local");
-
+        // Verify we found npm dependencies
+        let has_npm = topology.deps.iter().any(|d| d.dep_type == "npm");
         assert!(has_npm, "Should find npm dependencies");
-        assert!(has_local, "Should find local dependencies");
+
+        // Verify deps have source files
+        let has_source_files = topology.deps.iter().any(|d| !d.source_files.is_empty());
+        assert!(has_source_files, "At least some deps should have source files");
 
         println!("\n=== JSON OUTPUT ===");
         println!("{}", json.unwrap());
@@ -723,31 +860,19 @@ mod tests {
 
         let topology = result.unwrap();
 
-        // Verify root node
-        assert_eq!(topology.name, "plan.controller");
-        assert_eq!(topology.node_type, "local");
-        assert!(topology.path.is_some());
-
-        // Verify it found dependencies
-        assert!(topology.children.is_some(), "Service should have dependencies");
-        let children = topology.children.as_ref().unwrap();
-        assert!(!children.is_empty(), "Service should have at least one dependency");
+        // Verify flat topology
+        assert!(!topology.deps.is_empty(), "Service should have dependencies");
 
         println!("=== SERVICE TOPOLOGY SCAN ===");
-        println!("Root: {} (type: {})", topology.name, topology.node_type);
-        println!("Dependencies found: {}", children.len());
+        println!("Dependencies found: {}", topology.deps.len());
 
-        for child in children {
-            println!("  - {} (type: {}, version: {:?})",
-                child.name,
-                child.node_type,
-                child.version
-            );
+        for dep in &topology.deps {
+            println!("  - {} (type: {}, version: {:?}, sourceFiles: {:?})", dep.name, dep.dep_type, dep.version, dep.source_files);
         }
 
         // Services should have npm dependencies like @forklaunch packages
-        let has_forklaunch = children.iter().any(|c|
-            c.name.starts_with("@forklaunch")
+        let has_forklaunch = topology.deps.iter().any(|d|
+            d.name.starts_with("@forklaunch")
         );
         assert!(has_forklaunch, "Service should use @forklaunch packages");
     }
@@ -800,7 +925,11 @@ mod tests {
             ImportScanner::normalize_scoped_package("stripe"),
             "stripe"
         );
-        // Non-scoped with subpath (shouldn't happen in practice but handled)
+        // Non-scoped with subpath
+        assert_eq!(
+            ImportScanner::normalize_scoped_package("zod/v3"),
+            "zod"
+        );
         assert_eq!(
             ImportScanner::normalize_scoped_package("express"),
             "express"
@@ -895,57 +1024,30 @@ mod tests {
 
         let topology = result.unwrap();
 
-        // Root should be local
-        assert_eq!(topology.node_type, "local");
-        assert!(topology.children.is_some(), "Should have children");
+        // Flat topology should have deps
+        assert!(!topology.deps.is_empty(), "Should have npm dependencies");
 
-        let children = topology.children.as_ref().unwrap();
-
-        // Find npm children and verify they have versions
-        let npm_children: Vec<&CodeNode> = children.iter()
-            .filter(|c| c.node_type == "npm")
+        // Find npm deps and verify they have versions
+        let npm_deps: Vec<&Dependency> = topology.deps.iter()
+            .filter(|d| d.dep_type == "npm")
             .collect();
 
-        assert!(!npm_children.is_empty(), "Should have npm dependencies");
+        assert!(!npm_deps.is_empty(), "Should have npm dependencies");
 
         println!("=== ROUTE TOPOLOGY NPM VERSIONS ===");
-        for npm_dep in &npm_children {
-            println!("  {} -> version: {:?}", npm_dep.name, npm_dep.version);
-            // Every npm dep should have a version (from package.json)
+        for npm_dep in &npm_deps {
+            println!("  {} -> version: {:?}, sourceFiles: {:?}", npm_dep.name, npm_dep.version, npm_dep.source_files);
             assert!(
                 npm_dep.version.is_some(),
                 "npm dep '{}' should have a version",
                 npm_dep.name
             );
-            // Version should not be empty
             let version = npm_dep.version.as_ref().unwrap();
             assert!(
                 !version.is_empty(),
                 "npm dep '{}' version should not be empty",
                 npm_dep.name
             );
-        }
-
-        // Also check nested local children for npm deps with versions
-        let local_children: Vec<&CodeNode> = children.iter()
-            .filter(|c| c.node_type == "local")
-            .collect();
-
-        for local_child in &local_children {
-            if let Some(nested) = &local_child.children {
-                let nested_npm: Vec<&CodeNode> = nested.iter()
-                    .filter(|c| c.node_type == "npm")
-                    .collect();
-                for npm_dep in &nested_npm {
-                    println!("  (nested in {}) {} -> version: {:?}",
-                        local_child.name, npm_dep.name, npm_dep.version);
-                    assert!(
-                        npm_dep.version.is_some(),
-                        "Nested npm dep '{}' in '{}' should have a version",
-                        npm_dep.name, local_child.name
-                    );
-                }
-            }
         }
     }
 
@@ -980,30 +1082,24 @@ mod tests {
                 );
 
                 let topo = topology.unwrap();
-                println!("    Root: {} (type: {})", topo.name, topo.node_type);
 
-                if let Some(children) = &topo.children {
-                    for child in children {
-                        match child.node_type.as_str() {
-                            "npm" => println!("    npm: {} @ {}", child.name,
-                                child.version.as_deref().unwrap_or("?")),
-                            "local" => println!("    local: {} ({})", child.name,
-                                child.path.as_deref().unwrap_or("?")),
-                            _ => {}
-                        }
+                for dep in &topo.deps {
+                    match dep.dep_type.as_str() {
+                        "npm" => println!("    npm: {} @ {}", dep.name,
+                            dep.version.as_deref().unwrap_or("?")),
+                        "api-call" => println!("    api-call: {} -> {}", dep.name,
+                            dep.target_service.as_deref().unwrap_or("?")),
+                        _ => {}
                     }
+                }
 
-                    // Verify npm deps have versions
-                    let npm_deps: Vec<&CodeNode> = children.iter()
-                        .filter(|c| c.node_type == "npm")
-                        .collect();
-                    for dep in &npm_deps {
-                        assert!(
-                            dep.version.is_some() && !dep.version.as_ref().unwrap().is_empty(),
-                            "Route {} {} handler '{}': npm dep '{}' should have version",
-                            route.method, route.path, route.handler, dep.name
-                        );
-                    }
+                // Verify npm deps have versions
+                for dep in topo.deps.iter().filter(|d| d.dep_type == "npm") {
+                    assert!(
+                        dep.version.is_some() && !dep.version.as_ref().unwrap().is_empty(),
+                        "Route {} {} handler '{}': npm dep '{}' should have version",
+                        route.method, route.path, route.handler, dep.name
+                    );
                 }
             } else {
                 println!("    (no source mapping for handler '{}')", route.handler);

@@ -163,7 +163,7 @@ pub fn generate_env_templates(
             },
         );
 
-        log_ok!(stdout, "[OK] Generated root .env.template");
+        log_ok!(stdout, "Generated root .env.template");
     }
 
     let mut symlink_templates: Vec<SymlinkTemplate> = Vec::new();
@@ -216,7 +216,7 @@ pub fn generate_env_templates(
                 },
             );
 
-            log_ok!(stdout, "[OK] Generated .env.template for {}", project_name);
+            log_ok!(stdout, "Generated .env.template for {}", project_name);
         }
     }
 
@@ -230,7 +230,7 @@ pub fn generate_env_templates(
                 .and_then(|p| p.file_name())
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default();
-            log_ok!(stdout, "[OK] Symlinked .env.template for worker {}", worker_name);
+            log_ok!(stdout, "Symlinked .env.template for worker {}", worker_name);
         }
     }
 
@@ -286,7 +286,7 @@ pub fn sync_env_local_files(
             let mut var_names: Vec<&String> = missing_root_vars.keys().collect();
             var_names.sort();
 
-            log_info!(stdout, "[INFO] Added {} missing application env var(s) to {}: {}", missing_root_vars.len(), root_env_local.display(), var_names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
+            log_info!(stdout, "Added {} missing application env var(s) to {}: {}", missing_root_vars.len(), root_env_local.display(), var_names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
         }
     }
 
@@ -329,7 +329,7 @@ pub fn sync_env_local_files(
             let mut var_names: Vec<&String> = missing_vars.keys().collect();
             var_names.sort();
 
-            log_info!(stdout, "[INFO] Added {} missing env var(s) to {}: {}", missing_vars.len(), env_local_path.display(), var_names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
+            log_info!(stdout, "Added {} missing env var(s) to {}: {}", missing_vars.len(), env_local_path.display(), var_names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
         }
     }
 
