@@ -221,23 +221,7 @@ export class S3ObjectStore implements ObjectStore<S3Client> {
       throw new Error('S3 did not return a stream');
     }
 
-    const reader = webStream.getReader();
-    const nodeStream = new Readable({
-      async read() {
-        try {
-          while (true) {
-            const { value, done } = await reader.read();
-            if (done) break;
-            this.push(value);
-          }
-          this.push(null);
-        } catch (err) {
-          this.destroy(err as Error);
-        }
-      }
-    });
-
-    return nodeStream;
+    return Readable.fromWeb(webStream as Parameters<typeof Readable.fromWeb>[0]);
   }
 
   /**
