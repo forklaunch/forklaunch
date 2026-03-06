@@ -1,5 +1,11 @@
 # @forklaunch/interfaces-iam
 
+## 0.8.16
+
+### Patch Changes
+
+- small nits
+
 ## 0.8.15
 
 ### Patch Changes

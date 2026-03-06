@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/implementation-billing-stripe",
-  "version": "0.5.15",
+  "version": "0.5.16",
   "description": "Stripe implementation for forklaunch billing",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {

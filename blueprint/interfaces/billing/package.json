@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/interfaces-billing",
-  "version": "0.8.15",
+  "version": "0.8.16",
   "description": "Billing interfaces for forklaunch",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {

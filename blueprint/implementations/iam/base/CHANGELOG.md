@@ -1,5 +1,13 @@
 # @forklaunch/implementation-iam-base
 
+## 0.8.17
+
+### Patch Changes
+
+- small nits
+- Updated dependencies
+  - @forklaunch/interfaces-iam@0.8.16
+
 ## 0.8.16
 
 ### Patch Changes

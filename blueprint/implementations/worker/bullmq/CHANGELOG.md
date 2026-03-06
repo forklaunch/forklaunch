@@ -1,5 +1,13 @@
 # @forklaunch/implementation-worker-bullmq
 
+## 0.8.16
+
+### Patch Changes
+
+- small nits
+- Updated dependencies
+  - @forklaunch/interfaces-worker@0.7.16
+
 ## 0.8.15
 
 ### Patch Changes

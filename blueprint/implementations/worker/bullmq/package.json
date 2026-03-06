@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/implementation-worker-bullmq",
-  "version": "0.8.15",
+  "version": "0.8.16",
   "description": "BullMQ implementation for forklaunch workers",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {

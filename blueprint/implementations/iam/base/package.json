@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/implementation-iam-base",
-  "version": "0.8.16",
+  "version": "0.8.17",
   "description": "IAM basic implementation for forklaunch",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {

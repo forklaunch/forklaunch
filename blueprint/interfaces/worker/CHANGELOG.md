@@ -1,5 +1,11 @@
 # @forklaunch/interfaces-worker
 
+## 0.7.16
+
+### Patch Changes
+
+- small nits
+
 ## 0.7.15
 
 ### Patch Changes
