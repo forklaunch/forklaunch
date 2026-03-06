@@ -1,5 +1,11 @@
 # @forklaunch/interfaces-billing
 
+## 0.8.17
+
+### Patch Changes
+
+- package bump
+
 ## 0.8.16
 
 ### Patch Changes

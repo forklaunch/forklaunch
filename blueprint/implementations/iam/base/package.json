@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/implementation-iam-base",
-  "version": "0.8.17",
+  "version": "0.8.18",
   "description": "IAM basic implementation for forklaunch",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -48,11 +48,11 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "^0.6.31",
-    "@forklaunch/core": "^0.18.4",
+    "@forklaunch/common": "^0.6.32",
+    "@forklaunch/core": "^0.18.5",
     "@forklaunch/interfaces-iam": "workspace:*",
-    "@forklaunch/internal": "^0.3.31",
-    "@forklaunch/validator": "^0.10.31",
+    "@forklaunch/internal": "^0.3.32",
+    "@forklaunch/validator": "^0.10.32",
     "@mikro-orm/core": "^6.6.9",
     "@sinclair/typebox": "^0.34.48",
     "ajv": "^8.18.0",

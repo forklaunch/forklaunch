@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/core",
-  "version": "0.18.4",
+  "version": "0.18.5",
   "description": "forklaunch-js core package. Contains useful building blocks.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {

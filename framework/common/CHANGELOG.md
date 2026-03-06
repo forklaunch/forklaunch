@@ -1,5 +1,11 @@
 # @forklaunch/common
 
+## 0.6.32
+
+### Patch Changes
+
+- Small bugs
+
 ## 0.6.31
 
 ### Patch Changes
