@@ -8,4 +8,4 @@ A TypeScript-first backend framework for building typed, modular Node.js service
 
 # Rules
 
-- Do not use `any` as a type. Use proper TypeScript types instead.
+- **Never use `any` as a type.** Use `unknown`, a specific type, or a generic parameter instead.
