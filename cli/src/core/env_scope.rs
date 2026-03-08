@@ -381,13 +381,9 @@ mod tests {
             vec![
                 EnvVarUsage {
                     var_name: "OTEL_EXPORTER_OTLP_ENDPOINT".to_string(),
-                    line: 1,
-                    column: 0,
                 },
                 EnvVarUsage {
                     var_name: "PORT".to_string(),
-                    line: 2,
-                    column: 0,
                 },
             ],
         );
@@ -425,8 +421,6 @@ mod tests {
             "billing".to_string(),
             vec![EnvVarUsage {
                 var_name: "PLATFORM_MANAGEMENT_URL".to_string(),
-                line: 1,
-                column: 0,
             }],
         );
 

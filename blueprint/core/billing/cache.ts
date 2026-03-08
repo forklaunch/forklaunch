@@ -5,21 +5,7 @@
 
 import type { ResourceLimits } from './feature-flags';
 
-/**
- * Cache-like interface that cache services depend on.
- * Any cache implementation supporting these methods can be used.
- */
-export interface CacheLike {
-  readRecord<T>(key: string): Promise<{ value: T }>;
-  putRecord<T>(record: {
-    key: string;
-    value: T;
-    ttlMilliseconds: number;
-  }): Promise<void>;
-  deleteRecord(key: string): Promise<void>;
-  listKeys(prefix: string): Promise<string[]>;
-  deleteBatchRecords(keys: string[]): Promise<void>;
-}
+import type { TtlCache } from '@forklaunch/core/cache';
 
 // Billing cache key prefixes
 const SUBSCRIPTION_CACHE_PREFIX = 'billing:subscription:';
@@ -48,7 +34,7 @@ export type EntitlementCacheData = {
   source: 'db' | 'external';
 };
 
-export type BillingCacheLike = CacheLike;
+export type BillingCacheLike = TtlCache;
 
 export type BillingCacheService = {
   getCachedSubscription: (

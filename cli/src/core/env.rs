@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fs,
     io::Write,
     path::{Path, PathBuf},
@@ -112,6 +112,7 @@ impl<'de> Deserialize<'de> for Env {
             Version,
             DocsPath,
             BetterAuthSecret,
+            BetterAuthBasePath,
             HmacSecretKey,
             JwksPublicKeyUrl,
             Other(String),
@@ -186,6 +187,7 @@ impl<'de> Deserialize<'de> for Env {
                         Field::Version => env.version = Some(map.next_value()?),
                         Field::DocsPath => env.docs_path = Some(map.next_value()?),
                         Field::BetterAuthSecret => env.better_auth_secret = Some(map.next_value()?),
+                        Field::BetterAuthBasePath => env.better_auth_base_path = Some(map.next_value()?),
                         Field::HmacSecretKey => env.hmac_secret_key = Some(map.next_value()?),
                         Field::JwksPublicKeyUrl => {
                             env.jwks_public_key_url = Some(map.next_value()?)
@@ -206,8 +208,6 @@ impl<'de> Deserialize<'de> for Env {
 
 #[derive(Debug, Clone)]
 pub(crate) struct EnvFile {
-    #[allow(dead_code)]
-    pub(crate) path: PathBuf,
     pub(crate) variables: HashMap<String, String>,
 }
 
@@ -377,24 +377,10 @@ pub(crate) fn load_project_env_files(project_path: &Path) -> Result<Vec<EnvFile>
 
     for path in env_file_paths {
         let variables = load_env_file(&path)?;
-        env_files.push(EnvFile { path, variables });
+        env_files.push(EnvFile { variables });
     }
 
     Ok(env_files)
-}
-
-#[allow(dead_code)]
-pub(crate) fn get_all_env_vars_in_project(project_path: &Path) -> Result<HashSet<String>> {
-    let env_files = load_project_env_files(project_path)?;
-    let mut all_vars = HashSet::new();
-
-    for env_file in env_files {
-        for key in env_file.variables.keys() {
-            all_vars.insert(key.clone());
-        }
-    }
-
-    Ok(all_vars)
 }
 
 pub(crate) fn is_env_var_defined(project_path: &Path, var_name: &str) -> Result<bool> {

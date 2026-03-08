@@ -3,9 +3,7 @@
  * Redis-based caching for authentication data (roles, permissions)
  */
 
-import type { CacheLike } from '../billing/cache';
-
-export type { CacheLike };
+import type { TtlCache } from '@forklaunch/core/cache';
 
 // Cache key prefixes
 const ROLES_CACHE_PREFIX = 'auth:roles:';
@@ -29,7 +27,7 @@ export interface AuthCacheService {
   deleteCachedOrganizationRoles(organizationId: string): Promise<void>;
 }
 
-export function createAuthCacheService(cache: CacheLike): AuthCacheService {
+export function createAuthCacheService(cache: TtlCache): AuthCacheService {
   const TTL = 5 * 60 * 1000; // 5 minutes
 
   return {
@@ -96,8 +94,16 @@ export function createAuthCacheService(cache: CacheLike): AuthCacheService {
     },
 
     async deleteAllCachedData(userId: string) {
-      await this.deleteCachedRoles(userId);
-      await this.deleteCachedPermissions(userId);
+      try {
+        await cache.deleteRecord(`${ROLES_CACHE_PREFIX}${userId}`);
+      } catch {
+        // Silently fail
+      }
+      try {
+        await cache.deleteRecord(`${PERMISSIONS_CACHE_PREFIX}${userId}`);
+      } catch {
+        // Silently fail
+      }
     },
 
     async deleteByPrefix(prefix: string) {

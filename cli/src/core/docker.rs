@@ -510,7 +510,7 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
             command: Some(Command::Simple(
                 "redpanda start --overprovisioned --mode=dev-container --kafka-addr=PLAINTEXT://0.0.0.0:9092 --advertise-kafka-addr=PLAINTEXT://redpanda:9092".to_string(),
             )),
-            ports: Some(vec!["9092:9092".to_string()]),
+            ports: None,
             networks: Some(vec![format!("{}-network", app_name)]),
             healthcheck: Some(Healthcheck {
                 test: HealthTest::List(vec![

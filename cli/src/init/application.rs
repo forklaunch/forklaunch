@@ -352,15 +352,6 @@ impl CliCommand for ApplicationCommand {
                     .num_args(0..)
                     .action(ArgAction::Append),
             )
-            // .arg(
-            //     Arg::new("libraries")
-            //         .short('l')
-            //         .long("libraries")
-            //         .help("Additional libraries to include.]")
-            //         .value_parser(VALID_LIBRARIES)
-            //         .num_args(0..)
-            //         .action(ArgAction::Append),
-            // )
             .arg(
                 Arg::new("description")
                     .short('D')
@@ -557,20 +548,7 @@ impl CliCommand for ApplicationCommand {
             .parse()?
         };
 
-        // TODO: Add support for Bun test framework
-        let test_framework: Option<TestFramework> = 
-        // if runtime == Runtime::Bun {
-        //     if matches.get_one::<String>("test-framework").is_some() {
-        //         stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-        //         writeln!(
-        //             stdout,
-        //             "Ignoring test-framework choice, defaulting to Bun built-in test runner.",
-        //         )?;
-        //         stdout.reset()?;
-        //     }
-        //     None
-        // } else {
-            Some(
+        let test_framework: Option<TestFramework> = Some(
                 prompt_with_validation(
                     &mut line_editor,
                     &mut stdout,
@@ -583,7 +561,6 @@ impl CliCommand for ApplicationCommand {
                 )?
                 .parse()?,
             );
-        // };
 
         let mut global_module_config = ModuleConfig {
             iam: None,

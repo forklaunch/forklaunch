@@ -15,7 +15,7 @@ use crate::{
         command::command,
         manifest::application::ApplicationManifestData,
         package_json::project_package_json::ProjectPackageJson,
-        removal_template::{RemovalTemplate, RemovalTemplateType, remove_template_files},
+        removal_template::{RemovalTemplate, remove_template_files},
         rendered_template::{RenderedTemplate, RenderedTemplatesCache, write_rendered_templates},
         tsconfig::generate_root_tsconfig,
         vscode::generate_vscode_tasks,
@@ -106,12 +106,10 @@ fn use_live_sdk_mode(
 
     removal_templates.push(RemovalTemplate {
         path: app_root_path.join("tsconfig.json"),
-        r#type: RemovalTemplateType::File,
     });
 
     removal_templates.push(RemovalTemplate {
         path: app_root_path.join(".vscode").join("tasks.json"),
-        r#type: RemovalTemplateType::File,
     });
 
     let modules_path = app_root_path.join(manifest_data.modules_path.clone());

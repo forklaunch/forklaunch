@@ -103,22 +103,6 @@ impl CliCommand for DestroyCommand {
         );
         writeln!(stdout)?;
 
-        // Confirmation prompt?
-        // The implementation plan didn't explicitly ask for one in the logic section, but frontend has it.
-        // For CLI, explicit destroy command is usually enough, but let's add a warning if not "preserve-data".
-        // Actually, let's trust the user knows what they are doing if they run `destroy`.
-
-        // Removed the old request_body and client setup
-        // let request_body = DestroyDeploymentRequest { mode: mode.clone() };
-        // let url = format!(
-        //     "{}/applications/{}/environments/{}/regions/{}/destroy",
-        //     get_platform_management_api_url(),
-        //     application_id,
-        //     environment,
-        //     region
-        // );
-        // let client = Client::new();
-
         log_progress!(stdout, "Triggering destruction...");
 
         let request_body = DestroyDeploymentRequest { mode: mode.clone() };

@@ -64,7 +64,7 @@ use crate::{
             },
         },
         pnpm_workspace::PnpmWorkspace,
-        removal_template::{RemovalTemplate, RemovalTemplateType, remove_template_files},
+        removal_template::{RemovalTemplate, remove_template_files},
         rendered_template::{
             RenderedTemplate, RenderedTemplatesCache, TEMPLATES_DIR, write_rendered_templates,
         },
@@ -385,12 +385,10 @@ fn update_config_files(
                 for project in project_jsons_to_write.keys() {
                     removal_templates.push(RemovalTemplate {
                         path: base_path.join(project).join(file),
-                        r#type: RemovalTemplateType::File,
                     });
                 }
                 removal_templates.push(RemovalTemplate {
                     path: file_path,
-                    r#type: RemovalTemplateType::File,
                 });
             } else {
                 preserved_files.push(file_path.to_string_lossy().to_string());
@@ -822,7 +820,6 @@ fn change_runtime(
         Runtime::Node => {
             removal_templates.push(RemovalTemplate {
                 path: base_path.join("pnpm-workspace.yaml"),
-                r#type: RemovalTemplateType::File,
             });
             serde_yml::from_str::<PnpmWorkspace>(&read_to_string(
                 &base_path.join("pnpm-workspace.yaml"),
@@ -1473,7 +1470,6 @@ fn change_license(
     if exists(&license_path)? {
         removal_template = Some(RemovalTemplate {
             path: license_path.clone(),
-            r#type: RemovalTemplateType::File,
         });
     }
 

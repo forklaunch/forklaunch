@@ -30,6 +30,6 @@ datasources:
     jsonData:
       httpMethod: GET
       serviceMap:
-        datasourceUid: prometheus
+        datasourceUid: DS_PROMETHEUS
     version: 1
     editable: true
