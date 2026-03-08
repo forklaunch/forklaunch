@@ -502,17 +502,124 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
         );
     }
 
+    // Redpanda (Kafka-compatible broker for Tempo ingest)
+    docker_compose.services.insert(
+        "redpanda".to_string(),
+        DockerService {
+            image: Some("redpandadata/redpanda:latest".to_string()),
+            command: Some(Command::Simple(
+                "redpanda start --overprovisioned --mode=dev-container --kafka-addr=PLAINTEXT://0.0.0.0:9092 --advertise-kafka-addr=PLAINTEXT://redpanda:9092".to_string(),
+            )),
+            ports: Some(vec!["9092:9092".to_string()]),
+            networks: Some(vec![format!("{}-network", app_name)]),
+            healthcheck: Some(Healthcheck {
+                test: HealthTest::List(vec![
+                    "CMD".to_string(),
+                    "rpk".to_string(),
+                    "cluster".to_string(),
+                    "health".to_string(),
+                ]),
+                interval: "30s".to_string(),
+                timeout: "10s".to_string(),
+                retries: 3,
+                start_period: "30s".to_string(),
+                additional_properties: HashMap::new(),
+            }),
+            ..Default::default()
+        },
+    );
+
+    // MinIO (S3-compatible object store for Tempo, Loki, Thanos)
+    if !docker_compose.services.contains_key("minio") {
+        let mut minio_environment = IndexMap::new();
+        minio_environment.insert("MINIO_ROOT_USER".to_string(), "minioadmin".to_string());
+        minio_environment.insert("MINIO_ROOT_PASSWORD".to_string(), "minioadmin".to_string());
+
+        docker_compose.services.insert(
+            "minio".to_string(),
+            DockerService {
+                image: Some("minio/minio".to_string()),
+                container_name: Some(format!("{}-minio", app_name)),
+                restart: Some(Restart::Always),
+                environment: Some(minio_environment),
+                ports: Some(vec!["9000:9000".to_string(), "9001:9001".to_string()]),
+                networks: Some(vec![format!("{}-network", app_name)]),
+                volumes: Some(vec!["minio-data:/data".to_string()]),
+                command: Some(Command::Simple(
+                    "server /data --console-address :9001".to_string(),
+                )),
+                healthcheck: Some(Healthcheck {
+                    test: HealthTest::List(vec![
+                        "CMD".to_string(),
+                        "mc".to_string(),
+                        "ready".to_string(),
+                        "local".to_string(),
+                    ]),
+                    interval: "30s".to_string(),
+                    timeout: "10s".to_string(),
+                    retries: 3,
+                    start_period: "30s".to_string(),
+                    additional_properties: HashMap::new(),
+                }),
+                ..Default::default()
+            },
+        );
+    }
+
+    if !docker_compose.volumes.contains_key("minio-data") {
+        docker_compose.volumes.insert(
+            "minio-data".to_string(),
+            DockerVolume {
+                driver: "local".to_string(),
+            },
+        );
+    }
+
+    // MinIO init (create telemetry bucket)
+    docker_compose.services.insert(
+        "minio-init".to_string(),
+        DockerService {
+            image: Some("minio/mc:latest".to_string()),
+            networks: Some(vec![format!("{}-network", app_name)]),
+            depends_on: Some(IndexMap::from([(
+                "minio".to_string(),
+                DependsOn {
+                    condition: DependencyCondition::ServiceHealthy,
+                },
+            )])),
+            entrypoint: Some(Command::Simple(
+                "/bin/sh -c \"mc alias set local http://minio:9000 minioadmin minioadmin && mc mb --ignore-existing local/forklaunch-telemetry\"".to_string(),
+            )),
+            ..Default::default()
+        },
+    );
+
+    // Tempo (distributed tracing backend)
     docker_compose.services.insert(
         "tempo".to_string(),
         DockerService {
             image: Some("grafana/tempo:latest".to_string()),
-            command: Some(Command::Simple("-config.file=/etc/tempo.yaml".to_string())),
+            command: Some(Command::Simple("-target=all -config.file=/etc/tempo.yaml".to_string())),
             ports: Some(vec!["3200:3200".to_string(), "4317:4317".to_string()]),
             volumes: Some(vec![format!(
                 "{}/monitoring/tempo.yaml:/etc/tempo.yaml",
                 context_path.to_string_lossy()
             )]),
             networks: Some(vec![format!("{}-network", app_name)]),
+            depends_on: Some(IndexMap::from([
+                (
+                    "minio-init".to_string(),
+                    DependsOn {
+                        condition: DependencyCondition::ServiceCompletedSuccessfully,
+                    },
+                ),
+                (
+                    "redpanda".to_string(),
+                    DependsOn {
+                        condition: DependencyCondition::ServiceHealthy,
+                    },
+                ),
+            ])),
             healthcheck: Some(Healthcheck {
                 test: HealthTest::List(vec![
                     "CMD".to_string(),
@@ -532,12 +639,24 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
         },
     );
 
+    // Loki (log aggregation)
     docker_compose.services.insert(
         "loki".to_string(),
         DockerService {
             image: Some("grafana/loki:latest".to_string()),
+            command: Some(Command::Simple("-config.file=/etc/loki/local-config.yaml".to_string())),
             ports: Some(vec!["3100:3100".to_string()]),
+            volumes: Some(vec![format!(
+                "{}/monitoring/loki.yaml:/etc/loki/local-config.yaml",
+                context_path.to_string_lossy()
+            )]),
             networks: Some(vec![format!("{}-network", app_name)]),
+            depends_on: Some(IndexMap::from([(
+                "minio-init".to_string(),
+                DependsOn {
+                    condition: DependencyCondition::ServiceCompletedSuccessfully,
+                },
+            )])),
             healthcheck: Some(Healthcheck {
                 test: HealthTest::List(vec![
                     "CMD".to_string(),
@@ -557,16 +676,43 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
         },
     );
 
+    // Prometheus (metrics)
+    if !docker_compose.volumes.contains_key("prometheus-data") {
+        docker_compose.volumes.insert(
+            "prometheus-data".to_string(),
+            DockerVolume {
+                driver: "local".to_string(),
+            },
+        );
+    }
+
     docker_compose.services.insert(
         "prometheus".to_string(),
         DockerService {
             image: Some("prom/prometheus:latest".to_string()),
             ports: Some(vec!["9090:9090".to_string()]),
-            volumes: Some(vec![format!(
-                "{}/monitoring/prometheus.yaml:/etc/prometheus/prometheus.yml",
-                context_path.to_string_lossy()
-            )]),
+            volumes: Some(vec![
+                format!(
+                    "{}/monitoring/prometheus.yaml:/etc/prometheus/prometheus.yml",
+                    context_path.to_string_lossy()
+                ),
+                "prometheus-data:/prometheus".to_string(),
+            ]),
+            command: Some(Command::Multiple(vec![
+                "--config.file=/etc/prometheus/prometheus.yml".to_string(),
+                "--storage.tsdb.path=/prometheus".to_string(),
+                "--storage.tsdb.min-block-duration=2h".to_string(),
+                "--storage.tsdb.max-block-duration=2h".to_string(),
+                "--web.console.libraries=/usr/share/prometheus/console_libraries".to_string(),
+                "--web.console.templates=/usr/share/prometheus/consoles".to_string(),
+            ])),
             networks: Some(vec![format!("{}-network", app_name)]),
+            depends_on: Some(IndexMap::from([(
+                "minio-init".to_string(),
+                DependsOn {
+                    condition: DependencyCondition::ServiceCompletedSuccessfully,
+                },
+            )])),
             healthcheck: Some(Healthcheck {
                 test: HealthTest::List(vec![
                     "CMD".to_string(),
@@ -586,6 +732,7 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
         },
     );
 
+    // Grafana (dashboards)
     docker_compose.services.insert(
         "grafana".to_string(),
         DockerService {
@@ -615,6 +762,7 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
         },
     );
 
+    // OTel Collector
     docker_compose.services.insert(
         "otel-collector".to_string(),
         DockerService {
@@ -628,6 +776,43 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
                 context_path.to_string_lossy()
             )]),
             networks: Some(vec![format!("{}-network", app_name)]),
+            ..Default::default()
+        },
+    );
+
+    // Thanos sidecar (long-term metric storage via S3)
+    docker_compose.services.insert(
+        "thanos-sidecar".to_string(),
+        DockerService {
+            image: Some("thanosio/thanos:v0.41.0".to_string()),
+            command: Some(Command::Multiple(vec![
+                "sidecar".to_string(),
+                "--tsdb.path=/prometheus".to_string(),
+                "--prometheus.url=http://prometheus:9090".to_string(),
+                "--objstore.config-file=/etc/thanos/objstore.yaml".to_string(),
+            ])),
+            volumes: Some(vec![
+                "prometheus-data:/prometheus".to_string(),
+                format!(
+                    "{}/monitoring/thanos-objstore.yaml:/etc/thanos/objstore.yaml",
+                    context_path.to_string_lossy()
+                ),
+            ]),
+            networks: Some(vec![format!("{}-network", app_name)]),
+            depends_on: Some(IndexMap::from([
+                (
+                    "prometheus".to_string(),
+                    DependsOn {
+                        condition: DependencyCondition::ServiceHealthy,
+                    },
+                ),
+                (
+                    "minio".to_string(),
+                    DependsOn {
+                        condition: DependencyCondition::ServiceHealthy,
+                    },
+                ),
+            ])),
             ..Default::default()
         },
     );
@@ -1593,17 +1778,7 @@ pub(crate) fn add_service_definition_to_docker_compose(
         docker_compose_string,
     )?;
 
-    if manifest_data.is_iam {
-        environment.insert(
-            "PASSWORD_ENCRYPTION_SECRET".to_string(),
-            manifest_data.generated_password_encryption_secret.clone(),
-        );
-    }
     if manifest_data.is_better_auth {
-        environment.insert(
-            "PASSWORD_ENCRYPTION_SECRET".to_string(),
-            manifest_data.generated_password_encryption_secret.clone(),
-        );
         environment.insert(
             "BETTER_AUTH_SECRET".to_string(),
             manifest_data.generated_better_auth_secret.clone(),

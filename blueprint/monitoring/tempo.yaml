@@ -1,5 +1,9 @@
+partition_ring_live_store: true
+stream_over_http_enabled: true
+
 server:
   http_listen_port: 3200
+  log_level: warn
 
 distributor:
   receivers:
@@ -8,8 +12,36 @@ distributor:
         grpc:
           endpoint: 0.0.0.0:4317
 
+querier:
+  query_live_store: true
+
+query_frontend:
+  rf1_after: "1999-01-01T00:00:00Z"
+
+usage_report:
+  reporting_enabled: false
+
 storage:
   trace:
-    backend: local
-    local:
-      path: /tmp/tempo/blocks
+    backend: s3
+    s3:
+      bucket: forklaunch-telemetry
+      endpoint: minio:9000
+      access_key: minioadmin
+      secret_key: minioadmin
+      insecure: true
+      forcepathstyle: true
+    wal:
+      path: /tmp/tempo/wal
+
+ingest:
+  enabled: true
+  kafka:
+    address: redpanda:9092
+    topic: tempo-ingest
+
+block_builder:
+  consume_cycle_duration: 30s
+
+overrides:
+  defaults: {}

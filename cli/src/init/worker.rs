@@ -915,7 +915,6 @@ impl CliCommand for WorkerCommand {
             },
 
             // These will be properly generated when initialized
-            generated_password_encryption_secret: String::new(),
             generated_better_auth_secret: String::new(),
             generated_hmac_secret: String::new(),
         };

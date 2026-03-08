@@ -103,8 +103,6 @@ config_struct!(
 
         // Generated secrets - each instantiation gets unique random values
         #[serde(skip_serializing, skip_deserializing)]
-        pub(crate) generated_password_encryption_secret: String,
-        #[serde(skip_serializing, skip_deserializing)]
         pub(crate) generated_better_auth_secret: String,
         #[serde(skip_serializing, skip_deserializing)]
         pub(crate) generated_hmac_secret: String,
@@ -236,7 +234,6 @@ impl InitializableManifestConfig for WorkerManifestData {
                 .unwrap_or(0),
 
             // Generate unique random secrets for each worker/environment
-            generated_password_encryption_secret: generate_random_secret(32), // 32 bytes = 256 bits
             generated_better_auth_secret: generate_random_secret(32),
             generated_hmac_secret: generate_random_secret(32),
 

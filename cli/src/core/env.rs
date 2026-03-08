@@ -64,20 +64,12 @@ pub(crate) struct Env {
     #[serde(rename = "DOCS_PATH", skip_serializing_if = "Option::is_none")]
     pub(crate) docs_path: Option<String>,
     #[serde(
-        rename = "PASSWORD_ENCRYPTION_PUBLIC_KEY_PATH",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub(crate) password_encryption_public_key_path: Option<String>,
-    #[serde(
-        rename = "PASSWORD_ENCRYPTION_SECRET_PATH",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub(crate) password_encryption_secret_path: Option<String>,
-    #[serde(
         rename = "BETTER_AUTH_BASE_PATH",
         skip_serializing_if = "Option::is_none"
     )]
     pub(crate) better_auth_base_path: Option<String>,
+    #[serde(rename = "BETTER_AUTH_SECRET", skip_serializing_if = "Option::is_none")]
+    pub(crate) better_auth_secret: Option<String>,
     #[serde(rename = "CORS_ORIGINS", skip_serializing_if = "Option::is_none")]
     pub(crate) cors_origins: Option<String>,
     #[serde(rename = "STRIPE_API_KEY", skip_serializing_if = "Option::is_none")]
@@ -119,7 +111,7 @@ impl<'de> Deserialize<'de> for Env {
             Port,
             Version,
             DocsPath,
-            PasswordEncryptionPublicKeyPath,
+            BetterAuthSecret,
             HmacSecretKey,
             JwksPublicKeyUrl,
             Other(String),
@@ -162,8 +154,7 @@ impl<'de> Deserialize<'de> for Env {
                     port: None,
                     version: None,
                     docs_path: None,
-                    password_encryption_public_key_path: None,
-                    password_encryption_secret_path: None,
+                    better_auth_secret: None,
                     better_auth_base_path: None,
                     cors_origins: None,
                     stripe_api_key: None,
@@ -194,9 +185,7 @@ impl<'de> Deserialize<'de> for Env {
                         Field::Port => env.port = Some(map.next_value()?),
                         Field::Version => env.version = Some(map.next_value()?),
                         Field::DocsPath => env.docs_path = Some(map.next_value()?),
-                        Field::PasswordEncryptionPublicKeyPath => {
-                            env.password_encryption_public_key_path = Some(map.next_value()?)
-                        }
+                        Field::BetterAuthSecret => env.better_auth_secret = Some(map.next_value()?),
                         Field::HmacSecretKey => env.hmac_secret_key = Some(map.next_value()?),
                         Field::JwksPublicKeyUrl => {
                             env.jwks_public_key_url = Some(map.next_value()?)
@@ -612,7 +601,10 @@ mod tests {
     fn test_extract_env_value_plain_strips_inline_comment() {
         let lines = vec!["KEY=hello # a comment"];
         let mut i = 0;
-        assert_eq!(extract_env_value(&lines, &mut i, "hello # a comment"), "hello");
+        assert_eq!(
+            extract_env_value(&lines, &mut i, "hello # a comment"),
+            "hello"
+        );
         assert_eq!(i, 0);
     }
 
@@ -620,7 +612,10 @@ mod tests {
     fn test_extract_env_value_single_line_double_quoted() {
         let lines = vec!["KEY=\"hello world\""];
         let mut i = 0;
-        assert_eq!(extract_env_value(&lines, &mut i, "\"hello world\""), "hello world");
+        assert_eq!(
+            extract_env_value(&lines, &mut i, "\"hello world\""),
+            "hello world"
+        );
         assert_eq!(i, 0);
     }
 
@@ -628,7 +623,10 @@ mod tests {
     fn test_extract_env_value_single_line_single_quoted() {
         let lines = vec!["KEY='hello world'"];
         let mut i = 0;
-        assert_eq!(extract_env_value(&lines, &mut i, "'hello world'"), "hello world");
+        assert_eq!(
+            extract_env_value(&lines, &mut i, "'hello world'"),
+            "hello world"
+        );
         assert_eq!(i, 0);
     }
 
@@ -671,17 +669,15 @@ mod tests {
     fn test_parse_env_file_items_preserves_section_headers() {
         let temp_dir = TempDir::new().unwrap();
         let path = temp_dir.path().join("test.env");
-        fs::write(
-            &path,
-            "# application\nA=1\n# my-service (abc-123)\nB=2\n",
-        )
-        .unwrap();
+        fs::write(&path, "# application\nA=1\n# my-service (abc-123)\nB=2\n").unwrap();
 
         let items = parse_env_file_items(&path).unwrap();
         assert_eq!(items.len(), 4);
         assert!(matches!(&items[0], EnvFileItem::SectionHeader(h) if h == "# application"));
         assert!(matches!(&items[1], EnvFileItem::KeyValue(k, v) if k == "A" && v == "1"));
-        assert!(matches!(&items[2], EnvFileItem::SectionHeader(h) if h == "# my-service (abc-123)"));
+        assert!(
+            matches!(&items[2], EnvFileItem::SectionHeader(h) if h == "# my-service (abc-123)")
+        );
         assert!(matches!(&items[3], EnvFileItem::KeyValue(k, v) if k == "B" && v == "2"));
     }
 
@@ -706,7 +702,9 @@ mod tests {
 
         let items = parse_env_file_items(&path).unwrap();
         assert_eq!(items.len(), 2);
-        assert!(matches!(&items[0], EnvFileItem::KeyValue(k, v) if k == "KEY" && v == "line one\nline two"));
+        assert!(
+            matches!(&items[0], EnvFileItem::KeyValue(k, v) if k == "KEY" && v == "line one\nline two")
+        );
         assert!(matches!(&items[1], EnvFileItem::KeyValue(k, v) if k == "OTHER" && v == "val"));
     }
 

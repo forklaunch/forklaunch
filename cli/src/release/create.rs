@@ -1657,7 +1657,6 @@ fn should_passthrough(key: &str, value: &str) -> bool {
 
 const CLI_GENERATED_KEY_VARS: &[&str] = &[
     "HMAC_SECRET_KEY",
-    "PASSWORD_ENCRYPTION_SECRET",
 ];
 
 fn is_cli_generated_key_var(key_upper: &str) -> bool {
@@ -2019,7 +2018,6 @@ fn is_platform_managed_var(var_name: &str) -> bool {
         "BETTER_AUTH_BASE_PATH",
         // CLI-generated: random secrets produced during `forklaunch init`
         "HMAC_SECRET_KEY",
-        "PASSWORD_ENCRYPTION_SECRET",
         "BETTER_AUTH_SECRET",
         // Pulumi-generated: derived from other vars at deploy time
         "JWKS_PUBLIC_KEY_URL",

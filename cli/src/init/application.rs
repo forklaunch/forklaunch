@@ -41,7 +41,6 @@ use crate::{
         format::format_code,
         gitignore::generate_gitignore,
         husky::create_or_merge_husky_pre_commit,
-        iam::generate_iam_secret,
         license::generate_license,
         manifest::{
             ManifestData, ProjectEntry, ProjectType, ResourceInventory,
@@ -979,16 +978,9 @@ impl CliCommand for ApplicationCommand {
                 // Default to false for application initialization, will be set by CLI flag
                 with_mappers: false,
 
-                iam_secret: if template_dir.module_id == Some(Module::BaseIam)
-                    || template_dir.module_id == Some(Module::BetterAuthIam)
-                {
-                    Some(generate_iam_secret())
-                } else {
-                    None
-                },
+                iam_secret: None,
 
                 // These will be properly generated when initialized
-                generated_password_encryption_secret: String::new(),
                 generated_better_auth_secret: String::new(),
                 generated_hmac_secret: String::new(),
             };
@@ -1167,13 +1159,6 @@ impl CliCommand for ApplicationCommand {
                 },
             )?);
 
-            if let Some(secret) = &service_data.iam_secret {
-                rendered_templates.push(RenderedTemplate {
-                    path: Path::new(&application_path).join(".env.local"),
-                    content: format!("PASSWORD_ENCRYPTION_SECRET={}\n", secret),
-                    context: None,
-                });
-            }
         }
 
         let docker_compose_path = if let Some(docker_compose_path) = &data.docker_compose_path {
