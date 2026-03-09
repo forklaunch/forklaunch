@@ -158,7 +158,7 @@ const environmentConfig = configInjector.chain({
 //! defines the runtime dependencies for the application
 const runtimeDependencies = environmentConfig.chain({
   {{#is_database_enabled}}
-  MikroORM: {
+  Orm: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
     factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
@@ -170,7 +170,7 @@ const runtimeDependencies = environmentConfig.chain({
     }),
     {{{default_worker_options}}}
   },
-  {{/is_worker}}OpenTelemetryCollector: {
+  {{/is_worker}}OtelCollector: {
     lifetime: Lifetime.Singleton,
     type: OpenTelemetryCollector,
     factory: ({ OTEL_SERVICE_NAME, OTEL_LEVEL }) =>
@@ -183,19 +183,19 @@ const runtimeDependencies = environmentConfig.chain({
   TtlCache: {
     lifetime: Lifetime.Singleton,
     type: RedisTtlCache,
-    factory: ({ REDIS_URL, OpenTelemetryCollector }) =>
-      new RedisTtlCache(60 * 60 * 1000, OpenTelemetryCollector, {
+    factory: ({ REDIS_URL, OtelCollector }) =>
+      new RedisTtlCache(60 * 60 * 1000, OtelCollector, {
         url: REDIS_URL,
       }, {
         enabled: true,
         level: "info",
       }),
   },{{/is_request_cache_needed}}{{#is_s3_enabled}}
-  S3ObjectStore: {
+  ObjectStore: {
     lifetime: Lifetime.Singleton,
     type: S3ObjectStore,
     factory: ({
-      OpenTelemetryCollector,
+      OtelCollector,
       OTEL_LEVEL,
       S3_REGION,
       S3_ACCESS_KEY_ID,
@@ -204,7 +204,7 @@ const runtimeDependencies = environmentConfig.chain({
       S3_BUCKET
     }) =>
       new S3ObjectStore(
-        OpenTelemetryCollector,
+        OtelCollector,
         {
           bucket: S3_BUCKET,
           clientConfig: {
@@ -224,11 +224,11 @@ const runtimeDependencies = environmentConfig.chain({
       )
   },
   {{/is_s3_enabled}}{{#is_database_enabled}}
-  EntityManager: {
+  EntityMgr: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
-    factory: ({ MikroORM }, _resolve, context) =>
-      MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined),
+    factory: ({ Orm }, _resolve, context) =>
+      Orm.em.fork(context?.entityManagerOptions as ForkOptions | undefined),
   },{{/is_database_enabled}}{{#is_iam_configured}}
   AuthCacheService: {
     lifetime: Lifetime.Singleton,
@@ -264,14 +264,14 @@ const serviceDependencies = runtimeDependencies.chain({ {{#is_worker}}
     lifetime: Lifetime.Scoped,
     type: Base{{pascal_case_name}}Service,
     factory: ({ {{^is_worker}}
-      EntityManager,{{/is_worker}}{{#is_worker}}
+      EntityMgr,{{/is_worker}}{{#is_worker}}
       WorkerProducer,{{/is_worker}}
-      OpenTelemetryCollector
+      OtelCollector
     }) =>
       new Base{{pascal_case_name}}Service({{^is_worker}}
-        EntityManager,{{/is_worker}}{{#is_worker}}
+        EntityMgr,{{/is_worker}}{{#is_worker}}
         WorkerProducer,{{/is_worker}}
-        OpenTelemetryCollector
+        OtelCollector
       )
   }
 });

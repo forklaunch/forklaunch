@@ -714,7 +714,7 @@ import {{ processEvents, processErrors }} from './services/{camel_case_name}.ser
 /**
  * Creates an instance of OpenTelemetryCollector
  */
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 
 /**
  * Main worker entry point

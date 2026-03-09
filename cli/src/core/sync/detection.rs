@@ -71,6 +71,7 @@ pub fn has_database_in_registrations(project_path: &Path) -> Result<bool> {
 
     Ok(
         (content.contains("MikroORM") && content.contains("@mikro-orm/core"))
+            || content.contains("EntityMgr")
             || content.contains("EntityManager"),
     )
 }

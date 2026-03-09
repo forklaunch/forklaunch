@@ -67,8 +67,8 @@ pub(crate) fn redis_ttl_cache_runtime_dependency<'a>(
                 TtlCache: {
                     lifetime: Lifetime.Singleton,
                     type: RedisTtlCache,
-                    factory: ({ REDIS_URL, OpenTelemetryCollector }) =>
-                        new RedisTtlCache(60 * 60 * 1000, OpenTelemetryCollector, {
+                    factory: ({ REDIS_URL, OtelCollector }) =>
+                        new RedisTtlCache(60 * 60 * 1000, OtelCollector, {
                             url: REDIS_URL,
                         }, {
                             enabled: true,

@@ -83,11 +83,11 @@ pub(crate) fn s3_object_store_runtime_dependency<'a>(
     registrations_program: &mut Program<'a>,
 ) -> Result<()> {
     let s3_registration_text = "const configInjector = createConfigInjector(SchemaValidator(), {
-        S3ObjectStore: {
+        ObjectStore: {
             lifetime: Lifetime.Singleton,
             type: S3ObjectStore,
             factory: ({
-                OpenTelemetryCollector,
+                OtelCollector,
                 OTEL_LEVEL,
                 S3_REGION,
                 S3_ACCESS_KEY_ID,
@@ -96,7 +96,7 @@ pub(crate) fn s3_object_store_runtime_dependency<'a>(
                 S3_BUCKET
             }) =>
                 new S3ObjectStore(
-                OpenTelemetryCollector,
+                OtelCollector,
                 {
                     bucket: S3_BUCKET,
                     clientConfig: {
@@ -182,7 +182,7 @@ pub(crate) fn delete_s3_object_store_runtime_dependency<'a>(
     let _ = delete_from_registrations_ts_config_injector(
         &allocator,
         registrations_program,
-        "S3ObjectStore",
+        "ObjectStore",
         "runtimeDependencies",
     );
 }

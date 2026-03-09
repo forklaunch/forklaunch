@@ -13,7 +13,7 @@ const scopeFactory = () => ci.createScope();
 // serviceFactory returns a new service instance on demand
 const serviceFactory = ci.scopedResolver(tokens.{{pascal_case_name}}Service);
 // openTelemetryCollector for collecting logs and metrics with appropriate context
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);{{#is_iam_configured}}
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);{{#is_iam_configured}}
 //! resolve the JWKS public key URL
 const JWKS_PUBLIC_KEY_URL = ci.resolve(tokens.JWKS_PUBLIC_KEY_URL);{{/is_iam_configured}}
 

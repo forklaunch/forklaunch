@@ -82,11 +82,11 @@ pub(crate) fn transform_registrations_ts_add_router(
     let (dependency, em_setup, em_resolution, service_param) = match project_type {
         ProjectType::Worker => ("WorkerProducer", "", "", "WorkerProducer"),
         ProjectType::Service => (
-            "EntityManager",
+            "EntityMgr",
             "resolve,",
-            "let em = EntityManager;
+            "let em = EntityMgr;
               if (context.entityManagerOptions) {
-                em = resolve('EntityManager', context);
+                em = resolve('EntityMgr', context);
               }",
             "em",
         ),
@@ -99,14 +99,14 @@ pub(crate) fn transform_registrations_ts_add_router(
             lifetime: Lifetime.Scoped,
             type: Base{router_name_pascal_case}Service,
             factory: (
-                {{ {dependency}, OpenTelemetryCollector }}, 
+                {{ {dependency}, OtelCollector }},
                 {em_setup}
                 context
-            ) => {{ 
+            ) => {{
                 {em_resolution}
                 return new Base{router_name_pascal_case}Service(
                     {service_param},
-                    OpenTelemetryCollector
+                    OtelCollector
                 );
             }}
             }}
