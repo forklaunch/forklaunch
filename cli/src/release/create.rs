@@ -2,8 +2,39 @@ use std::{
     collections::{HashMap, HashSet, hash_map::Entry},
     fs::{self, create_dir_all, read_to_string},
     io::Write,
-    path::Path,
+    path::{Path, PathBuf},
 };
+
+/// Scope guard that removes a directory when dropped, warning on failure.
+struct RemoveDirGuard {
+    path: Option<PathBuf>,
+}
+
+impl RemoveDirGuard {
+    fn new(path: PathBuf) -> Self {
+        Self { path: Some(path) }
+    }
+
+    /// Disarm the guard so it does not remove the directory on drop.
+    #[allow(dead_code)]
+    fn disarm(&mut self) {
+        self.path = None;
+    }
+}
+
+impl Drop for RemoveDirGuard {
+    fn drop(&mut self) {
+        if let Some(path) = self.path.take() {
+            if let Err(e) = fs::remove_dir_all(&path) {
+                eprintln!(
+                    "Warning: failed to clean up temporary directory {}: {}",
+                    path.display(),
+                    e
+                );
+            }
+        }
+    }
+}
 
 use anyhow::{Context, Result, bail};
 use clap::{Arg, ArgMatches, Command};
@@ -234,6 +265,7 @@ impl CliCommand for CreateCommand {
 
         let openapi_path = app_root.join(".forklaunch").join("openapi");
         create_dir_all(&openapi_path).with_context(|| "Failed to create openapi directory")?;
+        let _openapi_guard = RemoveDirGuard::new(openapi_path.clone());
 
         let exported_services = export_all_services(&app_root, &manifest, &openapi_path)?;
 
@@ -249,8 +281,7 @@ impl CliCommand for CreateCommand {
             }
         }
 
-        // Clean up temporary openapi files - specs are now in memory
-        let _ = fs::remove_dir_all(&openapi_path);
+        // openapi cleanup is handled by _openapi_guard (Drop)
 
         log_progress!(stdout, "Detecting required environment variables...");
 
