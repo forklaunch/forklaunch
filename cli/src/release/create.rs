@@ -50,7 +50,7 @@ fn poll_for_git_repository(
     stdout: &mut StandardStream,
 ) -> Result<String> {
     let integration_url = format!(
-        "{}/apps/{}/settings",
+        "{}/dashboard/applications/{}/github",
         get_platform_ui_url(),
         application_id
     );
@@ -282,6 +282,7 @@ impl CliCommand for CreateCommand {
 
         // When not in a git repo and not already in local mode, let the user choose
         let mut local_mode = local_mode;
+        let mut connected_github = false;
         if !is_git_repo() && !local_mode {
             log_warn!(stdout, "Not a git repository");
             writeln!(stdout)?;
@@ -313,6 +314,7 @@ impl CliCommand for CreateCommand {
                         .with_context(|| "Failed to write manifest")?;
 
                     log_ok!(stdout, "Git repository saved to manifest.toml");
+                    connected_github = true;
                 }
                 _ => {
                     local_mode = true;
@@ -321,7 +323,7 @@ impl CliCommand for CreateCommand {
         }
 
         // Prompt for git repository URL if not set and not using local mode
-        if !local_mode && manifest.git_repository.is_none() {
+        if !local_mode && !connected_github && manifest.git_repository.is_none() {
             log_info!(stdout, "Git repository URL not set in manifest");
 
             print!("Enter git repository URL (e.g., https://github.com/user/repo.git): ");
@@ -354,11 +356,19 @@ impl CliCommand for CreateCommand {
         log_progress!(stdout, "  Detecting git metadata...");
 
         let (git_commit, git_branch) = if is_git_repo() {
-            let commit = get_git_commit()?;
-            let branch = get_git_branch().ok();
-            log_ok_suffix!(stdout);
-            (commit, branch)
-        } else if local_mode {
+            match get_git_commit() {
+                Ok(commit) => {
+                    let branch = get_git_branch().ok();
+                    log_ok_suffix!(stdout);
+                    (commit, branch)
+                }
+                Err(_) => {
+                    // git repo exists but no commits yet
+                    log_warn!(stdout, "No commits found (using local defaults)");
+                    ("local-build".to_string(), get_git_branch().ok().or(Some("local".to_string())))
+                }
+            }
+        } else if local_mode || connected_github {
             log_warn!(stdout, "Not a git repository (using local defaults)");
             ("local-build".to_string(), Some("local".to_string()))
         } else {
