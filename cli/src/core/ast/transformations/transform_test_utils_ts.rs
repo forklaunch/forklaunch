@@ -776,6 +776,28 @@ export const mockTestData = {
     }
 
     #[test]
+    fn test_remove_infrastructure_s3() {
+        let (_temp_dir, base_path) = setup_test_env();
+        let cache = RenderedTemplatesCache::new();
+
+        let result =
+            transform_test_utils_add_infrastructure(&cache, &base_path, &Infrastructure::S3);
+        write(
+            base_path.join("__test__").join("test-utils.ts"),
+            &result.unwrap(),
+        )
+        .unwrap();
+
+        let cache = RenderedTemplatesCache::new();
+        let result =
+            transform_test_utils_remove_infrastructure(&cache, &base_path, &Infrastructure::S3);
+        assert!(result.is_ok());
+
+        let content = result.unwrap();
+        assert!(!content.contains("needsS3"));
+    }
+
+    #[test]
     fn test_multiple_operations() {
         let (_temp_dir, base_path) = setup_test_env();
         let cache = RenderedTemplatesCache::new();

@@ -1229,6 +1229,9 @@ impl CliCommand for ServiceCommand {
         if let Some(queue) = &project_resources.queue {
             active_infrastructure.push(queue.to_string());
         }
+        if let Some(object_store) = &project_resources.object_store {
+            active_infrastructure.push(object_store.to_string());
+        }
 
         let infrastructure = prompt_comma_separated_list_from_selections(
             "infrastructure",
@@ -1396,5 +1399,269 @@ impl CliCommand for ServiceCommand {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::write;
+
+    use indexmap::IndexMap;
+    use tempfile::TempDir;
+
+    use super::*;
+    use crate::{
+        constants::Infrastructure,
+        core::{
+            docker::DockerService,
+            manifest::{
+                InitializableManifestConfig, InitializableManifestConfigMetadata,
+                ProjectInitializationMetadata,
+            },
+            package_json::project_package_json::{ProjectDependencies, ProjectPackageJson},
+            rendered_template::RenderedTemplatesCache,
+        },
+    };
+
+    const MINIMAL_REGISTRATIONS_TS: &str = r#"import {
+  number,
+  schemaValidator,
+  string
+} from '@test-app/core';
+import { OpenTelemetryCollector } from '@forklaunch/core/http';
+import {
+  createConfigInjector,
+  getEnvVar,
+  Lifetime
+} from '@forklaunch/core/services';
+import { EntityManager, ForkOptions, MikroORM } from '@mikro-orm/core';
+import mikroOrmOptionsConfig from './mikro-orm.config';
+
+const configInjector = createConfigInjector(schemaValidator, {
+  SERVICE_METADATA: {
+    lifetime: Lifetime.Singleton,
+    type: { name: string, version: string },
+    value: { name: 'test-svc', version: '0.1.0' }
+  }
+});
+
+const environmentConfig = configInjector.chain({
+  HOST: { lifetime: Lifetime.Singleton, type: string, value: getEnvVar('HOST') },
+  PORT: { lifetime: Lifetime.Singleton, type: number, value: Number(getEnvVar('PORT')) }
+});
+
+const runtimeDependencies = environmentConfig.chain({
+  MikroORM: {
+    lifetime: Lifetime.Singleton,
+    type: MikroORM,
+    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+  },
+  OpenTelemetryCollector: {
+    lifetime: Lifetime.Singleton,
+    type: OpenTelemetryCollector,
+    factory: ({ OTEL_SERVICE_NAME, OTEL_LEVEL }) =>
+      new OpenTelemetryCollector(OTEL_SERVICE_NAME, OTEL_LEVEL || 'info')
+  },
+  EntityManager: {
+    lifetime: Lifetime.Scoped,
+    type: EntityManager,
+    factory: ({ MikroORM }, _resolve, context) =>
+      MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined)
+  }
+});
+
+const serviceDependencies = runtimeDependencies.chain({});
+"#;
+
+    const MANIFEST_TOML: &str = r#"
+id = "test-id"
+cli_version = "0.6.3"
+app_name = "test-app"
+modules_path = "src/modules"
+app_description = "test"
+linter = "eslint"
+formatter = "prettier"
+validator = "zod"
+http_framework = "express"
+runtime = "node"
+author = "test"
+license = "MIT"
+
+[project_peer_topology]
+
+[[projects]]
+type = "Service"
+name = "test-svc"
+description = "test service"
+
+[projects.resources]
+database = "postgresql"
+"#;
+
+    fn setup() -> (
+        TempDir,
+        ServiceManifestData,
+        DockerCompose,
+        ProjectPackageJson,
+        RenderedTemplatesCache,
+    ) {
+        let tmp = TempDir::new().unwrap();
+        let base = tmp.path();
+
+        write(base.join("registrations.ts"), MINIMAL_REGISTRATIONS_TS).unwrap();
+        write(base.join(".env.local"), "").unwrap();
+
+        let raw: ServiceManifestData = toml::from_str(MANIFEST_TOML).unwrap();
+        let manifest =
+            raw.initialize(InitializableManifestConfigMetadata::Project(
+                ProjectInitializationMetadata {
+                    project_name: "test-svc".to_string(),
+                    database: None,
+                    infrastructure: None,
+                    description: None,
+                    worker_type: None,
+                },
+            ));
+
+        let mut docker_compose = DockerCompose::default();
+        docker_compose.services.insert(
+            "test-svc".to_string(),
+            DockerService {
+                environment: Some(IndexMap::new()),
+                ..Default::default()
+            },
+        );
+
+        let pkg_json = ProjectPackageJson {
+            dependencies: Some(ProjectDependencies::default()),
+            ..Default::default()
+        };
+
+        let cache = RenderedTemplatesCache::new();
+
+        (tmp, manifest, docker_compose, pkg_json, cache)
+    }
+
+    #[test]
+    fn test_change_infrastructure_add_s3_updates_docker_compose_manifest_and_deps() {
+        let (_tmp, mut manifest, mut docker, mut pkg, mut cache) = setup();
+        let base = _tmp.path();
+
+        change_infrastructure(
+            base,
+            vec![Infrastructure::S3],
+            vec![],
+            &mut pkg,
+            &mut manifest,
+            &mut docker,
+            &mut cache,
+        )
+        .expect("change_infrastructure should succeed");
+
+        // 1. docker-compose must have minio service
+        assert!(
+            docker.services.contains_key("minio"),
+            "Expected 'minio' in docker-compose services, got: {:?}",
+            docker.services.keys().collect::<Vec<_>>()
+        );
+
+        // 2. service environment must have S3 env vars injected
+        let env = docker.services["test-svc"].environment.as_ref().unwrap();
+        assert!(env.contains_key("S3_URL"), "Expected S3_URL in service environment");
+        assert!(env.contains_key("S3_BUCKET"), "Expected S3_BUCKET in service environment");
+
+        // 3. manifest object_store must be recorded as "s3"
+        let project = manifest
+            .projects
+            .iter()
+            .find(|p| p.name == "test-svc")
+            .unwrap();
+        assert_eq!(
+            project.resources.as_ref().unwrap().object_store,
+            Some("s3".to_string()),
+            "Expected manifest object_store = 's3'"
+        );
+
+        // 4. package.json S3 dependency must be set
+        assert!(
+            pkg.dependencies
+                .as_ref()
+                .unwrap()
+                .forklaunch_infrastructure_s3
+                .is_some(),
+            "Expected @forklaunch/infrastructure-s3 in package.json dependencies"
+        );
+
+        // 5. registrations.ts in cache must have S3 content injected
+        let reg = cache
+            .get(base.join("registrations.ts"))
+            .unwrap()
+            .unwrap();
+        assert!(
+            reg.content.contains("S3ObjectStore") || reg.content.contains("s3Url"),
+            "Expected S3 import/usage in registrations.ts cache"
+        );
+    }
+
+    #[test]
+    fn test_change_infrastructure_remove_s3_cleans_up_docker_compose_and_manifest() {
+        let (_tmp, mut manifest, mut docker, mut pkg, mut cache) = setup();
+        let base = _tmp.path();
+
+        // First add S3
+        change_infrastructure(
+            base,
+            vec![Infrastructure::S3],
+            vec![],
+            &mut pkg,
+            &mut manifest,
+            &mut docker,
+            &mut cache,
+        )
+        .expect("add S3 should succeed");
+
+        assert!(
+            docker.services.contains_key("minio"),
+            "Pre-condition: minio must exist after add"
+        );
+
+        // Now remove S3 — reuse the same cache so it can read updated registrations.ts
+        change_infrastructure(
+            base,
+            vec![],
+            vec![Infrastructure::S3],
+            &mut pkg,
+            &mut manifest,
+            &mut docker,
+            &mut cache,
+        )
+        .expect("remove S3 should succeed");
+
+        // 1. minio must be removed from docker-compose
+        assert!(
+            !docker.services.contains_key("minio"),
+            "Expected 'minio' to be removed from docker-compose after S3 removal"
+        );
+
+        // 2. manifest object_store must be cleared
+        let project = manifest
+            .projects
+            .iter()
+            .find(|p| p.name == "test-svc")
+            .unwrap();
+        assert!(
+            project.resources.as_ref().unwrap().object_store.is_none(),
+            "Expected object_store = None after S3 removal"
+        );
+
+        // 3. package.json S3 dependency must be cleared
+        assert!(
+            pkg.dependencies
+                .as_ref()
+                .unwrap()
+                .forklaunch_infrastructure_s3
+                .is_none(),
+            "Expected @forklaunch/infrastructure-s3 to be removed from dependencies"
+        );
     }
 }

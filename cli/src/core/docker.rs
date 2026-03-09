@@ -1501,6 +1501,9 @@ pub(crate) fn clean_up_unused_infrastructure_services(
                 let queue = queue.clone();
                 infrastructure_in_use.insert(queue);
             }
+            if let Some(object_store) = resources.object_store {
+                infrastructure_in_use.insert(object_store);
+            }
         }
     }
 
@@ -1521,6 +1524,7 @@ pub(crate) fn clean_up_unused_infrastructure_services(
         .difference(&infrastructure_in_use)
         .flat_map(|component| match component.parse::<Infrastructure>() {
             Ok(Infrastructure::Redis) => vec!["redis".to_string()],
+            Ok(Infrastructure::S3) => vec!["minio".to_string()],
             _ => match component.parse::<Database>() {
                 Ok(Database::MongoDB) => vec!["mongodb".to_string(), "mongo-init".to_string()],
                 _ => vec![component.to_string()],

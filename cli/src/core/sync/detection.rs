@@ -330,6 +330,26 @@ mod tests {
     }
 
     #[test]
+    fn test_detect_s3_infrastructure() {
+        let temp_dir = TempDir::new().unwrap();
+        let service_path = temp_dir.path();
+
+        fs::write(
+            service_path.join("registrations.ts"),
+            "import { S3ObjectStore } from '@forklaunch/infrastructure-s3';
+            const deps = {
+                ObjectStore: {
+                    type: S3ObjectStore,
+                }
+            }",
+        )
+        .unwrap();
+
+        let result = detect_infrastructure_from_registrations(service_path).unwrap();
+        assert!(result.contains(&Infrastructure::S3));
+    }
+
+    #[test]
     fn test_has_database_in_registrations() {
         let temp_dir = TempDir::new().unwrap();
         let service_path = temp_dir.path();
