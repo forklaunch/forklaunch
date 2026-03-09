@@ -127,4 +127,17 @@ pub(crate) fn delete_redis_ttl_cache_runtime_dependency<'a>(
         "TtlCache",
         "runtimeDependencies",
     );
+
+    let _ = delete_from_registrations_ts_config_injector(
+        &allocator,
+        registrations_program,
+        "AuthCacheService",
+        "runtimeDependencies",
+    );
+    let _ = delete_from_registrations_ts_config_injector(
+        &allocator,
+        registrations_program,
+        "BillingCacheService",
+        "runtimeDependencies",
+    );
 }
