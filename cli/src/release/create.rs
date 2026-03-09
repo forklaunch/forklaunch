@@ -36,8 +36,85 @@ impl Drop for RemoveDirGuard {
     }
 }
 
+#[derive(Debug, Deserialize)]
+struct ApplicationGitInfo {
+    #[serde(rename = "gitRepository")]
+    git_repository: Option<String>,
+}
+
+/// Opens the platform git integration page and polls until the git repository
+/// URL is configured. Returns the git repository URL.
+fn poll_for_git_repository(
+    auth_mode: &AuthMode,
+    application_id: &str,
+    stdout: &mut StandardStream,
+) -> Result<String> {
+    let integration_url = format!(
+        "{}/apps/{}/settings",
+        get_platform_ui_url(),
+        application_id
+    );
+
+    log_info!(
+        stdout,
+        "Opening git integration page in your browser..."
+    );
+    writeln!(stdout, "  {}", integration_url)?;
+
+    if let Err(e) = opener::open(&integration_url) {
+        log_warn!(
+            stdout,
+            "Could not open browser automatically: {}",
+            e
+        );
+        log_info!(stdout, "Please open the URL above manually.");
+    }
+
+    log_info!(stdout, "Waiting for git repository to be connected...");
+
+    let url = format!(
+        "{}/applications/{}",
+        get_platform_management_api_url(),
+        application_id
+    );
+
+    loop {
+        sleep(Duration::from_secs(3));
+
+        let response = http_client::get_with_auth(auth_mode, &url);
+
+        match response {
+            Ok(resp) if resp.status().is_success() => {
+                if let Ok(app) = resp.json::<ApplicationGitInfo>() {
+                    if let Some(git_repo) = app.git_repository {
+                        if !git_repo.is_empty() {
+                            log_ok!(stdout, "Git repository connected: {}", git_repo);
+                            return Ok(git_repo);
+                        }
+                    }
+                }
+            }
+            Ok(resp) => {
+                log_warn!(
+                    stdout,
+                    "Unexpected response while polling (HTTP {}). Retrying...",
+                    resp.status()
+                );
+            }
+            Err(_) => {
+                // Transient network error — keep polling
+            }
+        }
+    }
+}
+
+use std::thread::sleep;
+use std::time::Duration;
+
 use anyhow::{Context, Result, bail};
 use clap::{Arg, ArgMatches, Command};
+use dialoguer::{Select, theme::ColorfulTheme};
+use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
 use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
@@ -53,7 +130,7 @@ use super::{
 };
 use crate::{
     CliCommand,
-    constants::get_platform_management_api_url,
+    constants::{get_platform_management_api_url, get_platform_ui_url},
     core::{
         ast::infrastructure::{
             env::find_all_env_vars,
@@ -203,7 +280,47 @@ impl CliCommand for CreateCommand {
             writeln!(stdout)?;
         }
 
-        // Skip git repository check if using local mode
+        // When not in a git repo and not already in local mode, let the user choose
+        let mut local_mode = local_mode;
+        if !is_git_repo() && !local_mode {
+            log_warn!(stdout, "Not a git repository");
+            writeln!(stdout)?;
+
+            let options = [
+                "Connect GitHub repository (opens browser)",
+                "Package locally (upload code directly)",
+            ];
+            let selection = Select::with_theme(&ColorfulTheme::default())
+                .with_prompt("How would you like to proceed?")
+                .items(&options)
+                .default(0)
+                .interact()?;
+
+            match selection {
+                0 => {
+                    // Open integration page and poll for git repository
+                    let git_repo = poll_for_git_repository(
+                        &auth_mode,
+                        &application_id,
+                        &mut stdout,
+                    )?;
+
+                    manifest.git_repository = Some(git_repo);
+
+                    let manifest_str =
+                        to_string_pretty(&manifest).with_context(|| "Failed to serialize manifest")?;
+                    fs::write(&manifest_path, manifest_str)
+                        .with_context(|| "Failed to write manifest")?;
+
+                    log_ok!(stdout, "Git repository saved to manifest.toml");
+                }
+                _ => {
+                    local_mode = true;
+                }
+            }
+        }
+
+        // Prompt for git repository URL if not set and not using local mode
         if !local_mode && manifest.git_repository.is_none() {
             log_info!(stdout, "Git repository URL not set in manifest");
 
