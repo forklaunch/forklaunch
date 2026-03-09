@@ -775,8 +775,6 @@ impl CliCommand for ServiceCommand {
             platform_application_id: manifest_data.platform_application_id.clone(),
             platform_organization_id: manifest_data.platform_organization_id.clone(),
             release_version: manifest_data.release_version.clone(),
-            release_git_commit: manifest_data.release_git_commit.clone(),
-            release_git_branch: manifest_data.release_git_branch.clone(),
             is_s3_enabled: infrastructure.contains(&Infrastructure::S3),
             is_database_enabled: true,
 

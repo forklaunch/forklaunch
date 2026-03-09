@@ -2,11 +2,119 @@ use std::{
     collections::{HashMap, HashSet, hash_map::Entry},
     fs::{self, create_dir_all, read_to_string},
     io::Write,
-    path::Path,
+    path::{Path, PathBuf},
 };
+
+/// Scope guard that removes a directory when dropped, warning on failure.
+struct RemoveDirGuard {
+    path: Option<PathBuf>,
+}
+
+impl RemoveDirGuard {
+    fn new(path: PathBuf) -> Self {
+        Self { path: Some(path) }
+    }
+
+    /// Disarm the guard so it does not remove the directory on drop.
+    #[allow(dead_code)]
+    fn disarm(&mut self) {
+        self.path = None;
+    }
+}
+
+impl Drop for RemoveDirGuard {
+    fn drop(&mut self) {
+        if let Some(path) = self.path.take() {
+            if let Err(e) = fs::remove_dir_all(&path) {
+                eprintln!(
+                    "Warning: failed to clean up temporary directory {}: {}",
+                    path.display(),
+                    e
+                );
+            }
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ApplicationGitInfo {
+    #[serde(rename = "gitRepository")]
+    git_repository: Option<String>,
+}
+
+/// Opens the platform git integration page and polls until the git repository
+/// URL is configured. Returns the git repository URL.
+fn poll_for_git_repository(
+    auth_mode: &AuthMode,
+    application_id: &str,
+    stdout: &mut StandardStream,
+) -> Result<String> {
+    let integration_url = format!(
+        "{}/dashboard/applications/{}/github",
+        get_platform_ui_url(),
+        application_id
+    );
+
+    log_info!(
+        stdout,
+        "Opening git integration page in your browser..."
+    );
+    writeln!(stdout, "  {}", integration_url)?;
+
+    if let Err(e) = opener::open(&integration_url) {
+        log_warn!(
+            stdout,
+            "Could not open browser automatically: {}",
+            e
+        );
+        log_info!(stdout, "Please open the URL above manually.");
+    }
+
+    log_info!(stdout, "Waiting for git repository to be connected...");
+
+    let url = format!(
+        "{}/applications/{}",
+        get_platform_management_api_url(),
+        application_id
+    );
+
+    loop {
+        sleep(Duration::from_secs(3));
+
+        let response = http_client::get_with_auth(auth_mode, &url);
+
+        match response {
+            Ok(resp) if resp.status().is_success() => {
+                if let Ok(app) = resp.json::<ApplicationGitInfo>() {
+                    if let Some(git_repo) = app.git_repository {
+                        if !git_repo.is_empty() {
+                            log_ok!(stdout, "Git repository connected: {}", git_repo);
+                            return Ok(git_repo);
+                        }
+                    }
+                }
+            }
+            Ok(resp) => {
+                log_warn!(
+                    stdout,
+                    "Unexpected response while polling (HTTP {}). Retrying...",
+                    resp.status()
+                );
+            }
+            Err(_) => {
+                // Transient network error — keep polling
+            }
+        }
+    }
+}
+
+use std::thread::sleep;
+use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use clap::{Arg, ArgMatches, Command};
+use dialoguer::{Select, theme::ColorfulTheme};
+use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
 use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
@@ -22,7 +130,7 @@ use super::{
 };
 use crate::{
     CliCommand,
-    constants::get_platform_management_api_url,
+    constants::{get_platform_management_api_url, get_platform_ui_url},
     core::{
         ast::infrastructure::{
             env::find_all_env_vars,
@@ -172,8 +280,50 @@ impl CliCommand for CreateCommand {
             writeln!(stdout)?;
         }
 
-        // Skip git repository check if using local mode
-        if !local_mode && manifest.git_repository.is_none() {
+        // When not in a git repo and not already in local mode, let the user choose
+        let mut local_mode = local_mode;
+        let mut connected_github = false;
+        if !is_git_repo() && !local_mode {
+            log_warn!(stdout, "Not a git repository");
+            writeln!(stdout)?;
+
+            let options = [
+                "Connect GitHub repository (opens browser)",
+                "Package locally (upload code directly)",
+            ];
+            let selection = Select::with_theme(&ColorfulTheme::default())
+                .with_prompt("How would you like to proceed?")
+                .items(&options)
+                .default(0)
+                .interact()?;
+
+            match selection {
+                0 => {
+                    // Open integration page and poll for git repository
+                    let git_repo = poll_for_git_repository(
+                        &auth_mode,
+                        &application_id,
+                        &mut stdout,
+                    )?;
+
+                    manifest.git_repository = Some(git_repo);
+
+                    let manifest_str =
+                        to_string_pretty(&manifest).with_context(|| "Failed to serialize manifest")?;
+                    fs::write(&manifest_path, manifest_str)
+                        .with_context(|| "Failed to write manifest")?;
+
+                    log_ok!(stdout, "Git repository saved to manifest.toml");
+                    connected_github = true;
+                }
+                _ => {
+                    local_mode = true;
+                }
+            }
+        }
+
+        // Prompt for git repository URL if not set and not using local mode
+        if !local_mode && !connected_github && manifest.git_repository.is_none() {
             log_info!(stdout, "Git repository URL not set in manifest");
 
             print!("Enter git repository URL (e.g., https://github.com/user/repo.git): ");
@@ -206,11 +356,19 @@ impl CliCommand for CreateCommand {
         log_progress!(stdout, "  Detecting git metadata...");
 
         let (git_commit, git_branch) = if is_git_repo() {
-            let commit = get_git_commit()?;
-            let branch = get_git_branch().ok();
-            log_ok_suffix!(stdout);
-            (commit, branch)
-        } else if local_mode {
+            match get_git_commit() {
+                Ok(commit) => {
+                    let branch = get_git_branch().ok();
+                    log_ok_suffix!(stdout);
+                    (commit, branch)
+                }
+                Err(_) => {
+                    // git repo exists but no commits yet
+                    log_warn!(stdout, "No commits found (using local defaults)");
+                    ("local-build".to_string(), get_git_branch().ok().or(Some("local".to_string())))
+                }
+            }
+        } else if local_mode || connected_github {
             log_warn!(stdout, "Not a git repository (using local defaults)");
             ("local-build".to_string(), Some("local".to_string()))
         } else {
@@ -234,6 +392,7 @@ impl CliCommand for CreateCommand {
 
         let openapi_path = app_root.join(".forklaunch").join("openapi");
         create_dir_all(&openapi_path).with_context(|| "Failed to create openapi directory")?;
+        let _openapi_guard = RemoveDirGuard::new(openapi_path.clone());
 
         let exported_services = export_all_services(&app_root, &manifest, &openapi_path)?;
 
@@ -248,6 +407,8 @@ impl CliCommand for CreateCommand {
                 openapi_specs.insert(project.name.clone(), spec);
             }
         }
+
+        // openapi cleanup is handled by _openapi_guard (Drop)
 
         log_progress!(stdout, "Detecting required environment variables...");
 
@@ -842,8 +1003,6 @@ impl CliCommand for CreateCommand {
             log_ok_suffix!(stdout);
 
             manifest.release_version = Some(version.clone());
-            manifest.release_git_commit = Some(git_commit.clone());
-            manifest.release_git_branch = git_branch.clone();
 
             let updated_manifest = to_string_pretty(&manifest)
                 .with_context(|| "Failed to serialize updated manifest")?;
@@ -2142,8 +2301,6 @@ mod tests {
             platform_application_id: None,
             platform_organization_id: None,
             release_version: None,
-            release_git_commit: None,
-            release_git_branch: None,
         }
     }
 

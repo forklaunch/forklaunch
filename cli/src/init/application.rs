@@ -775,8 +775,6 @@ impl CliCommand for ApplicationCommand {
             platform_application_id: None,
             platform_organization_id: None,
             release_version: None,
-            release_git_commit: None,
-            release_git_branch: None,
         };
 
         let mut rendered_templates = Vec::new();
@@ -927,8 +925,6 @@ impl CliCommand for ApplicationCommand {
                 platform_application_id: data.platform_application_id.clone(),
                 platform_organization_id: data.platform_organization_id.clone(),
                 release_version: data.release_version.clone(),
-                release_git_commit: data.release_git_commit.clone(),
-                release_git_branch: data.release_git_branch.clone(),
 
                 is_better_auth: template_dir.module_id == Some(Module::BetterAuthIam),
                 is_stripe: template_dir.module_id == Some(Module::StripeBilling),
