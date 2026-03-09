@@ -39,6 +39,7 @@ const WORKER_TYPE_PROPERTY_KEYS: &[&str] = &[
     "DB_USER",
     "DB_PASSWORD",
     "DB_NAME",
+    "EntityMgr",
     "EntityManager",
 ];
 

@@ -109,18 +109,6 @@ pub fn put(url: &str, body: Value) -> Result<Response> {
     make_authenticated_request(Method::PUT, url, Some(body))
 }
 
-/// Helper to make a DELETE request with authentication
-#[allow(dead_code)]
-pub fn delete(url: &str) -> Result<Response> {
-    make_authenticated_request(Method::DELETE, url, None)
-}
-
-/// Helper to make a PATCH request with authentication
-#[allow(dead_code)]
-pub fn patch(url: &str, body: Value) -> Result<Response> {
-    make_authenticated_request(Method::PATCH, url, Some(body))
-}
-
 /// Extract the path component from a full URL (e.g. "https://host:port/path?q" -> "/path?q")
 fn extract_url_path(url: &str) -> Result<String> {
     // Find the start of the path after scheme://host(:port)

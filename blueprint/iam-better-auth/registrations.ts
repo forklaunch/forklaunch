@@ -111,11 +111,6 @@ const environmentConfig = configInjector.chain({
     type: string,
     value: getEnvVar('OTEL_EXPORTER_OTLP_ENDPOINT')
   },
-  PASSWORD_ENCRYPTION_SECRET: {
-    lifetime: Lifetime.Singleton,
-    type: string,
-    value: getEnvVar('PASSWORD_ENCRYPTION_SECRET')
-  },
   BETTER_AUTH_BASE_PATH: {
     lifetime: Lifetime.Singleton,
     type: string,
@@ -258,7 +253,6 @@ const expressApplicationOptions = serviceDependencies.chain({
     type: type<unknown>(),
     factory: ({
       BETTER_AUTH_BASE_PATH,
-      PASSWORD_ENCRYPTION_SECRET,
       CORS_ORIGINS,
       MikroORM,
       OpenTelemetryCollector
@@ -266,7 +260,6 @@ const expressApplicationOptions = serviceDependencies.chain({
       betterAuth(
         betterAuthConfig({
           BETTER_AUTH_BASE_PATH,
-          PASSWORD_ENCRYPTION_SECRET,
           CORS_ORIGINS,
           orm: MikroORM,
           openTelemetryCollector: OpenTelemetryCollector

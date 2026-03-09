@@ -79,17 +79,28 @@ pub(crate) fn transform_registrations_ts_add_router(
         &registrations_source_text,
     )?;
 
+    // Detect naming convention from existing registrations file
+    let otel_token = if registrations_source_text.contains("OtelCollector:") {
+        "OtelCollector"
+    } else {
+        "OpenTelemetryCollector"
+    };
+    let em_token = if registrations_source_text.contains("EntityMgr:") {
+        "EntityMgr"
+    } else {
+        "EntityManager"
+    };
+
+    let em_resolution_text = format!(
+        "let em = {em_token};
+              if (context.entityManagerOptions) {{
+                em = resolve('{em_token}', context);
+              }}"
+    );
+
     let (dependency, em_setup, em_resolution, service_param) = match project_type {
         ProjectType::Worker => ("WorkerProducer", "", "", "WorkerProducer"),
-        ProjectType::Service => (
-            "EntityManager",
-            "resolve,",
-            "let em = EntityManager;
-              if (context.entityManagerOptions) {
-                em = resolve('EntityManager', context);
-              }",
-            "em",
-        ),
+        ProjectType::Service => (em_token, "resolve,", em_resolution_text.as_str(), "em"),
         _ => unreachable!(),
     };
 
@@ -99,14 +110,14 @@ pub(crate) fn transform_registrations_ts_add_router(
             lifetime: Lifetime.Scoped,
             type: Base{router_name_pascal_case}Service,
             factory: (
-                {{ {dependency}, OpenTelemetryCollector }}, 
+                {{ {dependency}, {otel_token} }},
                 {em_setup}
                 context
-            ) => {{ 
+            ) => {{
                 {em_resolution}
                 return new Base{router_name_pascal_case}Service(
                     {service_param},
-                    OpenTelemetryCollector
+                    {otel_token}
                 );
             }}
             }}
@@ -145,9 +156,15 @@ pub(crate) fn transform_registrations_ts_infrastructure_redis(
     let mut registrations_program =
         parse_ast_program(&allocator, &registrations_text, registrations_type);
 
+    let otel_token = if registrations_text.contains("OtelCollector:") {
+        "OtelCollector"
+    } else {
+        "OpenTelemetryCollector"
+    };
+
     redis_import(&allocator, &registrations_text, &mut registrations_program)?;
     redis_url_environment_variable(&allocator, &mut registrations_program)?;
-    redis_ttl_cache_runtime_dependency(&allocator, &mut registrations_program)?;
+    redis_ttl_cache_runtime_dependency(&allocator, &mut registrations_program, otel_token)?;
 
     Ok(Codegen::new()
         .with_options(CodegenOptions::default())
@@ -171,9 +188,15 @@ pub(crate) fn transform_registrations_ts_infrastructure_s3(
     let mut registrations_program =
         parse_ast_program(&allocator, &registrations_text, registrations_type);
 
+    let otel_token = if registrations_text.contains("OtelCollector:") {
+        "OtelCollector"
+    } else {
+        "OpenTelemetryCollector"
+    };
+
     s3_import(&allocator, &registrations_text, &mut registrations_program)?;
     s3_url_environment_variable(&allocator, &mut registrations_program)?;
-    s3_object_store_runtime_dependency(&allocator, &mut registrations_program)?;
+    s3_object_store_runtime_dependency(&allocator, &mut registrations_program, otel_token)?;
 
     Ok(Codegen::new()
         .with_options(CodegenOptions::default())
@@ -271,6 +294,22 @@ pub(crate) fn transform_registrations_ts_worker_type(
 
     delete_from_registrations_ts_worker_type(&allocator, &mut registration_program);
 
+    let otel_token = if registrations_text.contains("OtelCollector:") {
+        "OtelCollector"
+    } else {
+        "OpenTelemetryCollector"
+    };
+    let orm_token = if registrations_text.contains("Orm:") {
+        "Orm"
+    } else {
+        "MikroORM"
+    };
+    let em_token = if registrations_text.contains("EntityMgr:") {
+        "EntityMgr"
+    } else {
+        "EntityManager"
+    };
+
     match r#type {
         WorkerType::BullMQCache => {
             redis_import(&allocator, &registrations_text, &mut registration_program)?;
@@ -279,7 +318,7 @@ pub(crate) fn transform_registrations_ts_worker_type(
         WorkerType::RedisCache => {
             redis_import(&allocator, &registrations_text, &mut registration_program)?;
             redis_url_environment_variable(&allocator, &mut registration_program)?;
-            redis_ttl_cache_runtime_dependency(&allocator, &mut registration_program)?;
+            redis_ttl_cache_runtime_dependency(&allocator, &mut registration_program, otel_token)?;
         }
         WorkerType::Database => {
             let mut mikro_orm_import_program = parse_ast_program(
@@ -302,7 +341,7 @@ pub(crate) fn transform_registrations_ts_worker_type(
                 &mut mikro_orm_config_import_program,
                 "./mikro-orm.config",
             )?;
-            database_entity_manager_runtime_dependency(&allocator, &mut registration_program)?;
+            database_entity_manager_runtime_dependency(&allocator, &mut registration_program, orm_token, em_token)?;
         }
         WorkerType::Kafka => {
             inject_specifier_into_import_statement(

@@ -41,7 +41,6 @@ use crate::{
         format::format_code,
         gitignore::generate_gitignore,
         husky::create_or_merge_husky_pre_commit,
-        iam::generate_iam_secret,
         license::generate_license,
         manifest::{
             ManifestData, ProjectEntry, ProjectType, ResourceInventory,
@@ -353,15 +352,6 @@ impl CliCommand for ApplicationCommand {
                     .num_args(0..)
                     .action(ArgAction::Append),
             )
-            // .arg(
-            //     Arg::new("libraries")
-            //         .short('l')
-            //         .long("libraries")
-            //         .help("Additional libraries to include.]")
-            //         .value_parser(VALID_LIBRARIES)
-            //         .num_args(0..)
-            //         .action(ArgAction::Append),
-            // )
             .arg(
                 Arg::new("description")
                     .short('D')
@@ -558,20 +548,7 @@ impl CliCommand for ApplicationCommand {
             .parse()?
         };
 
-        // TODO: Add support for Bun test framework
-        let test_framework: Option<TestFramework> = 
-        // if runtime == Runtime::Bun {
-        //     if matches.get_one::<String>("test-framework").is_some() {
-        //         stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-        //         writeln!(
-        //             stdout,
-        //             "Ignoring test-framework choice, defaulting to Bun built-in test runner.",
-        //         )?;
-        //         stdout.reset()?;
-        //     }
-        //     None
-        // } else {
-            Some(
+        let test_framework: Option<TestFramework> = Some(
                 prompt_with_validation(
                     &mut line_editor,
                     &mut stdout,
@@ -584,7 +561,6 @@ impl CliCommand for ApplicationCommand {
                 )?
                 .parse()?,
             );
-        // };
 
         let mut global_module_config = ModuleConfig {
             iam: None,
@@ -979,18 +955,12 @@ impl CliCommand for ApplicationCommand {
                 // Default to false for application initialization, will be set by CLI flag
                 with_mappers: false,
 
-                iam_secret: if template_dir.module_id == Some(Module::BaseIam)
-                    || template_dir.module_id == Some(Module::BetterAuthIam)
-                {
-                    Some(generate_iam_secret())
-                } else {
-                    None
-                },
+                iam_secret: None,
 
                 // These will be properly generated when initialized
-                generated_password_encryption_secret: String::new(),
                 generated_better_auth_secret: String::new(),
                 generated_hmac_secret: String::new(),
+                otel_token: "OtelCollector".to_string(),
             };
 
             if service_data.service_name == "client-sdk" {
@@ -1167,13 +1137,6 @@ impl CliCommand for ApplicationCommand {
                 },
             )?);
 
-            if let Some(secret) = &service_data.iam_secret {
-                rendered_templates.push(RenderedTemplate {
-                    path: Path::new(&application_path).join(".env.local"),
-                    content: format!("PASSWORD_ENCRYPTION_SECRET={}\n", secret),
-                    context: None,
-                });
-            }
         }
 
         let docker_compose_path = if let Some(docker_compose_path) = &data.docker_compose_path {

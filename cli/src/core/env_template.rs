@@ -356,10 +356,6 @@ mod tests {
             categorize_env_var("BETTER_AUTH_BASE_PATH"),
             "Authentication"
         );
-        assert_eq!(
-            categorize_env_var("PASSWORD_ENCRYPTION_SECRET_PATH"),
-            "Authentication"
-        );
         assert_eq!(categorize_env_var("HMAC_SECRET_KEY"), "Authentication");
         assert_eq!(categorize_env_var("JWKS_PUBLIC_KEY_URL"), "Authentication");
         assert_eq!(categorize_env_var("CORS_ORIGINS"), "Authentication");

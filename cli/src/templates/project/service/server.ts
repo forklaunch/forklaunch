@@ -8,7 +8,7 @@ import { {{camel_case_name}}SdkClient } from './sdk';
 /**
  * Creates an instance of OpenTelemetryCollector
  */
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 {{#is_iam_configured}}
 const authCacheService = ci.resolve(tokens.AuthCacheService);
 const iamUrl = ci.resolve(tokens.IAM_URL);

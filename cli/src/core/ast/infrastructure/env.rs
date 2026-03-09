@@ -12,10 +12,6 @@ use crate::core::rendered_template::RenderedTemplatesCache;
 #[derive(Debug, Clone)]
 pub struct EnvVarUsage {
     pub var_name: String,
-    #[allow(dead_code)]
-    pub line: usize,
-    #[allow(dead_code)]
-    pub column: usize,
 }
 
 pub struct EnvVarVisitor {
@@ -38,12 +34,8 @@ impl<'a> Visit<'a> for EnvVarVisitor {
                     if let Some(Expression::StringLiteral(str_lit)) = arg.as_expression() {
                         let var_name = str_lit.value.to_string();
 
-                        let line = str_lit.span.start as usize;
-
                         self.env_vars.push(EnvVarUsage {
                             var_name,
-                            line,
-                            column: 0,
                         });
                     }
                 }
@@ -79,8 +71,6 @@ impl<'a> Visit<'a> for ProcessEnvVisitor {
                         if ident.name == "process" {
                             self.env_vars.push(EnvVarUsage {
                                 var_name: property_name,
-                                line: static_member.span.start as usize,
-                                column: 0,
                             });
                         }
                     }
@@ -293,21 +283,6 @@ fn get_project_name_from_path(file_path: &Path) -> Result<String> {
         .to_string();
 
     Ok(project_name)
-}
-
-#[allow(dead_code)]
-pub fn get_unique_env_vars(
-    project_env_vars: &std::collections::HashMap<String, Vec<EnvVarUsage>>,
-) -> HashSet<String> {
-    let mut unique_vars = HashSet::new();
-
-    for env_vars in project_env_vars.values() {
-        for env_var in env_vars {
-            unique_vars.insert(env_var.var_name.clone());
-        }
-    }
-
-    unique_vars
 }
 
 #[cfg(test)]

@@ -40,8 +40,6 @@ struct CreateDeploymentRequest {
 #[derive(Debug, Deserialize)]
 struct CreateDeploymentResponse {
     id: String,
-    #[allow(dead_code)]
-    status: String,
 }
 
 #[derive(Debug, Deserialize)]

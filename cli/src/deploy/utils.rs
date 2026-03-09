@@ -12,9 +12,6 @@ pub(crate) struct DeploymentStatus {
     pub(crate) id: String,
     pub(crate) status: String,
     pub(crate) phase: Option<String>,
-    #[serde(rename = "completedAt")]
-    #[allow(dead_code)]
-    pub(crate) completed_at: Option<String>,
     pub(crate) endpoints: Option<DeploymentEndpoints>,
     #[serde(rename = "errorMessage")]
     pub(crate) error: Option<String>,

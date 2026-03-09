@@ -17,12 +17,12 @@ use crate::{
             Healthcheck,
         },
         manifest::{MutableManifestData, ProjectEntry, ProjectType},
-        move_template::{MoveTemplate, MoveTemplateType},
+        move_template::MoveTemplate,
         package_json::{
             application_package_json::ApplicationPackageJson,
             project_package_json::ProjectPackageJson, replace_project_in_workspace_definition,
         },
-        removal_template::{RemovalTemplate, RemovalTemplateType},
+        removal_template::RemovalTemplate,
         rendered_template::{RenderedTemplate, RenderedTemplatesCache},
         string::short_circuit_replacement,
         tsconfig::update_project_in_modules_tsconfig,
@@ -111,7 +111,6 @@ pub(crate) fn change_name_in_files(
             if relative_path.to_string_lossy().to_string() != new_file_name.clone() {
                 removal_templates.push(RemovalTemplate {
                     path: entry.path().to_path_buf(),
-                    r#type: RemovalTemplateType::File,
                 })
             }
         }
@@ -389,6 +388,5 @@ pub(crate) fn change_name(
     Ok(MoveTemplate {
         path: base_path.to_path_buf(),
         target: base_path.parent().unwrap().join(name),
-        r#type: MoveTemplateType::Directory,
     })
 }

@@ -62,26 +62,30 @@ pub(crate) fn redis_url_environment_variable<'a>(
 pub(crate) fn redis_ttl_cache_runtime_dependency<'a>(
     allocator: &'a Allocator,
     registrations_program: &mut Program<'a>,
+    otel_token: &str,
 ) -> Result<()> {
-    let redis_registration_text = "const configInjector = createConfigInjector(SchemaValidator(), {
-                TtlCache: {
+    let redis_registration_text: &'static str = Box::leak(
+        format!("const configInjector = createConfigInjector(SchemaValidator(), {{
+                TtlCache: {{
                     lifetime: Lifetime.Singleton,
                     type: RedisTtlCache,
-                    factory: ({ REDIS_URL, OpenTelemetryCollector }) =>
-                        new RedisTtlCache(60 * 60 * 1000, OpenTelemetryCollector, {
+                    factory: ({{ REDIS_URL, {otel_token} }}) =>
+                        new RedisTtlCache(60 * 60 * 1000, {otel_token}, {{
                             url: REDIS_URL,
-                        }, {
+                        }}, {{
                             enabled: true,
                             level: 'info',
-                        }),
-                }
-            });";
+                        }}),
+                }}
+            }});")
+        .into_boxed_str(),
+    );
 
     let mut redis_registration_program =
-        parse_ast_program(&allocator, &redis_registration_text, SourceType::ts());
+        parse_ast_program(allocator, redis_registration_text, SourceType::ts());
 
     inject_into_registrations_config_injector(
-        &allocator,
+        allocator,
         registrations_program,
         &mut redis_registration_program,
         "runtimeDependencies",

@@ -1,4 +1,5 @@
 import { forklaunchExpress, schemaValidator } from '@forklaunch/blueprint-core';
+import { discoveryRouter } from './api/routes/discovery.routes';
 import { organizationRouter } from './api/routes/organization.routes';
 import { permissionRouter } from './api/routes/permission.routes';
 import { roleRouter } from './api/routes/role.routes';
@@ -47,6 +48,7 @@ const version = ci.resolve(tokens.VERSION);
 const docsPath = ci.resolve(tokens.DOCS_PATH);
 
 //! mounts the routes to the app
+app.use(discoveryRouter);
 app.use(organizationRouter);
 app.use(permissionRouter);
 app.use(roleRouter);
