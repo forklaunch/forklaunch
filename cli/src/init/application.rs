@@ -960,6 +960,7 @@ impl CliCommand for ApplicationCommand {
                 // These will be properly generated when initialized
                 generated_better_auth_secret: String::new(),
                 generated_hmac_secret: String::new(),
+                otel_token: "OtelCollector".to_string(),
             };
 
             if service_data.service_name == "client-sdk" {

@@ -99,6 +99,9 @@ config_struct!(
         pub(crate) generated_better_auth_secret: String,
         #[serde(skip_serializing, skip_deserializing)]
         pub(crate) generated_hmac_secret: String,
+
+        #[serde(skip_serializing, skip_deserializing)]
+        pub(crate) otel_token: String,
     }
 );
 
@@ -225,6 +228,8 @@ impl InitializableManifestConfig for ServiceManifestData {
             // Generate unique random secrets for each service/environment
             generated_better_auth_secret: generate_random_secret(32),
             generated_hmac_secret: generate_random_secret(32),
+
+            otel_token: "OtelCollector".to_string(),
 
             ..self.clone()
         }
