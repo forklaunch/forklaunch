@@ -12,7 +12,7 @@ const DEV_IAM_API_URL: &str = "http://localhost:8001";
 const DEV_BILLING_API_URL: &str = "http://localhost:8000";
 const DEV_PLATFORM_UI_URL: &str = "http://localhost:3001";
 
-const PROD_PLATFORM_MANAGEMENT_API_URL: &str = "https://platform.forklaunch.com";
+const PROD_PLATFORM_MANAGEMENT_API_URL: &str = "https://platform-management.forklaunch.com";
 const PROD_IAM_API_URL: &str = "https://iam.forklaunch.com";
 const PROD_BILLING_API_URL: &str = "https://billing.forklaunch.com";
 const PROD_PLATFORM_UI_URL: &str = "https://forklaunch.com";

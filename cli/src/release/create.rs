@@ -249,6 +249,9 @@ impl CliCommand for CreateCommand {
             }
         }
 
+        // Clean up temporary openapi files - specs are now in memory
+        let _ = fs::remove_dir_all(&openapi_path);
+
         log_progress!(stdout, "Detecting required environment variables...");
 
         let workspace_root = find_workspace_root(&app_root)?;
@@ -842,8 +845,6 @@ impl CliCommand for CreateCommand {
             log_ok_suffix!(stdout);
 
             manifest.release_version = Some(version.clone());
-            manifest.release_git_commit = Some(git_commit.clone());
-            manifest.release_git_branch = git_branch.clone();
 
             let updated_manifest = to_string_pretty(&manifest)
                 .with_context(|| "Failed to serialize updated manifest")?;
@@ -2142,8 +2143,6 @@ mod tests {
             platform_application_id: None,
             platform_organization_id: None,
             release_version: None,
-            release_git_commit: None,
-            release_git_branch: None,
         }
     }
 

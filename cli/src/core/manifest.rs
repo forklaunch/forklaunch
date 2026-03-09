@@ -182,10 +182,6 @@ macro_rules! internal_config_struct {
             $vis platform_organization_id: Option<String>,
             #[serde(skip_serializing_if = "Option::is_none")]
             $vis release_version: Option<String>,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            $vis release_git_commit: Option<String>,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            $vis release_git_branch: Option<String>,
         }
     };
 }
@@ -288,8 +284,6 @@ macro_rules! config_struct {
                         platform_application_id: shadow.platform_application_id.clone(),
                         platform_organization_id: shadow.platform_organization_id.clone(),
                         release_version: shadow.release_version.clone(),
-                        release_git_commit: shadow.release_git_commit.clone(),
-                        release_git_branch: shadow.release_git_branch.clone(),
 
                         is_eslint: shadow.linter == "eslint",
                         is_biome: shadow.formatter == "biome",

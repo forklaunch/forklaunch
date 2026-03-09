@@ -368,8 +368,6 @@ mod tests {
             platform_application_id: None,
             platform_organization_id: None,
             release_version: None,
-            release_git_commit: None,
-            release_git_branch: None,
         }
     }
 
