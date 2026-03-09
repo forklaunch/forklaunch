@@ -1,1 +1,1 @@
-../../iam-base/api/routes/discovery.routes.ts
+../../../iam-base/api/routes/discovery.routes.ts
