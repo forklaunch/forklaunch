@@ -8,7 +8,7 @@ use super::base_path::{RequiredLocation, find_app_root_path};
 use super::hmac::AuthMode;
 use super::manifest::application::ApplicationManifestData;
 use super::token::get_token;
-use crate::constants::{get_iam_api_url, is_dev_build};
+use crate::constants::{get_billing_api_url, is_dev_build};
 
 /// Validates user is authenticated. Returns the auth token.
 pub(crate) fn require_auth() -> Result<String> {
@@ -59,7 +59,7 @@ pub(crate) fn require_active_account(auth_mode: &AuthMode) -> Result<()> {
     }
 
     let token = get_token()?;
-    let api_url = get_iam_api_url();
+    let api_url = get_billing_api_url();
     let client = reqwest::blocking::Client::new();
     let response = client
         .get(format!("{}/trial/status", api_url))

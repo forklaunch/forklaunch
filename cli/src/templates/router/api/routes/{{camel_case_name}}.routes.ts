@@ -4,7 +4,7 @@ import { ci, tokens } from '../../bootstrapper';
 
 
 // resolve the dependencies
-const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
+const openTelemetryCollector = ci.resolve(tokens.{{otel_token}});
 
 // defines the router for the {{camel_case_name}} routes
 export const {{camel_case_name}}Router = forklaunchRouter(

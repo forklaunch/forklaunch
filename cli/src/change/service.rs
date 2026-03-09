@@ -706,6 +706,15 @@ fn service_to_worker(
         },
     );
 
+    // Detect naming convention from existing registrations file
+    let registrations_content = std::fs::read_to_string(base_path.join("registrations.ts"))
+        .unwrap_or_default();
+    let otel_token = if registrations_content.contains("OtelCollector:") {
+        "OtelCollector"
+    } else {
+        "OpenTelemetryCollector"
+    };
+
     let worker_ts_path = base_path.join("worker.ts");
     let worker_ts_content = format!(
         r#"import {{ ci, tokens }} from './bootstrapper';
@@ -714,7 +723,7 @@ import {{ processEvents, processErrors }} from './services/{camel_case_name}.ser
 /**
  * Creates an instance of OpenTelemetryCollector
  */
-const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
+const openTelemetryCollector = ci.resolve(tokens.{otel_token});
 
 /**
  * Main worker entry point
