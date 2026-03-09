@@ -2,7 +2,7 @@
 use std::os::unix::{fs::symlink, prelude::PermissionsExt};
 use std::{
     env::{args, current_dir},
-    fs::{File, create_dir_all, metadata, read_to_string, remove_file, set_permissions},
+    fs::{File, create_dir_all, metadata, read_to_string, remove_file, rename, set_permissions},
     io::{Write, copy},
     path::PathBuf,
     process::{Command as OsCommand, Stdio, exit},
@@ -95,14 +95,20 @@ fn download_binary(required_version: &str) -> Result<PathBuf> {
             resp.status()
         );
     }
-    let mut file = File::create(&binary_path)?;
+    // Write to a temp file first, then atomically rename into place.
+    // Directly overwriting a running binary (same inode) causes macOS to
+    // SIGKILL the process because the code signature becomes invalid.
+    let tmp_path = binary_path.with_extension("tmp");
+    let mut file = File::create(&tmp_path)?;
     copy(&mut resp, &mut file)?;
+    drop(file);
     #[cfg(unix)]
     {
-        let mut perms = metadata(&binary_path)?.permissions();
+        let mut perms = metadata(&tmp_path)?.permissions();
         perms.set_mode(0o755);
-        set_permissions(&binary_path, perms)?;
+        set_permissions(&tmp_path, perms)?;
     }
+    rename(&tmp_path, &binary_path)?;
 
     #[cfg(not(target_os = "windows"))]
     {
