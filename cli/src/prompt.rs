@@ -251,7 +251,7 @@ pub(crate) fn prompt_comma_separated_list_from_selections(
             Ok(current_value.map(|v| v.clone()))
         }
     } else {
-        Ok(None)
+        Ok(current_value)
     }
 }
 
