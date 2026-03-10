@@ -3,6 +3,7 @@ use std::{
     fs::{self, create_dir_all, read_to_string},
     io::Write,
     path::{Path, PathBuf},
+    process::Command as ProcessCommand,
 };
 
 /// Scope guard that removes a directory when dropped, warning on failure.
@@ -132,6 +133,7 @@ use crate::{
     CliCommand,
     constants::{get_platform_management_api_url, get_platform_ui_url},
     core::{
+        openapi_export::resolve_command,
         ast::infrastructure::{
             env::find_all_env_vars,
             integrations::find_all_integrations,
@@ -208,7 +210,13 @@ impl CliCommand for CreateCommand {
                 Arg::new("local")
                     .long("local")
                     .action(clap::ArgAction::SetTrue)
-                    .help("Package local code and upload to S3 (for CI/CD testing without GitHub)"),
+                    .help("Package local code and upload to S3 (skip mode selection prompt)"),
+            )
+            .arg(
+                Arg::new("git")
+                    .long("git")
+                    .action(clap::ArgAction::SetTrue)
+                    .help("Use git-based release flow (skip mode selection prompt)"),
             )
             .arg(
                 Arg::new("skip-sync")
@@ -231,8 +239,13 @@ impl CliCommand for CreateCommand {
             .ok_or_else(|| anyhow::anyhow!("Version is required"))?;
 
         let dry_run = matches.get_flag("dry-run");
-        let local_mode = matches.get_flag("local");
+        let flag_local = matches.get_flag("local");
+        let flag_git = matches.get_flag("git");
         let skip_sync = matches.get_flag("skip-sync");
+
+        if flag_local && flag_git {
+            bail!("Cannot specify both --local and --git flags");
+        }
 
         let manifest_path = app_root.join(".forklaunch").join("manifest.toml");
         let mut manifest = manifest;
@@ -280,60 +293,39 @@ impl CliCommand for CreateCommand {
             writeln!(stdout)?;
         }
 
-        // When not in a git repo and not already in local mode, let the user choose
-        let mut local_mode = local_mode;
-        let mut connected_github = false;
-        if !is_git_repo() && !local_mode {
-            log_warn!(stdout, "Not a git repository");
-            writeln!(stdout)?;
-
+        // Determine release mode: local (default) or git
+        let local_mode = if flag_local {
+            true
+        } else if flag_git {
+            false
+        } else {
+            // Prompt user to choose
             let options = [
-                "Connect GitHub repository (opens browser)",
                 "Package locally (upload code directly)",
+                "Use git (connect GitHub repository)",
             ];
             let selection = Select::with_theme(&ColorfulTheme::default())
-                .with_prompt("How would you like to proceed?")
+                .with_prompt("How would you like to release?")
                 .items(&options)
                 .default(0)
                 .interact()?;
 
             match selection {
-                0 => {
-                    // Open integration page and poll for git repository
-                    let git_repo = poll_for_git_repository(
-                        &auth_mode,
-                        &application_id,
-                        &mut stdout,
-                    )?;
-
-                    manifest.git_repository = Some(git_repo);
-
-                    let manifest_str =
-                        to_string_pretty(&manifest).with_context(|| "Failed to serialize manifest")?;
-                    fs::write(&manifest_path, manifest_str)
-                        .with_context(|| "Failed to write manifest")?;
-
-                    log_ok!(stdout, "Git repository saved to manifest.toml");
-                    connected_github = true;
-                }
-                _ => {
-                    local_mode = true;
-                }
+                1 => false,
+                _ => true,
             }
-        }
+        };
 
-        // Prompt for git repository URL if not set and not using local mode
-        if !local_mode && !connected_github && manifest.git_repository.is_none() {
-            log_info!(stdout, "Git repository URL not set in manifest");
+        let mut connected_github = false;
+        if !local_mode {
+            // Git mode: connect GitHub repository if not in a git repo
+            if !is_git_repo() {
+                let git_repo = poll_for_git_repository(
+                    &auth_mode,
+                    &application_id,
+                    &mut stdout,
+                )?;
 
-            print!("Enter git repository URL (e.g., https://github.com/user/repo.git): ");
-            std::io::stdout().flush()?;
-
-            let mut git_repo = String::new();
-            std::io::stdin().read_line(&mut git_repo)?;
-            let git_repo = git_repo.trim().to_string();
-
-            if !git_repo.is_empty() {
                 manifest.git_repository = Some(git_repo);
 
                 let manifest_str =
@@ -342,6 +334,7 @@ impl CliCommand for CreateCommand {
                     .with_context(|| "Failed to write manifest")?;
 
                 log_ok!(stdout, "Git repository saved to manifest.toml");
+                connected_github = true;
             }
         }
 
@@ -351,6 +344,49 @@ impl CliCommand for CreateCommand {
 
         log_header!(stdout, Color::Cyan, "Creating release {}...", version);
         writeln!(stdout)?;
+
+        let workspace_root = find_workspace_root(&app_root)?;
+        let modules_path = get_modules_path(&workspace_root)?;
+
+        // Step 0.5: Install dependencies and build in modules path
+        {
+            let runtime_cmd = if manifest.runtime == "bun" { "bun" } else { "pnpm" };
+            let resolved = resolve_command(runtime_cmd);
+
+            log_header!(stdout, Color::Cyan, "Installing dependencies ({})...", runtime_cmd);
+            writeln!(stdout)?;
+
+            let install_status = ProcessCommand::new(&resolved)
+                .args(&["install", "--frozen-lockfile"])
+                .current_dir(&modules_path)
+                .status()
+                .with_context(|| format!("Failed to run {} install", runtime_cmd))?;
+
+            if !install_status.success() {
+                bail!("{} install failed", runtime_cmd);
+            }
+            log_ok!(stdout, "Dependencies installed");
+
+            log_header!(stdout, Color::Cyan, "Building project ({})...", runtime_cmd);
+            writeln!(stdout)?;
+
+            let build_args = if manifest.runtime == "bun" {
+                vec!["run", "build"]
+            } else {
+                vec!["build"]
+            };
+            let build_status = ProcessCommand::new(&resolved)
+                .args(&build_args)
+                .current_dir(&modules_path)
+                .status()
+                .with_context(|| format!("Failed to run {} build", runtime_cmd))?;
+
+            if !build_status.success() {
+                bail!("{} build failed", runtime_cmd);
+            }
+            log_ok!(stdout, "Build completed");
+            writeln!(stdout)?;
+        }
 
         // Step 1: Detect git metadata
         let (git_commit, git_branch) = if is_git_repo() {
@@ -405,9 +441,6 @@ impl CliCommand for CreateCommand {
         }
 
         // openapi cleanup is handled by _openapi_guard (Drop)
-
-        let workspace_root = find_workspace_root(&app_root)?;
-        let modules_path = get_modules_path(&workspace_root)?;
 
         let rendered_templates_cache = RenderedTemplatesCache::new();
         let project_env_vars = find_all_env_vars(&modules_path, &rendered_templates_cache)?;
@@ -934,6 +967,28 @@ impl CliCommand for CreateCommand {
             HashMap::new()
         };
 
+        // Detect projects where DB_HOST is user-managed (set in .env.local)
+        let mut user_managed_db_projects: HashSet<String> = HashSet::new();
+        for project in &manifest.projects {
+            let env_local_path = app_root
+                .join(&manifest.modules_path)
+                .join(&project.name)
+                .join(".env.local");
+            if let Ok(contents) = read_to_string(&env_local_path) {
+                let has_user_db_host = contents
+                    .lines()
+                    .filter(|line| !line.trim().is_empty() && !line.starts_with('#'))
+                    .any(|line| {
+                        line.split('=')
+                            .next()
+                            .is_some_and(|k| k.trim() == "DB_HOST")
+                    });
+                if has_user_db_host {
+                    user_managed_db_projects.insert(project.name.clone());
+                }
+            }
+        }
+
         let release_manifest = generate_release_manifest(
             &app_root,
             application_id.clone(),
@@ -949,6 +1004,7 @@ impl CliCommand for CreateCommand {
             &all_worker_configs,
             &all_service_deps,
             &openapi_s3_keys,
+            &user_managed_db_projects,
         )?;
 
         log_ok!(stdout, "Generated release manifest");

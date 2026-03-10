@@ -1,4 +1,8 @@
-# Contributor Code of Conduct
+---
+title: Contributor Code of Conduct
+category: Community
+description: Our community code of conduct and standards for participation.
+---
 
 ## Our Pledge
 

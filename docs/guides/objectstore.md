@@ -773,7 +773,7 @@ const store = new InMemoryObjectStore();
 
 ## Related Documentation
 
-- **[Cache Module](/docs/development/cache.md)** - For short-term data caching
-- **[Testing](/docs/development/testing.md)** - TestContainers setup for S3
-- **[Telemetry](/docs/development/telemetry.md)** - Monitoring object store performance
-- **[HTTP Framework](/docs/development/http.md)** - Integrating with HTTP endpoints
+- [Cache](/docs/guides/cache.md): For short-term data caching
+- [Testing](/docs/guides/testing.md): TestContainers setup for S3
+- [Telemetry](/docs/framework/telemetry.md): Monitoring object store performance
+- [HTTP Framework](/docs/framework/http.md): Integrating with HTTP endpoints

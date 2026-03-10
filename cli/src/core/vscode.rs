@@ -17,7 +17,7 @@ pub(crate) fn generate_vscode_settings(path_dir: &Path) -> Result<Option<Rendere
     Ok(Some(RenderedTemplate {
         path,
         content: to_string_pretty(&json!({
-          "typescript.experimental.useTsgo": false,
+          "ts.experimental.useTsgo": false,
           "editor.codeActionsOnSave": {
             "source.organizeImports": "explicit"
           },

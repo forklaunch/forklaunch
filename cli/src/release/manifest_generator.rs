@@ -344,6 +344,7 @@ pub(crate) fn generate_release_manifest(
     worker_configs: &HashMap<String, AstWorkerConfig>,
     service_dependencies: &HashMap<String, Vec<(String, String)>>,
     openapi_s3_keys: &HashMap<String, String>,
+    user_managed_db_projects: &std::collections::HashSet<String>,
 ) -> Result<ReleaseManifest> {
     let timestamp = chrono::Utc::now().to_rfc3339();
 
@@ -676,19 +677,34 @@ pub(crate) fn generate_release_manifest(
     let mut resources = Vec::new();
     for project in &manifest.projects {
         if let Some(project_resources) = &project.resources {
+            let user_managed_db = user_managed_db_projects.contains(&project.name);
+
             // For worker projects, resources need to be accessible to both
             // the "{name}-service" and "{name}-worker" components
             if project.r#type == ProjectType::Worker {
-                // Create resources for the worker-service component
-                let service_name = format!("{}-service", project.name);
-                add_resources_from_inventory(&service_name, project_resources, &mut resources);
+                if user_managed_db {
+                    // When DB is user-managed, emit a single detached DB resource (no service_name)
+                    // to avoid duplicates, then add non-DB resources for each component
+                    add_resources_from_inventory(&project.name, project_resources, &mut resources, true);
 
-                // Create resources for the worker-worker component
-                let worker_name = format!("{}-worker", project.name);
-                add_resources_from_inventory(&worker_name, project_resources, &mut resources);
+                    // Add non-DB resources for service and worker components
+                    let service_name = format!("{}-service", project.name);
+                    add_non_db_resources(&service_name, project_resources, &mut resources);
+
+                    let worker_name = format!("{}-worker", project.name);
+                    add_non_db_resources(&worker_name, project_resources, &mut resources);
+                } else {
+                    // Create resources for the worker-service component
+                    let service_name = format!("{}-service", project.name);
+                    add_resources_from_inventory(&service_name, project_resources, &mut resources, false);
+
+                    // Create resources for the worker-worker component
+                    let worker_name = format!("{}-worker", project.name);
+                    add_resources_from_inventory(&worker_name, project_resources, &mut resources, false);
+                }
             } else {
                 // For regular service projects, create resources with the project name
-                add_resources_from_inventory(&project.name, project_resources, &mut resources);
+                add_resources_from_inventory(&project.name, project_resources, &mut resources, user_managed_db);
             }
         }
     }
@@ -747,10 +763,12 @@ fn add_resources_from_inventory(
     service_name: &str,
     inventory: &ResourceInventory,
     resources: &mut Vec<ResourceDefinition>,
+    user_managed_db: bool,
 ) {
     if let Some(database) = &inventory.database {
         let mut config = HashMap::new();
         config.insert("technology".to_string(), Value::String(database.clone()));
+        config.insert("mode".to_string(), Value::String("centralized".to_string()));
 
         resources.push(ResourceDefinition {
             id: format!("{}-db", service_name),
@@ -760,13 +778,20 @@ fn add_resources_from_inventory(
             name: format!("{}-database", service_name),
             region: None,
             config: Some(config),
-            service_name: Some(service_name.to_string()),
+            // If user manages DB_HOST themselves, don't connect the resource to the service
+            // (keep the resource visible in resource view but not as an ApplicationResource)
+            service_name: if user_managed_db {
+                None
+            } else {
+                Some(service_name.to_string())
+            },
         });
     }
 
     if let Some(cache) = &inventory.cache {
         let mut config = HashMap::new();
         config.insert("technology".to_string(), Value::String(cache.clone()));
+        config.insert("mode".to_string(), Value::String("distributed".to_string()));
 
         resources.push(ResourceDefinition {
             id: format!("{}-cache", service_name),
@@ -782,6 +807,7 @@ fn add_resources_from_inventory(
     if let Some(queue) = &inventory.queue {
         let mut config = HashMap::new();
         config.insert("technology".to_string(), Value::String(queue.clone()));
+        config.insert("mode".to_string(), Value::String("distributed".to_string()));
 
         resources.push(ResourceDefinition {
             id: format!("{}-queue", service_name),
@@ -804,6 +830,61 @@ fn add_resources_from_inventory(
         resources.push(ResourceDefinition {
             id: format!("{}-storage", service_name),
             // Object storage maps to the "objectstore" integration type
+            resource_type: "objectstore".to_string(),
+            name: format!("{}-storage", service_name),
+            region: None,
+            config: Some(config),
+            service_name: Some(service_name.to_string()),
+        });
+    }
+}
+
+/// Adds non-database resources from inventory (cache, queue, object_store).
+/// Used for worker components when DB is user-managed to avoid duplicate DB resources.
+fn add_non_db_resources(
+    service_name: &str,
+    inventory: &ResourceInventory,
+    resources: &mut Vec<ResourceDefinition>,
+) {
+    if let Some(cache) = &inventory.cache {
+        let mut config = HashMap::new();
+        config.insert("technology".to_string(), Value::String(cache.clone()));
+        config.insert("mode".to_string(), Value::String("distributed".to_string()));
+
+        resources.push(ResourceDefinition {
+            id: format!("{}-cache", service_name),
+            resource_type: "cache".to_string(),
+            name: format!("{}-cache", service_name),
+            region: None,
+            config: Some(config),
+            service_name: Some(service_name.to_string()),
+        });
+    }
+
+    if let Some(queue) = &inventory.queue {
+        let mut config = HashMap::new();
+        config.insert("technology".to_string(), Value::String(queue.clone()));
+        config.insert("mode".to_string(), Value::String("distributed".to_string()));
+
+        resources.push(ResourceDefinition {
+            id: format!("{}-queue", service_name),
+            resource_type: "messagequeue".to_string(),
+            name: format!("{}-queue", service_name),
+            region: None,
+            config: Some(config),
+            service_name: Some(service_name.to_string()),
+        });
+    }
+
+    if let Some(object_store) = &inventory.object_store {
+        let mut config = HashMap::new();
+        config.insert(
+            "technology".to_string(),
+            Value::String(object_store.clone()),
+        );
+
+        resources.push(ResourceDefinition {
+            id: format!("{}-storage", service_name),
             resource_type: "objectstore".to_string(),
             name: format!("{}-storage", service_name),
             region: None,

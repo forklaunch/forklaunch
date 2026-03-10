@@ -57,7 +57,7 @@ use crate::{
                 application_up_packages_script, project_clean_script, project_dev_local_script,
                 project_dev_server_script, project_dev_worker_client_script, project_format_script,
                 project_lint_fix_script, project_lint_script, project_start_server_script,
-                project_start_worker_script, project_test_script,
+                project_start_worker_script, project_test_script, project_up_latest_script,
             },
             project_package_json::{
                 ProjectDependencies, ProjectDevDependencies, ProjectPackageJson, ProjectScripts,
@@ -69,6 +69,7 @@ use crate::{
             RenderedTemplate, RenderedTemplatesCache, TEMPLATES_DIR, write_rendered_templates,
         },
         symlink_template::{SymlinkTemplate, create_symlinks},
+        tsconfig::update_tsconfig_test_framework_types,
         watermark::apply_watermark,
     },
     prompt::{ArrayCompleter, prompt_field_from_selections_with_validation},
@@ -1052,6 +1053,22 @@ fn change_runtime(
                 &project_clean_script(runtime),
                 None,
             ));
+            {
+                let old_up_latest = project_up_latest_script(&existing_runtime);
+                let new_up_latest = project_up_latest_script(runtime);
+                // Stash user customization if the existing value differs from what the old runtime generated
+                if project_scripts.up_latest != old_up_latest {
+                    if let Some(existing) = &project_scripts.up_latest {
+                        if new_up_latest.as_ref() != Some(existing) {
+                            project_scripts.additional_scripts.insert(
+                                format!("up:latest:{}", existing_runtime.to_string()),
+                                existing.clone(),
+                            );
+                        }
+                    }
+                }
+                project_scripts.up_latest = new_up_latest;
+            }
             match project_type {
                 ProjectType::Service => {
                     project_scripts.dev = Some(attempt_replacement(
@@ -1443,6 +1460,23 @@ fn change_test_framework(
         },
         &mut |_dev_dependencies| {},
     )?;
+
+    // Update tsconfig types for the new test framework
+    let project_names: Vec<&str> = manifest_data
+        .projects
+        .iter()
+        .map(|p| p.name.as_str())
+        .collect();
+    let tsconfig_templates = update_tsconfig_test_framework_types(
+        base_path,
+        test_framework,
+        existing_test_framework.as_ref(),
+        &project_names,
+    )?;
+    for template in tsconfig_templates {
+        let key = template.path.to_string_lossy().to_string();
+        rendered_templates_cache.insert(key, template);
+    }
 
     Ok((removal_templates, symlink_templates))
 }

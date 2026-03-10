@@ -65,7 +65,7 @@ use crate::{
                 ZOD_VERSION, project_clean_script, project_dev_local_script,
                 project_dev_server_script, project_format_script, project_lint_fix_script,
                 project_lint_script, project_migrate_script, project_start_server_script,
-                project_test_script,
+                project_test_script, project_up_latest_script,
             },
             project_package_json::{
                 MIKRO_ORM_CONFIG_PATHS, ProjectDependencies, ProjectDevDependencies,
@@ -132,7 +132,7 @@ fn generate_basic_service(
     )?);
 
     rendered_templates.extend(
-        generate_project_tsconfig(&output_path).with_context(|| ERROR_FAILED_TO_CREATE_TSCONFIG)?,
+        generate_project_tsconfig(&output_path, Some(&["express", "qs"])).with_context(|| ERROR_FAILED_TO_CREATE_TSCONFIG)?,
     );
 
     rendered_templates.extend(
@@ -360,6 +360,7 @@ pub(crate) fn generate_service_package_json(
                     &manifest_data.runtime.parse()?,
                     manifest_data.database.parse::<Database>().ok(),
                 )),
+                up_latest: project_up_latest_script(&manifest_data.runtime.parse()?),
                 ..Default::default()
             }
         }),

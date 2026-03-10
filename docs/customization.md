@@ -1,7 +1,7 @@
 ---
-title: Customizations
-category: References
-description: Learn how to customize your ForkLaunch application's behavior.
+title: Customization
+category: Guides
+description: Customize documentation UI, authorization behavior, and validation in your ForkLaunch application.
 ---
 
 ## Overview

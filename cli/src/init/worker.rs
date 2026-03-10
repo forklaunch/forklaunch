@@ -63,7 +63,7 @@ use crate::{
                 project_dev_local_worker_script, project_dev_server_script,
                 project_dev_worker_client_script, project_format_script, project_lint_fix_script,
                 project_lint_script, project_migrate_script, project_start_server_script,
-                project_start_worker_script, project_test_script,
+                project_start_worker_script, project_test_script, project_up_latest_script,
             },
             project_package_json::{
                 MIKRO_ORM_CONFIG_PATHS, ProjectDependencies, ProjectDevDependencies,
@@ -145,7 +145,7 @@ fn generate_basic_worker(
         None,
     )?);
     rendered_templates.extend(
-        generate_project_tsconfig(&output_path).with_context(|| ERROR_FAILED_TO_CREATE_TSCONFIG)?,
+        generate_project_tsconfig(&output_path, Some(&["express", "qs"])).with_context(|| ERROR_FAILED_TO_CREATE_TSCONFIG)?,
     );
     rendered_templates.extend(
         generate_gitignore(&output_path).with_context(|| ERROR_FAILED_TO_CREATE_GITIGNORE)?,
@@ -402,6 +402,7 @@ pub(crate) fn generate_worker_package_json(
                         .as_ref()
                         .map(|db| db.parse::<Database>().unwrap()),
                 )),
+                up_latest: project_up_latest_script(&manifest_data.runtime.parse()?),
                 ..Default::default()
             }
         }),

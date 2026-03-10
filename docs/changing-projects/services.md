@@ -219,7 +219,7 @@ forklaunch change service --path ./user-service --name authentication-service \
   --description "User authentication and authorization"
 
 # Add new user profile service separately
-forklaunch init service profile-service --database postgresql
+forklaunch init service profile-service --path ./my-app/src/modules --database postgresql
 ```
 
 ## Best Practices
@@ -250,7 +250,7 @@ forklaunch init service profile-service --database postgresql
 
 ## Related Documentation
 
-- **[Changing Applications](./applications.md)** - Application-level changes
-- **[Adding Services](../adding-projects/services.md)** - Creating new services
-- **[Database Configuration](../framework/database.md)** - Database setup and configuration
-- **[Infrastructure Integration](../framework/infrastructure.md)** - Infrastructure components
+- **[Changing Applications](./applications)** - Application-level changes
+- **[Adding Services](../adding-projects/services)** - Creating new services
+- **[Database Configuration](../framework/database)** - Database setup and configuration
+- **[Infrastructure Integration](../framework/infrastructure)** - Infrastructure components

@@ -157,34 +157,50 @@ app.listen(8000, () => {
 
 ## Documentation
 
-### Getting Started
-| Section | Description |
-|---------|-------------|
-| [Getting Started](/docs/getting-started.md) | Installation and first run |
-| [Creating an Application](/docs/creating-an-application.md) | Core architecture |
-| [Local Development](/docs/local-development.md) | Environment and tooling |
+### Guides
+| Guide | Description |
+|:------|:------------|
+| [Getting Started](/docs/getting-started.md) | Install the CLI and get your environment ready |
+| [Creating an Application](/docs/creating-an-application.md) | Initialize your first ForkLaunch application |
+| [Adding Projects](/docs/adding-projects.md) | Add services, workers, libraries, and routers |
+| [Changing Projects](/docs/changing-projects.md) | Modify existing project configuration |
+| [Deleting Projects](/docs/deleting-projects.md) | Remove services and clean up artifacts |
+| [Local Development](/docs/local-development.md) | Run your full stack locally with docker-compose |
+| [Preconfigured Services](/docs/preconfigured-services.md) | Use ready-made service blueprints |
+| [Customization](/docs/customization.md) | Adapt generated code to your conventions |
 
-### Project Management
-| Section | Description |
-|---------|-------------|
-| [Adding Projects](/docs/adding-projects.md) | Add new services or components |
-| [Changing Projects](/docs/changing-projects.md) | Modify existing components |
-| [Deleting Projects](/docs/deleting-projects.md) | Remove components safely |
+### Advanced Guides
+| Guide | Description |
+|:------|:------------|
+| [Contract-First Development](/docs/guides/contract-first-development.md) | Design APIs from schema outward |
+| [Dependency Management](/docs/guides/dependency-management.md) | Manage cross-service dependencies safely |
+| [AsyncAPI Generation](/docs/guides/asyncapi.md) | Generate AsyncAPI specs for event-driven services |
+| [Pulumi Export](/docs/guides/pulumi-export.md) | Export infrastructure as standard Pulumi TypeScript |
+| [Cache](/docs/guides/cache.md) | Use TTL-based caching with Redis |
+| [Object Store](/docs/guides/objectstore.md) | Store and stream large files with S3 |
+| [WebSockets](/docs/guides/websockets.md) | Build real-time APIs with type-safe WebSocket events |
+| [Testing](/docs/guides/testing.md) | Unit and integration testing patterns |
+| [CLI Commands](/docs/guides/cli-commands.md) | Common CLI workflows and task sequences |
 
-### Framework and CLI
-| Section | Description |
-|---------|-------------|
-| [Framework Guide](/docs/framework.md) | Core patterns |
-| [CLI Reference](/docs/cli.md) | Full command reference |
-| [Customization](/docs/customization.md) | Override defaults |
-| [Preconfigured Services](/docs/preconfigured-services.md) | Built-in modules |
+### Knowledge Base
+| Page | Description |
+|:-----|:------------|
+| [Features](/docs/learn/features.md) | Complete overview of ForkLaunch capabilities |
+| [Project Basics](/docs/learn/project-basics.md) | Understand applications, services, workers, and libraries |
+| [Artifacts](/docs/learn/artifacts.md) | What ForkLaunch generates and why |
+| [Architecture](/docs/learn/architecture.md) | System design and internal structure |
+
+### Reference
+| Reference | Description |
+|:----------|:------------|
+| [CLI Reference](/docs/cli.md) | All CLI commands and options |
+| [Framework Reference](/docs/framework.md) | HTTP, validation, telemetry, authorization, and more |
 
 ### Community
-| Section |
-|---------|
-| [Contributing](/docs/CONTRIBUTING.md) |
-| [Code of Conduct](/docs/CODE_OF_CONDUCT.md) |
-| [Security](/docs/SECURITY.md) |
+| | |
+|:------|:------|
+| [Contributing](/docs/CONTRIBUTING.md) | [Code of Conduct](/docs/CODE_OF_CONDUCT.md) |
+| [Security](/docs/SECURITY.md) | |
 
 ---
 
