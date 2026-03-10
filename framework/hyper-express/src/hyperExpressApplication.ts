@@ -13,6 +13,7 @@ import {
   OpenTelemetryCollector,
   SessionObject
 } from '@forklaunch/core/http';
+import { findApplicationRoot } from '@forklaunch/core/environment';
 import {
   MiddlewareHandler,
   MiddlewareNext,
@@ -25,6 +26,7 @@ import { ZodSchemaValidator } from '@forklaunch/validator/zod';
 import { apiReference } from '@scalar/express-api-reference';
 import crypto from 'crypto';
 import fs from 'fs';
+import path from 'path';
 import * as uWebsockets from 'uWebSockets.js';
 import { startHyperExpressCluster } from './cluster/hyperExpress.cluster';
 import { contentParse } from './middleware/contentParse.middleware';
@@ -171,8 +173,20 @@ export class Application<
         this,
         this.openapiConfiguration
       );
+      const serviceName = process.env.OTEL_SERVICE_NAME || 'unknown-service';
+      const appRoot = findApplicationRoot(process.cwd());
+      const outputPath =
+        process.env.FORKLAUNCH_OPENAPI_OUTPUT ||
+        path.join(
+          appRoot,
+          '.forklaunch',
+          'openapi',
+          serviceName,
+          'openapi.json'
+        );
+      fs.mkdirSync(path.dirname(outputPath), { recursive: true });
       fs.writeFileSync(
-        process.env.FORKLAUNCH_OPENAPI_OUTPUT as string,
+        outputPath,
         JSON.stringify(
           {
             ...openApiSpec,
