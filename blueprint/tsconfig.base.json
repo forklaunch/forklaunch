@@ -15,6 +15,7 @@
     "allowJs": true,
     "esModuleInterop": true,
     "moduleResolution": "bundler",
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "types": ["node", "vitest/globals"]
   }
 }

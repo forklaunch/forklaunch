@@ -1,5 +1,13 @@
 # @forklaunch/implementation-worker-kafka
 
+## 0.9.12
+
+### Patch Changes
+
+- Package version bumps
+- Updated dependencies
+  - @forklaunch/interfaces-worker@0.7.18
+
 ## 0.9.11
 
 ### Patch Changes
