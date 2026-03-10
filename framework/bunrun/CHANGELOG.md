@@ -1,5 +1,11 @@
 # @forklaunch/bunrun
 
+## 0.0.27
+
+### Patch Changes
+
+- proxy based injection for ci, and openapi path resiliency
+
 ## 0.0.26
 
 ### Patch Changes

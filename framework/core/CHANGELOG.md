@@ -1,5 +1,14 @@
 # @forklaunch/core
 
+## 0.18.6
+
+### Patch Changes
+
+- proxy based injection for ci, and openapi path resiliency
+- Updated dependencies
+  - @forklaunch/validator@0.10.33
+  - @forklaunch/common@0.6.33
+
 ## 0.18.5
 
 ### Patch Changes

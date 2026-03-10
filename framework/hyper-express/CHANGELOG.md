@@ -1,5 +1,16 @@
 # @forklaunch/hyper-express
 
+## 0.11.10
+
+### Patch Changes
+
+- proxy based injection for ci, and openapi path resiliency
+- Updated dependencies
+  - @forklaunch/validator@0.10.33
+  - @forklaunch/common@0.6.33
+  - @forklaunch/core@0.18.6
+  - @forklaunch/ws@0.2.4
+
 ## 0.11.9
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/express",
-  "version": "0.10.9",
+  "version": "0.10.10",
   "description": "Forklaunch framework for express.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -40,7 +40,7 @@
     "@forklaunch/core": "workspace:*",
     "@forklaunch/validator": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.27.1",
-    "@scalar/express-api-reference": "^0.9.0",
+    "@scalar/express-api-reference": "^0.9.1",
     "@types/multer": "^2.1.0",
     "body-parser": "^2.2.2",
     "busboy": "^1.6.0",
@@ -61,12 +61,12 @@
     "@types/express": "^5.0.6",
     "@types/express-serve-static-core": "^5.1.1",
     "@types/jest": "^30.0.0",
-    "@types/node": "^25.3.5",
+    "@types/node": "^25.4.0",
     "@types/qs": "^6.15.0",
     "@types/range-parser": "^1.2.7",
     "@types/swagger-ui-express": "^4.1.8",
-    "@typescript/native-preview": "7.0.0-dev.20260306.1",
-    "jest": "^30.2.0",
+    "@typescript/native-preview": "7.0.0-dev.20260310.1",
+    "jest": "^30.3.0",
     "kill-port-process": "^4.0.2",
     "prettier": "^3.8.1",
     "ts-jest": "^29.4.6",
@@ -74,6 +74,6 @@
     "tsup": "^8.5.1",
     "typedoc": "^0.28.17",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.56.1"
+    "typescript-eslint": "^8.57.0"
   }
 }

@@ -1,5 +1,14 @@
 # @forklaunch/infrastructure-redis
 
+## 0.4.43
+
+### Patch Changes
+
+- proxy based injection for ci, and openapi path resiliency
+- Updated dependencies
+  - @forklaunch/common@0.6.33
+  - @forklaunch/core@0.18.6
+
 ## 0.4.42
 
 ### Patch Changes

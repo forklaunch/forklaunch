@@ -1,5 +1,11 @@
 # @forklaunch/testing
 
+## 0.0.22
+
+### Patch Changes
+
+- proxy based injection for ci, and openapi path resiliency
+
 ## 0.0.21
 
 ### Patch Changes
