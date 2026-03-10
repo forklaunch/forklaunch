@@ -1002,13 +1002,6 @@ impl CliCommand for CreateCommand {
 
             log_ok_suffix!(stdout);
 
-            manifest.release_version = Some(version.clone());
-
-            let updated_manifest = to_string_pretty(&manifest)
-                .with_context(|| "Failed to serialize updated manifest")?;
-
-            fs::write(&manifest_path, updated_manifest)
-                .with_context(|| "Failed to write updated manifest")?;
         }
 
         writeln!(stdout)?;
@@ -2300,7 +2293,6 @@ mod tests {
             is_jest: false,
             platform_application_id: None,
             platform_organization_id: None,
-            release_version: None,
         }
     }
 
