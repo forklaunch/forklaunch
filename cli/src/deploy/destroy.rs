@@ -103,8 +103,6 @@ impl CliCommand for DestroyCommand {
         );
         writeln!(stdout)?;
 
-        log_progress!(stdout, "Triggering destruction...");
-
         let request_body = DestroyDeploymentRequest { mode: mode.clone() };
 
         let url = format!(
@@ -126,7 +124,7 @@ impl CliCommand for DestroyCommand {
             let deployment: DestroyDeploymentResponse = serde_json::from_str(&response_text)
                 .with_context(|| format!("Failed to parse destroy response: {}", response_text))?;
 
-            log_ok_suffix!(stdout);
+            log_ok!(stdout, "Triggered destruction");
             log_info!(stdout, "Deployment ID: {}", deployment.id);
 
             if wait {
@@ -138,7 +136,7 @@ impl CliCommand for DestroyCommand {
                 )?;
             } else {
                 writeln!(stdout)?;
-                log_info!(stdout, "Destruction started. Check status at:");
+                writeln!(stdout, "Destruction started. Check status at:")?;
                 writeln!(
                     stdout,
                     "  {}/apps/{}/deployments/{}",
@@ -150,7 +148,7 @@ impl CliCommand for DestroyCommand {
                 .text()
                 .unwrap_or_else(|_| "Unknown error".to_string());
 
-            log_error_suffix!(stdout);
+            log_error!(stdout, "Deployment conflict");
 
             anyhow::bail!(
                 "Deployment conflict: {}. Wait for the current deployment to complete or cancel it first.",
@@ -161,7 +159,7 @@ impl CliCommand for DestroyCommand {
                 .text()
                 .unwrap_or_else(|_| "Unknown error".to_string());
 
-            log_error_suffix!(stdout);
+            log_error!(stdout, "Forbidden");
 
             anyhow::bail!("{}", error_text);
         } else {
@@ -169,7 +167,7 @@ impl CliCommand for DestroyCommand {
                 .text()
                 .unwrap_or_else(|_| "Unknown error".to_string());
 
-            log_error_suffix!(stdout);
+            log_error!(stdout, "Failed to destroy infrastructure (Status: {})", status);
 
             anyhow::bail!(
                 "Failed to destroy infrastructure: {} (Status: {})",
