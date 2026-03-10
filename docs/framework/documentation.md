@@ -13,10 +13,10 @@ ForkLaunch automatically generates comprehensive API documentation from your con
 - Type-safe contracts that generate accurate API specs
 - Interactive API testing through built-in documentation UI
 
-When running a single service, the generated documentation is available at `http://localhost:8000/api/v1/docs` by default.
+When running a single service, the generated documentation is available at `http://localhost:8000/docs` by default.
 
 ### Documentation UI Options
-- **Scalar** (default): Modern, feature-rich API explorer with enhanced testing capabilities. See [HTTP Framework > Application](/docs/framework/http#Application) for applying configuration.
+- **Scalar** (default): Modern, feature-rich API explorer with enhanced testing capabilities. See [HTTP Framework > Application](/docs/framework/http.md#Application) for applying configuration.
 - **Swagger UI**: Traditional OpenAPI interface, familiar to most developers
 - **None**: Disable UI, serve only OpenAPI JSON for consumption by other tools
 

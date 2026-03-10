@@ -6,19 +6,30 @@ use serde_json::{Value, json, to_string_pretty};
 use super::rendered_template::RenderedTemplate;
 use crate::core::manifest::application::ApplicationManifestData;
 
-pub(crate) fn generate_project_tsconfig(path_dir: &Path) -> Result<Option<RenderedTemplate>> {
+pub(crate) fn generate_project_tsconfig(
+    path_dir: &Path,
+    extra_types: Option<&[&str]>,
+) -> Result<Option<RenderedTemplate>> {
     let path = path_dir.join("tsconfig.json");
     if path.exists() {
         return Ok(None);
+    }
+
+    let mut compiler_options = json!({
+        "outDir": "dist"
+    });
+
+    if let Some(types) = extra_types {
+        let mut all_types = vec!["node", "vitest/globals"];
+        all_types.extend_from_slice(types);
+        compiler_options["types"] = json!(all_types);
     }
 
     Ok(Some(RenderedTemplate {
         path,
         content: to_string_pretty(&json!({
             "extends": "../tsconfig.base.json",
-            "compilerOptions": {
-                "outDir": "dist"
-            },
+            "compilerOptions": compiler_options,
             "exclude": [
                 "node_modules",
                 "dist",

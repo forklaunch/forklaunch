@@ -1139,7 +1139,7 @@ harness.cleanup();  // ❌ Missing await
 
 ## Related Documentation
 
-- **[Cache Module](/docs/development/cache.md)** - Testing with Redis cache
-- **[Config Module](/docs/development/config.md)** - Environment configuration
-- **[HTTP Framework](/docs/development/http.md)** - Testing HTTP routes
-- **[Validation](/docs/development/validation.md)** - Schema validation in tests
+- [Cache](/docs/guides/cache.md): Testing with Redis cache
+- [Config Injector](/docs/framework/config.md): Environment configuration
+- [HTTP Framework](/docs/framework/http.md): Testing HTTP routes
+- [Validation](/docs/framework/validation.md): Schema validation in tests

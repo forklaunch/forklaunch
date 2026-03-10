@@ -151,12 +151,12 @@ forklaunch logout
 
 ## Related Commands
 
-- [`forklaunch version`](./config.md#version) - Check CLI version and connectivity
-- [`forklaunch init`](./init.md) - Initialize projects (requires authentication)
-- [`forklaunch depcheck`](./depcheck.md) - Check dependencies (may require authentication)
+- [`forklaunch version`](./config#version) - Check CLI version and connectivity
+- [`forklaunch init`](./init) - Initialize projects (requires authentication)
+- [`forklaunch depcheck`](./depcheck) - Check dependencies (may require authentication)
 
 ## Related Documentation
 
-- **[Getting Started](../getting-started.md)** - Initial setup and verification
-- **[CLI Overview](../cli.md)** - Complete command reference
-- **[Configuration](./config.md)** - Advanced configuration options
+- **[Getting Started](../getting-started)** - Initial setup and verification
+- **[CLI Overview](../cli)** - Complete command reference
+- **[Configuration](./config)** - Advanced configuration options

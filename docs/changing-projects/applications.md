@@ -6,42 +6,26 @@ description: Complete guide for modifying ForkLaunch application configuration, 
 
 ## Overview
 
-The `forklaunch change application` command allows you to modify existing application configuration including runtimes, frameworks, and metadata. This guide covers all available options and common scenarios.
+The `forklaunch change library` command allows you to modify existing library configuration including names, descriptions, and metadata. This guide covers all available options and common scenarios.
 
-<CodeTabs type="instantiate">
-  <Tab title="Basic">
+```bash
+forklaunch change application [options]
+```
 
-  ```bash
-  forklaunch change application
-  ```
+## Available Options
 
-  </Tab>
-  <Tab title="With Options">
-
-  ```bash
-  forklaunch change application --runtime bun --http-framework hyper-express
-  ```
-
-  </Tab>
-</CodeTabs>
-
-## Command Options
-
-| Option | Short | Description | Valid Values |
-| :----- | :---- | :---------- | :----------- |
-| `--path` | `-p` | The application root path | Path to application directory |
-| `--name` | `-N` | The name of the application | Any valid application name |
-| `--validator` | `-v` | The validator to use | `zod`, `typebox` |
-| `--formatter` | `-f` | The formatter to use | `prettier`, `biome` |
-| `--linter` | `-l` | The linter to use | `eslint`, `oxlint` |
-| `--http-framework` | `-F` | The http framework to use | `express`, `hyper-express` |
-| `--runtime` | `-r` | The runtime to use | `node`, `bun` |
-| `--test-framework` | `-t` | The test framework to use | `vitest`, `jest` |
-| `--description` | `-D` | The description of the application | Any string |
-| `--author` | `-A` | The author of the application | Any string |
-| `--license` | `-L` | The license of the application | `AGPL-3.0`, `GPL-3.0`, `LGPL-3.0`, `Apache-2.0`, `MIT`, `Mozilla-2.0`, `Boost-1.0`, `Unlicense`, `none` |
-| `--dryrun` | `-n` | Dry run the command | Flag (no value) |
-| `--confirm` | `-c` | Flag to confirm any prompts | Flag (no value) |
+| Option                         | Type                      | Description                    | Default                |
+| ------------------------------ | ------------------------- | ------------------------------ | ---------------------- |
+| `--name <name>`                | string                    | Change application name        | Current name           |
+| `--description <desc>`         | string                    | Update application description | Current description    |
+| `--author <author>`            | string                    | Change author information      | Current author         |
+| `--license <license>`          | string                    | Update license                 | Current license        |
+| `--runtime <runtime>`          | `node`,`bun`              | Change JavaScript runtime      | Current runtime        |
+| `--http-framework <framework>` | `express`,`hyper-express` | Change HTTP framework          | Current framework      |
+| `--validator <validator>`      | `zod`,`typebox`           | Change validation library      | Current validator      |
+| `--formatter <formatter>`      | `prettier`,`biome`        | Change code formatter          | Current formatter      |
+| `--linter <linter>`            | `eslint`,`oxlint`         | Change linter                  | Current linter         |
+| `--test-framework <framework>` | `vitest`,`jest`           | Change testing framework       | Current test framework |
 
 ## Batch Changes
 
@@ -51,7 +35,6 @@ Update multiple tools at once:
 
 ```bash
 forklaunch change application \
-  --path ./my-app \
   --runtime bun \
   --http-framework hyper-express \
   --validator typebox \
@@ -66,15 +49,14 @@ Always preview major changes first:
 
 ```bash
 # Preview runtime change
-forklaunch change application --path ./my-app --runtime bun --dryrun
+forklaunch change application --runtime bun --dry-run
 
 # Preview complete modernization
 forklaunch change application \
-  --path ./my-app \
   --runtime bun \
   --formatter biome \
   --linter oxlint \
-  --dryrun
+  --dry-run
 ```
 
 ## Common Scenarios
@@ -85,14 +67,13 @@ Optimize for development and runtime performance:
 
 ```bash
 # Step 1: Switch to Bun
-forklaunch change application --path ./my-app --runtime bun
+forklaunch change application --runtime bun
 
 # Step 2: Switch to TypeBox
-forklaunch change application --path ./my-app --validator typebox
+forklaunch change application --validator typebox
 
 # Step 3: Update development tools
 forklaunch change application \
-  --path ./my-app \
   --formatter biome \
   --linter oxlint \
 ```
@@ -104,7 +85,6 @@ Align with team preferences:
 ```bash
 # Standardize on specific tools
 forklaunch change application \
-  --path ./my-app \
   --formatter prettier \
   --linter eslint \
   --test-framework jest
@@ -117,7 +97,6 @@ Migrate from older toolchain:
 ```bash
 # Modern JavaScript toolchain
 forklaunch change application \
-  --path ./my-app \
   --runtime bun \
   --formatter biome \
   --linter oxlint
@@ -142,7 +121,7 @@ pnpm install
 
 ```bash
 # Clear and reinstall
-rm -rf node_modules bun.lockb bun.lock
+rm -rf node_modules bun.lockb
 bun install
 ```
 
@@ -273,7 +252,7 @@ New components will use updated configuration:
 
 ```bash
 forklaunch change application --validator typebox
-forklaunch add service user-service  # Will use TypeBox
+forklaunch init service user-service  # Will use TypeBox
 ```
 
 ## Best Practices
@@ -287,5 +266,5 @@ forklaunch add service user-service  # Will use TypeBox
 
 ## Related Documentation
 
-- **[Changing Services](./services.md)** - Service-specific changes
-- **[CLI Reference](../cli/change.md)** - Complete CLI reference
+- **[Changing Services](./services)** - Service-specific changes
+- **[CLI Reference](../cli/change)** - Complete CLI reference

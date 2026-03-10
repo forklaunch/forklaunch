@@ -8,32 +8,17 @@ description: Complete guide for modifying ForkLaunch router configuration and na
 
 The `forklaunch change router` command allows you to modify existing router configuration including router names and references. This guide covers all available options and common scenarios.
 
-<CodeTabs type="instantiate">
-  <Tab title="Basic">
+```bash
+forklaunch change router [router-name] [options]
+```
 
-  ```bash
-  forklaunch change router
-  ```
+If no router name is provided, you'll be prompted to select from available routers.
 
-  </Tab>
-  <Tab title="With Options">
+## Available Options
 
-  ```bash
-  forklaunch change router --path ./my-service --existing-name old-router --new-name new-router
-  ```
-
-  </Tab>
-</CodeTabs>
-
-## Command Options
-
-| Option | Short | Description | Valid Values |
-| :----- | :---- | :---------- | :----------- |
-| `--path` | `-p` | The service path | Path to service directory |
-| `--existing-name` | `-e` | The original name of the router | Current router name |
-| `--new-name` | `-N` | The new name of the router | New router name |
-| `--dryrun` | `-n` | Dry run the command | Flag (no value) |
-| `--confirm` | `-c` | Flag to confirm any prompts | Flag (no value) |
+| Option              | Type   | Description     | Default      |
+| ------------------- | ------ | --------------- | ------------ |
+| `--new-name <name>` | string | New router name | Current name |
 
 ## Router Renaming
 
@@ -42,7 +27,7 @@ The `forklaunch change router` command allows you to modify existing router conf
 Rename a router and update all references:
 
 ```bash
-forklaunch change router --path ./my-service --existing-name user-routes --new-name account-routes
+forklaunch change router user-routes --new-name account-routes
 ```
 
 **What changes:**
@@ -61,9 +46,9 @@ Rename routers to better reflect their purpose:
 
 ```bash
 # Rename for better semantic meaning
-forklaunch change router --path ./my-service --existing-name user-routes --new-name authentication-routes
-forklaunch change router --path ./my-service --existing-name admin-routes --new-name management-routes
-forklaunch change router --path ./my-service --existing-name api-routes --new-name public-api-routes
+forklaunch change router user-routes --new-name authentication-routes
+forklaunch change router admin-routes --new-name management-routes
+forklaunch change router api-routes --new-name public-api-routes
 ```
 
 ### Scenario 2: Domain Reorganization
@@ -72,9 +57,9 @@ Reorganize routers to match new domain boundaries:
 
 ```bash
 # Align with new service boundaries
-forklaunch change router --path ./my-service --existing-name user-routes --new-name profile-routes
-forklaunch change router --path ./my-service --existing-name billing-routes --new-name payment-routes
-forklaunch change router --path ./my-service --existing-name analytics-routes --new-name reporting-routes
+forklaunch change router user-routes --new-name profile-routes
+forklaunch change router billing-routes --new-name payment-routes
+forklaunch change router analytics-routes --new-name reporting-routes
 ```
 
 ### Scenario 3: API Versioning
@@ -83,8 +68,8 @@ Rename routers for API versioning:
 
 ```bash
 # Add version information to router names
-forklaunch change router --path ./my-service --existing-name api-routes --new-name api-v1-routes
-forklaunch change router --path ./my-service --existing-name public-routes --new-name public-v2-routes
+forklaunch change router api-routes --new-name api-v1-routes
+forklaunch change router public-routes --new-name public-v2-routes
 ```
 
 ### Router Organization Patterns
@@ -93,27 +78,27 @@ forklaunch change router --path ./my-service --existing-name public-routes --new
 
 ```bash
 # Group by functionality
-forklaunch change router --path ./my-service --existing-name user-routes --new-name authentication-routes
-forklaunch change router --path ./my-service --existing-name profile-routes --new-name user-profile-routes
-forklaunch change router --path ./my-service --existing-name settings-routes --new-name user-settings-routes
+forklaunch change router user-routes --new-name authentication-routes
+forklaunch change router profile-routes --new-name user-profile-routes
+forklaunch change router settings-routes --new-name user-settings-routes
 ```
 
 #### Domain Organization
 
 ```bash
 # Group by domain
-forklaunch change router --path ./my-service --existing-name payment-routes --new-name billing-payment-routes
-forklaunch change router --path ./my-service --existing-name invoice-routes --new-name billing-invoice-routes
-forklaunch change router --path ./my-service --existing-name subscription-routes --new-name billing-subscription-routes
+forklaunch change router payment-routes --new-name billing-payment-routes
+forklaunch change router invoice-routes --new-name billing-invoice-routes
+forklaunch change router subscription-routes --new-name billing-subscription-routes
 ```
 
 #### Layer Organization
 
 ```bash
 # Group by architectural layer
-forklaunch change router --path ./my-service --existing-name api-routes --new-name rest-api-routes
-forklaunch change router --path ./my-service --existing-name webhook-routes --new-name webhook-handler-routes
-forklaunch change router --path ./my-service --existing-name admin-routes --new-name admin-panel-routes
+forklaunch change router api-routes --new-name rest-api-routes
+forklaunch change router webhook-routes --new-name webhook-handler-routes
+forklaunch change router admin-routes --new-name admin-panel-routes
 ```
 
 ## Best Practices
@@ -124,10 +109,10 @@ forklaunch change router --path ./my-service --existing-name admin-routes --new-
 
    ```bash
    # Good
-   forklaunch change router --path ./my-service --existing-name routes --new-name user-authentication-routes
+   forklaunch change router routes --new-name user-authentication-routes
 
    # Avoid
-   forklaunch change router --path ./my-service --existing-name routes --new-name routes1
+   forklaunch change router routes --new-name routes1
    ```
 
 2. **Consistent Patterns**: Follow consistent naming patterns across your project
@@ -144,10 +129,10 @@ forklaunch change router --path ./my-service --existing-name admin-routes --new-
 
    ```bash
    # Future-proof
-   forklaunch change router --path ./my-service --existing-name v1-routes --new-name core-api-routes
+   forklaunch change router v1-routes --new-name core-api-routes
 
    # Less future-proof
-   forklaunch change router --path ./my-service --existing-name routes --new-name current-routes
+   forklaunch change router routes --new-name current-routes
    ```
 
 ### Before Renaming
@@ -269,7 +254,6 @@ cat src/services/*/index.ts
 
 ## Related Documentation
 
-- **[Changing Services](./services.md)** - Service configuration changes
-- **[Adding Routers](../adding-projects/routers.md)** - Creating new routers
-- **[Framework Routing](../framework/routing.md)** - Routing framework documentation
-- **[API Design](../best-practices.md#api-design)** - API design guidelines
+- **[Changing Services](./services)** - Service configuration changes
+- **[Adding Routers](../adding-projects/routers)** - Creating new routers
+- **[Framework Routing](../framework/routing)** - Routing framework documentation

@@ -11,26 +11,25 @@ The `ForkLaunch` framework collects a set of lightweight libraries and exposes u
 ## Core Libraries
 
 ### HTTP and Routing
+
 - `@forklaunch/express`: Express.js integration layer providing routing and middleware support
 - `@forklaunch/hyper-express`: HyperExpress integration layer for high-performance HTTP handling
 
 ### Validation and Types
+
 - `@forklaunch/validator`: Schema validation and type coercion library supporting Zod and TypeBox
 - `@forklaunch/universal-sdk`: Type-safe SDK generator for consuming ForkLaunch APIs from any platform
 
 ### Utilities
+
 - `@forklaunch/common`: Common HTTP utilities, middleware, and request/response handling
 - `@forklaunch/core`: Core framework library containing shared utilities, base classes, and common interfaces
 - `@forklaunch/internal`: Internal utilities for ForkLaunch framework
 
-### Infrastructure Components
-- `@forklaunch/infrastructure-redis`: Redis integration for caching and session management
-- `@forklaunch/infrastructure-s3`: AWS S3 integration for file storage and management
-
 ## Framework Features
 
 - [HTTP Frameworks](/docs/framework/http.md)
-- [Validation](/docs/framework/validation.md) 
+- [Validation](/docs/framework/validation.md)
 - [Observability and OpenTelemetry](/docs/framework/telemetry.md)
 - [Configuration](/docs/framework/config.md)
 - [Authorization](/docs/framework/authorization.md)

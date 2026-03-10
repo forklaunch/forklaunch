@@ -897,13 +897,13 @@ forklaunch deploy create --release v1.0.0 --environment staging --region us-east
 
 1. **Initialize and Sync:**
    ```bash
-   forklaunch init my-app
+   forklaunch init application my-app --path ./my-app
    forklaunch sync all
    ```
 
 2. **Add Components:**
    ```bash
-   forklaunch add service billing
+   forklaunch init service billing
    forklaunch sync service billing
    ```
 

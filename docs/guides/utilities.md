@@ -115,8 +115,8 @@ import { openApiCompliantPath } from '@forklaunch/common';
 openApiCompliantPath('/users/:id/posts/:postId');
 // Returns: '/users/{id}/posts/{postId}'
 
-openApiCompliantPath('/api/v1/products/:productId/reviews/:reviewId');
-// Returns: '/api/v1/products/{productId}/reviews/{reviewId}'
+openApiCompliantPath('/products/:productId/reviews/:reviewId');
+// Returns: '/products/{productId}/reviews/{reviewId}'
 ```
 
 **Type Signature:**
@@ -696,7 +696,7 @@ class User {
 }
 
 const userRequestMapper = requestMapper({
-  schemaValidator: schemaValidator,
+  schemaValidator: zodValidator,
   schema: {
     name: string,
     age: number
@@ -751,7 +751,7 @@ import { responseMapper } from '@forklaunch/core/mappers';
 import { string, number } from '@forklaunch/validator/zod';
 
 const userResponseMapper = responseMapper({
-  schemaValidator: schemaValidator,
+  schemaValidator: zodValidator,
   schema: {
     id: string,
     name: string,

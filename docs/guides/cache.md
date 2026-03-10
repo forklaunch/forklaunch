@@ -598,25 +598,25 @@ const cache = new InMemoryCache();
 import { TestContainerManager } from '@forklaunch/testing';
 
 const manager = new TestContainerManager();
-const redisContainer = await manager.setupRedisContainer();
+const redisContainer = await manager.startRedis();
 
 const cache = new RedisTtlCache(
   60000,
   openTelemetryCollector,
   {
-    url: `redis://${redisContainer.getHost()}:${redisContainer.getMappedPort(6379)}`
+    url: redisContainer.getConnectionUrl()
   },
   telemetryOptions
 );
 
 // Run tests...
 
-await manager.cleanup();
+await manager.stopAll();
 ```
 
 ## Related Documentation
 
-- **[Object Store](/docs/development/objectstore.md)** - For large binary/file storage
-- **[Testing](/docs/development/testing.md)** - TestContainers setup for Redis
-- **[Telemetry](/docs/development/telemetry.md)** - Monitoring cache performance
-- **[Config](/docs/development/config.md)** - Configuration management
+- [Object Store](/docs/guides/objectstore.md): For large binary/file storage
+- [Testing](/docs/guides/testing.md): TestContainers setup for Redis
+- [Telemetry](/docs/framework/telemetry.md): Monitoring cache performance
+- [Config Injector](/docs/framework/config.md): Configuration management
