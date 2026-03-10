@@ -23,11 +23,8 @@ forklaunch env <subcommand> [options]
 Validates environment variables across all services and workers in the workspace.
 
 ```bash
-forklaunch environment validate [options]
+forklaunch environment validate
 ```
-
-**Options:**
-- `-p, --path <path>` - Path to application root (optional, defaults to current directory)
 
 **What it does:**
 - Scans all services and workers for environment variable usage
@@ -58,28 +55,24 @@ forklaunch environment sync [options]
 ```
 
 **Options:**
-- `-p, --path <path>` - Path to application root (optional)
-- `-e, --environment <env>` - Environment to sync (development, staging, production)
-- `-r, --region <region>` - Region to sync from
+- `-n, --dry-run` - Show what would be done without making changes
 
 **What it does:**
-- Fetches environment configuration from ForkLaunch platform
-- Updates local .env files with platform values
-- Preserves local-only variables
-- Creates backup of existing .env files
+- Finds missing environment variables across workspace projects
+- Adds missing variables to appropriate `.env` files with blank values
+- Respects the `.env` hierarchy by placing common variables in root `.env.local`
 
 **Example:**
 ```bash
-$ forklaunch env sync --environment development --region us-west-2
+$ forklaunch env sync
 
-[INFO] Fetching environment configuration...
-[INFO] Syncing 12 variables to local .env files
-[OK] Backed up existing .env to .env.backup
-[OK] Updated .env files for:
-  - services/payments/.env
-  - services/users/.env
-  - workers/email-processor/.env
+[INFO] Syncing missing environment variables...
+[OK] Added DB_HOST to payments/.env.local
+[OK] Added REDIS_URL to .env.local
 [OK] Environment variables synced successfully
+
+# Preview only
+$ forklaunch env sync --dry-run
 ```
 
 ## Common Workflows
@@ -92,27 +85,12 @@ Before deploying or running locally:
 forklaunch env validate
 ```
 
-### Sync Development Environment
+### Sync Missing Variables
 
-Pull latest environment config from platform:
-
-```bash
-forklaunch env sync --environment development --region us-west-2
-```
-
-### Setup New Developer Machine
+Add blank entries for any missing environment variables:
 
 ```bash
-# Clone repository
-git clone <repo>
-cd <repo>
-
-# Sync environment from platform
-forklaunch login
-forklaunch env sync --environment development --region us-west-2
-
-# Start development
-pnpm dev
+forklaunch env sync
 ```
 
 ## Best Practices

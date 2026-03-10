@@ -31,7 +31,7 @@ pub(crate) const VITEST_VERSION: &str = "^4.0.18";
 
 // Application package.json dependencies constants
 // @typescript/native-preview
-pub(crate) const TYPESCRIPT_NATIVE_PREVIEW_VERSION: &str = "^7.0.0-dev.20260310.1";
+pub(crate) const TYPESCRIPT_NATIVE_PREVIEW_VERSION: &str = "7.0.0-dev.20260310.1";
 // globals
 pub(crate) const GLOBALS_VERSION: &str = "^17.4.0";
 // husky

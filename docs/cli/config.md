@@ -8,7 +8,7 @@ description: Learn how to use the forklaunch config command.
 
 THIS COMMAND IS CURRENTLY UNDER DEVELOPMENT AND IS NOT YET AVAILABLE.
 
-The `config` command manages application configuration between your local environment and the ForkLaunch platform. You must be authenticate to use this command.
+The `config` command manages application configuration between your local environment and the ForkLaunch platform. You must be authenticated to use this command.
 
 ## Usage
 
@@ -18,32 +18,58 @@ forklaunch config [COMMAND]
 
 ### Available Commands
 
-| Command     | Description                          | Options                                 |
-| :---------- | :----------------------------------- | :-------------------------------------- |
-| `pull <id>` | Download configuration from platform | `-o, --output` - Save to specific file  |
-| `push <id>` | Upload configuration to platform     | `-i, --input` - Read from specific file |
+| Command | Description                          |
+| :------ | :----------------------------------- |
+| `pull`  | Pull environment configuration from platform |
+| `push`  | Push environment configuration to platform   |
+
+### pull
+
+```bash
+forklaunch config pull --region <region> --environment <env> [options]
+```
+
+**Required:**
+- `-r, --region <region>` - Region (e.g., `us-east-1`)
+- `-e, --environment <env>` - Environment name (e.g., `production`, `staging`)
+
+**Optional:**
+- `-s, --service <name>` - Filter to a specific service name
+- `-o, --output <file>` - Output file path (defaults to `<environment>.env`)
+- `-p, --path <path>` - Path to application root
+
+### push
+
+```bash
+forklaunch config push --region <region> --environment <env> [options]
+```
+
+**Required:**
+- `-r, --region <region>` - Region (e.g., `us-east-1`)
+- `-e, --environment <env>` - Environment name (e.g., `production`, `staging`)
+
+**Optional:**
+- `-i, --input <file>` - Input file path (defaults to `<environment>.env`)
+- `-p, --path <path>` - Path to application root
 
 ### Examples
 
 ```bash
-# Pull configuration to working directory
-forklaunch config pull my-config-id
+# Pull configuration for staging
+forklaunch config pull --region us-east-1 --environment staging
 
-# Pull configuration to specific file
-forklaunch config pull my-config-id --output ./config/.env.prod
+# Pull configuration for a specific service
+forklaunch config pull --region us-east-1 --environment staging --service payments
 
-# Push configuration from working directory
-forklaunch config push my-config-id
+# Pull configuration to a specific file
+forklaunch config pull --region us-east-1 --environment production --output ./config/.env.prod
 
-# Push configuration from specific file
-forklaunch config push my-config-id --input ./config/.env.prod
+# Push configuration for staging
+forklaunch config push --region us-east-1 --environment staging
+
+# Push configuration from a specific file
+forklaunch config push --region us-east-1 --environment production --input ./config/.env.prod
 ```
-
-### Notes
-
-- Configuration IDs must be unique within your platform account
-- Default configuration locations are determined by your project structure
-- Use different IDs for different environments (development, staging, production)
 
 ## Troubleshooting
 
@@ -51,11 +77,6 @@ forklaunch config push my-config-id --input ./config/.env.prod
 
 - Run `forklaunch login` to authenticate
 - Check session status with `forklaunch whoami`
-
-**Error: "Configuration not found"**
-
-- Verify the configuration ID exists on the platform
-- Check spelling and case sensitivity
 
 **Error: "Permission denied"**
 
@@ -66,11 +87,6 @@ forklaunch config push my-config-id --input ./config/.env.prod
 
 - Verify the input file path exists
 - Check file permissions and accessibility
-
-**Configuration conflicts**
-
-- Review environment-specific configurations
-- Ensure configuration IDs are unique per environment
 
 ## Related Commands
 

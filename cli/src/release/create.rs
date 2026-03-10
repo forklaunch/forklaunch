@@ -357,7 +357,7 @@ impl CliCommand for CreateCommand {
             writeln!(stdout)?;
 
             let install_status = ProcessCommand::new(&resolved)
-                .arg("install")
+                .args(&["install", "--frozen-lockfile"])
                 .current_dir(&modules_path)
                 .status()
                 .with_context(|| format!("Failed to run {} install", runtime_cmd))?;

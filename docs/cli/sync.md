@@ -69,6 +69,7 @@ forklaunch sync service <service-name> [options]
 
 **Options:**
 - `-p, --path <path>` - Path to application root (optional)
+- `-P, --prompts <JSON>` - JSON object with pre-provided answers for prompts
 
 **What it does:**
 - Regenerates service interfaces and types
@@ -100,6 +101,7 @@ forklaunch sync worker <worker-name> [options]
 
 **Options:**
 - `-p, --path <path>` - Path to application root (optional)
+- `-P, --prompts <JSON>` - JSON object with pre-provided answers for prompts
 
 **What it does:**
 - Regenerates worker interfaces and types
@@ -131,6 +133,7 @@ forklaunch sync library <library-name> [options]
 
 **Options:**
 - `-p, --path <path>` - Path to application root (optional)
+- `-P, --prompts <JSON>` - JSON object with pre-provided answers for prompts
 
 **What it does:**
 - Regenerates library exports and types

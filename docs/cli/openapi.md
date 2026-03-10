@@ -1,7 +1,7 @@
 ---
 title: OpenAPI Command
 category: CLI Reference
-description: Export and manage OpenAPI specifications for your services.
+description: Export OpenAPI specifications for your services.
 ---
 
 ## Overview
@@ -18,7 +18,7 @@ forklaunch openapi <subcommand> [options]
 
 ### export
 
-Export OpenAPI specifications for one or more services.
+Export OpenAPI specifications for all services.
 
 ```bash
 forklaunch openapi export [options]
@@ -26,76 +26,30 @@ forklaunch openapi export [options]
 
 **Options:**
 - `-p, --path <path>` - Path to application root (optional)
-- `-s, --service <name>` - Export specific service (can be repeated)
-- `-o, --output <dir>` - Output directory (default: `./openapi`)
-- `--all` - Export all services
-- `--format <format>` - Output format: `json` or `yaml` (default: both)
-- `--watch` - Watch for changes and auto-regenerate
+- `-o, --output <dir>` - Output directory (default: `.forklaunch/openapi`)
 
 ## Basic Usage
 
 ### Export All Services
 
 ```bash
-$ forklaunch openapi export --all
+$ forklaunch openapi export
 
 [INFO] Exporting OpenAPI specifications...
-[OK] Exported users → openapi/users.json
-[OK] Exported users → openapi/users.yaml
-[OK] Exported payments → openapi/payments.json
-[OK] Exported payments → openapi/payments.yaml
-[OK] Exported notifications → openapi/notifications.json
-[OK] Exported notifications → openapi/notifications.yaml
+[OK] Exported users → .forklaunch/openapi/users.json
+[OK] Exported payments → .forklaunch/openapi/payments.json
+[OK] Exported notifications → .forklaunch/openapi/notifications.json
 [OK] Exported 3 services successfully
-```
-
-### Export Specific Service
-
-```bash
-$ forklaunch openapi export --service payments
-
-[INFO] Exporting OpenAPI specification for: payments
-[OK] Exported payments → openapi/payments.json
-[OK] Exported payments → openapi/payments.yaml
-```
-
-### Export Multiple Services
-
-```bash
-$ forklaunch openapi export --service payments --service users
-
-[INFO] Exporting OpenAPI specifications...
-[OK] Exported payments → openapi/payments.json
-[OK] Exported payments → openapi/payments.yaml
-[OK] Exported users → openapi/users.json
-[OK] Exported users → openapi/users.yaml
 ```
 
 ### Custom Output Directory
 
 ```bash
-$ forklaunch openapi export --all --output ./docs/api
+$ forklaunch openapi export --output ./docs/api
 
 [INFO] Exporting OpenAPI specifications...
 [OK] Exported users → docs/api/users.json
-[OK] Exported users → docs/api/users.yaml
 [OK] Exported payments → docs/api/payments.json
-[OK] Exported payments → docs/api/payments.yaml
-```
-
-### Watch Mode
-
-Auto-regenerate specs when service code changes:
-
-```bash
-$ forklaunch openapi export --all --watch
-
-[INFO] Watching for changes...
-[INFO] Press Ctrl+C to stop
-
-[INFO] Change detected: src/modules/payments/api/routes/charge.routes.ts
-[OK] Re-exported payments → openapi/payments.json
-[OK] Re-exported payments → openapi/payments.yaml
 ```
 
 ## OpenAPI Specification Structure
@@ -218,13 +172,13 @@ Use exported specs with documentation tools:
 
 ```bash
 # Export OpenAPI specs
-forklaunch openapi export --all --format yaml
+forklaunch openapi export
 
 # Generate docs with Redoc
-npx redoc-cli bundle openapi/payments.yaml
+npx redoc-cli bundle .forklaunch/openapi/payments.json
 
 # Or use Swagger UI
-npx swagger-ui-watcher openapi/payments.yaml
+npx swagger-ui-watcher .forklaunch/openapi/payments.json
 ```
 
 ### Generate Client SDKs
@@ -233,19 +187,13 @@ Create type-safe client SDKs for frontend/mobile:
 
 ```bash
 # Export OpenAPI specs
-forklaunch openapi export --service payments
+forklaunch openapi export
 
 # Generate TypeScript client
 npx openapi-generator-cli generate \
-  -i openapi/payments.json \
+  -i .forklaunch/openapi/payments.json \
   -g typescript-fetch \
   -o ./clients/payments
-
-# Generate Python client
-npx openapi-generator-cli generate \
-  -i openapi/payments.json \
-  -g python \
-  -o ./clients/payments-python
 ```
 
 ### API Testing
@@ -254,145 +202,13 @@ Use specs with testing tools:
 
 ```bash
 # Export specs
-forklaunch openapi export --all
-
-# Run Postman tests
-newman run openapi/payments.json
+forklaunch openapi export
 
 # Run contract tests with Dredd
-dredd openapi/payments.yaml http://localhost:3000
+dredd .forklaunch/openapi/payments.json http://localhost:3000
 ```
-
-### API Gateway Integration
-
-Configure API gateways using OpenAPI specs:
-
-```bash
-# Export specs
-forklaunch openapi export --service payments --format yaml
-
-# Import to AWS API Gateway
-aws apigateway import-rest-api \
-  --body file://openapi/payments.yaml
-
-# Or Kong Gateway
-deck sync --state openapi/payments.yaml
-```
-
-### CI/CD Integration
-
-Include in your CI/CD pipeline:
-
-```yaml
-# .github/workflows/api-docs.yml
-name: Generate API Docs
-
-on: [push]
-
-jobs:
-  docs:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-
-      - name: Setup Node
-        uses: actions/setup-node@v2
-
-      - name: Install ForkLaunch CLI
-        run: npm install -g forklaunch
-
-      - name: Export OpenAPI specs
-        run: forklaunch openapi export --all --format yaml
-
-      - name: Generate documentation
-        run: npx redoc-cli bundle openapi/*.yaml
-
-      - name: Publish to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs
-```
-
-## Output Formats
-
-### JSON Format
-
-```bash
-forklaunch openapi export --service payments --format json
-```
-
-**Benefits:**
-- Smaller file size
-- Direct JavaScript/TypeScript import
-- Faster parsing
-- Better for tooling
-
-**Use cases:**
-- Client SDK generation
-- API testing tools
-- JavaScript/TypeScript consumers
-
-### YAML Format
-
-```bash
-forklaunch openapi export --service payments --format yaml
-```
-
-**Benefits:**
-- Human-readable
-- Easy to edit
-- Better for documentation
-- Standard for many tools
-
-**Use cases:**
-- Documentation generation
-- Manual review
-- API gateway configuration
-- Version control
-
-### Both Formats (Default)
-
-```bash
-forklaunch openapi export --service payments
-```
-
-Exports both `.json` and `.yaml` files for maximum flexibility.
 
 ## Customizing Specifications
-
-### Service-Level Configuration
-
-Configure OpenAPI metadata in service config:
-
-```typescript
-// src/modules/payments/config.ts
-export const serviceConfig = {
-  name: 'payments',
-  version: '1.0.0',
-  openapi: {
-    title: 'Payments API',
-    description: 'Secure payment processing service',
-    contact: {
-      name: 'API Support',
-      email: 'api@example.com'
-    },
-    license: {
-      name: 'MIT'
-    },
-    servers: [
-      {
-        url: 'https://api.example.com/payments',
-        description: 'Production'
-      },
-      {
-        url: 'https://staging-api.example.com/payments',
-        description: 'Staging'
-      }
-    ]
-  }
-};
-```
 
 ### Route-Level Documentation
 
@@ -429,23 +245,13 @@ export const createChargeRoute = forklaunch.post('/charges', {
 
 ```bash
 # Export spec
-forklaunch openapi export --service payments
+forklaunch openapi export
 
 # Validate with openapi-validator
-npx @ibm/openapi-validator openapi/payments.yaml
+npx @ibm/openapi-validator .forklaunch/openapi/payments.json
 
 # Or with Swagger CLI
-npx swagger-cli validate openapi/payments.yaml
-```
-
-### Lint OpenAPI Specs
-
-```bash
-# Export spec
-forklaunch openapi export --service payments
-
-# Lint with Spectral
-npx @stoplight/spectral-cli lint openapi/payments.yaml
+npx swagger-cli validate .forklaunch/openapi/payments.json
 ```
 
 ## Best Practices
@@ -456,8 +262,6 @@ npx @stoplight/spectral-cli lint openapi/payments.yaml
 4. **Document Thoroughly**: Add summaries and descriptions to all routes
 5. **Use Tags**: Organize routes with tags for better documentation
 6. **Include Examples**: Add request/response examples in route definitions
-7. **Semantic Versioning**: Version your APIs following semver
-8. **Automate**: Generate and publish docs automatically in CI/CD
 
 ## Troubleshooting
 
@@ -497,7 +301,6 @@ const schema = z.object({
 
 ## See Also
 
-- [API Documentation Guide](/docs/guides/api-documentation.md)
 - [Framework HTTP Module](/docs/framework/http.md)
 - [Schema Validation](/docs/framework/validation.md)
 - [OpenAPI Specification](https://spec.openapis.org/oas/latest.html)

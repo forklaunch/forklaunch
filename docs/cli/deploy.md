@@ -26,28 +26,33 @@ forklaunch deploy create --release <version> --environment <env> --region <regio
 
 **Required:**
 - `-r, --release <version>` - Release version to deploy (e.g., `1.0.0`)
-- `-e, --environment <env>` - Target environment (`development`, `staging`, `production`)
-- `--region <region>` - Deployment region (e.g., `us-west-2`, `eu-west-1`)
+- `-e, --environment <env>` - Target environment (e.g., `staging`, `production`)
+- `--region <region>` - Deployment region (e.g., `us-east-1`, `eu-west-1`)
 
 **Optional:**
 - `-p, --path <path>` - Path to application root
-- `--distribution-config <config>` - Custom distribution configuration (advanced)
-- `--priority <level>` - Deployment priority: `low`, `normal`, `high` (default: `normal`)
+- `--distribution-config <config>` - Distribution strategy (`centralized` or `distributed`)
+- `--dry-run` - Preview deployment without executing it
+- `--full` - Force a full deployment with Pulumi state refresh
+- `--node-env <env>` - NODE_ENV for this deployment (`production` or `development`)
+- `--no-wait` - Don't wait for deployment to complete
 
 ### destroy
 
-Tear down a deployment and release all resources.
+Tear down application infrastructure for a given environment and region.
 
 ```bash
-forklaunch deploy destroy --deployment <deployment-id> [options]
+forklaunch deploy destroy --environment <env> --region <region> [options]
 ```
 
 **Required:**
-- `-d, --deployment <deployment-id>` - Deployment ID to destroy
+- `-e, --environment <env>` - Environment name (e.g., `staging`, `production`)
+- `--region <region>` - AWS region (e.g., `us-east-1`)
 
 **Optional:**
 - `-p, --path <path>` - Path to application root
-- `--force` - Skip confirmation prompt
+- `--mode <mode>` - Destroy mode: `all` (default) or `preserve-data`
+- `--no-wait` - Don't wait for destruction to complete
 
 ## Creating Deployments
 
@@ -105,21 +110,16 @@ $ forklaunch deploy create \
   - notifications: https://staging-api.example.com/notifications
 ```
 
-### High Priority Deployment
+### Dry Run
 
-For urgent hotfixes or critical updates:
+Preview what a deployment would do without executing it:
 
 ```bash
 $ forklaunch deploy create \
-  --release 1.0.1 \
-  --environment production \
+  --release 1.0.0 \
+  --environment staging \
   --region us-west-2 \
-  --priority high
-
-[INFO] Creating HIGH PRIORITY deployment...
-[INFO] This deployment will be prioritized over others
-[...]
-[OK] Deployment created successfully!
+  --dry-run
 ```
 
 ### Multi-Region Deployment
@@ -182,35 +182,6 @@ Variables already set on the platform skip prompts:
   - SENDGRID_API_KEY ✓
 ```
 
-### Validation
-
-ForkLaunch validates environment variable values:
-
-```bash
-[PROMPT] Enter DATABASE_PORT: abc
-[ERROR] Invalid value: DATABASE_PORT must be a number
-
-[PROMPT] Enter DATABASE_PORT: 5432
-[OK] Valid value
-```
-
-### Updating Variables
-
-Update variables for existing deployment:
-
-```bash
-# Update via platform UI or CLI
-forklaunch environment sync \
-  --environment staging \
-  --region us-west-2
-
-# Redeploy to apply changes
-forklaunch deploy create \
-  --release 1.0.0 \
-  --environment staging \
-  --region us-west-2
-```
-
 ## Deployment Lifecycle
 
 ### Phases
@@ -231,73 +202,29 @@ View deployment progress on the platform:
 [INFO] Dashboard: https://platform.forklaunch.com/deployments/dep_abc123xyz
 ```
 
-Or use the CLI:
-
-```bash
-# Check deployment status
-forklaunch deployment status dep_abc123xyz
-
-# View logs
-forklaunch deployment logs dep_abc123xyz --service users
-
-# View metrics
-forklaunch deployment metrics dep_abc123xyz
-```
-
 ## Destroying Deployments
 
 ### Basic Destroy
 
 ```bash
-$ forklaunch deploy destroy --deployment dep_abc123xyz
+$ forklaunch deploy destroy --environment staging --region us-west-2
 
-[WARNING] This will destroy deployment dep_abc123xyz
-[WARNING] All data will be lost
-[PROMPT] Are you sure? (yes/no): yes
-
+[WARNING] This will destroy infrastructure for staging (us-west-2)
 [INFO] Destroying deployment...
 [OK] Stopped all services
 [OK] Stopped all workers
 [OK] Deleted load balancer
 [OK] Removed DNS records
-[OK] Deleted databases (data backed up to S3)
-[OK] Deleted caches
-[OK] Deleted storage buckets (data backed up)
 
 [OK] Deployment destroyed successfully
-
-[INFO] Backups available for 30 days at:
-  - Database: s3://forklaunch-backups/dep_abc123xyz/database
-  - Files: s3://forklaunch-backups/dep_abc123xyz/storage
 ```
 
-### Force Destroy
+### Preserve Data
 
-Skip confirmation:
-
-```bash
-forklaunch deploy destroy --deployment dep_abc123xyz --force
-```
-
-### Destroy with Data Retention
-
-Preserve data for disaster recovery:
+Keep databases and storage while tearing down compute:
 
 ```bash
-$ forklaunch deploy destroy --deployment dep_abc123xyz --retain-data
-
-[INFO] Destroying deployment (retaining data)...
-[OK] Stopped services and workers
-[OK] Removed networking
-[OK] Kept databases (marked for retention)
-[OK] Kept storage buckets
-
-[INFO] Data retained at:
-  - postgres://...
-  - s3://...
-
-[INFO] Data will be retained for 90 days
-[INFO] To restore, create new deployment with --restore-from dep_abc123xyz
+forklaunch deploy destroy --environment staging --region us-west-2 --mode preserve-data
 ```
 
 ## Environment Configuration
@@ -310,77 +237,7 @@ When you deploy with ForkLaunch, you'll need to configure environment variables 
 - API keys for external services
 - Any other service-specific configuration
 
-## Deployment Strategies
-
-### Rolling Deployment (Default)
-
-Updates instances gradually:
-
-```bash
-# Deploy with rolling updates
-forklaunch deploy create \
-  --release 1.1.0 \
-  --environment production \
-  --region us-west-2
-
-[INFO] Using rolling deployment strategy
-[INFO] Updating 1 instance at a time
-[OK] Instance 1/3 updated
-[OK] Instance 2/3 updated
-[OK] Instance 3/3 updated
-```
-
-### Blue-Green Deployment
-
-Zero-downtime with instant rollback:
-
-```bash
-# Deploy to green environment
-forklaunch deploy create \
-  --release 1.1.0 \
-  --environment production \
-  --region us-west-2 \
-  --strategy blue-green
-
-[INFO] Creating green environment...
-[OK] Green environment ready
-[INFO] Routing 10% traffic to green...
-[INFO] Routing 50% traffic to green...
-[INFO] Routing 100% traffic to green...
-[OK] Blue environment decommissioned
-```
-
-### Canary Deployment
-
-Gradual traffic shift:
-
-```bash
-forklaunch deploy create \
-  --release 1.1.0 \
-  --environment production \
-  --region us-west-2 \
-  --strategy canary \
-  --canary-percentage 10
-
-[INFO] Deploying canary (10% traffic)...
-[OK] Canary deployed
-[INFO] Monitor metrics at: https://platform.forklaunch.com/deployments/...
-[INFO] Promote with: forklaunch deployment promote dep_abc123xyz
-```
-
 ## Rollback
-
-### Automatic Rollback
-
-If health checks fail, automatic rollback:
-
-```bash
-[INFO] Deploying release 1.1.0...
-[ERROR] Health check failed for service: payments
-[WARNING] Initiating automatic rollback...
-[OK] Rolled back to release 1.0.0
-[INFO] Deployment failed - check logs for details
-```
 
 ### Manual Rollback
 
@@ -392,64 +249,6 @@ forklaunch deploy create \
   --release 1.0.0 \
   --environment production \
   --region us-west-2
-```
-
-## Monitoring Deployments
-
-### View Status
-
-```bash
-$ forklaunch deployment status dep_abc123xyz
-
-Deployment: dep_abc123xyz
-Status: running
-Release: 1.0.0
-Environment: production
-Region: us-west-2
-Created: 2026-01-20 19:00:00 UTC
-
-Services:
-  users (2/2 healthy)
-  payments (2/2 healthy)
-  notifications (1/1 healthy)
-
-Workers:
-  email-processor (3/3 healthy)
-  data-export (1/1 healthy)
-
-Health: ✓ All systems operational
-```
-
-### View Logs
-
-```bash
-# Service logs
-forklaunch deployment logs dep_abc123xyz --service payments
-
-# Worker logs
-forklaunch deployment logs dep_abc123xyz --worker email-processor
-
-# All logs
-forklaunch deployment logs dep_abc123xyz --all
-
-# Follow logs
-forklaunch deployment logs dep_abc123xyz --follow
-```
-
-### View Metrics
-
-```bash
-# View metrics
-forklaunch deployment metrics dep_abc123xyz
-
-# CPU usage
-forklaunch deployment metrics dep_abc123xyz --metric cpu
-
-# Memory usage
-forklaunch deployment metrics dep_abc123xyz --metric memory
-
-# Request rate
-forklaunch deployment metrics dep_abc123xyz --metric requests
 ```
 
 ## Common Workflows
@@ -509,9 +308,6 @@ forklaunch deploy create \
   --release 1.1.0 \
   --environment production \
   --region us-west-2
-
-# 5. Monitor
-forklaunch deployment status <deployment-id>
 ```
 
 ### Hotfix Workflow
@@ -520,15 +316,11 @@ forklaunch deployment status <deployment-id>
 # 1. Create hotfix release
 forklaunch release create --version 1.0.1 --notes "Critical bug fix"
 
-# 2. Deploy with high priority
+# 2. Deploy directly
 forklaunch deploy create \
   --release 1.0.1 \
   --environment production \
-  --region us-west-2 \
-  --priority high
-
-# 3. Monitor closely
-forklaunch deployment logs <deployment-id> --follow
+  --region us-west-2
 ```
 
 ## Troubleshooting
@@ -569,14 +361,12 @@ forklaunch deployment logs <deployment-id> --follow
 
 1. **Test in Staging**: Always deploy to staging before production
 2. **Monitor Deployments**: Watch health metrics during deployment
-3. **Gradual Rollout**: Use canary or blue-green for production
-4. **Environment Parity**: Keep staging similar to production
-5. **Automated Rollback**: Configure automatic rollback on failures
-6. **Version Control**: Tag releases in Git matching deployment versions
-7. **Document Changes**: Maintain release notes for each deployment
-8. **Schedule Deploys**: Deploy during low-traffic windows
-9. **Backup Data**: Always backup before destructive operations
-10. **Communication**: Notify team before production deployments
+3. **Environment Parity**: Keep staging similar to production
+4. **Version Control**: Tag releases in Git matching deployment versions
+5. **Document Changes**: Maintain release notes for each deployment
+6. **Schedule Deploys**: Deploy during low-traffic windows
+7. **Backup Data**: Always backup before destructive operations
+8. **Communication**: Notify team before production deployments
 
 ## Related Commands
 
@@ -589,4 +379,3 @@ forklaunch deployment logs <deployment-id> --follow
 - [Release Command](/docs/cli/release.md)
 - [Release and Deploy Guide](/docs/guides/release-and-deploy.md)
 - [Environment Management](/docs/guides/environment-management.md)
-- [Monitoring and Observability](/docs/guides/monitoring.md)

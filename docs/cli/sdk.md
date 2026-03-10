@@ -18,44 +18,34 @@ forklaunch sdk <subcommand> [options]
 
 ### mode
 
-Configure SDK generation mode for services.
+Configure SDK generation mode.
 
 ```bash
-forklaunch sdk mode <mode-type> [options]
+forklaunch sdk mode [options]
 ```
 
-**Mode Types:**
-- `default` - Standard SDK generation with all features
-- `minimal` - Lightweight SDKs with essential features only
-- `custom` - Custom SDK configuration (advanced)
-
 **Options:**
+- `-t, --type <mode>` - SDK mode type: `generated` or `live`
 - `-p, --path <path>` - Path to application root (optional)
-- `--service <name>` - Apply mode to specific service (optional)
-- `--global` - Apply mode globally to all services
+- `-n, --dryrun` - Show what would be changed without making changes
+
+If `--type` is not specified, the CLI will prompt for mode selection interactively.
 
 ## SDK Generation Modes
 
-### Default Mode
+### Generated Mode
 
-The default mode generates full-featured SDKs with:
-- Complete type safety
-- Automatic retry logic
-- Built-in error handling
-- Request/response logging
-- OpenTelemetry tracing
-- Automatic authentication
+The `generated` mode creates pre-built SDK clients from your service definitions:
 
-**Example:**
 ```bash
-forklaunch sdk mode default --global
+forklaunch sdk mode --type generated
 ```
 
 **Generated SDK Usage:**
 ```typescript
 import { paymentsService } from '@/sdk';
 
-// Full type safety and features
+// Full type safety
 const result = await paymentsService.createCharge({
   amount: 1000,
   currency: 'usd',
@@ -63,24 +53,19 @@ const result = await paymentsService.createCharge({
 });
 ```
 
-### Minimal Mode
+### Live Mode
 
-Minimal mode generates lightweight SDKs optimized for:
-- Reduced bundle size
-- Lower memory footprint
-- Faster cold starts
-- Minimal dependencies
+The `live` mode generates SDK clients that call services directly at runtime:
 
-**Example:**
 ```bash
-forklaunch sdk mode minimal --global
+forklaunch sdk mode --type live
 ```
 
-**Generated SDK Usage:**
+**Live SDK Usage:**
 ```typescript
 import { paymentsService } from '@/sdk';
 
-// Same type safety, fewer features
+// Same type-safe interface, live calls
 const result = await paymentsService.createCharge({
   amount: 1000,
   currency: 'usd',
@@ -88,64 +73,7 @@ const result = await paymentsService.createCharge({
 });
 ```
 
-### Custom Mode
-
-Custom mode allows fine-grained control over SDK features.
-
-**Example:**
-```bash
-forklaunch sdk mode custom --global
-```
-
-Then edit `.forklaunch/sdk.config.json`:
-
-```json
-{
-  "mode": "custom",
-  "features": {
-    "retry": true,
-    "tracing": true,
-    "logging": false,
-    "authentication": true
-  },
-  "bundleSize": "optimized",
-  "typescript": {
-    "strict": true
-  }
-}
-```
-
-## Per-Service Configuration
-
-Configure SDK mode for specific services:
-
-```bash
-# Minimal mode for high-volume service
-forklaunch sdk mode minimal --service analytics
-
-# Default mode for critical service
-forklaunch sdk mode default --service payments
-
-# Check configuration
-cat .forklaunch/sdk.config.json
-```
-
-**Example Configuration:**
-```json
-{
-  "globalMode": "default",
-  "services": {
-    "analytics": {
-      "mode": "minimal"
-    },
-    "payments": {
-      "mode": "default"
-    }
-  }
-}
-```
-
-## SDK Features Explained
+## SDK Features
 
 ### Type Safety
 
@@ -154,40 +82,13 @@ All SDK modes provide complete TypeScript type safety:
 ```typescript
 // TypeScript knows the exact shape
 const charge = await paymentsService.createCharge({
-  amount: 1000,        // ✓ number required
-  currency: 'usd',     // ✓ string required
-  customerId: 'cus_123' // ✓ string required
-});
-
-// TypeScript error - missing field
-const charge = await paymentsService.createCharge({
-  amount: 1000
-  // ❌ Error: currency required
+  amount: 1000,        // number required
+  currency: 'usd',     // string required
+  customerId: 'cus_123' // string required
 });
 
 // TypeScript knows response type
-const customerId = charge.customerId; // ✓ string
-const invalid = charge.nonExistent;   // ❌ Error: property doesn't exist
-```
-
-### Automatic Retry Logic (Default Mode)
-
-```typescript
-// Automatically retries on failure
-try {
-  const result = await paymentsService.createCharge({ ... });
-} catch (error) {
-  // Only throws after 3 retry attempts
-  console.error('All retries exhausted', error);
-}
-```
-
-### Built-in Tracing (Default Mode)
-
-```typescript
-// Automatically traces all SDK calls
-const result = await paymentsService.createCharge({ ... });
-// Appears in OpenTelemetry/Grafana with full context
+const customerId = charge.customerId; // string
 ```
 
 ### Error Handling
@@ -204,49 +105,6 @@ try {
     console.error('Service error:', error.statusCode, error.message);
   }
 }
-```
-
-## Common Use Cases
-
-### Optimize for Performance
-
-For high-throughput services:
-
-```bash
-# Use minimal mode for event-processing service
-forklaunch sdk mode minimal --service event-processor
-
-# Rebuild to apply changes
-pnpm build
-```
-
-### Optimize for Developer Experience
-
-For complex business logic services:
-
-```bash
-# Use default mode for business services
-forklaunch sdk mode default --service orders
-forklaunch sdk mode default --service inventory
-
-# Get full observability and debugging features
-```
-
-### Mixed Configuration
-
-Different modes for different needs:
-
-```bash
-# Critical services get full features
-forklaunch sdk mode default --service payments
-forklaunch sdk mode default --service auth
-
-# High-volume services get minimal overhead
-forklaunch sdk mode minimal --service analytics
-forklaunch sdk mode minimal --service logging
-
-# Verify configuration
-forklaunch sdk mode --show
 ```
 
 ## How SDKs Are Generated
@@ -280,7 +138,7 @@ export const createChargeRoute = forklaunch.post('/charges', {
 // Auto-generated: src/sdk/payments.sdk.ts
 export const paymentsService = {
   createCharge: async (data: CreateChargeRequest): Promise<Charge> => {
-    // Generated implementation with retries, tracing, etc.
+    // Generated implementation
   }
 };
 ```
@@ -348,7 +206,7 @@ pnpm build
 ### SDK Import Errors
 
 ```typescript
-// ❌ Error: Cannot find module '@/sdk'
+// Error: Cannot find module '@/sdk'
 import { paymentsService } from '@/sdk';
 ```
 
@@ -360,7 +218,7 @@ forklaunch sync all
 ### Type Mismatches
 
 ```typescript
-// ❌ Error: Property 'customerId' is missing
+// Error: Property 'customerId' is missing
 const charge = await paymentsService.createCharge({
   amount: 1000,
   currency: 'usd'
@@ -383,23 +241,10 @@ forklaunch sync all
 
 ## Best Practices
 
-1. **Use Global Default**: Start with default mode for all services
-2. **Optimize Selectively**: Switch to minimal mode only when needed
-3. **Consistent Configuration**: Keep SDK config in version control
-4. **Regenerate Regularly**: Run sync after pulling code changes
-5. **Type Everything**: Leverage full TypeScript type safety
-6. **Handle Errors**: Always catch and handle SDK errors appropriately
-
-## Performance Comparison
-
-| Feature | Default Mode | Minimal Mode | Impact |
-|---------|--------------|--------------|--------|
-| Bundle Size | ~15KB per service | ~3KB per service | 80% reduction |
-| Cold Start | ~50ms | ~10ms | 80% faster |
-| Memory | ~2MB per service | ~500KB per service | 75% reduction |
-| Retry Logic | ✓ Automatic | ✗ Manual | N/A |
-| Tracing | ✓ Automatic | ✗ Manual | N/A |
-| Logging | ✓ Automatic | ✗ Manual | N/A |
+1. **Start with Generated**: Use `generated` mode as a starting point
+2. **Regenerate Regularly**: Run sync after pulling code changes
+3. **Type Everything**: Leverage full TypeScript type safety
+4. **Handle Errors**: Always catch and handle SDK errors appropriately
 
 ## Related Commands
 
@@ -409,6 +254,5 @@ forklaunch sync all
 
 ## See Also
 
-- [Internal SDKs Guide](/docs/guides/internal-sdks.md)
 - [Service Communication](/docs/guides/service-communication.md)
 - [Universal SDK Framework](/docs/framework/universal-sdk.md)

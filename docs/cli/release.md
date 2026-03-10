@@ -28,12 +28,6 @@ Before creating releases, you must:
    forklaunch integrate --app <application-id>
    ```
 
-3. **Initialize Git Repository** (for automatic source uploads)
-   ```bash
-   git init
-   git remote add origin <repo-url>
-   ```
-
 ## Arguments
 
 **Required:**
@@ -43,7 +37,23 @@ Before creating releases, you must:
 - `-n, --notes <notes>` - Release notes or description
 - `-p, --path <path>` - Path to application root (defaults to current directory)
 - `--dry-run` - Simulate release without creating it
-- `--local` - Package local code without pushing to GitHub (for CI/CD)
+- `--local` - Package local code and upload to S3 (skip mode selection prompt)
+- `--git` - Use git-based release flow (skip mode selection prompt)
+- `--skip-sync` - Skip automatic sync of projects with manifest before creating release
+
+## Release Mode Selection
+
+When neither `--local` nor `--git` is specified, the CLI presents an interactive prompt:
+
+```bash
+$ forklaunch release create --version 1.0.0
+
+? How would you like to release?
+> Package locally (upload code directly)
+  Use git (connect GitHub repository)
+```
+
+Local mode is the default. Use `--local` or `--git` to bypass the prompt.
 
 ## Creating a Release
 
@@ -69,8 +79,6 @@ $ forklaunch release create --version 1.0.0
 [OK] Exported notifications.json
 
 [INFO] Packaging source code...
-[OK] Git commit: abc123def456
-[OK] Git branch: main
 [OK] Source uploaded to S3
 
 [INFO] Creating release manifest...
@@ -129,7 +137,7 @@ Environment Variables:
 
 ### Local Package Mode
 
-For CI/CD environments without GitHub integration:
+Package and upload code directly without GitHub integration:
 
 ```bash
 $ forklaunch release create --version 1.0.0 --local
@@ -141,6 +149,25 @@ $ forklaunch release create --version 1.0.0 --local
 [...]
 [OK] Release 1.0.0 created successfully!
 ```
+
+### Git Mode
+
+Use git-based release flow connecting to your repository:
+
+```bash
+$ forklaunch release create --version 1.0.0 --git
+
+[INFO] Creating release 1.0.0 (git mode)...
+[INFO] Git commit: abc123def456
+[INFO] Git branch: main
+[OK] Source uploaded via GitHub integration
+[...]
+[OK] Release 1.0.0 created successfully!
+```
+
+## Automatic Sync
+
+Before creating a release, the CLI automatically runs `sync all` to ensure all projects are synchronized with the manifest. Use `--skip-sync` to bypass this step.
 
 ## What Gets Packaged
 
@@ -167,7 +194,6 @@ Scanned from:
 ### API Specifications
 
 - OpenAPI specs for all services
-- AsyncAPI specs for workers
 - Internal SDK definitions
 
 ### Release Manifest
@@ -219,100 +245,6 @@ forklaunch release create --version 1.0.0-alpha.1
 forklaunch release create --version 1.0.0-rc.1
 ```
 
-### Version Validation
-
-ForkLaunch validates version numbers:
-
-```bash
-# ✓ Valid
-1.0.0
-1.2.3
-2.0.0-beta.1
-1.0.0-rc.2
-
-# ✗ Invalid
-v1.0.0          # No 'v' prefix
-1.0             # Must be MAJOR.MINOR.PATCH
-latest          # Must be explicit version
-```
-
-## Git Integration
-
-### Automatic Source Upload
-
-For projects with Git:
-
-```bash
-$ forklaunch release create --version 1.0.0
-
-[INFO] Git repository detected
-[INFO] Commit: abc123def456
-[INFO] Branch: main
-[INFO] Remote: github.com/company/backend
-[OK] Source uploaded via GitHub integration
-```
-
-### Requirements
-
-1. Git repository initialized
-2. Remote configured (GitHub, GitLab, Bitbucket)
-3. Latest changes committed
-4. Working directory clean (no uncommitted changes)
-
-### Uncommitted Changes
-
-```bash
-$ forklaunch release create --version 1.0.0
-
-[ERROR] Uncommitted changes detected:
-  M src/modules/users/api/routes/user.routes.ts
-  ?? src/modules/payments/new-file.ts
-
-[INFO] Please commit or stash changes before creating release
-```
-
-**Solution:**
-```bash
-git add .
-git commit -m "Prepare release 1.0.0"
-forklaunch release create --version 1.0.0
-```
-
-## Release Manifest
-
-Each release includes a detailed manifest:
-
-```json
-{
-  "version": "1.0.0",
-  "createdAt": "2026-01-20T19:00:00Z",
-  "git": {
-    "commit": "abc123def456",
-    "branch": "main",
-    "repository": "github.com/company/backend"
-  },
-  "services": [
-    {
-      "name": "users",
-      "type": "service",
-      "runtime": "node",
-      "dependencies": ["postgresql", "redis"],
-      "environmentVariables": [...]
-    }
-  ],
-  "workers": [...],
-  "libraries": [...],
-  "environmentVariables": [
-    {
-      "key": "DATABASE_URL",
-      "scope": "application",
-      "required": true,
-      "components": ["users", "payments"]
-    }
-  ]
-}
-```
-
 ## CI/CD Integration
 
 ### GitHub Actions
@@ -341,9 +273,7 @@ jobs:
         run: npm install -g forklaunch
 
       - name: Login to Platform
-        env:
-          FORKLAUNCH_TOKEN: ${{ secrets.FORKLAUNCH_TOKEN }}
-        run: echo "$FORKLAUNCH_TOKEN" | forklaunch login --token-stdin
+        run: forklaunch login --token "${{ secrets.FORKLAUNCH_TOKEN }}"
 
       - name: Extract version from tag
         id: version
@@ -353,6 +283,7 @@ jobs:
         run: |
           forklaunch release create \
             --version ${{ steps.version.outputs.VERSION }} \
+            --local \
             --notes "${{ github.event.head_commit.message }}"
 
       - name: Deploy to Staging
@@ -361,24 +292,6 @@ jobs:
             --release ${{ steps.version.outputs.VERSION }} \
             --environment staging \
             --region us-west-2
-```
-
-### GitLab CI
-
-```yaml
-# .gitlab-ci.yml
-release:
-  stage: release
-  only:
-    - tags
-  script:
-    - npm install -g forklaunch
-    - echo "$FORKLAUNCH_TOKEN" | forklaunch login --token-stdin
-    - VERSION=${CI_COMMIT_TAG#v}
-    - forklaunch release create --version $VERSION --notes "$CI_COMMIT_MESSAGE"
-    - forklaunch deploy create --release $VERSION --environment staging --region us-west-2
-  variables:
-    FORKLAUNCH_TOKEN: $FORKLAUNCH_TOKEN
 ```
 
 ## Common Workflows
@@ -423,7 +336,7 @@ git commit -m "Fix critical payment bug"
 forklaunch release create --version 1.0.1 --notes "Emergency fix for payment bug"
 
 # 4. Deploy immediately
-forklaunch deploy create --release 1.0.1 --environment production --region us-west-2 --priority high
+forklaunch deploy create --release 1.0.1 --environment production --region us-west-2
 
 # 5. Merge back to main
 git checkout main

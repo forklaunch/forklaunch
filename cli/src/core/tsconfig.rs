@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use serde_json::{Value, json, to_string_pretty};
 
 use super::rendered_template::RenderedTemplate;
+use crate::constants::TestFramework;
 use crate::core::manifest::application::ApplicationManifestData;
 
 pub(crate) fn generate_project_tsconfig(
@@ -197,4 +198,95 @@ pub(crate) fn update_project_in_modules_tsconfig(
         content: to_string_pretty(&tsconfig)?,
         context: None,
     })
+}
+
+fn test_framework_type_entry(test_framework: &TestFramework) -> &'static str {
+    match test_framework {
+        TestFramework::Vitest => "vitest/globals",
+        TestFramework::Jest => "jest",
+    }
+}
+
+/// Updates the test framework type entry in a tsconfig's compilerOptions.types array.
+/// Swaps old_type for new_type. If the types array doesn't exist, does nothing.
+fn swap_test_type_in_tsconfig(
+    tsconfig: &mut serde_json::Map<String, Value>,
+    old_type: &str,
+    new_type: &str,
+) {
+    if let Some(compiler_options) = tsconfig
+        .get_mut("compilerOptions")
+        .and_then(|co| co.as_object_mut())
+    {
+        if let Some(types) = compiler_options
+            .get_mut("types")
+            .and_then(|t| t.as_array_mut())
+        {
+            types.retain(|t| t.as_str() != Some(old_type));
+            if !types.iter().any(|t| t.as_str() == Some(new_type)) {
+                types.push(json!(new_type));
+            }
+        }
+    }
+}
+
+/// Updates tsconfig.base.json and per-project tsconfig.json files when the test framework changes.
+/// Swaps the old test framework type entry for the new one in the types array.
+pub(crate) fn update_tsconfig_test_framework_types(
+    base_path: &Path,
+    new_test_framework: &TestFramework,
+    existing_test_framework: Option<&TestFramework>,
+    project_names: &[&str],
+) -> Result<Vec<RenderedTemplate>> {
+    let new_type = test_framework_type_entry(new_test_framework);
+    let old_type = existing_test_framework
+        .map(test_framework_type_entry)
+        .unwrap_or("");
+
+    let mut templates = vec![];
+
+    // Update tsconfig.base.json
+    let base_tsconfig_path = base_path.join("tsconfig.base.json");
+    if base_tsconfig_path.exists() {
+        let content = read_to_string(&base_tsconfig_path)
+            .with_context(|| "Failed to read tsconfig.base.json")?;
+        let mut tsconfig: serde_json::Map<String, Value> =
+            serde_json::from_str(&content).with_context(|| "Failed to parse tsconfig.base.json")?;
+
+        swap_test_type_in_tsconfig(&mut tsconfig, old_type, new_type);
+
+        templates.push(RenderedTemplate {
+            path: base_tsconfig_path,
+            content: to_string_pretty(&tsconfig)?,
+            context: None,
+        });
+    }
+
+    // Update per-project tsconfig.json files
+    for project_name in project_names {
+        let project_tsconfig_path = base_path.join(project_name).join("tsconfig.json");
+        if project_tsconfig_path.exists() {
+            let content = read_to_string(&project_tsconfig_path)
+                .with_context(|| format!("Failed to read tsconfig.json for {}", project_name))?;
+            let mut tsconfig: serde_json::Map<String, Value> = serde_json::from_str(&content)
+                .with_context(|| format!("Failed to parse tsconfig.json for {}", project_name))?;
+
+            // Only update if this tsconfig has its own types array (overrides base)
+            if tsconfig
+                .get("compilerOptions")
+                .and_then(|co| co.get("types"))
+                .is_some()
+            {
+                swap_test_type_in_tsconfig(&mut tsconfig, old_type, new_type);
+
+                templates.push(RenderedTemplate {
+                    path: project_tsconfig_path,
+                    content: to_string_pretty(&tsconfig)?,
+                    context: None,
+                });
+            }
+        }
+    }
+
+    Ok(templates)
 }

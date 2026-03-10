@@ -85,13 +85,38 @@ impl<'de> Deserialize<'de> for DockerCompose {
                             compose.version =
                                 from_value(value).map_err(serde::de::Error::custom)?;
                         }
-                        "volumes" => match from_value(value.clone()) {
-                            Ok(v) => compose.volumes = v,
-                            Err(_) => { compose.additional_entries.insert(key, value); }
+                        "volumes" => {
+                            if let Value::Mapping(map) = value {
+                                for (k, v) in map {
+                                    let child_key = yaml_value_to_string(k);
+                                    match from_value::<DockerVolume>(v.clone()) {
+                                        Ok(vol) => { compose.volumes.insert(child_key, vol); }
+                                        Err(_) => { compose.additional_entries
+                                            .entry("volumes".to_string())
+                                            .or_insert_with(|| Value::Mapping(Default::default()))
+                                            .as_mapping_mut()
+                                            .map(|m| m.insert(Value::String(child_key), v));
+                                        }
+                                    }
+                                }
+                            }
+                            // ignore non-mapping volumes (shouldn't happen)
                         },
-                        "networks" => match from_value(value.clone()) {
-                            Ok(v) => compose.networks = v,
-                            Err(_) => { compose.additional_entries.insert(key, value); }
+                        "networks" => {
+                            if let Value::Mapping(map) = value {
+                                for (k, v) in map {
+                                    let child_key = yaml_value_to_string(k);
+                                    match from_value::<DockerNetwork>(v.clone()) {
+                                        Ok(net) => { compose.networks.insert(child_key, net); }
+                                        Err(_) => { compose.additional_entries
+                                            .entry("networks".to_string())
+                                            .or_insert_with(|| Value::Mapping(Default::default()))
+                                            .as_mapping_mut()
+                                            .map(|m| m.insert(Value::String(child_key), v));
+                                        }
+                                    }
+                                }
+                            }
                         },
                         "services" => {
                             compose.services =
@@ -470,9 +495,46 @@ impl<'de> Deserialize<'de> for DockerService {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+#[derive(Debug, Serialize, Default, Clone)]
 pub(crate) struct DockerVolume {
     pub(crate) driver: String,
+
+    #[serde(flatten)]
+    pub(crate) additional_properties: HashMap<String, Value>,
+}
+
+impl<'de> Deserialize<'de> for DockerVolume {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        // Accept null/empty as default, otherwise parse as map
+        let value = Value::deserialize(deserializer)?;
+        match value {
+            Value::Null => Ok(DockerVolume::default()),
+            Value::Mapping(map) => {
+                let mut vol = DockerVolume::default();
+                for (k, v) in map {
+                    let key = yaml_value_to_string(k);
+                    match key.as_str() {
+                        "driver" => {
+                            vol.driver = from_value(v).unwrap_or_default();
+                        }
+                        _ => {
+                            vol.additional_properties.insert(key, v);
+                        }
+                    }
+                }
+                Ok(vol)
+            }
+            // String short-form (e.g., volume defined as just a string)
+            Value::String(s) => Ok(DockerVolume {
+                driver: s,
+                additional_properties: HashMap::new(),
+            }),
+            _ => Ok(DockerVolume::default()),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -481,10 +543,49 @@ pub(crate) struct DockerBuild {
     pub(crate) dockerfile: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Default, Clone)]
 pub(crate) struct DockerNetwork {
     pub(crate) name: String,
     pub(crate) driver: String,
+
+    #[serde(flatten)]
+    pub(crate) additional_properties: HashMap<String, Value>,
+}
+
+impl<'de> Deserialize<'de> for DockerNetwork {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = Value::deserialize(deserializer)?;
+        match value {
+            Value::Null => Ok(DockerNetwork::default()),
+            Value::Mapping(map) => {
+                let mut net = DockerNetwork::default();
+                for (k, v) in map {
+                    let key = yaml_value_to_string(k);
+                    match key.as_str() {
+                        "name" => {
+                            net.name = from_value(v).unwrap_or_default();
+                        }
+                        "driver" => {
+                            net.driver = from_value(v).unwrap_or_default();
+                        }
+                        _ => {
+                            net.additional_properties.insert(key, v);
+                        }
+                    }
+                }
+                Ok(net)
+            }
+            Value::String(s) => Ok(DockerNetwork {
+                name: s,
+                driver: String::new(),
+                additional_properties: HashMap::new(),
+            }),
+            _ => Ok(DockerNetwork::default()),
+        }
+    }
 }
 
 pub(crate) fn add_otel_to_docker_compose<'a>(
@@ -505,6 +606,7 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
             DockerNetwork {
                 name: network_name.clone(),
                 driver: "bridge".to_string(),
+                ..Default::default()
             },
         );
     }
@@ -578,6 +680,7 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
             "minio-data".to_string(),
             DockerVolume {
                 driver: "local".to_string(),
+                ..Default::default()
             },
         );
     }
@@ -689,6 +792,7 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
             "prometheus-data".to_string(),
             DockerVolume {
                 driver: "local".to_string(),
+                ..Default::default()
             },
         );
     }
@@ -841,6 +945,7 @@ pub(crate) fn add_redis_to_docker_compose<'a>(
             DockerNetwork {
                 name: network_name.clone(),
                 driver: "bridge".to_string(),
+                ..Default::default()
             },
         );
     }
@@ -902,6 +1007,7 @@ pub(crate) fn add_s3_to_docker_compose<'a>(
             DockerNetwork {
                 name: network_name.clone(),
                 driver: "bridge".to_string(),
+                ..Default::default()
             },
         );
     }
@@ -955,6 +1061,7 @@ pub(crate) fn add_s3_to_docker_compose<'a>(
             "minio-data".to_string(),
             DockerVolume {
                 driver: "local".to_string(),
+                ..Default::default()
             },
         );
     }
@@ -1024,6 +1131,7 @@ pub(crate) fn add_kafka_to_docker_compose<'a>(
             DockerNetwork {
                 name: network_name.clone(),
                 driver: "bridge".to_string(),
+                ..Default::default()
             },
         );
     }
@@ -1200,6 +1308,7 @@ pub(crate) fn add_database_to_docker_compose(
             DockerNetwork {
                 name: network_name.clone(),
                 driver: "bridge".to_string(),
+                ..Default::default()
             },
         );
     }
@@ -1269,6 +1378,7 @@ pub(crate) fn add_database_to_docker_compose(
                     format!("{}-postgresql-data", app_name),
                     DockerVolume {
                         driver: "local".to_string(),
+                        ..Default::default()
                     },
                 );
             }
@@ -1331,6 +1441,7 @@ pub(crate) fn add_database_to_docker_compose(
                     format!("{}-mongodb-data", app_name),
                     DockerVolume {
                         driver: "local".to_string(),
+                        ..Default::default()
                     },
                 );
             }
@@ -1375,6 +1486,7 @@ pub(crate) fn add_database_to_docker_compose(
                     format!("{}-mysql-data", app_name),
                     DockerVolume {
                         driver: "local".to_string(),
+                        ..Default::default()
                     },
                 );
             }
@@ -1418,6 +1530,7 @@ pub(crate) fn add_database_to_docker_compose(
                     format!("{}-mariadb-data", app_name),
                     DockerVolume {
                         driver: "local".to_string(),
+                        ..Default::default()
                     },
                 );
             }
@@ -1460,6 +1573,7 @@ pub(crate) fn add_database_to_docker_compose(
                     format!("{}-mssql-data", app_name),
                     DockerVolume {
                         driver: "local".to_string(),
+                        ..Default::default()
                     },
                 );
             }
@@ -1572,6 +1686,7 @@ fn add_base_definition_to_docker_compose(
             DockerNetwork {
                 name: network_name,
                 driver: "bridge".to_string(),
+                ..Default::default()
             },
         );
     }

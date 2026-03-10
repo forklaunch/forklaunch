@@ -6,8 +6,6 @@ description: Learn how to authenticate with ForkLaunch services.
 
 ## Overview
 
-THIS COMMAND IS CURRENTLY UNDER DEVELOPMENT AND IS NOT YET AVAILABLE.
-
 Manage authentication with the ForkLaunch platform.
 
 ## Usage
@@ -17,10 +15,13 @@ Manage authentication with the ForkLaunch platform.
 Authenticate with your ForkLaunch account.
 
 ```bash
-forklaunch login
+forklaunch login [options]
 ```
 
-**Process:**
+**Options:**
+- `-t, --token <token>` - API token for headless authentication (for CI/CD). Can also be set via `FORKLAUNCH_API_TOKEN` environment variable.
+
+**Interactive login (default):**
 
 1. Opens browser to ForkLaunch login page
 2. Handles OAuth authentication flow
@@ -31,6 +32,17 @@ forklaunch login
 $ forklaunch login
 Opening browser for authentication...
 Successfully authenticated as user@example.com
+```
+
+**Token-based login (CI/CD):**
+
+```bash
+# Pass token directly
+forklaunch login --token <your-api-token>
+
+# Or set via environment variable
+export FORKLAUNCH_API_TOKEN=<your-api-token>
+forklaunch login
 ```
 
 ### Logout
@@ -44,7 +56,6 @@ forklaunch logout
 **Actions:**
 
 - Clears local tokens
-- Revokes server session (if connected)
 - Confirms logout
 
 ```bash
@@ -54,23 +65,15 @@ Successfully logged out from ForkLaunch
 
 ### Whoami
 
-Display current session information.
+Display current authentication token.
 
 ```bash
 forklaunch whoami
 ```
 
-**Shows:**
-
-- Username/Email
-- Organization (if applicable)
-- Session status and expiry
-
 ```bash
 $ forklaunch whoami
-Logged in as: user@example.com
-Organization: My Company
-Session expires: 2024-12-31 23:59:59 UTC
+<current auth token>
 ```
 
 When not authenticated:
@@ -91,8 +94,8 @@ forklaunch whoami
 forklaunch login
 
 # Use authenticated commands
-forklaunch init application
-forklaunch depcheck
+forklaunch release create --version 1.0.0
+forklaunch deploy create --release 1.0.0 --environment staging --region us-east-1
 
 # Logout when done (optional)
 forklaunch logout
@@ -151,12 +154,10 @@ forklaunch logout
 
 ## Related Commands
 
-- [`forklaunch version`](./config#version) - Check CLI version and connectivity
 - [`forklaunch init`](./init) - Initialize projects (requires authentication)
-- [`forklaunch depcheck`](./depcheck) - Check dependencies (may require authentication)
+- [`forklaunch integrate`](./integrate) - Link with platform (requires authentication)
 
 ## Related Documentation
 
 - **[Getting Started](../getting-started)** - Initial setup and verification
 - **[CLI Overview](../cli)** - Complete command reference
-- **[Configuration](./config)** - Advanced configuration options

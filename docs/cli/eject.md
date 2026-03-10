@@ -21,7 +21,7 @@ forklaunch eject [options]
 | `--continue`     | `-c`  | Continue the eject operation without confirmation | `false`               |
 | `--dependencies` | `-d`  | Specify which dependencies to eject               | Interactive selection |
 | `--dryrun`       | `-n`  | Show what would be ejected without making changes | `false`               |
-| `--base_path`    | `-b`  | Path to the application directory                 | Current directory     |
+| `--path`         | `-p`  | Path to the application directory                 | Current directory     |
 
 ## Interactive Mode
 
