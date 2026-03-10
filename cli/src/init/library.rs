@@ -35,7 +35,7 @@ use crate::{
             package_json_constants::{
                 PROJECT_BUILD_SCRIPT, PROJECT_DOCS_SCRIPT, project_clean_script,
                 project_format_script, project_lint_fix_script, project_lint_script,
-                project_test_script,
+                project_test_script, project_up_latest_script,
             },
             project_package_json::{ProjectDevDependencies, ProjectPackageJson, ProjectScripts},
         },
@@ -200,6 +200,7 @@ fn generate_library_package_json(
             lint: Some(project_lint_script(&manifest_data.linter.parse()?)),
             lint_fix: Some(project_lint_fix_script(&manifest_data.linter.parse()?)),
             test: project_test_script(&manifest_data.runtime.parse()?, &test_framework),
+            up_latest: project_up_latest_script(&manifest_data.runtime.parse()?),
             ..Default::default()
         }),
         dev_dependencies: Some(ProjectDevDependencies {

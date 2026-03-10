@@ -75,6 +75,8 @@ pub(crate) struct ProjectScripts {
     pub(crate) start_worker: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) test: Option<String>,
+    #[serde(rename = "up:latest", skip_serializing_if = "Option::is_none")]
+    pub(crate) up_latest: Option<String>,
 
     #[serde(flatten)]
     pub(crate) additional_scripts: HashMap<String, String>,
@@ -118,6 +120,7 @@ impl<'de> Deserialize<'de> for ProjectScripts {
                     start_server: None,
                     start_worker: None,
                     test: None,
+                    up_latest: None,
                     additional_scripts: HashMap::new(),
                 };
 
@@ -142,6 +145,7 @@ impl<'de> Deserialize<'de> for ProjectScripts {
                         "start:server" => scripts.start_server = Some(value),
                         "start:worker" => scripts.start_worker = Some(value),
                         "test" => scripts.test = Some(value),
+                        "up:latest" => scripts.up_latest = Some(value),
                         _ => {
                             scripts.additional_scripts.insert(key, value);
                         }

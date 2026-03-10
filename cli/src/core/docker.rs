@@ -85,14 +85,14 @@ impl<'de> Deserialize<'de> for DockerCompose {
                             compose.version =
                                 from_value(value).map_err(serde::de::Error::custom)?;
                         }
-                        "volumes" => {
-                            compose.volumes =
-                                from_value(value).map_err(serde::de::Error::custom)?;
-                        }
-                        "networks" => {
-                            compose.networks =
-                                from_value(value).map_err(serde::de::Error::custom)?;
-                        }
+                        "volumes" => match from_value(value.clone()) {
+                            Ok(v) => compose.volumes = v,
+                            Err(_) => { compose.additional_entries.insert(key, value); }
+                        },
+                        "networks" => match from_value(value.clone()) {
+                            Ok(v) => compose.networks = v,
+                            Err(_) => { compose.additional_entries.insert(key, value); }
+                        },
                         "services" => {
                             compose.services =
                                 from_value(value).map_err(serde::de::Error::custom)?;
@@ -225,6 +225,8 @@ pub(crate) enum Restart {
     Always,
     #[serde(rename = "unless-stopped")]
     UnlessStopped,
+    #[serde(rename = "on-failure")]
+    OnFailure,
     #[serde(rename = "no")]
     No,
 }
@@ -398,6 +400,7 @@ impl<'de> Deserialize<'de> for DockerService {
 
                 while let Some((key, value)) = access.next_entry::<String, Value>()? {
                     match key.as_str() {
+                        // Fields we strictly need — fail on parse error
                         "hostname" => {
                             service.hostname =
                                 from_value(value).map_err(serde::de::Error::custom)?
@@ -409,19 +412,9 @@ impl<'de> Deserialize<'de> for DockerService {
                         "image" => {
                             service.image = from_value(value).map_err(serde::de::Error::custom)?
                         }
-                        "restart" => {
-                            service.restart = from_value(value).map_err(serde::de::Error::custom)?
-                        }
-                        "build" => {
-                            service.build = from_value(value).map_err(serde::de::Error::custom)?
-                        }
                         "environment" => {
                             service.environment =
                                 parse_environment_value(value).map_err(serde::de::Error::custom)?;
-                        }
-                        "depends_on" => {
-                            service.depends_on =
-                                from_value(value).map_err(serde::de::Error::custom)?
                         }
                         "ports" => {
                             service.ports = from_value(value).map_err(serde::de::Error::custom)?
@@ -433,21 +426,35 @@ impl<'de> Deserialize<'de> for DockerService {
                         "volumes" => {
                             service.volumes = from_value(value).map_err(serde::de::Error::custom)?
                         }
-                        "working_dir" => {
-                            service.working_dir =
-                                from_value(value).map_err(serde::de::Error::custom)?
-                        }
-                        "entrypoint" => {
-                            service.entrypoint =
-                                from_value(value).map_err(serde::de::Error::custom)?
-                        }
-                        "command" => {
-                            service.command = from_value(value).map_err(serde::de::Error::custom)?
-                        }
-                        "healthcheck" => {
-                            service.healthcheck =
-                                from_value(value).map_err(serde::de::Error::custom)?
-                        }
+                        // Lenient fields — store raw value on parse failure
+                        "restart" => match from_value(value.clone()) {
+                            Ok(v) => service.restart = v,
+                            Err(_) => { additional_properties.insert(key, value); }
+                        },
+                        "build" => match from_value(value.clone()) {
+                            Ok(v) => service.build = v,
+                            Err(_) => { additional_properties.insert(key, value); }
+                        },
+                        "depends_on" => match from_value(value.clone()) {
+                            Ok(v) => service.depends_on = v,
+                            Err(_) => { additional_properties.insert(key, value); }
+                        },
+                        "working_dir" => match from_value(value.clone()) {
+                            Ok(v) => service.working_dir = v,
+                            Err(_) => { additional_properties.insert(key, value); }
+                        },
+                        "entrypoint" => match from_value(value.clone()) {
+                            Ok(v) => service.entrypoint = v,
+                            Err(_) => { additional_properties.insert(key, value); }
+                        },
+                        "command" => match from_value(value.clone()) {
+                            Ok(v) => service.command = v,
+                            Err(_) => { additional_properties.insert(key, value); }
+                        },
+                        "healthcheck" => match from_value(value.clone()) {
+                            Ok(v) => service.healthcheck = v,
+                            Err(_) => { additional_properties.insert(key, value); }
+                        },
                         _ => {
                             additional_properties.insert(key, value);
                         }

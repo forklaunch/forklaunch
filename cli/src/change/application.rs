@@ -57,7 +57,7 @@ use crate::{
                 application_up_packages_script, project_clean_script, project_dev_local_script,
                 project_dev_server_script, project_dev_worker_client_script, project_format_script,
                 project_lint_fix_script, project_lint_script, project_start_server_script,
-                project_start_worker_script, project_test_script,
+                project_start_worker_script, project_test_script, project_up_latest_script,
             },
             project_package_json::{
                 ProjectDependencies, ProjectDevDependencies, ProjectPackageJson, ProjectScripts,
@@ -1052,6 +1052,7 @@ fn change_runtime(
                 &project_clean_script(runtime),
                 None,
             ));
+            project_scripts.up_latest = project_up_latest_script(runtime);
             match project_type {
                 ProjectType::Service => {
                     project_scripts.dev = Some(attempt_replacement(

@@ -100,18 +100,74 @@ pub(crate) fn sync_service_with_cache(
         }
     }
 
-    if manifest_data
-        .projects
-        .iter()
-        .any(|p| p.name == service_name)
-    {
-        log_ok!(stdout, "Service '{}' already synced", service_name);
+    let detected = detect_service_config(&service_path)?;
+
+    // If project already exists in manifest, update resources if detection found new ones
+    if let Some(existing) = manifest_data.projects.iter_mut().find(|p| p.name == service_name) {
+        let mut updated = false;
+
+        // Re-detect database and update if found and not already set
+        if existing.resources.as_ref().and_then(|r| r.database.as_ref()).is_none() {
+            if let Some(db) = &detected.database {
+                let resources = existing.resources.get_or_insert_with(|| {
+                    crate::core::manifest::ResourceInventory {
+                        database: None,
+                        cache: None,
+                        queue: None,
+                        object_store: None,
+                        redis_partition: None,
+                    }
+                });
+                resources.database = Some(db.to_string());
+                updated = true;
+            }
+        }
+
+        // Re-detect infrastructure and update if found
+        for infra in &detected.infrastructure {
+            match infra {
+                crate::constants::Infrastructure::Redis => {
+                    if existing.resources.as_ref().and_then(|r| r.cache.as_ref()).is_none() {
+                        let resources = existing.resources.get_or_insert_with(|| {
+                            crate::core::manifest::ResourceInventory {
+                                database: None,
+                                cache: None,
+                                queue: None,
+                                object_store: None,
+                                redis_partition: None,
+                            }
+                        });
+                        resources.cache = Some(infra.metadata().id.to_string());
+                        updated = true;
+                    }
+                }
+                crate::constants::Infrastructure::S3 => {
+                    if existing.resources.as_ref().and_then(|r| r.object_store.as_ref()).is_none() {
+                        let resources = existing.resources.get_or_insert_with(|| {
+                            crate::core::manifest::ResourceInventory {
+                                database: None,
+                                cache: None,
+                                queue: None,
+                                object_store: None,
+                                redis_partition: None,
+                            }
+                        });
+                        resources.object_store = Some(infra.metadata().id.to_string());
+                        updated = true;
+                    }
+                }
+            }
+        }
+
+        if updated {
+            log_ok!(stdout, "Updated resources for service '{}'", service_name);
+        } else {
+            log_ok!(stdout, "Service '{}' already synced", service_name);
+        }
         return Ok(());
     }
 
     log_info!(stdout, "Detecting configuration from files...");
-
-    let detected = detect_service_config(&service_path)?;
     display_detection_results(&detected, stdout)?;
 
     let database = resolve_database_config(

@@ -7,7 +7,7 @@ use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use crate::{
     CliCommand,
-    constants::{ERROR_FAILED_TO_PARSE_MANIFEST, WorkerType},
+    constants::ERROR_FAILED_TO_PARSE_MANIFEST,
     core::{
         base_path::{RequiredLocation, find_app_root_path},
         command::command,
@@ -97,28 +97,91 @@ pub(crate) fn sync_worker_with_cache(
         }
     }
 
-    if manifest_data.projects.iter().any(|p| p.name == worker_name) {
-        log_ok!(stdout, "Worker '{}' already synced", worker_name);
+    let detected = detect_worker_config(&worker_path)?;
+
+    // If project already exists in manifest, update resources if detection found new ones
+    if let Some(existing) = manifest_data.projects.iter_mut().find(|p| p.name == worker_name) {
+        let mut updated = false;
+
+        // Re-detect database and update if found and not already set
+        if existing.resources.as_ref().and_then(|r| r.database.as_ref()).is_none() {
+            if let Some(db) = &detected.database {
+                let resources = existing.resources.get_or_insert_with(|| {
+                    crate::core::manifest::ResourceInventory {
+                        database: None,
+                        cache: None,
+                        queue: None,
+                        object_store: None,
+                        redis_partition: None,
+                    }
+                });
+                resources.database = Some(db.to_string());
+                updated = true;
+            }
+        }
+
+        // Re-detect infrastructure and update if found
+        for infra in &detected.infrastructure {
+            match infra {
+                crate::constants::Infrastructure::Redis => {
+                    if existing.resources.as_ref().and_then(|r| r.cache.as_ref()).is_none() {
+                        let resources = existing.resources.get_or_insert_with(|| {
+                            crate::core::manifest::ResourceInventory {
+                                database: None,
+                                cache: None,
+                                queue: None,
+                                object_store: None,
+                                redis_partition: None,
+                            }
+                        });
+                        resources.cache = Some(infra.metadata().id.to_string());
+                        updated = true;
+                    }
+                }
+                crate::constants::Infrastructure::S3 => {
+                    if existing.resources.as_ref().and_then(|r| r.object_store.as_ref()).is_none() {
+                        let resources = existing.resources.get_or_insert_with(|| {
+                            crate::core::manifest::ResourceInventory {
+                                database: None,
+                                cache: None,
+                                queue: None,
+                                object_store: None,
+                                redis_partition: None,
+                            }
+                        });
+                        resources.object_store = Some(infra.metadata().id.to_string());
+                        updated = true;
+                    }
+                }
+            }
+        }
+
+        if updated {
+            log_ok!(stdout, "Updated resources for worker '{}'", worker_name);
+        } else {
+            log_ok!(stdout, "Worker '{}' already synced", worker_name);
+        }
         return Ok(());
     }
 
     log_info!(stdout, "Detecting worker configuration from files...");
 
-    let detected = detect_worker_config(&worker_path)?;
     display_detection_results(&detected, stdout)?;
 
     let worker_type = resolve_worker_type(worker_name, &detected, matches, prompts_map, stdout)?;
 
-    let database = match worker_type {
-        WorkerType::Database => Some(resolve_database_config(
+    // Detect database if detected from code OR if worker type is Database
+    let database = if detected.database.is_some() || worker_type == crate::constants::WorkerType::Database {
+        Some(resolve_database_config(
             worker_name,
             &worker_path,
             &detected,
             matches,
             prompts_map,
             stdout,
-        )?),
-        _ => None,
+        )?)
+    } else {
+        None
     };
 
     let description = resolve_description(worker_name, &worker_path, matches, prompts_map, stdout)?;

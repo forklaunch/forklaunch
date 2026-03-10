@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fs::read_to_string, path::Path};
+use std::{collections::HashSet, fs, fs::read_to_string, path::Path};
 
 use anyhow::Result;
 use regex::Regex;
@@ -6,7 +6,10 @@ use serde_json::from_str as json_from_str;
 
 use crate::{
     constants::{Database, Infrastructure, InitializeType, WorkerType},
-    core::package_json::project_package_json::ProjectPackageJson,
+    core::{
+        ast::infrastructure::env::{extract_env_vars_from_source, extract_process_env_vars_from_source},
+        package_json::project_package_json::ProjectPackageJson,
+    },
 };
 #[derive(Debug, Clone)]
 pub struct DetectedConfig {
@@ -167,18 +170,95 @@ pub fn detect_database_from_package_json(project_path: &Path) -> Result<Option<D
     Ok(None)
 }
 
-pub fn detect_service_config(service_path: &Path) -> Result<DetectedConfig> {
-    let mut config = DetectedConfig::new();
+/// Check if a project has @mikro-orm/* in package.json AND accesses DB_HOST + DB_PASSWORD
+/// env vars (via getEnvVar or process.env). This detects database usage even without
+/// registrations.ts containing MikroORM.
+pub fn has_database_from_package_and_env(project_path: &Path) -> Result<bool> {
+    // Check for @mikro-orm/* in package.json
+    let package_json_path = project_path.join("package.json");
+    if !package_json_path.exists() {
+        return Ok(false);
+    }
 
-    let has_db = has_database_in_registrations(service_path)?;
+    let content = read_to_string(&package_json_path)?;
+    let package_json: ProjectPackageJson = json_from_str(&content)?;
 
-    if has_db {
-        config.database = detect_database_from_mikro_orm_config(service_path)?;
-        if config.database.is_none() {
-            config.database = detect_database_from_package_json(service_path)?;
+    let has_mikro_orm = package_json
+        .dependencies
+        .as_ref()
+        .is_some_and(|deps| deps.mikro_orm_core.is_some());
+
+    if !has_mikro_orm {
+        return Ok(false);
+    }
+
+    // Scan source files for DB_HOST and DB_PASSWORD env var accesses
+    let mut found_db_host = false;
+    let mut found_db_password = false;
+
+    if let Ok(entries) = fs::read_dir(project_path) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if !file_name.ends_with(".ts") || file_name.ends_with(".d.ts") {
+                continue;
+            }
+
+            if let Ok(source) = read_to_string(&path) {
+                if let Ok(vars) = extract_env_vars_from_source(&source) {
+                    for var in &vars {
+                        if var.var_name == "DB_HOST" {
+                            found_db_host = true;
+                        }
+                        if var.var_name == "DB_PASSWORD" {
+                            found_db_password = true;
+                        }
+                    }
+                }
+                if let Ok(vars) = extract_process_env_vars_from_source(&source) {
+                    for var in &vars {
+                        if var.var_name == "DB_HOST" {
+                            found_db_host = true;
+                        }
+                        if var.var_name == "DB_PASSWORD" {
+                            found_db_password = true;
+                        }
+                    }
+                }
+            }
+
+            if found_db_host && found_db_password {
+                return Ok(true);
+            }
         }
     }
 
+    Ok(found_db_host && found_db_password)
+}
+
+fn detect_database_for_project(project_path: &Path) -> Result<Option<Database>> {
+    let has_db = has_database_in_registrations(project_path)?
+        || has_database_from_package_and_env(project_path)?;
+
+    if !has_db {
+        return Ok(None);
+    }
+
+    let db = detect_database_from_mikro_orm_config(project_path)?;
+    if db.is_some() {
+        return Ok(db);
+    }
+
+    detect_database_from_package_json(project_path)
+}
+
+pub fn detect_service_config(service_path: &Path) -> Result<DetectedConfig> {
+    let mut config = DetectedConfig::new();
+
+    config.database = detect_database_for_project(service_path)?;
     config.infrastructure = detect_infrastructure_from_registrations(service_path)?;
     config.description = detect_description_from_package_json(service_path)?;
 
@@ -188,15 +268,7 @@ pub fn detect_service_config(service_path: &Path) -> Result<DetectedConfig> {
 pub fn detect_worker_config(worker_path: &Path) -> Result<DetectedConfig> {
     let mut config = DetectedConfig::new();
 
-    let has_db = has_database_in_registrations(worker_path)?;
-
-    if has_db {
-        config.database = detect_database_from_mikro_orm_config(worker_path)?;
-        if config.database.is_none() {
-            config.database = detect_database_from_package_json(worker_path)?;
-        }
-    }
-
+    config.database = detect_database_for_project(worker_path)?;
     config.infrastructure = detect_infrastructure_from_registrations(worker_path)?;
     config.worker_type = detect_worker_type_from_registrations(worker_path)?;
     config.description = detect_description_from_package_json(worker_path)?;
