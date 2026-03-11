@@ -1,16 +1,18 @@
-use std::{collections::HashMap, io::Write};
+use std::{collections::HashMap, io::Write, path::Path};
 
 use anyhow::{Context, Result, bail};
 use clap::ArgMatches;
 use rustyline::{Editor, history::DefaultHistory};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use crate::{
+    CliCommand,
     constants::ERROR_FAILED_TO_PARSE_MANIFEST,
     core::{
         base_path::{RequiredLocation, find_app_root_path},
+        command::command,
         manifest::{ProjectType, application::ApplicationManifestData},
-        rendered_template::{RenderedTemplatesCache, write_rendered_templates},
+        rendered_template::{RenderedTemplate, RenderedTemplatesCache, write_rendered_templates},
         sync::{
             artifacts::{ArtifactType, ProjectSyncMetadata, sync_project_to_artifacts},
             detection::detect_service_config,
@@ -34,7 +36,7 @@ impl ServiceSyncCommand {
 
 pub(crate) fn sync_service_with_cache(
     service_name: &str,
-    app_root_path: &std::path::Path,
+    app_root_path: &Path,
     manifest_data: &mut ApplicationManifestData,
     matches: &ArgMatches,
     prompts_map: &HashMap<String, HashMap<String, String>>,
@@ -52,12 +54,7 @@ pub(crate) fn sync_service_with_cache(
             .iter()
             .find(|p| p.name == service_name)
         {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-            writeln!(
-                stdout,
-                "[WARN] Service directory not found, but exists in manifest"
-            )?;
-            stdout.reset()?;
+            log_warn!(stdout, "Service directory not found, but exists in manifest");
 
             let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
             let should_cleanup = prompt_for_confirmation(
@@ -69,9 +66,7 @@ pub(crate) fn sync_service_with_cache(
             )?;
 
             if !should_cleanup {
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-                writeln!(stdout, "[INFO] Skipping cleanup")?;
-                stdout.reset()?;
+                log_warn!(stdout, "Skipping cleanup");
                 bail!("Service directory not found: {}", service_path.display());
             }
 
@@ -97,38 +92,82 @@ pub(crate) fn sync_service_with_cache(
                 stdout,
             )?;
 
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "[OK] Removed orphaned service '{}'", service_name)?;
-            stdout.reset()?;
+            log_ok!(stdout, "Removed orphaned service '{}'", service_name);
             return Ok(());
         } else {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
-            writeln!(
-                stdout,
-                "[ERROR] Service directory not found: {}",
-                service_path.display()
-            )?;
-            stdout.reset()?;
+            log_error!(stdout, "Service directory not found: {}", service_path.display());
             bail!("Service directory not found: {}", service_path.display());
         }
     }
 
-    if manifest_data
-        .projects
-        .iter()
-        .any(|p| p.name == service_name)
-    {
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-        writeln!(stdout, "[INFO] Service '{}' already synced", service_name)?;
-        stdout.reset()?;
+    let detected = detect_service_config(&service_path)?;
+
+    // If project already exists in manifest, update resources if detection found new ones
+    if let Some(existing) = manifest_data.projects.iter_mut().find(|p| p.name == service_name) {
+        let mut updated = false;
+
+        // Re-detect database and update if found and not already set
+        if existing.resources.as_ref().and_then(|r| r.database.as_ref()).is_none() {
+            if let Some(db) = &detected.database {
+                let resources = existing.resources.get_or_insert_with(|| {
+                    crate::core::manifest::ResourceInventory {
+                        database: None,
+                        cache: None,
+                        queue: None,
+                        object_store: None,
+                        redis_partition: None,
+                    }
+                });
+                resources.database = Some(db.to_string());
+                updated = true;
+            }
+        }
+
+        // Re-detect infrastructure and update if found
+        for infra in &detected.infrastructure {
+            match infra {
+                crate::constants::Infrastructure::Redis => {
+                    if existing.resources.as_ref().and_then(|r| r.cache.as_ref()).is_none() {
+                        let resources = existing.resources.get_or_insert_with(|| {
+                            crate::core::manifest::ResourceInventory {
+                                database: None,
+                                cache: None,
+                                queue: None,
+                                object_store: None,
+                                redis_partition: None,
+                            }
+                        });
+                        resources.cache = Some(infra.metadata().id.to_string());
+                        updated = true;
+                    }
+                }
+                crate::constants::Infrastructure::S3 => {
+                    if existing.resources.as_ref().and_then(|r| r.object_store.as_ref()).is_none() {
+                        let resources = existing.resources.get_or_insert_with(|| {
+                            crate::core::manifest::ResourceInventory {
+                                database: None,
+                                cache: None,
+                                queue: None,
+                                object_store: None,
+                                redis_partition: None,
+                            }
+                        });
+                        resources.object_store = Some(infra.metadata().id.to_string());
+                        updated = true;
+                    }
+                }
+            }
+        }
+
+        if updated {
+            log_ok!(stdout, "Updated resources for service '{}'", service_name);
+        } else {
+            log_ok!(stdout, "Service '{}' already synced", service_name);
+        }
         return Ok(());
     }
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-    writeln!(stdout, "[INFO] Detecting configuration from files...")?;
-    stdout.reset()?;
-
-    let detected = detect_service_config(&service_path)?;
+    log_info!(stdout, "Detecting configuration from files...");
     display_detection_results(&detected, stdout)?;
 
     let database = resolve_database_config(
@@ -171,25 +210,15 @@ pub(crate) fn sync_service_with_cache(
         stdout,
     )?;
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-    writeln!(
-        stdout,
-        "[OK] Service '{}' synced successfully",
-        service_name
-    )?;
-    stdout.reset()?;
+    log_ok!(stdout, "Service '{}' synced successfully", service_name);
 
     Ok(())
 }
 
-impl crate::CliCommand for ServiceSyncCommand {
+impl CliCommand for ServiceSyncCommand {
     fn command(&self) -> clap::Command {
         use clap::Arg;
-        crate::core::command::command(
-            "service",
-            "Sync a specific service to application artifacts",
-        )
-        .arg(
+        command("service", "Sync a specific service to application artifacts").arg(
             Arg::new("name")
                 .help("The name of the service")
                 .required(true),
@@ -240,10 +269,9 @@ impl crate::CliCommand for ServiceSyncCommand {
             &mut stdout,
         )?;
 
-        // Write the updated manifest back to cache
         rendered_templates_cache.insert(
             manifest_path.to_string_lossy().to_string(),
-            crate::core::rendered_template::RenderedTemplate {
+            RenderedTemplate {
                 path: manifest_path.clone(),
                 content: toml::to_string_pretty(&manifest_data)
                     .context("Failed to serialize manifest")?,
@@ -251,7 +279,6 @@ impl crate::CliCommand for ServiceSyncCommand {
             },
         );
 
-        // Collect and write all rendered templates (including manifest)
         let rendered_templates: Vec<_> = rendered_templates_cache
             .drain()
             .map(|(_, template)| template)

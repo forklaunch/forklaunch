@@ -17,54 +17,29 @@ ForkLaunch provides production-ready service modules that handle common applicat
 
 ### Identity and Access Management (IAM)
 Authorization service that handles:
-- User management  
+- User management
 - Role-based access control
 - Session management
-- Permission management
-- Organization management
 
-Authentication implementations:
-- **IAM Base**: Foundational authentication with JWT support and custom auth methods
-- **IAM Better Auth**: Integration with BetterAuth (https://www.better-auth.com/) for advanced authentication features
+Authentication flavors:
+- BetterAuth (https://www.better-auth.com/)
+- BYO Authentication (Base IAM + custom code)
 
 [View IAM API Documentation →](https://forklaunch.com/iam-api/docs)
 
 ### Billing
 Base billing infrastructure service that manages:
 - Payment tracking
-- Plan creation and management
-- Checkout session creation
+- Plan creation
+- Checkout portal creation
 - Subscription management
-- Billing portal access
-- Payment link generation
+- Billing portal
 
-Payment processor implementations:
-- **Billing Base**: Foundational billing logic with extensible payment provider interface
-- **Billing Stripe**: Full Stripe integration with webhook handling and complete payment flow
+Payment Processors:
+- Stripe
+- BYO Payment Processor (Base Billing + custom code)
 
 [View Billing API Documentation →](https://forklaunch.com/billing-api/docs)
-
-### Monitoring
-Observability and monitoring service that provides:
-- OpenTelemetry integration
-- Metrics collection with Prometheus
-- Distributed tracing with Tempo  
-- Grafana dashboards and provisioning
-- Performance monitoring and alerting
-
-### Universal SDK
-Type-safe SDK generator that creates:
-- Client libraries for consuming ForkLaunch APIs
-- Cross-platform compatibility (Node.js, Browser, React Native)
-- Automatic type generation from OpenAPI specs
-- Built-in error handling and retry logic
-
-### Core
-Shared utilities and base classes:
-- Base entity classes for SQL and NoSQL databases
-- Common interfaces and types
-- Persistence layer abstractions
-- Framework integration utilities
 
 ### Ejected Implementation
 For full customization, eject the service into your codebase:

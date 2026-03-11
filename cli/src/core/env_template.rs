@@ -6,11 +6,12 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use termcolor::{Color, ColorSpec, StandardStream, WriteColor};
+use termcolor::{StandardStream, WriteColor};
 
 use crate::core::{
     ast::infrastructure::env::find_all_env_vars,
     env::{add_env_vars_to_file, is_env_var_defined},
+    env_scope::{EnvironmentVariableScope, determine_env_var_scopes, is_pulumi_injected},
     manifest::{ProjectType, application::ApplicationManifestData},
     rendered_template::{RenderedTemplate, RenderedTemplatesCache},
     symlink_template::{SymlinkTemplate, create_symlinks},
@@ -47,7 +48,6 @@ fn build_env_template_content(var_names: &[String]) -> String {
     let mut sorted_vars = var_names.to_vec();
     sorted_vars.sort();
 
-    // Group by category
     let mut categories: Vec<(&'static str, Vec<&String>)> = Vec::new();
     let mut category_map: HashMap<&'static str, Vec<&String>> = HashMap::new();
 
@@ -56,7 +56,6 @@ fn build_env_template_content(var_names: &[String]) -> String {
         category_map.entry(category).or_default().push(var);
     }
 
-    // Define a stable ordering for categories
     let category_order = [
         "Database",
         "Cache (Redis)",
@@ -131,6 +130,42 @@ pub fn generate_env_templates(
         return Ok(());
     }
 
+    // Determine scopes to identify application-level vars
+    let scoped_vars = determine_env_var_scopes(&project_env_vars, manifest_data)?;
+    let project_names: Vec<String> = manifest_data.projects.iter().map(|p| p.name.clone()).collect();
+    let application_var_names: std::collections::HashSet<String> = scoped_vars
+        .iter()
+        .filter(|v| v.scope == EnvironmentVariableScope::Application)
+        .map(|v| v.name.clone())
+        .collect();
+
+    // Generate root .env.template with application-scoped vars
+    // Exclude inter-service URL vars — Pulumi injects these at deploy time
+    if !application_var_names.is_empty() {
+        let app_root = modules_path
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("Cannot determine app root from modules path"))?;
+        let root_template_path = app_root.join(".env.template");
+        let mut app_var_list: Vec<String> = application_var_names
+            .iter()
+            .filter(|name| !is_pulumi_injected(name, &project_names))
+            .cloned()
+            .collect();
+        app_var_list.sort();
+        let content = build_env_template_content(&app_var_list);
+
+        rendered_templates_cache.insert(
+            root_template_path.to_string_lossy().to_string(),
+            RenderedTemplate {
+                path: root_template_path.clone(),
+                content,
+                context: Some("Failed to write root .env.template".to_string()),
+            },
+        );
+
+        log_ok!(stdout, "Generated root .env.template");
+    }
+
     let mut symlink_templates: Vec<SymlinkTemplate> = Vec::new();
 
     for (project_name, env_vars) in &project_env_vars {
@@ -141,7 +176,6 @@ pub fn generate_env_templates(
         let project_path = modules_path.join(project_name);
         let template_path = project_path.join(".env.template");
 
-        // Check if this is a worker project
         let is_worker = manifest_data
             .projects
             .iter()
@@ -157,8 +191,17 @@ pub fn generate_env_templates(
                 });
             }
         } else {
-            // For services/libraries, generate the template file directly
-            let var_names: Vec<String> = env_vars.iter().map(|v| v.var_name.clone()).collect();
+            // Filter out application-scoped vars from per-service templates
+            let var_names: Vec<String> = env_vars
+                .iter()
+                .filter(|v| !application_var_names.contains(&v.var_name))
+                .map(|v| v.var_name.clone())
+                .collect();
+
+            if var_names.is_empty() {
+                continue;
+            }
+
             let content = build_env_template_content(&var_names);
 
             rendered_templates_cache.insert(
@@ -173,17 +216,10 @@ pub fn generate_env_templates(
                 },
             );
 
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(
-                stdout,
-                "[OK] Generated .env.template for {}",
-                project_name
-            )?;
-            stdout.reset()?;
+            log_ok!(stdout, "Generated .env.template for {}", project_name);
         }
     }
 
-    // Create worker symlinks
     if !symlink_templates.is_empty() {
         create_symlinks(&symlink_templates, false, stdout)?;
 
@@ -194,13 +230,7 @@ pub fn generate_env_templates(
                 .and_then(|p| p.file_name())
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default();
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(
-                stdout,
-                "[OK] Symlinked .env.template for worker {}",
-                worker_name
-            )?;
-            stdout.reset()?;
+            log_ok!(stdout, "Symlinked .env.template for worker {}", worker_name);
         }
     }
 
@@ -209,6 +239,7 @@ pub fn generate_env_templates(
 
 /// Sync .env.local files for all projects that have env vars.
 /// Ensures each project has all required env vars present (with blank values for missing ones).
+/// Application-scoped vars are added to root .env.local instead of per-service files.
 pub fn sync_env_local_files(
     modules_path: &Path,
     manifest_data: &ApplicationManifestData,
@@ -221,6 +252,45 @@ pub fn sync_env_local_files(
         return Ok(());
     }
 
+    // Determine scopes to identify application-level vars
+    let scoped_vars = determine_env_var_scopes(&project_env_vars, manifest_data)?;
+    let project_names: Vec<String> = manifest_data.projects.iter().map(|p| p.name.clone()).collect();
+    let application_var_names: std::collections::HashSet<String> = scoped_vars
+        .iter()
+        .filter(|v| v.scope == EnvironmentVariableScope::Application)
+        .map(|v| v.name.clone())
+        .collect();
+
+    // Sync application-scoped vars to root .env.local
+    // Exclude inter-service URL vars — Pulumi injects these at deploy time
+    if !application_var_names.is_empty() {
+        let app_root = modules_path
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("Cannot determine app root from modules path"))?;
+        let root_env_local = app_root.join(".env.local");
+
+        let mut missing_root_vars: HashMap<String, String> = HashMap::new();
+        for var_name in &application_var_names {
+            if is_pulumi_injected(var_name, &project_names) {
+                continue;
+            }
+            if !is_env_var_defined(app_root, var_name)? {
+                missing_root_vars.insert(var_name.clone(), String::new());
+            }
+        }
+
+        if !missing_root_vars.is_empty() {
+            add_env_vars_to_file(&root_env_local, &missing_root_vars)
+                .with_context(|| "Failed to sync root .env.local")?;
+
+            let mut var_names: Vec<&String> = missing_root_vars.keys().collect();
+            var_names.sort();
+
+            log_info!(stdout, "Added {} missing application env var(s) to {}: {}", missing_root_vars.len(), root_env_local.display(), var_names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
+        }
+    }
+
+    // Sync per-service/worker vars (excluding application-scoped)
     for (project_name, env_vars) in &project_env_vars {
         if env_vars.is_empty() {
             continue;
@@ -242,6 +312,11 @@ pub fn sync_env_local_files(
         let mut missing_vars: HashMap<String, String> = HashMap::new();
 
         for env_var in env_vars {
+            // Skip application-scoped vars (they go to root)
+            if application_var_names.contains(&env_var.var_name) {
+                continue;
+            }
+
             if !is_env_var_defined(&project_path, &env_var.var_name)? {
                 missing_vars.insert(env_var.var_name.clone(), String::new());
             }
@@ -254,19 +329,7 @@ pub fn sync_env_local_files(
             let mut var_names: Vec<&String> = missing_vars.keys().collect();
             var_names.sort();
 
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-            writeln!(
-                stdout,
-                "[INFO] Added {} missing env var(s) to {}: {}",
-                missing_vars.len(),
-                env_local_path.display(),
-                var_names
-                    .iter()
-                    .map(|s| s.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )?;
-            stdout.reset()?;
+            log_info!(stdout, "Added {} missing env var(s) to {}: {}", missing_vars.len(), env_local_path.display(), var_names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
         }
     }
 
@@ -291,10 +354,6 @@ mod tests {
         assert_eq!(categorize_env_var("STRIPE_API_KEY"), "Billing (Stripe)");
         assert_eq!(
             categorize_env_var("BETTER_AUTH_BASE_PATH"),
-            "Authentication"
-        );
-        assert_eq!(
-            categorize_env_var("PASSWORD_ENCRYPTION_SECRET_PATH"),
             "Authentication"
         );
         assert_eq!(categorize_env_var("HMAC_SECRET_KEY"), "Authentication");

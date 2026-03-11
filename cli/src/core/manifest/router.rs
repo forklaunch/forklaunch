@@ -48,6 +48,9 @@ config_struct!(
         pub(crate) is_cache_enabled: bool,
         #[serde(skip_serializing, skip_deserializing)]
         pub(crate) is_s3_enabled: bool,
+
+        #[serde(skip_serializing, skip_deserializing)]
+        pub(crate) otel_token: String,
     }
 );
 
@@ -100,6 +103,8 @@ impl InitializableManifestConfig for RouterManifestData {
                 .unwrap()
                 .object_store
                 .is_some(),
+
+            otel_token: "OtelCollector".to_string(),
 
             ..self.clone()
         }

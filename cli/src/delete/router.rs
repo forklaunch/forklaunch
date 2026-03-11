@@ -9,7 +9,7 @@ use convert_case::{Case, Casing};
 use oxc_allocator::Allocator;
 use oxc_ast::ast::SourceType;
 use rustyline::{Editor, history::DefaultHistory};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use crate::{
     CliCommand,
@@ -136,9 +136,7 @@ impl CliCommand for RouterCommand {
             )?;
 
             if !continue_delete {
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
-                writeln!(stdout, "Deletion cancelled")?;
-                stdout.reset()?;
+                log_error!(stdout, "Deletion cancelled");
                 return Ok(());
             }
         }
@@ -354,9 +352,7 @@ impl CliCommand for RouterCommand {
             &mut stdout,
         )?;
 
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-        writeln!(stdout, "{} deleted successfully!", router_name)?;
-        stdout.reset()?;
+        log_ok!(stdout, "{} deleted successfully!", router_name);
 
         Ok(())
     }

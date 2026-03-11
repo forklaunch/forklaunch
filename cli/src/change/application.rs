@@ -15,7 +15,7 @@ use dialoguer::{MultiSelect, theme::ColorfulTheme};
 use glob::Pattern;
 use ramhorns::Template;
 use rustyline::{Editor, history::DefaultHistory};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 use walkdir::WalkDir;
 
 use super::core::clean_application::clean_application;
@@ -57,18 +57,19 @@ use crate::{
                 application_up_packages_script, project_clean_script, project_dev_local_script,
                 project_dev_server_script, project_dev_worker_client_script, project_format_script,
                 project_lint_fix_script, project_lint_script, project_start_server_script,
-                project_start_worker_script, project_test_script,
+                project_start_worker_script, project_test_script, project_up_latest_script,
             },
             project_package_json::{
                 ProjectDependencies, ProjectDevDependencies, ProjectPackageJson, ProjectScripts,
             },
         },
         pnpm_workspace::PnpmWorkspace,
-        removal_template::{RemovalTemplate, RemovalTemplateType, remove_template_files},
+        removal_template::{RemovalTemplate, remove_template_files},
         rendered_template::{
             RenderedTemplate, RenderedTemplatesCache, TEMPLATES_DIR, write_rendered_templates,
         },
         symlink_template::{SymlinkTemplate, create_symlinks},
+        tsconfig::update_tsconfig_test_framework_types,
         watermark::apply_watermark,
     },
     prompt::{ArrayCompleter, prompt_field_from_selections_with_validation},
@@ -385,12 +386,10 @@ fn update_config_files(
                 for project in project_jsons_to_write.keys() {
                     removal_templates.push(RemovalTemplate {
                         path: base_path.join(project).join(file),
-                        r#type: RemovalTemplateType::File,
                     });
                 }
                 removal_templates.push(RemovalTemplate {
                     path: file_path,
-                    r#type: RemovalTemplateType::File,
                 });
             } else {
                 preserved_files.push(file_path.to_string_lossy().to_string());
@@ -822,7 +821,6 @@ fn change_runtime(
         Runtime::Node => {
             removal_templates.push(RemovalTemplate {
                 path: base_path.join("pnpm-workspace.yaml"),
-                r#type: RemovalTemplateType::File,
             });
             serde_yml::from_str::<PnpmWorkspace>(&read_to_string(
                 &base_path.join("pnpm-workspace.yaml"),
@@ -1055,6 +1053,22 @@ fn change_runtime(
                 &project_clean_script(runtime),
                 None,
             ));
+            {
+                let old_up_latest = project_up_latest_script(&existing_runtime);
+                let new_up_latest = project_up_latest_script(runtime);
+                // Stash user customization if the existing value differs from what the old runtime generated
+                if project_scripts.up_latest != old_up_latest {
+                    if let Some(existing) = &project_scripts.up_latest {
+                        if new_up_latest.as_ref() != Some(existing) {
+                            project_scripts.additional_scripts.insert(
+                                format!("up:latest:{}", existing_runtime.to_string()),
+                                existing.clone(),
+                            );
+                        }
+                    }
+                }
+                project_scripts.up_latest = new_up_latest;
+            }
             match project_type {
                 ProjectType::Service => {
                     project_scripts.dev = Some(attempt_replacement(
@@ -1177,13 +1191,7 @@ fn change_runtime(
     })?;
 
     if existing_dockerfile_contents.trim() != watermarked_dockerfile_contents.trim() {
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-        writeln!(
-            stdout,
-            "Warning: Dockerfile is generating from template, you may need to manually migrate changes from Dockerfile.{}",
-            runtime.to_string()
-        )?;
-        stdout.reset()?;
+        log_warn!(stdout, "Warning: Dockerfile is generating from template, you may need to manually migrate changes from Dockerfile.{}", runtime.to_string());
         rendered_templates_cache.insert(
             base_path
                 .join(format!("Dockerfile.{}", runtime.to_string()))
@@ -1453,6 +1461,23 @@ fn change_test_framework(
         &mut |_dev_dependencies| {},
     )?;
 
+    // Update tsconfig types for the new test framework
+    let project_names: Vec<&str> = manifest_data
+        .projects
+        .iter()
+        .map(|p| p.name.as_str())
+        .collect();
+    let tsconfig_templates = update_tsconfig_test_framework_types(
+        base_path,
+        test_framework,
+        existing_test_framework.as_ref(),
+        &project_names,
+    )?;
+    for template in tsconfig_templates {
+        let key = template.path.to_string_lossy().to_string();
+        rendered_templates_cache.insert(key, template);
+    }
+
     Ok((removal_templates, symlink_templates))
 }
 
@@ -1479,7 +1504,6 @@ fn change_license(
     if exists(&license_path)? {
         removal_template = Some(RemovalTemplate {
             path: license_path.clone(),
-            r#type: RemovalTemplateType::File,
         });
     }
 
@@ -2001,9 +2025,7 @@ impl CliCommand for ApplicationCommand {
         write_rendered_templates(&rendered_templates, dryrun, &mut stdout)?;
         create_symlinks(&symlink_templates, dryrun, &mut stdout)?;
         if !dryrun {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "{} changed successfully!", &manifest_data.app_name)?;
-            stdout.reset()?;
+            log_ok!(stdout, "{} changed successfully!", &manifest_data.app_name);
             format_code(&app_path, &manifest_data.runtime.parse()?);
         }
 

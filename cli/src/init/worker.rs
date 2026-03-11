@@ -10,7 +10,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use convert_case::{Case, Casing};
 use rustyline::{Editor, history::DefaultHistory};
 use serde_json::to_string_pretty;
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 use toml::from_str;
 
 use crate::{
@@ -39,7 +39,7 @@ use crate::{
         manifest::{
             ApplicationInitializationMetadata, InitializableManifestConfig,
             InitializableManifestConfigMetadata, ManifestData, ProjectMetadata, ProjectType,
-            ResourceInventory, add_project_definition_to_manifest,
+            ResourceInventory, add_project_definition_to_manifest, next_available_redis_partition,
             application::ApplicationManifestData, worker::WorkerManifestData,
         },
         name::validate_name,
@@ -63,7 +63,7 @@ use crate::{
                 project_dev_local_worker_script, project_dev_server_script,
                 project_dev_worker_client_script, project_format_script, project_lint_fix_script,
                 project_lint_script, project_migrate_script, project_start_server_script,
-                project_start_worker_script, project_test_script,
+                project_start_worker_script, project_test_script, project_up_latest_script,
             },
             project_package_json::{
                 MIKRO_ORM_CONFIG_PATHS, ProjectDependencies, ProjectDevDependencies,
@@ -121,7 +121,6 @@ fn generate_basic_worker(
     } else {
         vec![]
     };
-    // Skip mappers directory if with_mappers is false
     if !manifest_data.with_mappers {
         ignore_dirs.push("mappers".to_string());
     }
@@ -146,7 +145,7 @@ fn generate_basic_worker(
         None,
     )?);
     rendered_templates.extend(
-        generate_project_tsconfig(&output_path).with_context(|| ERROR_FAILED_TO_CREATE_TSCONFIG)?,
+        generate_project_tsconfig(&output_path, Some(&["express", "qs"])).with_context(|| ERROR_FAILED_TO_CREATE_TSCONFIG)?,
     );
     rendered_templates.extend(
         generate_gitignore(&output_path).with_context(|| ERROR_FAILED_TO_CREATE_GITIGNORE)?,
@@ -176,7 +175,6 @@ fn generate_basic_worker(
         None,
     )?;
 
-    // Add project reference to modules tsconfig.json
     let tsconfig_template = add_project_to_modules_tsconfig(base_path, &manifest_data.worker_name)
         .with_context(|| "Failed to add worker to modules tsconfig.json")?;
     rendered_templates_cache.insert(
@@ -233,6 +231,11 @@ fn add_worker_to_artifacts(
                 None
             },
             object_store: None,
+            redis_partition: if manifest_data.is_cache_enabled {
+                Some(manifest_data.redis_partition)
+            } else {
+                None
+            },
         }),
         Some(vec![manifest_data.worker_name.clone()]),
         Some(ProjectMetadata {
@@ -399,6 +402,7 @@ pub(crate) fn generate_worker_package_json(
                         .as_ref()
                         .map(|db| db.parse::<Database>().unwrap()),
                 )),
+                up_latest: project_up_latest_script(&manifest_data.runtime.parse()?),
                 ..Default::default()
             }
         }),
@@ -823,9 +827,6 @@ impl CliCommand for WorkerCommand {
             is_kafka_enabled: r#type == WorkerType::Kafka,
             platform_application_id: manifest_data.platform_application_id.clone(),
             platform_organization_id: manifest_data.platform_organization_id.clone(),
-            release_version: manifest_data.release_version.clone(),
-            release_git_commit: manifest_data.release_git_commit.clone(),
-            release_git_branch: manifest_data.release_git_branch.clone(),
 
             is_postgres: if let Some(database) = &database {
                 database == &Database::PostgreSQL
@@ -905,10 +906,16 @@ impl CliCommand for WorkerCommand {
             is_type_needed: true,
             with_mappers: matches.get_flag("mappers"),
 
+            redis_partition: if r#type == WorkerType::BullMQCache || r#type == WorkerType::RedisCache {
+                next_available_redis_partition(&manifest_data.projects)
+            } else {
+                0
+            },
+
             // These will be properly generated when initialized
-            generated_password_encryption_secret: String::new(),
             generated_better_auth_secret: String::new(),
             generated_hmac_secret: String::new(),
+            otel_token: "OtelCollector".to_string(),
         };
 
         let dryrun = matches.get_flag("dryrun");
@@ -923,9 +930,7 @@ impl CliCommand for WorkerCommand {
         .with_context(|| "Failed to create worker")?;
 
         if !dryrun {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "{} initialized successfully!", worker_name)?;
-            stdout.reset()?;
+            log_ok!(stdout, "{} initialized successfully!", worker_name);
         }
 
         Ok(())

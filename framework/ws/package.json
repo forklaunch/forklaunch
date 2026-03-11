@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/ws",
-  "version": "0.1.8",
+  "version": "0.2.4",
   "description": "Typed framework for ws, by ForkLaunch.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -44,16 +44,16 @@
     "ws": "^8.19.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.2",
-    "@typescript/native-preview": "7.0.0-dev.20260204.1",
-    "jest": "^30.2.0",
+    "@eslint/js": "^10.0.1",
+    "@typescript/native-preview": "7.0.0-dev.20260310.1",
+    "jest": "^30.3.0",
     "prettier": "^3.8.1",
     "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
     "tsup": "^8.5.1",
-    "typedoc": "^0.28.16",
+    "typedoc": "^0.28.17",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.54.0",
+    "typescript-eslint": "^8.57.0",
     "zod": "^4.3.6"
   }
 }

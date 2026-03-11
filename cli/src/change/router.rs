@@ -5,7 +5,7 @@ use clap::{Arg, ArgAction, Command};
 use convert_case::{Case, Casing};
 use dialoguer::{MultiSelect, theme::ColorfulTheme};
 use rustyline::{Editor, history::DefaultHistory};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use super::core::change_name::change_name_in_files;
 use crate::{
@@ -66,7 +66,6 @@ fn add_mappers_to_router(
     dryrun: bool,
     stdout: &mut StandardStream,
 ) -> Result<()> {
-    // Derive names from the router path
     let router_name = router_base_path
         .file_name()
         .unwrap()
@@ -76,7 +75,6 @@ fn add_mappers_to_router(
     let pascal_case_name = router_name.to_case(Case::Pascal);
     let camel_case_name = router_name.to_case(Case::Camel);
 
-    // Find schema and entity files
     let schema_dir = router_base_path.join("domain").join("schemas");
     let entity_dir = router_base_path.join("persistence").join("entities");
 
@@ -88,7 +86,6 @@ fn add_mappers_to_router(
         bail!("Entity directory not found: {}", entity_dir.display());
     }
 
-    // Find the schema file (look for {name}.schema.ts)
     let schema_file = schema_dir.join(format!("{}.schema.ts", camel_case_name));
     if !schema_file.exists() {
         bail!("Schema file not found: {}", schema_file.display());
@@ -109,17 +106,12 @@ fn add_mappers_to_router(
         bail!("Entity file not found: {}", entity_file.display());
     }
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-    writeln!(stdout, "Parsing schema file: {}", schema_file.display())?;
-    stdout.reset()?;
+    log_info!(stdout, "Parsing schema file: {}", schema_file.display());
 
-    // Parse schema and entity files
     let schemas = SchemaAnalyzer::parse_schema_file(&schema_file)
         .with_context(|| format!("Failed to parse schema file: {}", schema_file.display()))?;
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-    writeln!(stdout, "Parsing entity file: {}", entity_file.display())?;
-    stdout.reset()?;
+    log_info!(stdout, "Parsing entity file: {}", entity_file.display());
 
     let entities = EntityAnalyzer::parse_entity_file(&entity_file)
         .with_context(|| format!("Failed to parse entity file: {}", entity_file.display()))?;
@@ -132,19 +124,14 @@ fn add_mappers_to_router(
         bail!("No entities found in: {}", entity_file.display());
     }
 
-    // Find the request schema (ends with "RequestSchema")
     let request_schema = schemas.iter()
         .find(|s| s.name.ends_with("RequestSchema"))
         .with_context(|| "No RequestSchema found in schema file")?;
 
-    // Use the first entity (should only be one per file)
     let entity = &entities[0];
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-    writeln!(stdout, "Generating mappers for {} -> {}", request_schema.name, entity.name)?;
-    stdout.reset()?;
+    log_info!(stdout, "Generating mappers for {} -> {}", request_schema.name, entity.name);
 
-    // Generate mapper code
     let generator = MapperGenerator::new(
         request_schema.clone(),
         entity.clone(),
@@ -154,16 +141,12 @@ fn add_mappers_to_router(
 
     let mapper_content = generator.generate_mapper_file();
 
-    // Create mappers directory
     let mappers_dir = router_base_path.join("domain").join("mappers");
     let mapper_file = mappers_dir.join(format!("{}.mappers.ts", camel_case_name));
 
-    // Check if mapper file already exists
     if mapper_file.exists() {
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-        writeln!(stdout, "⚠ Mapper file already exists: {}", mapper_file.display())?;
-        writeln!(stdout, "⚠ Skipping mapper generation to preserve custom logic")?;
-        stdout.reset()?;
+        log_warn!(stdout, "⚠ Mapper file already exists: {}", mapper_file.display());
+        log_warn!(stdout, "⚠ Skipping mapper generation to preserve custom logic");
         bail!("Mapper file already exists. Remove it manually if you want to regenerate.");
     }
 
@@ -171,7 +154,6 @@ fn add_mappers_to_router(
         fs::create_dir_all(&mappers_dir)?;
     }
 
-    // Write mapper file
     rendered_templates_cache.insert(
         mapper_file.to_string_lossy(),
         RenderedTemplate {
@@ -181,14 +163,9 @@ fn add_mappers_to_router(
         },
     );
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-    writeln!(stdout, "✓ Generated mapper file: {}", mapper_file.display())?;
-    stdout.reset()?;
+    log_ok!(stdout, "✓ Generated mapper file: {}", mapper_file.display());
 
-    // Update controller to import mappers instead of schemas
     update_controller_imports(router_base_path, &pascal_case_name, &camel_case_name, rendered_templates_cache, stdout)?;
-
-    // Update service and interface files to use DTOs
     update_service_and_interface_files(router_base_path, &pascal_case_name, &camel_case_name, &manifest_data.app_name, rendered_templates_cache, stdout)?;
 
     Ok(())
@@ -202,16 +179,13 @@ fn update_service_and_interface_files(
     rendered_templates_cache: &mut RenderedTemplatesCache,
     stdout: &mut StandardStream,
 ) -> Result<()> {
-    // Update interface file
     let interface_file = router_base_path
         .join("domain")
         .join("interfaces")
         .join(format!("{}.interface.ts", camel_case_name));
 
     if interface_file.exists() {
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-        writeln!(stdout, "Updating interface file: {}", interface_file.display())?;
-        stdout.reset()?;
+        log_info!(stdout, "Updating interface file: {}", interface_file.display());
 
         let content = match rendered_templates_cache.get(&interface_file)? {
             Some(template) => template.content.clone(),
@@ -219,7 +193,6 @@ fn update_service_and_interface_files(
                 .with_context(|| format!("Failed to read interface file: {}", interface_file.display()))?,
         };
 
-        // Add a comment about mappers instead of modifying the interface
         let mut updated_content = content;
 
         // Check if this was generated without mappers by looking for Schema import
@@ -232,7 +205,6 @@ fn update_service_and_interface_files(
             for line in lines {
                 // Detect the interface definition comment
                 if !added_mapper_comment && line.starts_with("// Interface that defines") {
-                    // Add comment block about mappers
                     new_lines.push("// ============================================================================".to_string());
                     new_lines.push("// MAPPERS GENERATED!".to_string());
                     new_lines.push("// ============================================================================".to_string());
@@ -266,21 +238,16 @@ fn update_service_and_interface_files(
             },
         );
 
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-        writeln!(stdout, "✓ Updated interface file")?;
-        stdout.reset()?;
+        log_ok!(stdout, "✓ Updated interface file");
     }
 
-    // Update service file
     let service_file = router_base_path
         .join("domain")
         .join("services")
         .join(format!("{}.service.ts", camel_case_name));
 
     if service_file.exists() {
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-        writeln!(stdout, "Updating service file: {}", service_file.display())?;
-        stdout.reset()?;
+        log_info!(stdout, "Updating service file: {}", service_file.display());
 
         let content = match rendered_templates_cache.get(&service_file)? {
             Some(template) => template.content.clone(),
@@ -349,9 +316,7 @@ fn update_service_and_interface_files(
             },
         );
 
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-        writeln!(stdout, "✓ Updated service file")?;
-        stdout.reset()?;
+        log_ok!(stdout, "✓ Updated service file");
     }
 
     Ok(())
@@ -364,7 +329,6 @@ fn update_controller_imports(
     rendered_templates_cache: &mut RenderedTemplatesCache,
     stdout: &mut StandardStream,
 ) -> Result<()> {
-    // Find controller file
     let controller_dir = router_base_path.join("api").join("controllers");
     let controller_file = controller_dir.join(format!("{}.controller.ts", camel_case_name));
 
@@ -372,11 +336,8 @@ fn update_controller_imports(
         bail!("Controller file not found: {}", controller_file.display());
     }
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-    writeln!(stdout, "Updating controller imports: {}", controller_file.display())?;
-    stdout.reset()?;
+    log_info!(stdout, "Updating controller imports: {}", controller_file.display());
 
-    // Read controller content
     let content = match rendered_templates_cache.get(&controller_file)? {
         Some(template) => template.content.clone(),
         None => {
@@ -385,7 +346,6 @@ fn update_controller_imports(
         }
     };
 
-    // Replace schema imports with mapper imports
     let old_import = format!(
         "import {{ {}RequestSchema, {}ResponseSchema }} from '../../domain/schemas/{}.schema';",
         pascal_case_name, pascal_case_name, camel_case_name
@@ -426,9 +386,7 @@ fn update_controller_imports(
         },
     );
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-    writeln!(stdout, "✓ Updated controller imports")?;
-    stdout.reset()?;
+    log_ok!(stdout, "✓ Updated controller imports");
 
     Ok(())
 }
@@ -526,7 +484,6 @@ impl CliCommand for RouterCommand {
             }),
         );
 
-        // Handle --add-mappers flag
         if add_mappers {
             add_mappers_to_router(&router_base_path, &project_name, &manifest_data, &mut rendered_templates_cache, dryrun, &mut stdout)?;
 
@@ -539,9 +496,7 @@ impl CliCommand for RouterCommand {
             write_rendered_templates(&rendered_templates, dryrun, &mut stdout)?;
 
             if !dryrun {
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-                writeln!(stdout, "✓ Mappers added successfully!")?;
-                stdout.reset()?;
+                log_ok!(stdout, "✓ Mappers added successfully!");
                 format_code(&router_base_path, &manifest_data.runtime.parse()?);
             }
 
@@ -619,8 +574,6 @@ impl CliCommand for RouterCommand {
         write_rendered_templates(&rendered_templates, dryrun, &mut stdout)?;
 
         if !dryrun {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            stdout.reset()?;
             format_code(&router_base_path, &manifest_data.runtime.parse()?);
         }
 

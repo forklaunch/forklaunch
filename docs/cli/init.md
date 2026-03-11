@@ -4,9 +4,9 @@ category: References
 description: Learn how to use the forklaunch init command.
 ---
 
-## Overview
+# Overview
 
-Create new application resources with ForkLaunch CLI commands. For detailed information, see [Adding Projects](/docs/adding-projects).
+Create new application resources with ForkLaunch CLI commands. For detailed information, see [Adding Projects](/docs/adding-projects.md).
 
 ## Usage
 
@@ -202,15 +202,14 @@ forklaunch init service --path ./my-app/src/modules --database postgresql --infr
 1. Start with `--dryrun` to preview your project structure
 2. Use consistent framework choices across all services
 3. Leverage the universal SDK for service-to-service communication
-4. Configure infrastructure early to avoid migration issues
+4. Choose infrastructure conifguration early to avoid migration issues
+
 
 ## Related Commands
 
-- [`forklaunch add`](../adding-projects.md) - Add components to existing projects
-- [`forklaunch depcheck`](./depcheck.md) - Check dependencies after initialization
-- [`forklaunch eject`](./eject.md) - Customize framework packages
+- [`forklaunch add`](../adding-projects) - Add components to existing projects
+- [`forklaunch depcheck`](./depcheck) - Check dependencies after initialization
 
 ## Related Documentation
 
-- **[Adding Projects Guide](../adding-projects.md)** - Comprehensive project creation guide
-- **[Framework Documentation](../framework.md)** - Detailed framework package documentation
+- **[Adding Projects Guide](../adding-projects)** - Comprehensive project creation guide

@@ -143,6 +143,8 @@ pub(crate) struct ApplicationDevDependencies {
     pub(crate) bunrun: Option<String>,
     #[serde(rename = "@types/jest", skip_serializing_if = "Option::is_none")]
     pub(crate) types_jest: Option<String>,
+    #[serde(rename = "@types/node", skip_serializing_if = "Option::is_none")]
+    pub(crate) types_node: Option<String>,
     #[serde(rename = "better-sqlite3", skip_serializing_if = "Option::is_none")]
     pub(crate) better_sqlite3: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -212,6 +214,7 @@ impl<'de> Deserialize<'de> for ApplicationDevDependencies {
                     bunrun: None,
                     eslint_js: None,
                     types_jest: None,
+                    types_node: None,
                     better_sqlite3: None,
                     eslint: None,
                     globals: None,
@@ -239,6 +242,7 @@ impl<'de> Deserialize<'de> for ApplicationDevDependencies {
                         "@eslint/js" => deps.eslint_js = Some(value),
                         "@forklaunch/bunrun" => deps.bunrun = Some(value),
                         "@types/jest" => deps.types_jest = Some(value),
+                        "@types/node" => deps.types_node = Some(value),
                         "better-sqlite3" => deps.better_sqlite3 = Some(value),
                         "eslint" => deps.eslint = Some(value),
                         "globals" => deps.globals = Some(value),

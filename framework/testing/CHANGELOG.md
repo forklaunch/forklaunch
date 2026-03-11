@@ -1,5 +1,35 @@
 # @forklaunch/testing
 
+## 0.0.22
+
+### Patch Changes
+
+- proxy based injection for ci, and openapi path resiliency
+
+## 0.0.21
+
+### Patch Changes
+
+- Small bugs
+
+## 0.0.20
+
+### Patch Changes
+
+- Prevent 404 message hijacking and update packages
+
+## 0.0.19
+
+### Patch Changes
+
+- Fix multiline config injection and update packages
+
+## 0.0.18
+
+### Patch Changes
+
+- WS actually working probably, and package bumps
+
 ## 0.0.17
 
 ### Patch Changes

@@ -12,7 +12,7 @@ use convert_case::{Case, Casing};
 use rustyline::{Editor, history::DefaultHistory};
 use serde_json::to_string_pretty;
 use serde_yml::{from_str, to_string};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 use uuid::Uuid;
 
 use super::service::generate_service_package_json;
@@ -41,7 +41,6 @@ use crate::{
         format::format_code,
         gitignore::generate_gitignore,
         husky::create_or_merge_husky_pre_commit,
-        iam::generate_iam_secret,
         license::generate_license,
         manifest::{
             ManifestData, ProjectEntry, ProjectType, ResourceInventory,
@@ -64,7 +63,7 @@ use crate::{
                 PROJECT_BUILD_SCRIPT, PROJECT_DOCS_SCRIPT, SORT_PACKAGE_JSON_VERSION,
                 SQLITE3_VERSION, TS_JEST_VERSION, TS_NODE_VERSION, TSX_VERSION, TYPEBOX_VERSION,
                 TYPES_BUILD_SCRIPT, TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION, TYPES_EXPRESS_VERSION,
-                TYPES_QS_VERSION, TYPES_UUID_VERSION, TYPES_WATCH_SCRIPT,
+                TYPES_NODE_VERSION, TYPES_QS_VERSION, TYPES_UUID_VERSION, TYPES_WATCH_SCRIPT,
                 TYPESCRIPT_ESLINT_VERSION, TYPESCRIPT_NATIVE_PREVIEW_VERSION, TYPESCRIPT_VERSION, UNIVERSAL_SDK_VERSION, UUID_VERSION,
                 VALIDATOR_VERSION, VITEST_VERSION, ZOD_VERSION, application_build_script,
                 application_clean_purge_script, application_clean_script, application_docs_script,
@@ -99,7 +98,6 @@ fn use_generated_sdk_mode_for_init(
     use crate::core::rendered_template::RenderedTemplatesCache;
     use crate::sdk::mode::apply_generated_sdk_mode_setup;
 
-    // Convert Vec to Cache for processing
     let mut cache = RenderedTemplatesCache::new();
     for template in rendered_templates.drain(..) {
         let path = template.path.to_string_lossy().to_string();
@@ -110,7 +108,6 @@ fn use_generated_sdk_mode_for_init(
     // Skip universal-sdk transformation during init (already in correct format from template)
     apply_generated_sdk_mode_setup(&app_root_path.to_path_buf(), manifest_data, &mut cache)?;
 
-    // Convert Cache back to Vec
     rendered_templates.extend(cache.drain().map(|(_, template)| template));
 
     Ok(())
@@ -213,6 +210,7 @@ fn generate_application_package_json(
             } else {
                 None
             },
+            types_node: Some(TYPES_NODE_VERSION.to_string()),
             better_sqlite3: if data.is_node && (data.is_sqlite || data.is_better_sqlite) {
                 Some(BETTER_SQLITE3_VERSION.to_string())
             } else {
@@ -355,15 +353,6 @@ impl CliCommand for ApplicationCommand {
                     .num_args(0..)
                     .action(ArgAction::Append),
             )
-            // .arg(
-            //     Arg::new("libraries")
-            //         .short('l')
-            //         .long("libraries")
-            //         .help("Additional libraries to include.]")
-            //         .value_parser(VALID_LIBRARIES)
-            //         .num_args(0..)
-            //         .action(ArgAction::Append),
-            // )
             .arg(
                 Arg::new("description")
                     .short('D')
@@ -448,12 +437,10 @@ impl CliCommand for ApplicationCommand {
         } else if origin_path.join("src").exists() && origin_path.join("src").is_dir() {
             Path::new("src").join("modules")
         } else {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-            writeln!(
+            log_warn!(
                 stdout,
                 "No 'src' folder in project root. Please confirm where project files will be initialized."
-            )?;
-            stdout.reset()?;
+            );
             let modules_path: String = prompt_with_validation(
                 &mut line_editor,
                 &mut stdout,
@@ -541,12 +528,10 @@ impl CliCommand for ApplicationCommand {
                     .parse::<HttpFramework>()?
                     == HttpFramework::HyperExpress
                 {
-                    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-                    writeln!(
+                    log_warn!(
                         stdout,
                         "Incompatible choices: Bun + hyper-express, defaulting to Bun + express.",
-                    )?;
-                    stdout.reset()?;
+                    );
                 }
             }
             HttpFramework::Express
@@ -564,20 +549,7 @@ impl CliCommand for ApplicationCommand {
             .parse()?
         };
 
-        // TODO: Add support for Bun test framework
-        let test_framework: Option<TestFramework> = 
-        // if runtime == Runtime::Bun {
-        //     if matches.get_one::<String>("test-framework").is_some() {
-        //         stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-        //         writeln!(
-        //             stdout,
-        //             "Ignoring test-framework choice, defaulting to Bun built-in test runner.",
-        //         )?;
-        //         stdout.reset()?;
-        //     }
-        //     None
-        // } else {
-            Some(
+        let test_framework: Option<TestFramework> = Some(
                 prompt_with_validation(
                     &mut line_editor,
                     &mut stdout,
@@ -590,7 +562,6 @@ impl CliCommand for ApplicationCommand {
                 )?
                 .parse()?,
             );
-        // };
 
         let mut global_module_config = ModuleConfig {
             iam: None,
@@ -619,9 +590,7 @@ impl CliCommand for ApplicationCommand {
                 if validate_modules(&modules_to_test, &mut global_module_config).is_ok() {
                     break;
                 } else {
-                    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-                    writeln!(stdout, "Invalid modules combination. Please try again.")?;
-                    stdout.reset()?;
+                    log_warn!(stdout, "Invalid modules combination. Please try again.");
                 }
             }
             modules_to_test
@@ -728,6 +697,7 @@ impl CliCommand for ApplicationCommand {
                 cache: get_service_module_cache(&package),
                 queue: None,
                 object_store: None,
+                redis_partition: None,
             }),
             routers: get_routers_from_standard_package(package),
             metadata: None,
@@ -805,9 +775,6 @@ impl CliCommand for ApplicationCommand {
             is_in_memory_database: is_in_memory_database(&database),
             platform_application_id: None,
             platform_organization_id: None,
-            release_version: None,
-            release_git_commit: None,
-            release_git_branch: None,
         };
 
         let mut rendered_templates = Vec::new();
@@ -957,9 +924,6 @@ impl CliCommand for ApplicationCommand {
                 is_database_enabled: true,
                 platform_application_id: data.platform_application_id.clone(),
                 platform_organization_id: data.platform_organization_id.clone(),
-                release_version: data.release_version.clone(),
-                release_git_commit: data.release_git_commit.clone(),
-                release_git_branch: data.release_git_branch.clone(),
 
                 is_better_auth: template_dir.module_id == Some(Module::BetterAuthIam),
                 is_stripe: template_dir.module_id == Some(Module::StripeBilling),
@@ -986,18 +950,12 @@ impl CliCommand for ApplicationCommand {
                 // Default to false for application initialization, will be set by CLI flag
                 with_mappers: false,
 
-                iam_secret: if template_dir.module_id == Some(Module::BaseIam)
-                    || template_dir.module_id == Some(Module::BetterAuthIam)
-                {
-                    Some(generate_iam_secret())
-                } else {
-                    None
-                },
+                iam_secret: None,
 
                 // These will be properly generated when initialized
-                generated_password_encryption_secret: String::new(),
                 generated_better_auth_secret: String::new(),
                 generated_hmac_secret: String::new(),
+                otel_token: "OtelCollector".to_string(),
             };
 
             if service_data.service_name == "client-sdk" {
@@ -1174,13 +1132,6 @@ impl CliCommand for ApplicationCommand {
                 },
             )?);
 
-            if let Some(secret) = &service_data.iam_secret {
-                rendered_templates.push(RenderedTemplate {
-                    path: Path::new(&application_path).join(".env.local"),
-                    content: format!("PASSWORD_ENCRYPTION_SECRET={}\n", secret),
-                    context: None,
-                });
-            }
         }
 
         let docker_compose_path = if let Some(docker_compose_path) = &data.docker_compose_path {
@@ -1267,7 +1218,6 @@ impl CliCommand for ApplicationCommand {
             dryrun,
         )?);
 
-        // Set up generated SDK mode by default
         use_generated_sdk_mode_for_init(
             &origin_path,
             &data,
@@ -1289,9 +1239,7 @@ impl CliCommand for ApplicationCommand {
             })?;
 
         if !dryrun {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "{} initialized successfully!", name)?;
-            stdout.reset()?;
+            log_ok!(stdout, "{} initialized successfully!", name);
             format_code(&Path::new(&application_path), &data.runtime.parse()?);
         }
 

@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fs::read_to_string,
+    io::Write as IoWrite,
     path::{Path, PathBuf},
 };
 
@@ -8,6 +9,7 @@ use anyhow::{Context, Result};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_yml::{Value, from_str, from_value, to_string};
+use termcolor::{StandardStream, WriteColor};
 use uuid::Uuid;
 use walkdir::WalkDir;
 
@@ -84,13 +86,38 @@ impl<'de> Deserialize<'de> for DockerCompose {
                                 from_value(value).map_err(serde::de::Error::custom)?;
                         }
                         "volumes" => {
-                            compose.volumes =
-                                from_value(value).map_err(serde::de::Error::custom)?;
-                        }
+                            if let Value::Mapping(map) = value {
+                                for (k, v) in map {
+                                    let child_key = yaml_value_to_string(k);
+                                    match from_value::<DockerVolume>(v.clone()) {
+                                        Ok(vol) => { compose.volumes.insert(child_key, vol); }
+                                        Err(_) => { compose.additional_entries
+                                            .entry("volumes".to_string())
+                                            .or_insert_with(|| Value::Mapping(Default::default()))
+                                            .as_mapping_mut()
+                                            .map(|m| m.insert(Value::String(child_key), v));
+                                        }
+                                    }
+                                }
+                            }
+                            // ignore non-mapping volumes (shouldn't happen)
+                        },
                         "networks" => {
-                            compose.networks =
-                                from_value(value).map_err(serde::de::Error::custom)?;
-                        }
+                            if let Value::Mapping(map) = value {
+                                for (k, v) in map {
+                                    let child_key = yaml_value_to_string(k);
+                                    match from_value::<DockerNetwork>(v.clone()) {
+                                        Ok(net) => { compose.networks.insert(child_key, net); }
+                                        Err(_) => { compose.additional_entries
+                                            .entry("networks".to_string())
+                                            .or_insert_with(|| Value::Mapping(Default::default()))
+                                            .as_mapping_mut()
+                                            .map(|m| m.insert(Value::String(child_key), v));
+                                        }
+                                    }
+                                }
+                            }
+                        },
                         "services" => {
                             compose.services =
                                 from_value(value).map_err(serde::de::Error::custom)?;
@@ -201,12 +228,30 @@ pub(crate) enum Command {
     Multiple(Vec<String>),
 }
 
+impl Command {
+    pub(crate) fn iter(&self) -> Box<dyn Iterator<Item = &String> + '_> {
+        match self {
+            Command::Simple(s) => Box::new(std::iter::once(s)),
+            Command::Multiple(v) => Box::new(v.iter()),
+        }
+    }
+
+    pub(crate) fn iter_mut(&mut self) -> Box<dyn Iterator<Item = &mut String> + '_> {
+        match self {
+            Command::Simple(s) => Box::new(std::iter::once(s)),
+            Command::Multiple(v) => Box::new(v.iter_mut()),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) enum Restart {
     #[serde(rename = "always")]
     Always,
     #[serde(rename = "unless-stopped")]
     UnlessStopped,
+    #[serde(rename = "on-failure")]
+    OnFailure,
     #[serde(rename = "no")]
     No,
 }
@@ -255,7 +300,7 @@ pub(crate) struct DockerService {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) working_dir: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) entrypoint: Option<Vec<String>>,
+    pub(crate) entrypoint: Option<Command>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) command: Option<Command>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -380,6 +425,7 @@ impl<'de> Deserialize<'de> for DockerService {
 
                 while let Some((key, value)) = access.next_entry::<String, Value>()? {
                     match key.as_str() {
+                        // Fields we strictly need — fail on parse error
                         "hostname" => {
                             service.hostname =
                                 from_value(value).map_err(serde::de::Error::custom)?
@@ -391,19 +437,9 @@ impl<'de> Deserialize<'de> for DockerService {
                         "image" => {
                             service.image = from_value(value).map_err(serde::de::Error::custom)?
                         }
-                        "restart" => {
-                            service.restart = from_value(value).map_err(serde::de::Error::custom)?
-                        }
-                        "build" => {
-                            service.build = from_value(value).map_err(serde::de::Error::custom)?
-                        }
                         "environment" => {
                             service.environment =
                                 parse_environment_value(value).map_err(serde::de::Error::custom)?;
-                        }
-                        "depends_on" => {
-                            service.depends_on =
-                                from_value(value).map_err(serde::de::Error::custom)?
                         }
                         "ports" => {
                             service.ports = from_value(value).map_err(serde::de::Error::custom)?
@@ -415,21 +451,35 @@ impl<'de> Deserialize<'de> for DockerService {
                         "volumes" => {
                             service.volumes = from_value(value).map_err(serde::de::Error::custom)?
                         }
-                        "working_dir" => {
-                            service.working_dir =
-                                from_value(value).map_err(serde::de::Error::custom)?
-                        }
-                        "entrypoint" => {
-                            service.entrypoint =
-                                from_value(value).map_err(serde::de::Error::custom)?
-                        }
-                        "command" => {
-                            service.command = from_value(value).map_err(serde::de::Error::custom)?
-                        }
-                        "healthcheck" => {
-                            service.healthcheck =
-                                from_value(value).map_err(serde::de::Error::custom)?
-                        }
+                        // Lenient fields — store raw value on parse failure
+                        "restart" => match from_value(value.clone()) {
+                            Ok(v) => service.restart = v,
+                            Err(_) => { additional_properties.insert(key, value); }
+                        },
+                        "build" => match from_value(value.clone()) {
+                            Ok(v) => service.build = v,
+                            Err(_) => { additional_properties.insert(key, value); }
+                        },
+                        "depends_on" => match from_value(value.clone()) {
+                            Ok(v) => service.depends_on = v,
+                            Err(_) => { additional_properties.insert(key, value); }
+                        },
+                        "working_dir" => match from_value(value.clone()) {
+                            Ok(v) => service.working_dir = v,
+                            Err(_) => { additional_properties.insert(key, value); }
+                        },
+                        "entrypoint" => match from_value(value.clone()) {
+                            Ok(v) => service.entrypoint = v,
+                            Err(_) => { additional_properties.insert(key, value); }
+                        },
+                        "command" => match from_value(value.clone()) {
+                            Ok(v) => service.command = v,
+                            Err(_) => { additional_properties.insert(key, value); }
+                        },
+                        "healthcheck" => match from_value(value.clone()) {
+                            Ok(v) => service.healthcheck = v,
+                            Err(_) => { additional_properties.insert(key, value); }
+                        },
                         _ => {
                             additional_properties.insert(key, value);
                         }
@@ -445,9 +495,46 @@ impl<'de> Deserialize<'de> for DockerService {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+#[derive(Debug, Serialize, Default, Clone)]
 pub(crate) struct DockerVolume {
     pub(crate) driver: String,
+
+    #[serde(flatten)]
+    pub(crate) additional_properties: HashMap<String, Value>,
+}
+
+impl<'de> Deserialize<'de> for DockerVolume {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        // Accept null/empty as default, otherwise parse as map
+        let value = Value::deserialize(deserializer)?;
+        match value {
+            Value::Null => Ok(DockerVolume::default()),
+            Value::Mapping(map) => {
+                let mut vol = DockerVolume::default();
+                for (k, v) in map {
+                    let key = yaml_value_to_string(k);
+                    match key.as_str() {
+                        "driver" => {
+                            vol.driver = from_value(v).unwrap_or_default();
+                        }
+                        _ => {
+                            vol.additional_properties.insert(key, v);
+                        }
+                    }
+                }
+                Ok(vol)
+            }
+            // String short-form (e.g., volume defined as just a string)
+            Value::String(s) => Ok(DockerVolume {
+                driver: s,
+                additional_properties: HashMap::new(),
+            }),
+            _ => Ok(DockerVolume::default()),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -456,10 +543,49 @@ pub(crate) struct DockerBuild {
     pub(crate) dockerfile: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Default, Clone)]
 pub(crate) struct DockerNetwork {
     pub(crate) name: String,
     pub(crate) driver: String,
+
+    #[serde(flatten)]
+    pub(crate) additional_properties: HashMap<String, Value>,
+}
+
+impl<'de> Deserialize<'de> for DockerNetwork {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = Value::deserialize(deserializer)?;
+        match value {
+            Value::Null => Ok(DockerNetwork::default()),
+            Value::Mapping(map) => {
+                let mut net = DockerNetwork::default();
+                for (k, v) in map {
+                    let key = yaml_value_to_string(k);
+                    match key.as_str() {
+                        "name" => {
+                            net.name = from_value(v).unwrap_or_default();
+                        }
+                        "driver" => {
+                            net.driver = from_value(v).unwrap_or_default();
+                        }
+                        _ => {
+                            net.additional_properties.insert(key, v);
+                        }
+                    }
+                }
+                Ok(net)
+            }
+            Value::String(s) => Ok(DockerNetwork {
+                name: s,
+                driver: String::new(),
+                additional_properties: HashMap::new(),
+            }),
+            _ => Ok(DockerNetwork::default()),
+        }
+    }
 }
 
 pub(crate) fn add_otel_to_docker_compose<'a>(
@@ -480,21 +606,130 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
             DockerNetwork {
                 name: network_name.clone(),
                 driver: "bridge".to_string(),
+                ..Default::default()
             },
         );
     }
 
+    // Redpanda (Kafka-compatible broker for Tempo ingest)
+    docker_compose.services.insert(
+        "redpanda".to_string(),
+        DockerService {
+            image: Some("redpandadata/redpanda:latest".to_string()),
+            command: Some(Command::Simple(
+                "redpanda start --overprovisioned --mode=dev-container --kafka-addr=PLAINTEXT://0.0.0.0:9092 --advertise-kafka-addr=PLAINTEXT://redpanda:9092".to_string(),
+            )),
+            ports: None,
+            networks: Some(vec![format!("{}-network", app_name)]),
+            healthcheck: Some(Healthcheck {
+                test: HealthTest::List(vec![
+                    "CMD".to_string(),
+                    "rpk".to_string(),
+                    "cluster".to_string(),
+                    "health".to_string(),
+                ]),
+                interval: "30s".to_string(),
+                timeout: "10s".to_string(),
+                retries: 3,
+                start_period: "30s".to_string(),
+                additional_properties: HashMap::new(),
+            }),
+            ..Default::default()
+        },
+    );
+
+    // MinIO (S3-compatible object store for Tempo, Loki, Thanos)
+    if !docker_compose.services.contains_key("minio") {
+        let mut minio_environment = IndexMap::new();
+        minio_environment.insert("MINIO_ROOT_USER".to_string(), "minioadmin".to_string());
+        minio_environment.insert("MINIO_ROOT_PASSWORD".to_string(), "minioadmin".to_string());
+
+        docker_compose.services.insert(
+            "minio".to_string(),
+            DockerService {
+                image: Some("minio/minio".to_string()),
+                container_name: Some(format!("{}-minio", app_name)),
+                restart: Some(Restart::Always),
+                environment: Some(minio_environment),
+                ports: Some(vec!["9000:9000".to_string(), "9001:9001".to_string()]),
+                networks: Some(vec![format!("{}-network", app_name)]),
+                volumes: Some(vec!["minio-data:/data".to_string()]),
+                command: Some(Command::Simple(
+                    "server /data --console-address :9001".to_string(),
+                )),
+                healthcheck: Some(Healthcheck {
+                    test: HealthTest::List(vec![
+                        "CMD".to_string(),
+                        "mc".to_string(),
+                        "ready".to_string(),
+                        "local".to_string(),
+                    ]),
+                    interval: "30s".to_string(),
+                    timeout: "10s".to_string(),
+                    retries: 3,
+                    start_period: "30s".to_string(),
+                    additional_properties: HashMap::new(),
+                }),
+                ..Default::default()
+            },
+        );
+    }
+
+    if !docker_compose.volumes.contains_key("minio-data") {
+        docker_compose.volumes.insert(
+            "minio-data".to_string(),
+            DockerVolume {
+                driver: "local".to_string(),
+                ..Default::default()
+            },
+        );
+    }
+
+    // MinIO init (create telemetry bucket)
+    docker_compose.services.insert(
+        "minio-init".to_string(),
+        DockerService {
+            image: Some("minio/mc:latest".to_string()),
+            networks: Some(vec![format!("{}-network", app_name)]),
+            depends_on: Some(IndexMap::from([(
+                "minio".to_string(),
+                DependsOn {
+                    condition: DependencyCondition::ServiceHealthy,
+                },
+            )])),
+            entrypoint: Some(Command::Simple(
+                "/bin/sh -c \"mc alias set local http://minio:9000 minioadmin minioadmin && mc mb --ignore-existing local/forklaunch-telemetry\"".to_string(),
+            )),
+            ..Default::default()
+        },
+    );
+
+    // Tempo (distributed tracing backend)
     docker_compose.services.insert(
         "tempo".to_string(),
         DockerService {
             image: Some("grafana/tempo:latest".to_string()),
-            command: Some(Command::Simple("-config.file=/etc/tempo.yaml".to_string())),
+            command: Some(Command::Simple("-target=all -config.file=/etc/tempo.yaml".to_string())),
             ports: Some(vec!["3200:3200".to_string(), "4317:4317".to_string()]),
             volumes: Some(vec![format!(
                 "{}/monitoring/tempo.yaml:/etc/tempo.yaml",
                 context_path.to_string_lossy()
             )]),
             networks: Some(vec![format!("{}-network", app_name)]),
+            depends_on: Some(IndexMap::from([
+                (
+                    "minio-init".to_string(),
+                    DependsOn {
+                        condition: DependencyCondition::ServiceCompletedSuccessfully,
+                    },
+                ),
+                (
+                    "redpanda".to_string(),
+                    DependsOn {
+                        condition: DependencyCondition::ServiceHealthy,
+                    },
+                ),
+            ])),
             healthcheck: Some(Healthcheck {
                 test: HealthTest::List(vec![
                     "CMD".to_string(),
@@ -514,12 +749,24 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
         },
     );
 
+    // Loki (log aggregation)
     docker_compose.services.insert(
         "loki".to_string(),
         DockerService {
             image: Some("grafana/loki:latest".to_string()),
+            command: Some(Command::Simple("-config.file=/etc/loki/local-config.yaml".to_string())),
             ports: Some(vec!["3100:3100".to_string()]),
+            volumes: Some(vec![format!(
+                "{}/monitoring/loki.yaml:/etc/loki/local-config.yaml",
+                context_path.to_string_lossy()
+            )]),
             networks: Some(vec![format!("{}-network", app_name)]),
+            depends_on: Some(IndexMap::from([(
+                "minio-init".to_string(),
+                DependsOn {
+                    condition: DependencyCondition::ServiceCompletedSuccessfully,
+                },
+            )])),
             healthcheck: Some(Healthcheck {
                 test: HealthTest::List(vec![
                     "CMD".to_string(),
@@ -539,16 +786,44 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
         },
     );
 
+    // Prometheus (metrics)
+    if !docker_compose.volumes.contains_key("prometheus-data") {
+        docker_compose.volumes.insert(
+            "prometheus-data".to_string(),
+            DockerVolume {
+                driver: "local".to_string(),
+                ..Default::default()
+            },
+        );
+    }
+
     docker_compose.services.insert(
         "prometheus".to_string(),
         DockerService {
             image: Some("prom/prometheus:latest".to_string()),
             ports: Some(vec!["9090:9090".to_string()]),
-            volumes: Some(vec![format!(
-                "{}/monitoring/prometheus.yaml:/etc/prometheus/prometheus.yml",
-                context_path.to_string_lossy()
-            )]),
+            volumes: Some(vec![
+                format!(
+                    "{}/monitoring/prometheus.yaml:/etc/prometheus/prometheus.yml",
+                    context_path.to_string_lossy()
+                ),
+                "prometheus-data:/prometheus".to_string(),
+            ]),
+            command: Some(Command::Multiple(vec![
+                "--config.file=/etc/prometheus/prometheus.yml".to_string(),
+                "--storage.tsdb.path=/prometheus".to_string(),
+                "--storage.tsdb.min-block-duration=2h".to_string(),
+                "--storage.tsdb.max-block-duration=2h".to_string(),
+                "--web.console.libraries=/usr/share/prometheus/console_libraries".to_string(),
+                "--web.console.templates=/usr/share/prometheus/consoles".to_string(),
+            ])),
             networks: Some(vec![format!("{}-network", app_name)]),
+            depends_on: Some(IndexMap::from([(
+                "minio-init".to_string(),
+                DependsOn {
+                    condition: DependencyCondition::ServiceCompletedSuccessfully,
+                },
+            )])),
             healthcheck: Some(Healthcheck {
                 test: HealthTest::List(vec![
                     "CMD".to_string(),
@@ -568,6 +843,7 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
         },
     );
 
+    // Grafana (dashboards)
     docker_compose.services.insert(
         "grafana".to_string(),
         DockerService {
@@ -597,6 +873,7 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
         },
     );
 
+    // OTel Collector
     docker_compose.services.insert(
         "otel-collector".to_string(),
         DockerService {
@@ -614,6 +891,43 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
         },
     );
 
+    // Thanos sidecar (long-term metric storage via S3)
+    docker_compose.services.insert(
+        "thanos-sidecar".to_string(),
+        DockerService {
+            image: Some("thanosio/thanos:v0.41.0".to_string()),
+            command: Some(Command::Multiple(vec![
+                "sidecar".to_string(),
+                "--tsdb.path=/prometheus".to_string(),
+                "--prometheus.url=http://prometheus:9090".to_string(),
+                "--objstore.config-file=/etc/thanos/objstore.yaml".to_string(),
+            ])),
+            volumes: Some(vec![
+                "prometheus-data:/prometheus".to_string(),
+                format!(
+                    "{}/monitoring/thanos-objstore.yaml:/etc/thanos/objstore.yaml",
+                    context_path.to_string_lossy()
+                ),
+            ]),
+            networks: Some(vec![format!("{}-network", app_name)]),
+            depends_on: Some(IndexMap::from([
+                (
+                    "prometheus".to_string(),
+                    DependsOn {
+                        condition: DependencyCondition::ServiceHealthy,
+                    },
+                ),
+                (
+                    "minio".to_string(),
+                    DependsOn {
+                        condition: DependencyCondition::ServiceHealthy,
+                    },
+                ),
+            ])),
+            ..Default::default()
+        },
+    );
+
     Ok(docker_compose)
 }
 
@@ -621,6 +935,7 @@ pub(crate) fn add_redis_to_docker_compose<'a>(
     app_name: &str,
     docker_compose: &'a mut DockerCompose,
     environment: &mut IndexMap<String, String>,
+    redis_partition: u32,
 ) -> Result<&'a mut DockerCompose> {
     // Ensure the network definition exists
     let network_name = format!("{}-network", app_name);
@@ -630,11 +945,15 @@ pub(crate) fn add_redis_to_docker_compose<'a>(
             DockerNetwork {
                 name: network_name.clone(),
                 driver: "bridge".to_string(),
+                ..Default::default()
             },
         );
     }
 
-    environment.insert("REDIS_URL".to_string(), "redis://redis:6379".to_string());
+    environment.insert(
+        "REDIS_URL".to_string(),
+        format!("redis://redis:6379/{}", redis_partition),
+    );
     if !docker_compose.services.contains_key("redis") {
         docker_compose.services.insert(
             "redis".to_string(),
@@ -688,6 +1007,7 @@ pub(crate) fn add_s3_to_docker_compose<'a>(
             DockerNetwork {
                 name: network_name.clone(),
                 driver: "bridge".to_string(),
+                ..Default::default()
             },
         );
     }
@@ -736,12 +1056,12 @@ pub(crate) fn add_s3_to_docker_compose<'a>(
         );
     }
 
-    // Add minio-data volume if not present
     if !docker_compose.volumes.contains_key("minio-data") {
         docker_compose.volumes.insert(
             "minio-data".to_string(),
             DockerVolume {
                 driver: "local".to_string(),
+                ..Default::default()
             },
         );
     }
@@ -811,6 +1131,7 @@ pub(crate) fn add_kafka_to_docker_compose<'a>(
             DockerNetwork {
                 name: network_name.clone(),
                 driver: "bridge".to_string(),
+                ..Default::default()
             },
         );
     }
@@ -931,7 +1252,7 @@ pub(crate) fn add_kafka_to_docker_compose<'a>(
                 },
             )])),
             networks: Some(vec![format!("{}-network", app_name)]),
-            entrypoint: Some(vec!["/bin/bash".to_string(), "-lc".to_string()]),
+            entrypoint: Some(Command::Multiple(vec!["/bin/bash".to_string(), "-lc".to_string()])),
             command: Some(Command::Simple(format!(
                 r#"set -e
 until kafka-topics --bootstrap-server kafka:29092 --list; do
@@ -987,6 +1308,7 @@ pub(crate) fn add_database_to_docker_compose(
             DockerNetwork {
                 name: network_name.clone(),
                 driver: "bridge".to_string(),
+                ..Default::default()
             },
         );
     }
@@ -1056,6 +1378,7 @@ pub(crate) fn add_database_to_docker_compose(
                     format!("{}-postgresql-data", app_name),
                     DockerVolume {
                         driver: "local".to_string(),
+                        ..Default::default()
                     },
                 );
             }
@@ -1118,6 +1441,7 @@ pub(crate) fn add_database_to_docker_compose(
                     format!("{}-mongodb-data", app_name),
                     DockerVolume {
                         driver: "local".to_string(),
+                        ..Default::default()
                     },
                 );
             }
@@ -1162,6 +1486,7 @@ pub(crate) fn add_database_to_docker_compose(
                     format!("{}-mysql-data", app_name),
                     DockerVolume {
                         driver: "local".to_string(),
+                        ..Default::default()
                     },
                 );
             }
@@ -1205,6 +1530,7 @@ pub(crate) fn add_database_to_docker_compose(
                     format!("{}-mariadb-data", app_name),
                     DockerVolume {
                         driver: "local".to_string(),
+                        ..Default::default()
                     },
                 );
             }
@@ -1247,6 +1573,7 @@ pub(crate) fn add_database_to_docker_compose(
                     format!("{}-mssql-data", app_name),
                     DockerVolume {
                         driver: "local".to_string(),
+                        ..Default::default()
                     },
                 );
             }
@@ -1295,6 +1622,9 @@ pub(crate) fn clean_up_unused_infrastructure_services(
                 let queue = queue.clone();
                 infrastructure_in_use.insert(queue);
             }
+            if let Some(object_store) = resources.object_store {
+                infrastructure_in_use.insert(object_store);
+            }
         }
     }
 
@@ -1315,6 +1645,7 @@ pub(crate) fn clean_up_unused_infrastructure_services(
         .difference(&infrastructure_in_use)
         .flat_map(|component| match component.parse::<Infrastructure>() {
             Ok(Infrastructure::Redis) => vec!["redis".to_string()],
+            Ok(Infrastructure::S3) => vec!["minio".to_string()],
             _ => match component.parse::<Database>() {
                 Ok(Database::MongoDB) => vec!["mongodb".to_string(), "mongo-init".to_string()],
                 _ => vec![component.to_string()],
@@ -1355,6 +1686,7 @@ fn add_base_definition_to_docker_compose(
             DockerNetwork {
                 name: network_name,
                 driver: "bridge".to_string(),
+                ..Default::default()
             },
         );
     }
@@ -1469,7 +1801,7 @@ fn create_base_service(
         networks: Some(vec![format!("{}-network", app_name)]),
         volumes: Some(volumes),
         working_dir: Some(format!("/{}/{}", app_name, component_name)),
-        entrypoint: Some(vec![
+        entrypoint: Some(Command::Multiple(vec![
             match runtime {
                 "node" => "pnpm".to_string(),
                 "bun" => "bun".to_string(),
@@ -1477,7 +1809,7 @@ fn create_base_service(
             },
             "run".to_string(),
             entrypoint_command.to_string(),
-        ]),
+        ])),
         healthcheck: if let Some(port_number) = port_number {
             Some(Healthcheck {
                 test: HealthTest::List(vec![
@@ -1572,17 +1904,7 @@ pub(crate) fn add_service_definition_to_docker_compose(
         docker_compose_string,
     )?;
 
-    if manifest_data.is_iam {
-        environment.insert(
-            "PASSWORD_ENCRYPTION_SECRET".to_string(),
-            manifest_data.generated_password_encryption_secret.clone(),
-        );
-    }
     if manifest_data.is_better_auth {
-        environment.insert(
-            "PASSWORD_ENCRYPTION_SECRET".to_string(),
-            manifest_data.generated_password_encryption_secret.clone(),
-        );
         environment.insert(
             "BETTER_AUTH_SECRET".to_string(),
             manifest_data.generated_better_auth_secret.clone(),
@@ -1621,6 +1943,7 @@ pub(crate) fn add_service_definition_to_docker_compose(
             &manifest_data.app_name,
             &mut docker_compose,
             &mut environment,
+            0,
         )
         .with_context(|| {
             format!(
@@ -1761,6 +2084,7 @@ pub(crate) fn add_worker_definition_to_docker_compose(
             &manifest_data.app_name,
             &mut docker_compose,
             &mut environment,
+            manifest_data.redis_partition,
         )
         .with_context(|| ERROR_FAILED_TO_ADD_PROJECT_METADATA_TO_DOCKER_COMPOSE)?;
     } else if manifest_data.is_database_enabled {
@@ -2085,6 +2409,75 @@ pub(crate) fn update_dockerfile_contents(
     }
 
     Ok(new_dockerfile_contents.join("\n"))
+}
+
+/// Synchronize docker-compose environment sections with env vars discovered from code scanning.
+///
+/// For each service/worker in docker-compose that maps to a known project,
+/// adds only the env vars that the project actually uses in its code.
+/// New vars are added with empty string values so the user can fill them in.
+pub(crate) fn sync_docker_compose_env_vars(
+    docker_compose: &mut DockerCompose,
+    project_env_vars: &HashMap<String, Vec<super::ast::infrastructure::env::EnvVarUsage>>,
+    manifest: &ApplicationManifestData,
+    stdout: &mut StandardStream,
+) -> Result<bool> {
+    let mut changes_made = false;
+
+    let project_types: HashMap<String, super::manifest::ProjectType> = manifest
+        .projects
+        .iter()
+        .map(|p| (p.name.clone(), p.r#type.clone()))
+        .collect();
+
+    // For each docker-compose service, figure out which project it corresponds to
+    let service_keys: Vec<String> = docker_compose.services.keys().cloned().collect();
+
+    for service_key in &service_keys {
+        // Determine the project name this service corresponds to
+        let project_name = if project_types.contains_key(service_key) {
+            Some(service_key.clone())
+        } else {
+            // Check worker aliases: "foo-worker" -> "foo", "foo-service" -> "foo"
+            let mut found = None;
+            for suffix in &["-worker", "-service", "-server"] {
+                if let Some(base) = service_key.strip_suffix(suffix) {
+                    if project_types.contains_key(base) {
+                        found = Some(base.to_string());
+                        break;
+                    }
+                }
+            }
+            found
+        };
+
+        let Some(project_name) = project_name else {
+            continue;
+        };
+
+        let service = docker_compose.services.get_mut(service_key).unwrap();
+        let environment = service.environment.get_or_insert_with(IndexMap::new);
+
+        let mut added_vars = Vec::new();
+
+        // Only add env vars that this project actually uses in its code
+        if let Some(env_vars) = project_env_vars.get(&project_name) {
+            for env_var in env_vars {
+                if !environment.contains_key(&env_var.var_name) {
+                    environment.insert(env_var.var_name.clone(), String::new());
+                    added_vars.push(env_var.var_name.clone());
+                }
+            }
+        }
+
+        if !added_vars.is_empty() {
+            added_vars.sort();
+            changes_made = true;
+            log_info!(stdout, "Added {} env var(s) to docker-compose service '{}': {}", added_vars.len(), service_key, added_vars.join(", "));
+        }
+    }
+
+    Ok(changes_made)
 }
 
 #[cfg(test)]

@@ -8,7 +8,7 @@ description: Learn how to add and configure modules in your application.
 
 A **module** is a preconfigured, production-ready service that provides common functionality out of the box. Unlike regular services that you build from scratch, modules come with complete implementations for complex features like authentication (`iam-base`, `iam-better-auth`) and billing (`billing-base`, `billing-stripe`). Think of modules as ready-to-use building blocks that save you weeks of development time.
 
-In ForkLaunch, modules are complete services with full RCSIDES stacks, database integration, and API documentation—all configured and ready to use. You can customize them later using `forklaunch eject` if needed.
+In ForkLaunch, modules are complete services with full RCSIDES stacks, database integration, and API documentation, all configured and ready to use. You can customize them later using `forklaunch eject` if needed.
 
 ## Getting Started
 

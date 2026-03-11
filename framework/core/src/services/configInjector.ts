@@ -104,18 +104,28 @@ export class ConfigInjector<
     resolutionPath: (keyof CV)[] = []
   ): ResolvedConfigValidator<SV, CV>[T] {
     if (process.env.FORKLAUNCH_MODE === 'openapi') {
-      return {} as ResolvedConfigValidator<SV, CV>[T];
+      const noopHandler: ProxyHandler<Record<string, unknown>> = {
+        get(_target, prop) {
+          if (prop === Symbol.toPrimitive) return () => '';
+          if (prop === 'toString' || prop === 'valueOf') return () => '';
+          return () => {};
+        }
+      };
+      return new Proxy({}, noopHandler) as ResolvedConfigValidator<SV, CV>[T];
     }
 
-    const injectorArgument = extractArgumentNames(definition.factory)[0];
+    const rawInjectorArgument = extractArgumentNames(definition.factory)[0];
     // short circuit as no args
-    if (!injectorArgument || injectorArgument === '_args') {
+    if (!rawInjectorArgument || rawInjectorArgument === '_args') {
       return definition.factory(
         {} as Omit<ResolvedConfigValidator<SV, CV>, T>,
         this.resolve.bind(this),
         context ?? ({} as Record<string, unknown>)
       );
     }
+
+    // Normalize whitespace to handle both single-line and multiline formatting
+    const injectorArgument = rawInjectorArgument.replace(/\s+/g, '');
 
     if (!injectorArgument.startsWith('{') || !injectorArgument.endsWith('}')) {
       throw new Error(
@@ -126,9 +136,9 @@ export class ConfigInjector<
     }
     const resolvedArguments = Object.fromEntries(
       injectorArgument
-        .replace('{', '')
-        .replace('}', '')
+        .slice(1, -1)
         .split(',')
+        .filter((arg) => arg.length > 0)
         .map((arg) => arg.split(':')[0].trim())
         .map((arg) => {
           const newResolutionPath = [...resolutionPath, token];

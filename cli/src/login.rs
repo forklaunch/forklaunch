@@ -14,7 +14,7 @@ use std::fs::create_dir_all;
 use anyhow::{Result, bail};
 use clap::{Arg, ArgMatches, Command};
 use serde::{Deserialize, Serialize};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 
 use crate::{
     CliCommand,
@@ -62,10 +62,8 @@ struct TokenData {
 pub fn login_with_token(api_token: &str) -> Result<()> {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-    writeln!(stdout, "Forklaunch CLI Login (API Token)")?;
-    writeln!(stdout, "Validating API token...")?;
-    stdout.reset()?;
+    log_info!(stdout, "Forklaunch CLI Login (API Token)");
+    log_info!(stdout, "Validating API token...");
 
     // The API token is already a JWT that can be used directly
     // We just need to validate it and save it
@@ -117,10 +115,8 @@ pub fn login_with_token(api_token: &str) -> Result<()> {
         write(&token_path, toml_content)?;
     }
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true))?;
     writeln!(stdout)?;
-    writeln!(stdout, "Successfully logged in with API token!")?;
-    stdout.reset()?;
+    log_header!(stdout, Color::Green, "Successfully logged in with API token!");
     writeln!(
         stdout,
         "Note: API tokens are long-lived. Revoke them from the platform UI if compromised."
@@ -135,10 +131,8 @@ pub fn login() -> Result<()> {
     let api_url = get_iam_api_url();
 
     // Step 1: Request device code
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-    writeln!(stdout, "Forklaunch CLI Login")?;
-    writeln!(stdout, "Requesting device authorization...")?;
-    stdout.reset()?;
+    log_info!(stdout, "Forklaunch CLI Login");
+    log_info!(stdout, "Requesting device authorization...");
 
     let client = reqwest::blocking::Client::new();
     let device_response = client
@@ -160,10 +154,8 @@ pub fn login() -> Result<()> {
 
     // Step 2: Display user code and open browser
     writeln!(stdout)?;
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)).set_bold(true))?;
-    writeln!(stdout, "Please visit: {}", device_data.verification_uri)?;
-    writeln!(stdout, "Enter code: {}", device_data.user_code)?;
-    stdout.reset()?;
+    log_header!(stdout, Color::Yellow, "Please visit: {}", device_data.verification_uri);
+    log_header!(stdout, Color::Yellow, "Enter code: {}", device_data.user_code);
     writeln!(stdout)?;
 
     // Try to open browser
@@ -172,24 +164,18 @@ pub fn login() -> Result<()> {
         .as_ref()
         .unwrap_or(&device_data.verification_uri);
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-    writeln!(stdout, "Opening browser...")?;
-    stdout.reset()?;
+    log_info!(stdout, "Opening browser...");
 
     if let Err(e) = opener::open(url_to_open) {
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-        writeln!(stdout, "Could not open browser automatically: {}", e)?;
-        writeln!(stdout, "Please open the URL manually.")?;
-        stdout.reset()?;
+        log_warn!(stdout, "Could not open browser automatically: {}", e);
+        log_warn!(stdout, "Please open the URL manually.");
     }
 
     // Step 3: Poll for token
     let interval = Duration::from_secs(device_data.interval.unwrap_or(5) as u64);
     let mut polling_interval = interval;
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-    writeln!(stdout, "Waiting for authorization...")?;
-    stdout.reset()?;
+    log_info!(stdout, "Waiting for authorization...");
 
     loop {
         sleep(polling_interval);
@@ -211,9 +197,7 @@ pub fn login() -> Result<()> {
             let session_token = token_data.access_token;
 
             // Call /api/auth/token with session cookie to get JWT (same as browser)
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-            writeln!(stdout, "Exchanging session for JWT...")?;
-            stdout.reset()?;
+            log_info!(stdout, "Exchanging session for JWT...");
 
             let jwt_url = format!("{}/api/auth/token", api_url);
 
@@ -247,7 +231,6 @@ pub fn login() -> Result<()> {
                 expires_at,
             };
 
-            // Save to ~/.forklaunch/token as TOML
             let token_path = get_token_path()?;
 
             // Ensure parent directory exists with owner-only permissions (0o700)
@@ -290,33 +273,22 @@ pub fn login() -> Result<()> {
                 write(&token_path, toml_content)?;
             }
 
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true))?;
             writeln!(stdout)?;
-            writeln!(stdout, "Successfully logged in!")?;
-            stdout.reset()?;
+            log_header!(stdout, Color::Green, "Successfully logged in!");
 
             return Ok(());
         } else {
-            // Check error response
             let error_data: Result<TokenErrorResponse, _> = token_response.json();
 
             match error_data {
                 Ok(error) => {
                     match error.error.as_str() {
                         "authorization_pending" => {
-                            // Continue polling
                             continue;
                         }
                         "slow_down" => {
-                            // Increase polling interval
                             polling_interval += Duration::from_secs(5);
-                            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-                            writeln!(
-                                stdout,
-                                "Slowing down polling to {}s",
-                                polling_interval.as_secs()
-                            )?;
-                            stdout.reset()?;
+                            log_warn!(stdout, "Slowing down polling to {}s", polling_interval.as_secs());
                             continue;
                         }
                         "access_denied" => {
@@ -351,17 +323,14 @@ impl CliCommand for LoginCommand {
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        // Check if API token is provided via CLI arg
         if let Some(token) = matches.get_one::<String>("token") {
             return login_with_token(token);
         }
 
-        // Check environment variable
         if let Ok(token) = std::env::var("FORKLAUNCH_API_TOKEN") {
             return login_with_token(&token);
         }
 
-        // Default: interactive device flow
         login()
     }
 }

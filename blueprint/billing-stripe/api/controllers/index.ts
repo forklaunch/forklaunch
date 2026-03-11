@@ -3,3 +3,4 @@ export * from './checkoutSession.controller';
 export * from './paymentLink.controller';
 export * from './plan.controller';
 export * from './subscription.controller';
+export * from './webhook.controller';

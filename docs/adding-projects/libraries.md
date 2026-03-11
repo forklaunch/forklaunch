@@ -6,7 +6,7 @@ description: Learn how to add and configure libraries in your application.
 
 ## Add a Library
 
-A **library** is a shared code package that can be imported and used across multiple services and workers in your application. Unlike services and workers that run independently, libraries are code collections—utilities, helpers, shared business logic, or common types—that get bundled into the projects that use them. Think of it as a toolbox: instead of duplicating dice animation logic in every service, you create a `dice-animations-library` that stores animations for different die types (d4, d6, d12, d20) and can be imported by all services.
+A **library** is a shared code package that can be imported and used across multiple services and workers in your application. Unlike services and workers that run independently, libraries are code collections (utilities, helpers, shared business logic, or common types) that get bundled into the projects that use them. Think of it as a toolbox: instead of duplicating dice animation logic in every service, you create a `dice-animations-library` that stores animations for different die types (d4, d6, d12, d20) and can be imported by all services.
 
 In ForkLaunch, libraries are simple TypeScript packages with minimal structure. They're perfect for sharing code, types, utilities, and business logic across your application without the overhead of a full service or worker.
 

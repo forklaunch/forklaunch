@@ -6,7 +6,7 @@ use convert_case::{Case, Casing};
 use dialoguer::{MultiSelect, theme::ColorfulTheme};
 use indexmap::IndexMap;
 use rustyline::{Editor, history::DefaultHistory};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use super::core::{
     change_database::{
@@ -303,6 +303,7 @@ fn change_infrastructure(
                     &manifest_data.app_name,
                     docker_compose,
                     &mut environment,
+                    0,
                 )?;
                 docker_compose
                     .services
@@ -689,7 +690,6 @@ fn service_to_worker(
     let pascal_case_name = project_name.to_case(Case::Pascal);
     let camel_case_name = project_name.to_case(Case::Camel);
 
-    // 1. Update registrations.ts with worker dependencies
     let registrations_path = base_path.join("registrations.ts");
     rendered_templates_cache.insert(
         registrations_path.to_string_lossy(),
@@ -706,7 +706,15 @@ fn service_to_worker(
         },
     );
 
-    // 2. Create worker.ts from template
+    // Detect naming convention from existing registrations file
+    let registrations_content = std::fs::read_to_string(base_path.join("registrations.ts"))
+        .unwrap_or_default();
+    let otel_token = if registrations_content.contains("OtelCollector:") {
+        "OtelCollector"
+    } else {
+        "OpenTelemetryCollector"
+    };
+
     let worker_ts_path = base_path.join("worker.ts");
     let worker_ts_content = format!(
         r#"import {{ ci, tokens }} from './bootstrapper';
@@ -715,7 +723,7 @@ import {{ processEvents, processErrors }} from './services/{camel_case_name}.ser
 /**
  * Creates an instance of OpenTelemetryCollector
  */
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.{otel_token});
 
 /**
  * Main worker entry point
@@ -743,7 +751,6 @@ const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
         },
     );
 
-    // 3. Create event record entity
     let entities_dir = base_path.join("persistence").join("entities");
     let event_entity_path = entities_dir.join(format!("{}EventRecord.entity.ts", camel_case_name));
     let is_mongo = manifest_data.database == "mongodb";
@@ -778,7 +785,6 @@ export class {pascal_case_name}EventRecord extends {mongo_prefix}SqlBaseEntity {
         },
     );
 
-    // 4. Update .env.local to add QUEUE_NAME
     let env_local_path = base_path.join(".env.local");
     let mut env_local_content = serde_envfile::from_str::<Env>(
         &rendered_templates_cache
@@ -797,7 +803,6 @@ export class {pascal_case_name}EventRecord extends {mongo_prefix}SqlBaseEntity {
         },
     );
 
-    // 5. Update package.json scripts to add worker scripts
     use crate::core::package_json::package_json_constants::{
         project_start_server_script, project_start_worker_script, WORKER_BULLMQ_VERSION,
         WORKER_DATABASE_VERSION, WORKER_INTERFACES_VERSION, WORKER_KAFKA_VERSION,
@@ -817,7 +822,6 @@ export class {pascal_case_name}EventRecord extends {mongo_prefix}SqlBaseEntity {
     scripts.start_server = Some(project_start_server_script(runtime, database));
     scripts.start_worker = Some(project_start_worker_script(runtime, database));
 
-    // 6. Add worker implementation dependency
     let deps = project_package_json.dependencies.as_mut().unwrap();
     deps.forklaunch_interfaces_worker = Some(WORKER_INTERFACES_VERSION.to_string());
     match worker_type {
@@ -836,7 +840,6 @@ export class {pascal_case_name}EventRecord extends {mongo_prefix}SqlBaseEntity {
         }
     }
 
-    // 7. Update manifest - change project type to Worker
     manifest_data.projects.iter_mut().for_each(|project| {
         if project.name == project_name {
             project.r#type = ProjectType::Worker;
@@ -850,7 +853,6 @@ export class {pascal_case_name}EventRecord extends {mongo_prefix}SqlBaseEntity {
         }
     });
 
-    // 8. Add comment to server.ts suggesting review
     let server_ts_path = base_path.join("server.ts");
     if let Some(server_template) = rendered_templates_cache.get(&server_ts_path)? {
         let content = format!(
@@ -867,7 +869,6 @@ export class {pascal_case_name}EventRecord extends {mongo_prefix}SqlBaseEntity {
         );
     }
 
-    // 9. Add worker service to docker-compose
     let docker_service_name = format!("{}-worker", project_name);
     if let Some(server_service) = docker_compose.services.get(&project_name).cloned() {
         let mut worker_service = server_service.clone();
@@ -881,7 +882,6 @@ export class {pascal_case_name}EventRecord extends {mongo_prefix}SqlBaseEntity {
             .insert(docker_service_name, worker_service);
     }
 
-    // 10. Generate migration README
     let readme_path = base_path.join("README-MIGRATION.md");
     let readme_content = format!(
         r#"# Service to Worker Migration
@@ -934,12 +934,7 @@ This service has been converted to a worker of type `{worker_type}`.
         },
     );
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-    writeln!(
-        stdout,
-        "Service converted to worker. See README-MIGRATION.md for next steps."
-    )?;
-    stdout.reset()?;
+    log_warn!(stdout, "Service converted to worker. See README-MIGRATION.md for next steps.");
 
     Ok(())
 }
@@ -1066,7 +1061,6 @@ impl CliCommand for ServiceCommand {
         let dryrun = matches.get_flag("dryrun");
         let confirm = matches.get_flag("confirm");
 
-        // Handle service to worker conversion
         if let Some(to_type) = to {
             if to_type == "worker" {
                 let worker_type = if let Some(t) = worker_type_str {
@@ -1235,6 +1229,9 @@ impl CliCommand for ServiceCommand {
         if let Some(queue) = &project_resources.queue {
             active_infrastructure.push(queue.to_string());
         }
+        if let Some(object_store) = &project_resources.object_store {
+            active_infrastructure.push(object_store.to_string());
+        }
 
         let infrastructure = prompt_comma_separated_list_from_selections(
             "infrastructure",
@@ -1302,9 +1299,7 @@ impl CliCommand for ServiceCommand {
                 &mut rendered_templates_cache,
                 &mut removal_templates,
             )?;
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-            writeln!(stdout, "migrate:init or migrate:create will need to be run")?;
-            stdout.reset()?;
+            log_warn!(stdout, "migrate:init or migrate:create will need to be run");
         }
 
         if let Some(description) = description {
@@ -1399,16 +1394,274 @@ impl CliCommand for ServiceCommand {
         move_template_files(&move_templates, dryrun, &mut stdout)?;
 
         if !dryrun {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(
-                stdout,
-                "{} changed successfully!",
-                &manifest_data.service_name
-            )?;
-            stdout.reset()?;
+            log_ok!(stdout, "{} changed successfully!", &manifest_data.service_name);
             format_code(&service_base_path, &manifest_data.runtime.parse()?);
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::write;
+
+    use indexmap::IndexMap;
+    use tempfile::TempDir;
+
+    use super::*;
+    use crate::{
+        constants::Infrastructure,
+        core::{
+            docker::DockerService,
+            manifest::{
+                InitializableManifestConfig, InitializableManifestConfigMetadata,
+                ProjectInitializationMetadata,
+            },
+            package_json::project_package_json::{ProjectDependencies, ProjectPackageJson},
+            rendered_template::RenderedTemplatesCache,
+        },
+    };
+
+    const MINIMAL_REGISTRATIONS_TS: &str = r#"import {
+  number,
+  schemaValidator,
+  string
+} from '@test-app/core';
+import { OpenTelemetryCollector } from '@forklaunch/core/http';
+import {
+  createConfigInjector,
+  getEnvVar,
+  Lifetime
+} from '@forklaunch/core/services';
+import { EntityManager, ForkOptions, MikroORM } from '@mikro-orm/core';
+import mikroOrmOptionsConfig from './mikro-orm.config';
+
+const configInjector = createConfigInjector(schemaValidator, {
+  SERVICE_METADATA: {
+    lifetime: Lifetime.Singleton,
+    type: { name: string, version: string },
+    value: { name: 'test-svc', version: '0.1.0' }
+  }
+});
+
+const environmentConfig = configInjector.chain({
+  HOST: { lifetime: Lifetime.Singleton, type: string, value: getEnvVar('HOST') },
+  PORT: { lifetime: Lifetime.Singleton, type: number, value: Number(getEnvVar('PORT')) }
+});
+
+const runtimeDependencies = environmentConfig.chain({
+  MikroORM: {
+    lifetime: Lifetime.Singleton,
+    type: MikroORM,
+    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+  },
+  OpenTelemetryCollector: {
+    lifetime: Lifetime.Singleton,
+    type: OpenTelemetryCollector,
+    factory: ({ OTEL_SERVICE_NAME, OTEL_LEVEL }) =>
+      new OpenTelemetryCollector(OTEL_SERVICE_NAME, OTEL_LEVEL || 'info')
+  },
+  EntityManager: {
+    lifetime: Lifetime.Scoped,
+    type: EntityManager,
+    factory: ({ MikroORM }, _resolve, context) =>
+      MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined)
+  }
+});
+
+const serviceDependencies = runtimeDependencies.chain({});
+"#;
+
+    const MANIFEST_TOML: &str = r#"
+id = "test-id"
+cli_version = "0.6.3"
+app_name = "test-app"
+modules_path = "src/modules"
+app_description = "test"
+linter = "eslint"
+formatter = "prettier"
+validator = "zod"
+http_framework = "express"
+runtime = "node"
+author = "test"
+license = "MIT"
+
+[project_peer_topology]
+
+[[projects]]
+type = "Service"
+name = "test-svc"
+description = "test service"
+
+[projects.resources]
+database = "postgresql"
+"#;
+
+    fn setup() -> (
+        TempDir,
+        ServiceManifestData,
+        DockerCompose,
+        ProjectPackageJson,
+        RenderedTemplatesCache,
+    ) {
+        let tmp = TempDir::new().unwrap();
+        let base = tmp.path();
+
+        write(base.join("registrations.ts"), MINIMAL_REGISTRATIONS_TS).unwrap();
+        write(base.join(".env.local"), "").unwrap();
+
+        let raw: ServiceManifestData = toml::from_str(MANIFEST_TOML).unwrap();
+        let manifest =
+            raw.initialize(InitializableManifestConfigMetadata::Project(
+                ProjectInitializationMetadata {
+                    project_name: "test-svc".to_string(),
+                    database: None,
+                    infrastructure: None,
+                    description: None,
+                    worker_type: None,
+                },
+            ));
+
+        let mut docker_compose = DockerCompose::default();
+        docker_compose.services.insert(
+            "test-svc".to_string(),
+            DockerService {
+                environment: Some(IndexMap::new()),
+                ..Default::default()
+            },
+        );
+
+        let pkg_json = ProjectPackageJson {
+            dependencies: Some(ProjectDependencies::default()),
+            ..Default::default()
+        };
+
+        let cache = RenderedTemplatesCache::new();
+
+        (tmp, manifest, docker_compose, pkg_json, cache)
+    }
+
+    #[test]
+    fn test_change_infrastructure_add_s3_updates_docker_compose_manifest_and_deps() {
+        let (_tmp, mut manifest, mut docker, mut pkg, mut cache) = setup();
+        let base = _tmp.path();
+
+        change_infrastructure(
+            base,
+            vec![Infrastructure::S3],
+            vec![],
+            &mut pkg,
+            &mut manifest,
+            &mut docker,
+            &mut cache,
+        )
+        .expect("change_infrastructure should succeed");
+
+        // 1. docker-compose must have minio service
+        assert!(
+            docker.services.contains_key("minio"),
+            "Expected 'minio' in docker-compose services, got: {:?}",
+            docker.services.keys().collect::<Vec<_>>()
+        );
+
+        // 2. service environment must have S3 env vars injected
+        let env = docker.services["test-svc"].environment.as_ref().unwrap();
+        assert!(env.contains_key("S3_URL"), "Expected S3_URL in service environment");
+        assert!(env.contains_key("S3_BUCKET"), "Expected S3_BUCKET in service environment");
+
+        // 3. manifest object_store must be recorded as "s3"
+        let project = manifest
+            .projects
+            .iter()
+            .find(|p| p.name == "test-svc")
+            .unwrap();
+        assert_eq!(
+            project.resources.as_ref().unwrap().object_store,
+            Some("s3".to_string()),
+            "Expected manifest object_store = 's3'"
+        );
+
+        // 4. package.json S3 dependency must be set
+        assert!(
+            pkg.dependencies
+                .as_ref()
+                .unwrap()
+                .forklaunch_infrastructure_s3
+                .is_some(),
+            "Expected @forklaunch/infrastructure-s3 in package.json dependencies"
+        );
+
+        // 5. registrations.ts in cache must have S3 content injected
+        let reg = cache
+            .get(base.join("registrations.ts"))
+            .unwrap()
+            .unwrap();
+        assert!(
+            reg.content.contains("S3ObjectStore") || reg.content.contains("s3Url"),
+            "Expected S3 import/usage in registrations.ts cache"
+        );
+    }
+
+    #[test]
+    fn test_change_infrastructure_remove_s3_cleans_up_docker_compose_and_manifest() {
+        let (_tmp, mut manifest, mut docker, mut pkg, mut cache) = setup();
+        let base = _tmp.path();
+
+        // First add S3
+        change_infrastructure(
+            base,
+            vec![Infrastructure::S3],
+            vec![],
+            &mut pkg,
+            &mut manifest,
+            &mut docker,
+            &mut cache,
+        )
+        .expect("add S3 should succeed");
+
+        assert!(
+            docker.services.contains_key("minio"),
+            "Pre-condition: minio must exist after add"
+        );
+
+        // Now remove S3 — reuse the same cache so it can read updated registrations.ts
+        change_infrastructure(
+            base,
+            vec![],
+            vec![Infrastructure::S3],
+            &mut pkg,
+            &mut manifest,
+            &mut docker,
+            &mut cache,
+        )
+        .expect("remove S3 should succeed");
+
+        // 1. minio must be removed from docker-compose
+        assert!(
+            !docker.services.contains_key("minio"),
+            "Expected 'minio' to be removed from docker-compose after S3 removal"
+        );
+
+        // 2. manifest object_store must be cleared
+        let project = manifest
+            .projects
+            .iter()
+            .find(|p| p.name == "test-svc")
+            .unwrap();
+        assert!(
+            project.resources.as_ref().unwrap().object_store.is_none(),
+            "Expected object_store = None after S3 removal"
+        );
+
+        // 3. package.json S3 dependency must be cleared
+        assert!(
+            pkg.dependencies
+                .as_ref()
+                .unwrap()
+                .forklaunch_infrastructure_s3
+                .is_none(),
+            "Expected @forklaunch/infrastructure-s3 to be removed from dependencies"
+        );
     }
 }

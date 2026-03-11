@@ -155,7 +155,6 @@ export const {}ResponseMapper = responseMapper({{
         if self.entity.extends.is_some() || self.has_entity_property("updatedAt") {
             lines.push("        updatedAt: new Date()".to_string());
         } else {
-            // Remove trailing comma from last line
             if let Some(last) = lines.last_mut() {
                 *last = last.trim_end_matches(',').to_string();
             }

@@ -1,102 +1,110 @@
-# Dice Roll Example - Complete "Hello World" Tutorial
+---
+title: Dice Roll Node App
+category: Examples
+description: Build a dice rolling API with Node.js, Express, and PostgreSQL using ForkLaunch, from CLI scaffold to running endpoints in a few hours.
+---
 
-This is a complete step-by-step guide to building a simple dice roll application with ForkLaunch. It demonstrates the full workflow from initialization to a working API with database persistence.
+## Overview
 
-## What We'll Build
+This tutorial walks through building a dice roll API with ForkLaunch. The app accepts a number of sides, rolls the die, persists the result to PostgreSQL, and returns roll statistics. The full source code is on GitHub.
 
-A dice roll API that:
-- Accepts different die types (d4, d6, d12, d20, etc.)
-- Rolls the dice and returns the result
-- Saves each roll to the database
-- Provides statistics on all rolls
+<a href="https://github.com/srtandon/dicey-roll" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:8px;border:1px solid #E34C26;color:#E34C26;font-weight:600;font-size:14px;text-decoration:none;margin-bottom:16px;">
+  <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0 0 22 12.017C22 6.484 17.522 2 12 2z"/></svg>
+  View on GitHub: srtandon/dicey-roll
+</a>
 
-## Prerequisites
+**What you will build:**
+- `POST /dice-rtr/roll`: rolls a die with the specified number of sides and persists the result
+- `GET /dice-rtr/stats`: returns total rolls and distribution grouped by die type
 
-- ForkLaunch CLI installed
-- Node.js 18+ and pnpm 8+ (or Bun 1.22+)
+**Prerequisites:**
+- ForkLaunch CLI installed (`npm install -g forklaunch`)
+- Node.js 18+ and pnpm 8+
 - Docker (for PostgreSQL)
-- Git
 
-## Step 1: Create the Application
+---
 
-You can use interactive prompts or flags:
+## Quick Launch
+
+Five commands to get the scaffold running:
 
 ```bash
-# Interactive mode (prompts for each option)
-forklaunch init application dice-roll-node-app
-
-# Or with flags (for scripts/AIs)
-forklaunch init application dice-roll-node-app \
-  --path ./dice-roll-node-app \
-  -o src/modules \
-  -d postgresql \
-  -v zod \
-  -f prettier \
-  -l eslint \
-  -F express \
-  -r node \
-  -t vitest \
-  -D "Simple dice roll application" \
-  -A "Your Name" \
-  -L MIT
+# 1. Create the application
+forklaunch init app dice-roll-node-app --database postgresql --runtime node
 ```
 
-**What gets created:**
-- Application structure with core, monitoring, and universal-sdk modules
-- Docker Compose with monitoring services (Grafana, Prometheus, Loki, Tempo)
-- Application artifacts (manifest, workspace config, etc.)
+```bash
+# 2. Add the service
+cd dice-roll-node-app
+forklaunch init service roll-dice-svc --database postgresql
 
-## Step 2: Add a Service
+# 3. Add a router to the service
+forklaunch init router dice-rtr --path ./src/modules/roll-dice-svc
 
-Add a service to host the dice roll API:
+# 4. Install and migrate
+pnpm install && pnpm migrate:init && pnpm migrate:create && pnpm migrate:up
+
+# 5. Start the dev server
+pnpm dev
+```
+
+The server starts on `http://localhost:8000`. ForkLaunch generates OpenAPI docs at `http://localhost:8000/docs`.
+
+---
+
+## Try It Here
+
+<DiceRollDemo />
+
+---
+
+## Full Walkthrough
+
+### Step 1: Create the Application
+
+```bash
+forklaunch init app dice-roll-node-app \
+  --path ./dice-roll-node-app
+  --database postgresql \
+  --validator zod \
+  --http-framework express \
+  --runtime node
+```
+
+**What gets generated:**
+- Application structure under `src/`
+- `.forklaunch/manifest.toml`: source of truth for project configuration
+- `docker-compose.yaml` for local development (includes Grafana, Prometheus, Loki, Tempo)
+- Base configuration and TypeScript config files
+
+### Step 2: Add a Service
 
 ```bash
 cd dice-roll-node-app
-
-# Interactive mode
-forklaunch init service roll-dice-svc
-
-# Or with flags
-forklaunch init service roll-dice-svc \
-  --path ./src/modules \
-  --database postgresql \
-  --description "Dice roll API service"
+forklaunch init service roll-dice-svc --path dice-roll-node-app/src/modules --database postgresql
 ```
 
-**What gets created:**
-- Service directory with complete [RCSIDES](/docs/artifacts.md#rcsides-architecture-pattern) stack
-- Routes and controllers (empty, ready to customize)
-- Entity, schemas, types
-- Service registered in all artifacts (manifest, docker-compose, workspace, SDK, tsconfig)
+This generates a complete service with routes, controllers, services, entities, and mappers, wired into docker-compose automatically.
 
-## Step 3: Add a Router
-
-Add a router to the service for dice roll endpoints:
+### Step 3: Add a Router
 
 ```bash
-forklaunch init router dice-rtr \
-  --path ./src/modules/roll-dice-svc \
-  --description "Dice roll routes"
+forklaunch init router dice-rtr --path ./src/modules/roll-dice-svc
 ```
 
-**What gets created:**
-- New routes and controllers in the service
-- Additional [RCSIDES](/docs/artifacts.md#rcsides-architecture-pattern) files for the router
-- Router wired into `server.ts`
+This adds a new [RCSIDES](/docs/learn/artifacts.md#rcsides-architecture-pattern) route/controller stack to the service and wires it into `server.ts`.
 
-## Step 4: Configure Environment Variables
+### Step 4: Configure Environment Variables
 
 Create `.env.local` in the application root:
 
 ```bash
-# Database Configuration
 DB_NAME=dice-roll-node-app-dev
 DB_HOST=localhost
 DB_USER=postgresql
 DB_PASSWORD=postgresql
 DB_PORT=5432
 
-# Server Configuration
 PORT=8000
 NODE_ENV=development
 HOST=0.0.0.0
@@ -104,12 +112,11 @@ PROTOCOL=http
 VERSION=v1
 DOCS_PATH=/docs
 
-# OpenTelemetry
 OTEL_SERVICE_NAME=dice-roll-node-app
 OTEL_LEVEL=info
 ```
 
-## Step 5: Update Entity
+### Step 5: Update the Entity
 
 Edit `src/modules/roll-dice-svc/persistence/entities/diceRtrRecord.entity.ts`:
 
@@ -120,376 +127,158 @@ import { SqlBaseEntity } from '@dice-roll-node-app/core';
 @Entity()
 export class DiceRtrRecord extends SqlBaseEntity {
   @Property()
-  dieType!: string; // e.g., "d4", "d6", "d12", "d20"
+  sides!: number;
 
   @Property()
-  result!: number; // The rolled value (1 to dieType number)
+  result!: number;
 }
 ```
 
-## Step 6: Update Schemas
+### Step 6: Update Schemas
 
 Edit `src/modules/roll-dice-svc/domain/schemas/diceRtr.schema.ts`:
 
 ```typescript
 import { number, string } from '@dice-roll-node-app/core';
 
-export const DiceRtrRollRequestSchema = { 
-  dieType: string
+export const DiceRtrRollRequestSchema = {
+  sides: number
 };
 
 export const DiceRtrRollResponseSchema = {
-  dieType: string,
-  result: number
+  sides: number,
+  result: number,
+  id: string,
+  createdAt: string
 };
 
 export const DiceRtrStatsResponseSchema = {
-    totalRolls: number,
-    byDieType: record(string, {
-        count: number,
-        average: number,
-        min: number,
-        max: number
-    })
+  totalRolls: number,
+  distribution: {
+    sides: number,
+    count: number,
+    average: number,
+    min: number,
+    max: number
+  }
 };
 ```
 
-## Step 7: Update Mappers
-
-Edit `src/modules/roll-dice-svc/domain/mappers/diceRtr.mappers.ts`:
-
-```typescript
-import {
-  requestMapper,
-  responseMapper
-} from '@forklaunch/core/mappers';
-import { schemaValidator } from '@dice-roll-node-app/core';
-import { EntityManager } from '@mikro-orm/core';
-import { DiceRtrRecord } from '../../persistence/entities/diceRtrRecord.entity';
-import { DiceRtrRequestSchema, DiceRtrResponseSchema } from '../schemas/diceRtr.schema';
-
-export const DiceRtrRequestMapper = requestMapper(
-  schemaValidator,
-  DiceRtrRequestSchema,
-  DiceRtrRecord,
-  {
-    toEntity: async (dto, em: EntityManager) => {
-      // Parse dieType (e.g., "d6" -> 6)
-      const sides = parseInt(dto.dieType.replace('d', ''));
-      if (isNaN(sides) || sides < 2) {
-        throw new Error(`Invalid die type: ${dto.dieType}`);
-      }
-      
-      // Roll the dice
-      const result = Math.floor(Math.random() * sides) + 1;
-      
-      return DiceRtrRecord.create({
-        dieType: dto.dieType,
-        result: result,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }, em);
-    }
-  }
-);
-
-export const DiceRtrResponseMapper = responseMapper(
-  schemaValidator,
-  DiceRtrResponseSchema,
-  DiceRtrRecord,
-  {
-    toDto: async (entity: DiceRtrRecord) => {
-      return await entity.read();
-    }
-  }
-);
-```
-
-## Step 8: Update Service
+### Step 7: Update the Service
 
 Edit `src/modules/roll-dice-svc/services/diceRtr.service.ts`:
 
 ```typescript
-// ... existing imports ...
 import { DiceRtrRecord } from '../persistence/entities/diceRtrRecord.entity';
 
-export class BaseDiceRtrService implements DiceRtrService { 
-  // ... existing constructor ...
-
-  diceRtrRoll = async (
-    dto: DiceRtrRollRequestDto
-  ): Promise<DiceRtrRollResponseDto> => {
-    // Validate die type
-    const sides = parseInt(dto.dieType.replace('d', ''));
-    if (isNaN(sides) || sides < 2) {
-      throw new Error(`Invalid die type: ${dto.dieType}. Use format d4, d6, d12, d20, etc.`);
+export class BaseDiceRtrService implements DiceRtrService {
+  diceRtrRoll = async (dto: DiceRtrRollRequestDto): Promise<DiceRtrRollResponseDto> => {
+    if (dto.sides < 2) {
+      throw new Error(`sides must be at least 2, got ${dto.sides}`);
     }
 
-    // Create entity with roll result
-    const entity = await DiceRtrRollRequestMapper.toEntity(
-      dto,
-      this.entityManager
-    );
+    const result = Math.floor(Math.random() * dto.sides) + 1;
 
-    // Save to database
-    await this.entityManager.persistAndFlush(entity);
-
-    this.openTelemetryCollector.info('Dice rolled', {
-      dieType: dto.dieType,
-      result: entity.result
+    const entity = this.entityManager.create(DiceRtrRecord, {
+      sides: dto.sides,
+      result
     });
 
-    return DiceRtrRollResponseMapper.toDto(entity);
+    await this.entityManager.persistAndFlush(entity);
+
+    this.openTelemetryCollector.info('Dice rolled', { sides: dto.sides, result });
+
+    return { sides: dto.sides, result, id: entity.id, createdAt: entity.createdAt.toISOString() };
   };
 
   diceRtrStats = async (): Promise<DiceRtrStatsResponseDto> => {
-    // Get all rolls
     const allRolls = await this.entityManager.find(DiceRtrRecord, {});
 
-    // Group by die type and calculate stats
-    const byDieType: Record<string, { count: number; average: number; min: number; max: number }> = {};
+    const grouped: Record<number, number[]> = {};
+    for (const roll of allRolls) {
+      (grouped[roll.sides] ??= []).push(roll.result);
+    }
 
-    allRolls.forEach(roll => {
-      if (!byDieType[roll.dieType]) {
-        byDieType[roll.dieType] = {
-          count: 0,
-          average: 0,
-          min: Infinity,
-          max: -Infinity
-        };
-      }
+    const distribution = Object.entries(grouped).map(([sides, results]) => ({
+      sides: Number(sides),
+      count: results.length,
+      average: results.reduce((s, n) => s + n, 0) / results.length,
+      min: Math.min(...results),
+      max: Math.max(...results)
+    }));
 
-      const stats = byDieType[roll.dieType];
-      stats.count++;
-      stats.min = Math.min(stats.min, roll.result);
-      stats.max = Math.max(stats.max, roll.result);
-    });
-
-    // Calculate averages
-    Object.keys(byDieType).forEach(dieType => {
-      const rolls = allRolls.filter(r => r.dieType === dieType);
-      const sum = rolls.reduce((acc, r) => acc + r.result, 0);
-      byDieType[dieType].average = sum / rolls.length;
-    });
-
-    return {
-      totalRolls: allRolls.length,
-      byDieType
-    };
+    return { totalRolls: allRolls.length, distribution };
   };
 }
 ```
 
-## Step 9: Update Interface
-
-Edit `src/modules/roll-dice-svc/domain/interfaces/diceRtr.interface.ts`:
-
-```typescript
-import {
-  DiceRtrRequestDto,
-  DiceRtrResponseDto,
-  DiceRtrStatsResponseDto
-} from '../types/diceRtr.types';
-
-export interface DiceRtrService {
-  diceRtrPost: (dto: DiceRtrRequestDto) => Promise<DiceRtrResponseDto>;
-  diceRtrStats: () => Promise<DiceRtrStatsResponseDto>;
-}
-```
-
-## Step 10: Update Controller
+### Step 8: Update the Controller
 
 Edit `src/modules/roll-dice-svc/api/controllers/diceRtr.controller.ts`:
 
 ```typescript
 import { handlers, schemaValidator } from '@dice-roll-node-app/core';
-import { DiceRtrRequestMapper, DiceRtrResponseMapper } from '../../domain/mappers/diceRtr.mappers';
-import { DiceRtrRequestSchema, DiceRtrResponseSchema, DiceRtrStatsResponseSchema } from '../../domain/schemas/diceRtr.schema';
+import {
+  DiceRtrRollRequestSchema,
+  DiceRtrRollResponseSchema,
+  DiceRtrStatsResponseSchema
+} from '../../domain/schemas/diceRtr.schema';
 import { ci, tokens } from '../../bootstrapper';
 
 const scopeFactory = () => ci.createScope();
 const serviceFactory = ci.scopedResolver(tokens.DiceRtrService);
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
-
-// POST endpoint handler that returns a simple message
-export const diceRtrPost = handlers.post(
-  schemaValidator,
-  '/',
-  {
-    name: 'Dice Rtr Post',
-    summary: 'Posts Dice Rtr',
-    body: DiceRtrRequestSchema,
-    responses: {
-      200: DiceRtrResponseSchema
-    }
-  },
-  async (req, res) => {
-    res.status(200).json({
-      message: 'hello, world!'
-    });
-  }
-);
-
-// Roll dice endpoint
 export const diceRtrRoll = handlers.post(
   schemaValidator,
   '/roll',
   {
     name: 'Roll Dice',
-    summary: 'Rolls a dice with specified number of sides',
-    body: DiceRtrRollRequestMapper.schema,
-    responses: {
-      200: DiceRtrRollResponseMapper.schema
-    }
+    summary: 'Roll a die with the specified number of sides',
+    body: DiceRtrRollRequestSchema,
+    responses: { 200: DiceRtrRollResponseSchema }
   },
   async (req, res) => {
-    res.status(200).json(
-      await serviceFactory(scopeFactory()).diceRtrRoll(req.body)
-    );
+    res.status(200).json(await serviceFactory(scopeFactory()).diceRtrRoll(req.body));
   }
 );
 
-// Stats endpoint
 export const diceRtrStats = handlers.get(
   schemaValidator,
   '/stats',
   {
-    name: 'Get Dice Roll Statistics',
-    summary: 'Returns statistics about all dice rolls',
-    responses: {
-      200: DiceRtrStatsResponseSchema
-    }
+    name: 'Get Statistics',
+    summary: 'Return roll statistics grouped by die type',
+    responses: { 200: DiceRtrStatsResponseSchema }
   },
   async (req, res) => {
-    res.status(200).json(
-      await serviceFactory(scopeFactory()).diceRtrStats()
-    );
+    res.status(200).json(await serviceFactory(scopeFactory()).diceRtrStats());
   }
 );
 ```
 
-## Step 11: Update Routes
+### Step 9: Update Routes
 
 Edit `src/modules/roll-dice-svc/api/routes/diceRtr.routes.ts`:
 
 ```typescript
 import { forklaunchRouter, schemaValidator } from '@dice-roll-node-app/core';
-import { diceRtrGet, diceRtrPost, diceRtrRoll, diceRtrStats } from '../controllers/diceRtr.controller';
+import { diceRtrRoll, diceRtrStats } from '../controllers/diceRtr.controller';
 import { ci, tokens } from '../../bootstrapper';
 
 const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
 
-export const diceRtrRouter = forklaunchRouter(
-  '/dice-rtr',
-  schemaValidator, 
-  openTelemetryCollector
-);
+export const diceRtrRouter = forklaunchRouter('/dice-rtr', schemaValidator, openTelemetryCollector);
 
-// Mount the routes
-export const diceRtrGetRoute = diceRtrRouter.get('/', diceRtrGet);
-export const diceRtrPostRoute = diceRtrRouter.post('/', diceRtrPost);
-export const diceRtrRollRoute = diceRtrRouter.post('/roll', diceRtrRoll);
-export const diceRtrStatsRoute = diceRtrRouter.get('/stats', diceRtrStats);
+diceRtrRouter.post('/roll', diceRtrRoll);
+diceRtrRouter.get('/stats', diceRtrStats);
 ```
 
-## Step 12: Update Types
-
-Edit `src/modules/roll-dice-svc/domain/types/diceRtr.types.ts` to add stats type:
-
-```typescript
-import { Schema } from '@forklaunch/validator';
-import { SchemaValidator } from '@dice-roll-node-app/core';
-import { DiceRtrRequestSchema, DiceRtrResponseSchema, DiceRtrRollRequestSchema, DiceRtrRollResponseSchema, DiceRtrStatsResponseSchema } from '../schemas/diceRtr.schema';
-
-
-// Exported type that matches the request schema
-export type DiceRtrRequestDto = Schema<typeof DiceRtrRequestSchema, SchemaValidator>;
-
-// Exported type that matches the response schema
-export type DiceRtrResponseDto = Schema<typeof DiceRtrResponseSchema, SchemaValidator>;
-
-// Exported types for roll operations
-export type DiceRtrRollRequestDto = Schema<typeof DiceRtrRollRequestSchema, SchemaValidator>;
-export type DiceRtrRollResponseDto = Schema<typeof DiceRtrRollResponseSchema, SchemaValidator>;
-export type DiceRtrStatsResponseDto = Schema<typeof DiceRtrStatsResponseSchema, SchemaValidator>;
-```
-
-And add the stats schema to `diceRtr.schema.ts`:
-
-```typescript
-import { number, record, string } from '@dice-roll-node-app/core';
-
-// idiomatic validator schema defines the request schema. This should extend the request type
-export const DiceRtrRequestSchema = {
-    message: string
-};
-
-// idiomatic validator schema defines the response schema. This should extend the response type
-export const DiceRtrResponseSchema = {
-    message: string
-};
-
-// Request schema for rolling dice
-export const DiceRtrRollRequestSchema = {
-    dieType: string // e.g., "d4", "d6", "d12", "d20"
-};
-
-// Response schema for roll result
-export const DiceRtrRollResponseSchema = {
-    dieType: string,
-    result: number,
-    id: string,
-    createdAt: string
-};
-
-// Response schema for stats
-export const DiceRtrStatsResponseSchema = {
-    totalRolls: number,
-    byDieType: record(string, {
-        count: number,
-        average: number,
-        min: number,
-        max: number
-    })
-};
-```
-
-## Step 13: Set Up Database
-
-### Start Docker Containers (optional)
+### Step 10: Run Migrations and Start
 
 ```bash
-docker-compose up -d postgres
-```
-
-### Initialize Migrations (starts docker containers)
-
-```bash
-pnpm migrate:init
-```
-
-### Create Migration
-
-```bash
-pnpm migrate:create
-```
-
-### Run Migrations
-
-```bash
-pnpm migrate:up
-```
-
-## Step 14: Build and Run
-
-```bash
-# Install dependencies
 pnpm install
-
-# Build the application
-pnpm build
-
-# Start the development server
+pnpm migrate:init
+pnpm migrate:create
+pnpm migrate:up
 pnpm dev
 ```
 
@@ -498,79 +287,96 @@ You should see:
 INFO: 🎉 RollDiceSvc Server is running at http://0.0.0.0:8000 🎉
 ```
 
-## Step 15: Test the API
+### Step 11: Test the API
 
-### Roll a Dice
+**Roll a d20:**
 
 ```bash
 curl -X POST http://localhost:8000/dice-rtr/roll \
   -H "Content-Type: application/json" \
-  -d '{"dieType": "d20"}'
+  -d '{"sides": 20}'
 ```
 
 **Response:**
+
 ```json
 {
-  "dieType": "d20",
+  "sides": 20,
   "result": 15,
   "id": "ab45bbcb-40f1-425e-9a42-495b4065bf1b",
   "createdAt": "2025-11-12T07:03:17.634Z"
 }
 ```
 
-### Get Statistics
+**Get statistics:**
 
 ```bash
 curl http://localhost:8000/dice-rtr/stats
 ```
 
 **Response:**
+
 ```json
 {
   "totalRolls": 4,
-  "byDieType": {
-    "d20": {
-      "count": 2,
-      "average": 10.5,
-      "min": 6,
-      "max": 15
-    },
-    "d6": {
-      "count": 1,
-      "average": 4,
-      "min": 4,
-      "max": 4
-    },
-    "d12": {
-      "count": 1,
-      "average": 11,
-      "min": 11,
-      "max": 11
-    }
-  }
+  "distribution": [
+    { "sides": 20, "count": 2, "average": 10.5, "min": 6, "max": 15 },
+    { "sides": 6,  "count": 1, "average": 4,    "min": 4, "max": 4  },
+    { "sides": 12, "count": 1, "average": 11,   "min": 11,"max": 11 }
+  ]
 }
 ```
 
-## Next Steps
+### Step 12: View the Observability Dashboard
 
-- Add more endpoints (e.g., get roll history)
-- Add authentication
-- Deploy to production
-- Explore the monitoring dashboard at `http://localhost:3000` (Grafana)
+ForkLaunch includes a full observability stack out of the box. Open Grafana at `http://localhost:3000` to see request traces, logs, and service metrics; no additional setup required.
+
+---
+
+## Prompts I Used
+
+This app was built using Claude Code, Cursor, and ChatGPT to scaffold and debug. Here are the prompts that got the most done.
+
+**Prompt 1: Initial scaffold:**
+
+> "Step-by-step guide to create a dice roll API using ForkLaunch based on the architecture in this repo: https://github.com/forklaunch/forklaunch-js. Use Node.js, Express, Zod validator, and PostgreSQL."
+
+**Prompt 2: Generating the roll and stats endpoints:**
+
+> "Based on this ForkLaunch service scaffold, generate the roll and stats endpoints with PostgreSQL persistence using MikroORM. The roll endpoint should accept a `sides` parameter, compute a random result, and save to the database. The stats endpoint should return total rolls and a distribution grouped by die type."
+
+**Prompt 3: Debugging migrations:**
+
+> "I'm getting a MikroORM migration error when running `pnpm migrate:up`. The entity has `sides` and `result` as required properties. Here is the error: [paste error]. How do I fix this?"
+
+After a few hours of iteration and debugging, the API was running end-to-end with OpenTelemetry observability included automatically by ForkLaunch.
+
+---
 
 ## Troubleshooting
 
-**Port conflicts**: Change `PORT` in `.env.local`
+**Port already in use:** Change `PORT` in `.env.local`.
 
-**Database connection errors**: Ensure PostgreSQL is running:
+**Database connection errors:** Verify PostgreSQL is running:
+
 ```bash
 docker-compose ps
 docker-compose logs postgres
 ```
 
-**Migration errors**: Check that migrations ran:
+**Migration errors:** Check migration status:
+
 ```bash
 pnpm migrate:status
 ```
 
-**Service not starting**: Check logs for missing environment variables or configuration errors.
+**Service not starting:** Look for missing environment variables in the startup log. ForkLaunch validates required env vars at boot and prints which ones are missing.
+
+---
+
+## Next Steps
+
+- [Creating an Application](/docs/creating-an-application.md): Full walkthrough of building a multi-service system
+- [Local Development](/docs/local-development.md): docker-compose, hot reload, and database setup
+- [Framework Reference: Telemetry](/docs/framework/telemetry.md): OpenTelemetry configuration
+- [Adding Projects](/docs/adding-projects.md): Add workers, libraries, and additional services

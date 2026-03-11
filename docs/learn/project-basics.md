@@ -1,9 +1,12 @@
+---
+title: Project Basics
+category: Learn
+description: Understand ForkLaunch projects, artifacts, and the RCSIDES architecture pattern.
+---
+
 ## Overview
 
-The cornerstone of `ForkLaunch` is its modular project system. This approach:
-- Keeps code organized and maintainable
-- Reduces cognitive load
-- Provides flexibility for infrastructure decisions
+ForkLaunch organizes your backend into **projects** (services, workers, libraries, and routers) that live inside a single application. Each project type serves a specific purpose and is tracked via **artifacts**: configuration files that ForkLaunch generates and maintains automatically.
 
 ## Understanding Artifacts and Projects
 
@@ -23,7 +26,7 @@ The cornerstone of `ForkLaunch` is its modular project system. This approach:
 
 ### How Artifacts Change When Initializing Projects with `forklaunch init`
 
-When you initialize a project, ForkLaunch creates or updates the relevant artifacts:
+When you initialize a project, ForkLaunch creates the relevant artifacts:
 
 #### Adding a Service
 - **Manifest**: Adds service entry with metadata
@@ -65,11 +68,11 @@ When you initialize a project, ForkLaunch creates or updates the relevant artifa
 
 
 #### Syncing a Project (`forklaunch sync`)
-- **Manifest**: Adds project entry (if missing)
-- **Docker Compose**: Adds container definition (services/workers only)
-- **Runtime Workspace**: Adds to workspace
-- **Universal SDK**: Generates client code (services only)
-- **TypeScript Config**: Adds project reference
+- **Manifest**: Adds or removces project entry based on the repo structure
+- **Docker Compose**: Adds or removes container definition (services/workers only)
+- **Runtime Workspace**: Adds or removes to workspace
+- **Universal SDK**: Generates or removes client code (services only)
+- **TypeScript Config**: Adds or removes project reference
 
 ## Available Projects
 
@@ -80,7 +83,7 @@ When you initialize a project, ForkLaunch creates or updates the relevant artifa
 - **Libraries**: Share common code and business logic
 
 ### Project Building Blocks
-- **Routers**: Add [RCSIDES](/docs/artifacts.md#rcsides-architecture-pattern) stack to existing services/workers
+- **Routers**: Add [RCSIDES](/docs/learn/artifacts.md#rcsides-architecture-pattern) stack to existing services/workers
 
 ### Coming Soon
 - **Agents**: Optimized for AI-driven workflows

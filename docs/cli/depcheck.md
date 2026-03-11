@@ -11,25 +11,7 @@ Check dependency consistency across your application's projects for version mism
 ## Usage
 
 ```bash
-forklaunch depcheck [OPTIONS]
-```
-
-## Options
-
-| Option | Short | Description | Values |
-| :----- | :---- | :---------- | :----- |
-| `--path` | `-p` | The application path to initialize the service in | _string_ |
-| `--help` | `-h` | Print help | Flag |
-| `--version` | `-V` | Print version | Flag |
-
-## Examples
-
-```bash
-# Check dependencies in current directory
 forklaunch depcheck
-
-# Check dependencies in specific application directory
-forklaunch depcheck --path ./my-app
 ```
 
 ## Configuration
@@ -76,6 +58,7 @@ backend_group = [
 ## Output
 
 The command reports:
+
 - Projects with mismatched versions
 - Suggested version alignment actions
 - Dependency conflicts that need resolution
@@ -83,23 +66,28 @@ The command reports:
 ## Troubleshooting
 
 **Error: "Manifest file not found"**
+
 - Ensure you're in a ForkLaunch application directory
 - Check that `./forklaunch/manifest.toml` exists
 
 **Error: "No project groups defined"**
+
 - Add project groups to your manifest.toml
 - Use default configuration if checking all projects
 
 **Version mismatch warnings**
+
 - Review conflicting dependencies and their versions
 - Update package.json files to align versions
 - Run `npm install` after making changes
 
 **Permission errors reading manifest**
+
 - Check file permissions on manifest.toml
 - Ensure the forklaunch directory is accessible
 
 **Dependency resolution fails**
+
 - Clear node_modules and package-lock.json
 - Run fresh `pnpm/bun install`
 - Check for corrupted package cache
@@ -107,6 +95,7 @@ The command reports:
 ## Example Scenarios
 
 1. **Microservices**: Group services that share common dependencies
+
 ```toml
 [project-peer-topologies]
 auth_services = ["auth-api", "user-api"]
@@ -114,6 +103,7 @@ data_services = ["analytics-api", "reporting-api"]
 ```
 
 2. **Frontend/Backend Split**: Separate frontend and backend dependency checks
+
 ```toml
 [project-peer-topologies]
 frontend = ["web-app", "mobile-app"]
@@ -128,9 +118,9 @@ backend = ["api-server", "worker"]
 
 ## Related Commands
 
-- [`forklaunch init`](./init.md) - Initialize projects with proper dependencies
-- [`forklaunch eject`](./eject.md) - Check dependencies after ejection
+- [`forklaunch init`](./init) - Initialize projects with proper dependencies
+- [`forklaunch eject`](./eject) - Check dependencies after ejection
 
 ## Related Documentation
 
-- **[Project Structure](../framework.md)** - Understanding ForkLaunch project layout
+- **[Project Structure](../framework)** - Understanding ForkLaunch project layout

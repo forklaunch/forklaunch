@@ -67,9 +67,9 @@ For detailed information about specific commands:
 ### Authentication & Platform
 - [authentication](/docs/cli/authentication.md) - Login, logout, and user management
 
-## Quickstart Guide
 
-### Common Workflows
+
+### Common Commands
 
 **Create New Project:**
 ```bash
@@ -122,3 +122,32 @@ forklaunch login                       # Login to platform
 forklaunch whoami                      # Check current user
 forklaunch logout                      # Logout
 ```
+
+
+## Detailed Documentation
+
+For detailed information about specific commands:
+
+### Project Management
+- [init](/docs/cli/init.md) - Project initialization
+- [Adding Projects](/docs/adding-projects.md) - Add components to projects, sync existing or new components
+- [Changing Projects](/docs/changing-projects.md) - Modify existing components
+- [delete](/docs/cli/delete.md) - Delete project components
+- [Deleting Projects](/docs/deleting-projects.md) - Comprehensive deletion guide, clean up project artifacts
+- [sync](/docs/cli/sync.md) - Synchronize application directories with artifacts
+
+### Development Tools
+- [depcheck](/docs/cli/depcheck.md) - Dependency management
+- [eject](/docs/cli/eject.md) - Dependency ejection
+- [config](/docs/cli/config.md) - Configuration options
+- [environment](/docs/cli/environment.md) - Environment variable management
+- [openapi](/docs/cli/openapi.md) - OpenAPI specification export
+- [sdk](/docs/cli/sdk.md) - SDK generation configuration
+
+### Authentication & Platform
+- [authentication](/docs/cli/authentication.md) - Login, logout, and user management
+- [integrate](/docs/cli/integrate.md) - Link local app with platform
+- [release](/docs/cli/release.md) - Create and manage releases
+- [deploy](/docs/cli/deploy.md) - Deploy releases to environments
+
+

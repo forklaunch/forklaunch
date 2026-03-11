@@ -6,7 +6,7 @@ description: Application artifacts are the configuration files ForkLaunch genera
 
 ## Overview
 
-When you run `forklaunch init`, `forklaunch change`, `forklaunch sync`, or `forklaunch delete`, ForkLaunch updates a set of **artifacts** — configuration files that keep your application consistent. You do not need to edit these files directly; the CLI manages them for you.
+When you run `forklaunch init`, `forklaunch change`, `forklaunch sync`, or `forklaunch delete`, ForkLaunch updates a set of **artifacts**: configuration files that keep your application consistent. You do not need to edit these files directly; the CLI manages them for you.
 
 ## Application Artifacts
 

@@ -6,7 +6,7 @@ description: Learn how to add and configure services in your application.
 
 ## Add a Service
 
-A **service** is a standalone application that handles a specific business function. It exposes HTTP endpoints, implements business logic, and can use its own database. Think of it as a specialized worker that does one job well—like a `user-service` for managing accounts, a `product-service` for catalog management, or an `order-service` for processing purchases.
+A **service** is a standalone application that handles a specific business function. It exposes HTTP endpoints, implements business logic, and can use its own database. Think of it as a specialized worker that does one job well, such as a `user-service` for managing accounts, a `product-service` for catalog management, or an `order-service` for processing purchases.
 
 In ForkLaunch, each service is independent: it can be developed, tested, and deployed separately, making your application modular and scalable.
 
@@ -189,9 +189,10 @@ For database setup, migrations, building, and running the service, see [Local De
 4. **Infrastructure Dependencies**: Ensure Redis/S3 are configured if enabled
 5. **Path Conflicts**: Avoid service names that conflict with existing directories
 
+
 ### Deployment
 
-When you're ready to deploy your service, see [Release and Deploy](/docs/cli/release-and-deploy.md) for information about:
+When you're ready to deploy your service, see [Release](/docs/cli/release.md) and [Deploy](/docs/cli/deploy.md) for information about:
 - Deployment commands and workflows
 - Default AWS Free Tier resources
 - Cost estimates and scaling options
@@ -205,4 +206,4 @@ When you're ready to deploy your service, see [Release and Deploy](/docs/cli/rel
 5. **Testing**: Write tests for business logic and API endpoints
 6. **Documentation**: Document API endpoints and business rules
 7. **Infrastructure**: Use Redis for caching, S3 for file storage when needed
-8. **Free Tier**: Start with free tier defaults, upgrade when needed via Platform UI
+8. **Free-Tier**: Start with free-tier defaults, upgrade when needed via Platform UI

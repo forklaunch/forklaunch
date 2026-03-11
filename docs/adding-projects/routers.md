@@ -6,9 +6,9 @@ description: Learn how to add and configure routers in your application.
 
 ## Add a Router
 
-A **router** is a set of related API endpoints that you add to an existing service or worker. Unlike services and workers which are standalone projects, routers extend an existing service with new routes, controllers, and business logic. Think of it like adding a special die to your dice set: your service is the basic dice collection (d4, d6, d12, d20), and a router is like adding a custom d20 with special faces—it extends what you can roll (new endpoints) while using the same dice cup (service infrastructure).
+A **router** is a set of related API endpoints that you add to an existing service or worker. Unlike services and workers which are standalone projects, routers extend an existing service with new routes, controllers, and business logic. Think of it like adding a special die to your dice set: your service is the basic dice collection (d4, d6, d12, d20), and a router is like adding a custom d20 with special faces: it extends what you can roll (new endpoints) while using the same dice cup (service infrastructure).
 
-In ForkLaunch, routers add a complete [RCSIDES](/docs/artifacts.md#rcsides-architecture-pattern) stack to your service—new routes, controllers, services, entities, and schemas—all wired into the existing service's server. This lets you organize your API by domain (e.g., a `products-router` for product endpoints, a `users-router` for user endpoints) while keeping everything in one service.
+In ForkLaunch, routers add a complete [RCSIDES](/docs/artifacts.md#rcsides-architecture-pattern) stack to your service (new routes, controllers, services, entities, and schemas), all wired into the existing service's server. This lets you organize your API by domain (e.g., a `products-router` for product endpoints, a `users-router` for user endpoints) while keeping everything in one service.
 
 ## Getting Started
 

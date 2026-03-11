@@ -1,5 +1,35 @@
 # @forklaunch/bunrun
 
+## 0.0.27
+
+### Patch Changes
+
+- proxy based injection for ci, and openapi path resiliency
+
+## 0.0.26
+
+### Patch Changes
+
+- Small bugs
+
+## 0.0.25
+
+### Patch Changes
+
+- Prevent 404 message hijacking and update packages
+
+## 0.0.24
+
+### Patch Changes
+
+- Fix multiline config injection and update packages
+
+## 0.0.23
+
+### Patch Changes
+
+- WS actually working probably, and package bumps
+
 ## 0.0.22
 
 ### Patch Changes

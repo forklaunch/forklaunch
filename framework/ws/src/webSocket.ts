@@ -233,10 +233,9 @@ export class ForklaunchWebSocket<
 
     if (event === 'message' && args.length >= 2) {
       const data = args[0];
-      const isBinary = args[1];
 
       const serverSchema = this.schemas.serverMessagesSchema;
-      if (typeof isBinary === 'boolean' && isBinary && serverSchema) {
+      if (serverSchema) {
         const validated = this.decodeAndValidate(data, serverSchema);
         transformedArgs = [validated, false, ...args.slice(2)];
       }
@@ -278,14 +277,22 @@ export class ForklaunchWebSocket<
   protected wrapListenerWithTransformation<Event extends string | symbol>(
     superMethod: (
       event: Event,
-      listener: (ws: WebSocket, ...args: never[]) => void
+      listener: (this: WebSocket, ...args: never[]) => void
     ) => this,
     event: Event,
-    listener: (ws: WebSocket, ...args: unknown[]) => void
+    listener: (this: WebSocket, ...args: unknown[]) => void
   ): this {
-    return superMethod(event, (ws: WebSocket, ...args: never[]) => {
-      const transformedArgs = this.transformIncomingArgs(event, args);
-      return listener(ws, ...transformedArgs);
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
+    return superMethod(event, function (this: WebSocket, ...args: never[]) {
+      try {
+        const transformedArgs = self.transformIncomingArgs(event, args);
+        return listener.call(this, ...transformedArgs);
+      } catch (err) {
+        // Surface validation errors as 'error' events rather than
+        // letting them propagate as uncaught exceptions
+        WebSocket.prototype.emit.call(self, 'error', err);
+      }
     });
   }
 
@@ -386,7 +393,7 @@ export class ForklaunchWebSocket<
         listener: (this: WebSocket, ...args: never[]) => void
       ) => this,
       event,
-      listener as (ws: WebSocket, ...args: unknown[]) => void
+      listener as (this: WebSocket, ...args: unknown[]) => void
     );
   }
 
@@ -475,7 +482,7 @@ export class ForklaunchWebSocket<
         listener: (this: WebSocket, ...args: never[]) => void
       ) => this,
       event,
-      listener as (ws: WebSocket, ...args: unknown[]) => void
+      listener as (this: WebSocket, ...args: unknown[]) => void
     );
   }
 
@@ -564,7 +571,7 @@ export class ForklaunchWebSocket<
         listener: (this: WebSocket, ...args: never[]) => void
       ) => this,
       event,
-      listener as (ws: WebSocket, ...args: unknown[]) => void
+      listener as (this: WebSocket, ...args: unknown[]) => void
     );
   }
 
@@ -645,7 +652,7 @@ export class ForklaunchWebSocket<
         listener: (this: WebSocket, ...args: never[]) => void
       ) => this,
       event,
-      listener as (ws: WebSocket, ...args: unknown[]) => void
+      listener as (this: WebSocket, ...args: unknown[]) => void
     );
   }
 
@@ -726,7 +733,7 @@ export class ForklaunchWebSocket<
         listener: (this: WebSocket, ...args: never[]) => void
       ) => this,
       event,
-      listener as (ws: WebSocket, ...args: unknown[]) => void
+      listener as (this: WebSocket, ...args: unknown[]) => void
     );
   }
 
@@ -755,73 +762,25 @@ export class ForklaunchWebSocket<
    * ws.emit('error', { code: 500, message: 'Server error' });
    * ```
    */
+  /**
+   * Emits an event on the WebSocket.
+   *
+   * This method passes through to the underlying EventEmitter without
+   * transforming data. The ws library uses emit() internally to dispatch
+   * incoming events (message, close, ping, pong), so encoding here would
+   * incorrectly process incoming data as outgoing data.
+   *
+   * For sending data, use the dedicated methods instead:
+   * - {@link send} for messages
+   * - {@link close} for closing with a reason
+   * - {@link ping} for ping frames
+   * - {@link pong} for pong frames
+   */
   emit<K extends keyof OutgoingEventMap<SV, ES>>(
     event: K,
     ...args: OutgoingEventMap<SV, ES>[K]
   ): boolean {
-    let transformedArgs: unknown[] = args;
-    if (event === 'message' && args.length >= 2) {
-      const typedArgs = args as OutgoingEventMap<SV, ES>['message'];
-      const data = typedArgs[0];
-      const isBinary = typedArgs[1];
-
-      const clientSchema = this.schemas.clientMessagesSchema;
-      if (typeof isBinary === 'boolean' && isBinary && clientSchema) {
-        const encoded = this.validateAndEncode(
-          data,
-          clientSchema,
-          false,
-          'web socket message'
-        );
-        transformedArgs = [encoded, true, ...typedArgs.slice(2)];
-      }
-    } else if (event === 'close' && args.length >= 2) {
-      const typedArgs = args as OutgoingEventMap<SV, ES>['close'];
-      const code = typedArgs[0];
-      const reason = typedArgs[1];
-      const encoded = this.validateAndEncode(
-        reason,
-        this.schemas.closeReasonSchema,
-        false,
-        'web socket close'
-      );
-      transformedArgs = [code, encoded, ...typedArgs.slice(2)];
-    } else if (event === 'ping' && args.length >= 1) {
-      const typedArgs = args as OutgoingEventMap<SV, ES>['ping'];
-      const data = typedArgs[0];
-      const encoded = this.validateAndEncode(
-        data,
-        this.schemas.pingSchema,
-        false,
-        'web socket ping'
-      );
-      transformedArgs = [encoded, ...typedArgs.slice(1)];
-    } else if (event === 'pong' && args.length >= 1) {
-      const typedArgs = args as OutgoingEventMap<SV, ES>['pong'];
-      const data = typedArgs[0];
-      const encoded = this.validateAndEncode(
-        data,
-        this.schemas.pongSchema,
-        false,
-        'web socket pong'
-      );
-      transformedArgs = [encoded, ...typedArgs.slice(1)];
-    } else if (event === 'error' && args.length >= 1) {
-      const typedArgs = args as OutgoingEventMap<SV, ES>['error'];
-      const error = typedArgs[0];
-      const errorsSchema = this.schemas.errorsSchema;
-      if (errorsSchema) {
-        const encoded = this.validateAndEncode(
-          error,
-          errorsSchema,
-          false,
-          'web socket error'
-        );
-        transformedArgs = [encoded, ...typedArgs.slice(1)];
-      }
-    }
-
-    return super.emit(event, ...transformedArgs);
+    return super.emit(event, ...(args as unknown[]));
   }
 
   /**
@@ -882,7 +841,6 @@ export class ForklaunchWebSocket<
     optionsOrCb?: unknown,
     cb?: (err?: Error) => void
   ): void {
-    // Determine if second arg is options or callback
     const options =
       typeof optionsOrCb === 'function'
         ? undefined

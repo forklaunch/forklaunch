@@ -17,7 +17,6 @@ export * from './safeParse';
 export * from './safeStringify';
 export * from './slashManipulation';
 export * from './sortObjectKeys';
-export * from './stripUndefinedProperties';
 export * from './toRecord';
 export * from './types/camelCase.types';
 export * from './types/dto.types';

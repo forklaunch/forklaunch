@@ -1,12 +1,67 @@
-use std::{fs::create_dir_all, path::Path, process::Command as ProcessCommand};
+use std::{env, fs, io::Read as _, path::Path, process::{Command as ProcessCommand, Stdio}, thread, time::{Duration, Instant}};
 
 use anyhow::{Context, Result, bail};
+
+/// Resolve a command name to its full path by searching PATH.
+/// Falls back to the bare command name if not found (lets the OS try).
+pub(crate) fn resolve_command(name: &str) -> String {
+    if let Ok(path_var) = env::var("PATH") {
+        for dir in env::split_paths(&path_var) {
+            let candidate = dir.join(name);
+            if candidate.is_file() {
+                if let Some(s) = candidate.to_str() {
+                    return s.to_string();
+                }
+            }
+        }
+    }
+
+    // Common install locations as fallback
+    let home = env::var("HOME").unwrap_or_default();
+    let mut fallback_paths = vec![
+        format!("{}/Library/pnpm/{}", home, name),
+        format!("{}/.local/share/pnpm/{}", home, name),
+        format!("{}/.corepack/bin/{}", home, name),
+        format!("/opt/homebrew/bin/{}", name),
+        format!("/usr/local/bin/{}", name),
+        format!("{}/.bun/bin/{}", home, name),
+    ];
+
+    // Check nvm directories for node/npm/npx
+    if let Ok(nvm_dir) = env::var("NVM_DIR").or_else(|_| Ok::<String, ()>(format!("{}/.nvm", home))) {
+        let nvm_versions = Path::new(&nvm_dir).join("versions").join("node");
+        if nvm_versions.is_dir() {
+            // Find the latest installed node version
+            if let Ok(entries) = fs::read_dir(&nvm_versions) {
+                let mut versions: Vec<_> = entries
+                    .filter_map(|e| e.ok())
+                    .filter(|e| e.path().is_dir())
+                    .collect();
+                versions.sort_by(|a, b| b.file_name().cmp(&a.file_name()));
+                for version_entry in versions {
+                    fallback_paths.push(
+                        format!("{}/bin/{}", version_entry.path().display(), name)
+                    );
+                }
+            }
+        }
+    }
+
+    for path in &fallback_paths {
+        if Path::new(path).is_file() {
+            return path.clone();
+        }
+    }
+
+    name.to_string()
+}
 
 use crate::{
     constants::Runtime,
     core::{
         ast::infrastructure::env::{EnvVarUsage, find_all_env_vars},
         manifest::{ProjectType, application::ApplicationManifestData},
+        rendered_template::RenderedTemplatesCache,
     },
 };
 
@@ -15,7 +70,7 @@ fn generate_dummy_value(var_name: &str, var_type: &str, iam_port: Option<u16>) -
         "string" => {
             if var_name.ends_with("_PATH") || var_name.ends_with("_FILE") {
                 "/dev/null".to_string()
-            } else if var_name.contains("DATABASE_URL") || var_name.contains("DB_URL") {
+            } else if var_name.contains("DB_URL") {
                 "postgresql://dummy:dummy@localhost:5432/dummy".to_string()
             } else if var_name.contains("REDIS_URL") {
                 "redis://localhost:6379".to_string()
@@ -37,10 +92,20 @@ fn generate_dummy_value(var_name: &str, var_type: &str, iam_port: Option<u16>) -
                 "info".to_string()
             } else if var_name == "NODE_ENV" {
                 "development".to_string()
-            } else if var_name.contains("SECRET") || var_name.contains("KEY") {
+            } else if var_name.contains("S3_BUCKET") || var_name.contains("BUCKET_NAME") {
+                "dummy-bucket".to_string()
+            } else if var_name.contains("S3_REGION") || var_name.contains("AWS_REGION") {
+                "us-east-1".to_string()
+            } else if var_name == "JWKS_PUBLIC_KEY_URL" {
+                if let Some(port) = iam_port {
+                    format!("http://localhost:{}/api/auth/jwks", port)
+                } else {
+                    "dummy-jwks-url".to_string()
+                }
+            } else if var_name.contains("URL") {
+                "http://localhost:3000".to_string()
+            } else if var_name.contains("_SECRET") || var_name.contains("_KEY") || var_name.starts_with("SECRET") || var_name.starts_with("KEY") {
                 if var_name == "HMAC_SECRET_KEY" {
-                    // Generate a deterministic HMAC secret
-                    // This ensures consistent values for testing/documentation
                     format!("{:x}", {
                         use std::{
                             collections::hash_map::DefaultHasher,
@@ -53,17 +118,8 @@ fn generate_dummy_value(var_name: &str, var_type: &str, iam_port: Option<u16>) -
                 } else {
                     "dummy-secret-key".to_string()
                 }
-            } else if var_name == "JWKS_PUBLIC_KEY_URL" {
-                if let Some(port) = iam_port {
-                    format!("http://localhost:{}/api/auth/jwks", port)
-                } else {
-                    // Don't generate JWKS URL if no IAM service exists
-                    "dummy-jwks-url".to_string()
-                }
-            } else if var_name.contains("URL") {
-                "http://localhost:3000".to_string()
             } else {
-                "dummy-value".to_string()
+                "1".to_string()
             }
         }
         "number" => {
@@ -74,7 +130,7 @@ fn generate_dummy_value(var_name: &str, var_type: &str, iam_port: Option<u16>) -
             }
         }
         "boolean" => "true".to_string(),
-        _ => "dummy-value".to_string(),
+        _ => "1".to_string(),
     }
 }
 
@@ -92,37 +148,42 @@ pub(crate) fn export_service_openapi(
 
     let tsconfig_path = service_path.join("tsconfig.json");
 
-    let (package_manager, args) = match runtime.parse::<Runtime>()? {
-        Runtime::Bun => ("bun", vec!["server.ts"]),
+    // Resolve the runtime binary and build the command.
+    // For Node, run node directly with tsx's CLI module to avoid shebang PATH issues
+    // (e.g. `#!/usr/bin/env node` fails when node isn't in PATH).
+    let (resolved_bin, args) = match runtime.parse::<Runtime>()? {
+        Runtime::Bun => {
+            let bun = resolve_command("bun");
+            (bun, vec!["server.ts".to_string()])
+        }
         Runtime::Node => {
-            if service_path.join("../../pnpm-lock.yaml").exists()
-                || service_path.join("../../../pnpm-lock.yaml").exists()
-            {
-                (
-                    "pnpm",
-                    vec![
-                        "exec",
-                        "tsx",
-                        "--tsconfig",
-                        tsconfig_path.to_str().unwrap(),
-                        "server.ts",
-                    ],
-                )
-            } else {
-                (
-                    "npx",
-                    vec![
-                        "tsx",
-                        "--tsconfig",
-                        tsconfig_path.to_str().unwrap(),
-                        "server.ts",
-                    ],
-                )
+            let node = resolve_command("node");
+            let tsx_cli = service_path
+                .join("node_modules/tsx/dist/cli.mjs")
+                .to_string_lossy()
+                .to_string();
+
+            if !Path::new(&tsx_cli).exists() {
+                bail!(
+                    "tsx not found at {} for service {}. Run pnpm install first.",
+                    tsx_cli,
+                    service_name
+                );
             }
+
+            (
+                node,
+                vec![
+                    tsx_cli,
+                    "--tsconfig".to_string(),
+                    tsconfig_path.to_str().unwrap().to_string(),
+                    "server.ts".to_string(),
+                ],
+            )
         }
     };
 
-    let mut cmd = ProcessCommand::new(package_manager);
+    let mut cmd = ProcessCommand::new(&resolved_bin);
     cmd.args(&args)
         .current_dir(service_path)
         .env("FORKLAUNCH_MODE", "openapi")
@@ -133,13 +194,42 @@ pub(crate) fn export_service_openapi(
         cmd.env(&env_var.var_name, &dummy_value);
     }
 
-    let output = cmd
-        .output()
-        .with_context(|| format!("Failed to run {} command", package_manager))?;
+    let mut child = cmd
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| format!("Failed to spawn {} command", resolved_bin))?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!("Service {} failed to export: {}", service_name, stderr);
+    let timeout = Duration::from_secs(30);
+    let start = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if !status.success() {
+                    let stderr = child.stderr.take().map(|mut s| {
+                        let mut buf = String::new();
+                        s.read_to_string(&mut buf).ok();
+                        buf
+                    }).unwrap_or_default();
+                    bail!("Service {} failed to export: {}", service_name, stderr);
+                }
+                break;
+            }
+            Ok(None) => {
+                if start.elapsed() > timeout {
+                    let _ = child.kill();
+                    bail!(
+                        "Service {} timed out after {}s during OpenAPI export. \
+                        This usually means server.ts has top-level await calls (e.g. universalSdk, DB connections) \
+                        that block before the FORKLAUNCH_MODE check in listen(). \
+                        Wrap them in a guard: if (process.env.FORKLAUNCH_MODE !== 'openapi') {{ ... }}",
+                        service_name, timeout.as_secs()
+                    );
+                }
+                thread::sleep(Duration::from_millis(100));
+            }
+            Err(e) => bail!("Error waiting for {} subprocess: {}", service_name, e),
+        }
     }
 
     if !output_file.exists() {
@@ -158,8 +248,6 @@ pub(crate) fn export_all_services(
     manifest: &ApplicationManifestData,
     output_dir: &Path,
 ) -> Result<Vec<String>> {
-    use crate::core::rendered_template::RenderedTemplatesCache;
-
     let mut exported_services = Vec::new();
 
     let runtime = manifest.runtime.as_str();
@@ -199,7 +287,7 @@ pub(crate) fn export_all_services(
             // Try to get port from docker-compose by looking at services
             let docker_compose_path = app_root.join("docker-compose.yaml");
             if docker_compose_path.exists() {
-                if let Ok(content) = std::fs::read_to_string(&docker_compose_path) {
+                if let Ok(content) = fs::read_to_string(&docker_compose_path) {
                     if let Ok(compose) = serde_yml::from_str::<serde_yml::Value>(&content) {
                         if let Some(services) = compose.get("services") {
                             if let Some(i_services) = services.as_mapping() {
@@ -226,7 +314,7 @@ pub(crate) fn export_all_services(
         let service_path = app_root.join(&manifest.modules_path).join(&service.name);
         let service_output_dir = output_dir.join(&service.name);
 
-        create_dir_all(&service_output_dir)
+        fs::create_dir_all(&service_output_dir)
             .with_context(|| format!("Failed to create directory: {:?}", service_output_dir))?;
 
         let openapi_file = service_output_dir.join("openapi.json");

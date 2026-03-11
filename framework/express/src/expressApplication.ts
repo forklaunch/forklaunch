@@ -15,6 +15,7 @@ import {
   OpenTelemetryCollector,
   SessionObject
 } from '@forklaunch/core/http';
+import { findApplicationRoot } from '@forklaunch/core/environment';
 import { AnySchemaValidator } from '@forklaunch/validator';
 import { ZodSchemaValidator } from '@forklaunch/validator/zod';
 import { apiReference } from '@scalar/express-api-reference';
@@ -29,6 +30,7 @@ import express, {
 } from 'express';
 import fs from 'fs';
 import { Server } from 'http';
+import path from 'path';
 import swaggerUi from 'swagger-ui-express';
 import { startBunCluster } from './cluster/bun.cluster';
 import { startNodeCluster } from './cluster/node.cluster';
@@ -140,8 +142,20 @@ export class Application<
         this as ForklaunchRouter<SV>,
         this.openapiConfiguration
       );
+      const serviceName = process.env.OTEL_SERVICE_NAME || 'unknown-service';
+      const appRoot = findApplicationRoot(process.cwd());
+      const outputPath =
+        process.env.FORKLAUNCH_OPENAPI_OUTPUT ||
+        path.join(
+          appRoot,
+          '.forklaunch',
+          'openapi',
+          serviceName,
+          'openapi.json'
+        );
+      fs.mkdirSync(path.dirname(outputPath), { recursive: true });
       fs.writeFileSync(
-        process.env.FORKLAUNCH_OPENAPI_OUTPUT as string,
+        outputPath,
         JSON.stringify(
           {
             ...openApiSpec,

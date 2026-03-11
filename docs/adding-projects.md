@@ -1,7 +1,7 @@
 ---
 title: Adding Services and Workers
 category: Guides
-description: Learn how to add services and workers to your ForkLaunch application.
+description: Add services, workers, libraries, routers, and modules to your ForkLaunch application.
 ---
 
 # Overview
@@ -82,13 +82,14 @@ forklaunch init router orders --path ./my-app/src/modules/commerce-service --inf
 
 | Concept | Definition | What It Does | Common Examples |
 |----------|-------------|---------------|------------------|
-| **Module** | A **preconfigured, production-ready service** that provides common functionality out of the box. | It serves as a plug-and-play solution for standard features (like authentication or billing), with best practices and integrations already built in — saving you from building these from scratch. | - A **billing module** with Stripe integration for payments and subscriptions.<br>- An **IAM module** for user authentication, authorization, and session management.<br>- An **email module** for transactional emails and notifications. |
-| **Service** | A **self-contained API component** that handles synchronous requests for a specific business domain. | It runs continuously as an HTTP server and responds to requests in real-time — from users, other services, or front-end apps. Often paired with a worker to offload heavy or async tasks. | - An **API service** that handles user logins and profiles.<br>- A **billing service** that manages payments.<br>- A **data ingestion service** that collects and processes data. |
-| **Worker** | A **background process** that handles asynchronous tasks for a specific business domain. | It processes jobs from a queue or schedule, performing work that doesn't need immediate responses — often handling heavier workloads, scheduled tasks, or work offloaded from a paired service. | - Sending emails after a signup.<br>- Generating daily reports.<br>- Processing large datasets.<br>- Cleaning up logs or cache files. |
+| **Module** | A **preconfigured, production-ready service** that provides common functionality out of the box. | It serves as a plug-and-play solution for standard features (like authentication or billing), with best practices and integrations already built in, saving you from building these from scratch. | - A **billing module** with Stripe integration for payments and subscriptions.<br>- An **IAM module** for user authentication, authorization, and session management.<br>- An **email module** for transactional emails and notifications. |
+| **Service** | A **self-contained API component** that handles synchronous requests for a specific business domain. | It runs continuously as an HTTP server and responds to requests in real-time (from users, other services, or front-end apps). Often paired with a worker to offload heavy or async tasks. | - An **API service** that handles user logins and profiles.<br>- A **billing service** that manages payments.<br>- A **data ingestion service** that collects and processes data. |
+| **Worker** | A **background process** that handles asynchronous tasks for a specific business domain. | It processes jobs from a queue or schedule, performing work that doesn't need immediate responses, often handling heavier workloads, scheduled tasks, or work offloaded from a paired service. | - Sending emails after a signup.<br>- Generating daily reports.<br>- Processing large datasets.<br>- Cleaning up logs or cache files. |
 | **Library** | A **shared collection of code**, utilities, or models used across services and workers. | Provides reusable logic (like validation, database models, or helper functions) that multiple parts of the system can import. | - **Core library** with shared models and validation schemas.<br>- **Auth library** with JWT and session utilities.<br>- **Utils library** for formatting, logging, or constants. |
-| **Router** | A **set of routes and controllers** that extends an existing service with new endpoints. | It adds new API routes and their handling logic to a service without creating a separate service — allowing you to organize and grow your service's functionality modularly. | - A **products router** in an e-commerce service to manage product CRUD operations.<br>- An **orders router** to handle order processing and tracking.<br>- An **analytics router** to expose reporting endpoints. |
+| **Router** | A **set of routes and controllers** that extends an existing service with new endpoints. | It adds new API routes and their handling logic to a service without creating a separate service, allowing you to organize and grow your service's functionality modularly. | - A **products router** in an e-commerce service to manage product CRUD operations.<br>- An **orders router** to handle order processing and tracking.<br>- An **analytics router** to expose reporting endpoints. |
 
 **Note:** Services and workers share architecture; they are designed to work together as needed.
+
 
 
 

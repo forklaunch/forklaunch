@@ -6,7 +6,7 @@ description: Learn how to add and configure workers in your application.
 
 ## Add a Worker
 
-A **worker** is a background process that handles asynchronous tasks and job processing. While services handle HTTP requests synchronously, workers process jobs in the background—like sending emails, processing images, generating reports, or handling scheduled tasks. Think of it as a dedicated employee working behind the scenes: when a user places an order, a service handles the request immediately, while a worker processes the order fulfillment, sends confirmation emails, and updates inventory asynchronously.
+A **worker** is a background process that handles asynchronous tasks and job processing. While services handle HTTP requests synchronously, workers process jobs in the background, like sending emails, processing images, generating reports, or handling scheduled tasks. Think of it as a dedicated employee working behind the scenes: when a user places an order, a service handles the request immediately, while a worker processes the order fulfillment, sends confirmation emails, and updates inventory asynchronously.
 
 In ForkLaunch, workers can use different backends (database, Redis, Kafka, BullMQ) depending on your needs for durability, performance, and complexity. Each worker has both a `worker` entry point for processing jobs and a `server` entry point for health checks and management APIs.
 
@@ -173,7 +173,7 @@ For database setup, migrations, building, and running the worker, see [Local Dev
 
 ### Deployment
 
-When you're ready to deploy your worker, see [Release and Deploy](/docs/cli/release-and-deploy.md) for information about:
+When you're ready to deploy your worker, see [Release](/docs/cli/release.md) and [Deploy](/docs/cli/deploy.md) for information about:
 - Deployment commands and workflows
 - Default AWS Free Tier resources
 - Cost estimates and scaling options

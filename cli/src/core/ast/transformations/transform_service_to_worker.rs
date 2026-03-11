@@ -171,6 +171,23 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
         &registrations_text,
     )?;
 
+    // Detect naming convention from existing registrations file
+    let otel_token = if registrations_text.contains("OtelCollector:") {
+        "OtelCollector"
+    } else {
+        "OpenTelemetryCollector"
+    };
+    let orm_token = if registrations_text.contains("Orm:") {
+        "Orm"
+    } else {
+        "MikroORM"
+    };
+    let em_token = if registrations_text.contains("EntityMgr:") {
+        "EntityMgr"
+    } else {
+        "EntityManager"
+    };
+
     // Add worker-type-specific infrastructure
     match worker_type {
         WorkerType::BullMQCache => {
@@ -180,10 +197,10 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
         WorkerType::RedisCache => {
             redis_import(&allocator, &registrations_text, &mut program)?;
             redis_url_environment_variable(&allocator, &mut program)?;
-            redis_ttl_cache_runtime_dependency(&allocator, &mut program)?;
+            redis_ttl_cache_runtime_dependency(&allocator, &mut program, otel_token)?;
         }
         WorkerType::Database => {
-            database_entity_manager_runtime_dependency(&allocator, &mut program)?;
+            database_entity_manager_runtime_dependency(&allocator, &mut program, orm_token, em_token)?;
         }
         WorkerType::Kafka => {
             inject_specifier_into_import_statement(

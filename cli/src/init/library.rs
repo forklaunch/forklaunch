@@ -5,7 +5,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use convert_case::{Case, Casing};
 use rustyline::{Editor, history::DefaultHistory};
 use serde_json::to_string_pretty;
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 use toml::from_str;
 
 use crate::{
@@ -35,7 +35,7 @@ use crate::{
             package_json_constants::{
                 PROJECT_BUILD_SCRIPT, PROJECT_DOCS_SCRIPT, project_clean_script,
                 project_format_script, project_lint_fix_script, project_lint_script,
-                project_test_script,
+                project_test_script, project_up_latest_script,
             },
             project_package_json::{ProjectDevDependencies, ProjectPackageJson, ProjectScripts},
         },
@@ -82,7 +82,7 @@ fn generate_basic_library(
     )?;
     rendered_templates.push(generate_library_package_json(manifest_data, &output_path)?);
     rendered_templates.extend(
-        generate_project_tsconfig(&output_path).with_context(|| ERROR_FAILED_TO_CREATE_TSCONFIG)?,
+        generate_project_tsconfig(&output_path, None).with_context(|| ERROR_FAILED_TO_CREATE_TSCONFIG)?,
     );
     rendered_templates.extend(
         generate_gitignore(&output_path).with_context(|| ERROR_FAILED_TO_CREATE_GITIGNORE)?,
@@ -200,6 +200,7 @@ fn generate_library_package_json(
             lint: Some(project_lint_script(&manifest_data.linter.parse()?)),
             lint_fix: Some(project_lint_fix_script(&manifest_data.linter.parse()?)),
             test: project_test_script(&manifest_data.runtime.parse()?, &test_framework),
+            up_latest: project_up_latest_script(&manifest_data.runtime.parse()?),
             ..Default::default()
         }),
         dev_dependencies: Some(ProjectDevDependencies {
@@ -340,9 +341,6 @@ impl CliCommand for LibraryCommand {
             is_jest: manifest_data.is_jest,
             platform_application_id: manifest_data.platform_application_id.clone(),
             platform_organization_id: manifest_data.platform_organization_id.clone(),
-            release_version: manifest_data.release_version.clone(),
-            release_git_commit: manifest_data.release_git_commit.clone(),
-            release_git_branch: manifest_data.release_git_branch.clone(),
 
             // Library-specific fields
             library_name: library_name.clone(),
@@ -364,9 +362,7 @@ impl CliCommand for LibraryCommand {
         .with_context(|| "Failed to create library")?;
 
         if !dryrun {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "{} initialized successfully!", library_name)?;
-            stdout.reset()?;
+            log_ok!(stdout, "{} initialized successfully!", library_name);
             format_code(&base_path, &manifest_data.runtime.parse()?);
         }
 

@@ -176,7 +176,7 @@ export async function discriminateAuthMethod<
       verificationFunction = async (token) => {
         const { payload } = await jwtVerify(
           token,
-          Buffer.from(jwt.signatureKey)
+          new Uint8Array(Buffer.from(jwt.signatureKey))
         );
         return payload;
       };

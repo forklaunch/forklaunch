@@ -1,19 +1,14 @@
 ---
 title: Local Development
 category: Guides
-description: Learn how to run your ForkLaunch application locally.
+description: Run your ForkLaunch application locally with docker-compose, hot reload, and database migrations.
 ---
 
-## Local Development
+## Overview
 
-### Getting Started
-Once you have generated a new `ForkLaunch` application with at least one service or worker, you can test your application locally with the following steps: 
-
-
+When you generate a ForkLaunch application, everything needed to run locally is included: a `docker-compose.yaml` that starts all required infrastructure (databases, caches, queues) and per-service scripts for migrations, hot reload, and seeding. No manual database configuration is needed.
 
 ## Initial Setup
-
-Run these commands to set up your development environment:
 
 <CodeTabs type="terminal">
   <Tab title="pnpm">
@@ -22,11 +17,8 @@ Run these commands to set up your development environment:
   # Install dependencies
   pnpm install
 
-  # Build the application
-  pnpm build
-
-  # Set up database and initial migrations
-  forklaunch database:setup
+  # Initialize and run database migrations for all services
+  pnpm database:setup
   ```
 
   </Tab>
@@ -36,25 +28,22 @@ Run these commands to set up your development environment:
   # Install dependencies
   bun install
 
-  # Build the application
-  bun run build
-
-  # Set up database and initial migrations
-  forklaunch database:setup
+  # Initialize and run database migrations for all services
+  bun database:setup
   ```
 
   </Tab>
 </CodeTabs>
 
-**Note**: The `database:setup` script is a convenience command that:
-1. Starts Docker containers (PostgreSQL, Redis, etc.)
-2. Initializes the migrations folder (`migrate:init`)
-3. Runs all migrations (`migrate:up`)
-4. Seeds the database (`seed`)
+**Note**: Your can use `pnpm database:setup` or`bun database:setup` that will:
+1. Start Docker containers (PostgreSQL, Redis, etc.)
+2. Initialize the migrations folder (`migrate:init`)
+3. Run all migrations (`migrate:up`)
+4. Seed the database (`seed`)
 
 If you prefer to run these steps manually, see the [Database Migrations](#database-migrations) section below.
 
-## Development Mode
+## Start Development Mode
 
 Run the application with hot reloading enabled:
 
@@ -75,9 +64,9 @@ Run the application with hot reloading enabled:
   </Tab>
 </CodeTabs>
 
-## Production Mode
+This starts all services with hot reload. File changes are picked up automatically; restart individual services without rebuilding the whole stack.
 
-Run the application in production mode:
+## Production Mode
 
 <CodeTabs type="terminal">
   <Tab title="pnpm">
@@ -98,22 +87,22 @@ Run the application in production mode:
 
 ## Database Migrations
 
-When you modify entities or add new services/workers, you'll need to create and run migrations:
+When you add new services or modify entities, create and run a new migration:
 
 <CodeTabs type="terminal">
   <Tab title="pnpm">
 
   ```bash
-  # Initialize migrations folder (first time only, creates migrations/ directory)
+  # Initialize the migrations folder (run once per new service)
   pnpm migrate:init
 
-  # Create a new migration after modifying entities
+  # Create a migration after modifying entities
   pnpm migrate:create
 
-  # Run pending migrations
+  # Apply pending migrations
   pnpm migrate:up
 
-  # Rollback last migration
+  # Roll back the last migration
   pnpm migrate:down
   ```
 
@@ -121,84 +110,84 @@ When you modify entities or add new services/workers, you'll need to create and 
   <Tab title="bun">
 
   ```bash
-  # Initialize migrations folder (first time only, creates migrations/ directory)
+  # Initialize the migrations folder (run once per new service)
   bun migrate:init
 
-  # Create a new migration after modifying entities
+  # Create a migration after modifying entities
   bun migrate:create
-  
-  # Run pending migrations
+
+  # Apply pending migrations
   bun migrate:up
 
-  # Rollback last migration
+  # Roll back the last migration
   bun migrate:down
   ```
 
   </Tab>
 </CodeTabs>
 
-
-**Important**: 
-- `migrate:init` creates the migrations folder and initial migration (run once per service)
-- `migrate:create` creates a new migration file based on entity changes
-- Migrations require a `.env.local` file with `DB_*` environment variables (see [Environment Variables](#environment-variables))
+- `migrate:init`: creates the migrations folder and initial migration file. Run once per service after it is first generated.
+- `migrate:create`: generates a new migration file from the current entity diff.
+- `migrate:up` / `migrate:down`: apply or roll back pending migrations.
 
 ## Environment Variables
 
-Create a `.env.local` file in your service directory for database configuration:
+Create a `.env.local` file in each service directory with database credentials. MikroORM uses individual `DB_*` variables rather than a connection string:
 
 ```bash
-# Database configuration (required for migrations)
-DB_NAME=your_database_name
+DB_NAME=my_app
 DB_HOST=localhost
 DB_PORT=5432
 DB_USER=postgres
 DB_PASSWORD=postgres
 
-# Server configuration
 PORT=3000
 NODE_ENV=development
 ```
 
-**Note**: MikroORM expects individual `DB_*` environment variables, not a single `DATABASE_URL`. The migration scripts use `DOTENV_FILE_PATH=.env.local` to load these variables.
+Migration scripts use `DOTENV_FILE_PATH=.env.local` to load these values automatically.
 
 ## Troubleshooting
 
-When adding new services or workers, you might encounter initial setup errors. If this happens, try these steps in order:
+If you see errors after adding a new service, try these steps:
 
 <CodeTabs type="terminal">
   <Tab title="pnpm">
 
   ```bash
-  # Ensure Docker containers are running
+  # Make sure Docker containers are running
   docker-compose up -d
 
-  # Initialize and run migrations
+  # Initialize and apply migrations for the new service
   pnpm migrate:init
   pnpm migrate:up
 
-  # If errors persist, rebuild the development environment
-  pnpm build
-  pnpm dev
+  # Rebuild if necessary
+  pnpm build && pnpm dev
   ```
 
   </Tab>
   <Tab title="bun">
 
   ```bash
-  # Ensure Docker containers are running
+  # Make sure Docker containers are running
   docker-compose up -d
 
-  # Initialize and run migrations
+  # Initialize and apply migrations for the new service
   bun migrate:init
   bun migrate:up
-  
-  # If errors persist, rebuild the development environment
-  bun run build
-  bun dev
+
+  # Rebuild if necessary
+  bun run build && bun dev
   ```
 
   </Tab>
 </CodeTabs>
 
-ForkLaunch is designed to be modular, allowing you to add new components incrementally without breaking existing functionality. These commands help ensure new components are properly integrated into your application.
+ForkLaunch is designed to be modular. You can add new services and workers incrementally without touching existing components.
+
+## Next Steps
+
+- [Adding Projects](/docs/adding-projects.md): Add more services, workers, and libraries
+- [Environment variables](/docs/cli/environment.md): Manage environment variables with the CLI
+- [Customization](/docs/customization.md): Adapt generated patterns to your conventions

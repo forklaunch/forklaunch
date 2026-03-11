@@ -11,7 +11,7 @@ const envFilePath = getEnvVar('DOTENV_FILE_PATH');
 dotenv.config({ path: envFilePath });
 const { ci, tokens } = createDependencyContainer(envFilePath);
 
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 
 const processEvents: WorkerProcessFunction<{{pascal_case_name}}EventRecord> =
   async (events) => {

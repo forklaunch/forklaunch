@@ -1,4 +1,6 @@
 #[macro_use]
+pub(crate) mod log;
+#[macro_use]
 pub(crate) mod ast;
 pub(crate) mod base_path;
 pub(crate) mod choices;
@@ -14,7 +16,6 @@ pub(crate) mod gitignore;
 pub(crate) mod hmac;
 pub(crate) mod http_client;
 pub(crate) mod husky;
-pub(crate) mod iam;
 pub(crate) mod library_scanner;
 pub(crate) mod license;
 pub(crate) mod manifest;

@@ -16,7 +16,7 @@ use crate::{
             package_json_constants::{MIKRO_ORM_DATABASE_VERSION, PROJECT_SEED_SCRIPT},
             project_package_json::ProjectPackageJson,
         },
-        removal_template::{RemovalTemplate, RemovalTemplateType},
+        removal_template::RemovalTemplate,
         rendered_template::{RenderedTemplate, RenderedTemplatesCache, TEMPLATES_DIR},
         watermark::apply_watermark,
     },
@@ -185,7 +185,6 @@ pub(crate) fn change_database_base_entity(
     {
         return Ok(Some(RemovalTemplate {
             path: existing_base_entity_path,
-            r#type: RemovalTemplateType::File,
         }));
     }
 

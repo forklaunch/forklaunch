@@ -1,5 +1,45 @@
 # @forklaunch/validator
 
+## 0.10.33
+
+### Patch Changes
+
+- proxy based injection for ci, and openapi path resiliency
+- Updated dependencies
+  - @forklaunch/common@0.6.33
+
+## 0.10.32
+
+### Patch Changes
+
+- Small bugs
+- Updated dependencies
+  - @forklaunch/common@0.6.32
+
+## 0.10.31
+
+### Patch Changes
+
+- Prevent 404 message hijacking and update packages
+- Updated dependencies
+  - @forklaunch/common@0.6.31
+
+## 0.10.30
+
+### Patch Changes
+
+- Fix multiline config injection and update packages
+- Updated dependencies
+  - @forklaunch/common@0.6.30
+
+## 0.10.29
+
+### Patch Changes
+
+- WS actually working probably, and package bumps
+- Updated dependencies
+  - @forklaunch/common@0.6.29
+
 ## 0.10.28
 
 ### Patch Changes

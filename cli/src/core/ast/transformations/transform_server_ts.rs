@@ -249,7 +249,7 @@ export const { ci, tokens } = createDependencyContainer(envFilePath);
 export type ScopeFactory = typeof ci.createScope;
 
 //! resolves the openTelemetryCollector from the configuration
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 
 //! creates an instance of forklaunchExpress
 const app = forklaunchExpress(schemaValidator, openTelemetryCollector);
@@ -298,7 +298,7 @@ export const { ci, tokens } = createDependencyContainer(envFilePath);
 export type ScopeFactory = typeof ci.createScope;
 
 //! resolves the openTelemetryCollector from the configuration
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 
 //! creates an instance of forklaunchExpress
 const app = forklaunchExpress(schemaValidator, openTelemetryCollector);
@@ -446,7 +446,7 @@ export const { ci, tokens } = createDependencyContainer(envFilePath);
 export type ScopeFactory = typeof ci.createScope;
 
 //! resolves the openTelemetryCollector from the configuration
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 
 //! creates an instance of forklaunchExpress
 const app = forklaunchExpress(schemaValidator, openTelemetryCollector);

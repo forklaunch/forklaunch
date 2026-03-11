@@ -11,8 +11,8 @@ The ForkLaunch CLI provides commands to delete project components such as servic
 ## Getting Started
 
 You can delete a project in two ways:
-1. [Using Commands](/docs/deleting-projects.md#using-commands-recommended)
-2. [Manual Deletion with Sync](/docs/deleting-projects.md#manual-deletion-with-sync)
+1. [Using Commands](#using-commands-recommended)
+2. [Manual Deletion with Sync](#manual-deletion-with-sync)
 
 ### Using Commands (Recommended)
 
@@ -44,8 +44,7 @@ forklaunch sync all
 
 This updates artifacts (manifest, docker-compose, workspace, SDK, tsconfig) to remove references to the deleted project(s).
 
-> **For detailed CLI syntax and options, see**:  
-> [Delete Command Reference](/docs/cli/delete.md)
+> **For detailed CLI syntax and options, see**: [Delete Command Reference](/docs/cli/delete.md)
 
 ## How Deletions Affect Artifacts
 
@@ -214,7 +213,7 @@ If you accidentally delete a component:
 
    ```bash
    # Recreate the component
-   forklaunch add service restored-service --database postgresql
+   forklaunch init service restored-service --database postgresql
    ```
 
 3. **Fix Imports**
@@ -247,11 +246,10 @@ If deletion fails partway through:
 
 ## Related Documentation
 
-- [Adding Projects](/docs/adding-projects.md) - Create new components
-- [Changing Projects](/docs/changing-projects.md) - Modify existing components
-- [CLI Reference](/docs/cli.md) - All CLI commands
-- [Best Practices](/docs/best-practices.md) - Development best practices
-- [Troubleshooting](/docs/troubleshooting.md) - Common issues and solutions
+- [Adding Projects](/docs/adding-projects.md): Create new components
+- [Changing Projects](/docs/changing-projects.md): Modify existing components
+- [CLI Reference: delete](/docs/cli/delete.md): Full `delete` command options
+- [CLI Reference](/docs/cli.md): All CLI commands
 
 ## Security Considerations
 

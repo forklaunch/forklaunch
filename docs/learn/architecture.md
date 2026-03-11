@@ -1,3 +1,9 @@
+---
+title: Architecture
+category: Learn
+description: The directory structure and module layout of a ForkLaunch application.
+---
+
 ## Project Structure
 
 ```bash

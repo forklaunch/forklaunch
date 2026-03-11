@@ -10,7 +10,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use convert_case::{Case, Casing};
 use rustyline::{Editor, history::DefaultHistory};
 use serde_json::to_string_pretty;
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 use toml::from_str;
 
 use crate::{
@@ -65,7 +65,7 @@ use crate::{
                 ZOD_VERSION, project_clean_script, project_dev_local_script,
                 project_dev_server_script, project_format_script, project_lint_fix_script,
                 project_lint_script, project_migrate_script, project_start_server_script,
-                project_test_script,
+                project_test_script, project_up_latest_script,
             },
             project_package_json::{
                 MIKRO_ORM_CONFIG_PATHS, ProjectDependencies, ProjectDevDependencies,
@@ -104,7 +104,6 @@ fn generate_basic_service(
     };
 
     let ignore_files = vec![];
-    // Skip mappers directory if with_mappers is false
     let ignore_dirs = if !manifest_data.with_mappers {
         vec!["mappers".to_string()]
     } else {
@@ -133,7 +132,7 @@ fn generate_basic_service(
     )?);
 
     rendered_templates.extend(
-        generate_project_tsconfig(&output_path).with_context(|| ERROR_FAILED_TO_CREATE_TSCONFIG)?,
+        generate_project_tsconfig(&output_path, Some(&["express", "qs"])).with_context(|| ERROR_FAILED_TO_CREATE_TSCONFIG)?,
     );
 
     rendered_templates.extend(
@@ -219,6 +218,7 @@ fn add_service_to_artifacts(
             cache: None,
             queue: None,
             object_store: None,
+            redis_partition: None,
         }),
         Some(vec![manifest_data.service_name.clone()]),
         None,
@@ -360,6 +360,7 @@ pub(crate) fn generate_service_package_json(
                     &manifest_data.runtime.parse()?,
                     manifest_data.database.parse::<Database>().ok(),
                 )),
+                up_latest: project_up_latest_script(&manifest_data.runtime.parse()?),
                 ..Default::default()
             }
         }),
@@ -774,9 +775,6 @@ impl CliCommand for ServiceCommand {
             is_cache_enabled: infrastructure.contains(&Infrastructure::Redis),
             platform_application_id: manifest_data.platform_application_id.clone(),
             platform_organization_id: manifest_data.platform_organization_id.clone(),
-            release_version: manifest_data.release_version.clone(),
-            release_git_commit: manifest_data.release_git_commit.clone(),
-            release_git_branch: manifest_data.release_git_branch.clone(),
             is_s3_enabled: infrastructure.contains(&Infrastructure::S3),
             is_database_enabled: true,
 
@@ -811,9 +809,9 @@ impl CliCommand for ServiceCommand {
             iam_secret: None,
 
             // These will be properly generated when initialized
-            generated_password_encryption_secret: String::new(),
             generated_better_auth_secret: String::new(),
             generated_hmac_secret: String::new(),
+            otel_token: "OtelCollector".to_string(),
         };
 
         let dryrun = matches.get_flag("dryrun");
@@ -828,9 +826,7 @@ impl CliCommand for ServiceCommand {
         .with_context(|| "Failed to create service")?;
 
         if !dryrun {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "{} initialized successfully!", service_name)?;
-            stdout.reset()?;
+            log_ok!(stdout, "{} initialized successfully!", service_name);
             format_code(&base_path, &manifest_data.runtime.parse()?);
         }
 

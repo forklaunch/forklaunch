@@ -98,13 +98,17 @@ config_struct!(
         #[serde(skip_serializing, skip_deserializing)]
         pub(crate) with_mappers: bool,
 
-        // Generated secrets - each instantiation gets unique random values
         #[serde(skip_serializing, skip_deserializing)]
-        pub(crate) generated_password_encryption_secret: String,
+        pub(crate) redis_partition: u32,
+
+        // Generated secrets - each instantiation gets unique random values
         #[serde(skip_serializing, skip_deserializing)]
         pub(crate) generated_better_auth_secret: String,
         #[serde(skip_serializing, skip_deserializing)]
         pub(crate) generated_hmac_secret: String,
+
+        #[serde(skip_serializing, skip_deserializing)]
+        pub(crate) otel_token: String,
     }
 );
 
@@ -226,10 +230,17 @@ impl InitializableManifestConfig for WorkerManifestData {
             // Default to false, will be set by CLI flag
             with_mappers: false,
 
+            redis_partition: project_entry
+                .resources
+                .as_ref()
+                .and_then(|r| r.redis_partition)
+                .unwrap_or(0),
+
             // Generate unique random secrets for each worker/environment
-            generated_password_encryption_secret: generate_random_secret(32), // 32 bytes = 256 bits
             generated_better_auth_secret: generate_random_secret(32),
             generated_hmac_secret: generate_random_secret(32),
+
+            otel_token: "OtelCollector".to_string(),
 
             ..self.clone()
         }

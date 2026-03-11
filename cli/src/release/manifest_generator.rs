@@ -1,15 +1,18 @@
 use std::{collections::HashMap, path::Path};
 
 use anyhow::Result;
-use convert_case::{Case, Casing};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
     constants::RELEASE_MANIFEST_SCHEMA_VERSION,
     core::{
+        ast::infrastructure::{
+            integrations::Integration,
+            worker_config::WorkerConfig as AstWorkerConfig,
+        },
         library_scanner::{
-            CodeNode, ImportScanner, LibraryDefinition, parse_route_file,
+            Topology, ImportScanner, LibraryDefinition, parse_route_file,
             scan_project_libraries,
         },
         manifest::{ProjectType, ResourceInventory, application::ApplicationManifestData},
@@ -108,6 +111,18 @@ pub(crate) struct EnvironmentVariableComponent {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct InterServiceUrlInfo {
+    /// Target project/service name (e.g., "matching", "billing")
+    #[serde(rename = "targetService")]
+    pub target_service: String,
+    /// Transport protocol: "http" (default) or "ws"
+    pub transport: String,
+    /// Env var on the target service that provides the port (e.g., "WS_PORT" for ws, "PORT" for http)
+    #[serde(rename = "portEnvVar")]
+    pub port_env_var: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct EnvironmentVariableRequirement {
     pub name: String,
     pub scope: EnvironmentVariableScope,
@@ -115,6 +130,10 @@ pub(crate) struct EnvironmentVariableRequirement {
     pub scope_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub component: Option<EnvironmentVariableComponent>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
+    #[serde(rename = "interServiceUrl", skip_serializing_if = "Option::is_none")]
+    pub inter_service_url: Option<InterServiceUrlInfo>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -257,7 +276,7 @@ pub(crate) struct RouteDefinition {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auth: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub topology: Option<CodeNode>,
+    pub topology: Option<Topology>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -318,18 +337,14 @@ pub(crate) fn generate_release_manifest(
     git_branch: Option<String>,
     code_source_url: Option<String>,
     manifest: &ApplicationManifestData,
-    openapi_specs: &std::collections::HashMap<String, Value>,
+    openapi_specs: &HashMap<String, Value>,
     required_env_vars: Vec<EnvironmentVariableRequirement>,
-    project_runtime_deps: &std::collections::HashMap<String, Vec<String>>,
-    project_integrations: &std::collections::HashMap<
-        String,
-        Vec<crate::core::ast::infrastructure::integrations::Integration>,
-    >,
-    worker_configs: &std::collections::HashMap<
-        String,
-        crate::core::ast::infrastructure::worker_config::WorkerConfig,
-    >,
-    service_dependencies: &std::collections::HashMap<String, Vec<(String, String)>>,
+    project_runtime_deps: &HashMap<String, Vec<String>>,
+    project_integrations: &HashMap<String, Vec<Integration>>,
+    worker_configs: &HashMap<String, AstWorkerConfig>,
+    service_dependencies: &HashMap<String, Vec<(String, String)>>,
+    openapi_s3_keys: &HashMap<String, String>,
+    user_managed_db_projects: &std::collections::HashSet<String>,
 ) -> Result<ReleaseManifest> {
     let timestamp = chrono::Utc::now().to_rfc3339();
 
@@ -342,7 +357,11 @@ pub(crate) fn generate_release_manifest(
     let mut services = Vec::new();
     for project in &manifest.projects {
         if project.r#type == ProjectType::Service {
-            let open_api_spec = openapi_specs.get(&project.name).cloned();
+            let open_api_spec = if let Some(s3_key) = openapi_s3_keys.get(&project.name) {
+                Some(Value::String(s3_key.clone()))
+            } else {
+                openapi_specs.get(&project.name).cloned()
+            };
             let runtime_deps = project_runtime_deps.get(&project.name).cloned();
             let deps = service_dependencies.get(&project.name).map(|dep_tuples| {
                 dep_tuples
@@ -376,7 +395,7 @@ pub(crate) fn generate_release_manifest(
                                 .map(|router_name| {
                                     let route_file = service_path.join("api").join("routes").join(format!(
                                         "{}.routes.ts",
-                                        router_name.to_case(Case::Camel)
+                                        router_name
                                     ));
 
                                     // Parse route file to extract routes and handler→source mappings
@@ -410,7 +429,7 @@ pub(crate) fn generate_release_manifest(
                                         .collect();
 
                                     ControllerDefinition {
-                                        id: router_name.clone(),
+                                        id: format!("{}-controller", router_name.to_lowercase().trim_end_matches("controller")),
                                         name: router_name.clone(),
                                         path: format!("/{}", router_name),
                                         routes,
@@ -485,7 +504,11 @@ pub(crate) fn generate_release_manifest(
                     })
                     .collect()
             });
-            let open_api_spec = openapi_specs.get(&project.name).cloned();
+            let open_api_spec = if let Some(s3_key) = openapi_s3_keys.get(&project.name) {
+                Some(Value::String(s3_key.clone()))
+            } else {
+                openapi_specs.get(&project.name).cloned()
+            };
 
             let worker_path = app_root.join(&manifest.modules_path).join(&project.name);
             let controllers = if worker_path.join("api").join("routes").exists() {
@@ -497,7 +520,7 @@ pub(crate) fn generate_release_manifest(
                                 .map(|router_name| {
                                     let route_file = worker_path.join("api").join("routes").join(format!(
                                         "{}.routes.ts",
-                                        router_name.to_case(Case::Camel)
+                                        router_name
                                     ));
 
                                     let (parsed_routes, handler_sources) = parse_route_file(
@@ -528,7 +551,7 @@ pub(crate) fn generate_release_manifest(
                                         .collect();
 
                                     ControllerDefinition {
-                                        id: router_name.clone(),
+                                        id: format!("{}-controller", router_name.to_lowercase().trim_end_matches("controller")),
                                         name: router_name.clone(),
                                         path: format!("/{}", router_name),
                                         routes,
@@ -654,19 +677,34 @@ pub(crate) fn generate_release_manifest(
     let mut resources = Vec::new();
     for project in &manifest.projects {
         if let Some(project_resources) = &project.resources {
+            let user_managed_db = user_managed_db_projects.contains(&project.name);
+
             // For worker projects, resources need to be accessible to both
             // the "{name}-service" and "{name}-worker" components
             if project.r#type == ProjectType::Worker {
-                // Create resources for the worker-service component
-                let service_name = format!("{}-service", project.name);
-                add_resources_from_inventory(&service_name, project_resources, &mut resources);
+                if user_managed_db {
+                    // When DB is user-managed, emit a single detached DB resource (no service_name)
+                    // to avoid duplicates, then add non-DB resources for each component
+                    add_resources_from_inventory(&project.name, project_resources, &mut resources, true);
 
-                // Create resources for the worker-worker component
-                let worker_name = format!("{}-worker", project.name);
-                add_resources_from_inventory(&worker_name, project_resources, &mut resources);
+                    // Add non-DB resources for service and worker components
+                    let service_name = format!("{}-service", project.name);
+                    add_non_db_resources(&service_name, project_resources, &mut resources);
+
+                    let worker_name = format!("{}-worker", project.name);
+                    add_non_db_resources(&worker_name, project_resources, &mut resources);
+                } else {
+                    // Create resources for the worker-service component
+                    let service_name = format!("{}-service", project.name);
+                    add_resources_from_inventory(&service_name, project_resources, &mut resources, false);
+
+                    // Create resources for the worker-worker component
+                    let worker_name = format!("{}-worker", project.name);
+                    add_resources_from_inventory(&worker_name, project_resources, &mut resources, false);
+                }
             } else {
                 // For regular service projects, create resources with the project name
-                add_resources_from_inventory(&project.name, project_resources, &mut resources);
+                add_resources_from_inventory(&project.name, project_resources, &mut resources, user_managed_db);
             }
         }
     }
@@ -725,10 +763,12 @@ fn add_resources_from_inventory(
     service_name: &str,
     inventory: &ResourceInventory,
     resources: &mut Vec<ResourceDefinition>,
+    user_managed_db: bool,
 ) {
     if let Some(database) = &inventory.database {
         let mut config = HashMap::new();
         config.insert("technology".to_string(), Value::String(database.clone()));
+        config.insert("mode".to_string(), Value::String("centralized".to_string()));
 
         resources.push(ResourceDefinition {
             id: format!("{}-db", service_name),
@@ -738,13 +778,20 @@ fn add_resources_from_inventory(
             name: format!("{}-database", service_name),
             region: None,
             config: Some(config),
-            service_name: Some(service_name.to_string()),
+            // If user manages DB_HOST themselves, don't connect the resource to the service
+            // (keep the resource visible in resource view but not as an ApplicationResource)
+            service_name: if user_managed_db {
+                None
+            } else {
+                Some(service_name.to_string())
+            },
         });
     }
 
     if let Some(cache) = &inventory.cache {
         let mut config = HashMap::new();
         config.insert("technology".to_string(), Value::String(cache.clone()));
+        config.insert("mode".to_string(), Value::String("distributed".to_string()));
 
         resources.push(ResourceDefinition {
             id: format!("{}-cache", service_name),
@@ -760,6 +807,7 @@ fn add_resources_from_inventory(
     if let Some(queue) = &inventory.queue {
         let mut config = HashMap::new();
         config.insert("technology".to_string(), Value::String(queue.clone()));
+        config.insert("mode".to_string(), Value::String("distributed".to_string()));
 
         resources.push(ResourceDefinition {
             id: format!("{}-queue", service_name),
@@ -791,13 +839,70 @@ fn add_resources_from_inventory(
     }
 }
 
+/// Adds non-database resources from inventory (cache, queue, object_store).
+/// Used for worker components when DB is user-managed to avoid duplicate DB resources.
+fn add_non_db_resources(
+    service_name: &str,
+    inventory: &ResourceInventory,
+    resources: &mut Vec<ResourceDefinition>,
+) {
+    if let Some(cache) = &inventory.cache {
+        let mut config = HashMap::new();
+        config.insert("technology".to_string(), Value::String(cache.clone()));
+        config.insert("mode".to_string(), Value::String("distributed".to_string()));
+
+        resources.push(ResourceDefinition {
+            id: format!("{}-cache", service_name),
+            resource_type: "cache".to_string(),
+            name: format!("{}-cache", service_name),
+            region: None,
+            config: Some(config),
+            service_name: Some(service_name.to_string()),
+        });
+    }
+
+    if let Some(queue) = &inventory.queue {
+        let mut config = HashMap::new();
+        config.insert("technology".to_string(), Value::String(queue.clone()));
+        config.insert("mode".to_string(), Value::String("distributed".to_string()));
+
+        resources.push(ResourceDefinition {
+            id: format!("{}-queue", service_name),
+            resource_type: "messagequeue".to_string(),
+            name: format!("{}-queue", service_name),
+            region: None,
+            config: Some(config),
+            service_name: Some(service_name.to_string()),
+        });
+    }
+
+    if let Some(object_store) = &inventory.object_store {
+        let mut config = HashMap::new();
+        config.insert(
+            "technology".to_string(),
+            Value::String(object_store.clone()),
+        );
+
+        resources.push(ResourceDefinition {
+            id: format!("{}-storage", service_name),
+            resource_type: "objectstore".to_string(),
+            name: format!("{}-storage", service_name),
+            region: None,
+            config: Some(config),
+            service_name: Some(service_name.to_string()),
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_route_definition_has_topology_with_versions() {
-        // Verify that RouteDefinition carries per-route topology with npm version info
+        use crate::core::library_scanner::Dependency;
+
+        // Verify that RouteDefinition carries flat topology with deps and source files
         let route = RouteDefinition {
             id: "get-users".to_string(),
             method: "GET".to_string(),
@@ -806,47 +911,37 @@ mod tests {
             middleware: None,
             schema: None,
             auth: None,
-            topology: Some(CodeNode {
-                name: "user.controller".to_string(),
-                node_type: "local".to_string(),
-                version: None,
-                children: Some(vec![
-                    CodeNode {
+            topology: Some(Topology {
+                deps: vec![
+                    Dependency {
                         name: "@forklaunch/core".to_string(),
-                        node_type: "npm".to_string(),
+                        dep_type: "npm".to_string(),
                         version: Some("^0.6.5".to_string()),
-                        children: None,
-                        path: None,
                         target_service: None,
+                        source_files: vec![
+                            "api/controllers/user.controller.ts".to_string(),
+                            "domain/services/user.service.ts".to_string(),
+                        ],
                     },
-                    CodeNode {
+                    Dependency {
                         name: "stripe".to_string(),
-                        node_type: "npm".to_string(),
+                        dep_type: "npm".to_string(),
                         version: Some("^17.7.0".to_string()),
-                        children: None,
-                        path: None,
                         target_service: None,
+                        source_files: vec![
+                            "domain/services/user.service.ts".to_string(),
+                        ],
                     },
-                    CodeNode {
-                        name: "user.service".to_string(),
-                        node_type: "local".to_string(),
-                        version: None,
-                        children: Some(vec![
-                            CodeNode {
-                                name: "@mikro-orm/core".to_string(),
-                                node_type: "npm".to_string(),
-                                version: Some("^6.5.0".to_string()),
-                                children: None,
-                                path: None,
-                                target_service: None,
-                            },
-                        ]),
-                        path: Some("domain/services/user.service.ts".to_string()),
+                    Dependency {
+                        name: "@mikro-orm/core".to_string(),
+                        dep_type: "npm".to_string(),
+                        version: Some("^6.5.0".to_string()),
                         target_service: None,
+                        source_files: vec![
+                            "domain/services/user.service.ts".to_string(),
+                        ],
                     },
-                ]),
-                path: Some("api/controllers/user.controller.ts".to_string()),
-                target_service: None,
+                ],
             }),
         };
 
@@ -855,9 +950,10 @@ mod tests {
 
         let json_str = json.unwrap();
 
-        // Verify route-level topology is present
+        // Verify flat topology structure
         assert!(json_str.contains("\"topology\""), "JSON should contain topology field");
-        assert!(json_str.contains("\"children\""), "JSON should have children array");
+        assert!(json_str.contains("\"deps\""), "JSON should have deps array");
+        assert!(json_str.contains("\"sourceFiles\""), "JSON should have per-dep sourceFiles");
 
         // Verify npm dependencies have versions
         assert!(json_str.contains("\"@forklaunch/core\""), "Should contain npm dependency");
@@ -865,12 +961,12 @@ mod tests {
         assert!(json_str.contains("\"stripe\""), "Should contain stripe dependency");
         assert!(json_str.contains("\"^17.7.0\""), "Should contain version for stripe");
 
-        // Verify local children also have npm deps with versions
+        // Verify nested deps are flattened
         assert!(json_str.contains("\"@mikro-orm/core\""), "Should contain nested npm dep");
-        assert!(json_str.contains("\"^6.5.0\""), "Should contain version for nested dep");
 
-        // Verify local nodes have paths
+        // Verify source files
         assert!(json_str.contains("\"domain/services/user.service.ts\""), "Should have local path");
+        assert!(json_str.contains("\"api/controllers/user.controller.ts\""), "Should have controller path");
     }
 
     #[test]
@@ -888,13 +984,8 @@ mod tests {
                 middleware: None,
                 schema: None,
                 auth: None,
-                topology: Some(CodeNode {
-                    name: "test.controller".to_string(),
-                    node_type: "local".to_string(),
-                    version: None,
-                    children: None,
-                    path: Some("api/controllers/test.controller.ts".to_string()),
-                    target_service: None,
+                topology: Some(Topology {
+                    deps: vec![],
                 }),
             }],
         };

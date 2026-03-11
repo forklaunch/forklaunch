@@ -62,13 +62,11 @@ const userAdditionalFields = {
 
 export const betterAuthConfig = ({
   BETTER_AUTH_BASE_PATH,
-  PASSWORD_ENCRYPTION_SECRET,
   CORS_ORIGINS,
   orm,
   openTelemetryCollector
 }: {
   BETTER_AUTH_BASE_PATH: string;
-  PASSWORD_ENCRYPTION_SECRET: string;
   CORS_ORIGINS: string[];
   orm: MikroORM;
   openTelemetryCollector: OpenTelemetryCollector<Metrics>;
@@ -89,7 +87,6 @@ export const betterAuthConfig = ({
   return {
     baseURL,
     basePath: BETTER_AUTH_BASE_PATH,
-    secret: PASSWORD_ENCRYPTION_SECRET,
     trustedOrigins: CORS_ORIGINS,
     socialProviders: {
       google: {

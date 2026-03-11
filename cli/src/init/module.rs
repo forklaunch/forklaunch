@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use convert_case::{Case, Casing};
 use rustyline::{Editor, history::DefaultHistory};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use super::service::generate_service_package_json;
 use crate::{
@@ -221,9 +221,6 @@ impl CliCommand for ModuleCommand {
             is_database_enabled: true,
             platform_application_id: manifest_data.platform_application_id.clone(),
             platform_organization_id: manifest_data.platform_organization_id.clone(),
-            release_version: manifest_data.release_version.clone(),
-            release_git_commit: manifest_data.release_git_commit.clone(),
-            release_git_branch: manifest_data.release_git_branch.clone(),
 
             is_better_auth: module.clone() == Module::BetterAuthIam,
             is_stripe: module.clone() == Module::StripeBilling,
@@ -257,9 +254,9 @@ impl CliCommand for ModuleCommand {
             iam_secret: None,
 
             // These will be properly generated when initialized
-            generated_password_encryption_secret: String::new(),
             generated_better_auth_secret: String::new(),
             generated_hmac_secret: String::new(),
+            otel_token: "OtelCollector".to_string(),
         };
         let manifest_data = add_project_definition_to_manifest(
             ProjectType::Service,
@@ -270,6 +267,7 @@ impl CliCommand for ModuleCommand {
                 cache: get_service_module_cache(&module),
                 queue: None,
                 object_store: None,
+                redis_partition: None,
             }),
             get_routers_from_standard_package(module.clone()),
             None,
@@ -389,13 +387,11 @@ impl CliCommand for ModuleCommand {
                 &mut service_data,
                 dryrun,
             )?;
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(
+            log_ok!(
                 stdout,
                 "{} initialized successfully!",
                 get_service_module_name(&module)
-            )?;
-            stdout.reset()?;
+            );
             format_code(&base_path, &service_data.runtime.parse()?);
         }
 

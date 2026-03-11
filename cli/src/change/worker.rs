@@ -6,7 +6,7 @@ use convert_case::{Case, Casing};
 use dialoguer::{MultiSelect, theme::ColorfulTheme};
 use ramhorns::Template;
 use rustyline::{Editor, history::DefaultHistory};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use super::core::{
     change_database::{
@@ -127,6 +127,8 @@ fn change_type(
     rendered_templates_cache: &mut RenderedTemplatesCache,
     removal_templates: &mut Vec<RemovalTemplate>,
 ) -> Result<()> {
+    let next_redis_partition = crate::core::manifest::next_available_redis_partition(&manifest_data.projects);
+
     let project_entry = manifest_data
         .projects
         .iter_mut()
@@ -210,12 +212,14 @@ fn change_type(
                 .unwrap()
                 .ioredis = Some(IOREDIS_VERSION.to_string());
             resources.cache = Some(WorkerType::RedisCache.to_string());
+            resources.redis_partition = Some(next_redis_partition);
             let _ = add_redis_to_docker_compose(
                 &manifest_data.app_name,
                 docker_compose_data,
                 &mut environment,
+                next_redis_partition,
             );
-            env_local_content.redis_url = Some("redis://localhost:6379".to_string());
+            env_local_content.redis_url = Some(format!("redis://localhost:6379/{}", next_redis_partition));
         }
         WorkerType::Database => {
             let db = database.unwrap();
@@ -335,12 +339,14 @@ fn change_type(
                 .unwrap()
                 .ioredis = Some(IOREDIS_VERSION.to_string());
             resources.cache = Some(WorkerType::RedisCache.to_string());
+            resources.redis_partition = Some(next_redis_partition);
             let _ = add_redis_to_docker_compose(
                 &manifest_data.app_name,
                 docker_compose_data,
                 &mut environment,
+                next_redis_partition,
             );
-            env_local_content.redis_url = Some("redis://localhost:6379".to_string());
+            env_local_content.redis_url = Some(format!("redis://localhost:6379/{}", next_redis_partition));
         }
         WorkerType::Kafka => {
             dependencies.forklaunch_implementation_worker_kafka =
@@ -447,7 +453,6 @@ fn worker_to_service(
 ) -> Result<()> {
     let project_name = base_path.file_name().unwrap().to_string_lossy().to_string();
 
-    // 1. Transform registrations.ts
     let registrations_path = base_path.join("registrations.ts");
     let registrations_key = registrations_path.to_string_lossy().into_owned();
     rendered_templates_cache.insert(
@@ -462,7 +467,6 @@ fn worker_to_service(
         },
     );
 
-    // 2. Disable worker.ts
     let worker_ts_path = base_path.join("worker.ts");
     if let Some(template) = rendered_templates_cache.get(&worker_ts_path)? {
         let content = template
@@ -482,7 +486,6 @@ fn worker_to_service(
         );
     }
 
-    // 3. Update package.json
     if let Some(scripts) = project_package_json.scripts.as_mut() {
         scripts.dev_worker = None;
         scripts.start_worker = None;
@@ -496,7 +499,6 @@ fn worker_to_service(
         deps.forklaunch_implementation_worker_kafka = None;
     }
 
-    // 4. Update manifest
     manifest_data.projects.iter_mut().for_each(|project| {
         if project.name == project_name {
             project.r#type = ProjectType::Service;
@@ -506,11 +508,9 @@ fn worker_to_service(
         }
     });
 
-    // 5. Update docker-compose
     let worker_service_name = format!("{}-worker", project_name);
     remove_service_from_docker_compose(docker_compose, &worker_service_name)?;
 
-    // 6. Generate README-MIGRATION.md
     let readme_path = base_path.join("README-MIGRATION.md");
     let readme_key = readme_path.to_string_lossy().into_owned();
     let readme_content = format!(
@@ -549,12 +549,7 @@ This worker has been converted back to a service.
         },
     );
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-    writeln!(
-        stdout,
-        "Worker converted to service. See README-MIGRATION.md."
-    )?;
-    stdout.reset()?;
+    log_warn!(stdout, "Worker converted to service. See README-MIGRATION.md.");
 
     Ok(())
 }
@@ -662,7 +657,6 @@ impl CliCommand for WorkerCommand {
         let dryrun = matches.get_flag("dryrun");
         let confirm = matches.get_flag("confirm");
 
-        // Handle worker to service conversion
         if let Some(to) = to {
             if to == "service" {
                 let application_package_json_to_write =
@@ -964,9 +958,7 @@ impl CliCommand for WorkerCommand {
         move_template_files(&move_templates, dryrun, &mut stdout)?;
 
         if !dryrun {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "{} changed successfully!", &manifest_data.app_name)?;
-            stdout.reset()?;
+            log_ok!(stdout, "{} changed successfully!", &manifest_data.app_name);
             format_code(&worker_base_path, &manifest_data.runtime.parse()?);
         }
 

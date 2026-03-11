@@ -1,5 +1,53 @@
 # @forklaunch/implementation-worker-kafka
 
+## 0.9.12
+
+### Patch Changes
+
+- Package version bumps
+- Updated dependencies
+  - @forklaunch/interfaces-worker@0.7.18
+
+## 0.9.11
+
+### Patch Changes
+
+- package bump
+- Updated dependencies
+  - @forklaunch/interfaces-worker@0.7.17
+
+## 0.9.10
+
+### Patch Changes
+
+- small nits
+- Updated dependencies
+  - @forklaunch/interfaces-worker@0.7.16
+
+## 0.9.9
+
+### Patch Changes
+
+- Update internal package versions
+- Updated dependencies
+  - @forklaunch/interfaces-worker@0.7.15
+
+## 0.9.8
+
+### Patch Changes
+
+- bump package versions
+- Updated dependencies
+  - @forklaunch/interfaces-worker@0.7.14
+
+## 0.9.7
+
+### Patch Changes
+
+- package bump
+- Updated dependencies
+  - @forklaunch/interfaces-worker@0.7.13
+
 ## 0.9.6
 
 ### Patch Changes
