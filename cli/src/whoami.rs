@@ -48,10 +48,6 @@ struct SubscriptionInfo {
     status: Option<String>,
 }
 
-#[derive(Deserialize)]
-struct ApiResponse {
-    response: MeResponse,
-}
 
 impl CliCommand for WhoAmICommand {
     fn command(&self) -> Command {
@@ -77,10 +73,9 @@ impl CliCommand for WhoAmICommand {
             );
         }
 
-        let api_response: ApiResponse = response
+        let me: MeResponse = response
             .json()
             .with_context(|| "Failed to parse user info response")?;
-        let me = api_response.response;
 
         writeln!(stdout)?;
 
