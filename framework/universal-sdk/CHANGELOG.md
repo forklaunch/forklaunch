@@ -1,5 +1,21 @@
 # @forklaunch/universal-sdk
 
+## 0.7.35
+
+### Patch Changes
+
+- Downgrade mikro-orm back to normal
+- Updated dependencies
+  - @forklaunch/common@0.6.35
+
+## 0.7.34
+
+### Patch Changes
+
+- bump packages and internal proxy await resilience
+- Updated dependencies
+  - @forklaunch/common@0.6.34
+
 ## 0.7.33
 
 ### Patch Changes

@@ -1,5 +1,17 @@
 # @forklaunch/common
 
+## 0.6.35
+
+### Patch Changes
+
+- Downgrade mikro-orm back to normal
+
+## 0.6.34
+
+### Patch Changes
+
+- bump packages and internal proxy await resilience
+
 ## 0.6.33
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/common",
-  "version": "0.6.33",
+  "version": "0.6.35",
   "description": "Common package for base types, interfaces, implementations.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -42,7 +42,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^25.4.0",
-    "@typescript/native-preview": "7.0.0-dev.20260310.1",
+    "@typescript/native-preview": "7.0.0-dev.20260311.1",
     "depcheck": "^1.4.7",
     "eslint": "^10.0.3",
     "globals": "^17.4.0",

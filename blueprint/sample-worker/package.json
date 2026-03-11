@@ -40,15 +40,15 @@
   "dependencies": {
     "@forklaunch/blueprint-core": "workspace:*",
     "@forklaunch/blueprint-monitoring": "workspace:*",
-    "@forklaunch/core": "^0.18.6",
+    "@forklaunch/core": "^0.18.8",
     "@forklaunch/implementation-worker-bullmq": "workspace:*",
     "@forklaunch/implementation-worker-database": "workspace:*",
     "@forklaunch/implementation-worker-kafka": "workspace:*",
     "@forklaunch/implementation-worker-redis": "workspace:*",
-    "@forklaunch/infrastructure-redis": "^0.4.43",
-    "@forklaunch/infrastructure-s3": "^0.4.43",
+    "@forklaunch/infrastructure-redis": "^0.4.45",
+    "@forklaunch/infrastructure-s3": "^0.4.45",
     "@forklaunch/interfaces-worker": "workspace:*",
-    "@forklaunch/universal-sdk": "^0.7.33",
+    "@forklaunch/universal-sdk": "^0.7.35",
     "@mikro-orm/better-sqlite": "^6.6.9",
     "@mikro-orm/core": "^6.6.9",
     "@mikro-orm/libsql": "^6.6.9",
@@ -72,7 +72,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@forklaunch/testing": "^0.0.22",
+    "@forklaunch/testing": "^0.0.24",
     "@mikro-orm/cli": "^6.6.9",
     "@types/express": "^5.0.6",
     "@types/express-serve-static-core": "^5.1.1",

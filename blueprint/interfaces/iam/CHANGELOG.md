@@ -1,5 +1,11 @@
 # @forklaunch/interfaces-iam
 
+## 0.8.19
+
+### Patch Changes
+
+- Package bumps
+
 ## 0.8.18
 
 ### Patch Changes

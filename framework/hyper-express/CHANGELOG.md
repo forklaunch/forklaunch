@@ -1,5 +1,27 @@
 # @forklaunch/hyper-express
 
+## 0.11.12
+
+### Patch Changes
+
+- Downgrade mikro-orm back to normal
+- Updated dependencies
+  - @forklaunch/validator@0.10.35
+  - @forklaunch/common@0.6.35
+  - @forklaunch/core@0.18.8
+  - @forklaunch/ws@0.2.6
+
+## 0.11.11
+
+### Patch Changes
+
+- bump packages and internal proxy await resilience
+- Updated dependencies
+  - @forklaunch/validator@0.10.34
+  - @forklaunch/common@0.6.34
+  - @forklaunch/core@0.18.7
+  - @forklaunch/ws@0.2.5
+
 ## 0.11.10
 
 ### Patch Changes

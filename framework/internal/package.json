@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/internal",
-  "version": "0.3.33",
+  "version": "0.3.35",
   "description": "Internal package for utilities and other internal code.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -47,7 +47,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^25.4.0",
-    "@typescript/native-preview": "7.0.0-dev.20260310.1",
+    "@typescript/native-preview": "7.0.0-dev.20260311.1",
     "depcheck": "^1.4.7",
     "eslint": "^10.0.3",
     "globals": "^17.4.0",

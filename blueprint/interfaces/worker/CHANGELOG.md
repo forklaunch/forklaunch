@@ -1,5 +1,11 @@
 # @forklaunch/interfaces-worker
 
+## 0.7.19
+
+### Patch Changes
+
+- Package bumps
+
 ## 0.7.18
 
 ### Patch Changes

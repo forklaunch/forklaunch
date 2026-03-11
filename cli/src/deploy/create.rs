@@ -868,6 +868,11 @@ impl CliCommand for CreateCommand {
                 log_ok!(stdout, "Triggered deployment");
                 log_info!(stdout, "Deployment ID: {}", deployment.id);
 
+                let dashboard_url = format!(
+                    "{}/dashboard/deployments/{}",
+                    get_platform_ui_url(), deployment.id
+                );
+
                 if wait {
                     writeln!(stdout)?;
                     stream_deployment_status(
@@ -875,14 +880,12 @@ impl CliCommand for CreateCommand {
                         &deployment.id,
                         &mut stdout,
                     )?;
+                    writeln!(stdout)?;
+                    log_info!(stdout, "Dashboard: {}", dashboard_url);
                 } else {
                     writeln!(stdout)?;
                     writeln!(stdout, "Deployment started. Check status at:")?;
-                    writeln!(
-                        stdout,
-                        "  {}/apps/{}/deployments/{}",
-                        get_platform_ui_url(), application_id, deployment.id
-                    )?;
+                    writeln!(stdout, "  {}", dashboard_url)?;
                 }
                 break;
             } else if status.as_u16() == 400 {

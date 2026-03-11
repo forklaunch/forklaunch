@@ -60,7 +60,14 @@ impl CliCommand for IntegrateCommand {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
         let token = require_auth()?;
-        let (app_root, _manifest) = require_manifest(matches)?;
+        let (app_root, manifest) = require_manifest(matches)?;
+
+        if let Some(existing_id) = &manifest.platform_application_id {
+            bail!(
+                "This application is already integrated with platform application ID: {}. To re-integrate, remove the platform_application_id from .forklaunch/manifest.toml first.",
+                existing_id
+            );
+        }
 
         let application_id = matches
             .get_one::<String>("app")
@@ -68,26 +75,33 @@ impl CliCommand for IntegrateCommand {
 
         let manifest_path = app_root.join(".forklaunch").join("manifest.toml");
 
-        // Validate application exists on platform
-        log_info!(stdout, "Validating application on platform...");
+        // Integrate with platform application
+        log_info!(stdout, "Integrating with platform application...");
 
         let url = format!(
-            "{}/applications/{}",
+            "{}/applications/{}/integrate",
             get_platform_management_api_url(),
             application_id
         );
         let client = Client::new();
         let response = client
-            .get(&url)
+            .post(&url)
             .bearer_auth(&token)
             .send()
             .with_context(|| ERROR_FAILED_TO_SEND_REQUEST)?;
 
-        if !response.status().is_success() {
+        let status = response.status();
+        if status == reqwest::StatusCode::CONFLICT {
             bail!(
-                "Failed to find application: {} (Status: {})",
+                "This platform application is already integrated with another local app. Each platform application can only be linked to one local app at a time."
+            );
+        }
+
+        if !status.is_success() {
+            bail!(
+                "Failed to integrate application: {} (Status: {})",
                 application_id,
-                response.status()
+                status
             );
         }
 
@@ -95,7 +109,7 @@ impl CliCommand for IntegrateCommand {
             .json()
             .with_context(|| "Failed to parse application response")?;
 
-        log_ok!(stdout, "Found application: {}", app_data.name);
+        log_ok!(stdout, "Integrated with application: {}", app_data.name);
 
         let manifest_content = std::fs::read_to_string(&manifest_path)
             .with_context(|| format!("Failed to read manifest at {:?}", manifest_path))?;

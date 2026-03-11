@@ -1,5 +1,23 @@
 # @forklaunch/internal
 
+## 0.3.35
+
+### Patch Changes
+
+- Downgrade mikro-orm back to normal
+- Updated dependencies
+  - @forklaunch/validator@0.10.35
+  - @forklaunch/common@0.6.35
+
+## 0.3.34
+
+### Patch Changes
+
+- bump packages and internal proxy await resilience
+- Updated dependencies
+  - @forklaunch/validator@0.10.34
+  - @forklaunch/common@0.6.34
+
 ## 0.3.33
 
 ### Patch Changes

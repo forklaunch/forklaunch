@@ -567,7 +567,7 @@ impl CliCommand for ApplicationCommand {
             iam: None,
             billing: None,
         };
-        let mut modules: Vec<Module> = if matches.ids().all(|id| id == "dryrun") {
+        let mut modules: Vec<Module> = if matches.get_many::<String>("modules").is_none() {
             let mut modules_to_test;
             loop {
                 global_module_config = ModuleConfig {
@@ -1244,5 +1244,69 @@ impl CliCommand for ApplicationCommand {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn build_command() -> Command {
+        Command::new("application")
+            .arg(Arg::new("name"))
+            .arg(
+                Arg::new("modules")
+                    .short('m')
+                    .long("modules")
+                    .num_args(0..)
+                    .action(ArgAction::Append),
+            )
+            .arg(
+                Arg::new("dryrun")
+                    .short('n')
+                    .long("dryrun")
+                    .action(ArgAction::SetTrue),
+            )
+    }
+
+    #[test]
+    fn modules_prompt_needed_when_name_provided_without_modules_flag() {
+        let cmd = build_command();
+        let matches = cmd.try_get_matches_from(vec!["application", "my-app"]).unwrap();
+        // With only a positional name arg, modules should not be present — prompt is needed
+        assert!(matches.get_many::<String>("modules").is_none());
+    }
+
+    #[test]
+    fn modules_prompt_not_needed_when_modules_flag_provided() {
+        let cmd = build_command();
+        let matches = cmd
+            .try_get_matches_from(vec!["application", "my-app", "-m", "iam-base"])
+            .unwrap();
+        // With -m flag, modules should be present — no prompt needed
+        assert!(matches.get_many::<String>("modules").is_some());
+    }
+
+    #[test]
+    fn modules_prompt_needed_with_dryrun_and_no_modules() {
+        let cmd = build_command();
+        let matches = cmd
+            .try_get_matches_from(vec!["application", "my-app", "--dryrun"])
+            .unwrap();
+        assert!(matches.get_many::<String>("modules").is_none());
+    }
+
+    #[test]
+    fn old_condition_was_wrong_with_name_arg() {
+        // This test documents the bug: the old condition `matches.ids().all(|id| id == "dryrun")`
+        // returned false when a positional "name" arg was provided, skipping the module prompt.
+        let cmd = build_command();
+        let matches = cmd.try_get_matches_from(vec!["application", "my-app"]).unwrap();
+        // Old condition would have been false (because "name" id is present), incorrectly
+        // skipping the prompt. The new condition correctly checks for modules absence.
+        let old_condition = matches.ids().all(|id| id == "dryrun");
+        let new_condition = matches.get_many::<String>("modules").is_none();
+        assert!(!old_condition, "old condition incorrectly returns false with name arg");
+        assert!(new_condition, "new condition correctly identifies modules prompt is needed");
     }
 }

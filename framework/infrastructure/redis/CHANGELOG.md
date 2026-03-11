@@ -1,5 +1,23 @@
 # @forklaunch/infrastructure-redis
 
+## 0.4.45
+
+### Patch Changes
+
+- Downgrade mikro-orm back to normal
+- Updated dependencies
+  - @forklaunch/common@0.6.35
+  - @forklaunch/core@0.18.8
+
+## 0.4.44
+
+### Patch Changes
+
+- bump packages and internal proxy await resilience
+- Updated dependencies
+  - @forklaunch/common@0.6.34
+  - @forklaunch/core@0.18.7
+
 ## 0.4.43
 
 ### Patch Changes

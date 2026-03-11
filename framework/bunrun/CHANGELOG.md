@@ -1,5 +1,17 @@
 # @forklaunch/bunrun
 
+## 0.0.29
+
+### Patch Changes
+
+- Downgrade mikro-orm back to normal
+
+## 0.0.28
+
+### Patch Changes
+
+- bump packages and internal proxy await resilience
+
 ## 0.0.27
 
 ### Patch Changes

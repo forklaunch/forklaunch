@@ -104,14 +104,38 @@ export class ConfigInjector<
     resolutionPath: (keyof CV)[] = []
   ): ResolvedConfigValidator<SV, CV>[T] {
     if (process.env.FORKLAUNCH_MODE === 'openapi') {
-      const noopHandler: ProxyHandler<Record<string, unknown>> = {
-        get(_target, prop) {
-          if (prop === Symbol.toPrimitive) return () => '';
-          if (prop === 'toString' || prop === 'valueOf') return () => '';
-          return () => {};
+      const noopProxy: Record<string, unknown> = new Proxy(
+        function () {} as unknown as Record<string, unknown>,
+        {
+          get(_target, prop) {
+            if (prop === Symbol.toPrimitive) return () => '';
+            if (prop === 'toString' || prop === 'valueOf') return () => '';
+            if (prop === 'then')
+              return (resolve: (value: unknown) => void) => resolve(noopProxy);
+            if (prop === Symbol.iterator) return function* () {};
+            return noopProxy;
+          },
+          set() {
+            return true;
+          },
+          has() {
+            return true;
+          },
+          ownKeys() {
+            return [];
+          },
+          getOwnPropertyDescriptor() {
+            return { configurable: true, enumerable: true };
+          },
+          apply() {
+            return noopProxy;
+          },
+          construct() {
+            return noopProxy as object;
+          }
         }
-      };
-      return new Proxy({}, noopHandler) as ResolvedConfigValidator<SV, CV>[T];
+      );
+      return noopProxy as ResolvedConfigValidator<SV, CV>[T];
     }
 
     const rawInjectorArgument = extractArgumentNames(definition.factory)[0];

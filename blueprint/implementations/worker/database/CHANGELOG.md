@@ -1,5 +1,13 @@
 # @forklaunch/implementation-worker-database
 
+## 0.8.19
+
+### Patch Changes
+
+- Package bumps
+- Updated dependencies
+  - @forklaunch/interfaces-worker@0.7.19
+
 ## 0.8.18
 
 ### Patch Changes

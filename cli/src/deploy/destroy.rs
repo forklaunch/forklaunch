@@ -127,6 +127,11 @@ impl CliCommand for DestroyCommand {
             log_ok!(stdout, "Triggered destruction");
             log_info!(stdout, "Deployment ID: {}", deployment.id);
 
+            let dashboard_url = format!(
+                "{}/dashboard/deployments/{}",
+                get_platform_ui_url(), deployment.id
+            );
+
             if wait {
                 writeln!(stdout)?;
                 stream_deployment_status(
@@ -134,14 +139,12 @@ impl CliCommand for DestroyCommand {
                     &deployment.id,
                     &mut stdout,
                 )?;
+                writeln!(stdout)?;
+                log_info!(stdout, "Dashboard: {}", dashboard_url);
             } else {
                 writeln!(stdout)?;
                 writeln!(stdout, "Destruction started. Check status at:")?;
-                writeln!(
-                    stdout,
-                    "  {}/apps/{}/deployments/{}",
-                    get_platform_ui_url(), application_id, deployment.id
-                )?;
+                writeln!(stdout, "  {}", dashboard_url)?;
             }
         } else if status.as_u16() == 409 {
             let error_text = response

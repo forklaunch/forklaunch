@@ -356,8 +356,20 @@ impl CliCommand for CreateCommand {
             log_header!(stdout, Color::Cyan, "Installing dependencies ({})...", runtime_cmd);
             writeln!(stdout)?;
 
+            let has_lockfile = if manifest.runtime == "bun" {
+                modules_path.join("bun.lock").exists() || modules_path.join("bun.lockb").exists()
+            } else {
+                modules_path.join("pnpm-lock.yaml").exists()
+            };
+
+            let install_args: Vec<&str> = if has_lockfile {
+                vec!["install", "--frozen-lockfile"]
+            } else {
+                vec!["install"]
+            };
+
             let install_status = ProcessCommand::new(&resolved)
-                .args(&["install", "--frozen-lockfile"])
+                .args(&install_args)
                 .current_dir(&modules_path)
                 .status()
                 .with_context(|| format!("Failed to run {} install", runtime_cmd))?;

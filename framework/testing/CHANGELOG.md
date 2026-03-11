@@ -1,5 +1,17 @@
 # @forklaunch/testing
 
+## 0.0.24
+
+### Patch Changes
+
+- Downgrade mikro-orm back to normal
+
+## 0.0.23
+
+### Patch Changes
+
+- bump packages and internal proxy await resilience
+
 ## 0.0.22
 
 ### Patch Changes
