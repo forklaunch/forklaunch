@@ -313,6 +313,7 @@ pub(crate) struct ResourceDefinition {
     #[serde(rename = "type")]
     pub resource_type: String,
     pub name: String,
+    pub technology: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub region: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -767,7 +768,6 @@ fn add_resources_from_inventory(
 ) {
     if let Some(database) = &inventory.database {
         let mut config = HashMap::new();
-        config.insert("technology".to_string(), Value::String(database.clone()));
         config.insert("mode".to_string(), Value::String("centralized".to_string()));
 
         resources.push(ResourceDefinition {
@@ -776,6 +776,7 @@ fn add_resources_from_inventory(
             // see forklaunch-platform/src/modules/platform-management/domain/enum/integration-type.enum.ts
             resource_type: "database".to_string(),
             name: format!("{}-database", service_name),
+            technology: database.clone(),
             region: None,
             config: Some(config),
             // If user manages DB_HOST themselves, don't connect the resource to the service
@@ -790,7 +791,6 @@ fn add_resources_from_inventory(
 
     if let Some(cache) = &inventory.cache {
         let mut config = HashMap::new();
-        config.insert("technology".to_string(), Value::String(cache.clone()));
         config.insert("mode".to_string(), Value::String("distributed".to_string()));
 
         resources.push(ResourceDefinition {
@@ -798,6 +798,7 @@ fn add_resources_from_inventory(
             // Cache resources map to the "cache" integration type
             resource_type: "cache".to_string(),
             name: format!("{}-cache", service_name),
+            technology: cache.clone(),
             region: None,
             config: Some(config),
             service_name: Some(service_name.to_string()),
@@ -806,7 +807,6 @@ fn add_resources_from_inventory(
 
     if let Some(queue) = &inventory.queue {
         let mut config = HashMap::new();
-        config.insert("technology".to_string(), Value::String(queue.clone()));
         config.insert("mode".to_string(), Value::String("distributed".to_string()));
 
         resources.push(ResourceDefinition {
@@ -814,6 +814,7 @@ fn add_resources_from_inventory(
             // Queues are modeled as message queues in the platform schema
             resource_type: "messagequeue".to_string(),
             name: format!("{}-queue", service_name),
+            technology: queue.clone(),
             region: None,
             config: Some(config),
             service_name: Some(service_name.to_string()),
@@ -821,19 +822,14 @@ fn add_resources_from_inventory(
     }
 
     if let Some(object_store) = &inventory.object_store {
-        let mut config = HashMap::new();
-        config.insert(
-            "technology".to_string(),
-            Value::String(object_store.clone()),
-        );
-
         resources.push(ResourceDefinition {
             id: format!("{}-storage", service_name),
             // Object storage maps to the "objectstore" integration type
             resource_type: "objectstore".to_string(),
             name: format!("{}-storage", service_name),
+            technology: object_store.clone(),
             region: None,
-            config: Some(config),
+            config: None,
             service_name: Some(service_name.to_string()),
         });
     }
@@ -848,13 +844,13 @@ fn add_non_db_resources(
 ) {
     if let Some(cache) = &inventory.cache {
         let mut config = HashMap::new();
-        config.insert("technology".to_string(), Value::String(cache.clone()));
         config.insert("mode".to_string(), Value::String("distributed".to_string()));
 
         resources.push(ResourceDefinition {
             id: format!("{}-cache", service_name),
             resource_type: "cache".to_string(),
             name: format!("{}-cache", service_name),
+            technology: cache.clone(),
             region: None,
             config: Some(config),
             service_name: Some(service_name.to_string()),
@@ -863,13 +859,13 @@ fn add_non_db_resources(
 
     if let Some(queue) = &inventory.queue {
         let mut config = HashMap::new();
-        config.insert("technology".to_string(), Value::String(queue.clone()));
         config.insert("mode".to_string(), Value::String("distributed".to_string()));
 
         resources.push(ResourceDefinition {
             id: format!("{}-queue", service_name),
             resource_type: "messagequeue".to_string(),
             name: format!("{}-queue", service_name),
+            technology: queue.clone(),
             region: None,
             config: Some(config),
             service_name: Some(service_name.to_string()),
@@ -877,18 +873,13 @@ fn add_non_db_resources(
     }
 
     if let Some(object_store) = &inventory.object_store {
-        let mut config = HashMap::new();
-        config.insert(
-            "technology".to_string(),
-            Value::String(object_store.clone()),
-        );
-
         resources.push(ResourceDefinition {
             id: format!("{}-storage", service_name),
             resource_type: "objectstore".to_string(),
             name: format!("{}-storage", service_name),
+            technology: object_store.clone(),
             region: None,
-            config: Some(config),
+            config: None,
             service_name: Some(service_name.to_string()),
         });
     }
