@@ -28,7 +28,8 @@ RUST_BACKTRACE=1 cargo run --release init application sync-test-node-application
     -t vitest \
     -D "Test Sync Application" \
     -A "Test Author" \
-    -L 'MIT'
+    -L 'MIT' \
+    -m
 
 cd sync-test-node-application
 
@@ -76,7 +77,8 @@ RUST_BACKTRACE=1 cargo run --release init application sync-test-bun-application 
     -t vitest \
     -D "Test Sync Application" \
     -A "Test Author" \
-    -L 'MIT'
+    -L 'MIT' \
+    -m
 
 cd sync-test-bun-application
 

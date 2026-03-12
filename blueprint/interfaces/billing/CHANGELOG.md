@@ -1,5 +1,11 @@
 # @forklaunch/interfaces-billing
 
+## 0.8.20
+
+### Patch Changes
+
+- revert mikroorm version
+
 ## 0.8.19
 
 ### Patch Changes

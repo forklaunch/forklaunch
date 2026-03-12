@@ -1,5 +1,13 @@
 # @forklaunch/implementation-worker-bullmq
 
+## 0.8.20
+
+### Patch Changes
+
+- revert mikroorm version
+- Updated dependencies
+  - @forklaunch/interfaces-worker@0.7.20
+
 ## 0.8.19
 
 ### Patch Changes

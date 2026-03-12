@@ -27,7 +27,8 @@ RUST_BACKTRACE=1 cargo run --release init application test-app \
     -t vitest \
     -D "Test application" \
     -A "Test Author" \
-    -L 'MIT'
+    -L 'MIT' \
+    -m
 
 cd test-app
 

@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/implementation-worker-database",
-  "version": "0.8.19",
+  "version": "0.8.20",
   "description": "Database implementation for forklaunch workers",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {

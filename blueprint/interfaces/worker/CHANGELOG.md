@@ -1,5 +1,11 @@
 # @forklaunch/interfaces-worker
 
+## 0.7.20
+
+### Patch Changes
+
+- revert mikroorm version
+
 ## 0.7.19
 
 ### Patch Changes

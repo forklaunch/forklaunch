@@ -1,5 +1,13 @@
 # @forklaunch/implementation-worker-kafka
 
+## 0.9.14
+
+### Patch Changes
+
+- revert mikroorm version
+- Updated dependencies
+  - @forklaunch/interfaces-worker@0.7.20
+
 ## 0.9.13
 
 ### Patch Changes

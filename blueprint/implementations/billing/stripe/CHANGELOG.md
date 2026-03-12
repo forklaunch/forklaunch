@@ -1,5 +1,14 @@
 # @forklaunch/implementation-billing-stripe
 
+## 0.5.20
+
+### Patch Changes
+
+- revert mikroorm version
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@0.8.20
+  - @forklaunch/interfaces-billing@0.8.20
+
 ## 0.5.19
 
 ### Patch Changes

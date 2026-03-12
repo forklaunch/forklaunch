@@ -1,5 +1,13 @@
 # @forklaunch/implementation-iam-base
 
+## 0.8.21
+
+### Patch Changes
+
+- revert mikroorm version
+- Updated dependencies
+  - @forklaunch/interfaces-iam@0.8.20
+
 ## 0.8.20
 
 ### Patch Changes

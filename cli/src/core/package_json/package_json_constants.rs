@@ -240,29 +240,29 @@ pub(crate) const EXPRESS_VERSION: &str = "~0.10.12";
 // @forklaunch/hyper-express
 pub(crate) const HYPER_EXPRESS_VERSION: &str = "~0.11.12";
 // @forklaunch/implementation-billing-base
-pub(crate) const BILLING_BASE_VERSION: &str = "~0.8.19";
+pub(crate) const BILLING_BASE_VERSION: &str = "~0.8.20";
 // @forklaunch/implementation-billing-stripe
-pub(crate) const BILLING_STRIPE_VERSION: &str = "~0.5.19";
+pub(crate) const BILLING_STRIPE_VERSION: &str = "~0.5.20";
 // @forklaunch/implementation-iam-base
-pub(crate) const IAM_BASE_VERSION: &str = "~0.8.20";
+pub(crate) const IAM_BASE_VERSION: &str = "~0.8.21";
 // @forklaunch/implementation-worker-bullmq
-pub(crate) const WORKER_BULLMQ_VERSION: &str = "~0.8.19";
+pub(crate) const WORKER_BULLMQ_VERSION: &str = "~0.8.20";
 // @forklaunch/implementation-worker-redis
-pub(crate) const WORKER_REDIS_VERSION: &str = "~0.8.19";
+pub(crate) const WORKER_REDIS_VERSION: &str = "~0.8.20";
 // @forklaunch/implementation-worker-database
-pub(crate) const WORKER_DATABASE_VERSION: &str = "~0.8.19";
+pub(crate) const WORKER_DATABASE_VERSION: &str = "~0.8.20";
 // @forklaunch/implementation-worker-kafka
-pub(crate) const WORKER_KAFKA_VERSION: &str = "~0.9.13";
+pub(crate) const WORKER_KAFKA_VERSION: &str = "~0.9.14";
 // @forklaunch/infrastructure-redis
 pub(crate) const INFRASTRUCTURE_REDIS_VERSION: &str = "~0.4.45";
 // @forklaunch/infrastructure-s3
 pub(crate) const INFRASTRUCTURE_S3_VERSION: &str = "~0.4.45";
 // @forklaunch/interfaces-billing
-pub(crate) const BILLING_INTERFACES_VERSION: &str = "~0.8.19";
+pub(crate) const BILLING_INTERFACES_VERSION: &str = "~0.8.20";
 // @forklaunch/interfaces-iam
-pub(crate) const IAM_INTERFACES_VERSION: &str = "~0.8.19";
+pub(crate) const IAM_INTERFACES_VERSION: &str = "~0.8.20";
 // @forklaunch/interfaces-worker
-pub(crate) const WORKER_INTERFACES_VERSION: &str = "~0.7.19";
+pub(crate) const WORKER_INTERFACES_VERSION: &str = "~0.7.20";
 // @forklaunch/internal
 pub(crate) const INTERNAL_VERSION: &str = "~0.3.35";
 // @forklaunch/testing
