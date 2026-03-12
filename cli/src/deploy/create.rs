@@ -865,13 +865,13 @@ impl CliCommand for CreateCommand {
                         format!("Failed to parse deployment response: {}", response_text)
                     })?;
 
-                log_ok!(stdout, "Triggered deployment");
-                log_info!(stdout, "Deployment ID: {}", deployment.id);
-
                 let dashboard_url = format!(
                     "{}/dashboard/deployments/{}",
                     get_platform_ui_url(), deployment.id
                 );
+
+                log_ok!(stdout, "Triggered deployment: {}", dashboard_url);
+                log_info!(stdout, "Ctrl+C will not cancel the deployment");
 
                 if wait {
                     writeln!(stdout)?;

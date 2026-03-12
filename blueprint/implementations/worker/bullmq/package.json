@@ -54,7 +54,7 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/core": "^0.18.8",
+    "@forklaunch/core": "^0.18.9",
     "@forklaunch/interfaces-worker": "workspace:*",
     "@forklaunch/internal": "^0.3.35",
     "@sinclair/typebox": "^0.34.48",

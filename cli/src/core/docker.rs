@@ -2420,9 +2420,23 @@ pub(crate) fn sync_docker_compose_env_vars(
     docker_compose: &mut DockerCompose,
     project_env_vars: &HashMap<String, Vec<super::ast::infrastructure::env::EnvVarUsage>>,
     manifest: &ApplicationManifestData,
+    modules_path: &std::path::Path,
     stdout: &mut StandardStream,
 ) -> Result<bool> {
+    use crate::core::env_defaults::{EnvContext, ExistingEnvValues, find_existing_hmac_secret, resolve_env_var_default};
+
     let mut changes_made = false;
+
+    // Collect existing env values for majority-value resolution
+    let existing_values = ExistingEnvValues::collect(modules_path);
+
+    // Find existing HMAC secret for consistency
+    let existing_hmac_secret = find_existing_hmac_secret(modules_path);
+    let hmac_secret_for_sync = existing_hmac_secret.unwrap_or_else(|| {
+        let mut bytes = vec![0u8; 32];
+        getrandom::getrandom(&mut bytes).expect("Failed to generate random bytes");
+        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes)
+    });
 
     let project_types: HashMap<String, super::manifest::ProjectType> = manifest
         .projects
@@ -2455,6 +2469,11 @@ pub(crate) fn sync_docker_compose_env_vars(
             continue;
         };
 
+        let context = EnvContext::DockerCompose {
+            service_key,
+            project_name: &project_name,
+        };
+
         let service = docker_compose.services.get_mut(service_key).unwrap();
         let environment = service.environment.get_or_insert_with(IndexMap::new);
 
@@ -2464,7 +2483,15 @@ pub(crate) fn sync_docker_compose_env_vars(
         if let Some(env_vars) = project_env_vars.get(&project_name) {
             for env_var in env_vars {
                 if !environment.contains_key(&env_var.var_name) {
-                    environment.insert(env_var.var_name.clone(), String::new());
+                    let default_value = resolve_env_var_default(
+                        &env_var.var_name,
+                        manifest,
+                        &context,
+                        Some(&hmac_secret_for_sync),
+                        &existing_values,
+                    )
+                    .unwrap_or_default();
+                    environment.insert(env_var.var_name.clone(), default_value);
                     added_vars.push(env_var.var_name.clone());
                 }
             }

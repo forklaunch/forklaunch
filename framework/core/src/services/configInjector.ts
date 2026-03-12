@@ -110,9 +110,9 @@ export class ConfigInjector<
           get(_target, prop) {
             if (prop === Symbol.toPrimitive) return () => '';
             if (prop === 'toString' || prop === 'valueOf') return () => '';
-            if (prop === 'then')
-              return (resolve: (value: unknown) => void) => resolve(noopProxy);
+            if (prop === 'then') return undefined;
             if (prop === Symbol.iterator) return function* () {};
+            if (prop === Symbol.asyncIterator) return async function* () {};
             return noopProxy;
           },
           set() {
@@ -121,10 +121,16 @@ export class ConfigInjector<
           has() {
             return true;
           },
-          ownKeys() {
-            return [];
+          deleteProperty() {
+            return true;
           },
-          getOwnPropertyDescriptor() {
+          ownKeys() {
+            return ['prototype'];
+          },
+          getOwnPropertyDescriptor(_target, prop) {
+            if (prop === 'prototype') {
+              return { configurable: false, enumerable: false, writable: true };
+            }
             return { configurable: true, enumerable: true };
           },
           apply() {

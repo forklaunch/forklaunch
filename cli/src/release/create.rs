@@ -114,7 +114,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use clap::{Arg, ArgMatches, Command};
-use dialoguer::{Select, theme::ColorfulTheme};
+use dialoguer::{Confirm, Select, theme::ColorfulTheme};
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
@@ -247,6 +247,31 @@ impl CliCommand for CreateCommand {
             bail!("Cannot specify both --local and --git flags");
         }
 
+        // Early version conflict check (skip for dry runs)
+        if !dry_run {
+            let check_url = if auth_mode.is_hmac() {
+                format!(
+                    "{}/releases/internal/{}/{}",
+                    get_platform_management_api_url(),
+                    application_id,
+                    version
+                )
+            } else {
+                format!(
+                    "{}/releases/{}/{}",
+                    get_platform_management_api_url(),
+                    application_id,
+                    version
+                )
+            };
+
+            if let Ok(response) = http_client::get_with_auth(&auth_mode, &check_url) {
+                if response.status().is_success() {
+                    bail!("Release version '{}' already exists. Bump the version in your manifest and try again.", version);
+                }
+            }
+        }
+
         let manifest_path = app_root.join(".forklaunch").join("manifest.toml");
         let mut manifest = manifest;
 
@@ -340,6 +365,52 @@ impl CliCommand for CreateCommand {
 
         if local_mode {
             log_info!(stdout, "Using local mode - packaging code directly");
+        } else if is_git_repo() {
+            // Warn user and checkout main branch with latest changes
+            log_warn!(
+                stdout,
+                "Releasing from git will checkout the main branch and pull latest changes."
+            );
+            log_warn!(stdout, "Please save any uncommitted work before proceeding.");
+            writeln!(stdout)?;
+
+            let confirmed = Confirm::with_theme(&ColorfulTheme::default())
+                .with_prompt("Continue?")
+                .default(true)
+                .interact()?;
+
+            if !confirmed {
+                bail!("Release cancelled by user");
+            }
+
+            log_header!(stdout, Color::Cyan, "Checking out main branch...");
+            writeln!(stdout)?;
+
+            let checkout_status = ProcessCommand::new("git")
+                .args(&["checkout", "main"])
+                .status()
+                .with_context(|| "Failed to checkout main branch")?;
+
+            if !checkout_status.success() {
+                bail!("Failed to checkout main branch");
+            }
+
+            log_ok!(stdout, "Checked out main branch");
+
+            log_header!(stdout, Color::Cyan, "Pulling latest changes...");
+            writeln!(stdout)?;
+
+            let pull_status = ProcessCommand::new("git")
+                .args(&["pull"])
+                .status()
+                .with_context(|| "Failed to pull latest changes")?;
+
+            if !pull_status.success() {
+                bail!("Failed to pull latest changes");
+            }
+
+            log_ok!(stdout, "Pulled latest changes");
+            writeln!(stdout)?;
         }
 
         log_header!(stdout, Color::Cyan, "Creating release {}...", version);

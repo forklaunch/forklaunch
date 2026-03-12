@@ -495,6 +495,7 @@ fn sync_docker_compose_with_env_vars(
         &mut docker_compose,
         &project_env_vars,
         manifest_data,
+        modules_path,
         stdout,
     )?;
 

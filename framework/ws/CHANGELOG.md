@@ -1,5 +1,12 @@
 # @forklaunch/ws
 
+## 0.2.7
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@0.18.9
+
 ## 0.2.6
 
 ### Patch Changes

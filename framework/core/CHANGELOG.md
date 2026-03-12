@@ -1,5 +1,11 @@
 # @forklaunch/core
 
+## 0.18.9
+
+### Patch Changes
+
+- Make thenable fast resolve
+
 ## 0.18.8
 
 ### Patch Changes

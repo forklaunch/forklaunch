@@ -9,6 +9,7 @@ pub(crate) mod command;
 pub(crate) mod database;
 pub(crate) mod docker;
 pub(crate) mod env;
+pub(crate) mod env_defaults;
 pub(crate) mod env_scope;
 pub(crate) mod env_template;
 pub(crate) mod format;
