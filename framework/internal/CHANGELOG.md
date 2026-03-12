@@ -1,5 +1,14 @@
 # @forklaunch/internal
 
+## 0.3.36
+
+### Patch Changes
+
+- internal package bump
+- Updated dependencies
+  - @forklaunch/validator@0.10.36
+  - @forklaunch/common@0.6.36
+
 ## 0.3.35
 
 ### Patch Changes

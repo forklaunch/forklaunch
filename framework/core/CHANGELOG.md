@@ -1,5 +1,20 @@
 # @forklaunch/core
 
+## 0.18.11
+
+### Patch Changes
+
+- internal package bump
+- Updated dependencies
+  - @forklaunch/validator@0.10.36
+  - @forklaunch/common@0.6.36
+
+## 0.18.10
+
+### Patch Changes
+
+- better trap on openapi ci proxy
+
 ## 0.18.9
 
 ### Patch Changes

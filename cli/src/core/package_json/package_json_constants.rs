@@ -13,7 +13,7 @@ pub(crate) const ESLINT_VERSION: &str = "^10.0.1";
 // @types/jest
 pub(crate) const JEST_TYPES_VERSION: &str = "^30.0.0";
 // @types/node
-pub(crate) const TYPES_NODE_VERSION: &str = "^25.4.0";
+pub(crate) const TYPES_NODE_VERSION: &str = "^25.5.0";
 // jest
 pub(crate) const JEST_VERSION: &str = "^30.3.0";
 // oxlint
@@ -27,11 +27,11 @@ pub(crate) const TS_NODE_VERSION: &str = "^10.9.2";
 // typescript-eslint
 pub(crate) const TYPESCRIPT_ESLINT_VERSION: &str = "^8.57.0";
 // vitest
-pub(crate) const VITEST_VERSION: &str = "^4.0.18";
+pub(crate) const VITEST_VERSION: &str = "^4.1.0";
 
 // Application package.json dependencies constants
 // @typescript/native-preview
-pub(crate) const TYPESCRIPT_NATIVE_PREVIEW_VERSION: &str = "7.0.0-dev.20260311.1";
+pub(crate) const TYPESCRIPT_NATIVE_PREVIEW_VERSION: &str = "7.0.0-dev.20260312.1";
 // globals
 pub(crate) const GLOBALS_VERSION: &str = "^17.4.0";
 // husky
@@ -232,45 +232,45 @@ pub(crate) const APP_MONITORING_VERSION: &str = "workspace:*";
 // @forklaunch/bunrun
 pub(crate) const BUNRUN_VERSION: &str = "~0.0.2";
 // @forklaunch/common
-pub(crate) const COMMON_VERSION: &str = "~0.6.35";
+pub(crate) const COMMON_VERSION: &str = "~0.6.36";
 // @forklaunch/core
-pub(crate) const CORE_VERSION: &str = "~0.18.8";
+pub(crate) const CORE_VERSION: &str = "~0.18.11";
 // @forklaunch/express
-pub(crate) const EXPRESS_VERSION: &str = "~0.10.12";
+pub(crate) const EXPRESS_VERSION: &str = "~0.10.15";
 // @forklaunch/hyper-express
-pub(crate) const HYPER_EXPRESS_VERSION: &str = "~0.11.12";
+pub(crate) const HYPER_EXPRESS_VERSION: &str = "~0.11.15";
 // @forklaunch/implementation-billing-base
-pub(crate) const BILLING_BASE_VERSION: &str = "~0.8.20";
+pub(crate) const BILLING_BASE_VERSION: &str = "~0.8.21";
 // @forklaunch/implementation-billing-stripe
-pub(crate) const BILLING_STRIPE_VERSION: &str = "~0.5.20";
+pub(crate) const BILLING_STRIPE_VERSION: &str = "~0.5.21";
 // @forklaunch/implementation-iam-base
-pub(crate) const IAM_BASE_VERSION: &str = "~0.8.21";
+pub(crate) const IAM_BASE_VERSION: &str = "~0.8.22";
 // @forklaunch/implementation-worker-bullmq
-pub(crate) const WORKER_BULLMQ_VERSION: &str = "~0.8.20";
+pub(crate) const WORKER_BULLMQ_VERSION: &str = "~0.8.21";
 // @forklaunch/implementation-worker-redis
-pub(crate) const WORKER_REDIS_VERSION: &str = "~0.8.20";
+pub(crate) const WORKER_REDIS_VERSION: &str = "~0.8.21";
 // @forklaunch/implementation-worker-database
-pub(crate) const WORKER_DATABASE_VERSION: &str = "~0.8.20";
+pub(crate) const WORKER_DATABASE_VERSION: &str = "~0.8.21";
 // @forklaunch/implementation-worker-kafka
-pub(crate) const WORKER_KAFKA_VERSION: &str = "~0.9.14";
+pub(crate) const WORKER_KAFKA_VERSION: &str = "~0.9.15";
 // @forklaunch/infrastructure-redis
-pub(crate) const INFRASTRUCTURE_REDIS_VERSION: &str = "~0.4.45";
+pub(crate) const INFRASTRUCTURE_REDIS_VERSION: &str = "~0.4.48";
 // @forklaunch/infrastructure-s3
-pub(crate) const INFRASTRUCTURE_S3_VERSION: &str = "~0.4.45";
+pub(crate) const INFRASTRUCTURE_S3_VERSION: &str = "~0.4.48";
 // @forklaunch/interfaces-billing
-pub(crate) const BILLING_INTERFACES_VERSION: &str = "~0.8.20";
+pub(crate) const BILLING_INTERFACES_VERSION: &str = "~0.8.21";
 // @forklaunch/interfaces-iam
-pub(crate) const IAM_INTERFACES_VERSION: &str = "~0.8.20";
+pub(crate) const IAM_INTERFACES_VERSION: &str = "~0.8.21";
 // @forklaunch/interfaces-worker
-pub(crate) const WORKER_INTERFACES_VERSION: &str = "~0.7.20";
+pub(crate) const WORKER_INTERFACES_VERSION: &str = "~0.7.21";
 // @forklaunch/internal
-pub(crate) const INTERNAL_VERSION: &str = "~0.3.35";
+pub(crate) const INTERNAL_VERSION: &str = "~0.3.36";
 // @forklaunch/testing
-pub(crate) const TESTING_VERSION: &str = "~0.0.24";
+pub(crate) const TESTING_VERSION: &str = "~0.0.25";
 // @forklaunch/universal-sdk
-pub(crate) const UNIVERSAL_SDK_VERSION: &str = "~0.7.35";
+pub(crate) const UNIVERSAL_SDK_VERSION: &str = "~0.7.36";
 // @forklaunch/validator
-pub(crate) const VALIDATOR_VERSION: &str = "~0.10.35";
+pub(crate) const VALIDATOR_VERSION: &str = "~0.10.36";
 // @mikro-orm/core
 pub(crate) const MIKRO_ORM_CORE_VERSION: &str = "^6.6.9";
 // @mikro-orm/migrations
@@ -290,7 +290,7 @@ pub(crate) const AJV_VERSION: &str = "^8.18.0";
 // better-auth
 pub(crate) const BETTER_AUTH_VERSION: &str = "^1.5.5";
 // bullmq
-pub(crate) const BULLMQ_VERSION: &str = "^5.70.4";
+pub(crate) const BULLMQ_VERSION: &str = "^5.71.0";
 // better-sqlite3
 pub(crate) const BETTER_SQLITE3_VERSION: &str = "^12.6.2";
 // dotenv
@@ -298,7 +298,7 @@ pub(crate) const DOTENV_VERSION: &str = "^17.3.1";
 // jose
 pub(crate) const JOSE_VERSION: &str = "^6.2.1";
 // sqlite3
-pub(crate) const SQLITE3_VERSION: &str = "^5.1.7";
+pub(crate) const SQLITE3_VERSION: &str = "^6.0.1";
 // stripe
 pub(crate) const STRIPE_VERSION: &str = "^20.4.1";
 // uuid

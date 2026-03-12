@@ -45,12 +45,12 @@
     "@changesets/cli": "^2.30.0",
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
-    "@types/node": "^25.4.0",
+    "@types/node": "^25.5.0",
     "eslint": "^10.0.3",
     "globals": "^17.4.0",
     "jest": "^30.3.0",
     "lint-staged": "^16.3.3",
-    "oxlint": "^1.53.0",
+    "oxlint": "^1.55.0",
     "prettier": "^3.8.1",
     "sort-package-json": "^3.6.1",
     "ts-jest": "^29.4.6",
@@ -58,14 +58,14 @@
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.57.0",
-    "vitest": "^4.0.18"
+    "vitest": "^4.1.0"
   },
   "dependencies": {
-    "@forklaunch/common": "^0.6.35",
-    "@forklaunch/core": "^0.18.8",
-    "@forklaunch/express": "^0.10.12",
-    "@forklaunch/hyper-express": "^0.11.12",
-    "@forklaunch/universal-sdk": "^0.7.35",
-    "@forklaunch/validator": "^0.10.35"
+    "@forklaunch/common": "^0.6.36",
+    "@forklaunch/core": "^0.18.11",
+    "@forklaunch/express": "^0.10.15",
+    "@forklaunch/hyper-express": "^0.11.15",
+    "@forklaunch/universal-sdk": "^0.7.36",
+    "@forklaunch/validator": "^0.10.36"
   }
 }

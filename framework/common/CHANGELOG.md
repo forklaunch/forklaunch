@@ -1,5 +1,11 @@
 # @forklaunch/common
 
+## 0.6.36
+
+### Patch Changes
+
+- internal package bump
+
 ## 0.6.35
 
 ### Patch Changes

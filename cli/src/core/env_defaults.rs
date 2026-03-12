@@ -16,6 +16,7 @@ pub(crate) enum EnvContext<'a> {
         project_name: &'a str,
     },
     /// docker-compose context: services are referenced by container name
+    #[allow(dead_code)]
     DockerCompose {
         service_key: &'a str,
         project_name: &'a str,
@@ -410,6 +411,7 @@ fn generate_random_b64_secret(byte_length: usize) -> String {
 
 /// Resolve defaults for a batch of missing env vars.
 /// Returns a HashMap with values filled in where possible.
+#[allow(dead_code)]
 pub(crate) fn resolve_env_var_defaults(
     missing_vars: &[String],
     manifest: &ApplicationManifestData,

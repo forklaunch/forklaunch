@@ -1,5 +1,11 @@
 # @forklaunch/interfaces-worker
 
+## 0.7.21
+
+### Patch Changes
+
+- internal bump
+
 ## 0.7.20
 
 ### Patch Changes

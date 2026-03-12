@@ -1,5 +1,11 @@
 # @forklaunch/bunrun
 
+## 0.0.30
+
+### Patch Changes
+
+- internal package bump
+
 ## 0.0.29
 
 ### Patch Changes

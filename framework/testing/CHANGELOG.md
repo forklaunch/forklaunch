@@ -1,5 +1,11 @@
 # @forklaunch/testing
 
+## 0.0.25
+
+### Patch Changes
+
+- internal package bump
+
 ## 0.0.24
 
 ### Patch Changes
