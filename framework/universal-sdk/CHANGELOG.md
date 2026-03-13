@@ -1,5 +1,21 @@
 # @forklaunch/universal-sdk
 
+## 0.7.38
+
+### Patch Changes
+
+- clean build
+- Updated dependencies
+  - @forklaunch/common@0.6.38
+
+## 0.7.37
+
+### Patch Changes
+
+- fix mikroorm
+- Updated dependencies
+  - @forklaunch/common@0.6.37
+
 ## 0.7.36
 
 ### Patch Changes

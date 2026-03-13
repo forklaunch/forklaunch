@@ -1,5 +1,21 @@
 # @forklaunch/implementation-worker-bullmq
 
+## 0.8.23
+
+### Patch Changes
+
+- package bumps
+- Updated dependencies
+  - @forklaunch/interfaces-worker@0.7.23
+
+## 0.8.22
+
+### Patch Changes
+
+- fix mikro-orm
+- Updated dependencies
+  - @forklaunch/interfaces-worker@0.7.22
+
 ## 0.8.21
 
 ### Patch Changes

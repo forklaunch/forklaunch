@@ -1,5 +1,21 @@
 # @forklaunch/validator
 
+## 0.10.38
+
+### Patch Changes
+
+- clean build
+- Updated dependencies
+  - @forklaunch/common@0.6.38
+
+## 0.10.37
+
+### Patch Changes
+
+- fix mikroorm
+- Updated dependencies
+  - @forklaunch/common@0.6.37
+
 ## 0.10.36
 
 ### Patch Changes

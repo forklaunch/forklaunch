@@ -1,5 +1,40 @@
 # @forklaunch/ws
 
+## 0.2.13
+
+### Patch Changes
+
+- clean build
+- Updated dependencies
+  - @forklaunch/validator@0.10.38
+  - @forklaunch/common@0.6.38
+  - @forklaunch/core@0.18.15
+
+## 0.2.12
+
+### Patch Changes
+
+- fix mikroorm
+- Updated dependencies
+  - @forklaunch/core@0.18.14
+  - @forklaunch/common@0.6.37
+  - @forklaunch/validator@0.10.37
+
+## 0.2.11
+
+### Patch Changes
+
+- actually fix mikroorm
+- Updated dependencies
+  - @forklaunch/core@0.18.13
+
+## 0.2.10
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@0.18.12
+
 ## 0.2.9
 
 ### Patch Changes

@@ -1,5 +1,44 @@
 # @forklaunch/hyper-express
 
+## 0.11.19
+
+### Patch Changes
+
+- clean build
+- Updated dependencies
+  - @forklaunch/validator@0.10.38
+  - @forklaunch/common@0.6.38
+  - @forklaunch/core@0.18.15
+  - @forklaunch/ws@0.2.13
+
+## 0.11.18
+
+### Patch Changes
+
+- fix mikroorm
+- Updated dependencies
+  - @forklaunch/core@0.18.14
+  - @forklaunch/ws@0.2.12
+  - @forklaunch/common@0.6.37
+  - @forklaunch/validator@0.10.37
+
+## 0.11.17
+
+### Patch Changes
+
+- actually fix mikroorm
+- Updated dependencies
+  - @forklaunch/core@0.18.13
+  - @forklaunch/ws@0.2.11
+
+## 0.11.16
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@0.18.12
+  - @forklaunch/ws@0.2.10
+
 ## 0.11.15
 
 ### Patch Changes

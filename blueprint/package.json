@@ -61,11 +61,11 @@
     "vitest": "^4.1.0"
   },
   "dependencies": {
-    "@forklaunch/common": "^0.6.36",
-    "@forklaunch/core": "^0.18.11",
-    "@forklaunch/express": "^0.10.15",
-    "@forklaunch/hyper-express": "^0.11.15",
-    "@forklaunch/universal-sdk": "^0.7.36",
-    "@forklaunch/validator": "^0.10.36"
+    "@forklaunch/common": "^0.6.38",
+    "@forklaunch/core": "^0.18.15",
+    "@forklaunch/express": "^0.10.19",
+    "@forklaunch/hyper-express": "^0.11.19",
+    "@forklaunch/universal-sdk": "^0.7.38",
+    "@forklaunch/validator": "^0.10.38"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/core",
-  "version": "0.18.11",
+  "version": "0.18.15",
   "description": "forklaunch-js core package. Contains useful building blocks.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -91,8 +91,8 @@
     "@forklaunch/common": "workspace:*",
     "@forklaunch/opentelemetry-instrumentation-hyper-express": "0.0.5",
     "@forklaunch/validator": "workspace:*",
-    "@mikro-orm/core": "^6.6.9",
-    "@mikro-orm/mongodb": "^6.6.9",
+    "@mikro-orm/core": "6.6.9",
+    "@mikro-orm/mongodb": "6.6.9",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/api-logs": "^0.213.0",
     "@opentelemetry/exporter-logs-otlp-http": "^0.213.0",

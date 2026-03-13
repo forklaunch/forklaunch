@@ -1,5 +1,40 @@
 # @forklaunch/express
 
+## 0.10.19
+
+### Patch Changes
+
+- clean build
+- Updated dependencies
+  - @forklaunch/validator@0.10.38
+  - @forklaunch/common@0.6.38
+  - @forklaunch/core@0.18.15
+
+## 0.10.18
+
+### Patch Changes
+
+- fix mikroorm
+- Updated dependencies
+  - @forklaunch/core@0.18.14
+  - @forklaunch/common@0.6.37
+  - @forklaunch/validator@0.10.37
+
+## 0.10.17
+
+### Patch Changes
+
+- actually fix mikroorm
+- Updated dependencies
+  - @forklaunch/core@0.18.13
+
+## 0.10.16
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@0.18.12
+
 ## 0.10.15
 
 ### Patch Changes

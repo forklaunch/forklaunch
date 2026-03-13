@@ -1,5 +1,35 @@
 # @forklaunch/internal
 
+## 0.3.40
+
+### Patch Changes
+
+- clean build
+- Updated dependencies
+  - @forklaunch/validator@0.10.38
+  - @forklaunch/common@0.6.38
+
+## 0.3.39
+
+### Patch Changes
+
+- fix mikroorm
+- Updated dependencies
+  - @forklaunch/common@0.6.37
+  - @forklaunch/validator@0.10.37
+
+## 0.3.38
+
+### Patch Changes
+
+- actually fix mikroorm
+
+## 0.3.37
+
+### Patch Changes
+
+- fix mikroorm package versions
+
 ## 0.3.36
 
 ### Patch Changes

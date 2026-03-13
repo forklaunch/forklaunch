@@ -1,5 +1,38 @@
 # @forklaunch/infrastructure-s3
 
+## 0.4.52
+
+### Patch Changes
+
+- clean build
+- Updated dependencies
+  - @forklaunch/common@0.6.38
+  - @forklaunch/core@0.18.15
+
+## 0.4.51
+
+### Patch Changes
+
+- fix mikroorm
+- Updated dependencies
+  - @forklaunch/core@0.18.14
+  - @forklaunch/common@0.6.37
+
+## 0.4.50
+
+### Patch Changes
+
+- actually fix mikroorm
+- Updated dependencies
+  - @forklaunch/core@0.18.13
+
+## 0.4.49
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@0.18.12
+
 ## 0.4.48
 
 ### Patch Changes

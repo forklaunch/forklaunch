@@ -1,5 +1,21 @@
 # @forklaunch/implementation-iam-base
 
+## 0.8.24
+
+### Patch Changes
+
+- package bumps
+- Updated dependencies
+  - @forklaunch/interfaces-iam@0.8.23
+
+## 0.8.23
+
+### Patch Changes
+
+- fix mikro-orm
+- Updated dependencies
+  - @forklaunch/interfaces-iam@0.8.22
+
 ## 0.8.22
 
 ### Patch Changes

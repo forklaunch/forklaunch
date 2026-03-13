@@ -1,5 +1,17 @@
 # @forklaunch/interfaces-iam
 
+## 0.8.23
+
+### Patch Changes
+
+- package bumps
+
+## 0.8.22
+
+### Patch Changes
+
+- fix mikro-orm
+
 ## 0.8.21
 
 ### Patch Changes

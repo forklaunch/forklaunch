@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/common",
-  "version": "0.6.36",
+  "version": "0.6.38",
   "description": "Common package for base types, interfaces, implementations.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {

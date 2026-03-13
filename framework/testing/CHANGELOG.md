@@ -1,5 +1,29 @@
 # @forklaunch/testing
 
+## 0.0.29
+
+### Patch Changes
+
+- clean build
+
+## 0.0.28
+
+### Patch Changes
+
+- fix mikroorm
+
+## 0.0.27
+
+### Patch Changes
+
+- actually fix mikroorm
+
+## 0.0.26
+
+### Patch Changes
+
+- fix mikroorm package versions
+
 ## 0.0.25
 
 ### Patch Changes

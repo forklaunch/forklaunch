@@ -22,13 +22,13 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "^0.6.36",
-    "@forklaunch/core": "^0.18.11",
-    "@forklaunch/express": "^0.10.15",
-    "@forklaunch/hyper-express": "^0.11.15",
-    "@forklaunch/validator": "^0.10.36",
-    "@mikro-orm/core": "^7.0.1",
-    "@mikro-orm/mongodb": "^7.0.1",
+    "@forklaunch/common": "^0.6.38",
+    "@forklaunch/core": "^0.18.15",
+    "@forklaunch/express": "^0.10.19",
+    "@forklaunch/hyper-express": "^0.11.19",
+    "@forklaunch/validator": "^0.10.38",
+    "@mikro-orm/core": "6.6.9",
+    "@mikro-orm/mongodb": "6.6.9",
     "@sinclair/typebox": "^0.34.48",
     "uuid": "^13.0.0",
     "zod": "^4.3.6"

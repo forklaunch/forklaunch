@@ -1,5 +1,21 @@
 # @forklaunch/implementation-worker-kafka
 
+## 0.9.17
+
+### Patch Changes
+
+- package bumps
+- Updated dependencies
+  - @forklaunch/interfaces-worker@0.7.23
+
+## 0.9.16
+
+### Patch Changes
+
+- fix mikro-orm
+- Updated dependencies
+  - @forklaunch/interfaces-worker@0.7.22
+
 ## 0.9.15
 
 ### Patch Changes

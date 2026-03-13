@@ -1,5 +1,23 @@
 # @forklaunch/implementation-billing-stripe
 
+## 0.5.23
+
+### Patch Changes
+
+- package bumps
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@0.8.23
+  - @forklaunch/interfaces-billing@0.8.23
+
+## 0.5.22
+
+### Patch Changes
+
+- fix mikro-orm
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@0.8.22
+  - @forklaunch/interfaces-billing@0.8.22
+
 ## 0.5.21
 
 ### Patch Changes

@@ -1,5 +1,21 @@
 # @forklaunch/implementation-billing-base
 
+## 0.8.23
+
+### Patch Changes
+
+- package bumps
+- Updated dependencies
+  - @forklaunch/interfaces-billing@0.8.23
+
+## 0.8.22
+
+### Patch Changes
+
+- fix mikro-orm
+- Updated dependencies
+  - @forklaunch/interfaces-billing@0.8.22
+
 ## 0.8.21
 
 ### Patch Changes
