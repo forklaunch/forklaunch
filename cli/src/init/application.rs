@@ -65,7 +65,7 @@ use crate::{
                 TYPES_BUILD_SCRIPT, TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION, TYPES_EXPRESS_VERSION,
                 TYPES_NODE_VERSION, TYPES_QS_VERSION, TYPES_UUID_VERSION, TYPES_WATCH_SCRIPT,
                 TYPESCRIPT_ESLINT_VERSION, TYPESCRIPT_NATIVE_PREVIEW_VERSION, TYPESCRIPT_VERSION, UNIVERSAL_SDK_VERSION, UUID_VERSION,
-                VALIDATOR_VERSION, VITEST_VERSION, ZOD_VERSION, application_build_script,
+                VALIDATOR_VERSION, VITEST_VERSION, ZOD_VERSION, APPLICATION_BUILD_SCRIPT,
                 application_clean_purge_script, application_clean_script, application_docs_script,
                 application_format_script, application_lint_fix_script, application_lint_script,
                 application_migrate_script, application_seed_script, application_setup_script,
@@ -132,7 +132,7 @@ fn generate_application_package_json(
         author: Some(data.author.clone()),
         workspaces: bun_workspace_projects,
         scripts: Some(ApplicationScripts {
-            build: Some(application_build_script(&data.runtime.parse()?)),
+            build: Some(APPLICATION_BUILD_SCRIPT.to_string()),
             clean: Some(application_clean_script(&data.runtime.parse()?)),
             clean_purge: Some(application_clean_purge_script(&data.runtime.parse()?)),
             database_setup: Some(application_setup_script(&data.runtime.parse()?)),

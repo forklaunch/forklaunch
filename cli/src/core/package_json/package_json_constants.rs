@@ -77,12 +77,7 @@ pub(crate) fn application_lint_fix_script(linter: &Linter) -> String {
     })
 }
 
-pub(crate) fn application_build_script(runtime: &Runtime) -> String {
-    match runtime {
-        Runtime::Bun => "bunx -y @forklaunch/bunrun build".to_string(),
-        Runtime::Node => "pnpm -r --no-bail run build".to_string(),
-    }
-}
+pub(crate) const APPLICATION_BUILD_SCRIPT: &str = "tsgo -b";
 
 pub(crate) fn application_clean_script(runtime: &Runtime) -> String {
     String::from(match runtime {

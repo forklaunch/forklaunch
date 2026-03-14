@@ -120,6 +120,7 @@ pub fn sync_all_projects(
                         ArtifactType::DockerCompose,
                         ArtifactType::Runtime,
                         ArtifactType::ClientSdk,
+                        ArtifactType::ModulesTsconfig,
                     ],
                     app_root_path,
                     &modules_path,
