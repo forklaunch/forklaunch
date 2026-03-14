@@ -1,8 +1,11 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, wrap } from '@mikro-orm/core';
 import Stripe from 'stripe';
-import { PaymentLink } from '../../persistence/entities/paymentLink.entity';
+import {
+  PaymentLink,
+  type IPaymentLink
+} from '../../persistence/entities/paymentLink.entity';
 import { StatusEnum } from '../enum/status.enum';
 import { PaymentLinkSchemas } from '../schemas';
 
@@ -16,15 +19,12 @@ export const CreatePaymentLinkMapper = requestMapper({
       em: EntityManager,
       providerFields: Stripe.PaymentLink
     ) => {
-      return PaymentLink.create(
-        {
-          ...dto,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          providerFields
-        },
-        em
-      );
+      return em.create(PaymentLink, {
+        ...dto,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        providerFields
+      });
     }
   }
 });
@@ -39,13 +39,13 @@ export const UpdatePaymentLinkMapper = requestMapper({
       em: EntityManager,
       providerFields: Stripe.PaymentLink
     ) => {
-      return PaymentLink.update(
-        {
-          ...dto,
-          ...(providerFields !== undefined ? { providerFields } : {})
-        },
-        em
-      );
+      const entity = await em.findOneOrFail(PaymentLink, { id: dto.id });
+      em.assign(entity, {
+        ...dto,
+        ...(providerFields !== undefined ? { providerFields } : {}),
+        updatedAt: new Date()
+      });
+      return entity;
     }
   }
 });
@@ -55,9 +55,9 @@ export const PaymentLinkMapper = responseMapper({
   schema: PaymentLinkSchemas.PaymentLinkSchema(StatusEnum),
   entity: PaymentLink,
   mapperDefinition: {
-    toDto: async (entity: PaymentLink) => {
+    toDto: async (entity: IPaymentLink) => {
       return {
-        ...(await entity.read()),
+        ...wrap(entity).toPOJO(),
         stripeFields: entity.providerFields
       };
     }

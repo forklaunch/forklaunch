@@ -9,7 +9,6 @@ import { Migrator } from '@mikro-orm/migrations';
 // import { MySqlDriver } from '@mikro-orm/mysql';
 import { defineConfig, Platform, TextType, Type } from '@mikro-orm/core';
 import { PostgreSqlDriver } from '@mikro-orm/postgresql';
-import { TsMorphMetadataProvider } from '@mikro-orm/reflection';
 // import { SqliteDriver } from '@mikro-orm/sqlite';
 import dotenv from 'dotenv';
 import * as entities from './persistence/entities';
@@ -62,8 +61,6 @@ const mikroOrmOptionsConfig = defineConfig({
   port: validConfigInjector.resolve('DB_PORT'),
   entities: Object.values(entities),
   discovery: {
-    // disableDynamicFileAccess: true,
-    requireEntitiesArray: true,
     getMappedType(type: string, platform: Platform) {
       if (type === 'string') {
         return Type.getType(TextType);
@@ -72,7 +69,7 @@ const mikroOrmOptionsConfig = defineConfig({
       return platform.getDefaultMappedType(type);
     }
   },
-  metadataProvider: TsMorphMetadataProvider,
+  forceUtcTimezone: false,
   debug: validConfigInjector.resolve('NODE_ENV') === 'development',
   extensions: [Migrator],
   seeder: {

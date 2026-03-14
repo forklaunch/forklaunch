@@ -1,40 +1,25 @@
-import { SqlBaseEntity } from '@forklaunch/blueprint-core';
-import { Entity, Enum, Property, Unique } from '@mikro-orm/core';
+import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
+import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 import { BillingProviderEnum } from '../../domain/enum/billingProvider.enum';
 import { CurrencyEnum } from '../../domain/enum/currency.enum';
 import { PlanCadenceEnum } from '../../domain/enum/planCadence.enum';
 
-@Entity()
-export class Plan extends SqlBaseEntity {
-  @Property()
-  active!: boolean;
+export const Plan = defineEntity({
+  name: 'Plan',
+  properties: {
+    ...sqlBaseProperties,
+    active: p.boolean(),
+    name: p.string(),
+    description: p.string().nullable(),
+    price: p.number(),
+    currency: p.enum(() => CurrencyEnum),
+    cadence: p.enum(() => PlanCadenceEnum),
+    // tie to permissions (slugs)
+    features: p.array(p.string()).nullable(),
+    providerFields: p.json<unknown>().nullable(),
+    externalId: p.string().unique(),
+    billingProvider: p.enum(() => BillingProviderEnum).nullable()
+  }
+});
 
-  @Property()
-  name!: string;
-
-  @Property()
-  description?: string;
-
-  @Property()
-  price!: number;
-
-  @Enum(() => CurrencyEnum)
-  currency!: CurrencyEnum;
-
-  @Enum(() => PlanCadenceEnum)
-  cadence!: PlanCadenceEnum;
-
-  // tie to permissions (slugs)
-  @Property({ nullable: true })
-  features?: string[];
-
-  @Property({ type: 'json', nullable: true })
-  providerFields?: unknown;
-
-  @Property()
-  @Unique()
-  externalId!: string;
-
-  @Enum({ items: () => BillingProviderEnum, nullable: true })
-  billingProvider?: BillingProviderEnum;
-}
+export type IPlan = InferEntity<typeof Plan>;

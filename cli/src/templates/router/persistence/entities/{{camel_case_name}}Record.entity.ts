@@ -1,16 +1,14 @@
-import { Entity, Property } from '@mikro-orm/core';
-import { {{#is_mongo}}No{{/is_mongo}}SqlBaseEntity } from '@{{app_name}}/core';
+import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
+import { {{#is_mongo}}nosql{{/is_mongo}}{{^is_mongo}}sql{{/is_mongo}}BaseProperties } from '@{{app_name}}/core';
 
-// Entity class that defines the structure of the {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Recordtable
-@Entity()
-export class {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record extends {{#is_mongo}}No{{/is_mongo}}SqlBaseEntity {
-  // message property that stores a message string
-  @Property()
-  message!: string;{{#is_worker}}
+export const {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record = defineEntity({
+  name: '{{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record',
+  properties: {
+    ...{{#is_mongo}}nosql{{/is_mongo}}{{^is_mongo}}sql{{/is_mongo}}BaseProperties,
+    message: p.string(),{{#is_worker}}
+    processed: p.boolean(),
+    retryCount: p.integer(),{{/is_worker}}
+  },
+});
 
-  @Property()
-  processed!: boolean;
-
-  @Property()
-  retryCount!: number;{{/is_worker}}
-}
+export type I{{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record = InferEntity<typeof {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record>;

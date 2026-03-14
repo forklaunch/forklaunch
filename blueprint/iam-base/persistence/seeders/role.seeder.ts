@@ -11,6 +11,6 @@ export class RoleSeeder extends Seeder {
       em.create(Role, adminRole),
       em.create(Role, systemRole)
     ];
-    return em.persistAndFlush(roles);
+    await em.persist(roles).flush();
   }
 }

@@ -1,40 +1,21 @@
-import { SqlBaseEntity } from '@forklaunch/blueprint-core';
-import {
-  Collection,
-  Entity,
-  ManyToMany,
-  ManyToOne,
-  Property,
-  Unique
-} from '@mikro-orm/core';
-import type { Organization } from './organization.entity';
-import type { Role } from './role.entity';
+import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
+import { sqlBaseProperties } from '@forklaunch/blueprint-core';
+import { Organization } from './organization.entity';
+import { Role } from './role.entity';
 
-@Entity()
-export class User extends SqlBaseEntity {
-  @Property()
-  @Unique()
-  email!: string;
+export const User = defineEntity({
+  name: 'User',
+  properties: {
+    ...sqlBaseProperties,
+    email: p.string().unique(),
+    firstName: p.string(),
+    lastName: p.string(),
+    phoneNumber: p.string().nullable(),
+    organization: () => p.manyToOne(Organization).nullable(),
+    roles: () => p.manyToMany(Role),
+    subscription: p.string().unique().nullable(),
+    providerFields: p.json<unknown>().nullable()
+  }
+});
 
-  @Property()
-  firstName!: string;
-
-  @Property()
-  lastName!: string;
-
-  @Property({ nullable: true })
-  phoneNumber?: string;
-
-  @ManyToOne('Organization', { nullable: true })
-  organization?: Organization;
-
-  @ManyToMany('Role')
-  roles = new Collection<Role>(this);
-
-  @Property()
-  @Unique()
-  subscription?: string;
-
-  @Property({ type: 'json', nullable: true })
-  providerFields?: unknown;
-}
+export type IUser = InferEntity<typeof User>;

@@ -1,14 +1,14 @@
-import { SqlBaseEntity } from '@forklaunch/blueprint-core';
-import { Entity, Property } from '@mikro-orm/core';
+import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
+import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 
-@Entity()
-export class Verification extends SqlBaseEntity {
-  @Property()
-  identifier!: string;
+export const Verification = defineEntity({
+  name: 'Verification',
+  properties: {
+    ...sqlBaseProperties,
+    identifier: p.string(),
+    value: p.string(),
+    expiresAt: p.datetime()
+  }
+});
 
-  @Property()
-  value!: string;
-
-  @Property()
-  expiresAt!: Date;
-}
+export type IVerification = InferEntity<typeof Verification>;

@@ -1,8 +1,8 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, wrap } from '@mikro-orm/core';
 import Stripe from 'stripe';
-import { Plan } from '../../persistence/entities/plan.entity';
+import { Plan, type IPlan } from '../../persistence/entities/plan.entity';
 import { PlanSchemas } from '../schemas';
 
 export const CreatePlanMapper = requestMapper({
@@ -15,15 +15,12 @@ export const CreatePlanMapper = requestMapper({
       em: EntityManager,
       providerFields: Stripe.Product
     ) => {
-      return Plan.create(
-        {
-          ...dto,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          providerFields
-        },
-        em
-      );
+      return em.create(Plan, {
+        ...dto,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        providerFields
+      });
     }
   }
 });
@@ -38,15 +35,13 @@ export const UpdatePlanMapper = requestMapper({
       em: EntityManager,
       providerFields: Stripe.Product
     ) => {
-      const existingPlan = await em.findOneOrFail(Plan, { id: dto.id });
-
-      Object.assign(existingPlan, {
+      const entity = await em.findOneOrFail(Plan, { id: dto.id });
+      em.assign(entity, {
         ...dto,
         providerFields,
         updatedAt: new Date()
       });
-
-      return existingPlan;
+      return entity;
     }
   }
 });
@@ -56,8 +51,8 @@ export const PlanMapper = responseMapper({
   schema: PlanSchemas.PlanSchema,
   entity: Plan,
   mapperDefinition: {
-    toDto: async (entity: Plan) => {
-      const baseData = await entity.read();
+    toDto: async (entity: IPlan) => {
+      const baseData = wrap(entity).toPOJO();
       return {
         ...baseData,
         stripeFields: entity.providerFields

@@ -6,6 +6,6 @@ import { session } from '../seed.data';
 export class SessionSeeder extends Seeder {
   async run(em: EntityManager): Promise<void> {
     const createdSession = em.create(Session, session);
-    return em.persistAndFlush(createdSession);
+    await em.persist(createdSession).flush();
   }
 }

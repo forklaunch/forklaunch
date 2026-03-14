@@ -81,7 +81,7 @@ export class BaseUserService<
     if (em) {
       await em.persist(user);
     } else {
-      await this.em.persistAndFlush(user);
+      await this.em.persist(user).flush();
     }
 
     return this.mappers.UserMapper.toDto(user);
@@ -109,7 +109,7 @@ export class BaseUserService<
     if (em) {
       await em.persist(users);
     } else {
-      await this.em.persistAndFlush(users);
+      await this.em.persist(users).flush();
     }
 
     return Promise.all(
@@ -121,9 +121,13 @@ export class BaseUserService<
     idDto: IdDto,
     em?: EntityManager
   ): Promise<string | undefined> {
-    const user = await (em ?? this.em).findOne('User', idDto, {
-      populate: ['id', 'organization']
-    });
+    const user = await (em ?? this.em).findOne(
+      this.mappers.UserMapper.entity,
+      idDto,
+      {
+        populate: ['id', 'organization']
+      }
+    );
     return user?.organization?.id;
   }
 
@@ -135,9 +139,13 @@ export class BaseUserService<
       this.openTelemetryCollector.info('Getting user', idDto);
     }
 
-    const user = await (em ?? this.em).findOneOrFail('User', idDto, {
-      populate: ['id', '*']
-    });
+    const user = await (em ?? this.em).findOneOrFail(
+      this.mappers.UserMapper.entity,
+      idDto,
+      {
+        populate: ['id', '*']
+      }
+    );
 
     return this.mappers.UserMapper.toDto(user as MapperEntities['UserMapper']);
   }
@@ -160,7 +168,7 @@ export class BaseUserService<
 
     return Promise.all(
       (
-        await (em ?? this.em).find('User', filter, {
+        await (em ?? this.em).find(this.mappers.UserMapper.entity, filter, {
           populate: ['id', '*']
         })
       ).map((user) =>
@@ -187,7 +195,7 @@ export class BaseUserService<
     if (em) {
       await em.persist(user);
     } else {
-      await this.em.persistAndFlush(user);
+      await this.em.persist(user).flush();
     }
 
     return this.mappers.UserMapper.toDto(user);
@@ -215,7 +223,7 @@ export class BaseUserService<
     if (em) {
       await em.persist(users);
     } else {
-      await this.em.persistAndFlush(users);
+      await this.em.persist(users).flush();
     }
 
     return Promise.all(
@@ -242,7 +250,7 @@ export class BaseUserService<
       })
     } as FilterQuery<MapperEntities['UserMapper']>;
 
-    await (em ?? this.em).nativeDelete('User', filter);
+    await (em ?? this.em).nativeDelete(this.mappers.UserMapper.entity, filter);
   }
 
   async deleteBatchUsers(
@@ -264,7 +272,7 @@ export class BaseUserService<
       })
     };
 
-    await (em ?? this.em).nativeDelete('User', filter);
+    await (em ?? this.em).nativeDelete(this.mappers.UserMapper.entity, filter);
   }
 
   async surfaceRoles(

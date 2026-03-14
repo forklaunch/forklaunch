@@ -1,4 +1,4 @@
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, EntitySchema } from '@mikro-orm/core';
 import { BaseCheckoutSessionDtos } from './baseBillingDto.types';
 import { BaseCheckoutSessionEntities } from './baseBillingEntity.types';
 
@@ -18,11 +18,13 @@ export type CheckoutSessionMappers<
   >
 > = {
   CheckoutSessionMapper: {
+    entity: EntitySchema;
     toDto: (
       entity: MapperEntities['CheckoutSessionMapper']
     ) => Promise<MapperDomains['CheckoutSessionMapper']>;
   };
   CreateCheckoutSessionMapper: {
+    entity: EntitySchema;
     toEntity: (
       dto: MapperDomains['CreateCheckoutSessionMapper'],
       em: EntityManager,
@@ -30,6 +32,7 @@ export type CheckoutSessionMappers<
     ) => Promise<MapperEntities['CreateCheckoutSessionMapper']>;
   };
   UpdateCheckoutSessionMapper: {
+    entity: EntitySchema;
     toEntity: (
       dto: MapperDomains['UpdateCheckoutSessionMapper'],
       em: EntityManager,

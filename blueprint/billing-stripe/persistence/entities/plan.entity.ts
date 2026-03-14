@@ -1,43 +1,28 @@
-import { SqlBaseEntity } from '@forklaunch/blueprint-core';
+import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
+import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 import {
   BillingProviderEnum,
   CurrencyEnum,
   PlanCadenceEnum
 } from '@forklaunch/implementation-billing-stripe/enum';
-import { Entity, Enum, Property, Unique } from '@mikro-orm/core';
 import Stripe from 'stripe';
 
-@Entity()
-export class Plan extends SqlBaseEntity {
-  @Property()
-  active!: boolean;
+export const Plan = defineEntity({
+  name: 'Plan',
+  properties: {
+    ...sqlBaseProperties,
+    active: p.boolean(),
+    name: p.string(),
+    description: p.string().optional(),
+    price: p.number(),
+    currency: p.enum(() => CurrencyEnum),
+    cadence: p.enum(() => PlanCadenceEnum),
+    // tie to permissions (slugs)
+    features: p.array(p.string()).nullable(),
+    providerFields: p.json<Stripe.Product>(),
+    externalId: p.string().unique(),
+    billingProvider: p.enum(() => BillingProviderEnum).nullable()
+  }
+});
 
-  @Property()
-  name!: string;
-
-  @Property()
-  description?: string;
-
-  @Property()
-  price!: number;
-
-  @Enum(() => CurrencyEnum)
-  currency!: CurrencyEnum;
-
-  @Enum(() => PlanCadenceEnum)
-  cadence!: PlanCadenceEnum;
-
-  // tie to permissions (slugs)
-  @Property({ nullable: true })
-  features?: string[];
-
-  @Property({ type: 'json' })
-  providerFields!: Stripe.Product;
-
-  @Property()
-  @Unique()
-  externalId!: string;
-
-  @Enum({ items: () => BillingProviderEnum, nullable: true })
-  billingProvider?: BillingProviderEnum;
-}
+export type IPlan = InferEntity<typeof Plan>;

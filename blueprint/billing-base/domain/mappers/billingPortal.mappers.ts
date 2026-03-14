@@ -1,7 +1,10 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager } from '@mikro-orm/core';
-import { BillingPortal } from '../../persistence/entities/billingPortal.entity';
+import { EntityManager, wrap } from '@mikro-orm/core';
+import {
+  BillingPortal,
+  type IBillingPortal
+} from '../../persistence/entities/billingPortal.entity';
 import { BillingPortalSchemas } from '../schemas';
 
 export const CreateBillingPortalMapper = requestMapper({
@@ -10,14 +13,11 @@ export const CreateBillingPortalMapper = requestMapper({
   entity: BillingPortal,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return BillingPortal.create(
-        {
-          ...dto,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        },
-        em
-      );
+      return em.create(BillingPortal, {
+        ...dto,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
     }
   }
 });
@@ -28,7 +28,9 @@ export const UpdateBillingPortalMapper = requestMapper({
   entity: BillingPortal,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return BillingPortal.update(dto, em);
+      const entity = await em.findOneOrFail(BillingPortal, { id: dto.id });
+      em.assign(entity, { ...dto, updatedAt: new Date() });
+      return entity;
     }
   }
 });
@@ -38,8 +40,8 @@ export const BillingPortalMapper = responseMapper({
   schema: BillingPortalSchemas.BillingPortalSchema,
   entity: BillingPortal,
   mapperDefinition: {
-    toDto: async (entity: BillingPortal) => {
-      return await entity.read();
+    toDto: async (entity: IBillingPortal) => {
+      return wrap(entity).toPOJO();
     }
   }
 });

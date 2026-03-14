@@ -5,6 +5,7 @@ import {
 import { AnySchemaValidator } from '@forklaunch/validator';
 import { EntityManager } from '@mikro-orm/core';
 import Stripe from 'stripe';
+import { StripeWebhookEvent } from '../../../../billing-stripe/persistence/entities/stripeWebhookEvent.entity';
 import { PartyEnum } from '../../../../billing-base/domain/enum/party.enum';
 import { BillingProviderEnum } from '../domain/enum/billingProvider.enum';
 import { CurrencyEnum } from '../domain/enum/currency.enum';
@@ -136,7 +137,7 @@ export class StripeWebhookService<
     }
 
     if (
-      await this.em.findOne('StripeWebhookEvent', {
+      await this.em.findOne(StripeWebhookEvent, {
         idempotencyKey: event.request?.idempotency_key
       })
     ) {
@@ -454,7 +455,7 @@ export class StripeWebhookService<
         break;
     }
 
-    await this.em.insert('StripeWebhookEvent', {
+    await this.em.insert(StripeWebhookEvent, {
       stripeId: event.id,
       idempotencyKey: event.request?.idempotency_key,
       eventType: event.type,

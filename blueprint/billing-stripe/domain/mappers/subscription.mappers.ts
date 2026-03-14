@@ -1,8 +1,11 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, wrap } from '@mikro-orm/core';
 import Stripe from 'stripe';
-import { Subscription } from '../../persistence/entities/subscription.entity';
+import {
+  Subscription,
+  type ISubscription
+} from '../../persistence/entities/subscription.entity';
 import { PartyEnum } from '../enum/party.enum';
 import { SubscriptionSchemas } from '../schemas';
 
@@ -16,15 +19,12 @@ export const CreateSubscriptionMapper = requestMapper({
       em: EntityManager,
       providerFields: Stripe.Subscription
     ) => {
-      return Subscription.create(
-        {
-          ...dto,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          providerFields
-        },
-        em
-      );
+      return em.create(Subscription, {
+        ...dto,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        providerFields
+      });
     }
   }
 });
@@ -39,13 +39,13 @@ export const UpdateSubscriptionMapper = requestMapper({
       em: EntityManager,
       providerFields: Stripe.Subscription
     ) => {
-      return Subscription.update(
-        {
-          ...dto,
-          providerFields
-        },
-        em
-      );
+      const entity = await em.findOneOrFail(Subscription, { id: dto.id });
+      em.assign(entity, {
+        ...dto,
+        providerFields,
+        updatedAt: new Date()
+      });
+      return entity;
     }
   }
 });
@@ -55,8 +55,8 @@ export const SubscriptionMapper = responseMapper({
   schema: SubscriptionSchemas.SubscriptionSchema(PartyEnum),
   entity: Subscription,
   mapperDefinition: {
-    toDto: async (entity: Subscription) => {
-      const data = await entity.read();
+    toDto: async (entity: ISubscription) => {
+      const data = wrap(entity).toPOJO();
       return {
         ...data,
         // Convert null endDate to undefined for DTO validation

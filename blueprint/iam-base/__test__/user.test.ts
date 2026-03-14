@@ -175,7 +175,7 @@ describe('User Routes E2E Tests with PostgreSQL Container', () => {
         organization: org2
       });
 
-      await em.persistAndFlush([org1, org2, user1, user2]);
+      await em.persist([org1, org2, user1, user2]).flush();
 
       const { ci, tokens } = await import('../bootstrapper');
       const UserService = ci.resolve(tokens.UserService);

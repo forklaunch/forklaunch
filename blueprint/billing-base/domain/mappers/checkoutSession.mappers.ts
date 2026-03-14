@@ -1,7 +1,10 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager } from '@mikro-orm/core';
-import { CheckoutSession } from '../../persistence/entities/checkoutSession.entity';
+import { EntityManager, wrap } from '@mikro-orm/core';
+import {
+  CheckoutSession,
+  type ICheckoutSession
+} from '../../persistence/entities/checkoutSession.entity';
 import { CurrencyEnum } from '../enum/currency.enum';
 import { PaymentMethodEnum } from '../enum/paymentMethod.enum';
 import { StatusEnum } from '../enum/status.enum';
@@ -17,14 +20,11 @@ export const CreateCheckoutSessionMapper = requestMapper({
   entity: CheckoutSession,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return CheckoutSession.create(
-        {
-          ...dto,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        },
-        em
-      );
+      return em.create(CheckoutSession, {
+        ...dto,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
     }
   }
 });
@@ -39,7 +39,9 @@ export const UpdateCheckoutSessionMapper = requestMapper({
   entity: CheckoutSession,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return CheckoutSession.update(dto, em);
+      const entity = await em.findOneOrFail(CheckoutSession, { id: dto.id });
+      em.assign(entity, { ...dto, updatedAt: new Date() });
+      return entity;
     }
   }
 });
@@ -53,8 +55,8 @@ export const CheckoutSessionMapper = responseMapper({
   ),
   entity: CheckoutSession,
   mapperDefinition: {
-    toDto: async (entity: CheckoutSession) => {
-      return await entity.read();
+    toDto: async (entity: ICheckoutSession) => {
+      return wrap(entity).toPOJO();
     }
   }
 });

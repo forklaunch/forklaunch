@@ -1,36 +1,22 @@
-import { SqlBaseEntity } from '@forklaunch/blueprint-core';
-import { Entity, ManyToOne, Property } from '@mikro-orm/core';
+import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
+import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 import { User } from './user.entity';
 
-@Entity()
-export class Account extends SqlBaseEntity {
-  @ManyToOne('User')
-  user!: User;
+export const Account = defineEntity({
+  name: 'Account',
+  properties: {
+    ...sqlBaseProperties,
+    user: () => p.manyToOne(User),
+    accountId: p.string(),
+    providerId: p.string(),
+    accessToken: p.string().nullable(),
+    refreshToken: p.string().nullable(),
+    accessTokenExpiresAt: p.datetime().nullable(),
+    refreshTokenExpiresAt: p.datetime().nullable(),
+    scope: p.string().nullable(),
+    idToken: p.string().nullable(),
+    password: p.string().nullable()
+  }
+});
 
-  @Property()
-  accountId!: string;
-
-  @Property()
-  providerId!: string;
-
-  @Property()
-  accessToken?: string;
-
-  @Property()
-  refreshToken?: string;
-
-  @Property()
-  accessTokenExpiresAt?: Date;
-
-  @Property()
-  refreshTokenExpiresAt?: Date;
-
-  @Property()
-  scope?: string;
-
-  @Property()
-  idToken?: string;
-
-  @Property()
-  password?: string;
-}
+export type IAccount = InferEntity<typeof Account>;

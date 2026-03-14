@@ -43,9 +43,9 @@ impl MapperGenerator {
     fn generate_imports(&self, pascal_case_name: &str, camel_case_name: &str) -> String {
         let entity_suffix = if self.is_worker { "EventRecord" } else { "Record" };
         let em_import = if !self.is_worker {
-            "\nimport { EntityManager } from '@mikro-orm/core';"
+            "\nimport { EntityManager, wrap } from '@mikro-orm/core';"
         } else {
-            ""
+            "\nimport { wrap } from '@mikro-orm/core';"
         };
 
         format!(
@@ -54,10 +54,12 @@ impl MapperGenerator {
   responseMapper
 }} from '@forklaunch/core/mappers';
 import {{ schemaValidator }} from '@{}/core';{}
-import {{ {}{} }} from '../../persistence/entities/{}{}.entity';
+import {{ {}{}, type I{}{} }} from '../../persistence/entities/{}{}.entity';
 import {{ {}RequestSchema, {}ResponseSchema }} from '../schemas/{}.schema';"#,
             self.app_name,
             em_import,
+            pascal_case_name,
+            entity_suffix,
             pascal_case_name,
             entity_suffix,
             camel_case_name,
@@ -76,7 +78,7 @@ import {{ {}RequestSchema, {}ResponseSchema }} from '../schemas/{}.schema';"#,
         } else {
             ""
         };
-        let em_arg = if !self.is_worker { ", em" } else { "" };
+        let _em_arg = if !self.is_worker { ", em" } else { "" };
 
         format!(
             r#"// RequestMapper const that maps a request schema to an entity
@@ -86,9 +88,9 @@ export const {}RequestMapper = requestMapper({{
   entity: {}{},
   mapperDefinition: {{
     toEntity: async (dto{}) => {{
-      return {}{}.create({{
+      return em.create({}{}, {{
 {}
-      }}{});
+      }});
     }}
   }}
 }});"#,
@@ -100,7 +102,6 @@ export const {}RequestMapper = requestMapper({{
             pascal_case_name,
             entity_suffix,
             to_entity_body,
-            em_arg
         )
     }
 
@@ -114,8 +115,8 @@ export const {}ResponseMapper = responseMapper({{
   schema: {}ResponseSchema,
   entity: {}{},
   mapperDefinition: {{
-    toDto: async (entity: {}{}) => {{
-      return await entity.read();
+    toDto: async (entity: I{}{}) => {{
+      return wrap(entity).toPOJO();
     }}
   }}
 }});"#,

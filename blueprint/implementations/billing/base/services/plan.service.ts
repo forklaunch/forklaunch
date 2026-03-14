@@ -87,7 +87,7 @@ export class BasePlanService<
 
     return Promise.all(
       (
-        await (em ?? this.em).findAll('Plan', {
+        await (em ?? this.em).findAll(this.mappers.PlanMapper.entity, {
           where: idsDto?.ids?.length ? { id: { $in: idsDto.ids } } : undefined
         })
       ).map((plan) =>
@@ -122,7 +122,10 @@ export class BasePlanService<
     if (this.evaluatedTelemetryOptions.logging) {
       this.openTelemetryCollector.info('Getting plan', idDto);
     }
-    const plan = await (em ?? this.em).findOneOrFail('Plan', idDto);
+    const plan = await (em ?? this.em).findOneOrFail(
+      this.mappers.PlanMapper.entity,
+      idDto
+    );
     return this.mappers.PlanMapper.toDto(plan as MapperEntities['PlanMapper']);
   }
 
@@ -151,6 +154,6 @@ export class BasePlanService<
     if (this.evaluatedTelemetryOptions.logging) {
       this.openTelemetryCollector.info('Deleting plan', idDto);
     }
-    await (em ?? this.em).nativeDelete('Plan', idDto);
+    await (em ?? this.em).nativeDelete(this.mappers.PlanMapper.entity, idDto);
   }
 }

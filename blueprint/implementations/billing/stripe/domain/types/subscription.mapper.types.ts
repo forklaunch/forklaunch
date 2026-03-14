@@ -1,4 +1,4 @@
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, EntitySchema } from '@mikro-orm/core';
 import Stripe from 'stripe';
 import { StripeSubscriptionDtos } from './stripe.dto.types';
 import { StripeSubscriptionEntities } from './stripe.entity.types';
@@ -9,11 +9,13 @@ export type StripeSubscriptionMappers<
   Dto extends StripeSubscriptionDtos<PartyType>
 > = {
   SubscriptionMapper: {
+    entity: EntitySchema;
     toDto: (
       entity: Entities['SubscriptionMapper']
     ) => Promise<Dto['SubscriptionMapper']>;
   };
   CreateSubscriptionMapper: {
+    entity: EntitySchema;
     toEntity: (
       dto: Dto['CreateSubscriptionMapper'],
       em: EntityManager,
@@ -22,6 +24,7 @@ export type StripeSubscriptionMappers<
     ) => Promise<Entities['CreateSubscriptionMapper']>;
   };
   UpdateSubscriptionMapper: {
+    entity: EntitySchema;
     toEntity: (
       dto: Dto['UpdateSubscriptionMapper'],
       em: EntityManager,

@@ -87,7 +87,7 @@ export class BaseOrganizationService<
     if (em) {
       await em.persist(organization);
     } else {
-      await this.em.persistAndFlush(organization);
+      await this.em.persist(organization).flush();
     }
 
     return this.mappers.OrganizationMapper.toDto(organization);
@@ -102,7 +102,7 @@ export class BaseOrganizationService<
     }
 
     const organization = await (em ?? this.em).findOneOrFail(
-      'Organization',
+      this.mappers.OrganizationMapper.entity,
       idDto,
       {
         populate: ['id', '*']
@@ -136,7 +136,7 @@ export class BaseOrganizationService<
     if (em) {
       await em.persist(updatedOrganization);
     } else {
-      await this.em.persistAndFlush(updatedOrganization);
+      await this.em.persist(updatedOrganization).flush();
     }
 
     return this.mappers.OrganizationMapper.toDto(updatedOrganization);
@@ -148,9 +148,9 @@ export class BaseOrganizationService<
     }
 
     if (em) {
-      await em.nativeDelete('Organization', idDto);
+      await em.nativeDelete(this.mappers.OrganizationMapper.entity, idDto);
     } else {
-      await this.em.nativeDelete('Organization', idDto);
+      await this.em.nativeDelete(this.mappers.OrganizationMapper.entity, idDto);
     }
   }
 }
