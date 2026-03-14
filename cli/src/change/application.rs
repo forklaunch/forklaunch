@@ -50,7 +50,7 @@ use crate::{
                 BIOME_VERSION, ESLINT_VERSION, EXPRESS_VERSION, HYPER_EXPRESS_VERSION,
                 JEST_TYPES_VERSION, JEST_VERSION, OXLINT_VERSION, PRETTIER_VERSION,
                 TS_JEST_VERSION, TYPEBOX_VERSION, TYPESCRIPT_ESLINT_VERSION, VITEST_VERSION,
-                ZOD_VERSION, application_build_script, application_clean_purge_script,
+                ZOD_VERSION, APPLICATION_BUILD_SCRIPT, application_clean_purge_script,
                 application_clean_script, application_docs_script, application_format_script,
                 application_lint_fix_script, application_lint_script, application_migrate_script,
                 application_seed_script, application_setup_script, application_test_script,
@@ -887,10 +887,10 @@ fn change_runtime(
         &mut application_package_json_scripts.additional_scripts,
         application_package_json_scripts.build.clone(),
         Some(existing_runtime.to_string()),
-        Some(application_build_script(&existing_runtime)),
+        Some(APPLICATION_BUILD_SCRIPT.to_string()),
         "build",
         &runtime.to_string(),
-        &application_build_script(runtime),
+        APPLICATION_BUILD_SCRIPT,
         None,
     ));
     application_package_json_scripts.clean = Some(attempt_replacement(
