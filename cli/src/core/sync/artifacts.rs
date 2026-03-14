@@ -32,7 +32,7 @@ use crate::{
         pnpm_workspace::PnpmWorkspace,
         rendered_template::{RenderedTemplate, RenderedTemplatesCache},
         sync::detection::detect_routers_from_service,
-        tsconfig::add_project_to_modules_tsconfig,
+        tsconfig::{add_project_to_modules_tsconfig, remove_project_from_modules_tsconfig},
     },
 };
 
@@ -607,10 +607,13 @@ pub fn remove_project_from_artifacts(
                 }
             }
             ArtifactType::ModulesTsconfig => {
-                writeln!(
-                    stdout,
-                    "[INFO] Modules tsconfig.json cleanup not yet implemented"
-                )?;
+                let rendered_template =
+                    remove_project_from_modules_tsconfig(modules_path, project_name)?;
+                rendered_templates_cache.insert(
+                    rendered_template.path.to_string_lossy().to_string(),
+                    rendered_template,
+                );
+                log_ok!(stdout, "Removed from modules tsconfig.json");
             }
         }
     }
