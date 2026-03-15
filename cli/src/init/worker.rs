@@ -52,7 +52,7 @@ use crate::{
                 HYPER_EXPRESS_VERSION, INFRASTRUCTURE_REDIS_VERSION, INTERNAL_VERSION,
                 IOREDIS_VERSION, MIKRO_ORM_CLI_VERSION, MIKRO_ORM_CORE_VERSION,
                 MIKRO_ORM_DATABASE_VERSION, MIKRO_ORM_MIGRATIONS_VERSION,
-                MIKRO_ORM_REFLECTION_VERSION, MIKRO_ORM_SEEDER_VERSION, OXLINT_VERSION,
+                MIKRO_ORM_SEEDER_VERSION, OXLINT_VERSION,
                 PINO_VERSION, PRETTIER_VERSION, PROJECT_BUILD_SCRIPT, PROJECT_DOCS_SCRIPT,
                 PROJECT_SEED_SCRIPT, SQLITE3_VERSION, TESTING_VERSION, TSX_VERSION,
                 TYPEBOX_VERSION, TYPEDOC_VERSION, TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION,
@@ -507,11 +507,7 @@ pub(crate) fn generate_worker_package_json(
                 } else {
                     None
                 },
-                mikro_orm_reflection: if manifest_data.is_database_enabled {
-                    Some(MIKRO_ORM_REFLECTION_VERSION.to_string())
-                } else {
-                    None
-                },
+                mikro_orm_reflection: None,
                 mikro_orm_seeder: if manifest_data.is_database_enabled {
                     Some(MIKRO_ORM_SEEDER_VERSION.to_string())
                 } else {

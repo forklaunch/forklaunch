@@ -9,8 +9,7 @@ export type DatabaseType =
   | 'mongo'
   | 'mssql'
   | 'libsql'
-  | 'sqlite'
-  | 'better-sqlite';
+  | 'sqlite';
 
 export interface PostgresConfig {
   user?: string;
@@ -127,7 +126,6 @@ export class TestContainerManager {
       case 'mssql':
         return 'mssql';
       case 'sqlite':
-      case 'better-sqlite':
       case 'libsql':
         return 'sqlite';
       default:

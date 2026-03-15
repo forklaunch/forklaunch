@@ -6,6 +6,6 @@ import { account } from '../seed.data';
 export class AccountSeeder extends Seeder {
   async run(em: EntityManager): Promise<void> {
     const createdAccount = em.create(Account, account);
-    return em.persistAndFlush(createdAccount);
+    await em.persist(createdAccount).flush();
   }
 }

@@ -1,4 +1,4 @@
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, EntitySchema } from '@mikro-orm/core';
 import { OrganizationDtos } from './iamDto.types';
 import { OrganizationEntities } from './iamEntities.types';
 
@@ -8,11 +8,13 @@ export type OrganizationMappers<
   MapperDomains extends OrganizationDtos<OrganizationStatus>
 > = {
   OrganizationMapper: {
+    entity: EntitySchema<MapperEntities['OrganizationMapper']>;
     toDto: (
       entity: MapperEntities['OrganizationMapper']
     ) => Promise<MapperDomains['OrganizationMapper']>;
   };
   CreateOrganizationMapper: {
+    entity: EntitySchema<MapperEntities['OrganizationMapper']>;
     toEntity: (
       dto: MapperDomains['CreateOrganizationMapper'],
       em: EntityManager,
@@ -20,6 +22,7 @@ export type OrganizationMappers<
     ) => Promise<MapperEntities['CreateOrganizationMapper']>;
   };
   UpdateOrganizationMapper: {
+    entity: EntitySchema<MapperEntities['OrganizationMapper']>;
     toEntity: (
       dto: MapperDomains['UpdateOrganizationMapper'],
       em: EntityManager,

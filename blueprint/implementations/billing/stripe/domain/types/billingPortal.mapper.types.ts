@@ -1,4 +1,4 @@
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, EntitySchema } from '@mikro-orm/core';
 import Stripe from 'stripe';
 import { StripeBillingPortalDtos } from './stripe.dto.types';
 import { StripeBillingPortalEntities } from './stripe.entity.types';
@@ -8,11 +8,13 @@ export type StripeBillingPortalMappers<
   Dto extends StripeBillingPortalDtos
 > = {
   BillingPortalMapper: {
+    entity: EntitySchema;
     toDto: (
       entity: Entities['BillingPortalMapper']
     ) => Promise<Dto['BillingPortalMapper']>;
   };
   CreateBillingPortalMapper: {
+    entity: EntitySchema;
     toEntity: (
       dto: Dto['CreateBillingPortalMapper'],
       em: EntityManager,
@@ -21,6 +23,7 @@ export type StripeBillingPortalMappers<
     ) => Promise<Entities['CreateBillingPortalMapper']>;
   };
   UpdateBillingPortalMapper: {
+    entity: EntitySchema;
     toEntity: (
       dto: Dto['UpdateBillingPortalMapper'],
       em: EntityManager,

@@ -1,4 +1,4 @@
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, EntitySchema } from '@mikro-orm/core';
 import { PermissionDtos } from './iamDto.types';
 import { PermissionEntities } from './iamEntities.types';
 
@@ -7,11 +7,13 @@ export type PermissionMappers<
   MapperDomains extends PermissionDtos
 > = {
   PermissionMapper: {
+    entity: EntitySchema;
     toDto: (
       entity: MapperEntities['PermissionMapper']
     ) => Promise<MapperDomains['PermissionMapper']>;
   };
   CreatePermissionMapper: {
+    entity: EntitySchema;
     toEntity: (
       dto: MapperDomains['CreatePermissionMapper'],
       em: EntityManager,
@@ -19,6 +21,7 @@ export type PermissionMappers<
     ) => Promise<MapperEntities['CreatePermissionMapper']>;
   };
   UpdatePermissionMapper: {
+    entity: EntitySchema;
     toEntity: (
       dto: MapperDomains['UpdatePermissionMapper'],
       em: EntityManager,
@@ -26,6 +29,7 @@ export type PermissionMappers<
     ) => Promise<MapperEntities['UpdatePermissionMapper']>;
   };
   RoleEntityMapper: {
+    entity: EntitySchema;
     toEntity: (
       dto: MapperDomains['RoleEntityMapper'],
       em: EntityManager,

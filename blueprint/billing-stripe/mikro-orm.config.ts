@@ -9,7 +9,6 @@ import { Migrator } from '@mikro-orm/migrations';
 // import { MySqlDriver } from '@mikro-orm/mysql';
 import { defineConfig, Platform, TextType, Type } from '@mikro-orm/core';
 import { PostgreSqlDriver } from '@mikro-orm/postgresql';
-import { TsMorphMetadataProvider } from '@mikro-orm/reflection';
 // import { SqliteDriver } from '@mikro-orm/sqlite';
 import dotenv from 'dotenv';
 import * as entities from './persistence/entities';
@@ -61,7 +60,7 @@ const mikroOrmOptionsConfig = defineConfig({
   password: validConfigInjector.resolve('DB_PASSWORD'),
   port: validConfigInjector.resolve('DB_PORT'),
   entities: Object.values(entities),
-  metadataProvider: TsMorphMetadataProvider,
+  forceUtcTimezone: false,
   debug: validConfigInjector.resolve('NODE_ENV') === 'development',
   extensions: [Migrator],
   discovery: {

@@ -136,7 +136,7 @@ async function seedPlans() {
       existing.providerFields = product;
       existing.updatedAt = new Date();
 
-      await em.persistAndFlush(existing);
+      await em.persist(existing).flush();
       console.log(`  ✓ Updated: ${planName}`);
     } else {
       console.log(`  + Creating new plan: ${planName}`);
@@ -158,7 +158,7 @@ async function seedPlans() {
         updatedAt: new Date()
       });
 
-      await em.persistAndFlush(plan);
+      await em.persist(plan).flush();
       console.log(`  ✓ Created: ${planName}`);
       seeded++;
     }

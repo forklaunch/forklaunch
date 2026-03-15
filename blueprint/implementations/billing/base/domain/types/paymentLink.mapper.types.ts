@@ -1,4 +1,4 @@
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, EntitySchema } from '@mikro-orm/core';
 import { BasePaymentLinkDtos } from './baseBillingDto.types';
 import { BasePaymentLinkEntities } from './baseBillingEntity.types';
 
@@ -18,11 +18,13 @@ export type PaymentLinkMappers<
   >
 > = {
   PaymentLinkMapper: {
+    entity: EntitySchema;
     toDto: (
       entity: MapperEntities['PaymentLinkMapper']
     ) => Promise<MapperDomains['PaymentLinkMapper']>;
   };
   CreatePaymentLinkMapper: {
+    entity: EntitySchema;
     toEntity: (
       dto: MapperDomains['CreatePaymentLinkMapper'],
       em: EntityManager,
@@ -30,6 +32,7 @@ export type PaymentLinkMappers<
     ) => Promise<MapperEntities['CreatePaymentLinkMapper']>;
   };
   UpdatePaymentLinkMapper: {
+    entity: EntitySchema;
     toEntity: (
       dto: MapperDomains['UpdatePaymentLinkMapper'],
       em: EntityManager,

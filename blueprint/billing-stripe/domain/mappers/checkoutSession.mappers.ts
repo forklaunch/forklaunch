@@ -1,8 +1,11 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, wrap } from '@mikro-orm/core';
 import Stripe from 'stripe';
-import { CheckoutSession } from '../../persistence/entities/checkoutSession.entity';
+import {
+  CheckoutSession,
+  type ICheckoutSession
+} from '../../persistence/entities/checkoutSession.entity';
 import { StatusEnum } from '../enum/status.enum';
 import { CheckoutSessionSchemas } from '../schemas';
 
@@ -16,15 +19,12 @@ export const CreateCheckoutSessionMapper = requestMapper({
       em: EntityManager,
       providerFields: Stripe.Checkout.Session
     ) => {
-      return CheckoutSession.create(
-        {
-          ...dto,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          providerFields
-        },
-        em
-      );
+      return em.create(CheckoutSession, {
+        ...dto,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        providerFields
+      });
     }
   }
 });
@@ -39,13 +39,13 @@ export const UpdateCheckoutSessionMapper = requestMapper({
       em: EntityManager,
       providerFields: Stripe.Checkout.Session
     ) => {
-      return CheckoutSession.update(
-        {
-          ...dto,
-          providerFields
-        },
-        em
-      );
+      const entity = await em.findOneOrFail(CheckoutSession, { id: dto.id });
+      em.assign(entity, {
+        ...dto,
+        providerFields,
+        updatedAt: new Date()
+      });
+      return entity;
     }
   }
 });
@@ -55,9 +55,9 @@ export const CheckoutSessionMapper = responseMapper({
   schema: CheckoutSessionSchemas.CheckoutSessionSchema(StatusEnum),
   entity: CheckoutSession,
   mapperDefinition: {
-    toDto: async (entity: CheckoutSession) => {
+    toDto: async (entity: ICheckoutSession) => {
       return {
-        ...(await entity.read()),
+        ...wrap(entity).toPOJO(),
         stripeFields: entity.providerFields
       };
     }

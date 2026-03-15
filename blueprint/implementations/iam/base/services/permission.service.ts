@@ -173,7 +173,7 @@ export class BasePermissionService<
     if (em) {
       await em.persist([permission, ...roles]);
     } else {
-      await this.em.persistAndFlush([permission, ...roles]);
+      await this.em.persist([permission, ...roles]).flush();
     }
 
     return this.mappers.PermissionMapper.toDto(permission);
@@ -233,7 +233,7 @@ export class BasePermissionService<
     if (em) {
       await em.persist(entities);
     } else {
-      await this.em.persistAndFlush(entities);
+      await this.em.persist(entities).flush();
     }
 
     return Promise.all(
@@ -250,7 +250,10 @@ export class BasePermissionService<
     if (this.evaluatedTelemetryOptions.logging) {
       this.openTelemetryCollector.info('Getting permission', idDto);
     }
-    const permission = await (em ?? this.em).findOneOrFail('Permission', idDto);
+    const permission = await (em ?? this.em).findOneOrFail(
+      this.mappers.PermissionMapper.entity,
+      idDto
+    );
     return this.mappers.PermissionMapper.toDto(
       permission as MapperEntities['PermissionMapper']
     );
@@ -265,7 +268,7 @@ export class BasePermissionService<
     }
     return Promise.all(
       (
-        await (em ?? this.em).find('Permission', {
+        await (em ?? this.em).find(this.mappers.PermissionMapper.entity, {
           id: { $in: idsDto.ids }
         })
       ).map((permission) =>
@@ -326,7 +329,7 @@ export class BasePermissionService<
     if (em) {
       await em.persist(entities);
     } else {
-      await this.em.persistAndFlush(entities);
+      await this.em.persist(entities).flush();
     }
 
     return this.mappers.PermissionMapper.toDto(permission);
@@ -369,7 +372,7 @@ export class BasePermissionService<
       if (em) {
         await em.persist(entities);
       } else {
-        await this.em.persistAndFlush(entities);
+        await this.em.persist(entities).flush();
       }
     });
 
@@ -384,7 +387,10 @@ export class BasePermissionService<
     if (this.evaluatedTelemetryOptions.logging) {
       this.openTelemetryCollector.info('Deleting permission', idDto);
     }
-    await (em ?? this.em).nativeDelete('Permission', idDto);
+    await (em ?? this.em).nativeDelete(
+      this.mappers.PermissionMapper.entity,
+      idDto
+    );
   }
 
   async deleteBatchPermissions(
@@ -394,7 +400,7 @@ export class BasePermissionService<
     if (this.evaluatedTelemetryOptions.logging) {
       this.openTelemetryCollector.info('Deleting batch permissions', idsDto);
     }
-    await (em ?? this.em).nativeDelete('Permission', {
+    await (em ?? this.em).nativeDelete(this.mappers.PermissionMapper.entity, {
       id: { $in: idsDto.ids }
     });
   }

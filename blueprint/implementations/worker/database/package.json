@@ -57,7 +57,7 @@
     "@forklaunch/core": "^0.18.15",
     "@forklaunch/interfaces-worker": "workspace:*",
     "@forklaunch/internal": "^0.3.40",
-    "@mikro-orm/core": "6.6.9",
+    "@mikro-orm/core": "7.0.2",
     "@sinclair/typebox": "^0.34.48",
     "zod": "^4.3.6"
   },

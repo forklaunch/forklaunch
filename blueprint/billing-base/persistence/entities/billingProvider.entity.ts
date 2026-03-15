@@ -1,19 +1,16 @@
-import { SqlBaseEntity } from '@forklaunch/blueprint-core';
-import { Entity, Enum, Property, Unique } from '@mikro-orm/core';
+import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
+import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 import { BillingProviderEnum } from '../../domain/enum/billingProvider.enum';
 
 // This is to represent connection information for a billing provider
-@Entity()
-export class BillingProvider extends SqlBaseEntity {
-  @Property({ nullable: true })
-  @Unique()
-  externalId?: string;
+export const BillingProvider = defineEntity({
+  name: 'BillingProvider',
+  properties: {
+    ...sqlBaseProperties,
+    externalId: p.string().unique().nullable(),
+    providerFields: p.json<unknown>().nullable(),
+    billingProvider: p.enum(() => BillingProviderEnum).nullable()
+  }
+});
 
-  // maybe include standardized auth fields if the same, if not, leverage the providerFields
-  // store information here as well
-  @Property({ type: 'json', nullable: true })
-  providerFields?: unknown;
-
-  @Enum({ items: () => BillingProviderEnum, nullable: true })
-  billingProvider?: BillingProviderEnum;
-}
+export type IBillingProvider = InferEntity<typeof BillingProvider>;

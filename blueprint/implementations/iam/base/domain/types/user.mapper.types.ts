@@ -1,4 +1,4 @@
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, EntitySchema } from '@mikro-orm/core';
 import { UserDtos } from './iamDto.types';
 import { UserEntities } from './iamEntities.types';
 
@@ -7,11 +7,13 @@ export type UserMappers<
   MapperDomains extends UserDtos
 > = {
   UserMapper: {
+    entity: EntitySchema<MapperEntities['UserMapper']>;
     toDto: (
       entity: MapperEntities['UserMapper']
     ) => Promise<MapperDomains['UserMapper']>;
   };
   CreateUserMapper: {
+    entity: EntitySchema<MapperEntities['UserMapper']>;
     toEntity: (
       dto: MapperDomains['CreateUserMapper'],
       em: EntityManager,
@@ -19,6 +21,7 @@ export type UserMappers<
     ) => Promise<MapperEntities['CreateUserMapper']>;
   };
   UpdateUserMapper: {
+    entity: EntitySchema<MapperEntities['UserMapper']>;
     toEntity: (
       dto: MapperDomains['UpdateUserMapper'],
       em: EntityManager,

@@ -6,7 +6,7 @@ import {
   Schema,
   SchemaValidator
 } from '@forklaunch/validator';
-import { Constructor } from '@mikro-orm/core';
+import { EntitySchema } from '@mikro-orm/core';
 
 export function requestMapper<
   SV extends AnySchemaValidator,
@@ -16,13 +16,12 @@ export function requestMapper<
 >({
   schemaValidator,
   schema,
-  // eslint-disable-next-line
   entity,
   mapperDefinition
 }: {
   schemaValidator: SV;
   schema: DomainSchema;
-  entity: Constructor<Entity>;
+  entity: EntitySchema<Entity>;
   mapperDefinition: {
     toEntity: (
       dto: Schema<DomainSchema, SV>,
@@ -30,11 +29,13 @@ export function requestMapper<
     ) => Promise<Entity>;
   };
 }): {
+  entity: EntitySchema<Entity>;
   schema: DomainSchema;
 } & typeof mapperDefinition {
   const sv = schemaValidator as SchemaValidator;
   return {
     ...mapperDefinition,
+    entity,
     schema,
 
     toEntity: async (
@@ -61,13 +62,12 @@ export function responseMapper<
 >({
   schemaValidator,
   schema,
-  // eslint-disable-next-line
   entity,
   mapperDefinition
 }: {
   schemaValidator: SV;
   schema: DomainSchema;
-  entity: Constructor<Entity>;
+  entity: EntitySchema<Entity>;
   mapperDefinition: {
     toDto: (
       entity: Entity,
@@ -76,12 +76,14 @@ export function responseMapper<
   };
 }): Prettify<
   {
+    entity: EntitySchema<Entity>;
     schema: DomainSchema;
   } & typeof mapperDefinition
 > {
   const sv = schemaValidator as SchemaValidator;
   return {
     ...mapperDefinition,
+    entity,
     schema,
 
     toDto: async (entity: Entity, ...args: AdditionalArgs) => {

@@ -1,7 +1,10 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager } from '@mikro-orm/core';
-import { Organization } from '../../persistence/entities/organization.entity';
+import { EntityManager, wrap } from '@mikro-orm/core';
+import {
+  Organization,
+  type IOrganization
+} from '../../persistence/entities/organization.entity';
 import { OrganizationStatus } from '../enum/organizationStatus.enum';
 import { OrganizationSchemas } from '../schemas';
 import { UserMapper } from './user.mappers';
@@ -12,16 +15,13 @@ export const CreateOrganizationMapper = requestMapper({
   entity: Organization,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return Organization.create(
-        {
-          ...dto,
-          users: [],
-          status: OrganizationStatus.ACTIVE,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        },
-        em
-      );
+      return em.create(Organization, {
+        ...dto,
+        users: [],
+        status: OrganizationStatus.ACTIVE,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
     }
   }
 });
@@ -32,7 +32,9 @@ export const UpdateOrganizationMapper = requestMapper({
   entity: Organization,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return Organization.update(dto, em);
+      const entity = await em.findOneOrFail(Organization, { id: dto.id });
+      em.assign(entity, { ...dto, updatedAt: new Date() });
+      return entity;
     }
   }
 });
@@ -42,12 +44,11 @@ export const OrganizationMapper = responseMapper({
   schema: OrganizationSchemas.OrganizationSchema(OrganizationStatus),
   entity: Organization,
   mapperDefinition: {
-    toDto: async (entity: Organization) => {
-      const entityData = await entity.read();
-
+    toDto: async (entity: IOrganization) => {
+      const pojo = wrap(entity).toPOJO();
       return {
-        ...entityData,
-        logoUrl: entityData.logoUrl || undefined, // Convert null to undefined
+        ...pojo,
+        logoUrl: pojo.logoUrl || undefined,
         users: await Promise.all(
           (entity.users.isInitialized()
             ? entity.users
@@ -55,7 +56,6 @@ export const OrganizationMapper = responseMapper({
           )
             .getItems()
             .map(async (user) => {
-              // Use the mapper function directly to avoid circular dependency
               return UserMapper.toDto(user);
             })
         )

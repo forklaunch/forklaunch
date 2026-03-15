@@ -16,8 +16,8 @@ export interface MikroOrmTestConfig {
 
   /**
    * Whether to use migrations (true) or schema generation (false)
-   * - true: IAM blueprints (uses getMigrator().up())
-   * - false: Billing blueprints (uses getSchemaGenerator().createSchema())
+   * - true: IAM blueprints (uses orm.migrator.up())
+   * - false: Billing blueprints (uses orm.schema.create())
    */
   useMigrations?: boolean;
 
@@ -49,7 +49,6 @@ function getDatabasePort(type: DatabaseType): number {
     case 'mssql':
       return 1433;
     case 'sqlite':
-    case 'better-sqlite':
     case 'libsql':
       return 0; // SQLite is file-based, no port
     default:
@@ -73,12 +72,8 @@ export async function setupTestORM(
   const dbPort = getDatabasePort(databaseType);
 
   // SQLite databases are file-based
-  let ormConfig: Options = {};
-  if (
-    databaseType === 'sqlite' ||
-    databaseType === 'better-sqlite' ||
-    databaseType === 'libsql'
-  ) {
+  let ormConfig = {} as Options;
+  if (databaseType === 'sqlite' || databaseType === 'libsql') {
     ormConfig = {
       ...mikroOrmConfig,
       dbName: ':memory:', // In-memory SQLite for tests
@@ -126,9 +121,9 @@ export async function setupTestORM(
   const orm = await MikroORM.init(ormConfig);
 
   if (useMigrations) {
-    await orm.getMigrator().up();
+    await orm.migrator.up();
   } else {
-    await orm.getSchemaGenerator().createSchema();
+    await orm.schema.create();
   }
 
   return orm;

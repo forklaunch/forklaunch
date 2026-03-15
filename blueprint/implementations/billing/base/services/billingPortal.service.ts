@@ -81,7 +81,7 @@ export class BaseBillingPortalService<
     );
 
     if (this.enableDatabaseBackup) {
-      await this.em.persistAndFlush(billingPortal);
+      await this.em.persist(billingPortal).flush();
     }
 
     const createdBillingPortalDto =
@@ -147,9 +147,11 @@ export class BaseBillingPortalService<
     );
 
     if (this.enableDatabaseBackup) {
-      await this.em.persistAndFlush({
-        billingPortal
-      });
+      await this.em
+        .persist({
+          billingPortal
+        })
+        .flush();
     }
 
     const updatedBillingPortalDto = {

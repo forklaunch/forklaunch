@@ -1,4 +1,4 @@
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, EntitySchema } from '@mikro-orm/core';
 import Stripe from 'stripe';
 import { StripePaymentLinkDtos } from './stripe.dto.types';
 import { StripePaymentLinkEntities } from './stripe.entity.types';
@@ -9,11 +9,13 @@ export type StripePaymentLinkMappers<
   Dto extends StripePaymentLinkDtos<StatusEnum>
 > = {
   PaymentLinkMapper: {
+    entity: EntitySchema;
     toDto: (
       entity: Entities['PaymentLinkMapper']
     ) => Promise<Dto['PaymentLinkMapper']>;
   };
   CreatePaymentLinkMapper: {
+    entity: EntitySchema;
     toEntity: (
       dto: Dto['CreatePaymentLinkMapper'],
       em: EntityManager,
@@ -22,6 +24,7 @@ export type StripePaymentLinkMappers<
     ) => Promise<Entities['CreatePaymentLinkMapper']>;
   };
   UpdatePaymentLinkMapper: {
+    entity: EntitySchema;
     toEntity: (
       dto: Dto['UpdatePaymentLinkMapper'],
       em: EntityManager,

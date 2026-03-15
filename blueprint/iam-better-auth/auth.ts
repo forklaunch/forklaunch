@@ -160,13 +160,13 @@ export const betterAuthConfig = ({
                   updatedAt: new Date()
                 });
 
-                await em.persistAndFlush(organization);
+                await em.persist(organization).flush();
 
                 // Update user with organization
                 const userEntity = await em.findOne(User, { id: user.id });
                 if (userEntity) {
                   userEntity.organization = organization;
-                  await em.persistAndFlush(userEntity);
+                  await em.persist(userEntity).flush();
                 }
 
                 openTelemetryCollector.info(

@@ -15,10 +15,10 @@ export class DatabaseWorkerProducer<
   }
 
   async enqueueJob(event: EventEntity): Promise<void> {
-    await this.em.persistAndFlush(event);
+    await this.em.persist(event).flush();
   }
 
   async enqueueBatchJobs(events: EventEntity[]): Promise<void> {
-    await this.em.persistAndFlush(events);
+    await this.em.persist(events).flush();
   }
 }

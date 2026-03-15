@@ -1,8 +1,11 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, wrap } from '@mikro-orm/core';
 import Stripe from 'stripe';
-import { BillingPortal } from '../../persistence/entities/billingPortal.entity';
+import {
+  BillingPortal,
+  type IBillingPortal
+} from '../../persistence/entities/billingPortal.entity';
 import { BillingPortalSchemas } from '../schemas';
 
 export const CreateBillingPortalMapper = requestMapper({
@@ -15,15 +18,12 @@ export const CreateBillingPortalMapper = requestMapper({
       em: EntityManager,
       providerFields: Stripe.BillingPortal.Session
     ) => {
-      return BillingPortal.create(
-        {
-          ...dto,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          providerFields
-        },
-        em
-      );
+      return em.create(BillingPortal, {
+        ...dto,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        providerFields
+      });
     }
   }
 });
@@ -38,13 +38,13 @@ export const UpdateBillingPortalMapper = requestMapper({
       em: EntityManager,
       providerFields: Stripe.BillingPortal.Session
     ) => {
-      return BillingPortal.update(
-        {
-          ...dto,
-          providerFields
-        },
-        em
-      );
+      const entity = await em.findOneOrFail(BillingPortal, { id: dto.id });
+      em.assign(entity, {
+        ...dto,
+        providerFields,
+        updatedAt: new Date()
+      });
+      return entity;
     }
   }
 });
@@ -54,9 +54,9 @@ export const BillingPortalMapper = responseMapper({
   schema: BillingPortalSchemas.BillingPortalSchema,
   entity: BillingPortal,
   mapperDefinition: {
-    toDto: async (entity: BillingPortal) => {
+    toDto: async (entity: IBillingPortal) => {
       return {
-        ...(await entity.read()),
+        ...wrap(entity).toPOJO(),
         stripeFields: entity.providerFields
       };
     }

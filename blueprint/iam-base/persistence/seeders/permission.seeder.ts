@@ -9,6 +9,6 @@ export class PermissionSeeder extends Seeder {
       em.create(Permission, platformReadPermission),
       em.create(Permission, platformWritePermission)
     ];
-    return em.persistAndFlush(permissions);
+    await em.persist(permissions).flush();
   }
 }

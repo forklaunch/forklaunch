@@ -1,7 +1,7 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager } from '@mikro-orm/core';
-import { Plan } from '../../persistence/entities/plan.entity';
+import { EntityManager, wrap } from '@mikro-orm/core';
+import { Plan, type IPlan } from '../../persistence/entities/plan.entity';
 import { BillingProviderEnum } from '../enum/billingProvider.enum';
 import { CurrencyEnum } from '../enum/currency.enum';
 import { PlanCadenceEnum } from '../enum/planCadence.enum';
@@ -17,14 +17,11 @@ export const CreatePlanMapper = requestMapper({
   entity: Plan,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return Plan.create(
-        {
-          ...dto,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        },
-        em
-      );
+      return em.create(Plan, {
+        ...dto,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
     }
   }
 });
@@ -39,7 +36,9 @@ export const UpdatePlanMapper = requestMapper({
   entity: Plan,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return Plan.update(dto, em);
+      const entity = await em.findOneOrFail(Plan, { id: dto.id });
+      em.assign(entity, { ...dto, updatedAt: new Date() });
+      return entity;
     }
   }
 });
@@ -53,8 +52,8 @@ export const PlanMapper = responseMapper({
   ),
   entity: Plan,
   mapperDefinition: {
-    toDto: async (entity: Plan) => {
-      return await entity.read();
+    toDto: async (entity: IPlan) => {
+      return wrap(entity).toPOJO();
     }
   }
 });

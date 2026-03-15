@@ -109,7 +109,7 @@ export class BaseCheckoutSessionService<
       await this.mappers.CheckoutSessionMapper.toDto(checkoutSession);
 
     if (this.enableDatabaseBackup) {
-      await this.em.persistAndFlush(checkoutSession);
+      await this.em.persist(checkoutSession).flush();
     }
 
     await this.cache.putRecord({
@@ -155,11 +155,14 @@ export class BaseCheckoutSessionService<
     }
 
     if (this.enableDatabaseBackup) {
-      const checkoutSession = await this.em.upsert('CheckoutSession', {
-        id,
-        status: 'SUCCESS'
-      });
-      await this.em.persistAndFlush(checkoutSession);
+      const checkoutSession = await this.em.upsert(
+        this.mappers.CheckoutSessionMapper.entity,
+        {
+          id,
+          status: 'SUCCESS'
+        }
+      );
+      await this.em.persist(checkoutSession).flush();
     }
 
     await this.cache.deleteRecord(this.createCacheKey(id));
@@ -171,11 +174,14 @@ export class BaseCheckoutSessionService<
     }
 
     if (this.enableDatabaseBackup) {
-      const checkoutSession = await this.em.upsert('CheckoutSession', {
-        id,
-        status: 'FAILED'
-      });
-      await this.em.persistAndFlush(checkoutSession);
+      const checkoutSession = await this.em.upsert(
+        this.mappers.CheckoutSessionMapper.entity,
+        {
+          id,
+          status: 'FAILED'
+        }
+      );
+      await this.em.persist(checkoutSession).flush();
     }
 
     await this.cache.deleteRecord(this.createCacheKey(id));

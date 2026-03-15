@@ -55,7 +55,7 @@ use crate::{
                 IAM_BASE_VERSION, IAM_INTERFACES_VERSION, INFRASTRUCTURE_REDIS_VERSION,
                 INFRASTRUCTURE_S3_VERSION, INTERNAL_VERSION, IOREDIS_VERSION, JOSE_VERSION,
                 MIKRO_ORM_CLI_VERSION, MIKRO_ORM_CORE_VERSION, MIKRO_ORM_DATABASE_VERSION,
-                MIKRO_ORM_MIGRATIONS_VERSION, MIKRO_ORM_REFLECTION_VERSION,
+                MIKRO_ORM_MIGRATIONS_VERSION,
                 MIKRO_ORM_SEEDER_VERSION, OPENTELEMETRY_API_VERSION, OXLINT_VERSION, PINO_VERSION,
                 PRETTIER_VERSION, PROJECT_BUILD_SCRIPT, PROJECT_DOCS_SCRIPT, PROJECT_SEED_SCRIPT,
                 SQLITE3_VERSION, STRIPE_VERSION, TESTING_VERSION, TSX_VERSION, TYPEBOX_VERSION,
@@ -450,7 +450,7 @@ pub(crate) fn generate_service_package_json(
                 mikro_orm_core: Some(MIKRO_ORM_CORE_VERSION.to_string()),
                 mikro_orm_migrations: Some(MIKRO_ORM_MIGRATIONS_VERSION.to_string()),
                 mikro_orm_database: Some(MIKRO_ORM_DATABASE_VERSION.to_string()),
-                mikro_orm_reflection: Some(MIKRO_ORM_REFLECTION_VERSION.to_string()),
+                mikro_orm_reflection: None,
                 mikro_orm_seeder: Some(MIKRO_ORM_SEEDER_VERSION.to_string()),
                 opentelemetry_api: if manifest_data.is_better_auth {
                     Some(OPENTELEMETRY_API_VERSION.to_string())

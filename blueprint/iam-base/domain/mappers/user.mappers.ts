@@ -1,9 +1,9 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, wrap } from '@mikro-orm/core';
 import { Organization } from '../../persistence/entities/organization.entity';
 import { Role } from '../../persistence/entities/role.entity';
-import { User } from '../../persistence/entities/user.entity';
+import { User, type IUser } from '../../persistence/entities/user.entity';
 import { UserSchemas } from '../schemas';
 import { RoleMapper } from './role.mappers';
 
@@ -13,20 +13,17 @@ export const CreateUserMapper = requestMapper({
   entity: User,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return User.create(
-        {
-          ...dto,
-          organization: await em.findOne(Organization, {
-            id: dto.organization
-          }),
-          roles: await em.findAll(Role, {
-            where: { id: { $in: dto.roles } }
-          }),
-          createdAt: new Date(),
-          updatedAt: new Date()
-        },
-        em
-      );
+      return em.create(User, {
+        ...dto,
+        organization: dto.organization
+          ? await em.findOne(Organization, { id: dto.organization })
+          : undefined,
+        roles: await em.find(Role, {
+          id: { $in: dto.roles }
+        }),
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
     }
   }
 });
@@ -37,7 +34,9 @@ export const UpdateUserMapper = requestMapper({
   entity: User,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return User.update(dto, em);
+      const entity = await em.findOneOrFail(User, { id: dto.id });
+      em.assign(entity, { ...dto, updatedAt: new Date() });
+      return entity;
     }
   }
 });
@@ -47,10 +46,10 @@ export const UserMapper = responseMapper({
   schema: UserSchemas.UserSchema,
   entity: User,
   mapperDefinition: {
-    toDto: async (entity: User) => {
-      const read = await entity.read();
+    toDto: async (entity: IUser) => {
+      const pojo = wrap(entity).toPOJO();
       return {
-        ...read,
+        ...pojo,
         phoneNumber: entity.phoneNumber ?? undefined,
         subscription: entity.subscription ?? undefined,
         roles: await Promise.all(

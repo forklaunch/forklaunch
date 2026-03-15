@@ -1,8 +1,11 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, wrap } from '@mikro-orm/core';
 import { OrganizationStatus } from '../../domain/enum/organizationStatus.enum';
-import { Organization } from '../../persistence/entities/organization.entity';
+import {
+  Organization,
+  type IOrganization
+} from '../../persistence/entities/organization.entity';
 import { OrganizationSchemas } from '../schemas';
 import { UserMapper } from './user.mappers';
 
@@ -12,16 +15,13 @@ export const CreateOrganizationMapper = requestMapper({
   entity: Organization,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return Organization.create(
-        {
-          ...dto,
-          users: [],
-          status: OrganizationStatus.ACTIVE,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        },
-        em
-      );
+      return em.create(Organization, {
+        ...dto,
+        users: [],
+        status: OrganizationStatus.ACTIVE,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
     }
   }
 });
@@ -32,7 +32,9 @@ export const UpdateOrganizationMapper = requestMapper({
   entity: Organization,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return Organization.update(dto, em);
+      const entity = await em.findOneOrFail(Organization, { id: dto.id });
+      em.assign(entity, { ...dto, updatedAt: new Date() });
+      return entity;
     }
   }
 });
@@ -42,9 +44,9 @@ export const OrganizationMapper = responseMapper({
   schema: OrganizationSchemas.OrganizationSchema(OrganizationStatus),
   entity: Organization,
   mapperDefinition: {
-    toDto: async (entity: Organization) => {
+    toDto: async (entity: IOrganization) => {
       return {
-        ...(await entity.read()),
+        ...wrap(entity).toPOJO(),
         users: await Promise.all(
           (entity.users.isInitialized()
             ? entity.users

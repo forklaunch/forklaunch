@@ -96,7 +96,7 @@ export class BaseSubscriptionService<
       this.openTelemetryCollector.info('Getting subscription', idDto);
     }
     const subscription = await (em ?? this.em).findOneOrFail(
-      'Subscription',
+      this.mappers.SubscriptionMapper.entity,
       idDto
     );
     return this.mappers.SubscriptionMapper.toDto(
@@ -111,11 +111,14 @@ export class BaseSubscriptionService<
     if (this.evaluatedTelemetryOptions.logging) {
       this.openTelemetryCollector.info('Getting user subscription', id);
     }
-    const subscription = await (em ?? this.em).findOneOrFail('Subscription', {
-      partyId: id,
-      partyType: 'USER',
-      active: true
-    });
+    const subscription = await (em ?? this.em).findOneOrFail(
+      this.mappers.SubscriptionMapper.entity,
+      {
+        partyId: id,
+        partyType: 'USER',
+        active: true
+      }
+    );
 
     return this.mappers.SubscriptionMapper.toDto(
       subscription as Entities['SubscriptionMapper']
@@ -129,11 +132,14 @@ export class BaseSubscriptionService<
     if (this.evaluatedTelemetryOptions.logging) {
       this.openTelemetryCollector.info('Getting organization subscription', id);
     }
-    const subscription = await (em ?? this.em).findOneOrFail('Subscription', {
-      partyId: id,
-      partyType: 'ORGANIZATION',
-      active: true
-    });
+    const subscription = await (em ?? this.em).findOneOrFail(
+      this.mappers.SubscriptionMapper.entity,
+      {
+        partyId: id,
+        partyType: 'ORGANIZATION',
+        active: true
+      }
+    );
     return this.mappers.SubscriptionMapper.toDto(
       subscription as Entities['SubscriptionMapper']
     );
@@ -172,11 +178,14 @@ export class BaseSubscriptionService<
     if (this.evaluatedTelemetryOptions.logging) {
       this.openTelemetryCollector.info('Deleting subscription', idDto);
     }
-    const subscription = await (em ?? this.em).findOne('Subscription', idDto);
+    const subscription = await (em ?? this.em).findOne(
+      this.mappers.SubscriptionMapper.entity,
+      idDto
+    );
     if (!subscription) {
       throw new Error('Subscription not found');
     }
-    await (em ?? this.em).removeAndFlush(subscription);
+    await (em ?? this.em).remove(subscription).flush();
   }
 
   async listSubscriptions(
@@ -188,7 +197,7 @@ export class BaseSubscriptionService<
     }
     return Promise.all(
       (
-        await (em ?? this.em).findAll('Subscription', {
+        await (em ?? this.em).findAll(this.mappers.SubscriptionMapper.entity, {
           where: idsDto?.ids?.length ? { id: { $in: idsDto.ids } } : undefined
         })
       ).map((subscription) =>
@@ -203,7 +212,10 @@ export class BaseSubscriptionService<
     if (this.evaluatedTelemetryOptions.logging) {
       this.openTelemetryCollector.info('Canceling subscription', idDto);
     }
-    const subscription = await (em ?? this.em).findOne('Subscription', idDto);
+    const subscription = await (em ?? this.em).findOne(
+      this.mappers.SubscriptionMapper.entity,
+      idDto
+    );
     if (!subscription) {
       throw new Error('Subscription not found');
     }
@@ -217,7 +229,10 @@ export class BaseSubscriptionService<
     if (this.evaluatedTelemetryOptions.logging) {
       this.openTelemetryCollector.info('Resuming subscription', idDto);
     }
-    const subscription = await (em ?? this.em).findOne('Subscription', idDto);
+    const subscription = await (em ?? this.em).findOne(
+      this.mappers.SubscriptionMapper.entity,
+      idDto
+    );
     if (!subscription) {
       throw new Error('Subscription not found');
     }

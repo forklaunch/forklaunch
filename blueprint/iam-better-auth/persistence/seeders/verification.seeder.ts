@@ -6,6 +6,6 @@ import { verification } from '../seed.data';
 export class VerificationSeeder extends Seeder {
   async run(em: EntityManager): Promise<void> {
     const createdVerification = em.create(Verification, verification);
-    return em.persistAndFlush(createdVerification);
+    await em.persist(createdVerification).flush();
   }
 }
