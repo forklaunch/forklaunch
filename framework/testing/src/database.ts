@@ -72,7 +72,7 @@ export async function setupTestORM(
   const dbPort = getDatabasePort(databaseType);
 
   // SQLite databases are file-based
-  let ormConfig: Options = {};
+  let ormConfig = {} as Options;
   if (databaseType === 'sqlite' || databaseType === 'libsql') {
     ormConfig = {
       ...mikroOrmConfig,
@@ -144,7 +144,7 @@ export async function clearTestDatabase(options?: {
 
   if (orm) {
     const em = orm.em.fork();
-    const entities = Object.values(orm.metadata.getAll());
+    const entities = Object.values(orm.getMetadata().getAll());
 
     // Delete in reverse order to avoid foreign key constraints
     for (const entity of entities.reverse()) {
