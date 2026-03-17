@@ -1,5 +1,24 @@
 # @forklaunch/universal-sdk
 
+## 0.8.1
+
+### Patch Changes
+
+- package upgrades
+- Updated dependencies
+  - @forklaunch/common@0.7.1
+
+## 0.8.0
+
+### Minor Changes
+
+- update packages and update to mikro orm v7
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/common@0.7.0
+
 ## 0.7.38
 
 ### Patch Changes

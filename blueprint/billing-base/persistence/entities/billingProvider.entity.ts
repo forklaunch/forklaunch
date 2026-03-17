@@ -3,7 +3,7 @@ import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 import { BillingProviderEnum } from '../../domain/enum/billingProvider.enum';
 
 // This is to represent connection information for a billing provider
-export const BillingProvider = defineEntity({
+export const billingProvider = defineEntity({
   name: 'BillingProvider',
   properties: {
     ...sqlBaseProperties,
@@ -13,4 +13,4 @@ export const BillingProvider = defineEntity({
   }
 });
 
-export type IBillingProvider = InferEntity<typeof BillingProvider>;
+export type BillingProvider = InferEntity<typeof billingProvider>;

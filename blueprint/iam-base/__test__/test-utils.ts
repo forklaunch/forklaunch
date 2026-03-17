@@ -44,12 +44,12 @@ export const clearDatabase = async (options?: {
 };
 
 export const setupTestData = async (em: EntityManager) => {
-  const { Permission } = await import(
+  const { permission } = await import(
     '../persistence/entities/permission.entity'
   );
-  const { Role } = await import('../persistence/entities/role.entity');
-  const { User } = await import('../persistence/entities/user.entity');
-  const { Organization } = await import(
+  const { role } = await import('../persistence/entities/role.entity');
+  const { user } = await import('../persistence/entities/user.entity');
+  const { organization } = await import(
     '../persistence/entities/organization.entity'
   );
   const { OrganizationStatus } = await import(
@@ -57,7 +57,7 @@ export const setupTestData = async (em: EntityManager) => {
   );
 
   // Create test organization
-  const organization = em.create(Organization, {
+  const createdOrganization = em.create(organization, {
     id: '123e4567-e89b-12d3-a456-426614174001',
     name: 'Test Organization',
     domain: 'test.com',
@@ -68,7 +68,7 @@ export const setupTestData = async (em: EntityManager) => {
   });
 
   // Create test permission
-  const permission = em.create(Permission, {
+  const createdPermission = em.create(permission, {
     id: '123e4567-e89b-12d3-a456-426614174002',
     slug: 'read:users',
     createdAt: new Date(),
@@ -76,24 +76,25 @@ export const setupTestData = async (em: EntityManager) => {
   });
 
   // Create test role
-  const role = em.create(Role, {
+  const createdRole = em.create(role, {
     id: '123e4567-e89b-12d3-a456-426614174000',
     name: 'admin',
-    permissions: [permission],
+    permissions: [createdPermission],
     createdAt: new Date(),
     updatedAt: new Date()
   });
 
   // Create test user
-  em.create(User, {
+  em.create(user, {
     id: '123e4567-e89b-12d3-a456-426614174000',
     email: 'test@example.com',
     firstName: 'John',
     lastName: 'Doe',
     phoneNumber: '+1234567890',
-    organization: organization,
-    roles: [role],
+    organization: createdOrganization,
+    roles: [createdRole],
     subscription: 'enterprise',
+    providerFields: [],
     createdAt: new Date(),
     updatedAt: new Date()
   });

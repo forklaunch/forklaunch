@@ -1,8 +1,8 @@
-export { Account } from './account.entity';
-export { Jwks } from './jwks.entity';
-export { Organization } from './organization.entity';
-export { Permission } from './permission.entity';
-export { Role } from './role.entity';
-export { Session } from './session.entity';
-export { User } from './user.entity';
-export { Verification } from './verification.entity';
+export { account, type Account } from './account.entity';
+export { jwks, type Jwks } from './jwks.entity';
+export { organization, type Organization } from './organization.entity';
+export { permission, type Permission } from './permission.entity';
+export { role, type Role } from './role.entity';
+export { session, type Session } from './session.entity';
+export { user, type User } from './user.entity';
+export { verification, type Verification } from './verification.entity';

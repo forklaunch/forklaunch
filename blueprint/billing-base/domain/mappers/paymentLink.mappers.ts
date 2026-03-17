@@ -1,9 +1,10 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager, wrap } from '@mikro-orm/core';
+import { wrap } from '@mikro-orm/core';
+import { EntityManager } from '@mikro-orm/core';
 import {
-  PaymentLink,
-  type IPaymentLink
+  paymentLink,
+  type PaymentLink
 } from '../../persistence/entities/paymentLink.entity';
 import { CurrencyEnum } from '../enum/currency.enum';
 import { PaymentMethodEnum } from '../enum/paymentMethod.enum';
@@ -17,10 +18,10 @@ export const CreatePaymentLinkMapper = requestMapper({
     CurrencyEnum,
     StatusEnum
   ),
-  entity: PaymentLink,
+  entity: paymentLink,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return em.create(PaymentLink, {
+      return em.create(paymentLink, {
         ...dto,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -36,10 +37,10 @@ export const UpdatePaymentLinkMapper = requestMapper({
     CurrencyEnum,
     StatusEnum
   ),
-  entity: PaymentLink,
+  entity: paymentLink,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      const entity = await em.findOneOrFail(PaymentLink, { id: dto.id });
+      const entity = await em.findOneOrFail(paymentLink, { id: dto.id });
       em.assign(entity, { ...dto, updatedAt: new Date() });
       return entity;
     }
@@ -53,9 +54,9 @@ export const PaymentLinkMapper = responseMapper({
     CurrencyEnum,
     StatusEnum
   ),
-  entity: PaymentLink,
+  entity: paymentLink,
   mapperDefinition: {
-    toDto: async (entity: IPaymentLink) => {
+    toDto: async (entity: PaymentLink) => {
       return wrap(entity).toPOJO();
     }
   }

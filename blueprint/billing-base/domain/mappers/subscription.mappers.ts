@@ -1,9 +1,10 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager, wrap } from '@mikro-orm/core';
+import { wrap } from '@mikro-orm/core';
+import { EntityManager } from '@mikro-orm/core';
 import {
-  Subscription,
-  type ISubscription
+  subscription,
+  type Subscription
 } from '../../persistence/entities/subscription.entity';
 import { BillingProviderEnum } from '../enum/billingProvider.enum';
 import { PartyEnum } from '../enum/party.enum';
@@ -15,10 +16,10 @@ export const CreateSubscriptionMapper = requestMapper({
     PartyEnum,
     BillingProviderEnum
   ),
-  entity: Subscription,
+  entity: subscription,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return em.create(Subscription, {
+      return em.create(subscription, {
         ...dto,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -33,10 +34,10 @@ export const UpdateSubscriptionMapper = requestMapper({
     PartyEnum,
     BillingProviderEnum
   ),
-  entity: Subscription,
+  entity: subscription,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      const entity = await em.findOneOrFail(Subscription, { id: dto.id });
+      const entity = await em.findOneOrFail(subscription, { id: dto.id });
       em.assign(entity, { ...dto, updatedAt: new Date() });
       return entity;
     }
@@ -49,9 +50,9 @@ export const SubscriptionMapper = responseMapper({
     PartyEnum,
     BillingProviderEnum
   ),
-  entity: Subscription,
+  entity: subscription,
   mapperDefinition: {
-    toDto: async (entity: ISubscription) => {
+    toDto: async (entity: Subscription) => {
       return {
         ...wrap(entity).toPOJO(),
         endDate: entity.endDate || undefined

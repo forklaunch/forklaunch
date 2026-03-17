@@ -8,11 +8,11 @@ export type StripePlanMappers<
   Dto extends StripePlanDtos
 > = {
   PlanMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toDto: (entity: Entities['PlanMapper']) => Promise<Dto['PlanMapper']>;
   };
   CreatePlanMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: Dto['CreatePlanMapper'],
       em: EntityManager,
@@ -21,7 +21,7 @@ export type StripePlanMappers<
     ) => Promise<Entities['CreatePlanMapper']>;
   };
   UpdatePlanMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: Dto['UpdatePlanMapper'],
       em: EntityManager,

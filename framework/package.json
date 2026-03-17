@@ -31,7 +31,7 @@
     "eslint": "^10.0.3",
     "globals": "^17.4.0",
     "jest": "^30.3.0",
-    "lint-staged": "^16.3.3",
+    "lint-staged": "^16.4.0",
     "prettier": "^3.8.1",
     "sort-package-json": "^3.6.1",
     "ts-jest": "^29.4.6",

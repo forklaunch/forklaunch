@@ -9,6 +9,7 @@ pub struct MapperGenerator {
     entity: EntityDefinition,
     app_name: String,
     is_worker: bool,
+    database: String,
 }
 
 impl MapperGenerator {
@@ -17,22 +18,26 @@ impl MapperGenerator {
         entity: EntityDefinition,
         app_name: String,
         is_worker: bool,
+        database: String,
     ) -> Self {
         Self {
             schema,
             entity,
             app_name,
             is_worker,
+            database,
         }
     }
 
     pub fn generate_mapper_file(&self) -> String {
         let pascal_case_name = self.entity.name.replace("Record", "").replace("EventRecord", "");
         let camel_case_name = pascal_case_name.to_case(Case::Camel);
+        // Entity const is camelCase of the full entity name (e.g., "userRecord")
+        let entity_const_name = self.entity.name.to_case(Case::Camel);
 
-        let imports = self.generate_imports(&pascal_case_name, &camel_case_name);
-        let request_mapper = self.generate_request_mapper(&pascal_case_name);
-        let response_mapper = self.generate_response_mapper(&pascal_case_name);
+        let imports = self.generate_imports(&pascal_case_name, &camel_case_name, &entity_const_name);
+        let request_mapper = self.generate_request_mapper(&pascal_case_name, &entity_const_name);
+        let response_mapper = self.generate_response_mapper(&pascal_case_name, &entity_const_name);
 
         format!(
             "{}\n\n{}\n\n{}",
@@ -40,12 +45,15 @@ impl MapperGenerator {
         )
     }
 
-    fn generate_imports(&self, pascal_case_name: &str, camel_case_name: &str) -> String {
+    fn generate_imports(&self, pascal_case_name: &str, camel_case_name: &str, entity_const_name: &str) -> String {
         let entity_suffix = if self.is_worker { "EventRecord" } else { "Record" };
         let em_import = if !self.is_worker {
-            "\nimport { EntityManager, wrap } from '@mikro-orm/core';"
+            format!(
+                "\nimport {{ wrap }} from '@mikro-orm/core';\nimport {{ EntityManager }} from '@mikro-orm/{}';",
+                self.database
+            )
         } else {
-            "\nimport { wrap } from '@mikro-orm/core';"
+            "\nimport { wrap } from '@mikro-orm/core';".to_string()
         };
 
         format!(
@@ -54,12 +62,11 @@ impl MapperGenerator {
   responseMapper
 }} from '@forklaunch/core/mappers';
 import {{ schemaValidator }} from '@{}/core';{}
-import {{ {}{}, type I{}{} }} from '../../persistence/entities/{}{}.entity';
+import {{ {}, type {}{} }} from '../../persistence/entities/{}{}.entity';
 import {{ {}RequestSchema, {}ResponseSchema }} from '../schemas/{}.schema';"#,
             self.app_name,
             em_import,
-            pascal_case_name,
-            entity_suffix,
+            entity_const_name,
             pascal_case_name,
             entity_suffix,
             camel_case_name,
@@ -70,25 +77,23 @@ import {{ {}RequestSchema, {}ResponseSchema }} from '../schemas/{}.schema';"#,
         )
     }
 
-    fn generate_request_mapper(&self, pascal_case_name: &str) -> String {
-        let entity_suffix = if self.is_worker { "EventRecord" } else { "Record" };
+    fn generate_request_mapper(&self, pascal_case_name: &str, entity_const_name: &str) -> String {
         let to_entity_body = self.generate_to_entity_body();
         let em_param = if !self.is_worker {
             ", em: EntityManager"
         } else {
             ""
         };
-        let _em_arg = if !self.is_worker { ", em" } else { "" };
 
         format!(
             r#"// RequestMapper const that maps a request schema to an entity
 export const {}RequestMapper = requestMapper({{
   schemaValidator,
   schema: {}RequestSchema,
-  entity: {}{},
+  entity: {},
   mapperDefinition: {{
     toEntity: async (dto{}) => {{
-      return em.create({}{}, {{
+      return em.create({}, {{
 {}
       }});
     }}
@@ -96,16 +101,14 @@ export const {}RequestMapper = requestMapper({{
 }});"#,
             pascal_case_name,
             pascal_case_name,
-            pascal_case_name,
-            entity_suffix,
+            entity_const_name,
             em_param,
-            pascal_case_name,
-            entity_suffix,
+            entity_const_name,
             to_entity_body,
         )
     }
 
-    fn generate_response_mapper(&self, pascal_case_name: &str) -> String {
+    fn generate_response_mapper(&self, pascal_case_name: &str, entity_const_name: &str) -> String {
         let entity_suffix = if self.is_worker { "EventRecord" } else { "Record" };
 
         format!(
@@ -113,17 +116,16 @@ export const {}RequestMapper = requestMapper({{
 export const {}ResponseMapper = responseMapper({{
   schemaValidator,
   schema: {}ResponseSchema,
-  entity: {}{},
+  entity: {},
   mapperDefinition: {{
-    toDto: async (entity: I{}{}) => {{
+    toDto: async (entity: {}{}) => {{
       return wrap(entity).toPOJO();
     }}
   }}
 }});"#,
             pascal_case_name,
             pascal_case_name,
-            pascal_case_name,
-            entity_suffix,
+            entity_const_name,
             pascal_case_name,
             entity_suffix
         )
@@ -307,7 +309,7 @@ mod tests {
             ],
         };
 
-        let generator = MapperGenerator::new(schema, entity, "my-app".to_string(), false);
+        let generator = MapperGenerator::new(schema, entity, "my-app".to_string(), false, "postgresql".to_string());
         let result = generator.generate_mapper_file();
 
         assert!(result.contains("requestMapper"));
@@ -372,7 +374,7 @@ mod tests {
             ],
         };
 
-        let generator = MapperGenerator::new(schema, entity, "my-app".to_string(), false);
+        let generator = MapperGenerator::new(schema, entity, "my-app".to_string(), false, "postgresql".to_string());
         let result = generator.generate_to_entity_body();
 
         eprintln!("Generated body:\n{}", result);

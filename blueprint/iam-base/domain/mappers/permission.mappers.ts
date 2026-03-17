@@ -1,20 +1,21 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager, wrap } from '@mikro-orm/core';
+import { wrap } from '@mikro-orm/core';
+import { EntityManager } from '@mikro-orm/core';
 import {
-  Permission,
-  type IPermission
+  permission,
+  type Permission
 } from '../../persistence/entities/permission.entity';
 import { PermissionSchemas } from '../schemas';
 
 export const CreatePermissionMapper = requestMapper({
   schemaValidator,
   schema: PermissionSchemas.CreatePermissionSchema,
-  entity: Permission,
+  entity: permission,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return em.create(Permission, {
-        ...dto,
+      return em.create(permission, {
+        slug: dto.slug,
         createdAt: new Date(),
         updatedAt: new Date()
       });
@@ -25,11 +26,14 @@ export const CreatePermissionMapper = requestMapper({
 export const UpdatePermissionMapper = requestMapper({
   schemaValidator,
   schema: PermissionSchemas.UpdatePermissionSchema,
-  entity: Permission,
+  entity: permission,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      const entity = await em.findOneOrFail(Permission, { id: dto.id });
-      em.assign(entity, { ...dto, updatedAt: new Date() });
+      const entity = await em.findOneOrFail(permission, { id: dto.id });
+      em.assign(entity, {
+        ...(dto.slug !== undefined && { slug: dto.slug }),
+        updatedAt: new Date()
+      });
       return entity;
     }
   }
@@ -38,9 +42,9 @@ export const UpdatePermissionMapper = requestMapper({
 export const PermissionMapper = responseMapper({
   schemaValidator,
   schema: PermissionSchemas.PermissionSchema,
-  entity: Permission,
+  entity: permission,
   mapperDefinition: {
-    toDto: async (entity: IPermission) => {
+    toDto: async (entity: Permission) => {
       return wrap(entity).toPOJO();
     }
   }

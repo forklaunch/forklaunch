@@ -9,13 +9,13 @@ export type StripeSubscriptionMappers<
   Dto extends StripeSubscriptionDtos<PartyType>
 > = {
   SubscriptionMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toDto: (
       entity: Entities['SubscriptionMapper']
     ) => Promise<Dto['SubscriptionMapper']>;
   };
   CreateSubscriptionMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: Dto['CreateSubscriptionMapper'],
       em: EntityManager,
@@ -24,7 +24,7 @@ export type StripeSubscriptionMappers<
     ) => Promise<Entities['CreateSubscriptionMapper']>;
   };
   UpdateSubscriptionMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: Dto['UpdateSubscriptionMapper'],
       em: EntityManager,

@@ -50,11 +50,11 @@ export const clearDatabase = async (options?: {
 };
 
 export const setupTestData = async (em: EntityManager) => {
-  const { SampleWorkerEventRecord } = await import(
+  const { sampleWorkerEventRecord } = await import(
     '../persistence/entities/sampleWorkerRecord.entity'
   );
 
-  em.create(SampleWorkerEventRecord, {
+  em.create(sampleWorkerEventRecord, {
     id: '123e4567-e89b-12d3-a456-426614174000',
     message: 'Test message',
     processed: false,

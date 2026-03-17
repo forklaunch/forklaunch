@@ -7,13 +7,13 @@ export type UserMappers<
   MapperDomains extends UserDtos
 > = {
   UserMapper: {
-    entity: EntitySchema<MapperEntities['UserMapper']>;
+    entity: EntitySchema<any>;
     toDto: (
       entity: MapperEntities['UserMapper']
     ) => Promise<MapperDomains['UserMapper']>;
   };
   CreateUserMapper: {
-    entity: EntitySchema<MapperEntities['UserMapper']>;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: MapperDomains['CreateUserMapper'],
       em: EntityManager,
@@ -21,7 +21,7 @@ export type UserMappers<
     ) => Promise<MapperEntities['CreateUserMapper']>;
   };
   UpdateUserMapper: {
-    entity: EntitySchema<MapperEntities['UserMapper']>;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: MapperDomains['UpdateUserMapper'],
       em: EntityManager,

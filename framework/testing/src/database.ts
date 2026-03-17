@@ -7,7 +7,7 @@ export interface MikroOrmTestConfig {
   /**
    * MikroORM config object (imported from mikro-orm.config)
    */
-  mikroOrmConfig: Options;
+  mikroOrmConfig: Partial<Options>;
 
   /**
    * Database type (postgres, mysql, mongodb, etc.)
@@ -72,7 +72,7 @@ export async function setupTestORM(
   const dbPort = getDatabasePort(databaseType);
 
   // SQLite databases are file-based
-  let ormConfig = {} as Options;
+  let ormConfig: Partial<Options> = {};
   if (databaseType === 'sqlite' || databaseType === 'libsql') {
     ormConfig = {
       ...mikroOrmConfig,

@@ -90,9 +90,7 @@ export class BasePlanService<
         await (em ?? this.em).findAll(this.mappers.PlanMapper.entity, {
           where: idsDto?.ids?.length ? { id: { $in: idsDto.ids } } : undefined
         })
-      ).map((plan) =>
-        this.mappers.PlanMapper.toDto(plan as MapperEntities['PlanMapper'])
-      )
+      ).map((plan) => this.mappers.PlanMapper.toDto(plan))
     );
   }
 
@@ -126,7 +124,7 @@ export class BasePlanService<
       this.mappers.PlanMapper.entity,
       idDto
     );
-    return this.mappers.PlanMapper.toDto(plan as MapperEntities['PlanMapper']);
+    return this.mappers.PlanMapper.toDto(plan);
   }
 
   async updatePlan(

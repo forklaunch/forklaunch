@@ -9,13 +9,13 @@ export type StripePaymentLinkMappers<
   Dto extends StripePaymentLinkDtos<StatusEnum>
 > = {
   PaymentLinkMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toDto: (
       entity: Entities['PaymentLinkMapper']
     ) => Promise<Dto['PaymentLinkMapper']>;
   };
   CreatePaymentLinkMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: Dto['CreatePaymentLinkMapper'],
       em: EntityManager,
@@ -24,7 +24,7 @@ export type StripePaymentLinkMappers<
     ) => Promise<Entities['CreatePaymentLinkMapper']>;
   };
   UpdatePaymentLinkMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: Dto['UpdatePaymentLinkMapper'],
       em: EntityManager,

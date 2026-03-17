@@ -5,10 +5,11 @@ import {
   string
 } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager, wrap } from '@mikro-orm/core';
+import { wrap } from '@mikro-orm/core';
+import { EntityManager } from '@mikro-orm/core';
 import {
-  SampleWorkerEventRecord,
-  type ISampleWorkerEventRecord
+  sampleWorkerEventRecord,
+  type SampleWorkerEventRecord
 } from '../../persistence/entities/sampleWorkerRecord.entity';
 import { SampleWorkerSchema } from '../schemas/sampleWorker.schema';
 
@@ -16,10 +17,10 @@ import { SampleWorkerSchema } from '../schemas/sampleWorker.schema';
 export const SampleWorkerRequestMapper = requestMapper({
   schemaValidator,
   schema: SampleWorkerSchema,
-  entity: SampleWorkerEventRecord,
+  entity: sampleWorkerEventRecord,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return em.create(SampleWorkerEventRecord, {
+      return em.create(sampleWorkerEventRecord, {
         ...dto,
         processed: false,
         retryCount: 0,
@@ -38,12 +39,9 @@ export const SampleWorkerResponseMapper = responseMapper({
     processed: boolean,
     retryCount: number
   },
-  entity: SampleWorkerEventRecord,
+  entity: sampleWorkerEventRecord,
   mapperDefinition: {
-    toDto: async (entity: ISampleWorkerEventRecord) => {
-      if (!entity.isInitialized()) {
-        throw new Error('SampleWorkerEventRecord is not initialized');
-      }
+    toDto: async (entity: SampleWorkerEventRecord) => {
       return wrap(entity).toPOJO();
     }
   }

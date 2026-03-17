@@ -38,6 +38,7 @@ export const UserSchema = ({ uuidId }: { uuidId: boolean }) => ({
   email: email,
   firstName: string,
   lastName: string,
+  organization: string,
   roles: array(RoleSchema({ uuidId })),
   phoneNumber: optional(string),
   subscription: optional(string),

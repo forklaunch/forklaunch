@@ -45,20 +45,20 @@ export const clearDatabase = async (options?: {
 };
 
 export const setupTestData = async (em: EntityManager) => {
-  const { Plan } = await import('../persistence/entities/plan.entity');
-  const { Subscription } = await import(
+  const { plan } = await import('../persistence/entities/plan.entity');
+  const { subscription } = await import(
     '../persistence/entities/subscription.entity'
   );
-  const { CheckoutSession } = await import(
+  const { checkoutSession } = await import(
     '../persistence/entities/checkoutSession.entity'
   );
-  const { PaymentLink } = await import(
+  const { paymentLink } = await import(
     '../persistence/entities/paymentLink.entity'
   );
-  const { BillingPortal } = await import(
+  const { billingPortal } = await import(
     '../persistence/entities/billingPortal.entity'
   );
-  const { BillingProvider } = await import(
+  const { billingProvider } = await import(
     '../persistence/entities/billingProvider.entity'
   );
   const { BillingProviderEnum } = await import(
@@ -72,7 +72,7 @@ export const setupTestData = async (em: EntityManager) => {
     '../domain/enum/paymentMethod.enum'
   );
 
-  em.create(BillingProvider, {
+  em.create(billingProvider, {
     id: '123e4567-e89b-12d3-a456-426614174001',
     billingProvider: BillingProviderEnum.STRIPE,
     providerFields: { apiKey: 'test-api-key' },
@@ -80,7 +80,7 @@ export const setupTestData = async (em: EntityManager) => {
     updatedAt: new Date()
   });
 
-  em.create(Plan, {
+  em.create(plan, {
     id: '123e4567-e89b-12d3-a456-426614174002',
     active: true,
     name: 'Test Plan',
@@ -95,7 +95,7 @@ export const setupTestData = async (em: EntityManager) => {
     updatedAt: new Date()
   });
 
-  em.create(Subscription, {
+  em.create(subscription, {
     id: '123e4567-e89b-12d3-a456-426614174003',
     partyId: '123e4567-e89b-12d3-a456-426614174000',
     partyType: PartyEnum.USER,
@@ -110,7 +110,7 @@ export const setupTestData = async (em: EntityManager) => {
     updatedAt: new Date()
   });
 
-  em.create(CheckoutSession, {
+  em.create(checkoutSession, {
     id: '123e4567-e89b-12d3-a456-426614174004',
     customerId: 'cus_test_123',
     paymentMethods: [PaymentMethodEnum.CREDIT_CARD],
@@ -124,7 +124,7 @@ export const setupTestData = async (em: EntityManager) => {
     updatedAt: new Date()
   });
 
-  em.create(PaymentLink, {
+  em.create(paymentLink, {
     id: '123e4567-e89b-12d3-a456-426614174005',
     amount: 4999,
     paymentMethods: [PaymentMethodEnum.CREDIT_CARD],
@@ -135,7 +135,7 @@ export const setupTestData = async (em: EntityManager) => {
     updatedAt: new Date()
   });
 
-  em.create(BillingPortal, {
+  em.create(billingPortal, {
     id: '123e4567-e89b-12d3-a456-426614174006',
     customerId: 'cus_test_123',
     uri: 'https://example.com/billing',

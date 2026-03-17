@@ -1,14 +1,14 @@
 import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
-import { Permission } from './permission.entity';
+import { permission } from './permission.entity';
 
-export const Role = defineEntity({
+export const role = defineEntity({
   name: 'Role',
   properties: {
     ...sqlBaseProperties,
     name: p.string(),
-    permissions: () => p.manyToMany(Permission)
+    permissions: () => p.manyToMany(permission)
   }
 });
 
-export type IRole = InferEntity<typeof Role>;
+export type Role = InferEntity<typeof role>;

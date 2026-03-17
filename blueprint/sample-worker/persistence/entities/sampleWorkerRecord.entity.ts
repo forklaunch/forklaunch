@@ -2,7 +2,7 @@ import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 
 // Entity that defines the structure of the SampleWorkerEventRecord table
-export const SampleWorkerEventRecord = defineEntity({
+export const sampleWorkerEventRecord = defineEntity({
   name: 'SampleWorkerEventRecord',
   properties: {
     ...sqlBaseProperties,
@@ -12,6 +12,6 @@ export const SampleWorkerEventRecord = defineEntity({
   }
 });
 
-export type ISampleWorkerEventRecord = InferEntity<
-  typeof SampleWorkerEventRecord
+export type SampleWorkerEventRecord = InferEntity<
+  typeof sampleWorkerEventRecord
 >;

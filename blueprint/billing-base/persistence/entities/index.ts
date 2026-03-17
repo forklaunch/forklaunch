@@ -1,12 +1,12 @@
-export { BillingPortal, type IBillingPortal } from './billingPortal.entity';
+export { billingPortal, type BillingPortal } from './billingPortal.entity';
 export {
-  BillingProvider,
-  type IBillingProvider
+  billingProvider,
+  type BillingProvider
 } from './billingProvider.entity';
 export {
-  CheckoutSession,
-  type ICheckoutSession
+  checkoutSession,
+  type CheckoutSession
 } from './checkoutSession.entity';
-export { PaymentLink, type IPaymentLink } from './paymentLink.entity';
-export { Plan, type IPlan } from './plan.entity';
-export { Subscription, type ISubscription } from './subscription.entity';
+export { paymentLink, type PaymentLink } from './paymentLink.entity';
+export { plan, type Plan } from './plan.entity';
+export { subscription, type Subscription } from './subscription.entity';

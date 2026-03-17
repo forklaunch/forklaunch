@@ -18,13 +18,13 @@ export type CheckoutSessionMappers<
   >
 > = {
   CheckoutSessionMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toDto: (
       entity: MapperEntities['CheckoutSessionMapper']
     ) => Promise<MapperDomains['CheckoutSessionMapper']>;
   };
   CreateCheckoutSessionMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: MapperDomains['CreateCheckoutSessionMapper'],
       em: EntityManager,
@@ -32,7 +32,7 @@ export type CheckoutSessionMappers<
     ) => Promise<MapperEntities['CreateCheckoutSessionMapper']>;
   };
   UpdateCheckoutSessionMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: MapperDomains['UpdateCheckoutSessionMapper'],
       em: EntityManager,

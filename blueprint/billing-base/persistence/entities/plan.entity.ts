@@ -4,7 +4,7 @@ import { BillingProviderEnum } from '../../domain/enum/billingProvider.enum';
 import { CurrencyEnum } from '../../domain/enum/currency.enum';
 import { PlanCadenceEnum } from '../../domain/enum/planCadence.enum';
 
-export const Plan = defineEntity({
+export const plan = defineEntity({
   name: 'Plan',
   properties: {
     ...sqlBaseProperties,
@@ -22,4 +22,4 @@ export const Plan = defineEntity({
   }
 });
 
-export type IPlan = InferEntity<typeof Plan>;
+export type Plan = InferEntity<typeof plan>;

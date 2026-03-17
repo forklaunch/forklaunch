@@ -1,7 +1,7 @@
-import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
+import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
 
-export const Permission = defineEntity({
+export const permission = defineEntity({
   name: 'Permission',
   properties: {
     ...sqlBaseProperties,
@@ -9,4 +9,4 @@ export const Permission = defineEntity({
   }
 });
 
-export type IPermission = InferEntity<typeof Permission>;
+export type Permission = InferEntity<typeof permission>;

@@ -1,6 +1,7 @@
 import { OpenTelemetryCollector } from '@forklaunch/core/http';{{#is_worker}}
 import { WorkerProducer } from '@forklaunch/interfaces-worker/interfaces';{{/is_worker}}{{^is_worker}}
-import { EntityManager } from '@mikro-orm/core';{{/is_worker}}{{^with_mappers}}
+import { EntityManager } from '@mikro-orm/{{database}}';{{/is_worker}}{{^with_mappers}}
+import { wrap } from '@mikro-orm/core';{{/with_mappers}}
 import { Schema } from '@forklaunch/validator';{{/with_mappers}}
 import { SchemaValidator } from '@{{app_name}}/core';
 import { Metrics } from '@{{app_name}}/monitoring';
@@ -17,12 +18,12 @@ import {
   {{pascal_case_name}}RequestSchema,
   {{pascal_case_name}}ResponseSchema
 } from '../schemas/{{camel_case_name}}.schema';
-import { {{pascal_case_name}}{{#is_worker}}EventRecord{{/is_worker}}{{^is_worker}}Record{{/is_worker}} } from '../../persistence/entities';
+import { {{camel_case_name}}{{#is_worker}}EventRecord{{/is_worker}}{{^is_worker}}Record{{/is_worker}}, type {{pascal_case_name}}{{#is_worker}}EventRecord{{/is_worker}}{{^is_worker}}Record{{/is_worker}} } from '../../persistence/entities';
 
 // When not using mappers, work directly with schema-validated types
 type {{pascal_case_name}}Request = Schema<typeof {{pascal_case_name}}RequestSchema, SchemaValidator>;
 type {{pascal_case_name}}Response = Schema<typeof {{pascal_case_name}}ResponseSchema, SchemaValidator>;{{/with_mappers}}{{#with_mappers}}{{#is_worker}}
-import { {{pascal_case_name}}EventRecord } from '../../persistence/entities';{{/is_worker}}{{/with_mappers}}
+import { {{camel_case_name}}EventRecord, type {{pascal_case_name}}EventRecord } from '../../persistence/entities';{{/is_worker}}{{/with_mappers}}
 
 // Base{{pascal_case_name}}Service class that implements the {{pascal_case_name}}Service interface
 export class Base{{pascal_case_name}}Service implements {{pascal_case_name}}Service { {{^is_worker}}
@@ -50,7 +51,7 @@ export class Base{{pascal_case_name}}Service implements {{pascal_case_name}}Serv
     );
     {{#is_worker}}
     await this.workerProducer.enqueueJob(entity);{{/is_worker}}{{^is_worker}}
-    await this.entityManager.persistAndFlush(entity);
+    await this.entityManager.persist(entity).flush();
     {{/is_worker}}
     return {{pascal_case_name}}ResponseMapper.toDto(entity);{{/with_mappers}}{{^with_mappers}}
     data: {{pascal_case_name}}Request
@@ -71,18 +72,18 @@ export class Base{{pascal_case_name}}Service implements {{pascal_case_name}}Serv
     // ============================================================================
 
     // Map from request data to entity (inline DTO → Entity conversion)
-    const entity = await {{pascal_case_name}}{{#is_worker}}EventRecord{{/is_worker}}{{^is_worker}}Record{{/is_worker}}.create({
+    const entity = this.entityManager.create({{camel_case_name}}{{#is_worker}}EventRecord{{/is_worker}}{{^is_worker}}Record{{/is_worker}}, {
       ...data,{{#is_worker}}
       processed: false,
       retryCount: 0,{{/is_worker}}
       createdAt: new Date(),
       updatedAt: new Date()
-    }{{^is_worker}}, this.entityManager{{/is_worker}});
+    });
 {{#is_worker}}
     await this.workerProducer.enqueueJob(entity);{{/is_worker}}{{^is_worker}}
-    await this.entityManager.persistAndFlush(entity);{{/is_worker}}
+    await this.entityManager.persist(entity).flush();{{/is_worker}}
 
     // Map from entity to response (inline Entity → DTO conversion)
-    return await entity.read();{{/with_mappers}}
+    return wrap(entity).toPOJO();{{/with_mappers}}
   };
 }

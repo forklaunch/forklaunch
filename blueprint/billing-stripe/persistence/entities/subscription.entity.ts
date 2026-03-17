@@ -4,7 +4,7 @@ import { BillingProviderEnum } from '@forklaunch/implementation-billing-stripe/e
 import Stripe from 'stripe';
 import { PartyEnum } from '../../domain/enum/party.enum';
 
-export const Subscription = defineEntity({
+export const subscription = defineEntity({
   name: 'Subscription',
   properties: {
     ...sqlBaseProperties,
@@ -25,4 +25,4 @@ export const Subscription = defineEntity({
   }
 });
 
-export type ISubscription = InferEntity<typeof Subscription>;
+export type Subscription = InferEntity<typeof subscription>;

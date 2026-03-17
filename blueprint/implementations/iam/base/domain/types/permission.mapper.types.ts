@@ -7,13 +7,13 @@ export type PermissionMappers<
   MapperDomains extends PermissionDtos
 > = {
   PermissionMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toDto: (
       entity: MapperEntities['PermissionMapper']
     ) => Promise<MapperDomains['PermissionMapper']>;
   };
   CreatePermissionMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: MapperDomains['CreatePermissionMapper'],
       em: EntityManager,
@@ -21,7 +21,7 @@ export type PermissionMappers<
     ) => Promise<MapperEntities['CreatePermissionMapper']>;
   };
   UpdatePermissionMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: MapperDomains['UpdatePermissionMapper'],
       em: EntityManager,
@@ -29,7 +29,7 @@ export type PermissionMappers<
     ) => Promise<MapperEntities['UpdatePermissionMapper']>;
   };
   RoleEntityMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: MapperDomains['RoleEntityMapper'],
       em: EntityManager,

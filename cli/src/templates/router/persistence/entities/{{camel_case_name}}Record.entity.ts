@@ -1,7 +1,7 @@
 import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
 import { {{#is_mongo}}nosql{{/is_mongo}}{{^is_mongo}}sql{{/is_mongo}}BaseProperties } from '@{{app_name}}/core';
 
-export const {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record = defineEntity({
+export const {{camel_case_name}}{{#is_worker}}Event{{/is_worker}}Record = defineEntity({
   name: '{{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record',
   properties: {
     ...{{#is_mongo}}nosql{{/is_mongo}}{{^is_mongo}}sql{{/is_mongo}}BaseProperties,
@@ -11,4 +11,4 @@ export const {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record = defin
   },
 });
 
-export type I{{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record = InferEntity<typeof {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record>;
+export type {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record = InferEntity<typeof {{camel_case_name}}{{#is_worker}}Event{{/is_worker}}Record>;

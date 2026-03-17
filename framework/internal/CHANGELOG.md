@@ -1,5 +1,26 @@
 # @forklaunch/internal
 
+## 0.4.1
+
+### Patch Changes
+
+- package upgrades
+- Updated dependencies
+  - @forklaunch/validator@0.11.1
+  - @forklaunch/common@0.7.1
+
+## 0.4.0
+
+### Minor Changes
+
+- update packages and update to mikro orm v7
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/validator@0.11.0
+  - @forklaunch/common@0.7.0
+
 ## 0.3.40
 
 ### Patch Changes

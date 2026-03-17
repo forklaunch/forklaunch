@@ -5,8 +5,8 @@ import { MikroORM } from '@mikro-orm/core';
 import { betterAuth, BetterAuthOptions } from 'better-auth';
 import { jwt, openAPI } from 'better-auth/plugins';
 import { getEnvVar } from '@forklaunch/common';
-import { Organization } from './persistence/entities/organization.entity';
-import { User } from './persistence/entities/user.entity';
+import { organization as organizationEntity } from './persistence/entities/organization.entity';
+import { user as userEntity } from './persistence/entities/user.entity';
 
 type Plugins = [ReturnType<typeof jwt>, ReturnType<typeof openAPI>];
 const plugins: Plugins = [
@@ -151,7 +151,7 @@ export const betterAuthConfig = ({
                 const orgName = `${user.name || user.email.split('@')[0]}'s Organization`;
 
                 // Create organization using ORM entities
-                const organization = em.create(Organization, {
+                const organization = em.create(organizationEntity, {
                   name: orgName,
                   domain: `${orgName.toLowerCase().replace(/[^a-z0-9]/g, '-')}.forklaunch.app`,
                   subscription: 'free',
@@ -163,10 +163,10 @@ export const betterAuthConfig = ({
                 await em.persist(organization).flush();
 
                 // Update user with organization
-                const userEntity = await em.findOne(User, { id: user.id });
-                if (userEntity) {
-                  userEntity.organization = organization;
-                  await em.persist(userEntity).flush();
+                const foundUser = await em.findOne(userEntity, { id: user.id });
+                if (foundUser) {
+                  foundUser.organization = organization;
+                  await em.persist(foundUser).flush();
                 }
 
                 openTelemetryCollector.info(

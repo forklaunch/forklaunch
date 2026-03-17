@@ -7,13 +7,13 @@ export type BillingPortalMappers<
   MapperDomains extends BaseBillingDtos
 > = {
   BillingPortalMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toDto: (
       entity: MapperEntities['BillingPortalMapper']
     ) => Promise<MapperDomains['BillingPortalMapper']>;
   };
   CreateBillingPortalMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: MapperDomains['CreateBillingPortalMapper'],
       em: EntityManager,
@@ -21,7 +21,7 @@ export type BillingPortalMappers<
     ) => Promise<MapperEntities['CreateBillingPortalMapper']>;
   };
   UpdateBillingPortalMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: MapperDomains['UpdateBillingPortalMapper'],
       em: EntityManager,

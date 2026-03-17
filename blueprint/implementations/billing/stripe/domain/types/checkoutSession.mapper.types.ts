@@ -9,13 +9,13 @@ export type StripeCheckoutSessionMappers<
   Dto extends StripeCheckoutSessionDtos<StatusEnum>
 > = {
   CheckoutSessionMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toDto: (
       entity: Entities['CheckoutSessionMapper']
     ) => Promise<Dto['CheckoutSessionMapper']>;
   };
   CreateCheckoutSessionMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: Dto['CreateCheckoutSessionMapper'],
       em: EntityManager,
@@ -24,7 +24,7 @@ export type StripeCheckoutSessionMappers<
     ) => Promise<Entities['CreateCheckoutSessionMapper']>;
   };
   UpdateCheckoutSessionMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: Dto['UpdateCheckoutSessionMapper'],
       em: EntityManager,

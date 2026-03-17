@@ -18,13 +18,13 @@ export type PlanMappers<
   >
 > = {
   PlanMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toDto: (
       entity: MapperEntities['PlanMapper']
     ) => Promise<MapperDomains['PlanMapper']>;
   };
   CreatePlanMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: MapperDomains['CreatePlanMapper'],
       em: EntityManager,
@@ -32,7 +32,7 @@ export type PlanMappers<
     ) => Promise<MapperEntities['CreatePlanMapper']>;
   };
   UpdatePlanMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: MapperDomains['UpdatePlanMapper'],
       em: EntityManager,

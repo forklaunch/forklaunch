@@ -11,7 +11,7 @@ import {
   UpdateOrganizationDto
 } from '@forklaunch/interfaces-iam/types';
 import { AnySchemaValidator } from '@forklaunch/validator';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, FilterQuery } from '@mikro-orm/core';
 import { OrganizationDtos } from '../domain/types/iamDto.types';
 import { OrganizationEntities } from '../domain/types/iamEntities.types';
 import { OrganizationMappers } from '../domain/types/organization.mapper.types';
@@ -94,7 +94,7 @@ export class BaseOrganizationService<
   }
 
   async getOrganization(
-    idDto: IdDto,
+    idDto: IdDto & FilterQuery<NoInfer<MapperEntities['OrganizationMapper']>>,
     em?: EntityManager
   ): Promise<MapperDomains['OrganizationMapper']> {
     if (this.evaluatedTelemetryOptions.logging) {
@@ -103,15 +103,10 @@ export class BaseOrganizationService<
 
     const organization = await (em ?? this.em).findOneOrFail(
       this.mappers.OrganizationMapper.entity,
-      idDto,
-      {
-        populate: ['id', '*']
-      }
+      idDto
     );
 
-    return this.mappers.OrganizationMapper.toDto(
-      organization as MapperEntities['OrganizationMapper']
-    );
+    return this.mappers.OrganizationMapper.toDto(organization);
   }
 
   async updateOrganization(
@@ -142,7 +137,10 @@ export class BaseOrganizationService<
     return this.mappers.OrganizationMapper.toDto(updatedOrganization);
   }
 
-  async deleteOrganization(idDto: IdDto, em?: EntityManager): Promise<void> {
+  async deleteOrganization(
+    idDto: IdDto & FilterQuery<NoInfer<MapperEntities['OrganizationMapper']>>,
+    em?: EntityManager
+  ): Promise<void> {
     if (this.evaluatedTelemetryOptions.logging) {
       this.openTelemetryCollector.info('Deleting organization', idDto);
     }

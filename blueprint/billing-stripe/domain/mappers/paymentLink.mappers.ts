@@ -1,10 +1,11 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager, wrap } from '@mikro-orm/core';
+import { wrap } from '@mikro-orm/core';
+import { EntityManager } from '@mikro-orm/core';
 import Stripe from 'stripe';
 import {
-  PaymentLink,
-  type IPaymentLink
+  paymentLink,
+  type PaymentLink
 } from '../../persistence/entities/paymentLink.entity';
 import { StatusEnum } from '../enum/status.enum';
 import { PaymentLinkSchemas } from '../schemas';
@@ -12,18 +13,22 @@ import { PaymentLinkSchemas } from '../schemas';
 export const CreatePaymentLinkMapper = requestMapper({
   schemaValidator,
   schema: PaymentLinkSchemas.CreatePaymentLinkSchema(StatusEnum),
-  entity: PaymentLink,
+  entity: paymentLink,
   mapperDefinition: {
     toEntity: async (
       dto,
       em: EntityManager,
       providerFields: Stripe.PaymentLink
     ) => {
-      return em.create(PaymentLink, {
-        ...dto,
+      return em.create(paymentLink, {
+        amount: dto.amount,
+        paymentMethods: dto.paymentMethods,
+        currency: dto.currency,
+        description: null,
+        status: dto.status,
+        providerFields,
         createdAt: new Date(),
-        updatedAt: new Date(),
-        providerFields
+        updatedAt: new Date()
       });
     }
   }
@@ -32,16 +37,21 @@ export const CreatePaymentLinkMapper = requestMapper({
 export const UpdatePaymentLinkMapper = requestMapper({
   schemaValidator,
   schema: PaymentLinkSchemas.UpdatePaymentLinkSchema(StatusEnum),
-  entity: PaymentLink,
+  entity: paymentLink,
   mapperDefinition: {
     toEntity: async (
       dto,
       em: EntityManager,
       providerFields: Stripe.PaymentLink
     ) => {
-      const entity = await em.findOneOrFail(PaymentLink, { id: dto.id });
+      const entity = await em.findOneOrFail(paymentLink, { id: dto.id });
       em.assign(entity, {
-        ...dto,
+        ...(dto.amount !== undefined && { amount: dto.amount }),
+        ...(dto.paymentMethods !== undefined && {
+          paymentMethods: dto.paymentMethods
+        }),
+        ...(dto.currency !== undefined && { currency: dto.currency }),
+        ...(dto.status !== undefined && { status: dto.status }),
         ...(providerFields !== undefined ? { providerFields } : {}),
         updatedAt: new Date()
       });
@@ -53,9 +63,9 @@ export const UpdatePaymentLinkMapper = requestMapper({
 export const PaymentLinkMapper = responseMapper({
   schemaValidator,
   schema: PaymentLinkSchemas.PaymentLinkSchema(StatusEnum),
-  entity: PaymentLink,
+  entity: paymentLink,
   mapperDefinition: {
-    toDto: async (entity: IPaymentLink) => {
+    toDto: async (entity: PaymentLink) => {
       return {
         ...wrap(entity).toPOJO(),
         stripeFields: entity.providerFields

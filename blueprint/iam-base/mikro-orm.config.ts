@@ -7,8 +7,7 @@ import {
 import { Migrator } from '@mikro-orm/migrations';
 // import { MongoDriver } from '@mikro-orm/mongodb';
 // import { MySqlDriver } from '@mikro-orm/mysql';
-import { defineConfig, Platform, TextType, Type } from '@mikro-orm/core';
-import { PostgreSqlDriver } from '@mikro-orm/postgresql';
+import { defineConfig, Platform, TextType, Type } from '@mikro-orm/postgresql';
 import dotenv from 'dotenv';
 // import { SqliteDriver } from '@mikro-orm/sqlite';
 import * as entities from './persistence/entities';
@@ -53,7 +52,6 @@ export const validConfigInjector = configInjector.validateConfigSingletons(
 );
 
 const mikroOrmOptionsConfig = defineConfig({
-  driver: PostgreSqlDriver,
   dbName: validConfigInjector.resolve('DB_NAME'),
   host: validConfigInjector.resolve('DB_HOST'),
   user: validConfigInjector.resolve('DB_USER'),

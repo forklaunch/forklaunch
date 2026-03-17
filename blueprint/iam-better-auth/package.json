@@ -35,11 +35,11 @@
     "test": "NODE_OPTIONS='--import=tsx' vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/better-auth-mikro-orm-fork": "^0.4.106",
+    "@forklaunch/better-auth-mikro-orm-fork": "^0.5.0",
     "@forklaunch/blueprint-core": "workspace:*",
     "@forklaunch/blueprint-iam-base": "workspace:*",
     "@forklaunch/blueprint-monitoring": "workspace:*",
-    "@forklaunch/core": "^0.18.15",
+    "@forklaunch/core": "^0.19.1",
     "@forklaunch/implementation-iam-base": "workspace:*",
     "@forklaunch/interfaces-iam": "workspace:*",
     "@mikro-orm/core": "7.0.2",
@@ -59,7 +59,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@forklaunch/testing": "^0.0.29",
+    "@forklaunch/testing": "^0.1.1",
     "@mikro-orm/cli": "7.0.2",
     "@types/express": "^5.0.6",
     "@types/express-serve-static-core": "^5.1.1",

@@ -2,10 +2,8 @@ import { PERMISSIONS, ROLES } from '@forklaunch/blueprint-core';
 import { RequiredEntityData } from '@mikro-orm/core';
 import { v4 as uuidv4 } from 'uuid';
 import { OrganizationStatus } from '../domain/enum/organizationStatus.enum';
-import { Organization } from './entities/organization.entity';
+import { Organization, Role, User } from './entities';
 import { Permission } from './entities/permission.entity';
-import { Role } from './entities/role.entity';
-import { User } from './entities/user.entity';
 
 //! Begin seed data - RBAC Permissions
 export const platformReadPermission = {
@@ -61,6 +59,7 @@ export const user = {
   firstName: 'Test',
   lastName: 'User',
   roles: [adminRole.id],
+  providerFields: null,
   createdAt: new Date(),
   updatedAt: new Date()
 } satisfies RequiredEntityData<User>;
@@ -71,6 +70,7 @@ export const organization = {
   subscription: 'test',
   domain: 'test.com',
   status: OrganizationStatus.ACTIVE,
+  providerFields: null,
   createdAt: new Date(),
   updatedAt: new Date()
 } satisfies RequiredEntityData<Organization>;

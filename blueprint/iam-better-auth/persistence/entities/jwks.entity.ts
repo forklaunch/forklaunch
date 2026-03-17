@@ -1,7 +1,7 @@
 import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 
-export const Jwks = defineEntity({
+export const jwks = defineEntity({
   name: 'Jwks',
   properties: {
     ...sqlBaseProperties,
@@ -10,4 +10,4 @@ export const Jwks = defineEntity({
   }
 });
 
-export type IJwks = InferEntity<typeof Jwks>;
+export type Jwks = InferEntity<typeof jwks>;

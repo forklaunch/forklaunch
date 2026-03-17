@@ -1,4 +1,4 @@
-import { EntityManager } from "@mikro-orm/core";
+import { EntityManager } from "@mikro-orm/{{database}}";
 import { Seeder } from "@mikro-orm/seeder";
 import { validConfigInjector } from "../mikro-orm.config";
 import * as seeders from "./seeders";

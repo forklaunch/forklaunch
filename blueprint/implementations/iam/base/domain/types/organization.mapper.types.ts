@@ -8,13 +8,13 @@ export type OrganizationMappers<
   MapperDomains extends OrganizationDtos<OrganizationStatus>
 > = {
   OrganizationMapper: {
-    entity: EntitySchema<MapperEntities['OrganizationMapper']>;
+    entity: EntitySchema<any>;
     toDto: (
       entity: MapperEntities['OrganizationMapper']
     ) => Promise<MapperDomains['OrganizationMapper']>;
   };
   CreateOrganizationMapper: {
-    entity: EntitySchema<MapperEntities['OrganizationMapper']>;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: MapperDomains['CreateOrganizationMapper'],
       em: EntityManager,
@@ -22,7 +22,7 @@ export type OrganizationMappers<
     ) => Promise<MapperEntities['CreateOrganizationMapper']>;
   };
   UpdateOrganizationMapper: {
-    entity: EntitySchema<MapperEntities['OrganizationMapper']>;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: MapperDomains['UpdateOrganizationMapper'],
       em: EntityManager,

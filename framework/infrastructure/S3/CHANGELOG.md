@@ -1,5 +1,26 @@
 # @forklaunch/infrastructure-s3
 
+## 0.5.1
+
+### Patch Changes
+
+- package upgrades
+- Updated dependencies
+  - @forklaunch/common@0.7.1
+  - @forklaunch/core@0.19.1
+
+## 0.5.0
+
+### Minor Changes
+
+- update packages and update to mikro orm v7
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/common@0.7.0
+  - @forklaunch/core@0.19.0
+
 ## 0.4.52
 
 ### Patch Changes

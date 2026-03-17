@@ -8,7 +8,7 @@ import Stripe from 'stripe';
 import { StatusEnum } from '../../domain/enum/status.enum';
 
 // This is to represent connection information for a billing provider
-export const PaymentLink = defineEntity({
+export const paymentLink = defineEntity({
   name: 'PaymentLink',
   properties: {
     ...sqlBaseProperties,
@@ -21,4 +21,4 @@ export const PaymentLink = defineEntity({
   }
 });
 
-export type IPaymentLink = InferEntity<typeof PaymentLink>;
+export type PaymentLink = InferEntity<typeof paymentLink>;

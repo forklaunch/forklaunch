@@ -8,13 +8,13 @@ export type StripeBillingPortalMappers<
   Dto extends StripeBillingPortalDtos
 > = {
   BillingPortalMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toDto: (
       entity: Entities['BillingPortalMapper']
     ) => Promise<Dto['BillingPortalMapper']>;
   };
   CreateBillingPortalMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: Dto['CreateBillingPortalMapper'],
       em: EntityManager,
@@ -23,7 +23,7 @@ export type StripeBillingPortalMappers<
     ) => Promise<Entities['CreateBillingPortalMapper']>;
   };
   UpdateBillingPortalMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: Dto['UpdateBillingPortalMapper'],
       em: EntityManager,

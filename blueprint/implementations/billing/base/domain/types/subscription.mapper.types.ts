@@ -12,13 +12,13 @@ export type SubscriptionMappers<
   MapperDomains extends BaseSubscriptionDtos<PartyType, BillingProviderType>
 > = {
   SubscriptionMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toDto: (
       entity: MapperEntities['SubscriptionMapper']
     ) => Promise<MapperDomains['SubscriptionMapper']>;
   };
   CreateSubscriptionMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: MapperDomains['CreateSubscriptionMapper'],
       em: EntityManager,
@@ -26,7 +26,7 @@ export type SubscriptionMappers<
     ) => Promise<MapperEntities['CreateSubscriptionMapper']>;
   };
   UpdateSubscriptionMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: MapperDomains['UpdateSubscriptionMapper'],
       em: EntityManager,

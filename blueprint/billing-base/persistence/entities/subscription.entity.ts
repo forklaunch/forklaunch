@@ -3,7 +3,7 @@ import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 import { BillingProviderEnum } from '../../domain/enum/billingProvider.enum';
 import { PartyEnum } from '../../domain/enum/party.enum';
 
-export const Subscription = defineEntity({
+export const subscription = defineEntity({
   name: 'Subscription',
   properties: {
     ...sqlBaseProperties,
@@ -24,4 +24,4 @@ export const Subscription = defineEntity({
   }
 });
 
-export type ISubscription = InferEntity<typeof Subscription>;
+export type Subscription = InferEntity<typeof subscription>;

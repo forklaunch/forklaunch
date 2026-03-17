@@ -1,5 +1,17 @@
 # @forklaunch/testing
 
+## 0.1.1
+
+### Patch Changes
+
+- package upgrades
+
+## 0.1.0
+
+### Minor Changes
+
+- update packages and update to mikro orm v7
+
 ## 0.0.29
 
 ### Patch Changes

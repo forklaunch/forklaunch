@@ -18,13 +18,13 @@ export type PaymentLinkMappers<
   >
 > = {
   PaymentLinkMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toDto: (
       entity: MapperEntities['PaymentLinkMapper']
     ) => Promise<MapperDomains['PaymentLinkMapper']>;
   };
   CreatePaymentLinkMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: MapperDomains['CreatePaymentLinkMapper'],
       em: EntityManager,
@@ -32,7 +32,7 @@ export type PaymentLinkMappers<
     ) => Promise<MapperEntities['CreatePaymentLinkMapper']>;
   };
   UpdatePaymentLinkMapper: {
-    entity: EntitySchema;
+    entity: EntitySchema<any>;
     toEntity: (
       dto: MapperDomains['UpdatePaymentLinkMapper'],
       em: EntityManager,

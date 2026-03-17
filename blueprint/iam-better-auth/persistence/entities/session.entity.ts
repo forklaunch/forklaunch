@@ -1,12 +1,12 @@
 import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
-import { User } from './user.entity';
+import { user } from './user.entity';
 
-export const Session = defineEntity({
+export const session = defineEntity({
   name: 'Session',
   properties: {
     ...sqlBaseProperties,
-    user: () => p.manyToOne(User),
+    user: () => p.manyToOne(user),
     token: p.string(),
     expiresAt: p.datetime(),
     ipAddress: p.string().nullable(),
@@ -14,4 +14,4 @@ export const Session = defineEntity({
   }
 });
 
-export type ISession = InferEntity<typeof Session>;
+export type Session = InferEntity<typeof session>;

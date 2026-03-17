@@ -91,17 +91,17 @@ export const clearDatabase = async (options?: {
 };
 
 export const setupTestData = async (em: EntityManager) => {
-  const { CheckoutSession } = await import(
+  const { checkoutSession } = await import(
     '../persistence/entities/checkoutSession.entity'
   );
-  const { PaymentLink } = await import(
+  const { paymentLink } = await import(
     '../persistence/entities/paymentLink.entity'
   );
-  const { BillingPortal } = await import(
+  const { billingPortal } = await import(
     '../persistence/entities/billingPortal.entity'
   );
 
-  em.create(CheckoutSession, {
+  em.create(checkoutSession, {
     id: '123e4567-e89b-12d3-a456-426614174004',
     customerId: 'cus_test_123',
     paymentMethods: [PaymentMethodEnum.CARD],
@@ -126,7 +126,7 @@ export const setupTestData = async (em: EntityManager) => {
     updatedAt: new Date()
   });
 
-  em.create(PaymentLink, {
+  em.create(paymentLink, {
     id: '123e4567-e89b-12d3-a456-426614174005',
     amount: 4999,
     paymentMethods: [PaymentMethodEnum.CARD],
@@ -143,7 +143,7 @@ export const setupTestData = async (em: EntityManager) => {
     updatedAt: new Date()
   });
 
-  em.create(BillingPortal, {
+  em.create(billingPortal, {
     id: '123e4567-e89b-12d3-a456-426614174006',
     customerId: 'cus_test_123',
     uri: 'https://example.com/billing',

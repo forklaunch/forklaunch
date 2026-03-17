@@ -21,7 +21,8 @@ import {
   StripeWebhookService
 } from '@forklaunch/implementation-billing-stripe/services';
 import { RedisTtlCache } from '@forklaunch/infrastructure-redis';
-import { EntityManager, ForkOptions, MikroORM } from '@mikro-orm/core';
+import { ForkOptions } from '@mikro-orm/core';
+import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
 import Stripe from 'stripe';
 import { PartyEnum } from './domain/enum/party.enum';
 import { StatusEnum } from './domain/enum/status.enum';
@@ -153,7 +154,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
   OpenTelemetryCollector: {
     lifetime: Lifetime.Singleton,

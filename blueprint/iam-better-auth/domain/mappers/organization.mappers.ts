@@ -1,10 +1,11 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager, wrap } from '@mikro-orm/core';
+import { wrap } from '@mikro-orm/core';
+import { EntityManager } from '@mikro-orm/core';
 import { OrganizationStatus } from '../../domain/enum/organizationStatus.enum';
 import {
-  Organization,
-  type IOrganization
+  organization,
+  type Organization
 } from '../../persistence/entities/organization.entity';
 import { OrganizationSchemas } from '../schemas';
 import { UserMapper } from './user.mappers';
@@ -12,11 +13,14 @@ import { UserMapper } from './user.mappers';
 export const CreateOrganizationMapper = requestMapper({
   schemaValidator,
   schema: OrganizationSchemas.CreateOrganizationSchema,
-  entity: Organization,
+  entity: organization,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return em.create(Organization, {
-        ...dto,
+      return em.create(organization, {
+        name: dto.name,
+        domain: dto.domain,
+        subscription: dto.subscription,
+        logoUrl: dto.logoUrl || null,
         users: [],
         status: OrganizationStatus.ACTIVE,
         createdAt: new Date(),
@@ -29,11 +33,19 @@ export const CreateOrganizationMapper = requestMapper({
 export const UpdateOrganizationMapper = requestMapper({
   schemaValidator,
   schema: OrganizationSchemas.UpdateOrganizationSchema,
-  entity: Organization,
+  entity: organization,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      const entity = await em.findOneOrFail(Organization, { id: dto.id });
-      em.assign(entity, { ...dto, updatedAt: new Date() });
+      const entity = await em.findOneOrFail(organization, { id: dto.id });
+      em.assign(entity, {
+        ...(dto.name !== undefined && { name: dto.name }),
+        ...(dto.domain !== undefined && { domain: dto.domain }),
+        ...(dto.subscription !== undefined && {
+          subscription: dto.subscription
+        }),
+        ...(dto.logoUrl !== undefined && { logoUrl: dto.logoUrl }),
+        updatedAt: new Date()
+      });
       return entity;
     }
   }
@@ -42,9 +54,9 @@ export const UpdateOrganizationMapper = requestMapper({
 export const OrganizationMapper = responseMapper({
   schemaValidator,
   schema: OrganizationSchemas.OrganizationSchema(OrganizationStatus),
-  entity: Organization,
+  entity: organization,
   mapperDefinition: {
-    toDto: async (entity: IOrganization) => {
+    toDto: async (entity: Organization) => {
       return {
         ...wrap(entity).toPOJO(),
         users: await Promise.all(

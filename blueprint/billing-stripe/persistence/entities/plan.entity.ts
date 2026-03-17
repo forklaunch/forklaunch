@@ -7,7 +7,7 @@ import {
 } from '@forklaunch/implementation-billing-stripe/enum';
 import Stripe from 'stripe';
 
-export const Plan = defineEntity({
+export const plan = defineEntity({
   name: 'Plan',
   properties: {
     ...sqlBaseProperties,
@@ -25,4 +25,4 @@ export const Plan = defineEntity({
   }
 });
 
-export type IPlan = InferEntity<typeof Plan>;
+export type Plan = InferEntity<typeof plan>;

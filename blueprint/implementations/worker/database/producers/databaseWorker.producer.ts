@@ -1,9 +1,9 @@
 import { WorkerEventEntity } from '@forklaunch/interfaces-worker/types';
-import { BaseEntity, EntityManager } from '@mikro-orm/core';
+import { EntityManager } from '@mikro-orm/core';
 import { DatabaseWorkerOptions } from '../domain/types/databaseWorker.types';
 
 export class DatabaseWorkerProducer<
-  EventEntity extends WorkerEventEntity & BaseEntity,
+  EventEntity extends WorkerEventEntity,
   Options extends DatabaseWorkerOptions
 > {
   private readonly em: EntityManager;

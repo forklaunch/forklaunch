@@ -404,13 +404,13 @@ describe('Role Routes E2E Tests with PostgreSQL Container', () => {
       const { updateRoleRoute } = await import('../api/routes/role.routes');
 
       // First create a new permission
-      const { Permission } = await import(
+      const { permission } = await import(
         '../persistence/entities/permission.entity'
       );
       if (!orm) throw new Error('ORM not initialized');
       const em = orm.em.fork();
 
-      em.create(Permission, {
+      em.create(permission, {
         id: '123e4567-e89b-12d3-a456-426614174003',
         slug: 'write:organizations',
         createdAt: new Date(),

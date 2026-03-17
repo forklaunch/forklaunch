@@ -2,7 +2,7 @@ import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 
 // This is to represent connection information for a billing provider
-export const BillingPortal = defineEntity({
+export const billingPortal = defineEntity({
   name: 'BillingPortal',
   properties: {
     ...sqlBaseProperties,
@@ -13,4 +13,4 @@ export const BillingPortal = defineEntity({
   }
 });
 
-export type IBillingPortal = InferEntity<typeof BillingPortal>;
+export type BillingPortal = InferEntity<typeof billingPortal>;

@@ -1,9 +1,10 @@
 import { boolean, schemaValidator, string } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager, wrap } from '@mikro-orm/core';
-import { Organization } from '../../persistence/entities/organization.entity';
-import { Role } from '../../persistence/entities/role.entity';
-import { User, type IUser } from '../../persistence/entities/user.entity';
+import { wrap } from '@mikro-orm/core';
+import { EntityManager } from '@mikro-orm/core';
+import { organization } from '../../persistence/entities/organization.entity';
+import { role } from '../../persistence/entities/role.entity';
+import { user, type User } from '../../persistence/entities/user.entity';
 import { UserSchemas } from '../schemas';
 import { RoleMapper } from './role.mappers';
 
@@ -14,17 +15,25 @@ export const CreateUserMapper = requestMapper({
     name: string,
     emailVerified: boolean
   },
-  entity: User,
+  entity: user,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return em.create(User, {
-        ...dto,
-        organization: await em.findOne(Organization, {
-          id: dto.organization
-        }),
-        roles: await em.findAll(Role, {
+      return em.create(user, {
+        email: dto.email,
+        emailVerified: dto.emailVerified,
+        name: dto.name,
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        image: null,
+        phoneNumber: dto.phoneNumber || null,
+        organization: dto.organization
+          ? await em.findOne(organization, { id: dto.organization })
+          : null,
+        roles: await em.findAll(role, {
           where: { id: { $in: dto.roles } }
         }),
+        subscription: dto.subscription || null,
+        providerFields: dto.providerFields || null,
         createdAt: new Date(),
         updatedAt: new Date()
       });
@@ -35,11 +44,26 @@ export const CreateUserMapper = requestMapper({
 export const UpdateUserMapper = requestMapper({
   schemaValidator,
   schema: UserSchemas.UpdateUserSchema,
-  entity: User,
+  entity: user,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      const entity = await em.findOneOrFail(User, { id: dto.id });
-      em.assign(entity, { ...dto, updatedAt: new Date() });
+      const entity = await em.findOneOrFail(user, { id: dto.id });
+      em.assign(entity, {
+        ...(dto.email !== undefined && { email: dto.email }),
+        ...(dto.firstName !== undefined && { firstName: dto.firstName }),
+        ...(dto.lastName !== undefined && { lastName: dto.lastName }),
+        ...(dto.phoneNumber !== undefined && { phoneNumber: dto.phoneNumber }),
+        ...(dto.roles !== undefined && {
+          roles: await em.find(role, { id: { $in: dto.roles } })
+        }),
+        ...(dto.subscription !== undefined && {
+          subscription: dto.subscription
+        }),
+        ...(dto.providerFields !== undefined && {
+          providerFields: dto.providerFields
+        }),
+        updatedAt: new Date()
+      });
       return entity;
     }
   }
@@ -48,9 +72,9 @@ export const UpdateUserMapper = requestMapper({
 export const UserMapper = responseMapper({
   schemaValidator,
   schema: UserSchemas.UserSchema,
-  entity: User,
+  entity: user,
   mapperDefinition: {
-    toDto: async (entity: IUser) => {
+    toDto: async (entity: User) => {
       const read = wrap(entity).toPOJO();
       return {
         ...read,

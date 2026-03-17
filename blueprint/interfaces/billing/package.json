@@ -43,11 +43,11 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "^0.6.38",
+    "@forklaunch/common": "^0.7.1",
     "@mikro-orm/core": "7.0.2"
   },
   "devDependencies": {
-    "@typescript/native-preview": "7.0.0-dev.20260312.1",
+    "@typescript/native-preview": "7.0.0-dev.20260316.1",
     "depcheck": "^1.4.7",
     "prettier": "^3.8.1",
     "typedoc": "^0.28.17"

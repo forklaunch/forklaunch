@@ -1,5 +1,24 @@
 # @forklaunch/validator
 
+## 0.11.1
+
+### Patch Changes
+
+- package upgrades
+- Updated dependencies
+  - @forklaunch/common@0.7.1
+
+## 0.11.0
+
+### Minor Changes
+
+- update packages and update to mikro orm v7
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/common@0.7.0
+
 ## 0.10.38
 
 ### Patch Changes
