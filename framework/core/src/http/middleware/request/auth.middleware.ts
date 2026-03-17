@@ -350,10 +350,9 @@ async function checkAuthorizationToken<
         if (collapsedAuthorizationMethod.requiredScope) {
           if (
             !resourceScopes.has(collapsedAuthorizationMethod.requiredScope) ||
-            Array.from(resourceScopes).every(
+            !Array.from(resourceScopes).every(
               (scope) =>
-                collapsedAuthorizationMethod.scopeHeirarchy?.indexOf(scope) ??
-                -1 > -1
+                (collapsedAuthorizationMethod.scopeHeirarchy?.indexOf(scope) ?? -1) > -1
             )
           ) {
             return invalidScope;
