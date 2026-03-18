@@ -115,7 +115,7 @@ async function syncProduct(
       existingProduct.name !== productData.name ||
       existingProduct.description !== productData.description ||
       JSON.stringify(existingProduct.metadata) !==
-        JSON.stringify(productData.metadata);
+      JSON.stringify(productData.metadata);
 
     if (!needsUpdate) {
       console.log(`  ✓ Product already up to date: ${planName}`);
