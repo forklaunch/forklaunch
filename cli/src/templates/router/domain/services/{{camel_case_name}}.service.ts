@@ -1,7 +1,7 @@
 import { OpenTelemetryCollector } from '@forklaunch/core/http';{{#is_worker}}
 import { WorkerProducer } from '@forklaunch/interfaces-worker/interfaces';{{/is_worker}}{{^is_worker}}
 import { EntityManager } from '@mikro-orm/{{database}}';{{/is_worker}}{{^with_mappers}}
-import { wrap } from '@mikro-orm/core';{{/with_mappers}}
+import { wrap } from '@mikro-orm/core';
 import { Schema } from '@forklaunch/validator';{{/with_mappers}}
 import { SchemaValidator } from '@{{app_name}}/core';
 import { Metrics } from '@{{app_name}}/monitoring';
