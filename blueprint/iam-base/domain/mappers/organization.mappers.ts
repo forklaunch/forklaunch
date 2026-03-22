@@ -1,6 +1,6 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager, wrap } from '@mikro-orm/core';
+import { EntityManager, InferEntity, wrap } from '@mikro-orm/core';
 import { Organization } from '../../persistence/entities/organization.entity';
 import { OrganizationStatus } from '../enum/organizationStatus.enum';
 import { OrganizationSchemas } from '../schemas';
@@ -42,7 +42,7 @@ export const OrganizationMapper = responseMapper({
   schema: OrganizationSchemas.OrganizationSchema(OrganizationStatus),
   entity: Organization,
   mapperDefinition: {
-    toDto: async (entity: Organization) => {
+    toDto: async (entity: InferEntity<typeof Organization>) => {
       const pojo = wrap(entity).toPOJO();
       return {
         ...pojo,

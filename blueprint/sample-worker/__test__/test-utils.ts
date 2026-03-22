@@ -42,19 +42,19 @@ export const cleanupTestDatabase = async (): Promise<void> => {
   }
 };
 
-export const clearDatabase = async (options?: {
+export async function clearDatabase(options?: {
   orm?: MikroORM;
   redis?: TestSetupResult['redis'];
-}): Promise<void> => {
+}): Promise<void> {
   await clearTestDatabase(options);
-};
+}
 
 export const setupTestData = async (em: EntityManager) => {
-  const { sampleWorkerEventRecord } = await import(
+  const { SampleWorkerEventRecord } = await import(
     '../persistence/entities/sampleWorkerRecord.entity'
   );
 
-  em.create(sampleWorkerEventRecord, {
+  em.create(SampleWorkerEventRecord, {
     id: '123e4567-e89b-12d3-a456-426614174000',
     message: 'Test message',
     processed: false,

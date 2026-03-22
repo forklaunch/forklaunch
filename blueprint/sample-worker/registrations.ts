@@ -38,10 +38,7 @@ import {
 import { ForkOptions } from '@mikro-orm/core';
 import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
 import mikroOrmOptionsConfig from './mikro-orm.config';
-import {
-  sampleWorkerEventRecord,
-  type SampleWorkerEventRecord
-} from './persistence/entities';
+import { SampleWorkerEventRecord } from './persistence/entities';
 import { BaseSampleWorkerService } from './services/sampleWorker.service';
 
 const BullMqWorkerOptionsSchema = BullMqWorkerSchemas({
@@ -356,7 +353,7 @@ const serviceDependencies = runtimeDependencies.chain({
         failureHandler: WorkerFailureHandler<SampleWorkerEventRecord>
       ) =>
         new DatabaseWorkerConsumer(
-          sampleWorkerEventRecord,
+          SampleWorkerEventRecord,
           EntityManager,
           DatabaseWorkerOptions,
           processEventsFunction,

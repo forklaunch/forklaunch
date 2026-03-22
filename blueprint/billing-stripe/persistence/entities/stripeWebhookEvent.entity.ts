@@ -1,7 +1,7 @@
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
-import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
+import { defineEntity, p } from '@mikro-orm/core';
 
-export const stripeWebhookEvent = defineEntity({
+export const StripeWebhookEvent = defineEntity({
   name: 'StripeWebhookEvent',
   properties: {
     ...sqlBaseProperties,
@@ -11,5 +11,3 @@ export const stripeWebhookEvent = defineEntity({
     eventData: p.json<unknown>()
   }
 });
-
-export type StripeWebhookEvent = InferEntity<typeof stripeWebhookEvent>;

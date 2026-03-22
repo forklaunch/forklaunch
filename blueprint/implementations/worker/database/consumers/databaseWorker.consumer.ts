@@ -4,7 +4,7 @@ import {
   WorkerFailureHandler,
   WorkerProcessFunction
 } from '@forklaunch/interfaces-worker/types';
-import { EntityManager, EntityName } from '@mikro-orm/core';
+import { EntityManager, EntitySchema } from '@mikro-orm/core';
 import { DatabaseWorkerOptions } from '../domain/types/databaseWorker.types';
 
 export class DatabaseWorkerConsumer<
@@ -12,14 +12,14 @@ export class DatabaseWorkerConsumer<
   Options extends DatabaseWorkerOptions
 > implements WorkerConsumer<EventEntity>
 {
-  protected readonly entityName: EntityName<EventEntity>;
+  protected readonly entityName: EntitySchema<EventEntity>;
   protected readonly em: EntityManager;
   protected readonly options: Options;
   protected readonly processEvents: WorkerProcessFunction<EventEntity>;
   protected readonly failureHandler: WorkerFailureHandler<EventEntity>;
 
   constructor(
-    entityName: EntityName<EventEntity>,
+    entityName: EntitySchema<EventEntity>,
     em: EntityManager,
     options: Options,
     processEvents: WorkerProcessFunction<EventEntity>,

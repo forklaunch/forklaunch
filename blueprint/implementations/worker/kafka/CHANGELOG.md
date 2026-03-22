@@ -1,5 +1,16 @@
 # @forklaunch/implementation-worker-kafka
 
+## 0.10.0
+
+### Minor Changes
+
+- MikroOrm v7 upgrade
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/interfaces-worker@0.8.0
+
 ## 0.9.17
 
 ### Patch Changes

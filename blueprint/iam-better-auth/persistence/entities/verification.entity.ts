@@ -1,7 +1,7 @@
 import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 
-export const verification = defineEntity({
+export const Verification = defineEntity({
   name: 'Verification',
   properties: {
     ...sqlBaseProperties,
@@ -11,4 +11,4 @@ export const verification = defineEntity({
   }
 });
 
-export type Verification = InferEntity<typeof verification>;
+export type Verification = InferEntity<typeof Verification>;

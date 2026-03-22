@@ -83,25 +83,25 @@ export const cleanupTestDatabase = async (): Promise<void> => {
   }
 };
 
-export const clearDatabase = async (options?: {
+export async function clearDatabase(options?: {
   orm?: MikroORM;
   redis?: TestSetupResult['redis'];
-}): Promise<void> => {
+}): Promise<void> {
   await clearTestDatabase(options);
-};
+}
 
 export const setupTestData = async (em: EntityManager) => {
-  const { checkoutSession } = await import(
+  const { CheckoutSession } = await import(
     '../persistence/entities/checkoutSession.entity'
   );
-  const { paymentLink } = await import(
+  const { PaymentLink } = await import(
     '../persistence/entities/paymentLink.entity'
   );
-  const { billingPortal } = await import(
+  const { BillingPortal } = await import(
     '../persistence/entities/billingPortal.entity'
   );
 
-  em.create(checkoutSession, {
+  em.create(CheckoutSession, {
     id: '123e4567-e89b-12d3-a456-426614174004',
     customerId: 'cus_test_123',
     paymentMethods: [PaymentMethodEnum.CARD],
@@ -126,7 +126,7 @@ export const setupTestData = async (em: EntityManager) => {
     updatedAt: new Date()
   });
 
-  em.create(paymentLink, {
+  em.create(PaymentLink, {
     id: '123e4567-e89b-12d3-a456-426614174005',
     amount: 4999,
     paymentMethods: [PaymentMethodEnum.CARD],
@@ -143,7 +143,7 @@ export const setupTestData = async (em: EntityManager) => {
     updatedAt: new Date()
   });
 
-  em.create(billingPortal, {
+  em.create(BillingPortal, {
     id: '123e4567-e89b-12d3-a456-426614174006',
     customerId: 'cus_test_123',
     uri: 'https://example.com/billing',

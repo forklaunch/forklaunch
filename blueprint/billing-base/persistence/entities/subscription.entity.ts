@@ -1,9 +1,9 @@
-import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
+import { defineEntity, p } from '@mikro-orm/core';
 import { BillingProviderEnum } from '../../domain/enum/billingProvider.enum';
 import { PartyEnum } from '../../domain/enum/party.enum';
 
-export const subscription = defineEntity({
+export const Subscription = defineEntity({
   name: 'Subscription',
   properties: {
     ...sqlBaseProperties,
@@ -17,11 +17,9 @@ export const subscription = defineEntity({
     // access billing provider information pointer -- especially about entitlements, that can be grabbed later
     providerFields: p.json<unknown>().nullable(),
     externalId: p.string().unique(),
-    billingProvider: p.enum(() => BillingProviderEnum).nullable(),
+    billingProvider: p.enum(() => BillingProviderEnum),
     startDate: p.datetime(),
     endDate: p.datetime().nullable(),
     status: p.string()
   }
 });
-
-export type Subscription = InferEntity<typeof subscription>;

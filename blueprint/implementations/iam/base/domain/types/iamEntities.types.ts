@@ -1,49 +1,67 @@
-import { MapNestedDtoArraysToCollections } from '@forklaunch/core/services';
 import {
-  OrganizationDto,
-  PermissionDto,
-  RoleDto,
-  UpdateRoleDto,
-  UserDto
-} from '@forklaunch/interfaces-iam/types';
+  Organization,
+  Permission,
+  Role,
+  User
+} from '../../persistence/entities';
 
-// organization
+// organization entity mapper types
 export type OrganizationEntities<OrganizationStatus> = {
-  OrganizationMapper: MapNestedDtoArraysToCollections<
-    OrganizationDto<OrganizationStatus>,
-    'users'
-  >;
-  CreateOrganizationMapper: MapNestedDtoArraysToCollections<
-    OrganizationDto<OrganizationStatus>,
-    'users'
-  >;
-  UpdateOrganizationMapper: MapNestedDtoArraysToCollections<
-    OrganizationDto<OrganizationStatus>,
-    'users'
-  >;
+  OrganizationMapper: {
+    '~entity': (typeof Organization)['~entity'] & {
+      status: OrganizationStatus[keyof OrganizationStatus];
+    };
+  };
+  CreateOrganizationMapper: {
+    '~entity': (typeof Organization)['~entity'] & {
+      status: OrganizationStatus[keyof OrganizationStatus];
+    };
+  };
+  UpdateOrganizationMapper: {
+    '~entity': (typeof Organization)['~entity'] & {
+      status: OrganizationStatus[keyof OrganizationStatus];
+    };
+  };
 };
 
-// permission
+// permission entity mapper types
 export type PermissionEntities = {
-  PermissionMapper: PermissionDto;
-  CreatePermissionMapper: PermissionDto;
-  UpdatePermissionMapper: PermissionDto;
-  RoleEntityMapper: MapNestedDtoArraysToCollections<
-    UpdateRoleDto,
-    'permissions'
-  >;
+  PermissionMapper: {
+    '~entity': (typeof Permission)['~entity'];
+  };
+  CreatePermissionMapper: {
+    '~entity': (typeof Permission)['~entity'];
+  };
+  UpdatePermissionMapper: {
+    '~entity': (typeof Permission)['~entity'];
+  };
+  RoleEntityMapper: {
+    '~entity': (typeof Role)['~entity'];
+  };
 };
 
-// role
+// role entity mapper types
 export type RoleEntities = {
-  RoleMapper: MapNestedDtoArraysToCollections<RoleDto, 'permissions'>;
-  CreateRoleMapper: MapNestedDtoArraysToCollections<RoleDto, 'permissions'>;
-  UpdateRoleMapper: MapNestedDtoArraysToCollections<RoleDto, 'permissions'>;
+  RoleMapper: {
+    '~entity': (typeof Role)['~entity'];
+  };
+  CreateRoleMapper: {
+    '~entity': (typeof Role)['~entity'];
+  };
+  UpdateRoleMapper: {
+    '~entity': (typeof Role)['~entity'];
+  };
 };
 
-// user
+// user entity mapper types
 export type UserEntities = {
-  UserMapper: MapNestedDtoArraysToCollections<UserDto, 'roles'>;
-  CreateUserMapper: MapNestedDtoArraysToCollections<UserDto, 'roles'>;
-  UpdateUserMapper: MapNestedDtoArraysToCollections<UserDto, 'roles'>;
+  UserMapper: {
+    '~entity': (typeof User)['~entity'];
+  };
+  CreateUserMapper: {
+    '~entity': (typeof User)['~entity'];
+  };
+  UpdateUserMapper: {
+    '~entity': (typeof User)['~entity'];
+  };
 };

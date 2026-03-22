@@ -1,9 +1,9 @@
-import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
-import { organization } from './organization.entity';
-import { role } from './role.entity';
+import { defineEntity, p } from '@mikro-orm/core';
+import { Organization } from './organization.entity';
+import { Role } from './role.entity';
 
-export const user = defineEntity({
+export const User = defineEntity({
   name: 'User',
   properties: {
     ...sqlBaseProperties,
@@ -11,11 +11,11 @@ export const user = defineEntity({
     firstName: p.string(),
     lastName: p.string(),
     phoneNumber: p.string().nullable(),
-    organization: () => p.manyToOne(organization).nullable(),
-    roles: () => p.manyToMany(role),
+    organization: () => p.manyToOne(Organization).nullable(),
+    roles: () => p.manyToMany(Role),
     subscription: p.string().unique().nullable(),
     providerFields: p.json<unknown>().nullable()
   }
 });
 
-export type User = InferEntity<typeof user>;
+// export type User = InferEntity<typeof user>;

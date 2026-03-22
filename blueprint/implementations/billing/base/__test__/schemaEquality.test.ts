@@ -386,7 +386,8 @@ describe('schema equality', () => {
           description: 'test',
           providerFields: {
             test: 'test'
-          }
+          },
+          billingProvider: DummyEnum.A
         })
       )
     ).toBeTruthy();
@@ -428,7 +429,8 @@ describe('schema equality', () => {
           description: 'test',
           providerFields: {
             test: 'test'
-          }
+          },
+          billingProvider: DummyEnum.A
         })
       )
     ).toBeTruthy();

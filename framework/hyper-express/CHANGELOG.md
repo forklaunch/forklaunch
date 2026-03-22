@@ -1,5 +1,49 @@
 # @forklaunch/hyper-express
 
+## 0.12.5
+
+### Patch Changes
+
+- Another fix
+- Updated dependencies
+  - @forklaunch/validator@0.11.5
+  - @forklaunch/common@0.7.5
+  - @forklaunch/core@0.19.5
+  - @forklaunch/ws@0.3.5
+
+## 0.12.4
+
+### Patch Changes
+
+- correct extension for mappers
+- Updated dependencies
+  - @forklaunch/validator@0.11.4
+  - @forklaunch/common@0.7.4
+  - @forklaunch/core@0.19.4
+  - @forklaunch/ws@0.3.4
+
+## 0.12.3
+
+### Patch Changes
+
+- mapper fix
+- Updated dependencies
+  - @forklaunch/validator@0.11.3
+  - @forklaunch/common@0.7.3
+  - @forklaunch/core@0.19.3
+  - @forklaunch/ws@0.3.3
+
+## 0.12.2
+
+### Patch Changes
+
+- Update packages and remove EntityMapper wrapping
+- Updated dependencies
+  - @forklaunch/validator@0.11.2
+  - @forklaunch/common@0.7.2
+  - @forklaunch/core@0.19.2
+  - @forklaunch/ws@0.3.2
+
 ## 0.12.1
 
 ### Patch Changes

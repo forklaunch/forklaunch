@@ -1,4 +1,4 @@
-import { EntityManager, EntitySchema } from '@mikro-orm/core';
+import { EntityManager, InferEntity } from '@mikro-orm/core';
 import { PermissionDtos } from './iamDto.types';
 import { PermissionEntities } from './iamEntities.types';
 
@@ -7,33 +7,33 @@ export type PermissionMappers<
   MapperDomains extends PermissionDtos
 > = {
   PermissionMapper: {
-    entity: EntitySchema<any>;
+    entity: MapperEntities['PermissionMapper'];
     toDto: (
-      entity: MapperEntities['PermissionMapper']
+      entity: InferEntity<MapperEntities['PermissionMapper']>
     ) => Promise<MapperDomains['PermissionMapper']>;
   };
   CreatePermissionMapper: {
-    entity: EntitySchema<any>;
+    entity: MapperEntities['CreatePermissionMapper'];
     toEntity: (
       dto: MapperDomains['CreatePermissionMapper'],
       em: EntityManager,
       ...args: unknown[]
-    ) => Promise<MapperEntities['CreatePermissionMapper']>;
+    ) => Promise<InferEntity<MapperEntities['CreatePermissionMapper']>>;
   };
   UpdatePermissionMapper: {
-    entity: EntitySchema<any>;
+    entity: MapperEntities['UpdatePermissionMapper'];
     toEntity: (
       dto: MapperDomains['UpdatePermissionMapper'],
       em: EntityManager,
       ...args: unknown[]
-    ) => Promise<MapperEntities['UpdatePermissionMapper']>;
+    ) => Promise<InferEntity<MapperEntities['UpdatePermissionMapper']>>;
   };
   RoleEntityMapper: {
-    entity: EntitySchema<any>;
+    entity: MapperEntities['RoleEntityMapper'];
     toEntity: (
       dto: MapperDomains['RoleEntityMapper'],
       em: EntityManager,
       ...args: unknown[]
-    ) => Promise<MapperEntities['RoleEntityMapper']>;
+    ) => Promise<InferEntity<MapperEntities['RoleEntityMapper']>>;
   };
 };

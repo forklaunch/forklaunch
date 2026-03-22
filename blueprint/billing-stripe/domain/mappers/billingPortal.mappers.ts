@@ -1,25 +1,21 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { wrap } from '@mikro-orm/core';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, InferEntity, wrap } from '@mikro-orm/core';
 import Stripe from 'stripe';
-import {
-  billingPortal,
-  type BillingPortal
-} from '../../persistence/entities/billingPortal.entity';
+import { BillingPortal } from '../../persistence/entities/billingPortal.entity';
 import { BillingPortalSchemas } from '../schemas';
 
 export const CreateBillingPortalMapper = requestMapper({
   schemaValidator,
   schema: BillingPortalSchemas.CreateBillingPortalSchema,
-  entity: billingPortal,
+  entity: BillingPortal,
   mapperDefinition: {
     toEntity: async (
       dto,
       em: EntityManager,
       providerFields: Stripe.BillingPortal.Session
     ) => {
-      return em.create(billingPortal, {
+      return em.create(BillingPortal, {
         customerId: dto.customerId,
         uri: dto.uri || null,
         expiresAt: dto.expiresAt,
@@ -34,17 +30,18 @@ export const CreateBillingPortalMapper = requestMapper({
 export const UpdateBillingPortalMapper = requestMapper({
   schemaValidator,
   schema: BillingPortalSchemas.UpdateBillingPortalSchema,
-  entity: billingPortal,
+  entity: BillingPortal,
   mapperDefinition: {
     toEntity: async (
       dto,
       em: EntityManager,
       providerFields: Stripe.BillingPortal.Session
     ) => {
-      const entity = await em.findOneOrFail(billingPortal, { id: dto.id });
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { stripeFields, ...rest } = dto;
+      const entity = await em.findOneOrFail(BillingPortal, { id: rest.id });
       em.assign(entity, {
-        ...(dto.uri !== undefined && { uri: dto.uri }),
-        ...(dto.expiresAt !== undefined && { expiresAt: dto.expiresAt }),
+        ...rest,
         providerFields,
         updatedAt: new Date()
       });
@@ -56,11 +53,12 @@ export const UpdateBillingPortalMapper = requestMapper({
 export const BillingPortalMapper = responseMapper({
   schemaValidator,
   schema: BillingPortalSchemas.BillingPortalSchema,
-  entity: billingPortal,
+  entity: BillingPortal,
   mapperDefinition: {
-    toDto: async (entity: BillingPortal) => {
+    toDto: async (entity: InferEntity<typeof BillingPortal>) => {
       return {
         ...wrap(entity).toPOJO(),
+        uri: entity.uri ?? undefined,
         stripeFields: entity.providerFields
       };
     }

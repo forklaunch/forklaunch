@@ -7,20 +7,17 @@ import {
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
 import { wrap } from '@mikro-orm/core';
 import { EntityManager } from '@mikro-orm/core';
-import {
-  sampleWorkerEventRecord,
-  type SampleWorkerEventRecord
-} from '../../persistence/entities/sampleWorkerRecord.entity';
+import { SampleWorkerEventRecord } from '../../persistence/entities/sampleWorkerRecord.entity';
 import { SampleWorkerSchema } from '../schemas/sampleWorker.schema';
 
 // RequestMapper function that maps the request schema to the entity
 export const SampleWorkerRequestMapper = requestMapper({
   schemaValidator,
   schema: SampleWorkerSchema,
-  entity: sampleWorkerEventRecord,
+  entity: SampleWorkerEventRecord,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return em.create(sampleWorkerEventRecord, {
+      return em.create(SampleWorkerEventRecord, {
         ...dto,
         processed: false,
         retryCount: 0,
@@ -39,7 +36,7 @@ export const SampleWorkerResponseMapper = responseMapper({
     processed: boolean,
     retryCount: number
   },
-  entity: sampleWorkerEventRecord,
+  entity: SampleWorkerEventRecord,
   mapperDefinition: {
     toDto: async (entity: SampleWorkerEventRecord) => {
       return wrap(entity).toPOJO();

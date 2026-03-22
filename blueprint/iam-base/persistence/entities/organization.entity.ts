@@ -1,14 +1,14 @@
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
-import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
+import { defineEntity, p } from '@mikro-orm/core';
 import { OrganizationStatus } from '../../domain/enum/organizationStatus.enum';
-import { user } from './user.entity';
+import { User } from './user.entity';
 
 export const Organization = defineEntity({
   name: 'Organization',
   properties: {
     ...sqlBaseProperties,
     name: p.string(),
-    users: () => p.oneToMany(user).mappedBy('organization'),
+    users: () => p.oneToMany(User).mappedBy('organization'),
     domain: p.string(),
     logoUrl: p.string().nullable(),
     subscription: p.string().unique(),
@@ -16,5 +16,3 @@ export const Organization = defineEntity({
     status: p.enum(() => OrganizationStatus).default(OrganizationStatus.ACTIVE)
   }
 });
-
-export type Organization = InferEntity<typeof Organization>;

@@ -1,4 +1,4 @@
-import { EntityManager, EntitySchema } from '@mikro-orm/core';
+import { EntityManager, InferEntity } from '@mikro-orm/core';
 import { BaseCheckoutSessionDtos } from './baseBillingDto.types';
 import { BaseCheckoutSessionEntities } from './baseBillingEntity.types';
 
@@ -18,25 +18,25 @@ export type CheckoutSessionMappers<
   >
 > = {
   CheckoutSessionMapper: {
-    entity: EntitySchema<any>;
+    entity: MapperEntities['CheckoutSessionMapper'];
     toDto: (
-      entity: MapperEntities['CheckoutSessionMapper']
+      entity: InferEntity<MapperEntities['CheckoutSessionMapper']>
     ) => Promise<MapperDomains['CheckoutSessionMapper']>;
   };
   CreateCheckoutSessionMapper: {
-    entity: EntitySchema<any>;
+    entity: MapperEntities['CreateCheckoutSessionMapper'];
     toEntity: (
       dto: MapperDomains['CreateCheckoutSessionMapper'],
       em: EntityManager,
       ...args: unknown[]
-    ) => Promise<MapperEntities['CreateCheckoutSessionMapper']>;
+    ) => Promise<InferEntity<MapperEntities['CreateCheckoutSessionMapper']>>;
   };
   UpdateCheckoutSessionMapper: {
-    entity: EntitySchema<any>;
+    entity: MapperEntities['UpdateCheckoutSessionMapper'];
     toEntity: (
       dto: MapperDomains['UpdateCheckoutSessionMapper'],
       em: EntityManager,
       ...args: unknown[]
-    ) => Promise<MapperEntities['UpdateCheckoutSessionMapper']>;
+    ) => Promise<InferEntity<MapperEntities['UpdateCheckoutSessionMapper']>>;
   };
 };

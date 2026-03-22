@@ -104,7 +104,7 @@ export class BaseBillingPortalService<
     }
 
     const billingPortalDetails = await this.cache.readRecord<
-      MapperEntities['BillingPortalMapper']
+      MapperDomains['BillingPortalMapper']
     >(this.createCacheKey(idDto.id));
 
     if (!billingPortalDetails) {

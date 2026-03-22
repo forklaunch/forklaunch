@@ -23,7 +23,7 @@ import { StripeCheckoutSessionEntities } from '../domain/types/stripe.entity.typ
 export class StripeCheckoutSessionService<
   SchemaValidator extends AnySchemaValidator,
   StatusEnum,
-  Entities extends StripeCheckoutSessionEntities<StatusEnum>,
+  MapperEntities extends StripeCheckoutSessionEntities<StatusEnum>,
   Dto extends
     StripeCheckoutSessionDtos<StatusEnum> = StripeCheckoutSessionDtos<StatusEnum>
 > implements
@@ -43,7 +43,7 @@ export class StripeCheckoutSessionService<
     PaymentMethodEnum,
     CurrencyEnum,
     StatusEnum,
-    Entities,
+    MapperEntities,
     Dto
   >;
   protected readonly stripeClient: Stripe;
@@ -53,7 +53,7 @@ export class StripeCheckoutSessionService<
   protected readonly schemaValidator: SchemaValidator;
   protected readonly mappers: StripeCheckoutSessionMappers<
     StatusEnum,
-    Entities,
+    MapperEntities,
     Dto
   >;
 
@@ -63,7 +63,7 @@ export class StripeCheckoutSessionService<
     cache: TtlCache,
     openTelemetryCollector: OpenTelemetryCollector<MetricsDefinition>,
     schemaValidator: SchemaValidator,
-    mappers: StripeCheckoutSessionMappers<StatusEnum, Entities, Dto>,
+    mappers: StripeCheckoutSessionMappers<StatusEnum, MapperEntities, Dto>,
     readonly options?: {
       enableDatabaseBackup?: boolean;
       telemetry?: TelemetryOptions;
@@ -84,7 +84,7 @@ export class StripeCheckoutSessionService<
         PaymentMethodEnum,
         CurrencyEnum,
         StatusEnum,
-        Entities,
+        MapperEntities,
         Dto
       >,
       options

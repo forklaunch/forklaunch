@@ -6,12 +6,12 @@ import {
   Schema,
   SchemaValidator
 } from '@forklaunch/validator';
-import { EntitySchema } from '@mikro-orm/core';
+import { EntitySchema, InferEntity } from '@mikro-orm/core';
 
 export function requestMapper<
   SV extends AnySchemaValidator,
   DomainSchema extends IdiomaticSchema<SV>,
-  Entity,
+  Entity extends EntitySchema,
   AdditionalArgs extends unknown[] = []
 >({
   schemaValidator,
@@ -21,15 +21,15 @@ export function requestMapper<
 }: {
   schemaValidator: SV;
   schema: DomainSchema;
-  entity: EntitySchema<Entity>;
+  entity: Entity;
   mapperDefinition: {
     toEntity: (
       dto: Schema<DomainSchema, SV>,
       ...args: AdditionalArgs
-    ) => Promise<Entity>;
+    ) => Promise<InferEntity<Entity>>;
   };
 }): {
-  entity: EntitySchema<Entity>;
+  entity: Entity;
   schema: DomainSchema;
 } & typeof mapperDefinition {
   const sv = schemaValidator as SchemaValidator;
@@ -57,7 +57,7 @@ export function requestMapper<
 export function responseMapper<
   SV extends AnySchemaValidator,
   DomainSchema extends IdiomaticSchema<SV>,
-  Entity,
+  Entity extends EntitySchema,
   AdditionalArgs extends unknown[] = []
 >({
   schemaValidator,
@@ -67,16 +67,16 @@ export function responseMapper<
 }: {
   schemaValidator: SV;
   schema: DomainSchema;
-  entity: EntitySchema<Entity>;
+  entity: Entity;
   mapperDefinition: {
     toDto: (
-      entity: Entity,
+      entity: InferEntity<Entity>,
       ...args: AdditionalArgs
     ) => Promise<Schema<DomainSchema, SV>>;
   };
 }): Prettify<
   {
-    entity: EntitySchema<Entity>;
+    entity: Entity;
     schema: DomainSchema;
   } & typeof mapperDefinition
 > {
@@ -86,7 +86,7 @@ export function responseMapper<
     entity,
     schema,
 
-    toDto: async (entity: Entity, ...args: AdditionalArgs) => {
+    toDto: async (entity: InferEntity<Entity>, ...args: AdditionalArgs) => {
       const domain = await mapperDefinition.toDto(entity, ...args);
       const parsedSchema = sv.parse(sv.schemify(schema), domain);
       if (!parsedSchema.ok) {

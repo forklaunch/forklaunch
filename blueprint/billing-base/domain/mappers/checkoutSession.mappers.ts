@@ -1,11 +1,7 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { wrap } from '@mikro-orm/core';
-import { EntityManager } from '@mikro-orm/core';
-import {
-  checkoutSession,
-  type CheckoutSession
-} from '../../persistence/entities/checkoutSession.entity';
+import { EntityManager, InferEntity, wrap } from '@mikro-orm/core';
+import { CheckoutSession } from '../../persistence/entities/checkoutSession.entity';
 import { CurrencyEnum } from '../enum/currency.enum';
 import { PaymentMethodEnum } from '../enum/paymentMethod.enum';
 import { StatusEnum } from '../enum/status.enum';
@@ -18,11 +14,12 @@ export const CreateCheckoutSessionMapper = requestMapper({
     CurrencyEnum,
     StatusEnum
   ),
-  entity: checkoutSession,
+  entity: CheckoutSession,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return em.create(checkoutSession, {
+      return em.create(CheckoutSession, {
         ...dto,
+        providerFields: dto.providerFields ?? null,
         createdAt: new Date(),
         updatedAt: new Date()
       });
@@ -37,10 +34,10 @@ export const UpdateCheckoutSessionMapper = requestMapper({
     CurrencyEnum,
     StatusEnum
   ),
-  entity: checkoutSession,
+  entity: CheckoutSession,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      const entity = await em.findOneOrFail(checkoutSession, { id: dto.id });
+      const entity = await em.findOneOrFail(CheckoutSession, { id: dto.id });
       em.assign(entity, { ...dto, updatedAt: new Date() });
       return entity;
     }
@@ -54,10 +51,15 @@ export const CheckoutSessionMapper = responseMapper({
     CurrencyEnum,
     StatusEnum
   ),
-  entity: checkoutSession,
+  entity: CheckoutSession,
   mapperDefinition: {
-    toDto: async (entity: CheckoutSession) => {
-      return wrap(entity).toPOJO();
+    toDto: async (entity: InferEntity<typeof CheckoutSession>) => {
+      return {
+        ...wrap(entity).toPOJO(),
+        uri: entity.uri ?? undefined,
+        successRedirectUri: entity.successRedirectUri ?? undefined,
+        cancelRedirectUri: entity.cancelRedirectUri ?? undefined
+      };
     }
   }
 });

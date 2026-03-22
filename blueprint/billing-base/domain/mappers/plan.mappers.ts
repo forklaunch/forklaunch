@@ -1,8 +1,7 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { wrap } from '@mikro-orm/core';
-import { EntityManager } from '@mikro-orm/core';
-import { plan, type Plan } from '../../persistence/entities/plan.entity';
+import { EntityData, EntityManager, InferEntity, wrap } from '@mikro-orm/core';
+import { Plan } from '../../persistence/entities/plan.entity';
 import { BillingProviderEnum } from '../enum/billingProvider.enum';
 import { CurrencyEnum } from '../enum/currency.enum';
 import { PlanCadenceEnum } from '../enum/planCadence.enum';
@@ -15,11 +14,12 @@ export const CreatePlanMapper = requestMapper({
     CurrencyEnum,
     BillingProviderEnum
   ),
-  entity: plan,
+  entity: Plan,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return em.create(plan, {
+      return em.create(Plan, {
         ...dto,
+        providerFields: dto.providerFields ?? null,
         createdAt: new Date(),
         updatedAt: new Date()
       });
@@ -34,11 +34,13 @@ export const UpdatePlanMapper = requestMapper({
     CurrencyEnum,
     BillingProviderEnum
   ),
-  entity: plan,
+  entity: Plan,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      const entity = await em.findOneOrFail(plan, { id: dto.id });
-      em.assign(entity, { ...dto, updatedAt: new Date() });
+      const entity = await em.findOneOrFail(Plan, { id: dto.id });
+      em.assign(entity, { ...dto, updatedAt: new Date() } as EntityData<
+        InferEntity<typeof Plan>
+      >);
       return entity;
     }
   }
@@ -51,10 +53,15 @@ export const PlanMapper = responseMapper({
     CurrencyEnum,
     BillingProviderEnum
   ),
-  entity: plan,
+  entity: Plan,
   mapperDefinition: {
-    toDto: async (entity: Plan) => {
-      return wrap(entity).toPOJO();
+    toDto: async (entity: InferEntity<typeof Plan>) => {
+      return {
+        ...wrap(entity).toPOJO(),
+        price: Number(entity.price),
+        description: entity.description ?? undefined,
+        features: entity.features ?? undefined
+      };
     }
   }
 });

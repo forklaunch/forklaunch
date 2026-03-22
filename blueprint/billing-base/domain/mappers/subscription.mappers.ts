@@ -1,11 +1,7 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { wrap } from '@mikro-orm/core';
-import { EntityManager } from '@mikro-orm/core';
-import {
-  subscription,
-  type Subscription
-} from '../../persistence/entities/subscription.entity';
+import { EntityManager, InferEntity, wrap } from '@mikro-orm/core';
+import { Subscription } from '../../persistence/entities/subscription.entity';
 import { BillingProviderEnum } from '../enum/billingProvider.enum';
 import { PartyEnum } from '../enum/party.enum';
 import { SubscriptionSchemas } from '../schemas';
@@ -16,11 +12,12 @@ export const CreateSubscriptionMapper = requestMapper({
     PartyEnum,
     BillingProviderEnum
   ),
-  entity: subscription,
+  entity: Subscription,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return em.create(subscription, {
+      return em.create(Subscription, {
         ...dto,
+        providerFields: dto.providerFields ?? null,
         createdAt: new Date(),
         updatedAt: new Date()
       });
@@ -34,10 +31,10 @@ export const UpdateSubscriptionMapper = requestMapper({
     PartyEnum,
     BillingProviderEnum
   ),
-  entity: subscription,
+  entity: Subscription,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      const entity = await em.findOneOrFail(subscription, { id: dto.id });
+      const entity = await em.findOneOrFail(Subscription, { id: dto.id });
       em.assign(entity, { ...dto, updatedAt: new Date() });
       return entity;
     }
@@ -50,12 +47,13 @@ export const SubscriptionMapper = responseMapper({
     PartyEnum,
     BillingProviderEnum
   ),
-  entity: subscription,
+  entity: Subscription,
   mapperDefinition: {
-    toDto: async (entity: Subscription) => {
+    toDto: async (entity: InferEntity<typeof Subscription>) => {
       return {
         ...wrap(entity).toPOJO(),
-        endDate: entity.endDate || undefined
+        endDate: entity.endDate ?? undefined,
+        description: entity.description ?? undefined
       };
     }
   }

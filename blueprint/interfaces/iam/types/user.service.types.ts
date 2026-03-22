@@ -6,7 +6,7 @@ export type CreateUserDto = Partial<IdDto> & {
   password: string;
   firstName: string;
   lastName: string;
-  organization: string;
+  organization?: string;
   roles: string[];
   phoneNumber?: string;
   subscription?: string;

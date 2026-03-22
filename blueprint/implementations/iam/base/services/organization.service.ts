@@ -11,10 +11,11 @@ import {
   UpdateOrganizationDto
 } from '@forklaunch/interfaces-iam/types';
 import { AnySchemaValidator } from '@forklaunch/validator';
-import { EntityManager, FilterQuery } from '@mikro-orm/core';
+import { EntityManager, FilterQuery, InferEntity } from '@mikro-orm/core';
 import { OrganizationDtos } from '../domain/types/iamDto.types';
 import { OrganizationEntities } from '../domain/types/iamEntities.types';
 import { OrganizationMappers } from '../domain/types/organization.mapper.types';
+import { Organization } from '../persistence/entities';
 
 export class BaseOrganizationService<
   SchemaValidator extends AnySchemaValidator,
@@ -94,7 +95,8 @@ export class BaseOrganizationService<
   }
 
   async getOrganization(
-    idDto: IdDto & FilterQuery<NoInfer<MapperEntities['OrganizationMapper']>>,
+    idDto: IdDto &
+      FilterQuery<InferEntity<MapperEntities['OrganizationMapper']>>,
     em?: EntityManager
   ): Promise<MapperDomains['OrganizationMapper']> {
     if (this.evaluatedTelemetryOptions.logging) {
@@ -102,11 +104,13 @@ export class BaseOrganizationService<
     }
 
     const organization = await (em ?? this.em).findOneOrFail(
-      this.mappers.OrganizationMapper.entity,
+      this.mappers.OrganizationMapper.entity as typeof Organization,
       idDto
     );
 
-    return this.mappers.OrganizationMapper.toDto(organization);
+    return this.mappers.OrganizationMapper.toDto(
+      organization as InferEntity<MapperEntities['OrganizationMapper']>
+    );
   }
 
   async updateOrganization(
@@ -138,7 +142,8 @@ export class BaseOrganizationService<
   }
 
   async deleteOrganization(
-    idDto: IdDto & FilterQuery<NoInfer<MapperEntities['OrganizationMapper']>>,
+    idDto: IdDto &
+      FilterQuery<InferEntity<MapperEntities['OrganizationMapper']>>,
     em?: EntityManager
   ): Promise<void> {
     if (this.evaluatedTelemetryOptions.logging) {
@@ -146,9 +151,15 @@ export class BaseOrganizationService<
     }
 
     if (em) {
-      await em.nativeDelete(this.mappers.OrganizationMapper.entity, idDto);
+      await em.nativeDelete(
+        this.mappers.OrganizationMapper.entity as typeof Organization,
+        idDto
+      );
     } else {
-      await this.em.nativeDelete(this.mappers.OrganizationMapper.entity, idDto);
+      await this.em.nativeDelete(
+        this.mappers.OrganizationMapper.entity as typeof Organization,
+        idDto
+      );
     }
   }
 }

@@ -10,6 +10,7 @@ import { CheckoutSessionService } from '@forklaunch/interfaces-billing/interface
 import { CreateCheckoutSessionDto } from '@forklaunch/interfaces-billing/types';
 import { AnySchemaValidator } from '@forklaunch/validator';
 import { EntityManager } from '@mikro-orm/core';
+import { CheckoutSession } from '../persistence/entities';
 import { BaseCheckoutSessionDtos } from '../domain/types/baseBillingDto.types';
 import { BaseCheckoutSessionEntities } from '../domain/types/baseBillingEntity.types';
 import { CheckoutSessionMappers } from '../domain/types/checkoutSession.mapper.types';
@@ -125,7 +126,7 @@ export class BaseCheckoutSessionService<
     id
   }: IdDto): Promise<MapperDomains['CheckoutSessionMapper']> {
     const checkoutSessionDetails = await this.cache.readRecord<
-      MapperEntities['CheckoutSessionMapper']
+      MapperDomains['CheckoutSessionMapper']
     >(this.createCacheKey(id));
     if (!checkoutSessionDetails) {
       throw new Error('Session not found');
@@ -156,7 +157,7 @@ export class BaseCheckoutSessionService<
 
     if (this.enableDatabaseBackup) {
       const checkoutSession = await this.em.upsert(
-        this.mappers.CheckoutSessionMapper.entity,
+        this.mappers.CheckoutSessionMapper.entity as typeof CheckoutSession,
         {
           id,
           status: 'SUCCESS'
@@ -175,7 +176,7 @@ export class BaseCheckoutSessionService<
 
     if (this.enableDatabaseBackup) {
       const checkoutSession = await this.em.upsert(
-        this.mappers.CheckoutSessionMapper.entity,
+        this.mappers.CheckoutSessionMapper.entity as typeof CheckoutSession,
         {
           id,
           status: 'FAILED'

@@ -36,20 +36,20 @@ export const cleanupTestDatabase = async (): Promise<void> => {
   }
 };
 
-export const clearDatabase = async (options?: {
+export async function clearDatabase(options?: {
   orm?: MikroORM;
   redis?: TestSetupResult['redis'];
-}): Promise<void> => {
+}): Promise<void> {
   await clearTestDatabase(options);
-};
+}
 
 export const setupTestData = async (em: EntityManager) => {
-  const { permission } = await import(
+  const { Permission } = await import(
     '../persistence/entities/permission.entity'
   );
-  const { role } = await import('../persistence/entities/role.entity');
-  const { user } = await import('../persistence/entities/user.entity');
-  const { organization } = await import(
+  const { Role } = await import('../persistence/entities/role.entity');
+  const { User } = await import('../persistence/entities/user.entity');
+  const { Organization } = await import(
     '../persistence/entities/organization.entity'
   );
   const { OrganizationStatus } = await import(
@@ -57,18 +57,19 @@ export const setupTestData = async (em: EntityManager) => {
   );
 
   // Create test organization
-  const createdOrganization = em.create(organization, {
+  const createdOrganization = em.create(Organization, {
     id: '123e4567-e89b-12d3-a456-426614174001',
     name: 'Test Organization',
     domain: 'test.com',
     subscription: 'premium',
     status: OrganizationStatus.ACTIVE,
+    providerFields: null,
     createdAt: new Date(),
     updatedAt: new Date()
   });
 
   // Create test permission
-  const createdPermission = em.create(permission, {
+  const createdPermission = em.create(Permission, {
     id: '123e4567-e89b-12d3-a456-426614174002',
     slug: 'read:users',
     createdAt: new Date(),
@@ -76,7 +77,7 @@ export const setupTestData = async (em: EntityManager) => {
   });
 
   // Create test role
-  const createdRole = em.create(role, {
+  const createdRole = em.create(Role, {
     id: '123e4567-e89b-12d3-a456-426614174000',
     name: 'admin',
     permissions: [createdPermission],
@@ -85,7 +86,7 @@ export const setupTestData = async (em: EntityManager) => {
   });
 
   // Create test user
-  em.create(user, {
+  em.create(User, {
     id: '123e4567-e89b-12d3-a456-426614174000',
     email: 'test@example.com',
     firstName: 'John',

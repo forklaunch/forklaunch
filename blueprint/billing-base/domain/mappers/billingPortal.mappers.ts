@@ -1,21 +1,18 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { wrap } from '@mikro-orm/core';
-import { EntityManager } from '@mikro-orm/core';
-import {
-  billingPortal,
-  type BillingPortal
-} from '../../persistence/entities/billingPortal.entity';
+import { EntityManager, InferEntity, wrap } from '@mikro-orm/core';
+import { BillingPortal } from '../../persistence/entities/billingPortal.entity';
 import { BillingPortalSchemas } from '../schemas';
 
 export const CreateBillingPortalMapper = requestMapper({
   schemaValidator,
   schema: BillingPortalSchemas.CreateBillingPortalSchema,
-  entity: billingPortal,
+  entity: BillingPortal,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return em.create(billingPortal, {
+      return em.create(BillingPortal, {
         ...dto,
+        providerFields: dto.providerFields ?? null,
         createdAt: new Date(),
         updatedAt: new Date()
       });
@@ -26,10 +23,10 @@ export const CreateBillingPortalMapper = requestMapper({
 export const UpdateBillingPortalMapper = requestMapper({
   schemaValidator,
   schema: BillingPortalSchemas.UpdateBillingPortalSchema,
-  entity: billingPortal,
+  entity: BillingPortal,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      const entity = await em.findOneOrFail(billingPortal, { id: dto.id });
+      const entity = await em.findOneOrFail(BillingPortal, { id: dto.id });
       em.assign(entity, { ...dto, updatedAt: new Date() });
       return entity;
     }
@@ -39,10 +36,13 @@ export const UpdateBillingPortalMapper = requestMapper({
 export const BillingPortalMapper = responseMapper({
   schemaValidator,
   schema: BillingPortalSchemas.BillingPortalSchema,
-  entity: billingPortal,
+  entity: BillingPortal,
   mapperDefinition: {
-    toDto: async (entity: BillingPortal) => {
-      return wrap(entity).toPOJO();
+    toDto: async (entity: InferEntity<typeof BillingPortal>) => {
+      return {
+        ...wrap(entity).toPOJO(),
+        uri: entity.uri ?? undefined
+      };
     }
   }
 });

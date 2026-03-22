@@ -1,5 +1,17 @@
 # @forklaunch/implementation-billing-stripe
 
+## 0.6.0
+
+### Minor Changes
+
+- MikroOrm v7 upgrade
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@0.9.0
+  - @forklaunch/interfaces-billing@0.9.0
+
 ## 0.5.23
 
 ### Patch Changes

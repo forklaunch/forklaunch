@@ -1,20 +1,16 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { wrap } from '@mikro-orm/core';
-import { EntityManager } from '@mikro-orm/core';
-import {
-  permission,
-  type Permission
-} from '../../persistence/entities/permission.entity';
+import { EntityManager, InferEntity, wrap } from '@mikro-orm/core';
+import { Permission } from '../../persistence/entities/permission.entity';
 import { PermissionSchemas } from '../schemas';
 
 export const CreatePermissionMapper = requestMapper({
   schemaValidator,
   schema: PermissionSchemas.CreatePermissionSchema,
-  entity: permission,
+  entity: Permission,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return em.create(permission, {
+      return em.create(Permission, {
         slug: dto.slug,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -26,12 +22,15 @@ export const CreatePermissionMapper = requestMapper({
 export const UpdatePermissionMapper = requestMapper({
   schemaValidator,
   schema: PermissionSchemas.UpdatePermissionSchema,
-  entity: permission,
+  entity: Permission,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      const entity = await em.findOneOrFail(permission, { id: dto.id });
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { providerFields, addToRolesIds, removeFromRolesIds, ...rest } =
+        dto;
+      const entity = await em.findOneOrFail(Permission, { id: rest.id });
       em.assign(entity, {
-        ...(dto.slug !== undefined && { slug: dto.slug }),
+        ...rest,
         updatedAt: new Date()
       });
       return entity;
@@ -42,9 +41,9 @@ export const UpdatePermissionMapper = requestMapper({
 export const PermissionMapper = responseMapper({
   schemaValidator,
   schema: PermissionSchemas.PermissionSchema,
-  entity: permission,
+  entity: Permission,
   mapperDefinition: {
-    toDto: async (entity: Permission) => {
+    toDto: async (entity: InferEntity<typeof Permission>) => {
       return wrap(entity).toPOJO();
     }
   }

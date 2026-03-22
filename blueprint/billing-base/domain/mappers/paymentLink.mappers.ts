@@ -1,11 +1,7 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { wrap } from '@mikro-orm/core';
-import { EntityManager } from '@mikro-orm/core';
-import {
-  paymentLink,
-  type PaymentLink
-} from '../../persistence/entities/paymentLink.entity';
+import { EntityManager, InferEntity, wrap } from '@mikro-orm/core';
+import { PaymentLink } from '../../persistence/entities/paymentLink.entity';
 import { CurrencyEnum } from '../enum/currency.enum';
 import { PaymentMethodEnum } from '../enum/paymentMethod.enum';
 import { StatusEnum } from '../enum/status.enum';
@@ -18,11 +14,12 @@ export const CreatePaymentLinkMapper = requestMapper({
     CurrencyEnum,
     StatusEnum
   ),
-  entity: paymentLink,
+  entity: PaymentLink,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return em.create(paymentLink, {
+      return em.create(PaymentLink, {
         ...dto,
+        providerFields: dto.providerFields ?? null,
         createdAt: new Date(),
         updatedAt: new Date()
       });
@@ -37,10 +34,10 @@ export const UpdatePaymentLinkMapper = requestMapper({
     CurrencyEnum,
     StatusEnum
   ),
-  entity: paymentLink,
+  entity: PaymentLink,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      const entity = await em.findOneOrFail(paymentLink, { id: dto.id });
+      const entity = await em.findOneOrFail(PaymentLink, { id: dto.id });
       em.assign(entity, { ...dto, updatedAt: new Date() });
       return entity;
     }
@@ -54,10 +51,13 @@ export const PaymentLinkMapper = responseMapper({
     CurrencyEnum,
     StatusEnum
   ),
-  entity: paymentLink,
+  entity: PaymentLink,
   mapperDefinition: {
-    toDto: async (entity: PaymentLink) => {
-      return wrap(entity).toPOJO();
+    toDto: async (entity: InferEntity<typeof PaymentLink>) => {
+      return {
+        ...wrap(entity).toPOJO(),
+        amount: Number(entity.amount)
+      };
     }
   }
 });

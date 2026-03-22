@@ -1,5 +1,41 @@
 # @forklaunch/internal
 
+## 0.4.5
+
+### Patch Changes
+
+- Another fix
+- Updated dependencies
+  - @forklaunch/validator@0.11.5
+  - @forklaunch/common@0.7.5
+
+## 0.4.4
+
+### Patch Changes
+
+- correct extension for mappers
+- Updated dependencies
+  - @forklaunch/validator@0.11.4
+  - @forklaunch/common@0.7.4
+
+## 0.4.3
+
+### Patch Changes
+
+- mapper fix
+- Updated dependencies
+  - @forklaunch/validator@0.11.3
+  - @forklaunch/common@0.7.3
+
+## 0.4.2
+
+### Patch Changes
+
+- Update packages and remove EntityMapper wrapping
+- Updated dependencies
+  - @forklaunch/validator@0.11.2
+  - @forklaunch/common@0.7.2
+
 ## 0.4.1
 
 ### Patch Changes

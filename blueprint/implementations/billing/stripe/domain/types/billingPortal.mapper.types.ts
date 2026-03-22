@@ -1,4 +1,4 @@
-import { EntityManager, EntitySchema } from '@mikro-orm/core';
+import { EntityManager, InferEntity } from '@mikro-orm/core';
 import Stripe from 'stripe';
 import { StripeBillingPortalDtos } from './stripe.dto.types';
 import { StripeBillingPortalEntities } from './stripe.entity.types';
@@ -8,27 +8,27 @@ export type StripeBillingPortalMappers<
   Dto extends StripeBillingPortalDtos
 > = {
   BillingPortalMapper: {
-    entity: EntitySchema<any>;
+    entity: Entities['BillingPortalMapper'];
     toDto: (
-      entity: Entities['BillingPortalMapper']
+      entity: InferEntity<Entities['BillingPortalMapper']>
     ) => Promise<Dto['BillingPortalMapper']>;
   };
   CreateBillingPortalMapper: {
-    entity: EntitySchema<any>;
+    entity: Entities['CreateBillingPortalMapper'];
     toEntity: (
       dto: Dto['CreateBillingPortalMapper'],
       em: EntityManager,
       stripeSession: Stripe.BillingPortal.Session,
       ...args: unknown[]
-    ) => Promise<Entities['CreateBillingPortalMapper']>;
+    ) => Promise<InferEntity<Entities['CreateBillingPortalMapper']>>;
   };
   UpdateBillingPortalMapper: {
-    entity: EntitySchema<any>;
+    entity: Entities['UpdateBillingPortalMapper'];
     toEntity: (
       dto: Dto['UpdateBillingPortalMapper'],
       em: EntityManager,
       stripeSession: Stripe.BillingPortal.Session,
       ...args: unknown[]
-    ) => Promise<Entities['UpdateBillingPortalMapper']>;
+    ) => Promise<InferEntity<Entities['UpdateBillingPortalMapper']>>;
   };
 };

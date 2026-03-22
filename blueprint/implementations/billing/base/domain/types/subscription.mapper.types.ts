@@ -1,4 +1,4 @@
-import { EntityManager, EntitySchema } from '@mikro-orm/core';
+import { EntityManager, InferEntity } from '@mikro-orm/core';
 import { BaseSubscriptionDtos } from './baseBillingDto.types';
 import { BaseSubscriptionEntities } from './baseBillingEntity.types';
 
@@ -12,25 +12,25 @@ export type SubscriptionMappers<
   MapperDomains extends BaseSubscriptionDtos<PartyType, BillingProviderType>
 > = {
   SubscriptionMapper: {
-    entity: EntitySchema<any>;
+    entity: MapperEntities['SubscriptionMapper'];
     toDto: (
-      entity: MapperEntities['SubscriptionMapper']
+      entity: InferEntity<MapperEntities['SubscriptionMapper']>
     ) => Promise<MapperDomains['SubscriptionMapper']>;
   };
   CreateSubscriptionMapper: {
-    entity: EntitySchema<any>;
+    entity: MapperEntities['CreateSubscriptionMapper'];
     toEntity: (
       dto: MapperDomains['CreateSubscriptionMapper'],
       em: EntityManager,
       ...args: unknown[]
-    ) => Promise<MapperEntities['CreateSubscriptionMapper']>;
+    ) => Promise<InferEntity<MapperEntities['CreateSubscriptionMapper']>>;
   };
   UpdateSubscriptionMapper: {
-    entity: EntitySchema<any>;
+    entity: MapperEntities['UpdateSubscriptionMapper'];
     toEntity: (
       dto: MapperDomains['UpdateSubscriptionMapper'],
       em: EntityManager,
       ...args: unknown[]
-    ) => Promise<MapperEntities['UpdateSubscriptionMapper']>;
+    ) => Promise<InferEntity<MapperEntities['UpdateSubscriptionMapper']>>;
   };
 };

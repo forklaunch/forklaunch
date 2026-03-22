@@ -13,6 +13,7 @@ import {
 } from '@forklaunch/interfaces-billing/types';
 import { AnySchemaValidator } from '@forklaunch/validator';
 import { EntityManager } from '@mikro-orm/core';
+import { PaymentLink } from '../persistence/entities';
 import { BasePaymentLinkDtos } from '../domain/types/baseBillingDto.types';
 import { BasePaymentLinkEntities } from '../domain/types/baseBillingEntity.types';
 import { PaymentLinkMappers } from '../domain/types/paymentLink.mapper.types';
@@ -186,7 +187,7 @@ export class BasePaymentLinkService<
 
     if (this.enableDatabaseBackup) {
       const paymentLink = await this.em.upsert(
-        this.mappers.PaymentLinkMapper.entity,
+        this.mappers.PaymentLinkMapper.entity as typeof PaymentLink,
         {
           id,
           status: 'EXPIRED'
@@ -201,7 +202,7 @@ export class BasePaymentLinkService<
     this.openTelemetryCollector.info('Payment link success', { id });
     if (this.enableDatabaseBackup) {
       const paymentLink = await this.em.upsert(
-        this.mappers.PaymentLinkMapper.entity,
+        this.mappers.PaymentLinkMapper.entity as typeof PaymentLink,
         {
           id,
           status: 'COMPLETED'
@@ -216,7 +217,7 @@ export class BasePaymentLinkService<
     this.openTelemetryCollector.info('Payment link failure', { id });
     if (this.enableDatabaseBackup) {
       const paymentLink = await this.em.upsert(
-        this.mappers.PaymentLinkMapper.entity,
+        this.mappers.PaymentLinkMapper.entity as typeof PaymentLink,
         {
           id,
           status: 'FAILED'

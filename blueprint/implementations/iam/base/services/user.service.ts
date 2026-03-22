@@ -13,7 +13,8 @@ import {
 } from '@forklaunch/core/http';
 import { CreateUserDto, UpdateUserDto } from '@forklaunch/interfaces-iam/types';
 import { AnySchemaValidator } from '@forklaunch/validator';
-import { EntityManager, FilterQuery } from '@mikro-orm/core';
+import { EntityManager, FilterQuery, InferEntity } from '@mikro-orm/core';
+import { User } from '../persistence/entities';
 import { UserDtos } from '../domain/types/iamDto.types';
 import { UserEntities } from '../domain/types/iamEntities.types';
 import { UserMappers } from '../domain/types/user.mapper.types';
@@ -122,7 +123,7 @@ export class BaseUserService<
     em?: EntityManager
   ): Promise<string | undefined> {
     const user = await (em ?? this.em).findOne(
-      this.mappers.UserMapper.entity,
+      this.mappers.UserMapper.entity as typeof User,
       idDto,
       {
         populate: ['id', 'organization']
@@ -132,7 +133,7 @@ export class BaseUserService<
   }
 
   async getUser(
-    idDto: IdDto & FilterQuery<MapperEntities['UserMapper']>,
+    idDto: IdDto & FilterQuery<InferEntity<MapperEntities['UserMapper']>>,
     em?: EntityManager
   ): Promise<MapperDomains['UserMapper']> {
     if (this.evaluatedTelemetryOptions.logging) {
@@ -140,39 +141,39 @@ export class BaseUserService<
     }
 
     const user = await (em ?? this.em).findOneOrFail(
-      this.mappers.UserMapper.entity,
+      this.mappers.UserMapper.entity as typeof User,
       idDto,
       {
         populate: ['id', '*']
       }
     );
 
-    return this.mappers.UserMapper.toDto(user as MapperEntities['UserMapper']);
+    return this.mappers.UserMapper.toDto(
+      user as InferEntity<MapperEntities['UserMapper']>
+    );
   }
 
   async getBatchUsers(
-    idsDto: IdsDto & FilterQuery<MapperEntities['UserMapper']>,
+    idsDto: IdsDto & FilterQuery<InferEntity<MapperEntities['UserMapper']>>,
     em?: EntityManager
   ): Promise<MapperDomains['UserMapper'][]> {
     if (this.evaluatedTelemetryOptions.logging) {
       this.openTelemetryCollector.info('Getting batch users', idsDto);
     }
 
-    // Build filter with organization constraint if provided
-    const filter: FilterQuery<MapperEntities['UserMapper']> = {
-      id: { $in: idsDto.ids },
-      ...((idsDto as any).organization && {
-        organization: (idsDto as any).organization
-      })
-    };
-
     return Promise.all(
       (
-        await (em ?? this.em).find(this.mappers.UserMapper.entity, filter, {
-          populate: ['id', '*']
-        })
+        await (em ?? this.em).find(
+          this.mappers.UserMapper.entity as typeof User,
+          idsDto,
+          {
+            populate: ['id', '*']
+          }
+        )
       ).map((user) =>
-        this.mappers.UserMapper.toDto(user as MapperEntities['UserMapper'])
+        this.mappers.UserMapper.toDto(
+          user as InferEntity<MapperEntities['UserMapper']>
+        )
       )
     );
   }
@@ -232,10 +233,7 @@ export class BaseUserService<
   }
 
   async deleteUser(
-    idDto: IdDto & { organization?: { id: string } } & FilterQuery<
-        MapperEntities['UserMapper']
-      > &
-      object,
+    idDto: IdDto & { organization?: { id: string } },
     em?: EntityManager
   ): Promise<void> {
     if (this.evaluatedTelemetryOptions.logging) {
@@ -248,16 +246,16 @@ export class BaseUserService<
       ...(idDto.organization && {
         organization: idDto.organization
       })
-    } as FilterQuery<MapperEntities['UserMapper']>;
+    };
 
-    await (em ?? this.em).nativeDelete(this.mappers.UserMapper.entity, filter);
+    await (em ?? this.em).nativeDelete(
+      this.mappers.UserMapper.entity as typeof User,
+      filter
+    );
   }
 
   async deleteBatchUsers(
-    idsDto: IdsDto & { organization?: { id: string } } & FilterQuery<
-        MapperEntities['UserMapper']
-      > &
-      object,
+    idsDto: IdsDto & { organization?: { id: string } },
     em?: EntityManager
   ): Promise<void> {
     if (this.evaluatedTelemetryOptions.logging) {
@@ -268,15 +266,18 @@ export class BaseUserService<
       ...idsDto,
       id: { $in: idsDto.ids },
       ...(idsDto.organization && {
-        organization: idsDto.organization
+        organization: idsDto.organization.id
       })
     };
 
-    await (em ?? this.em).nativeDelete(this.mappers.UserMapper.entity, filter);
+    await (em ?? this.em).nativeDelete(
+      this.mappers.UserMapper.entity as typeof User,
+      filter
+    );
   }
 
   async surfaceRoles(
-    idDto: IdDto & FilterQuery<MapperEntities['UserMapper']>,
+    idDto: IdDto & FilterQuery<InferEntity<MapperEntities['UserMapper']>>,
     em?: EntityManager
   ): Promise<MapperDomains['UserMapper']['roles']> {
     if (this.evaluatedTelemetryOptions.logging) {
@@ -289,7 +290,7 @@ export class BaseUserService<
   }
 
   async surfacePermissions(
-    idDto: IdDto & FilterQuery<MapperEntities['UserMapper']>,
+    idDto: IdDto & FilterQuery<InferEntity<MapperEntities['UserMapper']>>,
     em?: EntityManager
   ): Promise<MapperDomains['UserMapper']['roles'][0]['permissions']> {
     if (this.evaluatedTelemetryOptions.logging) {

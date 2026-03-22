@@ -1,5 +1,16 @@
 # @forklaunch/implementation-iam-base
 
+## 0.9.0
+
+### Minor Changes
+
+- MikroOrm v7 upgrade
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/interfaces-iam@0.9.0
+
 ## 0.8.24
 
 ### Patch Changes

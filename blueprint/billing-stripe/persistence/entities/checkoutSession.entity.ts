@@ -1,4 +1,4 @@
-import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
+import { defineEntity, p } from '@mikro-orm/core';
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 import {
   CurrencyEnum,
@@ -8,7 +8,7 @@ import Stripe from 'stripe';
 import { StatusEnum } from '../../domain/enum/status.enum';
 
 // This is to represent connection information for a billing provider
-export const checkoutSession = defineEntity({
+export const CheckoutSession = defineEntity({
   name: 'CheckoutSession',
   properties: {
     ...sqlBaseProperties,
@@ -23,5 +23,3 @@ export const checkoutSession = defineEntity({
     providerFields: p.json<Stripe.Checkout.Session>()
   }
 });
-
-export type CheckoutSession = InferEntity<typeof checkoutSession>;

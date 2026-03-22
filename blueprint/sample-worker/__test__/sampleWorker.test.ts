@@ -150,11 +150,11 @@ describe('SampleWorker Routes E2E Tests with PostgreSQL Container', () => {
 
       if (!orm) throw new Error('ORM not initialized');
       const em = orm.em.fork();
-      const { sampleWorkerEventRecord } = await import(
+      const { SampleWorkerEventRecord } = await import(
         '../persistence/entities/sampleWorkerRecord.entity'
       );
 
-      const records = await em.find(sampleWorkerEventRecord, {
+      const records = await em.find(SampleWorkerEventRecord, {
         message: mockSampleWorkerData.message
       });
 

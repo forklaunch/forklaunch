@@ -1,5 +1,5 @@
 import { PERMISSIONS, ROLES } from '@forklaunch/blueprint-core';
-import { RequiredEntityData } from '@mikro-orm/core';
+import { InferEntity, RequiredEntityData } from '@mikro-orm/core';
 import { v4 as uuidv4 } from 'uuid';
 import { OrganizationStatus } from '../domain/enum/organizationStatus.enum';
 import { Organization, Role, User } from './entities';
@@ -11,14 +11,14 @@ export const platformReadPermission = {
   slug: PERMISSIONS.PLATFORM_READ,
   createdAt: new Date(),
   updatedAt: new Date()
-} satisfies RequiredEntityData<Permission>;
+} satisfies RequiredEntityData<InferEntity<typeof Permission>>;
 
 export const platformWritePermission = {
   id: uuidv4(),
   slug: PERMISSIONS.PLATFORM_WRITE,
   createdAt: new Date(),
   updatedAt: new Date()
-} satisfies RequiredEntityData<Permission>;
+} satisfies RequiredEntityData<InferEntity<typeof Permission>>;
 
 //! RBAC Roles
 export const viewerRole = {
@@ -27,7 +27,7 @@ export const viewerRole = {
   permissions: [platformReadPermission.id],
   createdAt: new Date(),
   updatedAt: new Date()
-} satisfies RequiredEntityData<Role>;
+} satisfies RequiredEntityData<InferEntity<typeof Role>>;
 
 export const editorRole = {
   id: uuidv4(),
@@ -35,7 +35,7 @@ export const editorRole = {
   permissions: [platformReadPermission.id, platformWritePermission.id],
   createdAt: new Date(),
   updatedAt: new Date()
-} satisfies RequiredEntityData<Role>;
+} satisfies RequiredEntityData<InferEntity<typeof Role>>;
 
 export const adminRole = {
   id: uuidv4(),
@@ -43,7 +43,7 @@ export const adminRole = {
   permissions: [platformReadPermission.id, platformWritePermission.id],
   createdAt: new Date(),
   updatedAt: new Date()
-} satisfies RequiredEntityData<Role>;
+} satisfies RequiredEntityData<InferEntity<typeof Role>>;
 
 export const systemRole = {
   id: uuidv4(),
@@ -51,7 +51,7 @@ export const systemRole = {
   permissions: [platformReadPermission.id, platformWritePermission.id],
   createdAt: new Date(),
   updatedAt: new Date()
-} satisfies RequiredEntityData<Role>;
+} satisfies RequiredEntityData<InferEntity<typeof Role>>;
 
 export const user = {
   id: uuidv4(),
@@ -62,7 +62,7 @@ export const user = {
   providerFields: null,
   createdAt: new Date(),
   updatedAt: new Date()
-} satisfies RequiredEntityData<User>;
+} satisfies RequiredEntityData<InferEntity<typeof User>>;
 
 export const organization = {
   name: 'Test',
@@ -73,4 +73,4 @@ export const organization = {
   providerFields: null,
   createdAt: new Date(),
   updatedAt: new Date()
-} satisfies RequiredEntityData<Organization>;
+} satisfies RequiredEntityData<InferEntity<typeof Organization>>;

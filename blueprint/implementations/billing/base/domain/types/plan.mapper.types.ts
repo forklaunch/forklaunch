@@ -1,4 +1,4 @@
-import { EntityManager, EntitySchema } from '@mikro-orm/core';
+import { EntityManager, InferEntity } from '@mikro-orm/core';
 import { BasePlanDtos } from './baseBillingDto.types';
 import { BasePlanEntities } from './baseBillingEntity.types';
 
@@ -18,25 +18,25 @@ export type PlanMappers<
   >
 > = {
   PlanMapper: {
-    entity: EntitySchema<any>;
+    entity: MapperEntities['PlanMapper'];
     toDto: (
-      entity: MapperEntities['PlanMapper']
+      entity: InferEntity<MapperEntities['PlanMapper']>
     ) => Promise<MapperDomains['PlanMapper']>;
   };
   CreatePlanMapper: {
-    entity: EntitySchema<any>;
+    entity: MapperEntities['CreatePlanMapper'];
     toEntity: (
       dto: MapperDomains['CreatePlanMapper'],
       em: EntityManager,
       ...args: unknown[]
-    ) => Promise<MapperEntities['CreatePlanMapper']>;
+    ) => Promise<InferEntity<MapperEntities['CreatePlanMapper']>>;
   };
   UpdatePlanMapper: {
-    entity: EntitySchema<any>;
+    entity: MapperEntities['UpdatePlanMapper'];
     toEntity: (
       dto: MapperDomains['UpdatePlanMapper'],
       em: EntityManager,
       ...args: unknown[]
-    ) => Promise<MapperEntities['UpdatePlanMapper']>;
+    ) => Promise<InferEntity<MapperEntities['UpdatePlanMapper']>>;
   };
 };

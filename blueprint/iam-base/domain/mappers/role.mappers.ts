@@ -1,22 +1,21 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { wrap } from '@mikro-orm/core';
-import { EntityManager } from '@mikro-orm/core';
-import { permission } from '../../persistence/entities/permission.entity';
-import { role, type Role } from '../../persistence/entities/role.entity';
+import { EntityManager, InferEntity, wrap } from '@mikro-orm/core';
+import { Permission } from '../../persistence/entities/permission.entity';
+import { Role } from '../../persistence/entities/role.entity';
 import { RoleSchemas } from '../schemas';
 import { PermissionMapper } from './permission.mappers';
 
 export const CreateRoleMapper = requestMapper({
   schemaValidator,
   schema: RoleSchemas.CreateRoleSchema,
-  entity: role,
+  entity: Role,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return em.create(role, {
+      return em.create(Role, {
         name: dto.name,
         permissions: dto.permissionIds
-          ? await em.find(permission, { id: { $in: dto.permissionIds } })
+          ? await em.find(Permission, { id: { $in: dto.permissionIds } })
           : [],
         createdAt: new Date(),
         updatedAt: new Date()
@@ -28,15 +27,17 @@ export const CreateRoleMapper = requestMapper({
 export const UpdateRoleMapper = requestMapper({
   schemaValidator,
   schema: RoleSchemas.UpdateRoleSchema,
-  entity: role,
+  entity: Role,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      const entity = await em.findOneOrFail(role, { id: dto.id });
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { permissionIds, providerFields, ...rest } = dto;
+      const entity = await em.findOneOrFail(Role, { id: rest.id });
       em.assign(entity, {
-        ...(dto.name !== undefined && { name: dto.name }),
-        ...(dto.permissionIds !== undefined && {
-          permissions: await em.find(permission, {
-            id: { $in: dto.permissionIds }
+        ...rest,
+        ...(permissionIds !== undefined && {
+          permissions: await em.find(Permission, {
+            id: { $in: permissionIds }
           })
         }),
         updatedAt: new Date()
@@ -49,9 +50,9 @@ export const UpdateRoleMapper = requestMapper({
 export const RoleMapper = responseMapper({
   schemaValidator,
   schema: RoleSchemas.RoleSchema,
-  entity: role,
+  entity: Role,
   mapperDefinition: {
-    toDto: async (entity: Role) => {
+    toDto: async (entity: InferEntity<typeof Role>) => {
       const pojo = wrap(entity).toPOJO();
       return {
         ...pojo,
@@ -73,10 +74,10 @@ export const RoleMapper = responseMapper({
 export const RoleEntityMapper = requestMapper({
   schemaValidator,
   schema: RoleSchemas.UpdateRoleSchema,
-  entity: role,
+  entity: Role,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      const foundRole = await em.findOne(role, dto.id);
+      const foundRole = await em.findOne(Role, dto.id);
       if (!foundRole) {
         throw new Error('Role not found');
       }

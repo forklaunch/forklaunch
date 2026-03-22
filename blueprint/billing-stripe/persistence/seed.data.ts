@@ -1,4 +1,4 @@
-import { RequiredEntityData } from '@mikro-orm/core';
+import { InferEntity, RequiredEntityData } from '@mikro-orm/core';
 
 import { PartyEnum } from '../domain/enum/party.enum';
 
@@ -24,7 +24,7 @@ export const paymentLink = {
   createdAt: new Date(),
   updatedAt: new Date(),
   providerFields: {} as Stripe.PaymentLink
-} satisfies RequiredEntityData<PaymentLink>;
+} satisfies RequiredEntityData<InferEntity<typeof PaymentLink>>;
 
 export const plan = {
   active: true,
@@ -39,7 +39,7 @@ export const plan = {
   billingProvider: BillingProviderEnum.STRIPE,
   createdAt: new Date(),
   updatedAt: new Date()
-} satisfies RequiredEntityData<Plan>;
+} satisfies RequiredEntityData<InferEntity<typeof Plan>>;
 
 export const checkoutSession = {
   customerId: 'test@example.com',
@@ -53,7 +53,7 @@ export const checkoutSession = {
   createdAt: new Date(),
   updatedAt: new Date(),
   providerFields: {} as Stripe.Checkout.Session
-} satisfies RequiredEntityData<CheckoutSession>;
+} satisfies RequiredEntityData<InferEntity<typeof CheckoutSession>>;
 
 export const subscription = {
   partyId: '1234567890',
@@ -69,4 +69,4 @@ export const subscription = {
   status: 'active',
   createdAt: new Date(),
   updatedAt: new Date()
-} satisfies RequiredEntityData<Subscription>;
+} satisfies RequiredEntityData<InferEntity<typeof Subscription>>;

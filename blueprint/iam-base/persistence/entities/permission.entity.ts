@@ -1,12 +1,10 @@
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
-import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
+import { defineEntity, p } from '@mikro-orm/core';
 
-export const permission = defineEntity({
+export const Permission = defineEntity({
   name: 'Permission',
   properties: {
     ...sqlBaseProperties,
     slug: p.string()
   }
 });
-
-export type Permission = InferEntity<typeof permission>;

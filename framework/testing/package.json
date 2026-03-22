@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/testing",
-  "version": "0.1.1",
+  "version": "0.1.5",
   "description": "Testing utilities for forklaunch-js blueprints including testcontainer management",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -39,20 +39,20 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@mikro-orm/core": "7.0.2",
-    "ioredis": "^5.10.0",
-    "testcontainers": "^11.12.0"
+    "@mikro-orm/core": "7.0.4",
+    "ioredis": "^5.10.1",
+    "testcontainers": "^11.13.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^25.5.0",
-    "@typescript/native-preview": "7.0.0-dev.20260316.1",
+    "@typescript/native-preview": "7.0.0-dev.20260320.1",
     "globals": "^17.4.0",
     "prettier": "^3.8.1",
     "ts-node": "^10.9.2",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.57.0",
+    "typescript-eslint": "^8.57.1",
     "vitest": "^4.1.0"
   },
   "peerDependencies": {

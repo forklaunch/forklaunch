@@ -1,5 +1,16 @@
 # @forklaunch/implementation-worker-redis
 
+## 0.9.0
+
+### Minor Changes
+
+- MikroOrm v7 upgrade
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/interfaces-worker@0.8.0
+
 ## 0.8.23
 
 ### Patch Changes

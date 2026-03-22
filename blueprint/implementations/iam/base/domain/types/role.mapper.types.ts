@@ -1,4 +1,4 @@
-import { EntityManager, EntitySchema } from '@mikro-orm/core';
+import { EntityManager, InferEntity } from '@mikro-orm/core';
 import { RoleDtos } from './iamDto.types';
 import { RoleEntities } from './iamEntities.types';
 
@@ -7,25 +7,25 @@ export type RoleMappers<
   MapperDomains extends RoleDtos
 > = {
   RoleMapper: {
-    entity: EntitySchema<any>;
+    entity: MapperEntities['RoleMapper'];
     toDto: (
-      entity: MapperEntities['RoleMapper']
+      entity: InferEntity<MapperEntities['RoleMapper']>
     ) => Promise<MapperDomains['RoleMapper']>;
   };
   CreateRoleMapper: {
-    entity: EntitySchema<any>;
+    entity: MapperEntities['CreateRoleMapper'];
     toEntity: (
       dto: MapperDomains['CreateRoleMapper'],
       em: EntityManager,
       ...args: unknown[]
-    ) => Promise<MapperEntities['CreateRoleMapper']>;
+    ) => Promise<InferEntity<MapperEntities['CreateRoleMapper']>>;
   };
   UpdateRoleMapper: {
-    entity: EntitySchema<any>;
+    entity: MapperEntities['UpdateRoleMapper'];
     toEntity: (
       dto: MapperDomains['UpdateRoleMapper'],
       em: EntityManager,
       ...args: unknown[]
-    ) => Promise<MapperEntities['UpdateRoleMapper']>;
+    ) => Promise<InferEntity<MapperEntities['UpdateRoleMapper']>>;
   };
 };

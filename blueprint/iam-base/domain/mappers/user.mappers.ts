@@ -1,28 +1,27 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { wrap } from '@mikro-orm/core';
-import { EntityManager } from '@mikro-orm/core';
-import { organization } from '../../persistence/entities/organization.entity';
-import { role } from '../../persistence/entities/role.entity';
-import { user, type User } from '../../persistence/entities/user.entity';
+import { EntityManager, InferEntity, wrap } from '@mikro-orm/core';
+import { Organization } from '../../persistence/entities/organization.entity';
+import { Role } from '../../persistence/entities/role.entity';
+import { User } from '../../persistence/entities/user.entity';
 import { UserSchemas } from '../schemas';
 import { RoleMapper } from './role.mappers';
 
 export const CreateUserMapper = requestMapper({
   schemaValidator,
   schema: UserSchemas.CreateUserSchema,
-  entity: user,
+  entity: User,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return em.create(user, {
+      return em.create(User, {
         email: dto.email,
         firstName: dto.firstName,
         lastName: dto.lastName,
         phoneNumber: dto.phoneNumber || null,
         organization: dto.organization
-          ? await em.findOne(organization, { id: dto.organization })
+          ? await em.findOne(Organization, { id: dto.organization })
           : null,
-        roles: await em.find(role, {
+        roles: await em.find(Role, {
           id: { $in: dto.roles }
         }),
         subscription: dto.subscription || null,
@@ -37,23 +36,16 @@ export const CreateUserMapper = requestMapper({
 export const UpdateUserMapper = requestMapper({
   schemaValidator,
   schema: UserSchemas.UpdateUserSchema,
-  entity: user,
+  entity: User,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      const entity = await em.findOneOrFail(user, { id: dto.id });
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { roles, password, ...rest } = dto;
+      const entity = await em.findOneOrFail(User, { id: rest.id });
       em.assign(entity, {
-        ...(dto.email !== undefined && { email: dto.email }),
-        ...(dto.firstName !== undefined && { firstName: dto.firstName }),
-        ...(dto.lastName !== undefined && { lastName: dto.lastName }),
-        ...(dto.phoneNumber !== undefined && { phoneNumber: dto.phoneNumber }),
-        ...(dto.roles !== undefined && {
-          roles: await em.find(role, { id: { $in: dto.roles } })
-        }),
-        ...(dto.subscription !== undefined && {
-          subscription: dto.subscription
-        }),
-        ...(dto.providerFields !== undefined && {
-          providerFields: dto.providerFields
+        ...rest,
+        ...(roles !== undefined && {
+          roles: await em.find(Role, { id: { $in: roles } })
         }),
         updatedAt: new Date()
       });
@@ -65,12 +57,13 @@ export const UpdateUserMapper = requestMapper({
 export const UserMapper = responseMapper({
   schemaValidator,
   schema: UserSchemas.UserSchema,
-  entity: user,
+  entity: User,
   mapperDefinition: {
-    toDto: async (entity: User) => {
+    toDto: async (entity: InferEntity<typeof User>) => {
       const pojo = wrap(entity).toPOJO();
       return {
         ...pojo,
+        organization: pojo.organization?.id ?? undefined,
         phoneNumber: entity.phoneNumber ?? undefined,
         subscription: entity.subscription ?? undefined,
         roles: await Promise.all(

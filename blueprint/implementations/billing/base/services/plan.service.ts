@@ -11,10 +11,11 @@ import {
   UpdatePlanDto
 } from '@forklaunch/interfaces-billing/types';
 import { AnySchemaValidator } from '@forklaunch/validator';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, InferEntity } from '@mikro-orm/core';
 import { BasePlanDtos } from '../domain/types/baseBillingDto.types';
 import { BasePlanEntities } from '../domain/types/baseBillingEntity.types';
 import { PlanMappers } from '../domain/types/plan.mapper.types';
+import { Plan } from '../persistence/entities';
 
 export class BasePlanService<
   SchemaValidator extends AnySchemaValidator,
@@ -87,10 +88,17 @@ export class BasePlanService<
 
     return Promise.all(
       (
-        await (em ?? this.em).findAll(this.mappers.PlanMapper.entity, {
-          where: idsDto?.ids?.length ? { id: { $in: idsDto.ids } } : undefined
-        })
-      ).map((plan) => this.mappers.PlanMapper.toDto(plan))
+        await (em ?? this.em).findAll(
+          this.mappers.PlanMapper.entity as typeof Plan,
+          {
+            where: idsDto?.ids?.length ? { id: { $in: idsDto.ids } } : undefined
+          }
+        )
+      ).map((plan) =>
+        this.mappers.PlanMapper.toDto(
+          plan as InferEntity<MapperEntities['PlanMapper']>
+        )
+      )
     );
   }
 
@@ -121,10 +129,12 @@ export class BasePlanService<
       this.openTelemetryCollector.info('Getting plan', idDto);
     }
     const plan = await (em ?? this.em).findOneOrFail(
-      this.mappers.PlanMapper.entity,
+      this.mappers.PlanMapper.entity as typeof Plan,
       idDto
     );
-    return this.mappers.PlanMapper.toDto(plan);
+    return this.mappers.PlanMapper.toDto(
+      plan as InferEntity<MapperEntities['PlanMapper']>
+    );
   }
 
   async updatePlan(
@@ -152,6 +162,9 @@ export class BasePlanService<
     if (this.evaluatedTelemetryOptions.logging) {
       this.openTelemetryCollector.info('Deleting plan', idDto);
     }
-    await (em ?? this.em).nativeDelete(this.mappers.PlanMapper.entity, idDto);
+    await (em ?? this.em).nativeDelete(
+      this.mappers.PlanMapper.entity as typeof Plan,
+      idDto
+    );
   }
 }

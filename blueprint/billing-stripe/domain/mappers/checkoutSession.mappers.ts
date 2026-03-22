@@ -1,26 +1,22 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { wrap } from '@mikro-orm/core';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, InferEntity, wrap } from '@mikro-orm/core';
 import Stripe from 'stripe';
-import {
-  checkoutSession,
-  type CheckoutSession
-} from '../../persistence/entities/checkoutSession.entity';
+import { CheckoutSession } from '../../persistence/entities/checkoutSession.entity';
 import { StatusEnum } from '../enum/status.enum';
 import { CheckoutSessionSchemas } from '../schemas';
 
 export const CreateCheckoutSessionMapper = requestMapper({
   schemaValidator,
   schema: CheckoutSessionSchemas.CreateCheckoutSessionSchema(StatusEnum),
-  entity: checkoutSession,
+  entity: CheckoutSession,
   mapperDefinition: {
     toEntity: async (
       dto,
       em: EntityManager,
       providerFields: Stripe.Checkout.Session
     ) => {
-      return em.create(checkoutSession, {
+      return em.create(CheckoutSession, {
         customerId: dto.customerId,
         paymentMethods: dto.paymentMethods,
         currency: dto.currency,
@@ -40,29 +36,18 @@ export const CreateCheckoutSessionMapper = requestMapper({
 export const UpdateCheckoutSessionMapper = requestMapper({
   schemaValidator,
   schema: CheckoutSessionSchemas.UpdateCheckoutSessionSchema(StatusEnum),
-  entity: checkoutSession,
+  entity: CheckoutSession,
   mapperDefinition: {
     toEntity: async (
       dto,
       em: EntityManager,
       providerFields: Stripe.Checkout.Session
     ) => {
-      const entity = await em.findOneOrFail(checkoutSession, { id: dto.id });
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { stripeFields, ...rest } = dto;
+      const entity = await em.findOneOrFail(CheckoutSession, { id: rest.id });
       em.assign(entity, {
-        ...(dto.customerId !== undefined && { customerId: dto.customerId }),
-        ...(dto.paymentMethods !== undefined && {
-          paymentMethods: dto.paymentMethods
-        }),
-        ...(dto.currency !== undefined && { currency: dto.currency }),
-        ...(dto.uri !== undefined && { uri: dto.uri }),
-        ...(dto.successRedirectUri !== undefined && {
-          successRedirectUri: dto.successRedirectUri
-        }),
-        ...(dto.cancelRedirectUri !== undefined && {
-          cancelRedirectUri: dto.cancelRedirectUri
-        }),
-        ...(dto.expiresAt !== undefined && { expiresAt: dto.expiresAt }),
-        ...(dto.status !== undefined && { status: dto.status }),
+        ...rest,
         providerFields,
         updatedAt: new Date()
       });
@@ -74,11 +59,13 @@ export const UpdateCheckoutSessionMapper = requestMapper({
 export const CheckoutSessionMapper = responseMapper({
   schemaValidator,
   schema: CheckoutSessionSchemas.CheckoutSessionSchema(StatusEnum),
-  entity: checkoutSession,
+  entity: CheckoutSession,
   mapperDefinition: {
-    toDto: async (entity: CheckoutSession) => {
+    toDto: async (entity: InferEntity<typeof CheckoutSession>) => {
       return {
         ...wrap(entity).toPOJO(),
+        successRedirectUri: entity.successRedirectUri ?? undefined,
+        cancelRedirectUri: entity.cancelRedirectUri ?? undefined,
         stripeFields: entity.providerFields
       };
     }

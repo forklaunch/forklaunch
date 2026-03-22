@@ -1,5 +1,29 @@
 # @forklaunch/common
 
+## 0.7.5
+
+### Patch Changes
+
+- Another fix
+
+## 0.7.4
+
+### Patch Changes
+
+- correct extension for mappers
+
+## 0.7.3
+
+### Patch Changes
+
+- mapper fix
+
+## 0.7.2
+
+### Patch Changes
+
+- Update packages and remove EntityMapper wrapping
+
 ## 0.7.1
 
 ### Patch Changes

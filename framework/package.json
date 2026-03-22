@@ -28,7 +28,7 @@
     "@changesets/cli": "^2.30.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^25.5.0",
-    "eslint": "^10.0.3",
+    "eslint": "^10.1.0",
     "globals": "^17.4.0",
     "jest": "^30.3.0",
     "lint-staged": "^16.4.0",
@@ -38,7 +38,7 @@
     "tsx": "^4.21.0",
     "typedoc": "^0.28.17",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.57.0",
+    "typescript-eslint": "^8.57.1",
     "vitest": "^4.1.0"
   },
   "dependencies": {

@@ -1,9 +1,9 @@
-import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
+import { defineEntity, p } from '@mikro-orm/core';
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 import { BillingProviderEnum } from '../../domain/enum/billingProvider.enum';
 
 // This is to represent connection information for a billing provider
-export const billingProvider = defineEntity({
+export const BillingProvider = defineEntity({
   name: 'BillingProvider',
   properties: {
     ...sqlBaseProperties,
@@ -12,5 +12,3 @@ export const billingProvider = defineEntity({
     billingProvider: p.enum(() => BillingProviderEnum).nullable()
   }
 });
-
-export type BillingProvider = InferEntity<typeof billingProvider>;
