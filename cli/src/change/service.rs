@@ -210,6 +210,28 @@ fn change_database(
         },
     );
 
+    // Update registrations.ts import source for database-specific package
+    let registrations_path = base_path.join("registrations.ts");
+    if let Some(template) = rendered_templates_cache.get(&registrations_path)? {
+        let old_source = format!(
+            "@mikro-orm/{}",
+            existing_database.to_string().to_lowercase()
+        );
+        let new_source = format!(
+            "@mikro-orm/{}",
+            database.to_string().to_lowercase()
+        );
+        let new_content = template.content.replace(&old_source, &new_source);
+        rendered_templates_cache.insert(
+            registrations_path.to_string_lossy(),
+            RenderedTemplate {
+                path: registrations_path.clone(),
+                content: new_content,
+                context: None,
+            },
+        );
+    }
+
     let env_local_path = base_path.join(".env.local");
     let env_local_content = rendered_templates_cache
         .get(&env_local_path)?
@@ -1400,7 +1422,7 @@ impl CliCommand for ServiceCommand {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::write;
+    use std::fs::{create_dir_all, write};
 
     use indexmap::IndexMap;
     use tempfile::TempDir;
@@ -1414,7 +1436,10 @@ mod tests {
                 InitializableManifestConfig, InitializableManifestConfigMetadata,
                 ProjectInitializationMetadata,
             },
-            package_json::project_package_json::{ProjectDependencies, ProjectPackageJson},
+            package_json::{
+                application_package_json::{ApplicationPackageJson, ApplicationScripts},
+                project_package_json::{ProjectDependencies, ProjectPackageJson, ProjectScripts},
+            },
             rendered_template::RenderedTemplatesCache,
         },
     };
@@ -1658,6 +1683,190 @@ database = "postgresql"
                 .forklaunch_infrastructure_s3
                 .is_none(),
             "Expected @forklaunch/infrastructure-s3 to be removed from dependencies"
+        );
+    }
+
+    const POSTGRESQL_MIKRO_ORM_CONFIG: &str = r#"import { createConfigInjector, getEnvVar, Lifetime } from '@forklaunch/core/services';
+import { Migrator } from '@mikro-orm/migrations';
+import { number, string } from '@test-app/core';
+import { defineConfig } from '@mikro-orm/postgresql';
+
+const configInjector = createConfigInjector(schemaValidator, {
+  DB_NAME: { lifetime: Lifetime.Singleton, type: string, value: getEnvVar('DB_NAME') },
+  DB_HOST: { lifetime: Lifetime.Singleton, type: string, value: getEnvVar('DB_HOST') },
+  DB_USER: { lifetime: Lifetime.Singleton, type: string, value: getEnvVar('DB_USER') },
+  DB_PASSWORD: { lifetime: Lifetime.Singleton, type: string, value: getEnvVar('DB_PASSWORD') },
+  DB_PORT: { lifetime: Lifetime.Singleton, type: number, value: Number(getEnvVar('DB_PORT')) }
+});
+
+const mikroOrmOptionsConfig = defineConfig({
+  dbName: validConfigInjector.resolve('DB_NAME'),
+  host: validConfigInjector.resolve('DB_HOST'),
+  user: validConfigInjector.resolve('DB_USER'),
+  password: validConfigInjector.resolve('DB_PASSWORD'),
+  port: validConfigInjector.resolve('DB_PORT'),
+  driver: PostgreSqlDriver,
+  migrations: { path: 'dist/migrations-postgresql', pathTs: 'migrations-postgresql' }
+});
+"#;
+
+    const MANIFEST_WITH_POSTGRESQL: &str = r#"
+id = "test-id"
+cli_version = "0.6.3"
+app_name = "test-app"
+modules_path = "src/modules"
+app_description = "test"
+linter = "eslint"
+formatter = "prettier"
+validator = "zod"
+http_framework = "express"
+runtime = "node"
+author = "test"
+license = "MIT"
+
+[project_peer_topology]
+
+[[projects]]
+type = "Service"
+name = "test-svc"
+description = "test service"
+
+[projects.resources]
+database = "postgresql"
+"#;
+
+    fn setup_change_database() -> (
+        TempDir,
+        ServiceManifestData,
+        DockerCompose,
+        ApplicationPackageJson,
+        ProjectPackageJson,
+    ) {
+        let tmp = TempDir::new().unwrap();
+        let base = tmp.path().join("test-svc");
+        create_dir_all(&base).unwrap();
+        create_dir_all(base.join("persistence").join("entities")).unwrap();
+
+        // Create the sql base properties file so transform_base_entity_ts returns None early
+        // (no actual base entity transformation needed for sql→sql tests)
+        let core_persistence = tmp.path().join("core").join("persistence");
+        create_dir_all(&core_persistence).unwrap();
+        write(
+            core_persistence.join("sql.base.properties.ts"),
+            "import { p } from '@mikro-orm/core';\nexport const sqlBaseProperties = { id: p.uuid().primary() };\n",
+        )
+        .unwrap();
+
+        write(base.join("mikro-orm.config.ts"), POSTGRESQL_MIKRO_ORM_CONFIG).unwrap();
+        write(base.join(".env.local"), "").unwrap();
+        write(
+            base.join("registrations.ts"),
+            "import { EntityManager } from '@mikro-orm/postgresql';\n",
+        )
+        .unwrap();
+
+        let raw: ServiceManifestData = toml::from_str(MANIFEST_WITH_POSTGRESQL).unwrap();
+        let manifest = raw.initialize(InitializableManifestConfigMetadata::Project(
+            ProjectInitializationMetadata {
+                project_name: "test-svc".to_string(),
+                database: None,
+                infrastructure: None,
+                description: None,
+                worker_type: None,
+            },
+        ));
+
+        let mut docker_compose = DockerCompose::default();
+        docker_compose.services.insert(
+            "test-svc".to_string(),
+            DockerService {
+                environment: Some(IndexMap::new()),
+                depends_on: Some(IndexMap::new()),
+                ..Default::default()
+            },
+        );
+
+        let app_pkg = ApplicationPackageJson {
+            scripts: Some(ApplicationScripts::default()),
+            ..Default::default()
+        };
+
+        let project_pkg = ProjectPackageJson {
+            dependencies: Some(ProjectDependencies::default()),
+            scripts: Some(ProjectScripts::default()),
+            ..Default::default()
+        };
+
+        (tmp, manifest, docker_compose, app_pkg, project_pkg)
+    }
+
+    #[test]
+    fn test_change_database_postgresql_to_mysql_updates_manifest_and_mikroorm_config() {
+        let (tmp, mut manifest, mut docker, mut app_pkg, mut project_pkg) =
+            setup_change_database();
+        let base = tmp.path().join("test-svc");
+        let mut removal_templates = Vec::new();
+        let mut cache = RenderedTemplatesCache::new();
+
+        change_database(
+            &base,
+            &Database::MySQL,
+            &mut manifest,
+            &mut app_pkg,
+            &mut project_pkg,
+            &mut docker,
+            &mut cache,
+            &mut removal_templates,
+        )
+        .expect("change_database should succeed");
+
+        // 1. manifest database must be updated
+        assert_eq!(manifest.database, "mysql");
+        let project = manifest.projects.iter().find(|p| p.name == "test-svc").unwrap();
+        assert_eq!(
+            project.resources.as_ref().unwrap().database,
+            Some("mysql".to_string())
+        );
+
+        // 2. mikro-orm.config.ts in cache must reference mysql
+        let config = cache
+            .get(base.join("mikro-orm.config.ts"))
+            .unwrap()
+            .unwrap();
+        assert!(
+            config.content.contains("@mikro-orm/mysql"),
+            "Expected @mikro-orm/mysql in mikro-orm.config.ts: {}",
+            config.content
+        );
+        assert!(
+            !config.content.contains("@mikro-orm/postgresql"),
+            "Expected @mikro-orm/postgresql removed: {}",
+            config.content
+        );
+
+        // 3. registrations.ts import source must be updated
+        let reg = cache
+            .get(base.join("registrations.ts"))
+            .unwrap()
+            .unwrap();
+        assert!(
+            reg.content.contains("@mikro-orm/mysql"),
+            "Expected @mikro-orm/mysql in registrations.ts: {}",
+            reg.content
+        );
+        assert!(
+            !reg.content.contains("@mikro-orm/postgresql"),
+            "Expected @mikro-orm/postgresql removed from registrations.ts: {}",
+            reg.content
+        );
+
+        // 4. docker-compose depends_on must reference mysql
+        let svc = docker.services.get("test-svc").unwrap();
+        let depends_on = svc.depends_on.as_ref().unwrap();
+        assert!(
+            depends_on.contains_key("mysql"),
+            "Expected mysql in depends_on: {:?}",
+            depends_on.keys().collect::<Vec<_>>()
         );
     }
 }

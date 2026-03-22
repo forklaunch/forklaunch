@@ -1,5 +1,5 @@
-import { defineEntity, p } from '@mikro-orm/core';
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
+import { defineEntity, p } from '@mikro-orm/core';
 
 // This is to represent connection information for a billing provider
 export const BillingPortal = defineEntity({
