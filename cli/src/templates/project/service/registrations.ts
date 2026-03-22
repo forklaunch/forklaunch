@@ -162,7 +162,7 @@ const runtimeDependencies = environmentConfig.chain({
   Orm: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },{{/is_database_enabled}}
   {{#is_worker}}WorkerOptions: {
     lifetime: Lifetime.Singleton,
