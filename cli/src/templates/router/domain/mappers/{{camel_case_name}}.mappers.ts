@@ -14,13 +14,17 @@ export const {{pascal_case_name}}RequestMapper = requestMapper({
   entity: {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record,
   mapperDefinition: {
     toEntity: async (dto{{^is_worker}}, em: EntityManager{{/is_worker}}) => {
-      return em.create({{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record, {
-        ...dto,{{#is_worker}}
-        processed: false,
-        retryCount: 0,{{/is_worker}}
+      {{^is_worker}}return em.create({{pascal_case_name}}Record, {
+        ...dto,
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      });{{/is_worker}}{{#is_worker}}return {
+        ...dto,
+        processed: false,
+        retryCount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as InferEntity<typeof {{pascal_case_name}}EventRecord>;{{/is_worker}}
     }
   }
 });

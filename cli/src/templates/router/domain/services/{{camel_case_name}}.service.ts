@@ -1,8 +1,8 @@
 import { OpenTelemetryCollector } from '@forklaunch/core/http';{{#is_worker}}
 import { WorkerProducer } from '@forklaunch/interfaces-worker/interfaces';
 import { InferEntity } from '@mikro-orm/core';{{/is_worker}}{{^is_worker}}
-import { EntityManager } from '@mikro-orm/core';{{/is_worker}}{{^with_mappers}}
-import { wrap } from '@mikro-orm/core';
+import { EntityManager } from '@mikro-orm/core';{{/is_worker}}{{^with_mappers}}{{^is_worker}}
+import { wrap } from '@mikro-orm/core';{{/is_worker}}
 import { Schema } from '@forklaunch/validator';{{/with_mappers}}
 import { SchemaValidator } from '@{{app_name}}/core';
 import { Metrics } from '@{{app_name}}/monitoring';
@@ -73,18 +73,21 @@ export class Base{{pascal_case_name}}Service implements {{pascal_case_name}}Serv
     // ============================================================================
 
     // Map from request data to entity (inline DTO → Entity conversion)
-    const entity = this.entityManager.create({{pascal_case_name}}{{#is_worker}}EventRecord{{/is_worker}}{{^is_worker}}Record{{/is_worker}}, {
-      ...data,{{#is_worker}}
-      processed: false,
-      retryCount: 0,{{/is_worker}}
+    {{^is_worker}}const entity = this.entityManager.create({{pascal_case_name}}Record, {
+      ...data,
       createdAt: new Date(),
       updatedAt: new Date()
     });
-{{#is_worker}}
-    await this.workerProducer.enqueueJob(entity);{{/is_worker}}{{^is_worker}}
-    await this.entityManager.persist(entity).flush();{{/is_worker}}
+    await this.entityManager.persist(entity).flush();{{/is_worker}}{{#is_worker}}const entity = {
+      ...data,
+      processed: false,
+      retryCount: 0,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    } as InferEntity<typeof {{pascal_case_name}}EventRecord>;
+    await this.workerProducer.enqueueJob(entity);{{/is_worker}}
 
     // Map from entity to response (inline Entity → DTO conversion)
-    return wrap(entity).toPOJO();{{/with_mappers}}
+    {{^is_worker}}return wrap(entity).toPOJO();{{/is_worker}}{{#is_worker}}return entity as unknown as {{pascal_case_name}}Response;{{/is_worker}}{{/with_mappers}}
   };
 }
