@@ -389,9 +389,9 @@ pub(crate) fn transform_registrations_ts_worker_type(
                 WorkerConsumer: {{
                     lifetime: Lifetime.Scoped,
                     type: (
-                        processEventsFunction: WorkerProcessFunction<{}EventRecord>,
-                        failureHandler: WorkerFailureHandler<{}EventRecord>
-                    ) => {}WorkerConsumer<{}EventRecord, {}WorkerOptions>,
+                        processEventsFunction: WorkerProcessFunction<InferEntity<typeof {}EventRecord>>,
+                        failureHandler: WorkerFailureHandler<InferEntity<typeof {}EventRecord>>
+                    ) => {}WorkerConsumer<InferEntity<typeof {}EventRecord>, {}WorkerOptions>,
                     factory: {}
                 }}
             }})",
@@ -415,6 +415,26 @@ pub(crate) fn transform_registrations_ts_worker_type(
         &mut config_injector_service_dependencies_import,
         "serviceDependencies",
     );
+
+    // Ensure InferEntity is imported from @mikro-orm/core
+    if inject_specifier_into_import_statement(
+        &allocator,
+        &mut registration_program,
+        "InferEntity",
+        "@mikro-orm/core",
+    )
+    .is_err()
+    {
+        let infer_entity_import_text = "import { InferEntity } from '@mikro-orm/core';";
+        let mut infer_entity_import =
+            parse_ast_program(&allocator, infer_entity_import_text, SourceType::ts());
+        inject_into_import_statement(
+            &mut registration_program,
+            &mut infer_entity_import,
+            "@mikro-orm/core",
+            &registrations_text,
+        )?;
+    }
 
     Ok(Codegen::new()
         .with_options(CodegenOptions::default())
@@ -495,7 +515,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
   OpenTelemetryCollector: {
     lifetime: Lifetime.Singleton,
@@ -591,7 +611,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
   OpenTelemetryCollector: {
     lifetime: Lifetime.Singleton,
@@ -687,7 +707,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
   OpenTelemetryCollector: {
     lifetime: Lifetime.Singleton,
@@ -778,7 +798,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
   OpenTelemetryCollector: {
     lifetime: Lifetime.Singleton,
@@ -880,7 +900,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
   OpenTelemetryCollector: {
     lifetime: Lifetime.Singleton,
@@ -971,7 +991,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
   OpenTelemetryCollector: {
     lifetime: Lifetime.Singleton,
@@ -1077,7 +1097,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
   OpenTelemetryCollector: {
     lifetime: Lifetime.Singleton,
@@ -1195,7 +1215,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
   OpenTelemetryCollector: {
     lifetime: Lifetime.Singleton,
@@ -1313,7 +1333,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
   OpenTelemetryCollector: {
     lifetime: Lifetime.Singleton,
@@ -1431,7 +1451,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
   OpenTelemetryCollector: {
     lifetime: Lifetime.Singleton,

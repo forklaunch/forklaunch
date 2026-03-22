@@ -56,7 +56,7 @@ use crate::{
             package_json_constants::{
                 BULLMQ_VERSION, INFRASTRUCTURE_REDIS_VERSION, IOREDIS_VERSION,
                 MIKRO_ORM_CORE_VERSION, MIKRO_ORM_DATABASE_VERSION, MIKRO_ORM_MIGRATIONS_VERSION,
-                MIKRO_ORM_REFLECTION_VERSION, WORKER_BULLMQ_VERSION, WORKER_DATABASE_VERSION,
+                WORKER_BULLMQ_VERSION, WORKER_DATABASE_VERSION,
                 WORKER_KAFKA_VERSION, WORKER_REDIS_VERSION,
             },
             project_package_json::ProjectPackageJson,
@@ -227,7 +227,6 @@ fn change_type(
             dependencies.databases = HashSet::from([db.clone()]);
             dependencies.mikro_orm_core = Some(MIKRO_ORM_CORE_VERSION.to_string());
             dependencies.mikro_orm_migrations = Some(MIKRO_ORM_MIGRATIONS_VERSION.to_string());
-            dependencies.mikro_orm_reflection = Some(MIKRO_ORM_REFLECTION_VERSION.to_string());
             dependencies.mikro_orm_database = Some(MIKRO_ORM_DATABASE_VERSION.to_string());
             dependencies.forklaunch_implementation_worker_database =
                 Some(WORKER_DATABASE_VERSION.to_string());
@@ -260,8 +259,8 @@ fn change_type(
                 }
             } else {
                 let database_entity = match db {
-                    Database::MongoDB => "nosql.base.entity.ts",
-                    _ => "sql.base.entity.ts",
+                    Database::MongoDB => "nosql.base.properties.ts",
+                    _ => "sql.base.properties.ts",
                 };
                 let entity_template_path = TEMPLATES_DIR
                     .get_file(

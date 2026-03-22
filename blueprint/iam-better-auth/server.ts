@@ -4,9 +4,6 @@ import {
   enrichBetterAuthApi
 } from './api/middlewares/betterAuth.middleware';
 import { discoveryRouter } from './api/routes/discovery.routes';
-import { organizationRouter } from './api/routes/organization.routes';
-import { permissionRouter } from './api/routes/permission.routes';
-import { roleRouter } from './api/routes/role.routes';
 import { userRouter } from './api/routes/user.routes';
 import { BetterAuth } from './auth';
 import { ci, tokens } from './bootstrapper';
@@ -123,9 +120,6 @@ const docsPath = ci.resolve(tokens.DOCS_PATH);
 
 //! mounts the routes to the app
 app.use(discoveryRouter);
-app.use(organizationRouter);
-app.use(permissionRouter);
-app.use(roleRouter);
 app.use(userRouter);
 
 //! register the sdk client

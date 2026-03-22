@@ -1,6 +1,6 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, InferEntity, wrap } from '@mikro-orm/core';
 import Stripe from 'stripe';
 import { CheckoutSession } from '../../persistence/entities/checkoutSession.entity';
 import { StatusEnum } from '../enum/status.enum';
@@ -16,15 +16,19 @@ export const CreateCheckoutSessionMapper = requestMapper({
       em: EntityManager,
       providerFields: Stripe.Checkout.Session
     ) => {
-      return CheckoutSession.create(
-        {
-          ...dto,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          providerFields
-        },
-        em
-      );
+      return em.create(CheckoutSession, {
+        customerId: dto.customerId,
+        paymentMethods: dto.paymentMethods,
+        currency: dto.currency,
+        uri: dto.uri,
+        successRedirectUri: dto.successRedirectUri || null,
+        cancelRedirectUri: dto.cancelRedirectUri || null,
+        expiresAt: dto.expiresAt,
+        status: dto.status,
+        providerFields,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
     }
   }
 });
@@ -39,13 +43,15 @@ export const UpdateCheckoutSessionMapper = requestMapper({
       em: EntityManager,
       providerFields: Stripe.Checkout.Session
     ) => {
-      return CheckoutSession.update(
-        {
-          ...dto,
-          providerFields
-        },
-        em
-      );
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { stripeFields, ...rest } = dto;
+      const entity = await em.findOneOrFail(CheckoutSession, { id: rest.id });
+      em.assign(entity, {
+        ...rest,
+        providerFields,
+        updatedAt: new Date()
+      });
+      return entity;
     }
   }
 });
@@ -55,9 +61,11 @@ export const CheckoutSessionMapper = responseMapper({
   schema: CheckoutSessionSchemas.CheckoutSessionSchema(StatusEnum),
   entity: CheckoutSession,
   mapperDefinition: {
-    toDto: async (entity: CheckoutSession) => {
+    toDto: async (entity: InferEntity<typeof CheckoutSession>) => {
       return {
-        ...(await entity.read()),
+        ...wrap(entity).toPOJO(),
+        successRedirectUri: entity.successRedirectUri ?? undefined,
+        cancelRedirectUri: entity.cancelRedirectUri ?? undefined,
         stripeFields: entity.providerFields
       };
     }

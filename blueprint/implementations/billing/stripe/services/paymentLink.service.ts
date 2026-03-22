@@ -138,18 +138,20 @@ export class StripePaymentLinkService<
     );
 
     const paymentLink = await this.basePaymentLinkService.updatePaymentLink(
-      await this.mappers.UpdatePaymentLinkMapper.toEntity(
-        {
-          ...paymentLinkDto,
-          id: session.id,
-          amount:
-            session.line_items?.data.reduce<number>(
-              (total, item) => total + item.amount_total,
-              0
-            ) ?? 0
-        },
-        this.em,
-        session
+      await this.mappers.PaymentLinkMapper.toDto(
+        await this.mappers.UpdatePaymentLinkMapper.toEntity(
+          {
+            ...paymentLinkDto,
+            id: session.id,
+            amount:
+              session.line_items?.data.reduce<number>(
+                (total, item) => total + item.amount_total,
+                0
+              ) ?? 0
+          },
+          this.em,
+          session
+        )
       ),
       ...args
     );

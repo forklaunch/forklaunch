@@ -1,3 +1,6 @@
+import { OrganizationStatus } from '../domain/enum/organizationStatus.enum';
+import { Organization } from '../persistence/entities/organization.entity';
+import { User } from '../persistence/entities/user.entity';
 import {
   cleanupTestDatabase,
   clearDatabase,
@@ -139,43 +142,47 @@ describe('User Routes E2E Tests with PostgreSQL Container', () => {
       const user1Id = 'aaa11111-e11b-11d1-a111-111111111111';
       const user2Id = 'bbb22222-e22b-22d2-a222-222222222222';
 
-      const org1 = em.create('Organization', {
+      const org1 = em.create(Organization, {
         id: org1Id,
         name: 'Organization 1',
         domain: 'org1.example.com',
         subscription: 'sub-org1-test',
-        status: 'ACTIVE'
+        status: OrganizationStatus.ACTIVE,
+        providerFields: null
       });
 
-      const org2 = em.create('Organization', {
+      const org2 = em.create(Organization, {
         id: org2Id,
         name: 'Organization 2',
         domain: 'org2.example.com',
         subscription: 'sub-org2-test',
-        status: 'ACTIVE'
+        status: OrganizationStatus.ACTIVE,
+        providerFields: null
       });
 
-      const user1 = em.create('User', {
+      const user1 = em.create(User, {
         id: user1Id,
         email: 'user1@org1.com',
         firstName: 'User',
         lastName: 'One',
         phoneNumber: '+1234567890',
         subscription: 'sub-user1-test',
-        organization: org1
+        organization: org1,
+        providerFields: null
       });
 
-      const user2 = em.create('User', {
+      const user2 = em.create(User, {
         id: user2Id,
         email: 'user2@org2.com',
         firstName: 'User',
         lastName: 'Two',
         phoneNumber: '+0987654321',
         subscription: 'sub-user2-test',
-        organization: org2
+        organization: org2,
+        providerFields: null
       });
 
-      await em.persistAndFlush([org1, org2, user1, user2]);
+      await em.persist([org1, org2, user1, user2]).flush();
 
       const { ci, tokens } = await import('../bootstrapper');
       const UserService = ci.resolve(tokens.UserService);

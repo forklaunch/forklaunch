@@ -1,5 +1,11 @@
 # @forklaunch/interfaces-worker
 
+## 0.8.0
+
+### Minor Changes
+
+- MikroOrm v7 upgrade
+
 ## 0.7.23
 
 ### Patch Changes

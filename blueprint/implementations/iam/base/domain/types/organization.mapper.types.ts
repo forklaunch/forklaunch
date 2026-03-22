@@ -1,4 +1,4 @@
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, InferEntity } from '@mikro-orm/core';
 import { OrganizationDtos } from './iamDto.types';
 import { OrganizationEntities } from './iamEntities.types';
 
@@ -8,22 +8,25 @@ export type OrganizationMappers<
   MapperDomains extends OrganizationDtos<OrganizationStatus>
 > = {
   OrganizationMapper: {
+    entity: MapperEntities['OrganizationMapper'];
     toDto: (
-      entity: MapperEntities['OrganizationMapper']
+      entity: InferEntity<MapperEntities['OrganizationMapper']>
     ) => Promise<MapperDomains['OrganizationMapper']>;
   };
   CreateOrganizationMapper: {
+    entity: MapperEntities['CreateOrganizationMapper'];
     toEntity: (
       dto: MapperDomains['CreateOrganizationMapper'],
       em: EntityManager,
       ...args: unknown[]
-    ) => Promise<MapperEntities['CreateOrganizationMapper']>;
+    ) => Promise<InferEntity<MapperEntities['CreateOrganizationMapper']>>;
   };
   UpdateOrganizationMapper: {
+    entity: MapperEntities['UpdateOrganizationMapper'];
     toEntity: (
       dto: MapperDomains['UpdateOrganizationMapper'],
       em: EntityManager,
       ...args: unknown[]
-    ) => Promise<MapperEntities['UpdateOrganizationMapper']>;
+    ) => Promise<InferEntity<MapperEntities['UpdateOrganizationMapper']>>;
   };
 };

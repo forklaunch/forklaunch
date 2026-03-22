@@ -16,47 +16,11 @@ import {
   getEnvVar,
   Lifetime
 } from '@forklaunch/core/services';
-import {
-  BaseOrganizationService,
-  BasePermissionService,
-  BaseRoleService,
-  BaseUserService
-} from '@forklaunch/implementation-iam-base/services';
-import { EntityManager, ForkOptions, MikroORM } from '@mikro-orm/core';
+import { ForkOptions } from '@mikro-orm/core';
+import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
 import { betterAuth } from 'better-auth';
 import { BetterAuth, betterAuthConfig } from './auth';
-import { OrganizationStatus } from './domain/enum/organizationStatus.enum';
-import {
-  CreateOrganizationMapper,
-  OrganizationMapper,
-  UpdateOrganizationMapper
-} from './domain/mappers/organization.mappers';
-import {
-  CreatePermissionMapper,
-  PermissionMapper,
-  UpdatePermissionMapper
-} from './domain/mappers/permission.mappers';
-import {
-  CreateRoleMapper,
-  RoleEntityMapper,
-  RoleMapper,
-  UpdateRoleMapper
-} from './domain/mappers/role.mappers';
-import {
-  CreateUserMapper,
-  UpdateUserMapper,
-  UserMapper
-} from './domain/mappers/user.mappers';
-import {
-  OrganizationDtoTypes,
-  OrganizationMapperTypes,
-  PermissionDtoTypes,
-  PermissionMapperTypes,
-  RoleDtoTypes,
-  RoleMapperTypes,
-  UserDtoTypes,
-  UserMapperTypes
-} from './domain/types/iamMappers.types';
+import { SurfacingService } from './domain/services/surfacing.service';
 import mikroOrmOptionsConfig from './mikro-orm.config';
 
 //! defines the configuration schema for the application
@@ -138,7 +102,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
   OpenTelemetryCollector: {
     lifetime: Lifetime.Singleton,
@@ -160,89 +124,10 @@ const runtimeDependencies = environmentConfig.chain({
 
 //! defines the service dependencies for the application
 const serviceDependencies = runtimeDependencies.chain({
-  OrganizationService: {
+  SurfacingService: {
     lifetime: Lifetime.Scoped,
-    type: BaseOrganizationService<
-      SchemaValidator,
-      typeof OrganizationStatus,
-      OrganizationMapperTypes,
-      OrganizationDtoTypes
-    >,
-    factory: ({ EntityManager, OpenTelemetryCollector }, resolve, context) =>
-      new BaseOrganizationService(
-        context.entityManagerOptions
-          ? resolve('EntityManager', context)
-          : EntityManager,
-        OpenTelemetryCollector,
-        schemaValidator,
-        {
-          OrganizationMapper,
-          CreateOrganizationMapper,
-          UpdateOrganizationMapper
-        }
-      )
-  },
-  PermissionService: {
-    lifetime: Lifetime.Scoped,
-    type: BasePermissionService<
-      SchemaValidator,
-      PermissionMapperTypes,
-      PermissionDtoTypes
-    >,
-    factory: ({ EntityManager, OpenTelemetryCollector }, resolve, context) =>
-      new BasePermissionService(
-        context.entityManagerOptions
-          ? resolve('EntityManager', context)
-          : EntityManager,
-        () => resolve('RoleService', context),
-        OpenTelemetryCollector,
-        schemaValidator,
-        {
-          PermissionMapper,
-          CreatePermissionMapper,
-          UpdatePermissionMapper,
-          RoleEntityMapper
-        }
-      )
-  },
-  RoleService: {
-    lifetime: Lifetime.Scoped,
-    type: BaseRoleService<SchemaValidator, RoleMapperTypes, RoleDtoTypes>,
-    factory: ({ EntityManager, OpenTelemetryCollector }, resolve, context) =>
-      new BaseRoleService(
-        context.entityManagerOptions
-          ? resolve('EntityManager', context)
-          : EntityManager,
-        OpenTelemetryCollector,
-        schemaValidator,
-        {
-          RoleMapper,
-          CreateRoleMapper,
-          UpdateRoleMapper
-        }
-      )
-  },
-  UserService: {
-    lifetime: Lifetime.Scoped,
-    type: BaseUserService<
-      SchemaValidator,
-      typeof OrganizationStatus,
-      UserMapperTypes,
-      UserDtoTypes
-    >,
-    factory: ({ EntityManager, OpenTelemetryCollector }, resolve, context) =>
-      new BaseUserService(
-        EntityManager,
-        () => resolve('RoleService', context),
-        () => resolve('OrganizationService', context),
-        OpenTelemetryCollector,
-        schemaValidator,
-        {
-          UserMapper,
-          CreateUserMapper,
-          UpdateUserMapper
-        }
-      )
+    type: SurfacingService,
+    factory: ({ EntityManager }) => new SurfacingService(EntityManager)
   }
 });
 
@@ -280,7 +165,7 @@ const expressApplicationOptions = serviceDependencies.chain({
       BETTER_AUTH_BASE_PATH,
       CORS_ORIGINS,
       BetterAuth,
-      UserService
+      SurfacingService
     }) => {
       const betterAuthOpenAPIContent = await (
         BetterAuth as BetterAuth
@@ -295,25 +180,19 @@ const expressApplicationOptions = serviceDependencies.chain({
             if (!payload.sub) {
               return new Set();
             }
-            return new Set(
-              (
-                await UserService.surfacePermissions({
-                  id: payload.sub
-                })
-              ).map((permission) => permission.slug)
+            const permissions = await SurfacingService.surfacePermissions(
+              payload.sub as string
             );
+            return new Set(permissions);
           },
           surfaceRoles: async (payload) => {
             if (!payload.sub) {
               return new Set();
             }
-            return new Set(
-              (
-                await UserService.surfaceRoles({
-                  id: payload.sub
-                })
-              ).map((role) => role.name)
+            const role = await SurfacingService.surfaceRole(
+              payload.sub as string
             );
+            return role ? new Set([role]) : new Set();
           }
         },
         cors: {

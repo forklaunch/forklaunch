@@ -13,6 +13,7 @@ import {
 } from '@forklaunch/interfaces-billing/types';
 import { AnySchemaValidator } from '@forklaunch/validator';
 import { EntityManager } from '@mikro-orm/core';
+import { PaymentLink } from '../persistence/entities';
 import { BasePaymentLinkDtos } from '../domain/types/baseBillingDto.types';
 import { BasePaymentLinkEntities } from '../domain/types/baseBillingEntity.types';
 import { PaymentLinkMappers } from '../domain/types/paymentLink.mapper.types';
@@ -106,7 +107,7 @@ export class BasePaymentLinkService<
     );
 
     if (this.enableDatabaseBackup) {
-      await this.em.persistAndFlush(paymentLink);
+      await this.em.persist(paymentLink).flush();
     }
 
     const createdPaymentLinkDto =
@@ -147,7 +148,7 @@ export class BasePaymentLinkService<
     );
 
     if (this.enableDatabaseBackup) {
-      await this.em.persistAndFlush(paymentLink);
+      await this.em.persist(paymentLink).flush();
     }
 
     const updatedLinkDto = {
@@ -185,11 +186,14 @@ export class BasePaymentLinkService<
     this.openTelemetryCollector.info('Payment link expired', { id });
 
     if (this.enableDatabaseBackup) {
-      const paymentLink = await this.em.upsert('PaymentLink', {
-        id,
-        status: 'EXPIRED'
-      });
-      await this.em.removeAndFlush(paymentLink);
+      const paymentLink = await this.em.upsert(
+        this.mappers.PaymentLinkMapper.entity as typeof PaymentLink,
+        {
+          id,
+          status: 'EXPIRED'
+        }
+      );
+      await this.em.remove(paymentLink).flush();
     }
     await this.cache.deleteRecord(this.createCacheKey(id));
   }
@@ -197,11 +201,14 @@ export class BasePaymentLinkService<
   async handlePaymentSuccess({ id }: IdDto): Promise<void> {
     this.openTelemetryCollector.info('Payment link success', { id });
     if (this.enableDatabaseBackup) {
-      const paymentLink = await this.em.upsert('PaymentLink', {
-        id,
-        status: 'COMPLETED'
-      });
-      await this.em.removeAndFlush(paymentLink);
+      const paymentLink = await this.em.upsert(
+        this.mappers.PaymentLinkMapper.entity as typeof PaymentLink,
+        {
+          id,
+          status: 'COMPLETED'
+        }
+      );
+      await this.em.remove(paymentLink).flush();
     }
     await this.cache.deleteRecord(this.createCacheKey(id));
   }
@@ -209,11 +216,14 @@ export class BasePaymentLinkService<
   async handlePaymentFailure({ id }: IdDto): Promise<void> {
     this.openTelemetryCollector.info('Payment link failure', { id });
     if (this.enableDatabaseBackup) {
-      const paymentLink = await this.em.upsert('PaymentLink', {
-        id,
-        status: 'FAILED'
-      });
-      await this.em.removeAndFlush(paymentLink);
+      const paymentLink = await this.em.upsert(
+        this.mappers.PaymentLinkMapper.entity as typeof PaymentLink,
+        {
+          id,
+          status: 'FAILED'
+        }
+      );
+      await this.em.remove(paymentLink).flush();
     }
     await this.cache.deleteRecord(this.createCacheKey(id));
   }

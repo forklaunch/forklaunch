@@ -92,7 +92,8 @@ export const setupTestData = async (em: EntityManager) => {
     externalId: 'plan_test_123',
     billingProvider: BillingProviderEnum.STRIPE,
     createdAt: new Date(),
-    updatedAt: new Date()
+    updatedAt: new Date(),
+    providerFields: null
   });
 
   em.create(Subscription, {
@@ -107,7 +108,8 @@ export const setupTestData = async (em: EntityManager) => {
     startDate: new Date(),
     status: 'active',
     createdAt: new Date(),
-    updatedAt: new Date()
+    updatedAt: new Date(),
+    providerFields: null
   });
 
   em.create(CheckoutSession, {
@@ -121,7 +123,8 @@ export const setupTestData = async (em: EntityManager) => {
     expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     status: StatusEnum.PENDING,
     createdAt: new Date(),
-    updatedAt: new Date()
+    updatedAt: new Date(),
+    providerFields: null
   });
 
   em.create(PaymentLink, {
@@ -132,7 +135,8 @@ export const setupTestData = async (em: EntityManager) => {
     description: 'A test payment link',
     status: StatusEnum.PENDING,
     createdAt: new Date(),
-    updatedAt: new Date()
+    updatedAt: new Date(),
+    providerFields: null
   });
 
   em.create(BillingPortal, {

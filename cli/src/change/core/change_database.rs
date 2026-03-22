@@ -31,21 +31,21 @@ pub(crate) fn change_database_base_entity(
     rendered_templates_cache: &mut RenderedTemplatesCache,
 ) -> Result<Option<RemovalTemplate>> {
     let import_source_from = match existing_database {
-        Database::MongoDB => "nosql.base.entity.ts",
-        _ => "sql.base.entity.ts",
+        Database::MongoDB => "nosql.base.properties.ts",
+        _ => "sql.base.properties.ts",
     };
     let import_source_to = match database {
-        Database::MongoDB => "nosql.base.entity.ts",
-        _ => "sql.base.entity.ts",
+        Database::MongoDB => "nosql.base.properties.ts",
+        _ => "sql.base.properties.ts",
     };
 
     let base_entity_from = match existing_database {
-        Database::MongoDB => "NoSqlBaseEntity",
-        _ => "SqlBaseEntity",
+        Database::MongoDB => "nosqlBaseProperties",
+        _ => "sqlBaseProperties",
     };
     let base_entity_to = match database {
-        Database::MongoDB => "NoSqlBaseEntity",
-        _ => "SqlBaseEntity",
+        Database::MongoDB => "nosqlBaseProperties",
+        _ => "sqlBaseProperties",
     };
 
     if let Some(base_entity_ts_content) = transform_base_entity_ts(

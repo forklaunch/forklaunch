@@ -222,7 +222,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(config)
+    factory: () => new MikroORM(config)
   },
   RedisClient: {
     lifetime: Lifetime.Singleton,
@@ -261,7 +261,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(config)
+    factory: () => new MikroORM(config)
   },
   EntityManager: {
     lifetime: Lifetime.Scoped,
@@ -292,7 +292,7 @@ const runtimeDependencies = environmentConfig.chain({
   Orm: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(config)
+    factory: () => new MikroORM(config)
   },
   OtelCollector: {
     lifetime: Lifetime.Singleton,

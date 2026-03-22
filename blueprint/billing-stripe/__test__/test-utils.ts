@@ -83,12 +83,12 @@ export const cleanupTestDatabase = async (): Promise<void> => {
   }
 };
 
-export const clearDatabase = async (options?: {
+export async function clearDatabase(options?: {
   orm?: MikroORM;
   redis?: TestSetupResult['redis'];
-}): Promise<void> => {
+}): Promise<void> {
   await clearTestDatabase(options);
-};
+}
 
 export const setupTestData = async (em: EntityManager) => {
   const { CheckoutSession } = await import(

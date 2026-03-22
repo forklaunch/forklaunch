@@ -19,7 +19,7 @@ pub(crate) fn database_entity_manager_runtime_dependency<'a>(
                 {orm_token}: {{
                   lifetime: Lifetime.Singleton,
                   type: MikroORM,
-                  factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+                  factory: () => new MikroORM(mikroOrmOptionsConfig)
                 }},
                 {em_token}: {{
                   lifetime: Lifetime.Scoped,

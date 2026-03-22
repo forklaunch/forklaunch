@@ -1,6 +1,6 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, InferEntity, wrap } from '@mikro-orm/core';
 import { Permission } from '../../persistence/entities/permission.entity';
 import { PermissionSchemas } from '../schemas';
 
@@ -10,14 +10,11 @@ export const CreatePermissionMapper = requestMapper({
   entity: Permission,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return Permission.create(
-        {
-          ...dto,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        },
-        em
-      );
+      return em.create(Permission, {
+        slug: dto.slug,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
     }
   }
 });
@@ -28,7 +25,15 @@ export const UpdatePermissionMapper = requestMapper({
   entity: Permission,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return Permission.update(dto, em);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { providerFields, addToRolesIds, removeFromRolesIds, ...rest } =
+        dto;
+      const entity = await em.findOneOrFail(Permission, { id: rest.id });
+      em.assign(entity, {
+        ...rest,
+        updatedAt: new Date()
+      });
+      return entity;
     }
   }
 });
@@ -38,12 +43,8 @@ export const PermissionMapper = responseMapper({
   schema: PermissionSchemas.PermissionSchema,
   entity: Permission,
   mapperDefinition: {
-    toDto: async (entity: Permission) => {
-      if (!entity.isInitialized()) {
-        await entity.init();
-      }
-
-      return await entity.read();
+    toDto: async (entity: InferEntity<typeof Permission>) => {
+      return wrap(entity).toPOJO();
     }
   }
 });

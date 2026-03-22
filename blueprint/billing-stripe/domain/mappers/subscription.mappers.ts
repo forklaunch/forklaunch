@@ -1,6 +1,6 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, InferEntity, wrap } from '@mikro-orm/core';
 import Stripe from 'stripe';
 import { Subscription } from '../../persistence/entities/subscription.entity';
 import { PartyEnum } from '../enum/party.enum';
@@ -16,15 +16,21 @@ export const CreateSubscriptionMapper = requestMapper({
       em: EntityManager,
       providerFields: Stripe.Subscription
     ) => {
-      return Subscription.create(
-        {
-          ...dto,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          providerFields
-        },
-        em
-      );
+      return em.create(Subscription, {
+        partyId: dto.partyId,
+        partyType: dto.partyType,
+        productId: dto.productId,
+        description: dto.description || null,
+        active: dto.active,
+        externalId: dto.externalId,
+        startDate: dto.startDate,
+        endDate: dto.endDate || null,
+        status: dto.status,
+        billingProvider: dto.billingProvider || null,
+        providerFields,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
     }
   }
 });
@@ -39,13 +45,15 @@ export const UpdateSubscriptionMapper = requestMapper({
       em: EntityManager,
       providerFields: Stripe.Subscription
     ) => {
-      return Subscription.update(
-        {
-          ...dto,
-          providerFields
-        },
-        em
-      );
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { stripeFields, ...rest } = dto;
+      const entity = await em.findOneOrFail(Subscription, { id: rest.id });
+      em.assign(entity, {
+        ...rest,
+        providerFields,
+        updatedAt: new Date()
+      });
+      return entity;
     }
   }
 });
@@ -55,11 +63,11 @@ export const SubscriptionMapper = responseMapper({
   schema: SubscriptionSchemas.SubscriptionSchema(PartyEnum),
   entity: Subscription,
   mapperDefinition: {
-    toDto: async (entity: Subscription) => {
-      const data = await entity.read();
+    toDto: async (entity: InferEntity<typeof Subscription>) => {
+      const data = wrap(entity).toPOJO();
       return {
         ...data,
-        // Convert null endDate to undefined for DTO validation
+        description: entity.description ?? undefined,
         endDate: data.endDate ?? undefined,
         stripeFields: entity.providerFields
       };

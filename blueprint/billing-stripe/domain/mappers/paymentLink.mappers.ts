@@ -1,6 +1,6 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, InferEntity, wrap } from '@mikro-orm/core';
 import Stripe from 'stripe';
 import { PaymentLink } from '../../persistence/entities/paymentLink.entity';
 import { StatusEnum } from '../enum/status.enum';
@@ -16,15 +16,16 @@ export const CreatePaymentLinkMapper = requestMapper({
       em: EntityManager,
       providerFields: Stripe.PaymentLink
     ) => {
-      return PaymentLink.create(
-        {
-          ...dto,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          providerFields
-        },
-        em
-      );
+      return em.create(PaymentLink, {
+        amount: dto.amount,
+        paymentMethods: dto.paymentMethods,
+        currency: dto.currency,
+        description: null,
+        status: dto.status,
+        providerFields,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
     }
   }
 });
@@ -39,13 +40,15 @@ export const UpdatePaymentLinkMapper = requestMapper({
       em: EntityManager,
       providerFields: Stripe.PaymentLink
     ) => {
-      return PaymentLink.update(
-        {
-          ...dto,
-          ...(providerFields !== undefined ? { providerFields } : {})
-        },
-        em
-      );
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { stripeFields, ...rest } = dto;
+      const entity = await em.findOneOrFail(PaymentLink, { id: rest.id });
+      em.assign(entity, {
+        ...rest,
+        providerFields,
+        updatedAt: new Date()
+      });
+      return entity;
     }
   }
 });
@@ -55,9 +58,11 @@ export const PaymentLinkMapper = responseMapper({
   schema: PaymentLinkSchemas.PaymentLinkSchema(StatusEnum),
   entity: PaymentLink,
   mapperDefinition: {
-    toDto: async (entity: PaymentLink) => {
+    toDto: async (entity: InferEntity<typeof PaymentLink>) => {
       return {
-        ...(await entity.read()),
+        ...wrap(entity).toPOJO(),
+        amount: Number(entity.amount),
+        description: entity.description ?? undefined,
         stripeFields: entity.providerFields
       };
     }

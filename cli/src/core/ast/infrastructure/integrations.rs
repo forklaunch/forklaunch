@@ -314,7 +314,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(config)
+    factory: () => new MikroORM(config)
   },
   RedisClient: {
     lifetime: Lifetime.Singleton,

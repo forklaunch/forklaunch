@@ -56,8 +56,8 @@ fn get_database_worker_consumer_factory(pascal_case_name: &str) -> String {
         "
 ({{ EntityMgr, WorkerOptions }}) =>
   (
-    processEventsFunction: WorkerProcessFunction<{}EventRecord>,
-    failureHandler: WorkerFailureHandler<{}EventRecord>
+    processEventsFunction: WorkerProcessFunction<InferEntity<typeof {}EventRecord>>,
+    failureHandler: WorkerFailureHandler<InferEntity<typeof {}EventRecord>>
   ) =>
     new DatabaseWorkerConsumer(
       {}EventRecord,
@@ -73,8 +73,8 @@ fn get_bullmq_worker_consumer_factory(pascal_case_name: &str) -> String {
     format!(
         "({{ QUEUE_NAME, WorkerOptions }}) =>
   (
-    processEventsFunction: WorkerProcessFunction<{}EventRecord>,
-    failureHandler: WorkerFailureHandler<{}EventRecord>
+    processEventsFunction: WorkerProcessFunction<InferEntity<typeof {}EventRecord>>,
+    failureHandler: WorkerFailureHandler<InferEntity<typeof {}EventRecord>>
   ) =>
     new BullMqWorkerConsumer(
       QUEUE_NAME,
@@ -89,8 +89,8 @@ fn get_kafka_worker_consumer_factory(pascal_case_name: &str) -> String {
     format!(
         "({{ QUEUE_NAME, WorkerOptions, OtelCollector }}) =>
   (
-    processEventsFunction: WorkerProcessFunction<{}EventRecord>,
-    failureHandler: WorkerFailureHandler<{}EventRecord>
+    processEventsFunction: WorkerProcessFunction<InferEntity<typeof {}EventRecord>>,
+    failureHandler: WorkerFailureHandler<InferEntity<typeof {}EventRecord>>
   ) =>
     new KafkaWorkerConsumer(
       QUEUE_NAME,
@@ -106,8 +106,8 @@ fn get_redis_worker_consumer_factory(pascal_case_name: &str) -> String {
     format!(
         "({{ TtlCache, QUEUE_NAME, WorkerOptions }}) =>
   (
-    processEventsFunction: WorkerProcessFunction<{}EventRecord>,
-    failureHandler: WorkerFailureHandler<{}EventRecord>
+    processEventsFunction: WorkerProcessFunction<InferEntity<typeof {}EventRecord>>,
+    failureHandler: WorkerFailureHandler<InferEntity<typeof {}EventRecord>>
   ) =>
     new RedisWorkerConsumer(
       QUEUE_NAME,

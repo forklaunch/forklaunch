@@ -1,5 +1,62 @@
 # @forklaunch/infrastructure-s3
 
+## 0.5.5
+
+### Patch Changes
+
+- Another fix
+- Updated dependencies
+  - @forklaunch/common@0.7.5
+  - @forklaunch/core@0.19.5
+
+## 0.5.4
+
+### Patch Changes
+
+- correct extension for mappers
+- Updated dependencies
+  - @forklaunch/common@0.7.4
+  - @forklaunch/core@0.19.4
+
+## 0.5.3
+
+### Patch Changes
+
+- mapper fix
+- Updated dependencies
+  - @forklaunch/common@0.7.3
+  - @forklaunch/core@0.19.3
+
+## 0.5.2
+
+### Patch Changes
+
+- Update packages and remove EntityMapper wrapping
+- Updated dependencies
+  - @forklaunch/common@0.7.2
+  - @forklaunch/core@0.19.2
+
+## 0.5.1
+
+### Patch Changes
+
+- package upgrades
+- Updated dependencies
+  - @forklaunch/common@0.7.1
+  - @forklaunch/core@0.19.1
+
+## 0.5.0
+
+### Minor Changes
+
+- update packages and update to mikro orm v7
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/common@0.7.0
+  - @forklaunch/core@0.19.0
+
 ## 0.4.52
 
 ### Patch Changes

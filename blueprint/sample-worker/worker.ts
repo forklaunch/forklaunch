@@ -3,7 +3,7 @@ import {
   WorkerProcessFunction
 } from '@forklaunch/interfaces-worker/types';
 import { ci, tokens } from './bootstrapper';
-import { SampleWorkerEventRecord } from './persistence/entities/sampleWorkerRecord.entity';
+import { type SampleWorkerEventRecord } from './persistence/entities/sampleWorkerRecord.entity';
 
 const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
 const s3 = ci.resolve(tokens.S3ObjectStore);

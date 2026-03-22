@@ -25,13 +25,13 @@ pub(crate) const TS_JEST_VERSION: &str = "^29.4.6";
 // ts-nodef
 pub(crate) const TS_NODE_VERSION: &str = "^10.9.2";
 // typescript-eslint
-pub(crate) const TYPESCRIPT_ESLINT_VERSION: &str = "^8.57.0";
+pub(crate) const TYPESCRIPT_ESLINT_VERSION: &str = "^8.57.1";
 // vitest
 pub(crate) const VITEST_VERSION: &str = "^4.1.0";
 
 // Application package.json dependencies constants
 // @typescript/native-preview
-pub(crate) const TYPESCRIPT_NATIVE_PREVIEW_VERSION: &str = "7.0.0-dev.20260312.1";
+pub(crate) const TYPESCRIPT_NATIVE_PREVIEW_VERSION: &str = "7.0.0-dev.20260320.1";
 // globals
 pub(crate) const GLOBALS_VERSION: &str = "^17.4.0";
 // husky
@@ -220,7 +220,7 @@ pub(crate) fn project_up_latest_script(runtime: &Runtime) -> Option<String> {
 
 // Project package.json dependencies constants
 // @forklaunch/better-auth-mikro-orm-fork
-pub(crate) const BETTER_AUTH_MIKRO_ORM_VERSION: &str = "~0.4.106";
+pub(crate) const BETTER_AUTH_MIKRO_ORM_VERSION: &str = "~0.5.0";
 // @forklaunch/blueprint-core
 pub(crate) const APP_CORE_VERSION: &str = "workspace:*";
 // @forklaunch/blueprint-billing
@@ -232,55 +232,53 @@ pub(crate) const APP_MONITORING_VERSION: &str = "workspace:*";
 // @forklaunch/bunrun
 pub(crate) const BUNRUN_VERSION: &str = "~0.0.2";
 // @forklaunch/common
-pub(crate) const COMMON_VERSION: &str = "~0.6.38";
+pub(crate) const COMMON_VERSION: &str = "~0.7.5";
 // @forklaunch/core
-pub(crate) const CORE_VERSION: &str = "~0.18.15";
+pub(crate) const CORE_VERSION: &str = "~0.19.5";
 // @forklaunch/express
-pub(crate) const EXPRESS_VERSION: &str = "~0.10.19";
+pub(crate) const EXPRESS_VERSION: &str = "~0.11.5";
 // @forklaunch/hyper-express
-pub(crate) const HYPER_EXPRESS_VERSION: &str = "~0.11.19";
+pub(crate) const HYPER_EXPRESS_VERSION: &str = "~0.12.5";
 // @forklaunch/implementation-billing-base
-pub(crate) const BILLING_BASE_VERSION: &str = "~0.8.23";
+pub(crate) const BILLING_BASE_VERSION: &str = "~0.9.0";
 // @forklaunch/implementation-billing-stripe
-pub(crate) const BILLING_STRIPE_VERSION: &str = "~0.5.23";
+pub(crate) const BILLING_STRIPE_VERSION: &str = "~0.6.0";
 // @forklaunch/implementation-iam-base
-pub(crate) const IAM_BASE_VERSION: &str = "~0.8.24";
+pub(crate) const IAM_BASE_VERSION: &str = "~0.9.0";
 // @forklaunch/implementation-worker-bullmq
-pub(crate) const WORKER_BULLMQ_VERSION: &str = "~0.8.23";
+pub(crate) const WORKER_BULLMQ_VERSION: &str = "~0.9.0";
 // @forklaunch/implementation-worker-redis
-pub(crate) const WORKER_REDIS_VERSION: &str = "~0.8.23";
+pub(crate) const WORKER_REDIS_VERSION: &str = "~0.9.0";
 // @forklaunch/implementation-worker-database
-pub(crate) const WORKER_DATABASE_VERSION: &str = "~0.8.23";
+pub(crate) const WORKER_DATABASE_VERSION: &str = "~0.9.0";
 // @forklaunch/implementation-worker-kafka
-pub(crate) const WORKER_KAFKA_VERSION: &str = "~0.9.17";
+pub(crate) const WORKER_KAFKA_VERSION: &str = "~0.10.0";
 // @forklaunch/infrastructure-redis
-pub(crate) const INFRASTRUCTURE_REDIS_VERSION: &str = "~0.4.52";
+pub(crate) const INFRASTRUCTURE_REDIS_VERSION: &str = "~0.5.5";
 // @forklaunch/infrastructure-s3
-pub(crate) const INFRASTRUCTURE_S3_VERSION: &str = "~0.4.52";
+pub(crate) const INFRASTRUCTURE_S3_VERSION: &str = "~0.5.5";
 // @forklaunch/interfaces-billing
-pub(crate) const BILLING_INTERFACES_VERSION: &str = "~0.8.23";
+pub(crate) const BILLING_INTERFACES_VERSION: &str = "~0.9.0";
 // @forklaunch/interfaces-iam
-pub(crate) const IAM_INTERFACES_VERSION: &str = "~0.8.23";
+pub(crate) const IAM_INTERFACES_VERSION: &str = "~0.9.0";
 // @forklaunch/interfaces-worker
-pub(crate) const WORKER_INTERFACES_VERSION: &str = "~0.7.23";
+pub(crate) const WORKER_INTERFACES_VERSION: &str = "~0.8.0";
 // @forklaunch/internal
-pub(crate) const INTERNAL_VERSION: &str = "~0.3.40";
+pub(crate) const INTERNAL_VERSION: &str = "~0.4.5";
 // @forklaunch/testing
-pub(crate) const TESTING_VERSION: &str = "~0.0.29";
+pub(crate) const TESTING_VERSION: &str = "~0.1.5";
 // @forklaunch/universal-sdk
-pub(crate) const UNIVERSAL_SDK_VERSION: &str = "~0.7.38";
+pub(crate) const UNIVERSAL_SDK_VERSION: &str = "~0.8.5";
 // @forklaunch/validator
-pub(crate) const VALIDATOR_VERSION: &str = "~0.10.38";
+pub(crate) const VALIDATOR_VERSION: &str = "~0.11.5";
 // @mikro-orm/core
-pub(crate) const MIKRO_ORM_CORE_VERSION: &str = "6.6.9";
+pub(crate) const MIKRO_ORM_CORE_VERSION: &str = "7.0.4";
 // @mikro-orm/migrations
-pub(crate) const MIKRO_ORM_MIGRATIONS_VERSION: &str = "6.6.9";
-// @mikro-orm/postgresql,@mikro-orm/mongodb,@mikro-orm/mysql,@mikro-orm/better-sqlite,@mikro-orm/sqlite,@mikro-orm/mariadb,@mikro-orm/libsql,@mikro-orm/mssql
-pub(crate) const MIKRO_ORM_DATABASE_VERSION: &str = "6.6.9";
-// @mikro-orm/reflection
-pub(crate) const MIKRO_ORM_REFLECTION_VERSION: &str = "6.6.9";
+pub(crate) const MIKRO_ORM_MIGRATIONS_VERSION: &str = "7.0.4";
+// @mikro-orm/postgresql,@mikro-orm/mongodb,@mikro-orm/mysql,@mikro-orm/sqlite,@mikro-orm/mariadb,@mikro-orm/libsql,@mikro-orm/mssql
+pub(crate) const MIKRO_ORM_DATABASE_VERSION: &str = "7.0.4";
 // @mikro-orm/seeder
-pub(crate) const MIKRO_ORM_SEEDER_VERSION: &str = "6.6.9";
+pub(crate) const MIKRO_ORM_SEEDER_VERSION: &str = "7.0.4";
 // @opentelemetry/api
 pub(crate) const OPENTELEMETRY_API_VERSION: &str = "^1.9.0";
 // @sinclair/typebox
@@ -292,11 +290,11 @@ pub(crate) const BETTER_AUTH_VERSION: &str = "^1.5.5";
 // bullmq
 pub(crate) const BULLMQ_VERSION: &str = "^5.71.0";
 // better-sqlite3
-pub(crate) const BETTER_SQLITE3_VERSION: &str = "^12.6.2";
+pub(crate) const BETTER_SQLITE3_VERSION: &str = "^12.8.0";
 // dotenv
 pub(crate) const DOTENV_VERSION: &str = "^17.3.1";
 // jose
-pub(crate) const JOSE_VERSION: &str = "^6.2.1";
+pub(crate) const JOSE_VERSION: &str = "^6.2.2";
 // sqlite3
 pub(crate) const SQLITE3_VERSION: &str = "^6.0.1";
 // stripe
@@ -308,7 +306,7 @@ pub(crate) const ZOD_VERSION: &str = "^4.3.6";
 
 // Project package.json devDependencies constants
 // @mikro-orm/cli
-pub(crate) const MIKRO_ORM_CLI_VERSION: &str = "6.6.9";
+pub(crate) const MIKRO_ORM_CLI_VERSION: &str = "7.0.4";
 // @types/express
 pub(crate) const TYPES_EXPRESS_VERSION: &str = "^5.0.6";
 // @types/express-serve-static-core
@@ -322,12 +320,12 @@ pub(crate) const TYPES_QS_VERSION: &str = "^6.15.0";
 // pino
 pub(crate) const PINO_VERSION: &str = "^10.3.1";
 // ioredis
-pub(crate) const IOREDIS_VERSION: &str = "^5.10.0";
+pub(crate) const IOREDIS_VERSION: &str = "^5.10.1";
 // typedoc
 pub(crate) const TYPEDOC_VERSION: &str = "^0.28.17";
 
 // Project package.json scripts constants
-pub(crate) const PROJECT_BUILD_SCRIPT: &str = "tsgo";
+pub(crate) const PROJECT_BUILD_SCRIPT: &str = "echo \"[debug] uname: $(uname -m)\" && echo \"[debug] which tsgo: $(which tsgo 2>&1)\" && echo \"[debug] tsgo version: $(tsgo --version 2>&1)\" && echo \"[debug] node_modules bin: $(ls node_modules/.bin/tsgo* 2>&1)\" && echo \"[debug] starting tsgo\" && tsgo";
 pub(crate) const PROJECT_DOCS_SCRIPT: &str = "typedoc --out docs *";
 pub(crate) const PROJECT_SEED_SCRIPT: &str = "[ -z $DOTENV_FILE_PATH ] && export DOTENV_FILE_PATH=.env.local; NODE_OPTIONS='--import=tsx' mikro-orm seeder:run";
 

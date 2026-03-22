@@ -1,18 +1,14 @@
-import { SqlBaseEntity } from '@forklaunch/blueprint-core';
-import { Entity, Property } from '@mikro-orm/core';
+import { sqlBaseProperties } from '@forklaunch/blueprint-core';
+import { defineEntity, p } from '@mikro-orm/core';
 
 // This is to represent connection information for a billing provider
-@Entity()
-export class BillingPortal extends SqlBaseEntity {
-  @Property()
-  customerId!: string;
-
-  @Property({ nullable: true })
-  uri?: string;
-
-  @Property()
-  expiresAt!: Date;
-
-  @Property({ type: 'json', nullable: true })
-  providerFields?: unknown;
-}
+export const BillingPortal = defineEntity({
+  name: 'BillingPortal',
+  properties: {
+    ...sqlBaseProperties,
+    customerId: p.string(),
+    uri: p.string().nullable(),
+    expiresAt: p.datetime(),
+    providerFields: p.json<unknown>().nullable()
+  }
+});

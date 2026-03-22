@@ -36,12 +36,12 @@ export const cleanupTestDatabase = async (): Promise<void> => {
   }
 };
 
-export const clearDatabase = async (options?: {
+export async function clearDatabase(options?: {
   orm?: MikroORM;
   redis?: TestSetupResult['redis'];
-}): Promise<void> => {
+}): Promise<void> {
   await clearTestDatabase(options);
-};
+}
 
 export const setupTestData = async (em: EntityManager) => {
   const { Permission } = await import(
@@ -57,18 +57,19 @@ export const setupTestData = async (em: EntityManager) => {
   );
 
   // Create test organization
-  const organization = em.create(Organization, {
+  const createdOrganization = em.create(Organization, {
     id: '123e4567-e89b-12d3-a456-426614174001',
     name: 'Test Organization',
     domain: 'test.com',
     subscription: 'premium',
     status: OrganizationStatus.ACTIVE,
+    providerFields: null,
     createdAt: new Date(),
     updatedAt: new Date()
   });
 
   // Create test permission
-  const permission = em.create(Permission, {
+  const createdPermission = em.create(Permission, {
     id: '123e4567-e89b-12d3-a456-426614174002',
     slug: 'read:users',
     createdAt: new Date(),
@@ -76,10 +77,10 @@ export const setupTestData = async (em: EntityManager) => {
   });
 
   // Create test role
-  const role = em.create(Role, {
+  const createdRole = em.create(Role, {
     id: '123e4567-e89b-12d3-a456-426614174000',
     name: 'admin',
-    permissions: [permission],
+    permissions: [createdPermission],
     createdAt: new Date(),
     updatedAt: new Date()
   });
@@ -91,9 +92,10 @@ export const setupTestData = async (em: EntityManager) => {
     firstName: 'John',
     lastName: 'Doe',
     phoneNumber: '+1234567890',
-    organization: organization,
-    roles: [role],
+    organization: createdOrganization,
+    roles: [createdRole],
     subscription: 'enterprise',
+    providerFields: [],
     createdAt: new Date(),
     updatedAt: new Date()
   });

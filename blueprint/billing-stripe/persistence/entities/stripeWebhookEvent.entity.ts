@@ -1,17 +1,13 @@
-import { SqlBaseEntity } from '@forklaunch/blueprint-core';
-import { Entity, Property } from '@mikro-orm/core';
+import { sqlBaseProperties } from '@forklaunch/blueprint-core';
+import { defineEntity, p } from '@mikro-orm/core';
 
-@Entity()
-export class StripeWebhookEvent extends SqlBaseEntity {
-  @Property()
-  stripeId!: string;
-
-  @Property()
-  idempotencyKey!: string;
-
-  @Property()
-  eventType!: string;
-
-  @Property({ type: 'json' })
-  eventData!: unknown;
-}
+export const StripeWebhookEvent = defineEntity({
+  name: 'StripeWebhookEvent',
+  properties: {
+    ...sqlBaseProperties,
+    stripeId: p.string(),
+    idempotencyKey: p.string().nullable(),
+    eventType: p.string(),
+    eventData: p.json<unknown>()
+  }
+});

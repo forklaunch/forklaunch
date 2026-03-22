@@ -11,7 +11,7 @@ export interface BlueprintTestConfig {
    * This is called AFTER environment variables are set
    * Optional - if not provided, no database will be set up
    */
-  getConfig?: () => Promise<Options>;
+  getConfig?: () => Promise<Partial<Options>>;
 
   /**
    * Database type (postgres, mysql, mongodb, etc.)
