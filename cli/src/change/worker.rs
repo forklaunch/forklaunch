@@ -259,8 +259,8 @@ fn change_type(
                 }
             } else {
                 let database_entity = match db {
-                    Database::MongoDB => "nosql.base.entity.ts",
-                    _ => "sql.base.entity.ts",
+                    Database::MongoDB => "nosql.base.properties.ts",
+                    _ => "sql.base.properties.ts",
                 };
                 let entity_template_path = TEMPLATES_DIR
                     .get_file(

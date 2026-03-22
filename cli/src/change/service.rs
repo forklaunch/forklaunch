@@ -755,26 +755,25 @@ const openTelemetryCollector = ci.resolve(tokens.{otel_token});
     let event_entity_path = entities_dir.join(format!("{}EventRecord.entity.ts", camel_case_name));
     let is_mongo = manifest_data.database == "mongodb";
     let event_entity_content = format!(
-        r#"import {{ Entity, Property }} from '@mikro-orm/core';
-import {{ {mongo_prefix}SqlBaseEntity }} from '@{app_name}/core';
+        r#"import {{ defineEntity, p, type InferEntity }} from '@mikro-orm/core';
+import {{ {mongo_prefix}sqlBaseProperties }} from '@{app_name}/core';
 
-// Entity class that defines the structure of the {pascal_case_name}EventRecord table
-@Entity()
-export class {pascal_case_name}EventRecord extends {mongo_prefix}SqlBaseEntity {{
-  // message property that stores a message string
-  @Property()
-  message!: string;
+export const {camel_case_name}EventRecord = defineEntity({{
+  name: '{pascal_case_name}EventRecord',
+  properties: {{
+    ...{mongo_prefix}sqlBaseProperties,
+    message: p.string(),
+    processed: p.boolean(),
+    retryCount: p.integer(),
+  }},
+}});
 
-  @Property()
-  processed!: boolean;
-
-  @Property()
-  retryCount!: number;
-}}
+export type {pascal_case_name}EventRecord = InferEntity<typeof {camel_case_name}EventRecord>;
 "#,
-        mongo_prefix = if is_mongo { "No" } else { "" },
+        mongo_prefix = if is_mongo { "no" } else { "" },
         app_name = manifest_data.app_name,
-        pascal_case_name = pascal_case_name
+        pascal_case_name = pascal_case_name,
+        camel_case_name = camel_case_name
     );
     rendered_templates_cache.insert(
         event_entity_path.to_string_lossy().to_string(),

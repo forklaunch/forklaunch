@@ -46,8 +46,8 @@ pub(crate) fn get_file_contents(filepath: &Path) -> Result<String> {
 fn database_replacements(database: &String, template: String) -> String {
     match database.as_str() {
         "mongodb" => {
-            let re = Regex::new(r"([^a-zA-Z0-9_$]|^)SqlBaseEntity").unwrap();
-            re.replace_all(&template, "${1}NoSqlBaseEntity")
+            let re = Regex::new(r"([^a-zA-Z0-9_$]|^)sqlBaseProperties").unwrap();
+            re.replace_all(&template, "${1}nosqlBaseProperties")
                 .replace("id: uuid", "id: string")
         }
         _ => template,

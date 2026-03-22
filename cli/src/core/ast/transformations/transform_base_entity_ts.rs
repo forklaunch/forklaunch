@@ -21,13 +21,13 @@ pub(crate) fn transform_base_entity_ts(
     let allocator = Allocator::default();
 
     let base_entity_file_name_to_create = match database {
-        Database::MongoDB => "nosql.base.entity.ts",
-        _ => "sql.base.entity.ts",
+        Database::MongoDB => "nosql.base.properties.ts",
+        _ => "sql.base.properties.ts",
     };
 
     let base_entity_file_name_to_copy = match database {
-        Database::MongoDB => "sql.base.entity.ts",
-        _ => "nosql.base.entity.ts",
+        Database::MongoDB => "sql.base.properties.ts",
+        _ => "nosql.base.properties.ts",
     };
 
     if exists(

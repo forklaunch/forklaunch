@@ -83,42 +83,42 @@ choice! {
         PostgreSQL = Choice {
             id: "postgresql",
             description: None,
-            exclusive_files: Some(&["sql.base.entity.ts"]),
+            exclusive_files: Some(&["sql.base.properties.ts"]),
         },
         MySQL = Choice {
             id: "mysql",
             description: None,
-            exclusive_files: Some(&["sql.base.entity.ts"]),
+            exclusive_files: Some(&["sql.base.properties.ts"]),
         },
         MariaDB = Choice {
             id: "mariadb",
             description: None,
-            exclusive_files: Some(&["sql.base.entity.ts"]),
+            exclusive_files: Some(&["sql.base.properties.ts"]),
         },
         MsSQL = Choice {
             id: "mssql",
             description: None,
-            exclusive_files: Some(&["sql.base.entity.ts"]),
+            exclusive_files: Some(&["sql.base.properties.ts"]),
         },
         MongoDB = Choice {
             id: "mongodb",
             description: None,
-            exclusive_files: Some(&["nosql.base.entity.ts"]),
+            exclusive_files: Some(&["nosql.base.properties.ts"]),
         },
         LibSQL = Choice {
             id: "libsql",
             description: None,
-            exclusive_files: Some(&["sql.base.entity.ts"]),
+            exclusive_files: Some(&["sql.base.properties.ts"]),
         },
         SQLite = Choice {
             id: "sqlite",
             description: None,
-            exclusive_files: Some(&["sql.base.entity.ts"]),
+            exclusive_files: Some(&["sql.base.properties.ts"]),
         },
         BetterSQLite = Choice {
             id: "better-sqlite",
             description: None,
-            exclusive_files: Some(&["sql.base.entity.ts"]),
+            exclusive_files: Some(&["sql.base.properties.ts"]),
         },
     }
 

@@ -151,7 +151,7 @@ export const {}ResponseMapper = responseMapper({{
         }
 
         // Add auto-populated timestamp fields if entity extends a base class or has these fields
-        // All entities that extend SqlBaseEntity, NoSqlBaseEntity, etc. have these fields
+        // All entities that extend sqlBaseProperties, NosqlBaseProperties, etc. have these fields
         if self.entity.extends.is_some() || self.has_entity_property("createdAt") {
             lines.push("        createdAt: new Date(),".to_string());
         }
@@ -283,7 +283,7 @@ mod tests {
 
         let entity = EntityDefinition {
             name: "UserRecord".to_string(),
-            extends: Some("SqlBaseEntity".to_string()),
+            extends: Some("sqlBaseProperties".to_string()),
             properties: vec![
                 EntityProperty {
                     name: "name".to_string(),
@@ -348,7 +348,7 @@ mod tests {
 
         let entity = EntityDefinition {
             name: "UserRecord".to_string(),
-            extends: Some("SqlBaseEntity".to_string()),
+            extends: Some("sqlBaseProperties".to_string()),
             properties: vec![
                 EntityProperty {
                     name: "name".to_string(),

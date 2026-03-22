@@ -53,7 +53,7 @@ export const validConfigInjector = configInjector.validateConfigSingletons(
 const tokens = validConfigInjector.tokens();
 
 //! Define the mikro-orm options config
-const mikroOrmOptionsConfig = defineConfig({{{#is_mongo}}
+const mikroOrmOptionsConfig = defineConfig({ {{#is_mongo}}
   clientUrl: `mongodb://${validConfigInjector.resolve(
     tokens.DB_USER
   )}:${validConfigInjector.resolve(
