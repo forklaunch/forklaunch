@@ -42,7 +42,7 @@ pub(crate) fn transform_entities_index_ts(
     );
 
     let entities_index_text = format!(
-        "export {{ {router_name_camel_case}Record, {router_name_pascal_case}Record }} from './{router_name_camel_case}Record.entity';",
+        "export {{ {router_name_pascal_case}Record }} from './{router_name_camel_case}Record.entity';",
     );
     let mut injection_program_ast =
         parse_ast_program(&allocator, &entities_index_text, SourceType::ts());
@@ -101,8 +101,7 @@ export { PermissionRecord } from './permissionRecord.entity';
 
         let transformed = result.unwrap();
 
-        assert!(transformed.contains("organizationRecord"));
-        assert!(transformed.contains("OrganizationRecord"));
+        assert!(transformed.contains("export { OrganizationRecord }"));
         assert!(transformed.contains("from \"./organizationRecord.entity\""));
 
         assert!(transformed.contains("export { UserRecord }"));
@@ -123,8 +122,7 @@ export { PermissionRecord } from './permissionRecord.entity';
 
         let transformed = result.unwrap();
 
-        assert!(transformed.contains("orderItemRecord"));
-        assert!(transformed.contains("OrderItemRecord"));
+        assert!(transformed.contains("export { OrderItemRecord }"));
         assert!(transformed.contains("from \"./orderItemRecord.entity\""));
     }
 
@@ -141,8 +139,7 @@ export { PermissionRecord } from './permissionRecord.entity';
 
         let transformed = result.unwrap();
 
-        assert!(transformed.contains("productRecord"));
-        assert!(transformed.contains("ProductRecord"));
+        assert!(transformed.contains("export { ProductRecord }"));
         assert!(transformed.contains("from \"./productRecord.entity\""));
     }
 }

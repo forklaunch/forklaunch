@@ -38,7 +38,7 @@ pub(crate) fn transform_seed_data_ts(
         parse_ast_program(&allocator, &seed_data_source_text, seed_data_source_type);
 
     let seed_data_import_text = format!(
-        "import {{ type {router_name_pascal_case}Record }} from './entities/{router_name_camel_case}Record.entity';",
+        "import {{ {router_name_pascal_case}Record }} from './entities/{router_name_camel_case}Record.entity';",
     );
     let mut seed_data_import_injection =
         parse_ast_program(&allocator, &seed_data_import_text, seed_data_source_type);
@@ -55,7 +55,7 @@ pub(crate) fn transform_seed_data_ts(
             message: 'Test message'{},
             createdAt: new Date(),
             updatedAt: new Date(),
-        }} satisfies RequiredEntityData<{router_name_pascal_case}Record>;",
+        }} satisfies RequiredEntityData<InferEntity<typeof {router_name_pascal_case}Record>>;",
         if project_type == &ProjectType::Worker {
             ",
             processed: false,

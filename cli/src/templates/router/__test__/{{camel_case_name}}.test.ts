@@ -106,11 +106,11 @@ describe('{{pascal_case_name}} Routes E2E Tests', () => {
 
       if (!orm) throw new Error('ORM not initialized');
       const em = orm.em.fork();
-      const { {{camel_case_name}}{{#is_worker}}Event{{/is_worker}}Record } = await import(
+      const { {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record } = await import(
         '../persistence/entities/{{camel_case_name}}{{#is_worker}}Event{{/is_worker}}Record.entity'
       );
 
-      const records = await em.find({{camel_case_name}}{{#is_worker}}Event{{/is_worker}}Record, {
+      const records = await em.find({{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record, {
         message: mock{{pascal_case_name}}Data.message
       });
 

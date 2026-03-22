@@ -1,5 +1,6 @@
 import { OpenTelemetryCollector } from '@forklaunch/core/http';{{#is_worker}}
-import { WorkerProducer } from '@forklaunch/interfaces-worker/interfaces';{{/is_worker}}{{^is_worker}}
+import { WorkerProducer } from '@forklaunch/interfaces-worker/interfaces';
+import { InferEntity } from '@mikro-orm/core';{{/is_worker}}{{^is_worker}}
 import { EntityManager } from '@mikro-orm/{{database}}';{{/is_worker}}{{^with_mappers}}
 import { wrap } from '@mikro-orm/core';
 import { Schema } from '@forklaunch/validator';{{/with_mappers}}
@@ -18,22 +19,22 @@ import {
   {{pascal_case_name}}RequestSchema,
   {{pascal_case_name}}ResponseSchema
 } from '../schemas/{{camel_case_name}}.schema';
-import { {{camel_case_name}}{{#is_worker}}EventRecord{{/is_worker}}{{^is_worker}}Record{{/is_worker}}, type {{pascal_case_name}}{{#is_worker}}EventRecord{{/is_worker}}{{^is_worker}}Record{{/is_worker}} } from '../../persistence/entities';
+import { {{pascal_case_name}}{{#is_worker}}EventRecord{{/is_worker}}{{^is_worker}}Record{{/is_worker}} } from '../../persistence/entities';
 
 // When not using mappers, work directly with schema-validated types
 type {{pascal_case_name}}Request = Schema<typeof {{pascal_case_name}}RequestSchema, SchemaValidator>;
 type {{pascal_case_name}}Response = Schema<typeof {{pascal_case_name}}ResponseSchema, SchemaValidator>;{{/with_mappers}}{{#with_mappers}}{{#is_worker}}
-import { {{camel_case_name}}EventRecord, type {{pascal_case_name}}EventRecord } from '../../persistence/entities';{{/is_worker}}{{/with_mappers}}
+import { {{pascal_case_name}}EventRecord } from '../../persistence/entities';{{/is_worker}}{{/with_mappers}}
 
 // Base{{pascal_case_name}}Service class that implements the {{pascal_case_name}}Service interface
 export class Base{{pascal_case_name}}Service implements {{pascal_case_name}}Service { {{^is_worker}}
   private entityManager: EntityManager;{{/is_worker}}{{#is_worker}}
-  private workerProducer: WorkerProducer<{{pascal_case_name}}EventRecord>;{{/is_worker}}
+  private workerProducer: WorkerProducer<InferEntity<typeof {{pascal_case_name}}EventRecord>>;{{/is_worker}}
   private readonly openTelemetryCollector: OpenTelemetryCollector<Metrics>;
 
   constructor({{^is_worker}}
     entityManager: EntityManager,{{/is_worker}}{{#is_worker}}
-    workerProducer: WorkerProducer<{{pascal_case_name}}EventRecord>,{{/is_worker}} 
+    workerProducer: WorkerProducer<InferEntity<typeof {{pascal_case_name}}EventRecord>>,{{/is_worker}} 
     openTelemetryCollector: OpenTelemetryCollector<Metrics>
   ) { {{^is_worker}}
     this.entityManager = entityManager;{{/is_worker}}{{#is_worker}}
@@ -72,7 +73,7 @@ export class Base{{pascal_case_name}}Service implements {{pascal_case_name}}Serv
     // ============================================================================
 
     // Map from request data to entity (inline DTO → Entity conversion)
-    const entity = this.entityManager.create({{camel_case_name}}{{#is_worker}}EventRecord{{/is_worker}}{{^is_worker}}Record{{/is_worker}}, {
+    const entity = this.entityManager.create({{pascal_case_name}}{{#is_worker}}EventRecord{{/is_worker}}{{^is_worker}}Record{{/is_worker}}, {
       ...data,{{#is_worker}}
       processed: false,
       retryCount: 0,{{/is_worker}}

@@ -755,10 +755,10 @@ const openTelemetryCollector = ci.resolve(tokens.{otel_token});
     let event_entity_path = entities_dir.join(format!("{}EventRecord.entity.ts", camel_case_name));
     let is_mongo = manifest_data.database == "mongodb";
     let event_entity_content = format!(
-        r#"import {{ defineEntity, p, type InferEntity }} from '@mikro-orm/core';
+        r#"import {{ defineEntity, p }} from '@mikro-orm/core';
 import {{ {mongo_prefix}sqlBaseProperties }} from '@{app_name}/core';
 
-export const {camel_case_name}EventRecord = defineEntity({{
+export const {pascal_case_name}EventRecord = defineEntity({{
   name: '{pascal_case_name}EventRecord',
   properties: {{
     ...{mongo_prefix}sqlBaseProperties,
@@ -767,13 +767,10 @@ export const {camel_case_name}EventRecord = defineEntity({{
     retryCount: p.integer(),
   }},
 }});
-
-export type {pascal_case_name}EventRecord = InferEntity<typeof {camel_case_name}EventRecord>;
 "#,
         mongo_prefix = if is_mongo { "no" } else { "" },
         app_name = manifest_data.app_name,
-        pascal_case_name = pascal_case_name,
-        camel_case_name = camel_case_name
+        pascal_case_name = pascal_case_name
     );
     rendered_templates_cache.insert(
         event_entity_path.to_string_lossy().to_string(),
