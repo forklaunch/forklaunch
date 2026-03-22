@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-import { Schema } from '@forklaunch/validator';
 import { SchemaValidator, number, string } from '@forklaunch/validator/typebox';
 import { EntityManager, InferEntity, defineEntity, p } from '@mikro-orm/core';
 import { requestMapper, responseMapper } from '../src/mappers';

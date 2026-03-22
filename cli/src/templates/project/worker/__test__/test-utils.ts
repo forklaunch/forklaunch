@@ -59,11 +59,11 @@ export const clearDatabase = async (options?: {
 {{#is_database_enabled}}
 
 export const setupTestData = async (em: EntityManager) => {
-  const { {{pascal_case_name}}EventRecord } = await import(
+  const { {{camel_case_name}}EventRecord } = await import(
     '../persistence/entities/{{camel_case_name}}EventRecord.entity'
   );
 
-  em.create({{pascal_case_name}}EventRecord, {
+  em.create({{camel_case_name}}EventRecord, {
     id: '123e4567-e89b-12d3-a456-426614174000',
     message: 'Test message',
     processed: false,
