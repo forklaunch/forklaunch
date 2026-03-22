@@ -32,8 +32,8 @@ impl MapperGenerator {
     pub fn generate_mapper_file(&self) -> String {
         let pascal_case_name = self.entity.name.replace("Record", "").replace("EventRecord", "");
         let camel_case_name = pascal_case_name.to_case(Case::Camel);
-        // Entity const is camelCase of the full entity name (e.g., "userRecord")
-        let entity_const_name = self.entity.name.to_case(Case::Camel);
+        // Entity const is PascalCase (e.g., "UserRecord")
+        let entity_const_name = &self.entity.name;
 
         let imports = self.generate_imports(&pascal_case_name, &camel_case_name, &entity_const_name);
         let request_mapper = self.generate_request_mapper(&pascal_case_name, &entity_const_name);
@@ -48,12 +48,9 @@ impl MapperGenerator {
     fn generate_imports(&self, pascal_case_name: &str, camel_case_name: &str, entity_const_name: &str) -> String {
         let entity_suffix = if self.is_worker { "EventRecord" } else { "Record" };
         let em_import = if !self.is_worker {
-            format!(
-                "\nimport {{ wrap }} from '@mikro-orm/core';\nimport {{ EntityManager }} from '@mikro-orm/{}';",
-                self.database
-            )
+            "EntityManager, "
         } else {
-            "\nimport { wrap } from '@mikro-orm/core';".to_string()
+            ""
         };
 
         format!(
@@ -61,14 +58,13 @@ impl MapperGenerator {
   requestMapper,
   responseMapper
 }} from '@forklaunch/core/mappers';
-import {{ schemaValidator }} from '@{}/core';{}
-import {{ {}, type {}{} }} from '../../persistence/entities/{}{}.entity';
+import {{ schemaValidator }} from '@{}/core';
+import {{ {}InferEntity, wrap }} from '@mikro-orm/core';
+import {{ {} }} from '../../persistence/entities/{}{}.entity';
 import {{ {}RequestSchema, {}ResponseSchema }} from '../schemas/{}.schema';"#,
             self.app_name,
             em_import,
             entity_const_name,
-            pascal_case_name,
-            entity_suffix,
             camel_case_name,
             entity_suffix,
             pascal_case_name,
@@ -118,7 +114,7 @@ export const {}ResponseMapper = responseMapper({{
   schema: {}ResponseSchema,
   entity: {},
   mapperDefinition: {{
-    toDto: async (entity: {}{}) => {{
+    toDto: async (entity: InferEntity<typeof {}>) => {{
       return wrap(entity).toPOJO();
     }}
   }}
@@ -126,8 +122,7 @@ export const {}ResponseMapper = responseMapper({{
             pascal_case_name,
             pascal_case_name,
             entity_const_name,
-            pascal_case_name,
-            entity_suffix
+            entity_const_name
         )
     }
 

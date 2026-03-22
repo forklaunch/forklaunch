@@ -4,12 +4,10 @@ import {
   getEnvVar,
   Lifetime
 } from '@forklaunch/core/services';
-import { Migrator } from '@mikro-orm/migrations';
-// import { MongoDriver } from '@mikro-orm/mongodb';
-// import { MySqlDriver } from '@mikro-orm/mysql';
 import { Platform, TextType, Type } from '@mikro-orm/core';
+import { Migrator } from '@mikro-orm/migrations';
 import { defineConfig } from '@mikro-orm/postgresql';
-// import { SqliteDriver } from '@mikro-orm/sqlite';
+
 import dotenv from 'dotenv';
 import * as entities from './persistence/entities';
 

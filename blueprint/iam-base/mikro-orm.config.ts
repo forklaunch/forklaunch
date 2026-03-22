@@ -5,11 +5,8 @@ import {
   Lifetime
 } from '@forklaunch/core/services';
 import { Migrator } from '@mikro-orm/migrations';
-// import { MongoDriver } from '@mikro-orm/mongodb';
-// import { MySqlDriver } from '@mikro-orm/mysql';
 import { defineConfig, Platform, TextType, Type } from '@mikro-orm/postgresql';
 import dotenv from 'dotenv';
-// import { SqliteDriver } from '@mikro-orm/sqlite';
 import * as entities from './persistence/entities';
 
 dotenv.config({ path: getEnvVar('DOTENV_FILE_PATH') });

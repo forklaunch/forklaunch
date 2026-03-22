@@ -431,7 +431,7 @@ mod tests {
             "import { MikroORM } from '@mikro-orm/core';
             const deps = {
                 MikroORM: {
-                    factory: () => MikroORM.initSync(config)
+                    factory: () => new MikroORM(config)
                 }
             }",
         )

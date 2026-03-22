@@ -1450,7 +1450,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
   OpenTelemetryCollector: {
     lifetime: Lifetime.Singleton,
