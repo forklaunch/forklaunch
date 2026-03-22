@@ -153,6 +153,27 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
         &registrations_text,
     )?;
 
+    // Add InferEntity to @mikro-orm/core import (needed for type positions)
+    // Try adding to existing import first; if @mikro-orm/core doesn't exist yet, add a new import
+    if inject_specifier_into_import_statement(
+        &allocator,
+        &mut program,
+        "InferEntity",
+        "@mikro-orm/core",
+    )
+    .is_err()
+    {
+        let infer_entity_text = "import { InferEntity } from '@mikro-orm/core';";
+        let mut infer_entity_import =
+            parse_ast_program(&allocator, infer_entity_text, SourceType::ts());
+        inject_into_import_statement(
+            &mut program,
+            &mut infer_entity_import,
+            "@mikro-orm/core",
+            &registrations_text,
+        )?;
+    }
+
     // Add event record entity import
     let event_record_text = format!(
         "import {{ {}EventRecord }} from './persistence/entities/{}EventRecord.entity';",
@@ -267,10 +288,10 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
                 lifetime: Lifetime.Scoped,
                 type: function_(
                     [
-                        type<WorkerProcessFunction<{}EventRecord>>(),
-                        type<WorkerFailureHandler<{}EventRecord>>()
+                        type<WorkerProcessFunction<InferEntity<typeof {}EventRecord>>>(),
+                        type<WorkerFailureHandler<InferEntity<typeof {}EventRecord>>>()
                     ],
-                    type<{}WorkerConsumer<{}EventRecord, {}WorkerOptions>>()
+                    type<{}WorkerConsumer<InferEntity<typeof {}EventRecord>, {}WorkerOptions>>()
                 ),
                 factory: {}
             }}
@@ -436,6 +457,16 @@ export const createDependencyContainer = (envFilePath: string) => ({
         // Verify WorkerConsumer and WorkerProducer were added
         assert!(transformed_code.contains("WorkerConsumer"));
         assert!(transformed_code.contains("WorkerProducer"));
+
+        // Verify InferEntity<typeof ...> is used in type positions (not bare entity const)
+        assert!(
+            transformed_code.contains("InferEntity"),
+            "Expected InferEntity import/usage in transformed code: {transformed_code}"
+        );
+        assert!(
+            transformed_code.contains("typeof TestServiceEventRecord"),
+            "Expected typeof in type positions: {transformed_code}"
+        );
     }
 
     #[test]

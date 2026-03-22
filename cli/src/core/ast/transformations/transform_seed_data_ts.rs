@@ -10,7 +10,9 @@ use crate::{
     constants::error_failed_to_read_file,
     core::{
         ast::{
-            injections::inject_into_import_statement::inject_into_import_statement,
+            injections::inject_into_import_statement::{
+                inject_into_import_statement, inject_specifier_into_import_statement,
+            },
             parse_ast_program::parse_ast_program,
         },
         manifest::ProjectType,
@@ -49,6 +51,30 @@ pub(crate) fn transform_seed_data_ts(
         format!("./entities/{router_name_camel_case}Record.entity").as_str(),
         &seed_data_source_text,
     )?;
+
+    // Ensure RequiredEntityData and InferEntity are imported from @mikro-orm/core
+    let mikro_orm_import_text =
+        "import { RequiredEntityData, InferEntity } from '@mikro-orm/core';";
+    for specifier in ["RequiredEntityData", "InferEntity"] {
+        if inject_specifier_into_import_statement(
+            &allocator,
+            &mut seed_data_program,
+            specifier,
+            "@mikro-orm/core",
+        )
+        .is_err()
+        {
+            let mut import_program =
+                parse_ast_program(&allocator, mikro_orm_import_text, SourceType::ts());
+            inject_into_import_statement(
+                &mut seed_data_program,
+                &mut import_program,
+                "@mikro-orm/core",
+                &seed_data_source_text,
+            )?;
+            break; // Both specifiers added via the full import
+        }
+    }
 
     let seed_data_text = format!(
         "export const {router_name_camel_case}RecordData = {{
