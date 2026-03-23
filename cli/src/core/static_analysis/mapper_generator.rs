@@ -223,10 +223,6 @@ export const {}ResponseMapper = responseMapper({{
         None
     }
 
-    fn has_entity_property(&self, name: &str) -> bool {
-        self.entity.properties.iter().any(|p| p.name == name)
-    }
-
     fn extract_relation_entity(&self, type_name: &str) -> String {
         // Extract "Role" from "Collection<Role>"
         if type_name.starts_with("Collection<") && type_name.ends_with('>') {
