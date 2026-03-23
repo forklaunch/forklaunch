@@ -1,6 +1,6 @@
 import { OpenTelemetryCollector } from '@forklaunch/core/http';{{#is_worker}}
 import { WorkerProducer } from '@forklaunch/interfaces-worker/interfaces';
-import type { {{pascal_case_name}}EventRecord } from '../types/{{camel_case_name}}EventRecord.types';
+import type { I{{pascal_case_name}}EventRecord } from '../types/{{camel_case_name}}EventRecord.types';
 import { v4 } from 'uuid';{{/is_worker}}{{^is_worker}}
 import { EntityManager } from '@mikro-orm/core';{{/is_worker}}{{^with_mappers}}{{^is_worker}}
 import { wrap } from '@mikro-orm/core';{{/is_worker}}
@@ -29,12 +29,12 @@ type {{pascal_case_name}}Response = Schema<typeof {{pascal_case_name}}ResponseSc
 // Base{{pascal_case_name}}Service class that implements the {{pascal_case_name}}Service interface
 export class Base{{pascal_case_name}}Service implements {{pascal_case_name}}Service { {{^is_worker}}
   private entityManager: EntityManager;{{/is_worker}}{{#is_worker}}
-  private workerProducer: WorkerProducer<{{pascal_case_name}}EventRecord>;{{/is_worker}}
+  private workerProducer: WorkerProducer<I{{pascal_case_name}}EventRecord>;{{/is_worker}}
   private readonly openTelemetryCollector: OpenTelemetryCollector<Metrics>;
 
   constructor({{^is_worker}}
     entityManager: EntityManager,{{/is_worker}}{{#is_worker}}
-    workerProducer: WorkerProducer<{{pascal_case_name}}EventRecord>,{{/is_worker}}
+    workerProducer: WorkerProducer<I{{pascal_case_name}}EventRecord>,{{/is_worker}}
     openTelemetryCollector: OpenTelemetryCollector<Metrics>
   ) { {{^is_worker}}
     this.entityManager = entityManager;{{/is_worker}}{{#is_worker}}
@@ -63,7 +63,7 @@ export class Base{{pascal_case_name}}Service implements {{pascal_case_name}}Serv
       createdAt: new Date(),
       updatedAt: new Date()
     });
-    await this.entityManager.persist(entity).flush();{{/is_worker}}{{#is_worker}}const entity: {{pascal_case_name}}EventRecord = {
+    await this.entityManager.persist(entity).flush();{{/is_worker}}{{#is_worker}}const entity: I{{pascal_case_name}}EventRecord = {
       id: v4(),
       ...data,
       processed: false,

@@ -803,6 +803,30 @@ export const {pascal_case_name}EventRecord = defineEntity({{
         },
     );
 
+    // Generate the event record interface type file
+    let types_dir = base_path.join("domain").join("types");
+    let event_record_types_path =
+        types_dir.join(format!("{}EventRecord.types.ts", camel_case_name));
+    let event_record_types_content = format!(
+        r#"import type {{ WorkerEventEntity }} from '@forklaunch/interfaces-worker/types';
+
+export interface I{pascal_case_name}EventRecord extends WorkerEventEntity {{
+  message: string;
+  createdAt: Date;
+  updatedAt: Date;
+}}
+"#,
+        pascal_case_name = pascal_case_name
+    );
+    rendered_templates_cache.insert(
+        event_record_types_path.to_string_lossy().to_string(),
+        RenderedTemplate {
+            path: event_record_types_path.clone(),
+            content: event_record_types_content,
+            context: None,
+        },
+    );
+
     let env_local_path = base_path.join(".env.local");
     let mut env_local_content = serde_envfile::from_str::<Env>(
         &rendered_templates_cache

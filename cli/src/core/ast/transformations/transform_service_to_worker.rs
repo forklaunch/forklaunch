@@ -155,7 +155,7 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
 
     // Add event record interface type import (used in type positions)
     let event_record_type_text = format!(
-        "import type {{ {}EventRecord }} from './domain/types/{}EventRecord.types';",
+        "import type {{ I{}EventRecord }} from './domain/types/{}EventRecord.types';",
         pascal_case_name,
         project_name.to_case(Case::Camel)
     );
@@ -285,10 +285,10 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
                 lifetime: Lifetime.Scoped,
                 type: function_(
                     [
-                        type<WorkerProcessFunction<{}EventRecord>>(),
-                        type<WorkerFailureHandler<{}EventRecord>>()
+                        type<WorkerProcessFunction<I{}EventRecord>>(),
+                        type<WorkerFailureHandler<I{}EventRecord>>()
                     ],
-                    type<{}WorkerConsumer<{}EventRecord, {}WorkerOptions>>()
+                    type<{}WorkerConsumer<I{}EventRecord, {}WorkerOptions>>()
                 ),
                 factory: {}
             }}

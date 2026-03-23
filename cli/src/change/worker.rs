@@ -485,6 +485,25 @@ fn worker_to_service(
         );
     }
 
+    // Remove the event record types file (no longer needed after worker→service)
+    let camel_case_name = project_name.to_case(Case::Camel);
+    let event_record_types_path = base_path
+        .join("domain")
+        .join("types")
+        .join(format!("{}EventRecord.types.ts", camel_case_name));
+    if event_record_types_path.exists() {
+        rendered_templates_cache.insert(
+            event_record_types_path.to_string_lossy().to_string(),
+            RenderedTemplate {
+                path: event_record_types_path.clone(),
+                content: String::new(),
+                context: None,
+            },
+        );
+        // Mark for deletion
+        std::fs::remove_file(&event_record_types_path).ok();
+    }
+
     if let Some(scripts) = project_package_json.scripts.as_mut() {
         scripts.dev_worker = None;
         scripts.start_worker = None;
