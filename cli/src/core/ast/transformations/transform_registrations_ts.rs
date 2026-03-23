@@ -389,9 +389,9 @@ pub(crate) fn transform_registrations_ts_worker_type(
                 WorkerConsumer: {{
                     lifetime: Lifetime.Scoped,
                     type: (
-                        processEventsFunction: WorkerProcessFunction<InferEntity<typeof {}EventRecord>>,
-                        failureHandler: WorkerFailureHandler<InferEntity<typeof {}EventRecord>>
-                    ) => {}WorkerConsumer<InferEntity<typeof {}EventRecord>, {}WorkerOptions>,
+                        processEventsFunction: WorkerProcessFunction<{}EventRecord>,
+                        failureHandler: WorkerFailureHandler<{}EventRecord>
+                    ) => {}WorkerConsumer<{}EventRecord, {}WorkerOptions>,
                     factory: {}
                 }}
             }})",
@@ -416,22 +416,20 @@ pub(crate) fn transform_registrations_ts_worker_type(
         "serviceDependencies",
     );
 
-    // Ensure InferEntity is imported from @mikro-orm/core
-    if inject_specifier_into_import_statement(
-        &allocator,
-        &mut registration_program,
-        "InferEntity",
-        "@mikro-orm/core",
-    )
-    .is_err()
-    {
-        let infer_entity_import_text = "import { InferEntity } from '@mikro-orm/core';";
-        let mut infer_entity_import =
-            parse_ast_program(&allocator, infer_entity_import_text, SourceType::ts());
+    // Ensure the event record interface type is imported
+    let event_record_type_import_text = format!(
+        "import type {{ {}EventRecord }} from './domain/types/{}EventRecord.types';",
+        pascal_case_name,
+        pascal_case_name.to_case(Case::Camel)
+    );
+    // Only inject if not already present
+    if !registrations_text.contains(&format!("{}EventRecord.types", pascal_case_name.to_case(Case::Camel))) {
+        let mut event_record_type_import =
+            parse_ast_program(&allocator, &event_record_type_import_text, SourceType::ts());
         inject_into_import_statement(
             &mut registration_program,
-            &mut infer_entity_import,
-            "@mikro-orm/core",
+            &mut event_record_type_import,
+            &format!("./domain/types/{}EventRecord.types", pascal_case_name.to_case(Case::Camel)),
             &registrations_text,
         )?;
     }

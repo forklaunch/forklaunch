@@ -153,28 +153,25 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
         &registrations_text,
     )?;
 
-    // Add InferEntity to @mikro-orm/core import (needed for type positions)
-    // Try adding to existing import first; if @mikro-orm/core doesn't exist yet, add a new import
-    if inject_specifier_into_import_statement(
-        &allocator,
+    // Add event record interface type import (used in type positions)
+    let event_record_type_text = format!(
+        "import type {{ {}EventRecord }} from './domain/types/{}EventRecord.types';",
+        pascal_case_name,
+        project_name.to_case(Case::Camel)
+    );
+    let mut event_record_type_import =
+        parse_ast_program(&allocator, &event_record_type_text, SourceType::ts());
+    inject_into_import_statement(
         &mut program,
-        "InferEntity",
-        "@mikro-orm/core",
-    )
-    .is_err()
-    {
-        let infer_entity_text = "import { InferEntity } from '@mikro-orm/core';";
-        let mut infer_entity_import =
-            parse_ast_program(&allocator, infer_entity_text, SourceType::ts());
-        inject_into_import_statement(
-            &mut program,
-            &mut infer_entity_import,
-            "@mikro-orm/core",
-            &registrations_text,
-        )?;
-    }
+        &mut event_record_type_import,
+        &format!(
+            "./domain/types/{}EventRecord.types",
+            project_name.to_case(Case::Camel)
+        ),
+        &registrations_text,
+    )?;
 
-    // Add event record entity import
+    // Add event record entity import (used at runtime in database worker factory)
     let event_record_text = format!(
         "import {{ {}EventRecord }} from './persistence/entities/{}EventRecord.entity';",
         pascal_case_name,
@@ -288,10 +285,10 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
                 lifetime: Lifetime.Scoped,
                 type: function_(
                     [
-                        type<WorkerProcessFunction<InferEntity<typeof {}EventRecord>>>(),
-                        type<WorkerFailureHandler<InferEntity<typeof {}EventRecord>>>()
+                        type<WorkerProcessFunction<{}EventRecord>>(),
+                        type<WorkerFailureHandler<{}EventRecord>>()
                     ],
-                    type<{}WorkerConsumer<InferEntity<typeof {}EventRecord>, {}WorkerOptions>>()
+                    type<{}WorkerConsumer<{}EventRecord, {}WorkerOptions>>()
                 ),
                 factory: {}
             }}
@@ -458,14 +455,10 @@ export const createDependencyContainer = (envFilePath: string) => ({
         assert!(transformed_code.contains("WorkerConsumer"));
         assert!(transformed_code.contains("WorkerProducer"));
 
-        // Verify InferEntity<typeof ...> is used in type positions (not bare entity const)
+        // Verify event record interface type is imported (not InferEntity)
         assert!(
-            transformed_code.contains("InferEntity"),
-            "Expected InferEntity import/usage in transformed code: {transformed_code}"
-        );
-        assert!(
-            transformed_code.contains("typeof TestServiceEventRecord"),
-            "Expected typeof in type positions: {transformed_code}"
+            transformed_code.contains("EventRecord.types"),
+            "Expected EventRecord.types import in transformed code: {transformed_code}"
         );
     }
 

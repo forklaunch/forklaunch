@@ -2,7 +2,7 @@ use convert_case::{Case, Casing};
 use ramhorns::Content;
 use serde::{Deserialize, Serialize};
 
-use super::{InitializableManifestConfig, InitializableManifestConfigMetadata};
+use super::{InitializableManifestConfig, InitializableManifestConfigMetadata, ProjectType};
 use crate::{config_struct, constants::Database, core::database::get_db_driver};
 
 config_struct!(
@@ -43,6 +43,9 @@ config_struct!(
         pub(crate) is_libsql: bool,
         #[serde(skip_serializing, skip_deserializing)]
         pub(crate) is_in_memory_database: bool,
+
+        #[serde(skip_serializing, skip_deserializing)]
+        pub(crate) is_worker: bool,
 
         #[serde(skip_serializing, skip_deserializing)]
         pub(crate) is_cache_enabled: bool,
@@ -95,6 +98,8 @@ impl InitializableManifestConfig for RouterManifestData {
             is_in_memory_database: parsed_database == Database::SQLite
                 || parsed_database == Database::BetterSQLite
                 || parsed_database == Database::LibSQL,
+
+            is_worker: matches!(project_entry.r#type, ProjectType::Worker),
 
             is_cache_enabled: project_entry.resources.as_ref().unwrap().cache.is_some(),
             is_s3_enabled: project_entry

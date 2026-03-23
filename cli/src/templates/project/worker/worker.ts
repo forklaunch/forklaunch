@@ -3,10 +3,9 @@ import {
   WorkerProcessFunction
 } from '@forklaunch/interfaces-worker/types';
 import { getEnvVar } from '@forklaunch/common';
-import { InferEntity } from '@mikro-orm/core';
 import dotenv from 'dotenv';
 import { createDependencyContainer } from './registrations';
-import { {{pascal_case_name}}EventRecord } from './persistence/entities/{{camel_case_name}}EventRecord.entity';
+import type { {{pascal_case_name}}EventRecord } from './domain/types/{{camel_case_name}}EventRecord.types';
 
 const envFilePath = getEnvVar('DOTENV_FILE_PATH');
 dotenv.config({ path: envFilePath });
@@ -14,7 +13,7 @@ const { ci, tokens } = createDependencyContainer(envFilePath);
 
 const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 
-const processEvents: WorkerProcessFunction<InferEntity<typeof {{pascal_case_name}}EventRecord>> =
+const processEvents: WorkerProcessFunction<{{pascal_case_name}}EventRecord> =
   async (events) => {
     const failedEvents = [];
 
@@ -35,7 +34,7 @@ const processEvents: WorkerProcessFunction<InferEntity<typeof {{pascal_case_name
     return failedEvents;
   };
 
-const processErrors: WorkerFailureHandler<InferEntity<typeof {{pascal_case_name}}EventRecord>> = async (
+const processErrors: WorkerFailureHandler<{{pascal_case_name}}EventRecord> = async (
   events
 ) => {
   events.forEach((event) => {
