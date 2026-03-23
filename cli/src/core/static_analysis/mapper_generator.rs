@@ -9,7 +9,6 @@ pub struct MapperGenerator {
     entity: EntityDefinition,
     app_name: String,
     is_worker: bool,
-    database: String,
 }
 
 impl MapperGenerator {
@@ -18,14 +17,12 @@ impl MapperGenerator {
         entity: EntityDefinition,
         app_name: String,
         is_worker: bool,
-        database: String,
     ) -> Self {
         Self {
             schema,
             entity,
             app_name,
             is_worker,
-            database,
         }
     }
 
@@ -105,8 +102,6 @@ export const {}RequestMapper = requestMapper({{
     }
 
     fn generate_response_mapper(&self, pascal_case_name: &str, entity_const_name: &str) -> String {
-        let entity_suffix = if self.is_worker { "EventRecord" } else { "Record" };
-
         format!(
             r#"// ResponseMapper const that maps an entity to a response schema
 export const {}ResponseMapper = responseMapper({{
@@ -304,7 +299,7 @@ mod tests {
             ],
         };
 
-        let generator = MapperGenerator::new(schema, entity, "my-app".to_string(), false, "postgresql".to_string());
+        let generator = MapperGenerator::new(schema, entity, "my-app".to_string(), false);
         let result = generator.generate_mapper_file();
 
         assert!(result.contains("requestMapper"));
@@ -369,7 +364,7 @@ mod tests {
             ],
         };
 
-        let generator = MapperGenerator::new(schema, entity, "my-app".to_string(), false, "postgresql".to_string());
+        let generator = MapperGenerator::new(schema, entity, "my-app".to_string(), false);
         let result = generator.generate_to_entity_body();
 
         eprintln!("Generated body:\n{}", result);

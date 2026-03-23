@@ -137,7 +137,6 @@ fn add_mappers_to_router(
         entity.clone(),
         manifest_data.app_name.clone(),
         is_worker,
-        manifest_data.database.clone(),
     );
 
     let mapper_content = generator.generate_mapper_file();
