@@ -325,7 +325,7 @@ pub(crate) const IOREDIS_VERSION: &str = "^5.10.1";
 pub(crate) const TYPEDOC_VERSION: &str = "^0.28.17";
 
 // Project package.json scripts constants
-pub(crate) const PROJECT_BUILD_SCRIPT: &str = "tsgo";
+pub(crate) const PROJECT_BUILD_SCRIPT: &str = "tsgo -b";
 pub(crate) const PROJECT_DOCS_SCRIPT: &str = "typedoc --out docs *";
 pub(crate) const PROJECT_SEED_SCRIPT: &str = "[ -z $DOTENV_FILE_PATH ] && export DOTENV_FILE_PATH=.env.local; NODE_OPTIONS='--import=tsx' mikro-orm seeder:run";
 
