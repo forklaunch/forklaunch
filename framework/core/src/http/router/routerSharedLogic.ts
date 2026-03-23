@@ -1,7 +1,11 @@
 import { isRecord } from '@forklaunch/common';
 import { AnySchemaValidator, SchemaValidator } from '@forklaunch/validator';
+import { hasPermissionChecks } from '../guards/hasPermissionChecks';
+import { hasRoleChecks } from '../guards/hasRoleChecks';
+import { hasScopeChecks } from '../guards/hasScopeChecks';
 import { hasVersionedSchema } from '../guards/hasVersionedSchema';
 import { isExpressLikeSchemaHandler } from '../guards/isExpressLikeSchemaHandler';
+import { isHmacMethod } from '../guards/isHmacMethod';
 import { isHttpContractDetails } from '../guards/isHttpContractDetails';
 import { isPathParamHttpContractDetails } from '../guards/isPathParamContractDetails';
 import { isTypedHandler } from '../guards/isTypedHandler';
@@ -463,6 +467,54 @@ export function validateContractDetails<
     >(contractDetails)
   ) {
     throw new Error('Contract details are malformed for route definition');
+  }
+
+  // Validate access field and auth narrowing (runtime safety net for JS users)
+  const access = (contractDetails as Record<string, unknown>)['access'] as
+    | string
+    | undefined;
+  const auth = (contractDetails as Record<string, unknown>)['auth'];
+
+  if (access != null) {
+    const validAccess = ['public', 'authenticated', 'protected', 'internal'];
+    if (!validAccess.includes(access)) {
+      throw new Error(
+        `Route '${contractDetails.name}': invalid access level '${access}'. ` +
+          `Must be one of: ${validAccess.join(', ')}`
+      );
+    }
+
+    if (access === 'public' && auth != null) {
+      throw new Error(
+        `Route '${contractDetails.name}': access 'public' cannot have auth configured`
+      );
+    }
+
+    if (access === 'protected') {
+      if (!auth) {
+        throw new Error(
+          `Route '${contractDetails.name}': access 'protected' requires auth with roles, permissions, or scope`
+        );
+      }
+      if (
+        !hasPermissionChecks(auth) &&
+        !hasRoleChecks(auth) &&
+        !hasScopeChecks(auth)
+      ) {
+        throw new Error(
+          `Route '${contractDetails.name}': access 'protected' requires at least one of ` +
+            `allowedRoles, forbiddenRoles, allowedPermissions, forbiddenPermissions, or requiredScope`
+        );
+      }
+    }
+
+    if (access === 'internal') {
+      if (!auth || !isHmacMethod(auth)) {
+        throw new Error(
+          `Route '${contractDetails.name}': access 'internal' requires HMAC auth`
+        );
+      }
+    }
   }
 
   if (contractDetails.versions) {

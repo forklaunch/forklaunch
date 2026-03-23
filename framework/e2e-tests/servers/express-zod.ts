@@ -45,6 +45,7 @@ const getHandler = handlers.get(
   '/test/:id',
   {
     name: 'Test File',
+    access: 'protected',
     summary: 'Gets a sample file back',
     params: {
       id: string
@@ -116,6 +117,7 @@ const postHandler = handlers.post(
   '/test',
   {
     name: 'Test SSE',
+    access: 'protected',
     summary: 'Sends a stream of events',
     versions: {
       '1.0.0': {
@@ -197,6 +199,7 @@ export const jsonPatchHandler = handlers.patch(
   '/test',
   {
     name: 'Test JSON Patch',
+    access: 'protected',
     summary: 'Returns a JSON object',
     body: {
       f: string,
@@ -241,6 +244,7 @@ const multipartHandler = handlers.post(
   '/test/multipart',
   {
     name: 'Test Multipart',
+    access: 'public',
     summary: 'Returns a string',
     body: {
       multipartForm: {
@@ -268,6 +272,7 @@ const urlEncodedFormHandler = handlers.post(
   '/test/url-encoded-form/:id',
   {
     name: 'Test URL Encoded Form',
+    access: 'public',
     summary: 'Returns a string',
     body: {
       urlEncodedForm: {
@@ -298,6 +303,7 @@ const filePostHandler = handlers.post(
   '/test/file',
   {
     name: 'Test File Upload + Download',
+    access: 'public',
     summary: 'Returns a file',
     body: file,
     responses: {
@@ -367,6 +373,7 @@ forklaunchApplication.get(
   '/alfalfa/:id',
   {
     name: 'Test',
+    access: 'public',
     summary: 'Test',
     params: {
       id: string

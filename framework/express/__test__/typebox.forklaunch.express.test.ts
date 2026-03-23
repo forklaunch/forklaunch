@@ -51,6 +51,7 @@ describe('Forklaunch Express Tests', () => {
       {
         name: 'Test',
         summary: 'Test Summary',
+        access: 'public',
         responses: {
           200: string
         }
@@ -66,6 +67,7 @@ describe('Forklaunch Express Tests', () => {
       {
         name: 'Test',
         summary: 'Test Summary',
+        access: 'public',
         body: {
           test: string
         },
@@ -84,6 +86,7 @@ describe('Forklaunch Express Tests', () => {
       {
         name: 'Test',
         summary: 'Test Summary',
+        access: 'public',
         body: {
           test: string
         },
@@ -101,6 +104,7 @@ describe('Forklaunch Express Tests', () => {
       {
         name: 'Test',
         summary: 'Test Summary',
+        access: 'public',
         body: {
           test: string
         },
@@ -118,6 +122,7 @@ describe('Forklaunch Express Tests', () => {
       {
         name: 'Test',
         summary: 'Test Summary',
+        access: 'public',
         responses: {
           200: string
         }
@@ -206,6 +211,7 @@ describe('handlers', () => {
       {
         name: 'Get Organization',
         summary: 'Gets an organization by ID',
+        access: 'protected',
         responses: {
           200: number,
           404: string
@@ -262,6 +268,7 @@ describe('handlers', () => {
       '/',
       {
         name: 'Create Organization',
+        access: 'public',
         body: {
           json: {
             name: string
@@ -299,6 +306,7 @@ describe('handlers', () => {
       '/',
       {
         name: 'Create Organization',
+        access: 'public',
         body: {
           json: {
             name: string
