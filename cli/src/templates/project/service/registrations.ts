@@ -12,10 +12,12 @@ import { {{worker_type}}WorkerConsumer } from '@forklaunch/implementation-worker
 import { {{worker_type}}WorkerProducer } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/producers';
 import { {{worker_type}}WorkerSchemas } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/schemas';
 import { {{worker_type}}WorkerOptions } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/types';
-import { WorkerProcessFunction, WorkerFailureHandler } from '@forklaunch/interfaces-worker/types';{{/is_worker}}{{#is_database_enabled}}
-import { EntityManager, ForkOptions, MikroORM } from "@mikro-orm/core";
-import mikroOrmOptionsConfig from './mikro-orm.config';{{/is_database_enabled}}{{#is_worker}}
-import { {{pascal_case_name}}EventRecord } from "./persistence/entities/{{camel_case_name}}EventRecord.entity";{{/is_worker}}
+import { WorkerProcessFunction, WorkerFailureHandler } from '@forklaunch/interfaces-worker/types';
+import type { I{{pascal_case_name}}EventRecord } from './domain/types/{{camel_case_name}}EventRecord.types';{{/is_worker}}{{#is_database_enabled}}
+import { ForkOptions } from "@mikro-orm/core";
+import { EntityManager, MikroORM } from "@mikro-orm/{{database}}";
+import mikroOrmOptionsConfig from './mikro-orm.config';{{/is_database_enabled}}{{#is_worker}}{{#is_database_enabled}}
+import { {{pascal_case_name}}EventRecord } from "./persistence/entities/{{camel_case_name}}EventRecord.entity";{{/is_database_enabled}}{{/is_worker}}
 import { Base{{pascal_case_name}}Service } from "./domain/services/{{camel_case_name}}.service";
 
 //! instantiates the config injector
@@ -161,7 +163,7 @@ const runtimeDependencies = environmentConfig.chain({
   Orm: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },{{/is_database_enabled}}
   {{#is_worker}}WorkerOptions: {
     lifetime: Lifetime.Singleton,
@@ -247,10 +249,10 @@ const serviceDependencies = runtimeDependencies.chain({ {{#is_worker}}
   WorkerConsumer: {
     lifetime: Lifetime.Scoped,
     type: function_([
-      type<WorkerProcessFunction<{{pascal_case_name}}EventRecord>>(),
-      type<WorkerFailureHandler<{{pascal_case_name}}EventRecord>>()
+      type<WorkerProcessFunction<I{{pascal_case_name}}EventRecord>>(),
+      type<WorkerFailureHandler<I{{pascal_case_name}}EventRecord>>()
     ],
-      type<{{worker_type}}WorkerConsumer<{{pascal_case_name}}EventRecord, {{worker_type}}WorkerOptions>>()
+      type<{{worker_type}}WorkerConsumer<I{{pascal_case_name}}EventRecord, {{worker_type}}WorkerOptions>>()
     ),
     factory: 
       {{{worker_consumer_factory}}}

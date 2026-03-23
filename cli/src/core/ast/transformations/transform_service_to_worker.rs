@@ -153,7 +153,25 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
         &registrations_text,
     )?;
 
-    // Add event record entity import
+    // Add event record interface type import (used in type positions)
+    let event_record_type_text = format!(
+        "import type {{ I{}EventRecord }} from './domain/types/{}EventRecord.types';",
+        pascal_case_name,
+        project_name.to_case(Case::Camel)
+    );
+    let mut event_record_type_import =
+        parse_ast_program(&allocator, &event_record_type_text, SourceType::ts());
+    inject_into_import_statement(
+        &mut program,
+        &mut event_record_type_import,
+        &format!(
+            "./domain/types/{}EventRecord.types",
+            project_name.to_case(Case::Camel)
+        ),
+        &registrations_text,
+    )?;
+
+    // Add event record entity import (used at runtime in database worker factory)
     let event_record_text = format!(
         "import {{ {}EventRecord }} from './persistence/entities/{}EventRecord.entity';",
         pascal_case_name,
@@ -267,10 +285,10 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
                 lifetime: Lifetime.Scoped,
                 type: function_(
                     [
-                        type<WorkerProcessFunction<{}EventRecord>>(),
-                        type<WorkerFailureHandler<{}EventRecord>>()
+                        type<WorkerProcessFunction<I{}EventRecord>>(),
+                        type<WorkerFailureHandler<I{}EventRecord>>()
                     ],
-                    type<{}WorkerConsumer<{}EventRecord, {}WorkerOptions>>()
+                    type<{}WorkerConsumer<I{}EventRecord, {}WorkerOptions>>()
                 ),
                 factory: {}
             }}
@@ -368,7 +386,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
   OpenTelemetryCollector: {
     lifetime: Lifetime.Singleton,
@@ -436,6 +454,12 @@ export const createDependencyContainer = (envFilePath: string) => ({
         // Verify WorkerConsumer and WorkerProducer were added
         assert!(transformed_code.contains("WorkerConsumer"));
         assert!(transformed_code.contains("WorkerProducer"));
+
+        // Verify event record interface type is imported (not InferEntity)
+        assert!(
+            transformed_code.contains("EventRecord.types"),
+            "Expected EventRecord.types import in transformed code: {transformed_code}"
+        );
     }
 
     #[test]

@@ -1,21 +1,19 @@
-import { SqlBaseEntity } from '@forklaunch/blueprint-core';
-import { Entity, ManyToOne, Property } from '@mikro-orm/core';
+import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
+import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 import { User } from './user.entity';
 
-@Entity()
-export class Session extends SqlBaseEntity {
-  @ManyToOne('User')
-  user!: User;
+export const Session = defineEntity({
+  name: 'Session',
+  properties: {
+    ...sqlBaseProperties,
+    user: () => p.manyToOne(User),
+    token: p.string(),
+    expiresAt: p.datetime(),
+    ipAddress: p.string().nullable(),
+    userAgent: p.string().nullable(),
+    activeOrganizationId: p.string().nullable(),
+    activeTeamId: p.string().nullable()
+  }
+});
 
-  @Property()
-  token!: string;
-
-  @Property()
-  expiresAt!: Date;
-
-  @Property()
-  ipAddress?: string;
-
-  @Property()
-  userAgent?: string;
-}
+export type Session = InferEntity<typeof Session>;

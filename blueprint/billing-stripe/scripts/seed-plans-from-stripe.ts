@@ -136,7 +136,7 @@ async function seedPlans() {
       existing.providerFields = product;
       existing.updatedAt = new Date();
 
-      await em.persistAndFlush(existing);
+      await em.persist(existing).flush();
       console.log(`  ✓ Updated: ${planName}`);
     } else {
       console.log(`  + Creating new plan: ${planName}`);
@@ -153,12 +153,10 @@ async function seedPlans() {
         active: product.active,
         features: JSON.parse(product.metadata.features || '[]'),
         providerFields: product,
-        billingProvider: BillingProviderEnum.STRIPE,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        billingProvider: BillingProviderEnum.STRIPE
       });
 
-      await em.persistAndFlush(plan);
+      await em.persist(plan).flush();
       console.log(`  ✓ Created: ${planName}`);
       seeded++;
     }

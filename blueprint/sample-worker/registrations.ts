@@ -35,7 +35,8 @@ import {
   WorkerFailureHandler,
   WorkerProcessFunction
 } from '@forklaunch/interfaces-worker/types';
-import { EntityManager, ForkOptions, MikroORM } from '@mikro-orm/core';
+import { ForkOptions } from '@mikro-orm/core';
+import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
 import mikroOrmOptionsConfig from './mikro-orm.config';
 import { SampleWorkerEventRecord } from './persistence/entities';
 import { BaseSampleWorkerService } from './services/sampleWorker.service';
@@ -175,7 +176,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
   RedisWorkerOptions: {
     lifetime: Lifetime.Singleton,
@@ -411,12 +412,14 @@ const serviceDependencies = runtimeDependencies.chain({
     lifetime: Lifetime.Scoped,
     type: BaseSampleWorkerService,
     factory: ({
+      EntityManager,
       SampleWorkerDatabaseProducer,
       SampleWorkerBullMqProducer,
       SampleWorkerKafkaProducer,
       SampleWorkerRedisProducer
     }) =>
       new BaseSampleWorkerService(
+        EntityManager,
         SampleWorkerDatabaseProducer,
         SampleWorkerBullMqProducer,
         SampleWorkerRedisProducer,

@@ -11,10 +11,11 @@ import {
   UpdateOrganizationDto
 } from '@forklaunch/interfaces-iam/types';
 import { AnySchemaValidator } from '@forklaunch/validator';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, FilterQuery, InferEntity } from '@mikro-orm/core';
 import { OrganizationDtos } from '../domain/types/iamDto.types';
 import { OrganizationEntities } from '../domain/types/iamEntities.types';
 import { OrganizationMappers } from '../domain/types/organization.mapper.types';
+import { Organization } from '../persistence/entities';
 
 export class BaseOrganizationService<
   SchemaValidator extends AnySchemaValidator,
@@ -87,14 +88,15 @@ export class BaseOrganizationService<
     if (em) {
       await em.persist(organization);
     } else {
-      await this.em.persistAndFlush(organization);
+      await this.em.persist(organization).flush();
     }
 
     return this.mappers.OrganizationMapper.toDto(organization);
   }
 
   async getOrganization(
-    idDto: IdDto,
+    idDto: IdDto &
+      FilterQuery<InferEntity<MapperEntities['OrganizationMapper']>>,
     em?: EntityManager
   ): Promise<MapperDomains['OrganizationMapper']> {
     if (this.evaluatedTelemetryOptions.logging) {
@@ -102,15 +104,12 @@ export class BaseOrganizationService<
     }
 
     const organization = await (em ?? this.em).findOneOrFail(
-      'Organization',
-      idDto,
-      {
-        populate: ['id', '*']
-      }
+      this.mappers.OrganizationMapper.entity as typeof Organization,
+      idDto
     );
 
     return this.mappers.OrganizationMapper.toDto(
-      organization as MapperEntities['OrganizationMapper']
+      organization as InferEntity<MapperEntities['OrganizationMapper']>
     );
   }
 
@@ -136,21 +135,31 @@ export class BaseOrganizationService<
     if (em) {
       await em.persist(updatedOrganization);
     } else {
-      await this.em.persistAndFlush(updatedOrganization);
+      await this.em.persist(updatedOrganization).flush();
     }
 
     return this.mappers.OrganizationMapper.toDto(updatedOrganization);
   }
 
-  async deleteOrganization(idDto: IdDto, em?: EntityManager): Promise<void> {
+  async deleteOrganization(
+    idDto: IdDto &
+      FilterQuery<InferEntity<MapperEntities['OrganizationMapper']>>,
+    em?: EntityManager
+  ): Promise<void> {
     if (this.evaluatedTelemetryOptions.logging) {
       this.openTelemetryCollector.info('Deleting organization', idDto);
     }
 
     if (em) {
-      await em.nativeDelete('Organization', idDto);
+      await em.nativeDelete(
+        this.mappers.OrganizationMapper.entity as typeof Organization,
+        idDto
+      );
     } else {
-      await this.em.nativeDelete('Organization', idDto);
+      await this.em.nativeDelete(
+        this.mappers.OrganizationMapper.entity as typeof Organization,
+        idDto
+      );
     }
   }
 }

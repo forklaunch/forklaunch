@@ -56,9 +56,7 @@ export const setupTestData = async (em: EntityManager) => {
 
   em.create({{pascal_case_name}}Record, {
     id: '123e4567-e89b-12d3-a456-426614174000',
-    message: 'Test message',
-    createdAt: new Date(),
-    updatedAt: new Date()
+    message: 'Test message'
   });
 
   await em.flush();

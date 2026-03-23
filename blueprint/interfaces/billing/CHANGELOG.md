@@ -1,5 +1,11 @@
 # @forklaunch/interfaces-billing
 
+## 0.9.0
+
+### Minor Changes
+
+- MikroOrm v7 upgrade
+
 ## 0.8.23
 
 ### Patch Changes

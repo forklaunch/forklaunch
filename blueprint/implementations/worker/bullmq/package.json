@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/implementation-worker-bullmq",
-  "version": "0.8.23",
+  "version": "0.9.0",
   "description": "BullMQ implementation for forklaunch workers",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -54,19 +54,19 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/core": "^0.18.15",
+    "@forklaunch/core": "^0.19.5",
     "@forklaunch/interfaces-worker": "workspace:*",
-    "@forklaunch/internal": "^0.3.40",
+    "@forklaunch/internal": "^0.4.5",
     "@sinclair/typebox": "^0.34.48",
     "bullmq": "^5.71.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@typescript/native-preview": "7.0.0-dev.20260312.1",
+    "@typescript/native-preview": "7.0.0-dev.20260320.1",
     "depcheck": "^1.4.7",
-    "eslint": "^10.0.3",
+    "eslint": "^10.1.0",
     "prettier": "^3.8.1",
     "typedoc": "^0.28.17",
-    "typescript-eslint": "^8.57.0"
+    "typescript-eslint": "^8.57.1"
   }
 }

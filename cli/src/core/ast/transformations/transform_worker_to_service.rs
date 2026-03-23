@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use oxc_allocator::Allocator;
+use oxc_allocator::{Allocator, CloneIn};
 use oxc_ast::ast::SourceType;
 use oxc_codegen::{Codegen, CodegenOptions};
 
@@ -51,6 +51,20 @@ pub(crate) fn transform_registrations_ts_worker_to_service(
     for import_prefix in worker_import_prefixes {
         let _ = delete_import_statements_with_prefix(&allocator, &mut program, import_prefix);
     }
+
+    // Delete EventRecord-related imports (type interface and entity alias)
+    // These contain "EventRecord" in the import source path
+    let mut new_body = oxc_allocator::Vec::new_in(&allocator);
+    for stmt in program.body.iter() {
+        if let oxc_ast::ast::Statement::ImportDeclaration(import) = stmt {
+            let source = import.source.value.as_str();
+            if source.contains("EventRecord") {
+                continue; // Skip EventRecord imports
+            }
+        }
+        new_body.push(stmt.clone_in(&allocator));
+    }
+    program.body = new_body;
 
     // Delete Redis import (often added by worker implementations like BullMQ)
     delete_redis_import(&allocator, &mut program);
@@ -143,7 +157,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
   WorkerOptions: {
     lifetime: Lifetime.Singleton,

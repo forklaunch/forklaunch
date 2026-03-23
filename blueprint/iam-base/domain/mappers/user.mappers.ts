@@ -1,6 +1,6 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, InferEntity, wrap } from '@mikro-orm/core';
 import { Organization } from '../../persistence/entities/organization.entity';
 import { Role } from '../../persistence/entities/role.entity';
 import { User } from '../../persistence/entities/user.entity';
@@ -13,20 +13,20 @@ export const CreateUserMapper = requestMapper({
   entity: User,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return User.create(
-        {
-          ...dto,
-          organization: await em.findOne(Organization, {
-            id: dto.organization
-          }),
-          roles: await em.findAll(Role, {
-            where: { id: { $in: dto.roles } }
-          }),
-          createdAt: new Date(),
-          updatedAt: new Date()
-        },
-        em
-      );
+      return em.create(User, {
+        email: dto.email,
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        phoneNumber: dto.phoneNumber ?? null,
+        organization: dto.organization
+          ? await em.findOne(Organization, { id: dto.organization })
+          : null,
+        roles: await em.find(Role, {
+          id: { $in: dto.roles }
+        }),
+        subscription: dto.subscription ?? null,
+        providerFields: dto.providerFields ?? null
+      });
     }
   }
 });
@@ -37,7 +37,16 @@ export const UpdateUserMapper = requestMapper({
   entity: User,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return User.update(dto, em);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { roles, password, ...rest } = dto;
+      const entity = await em.findOneOrFail(User, { id: rest.id });
+      em.assign(entity, {
+        ...rest,
+        ...(roles !== undefined && {
+          roles: await em.find(Role, { id: { $in: roles } })
+        })
+      });
+      return entity;
     }
   }
 });
@@ -47,10 +56,11 @@ export const UserMapper = responseMapper({
   schema: UserSchemas.UserSchema,
   entity: User,
   mapperDefinition: {
-    toDto: async (entity: User) => {
-      const read = await entity.read();
+    toDto: async (entity: InferEntity<typeof User>) => {
+      const pojo = wrap(entity).toPOJO();
       return {
-        ...read,
+        ...pojo,
+        organization: pojo.organization?.id ?? undefined,
         phoneNumber: entity.phoneNumber ?? undefined,
         subscription: entity.subscription ?? undefined,
         roles: await Promise.all(

@@ -1,5 +1,62 @@
 # @forklaunch/core
 
+## 0.19.5
+
+### Patch Changes
+
+- Another fix
+- Updated dependencies
+  - @forklaunch/validator@0.11.5
+  - @forklaunch/common@0.7.5
+
+## 0.19.4
+
+### Patch Changes
+
+- correct extension for mappers
+- Updated dependencies
+  - @forklaunch/validator@0.11.4
+  - @forklaunch/common@0.7.4
+
+## 0.19.3
+
+### Patch Changes
+
+- mapper fix
+- Updated dependencies
+  - @forklaunch/validator@0.11.3
+  - @forklaunch/common@0.7.3
+
+## 0.19.2
+
+### Patch Changes
+
+- Update packages and remove EntityMapper wrapping
+- Updated dependencies
+  - @forklaunch/validator@0.11.2
+  - @forklaunch/common@0.7.2
+
+## 0.19.1
+
+### Patch Changes
+
+- package upgrades
+- Updated dependencies
+  - @forklaunch/validator@0.11.1
+  - @forklaunch/common@0.7.1
+
+## 0.19.0
+
+### Minor Changes
+
+- update packages and update to mikro orm v7
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/validator@0.11.0
+  - @forklaunch/common@0.7.0
+
 ## 0.18.15
 
 ### Patch Changes

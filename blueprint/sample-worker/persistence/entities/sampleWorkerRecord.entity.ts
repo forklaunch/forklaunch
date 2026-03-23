@@ -1,16 +1,17 @@
-import { SqlBaseEntity } from '@forklaunch/blueprint-core';
-import { Entity, Property } from '@mikro-orm/core';
+import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
+import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 
-// Entity class that defines the structure of the SampleWorkerEventRecord table
-@Entity()
-export class SampleWorkerEventRecord extends SqlBaseEntity {
-  // message property that stores a message string
-  @Property()
-  message!: string;
+// Entity that defines the structure of the SampleWorkerEventRecord table
+export const SampleWorkerEventRecord = defineEntity({
+  name: 'SampleWorkerEventRecord',
+  properties: {
+    ...sqlBaseProperties,
+    message: p.string(),
+    processed: p.boolean(),
+    retryCount: p.integer()
+  }
+});
 
-  @Property()
-  processed!: boolean;
-
-  @Property()
-  retryCount!: number;
-}
+export type SampleWorkerEventRecord = InferEntity<
+  typeof SampleWorkerEventRecord
+>;

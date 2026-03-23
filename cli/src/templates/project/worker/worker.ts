@@ -5,7 +5,7 @@ import {
 import { getEnvVar } from '@forklaunch/common';
 import dotenv from 'dotenv';
 import { createDependencyContainer } from './registrations';
-import { {{pascal_case_name}}EventRecord} from './persistence/entities/{{camel_case_name}}EventRecord.entity';
+import type { I{{pascal_case_name}}EventRecord } from './domain/types/{{camel_case_name}}EventRecord.types';
 
 const envFilePath = getEnvVar('DOTENV_FILE_PATH');
 dotenv.config({ path: envFilePath });
@@ -13,7 +13,7 @@ const { ci, tokens } = createDependencyContainer(envFilePath);
 
 const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 
-const processEvents: WorkerProcessFunction<{{pascal_case_name}}EventRecord> =
+const processEvents: WorkerProcessFunction<I{{pascal_case_name}}EventRecord> =
   async (events) => {
     const failedEvents = [];
 
@@ -34,7 +34,7 @@ const processEvents: WorkerProcessFunction<{{pascal_case_name}}EventRecord> =
     return failedEvents;
   };
 
-const processErrors: WorkerFailureHandler<{{pascal_case_name}}EventRecord> = async (
+const processErrors: WorkerFailureHandler<I{{pascal_case_name}}EventRecord> = async (
   events
 ) => {
   events.forEach((event) => {

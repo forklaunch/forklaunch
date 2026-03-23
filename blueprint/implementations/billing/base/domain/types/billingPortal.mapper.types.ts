@@ -1,4 +1,4 @@
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, InferEntity } from '@mikro-orm/core';
 import { BaseBillingDtos } from './baseBillingDto.types';
 import { BaseBillingEntities } from './baseBillingEntity.types';
 
@@ -7,22 +7,25 @@ export type BillingPortalMappers<
   MapperDomains extends BaseBillingDtos
 > = {
   BillingPortalMapper: {
+    entity: MapperEntities['BillingPortalMapper'];
     toDto: (
-      entity: MapperEntities['BillingPortalMapper']
+      entity: InferEntity<MapperEntities['BillingPortalMapper']>
     ) => Promise<MapperDomains['BillingPortalMapper']>;
   };
   CreateBillingPortalMapper: {
+    entity: MapperEntities['CreateBillingPortalMapper'];
     toEntity: (
       dto: MapperDomains['CreateBillingPortalMapper'],
       em: EntityManager,
       ...args: unknown[]
-    ) => Promise<MapperEntities['CreateBillingPortalMapper']>;
+    ) => Promise<InferEntity<MapperEntities['CreateBillingPortalMapper']>>;
   };
   UpdateBillingPortalMapper: {
+    entity: MapperEntities['UpdateBillingPortalMapper'];
     toEntity: (
       dto: MapperDomains['UpdateBillingPortalMapper'],
       em: EntityManager,
       ...args: unknown[]
-    ) => Promise<MapperEntities['UpdateBillingPortalMapper']>;
+    ) => Promise<InferEntity<MapperEntities['UpdateBillingPortalMapper']>>;
   };
 };

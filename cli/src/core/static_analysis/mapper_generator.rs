@@ -29,10 +29,12 @@ impl MapperGenerator {
     pub fn generate_mapper_file(&self) -> String {
         let pascal_case_name = self.entity.name.replace("Record", "").replace("EventRecord", "");
         let camel_case_name = pascal_case_name.to_case(Case::Camel);
+        // Entity const is PascalCase (e.g., "UserRecord")
+        let entity_const_name = &self.entity.name;
 
-        let imports = self.generate_imports(&pascal_case_name, &camel_case_name);
-        let request_mapper = self.generate_request_mapper(&pascal_case_name);
-        let response_mapper = self.generate_response_mapper(&pascal_case_name);
+        let imports = self.generate_imports(&pascal_case_name, &camel_case_name, &entity_const_name);
+        let request_mapper = self.generate_request_mapper(&pascal_case_name, &entity_const_name);
+        let response_mapper = self.generate_response_mapper(&pascal_case_name, &entity_const_name);
 
         format!(
             "{}\n\n{}\n\n{}",
@@ -40,10 +42,10 @@ impl MapperGenerator {
         )
     }
 
-    fn generate_imports(&self, pascal_case_name: &str, camel_case_name: &str) -> String {
+    fn generate_imports(&self, pascal_case_name: &str, camel_case_name: &str, entity_const_name: &str) -> String {
         let entity_suffix = if self.is_worker { "EventRecord" } else { "Record" };
         let em_import = if !self.is_worker {
-            "\nimport { EntityManager } from '@mikro-orm/core';"
+            "EntityManager, "
         } else {
             ""
         };
@@ -53,13 +55,13 @@ impl MapperGenerator {
   requestMapper,
   responseMapper
 }} from '@forklaunch/core/mappers';
-import {{ schemaValidator }} from '@{}/core';{}
-import {{ {}{} }} from '../../persistence/entities/{}{}.entity';
+import {{ schemaValidator }} from '@{}/core';
+import {{ {}InferEntity, wrap }} from '@mikro-orm/core';
+import {{ {} }} from '../../persistence/entities/{}{}.entity';
 import {{ {}RequestSchema, {}ResponseSchema }} from '../schemas/{}.schema';"#,
             self.app_name,
             em_import,
-            pascal_case_name,
-            entity_suffix,
+            entity_const_name,
             camel_case_name,
             entity_suffix,
             pascal_case_name,
@@ -68,63 +70,54 @@ import {{ {}RequestSchema, {}ResponseSchema }} from '../schemas/{}.schema';"#,
         )
     }
 
-    fn generate_request_mapper(&self, pascal_case_name: &str) -> String {
-        let entity_suffix = if self.is_worker { "EventRecord" } else { "Record" };
+    fn generate_request_mapper(&self, pascal_case_name: &str, entity_const_name: &str) -> String {
         let to_entity_body = self.generate_to_entity_body();
         let em_param = if !self.is_worker {
             ", em: EntityManager"
         } else {
             ""
         };
-        let em_arg = if !self.is_worker { ", em" } else { "" };
 
         format!(
             r#"// RequestMapper const that maps a request schema to an entity
 export const {}RequestMapper = requestMapper({{
   schemaValidator,
   schema: {}RequestSchema,
-  entity: {}{},
+  entity: {},
   mapperDefinition: {{
     toEntity: async (dto{}) => {{
-      return {}{}.create({{
+      return em.create({}, {{
 {}
-      }}{});
+      }});
     }}
   }}
 }});"#,
             pascal_case_name,
             pascal_case_name,
-            pascal_case_name,
-            entity_suffix,
+            entity_const_name,
             em_param,
-            pascal_case_name,
-            entity_suffix,
+            entity_const_name,
             to_entity_body,
-            em_arg
         )
     }
 
-    fn generate_response_mapper(&self, pascal_case_name: &str) -> String {
-        let entity_suffix = if self.is_worker { "EventRecord" } else { "Record" };
-
+    fn generate_response_mapper(&self, pascal_case_name: &str, entity_const_name: &str) -> String {
         format!(
             r#"// ResponseMapper const that maps an entity to a response schema
 export const {}ResponseMapper = responseMapper({{
   schemaValidator,
   schema: {}ResponseSchema,
-  entity: {}{},
+  entity: {},
   mapperDefinition: {{
-    toDto: async (entity: {}{}) => {{
-      return await entity.read();
+    toDto: async (entity: InferEntity<typeof {}>) => {{
+      return wrap(entity).toPOJO();
     }}
   }}
 }});"#,
             pascal_case_name,
             pascal_case_name,
-            pascal_case_name,
-            entity_suffix,
-            pascal_case_name,
-            entity_suffix
+            entity_const_name,
+            entity_const_name
         )
     }
 
@@ -147,17 +140,9 @@ export const {}ResponseMapper = responseMapper({{
             lines.push("        retryCount: 0,".to_string());
         }
 
-        // Add auto-populated timestamp fields if entity extends a base class or has these fields
-        // All entities that extend SqlBaseEntity, NoSqlBaseEntity, etc. have these fields
-        if self.entity.extends.is_some() || self.has_entity_property("createdAt") {
-            lines.push("        createdAt: new Date(),".to_string());
-        }
-        if self.entity.extends.is_some() || self.has_entity_property("updatedAt") {
-            lines.push("        updatedAt: new Date()".to_string());
-        } else {
-            if let Some(last) = lines.last_mut() {
-                *last = last.trim_end_matches(',').to_string();
-            }
+        // Remove trailing comma from last line
+        if let Some(last) = lines.last_mut() {
+            *last = last.trim_end_matches(',').to_string();
         }
 
         lines.join("\n")
@@ -238,10 +223,6 @@ export const {}ResponseMapper = responseMapper({{
         None
     }
 
-    fn has_entity_property(&self, name: &str) -> bool {
-        self.entity.properties.iter().any(|p| p.name == name)
-    }
-
     fn extract_relation_entity(&self, type_name: &str) -> String {
         // Extract "Role" from "Collection<Role>"
         if type_name.starts_with("Collection<") && type_name.ends_with('>') {
@@ -280,7 +261,7 @@ mod tests {
 
         let entity = EntityDefinition {
             name: "UserRecord".to_string(),
-            extends: Some("SqlBaseEntity".to_string()),
+            extends: Some("sqlBaseProperties".to_string()),
             properties: vec![
                 EntityProperty {
                     name: "name".to_string(),
@@ -314,7 +295,8 @@ mod tests {
         assert!(result.contains("UserRequestSchema"));
         assert!(result.contains("name: dto.name"));
         assert!(result.contains("email: dto.email"));
-        assert!(result.contains("createdAt: new Date()"));
+        // Timestamps are handled by sqlBaseProperties hooks, not in mapper
+        assert!(!result.contains("createdAt: new Date()"));
     }
 
     #[test]
@@ -345,7 +327,7 @@ mod tests {
 
         let entity = EntityDefinition {
             name: "UserRecord".to_string(),
-            extends: Some("SqlBaseEntity".to_string()),
+            extends: Some("sqlBaseProperties".to_string()),
             properties: vec![
                 EntityProperty {
                     name: "name".to_string(),

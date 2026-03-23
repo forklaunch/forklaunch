@@ -20,7 +20,8 @@ import {
   BaseSubscriptionService
 } from '@forklaunch/implementation-billing-base/services';
 import { RedisTtlCache } from '@forklaunch/infrastructure-redis';
-import { EntityManager, ForkOptions, MikroORM } from '@mikro-orm/core';
+import { ForkOptions } from '@mikro-orm/core';
+import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
 import { BillingProviderEnum } from './domain/enum/billingProvider.enum';
 import { CurrencyEnum } from './domain/enum/currency.enum';
 import { PartyEnum } from './domain/enum/party.enum';
@@ -140,7 +141,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
   OpenTelemetryCollector: {
     lifetime: Lifetime.Singleton,

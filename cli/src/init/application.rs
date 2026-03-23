@@ -59,7 +59,7 @@ use crate::{
                 GLOBALS_VERSION, HUSKY_VERSION, HYPER_EXPRESS_VERSION, JEST_TYPES_VERSION,
                 JEST_VERSION, LINT_STAGED_VERSION, MIKRO_ORM_CORE_VERSION,
                 MIKRO_ORM_DATABASE_VERSION, MIKRO_ORM_MIGRATIONS_VERSION,
-                MIKRO_ORM_REFLECTION_VERSION, NODE_GYP_VERSION, OXLINT_VERSION, PRETTIER_VERSION,
+                NODE_GYP_VERSION, OXLINT_VERSION, PRETTIER_VERSION,
                 PROJECT_BUILD_SCRIPT, PROJECT_DOCS_SCRIPT, SORT_PACKAGE_JSON_VERSION,
                 SQLITE3_VERSION, TS_JEST_VERSION, TS_NODE_VERSION, TSX_VERSION, TYPEBOX_VERSION,
                 TYPES_BUILD_SCRIPT, TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION, TYPES_EXPRESS_VERSION,
@@ -1025,7 +1025,7 @@ impl CliCommand for ApplicationCommand {
                         mikro_orm_core: Some(MIKRO_ORM_CORE_VERSION.to_string()),
                         mikro_orm_migrations: Some(MIKRO_ORM_MIGRATIONS_VERSION.to_string()),
                         mikro_orm_database: Some(MIKRO_ORM_DATABASE_VERSION.to_string()),
-                        mikro_orm_reflection: Some(MIKRO_ORM_REFLECTION_VERSION.to_string()),
+                        mikro_orm_reflection: None,
                         opentelemetry_api: None,
                         typebox: if service_data.is_typebox {
                             Some(TYPEBOX_VERSION.to_string())

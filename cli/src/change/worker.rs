@@ -56,7 +56,7 @@ use crate::{
             package_json_constants::{
                 BULLMQ_VERSION, INFRASTRUCTURE_REDIS_VERSION, IOREDIS_VERSION,
                 MIKRO_ORM_CORE_VERSION, MIKRO_ORM_DATABASE_VERSION, MIKRO_ORM_MIGRATIONS_VERSION,
-                MIKRO_ORM_REFLECTION_VERSION, WORKER_BULLMQ_VERSION, WORKER_DATABASE_VERSION,
+                WORKER_BULLMQ_VERSION, WORKER_DATABASE_VERSION,
                 WORKER_KAFKA_VERSION, WORKER_REDIS_VERSION,
             },
             project_package_json::ProjectPackageJson,
@@ -227,7 +227,6 @@ fn change_type(
             dependencies.databases = HashSet::from([db.clone()]);
             dependencies.mikro_orm_core = Some(MIKRO_ORM_CORE_VERSION.to_string());
             dependencies.mikro_orm_migrations = Some(MIKRO_ORM_MIGRATIONS_VERSION.to_string());
-            dependencies.mikro_orm_reflection = Some(MIKRO_ORM_REFLECTION_VERSION.to_string());
             dependencies.mikro_orm_database = Some(MIKRO_ORM_DATABASE_VERSION.to_string());
             dependencies.forklaunch_implementation_worker_database =
                 Some(WORKER_DATABASE_VERSION.to_string());
@@ -260,8 +259,8 @@ fn change_type(
                 }
             } else {
                 let database_entity = match db {
-                    Database::MongoDB => "nosql.base.entity.ts",
-                    _ => "sql.base.entity.ts",
+                    Database::MongoDB => "nosql.base.properties.ts",
+                    _ => "sql.base.properties.ts",
                 };
                 let entity_template_path = TEMPLATES_DIR
                     .get_file(
@@ -484,6 +483,25 @@ fn worker_to_service(
                 context: None,
             },
         );
+    }
+
+    // Remove the event record types file (no longer needed after worker→service)
+    let camel_case_name = project_name.to_case(Case::Camel);
+    let event_record_types_path = base_path
+        .join("domain")
+        .join("types")
+        .join(format!("{}EventRecord.types.ts", camel_case_name));
+    if event_record_types_path.exists() {
+        rendered_templates_cache.insert(
+            event_record_types_path.to_string_lossy().to_string(),
+            RenderedTemplate {
+                path: event_record_types_path.clone(),
+                content: String::new(),
+                context: None,
+            },
+        );
+        // Mark for deletion
+        std::fs::remove_file(&event_record_types_path).ok();
     }
 
     if let Some(scripts) = project_package_json.scripts.as_mut() {

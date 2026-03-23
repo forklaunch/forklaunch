@@ -1,6 +1,6 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, InferEntity, wrap } from '@mikro-orm/core';
 import Stripe from 'stripe';
 import { BillingPortal } from '../../persistence/entities/billingPortal.entity';
 import { BillingPortalSchemas } from '../schemas';
@@ -15,15 +15,12 @@ export const CreateBillingPortalMapper = requestMapper({
       em: EntityManager,
       providerFields: Stripe.BillingPortal.Session
     ) => {
-      return BillingPortal.create(
-        {
-          ...dto,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          providerFields
-        },
-        em
-      );
+      return em.create(BillingPortal, {
+        customerId: dto.customerId,
+        uri: dto.uri ?? null,
+        expiresAt: dto.expiresAt,
+        providerFields
+      });
     }
   }
 });
@@ -38,13 +35,14 @@ export const UpdateBillingPortalMapper = requestMapper({
       em: EntityManager,
       providerFields: Stripe.BillingPortal.Session
     ) => {
-      return BillingPortal.update(
-        {
-          ...dto,
-          providerFields
-        },
-        em
-      );
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { stripeFields, ...rest } = dto;
+      const entity = await em.findOneOrFail(BillingPortal, { id: rest.id });
+      em.assign(entity, {
+        ...rest,
+        providerFields
+      });
+      return entity;
     }
   }
 });
@@ -54,9 +52,10 @@ export const BillingPortalMapper = responseMapper({
   schema: BillingPortalSchemas.BillingPortalSchema,
   entity: BillingPortal,
   mapperDefinition: {
-    toDto: async (entity: BillingPortal) => {
+    toDto: async (entity: InferEntity<typeof BillingPortal>) => {
       return {
-        ...(await entity.read()),
+        ...wrap(entity).toPOJO(),
+        uri: entity.uri ?? undefined,
         stripeFields: entity.providerFields
       };
     }

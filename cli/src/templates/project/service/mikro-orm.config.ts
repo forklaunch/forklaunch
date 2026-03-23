@@ -1,9 +1,8 @@
 import { createConfigInjector, getEnvVar, Lifetime } from '@forklaunch/core/services';
 import { Migrator } from '@mikro-orm/migrations{{#is_mongo}}-mongodb{{/is_mongo}}';
-import { TsMorphMetadataProvider } from '@mikro-orm/reflection';
 import { number, SchemaValidator, string } from '@{{app_name}}/core';
-import { defineConfig{{^is_mongo}}, Platform, TextType, Type{{/is_mongo}} } from '@mikro-orm/core';
-import { {{db_driver}} } from '@mikro-orm/{{database}}';
+{{^is_mongo}}import { Platform, TextType, Type } from '@mikro-orm/core';{{/is_mongo}}
+import { defineConfig } from '@mikro-orm/{{database}}';
 import dotenv from 'dotenv';
 import * as entities from './persistence/entities';
 
@@ -54,8 +53,7 @@ export const validConfigInjector = configInjector.validateConfigSingletons(
 const tokens = validConfigInjector.tokens();
 
 //! Define the mikro-orm options config
-const mikroOrmOptionsConfig = defineConfig({
-  driver: {{db_driver}},{{#is_mongo}}
+const mikroOrmOptionsConfig = defineConfig({ {{#is_mongo}}
   clientUrl: `mongodb://${validConfigInjector.resolve(
     tokens.DB_USER
   )}:${validConfigInjector.resolve(
@@ -83,7 +81,6 @@ const mikroOrmOptionsConfig = defineConfig({
     tokens.DB_PORT
   ),{{/is_in_memory_database}}{{/is_mongo}}
   entities: Object.values(entities),
-  metadataProvider: TsMorphMetadataProvider,
   debug: validConfigInjector.resolve(
     tokens.NODE_ENV
   ) === 'development',
