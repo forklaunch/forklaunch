@@ -9,9 +9,7 @@ import { StatusEnum } from '../domain/enum/status.enum';
 export const billingProvider = {
   billingProvider: BillingProviderEnum.STRIPE,
   externalId: '1234567890',
-  providerFields: {},
-  createdAt: new Date(),
-  updatedAt: new Date()
+  providerFields: {}
 };
 
 export const paymentLink = {
@@ -19,9 +17,7 @@ export const paymentLink = {
   currency: CurrencyEnum.USD,
   paymentMethods: [PaymentMethodEnum.CREDIT_CARD],
   status: StatusEnum.EXPIRED,
-  providerFields: null,
-  createdAt: new Date(),
-  updatedAt: new Date()
+  providerFields: null
 };
 
 export const plan = {
@@ -34,9 +30,7 @@ export const plan = {
   features: ['feature1', 'feature2'],
   providerFields: {},
   externalId: '1234567890',
-  billingProvider: BillingProviderEnum.STRIPE,
-  createdAt: new Date(),
-  updatedAt: new Date()
+  billingProvider: BillingProviderEnum.STRIPE
 };
 
 export const checkoutSession = {
@@ -48,9 +42,7 @@ export const checkoutSession = {
   cancelRedirectUri: 'https://example.com/cancel',
   expiresAt: new Date(),
   status: StatusEnum.EXPIRED,
-  providerFields: null,
-  createdAt: new Date(),
-  updatedAt: new Date()
+  providerFields: null
 };
 
 export const subscription = {
@@ -64,7 +56,5 @@ export const subscription = {
   billingProvider: BillingProviderEnum.STRIPE,
   startDate: new Date(),
   endDate: new Date(),
-  status: 'active',
-  createdAt: new Date(),
-  updatedAt: new Date()
+  status: 'active'
 };

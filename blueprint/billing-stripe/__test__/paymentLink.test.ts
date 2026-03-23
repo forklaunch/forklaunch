@@ -258,9 +258,7 @@ describe('PaymentLink Routes E2E Tests with PostgreSQL Container', () => {
         paymentMethods: [PaymentMethodEnum.CARD],
         currency: CurrencyEnum.GBP,
         description: 'An updated test payment link',
-        status: StatusEnum.COMPLETED,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        status: StatusEnum.COMPLETED
       };
 
       const response = await updatePaymentLinkRoute.sdk.updatePaymentLink({

@@ -20,9 +20,7 @@ export const SampleWorkerRequestMapper = requestMapper({
       return em.create(SampleWorkerEventRecord, {
         ...dto,
         processed: false,
-        retryCount: 0,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        retryCount: 0
       });
     }
   }

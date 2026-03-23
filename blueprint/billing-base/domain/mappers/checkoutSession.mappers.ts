@@ -19,9 +19,7 @@ export const CreateCheckoutSessionMapper = requestMapper({
     toEntity: async (dto, em: EntityManager) => {
       return em.create(CheckoutSession, {
         ...dto,
-        providerFields: dto.providerFields ?? null,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        providerFields: dto.providerFields ?? null
       });
     }
   }
@@ -38,7 +36,7 @@ export const UpdateCheckoutSessionMapper = requestMapper({
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
       const entity = await em.findOneOrFail(CheckoutSession, { id: dto.id });
-      em.assign(entity, { ...dto, updatedAt: new Date() });
+      em.assign(entity, { ...dto });
       return entity;
     }
   }

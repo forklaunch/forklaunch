@@ -812,8 +812,6 @@ export const {pascal_case_name}EventRecord = defineEntity({{
 
 export interface I{pascal_case_name}EventRecord extends WorkerEventEntity {{
   message: string;
-  createdAt: Date;
-  updatedAt: Date;
 }}
 "#,
         pascal_case_name = pascal_case_name

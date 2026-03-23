@@ -12,9 +12,7 @@ export const CreateBillingPortalMapper = requestMapper({
     toEntity: async (dto, em: EntityManager) => {
       return em.create(BillingPortal, {
         ...dto,
-        providerFields: dto.providerFields ?? null,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        providerFields: dto.providerFields ?? null
       });
     }
   }
@@ -27,7 +25,7 @@ export const UpdateBillingPortalMapper = requestMapper({
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
       const entity = await em.findOneOrFail(BillingPortal, { id: dto.id });
-      em.assign(entity, { ...dto, updatedAt: new Date() });
+      em.assign(entity, { ...dto });
       return entity;
     }
   }

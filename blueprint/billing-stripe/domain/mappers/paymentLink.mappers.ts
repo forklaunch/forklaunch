@@ -22,9 +22,7 @@ export const CreatePaymentLinkMapper = requestMapper({
         currency: dto.currency,
         description: null,
         status: dto.status,
-        providerFields,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        providerFields
       });
     }
   }
@@ -45,8 +43,7 @@ export const UpdatePaymentLinkMapper = requestMapper({
       const entity = await em.findOneOrFail(PaymentLink, { id: rest.id });
       em.assign(entity, {
         ...rest,
-        providerFields,
-        updatedAt: new Date()
+        providerFields
       });
       return entity;
     }

@@ -21,13 +21,11 @@ export const CreateCheckoutSessionMapper = requestMapper({
         paymentMethods: dto.paymentMethods,
         currency: dto.currency,
         uri: dto.uri,
-        successRedirectUri: dto.successRedirectUri || null,
-        cancelRedirectUri: dto.cancelRedirectUri || null,
+        successRedirectUri: dto.successRedirectUri ?? null,
+        cancelRedirectUri: dto.cancelRedirectUri ?? null,
         expiresAt: dto.expiresAt,
         status: dto.status,
-        providerFields,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        providerFields
       });
     }
   }
@@ -48,8 +46,7 @@ export const UpdateCheckoutSessionMapper = requestMapper({
       const entity = await em.findOneOrFail(CheckoutSession, { id: rest.id });
       em.assign(entity, {
         ...rest,
-        providerFields,
-        updatedAt: new Date()
+        providerFields
       });
       return entity;
     }

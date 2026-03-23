@@ -63,26 +63,20 @@ export const setupTestData = async (em: EntityManager) => {
     domain: 'test.com',
     subscription: 'premium',
     status: OrganizationStatus.ACTIVE,
-    providerFields: null,
-    createdAt: new Date(),
-    updatedAt: new Date()
+    providerFields: null
   });
 
   // Create test permission
   const createdPermission = em.create(Permission, {
     id: '123e4567-e89b-12d3-a456-426614174002',
-    slug: 'read:users',
-    createdAt: new Date(),
-    updatedAt: new Date()
+    slug: 'read:users'
   });
 
   // Create test role
   const createdRole = em.create(Role, {
     id: '123e4567-e89b-12d3-a456-426614174000',
     name: 'admin',
-    permissions: [createdPermission],
-    createdAt: new Date(),
-    updatedAt: new Date()
+    permissions: [createdPermission]
   });
 
   // Create test user
@@ -95,9 +89,7 @@ export const setupTestData = async (em: EntityManager) => {
     organization: createdOrganization,
     roles: [createdRole],
     subscription: 'enterprise',
-    providerFields: [],
-    createdAt: new Date(),
-    updatedAt: new Date()
+    providerFields: []
   });
 
   await em.flush();
@@ -147,9 +139,7 @@ export const mockPermissionData = {
 
 export const mockUpdatePermissionData = {
   id: '123e4567-e89b-12d3-a456-426614174002',
-  slug: 'write:organizations',
-  createdAt: new Date(),
-  updatedAt: new Date()
+  slug: 'write:organizations'
 };
 
 export const mockRoleData = {

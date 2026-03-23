@@ -81,7 +81,6 @@ const mikroOrmOptionsConfig = defineConfig({ {{#is_mongo}}
     tokens.DB_PORT
   ),{{/is_in_memory_database}}{{/is_mongo}}
   entities: Object.values(entities),
-  forceUtcTimezone: false,
   debug: validConfigInjector.resolve(
     tokens.NODE_ENV
   ) === 'development',

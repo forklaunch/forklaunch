@@ -153,9 +153,7 @@ async function seedPlans() {
         active: product.active,
         features: JSON.parse(product.metadata.features || '[]'),
         providerFields: product,
-        billingProvider: BillingProviderEnum.STRIPE,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        billingProvider: BillingProviderEnum.STRIPE
       });
 
       await em.persist(plan).flush();

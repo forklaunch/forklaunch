@@ -20,9 +20,7 @@ export const user = {
   name: 'test',
   firstName: 'Test',
   lastName: 'User',
-  providerFields: null,
-  createdAt: new Date(),
-  updatedAt: new Date()
+  providerFields: null
 } satisfies RequiredEntityData<User>;
 
 export const account = {
@@ -32,9 +30,7 @@ export const account = {
   accessToken: 'test',
   refreshToken: 'test',
   accessTokenExpiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-  refreshTokenExpiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-  createdAt: new Date(),
-  updatedAt: new Date()
+  refreshTokenExpiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24)
 } satisfies RequiredEntityData<Account>;
 
 export const session = {
@@ -42,15 +38,11 @@ export const session = {
   token: 'test',
   expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
   ipAddress: '127.0.0.1',
-  userAgent: 'test',
-  createdAt: new Date(),
-  updatedAt: new Date()
+  userAgent: 'test'
 } satisfies RequiredEntityData<Session>;
 
 export const verification = {
   identifier: 'test',
   value: 'test',
-  expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-  createdAt: new Date(),
-  updatedAt: new Date()
+  expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24)
 } satisfies RequiredEntityData<Verification>;

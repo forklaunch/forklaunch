@@ -16,9 +16,7 @@ export const CreateRoleMapper = requestMapper({
         name: dto.name,
         permissions: dto.permissionIds
           ? await em.find(Permission, { id: { $in: dto.permissionIds } })
-          : [],
-        createdAt: new Date(),
-        updatedAt: new Date()
+          : []
       });
     }
   }
@@ -39,8 +37,7 @@ export const UpdateRoleMapper = requestMapper({
           permissions: await em.find(Permission, {
             id: { $in: permissionIds }
           })
-        }),
-        updatedAt: new Date()
+        })
       });
       return entity;
     }

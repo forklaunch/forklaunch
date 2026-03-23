@@ -87,21 +87,21 @@ export type BasePlanEntities<
     '~entity': (typeof Plan)['~entity'] & {
       cadence: PlanCadenceEnum[keyof PlanCadenceEnum];
       currency: CurrencyEnum[keyof CurrencyEnum];
-      billingProvider: BillingProviderEnum[keyof BillingProviderEnum] | null;
+      billingProvider: BillingProviderEnum[keyof BillingProviderEnum];
     };
   };
   CreatePlanMapper: {
     '~entity': (typeof Plan)['~entity'] & {
       cadence: PlanCadenceEnum[keyof PlanCadenceEnum];
       currency: CurrencyEnum[keyof CurrencyEnum];
-      billingProvider: BillingProviderEnum[keyof BillingProviderEnum] | null;
+      billingProvider: BillingProviderEnum[keyof BillingProviderEnum];
     };
   };
   UpdatePlanMapper: {
     '~entity': (typeof Plan)['~entity'] & {
       cadence: PlanCadenceEnum[keyof PlanCadenceEnum];
       currency: CurrencyEnum[keyof CurrencyEnum];
-      billingProvider: BillingProviderEnum[keyof BillingProviderEnum] | null;
+      billingProvider: BillingProviderEnum[keyof BillingProviderEnum];
     };
   };
 };
@@ -111,19 +111,19 @@ export type BaseSubscriptionEntities<PartyType, BillingProviderType> = {
   SubscriptionMapper: {
     '~entity': (typeof Subscription)['~entity'] & {
       partyType: PartyType[keyof PartyType];
-      billingProvider: BillingProviderType[keyof BillingProviderType] | null;
+      billingProvider: BillingProviderType[keyof BillingProviderType];
     };
   };
   CreateSubscriptionMapper: {
     '~entity': (typeof Subscription)['~entity'] & {
       partyType: PartyType[keyof PartyType];
-      billingProvider: BillingProviderType[keyof BillingProviderType] | null;
+      billingProvider: BillingProviderType[keyof BillingProviderType];
     };
   };
   UpdateSubscriptionMapper: {
     '~entity': (typeof Subscription)['~entity'] & {
       partyType: PartyType[keyof PartyType];
-      billingProvider: BillingProviderType[keyof BillingProviderType] | null;
+      billingProvider: BillingProviderType[keyof BillingProviderType];
     };
   };
 };

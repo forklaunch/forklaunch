@@ -59,9 +59,7 @@ export class Base{{pascal_case_name}}Service implements {{pascal_case_name}}Serv
   ): Promise<{{pascal_case_name}}Response> => {
     // Map from request data to entity (inline DTO → Entity conversion)
     {{^is_worker}}const entity = this.entityManager.create({{pascal_case_name}}Record, {
-      ...data,
-      createdAt: new Date(),
-      updatedAt: new Date()
+      ...data
     });
     await this.entityManager.persist(entity).flush();{{/is_worker}}{{#is_worker}}const entity: I{{pascal_case_name}}EventRecord = {
       id: v4(),

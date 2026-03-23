@@ -67,9 +67,7 @@ export const setupTestData = async (em: EntityManager) => {
     id: '123e4567-e89b-12d3-a456-426614174000',
     message: 'Test message',
     processed: false,
-    retryCount: 0,
-    createdAt: new Date(),
-    updatedAt: new Date()
+    retryCount: 0
   });
 
   await em.flush();

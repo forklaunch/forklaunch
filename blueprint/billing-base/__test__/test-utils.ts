@@ -75,9 +75,7 @@ export const setupTestData = async (em: EntityManager) => {
   em.create(BillingProvider, {
     id: '123e4567-e89b-12d3-a456-426614174001',
     billingProvider: BillingProviderEnum.STRIPE,
-    providerFields: { apiKey: 'test-api-key' },
-    createdAt: new Date(),
-    updatedAt: new Date()
+    providerFields: { apiKey: 'test-api-key' }
   });
 
   em.create(Plan, {
@@ -91,8 +89,6 @@ export const setupTestData = async (em: EntityManager) => {
     features: ['feature1', 'feature2'],
     externalId: 'plan_test_123',
     billingProvider: BillingProviderEnum.STRIPE,
-    createdAt: new Date(),
-    updatedAt: new Date(),
     providerFields: null
   });
 
@@ -107,8 +103,6 @@ export const setupTestData = async (em: EntityManager) => {
     billingProvider: BillingProviderEnum.STRIPE,
     startDate: new Date(),
     status: 'active',
-    createdAt: new Date(),
-    updatedAt: new Date(),
     providerFields: null
   });
 
@@ -122,8 +116,6 @@ export const setupTestData = async (em: EntityManager) => {
     cancelRedirectUri: 'https://example.com/cancel',
     expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     status: StatusEnum.PENDING,
-    createdAt: new Date(),
-    updatedAt: new Date(),
     providerFields: null
   });
 
@@ -134,8 +126,6 @@ export const setupTestData = async (em: EntityManager) => {
     currency: CurrencyEnum.USD,
     description: 'A test payment link',
     status: StatusEnum.PENDING,
-    createdAt: new Date(),
-    updatedAt: new Date(),
     providerFields: null
   });
 
@@ -144,9 +134,7 @@ export const setupTestData = async (em: EntityManager) => {
     customerId: 'cus_test_123',
     uri: 'https://example.com/billing',
     providerFields: { apiKey: 'test-api-key' },
-    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-    createdAt: new Date(),
-    updatedAt: new Date()
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
   });
 
   await em.flush();
@@ -174,9 +162,7 @@ export const mockUpdatePlanData = {
   cadence: 'ANNUALLY' as const,
   features: ['feature1', 'feature2', 'feature3'],
   externalId: 'plan_updated_123',
-  billingProvider: 'stripe' as const,
-  createdAt: new Date(),
-  updatedAt: new Date()
+  billingProvider: 'stripe' as const
 };
 
 export const mockSubscriptionData = {
@@ -203,9 +189,7 @@ export const mockUpdateSubscriptionData = {
   billingProvider: 'stripe' as const,
   startDate: new Date(),
   endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-  status: 'cancelled',
-  createdAt: new Date(),
-  updatedAt: new Date()
+  status: 'cancelled'
 };
 
 export const mockCheckoutSessionData = {

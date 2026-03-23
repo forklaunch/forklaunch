@@ -21,8 +21,6 @@ export const paymentLink = {
   currency: CurrencyEnum.USD,
   paymentMethods: [PaymentMethodEnum.CARD],
   status: StatusEnum.EXPIRED,
-  createdAt: new Date(),
-  updatedAt: new Date(),
   providerFields: {} as Stripe.PaymentLink
 } satisfies RequiredEntityData<InferEntity<typeof PaymentLink>>;
 
@@ -36,9 +34,7 @@ export const plan = {
   features: ['feature1', 'feature2'],
   providerFields: {} as Stripe.Product,
   externalId: '1234567890',
-  billingProvider: BillingProviderEnum.STRIPE,
-  createdAt: new Date(),
-  updatedAt: new Date()
+  billingProvider: BillingProviderEnum.STRIPE
 } satisfies RequiredEntityData<InferEntity<typeof Plan>>;
 
 export const checkoutSession = {
@@ -50,8 +46,6 @@ export const checkoutSession = {
   cancelRedirectUri: 'https://example.com/cancel',
   expiresAt: new Date(),
   status: StatusEnum.EXPIRED,
-  createdAt: new Date(),
-  updatedAt: new Date(),
   providerFields: {} as Stripe.Checkout.Session
 } satisfies RequiredEntityData<InferEntity<typeof CheckoutSession>>;
 
@@ -66,7 +60,5 @@ export const subscription = {
   billingProvider: BillingProviderEnum.STRIPE,
   startDate: new Date(),
   endDate: new Date(),
-  status: 'active',
-  createdAt: new Date(),
-  updatedAt: new Date()
+  status: 'active'
 } satisfies RequiredEntityData<InferEntity<typeof Subscription>>;

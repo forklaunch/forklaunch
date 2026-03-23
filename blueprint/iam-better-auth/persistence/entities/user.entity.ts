@@ -7,7 +7,7 @@ export const User = defineEntity({
     ...sqlBaseProperties,
     email: p.string().unique(),
     emailVerified: p.boolean(),
-    name: p.string().unique(),
+    name: p.string(),
     firstName: p.string(),
     lastName: p.string(),
     image: p.string().nullable(),

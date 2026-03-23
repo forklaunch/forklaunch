@@ -20,16 +20,14 @@ export const CreateSubscriptionMapper = requestMapper({
         partyId: dto.partyId,
         partyType: dto.partyType,
         productId: dto.productId,
-        description: dto.description || null,
+        description: dto.description ?? null,
         active: dto.active,
         externalId: dto.externalId,
         startDate: dto.startDate,
-        endDate: dto.endDate || null,
+        endDate: dto.endDate ?? null,
         status: dto.status,
-        billingProvider: dto.billingProvider || null,
-        providerFields,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        billingProvider: dto.billingProvider,
+        providerFields
       });
     }
   }
@@ -50,8 +48,7 @@ export const UpdateSubscriptionMapper = requestMapper({
       const entity = await em.findOneOrFail(Subscription, { id: rest.id });
       em.assign(entity, {
         ...rest,
-        providerFields,
-        updatedAt: new Date()
+        providerFields
       });
       return entity;
     }

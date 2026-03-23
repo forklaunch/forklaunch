@@ -140,17 +140,9 @@ export const {}ResponseMapper = responseMapper({{
             lines.push("        retryCount: 0,".to_string());
         }
 
-        // Add auto-populated timestamp fields if entity extends a base class or has these fields
-        // All entities that extend sqlBaseProperties, NosqlBaseProperties, etc. have these fields
-        if self.entity.extends.is_some() || self.has_entity_property("createdAt") {
-            lines.push("        createdAt: new Date(),".to_string());
-        }
-        if self.entity.extends.is_some() || self.has_entity_property("updatedAt") {
-            lines.push("        updatedAt: new Date()".to_string());
-        } else {
-            if let Some(last) = lines.last_mut() {
-                *last = last.trim_end_matches(',').to_string();
-            }
+        // Remove trailing comma from last line
+        if let Some(last) = lines.last_mut() {
+            *last = last.trim_end_matches(',').to_string();
         }
 
         lines.join("\n")
@@ -307,7 +299,8 @@ mod tests {
         assert!(result.contains("UserRequestSchema"));
         assert!(result.contains("name: dto.name"));
         assert!(result.contains("email: dto.email"));
-        assert!(result.contains("createdAt: new Date()"));
+        // Timestamps are handled by sqlBaseProperties hooks, not in mapper
+        assert!(!result.contains("createdAt: new Date()"));
     }
 
     #[test]

@@ -17,9 +17,7 @@ export const {{pascal_case_name}}RequestMapper = requestMapper({
   mapperDefinition: {
     toEntity: async (dto{{^is_worker}}, em: EntityManager{{/is_worker}}) => {
       {{^is_worker}}return em.create({{pascal_case_name}}Record, {
-        ...dto,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        ...dto
       });{{/is_worker}}{{#is_worker}}return {
         id: v4(),
         ...dto,

@@ -17,17 +17,15 @@ export const CreatePlanMapper = requestMapper({
     ) => {
       return em.create(Plan, {
         name: dto.name,
-        description: dto.description || null,
+        description: dto.description ?? null,
         price: dto.price,
         cadence: dto.cadence,
         currency: dto.currency,
-        features: dto.features || null,
+        features: dto.features ?? null,
         externalId: dto.externalId,
-        billingProvider: dto.billingProvider || null,
+        billingProvider: dto.billingProvider,
         active: dto.active,
-        providerFields,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        providerFields
       });
     }
   }
@@ -48,8 +46,7 @@ export const UpdatePlanMapper = requestMapper({
       const entity = await em.findOneOrFail(Plan, { id: rest.id });
       em.assign(entity, {
         ...rest,
-        providerFields,
-        updatedAt: new Date()
+        providerFields
       });
       return entity;
     }

@@ -55,7 +55,6 @@ const mikroOrmOptionsConfig = defineConfig({
   password: validConfigInjector.resolve('DB_PASSWORD'),
   port: validConfigInjector.resolve('DB_PORT'),
   entities: Object.values(entities),
-  forceUtcTimezone: false,
   debug: validConfigInjector.resolve('NODE_ENV') === 'development',
   extensions: [Migrator],
   discovery: {

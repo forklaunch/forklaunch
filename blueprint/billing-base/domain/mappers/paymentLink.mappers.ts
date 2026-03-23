@@ -19,9 +19,7 @@ export const CreatePaymentLinkMapper = requestMapper({
     toEntity: async (dto, em: EntityManager) => {
       return em.create(PaymentLink, {
         ...dto,
-        providerFields: dto.providerFields ?? null,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        providerFields: dto.providerFields ?? null
       });
     }
   }
@@ -38,7 +36,7 @@ export const UpdatePaymentLinkMapper = requestMapper({
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
       const entity = await em.findOneOrFail(PaymentLink, { id: dto.id });
-      em.assign(entity, { ...dto, updatedAt: new Date() });
+      em.assign(entity, { ...dto });
       return entity;
     }
   }

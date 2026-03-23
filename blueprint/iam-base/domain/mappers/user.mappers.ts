@@ -17,17 +17,15 @@ export const CreateUserMapper = requestMapper({
         email: dto.email,
         firstName: dto.firstName,
         lastName: dto.lastName,
-        phoneNumber: dto.phoneNumber || null,
+        phoneNumber: dto.phoneNumber ?? null,
         organization: dto.organization
           ? await em.findOne(Organization, { id: dto.organization })
           : null,
         roles: await em.find(Role, {
           id: { $in: dto.roles }
         }),
-        subscription: dto.subscription || null,
-        providerFields: dto.providerFields || null,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        subscription: dto.subscription ?? null,
+        providerFields: dto.providerFields ?? null
       });
     }
   }
@@ -46,8 +44,7 @@ export const UpdateUserMapper = requestMapper({
         ...rest,
         ...(roles !== undefined && {
           roles: await em.find(Role, { id: { $in: roles } })
-        }),
-        updatedAt: new Date()
+        })
       });
       return entity;
     }

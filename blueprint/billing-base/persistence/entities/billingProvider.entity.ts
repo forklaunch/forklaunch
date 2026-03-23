@@ -9,6 +9,8 @@ export const BillingProvider = defineEntity({
     ...sqlBaseProperties,
     externalId: p.string().unique().nullable(),
     providerFields: p.json<unknown>().nullable(),
-    billingProvider: p.enum(() => BillingProviderEnum).nullable()
+    billingProvider: p
+      .enum(() => BillingProviderEnum)
+      .default(BillingProviderEnum.NONE)
   }
 });

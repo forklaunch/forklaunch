@@ -14,11 +14,9 @@ export const CreateOrganizationMapper = requestMapper({
     toEntity: async (dto, em: EntityManager) => {
       return em.create(Organization, {
         ...dto,
-        providerFields: dto.providerFields || null,
+        providerFields: dto.providerFields ?? null,
         users: [],
-        status: OrganizationStatus.ACTIVE,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        status: OrganizationStatus.ACTIVE
       });
     }
   }
@@ -31,7 +29,7 @@ export const UpdateOrganizationMapper = requestMapper({
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
       const entity = await em.findOneOrFail(Organization, { id: dto.id });
-      em.assign(entity, { ...dto, updatedAt: new Date() });
+      em.assign(entity, { ...dto });
       return entity;
     }
   }

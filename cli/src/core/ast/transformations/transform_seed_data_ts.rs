@@ -78,9 +78,7 @@ pub(crate) fn transform_seed_data_ts(
 
     let seed_data_text = format!(
         "export const {router_name_camel_case}RecordData = {{
-            message: 'Test message'{},
-            createdAt: new Date(),
-            updatedAt: new Date(),
+            message: 'Test message'{}
         }} satisfies RequiredEntityData<InferEntity<typeof {router_name_pascal_case}Record>>;",
         if project_type == &ProjectType::Worker {
             ",

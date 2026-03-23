@@ -17,11 +17,9 @@ export const CreateBillingPortalMapper = requestMapper({
     ) => {
       return em.create(BillingPortal, {
         customerId: dto.customerId,
-        uri: dto.uri || null,
+        uri: dto.uri ?? null,
         expiresAt: dto.expiresAt,
-        providerFields,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        providerFields
       });
     }
   }
@@ -42,8 +40,7 @@ export const UpdateBillingPortalMapper = requestMapper({
       const entity = await em.findOneOrFail(BillingPortal, { id: rest.id });
       em.assign(entity, {
         ...rest,
-        providerFields,
-        updatedAt: new Date()
+        providerFields
       });
       return entity;
     }

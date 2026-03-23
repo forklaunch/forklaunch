@@ -11,9 +11,7 @@ export const CreatePermissionMapper = requestMapper({
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
       return em.create(Permission, {
-        slug: dto.slug,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        slug: dto.slug
       });
     }
   }
@@ -30,8 +28,7 @@ export const UpdatePermissionMapper = requestMapper({
         dto;
       const entity = await em.findOneOrFail(Permission, { id: rest.id });
       em.assign(entity, {
-        ...rest,
-        updatedAt: new Date()
+        ...rest
       });
       return entity;
     }

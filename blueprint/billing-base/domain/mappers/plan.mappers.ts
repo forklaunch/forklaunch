@@ -19,9 +19,7 @@ export const CreatePlanMapper = requestMapper({
     toEntity: async (dto, em: EntityManager) => {
       return em.create(Plan, {
         ...dto,
-        providerFields: dto.providerFields ?? null,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        providerFields: dto.providerFields ?? null
       });
     }
   }
@@ -38,9 +36,7 @@ export const UpdatePlanMapper = requestMapper({
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
       const entity = await em.findOneOrFail(Plan, { id: dto.id });
-      em.assign(entity, { ...dto, updatedAt: new Date() } as EntityData<
-        InferEntity<typeof Plan>
-      >);
+      em.assign(entity, { ...dto } as EntityData<InferEntity<typeof Plan>>);
       return entity;
     }
   }

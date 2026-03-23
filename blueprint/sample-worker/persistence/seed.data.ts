@@ -4,9 +4,7 @@ import { SampleWorkerEventRecord as SampleWorkerEventRecordEntity } from './enti
 export const sampleWorkerEventRecord = {
   message: 'Hello, world!',
   processed: false,
-  retryCount: 0,
-  createdAt: new Date(),
-  updatedAt: new Date()
+  retryCount: 0
 } satisfies RequiredEntityData<
   InferEntity<typeof SampleWorkerEventRecordEntity>
 >;

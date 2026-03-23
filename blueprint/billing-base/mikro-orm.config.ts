@@ -66,7 +66,6 @@ const mikroOrmOptionsConfig = defineConfig({
       return platform.getDefaultMappedType(type);
     }
   },
-  forceUtcTimezone: false,
   debug: validConfigInjector.resolve('NODE_ENV') === 'development',
   extensions: [Migrator],
   seeder: {

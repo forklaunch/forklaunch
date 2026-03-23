@@ -65,9 +65,7 @@ export const setupTestData = async (em: EntityManager) => {
     metadata: null,
     domain: 'test.com',
     subscription: 'premium',
-    status: 'active',
-    createdAt: new Date(),
-    updatedAt: new Date()
+    status: 'active'
   });
 
   // Create test user
@@ -80,9 +78,7 @@ export const setupTestData = async (em: EntityManager) => {
     lastName: 'Doe',
     phoneNumber: '+1234567890',
     subscription: 'enterprise',
-    providerFields: null,
-    createdAt: new Date(),
-    updatedAt: new Date()
+    providerFields: null
   });
 
   // Create member (user belongs to org as admin)
@@ -90,9 +86,7 @@ export const setupTestData = async (em: EntityManager) => {
     id: '123e4567-e89b-12d3-a456-426614174010',
     organizationId: '123e4567-e89b-12d3-a456-426614174001',
     userId: '123e4567-e89b-12d3-a456-426614174000',
-    role: 'admin',
-    createdAt: new Date(),
-    updatedAt: new Date()
+    role: 'admin'
   });
 
   // Create org roles (admin has platform_read + platform_write)
@@ -100,18 +94,14 @@ export const setupTestData = async (em: EntityManager) => {
     id: '123e4567-e89b-12d3-a456-426614174020',
     organizationId: '123e4567-e89b-12d3-a456-426614174001',
     role: 'admin',
-    permission: 'platform_read',
-    createdAt: new Date(),
-    updatedAt: new Date()
+    permission: 'platform_read'
   });
 
   em.create(OrganizationRole, {
     id: '123e4567-e89b-12d3-a456-426614174021',
     organizationId: '123e4567-e89b-12d3-a456-426614174001',
     role: 'admin',
-    permission: 'platform_write',
-    createdAt: new Date(),
-    updatedAt: new Date()
+    permission: 'platform_write'
   });
 
   // Create active session for user with active org
@@ -122,9 +112,7 @@ export const setupTestData = async (em: EntityManager) => {
     expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
     ipAddress: '127.0.0.1',
     userAgent: 'test',
-    activeOrganizationId: '123e4567-e89b-12d3-a456-426614174001',
-    createdAt: new Date(),
-    updatedAt: new Date()
+    activeOrganizationId: '123e4567-e89b-12d3-a456-426614174001'
   });
 
   await em.flush();

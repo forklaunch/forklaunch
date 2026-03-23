@@ -147,11 +147,7 @@ export class BaseBillingPortalService<
     );
 
     if (this.enableDatabaseBackup) {
-      await this.em
-        .persist({
-          billingPortal
-        })
-        .flush();
+      await this.em.persist(billingPortal).flush();
     }
 
     const updatedBillingPortalDto = {

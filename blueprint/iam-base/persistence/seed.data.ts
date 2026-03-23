@@ -8,49 +8,37 @@ import { Permission } from './entities/permission.entity';
 //! Begin seed data - RBAC Permissions
 export const platformReadPermission = {
   id: uuidv4(),
-  slug: PERMISSIONS.PLATFORM_READ,
-  createdAt: new Date(),
-  updatedAt: new Date()
+  slug: PERMISSIONS.PLATFORM_READ
 } satisfies RequiredEntityData<InferEntity<typeof Permission>>;
 
 export const platformWritePermission = {
   id: uuidv4(),
-  slug: PERMISSIONS.PLATFORM_WRITE,
-  createdAt: new Date(),
-  updatedAt: new Date()
+  slug: PERMISSIONS.PLATFORM_WRITE
 } satisfies RequiredEntityData<InferEntity<typeof Permission>>;
 
 //! RBAC Roles
 export const viewerRole = {
   id: uuidv4(),
   name: ROLES.VIEWER,
-  permissions: [platformReadPermission.id],
-  createdAt: new Date(),
-  updatedAt: new Date()
+  permissions: [platformReadPermission.id]
 } satisfies RequiredEntityData<InferEntity<typeof Role>>;
 
 export const editorRole = {
   id: uuidv4(),
   name: ROLES.EDITOR,
-  permissions: [platformReadPermission.id, platformWritePermission.id],
-  createdAt: new Date(),
-  updatedAt: new Date()
+  permissions: [platformReadPermission.id, platformWritePermission.id]
 } satisfies RequiredEntityData<InferEntity<typeof Role>>;
 
 export const adminRole = {
   id: uuidv4(),
   name: ROLES.ADMIN,
-  permissions: [platformReadPermission.id, platformWritePermission.id],
-  createdAt: new Date(),
-  updatedAt: new Date()
+  permissions: [platformReadPermission.id, platformWritePermission.id]
 } satisfies RequiredEntityData<InferEntity<typeof Role>>;
 
 export const systemRole = {
   id: uuidv4(),
   name: ROLES.SYSTEM,
-  permissions: [platformReadPermission.id, platformWritePermission.id],
-  createdAt: new Date(),
-  updatedAt: new Date()
+  permissions: [platformReadPermission.id, platformWritePermission.id]
 } satisfies RequiredEntityData<InferEntity<typeof Role>>;
 
 export const user = {
@@ -59,9 +47,7 @@ export const user = {
   firstName: 'Test',
   lastName: 'User',
   roles: [adminRole.id],
-  providerFields: null,
-  createdAt: new Date(),
-  updatedAt: new Date()
+  providerFields: null
 } satisfies RequiredEntityData<InferEntity<typeof User>>;
 
 export const organization = {
@@ -70,7 +56,5 @@ export const organization = {
   subscription: 'test',
   domain: 'test.com',
   status: OrganizationStatus.ACTIVE,
-  providerFields: null,
-  createdAt: new Date(),
-  updatedAt: new Date()
+  providerFields: null
 } satisfies RequiredEntityData<InferEntity<typeof Organization>>;
