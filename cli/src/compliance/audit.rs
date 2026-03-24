@@ -102,9 +102,14 @@ impl CliCommand for AuditCommand {
                         encrypted: classification == "phi" || classification == "pci",
                     })
                     .collect();
+                let retention = compliance.retention.get(name).map(|r| RetentionReport {
+                    duration: r.duration.clone(),
+                    action: r.action.clone(),
+                });
                 EntityReport {
                     name: name.clone(),
                     fields: field_reports,
+                    retention,
                 }
             })
             .collect();
@@ -605,6 +610,15 @@ struct RouteReport {
 struct EntityReport {
     name: String,
     fields: Vec<FieldReport>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    retention: Option<RetentionReport>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RetentionReport {
+    duration: String,
+    action: String,
 }
 
 #[derive(Serialize)]

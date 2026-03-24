@@ -150,6 +150,17 @@ pub(crate) struct ComplianceManifestConfig {
     /// Classifications: "none", "pii", "phi", "pci".
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub(crate) entities: HashMap<String, HashMap<String, String>>,
+
+    /// Per-entity retention policies.
+    /// Keys are entity names, values are retention config (duration + action).
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub(crate) retention: HashMap<String, RetentionManifestConfig>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Content, Clone)]
+pub(crate) struct RetentionManifestConfig {
+    pub(crate) duration: String,
+    pub(crate) action: String,
 }
 
 #[macro_export]

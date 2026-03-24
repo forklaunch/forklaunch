@@ -17,11 +17,16 @@ use crate::{
 
 /// Default property names that are part of the base properties templates
 /// and should not be copied as user-defined properties.
-const BASE_PROPERTY_NAMES: &[&str] = &["id", "_id", "createdAt", "updatedAt"];
+const BASE_PROPERTY_NAMES: &[&str] = &["id", "_id", "createdAt", "updatedAt", "retentionAnonymizedAt"];
 
 /// Default import sources that are part of the base properties templates
 /// and should not be copied as user-defined imports.
-const BASE_IMPORT_SOURCES: &[&str] = &["@mikro-orm/core", "@mikro-orm/mongodb", "uuid"];
+const BASE_IMPORT_SOURCES: &[&str] = &[
+    "@mikro-orm/core",
+    "@mikro-orm/mongodb",
+    "@forklaunch/core/persistence",
+    "uuid",
+];
 
 pub(crate) fn transform_base_entity_ts(
     rendered_templates_cache: &RenderedTemplatesCache,

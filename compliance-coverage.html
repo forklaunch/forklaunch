@@ -56,8 +56,8 @@
 <p class="intro">ForkLaunch addresses every technical control required by HIPAA, SOC 2, PCI DSS, and GDPR at both the application and infrastructure layers. Controls are enforced across three layers: the <strong>Framework</strong> (<code>@forklaunch/core</code> — compile-time types, runtime middleware, encryption, tenant isolation), the <strong>CLI</strong> (<code>forklaunch</code> binary — code generation, compliance auditing, GitHub configs), and the <strong>Platform</strong> (ForkLaunch Cloud — risk scoring, data flow diagrams, DPIA, portal dashboard, deploy-time enforcement). Each control below is tagged with its layer. Controls that are not covered are either addressable with additional engineering work or are organizational processes that require business action.</p>
 
 <div class="summary-grid">
-  <div class="summary-card"><div class="count count-green">31</div><div class="label">Fully Addressed</div></div>
-  <div class="summary-card"><div class="count count-yellow">1</div><div class="label">Partially Addressed</div></div>
+  <div class="summary-card"><div class="count count-green">32</div><div class="label">Fully Addressed</div></div>
+  <div class="summary-card"><div class="count count-yellow">0</div><div class="label">Partially Addressed</div></div>
   <div class="summary-card"><div class="count count-purple">3</div><div class="label">Addressable by Engineering</div></div>
   <div class="summary-card"><div class="count count-red">6</div><div class="label">Business Action Required</div></div>
 </div>
@@ -319,24 +319,12 @@
   <td>Platform generates GDPR DPIA from CLI audit data. Pre-filled sections: data inventory (total entities, PII/PHI/PCI fields with classifications), data residency (allowed regions, cross-border analysis), risk assessment (score, finding counts), active mitigations (field encryption, tenant isolation, access control, audit logging, rate limiting, secrets management), retention periods. CLI displays with <code>--dpia</code> flag. Portal shows in DPIA tab with structured layout.</td>
   <td><span class="tag tag-gdpr">GDPR Art. 35</span></td>
 </tr>
-</tbody>
-</table>
-
-<!-- ================================================================ -->
-<h2>Partially Addressed</h2>
-
-<table>
-<thead>
-<tr><th>#</th><th>Requirement</th><th>Status</th><th>Layer</th><th>What's Done</th><th>What's Missing</th><th>Standards</th></tr>
-</thead>
-<tbody>
 <tr>
-  <td>24</td>
+  <td>32</td>
   <td>Data Retention / Disposal</td>
-  <td class="status-partial">Partial</td>
-  <td><span class="tag tag-framework">Framework</span> <span class="tag tag-platform">Platform</span></td>
-  <td>CloudTrail lifecycle policies for log retention. S3 30-day auto-expiration on Docker layer caches. Audit log bucket retention policies.</td>
-  <td>Application-level data retention policies — automatic deletion of records after a configurable retention period. Implement retention policy engine, add <code>retention</code> field to entity compliance metadata, build scheduled enforcement job.</td>
+  <td class="status-yes">Addressed</td>
+  <td><span class="tag tag-framework">Framework</span> <span class="tag tag-cli">CLI</span> <span class="tag tag-platform">Platform</span></td>
+  <td>Framework: <code>retention: { duration: RetentionDuration.years(3), action: 'anonymize' }</code> declared on <code>defineComplianceEntity</code>. ISO 8601 durations with const helpers. Validated at boot (min 1 day). <code>RetentionService.enforce()</code> finds expired records via <code>createdAt &lt; cutoff</code>, batches of 1000, action: <code>delete</code> (remove) or <code>anonymize</code> (null PII/PHI/PCI fields, set <code>retentionAnonymizedAt</code>). Idempotent re-runs. Infrastructure: CloudTrail lifecycle policies, S3 auto-expiration, audit log retention. CLI: audit reports retention policy coverage, entities with PII but no policy flagged as findings. Platform: risk scoring includes missing retention policies (5 points, medium severity).</td>
   <td><span class="tag tag-hipaa">HIPAA §164.530(j)</span><span class="tag tag-pci">PCI DSS 3.1</span><span class="tag tag-soc2">SOC 2 CC6.5</span></td>
 </tr>
 </tbody>
@@ -442,7 +430,7 @@
 </table>
 
 <div class="footer">
-  <p>ForkLaunch Compliance Coverage Report &mdash; 41 requirements evaluated across HIPAA, SOC 2, PCI DSS, and GDPR. 31 fully addressed, 1 partial, 3 addressable by engineering, 6 require organizational processes.</p>
+  <p>ForkLaunch Compliance Coverage Report &mdash; 41 requirements evaluated across HIPAA, SOC 2, PCI DSS, and GDPR. 32 fully addressed, 0 partial, 3 addressable by engineering, 6 require organizational processes.</p>
 </div>
 
 </div>

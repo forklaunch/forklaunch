@@ -12,5 +12,6 @@ export const nosqlBaseProperties = {
     .datetime()
     .onCreate(() => new Date())
     .onUpdate(() => new Date())
-    .compliance('none')
+    .compliance('none'),
+  retentionAnonymizedAt: fp.datetime().nullable().compliance('none')
 };

@@ -8,7 +8,15 @@ export {
   type WithCompliance,
   getComplianceMetadata,
   getEntityComplianceFields,
-  entityHasEncryptedFields
+  entityHasEncryptedFields,
+  // Retention
+  RetentionAction,
+  type RetentionAction as RetentionActionType,
+  type RetentionPolicy,
+  RetentionDuration,
+  parseDuration,
+  getEntityRetention,
+  getAllRetentionPolicies
 } from './complianceTypes';
 
 // Compliance-aware property builder (drop-in replacement for MikroORM's p)

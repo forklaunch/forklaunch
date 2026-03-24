@@ -6,7 +6,7 @@ export const BillingPortal = defineComplianceEntity({
   properties: {
     id: fp.string().primary().compliance('none'),
     customerId: fp.string().compliance('none'),
-    providerFields: fp.json<Stripe.BillingPortal.Session>().compliance('none')
+    providerFields: fp.json<Stripe.BillingPortal.Session>().compliance('pci')
   }
 });
 
@@ -18,7 +18,7 @@ export const CheckoutSession = defineComplianceEntity({
     paymentMethods: fp.enum().array().compliance('none'),
     currency: fp.enum().compliance('none'),
     status: fp.enum().compliance('none'),
-    providerFields: fp.json<Stripe.Checkout.Session>().compliance('none')
+    providerFields: fp.json<Stripe.Checkout.Session>().compliance('pci')
   }
 });
 
@@ -30,7 +30,7 @@ export const PaymentLink = defineComplianceEntity({
     paymentMethods: fp.enum().array().compliance('none'),
     currency: fp.enum().compliance('none'),
     status: fp.enum().compliance('none'),
-    providerFields: fp.json<Stripe.PaymentLink>().compliance('none')
+    providerFields: fp.json<Stripe.PaymentLink>().compliance('pci')
   }
 });
 
@@ -44,7 +44,7 @@ export const Plan = defineComplianceEntity({
     cadence: fp.enum().compliance('none'),
     currency: fp.enum().compliance('none'),
     billingProvider: fp.enum().compliance('none'),
-    providerFields: fp.json<Stripe.Product>().compliance('none')
+    providerFields: fp.json<Stripe.Product>().compliance('pci')
   }
 });
 
@@ -57,7 +57,7 @@ export const Subscription = defineComplianceEntity({
     partyType: fp.enum().compliance('none'),
     billingProvider: fp.enum().compliance('none'),
     active: fp.boolean().compliance('none'),
-    providerFields: fp.json<Stripe.Subscription>().compliance('none')
+    providerFields: fp.json<Stripe.Subscription>().compliance('pci')
   }
 });
 
@@ -77,6 +77,6 @@ export const StripeWebhookEvent = defineComplianceEntity({
     stripeId: fp.string().compliance('none'),
     idempotencyKey: fp.string().nullable().compliance('none'),
     eventType: fp.string().compliance('none'),
-    eventData: fp.json<unknown>().compliance('none')
+    eventData: fp.json<unknown>().compliance('pci')
   }
 });

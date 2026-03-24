@@ -7,6 +7,7 @@ import {
   createConfigInjector,
   getEnvVar,
   Lifetime,
+  RetentionService,
 } from "@forklaunch/core/services";{{#is_worker}}
 import { {{worker_type}}WorkerConsumer } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/consumers';
 import { {{worker_type}}WorkerProducer } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/producers';
@@ -275,7 +276,13 @@ const serviceDependencies = runtimeDependencies.chain({ {{#is_worker}}
         WorkerProducer,{{/is_worker}}
         OtelCollector
       )
-  }
+  },{{#is_database_enabled}}
+  RetentionService: {
+    lifetime: Lifetime.Singleton,
+    type: RetentionService,
+    factory: ({ Orm, OtelCollector }) =>
+      new RetentionService(Orm, OtelCollector)
+  }{{/is_database_enabled}}
 });
 
 //! validates the configuration and returns the dependencies for the application

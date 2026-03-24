@@ -63,6 +63,11 @@ export class WSChannelManager {
     if (!sub) {
       sub = { requiredPermissions, connections: new Map() };
       this.channels.set(channel, sub);
+    } else if (!arraysEqual(sub.requiredPermissions, requiredPermissions)) {
+      throw new Error(
+        `Channel '${channel}' already exists with different requiredPermissions: ` +
+          `[${sub.requiredPermissions.join(', ')}] vs [${requiredPermissions.join(', ')}]`
+      );
     }
     sub.connections.set(ws, { ws, session });
   }
@@ -167,6 +172,13 @@ export class WSChannelManager {
 /**
  * Check if a session has all required permissions.
  */
+function arraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const sorted1 = [...a].sort();
+  const sorted2 = [...b].sort();
+  return sorted1.every((v, i) => v === sorted2[i]);
+}
+
 function hasRequiredPermissions(
   session: WSSession,
   requiredPermissions: string[]

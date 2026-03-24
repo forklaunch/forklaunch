@@ -110,6 +110,23 @@ async function startServer() {
       // An API reference can be accessed at ${protocol}://${host}:${port}/api/${version}${docsPath}`
     );
   });
+{{#is_database_enabled}}
+  //! schedule daily retention enforcement
+  const retentionService = ci.resolve(tokens.RetentionService);
+  const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000;
+  setInterval(async () => {
+    try {
+      const result = await retentionService.enforce();
+      openTelemetryCollector.info(
+        `[Retention] Enforcement complete: ${result.processed} processed, ${result.deleted} deleted, ${result.anonymized} anonymized`
+      );
+    } catch (err) {
+      openTelemetryCollector.error('[Retention] Enforcement failed', {
+        error: String(err)
+      });
+    }
+  }, RETENTION_INTERVAL_MS);
+{{/is_database_enabled}}
 }
 
 startServer().catch((error) => {

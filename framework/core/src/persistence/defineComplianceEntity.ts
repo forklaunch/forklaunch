@@ -8,9 +8,12 @@ import {
 } from '@mikro-orm/core';
 import {
   COMPLIANCE_KEY,
+  parseDuration,
   registerEntityCompliance,
+  registerEntityRetention,
   type ClassifiedProperty,
-  type ComplianceLevel
+  type ComplianceLevel,
+  type RetentionPolicy
 } from './complianceTypes';
 
 type ValidateProperties<T> = {
@@ -45,7 +48,7 @@ export function defineComplianceEntity<
     TBase,
     TRepository,
     TForceObject
-  >
+  > & { retention?: RetentionPolicy }
 ): EntitySchemaWithMeta<
   TName,
   TTableName,
@@ -76,7 +79,27 @@ export function defineComplianceEntity<
 
   registerEntityCompliance(entityName, complianceFields);
 
-  return defineEntity(meta) as EntitySchemaWithMeta<
+  // Handle retention policy
+  if (meta.retention) {
+    parseDuration(meta.retention.duration); // validates at boot — throws if invalid
+
+    if (!resolvedProperties['createdAt']) {
+      throw new Error(
+        `Entity '${entityName}' has a retention policy but no 'createdAt' property. ` +
+          `Retention requires createdAt to compute expiration.`
+      );
+    }
+
+    registerEntityRetention(entityName, meta.retention);
+  }
+
+  // Strip retention before passing to MikroORM's defineEntity
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { retention: _retention, ...mikroMeta } = meta;
+
+  return defineEntity(
+    mikroMeta as unknown as typeof meta
+  ) as EntitySchemaWithMeta<
     TName,
     TTableName,
     InferEntityFromProperties<

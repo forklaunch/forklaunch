@@ -51,6 +51,74 @@ export function entityHasEncryptedFields(entityName: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Retention types and registry
+// ---------------------------------------------------------------------------
+
+export const RetentionAction = {
+  delete: 'delete',
+  anonymize: 'anonymize'
+} as const;
+export type RetentionAction =
+  (typeof RetentionAction)[keyof typeof RetentionAction];
+
+export interface RetentionPolicy {
+  duration: string;
+  action: RetentionAction;
+}
+
+export const RetentionDuration = {
+  days: (n: number): string => `P${n}D`,
+  months: (n: number): string => `P${n}M`,
+  years: (n: number): string => `P${n}Y`
+} as const;
+
+const DURATION_REGEX = /^P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)D)?$/;
+const MS_PER_DAY = 86_400_000;
+const MIN_DURATION_MS = MS_PER_DAY;
+
+export function parseDuration(iso: string): number {
+  const match = DURATION_REGEX.exec(iso);
+  if (!match) {
+    throw new Error(
+      `Invalid ISO 8601 duration: '${iso}'. Expected format: P[n]Y[n]M[n]D`
+    );
+  }
+  const years = parseInt(match[1] || '0', 10);
+  const months = parseInt(match[2] || '0', 10);
+  const days = parseInt(match[3] || '0', 10);
+  const totalDays = years * 365 + months * 30 + days;
+  const ms = totalDays * MS_PER_DAY;
+  if (ms < MIN_DURATION_MS) {
+    throw new Error(
+      `Retention duration must be >= 1 day (P1D). Got: '${iso}' (${totalDays} days)`
+    );
+  }
+  return ms;
+}
+
+const retentionRegistry = new Map<string, RetentionPolicy>();
+
+export function registerEntityRetention(
+  entityName: string,
+  policy: RetentionPolicy
+): void {
+  retentionRegistry.set(entityName, policy);
+}
+
+export function getEntityRetention(
+  entityName: string
+): RetentionPolicy | undefined {
+  return retentionRegistry.get(entityName);
+}
+
+export function getAllRetentionPolicies(): ReadonlyMap<
+  string,
+  RetentionPolicy
+> {
+  return retentionRegistry;
+}
+
+// ---------------------------------------------------------------------------
 // ClassifiedProperty — tagged wrapper: inner builder + compliance level
 // ---------------------------------------------------------------------------
 

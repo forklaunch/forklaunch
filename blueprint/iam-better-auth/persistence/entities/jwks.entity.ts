@@ -7,7 +7,7 @@ export const Jwks = defineComplianceEntity({
   properties: {
     ...sqlBaseProperties,
     publicKey: fp.string().compliance('none'),
-    privateKey: fp.string().compliance('none')
+    privateKey: fp.string().compliance('pci')
   }
 });
 
