@@ -1,5 +1,11 @@
 # @forklaunch/implementation-billing-stripe
 
+## 1.1.0
+
+### Minor Changes
+
+- Pass in enum container, not actual enum
+
 ## 1.0.1
 
 ### Patch Changes

@@ -361,7 +361,8 @@ const serviceDependencies = runtimeDependencies.chain({
         CheckoutSessionService,
         PaymentLinkService,
         PlanService,
-        SubscriptionService
+        SubscriptionService,
+        PartyEnum
       )
   }
 });

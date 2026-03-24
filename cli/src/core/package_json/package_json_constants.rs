@@ -242,7 +242,7 @@ pub(crate) const HYPER_EXPRESS_VERSION: &str = "~1.0.13";
 // @forklaunch/implementation-billing-base
 pub(crate) const BILLING_BASE_VERSION: &str = "~1.0.0";
 // @forklaunch/implementation-billing-stripe
-pub(crate) const BILLING_STRIPE_VERSION: &str = "~1.0.1";
+pub(crate) const BILLING_STRIPE_VERSION: &str = "~1.1.0";
 // @forklaunch/implementation-iam-base
 pub(crate) const IAM_BASE_VERSION: &str = "~1.0.0";
 // @forklaunch/implementation-worker-bullmq

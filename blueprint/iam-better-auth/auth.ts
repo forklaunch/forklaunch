@@ -156,6 +156,10 @@ export const betterAuthConfig = ({
     emailAndPassword: {
       enabled: true
     },
+    session: {
+      expiresIn: 60 * 60 * 24, // 24 hours
+      updateAge: 60 * 60 // refresh session if older than 1 hour
+    },
     plugins,
     user: {
       additionalFields: userAdditionalFields

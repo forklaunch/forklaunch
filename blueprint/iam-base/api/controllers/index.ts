@@ -1,3 +1,4 @@
+export * from './compliance.controller';
 export * from './discovery.controller';
 export * from './organization.controller';
 export * from './permission.controller';

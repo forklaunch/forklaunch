@@ -37,7 +37,7 @@ export class StripeWebhookService<
   SubscriptionEntities extends
     StripeSubscriptionEntities<PartyEnum> = StripeSubscriptionEntities<PartyEnum>
 > {
-  protected readonly defaultPartyType: PartyEnum[keyof PartyEnum];
+  protected readonly partyEnum: PartyEnum;
   protected readonly stripeClient: Stripe;
   protected readonly em: EntityManager;
   protected readonly schemaValidator: SchemaValidator;
@@ -91,9 +91,9 @@ export class StripeWebhookService<
       PartyEnum,
       SubscriptionEntities
     >,
-    defaultPartyType: PartyEnum[keyof PartyEnum]
+    partyEnum: PartyEnum
   ) {
-    this.defaultPartyType = defaultPartyType;
+    this.partyEnum = partyEnum;
     this.stripeClient = stripeClient;
     this.em = em;
     this.schemaValidator = schemaValidator;
@@ -103,6 +103,21 @@ export class StripeWebhookService<
     this.paymentLinkService = paymentLinkService;
     this.planService = planService;
     this.subscriptionService = subscriptionService;
+  }
+
+  /**
+   * Resolve the party type for a subscription event.
+   * Stripe subscriptions are customer-scoped — customers map to users
+   * by default. Override this method to implement organization-level
+   * subscriptions or other party resolution logic.
+   */
+  protected resolvePartyType(_event: Stripe.Event): PartyEnum[keyof PartyEnum] {
+    // Default: first value in the enum container.
+    // Subclasses can override to inspect event metadata for party type.
+    const keys = Object.keys(this.partyEnum as Record<string, unknown>);
+    return (this.partyEnum as Record<string, PartyEnum[keyof PartyEnum]>)[
+      keys[0]
+    ];
   }
 
   /**
@@ -379,7 +394,7 @@ export class StripeWebhookService<
               typeof event.data.object.customer === 'string'
                 ? event.data.object.customer
                 : event.data.object.customer.id,
-            partyType: this.defaultPartyType,
+            partyType: this.resolvePartyType(event),
             description: event.data.object.description ?? undefined,
             active: true,
             productId: event.data.object.items.data[0].plan.id,
@@ -412,7 +427,7 @@ export class StripeWebhookService<
               typeof event.data.object.customer === 'string'
                 ? event.data.object.customer
                 : event.data.object.customer.id,
-            partyType: this.defaultPartyType,
+            partyType: this.resolvePartyType(event),
             description: event.data.object.description ?? undefined,
             active: true,
             externalId: event.data.object.id,

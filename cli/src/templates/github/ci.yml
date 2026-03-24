@@ -1,0 +1,21 @@
+name: CI
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - {{#is_node}}uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install -g pnpm
+      - run: pnpm install{{/is_node}}{{#is_bun}}uses: oven-sh/setup-bun@v2
+      - run: bun install{{/is_bun}}
+      - run: {{#is_node}}pnpm{{/is_node}}{{#is_bun}}bun{{/is_bun}} lint
+      - run: {{#is_node}}pnpm{{/is_node}}{{#is_bun}}bun{{/is_bun}} build
+      - run: {{#is_node}}pnpm{{/is_node}}{{#is_bun}}bun{{/is_bun}} test

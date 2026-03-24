@@ -39,6 +39,7 @@ use crate::{
             find_docker_compose_path,
         },
         format::format_code,
+        github_configs::ensure_github_configs,
         gitignore::generate_gitignore,
         husky::create_or_merge_husky_pre_commit,
         license::generate_license,
@@ -1225,6 +1226,11 @@ impl CliCommand for ApplicationCommand {
             &data,
             &mut rendered_templates,
         )?;
+
+        rendered_templates.extend(
+            ensure_github_configs(&origin_path, &ManifestData::Application(&data))
+                .with_context(|| "Failed to generate GitHub config files")?,
+        );
 
         write_rendered_templates(&rendered_templates, dryrun, &mut stdout)
             .with_context(|| "Failed to write application files")?;
