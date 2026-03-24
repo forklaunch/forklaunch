@@ -1,5 +1,17 @@
 # @forklaunch/infrastructure-s3
 
+## 1.1.0
+
+### Minor Changes
+
+- retention policy update
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/common@1.1.0
+  - @forklaunch/core@1.1.0
+
 ## 1.0.13
 
 ### Patch Changes

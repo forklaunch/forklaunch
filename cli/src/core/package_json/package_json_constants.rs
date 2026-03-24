@@ -232,45 +232,45 @@ pub(crate) const APP_MONITORING_VERSION: &str = "workspace:*";
 // @forklaunch/bunrun
 pub(crate) const BUNRUN_VERSION: &str = "~0.0.2";
 // @forklaunch/common
-pub(crate) const COMMON_VERSION: &str = "~1.0.13";
+pub(crate) const COMMON_VERSION: &str = "~1.1.0";
 // @forklaunch/core
-pub(crate) const CORE_VERSION: &str = "~1.0.13";
+pub(crate) const CORE_VERSION: &str = "~1.1.0";
 // @forklaunch/express
-pub(crate) const EXPRESS_VERSION: &str = "~1.0.13";
+pub(crate) const EXPRESS_VERSION: &str = "~1.1.0";
 // @forklaunch/hyper-express
-pub(crate) const HYPER_EXPRESS_VERSION: &str = "~1.0.13";
+pub(crate) const HYPER_EXPRESS_VERSION: &str = "~1.1.0";
 // @forklaunch/implementation-billing-base
-pub(crate) const BILLING_BASE_VERSION: &str = "~1.0.0";
+pub(crate) const BILLING_BASE_VERSION: &str = "~1.0.1";
 // @forklaunch/implementation-billing-stripe
-pub(crate) const BILLING_STRIPE_VERSION: &str = "~1.1.0";
+pub(crate) const BILLING_STRIPE_VERSION: &str = "~1.1.1";
 // @forklaunch/implementation-iam-base
-pub(crate) const IAM_BASE_VERSION: &str = "~1.0.0";
+pub(crate) const IAM_BASE_VERSION: &str = "~1.0.1";
 // @forklaunch/implementation-worker-bullmq
-pub(crate) const WORKER_BULLMQ_VERSION: &str = "~1.0.0";
+pub(crate) const WORKER_BULLMQ_VERSION: &str = "~1.0.1";
 // @forklaunch/implementation-worker-redis
-pub(crate) const WORKER_REDIS_VERSION: &str = "~1.0.0";
+pub(crate) const WORKER_REDIS_VERSION: &str = "~1.0.1";
 // @forklaunch/implementation-worker-database
-pub(crate) const WORKER_DATABASE_VERSION: &str = "~1.0.0";
+pub(crate) const WORKER_DATABASE_VERSION: &str = "~1.0.1";
 // @forklaunch/implementation-worker-kafka
-pub(crate) const WORKER_KAFKA_VERSION: &str = "~1.0.0";
+pub(crate) const WORKER_KAFKA_VERSION: &str = "~1.0.1";
 // @forklaunch/infrastructure-redis
-pub(crate) const INFRASTRUCTURE_REDIS_VERSION: &str = "~1.0.13";
+pub(crate) const INFRASTRUCTURE_REDIS_VERSION: &str = "~1.1.0";
 // @forklaunch/infrastructure-s3
-pub(crate) const INFRASTRUCTURE_S3_VERSION: &str = "~1.0.13";
+pub(crate) const INFRASTRUCTURE_S3_VERSION: &str = "~1.1.0";
 // @forklaunch/interfaces-billing
-pub(crate) const BILLING_INTERFACES_VERSION: &str = "~1.0.0";
+pub(crate) const BILLING_INTERFACES_VERSION: &str = "~1.0.1";
 // @forklaunch/interfaces-iam
-pub(crate) const IAM_INTERFACES_VERSION: &str = "~1.0.0";
+pub(crate) const IAM_INTERFACES_VERSION: &str = "~1.0.1";
 // @forklaunch/interfaces-worker
-pub(crate) const WORKER_INTERFACES_VERSION: &str = "~1.0.0";
+pub(crate) const WORKER_INTERFACES_VERSION: &str = "~1.0.1";
 // @forklaunch/internal
-pub(crate) const INTERNAL_VERSION: &str = "~1.0.13";
+pub(crate) const INTERNAL_VERSION: &str = "~1.1.0";
 // @forklaunch/testing
-pub(crate) const TESTING_VERSION: &str = "~1.0.13";
+pub(crate) const TESTING_VERSION: &str = "~1.1.0";
 // @forklaunch/universal-sdk
-pub(crate) const UNIVERSAL_SDK_VERSION: &str = "~1.0.13";
+pub(crate) const UNIVERSAL_SDK_VERSION: &str = "~1.1.0";
 // @forklaunch/validator
-pub(crate) const VALIDATOR_VERSION: &str = "~1.0.13";
+pub(crate) const VALIDATOR_VERSION: &str = "~1.1.0";
 // @mikro-orm/core
 pub(crate) const MIKRO_ORM_CORE_VERSION: &str = "7.0.5";
 // @mikro-orm/migrations

@@ -50,7 +50,7 @@
     "globals": "^17.4.0",
     "jest": "^30.3.0",
     "lint-staged": "^16.4.0",
-    "oxlint": "^1.56.0",
+    "oxlint": "^1.57.0",
     "prettier": "^3.8.1",
     "sort-package-json": "^3.6.1",
     "ts-jest": "^29.4.6",
@@ -61,11 +61,11 @@
     "vitest": "^4.1.1"
   },
   "dependencies": {
-    "@forklaunch/common": "^1.0.13",
-    "@forklaunch/core": "^1.0.13",
-    "@forklaunch/express": "^1.0.13",
-    "@forklaunch/hyper-express": "^1.0.13",
-    "@forklaunch/universal-sdk": "^1.0.13",
-    "@forklaunch/validator": "^1.0.13"
+    "@forklaunch/common": "^1.1.0",
+    "@forklaunch/core": "^1.1.0",
+    "@forklaunch/express": "^1.1.0",
+    "@forklaunch/hyper-express": "^1.1.0",
+    "@forklaunch/universal-sdk": "^1.1.0",
+    "@forklaunch/validator": "^1.1.0"
   }
 }

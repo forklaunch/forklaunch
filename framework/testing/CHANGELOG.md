@@ -1,5 +1,11 @@
 # @forklaunch/testing
 
+## 1.1.0
+
+### Minor Changes
+
+- retention policy update
+
 ## 1.0.13
 
 ### Patch Changes

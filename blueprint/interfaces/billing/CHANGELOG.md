@@ -1,5 +1,11 @@
 # @forklaunch/interfaces-billing
 
+## 1.0.1
+
+### Patch Changes
+
+- update internal package versions
+
 ## 1.0.0
 
 ### Major Changes

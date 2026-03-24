@@ -1,5 +1,16 @@
 # @forklaunch/validator
 
+## 1.1.0
+
+### Minor Changes
+
+- retention policy update
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/common@1.1.0
+
 ## 1.0.13
 
 ### Patch Changes
