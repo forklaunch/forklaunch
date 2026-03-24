@@ -775,6 +775,7 @@ impl CliCommand for ServiceCommand {
             is_cache_enabled: infrastructure.contains(&Infrastructure::Redis),
             platform_application_id: manifest_data.platform_application_id.clone(),
             platform_organization_id: manifest_data.platform_organization_id.clone(),
+            compliance: manifest_data.compliance.clone(),
             is_s3_enabled: infrastructure.contains(&Infrastructure::S3),
             is_database_enabled: true,
 

@@ -1,13 +1,9 @@
 import type {
+  EmptyOptions,
   PropertyBuilders,
-  PropertyChain,
-  UniversalPropertyOptionsBuilder
+  PropertyChain
 } from '@mikro-orm/core';
 
-/**
- * Classification levels for entity field compliance.
- * Drives encryption (phi/pci), audit log redaction (all non-none), and compliance reporting.
- */
 export const ComplianceLevel = {
   pii: 'pii',
   phi: 'phi',
@@ -17,40 +13,14 @@ export const ComplianceLevel = {
 export type ComplianceLevel =
   (typeof ComplianceLevel)[keyof typeof ComplianceLevel];
 
-/**
- * Brand symbol — makes ClassifiedProperty structurally distinct from
- * plain PropertyChain at the TypeScript level.
- */
-declare const CLASSIFIED: unique symbol;
-
-/**
- * A property that has been classified via `.compliance()`.
- * Only ClassifiedProperty values are accepted by `defineComplianceEntity`.
- *
- * At runtime this is a Proxy wrapping a MikroORM PropertyBuilder.
- * The brand exists only at the type level for compile-time enforcement.
- */
-export interface ClassifiedProperty {
-  readonly [CLASSIFIED]: true;
-}
-
-/**
- * Internal key used by the runtime Proxy to store compliance level
- * on the builder instance. Not part of the public API.
- */
 export const COMPLIANCE_KEY = '~compliance' as const;
 
 // ---------------------------------------------------------------------------
-// Compliance metadata registry
+// Registry
 // ---------------------------------------------------------------------------
 
-/** entityName → (fieldName → ComplianceLevel) */
 const complianceRegistry = new Map<string, Map<string, ComplianceLevel>>();
 
-/**
- * Register compliance metadata for an entity's fields.
- * Called by `defineComplianceEntity` during entity definition.
- */
 export function registerEntityCompliance(
   entityName: string,
   fields: Map<string, ComplianceLevel>
@@ -58,10 +28,6 @@ export function registerEntityCompliance(
   complianceRegistry.set(entityName, fields);
 }
 
-/**
- * Look up the compliance level for a single field on an entity.
- * Returns `'none'` if the entity or field is not registered.
- */
 export function getComplianceMetadata(
   entityName: string,
   fieldName: string
@@ -69,19 +35,12 @@ export function getComplianceMetadata(
   return complianceRegistry.get(entityName)?.get(fieldName) ?? 'none';
 }
 
-/**
- * Get all compliance fields for an entity.
- * Returns undefined if the entity is not registered.
- */
 export function getEntityComplianceFields(
   entityName: string
 ): Map<string, ComplianceLevel> | undefined {
   return complianceRegistry.get(entityName);
 }
 
-/**
- * Check whether an entity has any fields requiring encryption (phi or pci).
- */
 export function entityHasEncryptedFields(entityName: string): boolean {
   const fields = complianceRegistry.get(entityName);
   if (!fields) return false;
@@ -92,47 +51,65 @@ export function entityHasEncryptedFields(entityName: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// ForklaunchPropertyChain — remapped PropertyChain that preserves
-// `.compliance()` through method chaining.
+// ClassifiedProperty — tagged wrapper: inner builder + compliance level
 // ---------------------------------------------------------------------------
 
 /**
- * Recursively remaps every method on PropertyChain<V,O> so those returning
- * PropertyChain<V2,O2> instead return ForklaunchPropertyChain<V2,O2>.
- * This preserves the `.compliance()` method through chained calls like
- * `.nullable().unique()`.
+ * Tagged wrapper returned by `.compliance()`.
+ * `__inner` is the EXACT MikroORM builder type.
+ * `defineComplianceEntity` checks for this wrapper and extracts `__inner`.
  */
-
-export interface ForklaunchPropertyChain<Value, Options> extends RemapReturns<
-  Value,
-  Options
+export interface ClassifiedProperty<
+  Builder = unknown,
+  Value = unknown,
+  Options = unknown
 > {
-  /**
-   * Classify this field's compliance level. Must be called on every scalar
-   * field passed to `defineComplianceEntity`.
-   * Returns an opaque `ClassifiedProperty`.
-   */
-  compliance(level: ComplianceLevel): ClassifiedProperty;
+  readonly __inner: Builder;
+  readonly __compliance: ComplianceLevel;
+  readonly '~type'?: { value: Value };
+  readonly '~options': Options;
 }
 
-type RemapReturns<Value, Options> = {
-  [K in keyof PropertyChain<Value, Options>]: PropertyChain<
-    Value,
-    Options
-  >[K] extends (...args: infer A) => PropertyChain<infer V2, infer O2>
-    ? (...args: A) => ForklaunchPropertyChain<V2, O2>
-    : PropertyChain<Value, Options>[K];
+// ---------------------------------------------------------------------------
+// ExtractInner — unwraps ClassifiedProperty to get the raw builder
+// ---------------------------------------------------------------------------
+
+/**
+ * For each property, if it's a ClassifiedProperty, extract __inner.
+ * Functions (lazy relations) and raw PropertyChain (relations) pass through.
+ */
+export type ExtractInner<T> = {
+  [K in keyof T]: T[K] extends ClassifiedProperty<infer B> ? B : T[K];
+};
+
+// ---------------------------------------------------------------------------
+// WithCompliance — adds .compliance() to any MikroORM builder
+// ---------------------------------------------------------------------------
+
+/**
+ * Adds `.compliance()` to a builder AND remaps chain methods so
+ * `.compliance()` persists. Each chain method returns WithCompliance
+ * wrapping the chain result. `.compliance()` captures the current
+ * builder as-is into ClassifiedProperty.
+ */
+export type WithCompliance<T> = {
+  [K in keyof T]: T[K] extends (...args: infer A) => infer R
+    ? R extends { '~type'?: unknown; '~options': unknown }
+      ? (...args: A) => WithCompliance<R>
+      : T[K]
+    : T[K];
+} & {
+  compliance(
+    level: ComplianceLevel
+  ): T extends { '~type'?: { value: infer V }; '~options': infer O }
+    ? ClassifiedProperty<T, V, O>
+    : ClassifiedProperty<T>;
 };
 
 // ---------------------------------------------------------------------------
 // ForklaunchPropertyBuilders — the type of `fp`
 // ---------------------------------------------------------------------------
 
-/**
- * Keys on PropertyBuilders that return relation builders.
- * These are auto-classified as 'none' — the fp proxy wraps them
- * to return ClassifiedProperty directly.
- */
 type RelationBuilderKeys =
   | 'manyToOne'
   | 'oneToMany'
@@ -140,43 +117,67 @@ type RelationBuilderKeys =
   | 'oneToOne'
   | 'embedded';
 
+// Generic methods whose type params get collapsed by mapped types
+type GenericBuilderKeys =
+  | 'json'
+  | 'formula'
+  | 'type'
+  | 'enum'
+  | 'bigint'
+  | 'array'
+  | 'decimal';
+
 /**
- * The type of `fp` — mirrors `PropertyBuilders` but:
- * - Scalar methods return `ForklaunchPropertyChain` (must call `.compliance()`)
- * - Relation methods return `ClassifiedProperty` directly (auto 'none')
+ * Each scalar method wraps the EXACT MikroORM return type with
+ * WithCompliance. Relations pass through unchanged.
+ * Generic methods have explicit signatures to preserve type params.
  */
 export type ForklaunchPropertyBuilders = {
   [K in Exclude<
     keyof PropertyBuilders,
-    RelationBuilderKeys
-  >]: PropertyBuilders[K] extends (
-    ...args: infer A
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  ) => UniversalPropertyOptionsBuilder<infer V, infer O, infer _IK>
-    ? (...args: A) => ForklaunchPropertyChain<V, O>
-    : PropertyBuilders[K] extends (
-          ...args: infer A
-        ) => PropertyChain<infer V, infer O>
-      ? (...args: A) => ForklaunchPropertyChain<V, O>
-      : PropertyBuilders[K];
-} & {
-  [K in RelationBuilderKeys]: PropertyBuilders[K] extends (
-    ...args: infer A
-  ) => PropertyChain<infer V, infer O>
-    ? (...args: A) => ClassifiedRelationChain<V, O>
+    RelationBuilderKeys | GenericBuilderKeys
+  >]: PropertyBuilders[K] extends (...args: infer A) => infer R
+    ? (...args: A) => WithCompliance<R>
     : PropertyBuilders[K];
+} & {
+  [K in RelationBuilderKeys]: PropertyBuilders[K];
+} & {
+  json: <T>() => WithCompliance<PropertyChain<T, EmptyOptions>>;
+  formula: <T>(
+    formula: string | ((...args: never[]) => string)
+  ) => WithCompliance<PropertyChain<T, EmptyOptions>>;
+  type: <T>(type: T) => WithCompliance<PropertyChain<T, EmptyOptions>>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  enum: <const T extends (number | string)[] | (() => Record<string, any>)>(
+    items?: T
+  ) => WithCompliance<
+    PropertyChain<
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      T extends () => Record<string, any>
+        ? T extends () => infer R
+          ? R[keyof R]
+          : never
+        : T extends (infer Value)[]
+          ? Value
+          : T,
+      EmptyOptions & { kind: 'enum' }
+    >
+  >;
+  bigint: <Mode extends 'bigint' | 'number' | 'string' = 'bigint'>(
+    mode?: Mode
+  ) => WithCompliance<
+    PropertyChain<
+      Mode extends 'bigint' ? bigint : Mode extends 'number' ? number : string,
+      EmptyOptions
+    >
+  >;
+  array: <T = string>(
+    toJsValue?: (i: string) => T,
+    toDbValue?: (i: T) => string
+  ) => WithCompliance<PropertyChain<T[], EmptyOptions>>;
+  decimal: <Mode extends 'number' | 'string' = 'string'>(
+    mode?: Mode
+  ) => WithCompliance<
+    PropertyChain<Mode extends 'number' ? number : string, EmptyOptions>
+  >;
 };
-
-/**
- * A relation builder that is already classified (as 'none') but still
- * supports chaining relation-specific methods like `.mappedBy()`, `.nullable()`.
- * All chain methods return ClassifiedRelationChain (preserving the brand).
- */
-export type ClassifiedRelationChain<Value, Options> = {
-  [K in keyof PropertyChain<Value, Options>]: PropertyChain<
-    Value,
-    Options
-  >[K] extends (...args: infer A) => PropertyChain<infer V2, infer O2>
-    ? (...args: A) => ClassifiedRelationChain<V2, O2>
-    : PropertyChain<Value, Options>[K];
-} & ClassifiedProperty;

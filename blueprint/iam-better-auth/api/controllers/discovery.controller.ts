@@ -19,6 +19,7 @@ export const getAuthMethods = handlers.get(
   '/auth-methods',
   {
     name: 'GetAuthMethods',
+    access: 'public',
     summary: 'Get configured authentication methods',
     responses: {
       200: {

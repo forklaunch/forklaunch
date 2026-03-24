@@ -263,15 +263,8 @@ describe('serviceFactory', () => {
       y: {
         type: number,
         lifetime: Lifetime.Transient,
-        factory: (
-          {
-            x
-          }: {
-            x: string;
-          },
-          resolve: (token: string) => unknown,
-          context: Record<string, unknown>
-        ) => x.length + (context.extra as number)
+        factory: ({ x }, resolve, context) =>
+          x.length + (context.extra as number)
       }
     });
     expect(multilineInjector.resolve('y', { extra: 10 })).toBe(15);

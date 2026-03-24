@@ -775,6 +775,7 @@ impl CliCommand for ApplicationCommand {
             is_in_memory_database: is_in_memory_database(&database),
             platform_application_id: None,
             platform_organization_id: None,
+            compliance: None,
         };
 
         let mut rendered_templates = Vec::new();
@@ -924,6 +925,7 @@ impl CliCommand for ApplicationCommand {
                 is_database_enabled: true,
                 platform_application_id: data.platform_application_id.clone(),
                 platform_organization_id: data.platform_organization_id.clone(),
+                compliance: data.compliance.clone(),
 
                 is_better_auth: template_dir.module_id == Some(Module::BetterAuthIam),
                 is_stripe: template_dir.module_id == Some(Module::StripeBilling),

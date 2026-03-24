@@ -1,12 +1,13 @@
-import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
+import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
+import type { InferEntity } from '@mikro-orm/core';
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 
-export const Team = defineEntity({
+export const Team = defineComplianceEntity({
   name: 'Team',
   properties: {
     ...sqlBaseProperties,
-    name: p.string(),
-    organizationId: p.string()
+    name: fp.string().compliance('none'),
+    organizationId: fp.string().compliance('none')
   }
 });
 

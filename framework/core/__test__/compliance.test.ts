@@ -8,51 +8,46 @@ import {
   COMPLIANCE_KEY
 } from '../src/persistence/complianceTypes';
 
+/** Read a property from an object by key, avoiding type casts. */
+function readKey(obj: unknown, key: string): unknown {
+  if (obj == null || typeof obj !== 'object') return undefined;
+  return (obj as Record<string, unknown>)[key];
+}
+
 describe('fp property builder', () => {
   it('adds .compliance() to scalar builders', () => {
     const builder = fp.string();
-    expect(typeof (builder as Record<string, unknown>).compliance).toBe(
-      'function'
-    );
+    expect(typeof builder.compliance).toBe('function');
   });
 
   it('stores compliance level via .compliance()', () => {
     const classified = fp.string().compliance('pii');
-    expect((classified as Record<string, unknown>)[COMPLIANCE_KEY]).toBe('pii');
+    expect(readKey(classified, COMPLIANCE_KEY)).toBe('pii');
   });
 
-  it('preserves compliance through chaining after .compliance()', () => {
-    const classified = (
-      fp.string().compliance('phi') as Record<string, unknown> & {
-        nullable: () => Record<string, unknown>;
-      }
-    ).nullable();
-    expect(classified[COMPLIANCE_KEY]).toBe('phi');
+  it('compliance works at end of chain', () => {
+    const classified = fp.string().nullable().unique().compliance('phi');
+    expect(readKey(classified, COMPLIANCE_KEY)).toBe('phi');
   });
 
-  it('preserves compliance through chaining before .compliance()', () => {
-    const classified = fp.string().nullable().unique().compliance('pci');
-    expect((classified as Record<string, unknown>)[COMPLIANCE_KEY]).toBe('pci');
+  it('compliance works with different chain order', () => {
+    const classified = fp.string().unique().nullable().compliance('pci');
+    expect(readKey(classified, COMPLIANCE_KEY)).toBe('pci');
   });
 
   it('auto-classifies relation methods as none', () => {
-    // manyToOne returns auto-classified builder
     const relation = fp.manyToOne(() => ({}));
-    expect((relation as Record<string, unknown>)[COMPLIANCE_KEY]).toBe('none');
+    expect(readKey(relation, COMPLIANCE_KEY)).toBe('none');
   });
 
   it('preserves auto-classification through relation chaining', () => {
-    const relation = (
-      fp.manyToOne(() => ({})) as Record<string, unknown> & {
-        nullable: () => Record<string, unknown>;
-      }
-    ).nullable();
-    expect(relation[COMPLIANCE_KEY]).toBe('none');
+    const relation = fp.manyToOne(() => ({})).nullable();
+    expect(readKey(relation, COMPLIANCE_KEY)).toBe('none');
   });
 
   it('forwards ~options for MikroORM compatibility', () => {
     const builder = fp.string().compliance('none');
-    expect((builder as Record<string, unknown>)['~options']).toBeDefined();
+    expect(readKey(builder, '~options')).toBeDefined();
   });
 });
 
@@ -155,7 +150,6 @@ describe('defineComplianceEntity', () => {
       }
     });
 
-    // EntitySchema has a name property
     expect(schema.meta.className).toBe('ValidEntity');
   });
 });

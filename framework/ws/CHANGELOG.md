@@ -1,5 +1,150 @@
 # @forklaunch/ws
 
+## 1.0.13
+
+### Patch Changes
+
+- patch working"
+- Updated dependencies
+  - @forklaunch/validator@1.0.13
+  - @forklaunch/common@1.0.13
+  - @forklaunch/core@1.0.13
+
+## 1.0.12
+
+### Patch Changes
+
+- try removing return type to let inference take over
+- Updated dependencies
+  - @forklaunch/validator@1.0.12
+  - @forklaunch/common@1.0.12
+  - @forklaunch/core@1.0.12
+
+## 1.0.11
+
+### Patch Changes
+
+- refinement
+- Updated dependencies
+  - @forklaunch/validator@1.0.11
+  - @forklaunch/common@1.0.11
+  - @forklaunch/core@1.0.11
+
+## 1.0.10
+
+### Patch Changes
+
+- store property as internal property instead of branding
+- Updated dependencies
+  - @forklaunch/validator@1.0.10
+  - @forklaunch/common@1.0.10
+  - @forklaunch/core@1.0.10
+
+## 1.0.9
+
+### Patch Changes
+
+- branding fixes
+- Updated dependencies
+  - @forklaunch/validator@1.0.9
+  - @forklaunch/common@1.0.9
+  - @forklaunch/core@1.0.9
+
+## 1.0.8
+
+### Patch Changes
+
+- remove brand from entity
+- Updated dependencies
+  - @forklaunch/validator@1.0.8
+  - @forklaunch/common@1.0.8
+  - @forklaunch/core@1.0.8
+
+## 1.0.7
+
+### Patch Changes
+
+- inconsistent state
+- Updated dependencies
+  - @forklaunch/validator@1.0.7
+  - @forklaunch/common@1.0.7
+  - @forklaunch/core@1.0.7
+
+## 1.0.6
+
+### Patch Changes
+
+- string brand instead of symbol
+- Updated dependencies
+  - @forklaunch/validator@1.0.6
+  - @forklaunch/common@1.0.6
+  - @forklaunch/core@1.0.6
+
+## 1.0.5
+
+### Patch Changes
+
+- entity rework
+- fix compliance brands
+- Updated dependencies
+- Updated dependencies
+  - @forklaunch/validator@1.0.5
+  - @forklaunch/common@1.0.5
+  - @forklaunch/core@1.0.5
+
+## 1.0.4
+
+### Patch Changes
+
+- Handle functional definitions on mikroorm entities
+- Updated dependencies
+  - @forklaunch/validator@1.0.4
+  - @forklaunch/common@1.0.4
+  - @forklaunch/core@1.0.4
+
+## 1.0.3
+
+### Patch Changes
+
+- Update packages and fix entity type
+- Updated dependencies
+  - @forklaunch/validator@1.0.3
+  - @forklaunch/common@1.0.3
+  - @forklaunch/core@1.0.3
+
+## 1.0.2
+
+### Patch Changes
+
+- Fix type agreement
+- Updated dependencies
+  - @forklaunch/validator@1.0.2
+  - @forklaunch/common@1.0.2
+  - @forklaunch/core@1.0.2
+
+## 1.0.1
+
+### Patch Changes
+
+- Version thrash
+- Updated dependencies
+  - @forklaunch/validator@1.0.1
+  - @forklaunch/common@1.0.1
+  - @forklaunch/core@1.0.1
+
+## 1.0.0
+
+### Major Changes
+
+- Compliance features first party
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.0.0
+  - @forklaunch/common@1.0.0
+  - @forklaunch/validator@1.0.0
+
 ## 0.3.5
 
 ### Patch Changes

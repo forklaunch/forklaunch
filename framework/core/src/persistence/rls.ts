@@ -1,10 +1,25 @@
-import type {
-  EntityManager,
-  EventSubscriber,
-  MikroORM,
-  TransactionEventArgs
-} from '@mikro-orm/core';
+import type { EntityManager, EventSubscriber, MikroORM } from '@mikro-orm/core';
 import { TENANT_FILTER_NAME } from './tenantFilter';
+
+/**
+ * Structural subset of {@link TransactionEventArgs} used by
+ * `RlsEventSubscriber` so that callers (and tests) only need to provide
+ * the properties the subscriber actually reads.
+ */
+export interface RlsTransactionEventArgs {
+  em: {
+    getFilterParams: EntityManager['getFilterParams'];
+    getConnection(): {
+      execute(
+        query: string,
+        params?: unknown[],
+        method?: 'all' | 'get' | 'run',
+        ctx?: unknown
+      ): Promise<unknown>;
+    };
+  };
+  transaction?: unknown;
+}
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -34,7 +49,7 @@ export interface RlsConfig {
  * (set by the tenant context middleware).
  */
 export class RlsEventSubscriber implements EventSubscriber {
-  async afterTransactionStart(args: TransactionEventArgs): Promise<void> {
+  async afterTransactionStart(args: RlsTransactionEventArgs): Promise<void> {
     const tenantId = this.getTenantId(args.em);
     if (!tenantId) {
       // No tenant context (e.g., super-admin or public route) — skip SET LOCAL
@@ -52,7 +67,9 @@ export class RlsEventSubscriber implements EventSubscriber {
     );
   }
 
-  private getTenantId(em: EntityManager): string | undefined {
+  private getTenantId(
+    em: Pick<EntityManager, 'getFilterParams'>
+  ): string | undefined {
     const params = em.getFilterParams(TENANT_FILTER_NAME) as
       | { tenantId?: string }
       | undefined;

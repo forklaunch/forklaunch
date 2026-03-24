@@ -1,5 +1,23 @@
 # @forklaunch/implementation-billing-stripe
 
+## 1.0.1
+
+### Patch Changes
+
+- Pass party enum from constructor
+
+## 1.0.0
+
+### Major Changes
+
+- Compliance framework installed
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.0
+  - @forklaunch/interfaces-billing@1.0.0
+
 ## 0.6.0
 
 ### Minor Changes

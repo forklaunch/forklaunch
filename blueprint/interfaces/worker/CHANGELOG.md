@@ -1,5 +1,11 @@
 # @forklaunch/interfaces-worker
 
+## 1.0.0
+
+### Major Changes
+
+- Compliance framework installed
+
 ## 0.8.0
 
 ### Minor Changes

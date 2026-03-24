@@ -1,14 +1,14 @@
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
-import { defineEntity, p } from '@mikro-orm/core';
+import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
 
 // This is to represent connection information for a billing provider
-export const BillingPortal = defineEntity({
+export const BillingPortal = defineComplianceEntity({
   name: 'BillingPortal',
   properties: {
     ...sqlBaseProperties,
-    customerId: p.string(),
-    uri: p.string().nullable(),
-    expiresAt: p.datetime(),
-    providerFields: p.json<unknown>().nullable()
+    customerId: fp.string().compliance('none'),
+    uri: fp.string().nullable().compliance('none'),
+    expiresAt: fp.datetime().compliance('none'),
+    providerFields: fp.json<unknown>().nullable().compliance('none')
   }
 });

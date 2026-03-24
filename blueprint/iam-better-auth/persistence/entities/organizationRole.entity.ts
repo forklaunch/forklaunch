@@ -1,13 +1,14 @@
-import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
+import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
+import type { InferEntity } from '@mikro-orm/core';
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 
-export const OrganizationRole = defineEntity({
+export const OrganizationRole = defineComplianceEntity({
   name: 'OrganizationRole',
   properties: {
     ...sqlBaseProperties,
-    organizationId: p.string(),
-    role: p.string(),
-    permission: p.string()
+    organizationId: fp.string().compliance('none'),
+    role: fp.string().compliance('none'),
+    permission: fp.string().compliance('none')
   }
 });
 

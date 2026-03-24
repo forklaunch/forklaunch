@@ -341,6 +341,7 @@ impl CliCommand for LibraryCommand {
             is_jest: manifest_data.is_jest,
             platform_application_id: manifest_data.platform_application_id.clone(),
             platform_organization_id: manifest_data.platform_organization_id.clone(),
+            compliance: manifest_data.compliance.clone(),
 
             // Library-specific fields
             library_name: library_name.clone(),

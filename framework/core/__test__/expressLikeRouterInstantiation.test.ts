@@ -20,7 +20,7 @@ import { typedAuthHandler } from '../src/http/handlers/typedAuthHandler';
 
 const contractDetails = {
   name: 'string',
-  access: 'protected',
+  access: 'protected' as const,
   summary: 'string',
   auth: {
     sessionSchema: {

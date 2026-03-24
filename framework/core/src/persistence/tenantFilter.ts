@@ -1,9 +1,4 @@
-import type {
-  Dictionary,
-  EntityManager,
-  FilterDef,
-  MikroORM
-} from '@mikro-orm/core';
+import type { Dictionary, EntityManager, FilterDef } from '@mikro-orm/core';
 
 /**
  * The name used to register the tenant isolation filter.
@@ -65,7 +60,9 @@ export function createTenantFilterDef(): FilterDef {
  * em.setFilterParams('tenant', { tenantId: 'org-123' });
  * ```
  */
-export function setupTenantFilter(orm: MikroORM): void {
+export function setupTenantFilter(orm: {
+  em: Pick<EntityManager, 'addFilter'>;
+}): void {
   orm.em.addFilter(createTenantFilterDef());
 }
 
@@ -75,7 +72,9 @@ export function setupTenantFilter(orm: MikroORM): void {
  * Use this only from code paths that have verified super-admin permissions.
  * Queries executed through the returned EM will return cross-tenant data.
  */
-export function getSuperAdminContext(em: EntityManager): EntityManager {
+export function getSuperAdminContext(
+  em: Pick<EntityManager, 'fork'>
+): ReturnType<EntityManager['fork']> {
   const forked = em.fork();
   forked.setFilterParams(TENANT_FILTER_NAME, { tenantId: undefined });
   // Disable the filter by passing false for the filter in each query isn't

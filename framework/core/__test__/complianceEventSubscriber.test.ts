@@ -35,10 +35,10 @@ function makeEventArgs(
   entityName: string,
   entity: Record<string, unknown>,
   tenantId?: string
-): EventArgs<Record<string, unknown>> {
+): EventArgs<unknown> {
   return {
     entity,
-    meta: { className: entityName } as EntityMetadata<Record<string, unknown>>,
+    meta: { className: entityName } as EntityMetadata<unknown>,
     em: {
       getFilterParams(filterName: string) {
         if (filterName === 'tenant') {
@@ -46,7 +46,7 @@ function makeEventArgs(
         }
         return undefined;
       }
-    } as EventArgs<Record<string, unknown>>['em']
+    } as EventArgs<unknown>['em']
   };
 }
 
@@ -274,9 +274,7 @@ describe('ComplianceEventSubscriber', () => {
 describe('wrapEmWithNativeQueryBlocking', () => {
   it('blocks nativeInsert on entities with phi/pci fields', () => {
     const mockEm = makeMockEm();
-    const wrapped = wrapEmWithNativeQueryBlocking(
-      mockEm as Parameters<typeof wrapEmWithNativeQueryBlocking>[0]
-    );
+    const wrapped = wrapEmWithNativeQueryBlocking(mockEm);
 
     expect(() => wrapped.nativeInsert('Patient' as never, {} as never)).toThrow(
       /nativeInsert.*blocked.*Patient/
@@ -285,9 +283,7 @@ describe('wrapEmWithNativeQueryBlocking', () => {
 
   it('blocks nativeUpdate on entities with phi/pci fields', () => {
     const mockEm = makeMockEm();
-    const wrapped = wrapEmWithNativeQueryBlocking(
-      mockEm as Parameters<typeof wrapEmWithNativeQueryBlocking>[0]
-    );
+    const wrapped = wrapEmWithNativeQueryBlocking(mockEm);
 
     expect(() =>
       wrapped.nativeUpdate('Patient' as never, {} as never, {} as never)
@@ -296,9 +292,7 @@ describe('wrapEmWithNativeQueryBlocking', () => {
 
   it('blocks nativeDelete on entities with phi/pci fields', () => {
     const mockEm = makeMockEm();
-    const wrapped = wrapEmWithNativeQueryBlocking(
-      mockEm as Parameters<typeof wrapEmWithNativeQueryBlocking>[0]
-    );
+    const wrapped = wrapEmWithNativeQueryBlocking(mockEm);
 
     expect(() => wrapped.nativeDelete('Patient' as never, {} as never)).toThrow(
       /nativeDelete.*blocked.*Patient/
@@ -307,9 +301,7 @@ describe('wrapEmWithNativeQueryBlocking', () => {
 
   it('allows native queries on entities without phi/pci fields', () => {
     const mockEm = makeMockEm();
-    const wrapped = wrapEmWithNativeQueryBlocking(
-      mockEm as Parameters<typeof wrapEmWithNativeQueryBlocking>[0]
-    );
+    const wrapped = wrapEmWithNativeQueryBlocking(mockEm);
 
     expect(() =>
       wrapped.nativeInsert('PublicEntity' as never, {} as never)
@@ -319,9 +311,7 @@ describe('wrapEmWithNativeQueryBlocking', () => {
 
   it('allows native queries on unregistered entities', () => {
     const mockEm = makeMockEm();
-    const wrapped = wrapEmWithNativeQueryBlocking(
-      mockEm as Parameters<typeof wrapEmWithNativeQueryBlocking>[0]
-    );
+    const wrapped = wrapEmWithNativeQueryBlocking(mockEm);
 
     expect(() =>
       wrapped.nativeInsert('UnregisteredEntity' as never, {} as never)
@@ -330,9 +320,7 @@ describe('wrapEmWithNativeQueryBlocking', () => {
 
   it('passes through non-blocked methods', () => {
     const mockEm = makeMockEm();
-    const wrapped = wrapEmWithNativeQueryBlocking(
-      mockEm as Parameters<typeof wrapEmWithNativeQueryBlocking>[0]
-    );
+    const wrapped = wrapEmWithNativeQueryBlocking(mockEm);
 
     wrapped.find('Patient' as never, {} as never);
     expect(mockEm.find).toHaveBeenCalled();

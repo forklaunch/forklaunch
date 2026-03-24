@@ -1,21 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { setTenantContext } from '../src/http/middleware/request/tenantContext.middleware';
+import {
+  setTenantContext,
+  type TenantContextRequest,
+  type TenantContextResponse
+} from '../src/http/middleware/request/tenantContext.middleware';
 import { TENANT_FILTER_NAME } from '../src/persistence/tenantFilter';
 
-type MockRequest = {
-  contractDetails: Record<string, unknown>;
-  session?: Record<string, unknown>;
-  headers: Record<string, unknown>;
-  em?: {
-    setFilterParams: ReturnType<typeof vi.fn>;
-  };
-  schemaValidator?: unknown;
-};
-
-type MockResponse = {
-  status: ReturnType<typeof vi.fn>;
-  send: ReturnType<typeof vi.fn>;
-};
+type MockRequest = TenantContextRequest;
 
 function makeReq(overrides: Partial<MockRequest> = {}): MockRequest {
   return {
@@ -27,26 +18,21 @@ function makeReq(overrides: Partial<MockRequest> = {}): MockRequest {
   };
 }
 
-function makeRes(): MockResponse {
-  const res: MockResponse = {
-    status: vi.fn(),
-    send: vi.fn()
+function makeRes() {
+  const res: TenantContextResponse = {
+    status: vi.fn<(code: number) => TenantContextResponse>(),
+    send: vi.fn<(body?: unknown) => TenantContextResponse>()
   };
-  res.status.mockReturnValue(res);
+  vi.mocked(res.status).mockReturnValue(res);
   return res;
 }
 
-// The middleware has complex generic types — we call it with simplified mocks
 function callMiddleware(
   req: MockRequest,
-  res: MockResponse,
-  next: ReturnType<typeof vi.fn>
+  res: TenantContextResponse,
+  next: () => void
 ) {
-  return setTenantContext(
-    req as Parameters<typeof setTenantContext>[0],
-    res as Parameters<typeof setTenantContext>[1],
-    next
-  );
+  return setTenantContext(req, res, next);
 }
 
 describe('setTenantContext', () => {

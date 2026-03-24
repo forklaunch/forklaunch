@@ -1,14 +1,15 @@
-import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
+import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
+import type { InferEntity } from '@mikro-orm/core';
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 
 // Entity that defines the structure of the SampleWorkerEventRecord table
-export const SampleWorkerEventRecord = defineEntity({
+export const SampleWorkerEventRecord = defineComplianceEntity({
   name: 'SampleWorkerEventRecord',
   properties: {
     ...sqlBaseProperties,
-    message: p.string(),
-    processed: p.boolean(),
-    retryCount: p.integer()
+    message: fp.string().compliance('none'),
+    processed: fp.boolean().compliance('none'),
+    retryCount: fp.integer().compliance('none')
   }
 });
 

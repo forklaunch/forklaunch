@@ -23,6 +23,7 @@ export const createSubscription = handlers.post(
   '/',
   {
     name: 'Create Subscription',
+    access: 'internal',
     summary: 'Create a subscription',
     auth: {
       hmac: {
@@ -47,6 +48,7 @@ export const getSubscription = handlers.get(
   '/:id',
   {
     name: 'Get Subscription',
+    access: 'internal',
     summary: 'Get a subscription',
     auth: {
       hmac: {
@@ -71,6 +73,7 @@ export const getUserSubscription = handlers.get(
   '/user/:id',
   {
     name: 'Get User Subscription',
+    access: 'internal',
     summary: 'Get a user subscription',
     auth: {
       hmac: {
@@ -97,6 +100,7 @@ export const getOrganizationSubscription = handlers.get(
   '/organization/:id',
   {
     name: 'Get Organization Subscription',
+    access: 'internal',
     summary: 'Get an organization subscription',
     auth: {
       hmac: {
@@ -126,6 +130,7 @@ export const updateSubscription = handlers.put(
   '/:id',
   {
     name: 'Update Subscription',
+    access: 'internal',
     summary: 'Update a subscription',
     auth: {
       hmac: {
@@ -159,6 +164,7 @@ export const deleteSubscription = handlers.delete(
   '/:id',
   {
     name: 'Delete Subscription',
+    access: 'internal',
     summary: 'Delete a subscription',
     auth: {
       hmac: {
@@ -184,6 +190,7 @@ export const listSubscriptions = handlers.get(
   '/',
   {
     name: 'List Subscriptions',
+    access: 'internal',
     summary: 'List subscriptions',
     query: {
       ids: optional(array(string))
@@ -212,6 +219,7 @@ export const cancelSubscription = handlers.get(
   '/:id/cancel',
   {
     name: 'Cancel Subscription',
+    access: 'internal',
     summary: 'Cancel a subscription',
     params: IdSchema,
     auth: {
@@ -237,6 +245,7 @@ export const resumeSubscription = handlers.get(
   '/:id/resume',
   {
     name: 'Resume Subscription',
+    access: 'internal',
     summary: 'Resume a subscription',
     params: IdSchema,
     auth: {

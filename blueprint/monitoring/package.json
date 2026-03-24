@@ -16,7 +16,7 @@
   "types": "lib/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "clean": "rm -rf lib pnpm.lock.yaml node_modules",
+    "clean": "rm -rf lib tsconfig.tsbuildinfo pnpm.lock.yaml node_modules",
     "docs": "typedoc --out docs *",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
     "lint": "eslint . -c eslint.config.mjs",
@@ -25,6 +25,6 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/core": "^0.19.5"
+    "@forklaunch/core": "^1.0.13"
   }
 }

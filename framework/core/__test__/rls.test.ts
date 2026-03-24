@@ -1,14 +1,16 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { RlsEventSubscriber } from '../src/persistence/rls';
+import {
+  RlsEventSubscriber,
+  type RlsTransactionEventArgs
+} from '../src/persistence/rls';
 import { TENANT_FILTER_NAME } from '../src/persistence/tenantFilter';
-import type { TransactionEventArgs } from '@mikro-orm/core';
 
 const TENANT_ID = 'org-abc-123';
 
 function makeTransactionArgs(
   tenantId?: string,
   executeFn = vi.fn().mockResolvedValue(undefined)
-): TransactionEventArgs {
+): RlsTransactionEventArgs {
   return {
     em: {
       getFilterParams(filterName: string) {
@@ -20,8 +22,8 @@ function makeTransactionArgs(
       getConnection() {
         return { execute: executeFn };
       }
-    } as TransactionEventArgs['em'],
-    transaction: {} as TransactionEventArgs['transaction']
+    } as RlsTransactionEventArgs['em'],
+    transaction: {}
   };
 }
 
@@ -76,7 +78,7 @@ describe('RlsEventSubscriber', () => {
     const executeFn = vi.fn().mockResolvedValue(undefined);
     const txn = { id: 'txn-123' };
     const args = makeTransactionArgs(TENANT_ID, executeFn);
-    args.transaction = txn as TransactionEventArgs['transaction'];
+    args.transaction = txn as RlsTransactionEventArgs['transaction'];
 
     await subscriber.afterTransactionStart(args);
 

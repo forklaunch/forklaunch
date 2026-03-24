@@ -167,9 +167,7 @@ export class ComplianceEventSubscriber implements EventSubscriber {
  * @returns A Proxy-wrapped EntityManager that throws on native query
  *          operations targeting compliance entities.
  */
-export function wrapEmWithNativeQueryBlocking<T extends EntityManager>(
-  em: T
-): T {
+export function wrapEmWithNativeQueryBlocking<T extends object>(em: T): T {
   const BLOCKED_METHODS = [
     'nativeInsert',
     'nativeUpdate',

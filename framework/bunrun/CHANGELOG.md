@@ -1,5 +1,90 @@
 # @forklaunch/bunrun
 
+## 1.0.13
+
+### Patch Changes
+
+- patch working"
+
+## 1.0.12
+
+### Patch Changes
+
+- try removing return type to let inference take over
+
+## 1.0.11
+
+### Patch Changes
+
+- refinement
+
+## 1.0.10
+
+### Patch Changes
+
+- store property as internal property instead of branding
+
+## 1.0.9
+
+### Patch Changes
+
+- branding fixes
+
+## 1.0.8
+
+### Patch Changes
+
+- remove brand from entity
+
+## 1.0.7
+
+### Patch Changes
+
+- inconsistent state
+
+## 1.0.6
+
+### Patch Changes
+
+- string brand instead of symbol
+
+## 1.0.5
+
+### Patch Changes
+
+- entity rework
+- fix compliance brands
+
+## 1.0.4
+
+### Patch Changes
+
+- Handle functional definitions on mikroorm entities
+
+## 1.0.3
+
+### Patch Changes
+
+- Update packages and fix entity type
+
+## 1.0.2
+
+### Patch Changes
+
+- Fix type agreement
+
+## 1.0.1
+
+### Patch Changes
+
+- Version thrash
+
+## 1.0.0
+
+### Major Changes
+
+- Compliance features first party
+
 ## 0.1.5
 
 ### Patch Changes

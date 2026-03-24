@@ -1,13 +1,14 @@
-import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
+import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
+import type { InferEntity } from '@mikro-orm/core';
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 
-export const Verification = defineEntity({
+export const Verification = defineComplianceEntity({
   name: 'Verification',
   properties: {
     ...sqlBaseProperties,
-    identifier: p.string(),
-    value: p.string(),
-    expiresAt: p.datetime()
+    identifier: fp.string().compliance('none'),
+    value: fp.string().compliance('none'),
+    expiresAt: fp.datetime().compliance('none')
   }
 });
 

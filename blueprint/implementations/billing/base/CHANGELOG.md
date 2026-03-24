@@ -1,5 +1,16 @@
 # @forklaunch/implementation-billing-base
 
+## 1.0.0
+
+### Major Changes
+
+- Compliance framework installed
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/interfaces-billing@1.0.0
+
 ## 0.9.0
 
 ### Minor Changes

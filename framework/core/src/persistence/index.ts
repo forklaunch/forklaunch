@@ -3,9 +3,9 @@ export {
   ComplianceLevel,
   type ComplianceLevel as ComplianceLevelType,
   type ClassifiedProperty,
-  type ClassifiedRelationChain,
+  type ExtractInner,
   type ForklaunchPropertyBuilders,
-  type ForklaunchPropertyChain,
+  type WithCompliance,
   getComplianceMetadata,
   getEntityComplianceFields,
   entityHasEncryptedFields

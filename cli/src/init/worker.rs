@@ -823,6 +823,7 @@ impl CliCommand for WorkerCommand {
             is_kafka_enabled: r#type == WorkerType::Kafka,
             platform_application_id: manifest_data.platform_application_id.clone(),
             platform_organization_id: manifest_data.platform_organization_id.clone(),
+            compliance: manifest_data.compliance.clone(),
 
             is_postgres: if let Some(database) = &database {
                 database == &Database::PostgreSQL

@@ -1,18 +1,19 @@
-import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
+import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
+import type { InferEntity } from '@mikro-orm/core';
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 import { User } from './user.entity';
 
-export const Session = defineEntity({
+export const Session = defineComplianceEntity({
   name: 'Session',
   properties: {
     ...sqlBaseProperties,
-    user: () => p.manyToOne(User),
-    token: p.string(),
-    expiresAt: p.datetime(),
-    ipAddress: p.string().nullable(),
-    userAgent: p.string().nullable(),
-    activeOrganizationId: p.string().nullable(),
-    activeTeamId: p.string().nullable()
+    user: () => fp.manyToOne(User),
+    token: fp.string().compliance('none'),
+    expiresAt: fp.datetime().compliance('none'),
+    ipAddress: fp.string().nullable().compliance('none'),
+    userAgent: fp.string().nullable().compliance('none'),
+    activeOrganizationId: fp.string().nullable().compliance('none'),
+    activeTeamId: fp.string().nullable().compliance('none')
   }
 });
 

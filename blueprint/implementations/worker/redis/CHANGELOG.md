@@ -1,5 +1,16 @@
 # @forklaunch/implementation-worker-redis
 
+## 1.0.0
+
+### Major Changes
+
+- Compliance framework installed
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.0
+
 ## 0.9.0
 
 ### Minor Changes

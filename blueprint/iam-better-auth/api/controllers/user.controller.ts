@@ -16,6 +16,7 @@ export const surfaceRoles = handlers.get(
   '/:id/surface-roles',
   {
     name: 'Surface User Roles',
+    access: 'internal',
     summary:
       'Surfaces the org-scoped roles for a user in their active organization',
     auth: {
@@ -51,6 +52,7 @@ export const surfacePermissions = handlers.get(
   '/:id/surface-permissions',
   {
     name: 'Surface User Permissions',
+    access: 'internal',
     summary:
       'Surfaces the org-scoped permissions for a user in their active organization',
     auth: {

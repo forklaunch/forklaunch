@@ -131,6 +131,27 @@ pub(crate) struct ProjectEntry {
     pub(crate) metadata: Option<ProjectMetadata>,
 }
 
+/// Compliance configuration stored in the `[compliance]` section of `manifest.toml`.
+/// All fields are optional so existing manifests parse without changes.
+#[derive(Debug, Serialize, Deserialize, Content, Clone, Default)]
+pub(crate) struct ComplianceManifestConfig {
+    /// Allowed deployment regions (e.g., `["us-east-1", "eu-west-1"]`).
+    /// Enforced by the platform compiler at deploy time.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) data_residency: Vec<String>,
+
+    /// Required secrets that must be present as environment variables at boot.
+    /// The framework's SecretsAccessor validates these at startup.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) secrets: Vec<String>,
+
+    /// Per-entity field compliance classifications.
+    /// Keys are entity names, values are field name → classification maps.
+    /// Classifications: "none", "pii", "phi", "pci".
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub(crate) entities: HashMap<String, HashMap<String, String>>,
+}
+
 #[macro_export]
 macro_rules! internal_config_struct {
     (
@@ -180,6 +201,8 @@ macro_rules! internal_config_struct {
             $vis platform_application_id: Option<String>,
             #[serde(skip_serializing_if = "Option::is_none")]
             $vis platform_organization_id: Option<String>,
+            #[serde(default, skip_serializing_if = "Option::is_none")]
+            $vis compliance: Option<crate::core::manifest::ComplianceManifestConfig>,
         }
     };
 }
@@ -281,6 +304,7 @@ macro_rules! config_struct {
                         license: shadow.license.clone(),
                         platform_application_id: shadow.platform_application_id.clone(),
                         platform_organization_id: shadow.platform_organization_id.clone(),
+                        compliance: shadow.compliance.clone(),
 
                         is_eslint: shadow.linter == "eslint",
                         is_biome: shadow.formatter == "biome",

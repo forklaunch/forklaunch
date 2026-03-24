@@ -52,6 +52,7 @@ export const createUser = handlers.post(
   '/',
   {
     name: 'Create User',
+    access: 'internal',
     summary: 'Creates a new user',
     auth: {
       hmac: {
@@ -79,6 +80,7 @@ export const createBatchUsers = handlers.post(
   '/batch',
   {
     name: 'Create Batch Users',
+    access: 'internal',
     summary: 'Creates multiple users',
     auth: {
       hmac: {
@@ -105,6 +107,7 @@ export const getUser = handlers.get(
   '/:id',
   {
     name: 'Get User',
+    access: 'protected',
     summary: 'Gets a user by ID',
     auth: {
       sessionSchema: {
@@ -143,6 +146,7 @@ export const getBatchUsers = handlers.get(
   '/batch',
   {
     name: 'Get Batch Users',
+    access: 'protected',
     summary: 'Gets multiple users by IDs',
     auth: {
       sessionSchema: {
@@ -183,6 +187,7 @@ export const updateUser = handlers.put(
   '/',
   {
     name: 'Update User',
+    access: 'protected',
     summary: 'Updates a user by ID',
     auth: {
       sessionSchema: {
@@ -234,6 +239,7 @@ export const updateBatchUsers = handlers.put(
   '/batch',
   {
     name: 'Update Batch Users',
+    access: 'protected',
     summary: 'Updates multiple users by IDs',
     auth: {
       sessionSchema: {
@@ -287,6 +293,7 @@ export const deleteUser = handlers.delete(
   '/:id',
   {
     name: 'Delete User',
+    access: 'protected',
     summary: 'Deletes a user by ID',
     auth: {
       sessionSchema: {
@@ -343,6 +350,7 @@ export const deleteBatchUsers = handlers.delete(
   '/batch',
   {
     name: 'Delete Batch Users',
+    access: 'protected',
     summary: 'Deletes multiple users by IDs',
     auth: {
       sessionSchema: {
@@ -424,6 +432,7 @@ export const surfaceRoles = handlers.get(
   '/:id/surface-roles',
   {
     name: 'Surface User Roles',
+    access: 'internal',
     summary: 'Surfaces the roles for a user',
     auth: {
       hmac: {
@@ -475,6 +484,7 @@ export const surfacePermissions = handlers.get(
   '/:id/surface-permissions',
   {
     name: 'Surface User Permissions',
+    access: 'internal',
     summary: 'Verifies if a user has a specified permission',
     auth: {
       hmac: {
