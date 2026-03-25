@@ -1,26 +1,13 @@
-/**
- * Retention Enforcement Script
- *
- * One-shot script that enforces data retention policies declared on entities.
- * Designed to be run as an ECS RunTask triggered by EventBridge on a schedule.
- *
- * Usage:
- *   pnpm retention:enforce              # enforce all
- *   pnpm retention:enforce -- --dry-run # preview without mutating
- */
-
 import { ci, tokens } from '../bootstrapper';
 
-const otel = ci.resolve(tokens.OtelCollector);
+const otel = ci.resolve(tokens.OpenTelemetryCollector);
 const retentionService = ci.resolve(tokens.RetentionService);
 
 const dryRun = process.argv.includes('--dry-run');
 
 async function main() {
   otel.info('[RetentionEnforcement] Starting', { dryRun });
-
   const result = await retentionService.enforce({ dryRun });
-
   otel.info('[RetentionEnforcement] Complete', {
     processed: result.processed,
     deleted: result.deleted,
@@ -28,7 +15,6 @@ async function main() {
     errors: result.errors,
     durationMs: result.durationMs
   });
-
   if (result.errors > 0) {
     otel.warn('[RetentionEnforcement] Completed with errors', {
       errors: result.errors,
@@ -36,7 +22,6 @@ async function main() {
     });
     process.exit(1);
   }
-
   process.exit(0);
 }
 

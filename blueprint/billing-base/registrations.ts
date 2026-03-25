@@ -11,7 +11,8 @@ import {
   ComplianceDataService,
   createConfigInjector,
   getEnvVar,
-  Lifetime
+  Lifetime,
+  RetentionService
 } from '@forklaunch/core/services';
 import {
   BaseBillingPortalService,
@@ -326,6 +327,12 @@ const serviceDependencies = runtimeDependencies.chain({
         PaymentLink: 'customerId',
         BillingPortal: 'customerId'
       })
+  },
+  RetentionService: {
+    lifetime: Lifetime.Singleton,
+    type: RetentionService,
+    factory: ({ MikroORM, OpenTelemetryCollector }) =>
+      new RetentionService(MikroORM, OpenTelemetryCollector)
   }
 });
 

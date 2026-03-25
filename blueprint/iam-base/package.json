@@ -32,7 +32,8 @@
     "seed": "DOTENV_FILE_PATH=.env.local NODE_OPTIONS='--import=tsx' mikro-orm seeder:run",
     "start": "node --import=tsx dist/server.js",
     "start:bun": "bun run migrate:up && bun dist/server.js",
-    "test": "NODE_OPTIONS='--import=tsx' vitest --passWithNoTests"
+    "test": "NODE_OPTIONS='--import=tsx' vitest --passWithNoTests",
+    "retention:enforce": "pnpm tsx scripts/enforce-retention.ts"
   },
   "dependencies": {
     "@forklaunch/blueprint-core": "workspace:*",

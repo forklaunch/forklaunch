@@ -34,7 +34,8 @@
     "start": "DOTENV_FILE_PATH=.env.local NODE_OPTIONS='--import=tsx' node dist/server.js",
     "start:bun": "bun run migrate:up && bun dist/server.js",
     "sync:stripe": "NODE_OPTIONS='--import=tsx' tsx scripts/sync-stripe-plans.ts",
-    "test": "vitest --passWithNoTests"
+    "test": "vitest --passWithNoTests",
+    "retention:enforce": "pnpm tsx scripts/enforce-retention.ts"
   },
   "dependencies": {
     "@forklaunch/blueprint-core": "workspace:*",

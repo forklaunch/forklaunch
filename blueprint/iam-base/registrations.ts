@@ -11,7 +11,8 @@ import {
   ComplianceDataService,
   createConfigInjector,
   getEnvVar,
-  Lifetime
+  Lifetime,
+  RetentionService
 } from '@forklaunch/core/services';
 import {
   BaseOrganizationService,
@@ -236,6 +237,12 @@ const serviceDependencies = runtimeDependencies.chain({
       new ComplianceDataService(MikroORM, OpenTelemetryCollector, {
         User: 'id'
       })
+  },
+  RetentionService: {
+    lifetime: Lifetime.Singleton,
+    type: RetentionService,
+    factory: ({ MikroORM, OpenTelemetryCollector }) =>
+      new RetentionService(MikroORM, OpenTelemetryCollector)
   }
 });
 
