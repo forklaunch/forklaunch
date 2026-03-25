@@ -1051,6 +1051,7 @@ impl CliCommand for ApplicationCommand {
                     }),
                     "client-sdk" => Some(ProjectDependencies {
                         forklaunch_common: Some(COMMON_VERSION.to_string()),
+                        forklaunch_core: Some(CORE_VERSION.to_string()),
                         forklaunch_universal_sdk: Some(UNIVERSAL_SDK_VERSION.to_string()),
                         better_auth: if global_module_config
                             .iam
