@@ -1,5 +1,14 @@
 # @forklaunch/implementation-billing-stripe
 
+## 1.1.3
+
+### Patch Changes
+
+- Worker decryption and encryption update
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.3
+  - @forklaunch/interfaces-billing@1.0.3
+
 ## 1.1.2
 
 ### Patch Changes

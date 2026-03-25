@@ -63,6 +63,7 @@ export class Base{{pascal_case_name}}Service implements {{pascal_case_name}}Serv
     });
     await this.entityManager.persist(entity).flush();{{/is_worker}}{{#is_worker}}const entity: I{{pascal_case_name}}EventRecord = {
       id: v4(),
+      tenantId: '', // TODO: resolve from request context (e.g. session.organizationId)
       ...data,
       processed: false,
       retryCount: 0,
@@ -73,6 +74,7 @@ export class Base{{pascal_case_name}}Service implements {{pascal_case_name}}Serv
     await this.workerProducer.enqueueJob(entity);{{/is_worker}}
 
     // Map from entity to response (inline Entity → DTO conversion)
-    {{^is_worker}}return wrap(entity).toPOJO();{{/is_worker}}{{#is_worker}}return entity as unknown as {{pascal_case_name}}Response;{{/is_worker}}{{/with_mappers}}
+    {{^is_worker}}return wrap(entity).toPOJO();{{/is_worker}}{{#is_worker}}const { id, tenantId, createdAt, updatedAt, retentionAnonymizedAt, ...response } = entity;
+    return response as {{pascal_case_name}}Response;{{/is_worker}}{{/with_mappers}}
   };
 }

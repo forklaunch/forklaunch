@@ -99,17 +99,16 @@ export function defineComplianceEntity<
     registerEntityUserIdField(entityName, meta.userIdField);
   }
 
-  // Strip custom fields before passing to MikroORM's defineEntity
-  const {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    retention: _retention,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    userIdField: _userIdField,
-    ...mikroMeta
-  } = meta;
-
   return defineEntity(
-    mikroMeta as unknown as typeof meta
+    meta as EntityMetadataWithProperties<
+      TName,
+      TTableName,
+      TProperties & ValidateProperties<TProperties>,
+      TPK,
+      TBase,
+      TRepository,
+      TForceObject
+    >
   ) as EntitySchemaWithMeta<
     TName,
     TTableName,

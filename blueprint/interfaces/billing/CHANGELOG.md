@@ -1,5 +1,11 @@
 # @forklaunch/interfaces-billing
 
+## 1.0.3
+
+### Patch Changes
+
+- Worker decryption and encryption update
+
 ## 1.0.2
 
 ### Patch Changes

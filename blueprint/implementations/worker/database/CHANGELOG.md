@@ -1,5 +1,13 @@
 # @forklaunch/implementation-worker-database
 
+## 1.0.3
+
+### Patch Changes
+
+- Worker decryption and encryption update
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.3
+
 ## 1.0.2
 
 ### Patch Changes
