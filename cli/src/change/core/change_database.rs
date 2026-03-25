@@ -13,7 +13,10 @@ use crate::{
         manifest::ProjectEntry,
         package_json::{
             application_package_json::ApplicationPackageJson,
-            package_json_constants::{MIKRO_ORM_DATABASE_VERSION, PROJECT_SEED_SCRIPT},
+            package_json_constants::{
+                MIKRO_ORM_DATABASE_VERSION, PROJECT_SEED_SCRIPT,
+                project_retention_enforce_script,
+            },
             project_package_json::ProjectPackageJson,
         },
         removal_template::RemovalTemplate,
@@ -226,5 +229,21 @@ pub(crate) fn change_database_seed_script(
     project_package_json.scripts.as_mut().unwrap().seed = match database {
         Database::MongoDB => None,
         _ => Some(PROJECT_SEED_SCRIPT.to_string()),
+    };
+}
+
+pub(crate) fn change_database_retention_script(
+    project_package_json: &mut ProjectPackageJson,
+    runtime: &crate::constants::Runtime,
+    has_database: bool,
+) {
+    project_package_json
+        .scripts
+        .as_mut()
+        .unwrap()
+        .retention_enforce = if has_database {
+        Some(project_retention_enforce_script(runtime))
+    } else {
+        None
     };
 }

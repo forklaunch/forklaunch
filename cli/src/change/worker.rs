@@ -18,7 +18,7 @@ use super::core::{
 };
 use crate::{
     CliCommand,
-    change::core::change_database::change_database_seed_script,
+    change::core::change_database::{change_database_retention_script, change_database_seed_script},
     constants::{
         Database, ERROR_FAILED_TO_PARSE_MANIFEST, ERROR_FAILED_TO_READ_DOCKER_COMPOSE,
         ERROR_FAILED_TO_READ_MANIFEST, ERROR_FAILED_TO_READ_PACKAGE_JSON, Infrastructure,
@@ -297,6 +297,11 @@ fn change_type(
 
             change_database_postinstall_script(application_package_json, &db);
             change_database_seed_script(project_package_json, &db);
+            change_database_retention_script(
+                project_package_json,
+                &manifest_data.runtime.parse()?,
+                true,
+            );
 
             rendered_templates_cache.insert(
                 base_path.join("mikro-orm.config.ts").to_string_lossy(),

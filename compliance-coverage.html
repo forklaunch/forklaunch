@@ -53,10 +53,10 @@
 
 <h1>ForkLaunch Compliance Coverage Report</h1>
 <p class="subtitle">Updated March 24, 2026</p>
-<p class="intro">ForkLaunch addresses every technical control required by HIPAA, SOC 2, PCI DSS, and GDPR at both the application and infrastructure layers. Controls are enforced across three layers: the <strong>Framework</strong> (<code>@forklaunch/core</code> — compile-time types, runtime middleware, encryption, tenant isolation), the <strong>CLI</strong> (<code>forklaunch</code> binary — code generation, compliance auditing, GitHub configs), and the <strong>Platform</strong> (ForkLaunch Cloud — risk scoring, data flow diagrams, DPIA, portal dashboard, deploy-time enforcement). Each control below is tagged with its layer. Controls that are not covered are either addressable with additional engineering work or are organizational processes that require business action.</p>
+<p class="intro">ForkLaunch addresses 34 of 43 compliance requirements across HIPAA, SOC 2 (all five trust service criteria: Security, Availability, Processing Integrity, Confidentiality, and Privacy), PCI DSS, and GDPR. Controls are enforced across three layers: the <strong>Framework</strong> (<code>@forklaunch/core</code> — compile-time types, runtime middleware, encryption, tenant isolation), the <strong>CLI</strong> (<code>forklaunch</code> binary — code generation, compliance auditing, GitHub configs), and the <strong>Platform</strong> (ForkLaunch Cloud — risk scoring, data flow diagrams, DPIA, portal dashboard, deploy-time enforcement). Each control below is tagged with its layer. 3 remaining gaps are addressable by engineering. 6 require organizational processes.</p>
 
 <div class="summary-grid">
-  <div class="summary-card"><div class="count count-green">32</div><div class="label">Fully Addressed</div></div>
+  <div class="summary-card"><div class="count count-green">34</div><div class="label">Fully Addressed</div></div>
   <div class="summary-card"><div class="count count-yellow">0</div><div class="label">Partially Addressed</div></div>
   <div class="summary-card"><div class="count count-purple">3</div><div class="label">Addressable by Engineering</div></div>
   <div class="summary-card"><div class="count count-red">6</div><div class="label">Business Action Required</div></div>
@@ -325,7 +325,23 @@
   <td class="status-yes">Addressed</td>
   <td><span class="tag tag-framework">Framework</span> <span class="tag tag-cli">CLI</span> <span class="tag tag-platform">Platform</span></td>
   <td>Framework: <code>retention: { duration: RetentionDuration.years(3), action: 'anonymize' }</code> declared on <code>defineComplianceEntity</code>. ISO 8601 durations with const helpers. Validated at boot (min 1 day). <code>RetentionService.enforce()</code> finds expired records via <code>createdAt &lt; cutoff</code>, batches of 1000, action: <code>delete</code> (remove) or <code>anonymize</code> (null PII/PHI/PCI fields, set <code>retentionAnonymizedAt</code>). Idempotent re-runs. Infrastructure: CloudTrail lifecycle policies, S3 auto-expiration, audit log retention. CLI: audit reports retention policy coverage, entities with PII but no policy flagged as findings. Platform: risk scoring includes missing retention policies (5 points, medium severity).</td>
-  <td><span class="tag tag-hipaa">HIPAA §164.530(j)</span><span class="tag tag-pci">PCI DSS 3.1</span><span class="tag tag-soc2">SOC 2 CC6.5</span></td>
+  <td><span class="tag tag-hipaa">HIPAA §164.530(j)</span><span class="tag tag-pci">PCI DSS 3.1</span><span class="tag tag-soc2">SOC 2 CC6.5</span><span class="tag tag-soc2">SOC 2 P4.1</span></td>
+</tr>
+<tr>
+  <td>33</td>
+  <td>Processing Integrity</td>
+  <td class="status-yes">Addressed</td>
+  <td><span class="tag tag-framework">Framework</span> <span class="tag tag-cli">CLI</span></td>
+  <td>Input validation: <code>schemaValidator</code> on every endpoint — invalid requests rejected before handler executes. Authorization gating: <code>access: 'protected'</code> requires RBAC, <code>hasPermissionChecks</code> validates Set.size > 0, startup rejects misconfigured routes. Data consistency: MikroORM Unit of Work atomic flushes, single-flush-after-all-removals in retention enforcement. Error handling: structured error responses per handler, OTEL logging with full context, worker retry with DLQ. Audit trail: every request logged with SHA-256 body hash, compliance fields redacted. Change detection: CI workflows run lint + type-check + tests on PRs. Data completeness: <code>.compliance()</code> required on every entity property at compile time — omission is a build error.</td>
+  <td><span class="tag tag-soc2">SOC 2 PI1.1</span><span class="tag tag-soc2">SOC 2 PI1.2</span><span class="tag tag-soc2">SOC 2 PI1.3</span><span class="tag tag-soc2">SOC 2 PI1.4</span><span class="tag tag-soc2">SOC 2 PI1.5</span></td>
+</tr>
+<tr>
+  <td>34</td>
+  <td>Privacy Controls</td>
+  <td class="status-yes">Addressed</td>
+  <td><span class="tag tag-framework">Framework</span> <span class="tag tag-cli">CLI</span> <span class="tag tag-platform">Platform</span></td>
+  <td>Data classification: <code>fp.compliance('pii'|'phi'|'pci'|'none')</code> required on every field at compile time. Data minimization: access levels control what data is exposed per route. Data retention: <code>RetentionService.enforce()</code> with delete/anonymize actions. Data subject rights: GDPR erasure + export endpoints with billing→IAM cascade. Data access logging: every request audit-logged via OTEL. Tenant isolation: MikroORM global filter + optional PostgreSQL RLS. PII encryption: PHI/PCI at application level (AES-256-GCM), PII at infrastructure level (RDS). DPIA: generated from compliance metadata. Cross-border: <code>data_residency</code> enforced at deploy time.</td>
+  <td><span class="tag tag-soc2">SOC 2 P1.1</span><span class="tag tag-soc2">SOC 2 P3.1</span><span class="tag tag-soc2">SOC 2 P4.1</span><span class="tag tag-soc2">SOC 2 P5.1</span><span class="tag tag-soc2">SOC 2 P6.1</span><span class="tag tag-soc2">SOC 2 P7.1</span><span class="tag tag-gdpr">GDPR Art. 5(1)</span></td>
 </tr>
 </tbody>
 </table>
@@ -340,7 +356,7 @@
 </thead>
 <tbody>
 <tr>
-  <td>32</td>
+  <td>35</td>
   <td>Consent Management</td>
   <td class="status-gap">Not yet built</td>
   <td><span class="tag tag-framework">Framework</span></td>
@@ -349,7 +365,7 @@
   <td><span class="tag tag-gdpr">GDPR Art. 7</span></td>
 </tr>
 <tr>
-  <td>33</td>
+  <td>36</td>
   <td>Penetration Testing</td>
   <td class="status-gap">Not yet built</td>
   <td><span class="tag tag-platform">Platform</span></td>
@@ -358,7 +374,7 @@
   <td><span class="tag tag-pci">PCI DSS 11.3</span></td>
 </tr>
 <tr>
-  <td>34</td>
+  <td>37</td>
   <td>Disaster Recovery Testing</td>
   <td class="status-gap">Not yet built</td>
   <td><span class="tag tag-platform">Platform</span></td>
@@ -379,7 +395,7 @@
 </thead>
 <tbody>
 <tr>
-  <td>36</td>
+  <td>38</td>
   <td>Breach Notification</td>
   <td>Documented procedure for notifying affected individuals, regulatory bodies (HHS for HIPAA, card brands for PCI), and business associates within required timeframes (60 days for HIPAA, 72 hours for GDPR).</td>
   <td>Legal, Compliance Officer, CISO</td>
@@ -387,7 +403,7 @@
   <td><span class="tag tag-hipaa">HIPAA §164.408</span><span class="tag tag-gdpr">GDPR Art. 33-34</span></td>
 </tr>
 <tr>
-  <td>37</td>
+  <td>39</td>
   <td>Business Associate Agreements</td>
   <td>Legal contracts establishing permitted uses of PHI, safeguards, and breach notification obligations between covered entity and ForkLaunch (or subprocessors).</td>
   <td>Legal, Sales/Partnerships</td>
@@ -395,7 +411,7 @@
   <td><span class="tag tag-hipaa">HIPAA §164.308(b)</span><span class="tag tag-hipaa">HIPAA §164.502(e)</span></td>
 </tr>
 <tr>
-  <td>38</td>
+  <td>40</td>
   <td>Data Processing Agreements</td>
   <td>Legal contracts between data controller and ForkLaunch (as data processor) establishing scope, purpose, and safeguards for personal data processing.</td>
   <td>Legal, DPO</td>
@@ -403,7 +419,7 @@
   <td><span class="tag tag-gdpr">GDPR Art. 28</span></td>
 </tr>
 <tr>
-  <td>39</td>
+  <td>41</td>
   <td>Employee Security Training</td>
   <td>Regular security awareness training covering HIPAA privacy/security rules, PCI data handling, phishing awareness, and incident reporting for all employees with access to sensitive systems.</td>
   <td>HR, CISO, Compliance Officer</td>
@@ -411,7 +427,7 @@
   <td><span class="tag tag-hipaa">HIPAA §164.308(a)(5)</span><span class="tag tag-pci">PCI DSS 12.6</span><span class="tag tag-soc2">SOC 2 CC1.4</span></td>
 </tr>
 <tr>
-  <td>40</td>
+  <td>42</td>
   <td>Incident Response Plan</td>
   <td>Documented incident response plan defining roles, escalation procedures, communication protocols, containment strategies, forensic analysis, and post-incident review processes.</td>
   <td>CISO, Engineering Leadership, Legal</td>
@@ -419,7 +435,7 @@
   <td><span class="tag tag-pci">PCI DSS 12.10</span><span class="tag tag-soc2">SOC 2 CC7.3</span><span class="tag tag-soc2">SOC 2 CC7.4</span><span class="tag tag-hipaa">HIPAA §164.308(a)(6)</span></td>
 </tr>
 <tr>
-  <td>41</td>
+  <td>43</td>
   <td>Physical Security</td>
   <td>Physical security controls for data centers and offices where sensitive data is processed.</td>
   <td>AWS (shared responsibility model)</td>
@@ -430,7 +446,7 @@
 </table>
 
 <div class="footer">
-  <p>ForkLaunch Compliance Coverage Report &mdash; 41 requirements evaluated across HIPAA, SOC 2, PCI DSS, and GDPR. 32 fully addressed, 0 partial, 3 addressable by engineering, 6 require organizational processes.</p>
+  <p>ForkLaunch Compliance Coverage Report &mdash; 43 requirements evaluated across HIPAA, SOC 2 (all five trust service criteria), PCI DSS, and GDPR. 34 fully addressed, 3 addressable by engineering, 6 require organizational processes.</p>
 </div>
 
 </div>

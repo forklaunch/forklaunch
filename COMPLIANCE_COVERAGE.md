@@ -2,7 +2,7 @@
 
 *Updated: March 24, 2026*
 
-ForkLaunch addresses 32 of 41 identified compliance requirements across HIPAA, SOC 2, PCI DSS, and GDPR. Controls are enforced across three layers: the **Framework** (`@forklaunch/core` — compile-time types, runtime middleware, encryption, tenant isolation), the **CLI** (`forklaunch` binary — code generation, compliance auditing, GitHub configs), and the **Platform** (ForkLaunch Cloud — risk scoring, data flow diagrams, DPIA, portal dashboard, deploy-time enforcement). 3 remaining gaps are addressable by engineering. 6 require organizational processes.
+ForkLaunch addresses 34 of 43 identified compliance requirements across HIPAA, SOC 2 (all five trust service criteria: Security, Availability, Processing Integrity, Confidentiality, and Privacy), PCI DSS, and GDPR. Controls are enforced across three layers: the **Framework** (`@forklaunch/core` — compile-time types, runtime middleware, encryption, tenant isolation), the **CLI** (`forklaunch` binary — code generation, compliance auditing, GitHub configs), and the **Platform** (ForkLaunch Cloud — risk scoring, data flow diagrams, DPIA, portal dashboard, deploy-time enforcement). 3 remaining gaps are addressable by engineering. 6 require organizational processes.
 
 For the full interactive report with layer tags, see `compliance-coverage.html`.
 
@@ -12,10 +12,10 @@ For the full interactive report with layer tags, see `compliance-coverage.html`.
 
 | Category | Count | Details |
 |---|---|---|
-| **Fully addressed** | 32 | All core technical controls across application and infrastructure layers |
+| **Fully addressed** | 34 | All core technical controls including SOC 2 Processing Integrity + Privacy |
 | **Addressable by engineering** | 3 | Consent management, penetration testing, disaster recovery testing |
 | **Business action required** | 6 | Breach notification, BAAs, DPAs, training, incident response, physical security |
-| **Total requirements** | 41 | |
+| **Total requirements** | 43 | |
 
 ---
 
@@ -54,7 +54,9 @@ For the full interactive report with layer tags, see `compliance-coverage.html`.
 | 29 | Cardholder Data Flow Diagram | Platform | PCI DSS 1.1.3 |
 | 30 | Supply Chain Monitoring | CLI | SOC 2 CC9.2, PCI DSS 6.2 |
 | 31 | Privacy Impact Assessments | Platform | GDPR Art. 35 |
-| 32 | Data Retention / Disposal | Framework + CLI + Platform | HIPAA §164.530(j), PCI DSS 3.1, SOC 2 CC6.5 |
+| 32 | Data Retention / Disposal | Framework + CLI + Platform | HIPAA §164.530(j), PCI DSS 3.1, SOC 2 CC6.5, SOC 2 P4.1 |
+| 33 | Processing Integrity | Framework + CLI | SOC 2 PI1.1-PI1.5 |
+| 34 | Privacy Controls | Framework + CLI + Platform | SOC 2 P1.1, P3.1, P4.1, P5.1, P6.1, P7.1, GDPR Art. 5(1) |
 
 ---
 
@@ -62,9 +64,9 @@ For the full interactive report with layer tags, see `compliance-coverage.html`.
 
 | # | Requirement | Target Layer | Standards |
 |---|-------------|-------------|-----------|
-| 33 | Consent Management | Framework | GDPR Art. 7 |
-| 34 | Penetration Testing | Platform | PCI DSS 11.3 |
-| 35 | Disaster Recovery Testing | Platform | HIPAA §164.308(a)(7)(ii), SOC 2 A1.2 |
+| 35 | Consent Management | Framework | GDPR Art. 7 |
+| 36 | Penetration Testing | Platform | PCI DSS 11.3 |
+| 37 | Disaster Recovery Testing | Platform | HIPAA §164.308(a)(7)(ii), SOC 2 A1.2 |
 
 ---
 
@@ -72,9 +74,9 @@ For the full interactive report with layer tags, see `compliance-coverage.html`.
 
 | # | Requirement | Owner | Standards |
 |---|-------------|-------|-----------|
-| 36 | Breach Notification | Legal, CISO | HIPAA §164.408, GDPR Art. 33-34 |
-| 37 | Business Associate Agreements | Legal, Sales | HIPAA §164.308(b), §164.502(e) |
-| 38 | Data Processing Agreements | Legal, DPO | GDPR Art. 28 |
-| 39 | Employee Security Training | HR, CISO | HIPAA §164.308(a)(5), PCI DSS 12.6, SOC 2 CC1.4 |
-| 40 | Incident Response Plan | CISO, Engineering | PCI DSS 12.10, SOC 2 CC7.3/CC7.4, HIPAA §164.308(a)(6) |
-| 41 | Physical Security | AWS (shared responsibility) | PCI DSS 9.x, SOC 2 CC6.4 |
+| 38 | Breach Notification | Legal, CISO | HIPAA §164.408, GDPR Art. 33-34 |
+| 39 | Business Associate Agreements | Legal, Sales | HIPAA §164.308(b), §164.502(e) |
+| 40 | Data Processing Agreements | Legal, DPO | GDPR Art. 28 |
+| 41 | Employee Security Training | HR, CISO | HIPAA §164.308(a)(5), PCI DSS 12.6, SOC 2 CC1.4 |
+| 42 | Incident Response Plan | CISO, Engineering | PCI DSS 12.10, SOC 2 CC7.3/CC7.4, HIPAA §164.308(a)(6) |
+| 43 | Physical Security | AWS (shared responsibility) | PCI DSS 9.x, SOC 2 CC6.4 |

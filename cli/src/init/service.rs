@@ -361,7 +361,11 @@ pub(crate) fn generate_service_package_json(
                     manifest_data.database.parse::<Database>().ok(),
                 )),
                 up_latest: project_up_latest_script(&manifest_data.runtime.parse()?),
-                retention_enforce: Some(project_retention_enforce_script(&manifest_data.runtime.parse()?)),
+                retention_enforce: if manifest_data.is_database_enabled {
+                    Some(project_retention_enforce_script(&manifest_data.runtime.parse()?))
+                } else {
+                    None
+                },
                 ..Default::default()
             }
         }),
