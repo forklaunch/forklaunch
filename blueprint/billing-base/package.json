@@ -29,11 +29,11 @@
     "migrate:init": "NODE_OPTIONS='--import=tsx' mikro-orm migration:create --initial",
     "migrate:up": "NODE_OPTIONS='--import=tsx' mikro-orm migration:up",
     "prepack": "pnpm run build",
+    "retention:enforce": "pnpm tsx scripts/enforce-retention.ts",
     "seed": "DOTENV_FILE_PATH=.env.local NODE_OPTIONS='--import=tsx' mikro-orm seeder:run",
     "start": "DOTENV_FILE_PATH=.env.local node --import=tsx dist/server.js",
     "start:bun": "bun run migrate:up && bun dist/server.js",
-    "test": "vitest --passWithNoTests",
-    "retention:enforce": "pnpm tsx scripts/enforce-retention.ts"
+    "test": "vitest --passWithNoTests"
   },
   "dependencies": {
     "@forklaunch/blueprint-core": "workspace:*",

@@ -6,6 +6,8 @@ import {
 } from '@forklaunch/core/services';
 import { Platform, TextType, Type } from '@mikro-orm/core';
 import { Migrator } from '@mikro-orm/migrations';
+import { ComplianceEventSubscriber } from '@forklaunch/core/persistence';
+import { FieldEncryptor } from '@forklaunch/core/encryption';
 import { defineConfig } from '@mikro-orm/postgresql';
 
 import dotenv from 'dotenv';
@@ -57,6 +59,11 @@ const mikroOrmOptionsConfig = defineConfig({
   password: validConfigInjector.resolve('DB_PASSWORD'),
   port: validConfigInjector.resolve('DB_PORT'),
   entities: Object.values(entities),
+  subscribers: [
+    new ComplianceEventSubscriber(
+      new FieldEncryptor(validConfigInjector.resolve(tokens.ENCRYPTION_KEY))
+    )
+  ],
   discovery: {
     getMappedType(type: string, platform: Platform) {
       if (type === 'string') {

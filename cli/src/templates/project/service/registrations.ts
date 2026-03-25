@@ -129,11 +129,6 @@ const environmentConfig = configInjector.chain({
     type: string,
     value: getEnvVar('S3_BUCKET')
   },{{/is_s3_enabled}}{{#is_iam_configured}}
-  HMAC_SECRET_KEY: {
-    lifetime: Lifetime.Singleton,
-    type: string,
-    value: getEnvVar('HMAC_SECRET_KEY')
-  },
   JWKS_PUBLIC_KEY_URL: {
     lifetime: Lifetime.Singleton,
     type: string,
@@ -148,15 +143,12 @@ const environmentConfig = configInjector.chain({
     lifetime: Lifetime.Singleton,
     type: string,
     value: getEnvVar('BILLING_URL')
-  },
-  {{^is_iam_configured}}
+  },{{/is_billing_configured}}
   HMAC_SECRET_KEY: {
     lifetime: Lifetime.Singleton,
     type: string,
     value: getEnvVar('HMAC_SECRET_KEY')
-  },
-  {{/is_iam_configured}}
-  {{/is_billing_configured}}
+  }
 });
 
 //! defines the runtime dependencies for the application

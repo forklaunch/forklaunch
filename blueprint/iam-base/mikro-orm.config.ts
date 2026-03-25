@@ -55,6 +55,11 @@ const mikroOrmOptionsConfig = defineConfig({
   password: validConfigInjector.resolve('DB_PASSWORD'),
   port: validConfigInjector.resolve('DB_PORT'),
   entities: Object.values(entities),
+  subscribers: [
+    new ComplianceEventSubscriber(
+      new FieldEncryptor(validConfigInjector.resolve(tokens.ENCRYPTION_KEY))
+    )
+  ],
   debug: true,
   extensions: [Migrator],
   migrations: {
