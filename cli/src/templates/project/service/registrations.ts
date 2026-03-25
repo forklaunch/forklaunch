@@ -294,10 +294,11 @@ const serviceDependencies = runtimeDependencies.chain({ {{#is_worker}}{{#is_data
   WorkerProducer: {
     lifetime: Lifetime.Scoped,
     type: EncryptingWorkerProducer,
-    factory: (container) =>
+    factory: (container, _resolve, context) =>
       new EncryptingWorkerProducer(
         ({{{worker_producer_factory}}})(container),
-        container.EventEncryptor
+        container.EventEncryptor,
+        (context?.tenantId as string) ?? ''
       )
   },
   {{/is_database_worker}}{{/is_worker}}{{pascal_case_name}}Service: {

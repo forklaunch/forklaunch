@@ -1,5 +1,11 @@
 # @forklaunch/interfaces-worker
 
+## 1.0.4
+
+### Patch Changes
+
+- Resolve tenantId from controller scope
+
 ## 1.0.3
 
 ### Patch Changes

@@ -16,5 +16,6 @@ export interface EventEncryptor {
  * payload fields are serialized and encrypted into `encryptedPayload`.
  */
 export type EncryptedEventEnvelope = WorkerEventEntity & {
+  tenantId: string;
   encryptedPayload: string;
 };

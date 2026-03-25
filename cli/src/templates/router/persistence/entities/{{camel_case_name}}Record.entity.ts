@@ -7,7 +7,6 @@ export const {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record = defin
   properties: {
     ...{{#is_mongo}}nosql{{/is_mongo}}{{^is_mongo}}sql{{/is_mongo}}BaseProperties,
     message: fp.string().compliance('none'),{{#is_worker}}
-    tenantId: fp.string().compliance('none'),
     processed: fp.boolean().compliance('none'),
     retryCount: fp.integer().compliance('none'),{{/is_worker}}
   },
