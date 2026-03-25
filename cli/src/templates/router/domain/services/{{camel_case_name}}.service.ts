@@ -67,7 +67,8 @@ export class Base{{pascal_case_name}}Service implements {{pascal_case_name}}Serv
       processed: false,
       retryCount: 0,
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
+      retentionAnonymizedAt: null
     };
     await this.workerProducer.enqueueJob(entity);{{/is_worker}}
 

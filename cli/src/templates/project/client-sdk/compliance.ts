@@ -33,8 +33,6 @@ export interface ComplianceCapableService {
 /**
  * Fan-out compliance client. Calls erase/export on all registered services
  * in parallel and returns per-service results.
- *
- * Lives in client-sdk because it knows what services exist in the application.
  */
 export function createComplianceClient(config: {
   hmacSecretKey: string;
@@ -47,11 +45,10 @@ export function createComplianceClient(config: {
       userId: string
     ): Promise<Record<string, ServiceComplianceResult<EraseResult>>> {
       const entries = Object.entries(services);
-      const path = `/erase/${userId}`;
       const headers = generateHmacAuthHeaders({
         secretKey: hmacSecretKey,
         method: 'DELETE',
-        path
+        path: `/erase/${userId}`
       });
 
       const results = await Promise.allSettled(
@@ -92,11 +89,10 @@ export function createComplianceClient(config: {
       userId: string
     ): Promise<Record<string, ServiceComplianceResult<ExportResult>>> {
       const entries = Object.entries(services);
-      const path = `/export/${userId}`;
       const headers = generateHmacAuthHeaders({
         secretKey: hmacSecretKey,
         method: 'GET',
-        path
+        path: `/export/${userId}`
       });
 
       const results = await Promise.allSettled(
