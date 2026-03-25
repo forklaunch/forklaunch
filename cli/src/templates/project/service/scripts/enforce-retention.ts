@@ -9,21 +9,11 @@
  *   pnpm retention:enforce -- --dry-run # preview without mutating
  */
 
+import { RetentionService } from '@forklaunch/core/services';
 import { ci, tokens } from '../bootstrapper';
 
 const otel = ci.resolve(tokens.OtelCollector);
-
-let retentionService: ReturnType<typeof ci.resolve>;
-try {
-  retentionService = ci.resolve(tokens.RetentionService);
-} catch {
-  console.error(
-    '[RetentionEnforcement] RetentionService is not registered. ' +
-      'This service may not have a database configured. ' +
-      'Retention enforcement requires a database-backed service.'
-  );
-  process.exit(1);
-}
+const retentionService = ci.resolve(tokens.RetentionService) as RetentionService;
 
 const dryRun = process.argv.includes('--dry-run');
 
