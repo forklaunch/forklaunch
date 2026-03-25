@@ -56,8 +56,8 @@ fn get_database_worker_consumer_factory(pascal_case_name: &str) -> String {
         "
 ({{ EntityMgr, WorkerOptions }}) =>
   (
-    processEventsFunction: WorkerProcessFunction<I{}EventRecord>,
-    failureHandler: WorkerFailureHandler<I{}EventRecord>
+    processEventsFunction: WorkerProcessFunction<{}EventRecord>,
+    failureHandler: WorkerFailureHandler<{}EventRecord>
   ) =>
     new DatabaseWorkerConsumer(
       {}EventRecord,

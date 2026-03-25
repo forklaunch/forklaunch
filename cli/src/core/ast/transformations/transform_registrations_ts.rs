@@ -428,7 +428,7 @@ pub(crate) fn transform_registrations_ts_worker_type(
             &mut registration_program,
             &mut encryption_key_injection,
             "environmentConfig",
-        );
+        )?;
 
         // Inject EventEncryptor runtime dependency
         let event_encryptor_text = "const configInjector = createConfigInjector(SchemaValidator(), {
@@ -445,7 +445,7 @@ pub(crate) fn transform_registrations_ts_worker_type(
             &mut registration_program,
             &mut event_encryptor_injection,
             "runtimeDependencies",
-        );
+        )?;
     }
 
     let config_injector_service_dependencies_text = if is_database_worker {
@@ -460,10 +460,10 @@ pub(crate) fn transform_registrations_ts_worker_type(
                         lifetime: Lifetime.Scoped,
                         type: function_(
                             [
-                                type<WorkerProcessFunction<I{}EventRecord>>(),
-                                type<WorkerFailureHandler<I{}EventRecord>>()
+                                type<WorkerProcessFunction<{}EventRecord>>(),
+                                type<WorkerFailureHandler<{}EventRecord>>()
                             ],
-                            type<{}WorkerConsumer<I{}EventRecord, {}WorkerOptions>>()
+                            type<{}WorkerConsumer<{}EventRecord, {}WorkerOptions>>()
                         ),
                         factory: {}
                     }}

@@ -349,10 +349,10 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
                     lifetime: Lifetime.Scoped,
                     type: function_(
                         [
-                            type<WorkerProcessFunction<I{}EventRecord>>(),
-                            type<WorkerFailureHandler<I{}EventRecord>>()
+                            type<WorkerProcessFunction<{}EventRecord>>(),
+                            type<WorkerFailureHandler<{}EventRecord>>()
                         ],
-                        type<{}WorkerConsumer<I{}EventRecord, {}WorkerOptions>>()
+                        type<{}WorkerConsumer<{}EventRecord, {}WorkerOptions>>()
                     ),
                     factory: {}
                 }}

@@ -257,10 +257,10 @@ const serviceDependencies = runtimeDependencies.chain({ {{#is_worker}}{{#is_data
   WorkerConsumer: {
     lifetime: Lifetime.Scoped,
     type: function_([
-      type<WorkerProcessFunction<I{{pascal_case_name}}EventRecord>>(),
-      type<WorkerFailureHandler<I{{pascal_case_name}}EventRecord>>()
+      type<WorkerProcessFunction<{{pascal_case_name}}EventRecord>>(),
+      type<WorkerFailureHandler<{{pascal_case_name}}EventRecord>>()
     ],
-      type<{{worker_type}}WorkerConsumer<I{{pascal_case_name}}EventRecord, {{worker_type}}WorkerOptions>>()
+      type<{{worker_type}}WorkerConsumer<{{pascal_case_name}}EventRecord, {{worker_type}}WorkerOptions>>()
     ),
     factory:
       {{{worker_consumer_factory}}}

@@ -2,8 +2,5 @@
 
 export interface I{{pascal_case_name}}EventRecord extends WorkerEventEntity {
   message: string;
-  createdAt: Date;
-  updatedAt: Date;
-  retentionAnonymizedAt: Date | null | undefined;
 }
 {{/is_worker}}

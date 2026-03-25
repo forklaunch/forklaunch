@@ -123,7 +123,11 @@ fn generate_basic_worker(
         vec!["consts.ts".to_string()]
     };
     let mut ignore_dirs = if !manifest_data.is_database_enabled {
-        vec!["seeder".to_string(), "seed.data.ts".to_string()]
+        let mut dirs = vec!["seeder".to_string(), "seed.data.ts".to_string()];
+        if !manifest_data.with_mappers {
+            dirs.push("persistence".to_string());
+        }
+        dirs
     } else {
         vec![]
     };

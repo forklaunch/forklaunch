@@ -67,13 +67,12 @@ export class Base{{pascal_case_name}}Service implements {{pascal_case_name}}Serv
       processed: false,
       retryCount: 0,
       createdAt: new Date(),
-      updatedAt: new Date(),
-      retentionAnonymizedAt: null
+      updatedAt: new Date()
     };
     await this.workerProducer.enqueueJob(entity);{{/is_worker}}
 
     // Map from entity to response (inline Entity → DTO conversion)
-    {{^is_worker}}return wrap(entity).toPOJO();{{/is_worker}}{{#is_worker}}const { id, createdAt, updatedAt, retentionAnonymizedAt, ...response } = entity;
+    {{^is_worker}}return wrap(entity).toPOJO();{{/is_worker}}{{#is_worker}}const { id, createdAt, updatedAt, ...response } = entity;
     return response as {{pascal_case_name}}Response;{{/is_worker}}{{/with_mappers}}
   };
 }
