@@ -815,7 +815,7 @@ export const {pascal_case_name}EventRecord = defineEntity({{
     let event_record_types_content = format!(
         r#"import type {{ WorkerEventEntity }} from '@forklaunch/interfaces-worker/types';
 
-export interface I{pascal_case_name}EventRecord extends WorkerEventEntity {{
+export interface {pascal_case_name}EventRecord extends WorkerEventEntity {{
   message: string;
   createdAt: Date;
   updatedAt: Date;

@@ -1,5 +1,11 @@
 # @forklaunch/bunrun
 
+## 1.1.3
+
+### Patch Changes
+
+- Package versions and simplified compliance entity typing
+
 ## 1.1.2
 
 ### Patch Changes

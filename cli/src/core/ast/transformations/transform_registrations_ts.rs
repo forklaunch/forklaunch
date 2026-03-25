@@ -10,7 +10,10 @@ use crate::{
     constants::{WorkerType, error_failed_to_read_file},
     core::{
         ast::{
-            deletions::delete_from_registrations_ts::delete_from_registrations_ts_worker_type,
+            deletions::{
+                delete_from_registrations_ts::delete_from_registrations_ts_worker_type,
+                delete_import_statement::delete_import_statement,
+            },
             infrastructure::{
                 database::database_entity_manager_runtime_dependency,
                 kafka::kafka_url_environment_variable,
@@ -494,20 +497,20 @@ pub(crate) fn transform_registrations_ts_worker_type(
                         lifetime: Lifetime.Scoped,
                         type: function_(
                             [
-                                type<WorkerProcessFunction<I{}EventRecord>>(),
-                                type<WorkerFailureHandler<I{}EventRecord>>()
+                                type<WorkerProcessFunction<{}EventRecord>>(),
+                                type<WorkerFailureHandler<{}EventRecord>>()
                             ],
                             type<{}WorkerConsumer<EncryptedEventEnvelope, {}WorkerOptions>>()
                         ),
                         factory: (container) => {{
                             const createConsumer = ({})(container);
                             return (
-                                processEventsFunction: WorkerProcessFunction<I{}EventRecord>,
-                                failureHandler: WorkerFailureHandler<I{}EventRecord>
+                                processEventsFunction: WorkerProcessFunction<{}EventRecord>,
+                                failureHandler: WorkerFailureHandler<{}EventRecord>
                             ) =>
                                 createConsumer(
-                                    withDecryption<I{}EventRecord>(processEventsFunction, container.EventEncryptor),
-                                    withDecryptionFailureHandler<I{}EventRecord>(failureHandler, container.EventEncryptor)
+                                    withDecryption<{}EventRecord>(processEventsFunction, container.EventEncryptor),
+                                    withDecryptionFailureHandler<{}EventRecord>(failureHandler, container.EventEncryptor)
                                 );
                         }}
                     }}
@@ -536,22 +539,37 @@ pub(crate) fn transform_registrations_ts_worker_type(
         "serviceDependencies",
     );
 
-    // Ensure the event record interface type is imported
+    // Handle event record type imports based on worker type
+    let camel_case_name = pascal_case_name.to_case(Case::Camel);
     let event_record_type_import_text = format!(
-        "import type {{ I{}EventRecord }} from './domain/types/{}EventRecord.types';",
+        "import type {{ {}EventRecord }} from './domain/types/{}EventRecord.types';",
         pascal_case_name,
-        pascal_case_name.to_case(Case::Camel)
+        camel_case_name
     );
-    // Only inject if not already present
-    if !registrations_text.contains(&format!("{}EventRecord.types", pascal_case_name.to_case(Case::Camel))) {
-        let mut event_record_type_import =
-            parse_ast_program(&allocator, &event_record_type_import_text, SourceType::ts());
-        inject_into_import_statement(
+    if is_database_worker {
+        // For database workers, remove the types file import (entity import is sufficient)
+        let _ = delete_import_statement(
+            &allocator,
             &mut registration_program,
-            &mut event_record_type_import,
-            &format!("./domain/types/{}EventRecord.types", pascal_case_name.to_case(Case::Camel)),
-            &registrations_text,
-        )?;
+            &format!("./domain/types/{}EventRecord.types", camel_case_name),
+        );
+    } else {
+        // For non-database workers, remove entity import and add types file import
+        let _ = delete_import_statement(
+            &allocator,
+            &mut registration_program,
+            &format!("./persistence/entities/{}EventRecord.entity", camel_case_name),
+        );
+        if !registrations_text.contains(&format!("{}EventRecord.types", camel_case_name)) {
+            let mut event_record_type_import =
+                parse_ast_program(&allocator, &event_record_type_import_text, SourceType::ts());
+            inject_into_import_statement(
+                &mut registration_program,
+                &mut event_record_type_import,
+                &format!("./domain/types/{}EventRecord.types", camel_case_name),
+                &registrations_text,
+            )?;
+        }
     }
 
     Ok(Codegen::new()

@@ -81,7 +81,7 @@ const Bad1 = defineComplianceEntity({
 const Bad2 = defineComplianceEntity({
   name: 'Bad2',
   properties: {
-    // @ts-expect-error — p.string() is not ClassifiedProperty
+    // @ts-expect-error — p.string() is not classified
     email: p.string()
   }
 });

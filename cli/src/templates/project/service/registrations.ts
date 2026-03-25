@@ -18,7 +18,7 @@ import { {{worker_type}}WorkerOptions } from '@forklaunch/implementation-worker-
 import { EncryptingWorkerProducer, withDecryption, withDecryptionFailureHandler } from '@forklaunch/interfaces-worker/interfaces';
 import { type EncryptedEventEnvelope, WorkerProcessFunction, WorkerFailureHandler } from '@forklaunch/interfaces-worker/types';{{/is_database_worker}}{{#is_database_worker}}
 import { WorkerProcessFunction, WorkerFailureHandler } from '@forklaunch/interfaces-worker/types';{{/is_database_worker}}
-import type { I{{pascal_case_name}}EventRecord } from './domain/types/{{camel_case_name}}EventRecord.types';{{/is_worker}}{{#is_database_enabled}}
+{{^is_database_worker}}import type { {{pascal_case_name}}EventRecord } from './domain/types/{{camel_case_name}}EventRecord.types';{{/is_database_worker}}{{/is_worker}}{{#is_database_enabled}}
 import { ForkOptions } from "@mikro-orm/core";
 import { EntityManager, MikroORM } from "@mikro-orm/{{database}}";
 import mikroOrmOptionsConfig from './mikro-orm.config';{{/is_database_enabled}}{{#is_worker}}{{#is_database_enabled}}
@@ -274,20 +274,20 @@ const serviceDependencies = runtimeDependencies.chain({ {{#is_worker}}{{#is_data
   WorkerConsumer: {
     lifetime: Lifetime.Scoped,
     type: function_([
-      type<WorkerProcessFunction<I{{pascal_case_name}}EventRecord>>(),
-      type<WorkerFailureHandler<I{{pascal_case_name}}EventRecord>>()
+      type<WorkerProcessFunction<{{pascal_case_name}}EventRecord>>(),
+      type<WorkerFailureHandler<{{pascal_case_name}}EventRecord>>()
     ],
       type<{{worker_type}}WorkerConsumer<EncryptedEventEnvelope, {{worker_type}}WorkerOptions>>()
     ),
     factory: (container) => {
       const createConsumer = ({{{worker_consumer_factory}}})(container);
       return (
-        processEventsFunction: WorkerProcessFunction<I{{pascal_case_name}}EventRecord>,
-        failureHandler: WorkerFailureHandler<I{{pascal_case_name}}EventRecord>
+        processEventsFunction: WorkerProcessFunction<{{pascal_case_name}}EventRecord>,
+        failureHandler: WorkerFailureHandler<{{pascal_case_name}}EventRecord>
       ) =>
         createConsumer(
-          withDecryption<I{{pascal_case_name}}EventRecord>(processEventsFunction, container.EventEncryptor),
-          withDecryptionFailureHandler<I{{pascal_case_name}}EventRecord>(failureHandler, container.EventEncryptor)
+          withDecryption<{{pascal_case_name}}EventRecord>(processEventsFunction, container.EventEncryptor),
+          withDecryptionFailureHandler<{{pascal_case_name}}EventRecord>(failureHandler, container.EventEncryptor)
         );
     }
   },

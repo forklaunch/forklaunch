@@ -181,23 +181,25 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
         )?;
     }
 
-    // Add event record interface type import (used in type positions)
+    // Add event record type import for non-database workers (db workers use the entity import)
     let event_record_type_text = format!(
-        "import type {{ I{}EventRecord }} from './domain/types/{}EventRecord.types';",
+        "import type {{ {}EventRecord }} from './domain/types/{}EventRecord.types';",
         pascal_case_name,
         project_name.to_case(Case::Camel)
     );
-    let mut event_record_type_import =
-        parse_ast_program(&allocator, &event_record_type_text, SourceType::ts());
-    inject_into_import_statement(
-        &mut program,
-        &mut event_record_type_import,
-        &format!(
-            "./domain/types/{}EventRecord.types",
-            project_name.to_case(Case::Camel)
-        ),
-        &registrations_text,
-    )?;
+    if !is_database_worker {
+        let mut event_record_type_import =
+            parse_ast_program(&allocator, &event_record_type_text, SourceType::ts());
+        inject_into_import_statement(
+            &mut program,
+            &mut event_record_type_import,
+            &format!(
+                "./domain/types/{}EventRecord.types",
+                project_name.to_case(Case::Camel)
+            ),
+            &registrations_text,
+        )?;
+    }
 
     // Add event record entity import (used at runtime in database worker factory)
     let event_record_text = format!(
@@ -383,20 +385,20 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
                     lifetime: Lifetime.Scoped,
                     type: function_(
                         [
-                            type<WorkerProcessFunction<I{}EventRecord>>(),
-                            type<WorkerFailureHandler<I{}EventRecord>>()
+                            type<WorkerProcessFunction<{}EventRecord>>(),
+                            type<WorkerFailureHandler<{}EventRecord>>()
                         ],
                         type<{}WorkerConsumer<EncryptedEventEnvelope, {}WorkerOptions>>()
                     ),
                     factory: (container) => {{
                         const createConsumer = ({})(container);
                         return (
-                            processEventsFunction: WorkerProcessFunction<I{}EventRecord>,
-                            failureHandler: WorkerFailureHandler<I{}EventRecord>
+                            processEventsFunction: WorkerProcessFunction<{}EventRecord>,
+                            failureHandler: WorkerFailureHandler<{}EventRecord>
                         ) =>
                             createConsumer(
-                                withDecryption<I{}EventRecord>(processEventsFunction, container.EventEncryptor),
-                                withDecryptionFailureHandler<I{}EventRecord>(failureHandler, container.EventEncryptor)
+                                withDecryption<{}EventRecord>(processEventsFunction, container.EventEncryptor),
+                                withDecryptionFailureHandler<{}EventRecord>(failureHandler, container.EventEncryptor)
                             );
                     }}
                 }}

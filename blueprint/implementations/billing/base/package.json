@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/implementation-billing-base",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Billing basic implementation for forklaunch",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -48,18 +48,18 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "^1.1.2",
-    "@forklaunch/core": "^1.1.2",
+    "@forklaunch/common": "^1.1.3",
+    "@forklaunch/core": "^1.1.3",
     "@forklaunch/interfaces-billing": "workspace:*",
-    "@forklaunch/internal": "^1.1.2",
-    "@forklaunch/validator": "^1.1.2",
+    "@forklaunch/internal": "^1.1.3",
+    "@forklaunch/validator": "^1.1.3",
     "@mikro-orm/core": "7.0.5",
     "@sinclair/typebox": "^0.34.48",
     "ajv": "^8.18.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@typescript/native-preview": "7.0.0-dev.20260324.1",
+    "@typescript/native-preview": "7.0.0-dev.20260320.1",
     "depcheck": "^1.4.7",
     "prettier": "^3.8.1",
     "typedoc": "^0.28.18"

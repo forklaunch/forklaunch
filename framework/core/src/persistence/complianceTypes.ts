@@ -163,46 +163,14 @@ export function getAllRetentionPolicies(): ReadonlyMap<
 }
 
 // ---------------------------------------------------------------------------
-// ClassifiedProperty — tagged wrapper: inner builder + compliance level
-// ---------------------------------------------------------------------------
-
-/**
- * Tagged wrapper returned by `.compliance()`.
- * `__inner` is the EXACT MikroORM builder type.
- * `defineComplianceEntity` checks for this wrapper and extracts `__inner`.
- */
-export interface ClassifiedProperty<
-  Builder = unknown,
-  Value = unknown,
-  Options = unknown
-> {
-  readonly __inner: Builder;
-  readonly __compliance: ComplianceLevel;
-  readonly '~type'?: { value: Value };
-  readonly '~options': Options;
-}
-
-// ---------------------------------------------------------------------------
-// ExtractInner — unwraps ClassifiedProperty to get the raw builder
-// ---------------------------------------------------------------------------
-
-/**
- * For each property, if it's a ClassifiedProperty, extract __inner.
- * Functions (lazy relations) and raw PropertyChain (relations) pass through.
- */
-export type ExtractInner<T> = {
-  [K in keyof T]: T[K] extends ClassifiedProperty<infer B> ? B : T[K];
-};
-
-// ---------------------------------------------------------------------------
 // WithCompliance — adds .compliance() to any MikroORM builder
 // ---------------------------------------------------------------------------
 
 /**
  * Adds `.compliance()` to a builder AND remaps chain methods so
- * `.compliance()` persists. Each chain method returns WithCompliance
- * wrapping the chain result. `.compliance()` captures the current
- * builder as-is into ClassifiedProperty.
+ * `.compliance()` persists through chains. `.compliance()` returns
+ * the builder intersected with a `__classified` brand — structurally
+ * identical to the plain PropertyChain, avoiding TS7056 on large entities.
  */
 export type WithCompliance<T> = {
   [K in keyof T]: T[K] extends (...args: infer A) => infer R
@@ -211,11 +179,7 @@ export type WithCompliance<T> = {
       : T[K]
     : T[K];
 } & {
-  compliance(
-    level: ComplianceLevel
-  ): T extends { '~type'?: { value: infer V }; '~options': infer O }
-    ? ClassifiedProperty<T, V, O>
-    : ClassifiedProperty<T>;
+  compliance(level: ComplianceLevel): T & { readonly __classified: true };
 };
 
 // ---------------------------------------------------------------------------

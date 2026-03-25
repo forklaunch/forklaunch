@@ -1,5 +1,14 @@
 # @forklaunch/infrastructure-s3
 
+## 1.1.3
+
+### Patch Changes
+
+- Package versions and simplified compliance entity typing
+- Updated dependencies
+  - @forklaunch/common@1.1.3
+  - @forklaunch/core@1.1.3
+
 ## 1.1.2
 
 ### Patch Changes

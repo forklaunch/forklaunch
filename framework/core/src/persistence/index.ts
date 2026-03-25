@@ -2,8 +2,6 @@
 export {
   ComplianceLevel,
   type ComplianceLevel as ComplianceLevelType,
-  type ClassifiedProperty,
-  type ExtractInner,
   type ForklaunchPropertyBuilders,
   type WithCompliance,
   getComplianceMetadata,
@@ -42,9 +40,6 @@ export {
   DecryptionError,
   EncryptionRequiredError
 } from './fieldEncryptor';
-
-// Re-export InferEntity from MikroORM for convenience
-export type { InferEntity } from '@mikro-orm/core';
 
 // Tenant isolation filter
 export {

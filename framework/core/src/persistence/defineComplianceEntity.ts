@@ -1,4 +1,3 @@
-import type { InferEntity } from '@mikro-orm/core';
 import {
   defineEntity,
   p,
@@ -12,17 +11,16 @@ import {
   registerEntityCompliance,
   registerEntityRetention,
   registerEntityUserIdField,
-  type ClassifiedProperty,
   type ComplianceLevel,
   type RetentionPolicy
 } from './complianceTypes';
 
 type ValidateProperties<T> = {
-  [K in keyof T]: T[K] extends ClassifiedProperty
+  [K in keyof T]: T[K] extends { readonly __classified: true }
     ? T[K]
     : T[K] extends (...args: never[]) => unknown
       ? T[K]
-      : ClassifiedProperty;
+      : { readonly __classified: true };
 };
 
 function readComplianceLevel(builder: unknown): ComplianceLevel | undefined {
@@ -123,5 +121,3 @@ export function defineComplianceEntity<
     TProperties
   >;
 }
-
-export type { InferEntity };
