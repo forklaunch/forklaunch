@@ -144,7 +144,6 @@ const BILLING_ENTITIES = [
   'BillingProvider'
 ] as const;
 
-/** Fields that link billing entities to a user */
 const USER_RELATION_FIELDS = ['partyId', 'customerId'];
 
 function entityHasUserRelation(em: EntityManager, entityName: string): boolean {
