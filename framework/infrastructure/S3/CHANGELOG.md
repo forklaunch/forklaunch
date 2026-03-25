@@ -1,5 +1,14 @@
 # @forklaunch/infrastructure-s3
 
+## 1.1.7
+
+### Patch Changes
+
+- More relations covered for compliance entity
+- Updated dependencies
+  - @forklaunch/common@1.1.7
+  - @forklaunch/core@1.1.7
+
 ## 1.1.6
 
 ### Patch Changes

@@ -183,7 +183,14 @@ declare module '@mikro-orm/core' {
 // ForklaunchPropertyBuilders — the type of `fp`
 // ---------------------------------------------------------------------------
 
-// Generic methods whose type params get collapsed by mapped types
+// Keys with generic type params that mapped types erase
+type RelationBuilderKeys =
+  | 'manyToOne'
+  | 'oneToMany'
+  | 'manyToMany'
+  | 'oneToOne'
+  | 'embedded';
+
 type GenericBuilderKeys =
   | 'json'
   | 'formula'
@@ -206,17 +213,25 @@ type ToPropertyChain<T> = T extends {
   : T;
 
 /**
- * Drop-in type for the `fp` proxy. Scalar and relation methods return
- * PropertyChain (which has .compliance() from the augmentation).
- * Generic methods have explicit signatures to preserve type params.
+ * Drop-in type for the `fp` proxy. Scalar methods go through the mapped
+ * type. Relation and generic builders are declared explicitly — mapped
+ * types over union keys erase generic type parameters, collapsing
+ * `<Target>` to its constraint and producing `Collection<any>`.
  */
 export type ForklaunchPropertyBuilders = {
   [K in Exclude<
     keyof PropertyBuilders,
-    GenericBuilderKeys
+    RelationBuilderKeys | GenericBuilderKeys
   >]: PropertyBuilders[K] extends (...args: infer A) => infer R
     ? (...args: A) => ToPropertyChain<R>
     : PropertyBuilders[K];
+} & {
+  // Explicit — direct indexed access preserves generic signatures
+  manyToMany: PropertyBuilders['manyToMany'];
+  manyToOne: PropertyBuilders['manyToOne'];
+  oneToMany: PropertyBuilders['oneToMany'];
+  oneToOne: PropertyBuilders['oneToOne'];
+  embedded: PropertyBuilders['embedded'];
 } & {
   json: <T>() => PropertyChain<T, EmptyOptions>;
   formula: <T>(

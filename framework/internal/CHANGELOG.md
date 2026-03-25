@@ -1,5 +1,14 @@
 # @forklaunch/internal
 
+## 1.1.7
+
+### Patch Changes
+
+- More relations covered for compliance entity
+- Updated dependencies
+  - @forklaunch/validator@1.1.7
+  - @forklaunch/common@1.1.7
+
 ## 1.1.6
 
 ### Patch Changes
