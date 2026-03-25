@@ -115,11 +115,20 @@ export const exportUserData = handlers.get(
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Entity names registered with defineComplianceEntity that have PII/PHI fields.
- * These are the IAM entities — User, Organization, etc.
- */
 const IAM_ENTITIES = ['User', 'Organization', 'Role', 'Permission'] as const;
+
+/** Fields that link non-User entities to a user */
+const USER_RELATION_FIELDS = ['user', 'userId'];
+
+function entityHasUserRelation(em: EntityManager, entityName: string): boolean {
+  const metadata = [...em.getMetadata().getAll().values()].find(
+    (m) => m.className === entityName
+  );
+  if (!metadata) return false;
+  return USER_RELATION_FIELDS.some(
+    (field) => metadata.properties[field] != null
+  );
+}
 
 async function eraseUserPii(
   em: EntityManager,
@@ -137,28 +146,33 @@ async function eraseUserPii(
     );
     if (!hasPii) continue;
 
-    // Find records linked to this user
     const metadata = [...em.getMetadata().getAll().values()].find(
       (m) => m.className === entityName
     );
     if (!metadata) continue;
 
-    // Try to find by id (for User entity) or by user/organization relation
-    const records =
-      entityName === 'User'
-        ? await em.find(metadata.class ?? metadata.className, { id: userId })
-        : await em
-            .find(metadata.class ?? metadata.className, {
-              $or: [{ user: userId }, { userId: userId }]
-            })
-            .catch(() => []);
+    let records: object[];
+    if (entityName === 'User') {
+      records = await em.find(metadata.class ?? metadata.className, {
+        id: userId
+      });
+    } else if (entityHasUserRelation(em, entityName)) {
+      records = await em.find(metadata.class ?? metadata.className, {
+        $or: [{ user: userId }, { userId: userId }]
+      });
+    } else {
+      continue;
+    }
 
     if (records.length > 0) {
       entitiesAffected.push(entityName);
       recordsDeleted += records.length;
       records.forEach((r) => em.remove(r));
-      await em.flush();
     }
+  }
+
+  if (recordsDeleted > 0) {
+    await em.flush();
   }
 
   return { entitiesAffected, recordsDeleted };
@@ -184,17 +198,20 @@ async function collectUserPii(
     );
     if (!metadata) continue;
 
-    const records =
-      entityName === 'User'
-        ? await em.find(metadata.class ?? metadata.className, { id: userId })
-        : await em
-            .find(metadata.class ?? metadata.className, {
-              $or: [{ user: userId }, { userId: userId }]
-            })
-            .catch(() => []);
+    let records: object[];
+    if (entityName === 'User') {
+      records = await em.find(metadata.class ?? metadata.className, {
+        id: userId
+      });
+    } else if (entityHasUserRelation(em, entityName)) {
+      records = await em.find(metadata.class ?? metadata.className, {
+        $or: [{ user: userId }, { userId: userId }]
+      });
+    } else {
+      continue;
+    }
 
     if (records.length > 0) {
-      // Filter to only PII/PHI/PCI fields
       const piiFieldNames = [...fields.entries()]
         .filter(([, level]) => level !== 'none')
         .map(([name]) => name);

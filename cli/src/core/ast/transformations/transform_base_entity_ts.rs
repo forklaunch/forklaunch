@@ -21,12 +21,20 @@ const BASE_PROPERTY_NAMES: &[&str] = &["id", "_id", "createdAt", "updatedAt", "r
 
 /// Default import sources that are part of the base properties templates
 /// and should not be copied as user-defined imports.
+/// Note: @forklaunch/core/persistence is NOT excluded here because users may
+/// add extra specifiers (e.g., RetentionDuration). Duplicate `fp` specifiers
+/// are handled by BASE_IMPORT_SPECIFIERS below.
 const BASE_IMPORT_SOURCES: &[&str] = &[
     "@mikro-orm/core",
     "@mikro-orm/mongodb",
-    "@forklaunch/core/persistence",
     "uuid",
 ];
+
+/// Import specifiers from @forklaunch/core/persistence that already exist
+/// in the base properties templates. If the user's source has ONLY these
+/// specifiers from that path, the import is redundant and should be skipped.
+const FORKLAUNCH_PERSISTENCE_SOURCE: &str = "@forklaunch/core/persistence";
+const BASE_PERSISTENCE_SPECIFIERS: &[&str] = &["fp"];
 
 pub(crate) fn transform_base_entity_ts(
     rendered_templates_cache: &RenderedTemplatesCache,
@@ -78,9 +86,33 @@ pub(crate) fn transform_base_entity_ts(
             _ => continue,
         };
 
-        if !BASE_IMPORT_SOURCES.contains(&import.source.value.as_str()) {
-            user_defined_imports.push(Statement::ImportDeclaration(import.clone_in(&allocator)));
+        let source = import.source.value.as_str();
+
+        // Fully excluded sources — never copy
+        if BASE_IMPORT_SOURCES.contains(&source) {
+            continue;
         }
+
+        // For @forklaunch/core/persistence: skip only if ALL specifiers are
+        // base specifiers (e.g., just `fp`). If user added extra specifiers
+        // (e.g., `RetentionDuration`), keep the import so those aren't lost.
+        if source == FORKLAUNCH_PERSISTENCE_SOURCE {
+            if let Some(specifiers) = &import.specifiers {
+                let all_base = specifiers.iter().all(|s| {
+                    match s {
+                        oxc_ast::ast::ImportDeclarationSpecifier::ImportSpecifier(spec) => {
+                            BASE_PERSISTENCE_SPECIFIERS.contains(&spec.local.name.as_str())
+                        }
+                        _ => false,
+                    }
+                });
+                if all_base {
+                    continue;
+                }
+            }
+        }
+
+        user_defined_imports.push(Statement::ImportDeclaration(import.clone_in(&allocator)));
     }
 
     // Extract user-defined properties from the exported object literal

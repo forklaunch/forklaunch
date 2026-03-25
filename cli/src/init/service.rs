@@ -64,8 +64,8 @@ use crate::{
                 TYPESCRIPT_ESLINT_VERSION, UNIVERSAL_SDK_VERSION, UUID_VERSION, VALIDATOR_VERSION,
                 ZOD_VERSION, project_clean_script, project_dev_local_script,
                 project_dev_server_script, project_format_script, project_lint_fix_script,
-                project_lint_script, project_migrate_script, project_start_server_script,
-                project_test_script, project_up_latest_script,
+                project_lint_script, project_migrate_script, project_retention_enforce_script,
+                project_start_server_script, project_test_script, project_up_latest_script,
             },
             project_package_json::{
                 MIKRO_ORM_CONFIG_PATHS, ProjectDependencies, ProjectDevDependencies,
@@ -361,6 +361,7 @@ pub(crate) fn generate_service_package_json(
                     manifest_data.database.parse::<Database>().ok(),
                 )),
                 up_latest: project_up_latest_script(&manifest_data.runtime.parse()?),
+                retention_enforce: Some(project_retention_enforce_script(&manifest_data.runtime.parse()?)),
                 ..Default::default()
             }
         }),

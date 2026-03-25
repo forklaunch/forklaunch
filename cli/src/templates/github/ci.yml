@@ -16,6 +16,6 @@ jobs:
       - run: npm install -g pnpm
       - run: pnpm install{{/is_node}}{{#is_bun}}uses: oven-sh/setup-bun@v2
       - run: bun install{{/is_bun}}
-      - run: {{#is_node}}pnpm{{/is_node}}{{#is_bun}}bun{{/is_bun}} lint
-      - run: {{#is_node}}pnpm{{/is_node}}{{#is_bun}}bun{{/is_bun}} build
-      - run: {{#is_node}}pnpm{{/is_node}}{{#is_bun}}bun{{/is_bun}} test
+      - run: {{#is_node}}pnpm{{/is_node}}{{#is_bun}}bun run{{/is_bun}} lint
+      - run: {{#is_node}}pnpm{{/is_node}}{{#is_bun}}bun run{{/is_bun}} build
+      - run: {{#is_node}}pnpm{{/is_node}}{{#is_bun}}bun run{{/is_bun}} test

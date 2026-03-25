@@ -60,7 +60,7 @@
 
 **What it does:** When `forklaunch init application` scaffolds a new project, it generates:
 - `.github/workflows/ci.yml` — runs lint, type-check, and tests on PRs
-- `.github/branch-protection.md` — instructions for enabling branch protection (can't be done via file — requires GitHub API or UI)
+- `.github/BRANCH_PROTECTION.md` — instructions for enabling branch protection (can't be done via file — requires GitHub API or UI)
 - Optionally: a `forklaunch compliance gate` pre-deploy check that verifies CI passed
 
 **Implementation:**

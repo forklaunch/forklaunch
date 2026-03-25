@@ -4,6 +4,7 @@ import {
   getAllRetentionPolicies,
   getEntityComplianceFields,
   parseDuration,
+  subtractDuration,
   type RetentionPolicy
 } from '../persistence/complianceTypes';
 
@@ -122,48 +123,73 @@ export class RetentionService {
       return;
     }
 
-    const cutoff = new Date(Date.now() - parseDuration(policy.duration));
+    const duration = parseDuration(policy.duration);
+    const cutoff = subtractDuration(new Date(), duration);
     const entityClass = metadata.class ?? metadata.className;
 
-    const piiFieldNames =
-      policy.action === 'anonymize'
-        ? [...(getEntityComplianceFields(entityName)?.entries() ?? [])]
-            .filter(([, level]) => level !== 'none')
-            .map(([name]) => name)
-        : [];
+    // For anonymize: only null out PII/PHI/PCI fields that are nullable.
+    // Non-nullable fields are skipped to avoid flush errors.
+    const piiFieldNames: string[] = [];
+    if (policy.action === 'anonymize') {
+      const complianceFields = getEntityComplianceFields(entityName);
+      if (complianceFields) {
+        for (const [fieldName, level] of complianceFields) {
+          if (level === 'none') continue;
+          const prop = metadata.properties[fieldName];
+          if (prop && prop.nullable) {
+            piiFieldNames.push(fieldName);
+          } else {
+            this.otel.warn(
+              '[RetentionService] Skipping non-nullable PII field for anonymize',
+              { entityName, fieldName, level }
+            );
+          }
+        }
+      }
+    }
+
+    const filter: Record<string, unknown> = {
+      createdAt: { $lt: cutoff }
+    };
+    if (policy.action === 'anonymize') {
+      filter['retentionAnonymizedAt'] = null;
+    }
+
+    // Dry run: use count instead of fetching records
+    if (dryRun) {
+      const em = this.orm.em.fork();
+      try {
+        const count = await em.count(entityClass, filter);
+        this.otel.info('[RetentionService] Dry run — would process', {
+          entityName,
+          action: policy.action,
+          count
+        });
+        if (policy.action === 'delete') stats.deleted += count;
+        else stats.anonymized += count;
+      } catch (err) {
+        stats.errors++;
+        this.otel.error('[RetentionService] Dry run count failed', {
+          entityName,
+          error: String(err)
+        });
+      }
+      return;
+    }
 
     let batchNum = 0;
-     
+
     while (true) {
       batchNum++;
       const em = this.orm.em.fork();
 
       try {
-        const filter: Record<string, unknown> = {
-          createdAt: { $lt: cutoff }
-        };
-        if (policy.action === 'anonymize') {
-          filter['retentionAnonymizedAt'] = null;
-        }
-
         const records = await em.find(entityClass, filter, {
           limit: batchSize,
           orderBy: { createdAt: 'ASC' }
         });
 
         if (records.length === 0) break;
-
-        if (dryRun) {
-          this.otel.info('[RetentionService] Dry run — would process', {
-            entityName,
-            action: policy.action,
-            batch: batchNum,
-            count: records.length
-          });
-          if (policy.action === 'delete') stats.deleted += records.length;
-          else stats.anonymized += records.length;
-          break; // dry run only reports first batch
-        }
 
         if (policy.action === 'delete') {
           records.forEach((r) => em.remove(r));

@@ -170,7 +170,8 @@ export class WSChannelManager {
 }
 
 /**
- * Check if a session has all required permissions.
+ * Compare two string arrays for equality irrespective of element order.
+ * Sorts copies of both arrays and compares element-by-element.
  */
 function arraysEqual(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;

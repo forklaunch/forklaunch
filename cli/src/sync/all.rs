@@ -15,12 +15,18 @@ use crate::{
         InitializeType,
     },
     core::{
-        ast::infrastructure::env::find_all_env_vars,
+        ast::infrastructure::{
+            compliance::scan_all_compliance,
+            env::find_all_env_vars,
+        },
         base_path::{RequiredLocation, find_app_root_path},
         command::command,
         docker::{DockerCompose, sync_docker_compose_env_vars},
         env_template::{generate_env_templates, sync_env_local_files},
-        manifest::{ProjectType, application::ApplicationManifestData},
+        manifest::{
+            RetentionManifestConfig,
+            ProjectType, application::ApplicationManifestData,
+        },
         rendered_template::{RenderedTemplate, RenderedTemplatesCache, write_rendered_templates},
         sync::{
             artifacts::{ArtifactType, remove_project_from_artifacts},
@@ -338,6 +344,48 @@ pub fn sync_all_projects(
                     "[INFO] Skipped (routers and modules are synced as part of their parent service)"
                 )?;
             }
+        }
+    }
+
+    // Scan entity files for compliance classifications and retention policies
+    let modules_path_buf = app_root_path.join(&manifest_data.modules_path);
+    match scan_all_compliance(&modules_path_buf) {
+        Ok((field_classifications, retention_policies)) => {
+            let mut compliance = manifest_data.compliance.take().unwrap_or_default();
+
+            if !field_classifications.is_empty() || !retention_policies.is_empty() {
+                compliance.entities = field_classifications;
+                compliance.retention = retention_policies
+                    .into_iter()
+                    .map(|(name, info)| {
+                        (
+                            name,
+                            RetentionManifestConfig {
+                                duration: info.duration,
+                                action: info.action,
+                            },
+                        )
+                    })
+                    .collect();
+
+                log_ok!(
+                    stdout,
+                    "Scanned {} entities, {} with retention policies",
+                    compliance.entities.len(),
+                    compliance.retention.len()
+                );
+
+                changes_made = true;
+            }
+
+            manifest_data.compliance = Some(compliance);
+        }
+        Err(e) => {
+            log_warn!(
+                stdout,
+                "Failed to scan entity compliance metadata: {}",
+                e
+            );
         }
     }
 

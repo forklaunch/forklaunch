@@ -89,25 +89,36 @@ impl CliCommand for AuditCommand {
         let show_all = !show_data_flow && !show_risk_score && !show_dpia;
         let json_output = matches.get_flag("json");
 
-        // Collect entity compliance data
-        let entities: Vec<EntityReport> = compliance
-            .entities
-            .iter()
-            .map(|(name, fields)| {
-                let field_reports: Vec<FieldReport> = fields
-                    .iter()
-                    .map(|(field_name, classification)| FieldReport {
-                        name: field_name.clone(),
-                        compliance: classification.clone(),
-                        encrypted: classification == "phi" || classification == "pci",
+        // Collect entity compliance data (merge field classifications + retention policies)
+        let mut entity_names: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        entity_names.extend(compliance.entities.keys().cloned());
+        entity_names.extend(compliance.retention.keys().cloned());
+
+        let entities: Vec<EntityReport> = entity_names
+            .into_iter()
+            .map(|name| {
+                let field_reports: Vec<FieldReport> = compliance
+                    .entities
+                    .get(&name)
+                    .map(|fields| {
+                        fields
+                            .iter()
+                            .map(|(field_name, classification)| FieldReport {
+                                name: field_name.clone(),
+                                compliance: classification.clone(),
+                                encrypted: classification == "phi"
+                                    || classification == "pci",
+                            })
+                            .collect()
                     })
-                    .collect();
-                let retention = compliance.retention.get(name).map(|r| RetentionReport {
-                    duration: r.duration.clone(),
-                    action: r.action.clone(),
-                });
+                    .unwrap_or_default();
+                let retention =
+                    compliance.retention.get(&name).map(|r| RetentionReport {
+                        duration: r.duration.clone(),
+                        action: r.action.clone(),
+                    });
                 EntityReport {
-                    name: name.clone(),
+                    name,
                     fields: field_reports,
                     retention,
                 }
@@ -115,7 +126,8 @@ impl CliCommand for AuditCommand {
             .collect();
 
         // Collect route data from OpenAPI spec (if available)
-        let routes = collect_routes_from_openapi(&app_root);
+        let modules_path = &manifest.modules_path;
+        let routes = collect_routes_from_openapi(&app_root, modules_path);
 
         // Build the local report
         let report = ComplianceReport {
@@ -675,7 +687,7 @@ struct PlatformFinding {
 
 /// Attempt to read routes from generated OpenAPI specs.
 /// Returns an empty vec if no specs are found.
-fn collect_routes_from_openapi(app_root: &Path) -> Vec<RouteReport> {
+fn collect_routes_from_openapi(app_root: &Path, modules_path: &str) -> Vec<RouteReport> {
     let mut routes = Vec::new();
 
     // OpenAPI specs are typically generated in each service's directory
@@ -684,8 +696,8 @@ fn collect_routes_from_openapi(app_root: &Path) -> Vec<RouteReport> {
         app_root.join("docs").join("openapi.json"),
     ];
 
-    // Also search in src/modules/*/openapi.json
-    if let Ok(entries) = fs::read_dir(app_root.join("src").join("modules")) {
+    // Search in <modules_path>/*/openapi.json (e.g., src/modules or modules)
+    if let Ok(entries) = fs::read_dir(app_root.join(modules_path)) {
         for entry in entries.flatten() {
             let spec_path = entry.path().join("openapi.json");
             if spec_path.exists() {

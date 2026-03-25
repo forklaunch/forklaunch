@@ -72,11 +72,19 @@ export const RetentionDuration = {
   years: (n: number): string => `P${n}Y`
 } as const;
 
-const DURATION_REGEX = /^P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)D)?$/;
-const MS_PER_DAY = 86_400_000;
-const MIN_DURATION_MS = MS_PER_DAY;
+export interface ParsedDuration {
+  years: number;
+  months: number;
+  days: number;
+}
 
-export function parseDuration(iso: string): number {
+const DURATION_REGEX = /^P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)D)?$/;
+
+/**
+ * Parse an ISO 8601 duration string into calendar units.
+ * Returns structured units to enable calendar-aware date arithmetic.
+ */
+export function parseDuration(iso: string): ParsedDuration {
   const match = DURATION_REGEX.exec(iso);
   if (!match) {
     throw new Error(
@@ -86,14 +94,28 @@ export function parseDuration(iso: string): number {
   const years = parseInt(match[1] || '0', 10);
   const months = parseInt(match[2] || '0', 10);
   const days = parseInt(match[3] || '0', 10);
-  const totalDays = years * 365 + months * 30 + days;
-  const ms = totalDays * MS_PER_DAY;
-  if (ms < MIN_DURATION_MS) {
+
+  // Approximate total days for minimum validation only
+  const approxDays = years * 365 + months * 30 + days;
+  if (approxDays < 1) {
     throw new Error(
-      `Retention duration must be >= 1 day (P1D). Got: '${iso}' (${totalDays} days)`
+      `Retention duration must be >= 1 day (P1D). Got: '${iso}' (${approxDays} approx days)`
     );
   }
-  return ms;
+
+  return { years, months, days };
+}
+
+/**
+ * Subtract a parsed duration from a date using calendar-aware arithmetic.
+ * Handles month-end clamping and leap years correctly.
+ */
+export function subtractDuration(from: Date, duration: ParsedDuration): Date {
+  const result = new Date(from);
+  result.setFullYear(result.getFullYear() - duration.years);
+  result.setMonth(result.getMonth() - duration.months);
+  result.setDate(result.getDate() - duration.days);
+  return result;
 }
 
 const retentionRegistry = new Map<string, RetentionPolicy>();

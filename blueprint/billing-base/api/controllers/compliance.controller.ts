@@ -1,24 +1,18 @@
 import { handlers, schemaValidator, string } from '@forklaunch/blueprint-core';
-import { generateHmacAuthHeaders } from '@forklaunch/core/http';
 import { getEntityComplianceFields } from '@forklaunch/core/persistence';
 import { EntityManager } from '@mikro-orm/core';
 import { ci, tokens } from '../../bootstrapper';
 
 const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
 const HMAC_SECRET_KEY = ci.resolve(tokens.HMAC_SECRET_KEY);
+const iamSdkPromise = ci.resolve(tokens.IamSdk);
 
 const scopeFactory = () => ci.createScope();
 const emFactory = ci.scopedResolver(tokens.EntityManager);
 
 /**
- * IAM service base URL for HMAC inter-service calls.
- * Billing cascades GDPR operations to IAM.
- */
-const IAM_SERVICE_URL = process.env.IAM_SERVICE_URL ?? 'http://localhost:8000';
-
-/**
  * GDPR Right to Erasure — deletes all PII/PHI data for a user.
- * Handles billing entities AND cascades to IAM via HMAC.
+ * Handles billing entities AND cascades to IAM via SDK.
  */
 export const eraseUserData = handlers.delete(
   schemaValidator,
@@ -56,11 +50,13 @@ export const eraseUserData = handlers.delete(
     const { userId } = req.params;
     const em = emFactory(scopeFactory());
 
-    // 1. Erase billing PII
     const billingResult = await eraseBillingPii(em, userId);
-
-    // 2. Cascade to IAM via HMAC
     const iamResult = await callIamErase(userId);
+
+    if (billingResult.recordsDeleted === 0 && iamResult.recordsDeleted === 0) {
+      res.status(404).send('User not found or no PII data to erase');
+      return;
+    }
 
     openTelemetryCollector.info('GDPR erasure completed (billing + IAM)', {
       'audit.eventType': 'gdpr_erasure',
@@ -78,7 +74,7 @@ export const eraseUserData = handlers.delete(
 
 /**
  * GDPR Data Portability — exports all PII/PHI data for a user.
- * Handles billing entities AND cascades to IAM via HMAC.
+ * Handles billing entities AND cascades to IAM via SDK.
  */
 export const exportUserData = handlers.get(
   schemaValidator,
@@ -111,11 +107,16 @@ export const exportUserData = handlers.get(
     const { userId } = req.params;
     const em = emFactory(scopeFactory());
 
-    // 1. Collect billing PII
     const billingData = await collectBillingPii(em, userId);
-
-    // 2. Cascade to IAM via HMAC
     const iamData = await callIamExport(userId);
+
+    if (
+      Object.keys(billingData).length === 0 &&
+      Object.keys(iamData).length === 0
+    ) {
+      res.status(404).send('User not found or no PII data to export');
+      return;
+    }
 
     openTelemetryCollector.info('GDPR export completed (billing + IAM)', {
       'audit.eventType': 'gdpr_export',
@@ -143,6 +144,19 @@ const BILLING_ENTITIES = [
   'BillingProvider'
 ] as const;
 
+/** Fields that link billing entities to a user */
+const USER_RELATION_FIELDS = ['partyId', 'customerId'];
+
+function entityHasUserRelation(em: EntityManager, entityName: string): boolean {
+  const metadata = [...em.getMetadata().getAll().values()].find(
+    (m) => m.className === entityName
+  );
+  if (!metadata) return false;
+  return USER_RELATION_FIELDS.some(
+    (field) => metadata.properties[field] != null
+  );
+}
+
 async function eraseBillingPii(
   em: EntityManager,
   userId: string
@@ -164,19 +178,21 @@ async function eraseBillingPii(
     );
     if (!metadata) continue;
 
-    // Billing entities are linked to users via partyId or customerId
-    const records = await em
-      .find(metadata.class ?? metadata.className, {
-        $or: [{ partyId: userId }, { customerId: userId }]
-      })
-      .catch(() => []);
+    if (!entityHasUserRelation(em, entityName)) continue;
+
+    const records = await em.find(metadata.class ?? metadata.className, {
+      $or: [{ partyId: userId }, { customerId: userId }]
+    });
 
     if (records.length > 0) {
       entitiesAffected.push(entityName);
       recordsDeleted += records.length;
       records.forEach((r) => em.remove(r));
-      await em.flush();
     }
+  }
+
+  if (recordsDeleted > 0) {
+    await em.flush();
   }
 
   return { entitiesAffected, recordsDeleted };
@@ -202,11 +218,11 @@ async function collectBillingPii(
     );
     if (!metadata) continue;
 
-    const records = await em
-      .find(metadata.class ?? metadata.className, {
-        $or: [{ partyId: userId }, { customerId: userId }]
-      })
-      .catch(() => []);
+    if (!entityHasUserRelation(em, entityName)) continue;
+
+    const records = await em.find(metadata.class ?? metadata.className, {
+      $or: [{ partyId: userId }, { customerId: userId }]
+    });
 
     if (records.length > 0) {
       const piiFieldNames = [...fields.entries()]
@@ -228,29 +244,23 @@ async function collectBillingPii(
 }
 
 // ---------------------------------------------------------------------------
-// IAM cascade via HMAC
+// IAM cascade via SDK
 // ---------------------------------------------------------------------------
 
 async function callIamErase(
   userId: string
 ): Promise<{ entitiesAffected: string[]; recordsDeleted: number }> {
   try {
-    const headers = generateHmacAuthHeaders({
-      secretKey: HMAC_SECRET_KEY,
-      method: 'DELETE',
-      path: `/compliance/erase/${userId}`
+    const iamSdk = await iamSdkPromise;
+    const response = await iamSdk.compliance.eraseUserData({
+      params: { userId },
+      headers: {
+        authorization: `HMAC keyId=default`
+      }
     });
 
-    const response = await fetch(
-      `${IAM_SERVICE_URL}/compliance/erase/${userId}`,
-      {
-        method: 'DELETE',
-        headers: { ...headers, 'Content-Type': 'application/json' }
-      }
-    );
-
-    if (response.ok) {
-      return (await response.json()) as {
+    if (response.code === 200) {
+      return response.response as {
         entitiesAffected: string[];
         recordsDeleted: number;
       };
@@ -266,22 +276,16 @@ async function callIamExport(
   userId: string
 ): Promise<Record<string, unknown[]>> {
   try {
-    const headers = generateHmacAuthHeaders({
-      secretKey: HMAC_SECRET_KEY,
-      method: 'GET',
-      path: `/compliance/export/${userId}`
+    const iamSdk = await iamSdkPromise;
+    const response = await iamSdk.compliance.exportUserData({
+      params: { userId },
+      headers: {
+        authorization: `HMAC keyId=default`
+      }
     });
 
-    const response = await fetch(
-      `${IAM_SERVICE_URL}/compliance/export/${userId}`,
-      {
-        method: 'GET',
-        headers: { ...headers, 'Content-Type': 'application/json' }
-      }
-    );
-
-    if (response.ok) {
-      const data = (await response.json()) as {
+    if (response.code === 200) {
+      const data = response.response as {
         entities: Record<string, unknown[]>;
       };
       return data.entities;

@@ -15,6 +15,8 @@ export {
   type RetentionPolicy,
   RetentionDuration,
   parseDuration,
+  subtractDuration,
+  type ParsedDuration,
   getEntityRetention,
   getAllRetentionPolicies
 } from './complianceTypes';

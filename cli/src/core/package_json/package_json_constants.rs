@@ -183,7 +183,7 @@ pub(crate) fn application_seed_script<'a>(
 pub(crate) fn application_setup_script(runtime: &Runtime) -> String {
     match runtime {
         Runtime::Bun => {
-            String::from("bun run build && bun migrate:init && bun migrate:up && bun seed")
+            String::from("bun run build && bun run migrate:init && bun run migrate:up && bun run seed")
         }
         Runtime::Node => {
             String::from("pnpm build && pnpm migrate:init && pnpm migrate:up && pnpm seed")
@@ -329,6 +329,13 @@ pub(crate) const PROJECT_BUILD_SCRIPT: &str = "tsgo -b";
 pub(crate) const PROJECT_DOCS_SCRIPT: &str = "typedoc --out docs *";
 pub(crate) const PROJECT_SEED_SCRIPT: &str = "[ -z $DOTENV_FILE_PATH ] && export DOTENV_FILE_PATH=.env.local; NODE_OPTIONS='--import=tsx' mikro-orm seeder:run";
 
+pub(crate) fn project_retention_enforce_script(runtime: &Runtime) -> String {
+    String::from(match runtime {
+        Runtime::Bun => "bun run scripts/enforce-retention.ts",
+        Runtime::Node => "pnpm tsx scripts/enforce-retention.ts",
+    })
+}
+
 pub(crate) fn project_format_script(formatter: &Formatter) -> String {
     String::from(match formatter {
         Formatter::Prettier => {
@@ -364,7 +371,7 @@ pub(crate) fn project_dev_server_script(runtime: &Runtime, database: Option<Data
         Runtime::Bun => format!(
             "{}bun --watch server.ts",
             if database.is_some_and(|db| db != Database::MongoDB) {
-                "bun migrate:up && "
+                "bun run migrate:up && "
             } else {
                 ""
             }
@@ -385,7 +392,7 @@ pub(crate) fn project_dev_local_script(runtime: &Runtime, database: Option<Datab
         Runtime::Bun => format!(
             "{}DOTENV_FILE_PATH=.env.local bun --watch server.ts",
             if database.is_some_and(|db| db != Database::MongoDB) {
-                "DOTENV_FILE_PATH=.env.local bun migrate:up && "
+                "DOTENV_FILE_PATH=.env.local bun run migrate:up && "
             } else {
                 ""
             }
@@ -489,7 +496,7 @@ pub(crate) fn project_dev_local_worker_script(
         Runtime::Bun => format!(
             "{}DOTENV_FILE_PATH=.env.local bun --watch server.ts && DOTENV_FILE_PATH=.env.local bun --watch worker.ts",
             if database.is_some_and(|db| db != Database::MongoDB) {
-                "DOTENV_FILE_PATH=.env.local bun migrate:up && "
+                "DOTENV_FILE_PATH=.env.local bun run migrate:up && "
             } else {
                 ""
             }

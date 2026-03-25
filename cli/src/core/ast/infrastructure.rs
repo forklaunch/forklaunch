@@ -1,3 +1,4 @@
+pub(crate) mod compliance;
 pub(crate) mod database;
 pub(crate) mod env;
 pub(crate) mod integrations;
