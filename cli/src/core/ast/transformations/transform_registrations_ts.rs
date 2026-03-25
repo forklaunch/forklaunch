@@ -379,31 +379,151 @@ pub(crate) fn transform_registrations_ts_worker_type(
         "runtimeDependencies",
     );
 
-    let config_injector_service_dependencies_text = format!(
-        "const configInjector = createConfigInjector(SchemaValidator(), {{
-                WorkerProducer: {{
-                    lifetime: Lifetime.Scoped,
-                    type: {}WorkerProducer,
-                    factory: {}
-                }},
-                WorkerConsumer: {{
-                    lifetime: Lifetime.Scoped,
-                    type: (
-                        processEventsFunction: WorkerProcessFunction<I{}EventRecord>,
-                        failureHandler: WorkerFailureHandler<I{}EventRecord>
-                    ) => {}WorkerConsumer<I{}EventRecord, {}WorkerOptions>,
-                    factory: {}
-                }}
-            }})",
-        worker_type,
-        get_worker_producer_factory(r#type),
-        pascal_case_name,
-        pascal_case_name,
-        worker_type,
-        pascal_case_name,
-        worker_type,
-        get_worker_consumer_factory(r#type, &pascal_case_name)
-    );
+    let is_database_worker = *r#type == WorkerType::Database;
+
+    // Add encryption imports and env/runtime deps for non-database workers
+    if !is_database_worker {
+        let encryption_interfaces_text = "import { EncryptingWorkerProducer, withDecryption, withDecryptionFailureHandler } from '@forklaunch/interfaces-worker/interfaces';";
+        let mut encryption_interfaces_import =
+            parse_ast_program(&allocator, encryption_interfaces_text, SourceType::ts());
+        inject_into_import_statement(
+            &mut registration_program,
+            &mut encryption_interfaces_import,
+            "@forklaunch/interfaces-worker/interfaces",
+            &registrations_text,
+        )?;
+
+        let encrypted_envelope_text = "import { type EncryptedEventEnvelope } from '@forklaunch/interfaces-worker/types';";
+        let mut encrypted_envelope_import =
+            parse_ast_program(&allocator, encrypted_envelope_text, SourceType::ts());
+        inject_into_import_statement(
+            &mut registration_program,
+            &mut encrypted_envelope_import,
+            "@forklaunch/interfaces-worker/types",
+            &registrations_text,
+        )?;
+
+        let field_encryptor_text = "import { FieldEncryptor } from '@forklaunch/core/persistence';";
+        let mut field_encryptor_import =
+            parse_ast_program(&allocator, field_encryptor_text, SourceType::ts());
+        inject_into_import_statement(
+            &mut registration_program,
+            &mut field_encryptor_import,
+            "@forklaunch/core/persistence",
+            &registrations_text,
+        )?;
+
+        // Inject ENCRYPTION_KEY env var
+        let encryption_key_text = "const configInjector = createConfigInjector(SchemaValidator(), {
+            ENCRYPTION_KEY: {
+                lifetime: Lifetime.Singleton,
+                type: string,
+                value: getEnvVar('ENCRYPTION_KEY')
+            }
+        });";
+        let mut encryption_key_injection =
+            parse_ast_program(&allocator, encryption_key_text, SourceType::ts());
+        inject_into_registrations_config_injector(
+            &allocator,
+            &mut registration_program,
+            &mut encryption_key_injection,
+            "environmentConfig",
+        );
+
+        // Inject EventEncryptor runtime dependency
+        let event_encryptor_text = "const configInjector = createConfigInjector(SchemaValidator(), {
+            EventEncryptor: {
+                lifetime: Lifetime.Singleton,
+                type: FieldEncryptor,
+                factory: ({ ENCRYPTION_KEY }) => new FieldEncryptor(ENCRYPTION_KEY)
+            }
+        });";
+        let mut event_encryptor_injection =
+            parse_ast_program(&allocator, event_encryptor_text, SourceType::ts());
+        inject_into_registrations_config_injector(
+            &allocator,
+            &mut registration_program,
+            &mut event_encryptor_injection,
+            "runtimeDependencies",
+        );
+    }
+
+    let config_injector_service_dependencies_text = if is_database_worker {
+        format!(
+            "const configInjector = createConfigInjector(SchemaValidator(), {{
+                    WorkerProducer: {{
+                        lifetime: Lifetime.Scoped,
+                        type: {}WorkerProducer,
+                        factory: {}
+                    }},
+                    WorkerConsumer: {{
+                        lifetime: Lifetime.Scoped,
+                        type: function_(
+                            [
+                                type<WorkerProcessFunction<I{}EventRecord>>(),
+                                type<WorkerFailureHandler<I{}EventRecord>>()
+                            ],
+                            type<{}WorkerConsumer<I{}EventRecord, {}WorkerOptions>>()
+                        ),
+                        factory: {}
+                    }}
+                }})",
+            worker_type,
+            get_worker_producer_factory(r#type),
+            pascal_case_name,
+            pascal_case_name,
+            worker_type,
+            pascal_case_name,
+            worker_type,
+            get_worker_consumer_factory(r#type, &pascal_case_name)
+        )
+    } else {
+        format!(
+            "const configInjector = createConfigInjector(SchemaValidator(), {{
+                    WorkerProducer: {{
+                        lifetime: Lifetime.Scoped,
+                        type: EncryptingWorkerProducer,
+                        factory: (container, _resolve, context) =>
+                            new EncryptingWorkerProducer(
+                                ({})(container),
+                                container.EventEncryptor,
+                                (context?.tenantId as string) ?? ''
+                            )
+                    }},
+                    WorkerConsumer: {{
+                        lifetime: Lifetime.Scoped,
+                        type: function_(
+                            [
+                                type<WorkerProcessFunction<I{}EventRecord>>(),
+                                type<WorkerFailureHandler<I{}EventRecord>>()
+                            ],
+                            type<{}WorkerConsumer<EncryptedEventEnvelope, {}WorkerOptions>>()
+                        ),
+                        factory: (container) => {{
+                            const createConsumer = ({})(container);
+                            return (
+                                processEventsFunction: WorkerProcessFunction<I{}EventRecord>,
+                                failureHandler: WorkerFailureHandler<I{}EventRecord>
+                            ) =>
+                                createConsumer(
+                                    withDecryption<I{}EventRecord>(processEventsFunction, container.EventEncryptor),
+                                    withDecryptionFailureHandler<I{}EventRecord>(failureHandler, container.EventEncryptor)
+                                );
+                        }}
+                    }}
+                }})",
+            get_worker_producer_factory(r#type),
+            pascal_case_name,
+            pascal_case_name,
+            worker_type,
+            worker_type,
+            get_worker_consumer_factory(r#type, &pascal_case_name),
+            pascal_case_name,
+            pascal_case_name,
+            pascal_case_name,
+            pascal_case_name,
+        )
+    };
     let mut config_injector_service_dependencies_import = parse_ast_program(
         &allocator,
         &config_injector_service_dependencies_text,

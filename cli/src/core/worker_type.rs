@@ -70,7 +70,7 @@ fn get_database_worker_consumer_factory(pascal_case_name: &str) -> String {
     )
 }
 fn get_bullmq_worker_consumer_factory(_pascal_case_name: &str) -> String {
-    "({{ QUEUE_NAME, WorkerOptions }}) =>
+    "({ QUEUE_NAME, WorkerOptions }) =>
   (
     processEventsFunction: WorkerProcessFunction<EncryptedEventEnvelope>,
     failureHandler: WorkerFailureHandler<EncryptedEventEnvelope>
@@ -83,7 +83,7 @@ fn get_bullmq_worker_consumer_factory(_pascal_case_name: &str) -> String {
     )".to_string()
 }
 fn get_kafka_worker_consumer_factory(_pascal_case_name: &str) -> String {
-    "({{ QUEUE_NAME, WorkerOptions, OtelCollector }}) =>
+    "({ QUEUE_NAME, WorkerOptions, OtelCollector }) =>
   (
     processEventsFunction: WorkerProcessFunction<EncryptedEventEnvelope>,
     failureHandler: WorkerFailureHandler<EncryptedEventEnvelope>
@@ -97,7 +97,7 @@ fn get_kafka_worker_consumer_factory(_pascal_case_name: &str) -> String {
     )".to_string()
 }
 fn get_redis_worker_consumer_factory(_pascal_case_name: &str) -> String {
-    "({{ TtlCache, QUEUE_NAME, WorkerOptions }}) =>
+    "({ TtlCache, QUEUE_NAME, WorkerOptions }) =>
   (
     processEventsFunction: WorkerProcessFunction<EncryptedEventEnvelope>,
     failureHandler: WorkerFailureHandler<EncryptedEventEnvelope>

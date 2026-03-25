@@ -142,16 +142,44 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
         &registrations_text,
     )?;
 
-    // Add worker interfaces import
-    let worker_interfaces_text = "import { WorkerProcessFunction, WorkerFailureHandler } from '@forklaunch/interfaces-worker/types';";
+    // Add worker interfaces imports
+    let is_database_worker = *worker_type == WorkerType::Database;
+    let worker_interfaces_types_text = if is_database_worker {
+        "import { WorkerProcessFunction, WorkerFailureHandler } from '@forklaunch/interfaces-worker/types';".to_string()
+    } else {
+        "import { type EncryptedEventEnvelope, WorkerProcessFunction, WorkerFailureHandler } from '@forklaunch/interfaces-worker/types';".to_string()
+    };
     let mut worker_interfaces_import =
-        parse_ast_program(&allocator, worker_interfaces_text, SourceType::ts());
+        parse_ast_program(&allocator, &worker_interfaces_types_text, SourceType::ts());
     inject_into_import_statement(
         &mut program,
         &mut worker_interfaces_import,
         "@forklaunch/interfaces-worker/types",
         &registrations_text,
     )?;
+
+    if !is_database_worker {
+        // Add encryption imports for non-database workers
+        let encryption_interfaces_text = "import { EncryptingWorkerProducer, withDecryption, withDecryptionFailureHandler } from '@forklaunch/interfaces-worker/interfaces';";
+        let mut encryption_interfaces_import =
+            parse_ast_program(&allocator, encryption_interfaces_text, SourceType::ts());
+        inject_into_import_statement(
+            &mut program,
+            &mut encryption_interfaces_import,
+            "@forklaunch/interfaces-worker/interfaces",
+            &registrations_text,
+        )?;
+
+        let field_encryptor_text = "import { FieldEncryptor } from '@forklaunch/core/persistence';";
+        let mut field_encryptor_import =
+            parse_ast_program(&allocator, field_encryptor_text, SourceType::ts());
+        inject_into_import_statement(
+            &mut program,
+            &mut field_encryptor_import,
+            "@forklaunch/core/persistence",
+            &registrations_text,
+        )?;
+    }
 
     // Add event record interface type import (used in type positions)
     let event_record_type_text = format!(
@@ -250,6 +278,41 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
         "environmentConfig",
     )?;
 
+    // Inject ENCRYPTION_KEY and EventEncryptor for non-database workers
+    if !is_database_worker {
+        let encryption_key_text = "const configInjector = createConfigInjector(SchemaValidator(), {
+            ENCRYPTION_KEY: {
+                lifetime: Lifetime.Singleton,
+                type: string,
+                value: getEnvVar('ENCRYPTION_KEY')
+            }
+        });";
+        let mut encryption_key_injection =
+            parse_ast_program(&allocator, encryption_key_text, SourceType::ts());
+        inject_into_registrations_config_injector(
+            &allocator,
+            &mut program,
+            &mut encryption_key_injection,
+            "environmentConfig",
+        )?;
+
+        let event_encryptor_text = "const configInjector = createConfigInjector(SchemaValidator(), {
+            EventEncryptor: {
+                lifetime: Lifetime.Singleton,
+                type: FieldEncryptor,
+                factory: ({ ENCRYPTION_KEY }) => new FieldEncryptor(ENCRYPTION_KEY)
+            }
+        });";
+        let mut event_encryptor_injection =
+            parse_ast_program(&allocator, event_encryptor_text, SourceType::ts());
+        inject_into_registrations_config_injector(
+            &allocator,
+            &mut program,
+            &mut event_encryptor_injection,
+            "runtimeDependencies",
+        )?;
+    }
+
     // Inject WorkerOptions into runtimeDependencies
     let worker_options_text = format!(
         "const configInjector = createConfigInjector(SchemaValidator(), {{
@@ -274,34 +337,82 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
     )?;
 
     // Inject WorkerConsumer and WorkerProducer into serviceDependencies
-    let worker_deps_text = format!(
-        "const configInjector = createConfigInjector(SchemaValidator(), {{
-            WorkerProducer: {{
-                lifetime: Lifetime.Scoped,
-                type: {}WorkerProducer,
-                factory: {}
-            }},
-            WorkerConsumer: {{
-                lifetime: Lifetime.Scoped,
-                type: function_(
-                    [
-                        type<WorkerProcessFunction<I{}EventRecord>>(),
-                        type<WorkerFailureHandler<I{}EventRecord>>()
-                    ],
-                    type<{}WorkerConsumer<I{}EventRecord, {}WorkerOptions>>()
-                ),
-                factory: {}
-            }}
-        }});",
-        worker_type_name,
-        get_worker_producer_factory(worker_type),
-        pascal_case_name,
-        pascal_case_name,
-        worker_type_name,
-        pascal_case_name,
-        worker_type_name,
-        get_worker_consumer_factory(worker_type, &pascal_case_name)
-    );
+    let worker_deps_text = if is_database_worker {
+        format!(
+            "const configInjector = createConfigInjector(SchemaValidator(), {{
+                WorkerProducer: {{
+                    lifetime: Lifetime.Scoped,
+                    type: {}WorkerProducer,
+                    factory: {}
+                }},
+                WorkerConsumer: {{
+                    lifetime: Lifetime.Scoped,
+                    type: function_(
+                        [
+                            type<WorkerProcessFunction<I{}EventRecord>>(),
+                            type<WorkerFailureHandler<I{}EventRecord>>()
+                        ],
+                        type<{}WorkerConsumer<I{}EventRecord, {}WorkerOptions>>()
+                    ),
+                    factory: {}
+                }}
+            }});",
+            worker_type_name,
+            get_worker_producer_factory(worker_type),
+            pascal_case_name,
+            pascal_case_name,
+            worker_type_name,
+            pascal_case_name,
+            worker_type_name,
+            get_worker_consumer_factory(worker_type, &pascal_case_name)
+        )
+    } else {
+        format!(
+            "const configInjector = createConfigInjector(SchemaValidator(), {{
+                WorkerProducer: {{
+                    lifetime: Lifetime.Scoped,
+                    type: EncryptingWorkerProducer,
+                    factory: (container, _resolve, context) =>
+                        new EncryptingWorkerProducer(
+                            ({})(container),
+                            container.EventEncryptor,
+                            (context?.tenantId as string) ?? ''
+                        )
+                }},
+                WorkerConsumer: {{
+                    lifetime: Lifetime.Scoped,
+                    type: function_(
+                        [
+                            type<WorkerProcessFunction<I{}EventRecord>>(),
+                            type<WorkerFailureHandler<I{}EventRecord>>()
+                        ],
+                        type<{}WorkerConsumer<EncryptedEventEnvelope, {}WorkerOptions>>()
+                    ),
+                    factory: (container) => {{
+                        const createConsumer = ({})(container);
+                        return (
+                            processEventsFunction: WorkerProcessFunction<I{}EventRecord>,
+                            failureHandler: WorkerFailureHandler<I{}EventRecord>
+                        ) =>
+                            createConsumer(
+                                withDecryption<I{}EventRecord>(processEventsFunction, container.EventEncryptor),
+                                withDecryptionFailureHandler<I{}EventRecord>(failureHandler, container.EventEncryptor)
+                            );
+                    }}
+                }}
+            }});",
+            get_worker_producer_factory(worker_type),
+            pascal_case_name,
+            pascal_case_name,
+            worker_type_name,
+            worker_type_name,
+            get_worker_consumer_factory(worker_type, &pascal_case_name),
+            pascal_case_name,
+            pascal_case_name,
+            pascal_case_name,
+            pascal_case_name,
+        )
+    };
     let mut worker_deps_injection =
         parse_ast_program(&allocator, &worker_deps_text, SourceType::ts());
     inject_into_registrations_config_injector(
