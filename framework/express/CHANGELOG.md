@@ -1,5 +1,15 @@
 # @forklaunch/express
 
+## 1.1.4
+
+### Patch Changes
+
+- improve performance of entity branding
+- Updated dependencies
+  - @forklaunch/validator@1.1.4
+  - @forklaunch/common@1.1.4
+  - @forklaunch/core@1.1.4
+
 ## 1.1.3
 
 ### Patch Changes

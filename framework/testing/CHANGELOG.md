@@ -1,5 +1,11 @@
 # @forklaunch/testing
 
+## 1.1.4
+
+### Patch Changes
+
+- improve performance of entity branding
+
 ## 1.1.3
 
 ### Patch Changes
