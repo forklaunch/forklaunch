@@ -35,6 +35,14 @@ export {
   wrapEmWithNativeQueryBlocking
 } from './complianceEventSubscriber';
 
+// Field encryption
+export {
+  FieldEncryptor,
+  MissingEncryptionKeyError,
+  DecryptionError,
+  EncryptionRequiredError
+} from './fieldEncryptor';
+
 // Re-export InferEntity from MikroORM for convenience
 export type { InferEntity } from '@mikro-orm/core';
 

@@ -1,5 +1,11 @@
 # @forklaunch/common
 
+## 1.1.2
+
+### Patch Changes
+
+- move FieldEncryptor into persistence (previously not exported)
+
 ## 1.1.1
 
 ### Patch Changes

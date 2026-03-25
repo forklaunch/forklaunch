@@ -100,9 +100,10 @@ export function defineComplianceEntity<
   }
 
   // Strip custom fields before passing to MikroORM's defineEntity
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     retention: _retention,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     userIdField: _userIdField,
     ...mikroMeta
   } = meta;

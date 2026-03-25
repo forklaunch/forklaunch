@@ -1,6 +1,6 @@
 import { createConfigInjector, getEnvVar, Lifetime } from '@forklaunch/core/services';
-import { ComplianceEventSubscriber } from '@forklaunch/core/persistence';
-import { FieldEncryptor } from '@forklaunch/core/encryption';
+import { ComplianceEventSubscriber, FieldEncryptor } from '@forklaunch/core/persistence';
+
 import { Migrator } from '@mikro-orm/migrations{{#is_mongo}}-mongodb{{/is_mongo}}';
 import { number, SchemaValidator, string } from '@{{app_name}}/core';
 {{^is_mongo}}import { Platform, TextType, Type } from '@mikro-orm/core';{{/is_mongo}}

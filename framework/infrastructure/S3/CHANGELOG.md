@@ -1,5 +1,14 @@
 # @forklaunch/infrastructure-s3
 
+## 1.1.2
+
+### Patch Changes
+
+- move FieldEncryptor into persistence (previously not exported)
+- Updated dependencies
+  - @forklaunch/common@1.1.2
+  - @forklaunch/core@1.1.2
+
 ## 1.1.1
 
 ### Patch Changes

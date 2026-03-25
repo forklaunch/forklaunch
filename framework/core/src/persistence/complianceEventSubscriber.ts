@@ -7,7 +7,7 @@ import {
   DecryptionError,
   EncryptionRequiredError,
   FieldEncryptor
-} from '../encryption/fieldEncryptor';
+} from './fieldEncryptor';
 import {
   type ComplianceLevel,
   getEntityComplianceFields

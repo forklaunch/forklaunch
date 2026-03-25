@@ -3,7 +3,7 @@ import {
   DecryptionError,
   FieldEncryptor,
   MissingEncryptionKeyError
-} from '../src/encryption/fieldEncryptor';
+} from '../src/persistence/fieldEncryptor';
 
 const MASTER_KEY = 'test-master-key-that-is-long-enough-for-hkdf';
 

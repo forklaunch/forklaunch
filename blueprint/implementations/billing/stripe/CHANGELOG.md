@@ -1,5 +1,14 @@
 # @forklaunch/implementation-billing-stripe
 
+## 1.1.2
+
+### Patch Changes
+
+- Package updates
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.2
+  - @forklaunch/interfaces-billing@1.0.2
+
 ## 1.1.1
 
 ### Patch Changes

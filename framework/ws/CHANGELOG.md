@@ -1,5 +1,15 @@
 # @forklaunch/ws
 
+## 1.1.2
+
+### Patch Changes
+
+- move FieldEncryptor into persistence (previously not exported)
+- Updated dependencies
+  - @forklaunch/validator@1.1.2
+  - @forklaunch/common@1.1.2
+  - @forklaunch/core@1.1.2
+
 ## 1.1.1
 
 ### Patch Changes

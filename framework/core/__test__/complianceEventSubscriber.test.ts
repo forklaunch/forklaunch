@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { FieldEncryptor } from '../src/encryption/fieldEncryptor';
+import { FieldEncryptor } from '../src/persistence/fieldEncryptor';
 import {
   ComplianceEventSubscriber,
   wrapEmWithNativeQueryBlocking
