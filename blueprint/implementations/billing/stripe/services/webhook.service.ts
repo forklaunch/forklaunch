@@ -5,7 +5,6 @@ import {
 import { AnySchemaValidator } from '@forklaunch/validator';
 import { EntityManager } from '@mikro-orm/core';
 import Stripe from 'stripe';
-import { StripeWebhookEvent } from '../persistence/entities';
 import { BillingProviderEnum } from '../domain/enum/billingProvider.enum';
 import { CurrencyEnum } from '../domain/enum/currency.enum';
 import { PaymentMethodEnum } from '../domain/enum/paymentMethod.enum';
@@ -17,6 +16,7 @@ import {
   StripePlanEntities,
   StripeSubscriptionEntities
 } from '../domain/types/stripe.entity.types';
+import { StripeWebhookEvent } from '../persistence/entities';
 import { StripeBillingPortalService } from './billingPortal.service';
 import { StripeCheckoutSessionService } from './checkoutSession.service';
 import { StripePaymentLinkService } from './paymentLink.service';

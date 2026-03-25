@@ -2,7 +2,7 @@
  * Compile-time type tests for fp + defineComplianceEntity.
  */
 
-import type { InferEntity } from '@mikro-orm/core';
+import type { Collection, InferEntity } from '@mikro-orm/core';
 import { p } from '@mikro-orm/core';
 import { fp } from '../src/persistence/compliancePropertyBuilder';
 import { defineComplianceEntity } from '../src/persistence/defineComplianceEntity';
@@ -122,6 +122,151 @@ const Bad6 = defineComplianceEntity({
   }
 });
 
+// ---------------------------------------------------------------------------
+// ✅ InferEntity produces clean types — no __classified brand leaking
+// ---------------------------------------------------------------------------
+
+// Exact type assertions: these fail if __classified leaks into the value type
+type AssertExact<T, U> = [T] extends [U]
+  ? [U] extends [T]
+    ? true
+    : false
+  : false;
+
+type _CheckId = AssertExact<UserType['id'], string>;
+const _checkId: _CheckId = true;
+
+type _CheckEmail = AssertExact<UserType['email'], string>;
+const _checkEmail: _CheckEmail = true;
+
+type _CheckAge = AssertExact<UserType['age'], number>;
+const _checkAge: _CheckAge = true;
+
+type _CheckActive = AssertExact<UserType['active'], boolean>;
+const _checkActive: _CheckActive = true;
+
+// nullable fields may include undefined depending on MikroORM's inference
+type _CheckMedical = AssertExact<
+  UserType['medicalRecord'],
+  string | null | undefined
+>;
+const _checkMedical: _CheckMedical = true;
+
+type _CheckStatus = AssertExact<UserType['status'], 'active' | 'inactive'>;
+const _checkStatus: _CheckStatus = true;
+
+type _CheckTags = AssertExact<UserType['tags'], string[]>;
+const _checkTags: _CheckTags = true;
+
+// ✅ Entity types are assignable to plain object shapes (em.create / em.find result)
+const plainUser: { id: string; email: string; age: number; active: boolean } =
+  {} as UserType;
+
+// ✅ __classified does NOT appear as a key on the inferred entity
+type UserKeys = keyof UserType;
+type _NoClassified = AssertExact<
+  '__classified' extends UserKeys ? true : false,
+  false
+>;
+const _noClassified: _NoClassified = true;
+
+// ✅ Cross-entity manyToOne: __classified doesn't cascade through relations
+const Order = defineComplianceEntity({
+  name: 'Order',
+  properties: {
+    id: fp.uuid().primary().compliance('none'),
+    total: fp.integer().compliance('none'),
+    user: () => fp.manyToOne(() => User)
+  }
+});
+type OrderType = InferEntity<typeof Order>;
+const _orderTotal: number = ({} as OrderType).total;
+
+// __classified must not appear on related entity types
+type OrderKeys = keyof OrderType;
+type _NoClassifiedOnOrder = AssertExact<
+  '__classified' extends OrderKeys ? true : false,
+  false
+>;
+const _noClassifiedOnOrder: _NoClassifiedOnOrder = true;
+
+// ✅ Nested reference: entity referencing another entity that itself has manyToOne
+const LineItem = defineComplianceEntity({
+  name: 'LineItem',
+  properties: {
+    id: fp.uuid().primary().compliance('none'),
+    quantity: fp.integer().compliance('none'),
+    order: () => fp.manyToOne(() => Order)
+  }
+});
+type LineItemType = InferEntity<typeof LineItem>;
+const _qty: number = ({} as LineItemType).quantity;
+
+// ✅ manyToMany: Collection<T> infers concrete type, not Collection<any>
+// (mirrors blueprint Role → Permission pattern)
+const Permission = defineComplianceEntity({
+  name: 'Permission',
+  properties: {
+    id: fp.uuid().primary().compliance('none'),
+    slug: fp.string().compliance('none')
+  }
+});
+type PermissionType = InferEntity<typeof Permission>;
+
+const Role = defineComplianceEntity({
+  name: 'Role',
+  properties: {
+    id: fp.uuid().primary().compliance('none'),
+    name: fp.string().compliance('none'),
+    permissions: () => fp.manyToMany(Permission)
+  }
+});
+type RoleType = InferEntity<typeof Role>;
+
+// permissions must be Collection<PermissionType>, NOT Collection<any>
+type _CheckPermissions = AssertExact<
+  RoleType['permissions'],
+  Collection<PermissionType>
+>;
+const _checkPermissions: _CheckPermissions = true;
+
+// slug must be string, not any
+const _permSlug: string = ({} as PermissionType).slug;
+
+// name must be string, not any
+const _roleName: string = ({} as RoleType).name;
+
+// ✅ onCreate / onUpdate / default: fields with these remain optional (Opt<>)
+const WithLifecycle = defineComplianceEntity({
+  name: 'WithLifecycle',
+  properties: {
+    id: fp.uuid().primary().compliance('none'),
+    createdAt: fp
+      .datetime()
+      .onCreate(() => new Date())
+      .compliance('none'),
+    updatedAt: fp
+      .datetime()
+      .onCreate(() => new Date())
+      .onUpdate(() => new Date())
+      .compliance('none'),
+    status: fp.string().default('active').compliance('none')
+  }
+});
+type WithLifecycleType = InferEntity<typeof WithLifecycle>;
+
+// onCreate/onUpdate/default fields should be optional in em.create() —
+// they're wrapped in Opt<> which makes them assignable without providing a value.
+// If __classified breaks Options inference, these lose Opt<> and become required.
+const lifecycleEntity: WithLifecycleType = {
+  id: 'uuid'
+  // createdAt, updatedAt, status intentionally omitted — they have defaults
+} as WithLifecycleType;
+const _createdAt: Date = lifecycleEntity.createdAt;
+
+void WithLifecycle;
+void lifecycleEntity;
+void _createdAt;
 void User;
 void user;
 void _id;
@@ -139,3 +284,22 @@ void Bad3;
 void Bad4;
 void Bad5;
 void Bad6;
+void plainUser;
+void _checkId;
+void _checkEmail;
+void _checkAge;
+void _checkActive;
+void _checkMedical;
+void _checkStatus;
+void _checkTags;
+void _noClassified;
+void Order;
+void _orderTotal;
+void _noClassifiedOnOrder;
+void LineItem;
+void _qty;
+void Permission;
+void Role;
+void _checkPermissions;
+void _permSlug;
+void _roleName;

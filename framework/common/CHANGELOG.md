@@ -1,5 +1,17 @@
 # @forklaunch/common
 
+## 1.1.6
+
+### Patch Changes
+
+- Restore MaybeOpt
+
+## 1.1.5
+
+### Patch Changes
+
+- cross boundary inference fix compliance entities
+
 ## 1.1.4
 
 ### Patch Changes

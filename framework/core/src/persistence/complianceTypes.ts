@@ -175,7 +175,7 @@ declare module '@mikro-orm/core' {
   interface PropertyChain<Value, Options> {
     compliance(
       level: ComplianceLevel
-    ): PropertyChain<Value, Options> & { readonly __classified: true };
+    ): PropertyChain<Value, Options & { readonly __classified: true }>;
   }
 }
 
