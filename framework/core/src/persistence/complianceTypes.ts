@@ -120,6 +120,28 @@ export function subtractDuration(from: Date, duration: ParsedDuration): Date {
 
 const retentionRegistry = new Map<string, RetentionPolicy>();
 
+// ---------------------------------------------------------------------------
+// User ID field registry — maps entity name to the field linking records to a user
+// ---------------------------------------------------------------------------
+
+const DEFAULT_USER_ID_FIELD = 'userId';
+const userIdFieldRegistry = new Map<string, string>();
+
+export function registerEntityUserIdField(
+  entityName: string,
+  field: string
+): void {
+  userIdFieldRegistry.set(entityName, field);
+}
+
+export function getEntityUserIdField(entityName: string): string {
+  return userIdFieldRegistry.get(entityName) ?? DEFAULT_USER_ID_FIELD;
+}
+
+export function getAllUserIdFields(): ReadonlyMap<string, string> {
+  return userIdFieldRegistry;
+}
+
 export function registerEntityRetention(
   entityName: string,
   policy: RetentionPolicy

@@ -1,7 +1,8 @@
 import { forklaunchExpress, {{#is_iam_configured}}PERMISSIONS, ROLES, {{/is_iam_configured}}SchemaValidator } from '@{{app_name}}/core';
 {{#is_iam_configured}}import { createSurfacePermissions, createSurfaceRoles } from '@{{app_name}}/iam';
 {{/is_iam_configured}}{{#is_billing_configured}}import { createSurfaceFeatures, createSurfaceSubscription } from '@{{app_name}}/billing';
-{{/is_billing_configured}}import { {{camel_case_name}}Router } from './api/routes/{{camel_case_name}}.routes';
+{{/is_billing_configured}}import { {{camel_case_name}}Router } from './api/routes/{{camel_case_name}}.routes';{{#is_database_enabled}}
+import { complianceRouter } from './api/routes/compliance.routes';{{/is_database_enabled}}
 import { ci, tokens } from './bootstrapper';
 import { {{camel_case_name}}SdkClient } from './sdk';
 
@@ -98,7 +99,8 @@ async function startServer() {
   const docsPath = ci.resolve(tokens.DOCS_PATH);
 
   //! mounts the routes to the app
-  app.use({{camel_case_name}}Router);
+  app.use({{camel_case_name}}Router);{{#is_database_enabled}}
+  app.use(complianceRouter);{{/is_database_enabled}}
 
   //! mounts the sdk to the app
   app.registerSdks({{camel_case_name}}SdkClient);

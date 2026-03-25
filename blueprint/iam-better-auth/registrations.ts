@@ -12,6 +12,7 @@ import {
 import { Metrics, metrics } from '@forklaunch/blueprint-monitoring';
 import { OpenTelemetryCollector, SessionObject } from '@forklaunch/core/http';
 import {
+  ComplianceDataService,
   createConfigInjector,
   getEnvVar,
   Lifetime
@@ -220,6 +221,14 @@ const expressApplicationOptions = serviceDependencies.chain({
 
       return options;
     }
+  },
+  ComplianceDataService: {
+    lifetime: Lifetime.Singleton,
+    type: ComplianceDataService,
+    factory: ({ MikroORM, OpenTelemetryCollector }) =>
+      new ComplianceDataService(MikroORM, OpenTelemetryCollector, {
+        User: 'id'
+      })
   }
 });
 

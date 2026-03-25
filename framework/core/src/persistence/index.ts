@@ -18,7 +18,9 @@ export {
   subtractDuration,
   type ParsedDuration,
   getEntityRetention,
-  getAllRetentionPolicies
+  getAllRetentionPolicies,
+  getEntityUserIdField,
+  getAllUserIdFields
 } from './complianceTypes';
 
 // Compliance-aware property builder (drop-in replacement for MikroORM's p)

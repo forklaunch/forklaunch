@@ -4,6 +4,7 @@ import { organizationRouter } from './api/routes/organization.routes';
 import { permissionRouter } from './api/routes/permission.routes';
 import { roleRouter } from './api/routes/role.routes';
 import { userRouter } from './api/routes/user.routes';
+import { complianceRouter } from './api/routes/compliance.routes';
 import { ci, tokens } from './bootstrapper';
 import { iamSdkClient } from './sdk';
 
@@ -53,6 +54,7 @@ app.use(organizationRouter);
 app.use(permissionRouter);
 app.use(roleRouter);
 app.use(userRouter);
+app.use(complianceRouter);
 
 //! register the sdk client
 app.registerSdks(iamSdkClient);

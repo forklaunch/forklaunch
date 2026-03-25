@@ -103,7 +103,12 @@ fn generate_basic_service(
         module_id: None,
     };
 
-    let ignore_files = vec![];
+    let mut ignore_files = vec![];
+    if !manifest_data.is_database_enabled {
+        ignore_files.push("compliance.controller.ts".to_string());
+        ignore_files.push("compliance.routes.ts".to_string());
+        ignore_files.push("enforce-retention.ts".to_string());
+    }
     let ignore_dirs = if !manifest_data.with_mappers {
         vec!["mappers".to_string()]
     } else {

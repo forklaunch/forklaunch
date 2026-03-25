@@ -4,13 +4,12 @@ import { RedisTtlCache } from "@forklaunch/infrastructure-redis";{{/is_request_c
 import { S3ObjectStore } from "@forklaunch/infrastructure-s3";{{/is_s3_enabled}}
 import { OpenTelemetryCollector } from "@forklaunch/core/http";
 import {
+  ComplianceDataService,
   createConfigInjector,
   getEnvVar,
   Lifetime,
   RetentionService,
-} from "@forklaunch/core/services";{{#is_iam_configured}}
-import type { IamSdkClient } from "@{{app_name}}/iam";
-import { universalSdk } from "@forklaunch/universal-sdk";{{/is_iam_configured}}{{#is_worker}}
+} from "@forklaunch/core/services";{{#is_worker}}
 import { {{worker_type}}WorkerConsumer } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/consumers';
 import { {{worker_type}}WorkerProducer } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/producers';
 import { {{worker_type}}WorkerSchemas } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/schemas';
@@ -239,15 +238,6 @@ const runtimeDependencies = environmentConfig.chain({
     lifetime: Lifetime.Singleton,
     type: type<AuthCacheService>(),
     factory: ({ TtlCache }) => createAuthCacheService(TtlCache)
-  },
-  IamSdk: {
-    lifetime: Lifetime.Singleton,
-    type: type<Promise<IamSdkClient>>(),
-    factory: ({ IAM_URL }) =>
-      universalSdk<IamSdkClient>({
-        host: IAM_URL,
-        registryOptions: { path: 'api/v1/openapi' }
-      })
   },{{/is_iam_configured}}{{#is_billing_configured}}
   BillingCacheService: {
     lifetime: Lifetime.Singleton,
@@ -293,6 +283,12 @@ const serviceDependencies = runtimeDependencies.chain({ {{#is_worker}}
     type: RetentionService,
     factory: ({ Orm, OtelCollector }) =>
       new RetentionService(Orm, OtelCollector)
+  },
+  ComplianceDataService: {
+    lifetime: Lifetime.Singleton,
+    type: ComplianceDataService,
+    factory: ({ Orm, OtelCollector }) =>
+      new ComplianceDataService(Orm, OtelCollector)
   }{{/is_database_enabled}}
 });
 

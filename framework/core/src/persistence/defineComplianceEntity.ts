@@ -11,6 +11,7 @@ import {
   parseDuration,
   registerEntityCompliance,
   registerEntityRetention,
+  registerEntityUserIdField,
   type ClassifiedProperty,
   type ComplianceLevel,
   type RetentionPolicy
@@ -48,7 +49,7 @@ export function defineComplianceEntity<
     TBase,
     TRepository,
     TForceObject
-  > & { retention?: RetentionPolicy }
+  > & { retention?: RetentionPolicy; userIdField?: string }
 ): EntitySchemaWithMeta<
   TName,
   TTableName,
@@ -93,9 +94,18 @@ export function defineComplianceEntity<
     registerEntityRetention(entityName, meta.retention);
   }
 
-  // Strip retention before passing to MikroORM's defineEntity
+  // Register userIdField (defaults to 'userId' if not specified)
+  if (meta.userIdField) {
+    registerEntityUserIdField(entityName, meta.userIdField);
+  }
+
+  // Strip custom fields before passing to MikroORM's defineEntity
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { retention: _retention, ...mikroMeta } = meta;
+  const {
+    retention: _retention,
+    userIdField: _userIdField,
+    ...mikroMeta
+  } = meta;
 
   return defineEntity(
     mikroMeta as unknown as typeof meta

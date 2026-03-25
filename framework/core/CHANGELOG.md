@@ -1,5 +1,14 @@
 # @forklaunch/core
 
+## 1.1.1
+
+### Patch Changes
+
+- add compliance utilities
+- Updated dependencies
+  - @forklaunch/validator@1.1.1
+  - @forklaunch/common@1.1.1
+
 ## 1.1.0
 
 ### Minor Changes

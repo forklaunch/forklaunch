@@ -1,5 +1,13 @@
 # @forklaunch/universal-sdk
 
+## 1.1.1
+
+### Patch Changes
+
+- add compliance utilities
+- Updated dependencies
+  - @forklaunch/common@1.1.1
+
 ## 1.1.0
 
 ### Minor Changes

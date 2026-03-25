@@ -10,3 +10,9 @@ export {
   type EnforcementOptions,
   type EnforcementResult
 } from './retentionService';
+export {
+  ComplianceDataService,
+  type EraseResult,
+  type ExportResult,
+  type UserIdFieldOverrides
+} from './complianceDataService';

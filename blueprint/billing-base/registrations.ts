@@ -3,18 +3,16 @@ import {
   optional,
   schemaValidator,
   SchemaValidator,
-  string,
-  type
+  string
 } from '@forklaunch/blueprint-core';
-import type { IamSdkClient } from '@forklaunch/blueprint-iam';
 import { Metrics, metrics } from '@forklaunch/blueprint-monitoring';
 import { OpenTelemetryCollector } from '@forklaunch/core/http';
 import {
+  ComplianceDataService,
   createConfigInjector,
   getEnvVar,
   Lifetime
 } from '@forklaunch/core/services';
-import { universalSdk } from '@forklaunch/universal-sdk';
 import {
   BaseBillingPortalService,
   BaseCheckoutSessionService,
@@ -146,15 +144,6 @@ const environmentConfig = configInjector.chain({
 
 //! defines the runtime dependencies for the application
 const runtimeDependencies = environmentConfig.chain({
-  IamSdk: {
-    lifetime: Lifetime.Singleton,
-    type: type<Promise<IamSdkClient>>(),
-    factory: ({ IAM_URL }) =>
-      universalSdk<IamSdkClient>({
-        host: IAM_URL,
-        registryOptions: { path: 'api/v1/openapi' }
-      })
-  },
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
@@ -326,6 +315,17 @@ const serviceDependencies = runtimeDependencies.chain({
           UpdateSubscriptionMapper
         }
       )
+  },
+  ComplianceDataService: {
+    lifetime: Lifetime.Singleton,
+    type: ComplianceDataService,
+    factory: ({ MikroORM, OpenTelemetryCollector }) =>
+      new ComplianceDataService(MikroORM, OpenTelemetryCollector, {
+        Subscription: 'partyId',
+        CheckoutSession: 'customerId',
+        PaymentLink: 'customerId',
+        BillingPortal: 'customerId'
+      })
   }
 });
 

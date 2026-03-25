@@ -5,6 +5,7 @@ import {
 } from './api/middlewares/betterAuth.middleware';
 import { discoveryRouter } from './api/routes/discovery.routes';
 import { userRouter } from './api/routes/user.routes';
+import { complianceRouter } from './api/routes/compliance.routes';
 import { BetterAuth } from './auth';
 import { ci, tokens } from './bootstrapper';
 import { iamSdkClient } from './sdk';
@@ -121,6 +122,7 @@ const docsPath = ci.resolve(tokens.DOCS_PATH);
 //! mounts the routes to the app
 app.use(discoveryRouter);
 app.use(userRouter);
+app.use(complianceRouter);
 
 //! register the sdk client
 app.registerSdks(iamSdkClient);

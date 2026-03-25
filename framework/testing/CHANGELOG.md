@@ -1,5 +1,11 @@
 # @forklaunch/testing
 
+## 1.1.1
+
+### Patch Changes
+
+- add compliance utilities
+
 ## 1.1.0
 
 ### Minor Changes
