@@ -568,10 +568,15 @@ export const createDependencyContainer = (envFilePath: string) => ({
         assert!(transformed_code.contains("WorkerConsumer"));
         assert!(transformed_code.contains("WorkerProducer"));
 
-        // Verify event record interface type is imported (not InferEntity)
+        // Verify entity import is present for database workers (not types file)
         assert!(
-            transformed_code.contains("EventRecord.types"),
-            "Expected EventRecord.types import in transformed code: {transformed_code}"
+            transformed_code.contains("persistence/entities/testServiceEventRecord.entity"),
+            "Expected entity import in transformed code for database worker: {transformed_code}"
+        );
+        // Types file import should NOT be present for database workers
+        assert!(
+            !transformed_code.contains("EventRecord.types"),
+            "Database worker should not import from types file: {transformed_code}"
         );
     }
 
