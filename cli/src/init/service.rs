@@ -467,6 +467,11 @@ pub(crate) fn generate_service_package_json(
                 } else {
                     None
                 },
+                types_express: Some(TYPES_EXPRESS_VERSION.to_string()),
+                types_express_serve_static_core: Some(
+                    TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION.to_string(),
+                ),
+                types_qs: Some(TYPES_QS_VERSION.to_string()),
                 typebox: if manifest_data.is_typebox {
                     Some(TYPEBOX_VERSION.to_string())
                 } else {
@@ -551,12 +556,7 @@ pub(crate) fn generate_service_package_json(
                 tsx: Some(TSX_VERSION.to_string()),
                 typedoc: Some(TYPEDOC_VERSION.to_string()),
                 typescript_eslint: Some(TYPESCRIPT_ESLINT_VERSION.to_string()),
-                types_express: Some(TYPES_EXPRESS_VERSION.to_string()),
-                types_express_serve_static_core: Some(
-                    TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION.to_string(),
-                ),
                 types_jest: Some(TYPES_JEST_VERSION.to_string()),
-                types_qs: Some(TYPES_QS_VERSION.to_string()),
                 types_uuid: Some(TYPES_UUID_VERSION.to_string()),
                 types_pino: None,
                 types_ioredis: None,
