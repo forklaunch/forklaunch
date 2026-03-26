@@ -1,5 +1,14 @@
 # @forklaunch/implementation-billing-stripe
 
+## 1.1.9
+
+### Patch Changes
+
+- shorter brand for compliance entities
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.9
+  - @forklaunch/interfaces-billing@1.0.9
+
 ## 1.1.8
 
 ### Patch Changes

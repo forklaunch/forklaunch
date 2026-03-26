@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/interfaces-iam",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "IAM interfaces for forklaunch",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {

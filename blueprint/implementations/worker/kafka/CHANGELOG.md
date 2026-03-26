@@ -1,5 +1,11 @@
 # @forklaunch/implementation-worker-kafka
 
+## 1.0.10
+
+### Patch Changes
+
+- shorter brand for compliance entities
+
 ## 1.0.9
 
 ### Patch Changes

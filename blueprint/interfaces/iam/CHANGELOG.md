@@ -1,5 +1,11 @@
 # @forklaunch/interfaces-iam
 
+## 1.0.9
+
+### Patch Changes
+
+- shorter brand for compliance entities
+
 ## 1.0.8
 
 ### Patch Changes
