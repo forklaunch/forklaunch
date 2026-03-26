@@ -2,7 +2,6 @@
 export {
   ComplianceLevel,
   type ComplianceLevel as ComplianceLevelType,
-  type ForklaunchPropertyBuilders,
   getComplianceMetadata,
   getEntityComplianceFields,
   entityHasEncryptedFields,

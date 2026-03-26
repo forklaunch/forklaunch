@@ -1,5 +1,16 @@
 # @forklaunch/hyper-express
 
+## 1.1.8
+
+### Patch Changes
+
+- Simplify property chain for easier consumption
+- Updated dependencies
+  - @forklaunch/validator@1.1.8
+  - @forklaunch/common@1.1.8
+  - @forklaunch/core@1.1.8
+  - @forklaunch/ws@1.1.8
+
 ## 1.1.7
 
 ### Patch Changes

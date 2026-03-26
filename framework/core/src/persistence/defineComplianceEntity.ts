@@ -63,8 +63,14 @@ export function defineComplianceEntity<
     typeof rawProperties === 'function' ? rawProperties(p) : rawProperties;
 
   for (const [fieldName, rawProp] of Object.entries(resolvedProperties)) {
-    const prop = typeof rawProp === 'function' ? rawProp() : rawProp;
-    const level = readComplianceLevel(prop);
+    if (typeof rawProp === 'function') {
+      // Relations are arrow-wrapped and auto-classified as 'none' — don't
+      // call the arrow, since the referenced entity may not be initialized
+      // yet (circular reference). MikroORM resolves these lazily.
+      complianceFields.set(fieldName, 'none');
+      continue;
+    }
+    const level = readComplianceLevel(rawProp);
 
     if (level == null) {
       throw new Error(

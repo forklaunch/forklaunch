@@ -1,9 +1,3 @@
-import type {
-  EmptyOptions,
-  PropertyBuilders,
-  PropertyChain
-} from '@mikro-orm/core';
-
 export const ComplianceLevel = {
   pii: 'pii',
   phi: 'phi',
@@ -163,106 +157,34 @@ export function getAllRetentionPolicies(): ReadonlyMap<
 }
 
 // ---------------------------------------------------------------------------
-// Module augmentation — adds .compliance() directly to PropertyChain
+// Module augmentation — adds .compliance() via PropertyOptions
 // ---------------------------------------------------------------------------
 
 /**
- * Augments MikroORM's PropertyChain with `.compliance()`. Because
- * PropertyChain methods return PropertyChain (not Pick), the method
- * persists through chains naturally — no recursive mapped type needed.
+ * Adds `compliance` to PropertyOptions, which flows into IncludeKeys
+ * for all scalar/enum/embedded builders (PropertyOptions is extended by
+ * EnumOptions and EmbeddedOptions). Relation builders use ReferenceOptions
+ * instead, so they don't get .compliance() — which is what we want.
  */
 declare module '@mikro-orm/core' {
-  interface PropertyChain<Value, Options> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  interface PropertyOptions<Owner> {
+    compliance?: ComplianceLevel;
+  }
+
+   
+  interface UniversalPropertyOptionsBuilder<Value, Options, IncludeKeys> {
     compliance(
       level: ComplianceLevel
-    ): PropertyChain<Value, Options & { readonly __classified: true }>;
+    ): Pick<
+      UniversalPropertyOptionsBuilder<
+        Value,
+        Options & { readonly __classified: true },
+        IncludeKeys
+      >,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      IncludeKeys & keyof UniversalPropertyOptionsBuilder<any, any, any>
+    >;
   }
 }
 
-// ---------------------------------------------------------------------------
-// ForklaunchPropertyBuilders — the type of `fp`
-// ---------------------------------------------------------------------------
-
-// Keys with generic type params that mapped types erase
-type RelationBuilderKeys =
-  | 'manyToOne'
-  | 'oneToMany'
-  | 'manyToMany'
-  | 'oneToOne'
-  | 'embedded';
-
-type GenericBuilderKeys =
-  | 'json'
-  | 'formula'
-  | 'type'
-  | 'enum'
-  | 'bigint'
-  | 'array'
-  | 'decimal';
-
-/**
- * Converts UniversalPropertyOptionsBuilder return types to PropertyChain.
- * PropertyChain is MikroORM's lightweight chain type and now carries
- * .compliance() via module augmentation — zero recursive mapped types.
- */
-type ToPropertyChain<T> = T extends {
-  '~type'?: { value: infer V };
-  '~options': infer O;
-}
-  ? PropertyChain<V, O>
-  : T;
-
-/**
- * Drop-in type for the `fp` proxy. Scalar methods go through the mapped
- * type. Relation and generic builders are declared explicitly — mapped
- * types over union keys erase generic type parameters, collapsing
- * `<Target>` to its constraint and producing `Collection<any>`.
- */
-export type ForklaunchPropertyBuilders = {
-  [K in Exclude<
-    keyof PropertyBuilders,
-    RelationBuilderKeys | GenericBuilderKeys
-  >]: PropertyBuilders[K] extends (...args: infer A) => infer R
-    ? (...args: A) => ToPropertyChain<R>
-    : PropertyBuilders[K];
-} & {
-  // Explicit — direct indexed access preserves generic signatures
-  manyToMany: PropertyBuilders['manyToMany'];
-  manyToOne: PropertyBuilders['manyToOne'];
-  oneToMany: PropertyBuilders['oneToMany'];
-  oneToOne: PropertyBuilders['oneToOne'];
-  embedded: PropertyBuilders['embedded'];
-} & {
-  json: <T>() => PropertyChain<T, EmptyOptions>;
-  formula: <T>(
-    formula: string | ((...args: never[]) => string)
-  ) => PropertyChain<T, EmptyOptions>;
-  type: <T>(type: T) => PropertyChain<T, EmptyOptions>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  enum: <const T extends (number | string)[] | (() => Record<string, any>)>(
-    items?: T
-  ) => PropertyChain<
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    T extends () => Record<string, any>
-      ? T extends () => infer R
-        ? R[keyof R]
-        : never
-      : T extends (infer Value)[]
-        ? Value
-        : T,
-    EmptyOptions & { kind: 'enum' }
-  >;
-  bigint: <Mode extends 'bigint' | 'number' | 'string' = 'bigint'>(
-    mode?: Mode
-  ) => PropertyChain<
-    Mode extends 'bigint' ? bigint : Mode extends 'number' ? number : string,
-    EmptyOptions
-  >;
-  array: <T = string>(
-    toJsValue?: (i: string) => T,
-    toDbValue?: (i: T) => string
-  ) => PropertyChain<T[], EmptyOptions>;
-  decimal: <Mode extends 'number' | 'string' = 'string'>(
-    mode?: Mode
-  ) => PropertyChain<Mode extends 'number' ? number : string, EmptyOptions>;
-};

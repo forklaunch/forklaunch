@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/implementation-worker-database",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Database implementation for forklaunch workers",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -54,9 +54,9 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/core": "^1.1.7",
+    "@forklaunch/core": "^1.1.8",
     "@forklaunch/interfaces-worker": "workspace:*",
-    "@forklaunch/internal": "^1.1.7",
+    "@forklaunch/internal": "^1.1.8",
     "@mikro-orm/core": "7.0.5",
     "@sinclair/typebox": "^0.34.48",
     "zod": "^4.3.6"

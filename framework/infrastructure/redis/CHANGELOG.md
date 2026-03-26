@@ -1,5 +1,14 @@
 # @forklaunch/infrastructure-redis
 
+## 1.1.8
+
+### Patch Changes
+
+- Simplify property chain for easier consumption
+- Updated dependencies
+  - @forklaunch/common@1.1.8
+  - @forklaunch/core@1.1.8
+
 ## 1.1.7
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @forklaunch/common
 
+## 1.1.8
+
+### Patch Changes
+
+- Simplify property chain for easier consumption
+
 ## 1.1.7
 
 ### Patch Changes

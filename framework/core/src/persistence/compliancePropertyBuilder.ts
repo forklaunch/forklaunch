@@ -1,9 +1,5 @@
-import { p } from '@mikro-orm/core';
-import {
-  COMPLIANCE_KEY,
-  type ComplianceLevel,
-  type ForklaunchPropertyBuilders
-} from './complianceTypes';
+import { p, type PropertyBuilders } from '@mikro-orm/core';
+import { COMPLIANCE_KEY, type ComplianceLevel } from './complianceTypes';
 
 // ---------------------------------------------------------------------------
 // Runtime Proxy implementation
@@ -128,7 +124,7 @@ function isRelationMethod(prop: string | symbol): boolean {
  * });
  * ```
  */
-export const fp: ForklaunchPropertyBuilders = new Proxy(p, {
+export const fp: PropertyBuilders = new Proxy(p, {
   get(target: Record<string | symbol, unknown>, prop) {
     const value = Reflect.get(target, prop, target);
     if (typeof value !== 'function') return value;
@@ -153,4 +149,4 @@ export const fp: ForklaunchPropertyBuilders = new Proxy(p, {
       return isBuilder(result) ? wrapUnclassified(result) : result;
     };
   }
-}) as ForklaunchPropertyBuilders;
+}) as PropertyBuilders;
