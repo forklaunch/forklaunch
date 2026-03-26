@@ -1,5 +1,101 @@
 # @forklaunch/implementation-billing-stripe
 
+## 1.1.8
+
+### Patch Changes
+
+- update packages
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.8
+  - @forklaunch/interfaces-billing@1.0.8
+
+## 1.1.7
+
+### Patch Changes
+
+- update internal packages
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.7
+  - @forklaunch/interfaces-billing@1.0.7
+
+## 1.1.6
+
+### Patch Changes
+
+- upgrade packages
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.6
+  - @forklaunch/interfaces-billing@1.0.6
+
+## 1.1.5
+
+### Patch Changes
+
+- package updates
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.5
+  - @forklaunch/interfaces-billing@1.0.5
+
+## 1.1.4
+
+### Patch Changes
+
+- update packages
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.4
+  - @forklaunch/interfaces-billing@1.0.4
+
+## 1.1.3
+
+### Patch Changes
+
+- Worker decryption and encryption update
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.3
+  - @forklaunch/interfaces-billing@1.0.3
+
+## 1.1.2
+
+### Patch Changes
+
+- Package updates
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.2
+  - @forklaunch/interfaces-billing@1.0.2
+
+## 1.1.1
+
+### Patch Changes
+
+- update internal package versions
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.1
+  - @forklaunch/interfaces-billing@1.0.1
+
+## 1.1.0
+
+### Minor Changes
+
+- Pass in enum container, not actual enum
+
+## 1.0.1
+
+### Patch Changes
+
+- Pass party enum from constructor
+
+## 1.0.0
+
+### Major Changes
+
+- Compliance framework installed
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.0
+  - @forklaunch/interfaces-billing@1.0.0
+
 ## 0.6.0
 
 ### Minor Changes

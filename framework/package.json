@@ -36,10 +36,10 @@
     "sort-package-json": "^3.6.1",
     "ts-jest": "^29.4.6",
     "tsx": "^4.21.0",
-    "typedoc": "^0.28.17",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "^8.57.1",
-    "vitest": "^4.1.0"
+    "typedoc": "^0.28.18",
+    "typescript": "^6.0.2",
+    "typescript-eslint": "^8.57.2",
+    "vitest": "^4.1.1"
   },
   "dependencies": {
     "@eslint/js": "^10.0.1"

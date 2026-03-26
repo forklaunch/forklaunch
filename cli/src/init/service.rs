@@ -64,8 +64,8 @@ use crate::{
                 TYPESCRIPT_ESLINT_VERSION, UNIVERSAL_SDK_VERSION, UUID_VERSION, VALIDATOR_VERSION,
                 ZOD_VERSION, project_clean_script, project_dev_local_script,
                 project_dev_server_script, project_format_script, project_lint_fix_script,
-                project_lint_script, project_migrate_script, project_start_server_script,
-                project_test_script, project_up_latest_script,
+                project_lint_script, project_migrate_script, project_retention_enforce_script,
+                project_start_server_script, project_test_script, project_up_latest_script,
             },
             project_package_json::{
                 MIKRO_ORM_CONFIG_PATHS, ProjectDependencies, ProjectDevDependencies,
@@ -103,7 +103,12 @@ fn generate_basic_service(
         module_id: None,
     };
 
-    let ignore_files = vec![];
+    let mut ignore_files = vec![];
+    if !manifest_data.is_database_enabled {
+        ignore_files.push("compliance.controller.ts".to_string());
+        ignore_files.push("compliance.routes.ts".to_string());
+        ignore_files.push("enforce-retention.ts".to_string());
+    }
     let ignore_dirs = if !manifest_data.with_mappers {
         vec!["mappers".to_string()]
     } else {
@@ -361,6 +366,11 @@ pub(crate) fn generate_service_package_json(
                     manifest_data.database.parse::<Database>().ok(),
                 )),
                 up_latest: project_up_latest_script(&manifest_data.runtime.parse()?),
+                retention_enforce: if manifest_data.is_database_enabled {
+                    Some(project_retention_enforce_script(&manifest_data.runtime.parse()?))
+                } else {
+                    None
+                },
                 ..Default::default()
             }
         }),
@@ -775,6 +785,7 @@ impl CliCommand for ServiceCommand {
             is_cache_enabled: infrastructure.contains(&Infrastructure::Redis),
             platform_application_id: manifest_data.platform_application_id.clone(),
             platform_organization_id: manifest_data.platform_organization_id.clone(),
+            compliance: manifest_data.compliance.clone(),
             is_s3_enabled: infrastructure.contains(&Infrastructure::S3),
             is_database_enabled: true,
 

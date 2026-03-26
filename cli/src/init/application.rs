@@ -39,6 +39,7 @@ use crate::{
             find_docker_compose_path,
         },
         format::format_code,
+        github_configs::ensure_github_configs,
         gitignore::generate_gitignore,
         husky::create_or_merge_husky_pre_commit,
         license::generate_license,
@@ -775,6 +776,7 @@ impl CliCommand for ApplicationCommand {
             is_in_memory_database: is_in_memory_database(&database),
             platform_application_id: None,
             platform_organization_id: None,
+            compliance: None,
         };
 
         let mut rendered_templates = Vec::new();
@@ -924,6 +926,7 @@ impl CliCommand for ApplicationCommand {
                 is_database_enabled: true,
                 platform_application_id: data.platform_application_id.clone(),
                 platform_organization_id: data.platform_organization_id.clone(),
+                compliance: data.compliance.clone(),
 
                 is_better_auth: template_dir.module_id == Some(Module::BetterAuthIam),
                 is_stripe: template_dir.module_id == Some(Module::StripeBilling),
@@ -1048,6 +1051,7 @@ impl CliCommand for ApplicationCommand {
                     }),
                     "client-sdk" => Some(ProjectDependencies {
                         forklaunch_common: Some(COMMON_VERSION.to_string()),
+                        forklaunch_core: Some(CORE_VERSION.to_string()),
                         forklaunch_universal_sdk: Some(UNIVERSAL_SDK_VERSION.to_string()),
                         better_auth: if global_module_config
                             .iam
@@ -1223,6 +1227,11 @@ impl CliCommand for ApplicationCommand {
             &data,
             &mut rendered_templates,
         )?;
+
+        rendered_templates.extend(
+            ensure_github_configs(&origin_path, &ManifestData::Application(&data))
+                .with_context(|| "Failed to generate GitHub config files")?,
+        );
 
         write_rendered_templates(&rendered_templates, dryrun, &mut stdout)
             .with_context(|| "Failed to write application files")?;

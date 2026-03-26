@@ -18,7 +18,7 @@ use super::core::{
 };
 use crate::{
     CliCommand,
-    change::core::change_database::change_database_seed_script,
+    change::core::change_database::{change_database_retention_script, change_database_seed_script},
     constants::{
         Database, ERROR_FAILED_TO_PARSE_MANIFEST, ERROR_FAILED_TO_READ_DOCKER_COMPOSE,
         ERROR_FAILED_TO_READ_MANIFEST, ERROR_FAILED_TO_READ_PACKAGE_JSON, Infrastructure,
@@ -248,6 +248,11 @@ fn change_database(
 
     change_database_postinstall_script(application_package_json, database);
     change_database_seed_script(project_package_json, database);
+    change_database_retention_script(
+        project_package_json,
+        &manifest_data.runtime.parse()?,
+        true, // changing database type means we have a database
+    );
 
     let removal_template = change_database_base_entity(
         base_path,
@@ -810,7 +815,7 @@ export const {pascal_case_name}EventRecord = defineEntity({{
     let event_record_types_content = format!(
         r#"import type {{ WorkerEventEntity }} from '@forklaunch/interfaces-worker/types';
 
-export interface I{pascal_case_name}EventRecord extends WorkerEventEntity {{
+export interface {pascal_case_name}EventRecord extends WorkerEventEntity {{
   message: string;
   createdAt: Date;
   updatedAt: Date;

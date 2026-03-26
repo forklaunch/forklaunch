@@ -358,19 +358,52 @@ export type AuthMethodsBase = TokenOptions &
         (BasicAuthMethods | JwtAuthMethods))
   );
 
-type PermissionSet =
+export type PermissionSet =
   | {
       readonly allowedPermissions: Set<string>;
     }
   | { readonly forbiddenPermissions: Set<string> };
 
-type RoleSet =
+export type RoleSet =
   | {
       readonly allowedRoles: Set<string>;
     }
   | {
       readonly forbiddenRoles: Set<string>;
     };
+
+/**
+ * Route access level — determines authentication and authorization requirements.
+ *
+ * - `'public'` — No authentication required. `auth` must not be provided.
+ * - `'authenticated'` — JWT or Basic auth required, any valid user. RBAC optional.
+ * - `'protected'` — JWT or Basic auth required. Must declare roles, permissions, or scope.
+ * - `'internal'` — HMAC auth required (inter-service communication).
+ */
+export type AccessLevel = 'public' | 'authenticated' | 'protected' | 'internal';
+
+/**
+ * Discriminated union that narrows the `auth` type based on the `access` level.
+ * - `public`: auth not allowed
+ * - `authenticated`: auth optional (JWT/Basic, RBAC not required)
+ * - `protected`: auth required, must include at least one RBAC declaration
+ * - `internal`: auth required, must be HMAC
+ */
+type AccessAuth<Auth> =
+  | { readonly access: 'public'; readonly auth?: never }
+  | { readonly access: 'authenticated'; readonly auth?: Auth }
+  | {
+      readonly access: 'protected';
+      readonly auth: Auth &
+        (
+          | { readonly allowedPermissions: Set<string> }
+          | { readonly forbiddenPermissions: Set<string> }
+          | { readonly allowedRoles: Set<string> }
+          | { readonly forbiddenRoles: Set<string> }
+          | { readonly requiredScope: string }
+        );
+    }
+  | { readonly access: 'internal'; readonly auth: Auth & HmacMethods };
 
 /**
  * Type representing the authentication methods.
@@ -649,10 +682,8 @@ export type PathParamHttpContractDetails<
         readonly responseHeaders?: never;
         readonly responses?: never;
       })
-  ) & {
-    /** Optional authentication details for the contract */
-    readonly auth?: Auth;
-  };
+  ) &
+  AccessAuth<Auth>;
 
 type VersionedHttpContractDetailsIO<
   SV extends AnySchemaValidator,
@@ -721,9 +752,8 @@ export type HttpContractDetails<
         readonly body?: never;
         readonly responses?: never;
       })
-  ) & {
-    readonly auth?: Auth;
-  };
+  ) &
+  AccessAuth<Auth>;
 
 /**
  * Interface representing HTTP contract details for middleware.

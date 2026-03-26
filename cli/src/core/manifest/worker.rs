@@ -8,7 +8,7 @@ use super::{
 };
 use crate::{
     config_struct,
-    constants::{Database, Infrastructure},
+    constants::{Database, Infrastructure, WorkerType},
     core::{
         database::{get_database_port, get_db_driver},
         worker_type::{
@@ -75,6 +75,9 @@ config_struct!(
         pub(crate) is_kafka_enabled: bool,
 
         #[serde(skip_serializing, skip_deserializing)]
+        pub(crate) is_database_worker: bool,
+
+        #[serde(skip_serializing, skip_deserializing)]
         pub(crate) worker_type: String,
         #[serde(skip_serializing, skip_deserializing)]
         pub(crate) worker_type_lowercase: String,
@@ -106,6 +109,8 @@ config_struct!(
         pub(crate) generated_better_auth_secret: String,
         #[serde(skip_serializing, skip_deserializing)]
         pub(crate) generated_hmac_secret: String,
+        #[serde(skip_serializing, skip_deserializing)]
+        pub(crate) generated_encryption_key: String,
 
         #[serde(skip_serializing, skip_deserializing)]
         pub(crate) otel_token: String,
@@ -193,6 +198,8 @@ impl InitializableManifestConfig for WorkerManifestData {
                 .and_then(|r| r.queue.as_ref())
                 .is_some_and(|queue| queue == "kafka"),
 
+            is_database_worker: worker_type == WorkerType::Database,
+
             worker_type: worker_type.to_string(),
             worker_type_lowercase: worker_type.to_string().to_lowercase(),
             default_worker_options: get_default_worker_options(&worker_type),
@@ -239,6 +246,7 @@ impl InitializableManifestConfig for WorkerManifestData {
             // Generate unique random secrets for each worker/environment
             generated_better_auth_secret: generate_random_secret(32),
             generated_hmac_secret: generate_random_secret(32),
+            generated_encryption_key: generate_random_secret(32),
 
             otel_token: "OtelCollector".to_string(),
 

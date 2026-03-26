@@ -7,6 +7,7 @@ describe('contractDetails.types', () => {
     it('should have required fields: name, summary, and responses', () => {
       const contractDetails = {
         name: 'getUser',
+        access: 'public',
         summary: 'Get user by ID',
         responses: {
           200: { json: { id: 'string', name: 'string' } }
@@ -22,6 +23,7 @@ describe('contractDetails.types', () => {
     it('should accept optional params field', () => {
       const contractDetails = {
         name: 'getUser',
+        access: 'public',
         summary: 'Get user by ID',
         params: { userId: 'string' },
         responses: {
@@ -36,6 +38,7 @@ describe('contractDetails.types', () => {
     it('should accept optional query field', () => {
       const contractDetails = {
         name: 'getUser',
+        access: 'public',
         summary: 'Get user by ID',
         query: { include: 'string' },
         responses: {
@@ -135,6 +138,7 @@ describe('contractDetails.types', () => {
     it('should support contract details with auth configuration', () => {
       const contractDetails = {
         name: 'getUser',
+        access: 'protected',
         summary: 'Get user by ID',
         responses: {
           200: { json: { id: 'string' } }

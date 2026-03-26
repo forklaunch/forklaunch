@@ -43,6 +43,7 @@ describe('Partial Update Tests (em.assign pattern)', () => {
   ) {
     const { id, ...rest } = updateData;
     const entity = await em.findOneOrFail(entitySchema as never, { id });
+    // @ts-expect-error — pre-existing
     em.assign(entity, { ...rest, updatedAt: new Date() });
     return entity;
   }

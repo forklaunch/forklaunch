@@ -24,6 +24,7 @@ export const createRole = handlers.post(
   '/',
   {
     name: 'Create Role',
+    access: 'internal',
     summary: 'Creates a new role',
     auth: {
       hmac: {
@@ -50,6 +51,7 @@ export const createBatchRoles = handlers.post(
   '/batch',
   {
     name: 'Create Batch Roles',
+    access: 'internal',
     summary: 'Creates multiple roles',
     auth: {
       hmac: {
@@ -76,6 +78,7 @@ export const getRole = handlers.get(
   '/:id',
   {
     name: 'Get Role',
+    access: 'protected',
     summary: 'Gets a role by ID',
     auth: {
       jwt: {
@@ -100,6 +103,7 @@ export const getBatchRoles = handlers.get(
   '/batch',
   {
     name: 'Get Batch Roles',
+    access: 'protected',
     summary: 'Gets multiple roles by IDs',
     auth: {
       jwt: {
@@ -124,6 +128,7 @@ export const updateRole = handlers.put(
   '/',
   {
     name: 'Update Role',
+    access: 'internal',
     summary: 'Updates a role by ID',
     auth: {
       hmac: {
@@ -150,6 +155,7 @@ export const updateBatchRoles = handlers.put(
   '/batch',
   {
     name: 'Update Batch Roles',
+    access: 'internal',
     summary: 'Updates multiple roles by IDs',
     auth: {
       hmac: {
@@ -176,6 +182,7 @@ export const deleteRole = handlers.delete(
   '/:id',
   {
     name: 'Delete Role',
+    access: 'internal',
     summary: 'Deletes a role by ID',
     auth: {
       hmac: {
@@ -202,6 +209,7 @@ export const deleteBatchRoles = handlers.delete(
   '/batch',
   {
     name: 'Delete Batch Roles',
+    access: 'internal',
     summary: 'Deletes multiple roles by IDs',
     auth: {
       hmac: {

@@ -1,23 +1,23 @@
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
-import { defineEntity, p } from '@mikro-orm/core';
+import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
 import { BillingProviderEnum } from '../../domain/enum/billingProvider.enum';
 import { CurrencyEnum } from '../../domain/enum/currency.enum';
 import { PlanCadenceEnum } from '../../domain/enum/planCadence.enum';
 
-export const Plan = defineEntity({
+export const Plan = defineComplianceEntity({
   name: 'Plan',
   properties: {
     ...sqlBaseProperties,
-    active: p.boolean(),
-    name: p.string(),
-    description: p.string().nullable(),
-    price: p.double(),
-    currency: p.enum(() => CurrencyEnum),
-    cadence: p.enum(() => PlanCadenceEnum),
+    active: fp.boolean().compliance('none'),
+    name: fp.string().compliance('none'),
+    description: fp.string().nullable().compliance('none'),
+    price: fp.double().compliance('none'),
+    currency: fp.enum(() => CurrencyEnum).compliance('none'),
+    cadence: fp.enum(() => PlanCadenceEnum).compliance('none'),
     // tie to permissions (slugs)
-    features: p.string().array().nullable(),
-    providerFields: p.json<unknown>().nullable(),
-    externalId: p.string().unique(),
-    billingProvider: p.enum(() => BillingProviderEnum)
+    features: fp.string().array().nullable().compliance('none'),
+    providerFields: fp.json<unknown>().nullable().compliance('none'),
+    externalId: fp.string().unique().compliance('none'),
+    billingProvider: fp.enum(() => BillingProviderEnum).compliance('none')
   }
 });

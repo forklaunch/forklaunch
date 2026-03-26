@@ -1,4 +1,51 @@
-// BaseEntity class removed in MikroORM v7 migration.
-// Entity definitions now use defineEntity() from @mikro-orm/core.
-// Shared base fields live in sqlBaseProperties/nosqlBaseProperties
-// in @forklaunch/blueprint-core.
+// Compliance types and registry
+export {
+  ComplianceLevel,
+  type ComplianceLevel as ComplianceLevelType,
+  getComplianceMetadata,
+  getEntityComplianceFields,
+  entityHasEncryptedFields,
+  // Retention
+  RetentionAction,
+  type RetentionAction as RetentionActionType,
+  type RetentionPolicy,
+  RetentionDuration,
+  parseDuration,
+  subtractDuration,
+  type ParsedDuration,
+  getEntityRetention,
+  getAllRetentionPolicies,
+  getEntityUserIdField,
+  getAllUserIdFields
+} from './complianceTypes';
+
+// Compliance-aware property builder (drop-in replacement for MikroORM's p)
+export { fp } from './compliancePropertyBuilder';
+
+// Compliance-aware entity definition (drop-in replacement for MikroORM's defineEntity)
+export { defineComplianceEntity } from './defineComplianceEntity';
+
+// Compliance EventSubscriber (encrypt on persist, decrypt on load)
+export {
+  ComplianceEventSubscriber,
+  wrapEmWithNativeQueryBlocking
+} from './complianceEventSubscriber';
+
+// Field encryption
+export {
+  FieldEncryptor,
+  MissingEncryptionKeyError,
+  DecryptionError,
+  EncryptionRequiredError
+} from './fieldEncryptor';
+
+// Tenant isolation filter
+export {
+  setupTenantFilter,
+  getSuperAdminContext,
+  createTenantFilterDef,
+  TENANT_FILTER_NAME
+} from './tenantFilter';
+
+// PostgreSQL Row-Level Security
+export { setupRls, RlsEventSubscriber, type RlsConfig } from './rls';

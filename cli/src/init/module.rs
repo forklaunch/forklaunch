@@ -221,6 +221,7 @@ impl CliCommand for ModuleCommand {
             is_database_enabled: true,
             platform_application_id: manifest_data.platform_application_id.clone(),
             platform_organization_id: manifest_data.platform_organization_id.clone(),
+            compliance: manifest_data.compliance.clone(),
 
             is_better_auth: module.clone() == Module::BetterAuthIam,
             is_stripe: module.clone() == Module::StripeBilling,

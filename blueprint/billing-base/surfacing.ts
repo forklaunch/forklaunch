@@ -66,10 +66,30 @@ export async function createSurfaceSubscription(params: {
         return null;
       }
 
-      // Ensure the response matches SubscriptionCacheData
-      // response.response should be likely be Subscription type which matches SubscriptionCacheData
-      const subscription =
-        response.response as unknown as SubscriptionCacheData;
+      const sub = response.response;
+
+      // Fetch the plan to get features
+      const planHeaders = generateHmacAuthHeaders({
+        secretKey: hmacSecretKey,
+        method: 'GET',
+        path: `/${sub.productId}/plan`
+      });
+      const planResponse = await billingSdk.plan.getPlan({
+        params: { id: sub.productId },
+        headers: planHeaders
+      });
+
+      const plan =
+        planResponse.code === 200 ? planResponse.response : undefined;
+
+      const subscription: SubscriptionCacheData = {
+        subscriptionId: sub.id,
+        planId: sub.productId,
+        planName: plan?.name ?? sub.description ?? '',
+        status: sub.status,
+        currentPeriodEnd: sub.endDate ?? sub.startDate,
+        features: plan?.features ?? []
+      };
 
       await billingCacheService.setCachedSubscription(
         payload.organizationId,
@@ -113,26 +133,36 @@ export async function createSurfaceFeatures(params: {
     }
 
     try {
-      const headers = generateHmacAuthHeaders({
+      const subHeaders = generateHmacAuthHeaders({
         secretKey: hmacSecretKey,
         method: 'GET',
         path: `/${payload.organizationId}/subscription`
       });
 
-      // reusing getOrganizationSubscription since it contains features
       const response =
         await billingSdk.subscription.getOrganizationSubscription({
           params: { id: payload.organizationId },
-          headers
+          headers: subHeaders
         });
 
       if (response.code !== 200 || !response.response) {
         return new Set<string>();
       }
 
-      const subscription =
-        response.response as unknown as SubscriptionCacheData;
-      const features = new Set<string>(subscription.features || []);
+      // Fetch the plan to get features
+      const planHeaders = generateHmacAuthHeaders({
+        secretKey: hmacSecretKey,
+        method: 'GET',
+        path: `/${response.response.productId}/plan`
+      });
+      const planResponse = await billingSdk.plan.getPlan({
+        params: { id: response.response.productId },
+        headers: planHeaders
+      });
+
+      const features = new Set<string>(
+        planResponse.code === 200 ? (planResponse.response?.features ?? []) : []
+      );
 
       await billingCacheService.setCachedFeatures(
         payload.organizationId,

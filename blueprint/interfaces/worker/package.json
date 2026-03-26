@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/interfaces-worker",
-  "version": "0.8.0",
+  "version": "1.0.9",
   "description": "Worker interfaces for forklaunch",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -31,7 +31,7 @@
   ],
   "scripts": {
     "build": "tsgo --noEmit && tsup interfaces/index.ts types/index.ts --format cjs,esm --no-splitting --dts --tsconfig tsconfig.json --out-dir lib --clean && if [ -f eject-package.bash ]; then pnpm package:eject; fi",
-    "clean": "rm -rf lib pnpm.lock.yaml node_modules",
+    "clean": "rm -rf lib tsconfig.tsbuildinfo pnpm.lock.yaml node_modules",
     "docs": "typedoc --out docs *",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
     "lint": "eslint . -c eslint.config.mjs",
@@ -46,7 +46,7 @@
     "depcheck": "^1.4.7",
     "eslint": "^10.1.0",
     "prettier": "^3.8.1",
-    "typedoc": "^0.28.17",
-    "typescript-eslint": "^8.57.1"
+    "typedoc": "^0.28.18",
+    "typescript-eslint": "^8.57.2"
   }
 }

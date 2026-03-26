@@ -1,6 +1,6 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityData, EntityManager, InferEntity, wrap } from '@mikro-orm/core';
+import { EntityData, EntityManager, InferEntity } from '@mikro-orm/core';
 import { Plan } from '../../persistence/entities/plan.entity';
 import { BillingProviderEnum } from '../enum/billingProvider.enum';
 import { CurrencyEnum } from '../enum/currency.enum';
@@ -51,9 +51,9 @@ export const PlanMapper = responseMapper({
   ),
   entity: Plan,
   mapperDefinition: {
-    toDto: async (entity: InferEntity<typeof Plan>) => {
+    toDto: async (entity) => {
       return {
-        ...wrap(entity).toPOJO(),
+        ...entity,
         price: Number(entity.price),
         description: entity.description ?? undefined,
         features: entity.features ?? undefined

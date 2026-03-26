@@ -18,7 +18,7 @@ use super::core::{
 };
 use crate::{
     CliCommand,
-    change::core::change_database::change_database_seed_script,
+    change::core::change_database::{change_database_retention_script, change_database_seed_script},
     constants::{
         Database, ERROR_FAILED_TO_PARSE_MANIFEST, ERROR_FAILED_TO_READ_DOCKER_COMPOSE,
         ERROR_FAILED_TO_READ_MANIFEST, ERROR_FAILED_TO_READ_PACKAGE_JSON, Infrastructure,
@@ -297,6 +297,11 @@ fn change_type(
 
             change_database_postinstall_script(application_package_json, &db);
             change_database_seed_script(project_package_json, &db);
+            change_database_retention_script(
+                project_package_json,
+                &manifest_data.runtime.parse()?,
+                true,
+            );
 
             rendered_templates_cache.insert(
                 base_path.join("mikro-orm.config.ts").to_string_lossy(),
@@ -434,6 +439,38 @@ fn change_type(
             RenderedTemplate {
                 path: test_utils_path.clone(),
                 content: test_content,
+                context: None,
+            },
+        );
+    }
+
+    // Update worker.ts import source based on new worker type
+    let worker_ts_path = base_path.join("worker.ts");
+    if let Some(template) = rendered_templates_cache.get(&worker_ts_path)? {
+        let pascal_case_name = manifest_data.worker_name.to_case(Case::Pascal);
+        let camel_case_name = manifest_data.worker_name.to_case(Case::Camel);
+        let is_database_worker = *r#type == WorkerType::Database;
+        let mut content = template.content.clone();
+
+        if is_database_worker {
+            // Switch import from types file to entities
+            content = content.replace(
+                &format!("import type {{ {}EventRecord }} from './domain/types/{}EventRecord.types';", pascal_case_name, camel_case_name),
+                &format!("import type {{ {}EventRecord }} from './persistence/entities';", pascal_case_name),
+            );
+        } else {
+            // Switch import from entities to types file
+            content = content.replace(
+                &format!("import type {{ {}EventRecord }} from './persistence/entities';", pascal_case_name),
+                &format!("import type {{ {}EventRecord }} from './domain/types/{}EventRecord.types';", pascal_case_name, camel_case_name),
+            );
+        }
+
+        rendered_templates_cache.insert(
+            worker_ts_path.to_string_lossy().into_owned(),
+            RenderedTemplate {
+                path: worker_ts_path.clone(),
+                content,
                 context: None,
             },
         );

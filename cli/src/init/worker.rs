@@ -112,12 +112,22 @@ fn generate_basic_worker(
     };
 
     let ignore_files = if !manifest_data.is_database_enabled {
-        vec!["mikro-orm.config.ts".to_string(), "seeder.ts".to_string()]
+        vec![
+            "mikro-orm.config.ts".to_string(),
+            "seeder.ts".to_string(),
+            "compliance.controller.ts".to_string(),
+            "compliance.routes.ts".to_string(),
+            "enforce-retention.ts".to_string(),
+        ]
     } else {
         vec!["consts.ts".to_string()]
     };
     let mut ignore_dirs = if !manifest_data.is_database_enabled {
-        vec!["seeder".to_string(), "seed.data.ts".to_string()]
+        let mut dirs = vec!["seeder".to_string(), "seed.data.ts".to_string()];
+        if !manifest_data.with_mappers {
+            dirs.push("persistence".to_string());
+        }
+        dirs
     } else {
         vec![]
     };
@@ -821,8 +831,10 @@ impl CliCommand for WorkerCommand {
             is_cache_enabled: r#type == WorkerType::BullMQCache || r#type == WorkerType::RedisCache,
             is_database_enabled: r#type == WorkerType::Database,
             is_kafka_enabled: r#type == WorkerType::Kafka,
+            is_database_worker: r#type == WorkerType::Database,
             platform_application_id: manifest_data.platform_application_id.clone(),
             platform_organization_id: manifest_data.platform_organization_id.clone(),
+            compliance: manifest_data.compliance.clone(),
 
             is_postgres: if let Some(database) = &database {
                 database == &Database::PostgreSQL
@@ -911,6 +923,7 @@ impl CliCommand for WorkerCommand {
             // These will be properly generated when initialized
             generated_better_auth_secret: String::new(),
             generated_hmac_secret: String::new(),
+            generated_encryption_key: String::new(),
             otel_token: "OtelCollector".to_string(),
         };
 

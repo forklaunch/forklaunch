@@ -4,16 +4,21 @@ import { RedisTtlCache } from "@forklaunch/infrastructure-redis";{{/is_request_c
 import { S3ObjectStore } from "@forklaunch/infrastructure-s3";{{/is_s3_enabled}}
 import { OpenTelemetryCollector } from "@forklaunch/core/http";
 import {
+  ComplianceDataService,
   createConfigInjector,
   getEnvVar,
   Lifetime,
-} from "@forklaunch/core/services";{{#is_worker}}
+  RetentionService,
+} from "@forklaunch/core/services";{{#is_worker}}{{^is_database_worker}}
+import { FieldEncryptor } from "@forklaunch/core/persistence";{{/is_database_worker}}
 import { {{worker_type}}WorkerConsumer } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/consumers';
 import { {{worker_type}}WorkerProducer } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/producers';
 import { {{worker_type}}WorkerSchemas } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/schemas';
-import { {{worker_type}}WorkerOptions } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/types';
-import { WorkerProcessFunction, WorkerFailureHandler } from '@forklaunch/interfaces-worker/types';
-import type { I{{pascal_case_name}}EventRecord } from './domain/types/{{camel_case_name}}EventRecord.types';{{/is_worker}}{{#is_database_enabled}}
+import { {{worker_type}}WorkerOptions } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/types';{{^is_database_worker}}
+import { EncryptingWorkerProducer, withDecryption, withDecryptionFailureHandler } from '@forklaunch/interfaces-worker/interfaces';
+import { type EncryptedEventEnvelope, WorkerProcessFunction, WorkerFailureHandler } from '@forklaunch/interfaces-worker/types';{{/is_database_worker}}{{#is_database_worker}}
+import { WorkerProcessFunction, WorkerFailureHandler } from '@forklaunch/interfaces-worker/types';{{/is_database_worker}}
+{{^is_database_worker}}import type { {{pascal_case_name}}EventRecord } from './domain/types/{{camel_case_name}}EventRecord.types';{{/is_database_worker}}{{/is_worker}}{{#is_database_enabled}}
 import { ForkOptions } from "@mikro-orm/core";
 import { EntityManager, MikroORM } from "@mikro-orm/{{database}}";
 import mikroOrmOptionsConfig from './mikro-orm.config';{{/is_database_enabled}}{{#is_worker}}{{#is_database_enabled}}
@@ -127,11 +132,6 @@ const environmentConfig = configInjector.chain({
     type: string,
     value: getEnvVar('S3_BUCKET')
   },{{/is_s3_enabled}}{{#is_iam_configured}}
-  HMAC_SECRET_KEY: {
-    lifetime: Lifetime.Singleton,
-    type: string,
-    value: getEnvVar('HMAC_SECRET_KEY')
-  },
   JWKS_PUBLIC_KEY_URL: {
     lifetime: Lifetime.Singleton,
     type: string,
@@ -146,15 +146,17 @@ const environmentConfig = configInjector.chain({
     lifetime: Lifetime.Singleton,
     type: string,
     value: getEnvVar('BILLING_URL')
-  },
-  {{^is_iam_configured}}
+  },{{/is_billing_configured}}
   HMAC_SECRET_KEY: {
     lifetime: Lifetime.Singleton,
     type: string,
     value: getEnvVar('HMAC_SECRET_KEY')
-  },
-  {{/is_iam_configured}}
-  {{/is_billing_configured}}
+  }{{#is_worker}}{{^is_database_worker}},
+  ENCRYPTION_KEY: {
+    lifetime: Lifetime.Singleton,
+    type: string,
+    value: getEnvVar('ENCRYPTION_KEY')
+  }{{/is_database_worker}}{{/is_worker}}
 });
 
 //! defines the runtime dependencies for the application
@@ -225,7 +227,13 @@ const runtimeDependencies = environmentConfig.chain({
         }
       )
   },
-  {{/is_s3_enabled}}{{#is_database_enabled}}
+  {{/is_s3_enabled}}{{#is_worker}}{{^is_database_worker}}EventEncryptor: {
+    lifetime: Lifetime.Singleton,
+    type: FieldEncryptor,
+    factory: ({ ENCRYPTION_KEY }) =>
+      new FieldEncryptor(ENCRYPTION_KEY)
+  },
+  {{/is_database_worker}}{{/is_worker}}{{#is_database_enabled}}
   EntityMgr: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
@@ -245,16 +253,16 @@ const runtimeDependencies = environmentConfig.chain({
 });
 
 //! defines the service dependencies for the application
-const serviceDependencies = runtimeDependencies.chain({ {{#is_worker}}
+const serviceDependencies = runtimeDependencies.chain({ {{#is_worker}}{{#is_database_worker}}
   WorkerConsumer: {
     lifetime: Lifetime.Scoped,
     type: function_([
-      type<WorkerProcessFunction<I{{pascal_case_name}}EventRecord>>(),
-      type<WorkerFailureHandler<I{{pascal_case_name}}EventRecord>>()
+      type<WorkerProcessFunction<{{pascal_case_name}}EventRecord>>(),
+      type<WorkerFailureHandler<{{pascal_case_name}}EventRecord>>()
     ],
-      type<{{worker_type}}WorkerConsumer<I{{pascal_case_name}}EventRecord, {{worker_type}}WorkerOptions>>()
+      type<{{worker_type}}WorkerConsumer<{{pascal_case_name}}EventRecord, {{worker_type}}WorkerOptions>>()
     ),
-    factory: 
+    factory:
       {{{worker_consumer_factory}}}
   },
   WorkerProducer: {
@@ -262,7 +270,38 @@ const serviceDependencies = runtimeDependencies.chain({ {{#is_worker}}
     type: {{worker_type}}WorkerProducer,
     factory: {{{worker_producer_factory}}}
   },
-  {{/is_worker}}{{pascal_case_name}}Service: {
+  {{/is_database_worker}}{{^is_database_worker}}
+  WorkerConsumer: {
+    lifetime: Lifetime.Scoped,
+    type: function_([
+      type<WorkerProcessFunction<{{pascal_case_name}}EventRecord>>(),
+      type<WorkerFailureHandler<{{pascal_case_name}}EventRecord>>()
+    ],
+      type<{{worker_type}}WorkerConsumer<EncryptedEventEnvelope, {{worker_type}}WorkerOptions>>()
+    ),
+    factory: (container) => {
+      const createConsumer = ({{{worker_consumer_factory}}})(container);
+      return (
+        processEventsFunction: WorkerProcessFunction<{{pascal_case_name}}EventRecord>,
+        failureHandler: WorkerFailureHandler<{{pascal_case_name}}EventRecord>
+      ) =>
+        createConsumer(
+          withDecryption<{{pascal_case_name}}EventRecord>(processEventsFunction, container.EventEncryptor),
+          withDecryptionFailureHandler<{{pascal_case_name}}EventRecord>(failureHandler, container.EventEncryptor)
+        );
+    }
+  },
+  WorkerProducer: {
+    lifetime: Lifetime.Scoped,
+    type: EncryptingWorkerProducer,
+    factory: (container, _resolve, context) =>
+      new EncryptingWorkerProducer(
+        ({{{worker_producer_factory}}})(container),
+        container.EventEncryptor,
+        (context?.tenantId as string) ?? ''
+      )
+  },
+  {{/is_database_worker}}{{/is_worker}}{{pascal_case_name}}Service: {
     lifetime: Lifetime.Scoped,
     type: Base{{pascal_case_name}}Service,
     factory: ({ {{^is_worker}}
@@ -275,7 +314,19 @@ const serviceDependencies = runtimeDependencies.chain({ {{#is_worker}}
         WorkerProducer,{{/is_worker}}
         OtelCollector
       )
-  }
+  },{{#is_database_enabled}}
+  RetentionService: {
+    lifetime: Lifetime.Singleton,
+    type: RetentionService,
+    factory: ({ Orm, OtelCollector }) =>
+      new RetentionService(Orm, OtelCollector)
+  },
+  ComplianceDataService: {
+    lifetime: Lifetime.Singleton,
+    type: ComplianceDataService,
+    factory: ({ Orm, OtelCollector }) =>
+      new ComplianceDataService(Orm, OtelCollector)
+  }{{/is_database_enabled}}
 });
 
 //! validates the configuration and returns the dependencies for the application

@@ -21,6 +21,7 @@ export const createBillingPortalSession = handlers.post(
   '/',
   {
     name: 'Create Billing Portal Session',
+    access: 'protected',
     summary: 'Create a billing portal session',
     auth: {
       jwt: {
@@ -46,6 +47,7 @@ export const getBillingPortalSession = handlers.get(
   '/:id',
   {
     name: 'Get Billing Portal Session',
+    access: 'protected',
     summary: 'Get a billing portal session',
     auth: {
       jwt: {
@@ -74,6 +76,7 @@ export const updateBillingPortalSession = handlers.put(
   '/:id',
   {
     name: 'Update Billing Portal Session',
+    access: 'protected',
     summary: 'Update a billing portal session',
     auth: {
       jwt: {
@@ -106,6 +109,7 @@ export const expireBillingPortalSession = handlers.delete(
   '/:id',
   {
     name: 'Expire Billing Portal Session',
+    access: 'protected',
     summary: 'Expire a billing portal session',
     auth: {
       jwt: {

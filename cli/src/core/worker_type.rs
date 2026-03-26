@@ -56,8 +56,8 @@ fn get_database_worker_consumer_factory(pascal_case_name: &str) -> String {
         "
 ({{ EntityMgr, WorkerOptions }}) =>
   (
-    processEventsFunction: WorkerProcessFunction<I{}EventRecord>,
-    failureHandler: WorkerFailureHandler<I{}EventRecord>
+    processEventsFunction: WorkerProcessFunction<{}EventRecord>,
+    failureHandler: WorkerFailureHandler<{}EventRecord>
   ) =>
     new DatabaseWorkerConsumer(
       {}EventRecord,
@@ -69,28 +69,24 @@ fn get_database_worker_consumer_factory(pascal_case_name: &str) -> String {
         pascal_case_name, pascal_case_name, pascal_case_name
     )
 }
-fn get_bullmq_worker_consumer_factory(pascal_case_name: &str) -> String {
-    format!(
-        "({{ QUEUE_NAME, WorkerOptions }}) =>
+fn get_bullmq_worker_consumer_factory(_pascal_case_name: &str) -> String {
+    "({ QUEUE_NAME, WorkerOptions }) =>
   (
-    processEventsFunction: WorkerProcessFunction<I{}EventRecord>,
-    failureHandler: WorkerFailureHandler<I{}EventRecord>
+    processEventsFunction: WorkerProcessFunction<EncryptedEventEnvelope>,
+    failureHandler: WorkerFailureHandler<EncryptedEventEnvelope>
   ) =>
     new BullMqWorkerConsumer(
       QUEUE_NAME,
       WorkerOptions,
       processEventsFunction,
       failureHandler
-    )",
-        pascal_case_name, pascal_case_name
-    )
+    )".to_string()
 }
-fn get_kafka_worker_consumer_factory(pascal_case_name: &str) -> String {
-    format!(
-        "({{ QUEUE_NAME, WorkerOptions, OtelCollector }}) =>
+fn get_kafka_worker_consumer_factory(_pascal_case_name: &str) -> String {
+    "({ QUEUE_NAME, WorkerOptions, OtelCollector }) =>
   (
-    processEventsFunction: WorkerProcessFunction<I{}EventRecord>,
-    failureHandler: WorkerFailureHandler<I{}EventRecord>
+    processEventsFunction: WorkerProcessFunction<EncryptedEventEnvelope>,
+    failureHandler: WorkerFailureHandler<EncryptedEventEnvelope>
   ) =>
     new KafkaWorkerConsumer(
       QUEUE_NAME,
@@ -98,16 +94,13 @@ fn get_kafka_worker_consumer_factory(pascal_case_name: &str) -> String {
       processEventsFunction,
       failureHandler,
       OtelCollector
-    )",
-        pascal_case_name, pascal_case_name
-    )
+    )".to_string()
 }
-fn get_redis_worker_consumer_factory(pascal_case_name: &str) -> String {
-    format!(
-        "({{ TtlCache, QUEUE_NAME, WorkerOptions }}) =>
+fn get_redis_worker_consumer_factory(_pascal_case_name: &str) -> String {
+    "({ TtlCache, QUEUE_NAME, WorkerOptions }) =>
   (
-    processEventsFunction: WorkerProcessFunction<I{}EventRecord>,
-    failureHandler: WorkerFailureHandler<I{}EventRecord>
+    processEventsFunction: WorkerProcessFunction<EncryptedEventEnvelope>,
+    failureHandler: WorkerFailureHandler<EncryptedEventEnvelope>
   ) =>
     new RedisWorkerConsumer(
       QUEUE_NAME,
@@ -115,9 +108,7 @@ fn get_redis_worker_consumer_factory(pascal_case_name: &str) -> String {
       WorkerOptions,
       processEventsFunction,
       failureHandler
-    )",
-        pascal_case_name, pascal_case_name
-    )
+    )".to_string()
 }
 
 pub(crate) fn get_worker_consumer_factory(r#type: &WorkerType, pascal_case_name: &str) -> String {

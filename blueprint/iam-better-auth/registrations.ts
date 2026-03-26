@@ -12,9 +12,11 @@ import {
 import { Metrics, metrics } from '@forklaunch/blueprint-monitoring';
 import { OpenTelemetryCollector, SessionObject } from '@forklaunch/core/http';
 import {
+  ComplianceDataService,
   createConfigInjector,
   getEnvVar,
-  Lifetime
+  Lifetime,
+  RetentionService
 } from '@forklaunch/core/services';
 import { ForkOptions } from '@mikro-orm/core';
 import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
@@ -220,6 +222,20 @@ const expressApplicationOptions = serviceDependencies.chain({
 
       return options;
     }
+  },
+  ComplianceDataService: {
+    lifetime: Lifetime.Singleton,
+    type: ComplianceDataService,
+    factory: ({ MikroORM, OpenTelemetryCollector }) =>
+      new ComplianceDataService(MikroORM, OpenTelemetryCollector, {
+        User: 'id'
+      })
+  },
+  RetentionService: {
+    lifetime: Lifetime.Singleton,
+    type: RetentionService,
+    factory: ({ MikroORM, OpenTelemetryCollector }) =>
+      new RetentionService(MikroORM, OpenTelemetryCollector)
   }
 });
 

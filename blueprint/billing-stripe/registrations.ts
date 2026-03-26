@@ -8,9 +8,11 @@ import {
 import { Metrics, metrics } from '@forklaunch/blueprint-monitoring';
 import { OpenTelemetryCollector } from '@forklaunch/core/http';
 import {
+  ComplianceDataService,
   createConfigInjector,
   getEnvVar,
-  Lifetime
+  Lifetime,
+  RetentionService
 } from '@forklaunch/core/services';
 import {
   StripeBillingPortalService,
@@ -141,6 +143,11 @@ const environmentConfig = configInjector.chain({
     lifetime: Lifetime.Singleton,
     type: string,
     value: getEnvVar('STRIPE_WEBHOOK_SECRET')
+  },
+  IAM_URL: {
+    lifetime: Lifetime.Singleton,
+    type: string,
+    value: getEnvVar('IAM_URL')
   }
 });
 
@@ -361,8 +368,26 @@ const serviceDependencies = runtimeDependencies.chain({
         CheckoutSessionService,
         PaymentLinkService,
         PlanService,
-        SubscriptionService
+        SubscriptionService,
+        PartyEnum
       )
+  },
+  ComplianceDataService: {
+    lifetime: Lifetime.Singleton,
+    type: ComplianceDataService,
+    factory: ({ MikroORM, OpenTelemetryCollector }) =>
+      new ComplianceDataService(MikroORM, OpenTelemetryCollector, {
+        Subscription: 'partyId',
+        CheckoutSession: 'customerId',
+        PaymentLink: 'customerId',
+        BillingPortal: 'customerId'
+      })
+  },
+  RetentionService: {
+    lifetime: Lifetime.Singleton,
+    type: RetentionService,
+    factory: ({ MikroORM, OpenTelemetryCollector }) =>
+      new RetentionService(MikroORM, OpenTelemetryCollector)
   }
 });
 

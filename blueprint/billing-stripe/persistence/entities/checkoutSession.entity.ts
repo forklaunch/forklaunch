@@ -1,4 +1,4 @@
-import { defineEntity, p } from '@mikro-orm/core';
+import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 import {
   CurrencyEnum,
@@ -8,18 +8,21 @@ import Stripe from 'stripe';
 import { StatusEnum } from '../../domain/enum/status.enum';
 
 // This is to represent connection information for a billing provider
-export const CheckoutSession = defineEntity({
+export const CheckoutSession = defineComplianceEntity({
   name: 'CheckoutSession',
   properties: {
     ...sqlBaseProperties,
-    customerId: p.string(),
-    paymentMethods: p.enum(() => PaymentMethodEnum).array(),
-    currency: p.enum(() => CurrencyEnum),
-    uri: p.string(),
-    successRedirectUri: p.string().nullable(),
-    cancelRedirectUri: p.string().nullable(),
-    expiresAt: p.datetime(),
-    status: p.enum(() => StatusEnum),
-    providerFields: p.json<Stripe.Checkout.Session>()
+    customerId: fp.string().compliance('none'),
+    paymentMethods: fp
+      .enum(() => PaymentMethodEnum)
+      .array()
+      .compliance('none'),
+    currency: fp.enum(() => CurrencyEnum).compliance('none'),
+    uri: fp.string().compliance('none'),
+    successRedirectUri: fp.string().nullable().compliance('none'),
+    cancelRedirectUri: fp.string().nullable().compliance('none'),
+    expiresAt: fp.datetime().compliance('none'),
+    status: fp.enum(() => StatusEnum).compliance('none'),
+    providerFields: fp.json<Stripe.Checkout.Session>().compliance('none')
   }
 });

@@ -1,19 +1,22 @@
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
-import { defineEntity, p } from '@mikro-orm/core';
+import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
 import { CurrencyEnum } from '../../domain/enum/currency.enum';
 import { PaymentMethodEnum } from '../../domain/enum/paymentMethod.enum';
 import { StatusEnum } from '../../domain/enum/status.enum';
 
 // This is to represent connection information for a billing provider
-export const PaymentLink = defineEntity({
+export const PaymentLink = defineComplianceEntity({
   name: 'PaymentLink',
   properties: {
     ...sqlBaseProperties,
-    amount: p.double(),
-    paymentMethods: p.enum(() => PaymentMethodEnum).array(),
-    currency: p.enum(() => CurrencyEnum),
-    description: p.string().nullable(),
-    status: p.enum(() => StatusEnum),
-    providerFields: p.json<unknown>().nullable()
+    amount: fp.double().compliance('none'),
+    paymentMethods: fp
+      .enum(() => PaymentMethodEnum)
+      .array()
+      .compliance('none'),
+    currency: fp.enum(() => CurrencyEnum).compliance('none'),
+    description: fp.string().nullable().compliance('none'),
+    status: fp.enum(() => StatusEnum).compliance('none'),
+    providerFields: fp.json<unknown>().nullable().compliance('none')
   }
 });

@@ -25,9 +25,9 @@ pub(crate) const TS_JEST_VERSION: &str = "^29.4.6";
 // ts-nodef
 pub(crate) const TS_NODE_VERSION: &str = "^10.9.2";
 // typescript-eslint
-pub(crate) const TYPESCRIPT_ESLINT_VERSION: &str = "^8.57.1";
+pub(crate) const TYPESCRIPT_ESLINT_VERSION: &str = "^8.57.2";
 // vitest
-pub(crate) const VITEST_VERSION: &str = "^4.1.0";
+pub(crate) const VITEST_VERSION: &str = "^4.1.1";
 
 // Application package.json dependencies constants
 // @typescript/native-preview
@@ -45,7 +45,7 @@ pub(crate) const SORT_PACKAGE_JSON_VERSION: &str = "^3.0.0";
 // tsx
 pub(crate) const TSX_VERSION: &str = "^4.21.0";
 // typescript
-pub(crate) const TYPESCRIPT_VERSION: &str = "^5.9.3";
+pub(crate) const TYPESCRIPT_VERSION: &str = "^6.0.2";
 
 // Application package.json scripts constants
 pub(crate) const APP_DEV_SCRIPT: &str = "docker compose up";
@@ -183,7 +183,7 @@ pub(crate) fn application_seed_script<'a>(
 pub(crate) fn application_setup_script(runtime: &Runtime) -> String {
     match runtime {
         Runtime::Bun => {
-            String::from("bun run build && bun migrate:init && bun migrate:up && bun seed")
+            String::from("bun run build && bun run migrate:init && bun run migrate:up && bun run seed")
         }
         Runtime::Node => {
             String::from("pnpm build && pnpm migrate:init && pnpm migrate:up && pnpm seed")
@@ -232,63 +232,63 @@ pub(crate) const APP_MONITORING_VERSION: &str = "workspace:*";
 // @forklaunch/bunrun
 pub(crate) const BUNRUN_VERSION: &str = "~0.0.2";
 // @forklaunch/common
-pub(crate) const COMMON_VERSION: &str = "~0.7.5";
+pub(crate) const COMMON_VERSION: &str = "~1.1.8";
 // @forklaunch/core
-pub(crate) const CORE_VERSION: &str = "~0.19.5";
+pub(crate) const CORE_VERSION: &str = "~1.1.8";
 // @forklaunch/express
-pub(crate) const EXPRESS_VERSION: &str = "~0.11.5";
+pub(crate) const EXPRESS_VERSION: &str = "~1.1.8";
 // @forklaunch/hyper-express
-pub(crate) const HYPER_EXPRESS_VERSION: &str = "~0.12.5";
+pub(crate) const HYPER_EXPRESS_VERSION: &str = "~1.1.7";
 // @forklaunch/implementation-billing-base
-pub(crate) const BILLING_BASE_VERSION: &str = "~0.9.0";
+pub(crate) const BILLING_BASE_VERSION: &str = "~1.0.8";
 // @forklaunch/implementation-billing-stripe
-pub(crate) const BILLING_STRIPE_VERSION: &str = "~0.6.0";
+pub(crate) const BILLING_STRIPE_VERSION: &str = "~1.1.8";
 // @forklaunch/implementation-iam-base
-pub(crate) const IAM_BASE_VERSION: &str = "~0.9.0";
+pub(crate) const IAM_BASE_VERSION: &str = "~1.0.8";
 // @forklaunch/implementation-worker-bullmq
-pub(crate) const WORKER_BULLMQ_VERSION: &str = "~0.9.0";
+pub(crate) const WORKER_BULLMQ_VERSION: &str = "~1.0.9";
 // @forklaunch/implementation-worker-redis
-pub(crate) const WORKER_REDIS_VERSION: &str = "~0.9.0";
+pub(crate) const WORKER_REDIS_VERSION: &str = "~1.0.9";
 // @forklaunch/implementation-worker-database
-pub(crate) const WORKER_DATABASE_VERSION: &str = "~0.9.0";
+pub(crate) const WORKER_DATABASE_VERSION: &str = "~1.0.9";
 // @forklaunch/implementation-worker-kafka
-pub(crate) const WORKER_KAFKA_VERSION: &str = "~0.10.0";
+pub(crate) const WORKER_KAFKA_VERSION: &str = "~1.0.9";
 // @forklaunch/infrastructure-redis
-pub(crate) const INFRASTRUCTURE_REDIS_VERSION: &str = "~0.5.5";
+pub(crate) const INFRASTRUCTURE_REDIS_VERSION: &str = "~1.1.8";
 // @forklaunch/infrastructure-s3
-pub(crate) const INFRASTRUCTURE_S3_VERSION: &str = "~0.5.5";
+pub(crate) const INFRASTRUCTURE_S3_VERSION: &str = "~1.1.8";
 // @forklaunch/interfaces-billing
-pub(crate) const BILLING_INTERFACES_VERSION: &str = "~0.9.0";
+pub(crate) const BILLING_INTERFACES_VERSION: &str = "~1.0.8";
 // @forklaunch/interfaces-iam
-pub(crate) const IAM_INTERFACES_VERSION: &str = "~0.9.0";
+pub(crate) const IAM_INTERFACES_VERSION: &str = "~1.0.8";
 // @forklaunch/interfaces-worker
-pub(crate) const WORKER_INTERFACES_VERSION: &str = "~0.8.0";
+pub(crate) const WORKER_INTERFACES_VERSION: &str = "~1.0.9";
 // @forklaunch/internal
-pub(crate) const INTERNAL_VERSION: &str = "~0.4.5";
+pub(crate) const INTERNAL_VERSION: &str = "~1.1.8";
 // @forklaunch/testing
-pub(crate) const TESTING_VERSION: &str = "~0.1.5";
+pub(crate) const TESTING_VERSION: &str = "~1.1.8";
 // @forklaunch/universal-sdk
-pub(crate) const UNIVERSAL_SDK_VERSION: &str = "~0.8.5";
+pub(crate) const UNIVERSAL_SDK_VERSION: &str = "~1.1.8";
 // @forklaunch/validator
-pub(crate) const VALIDATOR_VERSION: &str = "~0.11.5";
+pub(crate) const VALIDATOR_VERSION: &str = "~1.1.8";
 // @mikro-orm/core
-pub(crate) const MIKRO_ORM_CORE_VERSION: &str = "7.0.4";
+pub(crate) const MIKRO_ORM_CORE_VERSION: &str = "7.0.5";
 // @mikro-orm/migrations
-pub(crate) const MIKRO_ORM_MIGRATIONS_VERSION: &str = "7.0.4";
+pub(crate) const MIKRO_ORM_MIGRATIONS_VERSION: &str = "7.0.5";
 // @mikro-orm/postgresql,@mikro-orm/mongodb,@mikro-orm/mysql,@mikro-orm/sqlite,@mikro-orm/mariadb,@mikro-orm/libsql,@mikro-orm/mssql
-pub(crate) const MIKRO_ORM_DATABASE_VERSION: &str = "7.0.4";
+pub(crate) const MIKRO_ORM_DATABASE_VERSION: &str = "7.0.5";
 // @mikro-orm/seeder
-pub(crate) const MIKRO_ORM_SEEDER_VERSION: &str = "7.0.4";
+pub(crate) const MIKRO_ORM_SEEDER_VERSION: &str = "7.0.5";
 // @opentelemetry/api
-pub(crate) const OPENTELEMETRY_API_VERSION: &str = "^1.9.0";
+pub(crate) const OPENTELEMETRY_API_VERSION: &str = "^1.9.1";
 // @sinclair/typebox
 pub(crate) const TYPEBOX_VERSION: &str = "^0.34.48";
 // ajv
 pub(crate) const AJV_VERSION: &str = "^8.18.0";
 // better-auth
-pub(crate) const BETTER_AUTH_VERSION: &str = "^1.5.5";
+pub(crate) const BETTER_AUTH_VERSION: &str = "^1.5.6";
 // bullmq
-pub(crate) const BULLMQ_VERSION: &str = "^5.71.0";
+pub(crate) const BULLMQ_VERSION: &str = "^5.71.1";
 // better-sqlite3
 pub(crate) const BETTER_SQLITE3_VERSION: &str = "^12.8.0";
 // dotenv
@@ -306,7 +306,7 @@ pub(crate) const ZOD_VERSION: &str = "^4.3.6";
 
 // Project package.json devDependencies constants
 // @mikro-orm/cli
-pub(crate) const MIKRO_ORM_CLI_VERSION: &str = "7.0.4";
+pub(crate) const MIKRO_ORM_CLI_VERSION: &str = "7.0.5";
 // @types/express
 pub(crate) const TYPES_EXPRESS_VERSION: &str = "^5.0.6";
 // @types/express-serve-static-core
@@ -322,12 +322,19 @@ pub(crate) const PINO_VERSION: &str = "^10.3.1";
 // ioredis
 pub(crate) const IOREDIS_VERSION: &str = "^5.10.1";
 // typedoc
-pub(crate) const TYPEDOC_VERSION: &str = "^0.28.17";
+pub(crate) const TYPEDOC_VERSION: &str = "^0.28.18";
 
 // Project package.json scripts constants
 pub(crate) const PROJECT_BUILD_SCRIPT: &str = "tsgo -b";
 pub(crate) const PROJECT_DOCS_SCRIPT: &str = "typedoc --out docs *";
 pub(crate) const PROJECT_SEED_SCRIPT: &str = "[ -z $DOTENV_FILE_PATH ] && export DOTENV_FILE_PATH=.env.local; NODE_OPTIONS='--import=tsx' mikro-orm seeder:run";
+
+pub(crate) fn project_retention_enforce_script(runtime: &Runtime) -> String {
+    String::from(match runtime {
+        Runtime::Bun => "bun run scripts/enforce-retention.ts",
+        Runtime::Node => "pnpm tsx scripts/enforce-retention.ts",
+    })
+}
 
 pub(crate) fn project_format_script(formatter: &Formatter) -> String {
     String::from(match formatter {
@@ -364,7 +371,7 @@ pub(crate) fn project_dev_server_script(runtime: &Runtime, database: Option<Data
         Runtime::Bun => format!(
             "{}bun --watch server.ts",
             if database.is_some_and(|db| db != Database::MongoDB) {
-                "bun migrate:up && "
+                "bun run migrate:up && "
             } else {
                 ""
             }
@@ -385,7 +392,7 @@ pub(crate) fn project_dev_local_script(runtime: &Runtime, database: Option<Datab
         Runtime::Bun => format!(
             "{}DOTENV_FILE_PATH=.env.local bun --watch server.ts",
             if database.is_some_and(|db| db != Database::MongoDB) {
-                "DOTENV_FILE_PATH=.env.local bun migrate:up && "
+                "DOTENV_FILE_PATH=.env.local bun run migrate:up && "
             } else {
                 ""
             }
@@ -489,7 +496,7 @@ pub(crate) fn project_dev_local_worker_script(
         Runtime::Bun => format!(
             "{}DOTENV_FILE_PATH=.env.local bun --watch server.ts && DOTENV_FILE_PATH=.env.local bun --watch worker.ts",
             if database.is_some_and(|db| db != Database::MongoDB) {
-                "DOTENV_FILE_PATH=.env.local bun migrate:up && "
+                "DOTENV_FILE_PATH=.env.local bun run migrate:up && "
             } else {
                 ""
             }

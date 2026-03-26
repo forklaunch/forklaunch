@@ -18,7 +18,7 @@
   ],
   "scripts": {
     "build": "pnpm -r run build",
-    "clean": "rm -rf node_modules pnpm-lock.yaml && pnpm --parallel -r clean && pnpm store prune",
+    "clean": "rm -rf node_modules pnpm-lock.yaml tsconfig.tsbuildinfo && pnpm --parallel -r clean && pnpm store prune",
     "clean:purge": "pnpm run clean && pnpm store clear",
     "dev": "RUNTIME=node docker compose -f docker-compose.base.yml -f docker-compose.node.yml up",
     "dev:build": "RUNTIME=node docker compose -f docker-compose.base.yml -f docker-compose.node.yml build",
@@ -41,7 +41,7 @@
     "up:packages": "pnpm -r update --latest"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.8",
+    "@biomejs/biome": "2.4.9",
     "@changesets/cli": "^2.30.0",
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
@@ -50,22 +50,22 @@
     "globals": "^17.4.0",
     "jest": "^30.3.0",
     "lint-staged": "^16.4.0",
-    "oxlint": "^1.56.0",
+    "oxlint": "^1.57.0",
     "prettier": "^3.8.1",
     "sort-package-json": "^3.6.1",
     "ts-jest": "^29.4.6",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "^8.57.1",
-    "vitest": "^4.1.0"
+    "typescript": "^6.0.2",
+    "typescript-eslint": "^8.57.2",
+    "vitest": "^4.1.1"
   },
   "dependencies": {
-    "@forklaunch/common": "^0.7.5",
-    "@forklaunch/core": "^0.19.5",
-    "@forklaunch/express": "^0.11.5",
-    "@forklaunch/hyper-express": "^0.12.5",
-    "@forklaunch/universal-sdk": "^0.8.5",
-    "@forklaunch/validator": "^0.11.5"
+    "@forklaunch/common": "^1.1.8",
+    "@forklaunch/core": "^1.1.8",
+    "@forklaunch/express": "^1.1.8",
+    "@forklaunch/hyper-express": "^1.1.7",
+    "@forklaunch/universal-sdk": "^1.1.8",
+    "@forklaunch/validator": "^1.1.8"
   }
 }

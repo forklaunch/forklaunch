@@ -1,25 +1,25 @@
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
-import { defineEntity, p } from '@mikro-orm/core';
+import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
 import { BillingProviderEnum } from '../../domain/enum/billingProvider.enum';
 import { PartyEnum } from '../../domain/enum/party.enum';
 
-export const Subscription = defineEntity({
+export const Subscription = defineComplianceEntity({
   name: 'Subscription',
   properties: {
     ...sqlBaseProperties,
     // maybe have billing period here as well
-    partyId: p.string(),
-    partyType: p.enum(() => PartyEnum),
-    description: p.string().nullable(),
-    active: p.boolean(),
+    partyId: fp.string().compliance('none'),
+    partyType: fp.enum(() => PartyEnum).compliance('none'),
+    description: fp.string().nullable().compliance('none'),
+    active: fp.boolean().compliance('none'),
     // can make one to many, but for now, just store the id
-    productId: p.string(),
+    productId: fp.string().compliance('none'),
     // access billing provider information pointer -- especially about entitlements, that can be grabbed later
-    providerFields: p.json<unknown>().nullable(),
-    externalId: p.string().unique(),
-    billingProvider: p.enum(() => BillingProviderEnum),
-    startDate: p.datetime(),
-    endDate: p.datetime().nullable(),
-    status: p.string()
+    providerFields: fp.json<unknown>().nullable().compliance('none'),
+    externalId: fp.string().unique().compliance('none'),
+    billingProvider: fp.enum(() => BillingProviderEnum).compliance('none'),
+    startDate: fp.datetime().compliance('none'),
+    endDate: fp.datetime().nullable().compliance('none'),
+    status: fp.string().compliance('none')
   }
 });

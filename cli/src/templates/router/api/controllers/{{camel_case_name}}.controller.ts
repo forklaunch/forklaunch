@@ -11,7 +11,8 @@ import { ci, tokens } from '../../bootstrapper';
 //! scopeFactory creates a new dependency injection scope for the service
 const scopeFactory = () => ci.createScope();
 // serviceFactory returns a new service instance on demand
-const serviceFactory = ci.scopedResolver(tokens.{{pascal_case_name}}Service);
+const serviceFactory = {{#is_worker}}(context?: Record<string, unknown>) =>
+  scopeFactory().resolve(tokens.{{pascal_case_name}}Service, context);{{/is_worker}}{{^is_worker}}ci.scopedResolver(tokens.{{pascal_case_name}}Service);{{/is_worker}}
 // openTelemetryCollector for collecting logs and metrics with appropriate context
 const openTelemetryCollector = ci.resolve(tokens.{{otel_token}});{{#is_iam_configured}}
 //! resolve the JWKS public key URL
@@ -23,13 +24,14 @@ export const {{camel_case_name}}Get = handlers.get(
   '/',
   {
     name: '{{title_case_name}} Get',
-    summary: 'Gets {{title_case_name}}',{{#is_iam_configured}}
-     auth: {
+    summary: 'Gets {{title_case_name}}',
+    {{#is_iam_configured}}access: 'protected',
+    auth: {
       jwt: {
         jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL
       },
       allowedRoles: new Set([ROLES.ADMIN])
-    },{{/is_iam_configured}}
+    },{{/is_iam_configured}}{{^is_iam_configured}}access: 'public',{{/is_iam_configured}}
     responses: {
       {{#with_mappers}}
       // specifies the success response schema using Mapper constructs
@@ -55,14 +57,15 @@ export const {{camel_case_name}}Post = handlers.post(
   schemaValidator,
   '/',
   {
-    name: '{{title_case_name}} Post', 
-    summary: 'Posts {{title_case_name}}',{{#is_iam_configured}}
-     auth: {
+    name: '{{title_case_name}} Post',
+    summary: 'Posts {{title_case_name}}',
+    {{#is_iam_configured}}access: 'protected',
+    auth: {
       jwt: {
         jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL
       },
       allowedRoles: new Set([ROLES.ADMIN])
-    },{{/is_iam_configured}}
+    },{{/is_iam_configured}}{{^is_iam_configured}}access: 'public',{{/is_iam_configured}}
     {{#with_mappers}}
     // specifies the request body schema using Mapper constructs
     body: {{pascal_case_name}}RequestMapper.schema,
@@ -85,8 +88,9 @@ export const {{camel_case_name}}Post = handlers.post(
       .status(200)
       .json(
         // constructs a new service instance using the scopeFactory and calls the {{camel_case_name}}Post method
-        await serviceFactory(
-          scopeFactory()
+        await serviceFactory({{#is_worker}}
+          { tenantId: (req.session as Record<string, unknown>)?.organizationId ?? '' }{{/is_worker}}{{^is_worker}}
+          scopeFactory(){{/is_worker}}
         ).{{camel_case_name}}Post(req.body)
       );
   }

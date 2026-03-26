@@ -504,6 +504,7 @@ mod tests {
             is_jest: false,
             platform_application_id: None,
             platform_organization_id: None,
+            compliance: None,
         }
     }
 

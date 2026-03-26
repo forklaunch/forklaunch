@@ -1,18 +1,21 @@
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
-import { defineEntity, p } from '@mikro-orm/core';
+import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
 import { OrganizationStatus } from '../../domain/enum/organizationStatus.enum';
 import { User } from './user.entity';
 
-export const Organization = defineEntity({
+export const Organization = defineComplianceEntity({
   name: 'Organization',
   properties: {
     ...sqlBaseProperties,
-    name: p.string(),
-    users: () => p.oneToMany(User).mappedBy('organization'),
-    domain: p.string(),
-    logoUrl: p.string().nullable(),
-    subscription: p.string().unique(),
-    providerFields: p.json().nullable(),
-    status: p.enum(() => OrganizationStatus).default(OrganizationStatus.ACTIVE)
+    name: fp.string().compliance('none'),
+    users: () => fp.oneToMany(User).mappedBy('organization'),
+    domain: fp.string().compliance('none'),
+    logoUrl: fp.string().nullable().compliance('none'),
+    subscription: fp.string().unique().compliance('none'),
+    providerFields: fp.json().nullable().compliance('none'),
+    status: fp
+      .enum(() => OrganizationStatus)
+      .default(OrganizationStatus.ACTIVE)
+      .compliance('none')
   }
 });

@@ -1,12 +1,13 @@
-import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
+import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
+import type { InferEntity } from '@mikro-orm/core';
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 
-export const Jwks = defineEntity({
+export const Jwks = defineComplianceEntity({
   name: 'Jwks',
   properties: {
     ...sqlBaseProperties,
-    publicKey: p.string(),
-    privateKey: p.string()
+    publicKey: fp.string().compliance('none'),
+    privateKey: fp.string().compliance('pci')
   }
 });
 

@@ -1,33 +1,33 @@
-import { defineEntity, p } from '@mikro-orm/core';
+import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
 
-export const Organization = defineEntity({
+export const Organization = defineComplianceEntity({
   name: 'Organization',
   properties: {
-    id: p.string().primary(),
-    status: p.enum()
+    id: fp.string().primary().compliance('none'),
+    status: fp.enum().compliance('none')
   }
 });
 
-export const Role = defineEntity({
+export const Role = defineComplianceEntity({
   name: 'Role',
   properties: {
-    id: p.string().primary(),
-    permissions: () => p.manyToMany(Permission)
+    id: fp.string().primary().compliance('none'),
+    permissions: () => fp.manyToMany(Permission)
   }
 });
 
-export const Permission = defineEntity({
+export const Permission = defineComplianceEntity({
   name: 'Permission',
   properties: {
-    id: p.string().primary(),
-    slug: p.string()
+    id: fp.string().primary().compliance('none'),
+    slug: fp.string().compliance('none')
   }
 });
 
-export const User = defineEntity({
+export const User = defineComplianceEntity({
   name: 'User',
   properties: {
-    id: p.string().primary(),
-    organization: () => p.manyToOne(Organization).nullable()
+    id: fp.string().primary().compliance('none'),
+    organization: () => fp.manyToOne(Organization).nullable()
   }
 });

@@ -1,4 +1,6 @@
 import { createConfigInjector, getEnvVar, Lifetime } from '@forklaunch/core/services';
+import { ComplianceEventSubscriber, FieldEncryptor } from '@forklaunch/core/persistence';
+
 import { Migrator } from '@mikro-orm/migrations{{#is_mongo}}-mongodb{{/is_mongo}}';
 import { number, SchemaValidator, string } from '@{{app_name}}/core';
 {{^is_mongo}}import { Platform, TextType, Type } from '@mikro-orm/core';{{/is_mongo}}
@@ -42,6 +44,11 @@ const configInjector = createConfigInjector(
       lifetime: Lifetime.Singleton,
       type: string,
       value: getEnvVar('NODE_ENV')
+    },
+    ENCRYPTION_KEY: {
+      lifetime: Lifetime.Singleton,
+      type: string,
+      value: getEnvVar('ENCRYPTION_KEY')
     }
   }
 );
@@ -81,6 +88,11 @@ const mikroOrmOptionsConfig = defineConfig({ {{#is_mongo}}
     tokens.DB_PORT
   ),{{/is_in_memory_database}}{{/is_mongo}}
   entities: Object.values(entities),
+  subscribers: [
+    new ComplianceEventSubscriber(
+      new FieldEncryptor(validConfigInjector.resolve(tokens.ENCRYPTION_KEY))
+    )
+  ],
   debug: validConfigInjector.resolve(
     tokens.NODE_ENV
   ) === 'development',

@@ -26,6 +26,7 @@ export const createPlan = handlers.post(
   '/',
   {
     name: 'Create Plan',
+    access: 'internal',
     summary: 'Create a plan',
     auth: {
       hmac: {
@@ -50,6 +51,7 @@ export const getPlan = handlers.get(
   '/:id',
   {
     name: 'Get Plan',
+    access: 'internal',
     summary: 'Get a plan',
     auth: {
       hmac: {
@@ -78,6 +80,7 @@ export const updatePlan = handlers.put(
   '/',
   {
     name: 'Update Plan',
+    access: 'internal',
     summary: 'Update a plan',
     body: UpdatePlanMapper.schema,
     auth: {
@@ -102,6 +105,7 @@ export const deletePlan = handlers.delete(
   '/:id',
   {
     name: 'Delete Plan',
+    access: 'internal',
     summary: 'Delete a plan',
     params: IdSchema,
     auth: {
@@ -127,6 +131,7 @@ export const listPlans = handlers.get(
   '/',
   {
     name: 'List Plans',
+    access: 'internal',
     summary: 'List plans',
     query: IdsSchema,
     auth: {

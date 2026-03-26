@@ -11,6 +11,7 @@ export const handleWebhookEvent = handlers.post(
   '/',
   {
     name: 'handleWebhookEvent',
+    access: 'public',
     summary: 'Handle a stripe event via webhook',
     body: {
       text: string

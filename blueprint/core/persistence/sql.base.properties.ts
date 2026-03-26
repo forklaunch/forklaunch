@@ -1,14 +1,20 @@
-import { p } from '@mikro-orm/core';
+import { fp } from '@forklaunch/core/persistence';
 import { v4 } from 'uuid';
 
 export const sqlBaseProperties = {
-  id: p
+  id: fp
     .uuid()
     .primary()
-    .onCreate(() => v4()),
-  createdAt: p.datetime().onCreate(() => new Date()),
-  updatedAt: p
+    .onCreate(() => v4())
+    .compliance('none'),
+  createdAt: fp
+    .datetime()
+    .onCreate(() => new Date())
+    .compliance('none'),
+  updatedAt: fp
     .datetime()
     .onCreate(() => new Date())
     .onUpdate(() => new Date())
+    .compliance('none'),
+  retentionAnonymizedAt: fp.datetime().nullable().compliance('none')
 };
