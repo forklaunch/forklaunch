@@ -46,7 +46,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^25.5.0",
-    "@typescript/native-preview": "7.0.0-dev.20260320.1",
+    "@typescript/native-preview": "7.0.0-dev.20260326.1",
     "globals": "^17.4.0",
     "prettier": "^3.8.1",
     "ts-node": "^10.9.2",

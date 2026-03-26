@@ -48,7 +48,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
-    "@typescript/native-preview": "7.0.0-dev.20260320.1",
+    "@typescript/native-preview": "7.0.0-dev.20260326.1",
     "fetch-mock": "^12.6.0",
     "jest": "^30.3.0",
     "openapi3-ts": "^4.5.0",
