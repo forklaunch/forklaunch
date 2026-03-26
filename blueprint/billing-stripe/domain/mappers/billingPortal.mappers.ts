@@ -1,6 +1,6 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, wrap } from '@mikro-orm/core';
 import Stripe from 'stripe';
 import { BillingPortal } from '../../persistence/entities/billingPortal.entity';
 import { BillingPortalSchemas } from '../schemas';
@@ -53,8 +53,9 @@ export const BillingPortalMapper = responseMapper({
   entity: BillingPortal,
   mapperDefinition: {
     toDto: async (entity) => {
+      const pojo = wrap(entity).toPOJO();
       return {
-        ...entity,
+        ...pojo,
         uri: entity.uri ?? undefined,
         stripeFields: entity.providerFields
       };
