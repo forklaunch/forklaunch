@@ -3,7 +3,7 @@ import {
   responseMapper
 } from '@forklaunch/core/mappers';
 import { schemaValidator } from '@{{app_name}}/core';
-import { {{^is_worker}}EntityManager, InferEntity, wrap } from '@mikro-orm/core';{{/is_worker}}{{#is_worker}}InferEntity, wrap } from '@mikro-orm/core';
+import { {{^is_worker}}EntityManager } from '@mikro-orm/core';{{/is_worker}}{{#is_worker}}
 import { v4 } from 'uuid';{{/is_worker}}
 import { {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record } from '../../persistence/entities/{{camel_case_name}}{{#is_worker}}Event{{/is_worker}}Record.entity';
 import { {{pascal_case_name}}RequestSchema, {{pascal_case_name}}ResponseSchema } from '../schemas/{{camel_case_name}}.schema';
@@ -36,8 +36,8 @@ export const {{pascal_case_name}}ResponseMapper = responseMapper({
   schema: {{pascal_case_name}}ResponseSchema,
   entity: {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record,
   mapperDefinition: {
-    toDto: async (entity: InferEntity<typeof {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record>) => {
-      return wrap(entity).toPOJO();
+    toDto: async (entity) => {
+      return entity;
     }
   }
 });

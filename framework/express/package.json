@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/express",
-  "version": "1.1.8",
+  "version": "1.2.2",
   "description": "Forklaunch framework for express.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {

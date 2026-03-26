@@ -1,6 +1,6 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager, InferEntity, wrap } from '@mikro-orm/core';
+import { EntityManager } from '@mikro-orm/core';
 import Stripe from 'stripe';
 import { PaymentLink } from '../../persistence/entities/paymentLink.entity';
 import { StatusEnum } from '../enum/status.enum';
@@ -55,9 +55,9 @@ export const PaymentLinkMapper = responseMapper({
   schema: PaymentLinkSchemas.PaymentLinkSchema(StatusEnum),
   entity: PaymentLink,
   mapperDefinition: {
-    toDto: async (entity: InferEntity<typeof PaymentLink>) => {
+    toDto: async (entity) => {
       return {
-        ...wrap(entity).toPOJO(),
+        ...entity,
         amount: Number(entity.amount),
         description: entity.description ?? undefined,
         stripeFields: entity.providerFields

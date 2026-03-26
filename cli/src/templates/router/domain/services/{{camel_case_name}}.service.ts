@@ -3,7 +3,7 @@ import { WorkerProducer } from '@forklaunch/interfaces-worker/interfaces';
 import type { {{pascal_case_name}}EventRecord } from '../types/{{camel_case_name}}EventRecord.types';
 import { v4 } from 'uuid';{{/is_worker}}{{^is_worker}}
 import { EntityManager } from '@mikro-orm/core';{{/is_worker}}{{^with_mappers}}{{^is_worker}}
-import { wrap } from '@mikro-orm/core';{{/is_worker}}
+{{/is_worker}}
 import { Schema } from '@forklaunch/validator';{{/with_mappers}}
 import { SchemaValidator } from '@{{app_name}}/core';
 import { Metrics } from '@{{app_name}}/monitoring';
@@ -72,7 +72,7 @@ export class Base{{pascal_case_name}}Service implements {{pascal_case_name}}Serv
     await this.workerProducer.enqueueJob(entity);{{/is_worker}}
 
     // Map from entity to response (inline Entity → DTO conversion)
-    {{^is_worker}}return wrap(entity).toPOJO();{{/is_worker}}{{#is_worker}}const { id, createdAt, updatedAt, ...response } = entity;
+    {{^is_worker}}return entity;{{/is_worker}}{{#is_worker}}const { id, createdAt, updatedAt, ...response } = entity;
     return response as {{pascal_case_name}}Response;{{/is_worker}}{{/with_mappers}}
   };
 }

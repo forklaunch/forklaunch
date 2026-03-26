@@ -149,8 +149,8 @@ export class ConfigInjector<
     if (!rawInjectorArgument || rawInjectorArgument === '_args') {
       return definition.factory(
         {} as Omit<ResolvedConfigValidator<SV, CV>, T>,
-        this.resolve.bind(this),
-        context ?? ({} as Record<string, unknown>)
+        context ?? {},
+        this.resolve.bind(this)
       );
     }
 
@@ -185,8 +185,8 @@ export class ConfigInjector<
     ) as unknown as Omit<ResolvedConfigValidator<SV, CV>, T>;
     return definition.factory(
       resolvedArguments,
-      this.resolve.bind(this),
-      context ?? ({} as Record<string, unknown>)
+      context ?? {},
+      this.resolve.bind(this)
     );
   }
 
@@ -427,9 +427,16 @@ export class ConfigInjector<
     token: T,
     context?: Record<string, unknown>,
     resolutionPath: (keyof CV)[] = []
-  ): (scope?: ConfigInjector<SV, CV>) => ResolvedConfigValidator<SV, CV>[T] {
-    return (scope) =>
-      (scope ?? this.createScope()).resolve<T>(token, context, resolutionPath);
+  ): (options?: {
+    scope?: ConfigInjector<SV, CV>;
+    context?: Record<string, unknown>;
+  }) => ResolvedConfigValidator<SV, CV>[T] {
+    return (options) =>
+      (options?.scope ?? this.createScope()).resolve<T>(
+        token,
+        options?.context ? { ...context, ...options.context } : context,
+        resolutionPath
+      );
   }
 
   createScope(): ConfigInjector<SV, CV> {

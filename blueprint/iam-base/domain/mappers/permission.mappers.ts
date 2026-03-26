@@ -1,6 +1,6 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager, InferEntity, wrap } from '@mikro-orm/core';
+import { EntityManager, wrap } from '@mikro-orm/core';
 import { Permission } from '../../persistence/entities/permission.entity';
 import { PermissionSchemas } from '../schemas';
 
@@ -40,7 +40,7 @@ export const PermissionMapper = responseMapper({
   schema: PermissionSchemas.PermissionSchema,
   entity: Permission,
   mapperDefinition: {
-    toDto: async (entity: InferEntity<typeof Permission>) => {
+    toDto: async (entity) => {
       return wrap(entity).toPOJO();
     }
   }

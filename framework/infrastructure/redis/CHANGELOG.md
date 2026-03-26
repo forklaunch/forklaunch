@@ -1,5 +1,33 @@
 # @forklaunch/infrastructure-redis
 
+## 1.2.2
+
+### Patch Changes
+
+- fix compliance entity
+- Updated dependencies
+  - @forklaunch/common@1.2.1
+  - @forklaunch/core@1.2.2
+
+## 1.2.1
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.2.1
+
+## 1.2.0
+
+### Minor Changes
+
+- Validator 25% performance uptick and cleaner Config Injector syntax
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/common@1.2.0
+  - @forklaunch/core@1.2.0
+
 ## 1.1.8
 
 ### Patch Changes

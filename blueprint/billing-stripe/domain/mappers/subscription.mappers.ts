@@ -1,6 +1,6 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager, InferEntity, wrap } from '@mikro-orm/core';
+import { EntityManager } from '@mikro-orm/core';
 import Stripe from 'stripe';
 import { Subscription } from '../../persistence/entities/subscription.entity';
 import { PartyEnum } from '../enum/party.enum';
@@ -60,12 +60,11 @@ export const SubscriptionMapper = responseMapper({
   schema: SubscriptionSchemas.SubscriptionSchema(PartyEnum),
   entity: Subscription,
   mapperDefinition: {
-    toDto: async (entity: InferEntity<typeof Subscription>) => {
-      const data = wrap(entity).toPOJO();
+    toDto: async (entity) => {
       return {
-        ...data,
+        ...entity,
         description: entity.description ?? undefined,
-        endDate: data.endDate ?? undefined,
+        endDate: entity.endDate ?? undefined,
         stripeFields: entity.providerFields
       };
     }

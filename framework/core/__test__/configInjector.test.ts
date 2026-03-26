@@ -43,8 +43,8 @@ describe('serviceFactory', () => {
     c: {
       type: X,
       lifetime: Lifetime.Scoped,
-      factory: ({ a }, resolve, context) => {
-        const b = () => resolve('b') * (context.num as number);
+      factory: ({ a }, context, resolve) => {
+        const b = () => resolve!('b') * (context!.num as number);
         return new X(a, b);
       }
     },
@@ -216,7 +216,9 @@ describe('serviceFactory', () => {
       num: 5
     });
     expect(configInjector.resolve('c').dummy()).toEqual('a20');
-    expect(configInjector.scopedResolver('c')(scope).dummy()).toEqual('a25');
+    expect(configInjector.scopedResolver('c')({ scope }).dummy()).toEqual(
+      'a25'
+    );
   });
 
   test('dispose', () => {
@@ -263,8 +265,7 @@ describe('serviceFactory', () => {
       y: {
         type: number,
         lifetime: Lifetime.Transient,
-        factory: ({ x }, resolve, context) =>
-          x.length + (context.extra as number)
+        factory: ({ x }, context) => x.length + (context!.extra as number)
       }
     });
     expect(multilineInjector.resolve('y', { extra: 10 })).toBe(15);

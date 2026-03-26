@@ -1,5 +1,17 @@
 # @forklaunch/common
 
+## 1.2.1
+
+### Patch Changes
+
+- fix compliance entity
+
+## 1.2.0
+
+### Minor Changes
+
+- Validator 25% performance uptick and cleaner Config Injector syntax
+
 ## 1.1.8
 
 ### Patch Changes

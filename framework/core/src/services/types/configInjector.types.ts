@@ -25,11 +25,11 @@ export type ConstructedSingleton<Type, Args, Return> = {
   type: Type;
   factory: (
     args: Args,
+    context: Record<string, unknown>,
     resolve: <T extends keyof Args>(
       token: T,
       context?: Record<string, unknown>
-    ) => Args[T],
-    context: Record<string, unknown>
+    ) => Args[T]
   ) => Return;
 };
 
@@ -38,11 +38,11 @@ export type Constructed<Type, Args, Return> = {
   type: Type;
   factory: (
     args: Args,
+    context: Record<string, unknown>,
     resolve: <T extends keyof Args>(
       token: T,
       context?: Record<string, unknown>
-    ) => Args[T],
-    context: Record<string, unknown>
+    ) => Args[T]
   ) => Return;
 };
 

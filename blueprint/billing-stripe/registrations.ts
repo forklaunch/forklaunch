@@ -192,8 +192,16 @@ const runtimeDependencies = environmentConfig.chain({
   EntityManager: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
-    factory: ({ MikroORM }, _resolve, context) =>
-      MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined)
+    factory: (
+      { MikroORM },
+      context: { entityManagerOptions?: ForkOptions; tenantId?: string }
+    ) => {
+      const em = MikroORM.em.fork(context.entityManagerOptions);
+      if (context.tenantId) {
+        em.setFilterParams('tenant', { tenantId: context.tenantId });
+      }
+      return em;
+    }
   }
 });
 
@@ -208,8 +216,8 @@ const serviceDependencies = runtimeDependencies.chain({
     >,
     factory: (
       { StripeClient, EntityManager, TtlCache, OpenTelemetryCollector },
-      resolve,
-      context
+      context,
+      resolve
     ) =>
       new StripeBillingPortalService(
         StripeClient,
@@ -236,8 +244,8 @@ const serviceDependencies = runtimeDependencies.chain({
     >,
     factory: (
       { StripeClient, EntityManager, TtlCache, OpenTelemetryCollector },
-      resolve,
-      context
+      context,
+      resolve
     ) =>
       new StripeCheckoutSessionService(
         StripeClient,
@@ -264,8 +272,8 @@ const serviceDependencies = runtimeDependencies.chain({
     >,
     factory: (
       { StripeClient, EntityManager, TtlCache, OpenTelemetryCollector },
-      resolve,
-      context
+      context,
+      resolve
     ) =>
       new StripePaymentLinkService(
         StripeClient,
@@ -287,8 +295,8 @@ const serviceDependencies = runtimeDependencies.chain({
     type: StripePlanService<SchemaValidator, PlanMapperTypes, PlanDtoTypes>,
     factory: (
       { StripeClient, EntityManager, OpenTelemetryCollector },
-      resolve,
-      context
+      context,
+      resolve
     ) =>
       new StripePlanService(
         StripeClient,
@@ -314,8 +322,8 @@ const serviceDependencies = runtimeDependencies.chain({
     >,
     factory: (
       { StripeClient, EntityManager, OpenTelemetryCollector },
-      resolve,
-      context
+      context,
+      resolve
     ) =>
       new StripeSubscriptionService(
         StripeClient,
@@ -354,8 +362,8 @@ const serviceDependencies = runtimeDependencies.chain({
         PlanService,
         SubscriptionService
       },
-      resolve,
-      context
+      context,
+      resolve
     ) =>
       new StripeWebhookService(
         StripeClient,

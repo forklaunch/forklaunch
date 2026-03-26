@@ -32,7 +32,7 @@ function initStripe(): Stripe {
   }
 
   return new Stripe(apiKey, {
-    apiVersion: '2026-02-25.clover'
+    apiVersion: '2026-03-25.dahlia'
   });
 }
 

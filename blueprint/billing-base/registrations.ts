@@ -179,8 +179,16 @@ const runtimeDependencies = environmentConfig.chain({
   EntityManager: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
-    factory: ({ MikroORM }, _resolve, context) =>
-      MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined)
+    factory: (
+      { MikroORM },
+      context: { entityManagerOptions?: ForkOptions; tenantId?: string }
+    ) => {
+      const em = MikroORM.em.fork(context.entityManagerOptions);
+      if (context.tenantId) {
+        em.setFilterParams('tenant', { tenantId: context.tenantId });
+      }
+      return em;
+    }
   }
 });
 
@@ -195,8 +203,8 @@ const serviceDependencies = runtimeDependencies.chain({
     >,
     factory: (
       { EntityManager, TtlCache, OpenTelemetryCollector },
-      resolve,
-      context
+      context,
+      resolve
     ) =>
       new BaseBillingPortalService(
         context.entityManagerOptions
@@ -224,8 +232,8 @@ const serviceDependencies = runtimeDependencies.chain({
     >,
     factory: (
       { EntityManager, TtlCache, OpenTelemetryCollector },
-      resolve,
-      context
+      context,
+      resolve
     ) =>
       new BaseCheckoutSessionService(
         context.entityManagerOptions
@@ -253,8 +261,8 @@ const serviceDependencies = runtimeDependencies.chain({
     >,
     factory: (
       { EntityManager, TtlCache, OpenTelemetryCollector },
-      resolve,
-      context
+      context,
+      resolve
     ) =>
       new BasePaymentLinkService(
         context.entityManagerOptions
@@ -280,7 +288,7 @@ const serviceDependencies = runtimeDependencies.chain({
       PlanMapperTypes,
       PlanDtoTypes
     >,
-    factory: ({ EntityManager, OpenTelemetryCollector }, resolve, context) =>
+    factory: ({ EntityManager, OpenTelemetryCollector }, context, resolve) =>
       new BasePlanService(
         context.entityManagerOptions
           ? resolve('EntityManager', context)
@@ -303,7 +311,7 @@ const serviceDependencies = runtimeDependencies.chain({
       SubscriptionMapperTypes,
       SubscriptionDtoTypes
     >,
-    factory: ({ EntityManager, OpenTelemetryCollector }, resolve, context) =>
+    factory: ({ EntityManager, OpenTelemetryCollector }, context, resolve) =>
       new BaseSubscriptionService(
         context.entityManagerOptions
           ? resolve('EntityManager', context)

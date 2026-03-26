@@ -54,16 +54,16 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "^1.1.8",
-    "@forklaunch/core": "^1.1.8",
+    "@forklaunch/common": "^1.2.1",
+    "@forklaunch/core": "^1.2.2",
     "@forklaunch/implementation-billing-base": "workspace:*",
     "@forklaunch/interfaces-billing": "workspace:*",
-    "@forklaunch/internal": "^1.1.8",
-    "@forklaunch/validator": "^1.1.8",
+    "@forklaunch/internal": "^1.2.1",
+    "@forklaunch/validator": "^1.2.1",
     "@mikro-orm/core": "7.0.5",
     "@sinclair/typebox": "^0.34.48",
     "ajv": "^8.18.0",
-    "stripe": "^20.4.1",
+    "stripe": "^21.0.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

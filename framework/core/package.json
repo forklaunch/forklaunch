@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/core",
-  "version": "1.1.8",
+  "version": "1.2.2",
   "description": "forklaunch-js core package. Contains useful building blocks.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -99,7 +99,7 @@
     "@opentelemetry/exporter-metrics-otlp-http": "^0.214.0",
     "@opentelemetry/exporter-prometheus": "^0.214.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.214.0",
-    "@opentelemetry/instrumentation-express": "^0.61.0",
+    "@opentelemetry/instrumentation-express": "^0.62.0",
     "@opentelemetry/instrumentation-http": "^0.214.0",
     "@opentelemetry/resources": "^2.6.1",
     "@opentelemetry/sdk-logs": "^0.214.0",
