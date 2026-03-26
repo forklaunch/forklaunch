@@ -114,8 +114,8 @@ pub(crate) fn transform_registrations_ts_add_router(
             type: Base{router_name_pascal_case}Service,
             factory: (
                 {{ {dependency}, {otel_token} }},
+                context,
                 {em_setup}
-                context
             ) => {{
                 {em_resolution}
                 return new Base{router_name_pascal_case}Service(
