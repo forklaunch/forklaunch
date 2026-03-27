@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/bunrun",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Bun-native TypeScript workspace script runner with topological ordering",
   "keywords": [
     "bun",
@@ -42,7 +42,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
-    "@typescript/native-preview": "7.0.0-dev.20260320.1",
+    "@typescript/native-preview": "7.0.0-dev.20260326.1",
     "tsup": "^8.5.1",
     "typescript": "^6.0.2"
   },

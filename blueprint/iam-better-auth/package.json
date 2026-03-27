@@ -39,16 +39,16 @@
     "@forklaunch/blueprint-core": "workspace:*",
     "@forklaunch/blueprint-iam-base": "workspace:*",
     "@forklaunch/blueprint-monitoring": "workspace:*",
-    "@forklaunch/core": "^1.2.2",
+    "@forklaunch/core": "^1.2.3",
     "@forklaunch/implementation-iam-base": "workspace:*",
     "@forklaunch/interfaces-iam": "workspace:*",
-    "@mikro-orm/core": "7.0.5",
-    "@mikro-orm/migrations": "7.0.5",
-    "@mikro-orm/mongodb": "7.0.5",
-    "@mikro-orm/mysql": "7.0.5",
-    "@mikro-orm/postgresql": "7.0.5",
-    "@mikro-orm/seeder": "7.0.5",
-    "@mikro-orm/sqlite": "7.0.5",
+    "@mikro-orm/core": "7.0.6",
+    "@mikro-orm/migrations": "7.0.6",
+    "@mikro-orm/mongodb": "7.0.6",
+    "@mikro-orm/mysql": "7.0.6",
+    "@mikro-orm/postgresql": "7.0.6",
+    "@mikro-orm/seeder": "7.0.6",
+    "@mikro-orm/sqlite": "7.0.6",
     "@opentelemetry/api": "^1.9.1",
     "@sinclair/typebox": "^0.34.48",
     "better-auth": "^1.5.6",
@@ -59,8 +59,8 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@forklaunch/testing": "^1.2.1",
-    "@mikro-orm/cli": "7.0.5",
+    "@forklaunch/testing": "^1.2.2",
+    "@mikro-orm/cli": "7.0.6",
     "@types/express": "^5.0.6",
     "@types/express-serve-static-core": "^5.1.1",
     "@types/qs": "^6.15.0",
@@ -70,7 +70,7 @@
     "prettier": "^3.8.1",
     "testcontainers": "^11.13.0",
     "typedoc": "^0.28.18",
-    "vitest": "^4.1.1"
+    "vitest": "^4.1.2"
   },
   "mikro-orm": {
     "configPaths": [

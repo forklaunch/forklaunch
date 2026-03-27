@@ -8,11 +8,18 @@ export const TENANT_FILTER_NAME = 'tenant';
 /**
  * Creates the tenant filter definition.
  *
- * The filter adds `WHERE organizationId = :tenantId` to all queries
- * on entities that have an `organizationId` or `organization` property.
- * Entities without either property are unaffected (empty condition).
+ * The filter adds `WHERE <column> = :tenantId` to all queries
+ * on entities that have the configured tenant column (or its relation).
+ * Entities without the property are unaffected (empty condition).
+ *
+ * @param column - The entity property name used for tenant isolation.
+ *                 Defaults to `'organizationId'`. The relation name
+ *                 (without `Id` suffix) is also checked.
  */
-export function createTenantFilterDef(): FilterDef {
+export function createTenantFilterDef(
+  column: string = 'organizationId'
+): FilterDef {
+  const relation = column.replace(/Id$/, '');
   return {
     name: TENANT_FILTER_NAME,
     cond(
@@ -32,11 +39,12 @@ export function createTenantFilterDef(): FilterDef {
           return {};
         }
 
-        const hasOrganizationId = metadata.properties['organizationId'] != null;
-        const hasOrganization = metadata.properties['organization'] != null;
+        const hasColumn = metadata.properties[column] != null;
+        const hasRelation =
+          relation !== column && metadata.properties[relation] != null;
 
-        if (hasOrganizationId || hasOrganization) {
-          return { organizationId: args.tenantId };
+        if (hasColumn || hasRelation) {
+          return { [column]: args.tenantId };
         }
       } catch {
         // Entity not found in metadata — skip filtering
@@ -60,10 +68,20 @@ export function createTenantFilterDef(): FilterDef {
  * em.setFilterParams('tenant', { tenantId: 'org-123' });
  * ```
  */
-export function setupTenantFilter(orm: {
-  em: Pick<EntityManager, 'addFilter'>;
-}): void {
-  orm.em.addFilter(createTenantFilterDef());
+export function setupTenantFilter(
+  orm: {
+    em: Pick<EntityManager, 'addFilter'>;
+  },
+  config: {
+    /** Entity property name used for tenant isolation. Defaults to `'organizationId'`. */
+    column?: string;
+    logger?: { info: (msg: string, ...args: unknown[]) => void };
+  } = {}
+): void {
+  orm.em.addFilter(createTenantFilterDef(config.column));
+  (config.logger ?? console).info(
+    `[compliance] Tenant isolation filter registered on column '${config.column ?? 'organizationId'}'`
+  );
 }
 
 /**

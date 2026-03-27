@@ -32,6 +32,11 @@ export interface RlsConfig {
    * Set to `false` to opt out even on PostgreSQL.
    */
   enabled?: boolean;
+  /** Optional logger for compliance messages. Falls back to console. */
+  logger?: {
+    info: (msg: string, ...args: unknown[]) => void;
+    warn: (msg: string, ...args: unknown[]) => void;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -96,21 +101,25 @@ export class RlsEventSubscriber implements EventSubscriber {
 export function setupRls(orm: MikroORM, config: RlsConfig = {}): void {
   const isPostgres = isPostgresDriver(orm);
   const enabled = config.enabled ?? isPostgres;
+  const log = config.logger ?? { info: console.info, warn: console.warn };
 
   if (!enabled) {
     if (!isPostgres) {
       // Non-PostgreSQL — RLS not available, ORM filter is the sole enforcement
+      log.info(
+        '[compliance] Non-PostgreSQL database detected. RLS is not available; ORM filter is the sole tenant enforcement layer.'
+      );
       return;
     }
     // PostgreSQL but explicitly disabled
-    console.info(
+    log.info(
       '[compliance] PostgreSQL RLS disabled by configuration. ORM filter is the sole tenant enforcement layer.'
     );
     return;
   }
 
   if (!isPostgres) {
-    console.warn(
+    log.warn(
       '[compliance] RLS enabled but database driver is not PostgreSQL. ' +
         'RLS is only supported on PostgreSQL. Falling back to ORM filter only.'
     );
@@ -119,10 +128,11 @@ export function setupRls(orm: MikroORM, config: RlsConfig = {}): void {
 
   // Register the RLS transaction subscriber
   orm.em.getEventManager().registerSubscriber(new RlsEventSubscriber());
+  log.info('[compliance] PostgreSQL RLS event subscriber registered');
 
   // Validate RLS policies exist
   validateRlsPolicies(orm).catch((err) => {
-    console.warn('[compliance] Failed to validate RLS policies:', err);
+    log.warn('[compliance] Failed to validate RLS policies:', err);
   });
 }
 

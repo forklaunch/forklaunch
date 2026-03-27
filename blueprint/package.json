@@ -58,14 +58,14 @@
     "tsx": "^4.21.0",
     "typescript": "^6.0.2",
     "typescript-eslint": "^8.57.2",
-    "vitest": "^4.1.1"
+    "vitest": "^4.1.2"
   },
   "dependencies": {
-    "@forklaunch/common": "^1.2.1",
-    "@forklaunch/core": "^1.2.2",
-    "@forklaunch/express": "^1.2.2",
-    "@forklaunch/hyper-express": "^1.2.2",
-    "@forklaunch/universal-sdk": "^1.2.1",
-    "@forklaunch/validator": "^1.2.1"
+    "@forklaunch/common": "^1.2.2",
+    "@forklaunch/core": "^1.2.3",
+    "@forklaunch/express": "^1.2.3",
+    "@forklaunch/hyper-express": "^1.2.3",
+    "@forklaunch/universal-sdk": "^1.2.2",
+    "@forklaunch/validator": "^1.2.2"
   }
 }

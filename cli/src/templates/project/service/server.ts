@@ -12,8 +12,8 @@ import { {{camel_case_name}}SdkClient } from './sdk';
  */
 const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 {{#is_database_enabled}}const orm = ci.resolve(tokens.Orm);
-setupTenantFilter(orm);
-setupRls(orm);
+setupTenantFilter(orm, { logger: openTelemetryCollector });
+setupRls(orm, { logger: openTelemetryCollector });
 {{/is_database_enabled}}
 {{#is_iam_configured}}
 const authCacheService = ci.resolve(tokens.AuthCacheService);

@@ -4,6 +4,7 @@ import {
   ROLES,
   schemaValidator
 } from '@forklaunch/blueprint-core';
+import { setupRls, setupTenantFilter } from '@forklaunch/core/persistence';
 import { billingPortalRouter } from './api/routes/billingPortal.routes';
 import { checkoutSessionRouter } from './api/routes/checkoutSession.routes';
 import { paymentLinkRouter } from './api/routes/paymentLink.routes';
@@ -15,6 +16,9 @@ import { billingSdkClient } from './sdk';
 
 //! resolves the openTelemetryCollector from the configuration
 const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const orm = ci.resolve(tokens.MikroORM);
+setupTenantFilter(orm, { logger: openTelemetryCollector });
+setupRls(orm, { logger: openTelemetryCollector });
 
 //! creates an instance of forklaunchExpress
 const app = forklaunchExpress(schemaValidator, openTelemetryCollector, {

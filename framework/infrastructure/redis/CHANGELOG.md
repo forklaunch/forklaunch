@@ -1,5 +1,14 @@
 # @forklaunch/infrastructure-redis
 
+## 1.2.3
+
+### Patch Changes
+
+- tenant and rls configuration
+- Updated dependencies
+  - @forklaunch/common@1.2.2
+  - @forklaunch/core@1.2.3
+
 ## 1.2.2
 
 ### Patch Changes

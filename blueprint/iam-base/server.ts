@@ -1,4 +1,5 @@
 import { forklaunchExpress, schemaValidator } from '@forklaunch/blueprint-core';
+import { setupRls, setupTenantFilter } from '@forklaunch/core/persistence';
 import { discoveryRouter } from './api/routes/discovery.routes';
 import { organizationRouter } from './api/routes/organization.routes';
 import { permissionRouter } from './api/routes/permission.routes';
@@ -10,6 +11,9 @@ import { iamSdkClient } from './sdk';
 
 //! resolves the openTelemetryCollector from the configuration
 const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const orm = ci.resolve(tokens.MikroORM);
+setupTenantFilter(orm, { logger: openTelemetryCollector });
+setupRls(orm, { logger: openTelemetryCollector });
 const userService = ci.resolve(tokens.UserService);
 
 //! creates an instance of forklaunchExpress

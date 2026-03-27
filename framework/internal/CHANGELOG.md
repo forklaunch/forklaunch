@@ -1,5 +1,14 @@
 # @forklaunch/internal
 
+## 1.2.2
+
+### Patch Changes
+
+- tenant and rls configuration
+- Updated dependencies
+  - @forklaunch/validator@1.2.2
+  - @forklaunch/common@1.2.2
+
 ## 1.2.1
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @forklaunch/common
 
+## 1.2.2
+
+### Patch Changes
+
+- tenant and rls configuration
+
 ## 1.2.1
 
 ### Patch Changes
