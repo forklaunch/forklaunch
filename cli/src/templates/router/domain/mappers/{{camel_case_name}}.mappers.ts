@@ -3,8 +3,7 @@ import {
   responseMapper
 } from '@forklaunch/core/mappers';
 import { schemaValidator } from '@{{app_name}}/core';
-import { {{^is_worker}}EntityManager } from '@mikro-orm/core';{{/is_worker}}{{#is_worker}}
-import { v4 } from 'uuid';{{/is_worker}}
+{{^is_worker}}import { EntityManager } from '@mikro-orm/core';{{/is_worker}}{{#is_worker}}import { v4 } from 'uuid';{{/is_worker}}
 import { {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record } from '../../persistence/entities/{{camel_case_name}}{{#is_worker}}Event{{/is_worker}}Record.entity';
 import { {{pascal_case_name}}RequestSchema, {{pascal_case_name}}ResponseSchema } from '../schemas/{{camel_case_name}}.schema';
 

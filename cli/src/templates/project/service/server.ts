@@ -3,7 +3,7 @@ import { forklaunchExpress, {{#is_iam_configured}}PERMISSIONS, ROLES, {{/is_iam_
 {{/is_iam_configured}}{{#is_billing_configured}}import { createSurfaceFeatures, createSurfaceSubscription } from '@{{app_name}}/billing';
 {{/is_billing_configured}}import { {{camel_case_name}}Router } from './api/routes/{{camel_case_name}}.routes';{{#is_database_enabled}}
 import { complianceRouter } from './api/routes/compliance.routes';
-import { setupTenantFilter } from '@forklaunch/core/persistence';{{/is_database_enabled}}
+import { setupRls, setupTenantFilter } from '@forklaunch/core/persistence';{{/is_database_enabled}}
 import { ci, tokens } from './bootstrapper';
 import { {{camel_case_name}}SdkClient } from './sdk';
 
@@ -13,6 +13,7 @@ import { {{camel_case_name}}SdkClient } from './sdk';
 const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 {{#is_database_enabled}}const orm = ci.resolve(tokens.Orm);
 setupTenantFilter(orm);
+setupRls(orm);
 {{/is_database_enabled}}
 {{#is_iam_configured}}
 const authCacheService = ci.resolve(tokens.AuthCacheService);
