@@ -1,5 +1,21 @@
 # @forklaunch/implementation-billing-base
 
+## 1.0.10
+
+### Patch Changes
+
+- package version increase
+- Updated dependencies
+  - @forklaunch/interfaces-billing@1.0.10
+
+## 1.0.9
+
+### Patch Changes
+
+- shorter brand for compliance entities
+- Updated dependencies
+  - @forklaunch/interfaces-billing@1.0.9
+
 ## 1.0.8
 
 ### Patch Changes

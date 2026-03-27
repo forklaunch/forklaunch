@@ -1,5 +1,19 @@
 # @forklaunch/implementation-worker-redis
 
+## 1.0.11
+
+### Patch Changes
+
+- package version increase
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.10
+
+## 1.0.10
+
+### Patch Changes
+
+- shorter brand for compliance entities
+
 ## 1.0.9
 
 ### Patch Changes

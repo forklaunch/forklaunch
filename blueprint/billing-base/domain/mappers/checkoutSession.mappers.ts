@@ -1,6 +1,6 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager, InferEntity, wrap } from '@mikro-orm/core';
+import { EntityManager } from '@mikro-orm/core';
 import { CheckoutSession } from '../../persistence/entities/checkoutSession.entity';
 import { CurrencyEnum } from '../enum/currency.enum';
 import { PaymentMethodEnum } from '../enum/paymentMethod.enum';
@@ -51,9 +51,9 @@ export const CheckoutSessionMapper = responseMapper({
   ),
   entity: CheckoutSession,
   mapperDefinition: {
-    toDto: async (entity: InferEntity<typeof CheckoutSession>) => {
+    toDto: async (entity) => {
       return {
-        ...wrap(entity).toPOJO(),
+        ...entity,
         uri: entity.uri ?? undefined,
         successRedirectUri: entity.successRedirectUri ?? undefined,
         cancelRedirectUri: entity.cancelRedirectUri ?? undefined

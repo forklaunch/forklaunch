@@ -2,7 +2,8 @@ import { forklaunchExpress, {{#is_iam_configured}}PERMISSIONS, ROLES, {{/is_iam_
 {{#is_iam_configured}}import { createSurfacePermissions, createSurfaceRoles } from '@{{app_name}}/iam';
 {{/is_iam_configured}}{{#is_billing_configured}}import { createSurfaceFeatures, createSurfaceSubscription } from '@{{app_name}}/billing';
 {{/is_billing_configured}}import { {{camel_case_name}}Router } from './api/routes/{{camel_case_name}}.routes';{{#is_database_enabled}}
-import { complianceRouter } from './api/routes/compliance.routes';{{/is_database_enabled}}
+import { complianceRouter } from './api/routes/compliance.routes';
+import { setupRls, setupTenantFilter } from '@forklaunch/core/persistence';{{/is_database_enabled}}
 import { ci, tokens } from './bootstrapper';
 import { {{camel_case_name}}SdkClient } from './sdk';
 
@@ -10,6 +11,10 @@ import { {{camel_case_name}}SdkClient } from './sdk';
  * Creates an instance of OpenTelemetryCollector
  */
 const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
+{{#is_database_enabled}}const orm = ci.resolve(tokens.Orm);
+setupTenantFilter(orm, { logger: openTelemetryCollector });
+setupRls(orm, { logger: openTelemetryCollector });
+{{/is_database_enabled}}
 {{#is_iam_configured}}
 const authCacheService = ci.resolve(tokens.AuthCacheService);
 const iamUrl = ci.resolve(tokens.IAM_URL);

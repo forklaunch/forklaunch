@@ -172,19 +172,16 @@ declare module '@mikro-orm/core' {
     compliance?: ComplianceLevel;
   }
 
-   
   interface UniversalPropertyOptionsBuilder<Value, Options, IncludeKeys> {
     compliance(
       level: ComplianceLevel
     ): Pick<
       UniversalPropertyOptionsBuilder<
         Value,
-        Options & { readonly __classified: true },
+        Options & { readonly '~c': true },
         IncludeKeys
       >,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      IncludeKeys & keyof UniversalPropertyOptionsBuilder<any, any, any>
+      IncludeKeys & keyof UniversalPropertyOptionsBuilder<never, never, never>
     >;
   }
 }
-

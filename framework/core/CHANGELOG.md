@@ -1,5 +1,41 @@
 # @forklaunch/core
 
+## 1.2.3
+
+### Patch Changes
+
+- tenant and rls configuration
+- Updated dependencies
+  - @forklaunch/validator@1.2.2
+  - @forklaunch/common@1.2.2
+
+## 1.2.2
+
+### Patch Changes
+
+- fix compliance entity
+- Updated dependencies
+  - @forklaunch/validator@1.2.1
+  - @forklaunch/common@1.2.1
+
+## 1.2.1
+
+### Patch Changes
+
+- ConfigInjector undefined vs defined
+
+## 1.2.0
+
+### Minor Changes
+
+- Validator 25% performance uptick and cleaner Config Injector syntax
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/validator@1.2.0
+  - @forklaunch/common@1.2.0
+
 ## 1.1.8
 
 ### Patch Changes

@@ -1,4 +1,5 @@
 import { forklaunchExpress, schemaValidator } from '@forklaunch/blueprint-core';
+import { setupRls, setupTenantFilter } from '@forklaunch/core/persistence';
 import {
   betterAuthTelemetryHookMiddleware,
   enrichBetterAuthApi
@@ -12,6 +13,9 @@ import { iamSdkClient } from './sdk';
 
 //! resolves the openTelemetryCollector from the configuration
 const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const orm = ci.resolve(tokens.MikroORM);
+setupTenantFilter(orm, { logger: openTelemetryCollector });
+setupRls(orm, { logger: openTelemetryCollector });
 
 //! creates an instance of forklaunchExpress
 const app = forklaunchExpress(

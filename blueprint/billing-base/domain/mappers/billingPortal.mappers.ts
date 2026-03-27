@@ -1,6 +1,6 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager, InferEntity, wrap } from '@mikro-orm/core';
+import { EntityManager } from '@mikro-orm/core';
 import { BillingPortal } from '../../persistence/entities/billingPortal.entity';
 import { BillingPortalSchemas } from '../schemas';
 
@@ -36,9 +36,9 @@ export const BillingPortalMapper = responseMapper({
   schema: BillingPortalSchemas.BillingPortalSchema,
   entity: BillingPortal,
   mapperDefinition: {
-    toDto: async (entity: InferEntity<typeof BillingPortal>) => {
+    toDto: async (entity) => {
       return {
-        ...wrap(entity).toPOJO(),
+        ...entity,
         uri: entity.uri ?? undefined
       };
     }

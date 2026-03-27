@@ -1,5 +1,6 @@
 import { forklaunchExpress, schemaValidator } from '@forklaunch/blueprint-core';
 import { getEnvVar } from '@forklaunch/common';
+import { setupRls, setupTenantFilter } from '@forklaunch/core/persistence';
 import dotenv from 'dotenv';
 import { sampleWorkerRouter } from './api/routes/sampleWorker.routes';
 import { createDependencyContainer } from './registrations';
@@ -13,6 +14,9 @@ export type ScopeFactory = typeof ci.createScope;
 
 //! resolves the openTelemetryCollector from the configuration
 const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const orm = ci.resolve(tokens.MikroORM);
+setupTenantFilter(orm, { logger: openTelemetryCollector });
+setupRls(orm, { logger: openTelemetryCollector });
 
 //! creates an instance of forklaunchExpress
 const app = forklaunchExpress(schemaValidator, openTelemetryCollector);

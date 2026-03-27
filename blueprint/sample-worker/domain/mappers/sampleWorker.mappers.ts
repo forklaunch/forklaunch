@@ -5,7 +5,6 @@ import {
   string
 } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { wrap } from '@mikro-orm/core';
 import { EntityManager } from '@mikro-orm/core';
 import { SampleWorkerEventRecord } from '../../persistence/entities/sampleWorkerRecord.entity';
 import { SampleWorkerSchema } from '../schemas/sampleWorker.schema';
@@ -36,8 +35,8 @@ export const SampleWorkerResponseMapper = responseMapper({
   },
   entity: SampleWorkerEventRecord,
   mapperDefinition: {
-    toDto: async (entity: SampleWorkerEventRecord) => {
-      return wrap(entity).toPOJO();
+    toDto: async (entity) => {
+      return entity;
     }
   }
 });

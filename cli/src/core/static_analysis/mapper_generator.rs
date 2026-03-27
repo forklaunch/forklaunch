@@ -44,10 +44,10 @@ impl MapperGenerator {
 
     fn generate_imports(&self, pascal_case_name: &str, camel_case_name: &str, entity_const_name: &str) -> String {
         let entity_suffix = if self.is_worker { "EventRecord" } else { "Record" };
-        let em_import = if !self.is_worker {
-            "EntityManager, "
+        let extra_import = if !self.is_worker {
+            format!("\nimport {{ EntityManager }} from '@mikro-orm/core';")
         } else {
-            ""
+            format!("\nimport {{ v4 }} from 'uuid';")
         };
 
         format!(
@@ -55,12 +55,11 @@ impl MapperGenerator {
   requestMapper,
   responseMapper
 }} from '@forklaunch/core/mappers';
-import {{ schemaValidator }} from '@{}/core';
-import {{ {}InferEntity, wrap }} from '@mikro-orm/core';
+import {{ schemaValidator }} from '@{}/core';{}
 import {{ {} }} from '../../persistence/entities/{}{}.entity';
 import {{ {}RequestSchema, {}ResponseSchema }} from '../schemas/{}.schema';"#,
             self.app_name,
-            em_import,
+            extra_import,
             entity_const_name,
             camel_case_name,
             entity_suffix,
@@ -72,33 +71,55 @@ import {{ {}RequestSchema, {}ResponseSchema }} from '../schemas/{}.schema';"#,
 
     fn generate_request_mapper(&self, pascal_case_name: &str, entity_const_name: &str) -> String {
         let to_entity_body = self.generate_to_entity_body();
-        let em_param = if !self.is_worker {
-            ", em: EntityManager"
-        } else {
-            ""
-        };
 
-        format!(
-            r#"// RequestMapper const that maps a request schema to an entity
+        if self.is_worker {
+            format!(
+                r#"// RequestMapper const that maps a request schema to an entity
 export const {}RequestMapper = requestMapper({{
   schemaValidator,
   schema: {}RequestSchema,
   entity: {},
   mapperDefinition: {{
-    toEntity: async (dto{}) => {{
+    toEntity: async (dto) => {{
+      return {{
+        id: v4(),
+{}
+        processed: false,
+        retryCount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        retentionAnonymizedAt: null
+      }};
+    }}
+  }}
+}});"#,
+                pascal_case_name,
+                pascal_case_name,
+                entity_const_name,
+                to_entity_body,
+            )
+        } else {
+            format!(
+                r#"// RequestMapper const that maps a request schema to an entity
+export const {}RequestMapper = requestMapper({{
+  schemaValidator,
+  schema: {}RequestSchema,
+  entity: {},
+  mapperDefinition: {{
+    toEntity: async (dto, em: EntityManager) => {{
       return em.create({}, {{
 {}
       }});
     }}
   }}
 }});"#,
-            pascal_case_name,
-            pascal_case_name,
-            entity_const_name,
-            em_param,
-            entity_const_name,
-            to_entity_body,
-        )
+                pascal_case_name,
+                pascal_case_name,
+                entity_const_name,
+                entity_const_name,
+                to_entity_body,
+            )
+        }
     }
 
     fn generate_response_mapper(&self, pascal_case_name: &str, entity_const_name: &str) -> String {
@@ -109,14 +130,13 @@ export const {}ResponseMapper = responseMapper({{
   schema: {}ResponseSchema,
   entity: {},
   mapperDefinition: {{
-    toDto: async (entity: InferEntity<typeof {}>) => {{
-      return wrap(entity).toPOJO();
+    toDto: async (entity) => {{
+      return entity;
     }}
   }}
 }});"#,
             pascal_case_name,
             pascal_case_name,
-            entity_const_name,
             entity_const_name
         )
     }
@@ -132,12 +152,6 @@ export const {}ResponseMapper = responseMapper({{
                 // Direct mapping if no entity property found (pass through to DTO)
                 lines.push(format!("        {}: dto.{},", schema_prop.name, schema_prop.name));
             }
-        }
-
-        // Add worker-specific fields
-        if self.is_worker {
-            lines.push("        processed: false,".to_string());
-            lines.push("        retryCount: 0,".to_string());
         }
 
         // Remove trailing comma from last line

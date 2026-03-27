@@ -1,6 +1,6 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager, InferEntity, wrap } from '@mikro-orm/core';
+import { EntityManager } from '@mikro-orm/core';
 import Stripe from 'stripe';
 import { Plan } from '../../persistence/entities/plan.entity';
 import { PlanSchemas } from '../schemas';
@@ -58,10 +58,9 @@ export const PlanMapper = responseMapper({
   schema: PlanSchemas.PlanSchema,
   entity: Plan,
   mapperDefinition: {
-    toDto: async (entity: InferEntity<typeof Plan>) => {
-      const baseData = wrap(entity).toPOJO();
+    toDto: async (entity) => {
       return {
-        ...baseData,
+        ...entity,
         price: Number(entity.price),
         description: entity.description ?? undefined,
         features: entity.features ?? undefined,

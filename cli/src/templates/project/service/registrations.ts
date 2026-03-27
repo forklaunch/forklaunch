@@ -237,8 +237,16 @@ const runtimeDependencies = environmentConfig.chain({
   EntityMgr: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
-    factory: ({ Orm }, _resolve, context) =>
-      Orm.em.fork(context?.entityManagerOptions as ForkOptions | undefined),
+    factory: (
+      { Orm },
+      context: { entityManagerOptions?: ForkOptions; tenantId?: string }
+    ) => {
+      const em = Orm.em.fork(context.entityManagerOptions);
+      if (context.tenantId) {
+        em.setFilterParams('tenant', { tenantId: context.tenantId });
+      }
+      return em;
+    },
   },{{/is_database_enabled}}{{#is_iam_configured}}
   AuthCacheService: {
     lifetime: Lifetime.Singleton,
@@ -294,7 +302,7 @@ const serviceDependencies = runtimeDependencies.chain({ {{#is_worker}}{{#is_data
   WorkerProducer: {
     lifetime: Lifetime.Scoped,
     type: EncryptingWorkerProducer,
-    factory: (container, _resolve, context) =>
+    factory: (container, context) =>
       new EncryptingWorkerProducer(
         ({{{worker_producer_factory}}})(container),
         container.EventEncryptor,

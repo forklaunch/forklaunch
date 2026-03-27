@@ -114,8 +114,8 @@ pub(crate) fn transform_registrations_ts_add_router(
             type: Base{router_name_pascal_case}Service,
             factory: (
                 {{ {dependency}, {otel_token} }},
+                context,
                 {em_setup}
-                context
             ) => {{
                 {em_resolution}
                 return new Base{router_name_pascal_case}Service(
@@ -486,7 +486,7 @@ pub(crate) fn transform_registrations_ts_worker_type(
                     WorkerProducer: {{
                         lifetime: Lifetime.Scoped,
                         type: EncryptingWorkerProducer,
-                        factory: (container, _resolve, context) =>
+                        factory: (container, context) =>
                             new EncryptingWorkerProducer(
                                 ({})(container),
                                 container.EventEncryptor,
@@ -666,7 +666,7 @@ const runtimeDependencies = environmentConfig.chain({
   EntityManager: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
-    factory: ({ MikroORM }, _resolve, context) =>
+    factory: ({ MikroORM }, context) =>
       MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined)
   }
 });
@@ -762,7 +762,7 @@ const runtimeDependencies = environmentConfig.chain({
   EntityManager: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
-    factory: ({ MikroORM }, _resolve, context) =>
+    factory: ({ MikroORM }, context) =>
       MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined)
   }
 });
@@ -858,7 +858,7 @@ const runtimeDependencies = environmentConfig.chain({
   EntityManager: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
-    factory: ({ MikroORM }, _resolve, context) =>
+    factory: ({ MikroORM }, context) =>
       MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined)
   }
 });
@@ -949,7 +949,7 @@ const runtimeDependencies = environmentConfig.chain({
   EntityManager: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
-    factory: ({ MikroORM }, _resolve, context) =>
+    factory: ({ MikroORM }, context) =>
       MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined)
   }
 });
@@ -1051,7 +1051,7 @@ const runtimeDependencies = environmentConfig.chain({
   EntityManager: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
-    factory: ({ MikroORM }, _resolve, context) =>
+    factory: ({ MikroORM }, context) =>
       MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined)
   }
 });
@@ -1142,7 +1142,7 @@ const runtimeDependencies = environmentConfig.chain({
   EntityManager: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
-    factory: ({ MikroORM }, _resolve, context) =>
+    factory: ({ MikroORM }, context) =>
       MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined)
   }
 });
@@ -1248,7 +1248,7 @@ const runtimeDependencies = environmentConfig.chain({
   EntityManager: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
-    factory: ({ MikroORM }, _resolve, context) =>
+    factory: ({ MikroORM }, context) =>
       MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined)
   },
   WorkerOptions: {
@@ -1366,7 +1366,7 @@ const runtimeDependencies = environmentConfig.chain({
   EntityManager: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
-    factory: ({ MikroORM }, _resolve, context) =>
+    factory: ({ MikroORM }, context) =>
       MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined)
   },
   WorkerOptions: {
@@ -1484,7 +1484,7 @@ const runtimeDependencies = environmentConfig.chain({
   EntityManager: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
-    factory: ({ MikroORM }, _resolve, context) =>
+    factory: ({ MikroORM }, context) =>
       MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined)
   },
   WorkerOptions: {
@@ -1602,7 +1602,7 @@ const runtimeDependencies = environmentConfig.chain({
   EntityManager: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
-    factory: ({ MikroORM }, _resolve, context) =>
+    factory: ({ MikroORM }, context) =>
       MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined)
   },
   WorkerOptions: {

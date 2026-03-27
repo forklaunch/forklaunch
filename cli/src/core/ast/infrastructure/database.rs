@@ -24,8 +24,16 @@ pub(crate) fn database_entity_manager_runtime_dependency<'a>(
                 {em_token}: {{
                   lifetime: Lifetime.Scoped,
                   type: EntityManager,
-                  factory: ({{ {orm_token} }}, _resolve, context) =>
-                    {orm_token}.em.fork(context?.entityManagerOptions as ForkOptions | undefined),
+                  factory: (
+                    {{ {orm_token} }},
+                    context: {{ entityManagerOptions?: ForkOptions; tenantId?: string }}
+                  ) => {{
+                    const em = {orm_token}.em.fork(context.entityManagerOptions);
+                    if (context.tenantId) {{
+                      em.setFilterParams('tenant', {{ tenantId: context.tenantId }});
+                    }}
+                    return em;
+                  }},
                 }},
             }})"
         )

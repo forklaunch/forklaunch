@@ -1030,6 +1030,11 @@ impl CliCommand for ApplicationCommand {
                         mikro_orm_database: Some(MIKRO_ORM_DATABASE_VERSION.to_string()),
                         mikro_orm_reflection: None,
                         opentelemetry_api: None,
+                        types_express: Some(TYPES_EXPRESS_VERSION.to_string()),
+                        types_express_serve_static_core: Some(
+                            TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION.to_string(),
+                        ),
+                        types_qs: Some(TYPES_QS_VERSION.to_string()),
                         typebox: if service_data.is_typebox {
                             Some(TYPEBOX_VERSION.to_string())
                         } else {
@@ -1062,6 +1067,8 @@ impl CliCommand for ApplicationCommand {
                         } else {
                             None
                         },
+                        types_express: Some(TYPES_EXPRESS_VERSION.to_string()),
+                        types_qs: Some(TYPES_QS_VERSION.to_string()),
                         ..Default::default()
                     }),
                     _ => None,
@@ -1069,11 +1076,6 @@ impl CliCommand for ApplicationCommand {
                 match service_data.service_name.as_str() {
                     "core" => Some(ProjectDevDependencies {
                         types_uuid: Some(TYPES_UUID_VERSION.to_string()),
-                        types_express: Some(TYPES_EXPRESS_VERSION.to_string()),
-                        types_express_serve_static_core: Some(
-                            TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION.to_string(),
-                        ),
-                        types_qs: Some(TYPES_QS_VERSION.to_string()),
                         ..Default::default()
                     }),
                     "monitoring" => Some(ProjectDevDependencies {
@@ -1085,8 +1087,6 @@ impl CliCommand for ApplicationCommand {
                             global_module_config.billing.is_some(),
                             global_module_config.iam.is_some(),
                         ),
-                        types_express: Some(TYPES_EXPRESS_VERSION.to_string()),
-                        types_qs: Some(TYPES_QS_VERSION.to_string()),
                         ..Default::default()
                     }),
                     _ => None,

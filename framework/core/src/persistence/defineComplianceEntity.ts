@@ -16,11 +16,11 @@ import {
 } from './complianceTypes';
 
 type ValidateProperties<T> = {
-  [K in keyof T]: T[K] extends { '~options': { readonly __classified: true } }
+  [K in keyof T]: T[K] extends
+    | { '~options': { readonly '~c': true } }
+    | ((...args: never[]) => unknown)
     ? T[K]
-    : T[K] extends (...args: never[]) => unknown
-      ? T[K]
-      : { '~options': { readonly __classified: true } };
+    : { '~options': { readonly '~c': true } };
 };
 
 function readComplianceLevel(builder: unknown): ComplianceLevel | undefined {

@@ -90,7 +90,7 @@ export const {{camel_case_name}}Post = handlers.post(
         // constructs a new service instance using the scopeFactory and calls the {{camel_case_name}}Post method
         await serviceFactory({{#is_worker}}
           { tenantId: (req.session as Record<string, unknown>)?.organizationId ?? '' }{{/is_worker}}{{^is_worker}}
-          scopeFactory(){{/is_worker}}
+          { scope: scopeFactory() }{{/is_worker}}
         ).{{camel_case_name}}Post(req.body)
       );
   }

@@ -1,6 +1,6 @@
 import { schemaValidator } from '@forklaunch/blueprint-core';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
-import { EntityManager, InferEntity, wrap } from '@mikro-orm/core';
+import { EntityManager, wrap } from '@mikro-orm/core';
 import { Organization } from '../../persistence/entities/organization.entity';
 import { Role } from '../../persistence/entities/role.entity';
 import { User } from '../../persistence/entities/user.entity';
@@ -56,7 +56,7 @@ export const UserMapper = responseMapper({
   schema: UserSchemas.UserSchema,
   entity: User,
   mapperDefinition: {
-    toDto: async (entity: InferEntity<typeof User>) => {
+    toDto: async (entity) => {
       const pojo = wrap(entity).toPOJO();
       return {
         ...pojo,

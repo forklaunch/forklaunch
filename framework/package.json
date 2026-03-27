@@ -39,7 +39,7 @@
     "typedoc": "^0.28.18",
     "typescript": "^6.0.2",
     "typescript-eslint": "^8.57.2",
-    "vitest": "^4.1.1"
+    "vitest": "^4.1.2"
   },
   "dependencies": {
     "@eslint/js": "^10.0.1"

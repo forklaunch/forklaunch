@@ -282,8 +282,16 @@ const runtimeDependencies = environmentConfig.chain({
   EntityManager: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
-    factory: ({ MikroORM }, _resolve, context) =>
-      MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined)
+    factory: (
+      { MikroORM },
+      context: { entityManagerOptions?: ForkOptions; tenantId?: string }
+    ) => {
+      const em = MikroORM.em.fork(context.entityManagerOptions);
+      if (context.tenantId) {
+        em.setFilterParams('tenant', { tenantId: context.tenantId });
+      }
+      return em;
+    }
   }
 });
 

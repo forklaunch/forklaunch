@@ -5,6 +5,7 @@ import { {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record } from "../
 
 export class {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}RecordSeeder extends Seeder {
   async run(em: EntityManager): Promise<void> {
+    em.setFilterParams('tenant', { tenantId: 'seed' });
     const record = em.create({{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record, {{camel_case_name}}{{#is_worker}}Event{{/is_worker}}RecordData);
     await em.persist(record).flush();
   }

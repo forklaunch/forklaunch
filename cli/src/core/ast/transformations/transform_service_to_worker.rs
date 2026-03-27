@@ -374,7 +374,7 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
                 WorkerProducer: {{
                     lifetime: Lifetime.Scoped,
                     type: EncryptingWorkerProducer,
-                    factory: (container, _resolve, context) =>
+                    factory: (container, context) =>
                         new EncryptingWorkerProducer(
                             ({})(container),
                             container.EventEncryptor,
@@ -514,7 +514,7 @@ const runtimeDependencies = environmentConfig.chain({
   EntityManager: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
-    factory: ({ MikroORM }, _resolve, context) =>
+    factory: ({ MikroORM }, context) =>
       MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined)
   }
 });
