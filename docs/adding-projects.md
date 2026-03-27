@@ -1,5 +1,5 @@
 ---
-title: Adding Projects
+title: Adding Services and Workers
 category: Guides
 description: Add services, workers, libraries, routers, and modules to your ForkLaunch application.
 ---

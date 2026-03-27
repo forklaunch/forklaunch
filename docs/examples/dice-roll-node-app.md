@@ -227,7 +227,6 @@ import { ci, tokens } from '../../bootstrapper';
 
 const scopeFactory = () => ci.createScope();
 const serviceFactory = ci.scopedResolver(tokens.DiceRtrService);
-
 export const diceRtrRoll = handlers.post(
   schemaValidator,
   '/roll',
@@ -284,7 +283,6 @@ pnpm dev
 ```
 
 You should see:
-
 ```
 INFO: 🎉 RollDiceSvc Server is running at http://0.0.0.0:8000 🎉
 ```
