@@ -22,15 +22,15 @@ export type AuditEntry = {
 };
 
 export class AuditLogger {
-  #otel: OpenTelemetryCollector<MetricsDefinition>;
+  _otel: OpenTelemetryCollector<MetricsDefinition>;
 
   constructor(otel: OpenTelemetryCollector<MetricsDefinition>) {
-    this.#otel = otel;
+    this._otel = otel;
   }
 
   append(entry: AuditEntry): void {
     try {
-      this.#otel.info(
+      this._otel.info(
         {
           'log.type': 'audit',
           'audit.timestamp': entry.timestamp,

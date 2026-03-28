@@ -24,8 +24,6 @@ pub(crate) fn resolve_auth() -> Result<AuthMode> {
     Ok(mode)
 }
 
-const VALID_COMPLIANCE_CLASSIFICATIONS: &[&str] = &["none", "pii", "phi", "pci"];
-
 /// Validates manifest exists and parses it. Returns (app_root, manifest).
 pub(crate) fn require_manifest(
     matches: &ArgMatches,
@@ -36,21 +34,6 @@ pub(crate) fn require_manifest(
         .with_context(|| format!("Failed to read manifest at {:?}", manifest_path))?;
     let manifest: ApplicationManifestData =
         toml::from_str(&content).with_context(|| "Failed to parse manifest.toml")?;
-
-    // Validate compliance field classifications
-    if let Some(ref compliance) = manifest.compliance {
-        for (entity_name, fields) in &compliance.entities {
-            for (field_name, classification) in fields {
-                if !VALID_COMPLIANCE_CLASSIFICATIONS.contains(&classification.as_str()) {
-                    bail!(
-                        "Invalid compliance classification '{}' for field '{}.{}' in manifest.toml. \
-                         Allowed values: none, pii, phi, pci",
-                        classification, entity_name, field_name
-                    );
-                }
-            }
-        }
-    }
 
     Ok((app_root, manifest))
 }

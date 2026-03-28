@@ -133,6 +133,10 @@ pub(crate) struct ProjectEntry {
 
 /// Compliance configuration stored in the `[compliance]` section of `manifest.toml`.
 /// All fields are optional so existing manifests parse without changes.
+///
+/// Note: entity field classifications and retention policies are NOT stored here.
+/// They are scanned from source code at release/audit time and uploaded directly
+/// to the platform. This prevents leaking sensitive compliance metadata in the repo.
 #[derive(Debug, Serialize, Deserialize, Content, Clone, Default)]
 pub(crate) struct ComplianceManifestConfig {
     /// Allowed deployment regions (e.g., `["us-east-1", "eu-west-1"]`).
@@ -144,23 +148,6 @@ pub(crate) struct ComplianceManifestConfig {
     /// The framework's SecretsAccessor validates these at startup.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) secrets: Vec<String>,
-
-    /// Per-entity field compliance classifications.
-    /// Keys are entity names, values are field name → classification maps.
-    /// Classifications: "none", "pii", "phi", "pci".
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub(crate) entities: HashMap<String, HashMap<String, String>>,
-
-    /// Per-entity retention policies.
-    /// Keys are entity names, values are retention config (duration + action).
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub(crate) retention: HashMap<String, RetentionManifestConfig>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Content, Clone)]
-pub(crate) struct RetentionManifestConfig {
-    pub(crate) duration: String,
-    pub(crate) action: String,
 }
 
 #[macro_export]

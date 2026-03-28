@@ -17,9 +17,9 @@ describe('createTenantFilterDef', () => {
     expect(def.default).toBe(true);
   });
 
-  it('has args enabled', () => {
+  it('has args disabled to allow queries without tenant context', () => {
     const def = createTenantFilterDef();
-    expect(def.args).toBe(true);
+    expect(def.args).toBe(false);
   });
 
   describe('cond function', () => {
@@ -47,7 +47,7 @@ describe('createTenantFilterDef', () => {
       expect(result).toEqual({ organizationId: 'org-123' });
     });
 
-    it('returns organizationId condition for entities with organization relation', () => {
+    it('returns organization relation condition for entities with organization relation (no scalar)', () => {
       const def = createTenantFilterDef();
       const cond = def.cond as (...args: unknown[]) => unknown;
       const em = makeMockEm({ organization: { name: 'organization' } });
@@ -60,7 +60,7 @@ describe('createTenantFilterDef', () => {
         'RelatedEntity'
       );
 
-      expect(result).toEqual({ organizationId: 'org-456' });
+      expect(result).toEqual({ organization: 'org-456' });
     });
 
     it('returns empty condition for entities without organizationId or organization', () => {

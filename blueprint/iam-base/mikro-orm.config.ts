@@ -1,8 +1,8 @@
 import { number, schemaValidator, string } from '@forklaunch/blueprint-core';
 
 import {
-  ComplianceEventSubscriber,
-  FieldEncryptor
+  FieldEncryptor,
+  registerEncryptor
 } from '@forklaunch/core/persistence';
 import {
   createConfigInjector,
@@ -59,6 +59,10 @@ export const validConfigInjector = configInjector.validateConfigSingletons(
 );
 const tokens = validConfigInjector.tokens();
 
+registerEncryptor(
+  new FieldEncryptor(validConfigInjector.resolve(tokens.ENCRYPTION_KEY))
+);
+
 const mikroOrmOptionsConfig = defineConfig({
   dbName: validConfigInjector.resolve(tokens.DB_NAME),
   host: validConfigInjector.resolve(tokens.DB_HOST),
@@ -66,11 +70,6 @@ const mikroOrmOptionsConfig = defineConfig({
   password: validConfigInjector.resolve(tokens.DB_PASSWORD),
   port: validConfigInjector.resolve(tokens.DB_PORT),
   entities: Object.values(entities),
-  subscribers: [
-    new ComplianceEventSubscriber(
-      new FieldEncryptor(validConfigInjector.resolve(tokens.ENCRYPTION_KEY))
-    )
-  ],
   debug: true,
   extensions: [Migrator],
   migrations: {

@@ -1,5 +1,87 @@
 # @forklaunch/ws
 
+## 1.2.13
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.3
+
+## 1.2.12
+
+### Patch Changes
+
+- Encryptor required on redis and s3
+- Updated dependencies
+  - @forklaunch/validator@1.2.6
+  - @forklaunch/common@1.2.6
+  - @forklaunch/core@1.3.2
+
+## 1.2.11
+
+### Patch Changes
+
+- Make private fields respect interfaces
+- Updated dependencies
+  - @forklaunch/validator@1.2.5
+  - @forklaunch/common@1.2.5
+  - @forklaunch/core@1.3.1
+
+## 1.2.10
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.0
+
+## 1.2.9
+
+### Patch Changes
+
+- up packages
+- Updated dependencies
+  - @forklaunch/validator@1.2.4
+  - @forklaunch/common@1.2.4
+  - @forklaunch/core@1.2.9
+
+## 1.2.8
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.2.8
+
+## 1.2.7
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.2.7
+
+## 1.2.6
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.2.6
+
+## 1.2.5
+
+### Patch Changes
+
+- update packages
+- Updated dependencies
+  - @forklaunch/validator@1.2.3
+  - @forklaunch/common@1.2.3
+  - @forklaunch/core@1.2.5
+
+## 1.2.4
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.2.4
+
 ## 1.2.3
 
 ### Patch Changes

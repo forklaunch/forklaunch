@@ -1,5 +1,37 @@
 # @forklaunch/validator
 
+## 1.2.6
+
+### Patch Changes
+
+- Encryptor required on redis and s3
+- Updated dependencies
+  - @forklaunch/common@1.2.6
+
+## 1.2.5
+
+### Patch Changes
+
+- Make private fields respect interfaces
+- Updated dependencies
+  - @forklaunch/common@1.2.5
+
+## 1.2.4
+
+### Patch Changes
+
+- up packages
+- Updated dependencies
+  - @forklaunch/common@1.2.4
+
+## 1.2.3
+
+### Patch Changes
+
+- update packages
+- Updated dependencies
+  - @forklaunch/common@1.2.3
+
 ## 1.2.2
 
 ### Patch Changes

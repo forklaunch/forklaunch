@@ -9,6 +9,7 @@ use crate::{
     CliCommand,
     constants::get_platform_management_api_url,
     core::{
+        ast::infrastructure::compliance::scan_all_compliance,
         command::command,
         hmac::AuthMode,
         http_client::post_with_auth,
@@ -89,16 +90,28 @@ impl CliCommand for AuditCommand {
         let show_all = !show_data_flow && !show_risk_score && !show_dpia;
         let json_output = matches.get_flag("json");
 
-        // Collect entity compliance data (merge field classifications + retention policies)
+        // Scan entity compliance data directly from source code
+        let modules_path = &manifest.modules_path;
+        let modules_path_buf = app_root.join(modules_path);
+        let (field_classifications, retention_policies) =
+            scan_all_compliance(&modules_path_buf)
+                .unwrap_or_else(|e| {
+                    let _ = writeln!(
+                        stdout,
+                        "[WARN] Failed to scan entity compliance metadata: {}",
+                        e
+                    );
+                    (Default::default(), Default::default())
+                });
+
         let mut entity_names: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-        entity_names.extend(compliance.entities.keys().cloned());
-        entity_names.extend(compliance.retention.keys().cloned());
+        entity_names.extend(field_classifications.keys().cloned());
+        entity_names.extend(retention_policies.keys().cloned());
 
         let entities: Vec<EntityReport> = entity_names
             .into_iter()
             .map(|name| {
-                let field_reports: Vec<FieldReport> = compliance
-                    .entities
+                let field_reports: Vec<FieldReport> = field_classifications
                     .get(&name)
                     .map(|fields| {
                         fields
@@ -113,7 +126,7 @@ impl CliCommand for AuditCommand {
                     })
                     .unwrap_or_default();
                 let retention =
-                    compliance.retention.get(&name).map(|r| RetentionReport {
+                    retention_policies.get(&name).map(|r| RetentionReport {
                         duration: r.duration.clone(),
                         action: r.action.clone(),
                     });
@@ -126,7 +139,6 @@ impl CliCommand for AuditCommand {
             .collect();
 
         // Collect route data from OpenAPI spec (if available)
-        let modules_path = &manifest.modules_path;
         let routes = collect_routes_from_openapi(&app_root, modules_path);
 
         // Build the local report

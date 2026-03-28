@@ -1,4 +1,5 @@
 import { OpenTelemetryCollector } from '@forklaunch/core/http';
+import { FieldEncryptor } from '@forklaunch/core/persistence';
 import { GenericContainer, StartedTestContainer } from 'testcontainers';
 import { RedisTtlCache } from '../index';
 
@@ -23,6 +24,10 @@ describe('redisTtlCache', () => {
       {
         enabled: true,
         level: 'info'
+      },
+      {
+        encryptor: new FieldEncryptor('test-encryption-key-for-redis-tests'),
+        disabled: true
       }
     );
 

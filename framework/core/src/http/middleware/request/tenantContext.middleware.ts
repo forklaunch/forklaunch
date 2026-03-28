@@ -1,3 +1,4 @@
+import { setEncryptionTenantId } from '../../../persistence/encryptedType';
 import { TENANT_FILTER_NAME } from '../../../persistence/tenantFilter';
 
 /**
@@ -67,6 +68,8 @@ export async function setTenantContext(
     if (em && typeof em.setFilterParams === 'function') {
       em.setFilterParams(TENANT_FILTER_NAME, { tenantId });
     }
+    // Set encryption context so EncryptedType uses per-tenant key derivation
+    setEncryptionTenantId(tenantId);
   }
 
   next?.();

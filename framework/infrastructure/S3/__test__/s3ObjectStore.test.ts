@@ -1,5 +1,6 @@
 import { S3Client } from '@aws-sdk/client-s3';
 import { OpenTelemetryCollector } from '@forklaunch/core/http';
+import { FieldEncryptor } from '@forklaunch/core/persistence';
 import { Readable } from 'stream';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { S3ObjectStore } from '../index';
@@ -51,7 +52,11 @@ function makeStore(): S3ObjectStore {
   return new S3ObjectStore(
     new OpenTelemetryCollector('test'),
     { bucket: 'test-bucket', client: fakeClient },
-    { enabled: false, level: 'info' }
+    { enabled: false, level: 'info' },
+    {
+      encryptor: new FieldEncryptor('test-encryption-key-for-s3-tests'),
+      disabled: true
+    }
   );
 }
 

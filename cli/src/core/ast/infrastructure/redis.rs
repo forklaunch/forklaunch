@@ -69,12 +69,14 @@ pub(crate) fn redis_ttl_cache_runtime_dependency<'a>(
                 TtlCache: {{
                     lifetime: Lifetime.Singleton,
                     type: RedisTtlCache,
-                    factory: ({{ REDIS_URL, {otel_token} }}) =>
+                    factory: ({{ REDIS_URL, {otel_token}, ENCRYPTION_KEY }}) =>
                         new RedisTtlCache(60 * 60 * 1000, {otel_token}, {{
                             url: REDIS_URL,
                         }}, {{
                             enabled: true,
                             level: 'info',
+                        }}, {{
+                            encryptor: new FieldEncryptor(ENCRYPTION_KEY),
                         }}),
                 }}
             }});")

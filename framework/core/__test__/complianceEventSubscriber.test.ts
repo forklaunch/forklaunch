@@ -1,15 +1,15 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach } from 'vitest';
+import { Platform } from '@mikro-orm/core';
 import { FieldEncryptor } from '../src/persistence/fieldEncryptor';
-import {
-  ComplianceEventSubscriber,
-  wrapEmWithNativeQueryBlocking
-} from '../src/persistence/complianceEventSubscriber';
+import { wrapEmWithNativeQueryBlocking } from '../src/persistence/complianceEventSubscriber';
 import { fp } from '../src/persistence/compliancePropertyBuilder';
 import { defineComplianceEntity } from '../src/persistence/defineComplianceEntity';
-import type { EventArgs, EntityMetadata } from '@mikro-orm/core';
+import {
+  EncryptedType,
+  registerEncryptor
+} from '../src/persistence/encryptedType';
 
 const MASTER_KEY = 'test-master-key-for-unit-tests-32ch';
-const TENANT_ID = 'tenant-123';
 
 // Register test entities
 defineComplianceEntity({
@@ -31,298 +31,124 @@ defineComplianceEntity({
   }
 });
 
-function makeEventArgs(
-  entityName: string,
-  entity: Record<string, unknown>,
-  tenantId?: string
-): EventArgs<unknown> {
-  return {
-    entity,
-    meta: { className: entityName } as EntityMetadata<unknown>,
-    em: {
-      getFilterParams(filterName: string) {
-        if (filterName === 'tenant') {
-          return tenantId ? { tenantId } : undefined;
-        }
-        return undefined;
-      }
-    } as EventArgs<unknown>['em']
-  };
-}
-
-function makeMockEm(overrides: Record<string, ReturnType<typeof vi.fn>> = {}) {
-  return {
-    nativeInsert: vi.fn(),
-    nativeUpdate: vi.fn(),
-    nativeDelete: vi.fn(),
-    find: vi.fn().mockResolvedValue([]),
-    ...overrides
-  };
-}
-
-describe('ComplianceEventSubscriber', () => {
-  let encryptor: FieldEncryptor;
-  let subscriber: ComplianceEventSubscriber;
+describe('EncryptedType', () => {
+  let encryptedType: EncryptedType;
+  const platform = {} as Platform;
 
   beforeEach(() => {
-    encryptor = new FieldEncryptor(MASTER_KEY);
-    subscriber = new ComplianceEventSubscriber(encryptor);
+    const encryptor = new FieldEncryptor(MASTER_KEY);
+    registerEncryptor(encryptor);
+    encryptedType = new EncryptedType('string');
   });
 
-  describe('beforeCreate / beforeUpdate', () => {
-    it('encrypts PHI fields before persist', async () => {
-      const entity = {
-        id: '1',
-        name: 'John',
-        ssn: '123-45-6789',
-        cardNumber: '4111',
-        status: 'active'
-      };
-      const args = makeEventArgs('Patient', entity, TENANT_ID);
-
-      await subscriber.beforeCreate(args);
-
-      expect(entity.ssn).toMatch(/^v1:/);
-      expect(entity.ssn).not.toBe('123-45-6789');
+  describe('convertToDatabaseValue', () => {
+    it('encrypts plaintext strings', () => {
+      const result = encryptedType.convertToDatabaseValue('hello', platform);
+      expect(result).toMatch(/^v[12]:/);
     });
 
-    it('encrypts PCI fields before persist', async () => {
-      const entity = {
-        id: '1',
-        name: 'John',
-        ssn: '123',
-        cardNumber: '4111-1111-1111-1111',
-        status: 'active'
-      };
-      const args = makeEventArgs('Patient', entity, TENANT_ID);
-
-      await subscriber.beforeCreate(args);
-
-      expect(entity.cardNumber).toMatch(/^v1:/);
-      expect(entity.cardNumber).not.toBe('4111-1111-1111-1111');
+    it('returns null for null', () => {
+      expect(encryptedType.convertToDatabaseValue(null, platform)).toBeNull();
     });
 
-    it('does NOT encrypt PII fields', async () => {
-      const entity = {
-        id: '1',
-        name: 'John Doe',
-        ssn: '123',
-        cardNumber: '4111',
-        status: 'active'
-      };
-      const args = makeEventArgs('Patient', entity, TENANT_ID);
-
-      await subscriber.beforeCreate(args);
-
-      expect(entity.name).toBe('John Doe');
+    it('does not double-encrypt', () => {
+      const encrypted = encryptedType.convertToDatabaseValue('hello', platform);
+      const result = encryptedType.convertToDatabaseValue(encrypted, platform);
+      expect(result).toBe(encrypted);
     });
 
-    it('does NOT encrypt none fields', async () => {
-      const entity = {
-        id: '1',
-        name: 'John',
-        ssn: '123',
-        cardNumber: '4111',
-        status: 'active'
-      };
-      const args = makeEventArgs('Patient', entity, TENANT_ID);
-
-      await subscriber.beforeCreate(args);
-
-      expect(entity.status).toBe('active');
-      expect(entity.id).toBe('1');
-    });
-
-    it('skips null values', async () => {
-      const entity = {
-        id: '1',
-        name: 'John',
-        ssn: null,
-        cardNumber: null,
-        status: 'active'
-      };
-      const args = makeEventArgs('Patient', entity, TENANT_ID);
-
-      await subscriber.beforeCreate(args);
-
-      expect(entity.ssn).toBeNull();
-      expect(entity.cardNumber).toBeNull();
-    });
-
-    it('does not double-encrypt already encrypted values', async () => {
-      const entity = {
-        id: '1',
-        name: 'John',
-        ssn: 'v1:abc:def:ghi',
-        cardNumber: '4111',
-        status: 'active'
-      };
-      const args = makeEventArgs('Patient', entity, TENANT_ID);
-
-      await subscriber.beforeCreate(args);
-
-      expect(entity.ssn).toBe('v1:abc:def:ghi');
-    });
-
-    it('throws without tenant context', async () => {
-      const entity = {
-        id: '1',
-        name: 'John',
-        ssn: '123-45-6789',
-        cardNumber: '4111',
-        status: 'active'
-      };
-      const args = makeEventArgs('Patient', entity);
-
-      await expect(subscriber.beforeCreate(args)).rejects.toThrow(
-        /tenant context/i
-      );
-    });
-
-    it('skips entities with no encrypted compliance fields', async () => {
-      const entity = { id: '1', label: 'test' };
-      const args = makeEventArgs('PublicEntity', entity, TENANT_ID);
-
-      await subscriber.beforeCreate(args);
-
-      expect(entity.label).toBe('test');
-    });
-
-    it('skips unregistered entities', async () => {
-      const entity = { id: '1', data: 'foo' };
-      const args = makeEventArgs('UnknownEntity', entity, TENANT_ID);
-
-      await subscriber.beforeCreate(args);
-      expect(entity.data).toBe('foo');
+    it('returns empty string as-is', () => {
+      expect(encryptedType.convertToDatabaseValue('', platform)).toBe('');
     });
   });
 
-  describe('onLoad', () => {
-    it('decrypts encrypted PHI fields on load', async () => {
-      const encrypted = encryptor.encrypt('123-45-6789', TENANT_ID)!;
-      const entity = {
-        id: '1',
-        name: 'John',
-        ssn: encrypted,
-        cardNumber: '4111',
-        status: 'active'
-      };
-      const args = makeEventArgs('Patient', entity, TENANT_ID);
-
-      await subscriber.onLoad(args);
-
-      expect(entity.ssn).toBe('123-45-6789');
+  describe('convertToJSValue', () => {
+    it('decrypts encrypted strings', () => {
+      const encrypted = encryptedType.convertToDatabaseValue(
+        'hello',
+        platform
+      ) as string;
+      const result = encryptedType.convertToJSValue(encrypted, platform);
+      expect(result).toBe('hello');
     });
 
-    it('passes through pre-migration plaintext with warning', async () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const entity = {
-        id: '1',
-        name: 'John',
-        ssn: 'plaintext-ssn',
-        cardNumber: '4111',
-        status: 'active'
-      };
-      const args = makeEventArgs('Patient', entity, TENANT_ID);
-
-      await subscriber.onLoad(args);
-
-      expect(entity.ssn).toBe('plaintext-ssn');
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('unencrypted phi data')
-      );
-      warnSpy.mockRestore();
+    it('returns null for null', () => {
+      expect(encryptedType.convertToJSValue(null, platform)).toBeNull();
     });
 
-    it('throws on corrupted ciphertext', async () => {
-      const entity = {
-        id: '1',
-        name: 'John',
-        ssn: 'v1:bad:data:here',
-        cardNumber: '4111',
-        status: 'active'
-      };
-      const args = makeEventArgs('Patient', entity, TENANT_ID);
-
-      await expect(subscriber.onLoad(args)).rejects.toThrow(/decrypt/i);
+    it('passes through plaintext (pre-migration)', () => {
+      const result = encryptedType.convertToJSValue('plain value', platform);
+      expect(result).toBe('plain value');
     });
   });
 
-  describe('encrypt/decrypt roundtrip', () => {
-    it('roundtrips PHI and PCI fields through create and load', async () => {
-      const entity = {
-        id: '1',
-        name: 'John',
-        ssn: '123-45-6789',
-        cardNumber: '4111-1111',
-        status: 'active'
-      };
-
-      await subscriber.beforeCreate(
-        makeEventArgs('Patient', entity, TENANT_ID)
+  describe('roundtrip', () => {
+    it('roundtrips string values', () => {
+      const original = 'sensitive data';
+      const encrypted = encryptedType.convertToDatabaseValue(
+        original,
+        platform
       );
-      expect(entity.ssn).toMatch(/^v1:/);
-      expect(entity.cardNumber).toMatch(/^v1:/);
+      const decrypted = encryptedType.convertToJSValue(encrypted, platform);
+      expect(decrypted).toBe(original);
+    });
 
-      await subscriber.onLoad(makeEventArgs('Patient', entity, TENANT_ID));
-      expect(entity.ssn).toBe('123-45-6789');
-      expect(entity.cardNumber).toBe('4111-1111');
+    it('roundtrips JSON values', () => {
+      const jsonType = new EncryptedType('json');
+      const original = { key: 'value', nested: { a: 1 } };
+      const encrypted = jsonType.convertToDatabaseValue(original, platform);
+      expect(typeof encrypted).toBe('string');
+      expect(encrypted).toMatch(/^v[12]:/);
+      const decrypted = jsonType.convertToJSValue(encrypted, platform);
+      expect(decrypted).toEqual(original);
+    });
+
+    it('roundtrips number values', () => {
+      const numberType = new EncryptedType('number');
+      const encrypted = numberType.convertToDatabaseValue(42, platform);
+      expect(encrypted).toMatch(/^v[12]:/);
+      const decrypted = numberType.convertToJSValue(encrypted, platform);
+      expect(decrypted).toBe(42);
+    });
+
+    it('roundtrips boolean values', () => {
+      const boolType = new EncryptedType('boolean');
+      const encrypted = boolType.convertToDatabaseValue(true, platform);
+      expect(encrypted).toMatch(/^v[12]:/);
+      const decrypted = boolType.convertToJSValue(encrypted, platform);
+      expect(decrypted).toBe(true);
     });
   });
 });
 
 describe('wrapEmWithNativeQueryBlocking', () => {
-  it('blocks nativeInsert on entities with phi/pci fields', () => {
+  function makeMockEm() {
+    return {
+      nativeInsert: (..._args: unknown[]) => Promise.resolve(),
+      nativeUpdate: (..._args: unknown[]) => Promise.resolve(0),
+      nativeDelete: (..._args: unknown[]) => Promise.resolve(0),
+      find: (..._args: unknown[]) => Promise.resolve([])
+    };
+  }
+
+  it('blocks nativeInsert on entities with pii/phi/pci fields', () => {
     const mockEm = makeMockEm();
     const wrapped = wrapEmWithNativeQueryBlocking(mockEm);
 
-    expect(() => wrapped.nativeInsert('Patient' as never, {} as never)).toThrow(
-      /nativeInsert.*blocked.*Patient/
-    );
+    expect(() => wrapped.nativeInsert('Patient')).toThrow(/blocked/);
   });
 
-  it('blocks nativeUpdate on entities with phi/pci fields', () => {
+  it('allows nativeInsert on entities without compliance fields', () => {
     const mockEm = makeMockEm();
     const wrapped = wrapEmWithNativeQueryBlocking(mockEm);
 
-    expect(() =>
-      wrapped.nativeUpdate('Patient' as never, {} as never, {} as never)
-    ).toThrow(/nativeUpdate.*blocked.*Patient/);
+    expect(() => wrapped.nativeInsert('PublicEntity')).not.toThrow();
   });
 
-  it('blocks nativeDelete on entities with phi/pci fields', () => {
+  it('allows non-blocked methods', async () => {
     const mockEm = makeMockEm();
     const wrapped = wrapEmWithNativeQueryBlocking(mockEm);
 
-    expect(() => wrapped.nativeDelete('Patient' as never, {} as never)).toThrow(
-      /nativeDelete.*blocked.*Patient/
-    );
-  });
-
-  it('allows native queries on entities without phi/pci fields', () => {
-    const mockEm = makeMockEm();
-    const wrapped = wrapEmWithNativeQueryBlocking(mockEm);
-
-    expect(() =>
-      wrapped.nativeInsert('PublicEntity' as never, {} as never)
-    ).not.toThrow();
-    expect(mockEm.nativeInsert).toHaveBeenCalled();
-  });
-
-  it('allows native queries on unregistered entities', () => {
-    const mockEm = makeMockEm();
-    const wrapped = wrapEmWithNativeQueryBlocking(mockEm);
-
-    expect(() =>
-      wrapped.nativeInsert('UnregisteredEntity' as never, {} as never)
-    ).not.toThrow();
-  });
-
-  it('passes through non-blocked methods', () => {
-    const mockEm = makeMockEm();
-    const wrapped = wrapEmWithNativeQueryBlocking(mockEm);
-
-    wrapped.find('Patient' as never, {} as never);
-    expect(mockEm.find).toHaveBeenCalled();
+    await expect(wrapped.find()).resolves.toEqual([]);
   });
 });

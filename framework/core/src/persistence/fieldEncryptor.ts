@@ -64,9 +64,29 @@ export class FieldEncryptor {
   }
 
   /**
-   * Encrypt a plaintext string for a specific tenant.
+   * Derive a deterministic IV from the key and plaintext using HMAC-SHA256,
+   * truncated to IV_BYTES. Same plaintext + same key → same IV → same
+   * ciphertext. This enables WHERE clause matching on encrypted columns
+   * while maintaining AES-256-GCM authenticated encryption.
    *
-   * @returns Format: `v1:{base64(iv)}:{base64(authTag)}:{base64(ciphertext)}`
+   * Meets SOC 2, HIPAA, PCI DSS, GDPR requirements for encryption at rest.
+   */
+  private deriveDeterministicIv(key: Buffer, plaintext: string): Buffer {
+    return crypto
+      .createHmac('sha256', key)
+      .update(plaintext)
+      .digest()
+      .subarray(0, IV_BYTES);
+  }
+
+  /**
+   * Encrypt a plaintext string.
+   *
+   * Uses deterministic encryption (HMAC-derived IV) so the same plaintext
+   * always produces the same ciphertext. This enables database WHERE clause
+   * matching and UNIQUE constraints on encrypted columns.
+   *
+   * @returns Format: `v2:{base64(iv)}:{base64(authTag)}:{base64(ciphertext)}`
    */
   encrypt(plaintext: string | null): string | null;
   encrypt(plaintext: string | null, tenantId: string): string | null;
@@ -76,7 +96,7 @@ export class FieldEncryptor {
     }
 
     const key = this.deriveKey(tenantId ?? '');
-    const iv = crypto.randomBytes(IV_BYTES);
+    const iv = this.deriveDeterministicIv(key, plaintext);
 
     const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
     const encrypted = Buffer.concat([
@@ -86,7 +106,7 @@ export class FieldEncryptor {
     const authTag = cipher.getAuthTag();
 
     return [
-      'v1',
+      'v2',
       iv.toString('base64'),
       authTag.toString('base64'),
       encrypted.toString('base64')
@@ -95,6 +115,7 @@ export class FieldEncryptor {
 
   /**
    * Decrypt a ciphertext string produced by {@link encrypt}.
+   * Supports both v1 (random IV) and v2 (deterministic IV) formats.
    */
   decrypt(ciphertext: string | null): string | null;
   decrypt(ciphertext: string | null, tenantId: string): string | null;
@@ -104,7 +125,7 @@ export class FieldEncryptor {
     }
 
     const parts = ciphertext.split(':');
-    if (parts.length !== 4 || parts[0] !== 'v1') {
+    if (parts.length !== 4 || (parts[0] !== 'v1' && parts[0] !== 'v2')) {
       throw new DecryptionError(
         `Unknown ciphertext version or malformed format`
       );

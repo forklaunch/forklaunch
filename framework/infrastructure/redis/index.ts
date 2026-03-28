@@ -6,6 +6,10 @@ import {
   OpenTelemetryCollector,
   TelemetryOptions
 } from '@forklaunch/core/http';
+import {
+  getCurrentTenantId,
+  type FieldEncryptor
+} from '@forklaunch/core/persistence';
 import { createClient, RedisClientOptions } from 'redis';
 
 /**
@@ -20,33 +24,80 @@ type RedisCommandRawReply =
   | undefined
   | Array<RedisCommandRawReply>;
 
+const ENCRYPTED_PREFIXES = ['v1:', 'v2:'] as const;
+
+function isEncrypted(value: string): boolean {
+  return ENCRYPTED_PREFIXES.some((p) => value.startsWith(p));
+}
+
+/**
+ * Options for configuring encryption on the Redis cache.
+ * Required — every consumer must explicitly configure encryption.
+ */
+export interface RedisCacheEncryptionOptions {
+  /** The FieldEncryptor instance to use for encrypting cache values. */
+  encryptor: FieldEncryptor;
+  /** Set to true to disable encryption. Defaults to false (encryption enabled). */
+  disabled?: boolean;
+}
+
 /**
  * Class representing a Redis-based TTL (Time-To-Live) cache.
  * Implements the TtlCache interface to provide caching functionality with automatic expiration.
+ *
+ * Encryption is enabled by default when an encryptor is provided. Values are encrypted
+ * before storage and decrypted on read using AES-256-GCM with per-tenant key derivation.
  */
 export class RedisTtlCache implements TtlCache {
   private client;
   private telemetryOptions;
+  private encryptor?: FieldEncryptor;
+  private encryptionDisabled: boolean;
 
   /**
    * Creates an instance of RedisTtlCache.
    *
    * @param {number} ttlMilliseconds - The default Time-To-Live in milliseconds for cache entries
    * @param {OpenTelemetryCollector<MetricsDefinition>} openTelemetryCollector - Collector for OpenTelemetry metrics
-   * @param {RedisClientOptions} hostingOptions - Configuration options for the Redis client
+   * @param {RedisClientOptions} options - Configuration options for the Redis client
    * @param {TelemetryOptions} telemetryOptions - Configuration options for telemetry
+   * @param {RedisCacheEncryptionOptions} encryption - Encryption configuration (enabled by default)
    */
   constructor(
     private ttlMilliseconds: number,
     private openTelemetryCollector: OpenTelemetryCollector<MetricsDefinition>,
     options: RedisClientOptions,
-    telemetryOptions: TelemetryOptions
+    telemetryOptions: TelemetryOptions,
+    encryption: RedisCacheEncryptionOptions
   ) {
     this.telemetryOptions = evaluateTelemetryOptions(telemetryOptions);
     this.client = createClient(options);
+    this.encryptor = encryption.encryptor;
+    this.encryptionDisabled = encryption.disabled ?? false;
     if (this.telemetryOptions.enabled.logging) {
       this.client.on('error', (err) => this.openTelemetryCollector.error(err));
       this.client.connect().catch(this.openTelemetryCollector.error);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Encryption helpers
+  // ---------------------------------------------------------------------------
+
+  private encryptValue(serialized: string): string {
+    if (!this.encryptor || this.encryptionDisabled) return serialized;
+    return (
+      this.encryptor.encrypt(serialized, getCurrentTenantId()) ?? serialized
+    );
+  }
+
+  private decryptValue(value: string): string {
+    if (!this.encryptor || this.encryptionDisabled) return value;
+    if (!isEncrypted(value)) return value;
+    try {
+      return this.encryptor.decrypt(value, getCurrentTenantId()) ?? value;
+    } catch {
+      return value;
     }
   }
 
@@ -74,7 +125,7 @@ export class RedisTtlCache implements TtlCache {
     switch (typeof value) {
       case 'object':
       case 'string':
-        return safeParse(value) as T;
+        return safeParse(this.decryptValue(String(value))) as T;
       case 'number':
         return value as T;
     }
@@ -98,7 +149,7 @@ export class RedisTtlCache implements TtlCache {
     if (this.telemetryOptions.enabled.logging) {
       this.openTelemetryCollector.info(`Putting record into cache: ${key}`);
     }
-    await this.client.set(key, safeStringify(value), {
+    await this.client.set(key, this.encryptValue(safeStringify(value)), {
       PX: ttlMilliseconds
     });
   }
@@ -113,7 +164,7 @@ export class RedisTtlCache implements TtlCache {
   async putBatchRecords<T>(cacheRecords: TtlCacheRecord<T>[]): Promise<void> {
     const multiCommand = this.client.multi();
     for (const { key, value, ttlMilliseconds } of cacheRecords) {
-      multiCommand.set(key, safeStringify(value), {
+      multiCommand.set(key, this.encryptValue(safeStringify(value)), {
         PX: ttlMilliseconds || this.ttlMilliseconds
       });
     }
@@ -129,7 +180,7 @@ export class RedisTtlCache implements TtlCache {
    * @returns {Promise<void>} A promise that resolves when the value is enqueued
    */
   async enqueueRecord<T>(queueName: string, value: T): Promise<void> {
-    await this.client.lPush(queueName, safeStringify(value));
+    await this.client.lPush(queueName, this.encryptValue(safeStringify(value)));
   }
 
   /**
@@ -143,7 +194,7 @@ export class RedisTtlCache implements TtlCache {
   async enqueueBatchRecords<T>(queueName: string, values: T[]): Promise<void> {
     const multiCommand = this.client.multi();
     for (const value of values) {
-      multiCommand.lPush(queueName, safeStringify(value));
+      multiCommand.lPush(queueName, this.encryptValue(safeStringify(value)));
     }
     await multiCommand.exec();
   }
@@ -185,7 +236,7 @@ export class RedisTtlCache implements TtlCache {
     if (value === null) {
       throw new Error(`Queue is empty: ${queueName}`);
     }
-    return safeParse(value) as T;
+    return safeParse(this.decryptValue(value)) as T;
   }
 
   /**
