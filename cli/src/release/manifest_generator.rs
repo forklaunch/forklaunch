@@ -8,6 +8,7 @@ use crate::{
     constants::RELEASE_MANIFEST_SCHEMA_VERSION,
     core::{
         ast::infrastructure::{
+            compliance::scan_all_compliance,
             integrations::Integration,
             worker_config::WorkerConfig as AstWorkerConfig,
         },
@@ -170,6 +171,33 @@ pub(crate) struct ReleaseManifest {
     pub required_environment_variables: Option<Vec<EnvironmentVariableRequirement>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub libraries: Option<Vec<LibraryDefinition>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compliance: Option<ReleaseComplianceData>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReleaseComplianceData {
+    pub entities: Vec<ReleaseEntityCompliance>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub data_residency: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub secrets: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReleaseEntityCompliance {
+    pub name: String,
+    pub fields: HashMap<String, String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retention: Option<ReleaseRetentionConfig>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct ReleaseRetentionConfig {
+    pub duration: String,
+    pub action: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -737,6 +765,48 @@ pub(crate) fn generate_release_manifest(
         _ => None,
     };
 
+    // Scan compliance data from source code (never stored in manifest)
+    let compliance_data = scan_all_compliance(&modules_root).ok().map(
+        |(field_classifications, retention_policies)| {
+            let compliance_config = manifest.compliance.as_ref();
+            let mut entity_names: std::collections::BTreeSet<String> =
+                std::collections::BTreeSet::new();
+            entity_names.extend(field_classifications.keys().cloned());
+            entity_names.extend(retention_policies.keys().cloned());
+
+            let entities: Vec<ReleaseEntityCompliance> = entity_names
+                .into_iter()
+                .map(|name| {
+                    let fields = field_classifications
+                        .get(&name)
+                        .cloned()
+                        .unwrap_or_default();
+                    let retention = retention_policies.get(&name).map(|r| {
+                        ReleaseRetentionConfig {
+                            duration: r.duration.clone(),
+                            action: r.action.clone(),
+                        }
+                    });
+                    ReleaseEntityCompliance {
+                        name,
+                        fields,
+                        retention,
+                    }
+                })
+                .collect();
+
+            ReleaseComplianceData {
+                entities,
+                data_residency: compliance_config
+                    .map(|c| c.data_residency.clone())
+                    .unwrap_or_default(),
+                secrets: compliance_config
+                    .map(|c| c.secrets.clone())
+                    .unwrap_or_default(),
+            }
+        },
+    );
+
     Ok(ReleaseManifest {
         schema_version: Some(RELEASE_MANIFEST_SCHEMA_VERSION.to_string()),
         application_id,
@@ -757,6 +827,7 @@ pub(crate) fn generate_release_manifest(
             Some(required_env_vars)
         },
         libraries: scan_project_libraries(&app_root.join("package.json")).ok(),
+        compliance: compliance_data,
     })
 }
 
