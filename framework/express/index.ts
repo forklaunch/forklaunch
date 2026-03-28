@@ -279,5 +279,4 @@ export const port = <
   ];
 };
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _Shim = ParsedQs;

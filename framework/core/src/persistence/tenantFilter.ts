@@ -17,9 +17,10 @@ export const TENANT_FILTER_NAME = 'tenant';
  *                 (without `Id` suffix) is also checked.
  */
 export function createTenantFilterDef(
-  column: string = 'organizationId'
+  column: string = 'organizationId',
+  relationName?: string
 ): FilterDef {
-  const relation = column.replace(/Id$/, '');
+  const relation = relationName ?? column.replace(/Id$/, '');
   return {
     name: TENANT_FILTER_NAME,
     cond(
@@ -33,6 +34,13 @@ export function createTenantFilterDef(
         return {};
       }
 
+      // If no tenant context is set (startup, background jobs, better-auth),
+      // skip filtering entirely. This is safe: tenant-scoped endpoints always
+      // set filter params before querying.
+      if (!args?.tenantId) {
+        return {};
+      }
+
       try {
         const metadata = em.getMetadata().getByClassName(entityName, false);
         if (!metadata) {
@@ -43,8 +51,11 @@ export function createTenantFilterDef(
         const hasRelation =
           relation !== column && metadata.properties[relation] != null;
 
-        if (hasColumn || hasRelation) {
+        if (hasColumn) {
           return { [column]: args.tenantId };
+        }
+        if (hasRelation) {
+          return { [relation]: args.tenantId };
         }
       } catch {
         // Entity not found in metadata — skip filtering
@@ -53,7 +64,7 @@ export function createTenantFilterDef(
       return {};
     },
     default: true,
-    args: true
+    args: false
   };
 }
 
@@ -75,10 +86,12 @@ export function setupTenantFilter(
   config: {
     /** Entity property name used for tenant isolation. Defaults to `'organizationId'`. */
     column?: string;
+    /** Relation property name if different from column without 'Id' suffix. E.g., if column is 'orgId' but relation is 'parentOrg'. */
+    relation?: string;
     logger?: { info: (msg: string, ...args: unknown[]) => void };
   } = {}
 ): void {
-  orm.em.addFilter(createTenantFilterDef(config.column));
+  orm.em.addFilter(createTenantFilterDef(config.column, config.relation));
   (config.logger ?? console).info(
     `[compliance] Tenant isolation filter registered on column '${config.column ?? 'organizationId'}'`
   );

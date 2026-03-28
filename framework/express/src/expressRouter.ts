@@ -2215,5 +2215,5 @@ type _RouterSatisfiesInterface =
   > extends ForklaunchRouter<AnySchemaValidator>
     ? true
     : false;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+
 const _routerCheck: _RouterSatisfiesInterface = true;

@@ -25,11 +25,17 @@ export { fp } from './compliancePropertyBuilder';
 // Compliance-aware entity definition (drop-in replacement for MikroORM's defineEntity)
 export { defineComplianceEntity } from './defineComplianceEntity';
 
-// Compliance EventSubscriber (encrypt on persist, decrypt on load)
+// Native query blocking (prevents bypassing EncryptedType via raw queries)
+export { wrapEmWithNativeQueryBlocking } from './complianceEventSubscriber';
+
+// Encrypted custom type (transparent field encryption at the MikroORM data layer)
 export {
-  ComplianceEventSubscriber,
-  wrapEmWithNativeQueryBlocking
-} from './complianceEventSubscriber';
+  EncryptedType,
+  registerEncryptor,
+  withEncryptionContext,
+  setEncryptionTenantId,
+  getCurrentTenantId
+} from './encryptedType';
 
 // Field encryption
 export {

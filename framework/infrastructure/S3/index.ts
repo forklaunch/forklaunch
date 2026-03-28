@@ -14,8 +14,29 @@ import {
   OpenTelemetryCollector,
   TelemetryOptions
 } from '@forklaunch/core/http';
+import {
+  getCurrentTenantId,
+  type FieldEncryptor
+} from '@forklaunch/core/persistence';
 import { ObjectStore } from '@forklaunch/core/objectstore';
 import { Readable } from 'stream';
+
+const ENCRYPTED_PREFIXES = ['v1:', 'v2:'] as const;
+
+function isEncrypted(value: string): boolean {
+  return ENCRYPTED_PREFIXES.some((p) => value.startsWith(p));
+}
+
+/**
+ * Options for configuring encryption on the S3 object store.
+ * Required — every consumer must explicitly configure encryption.
+ */
+export interface S3EncryptionOptions {
+  /** The FieldEncryptor instance to use for encrypting object bodies. */
+  encryptor: FieldEncryptor;
+  /** Set to true to disable encryption. Defaults to false (encryption enabled). */
+  disabled?: boolean;
+}
 
 /**
  * Options for configuring the S3ObjectStore.
@@ -39,6 +60,10 @@ interface S3ObjectStoreOptions {
  * S3-backed implementation of the ObjectStore interface.
  * Provides methods for storing, retrieving, streaming, and deleting objects in S3.
  *
+ * Encryption is enabled by default when an encryptor is provided. Object bodies
+ * are encrypted before upload and decrypted after download using AES-256-GCM
+ * with per-tenant key derivation.
+ *
  * @example
  * const store = new S3ObjectStore(otelCollector, { bucket: 'my-bucket' }, telemetryOptions);
  * await store.putObject({ key: 'user-1', name: 'Alice' });
@@ -48,25 +73,59 @@ export class S3ObjectStore implements ObjectStore<S3Client> {
   private s3: S3Client;
   private bucket: string;
   private initialized: boolean;
+  private encryptor?: FieldEncryptor;
+  private encryptionDisabled: boolean;
 
   /**
    * Creates a new S3ObjectStore instance.
    * @param openTelemetryCollector - Collector for OpenTelemetry metrics.
    * @param options - S3 configuration options.
    * @param telemetryOptions - Telemetry configuration options.
+   * @param encryption - Encryption configuration (enabled by default when encryptor provided).
    *
    * @example
-   * const store = new S3ObjectStore(otelCollector, { bucket: 'my-bucket' }, telemetryOptions);
+   * const store = new S3ObjectStore(
+   *   otelCollector,
+   *   { bucket: 'my-bucket' },
+   *   telemetryOptions,
+   *   { encryptor }
+   * );
    */
   constructor(
     private openTelemetryCollector: OpenTelemetryCollector<MetricsDefinition>,
     options: S3ObjectStoreOptions,
-    private telemetryOptions: TelemetryOptions
+    private telemetryOptions: TelemetryOptions,
+    encryption: S3EncryptionOptions
   ) {
     this.s3 = options.client || new S3Client(options.clientConfig || {});
     this.bucket = options.bucket;
     this.initialized = false;
+    this.encryptor = encryption.encryptor;
+    this.encryptionDisabled = encryption.disabled ?? false;
   }
+
+  // ---------------------------------------------------------------------------
+  // Encryption helpers
+  // ---------------------------------------------------------------------------
+
+  private encryptBody(body: string): string {
+    if (!this.encryptor || this.encryptionDisabled) return body;
+    return this.encryptor.encrypt(body, getCurrentTenantId()) ?? body;
+  }
+
+  private decryptBody(body: string): string {
+    if (!this.encryptor || this.encryptionDisabled) return body;
+    if (!isEncrypted(body)) return body;
+    try {
+      return this.encryptor.decrypt(body, getCurrentTenantId()) ?? body;
+    } catch {
+      return body;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Internal
+  // ---------------------------------------------------------------------------
 
   private async ensureBucketExists() {
     try {
@@ -92,10 +151,11 @@ export class S3ObjectStore implements ObjectStore<S3Client> {
     }
 
     const { key, ...rest } = object;
+    const body = this.encryptBody(JSON.stringify(rest));
     const params: PutObjectCommandInput = {
       Bucket: this.bucket,
       Key: key,
-      Body: JSON.stringify(rest),
+      Body: body,
       ContentType: 'application/json'
     };
     await this.s3.send(new PutObjectCommand(params));
@@ -186,7 +246,8 @@ export class S3ObjectStore implements ObjectStore<S3Client> {
       throw new Error('S3 did not return a body');
     }
 
-    return JSON.parse(await resp.Body.transformToString()) as T;
+    const raw = await resp.Body.transformToString();
+    return JSON.parse(this.decryptBody(raw)) as T;
   }
 
   /**
@@ -204,6 +265,8 @@ export class S3ObjectStore implements ObjectStore<S3Client> {
 
   /**
    * Streams an object download from the S3 bucket.
+   * Note: Streaming bypasses application-level encryption/decryption.
+   * Use readObject for encrypted objects.
    * @param objectKey - The key of the object to download.
    * @returns A readable stream of the object's contents.
    * @throws If the S3 response does not include a readable stream.
@@ -228,6 +291,7 @@ export class S3ObjectStore implements ObjectStore<S3Client> {
 
   /**
    * Streams multiple object downloads from the S3 bucket.
+   * Note: Streaming bypasses application-level encryption/decryption.
    * @param objectKeys - The keys of the objects to download.
    * @returns An array of readable streams.
    *

@@ -28,11 +28,19 @@ describe('FieldEncryptor', () => {
     expect(ct1).not.toBe(ct2);
   });
 
-  it('should produce different ciphertext for the same tenant and plaintext (random IV)', () => {
+  it('should produce identical ciphertext for same tenant and plaintext (deterministic)', () => {
     const enc = new FieldEncryptor(MASTER_KEY);
     const plaintext = 'same-data';
     const ct1 = enc.encrypt(plaintext, 'tenant-a');
     const ct2 = enc.encrypt(plaintext, 'tenant-a');
+    expect(ct1).toBe(ct2);
+  });
+
+  it('should produce different ciphertext for same plaintext with different tenants', () => {
+    const enc = new FieldEncryptor(MASTER_KEY);
+    const plaintext = 'same-data';
+    const ct1 = enc.encrypt(plaintext, 'tenant-a');
+    const ct2 = enc.encrypt(plaintext, 'tenant-b');
     expect(ct1).not.toBe(ct2);
   });
 
@@ -69,10 +77,10 @@ describe('FieldEncryptor', () => {
     expect(enc.decrypt(null, 'tenant-a')).toBeNull();
   });
 
-  it('should produce ciphertext that starts with "v1:" prefix', () => {
+  it('should produce ciphertext that starts with "v2:" prefix', () => {
     const enc = new FieldEncryptor(MASTER_KEY);
     const ciphertext = enc.encrypt('data', 'tenant-a')!;
-    expect(ciphertext.startsWith('v1:')).toBe(true);
+    expect(ciphertext.startsWith('v2:')).toBe(true);
   });
 
   it('should throw DecryptionError for unknown version prefix', () => {

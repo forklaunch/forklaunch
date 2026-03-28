@@ -95,7 +95,8 @@ pub(crate) fn s3_object_store_runtime_dependency<'a>(
                 S3_ACCESS_KEY_ID,
                 S3_SECRET_ACCESS_KEY,
                 S3_URL,
-                S3_BUCKET
+                S3_BUCKET,
+                ENCRYPTION_KEY
             }}) =>
                 new S3ObjectStore(
                 {otel_token},
@@ -113,6 +114,9 @@ pub(crate) fn s3_object_store_runtime_dependency<'a>(
                 {{
                     enabled: true,
                     level: OTEL_LEVEL || 'info'
+                }},
+                {{
+                    encryptor: new FieldEncryptor(ENCRYPTION_KEY)
                 }})
         }}
     }});")

@@ -1,5 +1,29 @@
 # @forklaunch/common
 
+## 1.2.6
+
+### Patch Changes
+
+- Encryptor required on redis and s3
+
+## 1.2.5
+
+### Patch Changes
+
+- Make private fields respect interfaces
+
+## 1.2.4
+
+### Patch Changes
+
+- up packages
+
+## 1.2.3
+
+### Patch Changes
+
+- update packages
+
 ## 1.2.2
 
 ### Patch Changes

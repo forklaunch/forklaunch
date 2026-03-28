@@ -8,6 +8,7 @@ import {
 } from '@forklaunch/blueprint-core';
 import { Metrics, metrics } from '@forklaunch/blueprint-monitoring';
 import { OpenTelemetryCollector } from '@forklaunch/core/http';
+import { FieldEncryptor } from '@forklaunch/core/persistence';
 import {
   createConfigInjector,
   getEnvVar,
@@ -168,6 +169,11 @@ const environmentConfig = configInjector.chain({
     lifetime: Lifetime.Singleton,
     type: string,
     value: getEnvVar('HMAC_SECRET_KEY')
+  },
+  ENCRYPTION_KEY: {
+    lifetime: Lifetime.Singleton,
+    type: string,
+    value: getEnvVar('ENCRYPTION_KEY')
   }
 });
 
@@ -234,7 +240,12 @@ const runtimeDependencies = environmentConfig.chain({
   TtlCache: {
     lifetime: Lifetime.Singleton,
     type: RedisTtlCache,
-    factory: ({ REDIS_URL, OpenTelemetryCollector, OTEL_LEVEL }) =>
+    factory: ({
+      REDIS_URL,
+      OpenTelemetryCollector,
+      OTEL_LEVEL,
+      ENCRYPTION_KEY
+    }) =>
       new RedisTtlCache(
         60 * 60 * 1000,
         OpenTelemetryCollector,
@@ -244,6 +255,9 @@ const runtimeDependencies = environmentConfig.chain({
         {
           enabled: true,
           level: OTEL_LEVEL || 'info'
+        },
+        {
+          encryptor: new FieldEncryptor(ENCRYPTION_KEY)
         }
       )
   },
@@ -257,7 +271,8 @@ const runtimeDependencies = environmentConfig.chain({
       S3_ACCESS_KEY_ID,
       S3_SECRET_ACCESS_KEY,
       S3_BUCKET,
-      S3_URL
+      S3_URL,
+      ENCRYPTION_KEY
     }) =>
       new S3ObjectStore(
         OpenTelemetryCollector,
@@ -276,6 +291,9 @@ const runtimeDependencies = environmentConfig.chain({
         {
           enabled: true,
           level: OTEL_LEVEL || 'info'
+        },
+        {
+          encryptor: new FieldEncryptor(ENCRYPTION_KEY)
         }
       )
   },

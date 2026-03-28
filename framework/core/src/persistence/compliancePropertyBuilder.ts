@@ -1,5 +1,6 @@
 import { p, type PropertyBuilders } from '@mikro-orm/core';
 import { COMPLIANCE_KEY, type ComplianceLevel } from './complianceTypes';
+import { EncryptedType } from './encryptedType';
 
 // ---------------------------------------------------------------------------
 // Runtime Proxy implementation
@@ -47,11 +48,71 @@ function wrapUnclassified(builder: unknown): unknown {
 }
 
 /**
+ * Compliance levels that require field-level encryption via EncryptedType.
+ */
+const ENCRYPTED_LEVELS: ReadonlySet<ComplianceLevel> = new Set([
+  'pii',
+  'phi',
+  'pci'
+]);
+
+/**
+ * Detect the original type hint from the builder's ~options to create
+ * the appropriate EncryptedType variant for deserialization.
+ */
+function detectOriginalType(options: Record<string, unknown>): string {
+  const type = options.type;
+  if (!type) return 'string';
+
+  // type can be a string name or a Type instance
+  let t: string;
+  if (typeof type === 'string') {
+    t = type.toLowerCase();
+  } else if (typeof type === 'object' && type !== null) {
+    // Type instance — use constructor name or runtimeType
+    const rt = (type as { runtimeType?: string }).runtimeType;
+    t = rt ?? type.constructor?.name?.toLowerCase() ?? 'string';
+  } else {
+    return 'string';
+  }
+
+  if (t.includes('json') || t === 'object') return 'json';
+  if (
+    t.includes('int') ||
+    t === 'number' ||
+    t === 'double' ||
+    t === 'float' ||
+    t === 'decimal' ||
+    t === 'smallint' ||
+    t === 'tinyint'
+  )
+    return 'number';
+  if (t === 'boolean' || t === 'bool') return 'boolean';
+  return 'string';
+}
+
+/**
  * Wraps a builder that has been classified via `.compliance()`.
  * Stores the compliance level under `~compliance` for `defineComplianceEntity`.
+ * For encrypted levels (pii/phi/pci), applies EncryptedType to the builder
+ * so MikroORM handles encryption at the data conversion layer.
  * Chaining after `.compliance()` propagates the level through subsequent builders.
  */
 function wrapClassified(builder: object, level: ComplianceLevel): unknown {
+  // Apply EncryptedType for encrypted compliance levels
+  if (ENCRYPTED_LEVELS.has(level)) {
+    const options = (builder as Record<string | symbol, unknown>)[
+      '~options'
+    ] as Record<string, unknown> | undefined;
+    if (options) {
+      const originalType = detectOriginalType(options);
+      options.type = new EncryptedType(originalType);
+      // Force column type to text since encrypted output is always a string
+      options.columnType = 'text';
+      options.runtimeType = originalType === 'json' ? 'object' : originalType;
+    }
+  }
+
   return new Proxy(builder, {
     get(target: Record<string | symbol, unknown>, prop) {
       if (prop === COMPLIANCE_KEY) return level;

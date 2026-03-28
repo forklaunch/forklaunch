@@ -357,7 +357,6 @@ export class Application<
       res.send('OK');
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
       const statusCode = Number(res.statusCode);
       res.locals.errorMessage = err.message;

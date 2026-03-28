@@ -9,8 +9,8 @@ import {
   getEnvVar,
   Lifetime,
   RetentionService,
-} from "@forklaunch/core/services";{{#is_worker}}{{^is_database_worker}}
-import { FieldEncryptor } from "@forklaunch/core/persistence";{{/is_database_worker}}
+} from "@forklaunch/core/services";
+import { FieldEncryptor } from "@forklaunch/core/persistence";{{#is_worker}}
 import { {{worker_type}}WorkerConsumer } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/consumers';
 import { {{worker_type}}WorkerProducer } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/producers';
 import { {{worker_type}}WorkerSchemas } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/schemas';
@@ -151,12 +151,12 @@ const environmentConfig = configInjector.chain({
     lifetime: Lifetime.Singleton,
     type: string,
     value: getEnvVar('HMAC_SECRET_KEY')
-  }{{#is_worker}}{{^is_database_worker}},
+  },
   ENCRYPTION_KEY: {
     lifetime: Lifetime.Singleton,
     type: string,
     value: getEnvVar('ENCRYPTION_KEY')
-  }{{/is_database_worker}}{{/is_worker}}
+  }
 });
 
 //! defines the runtime dependencies for the application
@@ -187,12 +187,14 @@ const runtimeDependencies = environmentConfig.chain({
   TtlCache: {
     lifetime: Lifetime.Singleton,
     type: RedisTtlCache,
-    factory: ({ REDIS_URL, OtelCollector }) =>
+    factory: ({ REDIS_URL, OtelCollector, ENCRYPTION_KEY }) =>
       new RedisTtlCache(60 * 60 * 1000, OtelCollector, {
         url: REDIS_URL,
       }, {
         enabled: true,
         level: "info",
+      }, {
+        encryptor: new FieldEncryptor(ENCRYPTION_KEY),
       }),
   },{{/is_request_cache_needed}}{{#is_s3_enabled}}
   ObjectStore: {
@@ -205,7 +207,8 @@ const runtimeDependencies = environmentConfig.chain({
       S3_ACCESS_KEY_ID,
       S3_SECRET_ACCESS_KEY,
       S3_URL,
-      S3_BUCKET
+      S3_BUCKET,
+      ENCRYPTION_KEY
     }) =>
       new S3ObjectStore(
         OtelCollector,
@@ -224,6 +227,9 @@ const runtimeDependencies = environmentConfig.chain({
         {
           enabled: true,
           level: OTEL_LEVEL || 'info'
+        },
+        {
+          encryptor: new FieldEncryptor(ENCRYPTION_KEY),
         }
       )
   },

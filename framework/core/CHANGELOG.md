@@ -1,5 +1,77 @@
 # @forklaunch/core
 
+## 1.3.3
+
+### Patch Changes
+
+- accept custom relation and relation in tenant filtering
+
+## 1.3.2
+
+### Patch Changes
+
+- Encryptor required on redis and s3
+- Updated dependencies
+  - @forklaunch/validator@1.2.6
+  - @forklaunch/common@1.2.6
+
+## 1.3.1
+
+### Patch Changes
+
+- Make private fields respect interfaces
+- Updated dependencies
+  - @forklaunch/validator@1.2.5
+  - @forklaunch/common@1.2.5
+
+## 1.3.0
+
+### Minor Changes
+
+- Custom Entity type for encrypted fields
+
+## 1.2.9
+
+### Patch Changes
+
+- up packages
+- Updated dependencies
+  - @forklaunch/validator@1.2.4
+  - @forklaunch/common@1.2.4
+
+## 1.2.8
+
+### Patch Changes
+
+- encrypted level for pii too
+
+## 1.2.7
+
+### Patch Changes
+
+- decryption with tenant id = null
+
+## 1.2.6
+
+### Patch Changes
+
+- tenant id detail
+
+## 1.2.5
+
+### Patch Changes
+
+- update packages
+- Updated dependencies
+  - @forklaunch/validator@1.2.3
+  - @forklaunch/common@1.2.3
+
+## 1.2.4
+
+### Patch Changes
+
+- update tenant filter
+
 ## 1.2.3
 
 ### Patch Changes
