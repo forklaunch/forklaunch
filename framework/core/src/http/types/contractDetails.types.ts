@@ -371,20 +371,12 @@ type NoRbacConstraint = {
   readonly forbiddenRoles?: never;
 };
 
-/**
- * @deprecated Use AccessAuth discriminated union instead.
- * Kept for backwards compatibility with AuthMethods.
- */
 export type AuthMethodsBase = TokenOptions &
   (
     | HmacMethods
     | ({
         readonly decodeResource?: DecodeResource;
-      } & (
-        | (PermissionSet & (BasicAuthMethods | JwtAuthMethods))
-        | (RoleSet & (BasicAuthMethods | JwtAuthMethods))
-        | (BasicAuthMethods | JwtAuthMethods)
-      ))
+      } & (BasicAuthMethods | JwtAuthMethods))
   );
 
 /**
@@ -404,7 +396,129 @@ export type AccessLevel = 'public' | 'authenticated' | 'protected' | 'internal';
  * - `protected`: auth required, must include at least one RBAC declaration
  * - `internal`: auth required, must be HMAC
  */
-type AccessAuth<Auth> =
+/** Permission RBAC group — pairs permission sets with their surfacing function. */
+type PermissionRbac<
+  SV extends AnySchemaValidator,
+  ParamsSchema extends ParamsObject<SV>,
+  ReqBody extends Body<SV>,
+  QuerySchema extends QueryObject<SV>,
+  ReqHeaders extends HeadersObject<SV>,
+  VersionedApi extends VersionSchema<SV, Method>,
+  BaseRequest
+> = {
+  readonly surfacePermissions: ExpressLikeSchemaAuthMapper<
+    SV,
+    ParamsSchema,
+    ReqBody,
+    QuerySchema,
+    ReqHeaders,
+    VersionedApi,
+    SessionObject<SV>,
+    BaseRequest
+  >;
+  readonly allowedPermissions?: Set<string>;
+  readonly forbiddenPermissions?: Set<string>;
+};
+
+/** Role RBAC group — pairs role sets with their surfacing function. */
+type RoleRbac<
+  SV extends AnySchemaValidator,
+  ParamsSchema extends ParamsObject<SV>,
+  ReqBody extends Body<SV>,
+  QuerySchema extends QueryObject<SV>,
+  ReqHeaders extends HeadersObject<SV>,
+  VersionedApi extends VersionSchema<SV, Method>,
+  BaseRequest
+> = {
+  readonly surfaceRoles: ExpressLikeSchemaAuthMapper<
+    SV,
+    ParamsSchema,
+    ReqBody,
+    QuerySchema,
+    ReqHeaders,
+    VersionedApi,
+    SessionObject<SV>,
+    BaseRequest
+  >;
+  readonly allowedRoles?: Set<string>;
+  readonly forbiddenRoles?: Set<string>;
+};
+
+/** Scope RBAC group — pairs required scope with its surfacing function. */
+type ScopeRbac<
+  SV extends AnySchemaValidator,
+  ParamsSchema extends ParamsObject<SV>,
+  ReqBody extends Body<SV>,
+  QuerySchema extends QueryObject<SV>,
+  ReqHeaders extends HeadersObject<SV>,
+  VersionedApi extends VersionSchema<SV, Method>,
+  BaseRequest
+> = {
+  readonly requiredScope: string;
+  readonly scopeHeirarchy?: string[];
+  readonly surfaceScopes: ExpressLikeSchemaAuthMapper<
+    SV,
+    ParamsSchema,
+    ReqBody,
+    QuerySchema,
+    ReqHeaders,
+    VersionedApi,
+    SessionObject<SV>,
+    BaseRequest
+  >;
+};
+
+/**
+ * At least one RBAC group must be present on protected routes.
+ * Each group pairs its declarations with the required surfacing function.
+ */
+type ProtectedRbac<
+  SV extends AnySchemaValidator,
+  ParamsSchema extends ParamsObject<SV>,
+  ReqBody extends Body<SV>,
+  QuerySchema extends QueryObject<SV>,
+  ReqHeaders extends HeadersObject<SV>,
+  VersionedApi extends VersionSchema<SV, Method>,
+  BaseRequest
+> =
+  | PermissionRbac<
+      SV,
+      ParamsSchema,
+      ReqBody,
+      QuerySchema,
+      ReqHeaders,
+      VersionedApi,
+      BaseRequest
+    >
+  | RoleRbac<
+      SV,
+      ParamsSchema,
+      ReqBody,
+      QuerySchema,
+      ReqHeaders,
+      VersionedApi,
+      BaseRequest
+    >
+  | ScopeRbac<
+      SV,
+      ParamsSchema,
+      ReqBody,
+      QuerySchema,
+      ReqHeaders,
+      VersionedApi,
+      BaseRequest
+    >;
+
+type AccessAuth<
+  Auth,
+  SV extends AnySchemaValidator,
+  ParamsSchema extends ParamsObject<SV>,
+  ReqBody extends Body<SV>,
+  QuerySchema extends QueryObject<SV>,
+  ReqHeaders extends HeadersObject<SV>,
+  VersionedApi extends VersionSchema<SV, Method>,
+  BaseRequest
+> =
   | { readonly access: 'public'; readonly auth?: never }
   | {
       readonly access: 'authenticated';
@@ -413,13 +527,15 @@ type AccessAuth<Auth> =
   | {
       readonly access: 'protected';
       readonly auth: Auth &
-        (
-          | { readonly allowedPermissions: Set<string> }
-          | { readonly forbiddenPermissions: Set<string> }
-          | { readonly allowedRoles: Set<string> }
-          | { readonly forbiddenRoles: Set<string> }
-          | { readonly requiredScope: string }
-        );
+        ProtectedRbac<
+          SV,
+          ParamsSchema,
+          ReqBody,
+          QuerySchema,
+          ReqHeaders,
+          VersionedApi,
+          BaseRequest
+        >;
     }
   | { readonly access: 'internal'; readonly auth: Auth & HmacMethods };
 
@@ -448,34 +564,29 @@ export type SchemaAuthMethods<
     SessionObject<SV>,
     BaseRequest
   >;
+  readonly surfacePermissions?: ExpressLikeSchemaAuthMapper<
+    SV,
+    ParamsSchema,
+    ReqBody,
+    QuerySchema,
+    ReqHeaders,
+    VersionedApi,
+    SessionObject<SV>,
+    BaseRequest
+  >;
+  readonly surfaceRoles?: ExpressLikeSchemaAuthMapper<
+    SV,
+    ParamsSchema,
+    ReqBody,
+    QuerySchema,
+    ReqHeaders,
+    VersionedApi,
+    SessionObject<SV>,
+    BaseRequest
+  >;
   readonly requiredFeatures?: string[];
   readonly requireActiveSubscription?: boolean;
-} & (
-    | {
-        readonly surfacePermissions?: ExpressLikeSchemaAuthMapper<
-          SV,
-          ParamsSchema,
-          ReqBody,
-          QuerySchema,
-          ReqHeaders,
-          VersionedApi,
-          SessionObject<SV>,
-          BaseRequest
-        >;
-      }
-    | {
-        readonly surfaceRoles?: ExpressLikeSchemaAuthMapper<
-          SV,
-          ParamsSchema,
-          ReqBody,
-          QuerySchema,
-          ReqHeaders,
-          VersionedApi,
-          SessionObject<SV>,
-          BaseRequest
-        >;
-      }
-  );
+};
 
 export type AuthMethods<
   SV extends AnySchemaValidator,
@@ -499,34 +610,33 @@ export type AuthMethods<
     SessionObject<SV>,
     BaseRequest
   >;
+  readonly surfacePermissions?: ExpressLikeAuthMapper<
+    SV,
+    P,
+    ReqBody,
+    ReqQuery,
+    ReqHeaders,
+    VersionedReqs,
+    SessionObject<SV>,
+    BaseRequest
+  >;
+  readonly surfaceRoles?: ExpressLikeAuthMapper<
+    SV,
+    P,
+    ReqBody,
+    ReqQuery,
+    ReqHeaders,
+    VersionedReqs,
+    SessionObject<SV>,
+    BaseRequest
+  >;
+  readonly allowedPermissions?: Set<string>;
+  readonly forbiddenPermissions?: Set<string>;
+  readonly allowedRoles?: Set<string>;
+  readonly forbiddenRoles?: Set<string>;
   readonly requiredFeatures?: string[];
   readonly requireActiveSubscription?: boolean;
-} & (
-    | ({
-        readonly surfacePermissions?: ExpressLikeAuthMapper<
-          SV,
-          P,
-          ReqBody,
-          ReqQuery,
-          ReqHeaders,
-          VersionedReqs,
-          SessionObject<SV>,
-          BaseRequest
-        >;
-      } & PermissionSet)
-    | ({
-        readonly surfaceRoles?: ExpressLikeAuthMapper<
-          SV,
-          P,
-          ReqBody,
-          ReqQuery,
-          ReqHeaders,
-          VersionedReqs,
-          SessionObject<SV>,
-          BaseRequest
-        >;
-      } & RoleSet)
-  );
+};
 
 /**
  * Type representing a mapped schema.
@@ -701,7 +811,16 @@ export type PathParamHttpContractDetails<
         readonly responses?: never;
       })
   ) &
-  AccessAuth<Auth>;
+  AccessAuth<
+    Auth,
+    SV,
+    ParamsSchema,
+    BodySchema,
+    QuerySchema,
+    ReqHeaders,
+    VersionedApi,
+    BaseRequest
+  >;
 
 type VersionedHttpContractDetailsIO<
   SV extends AnySchemaValidator,
@@ -771,7 +890,16 @@ export type HttpContractDetails<
         readonly responses?: never;
       })
   ) &
-  AccessAuth<Auth>;
+  AccessAuth<
+    Auth,
+    SV,
+    ParamsSchema,
+    BodySchema,
+    QuerySchema,
+    ReqHeaders,
+    VersionedApi,
+    BaseRequest
+  >;
 
 /**
  * Interface representing HTTP contract details for middleware.
