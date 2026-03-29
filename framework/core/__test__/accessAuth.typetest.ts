@@ -189,12 +189,12 @@ const publicWithAuth: PathParamHttpContractDetails<SV, 'Bad', '/bad'> = {
 // ---------------------------------------------------------------------------
 // ❌ authenticated — cannot have allowedRoles
 // ---------------------------------------------------------------------------
+// @ts-expect-error — authenticated routes cannot have RBAC fields
 const authenticatedWithRoles: PathParamHttpContractDetails<SV, 'Bad', '/bad'> =
   {
     name: 'Bad',
     access: 'authenticated',
     summary: 'Should fail',
-    // @ts-expect-error — authenticated routes cannot have RBAC fields
     auth: {
       jwt: { signatureKey: 'secret' },
       allowedRoles: new Set(['admin'])
@@ -205,12 +205,12 @@ const authenticatedWithRoles: PathParamHttpContractDetails<SV, 'Bad', '/bad'> =
 // ---------------------------------------------------------------------------
 // ❌ authenticated — cannot have allowedPermissions
 // ---------------------------------------------------------------------------
+// @ts-expect-error — authenticated routes cannot have RBAC fields
 const authenticatedWithPerms: PathParamHttpContractDetails<SV, 'Bad', '/bad'> =
   {
     name: 'Bad',
     access: 'authenticated',
     summary: 'Should fail',
-    // @ts-expect-error — authenticated routes cannot have RBAC fields
     auth: {
       jwt: { signatureKey: 'secret' },
       allowedPermissions: new Set(['read'])
@@ -219,33 +219,36 @@ const authenticatedWithPerms: PathParamHttpContractDetails<SV, 'Bad', '/bad'> =
   };
 
 // ---------------------------------------------------------------------------
-// ❌ protected — allowedPermissions without surfacePermissions
+// ✅ protected — allowedPermissions without surfacePermissions
+//    (surfacePermissions can be provided at router/app level)
 // ---------------------------------------------------------------------------
-const protectedMissingSurface: PathParamHttpContractDetails<SV, 'Bad', '/bad'> =
-  {
-    name: 'Bad',
-    access: 'protected',
-    summary: 'Should fail',
-    // @ts-expect-error — allowedPermissions requires surfacePermissions
-    auth: {
-      jwt: { signatureKey: 'secret' },
-      allowedPermissions: new Set(['read'])
-    },
-    responses: { 200: string }
-  };
+const protectedMissingSurface: PathParamHttpContractDetails<
+  SV,
+  'PermsNoSurface',
+  '/perms'
+> = {
+  name: 'PermsNoSurface',
+  access: 'protected',
+  summary: 'Surfacing at router level',
+  auth: {
+    jwt: { signatureKey: 'secret' },
+    allowedPermissions: new Set(['read'])
+  },
+  responses: { 200: string }
+};
 
 // ---------------------------------------------------------------------------
-// ❌ protected — allowedRoles without surfaceRoles
+// ✅ protected — allowedRoles without surfaceRoles
+//    (surfaceRoles can be provided at router/app level)
 // ---------------------------------------------------------------------------
 const protectedMissingSurfaceRoles: PathParamHttpContractDetails<
   SV,
-  'Bad',
-  '/bad'
+  'RolesNoSurface',
+  '/roles'
 > = {
-  name: 'Bad',
+  name: 'RolesNoSurface',
   access: 'protected',
-  summary: 'Should fail',
-  // @ts-expect-error — allowedRoles requires surfaceRoles
+  summary: 'Surfacing at router level',
   auth: {
     jwt: { signatureKey: 'secret' },
     allowedRoles: new Set(['admin'])
@@ -254,17 +257,17 @@ const protectedMissingSurfaceRoles: PathParamHttpContractDetails<
 };
 
 // ---------------------------------------------------------------------------
-// ❌ protected — requiredScope without surfaceScopes
+// ✅ protected — requiredScope without surfaceScopes
+//    (surfaceScopes can be provided at router/app level)
 // ---------------------------------------------------------------------------
-// @ts-expect-error — requiredScope requires surfaceScopes
 const protectedMissingSurfaceScopes: PathParamHttpContractDetails<
   SV,
-  'Bad',
-  '/bad'
+  'ScopeNoSurface',
+  '/scoped'
 > = {
-  name: 'Bad',
+  name: 'ScopeNoSurface',
   access: 'protected',
-  summary: 'Should fail',
+  summary: 'Surfacing at router level',
   auth: {
     jwt: { signatureKey: 'secret' },
     requiredScope: 'read:all'

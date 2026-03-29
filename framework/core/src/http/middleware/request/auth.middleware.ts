@@ -152,7 +152,16 @@ async function checkAuthorizationToken<
   const collapsedAuthorizationMethod = {
     ...globalOptions,
     ...authorizationMethod
-  };
+  } as AuthMethods<
+    SV,
+    P,
+    ReqBody,
+    ReqQuery,
+    ReqHeaders,
+    VersionedReqs,
+    BaseRequest
+  > &
+    Exclude<ExpressLikeGlobalAuthOptions<SV, SessionSchema>, false | undefined>;
 
   if (authorizationToken == null) {
     return authorizationTokenRequired;

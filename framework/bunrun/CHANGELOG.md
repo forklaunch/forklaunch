@@ -1,5 +1,11 @@
 # @forklaunch/bunrun
 
+## 1.2.9
+
+### Patch Changes
+
+- Perf improvement
+
 ## 1.2.8
 
 ### Patch Changes

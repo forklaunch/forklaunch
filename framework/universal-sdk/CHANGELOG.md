@@ -1,5 +1,13 @@
 # @forklaunch/universal-sdk
 
+## 1.2.9
+
+### Patch Changes
+
+- Perf improvement
+- Updated dependencies
+  - @forklaunch/common@1.2.9
+
 ## 1.2.8
 
 ### Patch Changes

@@ -1,5 +1,16 @@
 # @forklaunch/hyper-express
 
+## 1.2.17
+
+### Patch Changes
+
+- Perf improvement
+- Updated dependencies
+  - @forklaunch/validator@1.2.9
+  - @forklaunch/common@1.2.9
+  - @forklaunch/core@1.3.7
+  - @forklaunch/ws@1.2.17
+
 ## 1.2.16
 
 ### Patch Changes

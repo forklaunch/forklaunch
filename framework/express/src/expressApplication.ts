@@ -134,6 +134,8 @@ export class Application<
   listen(path: string, callback?: () => void): Server;
   listen(handle: unknown, listeningListener?: () => void): Server;
   listen(...args: unknown[]): Server {
+    this.validateAllRoutes();
+
     if (process.env.FORKLAUNCH_MODE === 'openapi') {
       const openApiSpec = generateOpenApiSpecs<SV>(
         this.schemaValidator,
