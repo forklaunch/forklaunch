@@ -1,5 +1,14 @@
 # @forklaunch/core
 
+## 1.3.6
+
+### Patch Changes
+
+- bump package versions
+- Updated dependencies
+  - @forklaunch/validator@1.2.8
+  - @forklaunch/common@1.2.8
+
 ## 1.3.5
 
 ### Patch Changes

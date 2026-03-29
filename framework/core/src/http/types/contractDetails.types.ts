@@ -363,20 +363,13 @@ export type RoleSet =
       readonly forbiddenRoles: Set<string>;
     };
 
-/** Auth base for authenticated routes — JWT/Basic, no RBAC. */
-type AuthenticatedAuthBase = TokenOptions & {
-  readonly decodeResource?: DecodeResource;
+/** Constraints that forbid RBAC fields on authenticated routes. */
+type NoRbacConstraint = {
   readonly allowedPermissions?: never;
   readonly forbiddenPermissions?: never;
   readonly allowedRoles?: never;
   readonly forbiddenRoles?: never;
-} & (BasicAuthMethods | JwtAuthMethods);
-
-/** Auth base for protected routes — JWT/Basic with required RBAC. */
-type ProtectedAuthBase = TokenOptions & {
-  readonly decodeResource?: DecodeResource;
-} & (PermissionSet | RoleSet) &
-  (BasicAuthMethods | JwtAuthMethods);
+};
 
 /**
  * @deprecated Use AccessAuth discriminated union instead.
@@ -415,12 +408,11 @@ type AccessAuth<Auth> =
   | { readonly access: 'public'; readonly auth?: never }
   | {
       readonly access: 'authenticated';
-      readonly auth?: Auth & AuthenticatedAuthBase;
+      readonly auth?: Auth & NoRbacConstraint;
     }
   | {
       readonly access: 'protected';
       readonly auth: Auth &
-        ProtectedAuthBase &
         (
           | { readonly allowedPermissions: Set<string> }
           | { readonly forbiddenPermissions: Set<string> }

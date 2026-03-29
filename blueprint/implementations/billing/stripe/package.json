@@ -54,12 +54,12 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "^1.2.7",
-    "@forklaunch/core": "^1.3.4",
+    "@forklaunch/common": "^1.2.8",
+    "@forklaunch/core": "^1.3.6",
     "@forklaunch/implementation-billing-base": "workspace:*",
     "@forklaunch/interfaces-billing": "workspace:*",
-    "@forklaunch/internal": "^1.2.7",
-    "@forklaunch/validator": "^1.2.7",
+    "@forklaunch/internal": "^1.2.8",
+    "@forklaunch/validator": "^1.2.8",
     "@mikro-orm/core": "7.0.6",
     "@sinclair/typebox": "^0.34.49",
     "ajv": "^8.18.0",
@@ -67,7 +67,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@typescript/native-preview": "7.0.0-dev.20260320.1",
+    "@typescript/native-preview": "7.0.0-dev.20260329.1",
     "depcheck": "^1.4.7",
     "prettier": "^3.8.1",
     "typedoc": "^0.28.18"

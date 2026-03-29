@@ -54,14 +54,14 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/core": "^1.3.4",
+    "@forklaunch/core": "^1.3.6",
     "@forklaunch/interfaces-worker": "workspace:*",
-    "@forklaunch/internal": "^1.2.7",
+    "@forklaunch/internal": "^1.2.8",
     "@sinclair/typebox": "^0.34.49",
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@typescript/native-preview": "7.0.0-dev.20260320.1",
+    "@typescript/native-preview": "7.0.0-dev.20260329.1",
     "depcheck": "^1.4.7",
     "eslint": "^10.1.0",
     "prettier": "^3.8.1",

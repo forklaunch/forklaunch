@@ -25,6 +25,6 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/core": "^1.3.4"
+    "@forklaunch/core": "^1.3.6"
   }
 }
