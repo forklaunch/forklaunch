@@ -42,7 +42,7 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "^1.2.8",
+    "@forklaunch/common": "^1.2.9",
     "@mikro-orm/core": "7.0.6"
   },
   "devDependencies": {
