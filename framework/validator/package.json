@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/validator",
-  "version": "1.2.6",
+  "version": "1.2.7",
   "description": "Schema validator for ForkLaunch components.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -71,7 +71,7 @@
   },
   "dependencies": {
     "@forklaunch/common": "workspace:*",
-    "@sinclair/typebox": "^0.34.48",
+    "@sinclair/typebox": "^0.34.49",
     "ts-deepmerge": "^7.0.3",
     "zod": "^4.3.6"
   },
@@ -79,7 +79,7 @@
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
     "@types/node": "^25.5.0",
-    "@typescript/native-preview": "7.0.0-dev.20260327.2",
+    "@typescript/native-preview": "7.0.0-dev.20260328.1",
     "@vitest/coverage-v8": "^4.1.2",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.5",

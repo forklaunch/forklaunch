@@ -349,15 +349,6 @@ export type DecodeResource = (
   token: string
 ) => JWTPayload | Promise<JWTPayload>;
 
-export type AuthMethodsBase = TokenOptions &
-  (
-    | HmacMethods
-    | ({
-        readonly decodeResource?: DecodeResource;
-      } & (PermissionSet | RoleSet) &
-        (BasicAuthMethods | JwtAuthMethods))
-  );
-
 export type PermissionSet =
   | {
       readonly allowedPermissions: Set<string>;
@@ -372,11 +363,42 @@ export type RoleSet =
       readonly forbiddenRoles: Set<string>;
     };
 
+/** Auth base for authenticated routes — JWT/Basic, no RBAC. */
+type AuthenticatedAuthBase = TokenOptions & {
+  readonly decodeResource?: DecodeResource;
+  readonly allowedPermissions?: never;
+  readonly forbiddenPermissions?: never;
+  readonly allowedRoles?: never;
+  readonly forbiddenRoles?: never;
+} & (BasicAuthMethods | JwtAuthMethods);
+
+/** Auth base for protected routes — JWT/Basic with required RBAC. */
+type ProtectedAuthBase = TokenOptions & {
+  readonly decodeResource?: DecodeResource;
+} & (PermissionSet | RoleSet) &
+  (BasicAuthMethods | JwtAuthMethods);
+
+/**
+ * @deprecated Use AccessAuth discriminated union instead.
+ * Kept for backwards compatibility with AuthMethods.
+ */
+export type AuthMethodsBase = TokenOptions &
+  (
+    | HmacMethods
+    | ({
+        readonly decodeResource?: DecodeResource;
+      } & (
+        | (PermissionSet & (BasicAuthMethods | JwtAuthMethods))
+        | (RoleSet & (BasicAuthMethods | JwtAuthMethods))
+        | (BasicAuthMethods | JwtAuthMethods)
+      ))
+  );
+
 /**
  * Route access level — determines authentication and authorization requirements.
  *
  * - `'public'` — No authentication required. `auth` must not be provided.
- * - `'authenticated'` — JWT or Basic auth required, any valid user. RBAC optional.
+ * - `'authenticated'` — JWT or Basic auth required, any valid user. RBAC not allowed.
  * - `'protected'` — JWT or Basic auth required. Must declare roles, permissions, or scope.
  * - `'internal'` — HMAC auth required (inter-service communication).
  */
@@ -385,16 +407,20 @@ export type AccessLevel = 'public' | 'authenticated' | 'protected' | 'internal';
 /**
  * Discriminated union that narrows the `auth` type based on the `access` level.
  * - `public`: auth not allowed
- * - `authenticated`: auth optional (JWT/Basic, RBAC not required)
+ * - `authenticated`: JWT/Basic auth required, RBAC fields disallowed
  * - `protected`: auth required, must include at least one RBAC declaration
  * - `internal`: auth required, must be HMAC
  */
 type AccessAuth<Auth> =
   | { readonly access: 'public'; readonly auth?: never }
-  | { readonly access: 'authenticated'; readonly auth?: Auth }
+  | {
+      readonly access: 'authenticated';
+      readonly auth?: Auth & AuthenticatedAuthBase;
+    }
   | {
       readonly access: 'protected';
       readonly auth: Auth &
+        ProtectedAuthBase &
         (
           | { readonly allowedPermissions: Set<string> }
           | { readonly forbiddenPermissions: Set<string> }

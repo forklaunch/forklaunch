@@ -1,5 +1,13 @@
 # @forklaunch/validator
 
+## 1.2.7
+
+### Patch Changes
+
+- export consolidated retention logic
+- Updated dependencies
+  - @forklaunch/common@1.2.7
+
 ## 1.2.6
 
 ### Patch Changes

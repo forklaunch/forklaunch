@@ -142,7 +142,8 @@ async function checkAuthorizationToken<
     BaseRequest
   >,
   authorizationToken?: string,
-  globalOptions?: ExpressLikeGlobalAuthOptions<SV, SessionSchema>
+  globalOptions?: ExpressLikeGlobalAuthOptions<SV, SessionSchema>,
+  access?: 'public' | 'authenticated' | 'protected' | 'internal'
 ): Promise<readonly [400 | 401 | 403 | 500, string] | undefined> {
   if (authorizationMethod == null) {
     return undefined;
@@ -363,7 +364,12 @@ async function checkAuthorizationToken<
     }
   }
 
-  if (hasPermissionChecks(collapsedAuthorizationMethod)) {
+  // 'authenticated' routes only need a valid token (already verified above).
+  // 'internal' routes use HMAC (already verified above, no RBAC).
+  // Only 'protected' routes require RBAC checks.
+  if (access === 'authenticated' || access === 'internal') {
+    // Token/HMAC already validated — skip RBAC, proceed to subscription/feature checks
+  } else if (hasPermissionChecks(collapsedAuthorizationMethod)) {
     if (!collapsedAuthorizationMethod.surfacePermissions) {
       return [500, 'No permission surfacing function provided.'];
     }
@@ -450,7 +456,7 @@ async function checkAuthorizationToken<
         return invalidAuthorizationTokenRoles;
       }
     }
-  } else {
+  } else if (access === 'protected') {
     return invalidAuthorizationMethod;
   }
 
@@ -552,6 +558,19 @@ export async function parseRequestAuth<
   >,
   next?: ForklaunchNextFunction
 ) {
+  const access = req.contractDetails.access as
+    | 'public'
+    | 'authenticated'
+    | 'protected'
+    | 'internal'
+    | undefined;
+
+  // Public routes skip auth entirely
+  if (access === 'public') {
+    next?.();
+    return;
+  }
+
   const auth = req.contractDetails.auth as
     | AuthMethods<
         SV,
@@ -578,7 +597,7 @@ export async function parseRequestAuth<
       MapVersionedReqsSchema<SV, VersionedApi>,
       MapSessionSchema<SV, SessionSchema>,
       unknown
-    >(req, auth, token, req._globalOptions?.()?.auth)) ?? [];
+    >(req, auth, token, req._globalOptions?.()?.auth, access)) ?? [];
   if (error != null) {
     req.openTelemetryCollector?.error(
       message || 'Authorization Failed',

@@ -1,5 +1,21 @@
 # @forklaunch/infrastructure-redis
 
+## 1.3.3
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.5
+
+## 1.3.2
+
+### Patch Changes
+
+- export consolidated retention logic
+- Updated dependencies
+  - @forklaunch/common@1.2.7
+  - @forklaunch/core@1.3.4
+
 ## 1.3.1
 
 ### Patch Changes

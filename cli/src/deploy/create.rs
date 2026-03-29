@@ -448,12 +448,15 @@ impl CreateCommand {
 impl CliCommand for CreateCommand {
     fn command(&self) -> Command {
         command("create", "Create a new deployment")
+            .disable_version_flag(true)
             .arg(
                 Arg::new("release")
                     .long("release")
+                    .visible_alias("version")
                     .short('r')
+                    .visible_short_alias('v')
                     .required(true)
-                    .help("Release version to deploy"),
+                    .help("Release version to deploy (e.g., 1.0.0)"),
             )
             .arg(
                 Arg::new("environment")
@@ -515,7 +518,7 @@ impl CliCommand for CreateCommand {
 
         let release_version = matches
             .get_one::<String>("release")
-            .ok_or_else(|| anyhow::anyhow!("Release version is required"))?;
+            .ok_or_else(|| anyhow::anyhow!("Release version is required. Use --release <VERSION> or -r <VERSION> (e.g., --release 1.0.0)"))?;
 
         let environment = matches
             .get_one::<String>("environment")

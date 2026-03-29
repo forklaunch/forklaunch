@@ -1,5 +1,22 @@
 # @forklaunch/ws
 
+## 1.2.15
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.5
+
+## 1.2.14
+
+### Patch Changes
+
+- export consolidated retention logic
+- Updated dependencies
+  - @forklaunch/validator@1.2.7
+  - @forklaunch/common@1.2.7
+  - @forklaunch/core@1.3.4
+
 ## 1.2.13
 
 ### Patch Changes

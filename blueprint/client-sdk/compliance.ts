@@ -1,5 +1,3 @@
-import { generateHmacAuthHeaders } from '@forklaunch/core/http';
-
 export interface ServiceComplianceResult<T> {
   service: string;
   status: 'fulfilled' | 'rejected';
@@ -33,23 +31,21 @@ export interface ComplianceCapableService {
 /**
  * Fan-out compliance client. Calls erase/export on all registered services
  * in parallel and returns per-service results.
+ *
+ * Requires a JWT token from a user with SYSTEM role.
  */
 export function createComplianceClient(config: {
-  hmacSecretKey: string;
+  token: string;
   services: Record<string, ComplianceCapableService>;
 }) {
-  const { hmacSecretKey, services } = config;
+  const { token, services } = config;
+  const headers = { Authorization: `Bearer ${token}` };
 
   return {
     async erase(
       userId: string
     ): Promise<Record<string, ServiceComplianceResult<EraseResult>>> {
       const entries = Object.entries(services);
-      const headers = generateHmacAuthHeaders({
-        secretKey: hmacSecretKey,
-        method: 'DELETE',
-        path: `/erase/${userId}`
-      });
 
       const results = await Promise.allSettled(
         entries.map(async ([name, sdk]) => {
@@ -89,11 +85,6 @@ export function createComplianceClient(config: {
       userId: string
     ): Promise<Record<string, ServiceComplianceResult<ExportResult>>> {
       const entries = Object.entries(services);
-      const headers = generateHmacAuthHeaders({
-        secretKey: hmacSecretKey,
-        method: 'GET',
-        path: `/export/${userId}`
-      });
 
       const results = await Promise.allSettled(
         entries.map(async ([name, sdk]) => {

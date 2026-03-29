@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/implementation-worker-kafka",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "description": "Kafka implementation for forklaunch workers",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -54,10 +54,10 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/core": "^1.3.3",
+    "@forklaunch/core": "^1.3.4",
     "@forklaunch/interfaces-worker": "workspace:*",
-    "@forklaunch/internal": "^1.2.6",
-    "@sinclair/typebox": "^0.34.48",
+    "@forklaunch/internal": "^1.2.7",
+    "@sinclair/typebox": "^0.34.49",
     "kafkajs": "^2.2.4",
     "zod": "^4.3.6"
   },

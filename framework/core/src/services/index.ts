@@ -16,3 +16,4 @@ export {
   type ExportResult,
   type UserIdFieldOverrides
 } from './complianceDataService';
+export { runRetentionEnforcement } from './runRetentionEnforcement';

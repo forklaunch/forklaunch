@@ -1,5 +1,20 @@
 # @forklaunch/core
 
+## 1.3.5
+
+### Patch Changes
+
+- Access auth respected now
+
+## 1.3.4
+
+### Patch Changes
+
+- export consolidated retention logic
+- Updated dependencies
+  - @forklaunch/validator@1.2.7
+  - @forklaunch/common@1.2.7
+
 ## 1.3.3
 
 ### Patch Changes
