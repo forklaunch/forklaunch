@@ -1,5 +1,14 @@
 # @forklaunch/internal
 
+## 1.2.12
+
+### Patch Changes
+
+- sync changes across packages
+- Updated dependencies
+  - @forklaunch/validator@1.2.12
+  - @forklaunch/common@1.2.12
+
 ## 1.2.11
 
 ### Patch Changes

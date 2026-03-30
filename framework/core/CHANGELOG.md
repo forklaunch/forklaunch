@@ -1,5 +1,20 @@
 # @forklaunch/core
 
+## 1.3.15
+
+### Patch Changes
+
+- sync changes across packages
+- Updated dependencies
+  - @forklaunch/validator@1.2.12
+  - @forklaunch/common@1.2.12
+
+## 1.3.14
+
+### Patch Changes
+
+- Handle enums more robustly for ORM
+
 ## 1.3.13
 
 ### Patch Changes

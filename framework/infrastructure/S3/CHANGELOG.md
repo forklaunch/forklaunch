@@ -1,5 +1,21 @@
 # @forklaunch/infrastructure-s3
 
+## 1.3.13
+
+### Patch Changes
+
+- sync changes across packages
+- Updated dependencies
+  - @forklaunch/common@1.2.12
+  - @forklaunch/core@1.3.15
+
+## 1.3.12
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.14
+
 ## 1.3.11
 
 ### Patch Changes

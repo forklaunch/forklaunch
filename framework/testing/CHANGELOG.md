@@ -1,5 +1,11 @@
 # @forklaunch/testing
 
+## 1.2.12
+
+### Patch Changes
+
+- sync changes across packages
+
 ## 1.2.11
 
 ### Patch Changes

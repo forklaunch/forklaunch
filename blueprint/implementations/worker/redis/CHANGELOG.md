@@ -1,5 +1,13 @@
 # @forklaunch/implementation-worker-redis
 
+## 1.0.21
+
+### Patch Changes
+
+- update packages
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.19
+
 ## 1.0.20
 
 ### Patch Changes

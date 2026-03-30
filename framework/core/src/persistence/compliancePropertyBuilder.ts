@@ -1,4 +1,5 @@
-import { p, type PropertyBuilders } from '@mikro-orm/core';
+import { safeParse, safeStringify } from '@forklaunch/common';
+import { p, Type, type PropertyBuilders } from '@mikro-orm/core';
 import { COMPLIANCE_KEY, type ComplianceLevel } from './complianceTypes';
 import { EncryptedType, resolveTypeInstance } from './encryptedType';
 
@@ -152,6 +153,68 @@ function isRelationMethod(prop: string | symbol): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Enum type inference
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract the raw values from enum items (array or native TS enum object).
+ */
+function extractEnumValues(items: unknown): unknown[] {
+  if (Array.isArray(items)) return items;
+  if (items != null && typeof items === 'object') {
+    // Native TS numeric enums have reverse mappings (value → key).
+    // Filter those out by keeping only values whose key is not itself a value.
+    const obj = items as Record<string, unknown>;
+    const allValues = Object.values(obj);
+    return allValues.filter((v) => typeof v !== 'string' || !(v in obj));
+  }
+  return [];
+}
+
+/**
+ * MikroORM custom Type that stores mixed-type enum values as text
+ * using safeStringify/safeParse for round-trip fidelity.
+ */
+class EnumTextType extends Type<unknown, string> {
+  override convertToDatabaseValue(value: unknown): string {
+    return safeStringify(value);
+  }
+
+  override convertToJSValue(value: unknown): unknown {
+    return safeParse(value);
+  }
+
+  override getColumnType(): string {
+    return 'text';
+  }
+
+  get runtimeType(): string {
+    return 'string';
+  }
+}
+
+/**
+ * Infer the MikroORM type for an enum property from its items.
+ *
+ * - All items are strings → 'text'
+ * - All items are numbers → 'integer'
+ * - Mixed types → EnumTextType (safeStringify/safeParse round-trip)
+ * - No items → 'text'
+ */
+function inferEnumType(items: unknown): string | EnumTextType {
+  const values = extractEnumValues(items);
+  if (values.length === 0) return 'text';
+
+  const allStrings = values.every((v) => typeof v === 'string');
+  if (allStrings) return 'text';
+
+  const allNumbers = values.every((v) => typeof v === 'number');
+  if (allNumbers) return 'integer';
+
+  return new EnumTextType();
+}
+
+// ---------------------------------------------------------------------------
 // fp — the ForkLaunch property builder
 // ---------------------------------------------------------------------------
 
@@ -200,7 +263,20 @@ export const fp: PropertyBuilders = new Proxy(p, {
         target,
         args
       );
-      return isBuilder(result) ? wrapUnclassified(result) : result;
+      if (isBuilder(result)) {
+        // For enum(), infer a default type so MikroORM metadata
+        // discovery doesn't require an explicit .type() call.
+        if (prop === 'enum') {
+          const options = (result as Record<string | symbol, unknown>)[
+            '~options'
+          ] as Record<string, unknown> | undefined;
+          if (options && !options.type) {
+            options.type = inferEnumType(options.items);
+          }
+        }
+        return wrapUnclassified(result);
+      }
+      return result;
     };
   }
 }) as PropertyBuilders;

@@ -1,5 +1,22 @@
 # @forklaunch/ws
 
+## 1.2.25
+
+### Patch Changes
+
+- sync changes across packages
+- Updated dependencies
+  - @forklaunch/validator@1.2.12
+  - @forklaunch/common@1.2.12
+  - @forklaunch/core@1.3.15
+
+## 1.2.24
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.14
+
 ## 1.2.23
 
 ### Patch Changes

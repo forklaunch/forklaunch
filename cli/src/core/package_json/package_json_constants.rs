@@ -25,13 +25,13 @@ pub(crate) const TS_JEST_VERSION: &str = "^29.4.6";
 // ts-nodef
 pub(crate) const TS_NODE_VERSION: &str = "^10.9.2";
 // typescript-eslint
-pub(crate) const TYPESCRIPT_ESLINT_VERSION: &str = "^8.57.2";
+pub(crate) const TYPESCRIPT_ESLINT_VERSION: &str = "^8.58.0";
 // vitest
 pub(crate) const VITEST_VERSION: &str = "^4.1.2";
 
 // Application package.json dependencies constants
 // @typescript/native-preview
-pub(crate) const TYPESCRIPT_NATIVE_PREVIEW_VERSION: &str = "7.0.0-dev.20260329.1";
+pub(crate) const TYPESCRIPT_NATIVE_PREVIEW_VERSION: &str = "7.0.0-dev.20260330.1";
 // globals
 pub(crate) const GLOBALS_VERSION: &str = "^17.4.0";
 // husky
@@ -232,45 +232,45 @@ pub(crate) const APP_MONITORING_VERSION: &str = "workspace:*";
 // @forklaunch/bunrun
 pub(crate) const BUNRUN_VERSION: &str = "~0.0.2";
 // @forklaunch/common
-pub(crate) const COMMON_VERSION: &str = "~1.2.11";
+pub(crate) const COMMON_VERSION: &str = "~1.2.12";
 // @forklaunch/core
-pub(crate) const CORE_VERSION: &str = "~1.3.13";
+pub(crate) const CORE_VERSION: &str = "~1.3.15";
 // @forklaunch/express
-pub(crate) const EXPRESS_VERSION: &str = "~1.2.23";
+pub(crate) const EXPRESS_VERSION: &str = "~1.2.25";
 // @forklaunch/hyper-express
-pub(crate) const HYPER_EXPRESS_VERSION: &str = "~1.2.23";
+pub(crate) const HYPER_EXPRESS_VERSION: &str = "~1.2.25";
 // @forklaunch/implementation-billing-base
-pub(crate) const BILLING_BASE_VERSION: &str = "~1.0.19";
+pub(crate) const BILLING_BASE_VERSION: &str = "~1.0.20";
 // @forklaunch/implementation-billing-stripe
-pub(crate) const BILLING_STRIPE_VERSION: &str = "~1.1.19";
+pub(crate) const BILLING_STRIPE_VERSION: &str = "~1.1.20";
 // @forklaunch/implementation-iam-base
-pub(crate) const IAM_BASE_VERSION: &str = "~1.0.19";
+pub(crate) const IAM_BASE_VERSION: &str = "~1.0.20";
 // @forklaunch/implementation-worker-bullmq
-pub(crate) const WORKER_BULLMQ_VERSION: &str = "~1.0.20";
+pub(crate) const WORKER_BULLMQ_VERSION: &str = "~1.0.21";
 // @forklaunch/implementation-worker-redis
-pub(crate) const WORKER_REDIS_VERSION: &str = "~1.0.20";
+pub(crate) const WORKER_REDIS_VERSION: &str = "~1.0.21";
 // @forklaunch/implementation-worker-database
-pub(crate) const WORKER_DATABASE_VERSION: &str = "~1.0.20";
+pub(crate) const WORKER_DATABASE_VERSION: &str = "~1.0.21";
 // @forklaunch/implementation-worker-kafka
-pub(crate) const WORKER_KAFKA_VERSION: &str = "~1.0.20";
+pub(crate) const WORKER_KAFKA_VERSION: &str = "~1.0.21";
 // @forklaunch/infrastructure-redis
-pub(crate) const INFRASTRUCTURE_REDIS_VERSION: &str = "~1.3.11";
+pub(crate) const INFRASTRUCTURE_REDIS_VERSION: &str = "~1.3.13";
 // @forklaunch/infrastructure-s3
-pub(crate) const INFRASTRUCTURE_S3_VERSION: &str = "~1.3.11";
+pub(crate) const INFRASTRUCTURE_S3_VERSION: &str = "~1.3.13";
 // @forklaunch/interfaces-billing
-pub(crate) const BILLING_INTERFACES_VERSION: &str = "~1.0.18";
+pub(crate) const BILLING_INTERFACES_VERSION: &str = "~1.0.19";
 // @forklaunch/interfaces-iam
-pub(crate) const IAM_INTERFACES_VERSION: &str = "~1.0.18";
+pub(crate) const IAM_INTERFACES_VERSION: &str = "~1.0.19";
 // @forklaunch/interfaces-worker
-pub(crate) const WORKER_INTERFACES_VERSION: &str = "~1.0.18";
+pub(crate) const WORKER_INTERFACES_VERSION: &str = "~1.0.19";
 // @forklaunch/internal
-pub(crate) const INTERNAL_VERSION: &str = "~1.2.11";
+pub(crate) const INTERNAL_VERSION: &str = "~1.2.12";
 // @forklaunch/testing
-pub(crate) const TESTING_VERSION: &str = "~1.2.11";
+pub(crate) const TESTING_VERSION: &str = "~1.2.12";
 // @forklaunch/universal-sdk
-pub(crate) const UNIVERSAL_SDK_VERSION: &str = "~1.2.11";
+pub(crate) const UNIVERSAL_SDK_VERSION: &str = "~1.2.12";
 // @forklaunch/validator
-pub(crate) const VALIDATOR_VERSION: &str = "~1.2.11";
+pub(crate) const VALIDATOR_VERSION: &str = "~1.2.12";
 // @mikro-orm/core
 pub(crate) const MIKRO_ORM_CORE_VERSION: &str = "7.0.6";
 // @mikro-orm/migrations
