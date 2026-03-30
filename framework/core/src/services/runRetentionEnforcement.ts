@@ -12,7 +12,7 @@ import type { RetentionService } from './retentionService';
  *
  * runRetentionEnforcement(
  *   ci.resolve(tokens.RetentionService),
- *   ci.resolve(tokens.OpenTelemetryCollector)
+ *   ci.resolve(tokens.OtelCollector)
  * );
  * ```
  */
