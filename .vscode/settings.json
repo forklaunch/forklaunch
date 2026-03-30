@@ -16,5 +16,5 @@
     }
   },
   "rust-analyzer.checkOnSave": true,
-  "js/ts.experimental.useTsgo": true
+  "js/ts.experimental.useTsgo": false
 }

@@ -134,8 +134,6 @@ export class Application<
   listen(path: string, callback?: () => void): Server;
   listen(handle: unknown, listeningListener?: () => void): Server;
   listen(...args: unknown[]): Server {
-    this.validateAllRoutes();
-
     if (process.env.FORKLAUNCH_MODE === 'openapi') {
       const openApiSpec = generateOpenApiSpecs<SV>(
         this.schemaValidator,
@@ -169,6 +167,8 @@ export class Application<
       );
       process.exit(0);
     }
+
+    this.validateAllRoutes();
 
     const port =
       typeof args[0] === 'number' ? args[0] : Number(process.env.PORT);

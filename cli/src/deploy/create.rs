@@ -65,6 +65,9 @@ struct MissingKey {
     component: Option<ComponentMetadata>,
     #[serde(rename = "defaultValue")]
     default_value: Option<String>,
+    /// When true, the key already has a valid production value (included for review only).
+    #[serde(default)]
+    resolved: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -257,18 +260,24 @@ fn write_missing_vars_template(
         }
 
         let needs_config: Vec<&&MissingKey> = ordered.iter()
-            .filter(|k| !existing_config.contains_key(&k.name) && get_default_value(k).is_none())
+            .filter(|k| !k.resolved && !existing_config.contains_key(&k.name) && get_default_value(k).is_none())
+            .collect();
+        let rejected: Vec<&&MissingKey> = ordered.iter()
+            .filter(|k| !k.resolved && existing_config.contains_key(&k.name))
             .collect();
         let has_default: Vec<&&MissingKey> = ordered.iter()
-            .filter(|k| !existing_config.contains_key(&k.name) && get_default_value(k).is_some())
+            .filter(|k| !k.resolved && !existing_config.contains_key(&k.name) && get_default_value(k).is_some())
             .collect();
         let already_set: Vec<&&MissingKey> = ordered.iter()
-            .filter(|k| existing_config.contains_key(&k.name))
+            .filter(|k| k.resolved)
             .collect();
 
         let mut status_parts = Vec::new();
         if !needs_config.is_empty() {
             status_parts.push(format!("{} var(s) need configuration", needs_config.len()));
+        }
+        if !rejected.is_empty() {
+            status_parts.push(format!("{} var(s) rejected", rejected.len()));
         }
         if !has_default.is_empty() {
             status_parts.push(format!("{} var(s) pre-filled", has_default.len()));
@@ -289,8 +298,16 @@ fn write_missing_vars_template(
         ));
 
         for key in &ordered {
-            if let Some(existing_val) = existing_config.get(&key.name) {
-                content.push_str(&format!("{}={}\n", key.name, existing_val));
+            if key.resolved {
+                // Already has a valid production value — show for review
+                let val = existing_config.get(&key.name)
+                    .or(key.default_value.as_ref())
+                    .cloned()
+                    .unwrap_or_default();
+                content.push_str(&format!("{}={}\n", key.name, val));
+            } else if let Some(existing_val) = existing_config.get(&key.name) {
+                // Has a value but backend rejected it (e.g., development-only URL)
+                content.push_str(&format!("{}={} # ⚠ REJECTED — replace with production value\n", key.name, existing_val));
             } else if let Some(default_val) = get_default_value(key) {
                 content.push_str(&format!("{}={} # default — edit if needed\n", key.name, default_val));
             } else {
@@ -311,24 +328,30 @@ fn write_missing_vars_template(
             .filter(|k| !app_var_keys.contains(&k.name))
             .collect();
 
-        // Include vars that need a value or have a default to review
+        // Include vars that actually need user action (not resolved)
         let actionable: Vec<&&MissingKey> = component_keys.iter()
-            .filter(|k| !existing_config.contains_key(&k.name))
+            .filter(|k| !k.resolved)
             .collect();
 
         if actionable.is_empty() {
             continue;
         }
 
-        let needs_config_count = actionable.iter()
-            .filter(|k| get_default_value(k).is_none())
+        let rejected_count = actionable.iter()
+            .filter(|k| existing_config.contains_key(&k.name))
             .count();
-        let has_default_count = actionable.len() - needs_config_count;
+        let needs_config_count = actionable.iter()
+            .filter(|k| !existing_config.contains_key(&k.name) && get_default_value(k).is_none())
+            .count();
+        let has_default_count = actionable.len() - needs_config_count - rejected_count;
 
         let type_label = detail.component_type.to_uppercase();
         let mut comp_status_parts = Vec::new();
         if needs_config_count > 0 {
             comp_status_parts.push(format!("{} var(s) need configuration", needs_config_count));
+        }
+        if rejected_count > 0 {
+            comp_status_parts.push(format!("{} var(s) rejected", rejected_count));
         }
         if has_default_count > 0 {
             comp_status_parts.push(format!("{} var(s) pre-filled", has_default_count));
@@ -347,7 +370,10 @@ fn write_missing_vars_template(
         ));
 
         for key in actionable {
-            if let Some(default_val) = get_default_value(key) {
+            if let Some(existing_val) = existing_config.get(&key.name) {
+                // Has a value but backend rejected it (e.g., development-only URL)
+                content.push_str(&format!("{}={} # ⚠ REJECTED — replace with production value\n", key.name, existing_val));
+            } else if let Some(default_val) = get_default_value(key) {
                 content.push_str(&format!("{}={} # default — edit if needed\n", key.name, default_val));
             } else {
                 let hint = hint_for_key(key);
@@ -964,7 +990,7 @@ impl CliCommand for CreateCommand {
                             .flat_map(|d| &d.missing_keys)
                             .filter(|k| app_var_keys.contains(&k.name)
                                 && seen.insert(k.name.clone())
-                                && !existing_config.contains_key(&k.name))
+                                && !k.resolved)
                             .count();
                         if app_missing > 0 {
                             log_warn!(stdout, "  [APPLICATION] {} shared variable(s) need configuration", app_missing);
@@ -973,7 +999,7 @@ impl CliCommand for CreateCommand {
                             if detail.component_type == "application" { continue; }
                             let missing = detail.missing_keys.iter()
                                 .filter(|k| !app_var_keys.contains(&k.name)
-                                    && !existing_config.contains_key(&k.name))
+                                    && !k.resolved)
                                 .count();
                             if missing == 0 { continue; }
                             log_warn!(stdout, "  [{}] {} — {} variable(s) need configuration",

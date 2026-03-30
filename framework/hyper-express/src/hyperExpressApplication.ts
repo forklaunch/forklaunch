@@ -165,8 +165,6 @@ export class Application<
     arg1?: string | ((listen_socket: uWebsockets.us_listen_socket) => void),
     arg2?: (listen_socket: uWebsockets.us_listen_socket) => void
   ): Promise<uWebsockets.us_listen_socket> {
-    this.validateAllRoutes();
-
     if (process.env.FORKLAUNCH_MODE === 'openapi') {
       const openApiSpec = generateOpenApiSpecs<SV>(
         this.schemaValidator,
@@ -200,6 +198,8 @@ export class Application<
       );
       process.exit(0);
     }
+
+    this.validateAllRoutes();
 
     if (typeof arg0 === 'number') {
       const port = arg0 || Number(process.env.PORT);

@@ -1,6 +1,6 @@
 import { p, type PropertyBuilders } from '@mikro-orm/core';
 import { COMPLIANCE_KEY, type ComplianceLevel } from './complianceTypes';
-import { EncryptedType } from './encryptedType';
+import { EncryptedType, resolveTypeInstance } from './encryptedType';
 
 // ---------------------------------------------------------------------------
 // Runtime Proxy implementation
@@ -57,38 +57,31 @@ const ENCRYPTED_LEVELS: ReadonlySet<ComplianceLevel> = new Set([
 ]);
 
 /**
- * Detect the original type hint from the builder's ~options to create
- * the appropriate EncryptedType variant for deserialization.
+ * Resolve the element runtimeType and isArray flag from builder options.
+ * Uses the actual MikroORM Type instance's runtimeType — no manual
+ * type-name enumeration needed.
  */
-function detectOriginalType(options: Record<string, unknown>): string {
+function resolveEncryptedTypeArgs(options: Record<string, unknown>): {
+  elementRuntimeType: string;
+  isArray: boolean;
+} {
   const type = options.type;
-  if (!type) return 'string';
+  const isArray = options.array === true;
 
-  // type can be a string name or a Type instance
-  let t: string;
-  if (typeof type === 'string') {
-    t = type.toLowerCase();
-  } else if (typeof type === 'object' && type !== null) {
-    // Type instance — use constructor name or runtimeType
-    const rt = (type as { runtimeType?: string }).runtimeType;
-    t = rt ?? type.constructor?.name?.toLowerCase() ?? 'string';
-  } else {
-    return 'string';
+  // For arrays, the type is the element type (constructor or instance).
+  // For p.array() with no chained element type, type is an ArrayType instance.
+  const resolved = resolveTypeInstance(type);
+  if (resolved) {
+    const rt = resolved.runtimeType;
+    // ArrayType's runtimeType is 'string[]' — treat as array of strings
+    if (rt.endsWith('[]')) {
+      return { elementRuntimeType: rt.slice(0, -2) || 'string', isArray: true };
+    }
+    return { elementRuntimeType: rt, isArray };
   }
 
-  if (t.includes('json') || t === 'object') return 'json';
-  if (
-    t.includes('int') ||
-    t === 'number' ||
-    t === 'double' ||
-    t === 'float' ||
-    t === 'decimal' ||
-    t === 'smallint' ||
-    t === 'tinyint'
-  )
-    return 'number';
-  if (t === 'boolean' || t === 'bool') return 'boolean';
-  return 'string';
+  // No type set (e.g., plain enum) — default to string
+  return { elementRuntimeType: 'string', isArray };
 }
 
 /**
@@ -105,11 +98,11 @@ function wrapClassified(builder: object, level: ComplianceLevel): unknown {
       '~options'
     ] as Record<string, unknown> | undefined;
     if (options) {
-      const originalType = detectOriginalType(options);
-      options.type = new EncryptedType(originalType);
+      const { elementRuntimeType, isArray } = resolveEncryptedTypeArgs(options);
+      options.type = new EncryptedType(elementRuntimeType, isArray);
       // Force column type to text since encrypted output is always a string
       options.columnType = 'text';
-      options.runtimeType = originalType === 'json' ? 'object' : originalType;
+      options.runtimeType = isArray ? 'object' : elementRuntimeType;
     }
   }
 

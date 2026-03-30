@@ -1,5 +1,51 @@
 # @forklaunch/infrastructure-s3
 
+## 1.3.11
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.13
+
+## 1.3.10
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.12
+
+## 1.3.9
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.11
+
+## 1.3.8
+
+### Patch Changes
+
+- Align package vers
+- Updated dependencies
+  - @forklaunch/common@1.2.11
+  - @forklaunch/core@1.3.10
+
+## 1.3.7
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.9
+
+## 1.3.6
+
+### Patch Changes
+
+- fix nested app and router
+- Updated dependencies
+  - @forklaunch/common@1.2.10
+  - @forklaunch/core@1.3.8
+
 ## 1.3.5
 
 ### Patch Changes

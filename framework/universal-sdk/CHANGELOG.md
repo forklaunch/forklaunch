@@ -1,5 +1,21 @@
 # @forklaunch/universal-sdk
 
+## 1.2.11
+
+### Patch Changes
+
+- Align package vers
+- Updated dependencies
+  - @forklaunch/common@1.2.11
+
+## 1.2.10
+
+### Patch Changes
+
+- fix nested app and router
+- Updated dependencies
+  - @forklaunch/common@1.2.10
+
 ## 1.2.9
 
 ### Patch Changes

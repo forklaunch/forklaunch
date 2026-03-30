@@ -161,6 +161,73 @@ describe('validateSurfacingFunctions at listen()', () => {
     expect(server).toBeDefined();
   });
 
+  it('passes when surfaceRoles is on the app and sub-router is nested before mounting', async () => {
+    const app = forklaunchExpress(sv, otel, {
+      auth: {
+        surfaceRoles: () => new Set(['admin'])
+      }
+    });
+    const mid = forklaunchRouter('/mid', sv, otel);
+    const leaf = forklaunchRouter('/leaf', sv, otel);
+
+    leaf.get(
+      '/protected',
+      {
+        name: 'DeepRoute',
+        access: 'protected',
+        summary: 'test',
+        auth: {
+          jwt: { signatureKey: 'secret' },
+          allowedRoles: new Set(['admin'])
+        },
+        responses: { 200: string }
+      },
+      async (_req, res) => {
+        res.status(200).send('ok');
+      }
+    );
+
+    // Compose before mounting on app
+    mid.use(leaf);
+    app.use(mid);
+
+    server = app.listen(0) as Server;
+    expect(server).toBeDefined();
+  });
+
+  it('propagates app-level auth through a nested app that has no auth of its own', async () => {
+    const outer = forklaunchExpress(sv, otel, {
+      auth: {
+        surfaceRoles: () => new Set(['admin'])
+      }
+    });
+    const inner = forklaunchExpress(sv, otel);
+    const router = forklaunchRouter('/api', sv, otel);
+
+    router.get(
+      '/protected',
+      {
+        name: 'NestedAppRoute',
+        access: 'protected',
+        summary: 'test',
+        auth: {
+          jwt: { signatureKey: 'secret' },
+          allowedRoles: new Set(['admin'])
+        },
+        responses: { 200: string }
+      },
+      async (_req, res) => {
+        res.status(200).send('ok');
+      }
+    );
+
+    inner.use(router);
+    outer.use(inner);
+
+    server = outer.listen(0) as Server;
+    expect(server).toBeDefined();
+  });
+
   it('passes for public routes without any surfacing functions', async () => {
     const app = forklaunchExpress(sv, otel);
     const router = forklaunchRouter('/api', sv, otel);

@@ -1,5 +1,47 @@
 # @forklaunch/core
 
+## 1.3.13
+
+### Patch Changes
+
+- no more private fields
+
+## 1.3.12
+
+### Patch Changes
+
+- Turn private into public members
+
+## 1.3.11
+
+### Patch Changes
+
+- exhaustively cover serde
+
+## 1.3.10
+
+### Patch Changes
+
+- Align package vers
+- Updated dependencies
+  - @forklaunch/validator@1.2.11
+  - @forklaunch/common@1.2.11
+
+## 1.3.9
+
+### Patch Changes
+
+- Only validate on real path, not openapi path
+
+## 1.3.8
+
+### Patch Changes
+
+- fix nested app and router
+- Updated dependencies
+  - @forklaunch/validator@1.2.10
+  - @forklaunch/common@1.2.10
+
 ## 1.3.7
 
 ### Patch Changes

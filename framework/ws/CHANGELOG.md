@@ -1,5 +1,53 @@
 # @forklaunch/ws
 
+## 1.2.23
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.13
+
+## 1.2.22
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.12
+
+## 1.2.21
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.11
+
+## 1.2.20
+
+### Patch Changes
+
+- Align package vers
+- Updated dependencies
+  - @forklaunch/validator@1.2.11
+  - @forklaunch/common@1.2.11
+  - @forklaunch/core@1.3.10
+
+## 1.2.19
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.9
+
+## 1.2.18
+
+### Patch Changes
+
+- fix nested app and router
+- Updated dependencies
+  - @forklaunch/validator@1.2.10
+  - @forklaunch/common@1.2.10
+  - @forklaunch/core@1.3.8
+
 ## 1.2.17
 
 ### Patch Changes

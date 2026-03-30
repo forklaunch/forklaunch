@@ -1,5 +1,17 @@
 # @forklaunch/common
 
+## 1.2.11
+
+### Patch Changes
+
+- Align package vers
+
+## 1.2.10
+
+### Patch Changes
+
+- fix nested app and router
+
 ## 1.2.9
 
 ### Patch Changes

@@ -9,23 +9,23 @@ importers:
   .:
     dependencies:
       '@forklaunch/common':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@forklaunch/core':
-        specifier: ^1.3.7
-        version: 1.3.7(socks@2.8.7)
+        specifier: ^1.3.13
+        version: 1.3.13(socks@2.8.7)
       '@forklaunch/express':
-        specifier: ^1.2.17
-        version: 1.2.17(jose@6.2.2)(socks@2.8.7)(zod@4.3.6)
+        specifier: ^1.2.23
+        version: 1.2.23(jose@6.2.2)(socks@2.8.7)(zod@4.3.6)
       '@forklaunch/hyper-express':
-        specifier: ^1.2.17
-        version: 1.2.17(express@5.2.1)(socks@2.8.7)
+        specifier: ^1.2.23
+        version: 1.2.23(express@5.2.1)(socks@2.8.7)
       '@forklaunch/universal-sdk':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@forklaunch/validator':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
     devDependencies:
       '@biomejs/biome':
         specifier: 2.4.9
@@ -94,29 +94,29 @@ importers:
         specifier: workspace:*
         version: link:../monitoring
       '@forklaunch/common':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@forklaunch/core':
-        specifier: ^1.3.7
-        version: 1.3.7(socks@2.8.7)
+        specifier: ^1.3.13
+        version: 1.3.13(socks@2.8.7)
       '@forklaunch/express':
-        specifier: ^1.2.17
-        version: 1.2.17(jose@6.2.2)(socks@2.8.7)(zod@4.3.6)
+        specifier: ^1.2.23
+        version: 1.2.23(jose@6.2.2)(socks@2.8.7)(zod@4.3.6)
       '@forklaunch/hyper-express':
-        specifier: ^1.2.17
-        version: 1.2.17(express@5.2.1)(socks@2.8.7)
+        specifier: ^1.2.23
+        version: 1.2.23(express@5.2.1)(socks@2.8.7)
       '@forklaunch/implementation-billing-base':
         specifier: workspace:*
         version: link:../implementations/billing/base
       '@forklaunch/infrastructure-redis':
-        specifier: ^1.3.5
-        version: 1.3.5(socks@2.8.7)
+        specifier: ^1.3.11
+        version: 1.3.11(socks@2.8.7)
       '@forklaunch/interfaces-billing':
         specifier: workspace:*
         version: link:../interfaces/billing
       '@forklaunch/validator':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@mikro-orm/core':
         specifier: 7.0.6
         version: 7.0.6
@@ -161,8 +161,8 @@ importers:
         version: 4.3.6
     devDependencies:
       '@forklaunch/testing':
-        specifier: ^1.2.9
-        version: 1.2.9(vitest@4.1.2(@opentelemetry/api@1.9.1)(@types/node@25.5.0)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.5.0)(esbuild@0.27.4)(tsx@4.21.0)(yaml@2.8.3)))
+        specifier: ^1.2.11
+        version: 1.2.11(vitest@4.1.2(@opentelemetry/api@1.9.1)(@types/node@25.5.0)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.5.0)(esbuild@0.27.4)(tsx@4.21.0)(yaml@2.8.3)))
       '@mikro-orm/cli':
         specifier: 7.0.6
         version: 7.0.6
@@ -215,29 +215,29 @@ importers:
         specifier: workspace:*
         version: link:../monitoring
       '@forklaunch/common':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@forklaunch/core':
-        specifier: ^1.3.7
-        version: 1.3.7(socks@2.8.7)
+        specifier: ^1.3.13
+        version: 1.3.13(socks@2.8.7)
       '@forklaunch/express':
-        specifier: ^1.2.17
-        version: 1.2.17(jose@6.2.2)(socks@2.8.7)(zod@4.3.6)
+        specifier: ^1.2.23
+        version: 1.2.23(jose@6.2.2)(socks@2.8.7)(zod@4.3.6)
       '@forklaunch/hyper-express':
-        specifier: ^1.2.17
-        version: 1.2.17(express@5.2.1)(socks@2.8.7)
+        specifier: ^1.2.23
+        version: 1.2.23(express@5.2.1)(socks@2.8.7)
       '@forklaunch/implementation-billing-stripe':
         specifier: workspace:*
         version: link:../implementations/billing/stripe
       '@forklaunch/infrastructure-redis':
-        specifier: ^1.3.5
-        version: 1.3.5(socks@2.8.7)
+        specifier: ^1.3.11
+        version: 1.3.11(socks@2.8.7)
       '@forklaunch/interfaces-billing':
         specifier: workspace:*
         version: link:../interfaces/billing
       '@forklaunch/validator':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@mikro-orm/core':
         specifier: 7.0.6
         version: 7.0.6
@@ -285,8 +285,8 @@ importers:
         version: 4.3.6
     devDependencies:
       '@forklaunch/testing':
-        specifier: ^1.2.9
-        version: 1.2.9(vitest@4.1.2(@opentelemetry/api@1.9.1)(@types/node@25.5.0)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.5.0)(esbuild@0.27.4)(tsx@4.21.0)(yaml@2.8.3)))
+        specifier: ^1.2.11
+        version: 1.2.11(vitest@4.1.2(@opentelemetry/api@1.9.1)(@types/node@25.5.0)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.5.0)(esbuild@0.27.4)(tsx@4.21.0)(yaml@2.8.3)))
       '@mikro-orm/cli':
         specifier: 7.0.6
         version: 7.0.6
@@ -330,20 +330,20 @@ importers:
   core:
     dependencies:
       '@forklaunch/common':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@forklaunch/core':
-        specifier: ^1.3.7
-        version: 1.3.7(socks@2.8.7)
+        specifier: ^1.3.13
+        version: 1.3.13(socks@2.8.7)
       '@forklaunch/express':
-        specifier: ^1.2.17
-        version: 1.2.17(jose@6.2.2)(socks@2.8.7)(zod@4.3.6)
+        specifier: ^1.2.23
+        version: 1.2.23(jose@6.2.2)(socks@2.8.7)(zod@4.3.6)
       '@forklaunch/hyper-express':
-        specifier: ^1.2.17
-        version: 1.2.17(express@5.2.1)(socks@2.8.7)
+        specifier: ^1.2.23
+        version: 1.2.23(express@5.2.1)(socks@2.8.7)
       '@forklaunch/validator':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@mikro-orm/core':
         specifier: 7.0.6
         version: 7.0.6
@@ -382,8 +382,8 @@ importers:
         specifier: workspace:*
         version: link:../monitoring
       '@forklaunch/core':
-        specifier: ^1.3.7
-        version: 1.3.7(socks@2.8.7)
+        specifier: ^1.3.13
+        version: 1.3.13(socks@2.8.7)
       '@forklaunch/hyper-express-fork':
         specifier: ^6.17.35
         version: 6.17.35
@@ -394,8 +394,8 @@ importers:
         specifier: workspace:*
         version: link:../interfaces/iam
       '@forklaunch/validator':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@mikro-orm/core':
         specifier: 7.0.6
         version: 7.0.6
@@ -440,8 +440,8 @@ importers:
         version: 4.3.6
     devDependencies:
       '@forklaunch/testing':
-        specifier: ^1.2.9
-        version: 1.2.9(vitest@4.1.2(@opentelemetry/api@1.9.1)(@types/node@25.5.0)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.5.0)(esbuild@0.27.4)(tsx@4.21.0)(yaml@2.8.3)))
+        specifier: ^1.2.11
+        version: 1.2.11(vitest@4.1.2(@opentelemetry/api@1.9.1)(@types/node@25.5.0)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.5.0)(esbuild@0.27.4)(tsx@4.21.0)(yaml@2.8.3)))
       '@mikro-orm/cli':
         specifier: 7.0.6
         version: 7.0.6
@@ -491,8 +491,8 @@ importers:
         specifier: workspace:*
         version: link:../monitoring
       '@forklaunch/core':
-        specifier: ^1.3.7
-        version: 1.3.7(socks@2.8.7)
+        specifier: ^1.3.13
+        version: 1.3.13(socks@2.8.7)
       '@forklaunch/implementation-iam-base':
         specifier: workspace:*
         version: link:../implementations/iam/base
@@ -546,8 +546,8 @@ importers:
         version: 4.3.6
     devDependencies:
       '@forklaunch/testing':
-        specifier: ^1.2.9
-        version: 1.2.9(vitest@4.1.2(@opentelemetry/api@1.9.1)(@types/node@25.5.0)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.5.0)(esbuild@0.27.4)(tsx@4.21.0)(yaml@2.8.3)))
+        specifier: ^1.2.11
+        version: 1.2.11(vitest@4.1.2(@opentelemetry/api@1.9.1)(@types/node@25.5.0)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.5.0)(esbuild@0.27.4)(tsx@4.21.0)(yaml@2.8.3)))
       '@mikro-orm/cli':
         specifier: 7.0.6
         version: 7.0.6
@@ -585,20 +585,20 @@ importers:
   implementations/billing/base:
     dependencies:
       '@forklaunch/common':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@forklaunch/core':
-        specifier: ^1.3.7
-        version: 1.3.7(socks@2.8.7)
+        specifier: ^1.3.13
+        version: 1.3.13(socks@2.8.7)
       '@forklaunch/interfaces-billing':
         specifier: workspace:*
         version: link:../../../interfaces/billing
       '@forklaunch/internal':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@forklaunch/validator':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@mikro-orm/core':
         specifier: 7.0.6
         version: 7.0.6
@@ -628,11 +628,11 @@ importers:
   implementations/billing/stripe:
     dependencies:
       '@forklaunch/common':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@forklaunch/core':
-        specifier: ^1.3.7
-        version: 1.3.7(socks@2.8.7)
+        specifier: ^1.3.13
+        version: 1.3.13(socks@2.8.7)
       '@forklaunch/implementation-billing-base':
         specifier: workspace:*
         version: link:../base
@@ -640,11 +640,11 @@ importers:
         specifier: workspace:*
         version: link:../../../interfaces/billing
       '@forklaunch/internal':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@forklaunch/validator':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@mikro-orm/core':
         specifier: 7.0.6
         version: 7.0.6
@@ -677,20 +677,20 @@ importers:
   implementations/iam/base:
     dependencies:
       '@forklaunch/common':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@forklaunch/core':
-        specifier: ^1.3.7
-        version: 1.3.7(socks@2.8.7)
+        specifier: ^1.3.13
+        version: 1.3.13(socks@2.8.7)
       '@forklaunch/interfaces-iam':
         specifier: workspace:*
         version: link:../../../interfaces/iam
       '@forklaunch/internal':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@forklaunch/validator':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@mikro-orm/core':
         specifier: 7.0.6
         version: 7.0.6
@@ -723,14 +723,14 @@ importers:
   implementations/worker/bullmq:
     dependencies:
       '@forklaunch/core':
-        specifier: ^1.3.7
-        version: 1.3.7(socks@2.8.7)
+        specifier: ^1.3.13
+        version: 1.3.13(socks@2.8.7)
       '@forklaunch/interfaces-worker':
         specifier: workspace:*
         version: link:../../../interfaces/worker
       '@forklaunch/internal':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@sinclair/typebox':
         specifier: ^0.34.49
         version: 0.34.49
@@ -763,14 +763,14 @@ importers:
   implementations/worker/database:
     dependencies:
       '@forklaunch/core':
-        specifier: ^1.3.7
-        version: 1.3.7(socks@2.8.7)
+        specifier: ^1.3.13
+        version: 1.3.13(socks@2.8.7)
       '@forklaunch/interfaces-worker':
         specifier: workspace:*
         version: link:../../../interfaces/worker
       '@forklaunch/internal':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@mikro-orm/core':
         specifier: 7.0.6
         version: 7.0.6
@@ -803,14 +803,14 @@ importers:
   implementations/worker/kafka:
     dependencies:
       '@forklaunch/core':
-        specifier: ^1.3.7
-        version: 1.3.7(socks@2.8.7)
+        specifier: ^1.3.13
+        version: 1.3.13(socks@2.8.7)
       '@forklaunch/interfaces-worker':
         specifier: workspace:*
         version: link:../../../interfaces/worker
       '@forklaunch/internal':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@sinclair/typebox':
         specifier: ^0.34.49
         version: 0.34.49
@@ -843,14 +843,14 @@ importers:
   implementations/worker/redis:
     dependencies:
       '@forklaunch/core':
-        specifier: ^1.3.7
-        version: 1.3.7(socks@2.8.7)
+        specifier: ^1.3.13
+        version: 1.3.13(socks@2.8.7)
       '@forklaunch/interfaces-worker':
         specifier: workspace:*
         version: link:../../../interfaces/worker
       '@forklaunch/internal':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@sinclair/typebox':
         specifier: ^0.34.49
         version: 0.34.49
@@ -880,8 +880,8 @@ importers:
   interfaces/billing:
     dependencies:
       '@forklaunch/common':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@mikro-orm/core':
         specifier: 7.0.6
         version: 7.0.6
@@ -902,8 +902,8 @@ importers:
   interfaces/iam:
     dependencies:
       '@forklaunch/common':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@mikro-orm/core':
         specifier: 7.0.6
         version: 7.0.6
@@ -945,8 +945,8 @@ importers:
   monitoring:
     dependencies:
       '@forklaunch/core':
-        specifier: ^1.3.7
-        version: 1.3.7(socks@2.8.7)
+        specifier: ^1.3.13
+        version: 1.3.13(socks@2.8.7)
 
   sample-worker:
     dependencies:
@@ -957,8 +957,8 @@ importers:
         specifier: workspace:*
         version: link:../monitoring
       '@forklaunch/core':
-        specifier: ^1.3.7
-        version: 1.3.7(socks@2.8.7)
+        specifier: ^1.3.13
+        version: 1.3.13(socks@2.8.7)
       '@forklaunch/implementation-worker-bullmq':
         specifier: workspace:*
         version: link:../implementations/worker/bullmq
@@ -972,17 +972,17 @@ importers:
         specifier: workspace:*
         version: link:../implementations/worker/redis
       '@forklaunch/infrastructure-redis':
-        specifier: ^1.3.5
-        version: 1.3.5(socks@2.8.7)
+        specifier: ^1.3.11
+        version: 1.3.11(socks@2.8.7)
       '@forklaunch/infrastructure-s3':
-        specifier: ^1.3.5
-        version: 1.3.5(socks@2.8.7)
+        specifier: ^1.3.11
+        version: 1.3.11(socks@2.8.7)
       '@forklaunch/interfaces-worker':
         specifier: workspace:*
         version: link:../interfaces/worker
       '@forklaunch/universal-sdk':
-        specifier: ^1.2.9
-        version: 1.2.9
+        specifier: ^1.2.11
+        version: 1.2.11
       '@mikro-orm/core':
         specifier: 7.0.6
         version: 7.0.6
@@ -1045,8 +1045,8 @@ importers:
         version: 4.3.6
     devDependencies:
       '@forklaunch/testing':
-        specifier: ^1.2.9
-        version: 1.2.9(vitest@4.1.2(@opentelemetry/api@1.9.1)(@types/node@25.5.0)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.5.0)(esbuild@0.27.4)(tsx@4.21.0)(yaml@2.8.3)))
+        specifier: ^1.2.11
+        version: 1.2.11(vitest@4.1.2(@opentelemetry/api@1.9.1)(@types/node@25.5.0)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.5.0)(esbuild@0.27.4)(tsx@4.21.0)(yaml@2.8.3)))
       '@mikro-orm/cli':
         specifier: 7.0.6
         version: 7.0.6
@@ -1901,29 +1901,29 @@ packages:
       '@mikro-orm/core': ^7.0.0
       better-auth: ^1.0.0
 
-  '@forklaunch/common@1.2.9':
-    resolution: {integrity: sha512-kCC8NkjoZiYxes21zbSBE3//G6JPJZwHIc7AoudzOyML09NWSo7KBUa05PMwdr3MV1uaaiX/4A5k+hmSNZYVbQ==}
+  '@forklaunch/common@1.2.11':
+    resolution: {integrity: sha512-0LjUfAqeaNodKZIZ5EFZteBRLL2n13YKRmb+EE0IRm0gxukpuuWzzG+lUivsqnGv/RUHtMfsKLsILPx1mcMkJQ==}
 
-  '@forklaunch/core@1.3.7':
-    resolution: {integrity: sha512-ZiU6v5HqUBtW5jpybMomU7dgvWo6/iz0yZuVXqNuzH6pBOa/XCOBHsy6pfxE6+n6/D8LcYk537HeGXT7QCC7NQ==}
+  '@forklaunch/core@1.3.13':
+    resolution: {integrity: sha512-YwIvqtqz++JFM4XdbK68B2NavFqBG5yHm3uTydBhKsitYe57uzbSDEo7OkqR/QVFrASTgKKgZKwo/Zf5XWLgdQ==}
 
-  '@forklaunch/express@1.2.17':
-    resolution: {integrity: sha512-BrjbSv+xHS64nWUCfvRPWuREue3x1iWfzdDRoLsznLzi4t8K1PkrTRg+MilUOBx4JwpnWuKp93KBd1f67NtKhw==}
+  '@forklaunch/express@1.2.23':
+    resolution: {integrity: sha512-EajjmWyI1EUxr3dBXfkfXrWsOQiTxFLxc70yaRkh5FVwZXOC5f5I9ifWjlIs7rGQjakZmtPeUleUx2vGWXQbyQ==}
 
   '@forklaunch/hyper-express-fork@6.17.35':
     resolution: {integrity: sha512-FXez51tbt+3bB8J6B6qcL1Jqp0Bd6/Aq2iFVaQq3PDeeWAAXhktnN9+WkQ+UdqvxgV07oHbZgOY6ec56K0IxTg==}
 
-  '@forklaunch/hyper-express@1.2.17':
-    resolution: {integrity: sha512-+WngtYnp2kBS/0h/rmz2Fgw1xdDLkNvi+u4/cfPeIQABwnRwsiHKyFFg0ufEifMh95zwOequmzvLP6gPfF5Dzw==}
+  '@forklaunch/hyper-express@1.2.23':
+    resolution: {integrity: sha512-vtothg5rPxjwFhwDcZskKsGS6UF9XoMgO+TDZ7/sROExLfJ6jqPG80c/HXdal93dAMYB2mE0/BkMJZyBSPJjGQ==}
 
-  '@forklaunch/infrastructure-redis@1.3.5':
-    resolution: {integrity: sha512-35Tu6h0i7rAN+3ceZ7QpPa4ubXTQAAH5FoL7+ZzC/xuDTAIwtXr+AdnDUw2blyHElTdGvVzobcfTQrmbp1RArw==}
+  '@forklaunch/infrastructure-redis@1.3.11':
+    resolution: {integrity: sha512-W73vTHMCH59Feg55EjbJHWj3WZq9DVzjwbeZM/amGP+fN3UFM7wBOaT9594Gs3H0oUAcKtjTi/aPvrYVKr/gmg==}
 
-  '@forklaunch/infrastructure-s3@1.3.5':
-    resolution: {integrity: sha512-DrZU6LPfjM8inxkAire0XwzKUbckDYCbjh8tMF90TFqbaCHAt96SGTmLJxER6IUR2SDUjiDM27UWX9O0V0epGw==}
+  '@forklaunch/infrastructure-s3@1.3.11':
+    resolution: {integrity: sha512-MM3iQ0/T4NlIRe0W2pCex3kej2Q7/Ql8v2tU5gJXPEEAGIpovK5PLC52BDj/5G0EClJ1K0nKC4zyIzWWCPFOXA==}
 
-  '@forklaunch/internal@1.2.9':
-    resolution: {integrity: sha512-1DFPfbUOV+OfN+xRSL//hWSgK9Em8CsmA13nZbi6RKCdOyN4SMyNmgMdOdzcmoU/aTWgWQ53lTkGZoBwrhMrlQ==}
+  '@forklaunch/internal@1.2.11':
+    resolution: {integrity: sha512-q7dYWrYUPVjDx0zQx7WcNLbMDNcA2ArvF4UFbDFBzzOkIbIWFG+BZn1gBvBr3CbkimUyYBWdB4lYhZ6sYYaUKQ==}
 
   '@forklaunch/opentelemetry-instrumentation-hyper-express@0.0.5':
     resolution: {integrity: sha512-AwkA0ywzdZRz5p+kRMGWH0v0MH2aqxhlIBLV8SQDETKTbpN6G1BtptxPegC9QFFfCJSywDguXDNvVdmxX+VV0A==}
@@ -1931,19 +1931,19 @@ packages:
     peerDependencies:
       '@opentelemetry/api': ^1.3.0
 
-  '@forklaunch/testing@1.2.9':
-    resolution: {integrity: sha512-LAk6gDXLpnLl9XXHrxVsaHtBhU7fqrM3rqV4TU8ZZoPsL4XzbEupQN4teIz5XahvcODVqMmGKJTitZ6zwD6+0w==}
+  '@forklaunch/testing@1.2.11':
+    resolution: {integrity: sha512-B2aV7Ugwaj1YWPHJS9w9hXdTIYYhvtYS0tYIlVd27w2zcGcdBuVW/NzAfRViWjOwSOC6Ndks6yphJE1dPP+LGA==}
     peerDependencies:
       vitest: ^3.0.0
 
-  '@forklaunch/universal-sdk@1.2.9':
-    resolution: {integrity: sha512-VLFvwnCGm9lSFr83CWr9voJOxunm3HI97tTIVkL8h52SXqv2yRo21fQ7QwF/XSMhpoZWf/LbML5pfIGW41EauQ==}
+  '@forklaunch/universal-sdk@1.2.11':
+    resolution: {integrity: sha512-NDcqwsfcRBanT35kmIEzHa02v1Bgss+2+HpeDJVJzuKU1A7s8wVsv1I9SmXKDMWux4Zq4UegOaCxnjNK36UCzg==}
 
-  '@forklaunch/validator@1.2.9':
-    resolution: {integrity: sha512-O5tEW+A7qPMDIM4QZByn28hHshjF9op4mT6jSJq56pNqn9HqvMiz9kObJ9gcqOIHz5ggJGXc/UcyH4CN2z3y/Q==}
+  '@forklaunch/validator@1.2.11':
+    resolution: {integrity: sha512-yWXi2r3yTUXlHGx/QwYzQU2SM7DiBbAQeBaolPif1OHxbz6X7mB0pb/UcSHN7fgiqYKXDT/PbTHsISb6w+AEAA==}
 
-  '@forklaunch/ws@1.2.17':
-    resolution: {integrity: sha512-eo9C9a/4Uyh/A0Uwa26MVYY+TlMVVbREAXbkxobL0wAC6bTLW8V0S/s4oVSci+t9n2ZTAMhj3lshEL6u7SDFtQ==}
+  '@forklaunch/ws@1.2.23':
+    resolution: {integrity: sha512-j2S1zO8/dfS2i986/ee6e81rJDwhf25TJ6RytO8k6sdUUJub4+vPlMmnDe61kDzCDROfR1uJIiAvBBBoR433Qw==}
 
   '@gar/promise-retry@1.0.3':
     resolution: {integrity: sha512-GmzA9ckNokPypTg10pgpeHNQe7ph+iIKKmhKu3Ob9ANkswreCx7R3cKmY781K8QK3AqVL3xVh9A42JvIAbkkSA==}
@@ -4213,8 +4213,8 @@ packages:
     resolution: {integrity: sha512-Gmy6FhYlCY7uOElZUSbxo2UCDH8owEk996gkbrpsgGtrJLM3J7jGxl9Ic7Qwwj4ivOE5AWZWRMecDdF7hqGjFA==}
     engines: {node: '>=10'}
 
-  caniuse-lite@1.0.30001781:
-    resolution: {integrity: sha512-RdwNCyMsNBftLjW6w01z8bKEvT6e/5tpPVEgtn22TiLGlstHOVecsX2KHFkD5e/vRnIE4EGzpuIODb3mtswtkw==}
+  caniuse-lite@1.0.30001782:
+    resolution: {integrity: sha512-dZcaJLJeDMh4rELYFw1tvSn1bhZWYFOt468FcbHHxx/Z/dFidd1I6ciyFdi3iwfQCyOjqo9upF6lGQYtMiJWxw==}
 
   chai@6.2.2:
     resolution: {integrity: sha512-NUPRluOfOiTKBKvWPtSD4PhFvWCqOi0BGStNWs57X9js7XGTprSmFoz5F0tWhR4WPjNeR9jXqdC7/UpSJTnlRg==}
@@ -8920,14 +8920,14 @@ snapshots:
       better-auth: 1.5.6(@opentelemetry/api@1.9.1)(better-sqlite3@12.8.0)(mongodb@7.1.1(socks@2.8.7))(mysql2@3.20.0(@types/node@25.5.0))(pg@8.20.0)(vitest@4.1.2(@opentelemetry/api@1.9.1)(@types/node@25.5.0)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.5.0)(esbuild@0.27.4)(tsx@4.21.0)(yaml@2.8.3)))
       dset: 3.1.4
 
-  '@forklaunch/common@1.2.9': {}
+  '@forklaunch/common@1.2.11': {}
 
-  '@forklaunch/core@1.3.7(socks@2.8.7)':
+  '@forklaunch/core@1.3.13(socks@2.8.7)':
     dependencies:
       '@asyncapi/parser': 3.6.0
-      '@forklaunch/common': 1.2.9
+      '@forklaunch/common': 1.2.11
       '@forklaunch/opentelemetry-instrumentation-hyper-express': 0.0.5(@opentelemetry/api@1.9.1)
-      '@forklaunch/validator': 1.2.9
+      '@forklaunch/validator': 1.2.11
       '@mikro-orm/core': 7.0.6
       '@mikro-orm/mongodb': 7.0.6(@mikro-orm/core@7.0.6)(socks@2.8.7)
       '@opentelemetry/api': 1.9.1
@@ -8973,11 +8973,11 @@ snapshots:
       - supports-color
       - sury
 
-  '@forklaunch/express@1.2.17(jose@6.2.2)(socks@2.8.7)(zod@4.3.6)':
+  '@forklaunch/express@1.2.23(jose@6.2.2)(socks@2.8.7)(zod@4.3.6)':
     dependencies:
-      '@forklaunch/common': 1.2.9
-      '@forklaunch/core': 1.3.7(socks@2.8.7)
-      '@forklaunch/validator': 1.2.9
+      '@forklaunch/common': 1.2.11
+      '@forklaunch/core': 1.3.13(socks@2.8.7)
+      '@forklaunch/validator': 1.2.11
       '@modelcontextprotocol/sdk': 1.28.0(zod@4.3.6)
       '@scalar/express-api-reference': 0.9.5
       '@types/multer': 2.1.0
@@ -9023,13 +9023,13 @@ snapshots:
       typed-emitter: 2.1.0
       uWebSockets.js: https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3
 
-  '@forklaunch/hyper-express@1.2.17(express@5.2.1)(socks@2.8.7)':
+  '@forklaunch/hyper-express@1.2.23(express@5.2.1)(socks@2.8.7)':
     dependencies:
-      '@forklaunch/common': 1.2.9
-      '@forklaunch/core': 1.3.7(socks@2.8.7)
+      '@forklaunch/common': 1.2.11
+      '@forklaunch/core': 1.3.13(socks@2.8.7)
       '@forklaunch/hyper-express-fork': 6.17.35
-      '@forklaunch/validator': 1.2.9
-      '@forklaunch/ws': 1.2.17(socks@2.8.7)
+      '@forklaunch/validator': 1.2.11
+      '@forklaunch/ws': 1.2.23(socks@2.8.7)
       '@scalar/express-api-reference': 0.9.5
       cors: 2.8.6
       live-directory: 3.0.3
@@ -9059,10 +9059,10 @@ snapshots:
       - sury
       - utf-8-validate
 
-  '@forklaunch/infrastructure-redis@1.3.5(socks@2.8.7)':
+  '@forklaunch/infrastructure-redis@1.3.11(socks@2.8.7)':
     dependencies:
-      '@forklaunch/common': 1.2.9
-      '@forklaunch/core': 1.3.7(socks@2.8.7)
+      '@forklaunch/common': 1.2.11
+      '@forklaunch/core': 1.3.13(socks@2.8.7)
       redis: 5.11.0
     transitivePeerDependencies:
       - '@aws-sdk/credential-providers'
@@ -9082,11 +9082,11 @@ snapshots:
       - supports-color
       - sury
 
-  '@forklaunch/infrastructure-s3@1.3.5(socks@2.8.7)':
+  '@forklaunch/infrastructure-s3@1.3.11(socks@2.8.7)':
     dependencies:
       '@aws-sdk/client-s3': 3.1019.0
-      '@forklaunch/common': 1.2.9
-      '@forklaunch/core': 1.3.7(socks@2.8.7)
+      '@forklaunch/common': 1.2.11
+      '@forklaunch/core': 1.3.13(socks@2.8.7)
     transitivePeerDependencies:
       - '@aws-sdk/credential-providers'
       - '@cfworker/json-schema'
@@ -9106,10 +9106,10 @@ snapshots:
       - supports-color
       - sury
 
-  '@forklaunch/internal@1.2.9':
+  '@forklaunch/internal@1.2.11':
     dependencies:
-      '@forklaunch/common': 1.2.9
-      '@forklaunch/validator': 1.2.9
+      '@forklaunch/common': 1.2.11
+      '@forklaunch/validator': 1.2.11
       '@mikro-orm/core': 7.0.6
     transitivePeerDependencies:
       - dataloader
@@ -9124,7 +9124,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@forklaunch/testing@1.2.9(vitest@4.1.2(@opentelemetry/api@1.9.1)(@types/node@25.5.0)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.5.0)(esbuild@0.27.4)(tsx@4.21.0)(yaml@2.8.3)))':
+  '@forklaunch/testing@1.2.11(vitest@4.1.2(@opentelemetry/api@1.9.1)(@types/node@25.5.0)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.5.0)(esbuild@0.27.4)(tsx@4.21.0)(yaml@2.8.3)))':
     dependencies:
       '@mikro-orm/core': 7.0.6
       ioredis: 5.10.1
@@ -9137,25 +9137,25 @@ snapshots:
       - react-native-b4a
       - supports-color
 
-  '@forklaunch/universal-sdk@1.2.9':
+  '@forklaunch/universal-sdk@1.2.11':
     dependencies:
-      '@forklaunch/common': 1.2.9
+      '@forklaunch/common': 1.2.11
       ajv: 8.18.0
       ajv-formats: 3.0.1(ajv@8.18.0)
 
-  '@forklaunch/validator@1.2.9':
+  '@forklaunch/validator@1.2.11':
     dependencies:
-      '@forklaunch/common': 1.2.9
+      '@forklaunch/common': 1.2.11
       '@sinclair/typebox': 0.34.49
       ts-deepmerge: 7.0.3
       zod: 4.3.6
 
-  '@forklaunch/ws@1.2.17(socks@2.8.7)':
+  '@forklaunch/ws@1.2.23(socks@2.8.7)':
     dependencies:
       '@asyncapi/parser': 3.6.0
-      '@forklaunch/common': 1.2.9
-      '@forklaunch/core': 1.3.7(socks@2.8.7)
-      '@forklaunch/validator': 1.2.9
+      '@forklaunch/common': 1.2.11
+      '@forklaunch/core': 1.3.13(socks@2.8.7)
+      '@forklaunch/validator': 1.2.11
       '@types/ws': 8.18.1
       ws: 8.20.0
     transitivePeerDependencies:
@@ -11607,7 +11607,7 @@ snapshots:
   browserslist@4.28.1:
     dependencies:
       baseline-browser-mapping: 2.10.12
-      caniuse-lite: 1.0.30001781
+      caniuse-lite: 1.0.30001782
       electron-to-chromium: 1.5.328
       node-releases: 2.0.36
       update-browserslist-db: 1.2.3(browserslist@4.28.1)
@@ -11710,7 +11710,7 @@ snapshots:
 
   camelcase@6.3.0: {}
 
-  caniuse-lite@1.0.30001781: {}
+  caniuse-lite@1.0.30001782: {}
 
   chai@6.2.2: {}
 

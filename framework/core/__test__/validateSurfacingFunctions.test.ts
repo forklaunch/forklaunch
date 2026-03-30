@@ -219,4 +219,152 @@ describe('validateSurfacingFunctions', () => {
     // Now validate from the parent — child has inherited options
     expect(() => parent.validateSurfacingFunctions()).not.toThrow();
   });
+
+  it('propagates parent auth to deeply nested sub-routers composed before mounting', () => {
+    const app = createRouter('/', {
+      auth: {
+        surfaceRoles: () => new Set(['admin'])
+      }
+    });
+
+    const mid = createRouter('/mid');
+    const leaf = createRouter('/leaf');
+
+    leaf.get(
+      '/test',
+      {
+        name: 'LeafRoute',
+        access: 'protected',
+        summary: 'test',
+        auth: {
+          jwt: { signatureKey: 'secret' },
+          allowedRoles: new Set(['admin'])
+        },
+        responses: { 200: string }
+      },
+      async (_req, res) => {
+        res.status(200).send('ok');
+      }
+    );
+
+    // Compose child routers BEFORE mounting on app
+    mid.use(leaf);
+    app.use(mid);
+
+    // App-level surfaceRoles should propagate to the leaf
+    expect(() => app.validateSurfacingFunctions()).not.toThrow();
+  });
+
+  it('child router with own auth still inherits parent surfacing functions', () => {
+    const parent = createRouter('/', {
+      auth: {
+        surfaceRoles: () => new Set(['admin'])
+      }
+    });
+
+    const child = createRouter('/child', {
+      auth: {
+        sessionSchema: { name: 'string' }
+      }
+    });
+
+    child.get(
+      '/test',
+      {
+        name: 'ChildWithRoles',
+        access: 'protected',
+        summary: 'test',
+        auth: {
+          jwt: { signatureKey: 'secret' },
+          allowedRoles: new Set(['admin'])
+        },
+        responses: { 200: string }
+      },
+      async (_req, res) => {
+        res.status(200).send('ok');
+      }
+    );
+
+    parent.use(child);
+
+    // Parent's surfaceRoles should be visible even though child has its own auth
+    expect(() => parent.validateSurfacingFunctions()).not.toThrow();
+  });
+
+  it('child router auth properties override parent for the same key', () => {
+    const parentSurface = () => new Set(['parent-role']);
+    const childSurface = () => new Set(['child-role']);
+
+    const parent = createRouter('/', {
+      auth: {
+        surfaceRoles: parentSurface,
+        surfacePermissions: () => new Set(['parent-perm'])
+      }
+    });
+
+    const child = createRouter('/child', {
+      auth: {
+        surfaceRoles: childSurface
+      }
+    });
+
+    child.get(
+      '/test',
+      {
+        name: 'OverrideTest',
+        access: 'protected',
+        summary: 'test',
+        auth: {
+          jwt: { signatureKey: 'secret' },
+          allowedRoles: new Set(['child-role']),
+          allowedPermissions: new Set(['parent-perm'])
+        },
+        responses: { 200: string }
+      },
+      async (_req, res) => {
+        res.status(200).send('ok');
+      }
+    );
+
+    parent.use(child);
+
+    // Child overrides surfaceRoles, parent's surfacePermissions fills the gap
+    expect(() => parent.validateSurfacingFunctions()).not.toThrow();
+  });
+
+  it('sub-router auth overrides parent auth during validation', () => {
+    const parent = createRouter('/', {
+      auth: {
+        surfaceRoles: () => new Set(['admin'])
+      }
+    });
+
+    const child = createRouter('/child', {
+      auth: {
+        surfacePermissions: () => new Set(['read'])
+      }
+    });
+
+    child.get(
+      '/test',
+      {
+        name: 'ChildPermRoute',
+        access: 'protected',
+        summary: 'test',
+        auth: {
+          jwt: { signatureKey: 'secret' },
+          allowedPermissions: new Set(['read'])
+        },
+        responses: { 200: string }
+      },
+      async (_req, res) => {
+        res.status(200).send('ok');
+      }
+    );
+
+    parent.use(child);
+
+    // Child's own auth config should be used for its routes
+    expect(() => parent.validateSurfacingFunctions()).not.toThrow();
+  });
 });

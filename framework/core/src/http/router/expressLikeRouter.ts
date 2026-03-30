@@ -1999,12 +1999,19 @@ export class ForklaunchExpressLikeRouter<
    * available (from the route, router, or application level).
    * Call this at listen() time when the full option chain is assembled.
    */
-  validateSurfacingFunctions(router: ForklaunchRouter<SV> = this) {
-    const globalAuth =
+  validateSurfacingFunctions(
+    router: ForklaunchRouter<SV> = this,
+    parentAuth?: Record<string, unknown>
+  ) {
+    const routerAuth =
       router.routerOptions?.auth &&
       typeof router.routerOptions.auth === 'object'
         ? router.routerOptions.auth
         : undefined;
+    const globalAuth =
+      routerAuth && parentAuth
+        ? { ...parentAuth, ...routerAuth }
+        : (routerAuth ?? parentAuth);
 
     for (const route of router.routes) {
       const auth = route.contractDetails.auth;
@@ -2046,7 +2053,7 @@ export class ForklaunchExpressLikeRouter<
     }
 
     for (const subRouter of router.routers) {
-      this.validateSurfacingFunctions(subRouter);
+      this.validateSurfacingFunctions(subRouter, globalAuth);
     }
   }
 
