@@ -1,5 +1,15 @@
 # @forklaunch/ws
 
+## 1.2.27
+
+### Patch Changes
+
+- update enum logic
+- Updated dependencies
+  - @forklaunch/validator@1.2.14
+  - @forklaunch/common@1.2.14
+  - @forklaunch/core@1.3.17
+
 ## 1.2.26
 
 ### Patch Changes

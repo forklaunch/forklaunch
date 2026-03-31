@@ -163,10 +163,16 @@ export class EncryptedType extends Type<unknown, string | null> {
 
     // Validate enum values at app level before encryption replaces them
     // with ciphertext that would never pass a DB check constraint.
-    if (this._enumValues && !this._enumValues.includes(value)) {
-      throw new Error(
-        `Invalid enum value: ${String(value)}. Allowed values: ${this._enumValues.join(', ')}`
-      );
+    if (this._enumValues) {
+      const valuesToCheck =
+        this._isArray && Array.isArray(value) ? value : [value];
+      for (const v of valuesToCheck) {
+        if (!this._enumValues.includes(v)) {
+          throw new Error(
+            `Invalid enum value: ${String(v)}. Allowed values: ${this._enumValues.join(', ')}`
+          );
+        }
+      }
     }
 
     if (!_encryptor) {

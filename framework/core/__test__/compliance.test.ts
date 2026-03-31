@@ -305,4 +305,74 @@ describe('fp encrypted type resolution', () => {
     const et = getEncryptedType(builder);
     expect(et).toBeUndefined();
   });
+
+  it('resolves lazy enum factory with encrypted compliance', () => {
+    const Gender = { Male: 'male', Female: 'female', Other: 'other' } as const;
+    const builder = fp
+      .enum(() => Gender)
+      .nullable()
+      .compliance('pii');
+    const et = getEncryptedType(builder);
+    expect(et).toBeInstanceOf(EncryptedType);
+
+    // Validate that allowed values were extracted from the lazy factory
+    const platform = {} as Platform;
+    const encrypted = et!.convertToDatabaseValue('female', platform);
+    expect(typeof encrypted).toBe('string');
+    const decrypted = et!.convertToJSValue(encrypted, platform);
+    expect(decrypted).toBe('female');
+  });
+
+  it('rejects invalid values for lazy enum factory with encrypted compliance', () => {
+    const Gender = { Male: 'male', Female: 'female', Other: 'other' } as const;
+    const builder = fp.enum(() => Gender).compliance('pii');
+    const et = getEncryptedType(builder);
+    const platform = {} as Platform;
+    expect(() => et!.convertToDatabaseValue('invalid', platform)).toThrow(
+      /Invalid enum value: invalid/
+    );
+  });
+
+  it('strips enum metadata for encrypted compliance (no DB check constraint)', () => {
+    const Status = { Active: 'active', Inactive: 'inactive' } as const;
+    const builder = fp.enum(() => Status).compliance('pii');
+    const opts = (builder as Record<string | symbol, unknown>)['~options'] as
+      | Record<string, unknown>
+      | undefined;
+    // enum metadata should be removed so MikroORM won't generate check constraints
+    expect(opts?.items).toBeUndefined();
+    expect(opts?.enum).toBeUndefined();
+    expect(opts?.nativeEnumName).toBeUndefined();
+    // column type should be text (encrypted ciphertext)
+    expect(opts?.columnType).toBe('text');
+  });
+
+  it('resolves enum with direct items and encrypted compliance', () => {
+    const builder = fp
+      .enum(['red', 'green', 'blue'] as const)
+      .compliance('pii');
+    const et = getEncryptedType(builder);
+    const platform = {} as Platform;
+
+    // Valid value works
+    const encrypted = et!.convertToDatabaseValue('red', platform);
+    const decrypted = et!.convertToJSValue(encrypted, platform);
+    expect(decrypted).toBe('red');
+
+    // Invalid value throws
+    expect(() => et!.convertToDatabaseValue('purple', platform)).toThrow(
+      /Invalid enum value: purple/
+    );
+  });
+
+  it('resolves bare enum() with encrypted compliance (no items)', () => {
+    const builder = fp.enum().compliance('pii');
+    const et = getEncryptedType(builder);
+    expect(et).toBeInstanceOf(EncryptedType);
+    // No items → no enum validation, but encryption still works
+    const platform = {} as Platform;
+    const encrypted = et!.convertToDatabaseValue('anything', platform);
+    const decrypted = et!.convertToJSValue(encrypted, platform);
+    expect(decrypted).toBe('anything');
+  });
 });

@@ -1,5 +1,11 @@
 # @forklaunch/interfaces-worker
 
+## 1.0.21
+
+### Patch Changes
+
+- package version bumps
+
 ## 1.0.20
 
 ### Patch Changes

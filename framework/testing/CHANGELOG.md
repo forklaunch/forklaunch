@@ -1,5 +1,11 @@
 # @forklaunch/testing
 
+## 1.2.14
+
+### Patch Changes
+
+- update enum logic
+
 ## 1.2.13
 
 ### Patch Changes

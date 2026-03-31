@@ -1,5 +1,14 @@
 # @forklaunch/internal
 
+## 1.2.14
+
+### Patch Changes
+
+- update enum logic
+- Updated dependencies
+  - @forklaunch/validator@1.2.14
+  - @forklaunch/common@1.2.14
+
 ## 1.2.13
 
 ### Patch Changes

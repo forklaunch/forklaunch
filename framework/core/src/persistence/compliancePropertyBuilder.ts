@@ -107,8 +107,11 @@ function wrapClassified(builder: object, level: ComplianceLevel): unknown {
       let enumValues: unknown[] | undefined;
       if (options.items) {
         enumValues = extractEnumValues(options.items);
+        // Remove all enum metadata so MikroORM won't generate a DB
+        // check constraint (encrypted ciphertext never matches plaintext).
         delete options.items;
         delete options.nativeEnumName;
+        delete options.enum;
       }
 
       options.type = new EncryptedType(elementRuntimeType, isArray, enumValues);
@@ -168,9 +171,14 @@ function isRelationMethod(prop: string | symbol): boolean {
 // ---------------------------------------------------------------------------
 
 /**
- * Extract the raw values from enum items (array or native TS enum object).
+ * Extract the raw values from enum items (array, native TS enum object,
+ * or lazy factory function `() => EnumObj`).
  */
 function extractEnumValues(items: unknown): unknown[] {
+  // Resolve lazy enum factory: p.enum(() => MyEnum) stores the function
+  if (typeof items === 'function') {
+    return extractEnumValues((items as () => unknown)());
+  }
   if (Array.isArray(items)) return items;
   if (items != null && typeof items === 'object') {
     // Native TS numeric enums have reverse mappings (value → key).
