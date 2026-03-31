@@ -179,7 +179,7 @@ const environmentConfig = configInjector.chain({
 
 //! defines the runtime dependencies for the application
 const runtimeDependencies = environmentConfig.chain({
-  MikroORM: {
+  Orm: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
     factory: () => new MikroORM(mikroOrmOptionsConfig)
@@ -227,7 +227,7 @@ const runtimeDependencies = environmentConfig.chain({
       interval: 5000
     }
   },
-  OpenTelemetryCollector: {
+  OtelCollector: {
     lifetime: Lifetime.Singleton,
     type: OpenTelemetryCollector<Metrics>,
     factory: ({ OTEL_SERVICE_NAME, OTEL_LEVEL }) =>
@@ -240,15 +240,10 @@ const runtimeDependencies = environmentConfig.chain({
   TtlCache: {
     lifetime: Lifetime.Singleton,
     type: RedisTtlCache,
-    factory: ({
-      REDIS_URL,
-      OpenTelemetryCollector,
-      OTEL_LEVEL,
-      ENCRYPTION_KEY
-    }) =>
+    factory: ({ REDIS_URL, OtelCollector, OTEL_LEVEL, ENCRYPTION_KEY }) =>
       new RedisTtlCache(
         60 * 60 * 1000,
-        OpenTelemetryCollector,
+        OtelCollector,
         {
           url: REDIS_URL
         },
@@ -265,7 +260,7 @@ const runtimeDependencies = environmentConfig.chain({
     lifetime: Lifetime.Singleton,
     type: S3ObjectStore,
     factory: ({
-      OpenTelemetryCollector,
+      OtelCollector,
       OTEL_LEVEL,
       S3_REGION,
       S3_ACCESS_KEY_ID,
@@ -275,7 +270,7 @@ const runtimeDependencies = environmentConfig.chain({
       ENCRYPTION_KEY
     }) =>
       new S3ObjectStore(
-        OpenTelemetryCollector,
+        OtelCollector,
         {
           bucket: S3_BUCKET,
           clientConfig: {
@@ -301,10 +296,10 @@ const runtimeDependencies = environmentConfig.chain({
     lifetime: Lifetime.Scoped,
     type: EntityManager,
     factory: (
-      { MikroORM },
+      { Orm },
       context: { entityManagerOptions?: ForkOptions; tenantId?: string }
     ) => {
-      const em = MikroORM.em.fork(context.entityManagerOptions);
+      const em = Orm.em.fork(context.entityManagerOptions);
       if (context.tenantId) {
         em.setFilterParams('tenant', { tenantId: context.tenantId });
       }
@@ -396,7 +391,7 @@ const serviceDependencies = runtimeDependencies.chain({
       type<KafkaWorkerConsumer<SampleWorkerEventRecord, KafkaWorkerOptions>>()
     ),
     factory:
-      ({ SAMPLE_WORKER_QUEUE, KafkaWorkerOptions, OpenTelemetryCollector }) =>
+      ({ SAMPLE_WORKER_QUEUE, KafkaWorkerOptions, OtelCollector }) =>
       (
         processEventsFunction: WorkerProcessFunction<SampleWorkerEventRecord>,
         failureHandler: WorkerFailureHandler<SampleWorkerEventRecord>
@@ -406,7 +401,7 @@ const serviceDependencies = runtimeDependencies.chain({
           KafkaWorkerOptions,
           processEventsFunction,
           failureHandler,
-          OpenTelemetryCollector
+          OtelCollector
         )
   },
   SampleWorkerDatabaseProducer: {

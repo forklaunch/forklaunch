@@ -1,5 +1,13 @@
 # @forklaunch/validator
 
+## 1.2.13
+
+### Patch Changes
+
+- Update packages and enum constraint fix
+- Updated dependencies
+  - @forklaunch/common@1.2.13
+
 ## 1.2.12
 
 ### Patch Changes

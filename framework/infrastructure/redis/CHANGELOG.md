@@ -1,5 +1,14 @@
 # @forklaunch/infrastructure-redis
 
+## 1.3.14
+
+### Patch Changes
+
+- Update packages and enum constraint fix
+- Updated dependencies
+  - @forklaunch/common@1.2.13
+  - @forklaunch/core@1.3.16
+
 ## 1.3.13
 
 ### Patch Changes

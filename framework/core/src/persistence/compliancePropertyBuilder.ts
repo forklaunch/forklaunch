@@ -100,7 +100,18 @@ function wrapClassified(builder: object, level: ComplianceLevel): unknown {
     ] as Record<string, unknown> | undefined;
     if (options) {
       const { elementRuntimeType, isArray } = resolveEncryptedTypeArgs(options);
-      options.type = new EncryptedType(elementRuntimeType, isArray);
+
+      // For enum fields, extract allowed values for app-level validation
+      // then remove enum metadata so MikroORM won't generate a DB check
+      // constraint (the encrypted ciphertext would never satisfy it).
+      let enumValues: unknown[] | undefined;
+      if (options.items) {
+        enumValues = extractEnumValues(options.items);
+        delete options.items;
+        delete options.nativeEnumName;
+      }
+
+      options.type = new EncryptedType(elementRuntimeType, isArray, enumValues);
       // Force column type to text since encrypted output is always a string
       options.columnType = 'text';
       options.runtimeType = isArray ? 'object' : elementRuntimeType;

@@ -1,5 +1,16 @@
 # @forklaunch/hyper-express
 
+## 1.2.26
+
+### Patch Changes
+
+- Update packages and enum constraint fix
+- Updated dependencies
+  - @forklaunch/validator@1.2.13
+  - @forklaunch/common@1.2.13
+  - @forklaunch/core@1.3.16
+  - @forklaunch/ws@1.2.26
+
 ## 1.2.25
 
 ### Patch Changes

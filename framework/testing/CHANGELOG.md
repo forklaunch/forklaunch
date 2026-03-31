@@ -1,5 +1,11 @@
 # @forklaunch/testing
 
+## 1.2.13
+
+### Patch Changes
+
+- Update packages and enum constraint fix
+
 ## 1.2.12
 
 ### Patch Changes

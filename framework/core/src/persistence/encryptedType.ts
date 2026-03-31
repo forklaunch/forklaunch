@@ -133,16 +133,24 @@ export class EncryptedType extends Type<unknown, string | null> {
   // are loaded (dual-package hazard with CJS/ESM or duplicate node_modules).
   readonly _elementRuntimeType: string;
   readonly _isArray: boolean;
+  readonly _enumValues: unknown[] | undefined;
 
   /**
    * @param elementRuntimeType - The runtimeType of the (element) type,
    *   e.g. 'string', 'number', 'Date', 'bigint', 'Buffer', 'any'.
    * @param isArray - Whether this is an array container type.
+   * @param enumValues - Optional list of allowed enum values for app-level
+   *   validation (used when an enum field has encrypted compliance).
    */
-  constructor(elementRuntimeType: string = 'string', isArray: boolean = false) {
+  constructor(
+    elementRuntimeType: string = 'string',
+    isArray: boolean = false,
+    enumValues?: unknown[]
+  ) {
     super();
     this._elementRuntimeType = elementRuntimeType;
     this._isArray = isArray;
+    this._enumValues = enumValues;
   }
 
   override convertToDatabaseValue(
@@ -152,6 +160,14 @@ export class EncryptedType extends Type<unknown, string | null> {
   ): string | null {
     if (value === null || value === undefined) return null;
     if (typeof value === 'string' && value.length === 0) return '';
+
+    // Validate enum values at app level before encryption replaces them
+    // with ciphertext that would never pass a DB check constraint.
+    if (this._enumValues && !this._enumValues.includes(value)) {
+      throw new Error(
+        `Invalid enum value: ${String(value)}. Allowed values: ${this._enumValues.join(', ')}`
+      );
+    }
 
     if (!_encryptor) {
       return this.serialize(value);
