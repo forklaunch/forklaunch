@@ -5,7 +5,7 @@ import {
 import { ci, tokens } from './bootstrapper';
 import { type SampleWorkerEventRecord } from './persistence/entities/sampleWorkerRecord.entity';
 
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 const s3 = ci.resolve(tokens.S3ObjectStore);
 
 const processEvents: (

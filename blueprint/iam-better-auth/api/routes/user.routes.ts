@@ -5,7 +5,7 @@ import {
   surfaceRoles
 } from '../controllers/user.controller';
 
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 
 export const userRouter = forklaunchRouter(
   '/user',
