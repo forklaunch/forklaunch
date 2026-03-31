@@ -2,7 +2,7 @@ import { handlers, schemaValidator, string } from '@forklaunch/blueprint-core';
 import { default as Stripe, default as stripe } from 'stripe';
 import { ci, tokens } from '../../bootstrapper';
 
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 const serviceFactory = ci.scopedResolver(tokens.WebhookService);
 const STRIPE_WEBHOOK_SECRET = ci.resolve(tokens.STRIPE_WEBHOOK_SECRET);
 

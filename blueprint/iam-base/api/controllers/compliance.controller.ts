@@ -1,8 +1,13 @@
-import { handlers, schemaValidator, string } from '@forklaunch/blueprint-core';
+import {
+  handlers,
+  PLATFORM_SYSTEM_ROLES,
+  schemaValidator,
+  string
+} from '@forklaunch/blueprint-core';
 import { ci, tokens } from '../../bootstrapper';
 
 const complianceDataService = ci.resolve(tokens.ComplianceDataService);
-const HMAC_SECRET_KEY = ci.resolve(tokens.HMAC_SECRET_KEY);
+const JWKS_PUBLIC_KEY_URL = ci.resolve(tokens.JWKS_PUBLIC_KEY_URL);
 
 /**
  * GDPR Right to Erasure — deletes all PII/PHI/PCI data for a user
@@ -13,15 +18,14 @@ export const eraseUserData = handlers.delete(
   '/erase/:userId',
   {
     name: 'EraseUserData',
-    access: 'internal',
+    access: 'protected',
     summary:
       'Erases all PII/PHI/PCI data for a user from IAM entities (GDPR Art. 17)',
     auth: {
-      hmac: {
-        secretKeys: {
-          default: HMAC_SECRET_KEY
-        }
-      }
+      jwt: {
+        jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL
+      },
+      allowedRoles: PLATFORM_SYSTEM_ROLES
     },
     params: {
       userId: string
@@ -56,15 +60,14 @@ export const exportUserData = handlers.get(
   '/export/:userId',
   {
     name: 'ExportUserData',
-    access: 'internal',
+    access: 'protected',
     summary:
       'Exports all PII/PHI/PCI data for a user from IAM entities (GDPR Art. 20)',
     auth: {
-      hmac: {
-        secretKeys: {
-          default: HMAC_SECRET_KEY
-        }
-      }
+      jwt: {
+        jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL
+      },
+      allowedRoles: PLATFORM_SYSTEM_ROLES
     },
     params: {
       userId: string

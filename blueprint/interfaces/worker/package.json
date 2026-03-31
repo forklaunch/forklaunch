@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/interfaces-worker",
-  "version": "1.0.13",
+  "version": "1.0.20",
   "description": "Worker interfaces for forklaunch",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -42,11 +42,11 @@
     "test": "vitest --passWithNoTests"
   },
   "devDependencies": {
-    "@typescript/native-preview": "7.0.0-dev.20260320.1",
+    "@typescript/native-preview": "7.0.0-dev.20260331.1",
     "depcheck": "^1.4.7",
     "eslint": "^10.1.0",
     "prettier": "^3.8.1",
     "typedoc": "^0.28.18",
-    "typescript-eslint": "^8.57.2"
+    "typescript-eslint": "^8.58.0"
   }
 }

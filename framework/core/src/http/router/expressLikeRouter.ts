@@ -13,6 +13,9 @@ import {
   toRecord,
   TypeSafeFunction
 } from '@forklaunch/common';
+import { hasPermissionChecks } from '../guards/hasPermissionChecks';
+import { hasRoleChecks } from '../guards/hasRoleChecks';
+import { hasScopeChecks } from '../guards/hasScopeChecks';
 import { isConstrainedForklaunchRouter } from '../guards/isConstrainedForklaunchRouter';
 import { isExpressLikeSchemaHandler } from '../guards/isExpressLikeSchemaHandler';
 import { isForklaunchExpressLikeRouter } from '../guards/isForklaunchExpressLikeRouter';
@@ -1983,11 +1986,75 @@ export class ForklaunchExpressLikeRouter<
       ...(this.routerOptions ?? {}),
       ...(router.routerOptions ?? {})
     } as typeof this.routerOptions;
+
     router.routers.forEach((subRouter) => {
       this.addRouterOptions(
         subRouter as ConstrainedForklaunchRouter<SV, RouterHandler>
       );
     });
+  }
+
+  /**
+   * Validates that all protected routes have the required surfacing functions
+   * available (from the route, router, or application level).
+   * Call this at listen() time when the full option chain is assembled.
+   */
+  validateSurfacingFunctions(
+    router: ForklaunchRouter<SV> = this,
+    parentAuth?: Record<string, unknown>
+  ) {
+    const routerAuth =
+      router.routerOptions?.auth &&
+      typeof router.routerOptions.auth === 'object'
+        ? router.routerOptions.auth
+        : undefined;
+    const globalAuth =
+      routerAuth && parentAuth
+        ? { ...parentAuth, ...routerAuth }
+        : (routerAuth ?? parentAuth);
+
+    for (const route of router.routes) {
+      const auth = route.contractDetails.auth;
+      const access = route.contractDetails.access;
+      if (!auth || access !== 'protected') continue;
+
+      const routeAuth = auth as Record<string, unknown>;
+      const routeName = route.contractDetails.name;
+
+      if (hasPermissionChecks(auth)) {
+        if (
+          !routeAuth['surfacePermissions'] &&
+          !globalAuth?.surfacePermissions
+        ) {
+          throw new Error(
+            `Route '${routeName}': declares allowedPermissions or forbiddenPermissions ` +
+              `but no surfacePermissions function was provided on the route, router, or application`
+          );
+        }
+      }
+
+      if (hasRoleChecks(auth)) {
+        if (!routeAuth['surfaceRoles'] && !globalAuth?.surfaceRoles) {
+          throw new Error(
+            `Route '${routeName}': declares allowedRoles or forbiddenRoles ` +
+              `but no surfaceRoles function was provided on the route, router, or application`
+          );
+        }
+      }
+
+      if (hasScopeChecks(auth)) {
+        if (!routeAuth['surfaceScopes'] && !globalAuth?.surfaceScopes) {
+          throw new Error(
+            `Route '${routeName}': declares requiredScope ` +
+              `but no surfaceScopes function was provided on the route, router, or application`
+          );
+        }
+      }
+    }
+
+    for (const subRouter of router.routers) {
+      this.validateSurfacingFunctions(subRouter, globalAuth);
+    }
   }
 
   use: TypedNestableMiddlewareDefinition<

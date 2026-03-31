@@ -1,5 +1,47 @@
 # @forklaunch/common
 
+## 1.2.13
+
+### Patch Changes
+
+- Update packages and enum constraint fix
+
+## 1.2.12
+
+### Patch Changes
+
+- sync changes across packages
+
+## 1.2.11
+
+### Patch Changes
+
+- Align package vers
+
+## 1.2.10
+
+### Patch Changes
+
+- fix nested app and router
+
+## 1.2.9
+
+### Patch Changes
+
+- Perf improvement
+
+## 1.2.8
+
+### Patch Changes
+
+- bump package versions
+
+## 1.2.7
+
+### Patch Changes
+
+- export consolidated retention logic
+
 ## 1.2.6
 
 ### Patch Changes

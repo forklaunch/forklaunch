@@ -111,11 +111,11 @@ function safePrettyFormat(
 }
 
 export class PinoLogger {
-  private pinoLogger: Logger;
-  private meta: AnyValueMap;
+  _pinoLogger: Logger;
+  _meta: AnyValueMap;
 
   constructor(level: LevelWithSilentOrString, meta: AnyValueMap = {}) {
-    this.pinoLogger = pino({
+    this._pinoLogger = pino({
       level: level || 'info',
       formatters: {
         level(label) {
@@ -133,7 +133,7 @@ export class PinoLogger {
         }
       }
     });
-    this.meta = meta;
+    this._meta = meta;
   }
 
   log(level: LevelWithSilent, ...args: (string | unknown | LoggerMeta)[]) {
@@ -169,7 +169,7 @@ export class PinoLogger {
       ...meta
     };
 
-    this.pinoLogger[level](...normalizeLogArgs(filteredArgs));
+    this._pinoLogger[level](...normalizeLogArgs(filteredArgs));
 
     const formattedBody = safePrettyFormat(level, filteredArgs);
 
@@ -178,7 +178,7 @@ export class PinoLogger {
         severityText: level,
         severityNumber: mapSeverity(level),
         body: formattedBody,
-        attributes: { ...this.meta, ...meta }
+        attributes: { ...this._meta, ...meta }
       });
     } catch (error) {
       console.error('Failed to emit OpenTelemetry log:', error);
@@ -214,11 +214,11 @@ export class PinoLogger {
   ) => this.log('trace', msg, ...args);
 
   child(meta: AnyValueMap = {}) {
-    return new PinoLogger(this.pinoLogger.level, { ...this.meta, ...meta });
+    return new PinoLogger(this._pinoLogger.level, { ...this._meta, ...meta });
   }
 
   getBaseLogger() {
-    return this.pinoLogger;
+    return this._pinoLogger;
   }
 }
 

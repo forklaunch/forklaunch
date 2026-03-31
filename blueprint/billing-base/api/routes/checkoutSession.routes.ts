@@ -8,7 +8,7 @@ import {
   handleCheckoutSuccess
 } from '../controllers/checkoutSession.controller';
 
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 
 export const checkoutSessionRouter = forklaunchRouter(
   '/checkout-session',

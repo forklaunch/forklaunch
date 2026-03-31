@@ -1,5 +1,130 @@
 # @forklaunch/hyper-express
 
+## 1.2.26
+
+### Patch Changes
+
+- Update packages and enum constraint fix
+- Updated dependencies
+  - @forklaunch/validator@1.2.13
+  - @forklaunch/common@1.2.13
+  - @forklaunch/core@1.3.16
+  - @forklaunch/ws@1.2.26
+
+## 1.2.25
+
+### Patch Changes
+
+- sync changes across packages
+- Updated dependencies
+  - @forklaunch/validator@1.2.12
+  - @forklaunch/common@1.2.12
+  - @forklaunch/core@1.3.15
+  - @forklaunch/ws@1.2.25
+
+## 1.2.24
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.14
+  - @forklaunch/ws@1.2.24
+
+## 1.2.23
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.13
+  - @forklaunch/ws@1.2.23
+
+## 1.2.22
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.12
+  - @forklaunch/ws@1.2.22
+
+## 1.2.21
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.11
+  - @forklaunch/ws@1.2.21
+
+## 1.2.20
+
+### Patch Changes
+
+- Align package vers
+- Updated dependencies
+  - @forklaunch/validator@1.2.11
+  - @forklaunch/common@1.2.11
+  - @forklaunch/core@1.3.10
+  - @forklaunch/ws@1.2.20
+
+## 1.2.19
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.9
+  - @forklaunch/ws@1.2.19
+
+## 1.2.18
+
+### Patch Changes
+
+- fix nested app and router
+- Updated dependencies
+  - @forklaunch/validator@1.2.10
+  - @forklaunch/common@1.2.10
+  - @forklaunch/core@1.3.8
+  - @forklaunch/ws@1.2.18
+
+## 1.2.17
+
+### Patch Changes
+
+- Perf improvement
+- Updated dependencies
+  - @forklaunch/validator@1.2.9
+  - @forklaunch/common@1.2.9
+  - @forklaunch/core@1.3.7
+  - @forklaunch/ws@1.2.17
+
+## 1.2.16
+
+### Patch Changes
+
+- bump package versions
+- Updated dependencies
+  - @forklaunch/validator@1.2.8
+  - @forklaunch/common@1.2.8
+  - @forklaunch/core@1.3.6
+  - @forklaunch/ws@1.2.16
+
+## 1.2.15
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.5
+  - @forklaunch/ws@1.2.15
+
+## 1.2.14
+
+### Patch Changes
+
+- export consolidated retention logic
+- Updated dependencies
+  - @forklaunch/validator@1.2.7
+  - @forklaunch/common@1.2.7
+  - @forklaunch/core@1.3.4
+  - @forklaunch/ws@1.2.14
+
 ## 1.2.13
 
 ### Patch Changes

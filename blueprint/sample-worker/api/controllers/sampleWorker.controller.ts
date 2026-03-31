@@ -5,7 +5,7 @@ import {
   SampleWorkerResponseMapper
 } from '../../domain/mappers/sampleWorker.mappers';
 
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 const serviceFactory = ci.scopedResolver(tokens.SampleWorkerService);
 const HMAC_SECRET_KEY = ci.resolve(tokens.HMAC_SECRET_KEY);
 

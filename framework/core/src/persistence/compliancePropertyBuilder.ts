@@ -1,6 +1,7 @@
-import { p, type PropertyBuilders } from '@mikro-orm/core';
+import { safeParse, safeStringify } from '@forklaunch/common';
+import { p, Type, type PropertyBuilders } from '@mikro-orm/core';
 import { COMPLIANCE_KEY, type ComplianceLevel } from './complianceTypes';
-import { EncryptedType } from './encryptedType';
+import { EncryptedType, resolveTypeInstance } from './encryptedType';
 
 // ---------------------------------------------------------------------------
 // Runtime Proxy implementation
@@ -57,38 +58,31 @@ const ENCRYPTED_LEVELS: ReadonlySet<ComplianceLevel> = new Set([
 ]);
 
 /**
- * Detect the original type hint from the builder's ~options to create
- * the appropriate EncryptedType variant for deserialization.
+ * Resolve the element runtimeType and isArray flag from builder options.
+ * Uses the actual MikroORM Type instance's runtimeType — no manual
+ * type-name enumeration needed.
  */
-function detectOriginalType(options: Record<string, unknown>): string {
+function resolveEncryptedTypeArgs(options: Record<string, unknown>): {
+  elementRuntimeType: string;
+  isArray: boolean;
+} {
   const type = options.type;
-  if (!type) return 'string';
+  const isArray = options.array === true;
 
-  // type can be a string name or a Type instance
-  let t: string;
-  if (typeof type === 'string') {
-    t = type.toLowerCase();
-  } else if (typeof type === 'object' && type !== null) {
-    // Type instance — use constructor name or runtimeType
-    const rt = (type as { runtimeType?: string }).runtimeType;
-    t = rt ?? type.constructor?.name?.toLowerCase() ?? 'string';
-  } else {
-    return 'string';
+  // For arrays, the type is the element type (constructor or instance).
+  // For p.array() with no chained element type, type is an ArrayType instance.
+  const resolved = resolveTypeInstance(type);
+  if (resolved) {
+    const rt = resolved.runtimeType;
+    // ArrayType's runtimeType is 'string[]' — treat as array of strings
+    if (rt.endsWith('[]')) {
+      return { elementRuntimeType: rt.slice(0, -2) || 'string', isArray: true };
+    }
+    return { elementRuntimeType: rt, isArray };
   }
 
-  if (t.includes('json') || t === 'object') return 'json';
-  if (
-    t.includes('int') ||
-    t === 'number' ||
-    t === 'double' ||
-    t === 'float' ||
-    t === 'decimal' ||
-    t === 'smallint' ||
-    t === 'tinyint'
-  )
-    return 'number';
-  if (t === 'boolean' || t === 'bool') return 'boolean';
-  return 'string';
+  // No type set (e.g., plain enum) — default to string
+  return { elementRuntimeType: 'string', isArray };
 }
 
 /**
@@ -105,11 +99,22 @@ function wrapClassified(builder: object, level: ComplianceLevel): unknown {
       '~options'
     ] as Record<string, unknown> | undefined;
     if (options) {
-      const originalType = detectOriginalType(options);
-      options.type = new EncryptedType(originalType);
+      const { elementRuntimeType, isArray } = resolveEncryptedTypeArgs(options);
+
+      // For enum fields, extract allowed values for app-level validation
+      // then remove enum metadata so MikroORM won't generate a DB check
+      // constraint (the encrypted ciphertext would never satisfy it).
+      let enumValues: unknown[] | undefined;
+      if (options.items) {
+        enumValues = extractEnumValues(options.items);
+        delete options.items;
+        delete options.nativeEnumName;
+      }
+
+      options.type = new EncryptedType(elementRuntimeType, isArray, enumValues);
       // Force column type to text since encrypted output is always a string
       options.columnType = 'text';
-      options.runtimeType = originalType === 'json' ? 'object' : originalType;
+      options.runtimeType = isArray ? 'object' : elementRuntimeType;
     }
   }
 
@@ -156,6 +161,68 @@ const RELATION_METHODS = new Set([
 
 function isRelationMethod(prop: string | symbol): boolean {
   return typeof prop === 'string' && RELATION_METHODS.has(prop);
+}
+
+// ---------------------------------------------------------------------------
+// Enum type inference
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract the raw values from enum items (array or native TS enum object).
+ */
+function extractEnumValues(items: unknown): unknown[] {
+  if (Array.isArray(items)) return items;
+  if (items != null && typeof items === 'object') {
+    // Native TS numeric enums have reverse mappings (value → key).
+    // Filter those out by keeping only values whose key is not itself a value.
+    const obj = items as Record<string, unknown>;
+    const allValues = Object.values(obj);
+    return allValues.filter((v) => typeof v !== 'string' || !(v in obj));
+  }
+  return [];
+}
+
+/**
+ * MikroORM custom Type that stores mixed-type enum values as text
+ * using safeStringify/safeParse for round-trip fidelity.
+ */
+class EnumTextType extends Type<unknown, string> {
+  override convertToDatabaseValue(value: unknown): string {
+    return safeStringify(value);
+  }
+
+  override convertToJSValue(value: unknown): unknown {
+    return safeParse(value);
+  }
+
+  override getColumnType(): string {
+    return 'text';
+  }
+
+  get runtimeType(): string {
+    return 'string';
+  }
+}
+
+/**
+ * Infer the MikroORM type for an enum property from its items.
+ *
+ * - All items are strings → 'text'
+ * - All items are numbers → 'integer'
+ * - Mixed types → EnumTextType (safeStringify/safeParse round-trip)
+ * - No items → 'text'
+ */
+function inferEnumType(items: unknown): string | EnumTextType {
+  const values = extractEnumValues(items);
+  if (values.length === 0) return 'text';
+
+  const allStrings = values.every((v) => typeof v === 'string');
+  if (allStrings) return 'text';
+
+  const allNumbers = values.every((v) => typeof v === 'number');
+  if (allNumbers) return 'integer';
+
+  return new EnumTextType();
 }
 
 // ---------------------------------------------------------------------------
@@ -207,7 +274,20 @@ export const fp: PropertyBuilders = new Proxy(p, {
         target,
         args
       );
-      return isBuilder(result) ? wrapUnclassified(result) : result;
+      if (isBuilder(result)) {
+        // For enum(), infer a default type so MikroORM metadata
+        // discovery doesn't require an explicit .type() call.
+        if (prop === 'enum') {
+          const options = (result as Record<string | symbol, unknown>)[
+            '~options'
+          ] as Record<string, unknown> | undefined;
+          if (options && !options.type) {
+            options.type = inferEnumType(options.items);
+          }
+        }
+        return wrapUnclassified(result);
+      }
+      return result;
     };
   }
 }) as PropertyBuilders;
