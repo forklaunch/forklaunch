@@ -42,8 +42,8 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "^1.2.6",
-    "@mikro-orm/core": "7.0.6"
+    "@forklaunch/common": "^1.2.14",
+    "@mikro-orm/core": "7.0.8"
   },
   "devDependencies": {
     "@typescript/native-preview": "7.0.0-dev.20260320.1",
