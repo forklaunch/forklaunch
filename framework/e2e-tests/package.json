@@ -43,7 +43,7 @@
     "@types/express-serve-static-core": "^5.1.1",
     "@types/qs": "^6.15.0",
     "@types/range-parser": "^1.2.7",
-    "@typescript/native-preview": "7.0.0-dev.20260327.2",
+    "@typescript/native-preview": "7.0.0-dev.20260401.1",
     "jose": "6.2.2",
     "tsup": "^8.5.1"
   }
