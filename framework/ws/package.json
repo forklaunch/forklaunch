@@ -48,12 +48,12 @@
     "@typescript/native-preview": "7.0.0-dev.20260327.2",
     "jest": "^30.3.0",
     "prettier": "^3.8.1",
-    "ts-jest": "^29.4.6",
+    "ts-jest": "^29.4.9",
     "ts-node": "^10.9.2",
     "tsup": "^8.5.1",
     "typedoc": "^0.28.18",
     "typescript": "^6.0.2",
-    "typescript-eslint": "^8.57.2",
+    "typescript-eslint": "^8.58.0",
     "zod": "^4.3.6"
   }
 }
