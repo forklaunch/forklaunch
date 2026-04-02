@@ -91,8 +91,8 @@
     "@forklaunch/common": "workspace:*",
     "@forklaunch/opentelemetry-instrumentation-hyper-express": "0.0.5",
     "@forklaunch/validator": "workspace:*",
-    "@mikro-orm/core": "7.0.6",
-    "@mikro-orm/mongodb": "7.0.6",
+    "@mikro-orm/core": "7.0.8",
+    "@mikro-orm/mongodb": "7.0.8",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/api-logs": "^0.214.0",
     "@opentelemetry/exporter-logs-otlp-http": "^0.214.0",
@@ -108,7 +108,7 @@
     "@opentelemetry/sdk-trace-node": "^2.6.1",
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "cors": "^2.8.6",
-    "dotenv": "^17.3.1",
+    "dotenv": "^17.4.0",
     "fastmcp": "^3.34.0",
     "jose": "6.2.2",
     "openapi3-ts": "^4.5.0",
@@ -132,11 +132,11 @@
     "jose": "6.1.3",
     "prettier": "^3.8.1",
     "testcontainers": "^11.13.0",
-    "ts-jest": "^29.4.6",
+    "ts-jest": "^29.4.9",
     "ts-node": "^10.9.2",
     "tsup": "^8.5.1",
     "typedoc": "^0.28.18",
     "typescript": "^6.0.2",
-    "typescript-eslint": "^8.57.2"
+    "typescript-eslint": "^8.58.0"
   }
 }
