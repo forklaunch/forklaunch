@@ -26,7 +26,6 @@ forklaunch sdk mode [options]
 
 **Options:**
 - `-t, --type <mode>` - SDK mode type: `generated` or `live`
-- `-p, --path <path>` - Path to application root (optional)
 - `-n, --dryrun` - Show what would be changed without making changes
 
 If `--type` is not specified, the CLI will prompt for mode selection interactively.
