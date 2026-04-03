@@ -1,27 +1,93 @@
 import { mikroOrmAdapter } from '@forklaunch/better-auth-mikro-orm-fork';
+import { PERMISSIONS, ROLES } from '@forklaunch/blueprint-core';
 import { Metrics } from '@forklaunch/blueprint-monitoring';
+import { getEnvVar } from '@forklaunch/common';
 import { OpenTelemetryCollector } from '@forklaunch/core/http';
 import { MikroORM } from '@mikro-orm/core';
 import { betterAuth, BetterAuthOptions } from 'better-auth';
-import { jwt, openAPI } from 'better-auth/plugins';
-import { getEnvVar } from '@forklaunch/common';
-import { Organization } from './persistence/entities/organization.entity';
-import { User } from './persistence/entities/user.entity';
+import { createAccessControl } from 'better-auth/plugins/access';
+import { jwt, openAPI, organization } from 'better-auth/plugins';
 
-type Plugins = [ReturnType<typeof jwt>, ReturnType<typeof openAPI>];
-const plugins: Plugins = [
+const statement = {
+  platform: [PERMISSIONS.PLATFORM_READ, PERMISSIONS.PLATFORM_WRITE]
+} as const;
+
+const ac = createAccessControl(statement);
+
+const ownerRole = ac.newRole({
+  platform: [PERMISSIONS.PLATFORM_READ, PERMISSIONS.PLATFORM_WRITE]
+});
+
+const adminRole = ac.newRole({
+  platform: [PERMISSIONS.PLATFORM_READ, PERMISSIONS.PLATFORM_WRITE]
+});
+
+const editorRole = ac.newRole({
+  platform: [PERMISSIONS.PLATFORM_READ, PERMISSIONS.PLATFORM_WRITE]
+});
+
+const viewerRole = ac.newRole({
+  platform: [PERMISSIONS.PLATFORM_READ]
+});
+
+const systemRole = ac.newRole({
+  platform: [PERMISSIONS.PLATFORM_READ, PERMISSIONS.PLATFORM_WRITE]
+});
+
+const plugins = [
   jwt({
     jwt: {
-      definePayload: async ({ user }) => ({
+      definePayload: async ({
+        user,
+        session
+      }: {
+        user: Record<string, unknown>;
+        session: Record<string, unknown>;
+      }) => ({
         sub: user.id,
         email: user.email,
-        organizationId: user.organizationId,
-        roleIds: user.roleIds
+        activeOrganizationId: (session.activeOrganizationId as string) ?? null
       })
     }
   }),
   openAPI({
     disableDefaultReference: true
+  }),
+  organization({
+    allowUserToCreateOrganization: true,
+    creatorRole: 'owner',
+    membershipLimit: 100,
+    invitationExpiresIn: 48 * 60 * 60 * 1000,
+    teams: { enabled: true },
+    dynamicAccessControl: { enabled: true },
+    ac,
+    roles: {
+      owner: ownerRole,
+      [ROLES.ADMIN]: adminRole,
+      [ROLES.EDITOR]: editorRole,
+      [ROLES.VIEWER]: viewerRole,
+      [ROLES.SYSTEM]: systemRole
+    },
+    schema: {
+      organization: {
+        additionalFields: {
+          domain: {
+            type: 'string',
+            required: false
+          },
+          subscription: {
+            type: 'string',
+            required: false,
+            defaultValue: 'free'
+          },
+          status: {
+            type: 'string',
+            required: false,
+            defaultValue: 'active'
+          }
+        }
+      }
+    }
   })
 ];
 
@@ -37,51 +103,26 @@ const userAdditionalFields = {
   phoneNumber: {
     type: 'string',
     required: false
-  },
-  organizationId: {
-    type: 'string',
-    required: false,
-    returned: true
-  },
-  roleIds: {
-    type: 'string[]',
-    required: false,
-    returned: true
-  },
-  organization: {
-    type: 'string',
-    required: false,
-    returned: false
-  },
-  roles: {
-    type: 'string[]',
-    required: false,
-    returned: false
   }
 } as const;
 
 export const betterAuthConfig = ({
   BETTER_AUTH_BASE_PATH,
-  PASSWORD_ENCRYPTION_SECRET,
   CORS_ORIGINS,
   orm,
   openTelemetryCollector
 }: {
   BETTER_AUTH_BASE_PATH: string;
-  PASSWORD_ENCRYPTION_SECRET: string;
   CORS_ORIGINS: string[];
   orm: MikroORM;
   openTelemetryCollector: OpenTelemetryCollector<Metrics>;
 }) => {
-  // Construct the base URL for OAuth callbacks
-  // Use BETTER_AUTH_URL if set (for Docker/production), otherwise construct from env vars
   const baseURL =
     getEnvVar('BETTER_AUTH_URL') ??
     (() => {
       const protocol = getEnvVar('PROTOCOL') ?? 'http';
       const host = getEnvVar('HOST') ?? 'localhost';
       const port = getEnvVar('PORT') ?? '8000';
-      // For Docker: HOST is 0.0.0.0, but browsers need localhost
       const publicHost = host === '0.0.0.0' ? 'localhost' : host;
       return `${protocol}://${publicHost}:${port}`;
     })();
@@ -89,7 +130,6 @@ export const betterAuthConfig = ({
   return {
     baseURL,
     basePath: BETTER_AUTH_BASE_PATH,
-    secret: PASSWORD_ENCRYPTION_SECRET,
     trustedOrigins: CORS_ORIGINS,
     socialProviders: {
       google: {
@@ -116,80 +156,13 @@ export const betterAuthConfig = ({
     emailAndPassword: {
       enabled: true
     },
+    session: {
+      expiresIn: 60 * 60 * 24, // 24 hours
+      updateAge: 60 * 60 // refresh session if older than 1 hour
+    },
     plugins,
     user: {
       additionalFields: userAdditionalFields
-    },
-    databaseHooks: {
-      user: {
-        create: {
-          before: async (user, ctx) => {
-            return {
-              data: {
-                ...user,
-                ...(ctx?.body.organization || ctx?.body.organizationId
-                  ? {
-                      organization: {
-                        $in: [
-                          ctx?.body.organizationId || ctx?.body.organization
-                        ]
-                      }
-                    }
-                  : {}),
-                ...(ctx?.body.roleIds || ctx?.body.roles
-                  ? {
-                      roles: {
-                        $in: ctx?.body.roleIds || ctx?.body.roles
-                      }
-                    }
-                  : {})
-              }
-            };
-          },
-          after: async (user) => {
-            // If user doesn't have an organization, create one for them
-            if (!user.organizationId) {
-              try {
-                const em = orm.em.fork();
-                const orgName = `${user.name || user.email.split('@')[0]}'s Organization`;
-
-                // Create organization using ORM entities
-                const organization = em.create(Organization, {
-                  name: orgName,
-                  domain: `${orgName.toLowerCase().replace(/[^a-z0-9]/g, '-')}.forklaunch.app`,
-                  subscription: 'free',
-                  status: 'active',
-                  createdAt: new Date(),
-                  updatedAt: new Date()
-                });
-
-                await em.persistAndFlush(organization);
-
-                // Update user with organization
-                const userEntity = await em.findOne(User, { id: user.id });
-                if (userEntity) {
-                  userEntity.organization = organization;
-                  await em.persistAndFlush(userEntity);
-                }
-
-                openTelemetryCollector.info(
-                  'Auto-created organization for new user',
-                  {
-                    userId: user.id,
-                    organizationId: organization.id,
-                    organizationName: orgName
-                  }
-                );
-              } catch (error) {
-                openTelemetryCollector.error(
-                  'Failed to auto-create organization for user',
-                  error
-                );
-              }
-            }
-          }
-        }
-      }
     },
     advanced: {
       database: {

@@ -11,16 +11,20 @@ import {
   UpdateSubscriptionDto
 } from '@forklaunch/interfaces-billing/types';
 import { AnySchemaValidator } from '@forklaunch/validator';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, InferEntity } from '@mikro-orm/core';
 import { BaseSubscriptionDtos } from '../domain/types/baseBillingDto.types';
 import { BaseSubscriptionEntities } from '../domain/types/baseBillingEntity.types';
 import { SubscriptionMappers } from '../domain/types/subscription.mapper.types';
+import { Subscription } from '../persistence/entities';
 
 export class BaseSubscriptionService<
   SchemaValidator extends AnySchemaValidator,
   PartyType,
   BillingProviderType,
-  Entities extends BaseSubscriptionEntities<PartyType, BillingProviderType>,
+  MapperEntities extends BaseSubscriptionEntities<
+    PartyType,
+    BillingProviderType
+  >,
   Dto extends BaseSubscriptionDtos<
     PartyType,
     BillingProviderType
@@ -38,7 +42,7 @@ export class BaseSubscriptionService<
   protected readonly mappers: SubscriptionMappers<
     PartyType,
     BillingProviderType,
-    Entities,
+    MapperEntities,
     Dto
   >;
 
@@ -46,7 +50,12 @@ export class BaseSubscriptionService<
     em: EntityManager,
     openTelemetryCollector: OpenTelemetryCollector<MetricsDefinition>,
     schemaValidator: SchemaValidator,
-    mappers: SubscriptionMappers<PartyType, BillingProviderType, Entities, Dto>,
+    mappers: SubscriptionMappers<
+      PartyType,
+      BillingProviderType,
+      MapperEntities,
+      Dto
+    >,
     readonly options?: {
       telemetry?: TelemetryOptions;
     }
@@ -96,11 +105,11 @@ export class BaseSubscriptionService<
       this.openTelemetryCollector.info('Getting subscription', idDto);
     }
     const subscription = await (em ?? this.em).findOneOrFail(
-      'Subscription',
+      this.mappers.SubscriptionMapper.entity as typeof Subscription,
       idDto
     );
     return this.mappers.SubscriptionMapper.toDto(
-      subscription as Entities['SubscriptionMapper']
+      subscription as InferEntity<MapperEntities['SubscriptionMapper']>
     );
   }
 
@@ -111,14 +120,17 @@ export class BaseSubscriptionService<
     if (this.evaluatedTelemetryOptions.logging) {
       this.openTelemetryCollector.info('Getting user subscription', id);
     }
-    const subscription = await (em ?? this.em).findOneOrFail('Subscription', {
-      partyId: id,
-      partyType: 'USER',
-      active: true
-    });
+    const subscription = await (em ?? this.em).findOneOrFail(
+      this.mappers.SubscriptionMapper.entity as typeof Subscription,
+      {
+        partyId: id,
+        partyType: 'USER',
+        active: true
+      }
+    );
 
     return this.mappers.SubscriptionMapper.toDto(
-      subscription as Entities['SubscriptionMapper']
+      subscription as InferEntity<MapperEntities['SubscriptionMapper']>
     );
   }
 
@@ -129,13 +141,16 @@ export class BaseSubscriptionService<
     if (this.evaluatedTelemetryOptions.logging) {
       this.openTelemetryCollector.info('Getting organization subscription', id);
     }
-    const subscription = await (em ?? this.em).findOneOrFail('Subscription', {
-      partyId: id,
-      partyType: 'ORGANIZATION',
-      active: true
-    });
+    const subscription = await (em ?? this.em).findOneOrFail(
+      this.mappers.SubscriptionMapper.entity as typeof Subscription,
+      {
+        partyId: id,
+        partyType: 'ORGANIZATION',
+        active: true
+      }
+    );
     return this.mappers.SubscriptionMapper.toDto(
-      subscription as Entities['SubscriptionMapper']
+      subscription as InferEntity<MapperEntities['SubscriptionMapper']>
     );
   }
 
@@ -172,11 +187,14 @@ export class BaseSubscriptionService<
     if (this.evaluatedTelemetryOptions.logging) {
       this.openTelemetryCollector.info('Deleting subscription', idDto);
     }
-    const subscription = await (em ?? this.em).findOne('Subscription', idDto);
+    const subscription = await (em ?? this.em).findOne(
+      this.mappers.SubscriptionMapper.entity as typeof Subscription,
+      idDto
+    );
     if (!subscription) {
       throw new Error('Subscription not found');
     }
-    await (em ?? this.em).removeAndFlush(subscription);
+    await (em ?? this.em).remove(subscription).flush();
   }
 
   async listSubscriptions(
@@ -188,12 +206,15 @@ export class BaseSubscriptionService<
     }
     return Promise.all(
       (
-        await (em ?? this.em).findAll('Subscription', {
-          where: idsDto?.ids?.length ? { id: { $in: idsDto.ids } } : undefined
-        })
+        await (em ?? this.em).findAll(
+          this.mappers.SubscriptionMapper.entity as typeof Subscription,
+          {
+            where: idsDto?.ids?.length ? { id: { $in: idsDto.ids } } : undefined
+          }
+        )
       ).map((subscription) =>
         this.mappers.SubscriptionMapper.toDto(
-          subscription as Entities['SubscriptionMapper']
+          subscription as InferEntity<MapperEntities['SubscriptionMapper']>
         )
       )
     );
@@ -203,11 +224,14 @@ export class BaseSubscriptionService<
     if (this.evaluatedTelemetryOptions.logging) {
       this.openTelemetryCollector.info('Canceling subscription', idDto);
     }
-    const subscription = await (em ?? this.em).findOne('Subscription', idDto);
+    const subscription = await (em ?? this.em).findOne(
+      this.mappers.SubscriptionMapper.entity as typeof Subscription,
+      idDto
+    );
     if (!subscription) {
       throw new Error('Subscription not found');
     }
-    (subscription as Entities['SubscriptionMapper']).active = false;
+    subscription.active = false;
     await (em ?? this.em).transactional(async (innerEm) => {
       await innerEm.persist(subscription);
     });
@@ -217,11 +241,14 @@ export class BaseSubscriptionService<
     if (this.evaluatedTelemetryOptions.logging) {
       this.openTelemetryCollector.info('Resuming subscription', idDto);
     }
-    const subscription = await (em ?? this.em).findOne('Subscription', idDto);
+    const subscription = await (em ?? this.em).findOne(
+      this.mappers.SubscriptionMapper.entity as typeof Subscription,
+      idDto
+    );
     if (!subscription) {
       throw new Error('Subscription not found');
     }
-    (subscription as Entities['SubscriptionMapper']).active = true;
+    subscription.active = true;
     await (em ?? this.em).transactional(async (innerEm) => {
       await innerEm.persist(subscription);
     });

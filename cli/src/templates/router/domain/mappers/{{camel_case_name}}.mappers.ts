@@ -2,9 +2,9 @@ import {
   requestMapper,
   responseMapper
 } from '@forklaunch/core/mappers';
-import { schemaValidator } from '@{{app_name}}/core';{{^is_worker}}
-import { EntityManager } from '@mikro-orm/core';{{/is_worker}}
-import { {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record} from '../../persistence/entities/{{camel_case_name}}{{#is_worker}}Event{{/is_worker}}Record.entity';
+import { schemaValidator } from '@{{app_name}}/core';
+{{^is_worker}}import { EntityManager } from '@mikro-orm/core';{{/is_worker}}{{#is_worker}}import { v4 } from 'uuid';{{/is_worker}}
+import { {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record } from '../../persistence/entities/{{camel_case_name}}{{#is_worker}}Event{{/is_worker}}Record.entity';
 import { {{pascal_case_name}}RequestSchema, {{pascal_case_name}}ResponseSchema } from '../schemas/{{camel_case_name}}.schema';
 
 // RequestMapper const that maps a request schema to an entity
@@ -14,13 +14,17 @@ export const {{pascal_case_name}}RequestMapper = requestMapper({
   entity: {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record,
   mapperDefinition: {
     toEntity: async (dto{{^is_worker}}, em: EntityManager{{/is_worker}}) => {
-      return {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record.create({
-        ...dto,{{#is_worker}}
+      {{^is_worker}}return em.create({{pascal_case_name}}Record, {
+        ...dto
+      });{{/is_worker}}{{#is_worker}}return {
+        id: v4(),
+        ...dto,
         processed: false,
-        retryCount: 0,{{/is_worker}}
+        retryCount: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
-      }{{^is_worker}}, em{{/is_worker}});
+        retentionAnonymizedAt: null
+      };{{/is_worker}}
     }
   }
 });
@@ -31,9 +35,8 @@ export const {{pascal_case_name}}ResponseMapper = responseMapper({
   schema: {{pascal_case_name}}ResponseSchema,
   entity: {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record,
   mapperDefinition: {
-    toDto: async (entity: {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record) => {
-      return await entity.read();
+    toDto: async (entity) => {
+      return entity;
     }
   }
 });
-

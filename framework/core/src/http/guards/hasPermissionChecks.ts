@@ -6,10 +6,15 @@ export function hasPermissionChecks(maybePermissionedAuth: unknown) {
     return false;
   }
 
-  const auth = maybePermissionedAuth as Record<string, unknown>;
+  const hasAllowedPermissions =
+    'allowedPermissions' in maybePermissionedAuth &&
+    maybePermissionedAuth.allowedPermissions instanceof Set &&
+    maybePermissionedAuth.allowedPermissions.size > 0;
 
-  return (
-    ('allowedPermissions' in auth && auth.allowedPermissions != null) ||
-    ('forbiddenPermissions' in auth && auth.forbiddenPermissions != null)
-  );
+  const hasForbiddenPermissions =
+    'forbiddenPermissions' in maybePermissionedAuth &&
+    maybePermissionedAuth.forbiddenPermissions instanceof Set &&
+    maybePermissionedAuth.forbiddenPermissions.size > 0;
+
+  return hasAllowedPermissions || hasForbiddenPermissions;
 }

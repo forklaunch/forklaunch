@@ -8,34 +8,20 @@ description: Complete guide for modifying ForkLaunch worker types, queue systems
 
 The `forklaunch change worker` command allows you to modify existing worker configuration including worker types, queue systems, database connections, and metadata. This guide covers all available options and migration strategies.
 
-<CodeTabs type="instantiate">
-  <Tab title="Basic">
+```bash
+forklaunch change worker [worker-name] [options]
+```
 
-  ```bash
-  forklaunch change worker
-  ```
+If no worker name is provided, you'll be prompted to select from available workers.
 
-  </Tab>
-  <Tab title="With Options">
+## Available Options
 
-  ```bash
-  forklaunch change worker --path ./my-worker --type bullmq
-  ```
-
-  </Tab>
-</CodeTabs>
-
-## Command Options
-
-| Option | Short | Description | Valid Values |
-| :----- | :---- | :---------- | :----------- |
-| `--path` | `-p` | The service path | Path to worker directory |
-| `--name` | `-N` | The name of the service | Any valid worker name |
-| `--type` | `-t` | The type to use | `database`, `redis`, `kafka`, `bullmq` |
-| `--database` | `-d` | The database to use | See database options below |
-| `--description` | `-D` | The description of the service | Any string |
-| `--dryrun` | `-n` | Dry run the command | Flag (no value) |
-| `--confirm` | `-c` | Flag to confirm any prompts | Flag (no value) |
+| Option                  | Type                           | Description               | Default             |
+| ----------------------- | ------------------------------ | ------------------------- | ------------------- |
+| `--name <name>`         | string                         | Change worker name        | Current name        |
+| `--description <desc>`  | string                         | Update worker description | Current description |
+| `--type <type>`         | database\|redis\|kafka\|bullmq | Change worker type        | Current type        |
+| `--database <database>` | See database options           | Change database type      | Current database    |
 
 ## Worker Types
 
@@ -66,8 +52,7 @@ For database workers:
 Upgrade worker type and add enhanced features:
 
 ```bash
-forklaunch change worker \
-  --path ./email-processor \
+forklaunch change worker email-processor \
   --type bullmq \
   --description "High-performance email processing with BullMQ"
 ```
@@ -78,9 +63,9 @@ Update multiple workers to same configuration:
 
 ```bash
 # Migrate all workers to BullMQ
-forklaunch change worker --path ./email-processor --type bullmq
-forklaunch change worker --path ./sms-processor --type bullmq
-forklaunch change worker --path ./push-processor --type bullmq
+forklaunch change worker email-processor --type bullmq
+forklaunch change worker sms-processor --type bullmq
+forklaunch change worker push-processor --type bullmq
 ```
 
 ## Migration Scenarios
@@ -91,10 +76,10 @@ Migrate from simple database polling to high-performance queue:
 
 ```bash
 # Phase 1: Migrate to Redis for better performance
-forklaunch change worker --path ./batch-processor --type redis
+forklaunch change worker batch-processor --type redis
 
 # Phase 2: Upgrade to BullMQ for advanced features
-forklaunch change worker --path ./batch-processor --type bullmq
+forklaunch change worker batch-processor --type bullmq
 ```
 
 ### Scenario 2: Event-Driven Architecture
@@ -103,9 +88,9 @@ Migrate to Kafka for event-driven processing:
 
 ```bash
 # Migrate analytics workers to Kafka
-forklaunch change worker --path ./user-analytics --type kafka
-forklaunch change worker --path ./order-analytics --type kafka
-forklaunch change worker --path ./system-analytics --type kafka
+forklaunch change worker user-analytics --type kafka
+forklaunch change worker order-analytics --type kafka
+forklaunch change worker system-analytics --type kafka
 ```
 
 ### Scenario 3: Simplify Development
@@ -114,7 +99,7 @@ Use database workers for simpler local development:
 
 ```bash
 # Simplify for development
-forklaunch change worker --path ./email-processor --type database --database sqlite
+forklaunch change worker email-processor --type database --database sqlite
 ```
 
 ## Troubleshooting
@@ -167,6 +152,6 @@ kafka-consumer-groups.sh --bootstrap-server localhost:9092 --reset-offsets --gro
 
 ## Related Documentation
 
-- **[Changing Services](./services.md)** - Service configuration changes
-- **[Adding Workers](../adding-projects/workers.md)** - Creating new workers
-- **[Framework Workers](../framework/workers.md)** - Worker framework documentation
+- **[Changing Services](./services)** - Service configuration changes
+- **[Adding Workers](../adding-projects/workers)** - Creating new workers
+- **[Framework Workers](../framework/workers)** - Worker framework documentation

@@ -17,7 +17,8 @@ RUST_BACKTRACE=1 cargo run --release init application sync-test-node-application
     -t vitest \
     -D "Test Sync Application" \
     -A "Mushroom Research" \
-    -L 'AGPL-3.0'
+    -L 'AGPL-3.0' \
+    -m
 
 # Init dummy application
 RUST_BACKTRACE=1 cargo run --release init application sync-test-dummy-application \
@@ -32,7 +33,8 @@ RUST_BACKTRACE=1 cargo run --release init application sync-test-dummy-applicatio
     -t vitest \
     -D "Test Sync Application Dummy" \
     -A "Mushroom Research" \
-    -L 'AGPL-3.0'
+    -L 'AGPL-3.0' \
+    -m
 
 RUST_BACKTRACE=1 cargo run --release init library lib-dummy \
     -p sync-test-dummy-application/src/modules \

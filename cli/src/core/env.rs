@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fs,
     io::Write,
     path::{Path, PathBuf},
@@ -64,20 +64,12 @@ pub(crate) struct Env {
     #[serde(rename = "DOCS_PATH", skip_serializing_if = "Option::is_none")]
     pub(crate) docs_path: Option<String>,
     #[serde(
-        rename = "PASSWORD_ENCRYPTION_PUBLIC_KEY_PATH",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub(crate) password_encryption_public_key_path: Option<String>,
-    #[serde(
-        rename = "PASSWORD_ENCRYPTION_SECRET_PATH",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub(crate) password_encryption_secret_path: Option<String>,
-    #[serde(
         rename = "BETTER_AUTH_BASE_PATH",
         skip_serializing_if = "Option::is_none"
     )]
     pub(crate) better_auth_base_path: Option<String>,
+    #[serde(rename = "BETTER_AUTH_SECRET", skip_serializing_if = "Option::is_none")]
+    pub(crate) better_auth_secret: Option<String>,
     #[serde(rename = "CORS_ORIGINS", skip_serializing_if = "Option::is_none")]
     pub(crate) cors_origins: Option<String>,
     #[serde(rename = "STRIPE_API_KEY", skip_serializing_if = "Option::is_none")]
@@ -119,7 +111,8 @@ impl<'de> Deserialize<'de> for Env {
             Port,
             Version,
             DocsPath,
-            PasswordEncryptionPublicKeyPath,
+            BetterAuthSecret,
+            BetterAuthBasePath,
             HmacSecretKey,
             JwksPublicKeyUrl,
             Other(String),
@@ -162,8 +155,7 @@ impl<'de> Deserialize<'de> for Env {
                     port: None,
                     version: None,
                     docs_path: None,
-                    password_encryption_public_key_path: None,
-                    password_encryption_secret_path: None,
+                    better_auth_secret: None,
                     better_auth_base_path: None,
                     cors_origins: None,
                     stripe_api_key: None,
@@ -194,9 +186,8 @@ impl<'de> Deserialize<'de> for Env {
                         Field::Port => env.port = Some(map.next_value()?),
                         Field::Version => env.version = Some(map.next_value()?),
                         Field::DocsPath => env.docs_path = Some(map.next_value()?),
-                        Field::PasswordEncryptionPublicKeyPath => {
-                            env.password_encryption_public_key_path = Some(map.next_value()?)
-                        }
+                        Field::BetterAuthSecret => env.better_auth_secret = Some(map.next_value()?),
+                        Field::BetterAuthBasePath => env.better_auth_base_path = Some(map.next_value()?),
                         Field::HmacSecretKey => env.hmac_secret_key = Some(map.next_value()?),
                         Field::JwksPublicKeyUrl => {
                             env.jwks_public_key_url = Some(map.next_value()?)
@@ -217,9 +208,91 @@ impl<'de> Deserialize<'de> for Env {
 
 #[derive(Debug, Clone)]
 pub(crate) struct EnvFile {
-    #[allow(dead_code)]
-    pub(crate) path: PathBuf,
     pub(crate) variables: HashMap<String, String>,
+}
+
+/// For multiline values `*i` is advanced to the closing-quote line so the caller's
+/// `i += 1` lands on the next key correctly.
+pub(crate) fn extract_env_value(lines: &[&str], i: &mut usize, rest: &str) -> String {
+    if rest.starts_with('"') || rest.starts_with('\'') {
+        let quote_char = rest.chars().next().unwrap();
+        let inner = &rest[1..];
+        if !inner.is_empty() && inner.ends_with(quote_char) {
+            inner[..inner.len() - 1].to_string()
+        } else {
+            let mut value_lines = vec![inner.to_string()];
+            *i += 1;
+            while *i < lines.len() {
+                let next_line = lines[*i];
+                let trimmed = next_line.trim_end();
+                if trimmed.ends_with(quote_char) {
+                    value_lines.push(trimmed[..trimmed.len() - 1].to_string());
+                    break;
+                } else {
+                    value_lines.push(next_line.to_string());
+                    *i += 1;
+                }
+            }
+            value_lines.join("\n")
+        }
+    } else {
+        if let Some(comment_pos) = rest.find(" #") {
+            rest[..comment_pos].trim().to_string()
+        } else {
+            rest.trim().to_string()
+        }
+    }
+}
+
+/// An item parsed from an env file — either a section header comment or a key-value pair.
+#[derive(Debug)]
+pub(crate) enum EnvFileItem {
+    SectionHeader(String),
+    KeyValue(String, String),
+}
+
+/// Parses an env file preserving section header comment lines
+/// (e.g. `# application` or `# matching-service (uuid)`) so callers can reconstruct
+/// the full file content with scope information intact.
+pub(crate) fn parse_env_file_items(path: &Path) -> Result<Vec<EnvFileItem>> {
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let content = fs::read_to_string(path)
+        .with_context(|| format!("Failed to read env file: {}", path.display()))?;
+
+    let lines: Vec<&str> = content.lines().collect();
+    let mut items: Vec<EnvFileItem> = Vec::new();
+    let mut i = 0;
+
+    while i < lines.len() {
+        let line = lines[i].trim();
+
+        if line.is_empty() {
+            i += 1;
+            continue;
+        }
+
+        if line.starts_with('#') {
+            items.push(EnvFileItem::SectionHeader(line.to_string()));
+            i += 1;
+            continue;
+        }
+
+        if let Some(eq_pos) = line.find('=') {
+            let key = line[..eq_pos].trim().to_string();
+            let rest = line[eq_pos + 1..].trim();
+            if !key.is_empty() {
+                let value = extract_env_value(&lines, &mut i, rest);
+                items.push(EnvFileItem::KeyValue(key, value));
+            }
+        }
+
+        i += 1;
+    }
+
+    Ok(items)
 }
 
 pub(crate) fn load_env_file(path: &Path) -> Result<HashMap<String, String>> {
@@ -304,24 +377,10 @@ pub(crate) fn load_project_env_files(project_path: &Path) -> Result<Vec<EnvFile>
 
     for path in env_file_paths {
         let variables = load_env_file(&path)?;
-        env_files.push(EnvFile { path, variables });
+        env_files.push(EnvFile { variables });
     }
 
     Ok(env_files)
-}
-
-#[allow(dead_code)]
-pub(crate) fn get_all_env_vars_in_project(project_path: &Path) -> Result<HashSet<String>> {
-    let env_files = load_project_env_files(project_path)?;
-    let mut all_vars = HashSet::new();
-
-    for env_file in env_files {
-        for key in env_file.variables.keys() {
-            all_vars.insert(key.clone());
-        }
-    }
-
-    Ok(all_vars)
 }
 
 pub(crate) fn is_env_var_defined(project_path: &Path, var_name: &str) -> Result<bool> {
@@ -514,6 +573,131 @@ mod tests {
         assert_eq!(vars.get("KEY2"), Some(&"value2".to_string()));
         assert_eq!(vars.get("KEY3"), Some(&"value3".to_string()));
         assert_eq!(vars.len(), 3);
+    }
+
+    #[test]
+    fn test_extract_env_value_plain() {
+        let lines = vec!["KEY=hello"];
+        let mut i = 0;
+        assert_eq!(extract_env_value(&lines, &mut i, "hello"), "hello");
+        assert_eq!(i, 0); // no advancement for plain values
+    }
+
+    #[test]
+    fn test_extract_env_value_plain_strips_inline_comment() {
+        let lines = vec!["KEY=hello # a comment"];
+        let mut i = 0;
+        assert_eq!(
+            extract_env_value(&lines, &mut i, "hello # a comment"),
+            "hello"
+        );
+        assert_eq!(i, 0);
+    }
+
+    #[test]
+    fn test_extract_env_value_single_line_double_quoted() {
+        let lines = vec!["KEY=\"hello world\""];
+        let mut i = 0;
+        assert_eq!(
+            extract_env_value(&lines, &mut i, "\"hello world\""),
+            "hello world"
+        );
+        assert_eq!(i, 0);
+    }
+
+    #[test]
+    fn test_extract_env_value_single_line_single_quoted() {
+        let lines = vec!["KEY='hello world'"];
+        let mut i = 0;
+        assert_eq!(
+            extract_env_value(&lines, &mut i, "'hello world'"),
+            "hello world"
+        );
+        assert_eq!(i, 0);
+    }
+
+    #[test]
+    fn test_extract_env_value_multiline_double_quoted() {
+        let lines = vec![
+            "KEY=\"line one",
+            "line two",
+            "line three\"",
+            "NEXT=something",
+        ];
+        let mut i = 0;
+        let val = extract_env_value(&lines, &mut i, "\"line one");
+        assert_eq!(val, "line one\nline two\nline three");
+        assert_eq!(i, 2);
+    }
+
+    #[test]
+    fn test_extract_env_value_multiline_single_quoted() {
+        let lines = vec!["KEY='-----BEGIN", "abc", "-----END'"];
+        let mut i = 0;
+        let val = extract_env_value(&lines, &mut i, "'-----BEGIN");
+        assert_eq!(val, "-----BEGIN\nabc\n-----END");
+        assert_eq!(i, 2);
+    }
+
+    #[test]
+    fn test_parse_env_file_items_simple() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().join("test.env");
+        fs::write(&path, "A=1\nB=2\n").unwrap();
+
+        let items = parse_env_file_items(&path).unwrap();
+        assert_eq!(items.len(), 2);
+        assert!(matches!(&items[0], EnvFileItem::KeyValue(k, v) if k == "A" && v == "1"));
+        assert!(matches!(&items[1], EnvFileItem::KeyValue(k, v) if k == "B" && v == "2"));
+    }
+
+    #[test]
+    fn test_parse_env_file_items_preserves_section_headers() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().join("test.env");
+        fs::write(&path, "# application\nA=1\n# my-service (abc-123)\nB=2\n").unwrap();
+
+        let items = parse_env_file_items(&path).unwrap();
+        assert_eq!(items.len(), 4);
+        assert!(matches!(&items[0], EnvFileItem::SectionHeader(h) if h == "# application"));
+        assert!(matches!(&items[1], EnvFileItem::KeyValue(k, v) if k == "A" && v == "1"));
+        assert!(
+            matches!(&items[2], EnvFileItem::SectionHeader(h) if h == "# my-service (abc-123)")
+        );
+        assert!(matches!(&items[3], EnvFileItem::KeyValue(k, v) if k == "B" && v == "2"));
+    }
+
+    #[test]
+    fn test_parse_env_file_items_skips_blank_lines() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().join("test.env");
+        fs::write(&path, "\n# section\n\nA=1\n\nB=2\n").unwrap();
+
+        let items = parse_env_file_items(&path).unwrap();
+        assert_eq!(items.len(), 3);
+        assert!(matches!(&items[0], EnvFileItem::SectionHeader(_)));
+        assert!(matches!(&items[1], EnvFileItem::KeyValue(k, _) if k == "A"));
+        assert!(matches!(&items[2], EnvFileItem::KeyValue(k, _) if k == "B"));
+    }
+
+    #[test]
+    fn test_parse_env_file_items_multiline_value() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().join("test.env");
+        fs::write(&path, "KEY=\"line one\nline two\"\nOTHER=val\n").unwrap();
+
+        let items = parse_env_file_items(&path).unwrap();
+        assert_eq!(items.len(), 2);
+        assert!(
+            matches!(&items[0], EnvFileItem::KeyValue(k, v) if k == "KEY" && v == "line one\nline two")
+        );
+        assert!(matches!(&items[1], EnvFileItem::KeyValue(k, v) if k == "OTHER" && v == "val"));
+    }
+
+    #[test]
+    fn test_parse_env_file_items_nonexistent_returns_empty() {
+        let items = parse_env_file_items(std::path::Path::new("/nonexistent/file.env")).unwrap();
+        assert!(items.is_empty());
     }
 
     #[test]

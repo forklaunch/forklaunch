@@ -20,7 +20,6 @@ RUN pnpm install{{/is_node}}{{#is_bun}}RUN apt-get update && apt-get install -y 
 RUN bun install --ignore-scripts{{/is_bun}}
 
 # Build TypeScript code
-RUN {{#is_node}}pnpm{{/is_node}}{{#is_bun}}bun{{/is_bun}} types:build
 {{#is_node}}
 RUN pnpm build{{/is_node}}{{#is_bun}}
 RUN bun run build{{/is_bun}}

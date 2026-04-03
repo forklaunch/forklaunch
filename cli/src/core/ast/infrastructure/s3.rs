@@ -81,45 +81,53 @@ pub(crate) fn s3_url_environment_variable<'a>(
 pub(crate) fn s3_object_store_runtime_dependency<'a>(
     allocator: &'a Allocator,
     registrations_program: &mut Program<'a>,
+    otel_token: &str,
 ) -> Result<()> {
-    let s3_registration_text = "const configInjector = createConfigInjector(SchemaValidator(), {
-        S3ObjectStore: {
+    let s3_registration_text: &'static str = Box::leak(
+        format!("const configInjector = createConfigInjector(SchemaValidator(), {{
+        ObjectStore: {{
             lifetime: Lifetime.Singleton,
             type: S3ObjectStore,
-            factory: ({
-                OpenTelemetryCollector,
+            factory: ({{
+                {otel_token},
                 OTEL_LEVEL,
                 S3_REGION,
                 S3_ACCESS_KEY_ID,
                 S3_SECRET_ACCESS_KEY,
                 S3_URL,
-                S3_BUCKET
-            }) =>
+                S3_BUCKET,
+                ENCRYPTION_KEY
+            }}) =>
                 new S3ObjectStore(
-                OpenTelemetryCollector,
-                {
+                {otel_token},
+                {{
                     bucket: S3_BUCKET,
-                    clientConfig: {
+                    clientConfig: {{
                     endpoint: S3_URL,
                     region: S3_REGION,
-                    credentials: {
+                    credentials: {{
                         accessKeyId: S3_ACCESS_KEY_ID,
                         secretAccessKey: S3_SECRET_ACCESS_KEY
-                    }
-                    }
-                },
-                {
+                    }}
+                    }}
+                }},
+                {{
                     enabled: true,
                     level: OTEL_LEVEL || 'info'
-                })
-        }
-    });";
+                }},
+                {{
+                    encryptor: new FieldEncryptor(ENCRYPTION_KEY)
+                }})
+        }}
+    }});")
+        .into_boxed_str(),
+    );
 
     let mut s3_registration_program =
-        parse_ast_program(&allocator, &s3_registration_text, SourceType::ts());
+        parse_ast_program(allocator, s3_registration_text, SourceType::ts());
 
     inject_into_registrations_config_injector(
-        &allocator,
+        allocator,
         registrations_program,
         &mut s3_registration_program,
         "runtimeDependencies",
@@ -182,7 +190,7 @@ pub(crate) fn delete_s3_object_store_runtime_dependency<'a>(
     let _ = delete_from_registrations_ts_config_injector(
         &allocator,
         registrations_program,
-        "S3ObjectStore",
+        "ObjectStore",
         "runtimeDependencies",
     );
 }

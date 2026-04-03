@@ -6,14 +6,13 @@
   "license": "ISC",
   "author": "",
   "type": "module",
-  "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "files": [
     "lib/**"
   ],
   "scripts": {
-    "build": "tsc",
-    "clean": "rm -rf lib pnpm.lock.yaml node_modules",
+    "build": "tsgo -b",
+    "clean": "rm -rf lib tsconfig.tsbuildinfo pnpm.lock.yaml node_modules",
     "docs": "typedoc --out docs *",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
     "lint": "eslint . -c eslint.config.mjs",
@@ -22,20 +21,21 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "^0.6.28",
-    "@forklaunch/core": "^0.18.1",
-    "@forklaunch/express": "^0.10.5",
-    "@forklaunch/hyper-express": "^0.11.5",
-    "@forklaunch/validator": "^0.10.28",
-    "@mikro-orm/core": "^6.6.6",
-    "@mikro-orm/mongodb": "^6.6.6",
+    "@forklaunch/common": "^1.2.6",
+    "@forklaunch/core": "^1.3.3",
+    "@forklaunch/express": "^1.2.13",
+    "@forklaunch/hyper-express": "^1.2.13",
+    "@forklaunch/validator": "^1.2.6",
+    "@mikro-orm/core": "7.0.6",
+    "@mikro-orm/mongodb": "7.0.6",
     "@sinclair/typebox": "^0.34.48",
     "uuid": "^13.0.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
-    "@types/qs": "^6.14.0",
-    "@types/uuid": "^11.0.0"
+    "@types/qs": "^6.15.0",
+    "@types/uuid": "^11.0.0",
+    "@typescript/native-preview": "7.0.0-dev.20260327.2"
   }
 }

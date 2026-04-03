@@ -17,14 +17,10 @@ export const CreatePlanMapper = requestMapper({
   entity: Plan,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return Plan.create(
-        {
-          ...dto,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        },
-        em
-      );
+      return em.create(Plan, {
+        ...dto,
+        providerFields: dto.providerFields ?? null
+      });
     }
   }
 });
@@ -39,7 +35,9 @@ export const UpdatePlanMapper = requestMapper({
   entity: Plan,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return Plan.update(dto, em);
+      const entity = await em.findOneOrFail(Plan, { id: dto.id });
+      em.assign(entity, { ...dto });
+      return entity;
     }
   }
 });
@@ -53,8 +51,13 @@ export const PlanMapper = responseMapper({
   ),
   entity: Plan,
   mapperDefinition: {
-    toDto: async (entity: Plan) => {
-      return await entity.read();
+    toDto: async (entity) => {
+      return {
+        ...entity,
+        price: Number(entity.price),
+        description: entity.description ?? undefined,
+        features: entity.features ?? undefined
+      };
     }
   }
 });

@@ -66,7 +66,7 @@ FORKLAUNCH_MODE=openapi
 FORKLAUNCH_OPENAPI_OUTPUT=./dist/{service}/openapi.json
 DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy
 DB_NAME=dummy
-PASSWORD_ENCRYPTION_SECRET_PATH=/dev/null  # ✅ /dev/null for paths!
+SECRET_PATH=/dev/null  # ✅ /dev/null for paths!
 # ... all other detected vars ...
 ```
 
@@ -183,7 +183,7 @@ Without it: MikroORM decorator errors
 With it: Decorators work perfectly!
 
 ### 2. PATH Variables Need Special Handling
-Setting `PASSWORD_ENCRYPTION_SECRET_PATH=dummy-secret-key` causes `readFileSync` errors.  
+Setting `SECRET_PATH=dummy-secret-key` causes `readFileSync` errors.  
 Solution: Use `/dev/null` for all `*_PATH` and `*_FILE` variables.
 
 ### 3. ConfigInjector Skip is Essential

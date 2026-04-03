@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use convert_case::{Case, Casing};
 use rustyline::{Editor, history::DefaultHistory};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 use toml::from_str;
 
 use self::database::get_db_driver;
@@ -50,6 +50,14 @@ fn generate_basic_router(
     dryrun: bool,
     manifest_path: &Path,
 ) -> Result<()> {
+    // Detect naming convention from existing registrations file
+    let registrations_path = base_path.join("registrations.ts");
+    if let Ok(registrations_content) = read_to_string(&registrations_path) {
+        if registrations_content.contains("OpenTelemetryCollector:") {
+            manifest_data.otel_token = "OpenTelemetryCollector".to_string();
+        }
+    }
+
     let output_path = base_path.to_string_lossy().to_string();
     let template_dir = PathIO {
         input_path: Path::new("router").to_string_lossy().to_string(),
@@ -223,7 +231,6 @@ fn add_router_to_artifacts(
         },
     );
 
-    // Convert cache to Vec for return
     let rendered_templates: Vec<_> = rendered_templates_cache
         .drain()
         .map(|(_, template)| template)
@@ -381,9 +388,7 @@ impl CliCommand for RouterCommand {
             .with_context(|| "Failed to create router")?;
 
             if !dryrun {
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-                writeln!(stdout, "{} initialized successfully!", router_name)?;
-                stdout.reset()?;
+                log_ok!(stdout, "{} initialized successfully!", router_name);
                 format_code(&router_base_path, &manifest_data.runtime.parse()?);
             }
 

@@ -5,7 +5,6 @@ import {
 import { AnySchemaValidator } from '@forklaunch/validator';
 import { EntityManager } from '@mikro-orm/core';
 import Stripe from 'stripe';
-import { PartyEnum } from '../../../../billing-base/domain/enum/party.enum';
 import { BillingProviderEnum } from '../domain/enum/billingProvider.enum';
 import { CurrencyEnum } from '../domain/enum/currency.enum';
 import { PaymentMethodEnum } from '../domain/enum/paymentMethod.enum';
@@ -17,6 +16,7 @@ import {
   StripePlanEntities,
   StripeSubscriptionEntities
 } from '../domain/types/stripe.entity.types';
+import { StripeWebhookEvent } from '../persistence/entities';
 import { StripeBillingPortalService } from './billingPortal.service';
 import { StripeCheckoutSessionService } from './checkoutSession.service';
 import { StripePaymentLinkService } from './paymentLink.service';
@@ -37,6 +37,7 @@ export class StripeWebhookService<
   SubscriptionEntities extends
     StripeSubscriptionEntities<PartyEnum> = StripeSubscriptionEntities<PartyEnum>
 > {
+  protected readonly partyEnum: PartyEnum;
   protected readonly stripeClient: Stripe;
   protected readonly em: EntityManager;
   protected readonly schemaValidator: SchemaValidator;
@@ -89,8 +90,10 @@ export class StripeWebhookService<
       SchemaValidator,
       PartyEnum,
       SubscriptionEntities
-    >
+    >,
+    partyEnum: PartyEnum
   ) {
+    this.partyEnum = partyEnum;
     this.stripeClient = stripeClient;
     this.em = em;
     this.schemaValidator = schemaValidator;
@@ -100,6 +103,21 @@ export class StripeWebhookService<
     this.paymentLinkService = paymentLinkService;
     this.planService = planService;
     this.subscriptionService = subscriptionService;
+  }
+
+  /**
+   * Resolve the party type for a subscription event.
+   * Stripe subscriptions are customer-scoped — customers map to users
+   * by default. Override this method to implement organization-level
+   * subscriptions or other party resolution logic.
+   */
+  protected resolvePartyType(_event: Stripe.Event): PartyEnum[keyof PartyEnum] {
+    // Default: first value in the enum container.
+    // Subclasses can override to inspect event metadata for party type.
+    const keys = Object.keys(this.partyEnum as Record<string, unknown>);
+    return (this.partyEnum as Record<string, PartyEnum[keyof PartyEnum]>)[
+      keys[0]
+    ];
   }
 
   /**
@@ -136,7 +154,7 @@ export class StripeWebhookService<
     }
 
     if (
-      await this.em.findOne('StripeWebhookEvent', {
+      await this.em.findOne(StripeWebhookEvent, {
         idempotencyKey: event.request?.idempotency_key
       })
     ) {
@@ -376,7 +394,7 @@ export class StripeWebhookService<
               typeof event.data.object.customer === 'string'
                 ? event.data.object.customer
                 : event.data.object.customer.id,
-            partyType: PartyEnum.USER as PartyEnum[keyof PartyEnum],
+            partyType: this.resolvePartyType(event),
             description: event.data.object.description ?? undefined,
             active: true,
             productId: event.data.object.items.data[0].plan.id,
@@ -409,7 +427,7 @@ export class StripeWebhookService<
               typeof event.data.object.customer === 'string'
                 ? event.data.object.customer
                 : event.data.object.customer.id,
-            partyType: PartyEnum.USER as PartyEnum[keyof PartyEnum],
+            partyType: this.resolvePartyType(event),
             description: event.data.object.description ?? undefined,
             active: true,
             externalId: event.data.object.id,
@@ -454,7 +472,7 @@ export class StripeWebhookService<
         break;
     }
 
-    await this.em.insert('StripeWebhookEvent', {
+    await this.em.insert(StripeWebhookEvent, {
       stripeId: event.id,
       idempotencyKey: event.request?.idempotency_key,
       eventType: event.type,

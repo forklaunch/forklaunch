@@ -134,7 +134,7 @@ The function iterates through all services in docker-compose and for each enviro
 
 1. **Special Cases**:
    - `OTEL_EXPORTER_OTLP_ENDPOINT` → Service type, target="otel"
-   - CLI-generated keys (`HMAC_SECRET_KEY`, `PASSWORD_ENCRYPTION_SECRET`) → Key type with specific properties
+   - CLI-generated keys (`HMAC_SECRET_KEY`, `BETTER_AUTH_SECRET`) → Key type with specific properties
 
 2. **Database Detection**:
    - Key hints: `DB_`, `DATABASE`, `POSTGRES`, `MYSQL`, etc.
@@ -386,7 +386,7 @@ Explicitly excluded from passthrough classification (not marked as passthrough).
 
 Only these specific variables are classified as Key component type:
 - `HMAC_SECRET_KEY`
-- `PASSWORD_ENCRYPTION_SECRET`
+- `BETTER_AUTH_SECRET`
 
 Other key-like variables are not automatically classified as Key type unless they match other inference rules.
 

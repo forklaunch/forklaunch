@@ -99,6 +99,20 @@ pub(crate) struct ResourceInventory {
     pub(crate) cache: Option<String>,
     pub(crate) queue: Option<String>,
     pub(crate) object_store: Option<String>,
+    pub(crate) redis_partition: Option<u32>,
+}
+
+pub(crate) fn next_available_redis_partition(projects: &[ProjectEntry]) -> u32 {
+    let used: std::collections::HashSet<u32> = projects
+        .iter()
+        .filter_map(|p| p.resources.as_ref())
+        .filter_map(|r| r.redis_partition)
+        .collect();
+    let mut partition = 0u32;
+    while used.contains(&partition) {
+        partition += 1;
+    }
+    partition
 }
 
 #[derive(Debug, Serialize, Deserialize, Content, Clone)]
@@ -115,6 +129,25 @@ pub(crate) struct ProjectEntry {
     pub(crate) resources: Option<ResourceInventory>,
     pub(crate) routers: Option<Vec<String>>,
     pub(crate) metadata: Option<ProjectMetadata>,
+}
+
+/// Compliance configuration stored in the `[compliance]` section of `manifest.toml`.
+/// All fields are optional so existing manifests parse without changes.
+///
+/// Note: entity field classifications and retention policies are NOT stored here.
+/// They are scanned from source code at release/audit time and uploaded directly
+/// to the platform. This prevents leaking sensitive compliance metadata in the repo.
+#[derive(Debug, Serialize, Deserialize, Content, Clone, Default)]
+pub(crate) struct ComplianceManifestConfig {
+    /// Allowed deployment regions (e.g., `["us-east-1", "eu-west-1"]`).
+    /// Enforced by the platform compiler at deploy time.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) data_residency: Vec<String>,
+
+    /// Required secrets that must be present as environment variables at boot.
+    /// The framework's SecretsAccessor validates these at startup.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) secrets: Vec<String>,
 }
 
 #[macro_export]
@@ -166,12 +199,8 @@ macro_rules! internal_config_struct {
             $vis platform_application_id: Option<String>,
             #[serde(skip_serializing_if = "Option::is_none")]
             $vis platform_organization_id: Option<String>,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            $vis release_version: Option<String>,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            $vis release_git_commit: Option<String>,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            $vis release_git_branch: Option<String>,
+            #[serde(default, skip_serializing_if = "Option::is_none")]
+            $vis compliance: Option<crate::core::manifest::ComplianceManifestConfig>,
         }
     };
 }
@@ -273,9 +302,7 @@ macro_rules! config_struct {
                         license: shadow.license.clone(),
                         platform_application_id: shadow.platform_application_id.clone(),
                         platform_organization_id: shadow.platform_organization_id.clone(),
-                        release_version: shadow.release_version.clone(),
-                        release_git_commit: shadow.release_git_commit.clone(),
-                        release_git_branch: shadow.release_git_branch.clone(),
+                        compliance: shadow.compliance.clone(),
 
                         is_eslint: shadow.linter == "eslint",
                         is_biome: shadow.formatter == "biome",

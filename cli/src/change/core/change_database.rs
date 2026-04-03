@@ -13,10 +13,13 @@ use crate::{
         manifest::ProjectEntry,
         package_json::{
             application_package_json::ApplicationPackageJson,
-            package_json_constants::{MIKRO_ORM_DATABASE_VERSION, PROJECT_SEED_SCRIPT},
+            package_json_constants::{
+                MIKRO_ORM_DATABASE_VERSION, PROJECT_SEED_SCRIPT,
+                project_retention_enforce_script,
+            },
             project_package_json::ProjectPackageJson,
         },
-        removal_template::{RemovalTemplate, RemovalTemplateType},
+        removal_template::RemovalTemplate,
         rendered_template::{RenderedTemplate, RenderedTemplatesCache, TEMPLATES_DIR},
         watermark::apply_watermark,
     },
@@ -31,21 +34,21 @@ pub(crate) fn change_database_base_entity(
     rendered_templates_cache: &mut RenderedTemplatesCache,
 ) -> Result<Option<RemovalTemplate>> {
     let import_source_from = match existing_database {
-        Database::MongoDB => "nosql.base.entity.ts",
-        _ => "sql.base.entity.ts",
+        Database::MongoDB => "nosql.base.properties.ts",
+        _ => "sql.base.properties.ts",
     };
     let import_source_to = match database {
-        Database::MongoDB => "nosql.base.entity.ts",
-        _ => "sql.base.entity.ts",
+        Database::MongoDB => "nosql.base.properties.ts",
+        _ => "sql.base.properties.ts",
     };
 
     let base_entity_from = match existing_database {
-        Database::MongoDB => "NoSqlBaseEntity",
-        _ => "SqlBaseEntity",
+        Database::MongoDB => "nosqlBaseProperties",
+        _ => "sqlBaseProperties",
     };
     let base_entity_to = match database {
-        Database::MongoDB => "NoSqlBaseEntity",
-        _ => "SqlBaseEntity",
+        Database::MongoDB => "nosqlBaseProperties",
+        _ => "sqlBaseProperties",
     };
 
     if let Some(base_entity_ts_content) = transform_base_entity_ts(
@@ -185,7 +188,6 @@ pub(crate) fn change_database_base_entity(
     {
         return Ok(Some(RemovalTemplate {
             path: existing_base_entity_path,
-            r#type: RemovalTemplateType::File,
         }));
     }
 
@@ -227,5 +229,21 @@ pub(crate) fn change_database_seed_script(
     project_package_json.scripts.as_mut().unwrap().seed = match database {
         Database::MongoDB => None,
         _ => Some(PROJECT_SEED_SCRIPT.to_string()),
+    };
+}
+
+pub(crate) fn change_database_retention_script(
+    project_package_json: &mut ProjectPackageJson,
+    runtime: &crate::constants::Runtime,
+    has_database: bool,
+) {
+    project_package_json
+        .scripts
+        .as_mut()
+        .unwrap()
+        .retention_enforce = if has_database {
+        Some(project_retention_enforce_script(runtime))
+    } else {
+        None
     };
 }

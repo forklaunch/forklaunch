@@ -18,6 +18,29 @@ The `forklaunch change` command family allows you to modify:
 
 All change operations are designed to be safe, reversible, and maintain project integrity.
 
+## How Changes Affect Artifacts
+
+When you change a project, ForkLaunch automatically updates **application artifacts** - configuration files that manage your entire application:
+
+| Artifact | What Gets Updated |
+|----------|-------------------|
+| **Manifest** (`.forklaunch/manifest.toml`) | Project metadata, configuration, and dependencies |
+| **Docker Compose** (`docker-compose.yaml`) | Service definitions, ports, and infrastructure |
+| **Workspace Config** (`pnpm-workspace.yaml` or `package.json`) | Package references and scripts |
+| **Universal SDK** (`modules/universal-sdk/`) | API client generation (for services) |
+| **TypeScript Config** (`modules/tsconfig.json`) | Project references |
+
+**Example**: Changing a service's database from SQLite to PostgreSQL updates:
+- The service's `mikro-orm.config.ts` file
+- Docker Compose to add PostgreSQL container
+- Package dependencies in workspace config
+- Migration scripts in package.json
+
+After making changes, you may need to:
+1. Install updated dependencies: `pnpm install` (or `bun install`)
+2. Run migrations if database changed: `pnpm migrate:init` (or `bun migrate:init`)
+3. Rebuild the project: `pnpm build` (or `bun run build`)
+
 ## Core Principles
 
 ### Safety First
@@ -163,7 +186,7 @@ forklaunch change application \
 
 Learn how to modify application-level configuration, runtimes, and frameworks.
 
-👉 **[Changing Applications](./changing-projects/applications.md)**
+**[Changing Applications](/docs/changing-projects/applications.md)**
 
 - Runtime changes (Node.js ↔ Bun)
 - HTTP framework updates (Express ↔ Hyper-Express)
@@ -175,7 +198,7 @@ Learn how to modify application-level configuration, runtimes, and frameworks.
 
 Modify service configuration, databases, and infrastructure components.
 
-👉 **[Changing Services](./changing-projects/services.md)**
+**[Changing Services](/docs/changing-projects/services.md)**
 
 - Database type changes (SQLite → PostgreSQL, MySQL, etc.)
 - Infrastructure additions (Redis, message queues)
@@ -186,7 +209,7 @@ Modify service configuration, databases, and infrastructure components.
 
 Update worker types, queue systems, and processing configurations.
 
-👉 **[Changing Workers](./changing-projects/workers.md)**
+**[Changing Workers](/docs/changing-projects/workers.md)**
 
 - Worker type changes (Database → Redis → Kafka → BullMQ)
 - Queue system migrations
@@ -197,7 +220,7 @@ Update worker types, queue systems, and processing configurations.
 
 Modify router configurations and naming.
 
-👉 **[Changing Routers](./changing-projects/routers.md)**
+**[Changing Routers](/docs/changing-projects/routers.md)**
 
 - Router renaming and reorganization
 - Configuration updates
@@ -207,7 +230,7 @@ Modify router configurations and naming.
 
 Update library configuration and metadata.
 
-👉 **[Changing Libraries](./changing-projects/libraries.md)**
+**[Changing Libraries](/docs/changing-projects/libraries.md)**
 
 - Library name and description updates
 - Configuration changes
@@ -428,27 +451,18 @@ bun run dev
 
 When upgrading ForkLaunch versions:
 
-1. Review [Migration Guide](./migration.md) for breaking changes
-2. Update CLI to latest version
-3. Run `forklaunch depcheck` to identify issues
-4. Apply necessary configuration changes
-5. Test thoroughly in development environment
+1. Update the CLI to the latest version
+2. Run `forklaunch depcheck` to identify issues
+3. Apply necessary configuration changes
+4. Test thoroughly in your development environment
 
 ### Project Structure Changes
 
-Some changes may affect project structure:
-
-- File relocations and renames
-- New configuration files
-- Updated dependency requirements
-- Modified build processes
-
-Always review git diff after changes to understand the full impact.
+Some changes affect project structure: file relocations, new configuration files, updated dependency requirements, or modified build processes. Always review `git diff` after changes to understand the full impact.
 
 ## Related Documentation
 
-- **[Adding Projects](./adding-projects.md)** - Creating new components
-- **[CLI Reference](./cli.md)** - Complete command reference
-- **[Best Practices](./best-practices.md)** - Development best practices
-- **[Troubleshooting](./troubleshooting.md)** - Common issues and solutions
-- **[Deployment](./deployment.md)** - Production deployment strategies
+- [Adding Projects](/docs/adding-projects.md): Creating new components
+- [Deleting Projects](/docs/deleting-projects.md): Removing components safely
+- [CLI Reference: change](/docs/changing-projects.md): Full `change` command options
+- [Local Development](/docs/local-development.md): Running and testing changes locally

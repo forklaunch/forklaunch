@@ -36,7 +36,19 @@ pub struct EntityDefinition {
 pub struct EntityAnalyzer;
 
 impl EntityAnalyzer {
-    /// Parse a TypeScript entity file and extract entity definitions
+    /// Parse a TypeScript entity file and extract entity definitions.
+    /// Supports the v7 defineEntity() format:
+    ///
+    /// ```typescript
+    /// export const User = defineEntity({
+    ///   name: 'User',
+    ///   properties: {
+    ///     ...sqlBaseProperties,
+    ///     email: p.string().unique(),
+    ///     organization: () => p.manyToOne(Organization).nullable(),
+    ///   },
+    /// });
+    /// ```
     pub fn parse_entity_file(path: &Path) -> Result<Vec<EntityDefinition>> {
         let source = read_to_string(path)
             .with_context(|| format!("Failed to read entity file: {}", path.display()))?;
@@ -56,13 +68,17 @@ impl EntityAnalyzer {
 
         let mut entities = Vec::new();
 
-        // Visit all class declarations looking for entities with @Entity decorator
         for stmt in &program.body {
             if let Statement::ExportNamedDeclaration(export_decl) = stmt {
-                if let Some(Declaration::ClassDeclaration(class_decl)) = &export_decl.declaration {
-                    if Self::has_entity_decorator(&class_decl.decorators) {
-                        if let Some(entity) = Self::extract_entity_from_class(class_decl, &source) {
-                            entities.push(entity);
+                if let Some(Declaration::VariableDeclaration(var_decl)) = &export_decl.declaration {
+                    for declarator in &var_decl.declarations {
+                        if let Some(init) = &declarator.init {
+                            if Self::is_define_entity_call(init) {
+                                if let Some(entity) = Self::extract_entity_from_define_entity(init)
+                                {
+                                    entities.push(entity);
+                                }
+                            }
                         }
                     }
                 }
@@ -72,194 +88,234 @@ impl EntityAnalyzer {
         Ok(entities)
     }
 
-    fn has_entity_decorator(decorators: &[Decorator]) -> bool {
-        decorators.iter().any(|dec| {
-            if let Expression::CallExpression(call) = &dec.expression {
-                if let Expression::Identifier(id) = &call.callee {
-                    return id.name.as_str() == "Entity";
-                }
+    /// Check if an expression is a defineEntity() call
+    fn is_define_entity_call(expr: &Expression) -> bool {
+        if let Expression::CallExpression(call) = expr {
+            if let Expression::Identifier(id) = &call.callee {
+                return id.name.as_str() == "defineEntity";
             }
-            false
-        })
+        }
+        false
     }
 
-    fn extract_entity_from_class(class_decl: &Class, source: &str) -> Option<EntityDefinition> {
-        let name = class_decl.id.as_ref()?.name.as_str().to_string();
+    /// Extract entity definition from a defineEntity({...}) call
+    fn extract_entity_from_define_entity(expr: &Expression) -> Option<EntityDefinition> {
+        let call = match expr {
+            Expression::CallExpression(call) => call,
+            _ => return None,
+        };
 
-        let extends = class_decl.super_class.as_ref().and_then(|super_expr| {
-            if let Expression::Identifier(id) = super_expr {
-                Some(id.name.as_str().to_string())
-            } else {
-                None
-            }
-        });
+        let config_obj = match call.arguments.first() {
+            Some(Argument::ObjectExpression(obj)) => obj,
+            _ => return None,
+        };
 
+        let mut name = String::new();
         let mut properties = Vec::new();
 
-        for element in &class_decl.body.body {
-            if let ClassElement::PropertyDefinition(prop_def) = element {
-                if let Some(entity_prop) = Self::extract_property_from_definition(prop_def, source)
-                {
-                    properties.push(entity_prop);
+        for prop in &config_obj.properties {
+            if let ObjectPropertyKind::ObjectProperty(obj_prop) = prop {
+                let key = match &obj_prop.key {
+                    PropertyKey::StaticIdentifier(id) => id.name.as_str(),
+                    _ => continue,
+                };
+
+                match key {
+                    "name" => {
+                        if let Expression::StringLiteral(lit) = &obj_prop.value {
+                            name = lit.value.as_str().to_string();
+                        }
+                    }
+                    "properties" => {
+                        if let Expression::ObjectExpression(props_obj) = &obj_prop.value {
+                            properties = Self::extract_properties_from_object(props_obj);
+                        }
+                    }
+                    _ => {}
                 }
             }
+        }
+
+        if name.is_empty() {
+            return None;
         }
 
         Some(EntityDefinition {
             name,
-            extends,
+            extends: None, // class-free entities have no class hierarchy
             properties,
         })
     }
 
-    fn extract_property_from_definition(
-        prop_def: &PropertyDefinition,
-        _source: &str,
-    ) -> Option<EntityProperty> {
-        // Get property name
-        let name = match &prop_def.key {
-            PropertyKey::StaticIdentifier(id) => id.name.as_str().to_string(),
-            _ => return None,
-        };
+    /// Extract entity properties from the properties object in defineEntity
+    fn extract_properties_from_object(obj: &ObjectExpression) -> Vec<EntityProperty> {
+        let mut properties = Vec::new();
 
-        // Analyze decorators to determine if this is a relation
-        let (relation_type, is_nullable) = Self::analyze_decorators(&prop_def.decorators);
-
-        // Extract type information from type annotation or initializer
-        let (type_name, is_collection) = if let Some(type_annotation) = &prop_def.type_annotation {
-            Self::extract_type_info(&type_annotation.type_annotation)
-        } else if let Some(value) = &prop_def.value {
-            // Try to infer from initializer (e.g., new Collection<Role>(this))
-            Self::extract_type_from_initializer(value)
-        } else {
-            return None;
-        };
-
-        Some(EntityProperty {
-            name,
-            type_name,
-            is_nullable,
-            is_collection,
-            relation_type,
-        })
-    }
-
-    fn analyze_decorators(decorators: &[Decorator]) -> (Option<RelationType>, bool) {
-        let mut relation_type = None;
-        let mut is_nullable = false;
-
-        for decorator in decorators {
-            if let Expression::CallExpression(call) = &decorator.expression {
-                if let Expression::Identifier(id) = &call.callee {
-                    let decorator_name = id.name.as_str();
-
-                    // Detect relation decorators
-                    relation_type = match decorator_name {
-                        "ManyToOne" => Some(RelationType::ManyToOne),
-                        "OneToMany" => Some(RelationType::OneToMany),
-                        "ManyToMany" => Some(RelationType::ManyToMany),
-                        "OneToOne" => Some(RelationType::OneToOne),
-                        _ => relation_type,
+        for prop in &obj.properties {
+            match prop {
+                // Skip spread elements (e.g., ...sqlBaseProperties)
+                ObjectPropertyKind::SpreadProperty(_) => continue,
+                ObjectPropertyKind::ObjectProperty(obj_prop) => {
+                    let name = match &obj_prop.key {
+                        PropertyKey::StaticIdentifier(id) => id.name.as_str().to_string(),
+                        _ => continue,
                     };
 
-                    // Check for nullable option in @Property decorator
-                    if decorator_name == "Property" {
-                        if let Some(Argument::ObjectExpression(obj)) = call.arguments.first() {
-                            for prop in &obj.properties {
-                                if let ObjectPropertyKind::ObjectProperty(obj_prop) = prop {
-                                    if let PropertyKey::StaticIdentifier(key) = &obj_prop.key {
-                                        if key.name.as_str() == "nullable" {
-                                            if let Expression::BooleanLiteral(lit) = &obj_prop.value
-                                            {
-                                                is_nullable = lit.value;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    // The value is either:
+                    // 1. A property builder chain: p.string().unique()
+                    // 2. An arrow function wrapping a relation: () => p.manyToOne(Organization)
+                    let chain_expr = Self::unwrap_arrow_function(&obj_prop.value);
+                    let parsed = Self::parse_property_builder_chain(chain_expr);
+
+                    properties.push(EntityProperty {
+                        name,
+                        type_name: parsed.type_name,
+                        is_nullable: parsed.is_nullable,
+                        is_collection: parsed.is_collection,
+                        relation_type: parsed.relation_type,
+                    });
                 }
             }
         }
 
-        (relation_type, is_nullable)
+        properties
     }
 
-    fn extract_type_info(type_ann: &TSType) -> (String, bool) {
-        match type_ann {
-            TSType::TSTypeReference(type_ref) => {
-                if let TSTypeName::IdentifierReference(id) = &type_ref.type_name {
-                    let type_name = id.name.as_str();
-
-                    // Check if it's a Collection type
-                    if type_name == "Collection" {
-                        if let Some(type_params) = &type_ref.type_arguments {
-                            if let Some(first_param) = type_params.params.first() {
-                                if let TSType::TSTypeReference(inner_ref) = first_param {
-                                    if let TSTypeName::IdentifierReference(inner_id) =
-                                        &inner_ref.type_name
-                                    {
-                                        return (
-                                            format!("Collection<{}>", inner_id.name.as_str()),
-                                            true,
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                        return ("Collection".to_string(), true);
-                    }
-
-                    return (type_name.to_string(), false);
+    /// If the expression is an arrow function, unwrap to its body expression
+    fn unwrap_arrow_function<'a>(expr: &'a Expression<'a>) -> &'a Expression<'a> {
+        if let Expression::ArrowFunctionExpression(arrow) = expr {
+            // expression: true means it's a concise body (no braces)
+            if arrow.expression {
+                if let Some(Statement::ExpressionStatement(expr_stmt)) =
+                    arrow.body.statements.first()
+                {
+                    return &expr_stmt.expression;
                 }
-                ("unknown".to_string(), false)
             }
-            TSType::TSStringKeyword(_) => ("string".to_string(), false),
-            TSType::TSNumberKeyword(_) => ("number".to_string(), false),
-            TSType::TSBooleanKeyword(_) => ("boolean".to_string(), false),
-            TSType::TSUnionType(union) => {
-                // Handle optional types like string | undefined
-                let has_undefined = union
-                    .types
-                    .iter()
-                    .any(|t| matches!(t, TSType::TSUndefinedKeyword(_)));
-                if has_undefined && union.types.len() == 2 {
-                    // Extract the non-undefined type
-                    for t in &union.types {
-                        if !matches!(t, TSType::TSUndefinedKeyword(_)) {
-                            let (type_name, is_coll) = Self::extract_type_info(t);
-                            return (type_name, is_coll);
-                        }
-                    }
+            // For arrow functions with block body, try to extract the return expression
+            if let Some(Statement::ReturnStatement(ret)) = arrow.body.statements.first() {
+                if let Some(arg) = &ret.argument {
+                    return arg;
                 }
-                ("unknown".to_string(), false)
             }
-            _ => ("unknown".to_string(), false),
         }
+        expr
     }
 
-    fn extract_type_from_initializer(value: &Expression) -> (String, bool) {
-        // Handle new Collection<Role>(this) expressions
-        if let Expression::NewExpression(new_expr) = value {
-            if let Expression::Identifier(id) = &new_expr.callee {
-                if id.name.as_str() == "Collection" {
-                    // Extract the type argument (Role from Collection<Role>)
-                    if let Some(type_args) = &new_expr.type_arguments {
-                        if let Some(first_arg) = type_args.params.first() {
-                            if let TSType::TSTypeReference(type_ref) = first_arg {
-                                if let TSTypeName::IdentifierReference(id) = &type_ref.type_name {
-                                    let type_name = format!("Collection<{}>", id.name.as_str());
-                                    return (type_name, true);
-                                }
-                            }
-                        }
+    /// Parse a property builder chain like p.string().unique().nullable()
+    /// or p.manyToOne(Organization).nullable()
+    ///
+    /// Walks the chain from outermost to innermost:
+    ///   CallExpr(.nullable) -> MemberExpr -> CallExpr(p.string) -> MemberExpr -> Identifier(p)
+    fn parse_property_builder_chain(expr: &Expression) -> ParsedProperty {
+        let mut result = ParsedProperty {
+            type_name: "unknown".to_string(),
+            is_nullable: false,
+            is_collection: false,
+            relation_type: None,
+        };
+
+        Self::walk_chain(expr, &mut result);
+        result
+    }
+
+    /// Recursively walk a method chain, accumulating modifiers
+    fn walk_chain(expr: &Expression, result: &mut ParsedProperty) {
+        if let Expression::CallExpression(call) = expr {
+            if let Some(member) = call.callee.as_member_expression() {
+                if let MemberExpression::StaticMemberExpression(static_member) = member {
+                    let method_name = static_member.property.name.as_str();
+                    let object = &static_member.object;
+
+                    if Self::is_p_identifier(object) {
+                        // This is the base: p.string(), p.manyToOne(X), etc.
+                        Self::resolve_base_type(method_name, call, result);
+                    } else {
+                        // This is a modifier: .nullable(), .unique(), etc.
+                        Self::apply_modifier(method_name, result);
+                        // Recurse into the inner expression
+                        Self::walk_chain(object, result);
                     }
                 }
             }
         }
-        ("unknown".to_string(), false)
     }
+
+    /// Check if an expression is the `p` identifier (the property builder namespace)
+    fn is_p_identifier(expr: &Expression) -> bool {
+        matches!(expr, Expression::Identifier(id) if id.name.as_str() == "p")
+    }
+
+    /// Resolve the base type from a p.xxx() call
+    fn resolve_base_type(method: &str, call: &CallExpression, result: &mut ParsedProperty) {
+        match method {
+            // Scalar types
+            "string" | "text" => result.type_name = "string".to_string(),
+            "integer" | "number" | "smallint" | "tinyint" | "mediumint" | "float" | "double" => {
+                result.type_name = "number".to_string()
+            }
+            "boolean" => result.type_name = "boolean".to_string(),
+            "datetime" | "date" => result.type_name = "Date".to_string(),
+            "uuid" => result.type_name = "string".to_string(),
+            "bigint" => result.type_name = "bigint".to_string(),
+            "json" => result.type_name = "unknown".to_string(),
+            "blob" => result.type_name = "Buffer".to_string(),
+            "decimal" => result.type_name = "string".to_string(),
+            "time" => result.type_name = "string".to_string(),
+            "enum" => result.type_name = "enum".to_string(),
+            "type" => result.type_name = "unknown".to_string(),
+            "array" => result.type_name = "unknown".to_string(),
+
+            // Relation types - extract the target entity from the first argument
+            "manyToOne" => {
+                result.relation_type = Some(RelationType::ManyToOne);
+                result.type_name = Self::extract_relation_target(call);
+            }
+            "oneToMany" => {
+                result.relation_type = Some(RelationType::OneToMany);
+                result.type_name = Self::extract_relation_target(call);
+                result.is_collection = true;
+            }
+            "manyToMany" => {
+                result.relation_type = Some(RelationType::ManyToMany);
+                result.type_name =
+                    format!("Collection<{}>", Self::extract_relation_target(call));
+                result.is_collection = true;
+            }
+            "oneToOne" => {
+                result.relation_type = Some(RelationType::OneToOne);
+                result.type_name = Self::extract_relation_target(call);
+            }
+
+            _ => {}
+        }
+    }
+
+    /// Extract the target entity name from a relation call: p.manyToOne(Organization)
+    fn extract_relation_target(call: &CallExpression) -> String {
+        if let Some(Argument::Identifier(id)) = call.arguments.first() {
+            return id.name.as_str().to_string();
+        }
+        "unknown".to_string()
+    }
+
+    /// Apply a chain modifier (.nullable(), .unique(), .primary(), etc.)
+    fn apply_modifier(method: &str, result: &mut ParsedProperty) {
+        match method {
+            "nullable" => result.is_nullable = true,
+            "array" => result.is_collection = true,
+            // Other modifiers like unique, primary, default, etc. are ignored by the analyzer
+            _ => {}
+        }
+    }
+}
+
+// Inner struct for parse_property_builder_chain
+struct ParsedProperty {
+    type_name: String,
+    is_nullable: bool,
+    is_collection: bool,
+    relation_type: Option<RelationType>,
 }
 
 #[cfg(test)]
@@ -271,38 +327,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_entity_with_relations() {
+    fn test_parse_define_entity_with_relations() {
         let dir = tempdir().unwrap();
         let entity_path = dir.path().join("user.entity.ts");
 
         write(
             &entity_path,
             r#"
-import { Entity, Property, ManyToOne, ManyToMany, Collection } from '@mikro-orm/core';
-import { SqlBaseEntity } from './base.entity';
+import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
+import { sqlBaseProperties } from '@app/core';
 import { Organization } from './organization.entity';
 import { Role } from './role.entity';
 
-@Entity()
-export class User extends SqlBaseEntity {
-  @Property()
-  name!: string;
+export const User = defineEntity({
+  name: 'User',
+  properties: {
+    ...sqlBaseProperties,
+    name: p.string(),
+    email: p.string().unique(),
+    age: p.number().nullable(),
+    organization: () => p.manyToOne(Organization),
+    roles: () => p.manyToMany(Role),
+    createdAt: p.datetime(),
+  },
+});
 
-  @Property()
-  email!: string;
-
-  @Property({ nullable: true })
-  age?: number;
-
-  @ManyToOne(() => Organization)
-  organization!: Organization;
-
-  @ManyToMany(() => Role)
-  roles = new Collection<Role>(this);
-
-  @Property()
-  createdAt!: Date;
-}
+export type IUser = InferEntity<typeof User>;
 "#,
         )
         .unwrap();
@@ -313,13 +363,13 @@ export class User extends SqlBaseEntity {
 
         let user_entity = &entities[0];
         assert_eq!(user_entity.name, "User");
-        assert_eq!(user_entity.extends, Some("SqlBaseEntity".to_string()));
+        assert_eq!(user_entity.extends, None); // class-free, no extends
 
         eprintln!("Found {} properties:", user_entity.properties.len());
         for prop in &user_entity.properties {
             eprintln!(
-                "  - {} : {} (relation: {:?})",
-                prop.name, prop.type_name, prop.relation_type
+                "  - {} : {} (relation: {:?}, nullable: {})",
+                prop.name, prop.type_name, prop.relation_type, prop.is_nullable
             );
         }
 
@@ -332,6 +382,15 @@ export class User extends SqlBaseEntity {
         assert_eq!(name_prop.type_name, "string");
         assert!(!name_prop.is_nullable);
         assert!(name_prop.relation_type.is_none());
+
+        // Check email property (unique, but analyzer doesn't track unique)
+        let email_prop = user_entity
+            .properties
+            .iter()
+            .find(|p| p.name == "email")
+            .unwrap();
+        assert_eq!(email_prop.type_name, "string");
+        assert!(!email_prop.is_nullable);
 
         // Check age property (nullable)
         let age_prop = user_entity
@@ -351,7 +410,7 @@ export class User extends SqlBaseEntity {
         assert_eq!(org_prop.type_name, "Organization");
         assert_eq!(org_prop.relation_type, Some(RelationType::ManyToOne));
 
-        // Check roles (ManyToMany relation with Collection)
+        // Check roles (ManyToMany relation)
         let roles_prop = user_entity
             .properties
             .iter()
@@ -360,5 +419,86 @@ export class User extends SqlBaseEntity {
         assert!(roles_prop.type_name.contains("Collection"));
         assert!(roles_prop.is_collection);
         assert_eq!(roles_prop.relation_type, Some(RelationType::ManyToMany));
+
+        // Check createdAt
+        let created_prop = user_entity
+            .properties
+            .iter()
+            .find(|p| p.name == "createdAt")
+            .unwrap();
+        assert_eq!(created_prop.type_name, "Date");
+    }
+
+    #[test]
+    fn test_parse_simple_entity() {
+        let dir = tempdir().unwrap();
+        let entity_path = dir.path().join("permission.entity.ts");
+
+        write(
+            &entity_path,
+            r#"
+import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
+import { sqlBaseProperties } from '@app/core';
+
+export const Permission = defineEntity({
+  name: 'Permission',
+  properties: {
+    ...sqlBaseProperties,
+    slug: p.string(),
+  },
+});
+
+export type IPermission = InferEntity<typeof Permission>;
+"#,
+        )
+        .unwrap();
+
+        let entities = EntityAnalyzer::parse_entity_file(&entity_path).unwrap();
+        assert_eq!(entities.len(), 1);
+
+        let permission = &entities[0];
+        assert_eq!(permission.name, "Permission");
+        assert_eq!(permission.properties.len(), 1);
+        assert_eq!(permission.properties[0].name, "slug");
+        assert_eq!(permission.properties[0].type_name, "string");
+    }
+
+    #[test]
+    fn test_parse_entity_with_nullable_relation() {
+        let dir = tempdir().unwrap();
+        let entity_path = dir.path().join("user.entity.ts");
+
+        write(
+            &entity_path,
+            r#"
+import { defineEntity, p, type InferEntity } from '@mikro-orm/core';
+import { sqlBaseProperties } from '@app/core';
+import { Organization } from './organization.entity';
+
+export const User = defineEntity({
+  name: 'User',
+  properties: {
+    ...sqlBaseProperties,
+    email: p.string(),
+    organization: () => p.manyToOne(Organization).nullable(),
+  },
+});
+
+export type IUser = InferEntity<typeof User>;
+"#,
+        )
+        .unwrap();
+
+        let entities = EntityAnalyzer::parse_entity_file(&entity_path).unwrap();
+        let user = &entities[0];
+
+        let org_prop = user
+            .properties
+            .iter()
+            .find(|p| p.name == "organization")
+            .unwrap();
+        assert_eq!(org_prop.relation_type, Some(RelationType::ManyToOne));
+        assert!(org_prop.is_nullable);
+        assert_eq!(org_prop.type_name, "Organization");
     }
 }

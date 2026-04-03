@@ -61,7 +61,7 @@ function initStripe(): Stripe {
   }
 
   return new Stripe(apiKey, {
-    apiVersion: '2026-01-28.clover'
+    apiVersion: '2026-03-25.dahlia'
   });
 }
 

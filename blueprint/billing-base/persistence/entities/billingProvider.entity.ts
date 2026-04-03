@@ -1,19 +1,17 @@
-import { SqlBaseEntity } from '@forklaunch/blueprint-core';
-import { Entity, Enum, Property, Unique } from '@mikro-orm/core';
+import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
+import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 import { BillingProviderEnum } from '../../domain/enum/billingProvider.enum';
 
 // This is to represent connection information for a billing provider
-@Entity()
-export class BillingProvider extends SqlBaseEntity {
-  @Property({ nullable: true })
-  @Unique()
-  externalId?: string;
-
-  // maybe include standardized auth fields if the same, if not, leverage the providerFields
-  // store information here as well
-  @Property({ type: 'json', nullable: true })
-  providerFields?: unknown;
-
-  @Enum({ items: () => BillingProviderEnum, nullable: true })
-  billingProvider?: BillingProviderEnum;
-}
+export const BillingProvider = defineComplianceEntity({
+  name: 'BillingProvider',
+  properties: {
+    ...sqlBaseProperties,
+    externalId: fp.string().unique().nullable().compliance('none'),
+    providerFields: fp.json<unknown>().nullable().compliance('none'),
+    billingProvider: fp
+      .enum(() => BillingProviderEnum)
+      .default(BillingProviderEnum.NONE)
+      .compliance('none')
+  }
+});

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import { noop } from '@forklaunch/common';
 import { OpenTelemetryCollector } from '@forklaunch/core/http';
 import { number, SchemaValidator, string } from '@forklaunch/validator/zod';
@@ -48,6 +47,7 @@ describe('Forklaunch Express Tests', () => {
       '/test',
       {
         name: 'Test',
+        access: 'public',
         summary: 'Test Summary',
         responses: {
           200: string
@@ -63,6 +63,7 @@ describe('Forklaunch Express Tests', () => {
       '/test',
       {
         name: 'Test',
+        access: 'public',
         summary: 'Test Summary',
         body: {
           test: string
@@ -81,6 +82,7 @@ describe('Forklaunch Express Tests', () => {
       '/test',
       {
         name: 'Test',
+        access: 'public',
         summary: 'Test Summary',
         body: {
           test: string
@@ -98,6 +100,7 @@ describe('Forklaunch Express Tests', () => {
       '/test',
       {
         name: 'Test',
+        access: 'public',
         summary: 'Test Summary',
         body: {
           test: string
@@ -115,6 +118,7 @@ describe('Forklaunch Express Tests', () => {
       '/test',
       {
         name: 'Test',
+        access: 'public',
         summary: 'Test Summary',
         responses: {
           200: string
@@ -203,6 +207,7 @@ describe('handlers', () => {
       '/:id',
       {
         name: 'Get Organization',
+        access: 'protected',
         summary: 'Gets an organization by ID',
         responses: {
           200: {
@@ -261,6 +266,7 @@ describe('handlers', () => {
       '/',
       {
         name: 'Create Organization',
+        access: 'public',
         summary: 'Creates an organization',
         responses: {
           200: {
@@ -297,6 +303,7 @@ describe('handlers', () => {
       '/',
       {
         name: 'Create Organization',
+        access: 'protected',
         body: {
           json: {
             name: string

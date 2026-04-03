@@ -23,6 +23,7 @@ export const createOrganization = handlers.post(
   '/',
   {
     name: 'Create Organization',
+    access: 'internal',
     summary: 'Creates a new organization',
     auth: {
       hmac: {
@@ -56,6 +57,7 @@ export const getOrganization = handlers.get(
   '/:id',
   {
     name: 'Get Organization',
+    access: 'protected',
     summary: 'Gets an organization by ID',
     auth: {
       jwt: {
@@ -86,6 +88,7 @@ export const updateOrganization = handlers.put(
   '/',
   {
     name: 'Update Organization',
+    access: 'internal',
     summary: 'Updates an organization by ID',
     auth: {
       hmac: {
@@ -111,6 +114,7 @@ export const deleteOrganization = handlers.delete(
   '/:id',
   {
     name: 'Delete Organization',
+    access: 'internal',
     summary: 'Deletes an organization by ID',
     auth: {
       hmac: {

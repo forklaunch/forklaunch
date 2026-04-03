@@ -15,6 +15,7 @@ export const sampleWorkerGet = handlers.get(
   '/:id',
   {
     name: 'sampleWorkerGet',
+    access: 'internal',
     summary: 'Get sample worker',
     auth: {
       hmac: {
@@ -46,6 +47,7 @@ export const sampleWorkerPost = handlers.post(
   '/',
   {
     name: 'sampleWorkerPost',
+    access: 'internal',
     summary: 'Create sample worker',
     auth: {
       hmac: {

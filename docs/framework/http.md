@@ -6,85 +6,39 @@ description: Reference for using HTTP Frameworks in ForkLaunch.
 
 ## Overview
 
-ForkLaunch provides two high-performance HTTP frameworks built on top of proven technologies, offering near drop-in replacements with enhanced capabilities:
+`ForkLaunch` is built directly on top of the `express` syntax, allowing for a near drop-in replacement for your express applications. The net new difference is the requirement of a `ContractDetails` object, which enables:
+- Automatic schema validation and type coercion
+- Automatic API documentation generation
+- Built-in telemetry collection
+- Standardized error handling
 
-- **`@forklaunch/express`**: Built on Express.js with comprehensive HTTP method support (all REST methods plus WebDAV)
-- **`@forklaunch/hyper-express`**: Built on uWebSockets.js for maximum performance with core HTTP methods
+By default, `ForkLaunch` ships two flavors of HTTP frameworks:
 
-Both frameworks provide:
-- **Automatic schema validation and type coercion** via `ContractDetails`
-- **Built-in OpenTelemetry integration** for metrics and tracing
-- **Automatic API documentation generation** (OpenAPI 3.0)
-- **Standardized error handling** and response formatting
-- **Type-safe request/response handling** with full TypeScript support
-- **Session management** and authentication middleware
-- **CORS, parsing, and other middleware** pre-configured
+- `@forklaunch/express`: Compatible with `express.js` 4.0. As close to the standard framework in `node` development. Compatible with `bun` and `node` 18+.
+- `@forklaunch/hyper-express`: A `uwebsockets`-based framework that is faster and more efficient than `express.js` but still maintains a similar API.
 
-## Package Structure
+There are plans to support `express 5.0` as well as part of a separate package.
 
-### @forklaunch/express
-- **Full Express.js compatibility** with all HTTP methods
-- **WebDAV support** (PROPFIND, PROPPATCH, MKCOL, etc.)
-- **Advanced middleware** for content parsing, authentication, and response handling
-- **Cluster support** for both Node.js and Bun runtimes
+## Application
 
-### @forklaunch/hyper-express  
-- **High-performance uWebSockets.js backend**
-- **Core HTTP methods** (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS, TRACE)
-- **Optimized for speed** and resource efficiency
-- **Same API surface** as Express for easy migration
-
-## Application Initialization
-
-Both frameworks use the same `forklaunchExpress` function signature, providing a consistent API across both implementations:
+`forklaunchExpress` virtually acts as a drop-in replacement for `express`, with additional initialization arguments:
 
 ### Express Framework (`@forklaunch/express`)
 
 ```typescript
 import { forklaunchExpress } from '@forklaunch/express';
-import { createZodValidator } from '@forklaunch/validator/zod';
-import { createOpenTelemetryCollector } from '@forklaunch/core/http';
-
-const schemaValidator = createZodValidator();
-const openTelemetryCollector = createOpenTelemetryCollector();
 
 const app = forklaunchExpress(
   schemaValidator,
   openTelemetryCollector,
-  {
-    docs: {
-      enabled: true,
-      path: '/docs'
-    },
-    cors: {
-      origin: ['http://localhost:3000'],
-      credentials: true
-    },
-    json: {
-      limit: '10mb'
-    }
-  }
-);
-```
-
-### Hyper-Express Framework (`@forklaunch/hyper-express`)
-
-```typescript
-import { forklaunchExpress } from '@forklaunch/hyper-express';
-import { createTypeBoxValidator } from '@forklaunch/validator/typebox';
-import { createOpenTelemetryCollector } from '@forklaunch/core/http';
-
-const schemaValidator = createTypeBoxValidator();
-const openTelemetryCollector = createOpenTelemetryCollector();
-
-const app = forklaunchExpress(
-  schemaValidator,
-  openTelemetryCollector,
-  {
-    docs: {
-      enabled: true,
-      path: '/api-docs'
-    }
+  options?: {
+    docs?: DocsConfiguration;
+    busboy?: BusboyConfig;
+    text?: OptionsText;
+    json?: OptionsJson;
+    urlencoded?: OptionsUrlencoded;
+    cors?: CorsOptions;
+    mcp?: McpConfiguration; // Future: MCP autogeneration
   }
 );
 ```
@@ -249,75 +203,41 @@ const app = forklaunchExpress(schemaValidator, telemetryCollector, {
 });
 ```
 
-## Router Creation
+## Router
 
-Both frameworks provide `forklaunchRouter` for creating type-safe, validated route handlers with automatic OpenAPI generation:
+`forklaunchRouter` virtually acts as a drop-in replacement for `express.Router`, with additional initialization arguments:
 
-### Express Router (`@forklaunch/express`)
+### Express Router
 
 ```typescript
 import { forklaunchRouter } from '@forklaunch/express';
-import { z } from 'zod';
 
-const userRouter = forklaunchRouter(
-  '/api/users',
+const router = forklaunchRouter(
+  basePath,
   schemaValidator,
   openTelemetryCollector,
-  {
-    // Router-specific options
-    json: { limit: '5mb' },
-    cors: { origin: ['http://localhost:3000'] }
+  options?: {
+    busboy?: BusboyConfig;
+    text?: OptionsText;
+    json?: OptionsJson;
+    urlencoded?: OptionsUrlencoded;
   }
 );
-
-// Full HTTP method support including WebDAV
-userRouter.get('/:id', {
-  name: 'getUser',
-  params: z.object({ id: z.string() }),
-  responses: {
-    200: userSchema,
-    404: errorSchema
-  }
-}, getUserHandler);
-
-// WebDAV methods available in Express
-userRouter.propfind('/:id/properties', {
-  name: 'getUserProperties',
-  responses: { 207: propertiesSchema }
-}, getUserPropertiesHandler);
 ```
 
-### Hyper-Express Router (`@forklaunch/hyper-express`)
+### HyperExpress Router
 
 ```typescript
 import { forklaunchRouter } from '@forklaunch/hyper-express';
-import { Type } from '@sinclair/typebox';
 
-const userRouter = forklaunchRouter(
-  '/api/users',
+const router = forklaunchRouter(
+  basePath,
   schemaValidator,
-  openTelemetryCollector
+  openTelemetryCollector,
+  options?: {
+    busboy?: BusboyConfig;
+  }
 );
-
-// Core HTTP methods with high performance
-userRouter.get('/:id', {
-  name: 'getUser',
-  params: Type.Object({ id: Type.String() }),
-  responses: {
-    200: userSchema,
-    404: errorSchema
-  }
-}, getUserHandler);
-
-// All standard HTTP methods supported
-userRouter.post('/', {
-  name: 'createUser',
-  body: createUserSchema,
-  responses: {
-    201: userSchema,
-    400: validationErrorSchema
-  }
-}, createUserHandler);
 ```
 
 ## Example Configurations

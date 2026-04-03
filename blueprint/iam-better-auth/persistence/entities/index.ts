@@ -1,8 +1,11 @@
 export { Account } from './account.entity';
+export { Invitation } from './invitation.entity';
 export { Jwks } from './jwks.entity';
+export { Member } from './member.entity';
 export { Organization } from './organization.entity';
-export { Permission } from './permission.entity';
-export { Role } from './role.entity';
+export { OrganizationRole } from './organizationRole.entity';
 export { Session } from './session.entity';
+export { Team } from './team.entity';
+export { TeamMember } from './teamMember.entity';
 export { User } from './user.entity';
 export { Verification } from './verification.entity';

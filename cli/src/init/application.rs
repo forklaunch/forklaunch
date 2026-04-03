@@ -12,7 +12,7 @@ use convert_case::{Case, Casing};
 use rustyline::{Editor, history::DefaultHistory};
 use serde_json::to_string_pretty;
 use serde_yml::{from_str, to_string};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 use uuid::Uuid;
 
 use super::service::generate_service_package_json;
@@ -39,9 +39,9 @@ use crate::{
             find_docker_compose_path,
         },
         format::format_code,
+        github_configs::ensure_github_configs,
         gitignore::generate_gitignore,
         husky::create_or_merge_husky_pre_commit,
-        iam::generate_iam_secret,
         license::generate_license,
         manifest::{
             ManifestData, ProjectEntry, ProjectType, ResourceInventory,
@@ -60,11 +60,11 @@ use crate::{
                 GLOBALS_VERSION, HUSKY_VERSION, HYPER_EXPRESS_VERSION, JEST_TYPES_VERSION,
                 JEST_VERSION, LINT_STAGED_VERSION, MIKRO_ORM_CORE_VERSION,
                 MIKRO_ORM_DATABASE_VERSION, MIKRO_ORM_MIGRATIONS_VERSION,
-                MIKRO_ORM_REFLECTION_VERSION, NODE_GYP_VERSION, OXLINT_VERSION, PRETTIER_VERSION,
+                NODE_GYP_VERSION, OXLINT_VERSION, PRETTIER_VERSION,
                 PROJECT_BUILD_SCRIPT, PROJECT_DOCS_SCRIPT, SORT_PACKAGE_JSON_VERSION,
                 SQLITE3_VERSION, TS_JEST_VERSION, TS_NODE_VERSION, TSX_VERSION, TYPEBOX_VERSION,
                 TYPES_BUILD_SCRIPT, TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION, TYPES_EXPRESS_VERSION,
-                TYPES_QS_VERSION, TYPES_UUID_VERSION, TYPES_WATCH_SCRIPT,
+                TYPES_NODE_VERSION, TYPES_QS_VERSION, TYPES_UUID_VERSION, TYPES_WATCH_SCRIPT,
                 TYPESCRIPT_ESLINT_VERSION, TYPESCRIPT_NATIVE_PREVIEW_VERSION, TYPESCRIPT_VERSION, UNIVERSAL_SDK_VERSION, UUID_VERSION,
                 VALIDATOR_VERSION, VITEST_VERSION, ZOD_VERSION, application_build_script,
                 application_clean_purge_script, application_clean_script, application_docs_script,
@@ -99,7 +99,6 @@ fn use_generated_sdk_mode_for_init(
     use crate::core::rendered_template::RenderedTemplatesCache;
     use crate::sdk::mode::apply_generated_sdk_mode_setup;
 
-    // Convert Vec to Cache for processing
     let mut cache = RenderedTemplatesCache::new();
     for template in rendered_templates.drain(..) {
         let path = template.path.to_string_lossy().to_string();
@@ -110,7 +109,6 @@ fn use_generated_sdk_mode_for_init(
     // Skip universal-sdk transformation during init (already in correct format from template)
     apply_generated_sdk_mode_setup(&app_root_path.to_path_buf(), manifest_data, &mut cache)?;
 
-    // Convert Cache back to Vec
     rendered_templates.extend(cache.drain().map(|(_, template)| template));
 
     Ok(())
@@ -213,6 +211,7 @@ fn generate_application_package_json(
             } else {
                 None
             },
+            types_node: Some(TYPES_NODE_VERSION.to_string()),
             better_sqlite3: if data.is_node && (data.is_sqlite || data.is_better_sqlite) {
                 Some(BETTER_SQLITE3_VERSION.to_string())
             } else {
@@ -355,15 +354,6 @@ impl CliCommand for ApplicationCommand {
                     .num_args(0..)
                     .action(ArgAction::Append),
             )
-            // .arg(
-            //     Arg::new("libraries")
-            //         .short('l')
-            //         .long("libraries")
-            //         .help("Additional libraries to include.]")
-            //         .value_parser(VALID_LIBRARIES)
-            //         .num_args(0..)
-            //         .action(ArgAction::Append),
-            // )
             .arg(
                 Arg::new("description")
                     .short('D')
@@ -448,12 +438,10 @@ impl CliCommand for ApplicationCommand {
         } else if origin_path.join("src").exists() && origin_path.join("src").is_dir() {
             Path::new("src").join("modules")
         } else {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-            writeln!(
+            log_warn!(
                 stdout,
                 "No 'src' folder in project root. Please confirm where project files will be initialized."
-            )?;
-            stdout.reset()?;
+            );
             let modules_path: String = prompt_with_validation(
                 &mut line_editor,
                 &mut stdout,
@@ -541,12 +529,10 @@ impl CliCommand for ApplicationCommand {
                     .parse::<HttpFramework>()?
                     == HttpFramework::HyperExpress
                 {
-                    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-                    writeln!(
+                    log_warn!(
                         stdout,
                         "Incompatible choices: Bun + hyper-express, defaulting to Bun + express.",
-                    )?;
-                    stdout.reset()?;
+                    );
                 }
             }
             HttpFramework::Express
@@ -564,20 +550,7 @@ impl CliCommand for ApplicationCommand {
             .parse()?
         };
 
-        // TODO: Add support for Bun test framework
-        let test_framework: Option<TestFramework> = 
-        // if runtime == Runtime::Bun {
-        //     if matches.get_one::<String>("test-framework").is_some() {
-        //         stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-        //         writeln!(
-        //             stdout,
-        //             "Ignoring test-framework choice, defaulting to Bun built-in test runner.",
-        //         )?;
-        //         stdout.reset()?;
-        //     }
-        //     None
-        // } else {
-            Some(
+        let test_framework: Option<TestFramework> = Some(
                 prompt_with_validation(
                     &mut line_editor,
                     &mut stdout,
@@ -590,13 +563,12 @@ impl CliCommand for ApplicationCommand {
                 )?
                 .parse()?,
             );
-        // };
 
         let mut global_module_config = ModuleConfig {
             iam: None,
             billing: None,
         };
-        let mut modules: Vec<Module> = if matches.ids().all(|id| id == "dryrun") {
+        let mut modules: Vec<Module> = if matches.get_many::<String>("modules").is_none() {
             let mut modules_to_test;
             loop {
                 global_module_config = ModuleConfig {
@@ -619,9 +591,7 @@ impl CliCommand for ApplicationCommand {
                 if validate_modules(&modules_to_test, &mut global_module_config).is_ok() {
                     break;
                 } else {
-                    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-                    writeln!(stdout, "Invalid modules combination. Please try again.")?;
-                    stdout.reset()?;
+                    log_warn!(stdout, "Invalid modules combination. Please try again.");
                 }
             }
             modules_to_test
@@ -728,6 +698,7 @@ impl CliCommand for ApplicationCommand {
                 cache: get_service_module_cache(&package),
                 queue: None,
                 object_store: None,
+                redis_partition: None,
             }),
             routers: get_routers_from_standard_package(package),
             metadata: None,
@@ -805,9 +776,7 @@ impl CliCommand for ApplicationCommand {
             is_in_memory_database: is_in_memory_database(&database),
             platform_application_id: None,
             platform_organization_id: None,
-            release_version: None,
-            release_git_commit: None,
-            release_git_branch: None,
+            compliance: None,
         };
 
         let mut rendered_templates = Vec::new();
@@ -957,9 +926,7 @@ impl CliCommand for ApplicationCommand {
                 is_database_enabled: true,
                 platform_application_id: data.platform_application_id.clone(),
                 platform_organization_id: data.platform_organization_id.clone(),
-                release_version: data.release_version.clone(),
-                release_git_commit: data.release_git_commit.clone(),
-                release_git_branch: data.release_git_branch.clone(),
+                compliance: data.compliance.clone(),
 
                 is_better_auth: template_dir.module_id == Some(Module::BetterAuthIam),
                 is_stripe: template_dir.module_id == Some(Module::StripeBilling),
@@ -986,18 +953,12 @@ impl CliCommand for ApplicationCommand {
                 // Default to false for application initialization, will be set by CLI flag
                 with_mappers: false,
 
-                iam_secret: if template_dir.module_id == Some(Module::BaseIam)
-                    || template_dir.module_id == Some(Module::BetterAuthIam)
-                {
-                    Some(generate_iam_secret())
-                } else {
-                    None
-                },
+                iam_secret: None,
 
                 // These will be properly generated when initialized
-                generated_password_encryption_secret: String::new(),
                 generated_better_auth_secret: String::new(),
                 generated_hmac_secret: String::new(),
+                otel_token: "OtelCollector".to_string(),
             };
 
             if service_data.service_name == "client-sdk" {
@@ -1067,8 +1028,13 @@ impl CliCommand for ApplicationCommand {
                         mikro_orm_core: Some(MIKRO_ORM_CORE_VERSION.to_string()),
                         mikro_orm_migrations: Some(MIKRO_ORM_MIGRATIONS_VERSION.to_string()),
                         mikro_orm_database: Some(MIKRO_ORM_DATABASE_VERSION.to_string()),
-                        mikro_orm_reflection: Some(MIKRO_ORM_REFLECTION_VERSION.to_string()),
+                        mikro_orm_reflection: None,
                         opentelemetry_api: None,
+                        types_express: Some(TYPES_EXPRESS_VERSION.to_string()),
+                        types_express_serve_static_core: Some(
+                            TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION.to_string(),
+                        ),
+                        types_qs: Some(TYPES_QS_VERSION.to_string()),
                         typebox: if service_data.is_typebox {
                             Some(TYPEBOX_VERSION.to_string())
                         } else {
@@ -1090,6 +1056,7 @@ impl CliCommand for ApplicationCommand {
                     }),
                     "client-sdk" => Some(ProjectDependencies {
                         forklaunch_common: Some(COMMON_VERSION.to_string()),
+                        forklaunch_core: Some(CORE_VERSION.to_string()),
                         forklaunch_universal_sdk: Some(UNIVERSAL_SDK_VERSION.to_string()),
                         better_auth: if global_module_config
                             .iam
@@ -1100,6 +1067,8 @@ impl CliCommand for ApplicationCommand {
                         } else {
                             None
                         },
+                        types_express: Some(TYPES_EXPRESS_VERSION.to_string()),
+                        types_qs: Some(TYPES_QS_VERSION.to_string()),
                         ..Default::default()
                     }),
                     _ => None,
@@ -1107,11 +1076,6 @@ impl CliCommand for ApplicationCommand {
                 match service_data.service_name.as_str() {
                     "core" => Some(ProjectDevDependencies {
                         types_uuid: Some(TYPES_UUID_VERSION.to_string()),
-                        types_express: Some(TYPES_EXPRESS_VERSION.to_string()),
-                        types_express_serve_static_core: Some(
-                            TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION.to_string(),
-                        ),
-                        types_qs: Some(TYPES_QS_VERSION.to_string()),
                         ..Default::default()
                     }),
                     "monitoring" => Some(ProjectDevDependencies {
@@ -1123,8 +1087,6 @@ impl CliCommand for ApplicationCommand {
                             global_module_config.billing.is_some(),
                             global_module_config.iam.is_some(),
                         ),
-                        types_express: Some(TYPES_EXPRESS_VERSION.to_string()),
-                        types_qs: Some(TYPES_QS_VERSION.to_string()),
                         ..Default::default()
                     }),
                     _ => None,
@@ -1174,13 +1136,6 @@ impl CliCommand for ApplicationCommand {
                 },
             )?);
 
-            if let Some(secret) = &service_data.iam_secret {
-                rendered_templates.push(RenderedTemplate {
-                    path: Path::new(&application_path).join(".env.local"),
-                    content: format!("PASSWORD_ENCRYPTION_SECRET={}\n", secret),
-                    context: None,
-                });
-            }
         }
 
         let docker_compose_path = if let Some(docker_compose_path) = &data.docker_compose_path {
@@ -1267,12 +1222,16 @@ impl CliCommand for ApplicationCommand {
             dryrun,
         )?);
 
-        // Set up generated SDK mode by default
         use_generated_sdk_mode_for_init(
             &origin_path,
             &data,
             &mut rendered_templates,
         )?;
+
+        rendered_templates.extend(
+            ensure_github_configs(&origin_path, &ManifestData::Application(&data))
+                .with_context(|| "Failed to generate GitHub config files")?,
+        );
 
         write_rendered_templates(&rendered_templates, dryrun, &mut stdout)
             .with_context(|| "Failed to write application files")?;
@@ -1289,12 +1248,74 @@ impl CliCommand for ApplicationCommand {
             })?;
 
         if !dryrun {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "{} initialized successfully!", name)?;
-            stdout.reset()?;
+            log_ok!(stdout, "{} initialized successfully!", name);
             format_code(&Path::new(&application_path), &data.runtime.parse()?);
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn build_command() -> Command {
+        Command::new("application")
+            .arg(Arg::new("name"))
+            .arg(
+                Arg::new("modules")
+                    .short('m')
+                    .long("modules")
+                    .num_args(0..)
+                    .action(ArgAction::Append),
+            )
+            .arg(
+                Arg::new("dryrun")
+                    .short('n')
+                    .long("dryrun")
+                    .action(ArgAction::SetTrue),
+            )
+    }
+
+    #[test]
+    fn modules_prompt_needed_when_name_provided_without_modules_flag() {
+        let cmd = build_command();
+        let matches = cmd.try_get_matches_from(vec!["application", "my-app"]).unwrap();
+        // With only a positional name arg, modules should not be present — prompt is needed
+        assert!(matches.get_many::<String>("modules").is_none());
+    }
+
+    #[test]
+    fn modules_prompt_not_needed_when_modules_flag_provided() {
+        let cmd = build_command();
+        let matches = cmd
+            .try_get_matches_from(vec!["application", "my-app", "-m", "iam-base"])
+            .unwrap();
+        // With -m flag, modules should be present — no prompt needed
+        assert!(matches.get_many::<String>("modules").is_some());
+    }
+
+    #[test]
+    fn modules_prompt_needed_with_dryrun_and_no_modules() {
+        let cmd = build_command();
+        let matches = cmd
+            .try_get_matches_from(vec!["application", "my-app", "--dryrun"])
+            .unwrap();
+        assert!(matches.get_many::<String>("modules").is_none());
+    }
+
+    #[test]
+    fn old_condition_was_wrong_with_name_arg() {
+        // This test documents the bug: the old condition `matches.ids().all(|id| id == "dryrun")`
+        // returned false when a positional "name" arg was provided, skipping the module prompt.
+        let cmd = build_command();
+        let matches = cmd.try_get_matches_from(vec!["application", "my-app"]).unwrap();
+        // Old condition would have been false (because "name" id is present), incorrectly
+        // skipping the prompt. The new condition correctly checks for modules absence.
+        let old_condition = matches.ids().all(|id| id == "dryrun");
+        let new_condition = matches.get_many::<String>("modules").is_none();
+        assert!(!old_condition, "old condition incorrectly returns false with name arg");
+        assert!(new_condition, "new condition correctly identifies modules prompt is needed");
     }
 }

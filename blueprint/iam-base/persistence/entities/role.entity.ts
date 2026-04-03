@@ -1,12 +1,14 @@
-import { SqlBaseEntity } from '@forklaunch/blueprint-core';
-import { Collection, Entity, ManyToMany, Property } from '@mikro-orm/core';
+import { sqlBaseProperties } from '@forklaunch/blueprint-core';
+import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
 import { Permission } from './permission.entity';
 
-@Entity()
-export class Role extends SqlBaseEntity {
-  @Property()
-  name!: string;
+export const Role = defineComplianceEntity({
+  name: 'Role',
+  properties: {
+    ...sqlBaseProperties,
+    name: fp.string().compliance('none'),
+    permissions: () => fp.manyToMany(Permission)
+  }
+});
 
-  @ManyToMany('Permission')
-  permissions = new Collection<Permission>(this);
-}
+// export type Role = InferEntity<typeof role>;

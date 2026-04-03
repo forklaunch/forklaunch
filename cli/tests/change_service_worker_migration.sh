@@ -21,7 +21,8 @@ RUST_BACKTRACE=1 cargo run --release -- init application migration-app \
   -t vitest \
   -D "Migration App" \
   -A "Test Author" \
-  -L "MIT"
+  -L "MIT" \
+  -m
 
 echo "Initializing Service..."
 RUST_BACKTRACE=1 cargo run --release -- init service my-service \

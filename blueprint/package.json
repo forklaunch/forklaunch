@@ -18,7 +18,7 @@
   ],
   "scripts": {
     "build": "pnpm -r run build",
-    "clean": "rm -rf node_modules pnpm-lock.yaml && pnpm --parallel -r clean && pnpm store prune",
+    "clean": "rm -rf node_modules pnpm-lock.yaml tsconfig.tsbuildinfo && pnpm --parallel -r clean && pnpm store prune",
     "clean:purge": "pnpm run clean && pnpm store clear",
     "dev": "RUNTIME=node docker compose -f docker-compose.base.yml -f docker-compose.node.yml up",
     "dev:build": "RUNTIME=node docker compose -f docker-compose.base.yml -f docker-compose.node.yml build",
@@ -41,35 +41,31 @@
     "up:packages": "pnpm -r update --latest"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.3.14",
-    "@changesets/cli": "^2.29.8",
-    "@eslint/js": "^9.39.2",
+    "@biomejs/biome": "2.4.9",
+    "@changesets/cli": "^2.30.0",
+    "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
-    "eslint": "^9.39.2",
-    "globals": "^17.3.0",
-    "jest": "^30.2.0",
-    "lint-staged": "^16.2.7",
-    "oxlint": "^1.43.0",
+    "@types/node": "^25.5.0",
+    "eslint": "^10.1.0",
+    "globals": "^17.4.0",
+    "jest": "^30.3.0",
+    "lint-staged": "^16.4.0",
+    "oxlint": "^1.57.0",
     "prettier": "^3.8.1",
     "sort-package-json": "^3.6.1",
     "ts-jest": "^29.4.6",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "^8.54.0",
-    "vitest": "^4.0.18"
+    "typescript": "^6.0.2",
+    "typescript-eslint": "^8.57.2",
+    "vitest": "^4.1.2"
   },
   "dependencies": {
-    "@forklaunch/common": "^0.6.28",
-    "@forklaunch/core": "^0.18.1",
-    "@forklaunch/express": "^0.10.5",
-    "@forklaunch/hyper-express": "^0.11.5",
-    "@forklaunch/universal-sdk": "^0.7.28",
-    "@forklaunch/validator": "^0.10.28"
-  },
-  "pnpm": {
-    "patchedDependencies": {
-      "@jercle/yargonaut@1.1.5": "./patches/@jercle__yargonaut.patch"
-    }
+    "@forklaunch/common": "^1.2.6",
+    "@forklaunch/core": "^1.3.3",
+    "@forklaunch/express": "^1.2.13",
+    "@forklaunch/hyper-express": "^1.2.13",
+    "@forklaunch/universal-sdk": "^1.2.6",
+    "@forklaunch/validator": "^1.2.6"
   }
 }

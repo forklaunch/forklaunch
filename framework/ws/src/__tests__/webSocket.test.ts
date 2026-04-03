@@ -390,18 +390,20 @@ describe('ForklaunchWebSocket', () => {
         expect(result[0]).toEqual(data);
       });
 
-      it('should return args unchanged for non-binary message', () => {
+      it('should decode non-binary message when schema is present', () => {
         const ws = new ForklaunchWebSocket(
           validator,
           schemas,
           'ws://localhost:8080'
         );
-        const data = 'plain text';
+        const data = { type: 'chat' as const, message: 'hello', userId: '123' };
+        const jsonString = JSON.stringify(data);
 
         // @ts-expect-error - Accessing protected method for testing
-        const result = ws.transformIncomingArgs('message', [data, false]);
+        const result = ws.transformIncomingArgs('message', [jsonString, false]);
 
-        expect(result).toEqual([data, false]);
+        expect(result[0]).toEqual(data);
+        expect(result[1]).toBe(false);
       });
     });
   });

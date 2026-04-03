@@ -20,6 +20,7 @@ import { typedAuthHandler } from '../src/http/handlers/typedAuthHandler';
 
 const contractDetails = {
   name: 'string',
+  access: 'protected' as const,
   summary: 'string',
   auth: {
     sessionSchema: {
@@ -56,6 +57,7 @@ const xasd = typedHandler(
   'trace',
   {
     name: 'string',
+    access: 'protected',
     summary: 'string',
     params: {
       name: string,
@@ -131,6 +133,7 @@ const bl = xa.trace(
   '/test/:name/:id',
   {
     name: 'string',
+    access: 'protected',
     summary: 'string',
     params: {
       name: string,
@@ -196,6 +199,7 @@ xa.patch(
   '/test/:name/:id',
   {
     name: 'string',
+    access: 'protected',
     summary: 'string',
     auth: {
       sessionSchema: {
@@ -229,6 +233,7 @@ const fff = typedHandler(
   'trace',
   {
     name: 'string',
+    access: 'protected',
     summary: 'string',
     params: {
       name: string,

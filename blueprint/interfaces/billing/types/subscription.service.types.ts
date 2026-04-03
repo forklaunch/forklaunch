@@ -9,7 +9,7 @@ export type CreateSubscriptionDto<PartyType, BillingProviderType> =
     productId: string;
     providerFields?: unknown;
     externalId: string;
-    billingProvider?: BillingProviderType[keyof BillingProviderType];
+    billingProvider: BillingProviderType[keyof BillingProviderType];
     startDate: Date;
     endDate?: Date;
     status: string;

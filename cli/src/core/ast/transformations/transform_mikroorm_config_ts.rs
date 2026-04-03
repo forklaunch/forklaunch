@@ -61,17 +61,16 @@ pub(crate) fn transform_mikroorm_config_ts(
         &import_source_identifier,
     )?;
 
-    let database_driver_import_text = format!(
-        "import {{ {} }} from \"@mikro-orm/{}\";",
-        get_db_driver(database),
+    let database_import_text = format!(
+        "import {{ defineConfig }} from \"@mikro-orm/{}\";",
         database.to_string().to_lowercase()
     );
-    let mut database_driver_import_program =
-        parse_ast_program(&allocator, &database_driver_import_text, SourceType::ts());
+    let mut database_import_program =
+        parse_ast_program(&allocator, &database_import_text, SourceType::ts());
     if let Some(existing_database) = existing_database {
         let _ = replace_import_statment(
             &mut mikro_orm_config_program,
-            &mut database_driver_import_program,
+            &mut database_import_program,
             &format!(
                 "@mikro-orm/{}",
                 existing_database.to_string().to_lowercase()
@@ -359,4 +358,181 @@ pub(crate) fn transform_mikroorm_config_ts(
         .with_options(CodegenOptions::default())
         .build(&mikro_orm_config_program)
         .code)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::write;
+
+    use tempfile::TempDir;
+
+    use super::*;
+    use crate::core::rendered_template::RenderedTemplatesCache;
+
+    const POSTGRESQL_MIKRO_ORM_CONFIG: &str = r#"import { createConfigInjector, getEnvVar, Lifetime } from '@forklaunch/core/services';
+import { Migrator } from '@mikro-orm/migrations';
+import { number, string } from '@test-app/core';
+import { defineConfig } from '@mikro-orm/postgresql';
+
+const configInjector = createConfigInjector(schemaValidator, {
+  DB_NAME: { lifetime: Lifetime.Singleton, type: string, value: getEnvVar('DB_NAME') },
+  DB_HOST: { lifetime: Lifetime.Singleton, type: string, value: getEnvVar('DB_HOST') },
+  DB_USER: { lifetime: Lifetime.Singleton, type: string, value: getEnvVar('DB_USER') },
+  DB_PASSWORD: { lifetime: Lifetime.Singleton, type: string, value: getEnvVar('DB_PASSWORD') },
+  DB_PORT: { lifetime: Lifetime.Singleton, type: number, value: Number(getEnvVar('DB_PORT')) }
+});
+
+const mikroOrmOptionsConfig = defineConfig({
+  dbName: validConfigInjector.resolve('DB_NAME'),
+  host: validConfigInjector.resolve('DB_HOST'),
+  user: validConfigInjector.resolve('DB_USER'),
+  password: validConfigInjector.resolve('DB_PASSWORD'),
+  port: validConfigInjector.resolve('DB_PORT'),
+  driver: PostgreSqlDriver,
+  migrations: { path: 'dist/migrations-postgresql', pathTs: 'migrations-postgresql' }
+});
+"#;
+
+    fn make_cache_with_config(dir: &TempDir, content: &str) -> (RenderedTemplatesCache, std::path::PathBuf) {
+        let config_path = dir.path().join("mikro-orm.config.ts");
+        write(&config_path, content).unwrap();
+        (RenderedTemplatesCache::new(), dir.path().to_path_buf())
+    }
+
+    #[test]
+    fn test_transform_postgresql_to_mysql_updates_import_and_migrations() {
+        let tmp = TempDir::new().unwrap();
+        let (cache, base) = make_cache_with_config(&tmp, POSTGRESQL_MIKRO_ORM_CONFIG);
+
+        let result = transform_mikroorm_config_ts(
+            &cache,
+            &base,
+            &Some(Database::PostgreSQL),
+            &Database::MySQL,
+        )
+        .unwrap();
+
+        // Import source should be updated
+        assert!(
+            result.contains("@mikro-orm/mysql"),
+            "Expected @mikro-orm/mysql import in: {result}"
+        );
+        assert!(
+            !result.contains("@mikro-orm/postgresql"),
+            "Expected @mikro-orm/postgresql to be removed: {result}"
+        );
+
+        // Migrator import should still be plain (not -mongodb)
+        assert!(
+            result.contains("@mikro-orm/migrations\""),
+            "Expected plain migrations import: {result}"
+        );
+
+        // Migrations path should be updated to mysql
+        assert!(
+            result.contains("migrations-mysql"),
+            "Expected migrations-mysql path: {result}"
+        );
+        assert!(
+            !result.contains("migrations-postgresql"),
+            "Expected migrations-postgresql to be removed: {result}"
+        );
+    }
+
+    #[test]
+    fn test_transform_postgresql_to_mongodb_removes_db_credentials_adds_client_url() {
+        let tmp = TempDir::new().unwrap();
+        let (cache, base) = make_cache_with_config(&tmp, POSTGRESQL_MIKRO_ORM_CONFIG);
+
+        let result = transform_mikroorm_config_ts(
+            &cache,
+            &base,
+            &Some(Database::PostgreSQL),
+            &Database::MongoDB,
+        )
+        .unwrap();
+
+        // Import source should be updated to mongodb
+        assert!(
+            result.contains("@mikro-orm/mongodb"),
+            "Expected @mikro-orm/mongodb import: {result}"
+        );
+
+        // Migrator should use migrations-mongodb
+        assert!(
+            result.contains("@mikro-orm/migrations-mongodb"),
+            "Expected migrations-mongodb import: {result}"
+        );
+
+        // defineConfig should include clientUrl for mongodb (host/user/password/port
+        // stay in createConfigInjector so the clientUrl template can reference them)
+        assert!(
+            result.contains("clientUrl"),
+            "Expected clientUrl in defineConfig for mongodb: {result}"
+        );
+
+        // defineConfig should not have the individual host/user/password/port keys
+        // (they are replaced by clientUrl in the defineConfig block)
+        let define_config_start = result.find("defineConfig").expect("defineConfig missing");
+        let define_config_section = &result[define_config_start..];
+        assert!(
+            !define_config_section.contains("host:"),
+            "Expected host removed from defineConfig for mongodb: {result}"
+        );
+        assert!(
+            !define_config_section.contains("user:"),
+            "Expected user removed from defineConfig for mongodb: {result}"
+        );
+        assert!(
+            !define_config_section.contains("password:"),
+            "Expected password removed from defineConfig for mongodb: {result}"
+        );
+    }
+
+    #[test]
+    fn test_transform_postgresql_to_sqlite_removes_host_credentials() {
+        let tmp = TempDir::new().unwrap();
+        let (cache, base) = make_cache_with_config(&tmp, POSTGRESQL_MIKRO_ORM_CONFIG);
+
+        let result = transform_mikroorm_config_ts(
+            &cache,
+            &base,
+            &Some(Database::PostgreSQL),
+            &Database::LibSQL,
+        )
+        .unwrap();
+
+        // Import should update to libsql
+        assert!(
+            result.contains("@mikro-orm/libsql"),
+            "Expected @mikro-orm/libsql: {result}"
+        );
+
+        // For in-memory/libsql: host/user/password/port should be stripped from defineConfig
+        assert!(
+            !result.contains("host:"),
+            "Expected host removed for libsql: {result}"
+        );
+    }
+
+    #[test]
+    fn test_transform_no_op_when_database_unchanged() {
+        let tmp = TempDir::new().unwrap();
+        let (cache, base) = make_cache_with_config(&tmp, POSTGRESQL_MIKRO_ORM_CONFIG);
+
+        // Calling with same source/target — the caller (change_database) guards this,
+        // but the transform itself should still produce valid output
+        let result = transform_mikroorm_config_ts(
+            &cache,
+            &base,
+            &Some(Database::PostgreSQL),
+            &Database::PostgreSQL,
+        )
+        .unwrap();
+
+        assert!(
+            result.contains("@mikro-orm/postgresql"),
+            "Import should remain postgresql: {result}"
+        );
+    }
 }

@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Arg, ArgMatches, Command};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 use toml::to_string_pretty;
 
 use crate::{
@@ -13,6 +13,7 @@ use crate::{
     core::{
         command::command,
         manifest::application::ApplicationManifestData,
+        validate::{require_auth, require_manifest},
     },
 };
 
@@ -58,39 +59,49 @@ impl CliCommand for IntegrateCommand {
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-        // Upfront validation
-        let token = crate::core::validate::require_auth()?;
-        let (app_root, _manifest) = crate::core::validate::require_manifest(matches)?;
+        let token = require_auth()?;
+        let (app_root, manifest) = require_manifest(matches)?;
 
-        // Get application ID from args
+        if let Some(existing_id) = &manifest.platform_application_id {
+            bail!(
+                "This application is already integrated with platform application ID: {}. To re-integrate, remove the platform_application_id from .forklaunch/manifest.toml first.",
+                existing_id
+            );
+        }
+
         let application_id = matches
             .get_one::<String>("app")
             .ok_or_else(|| anyhow::anyhow!("Application ID is required"))?;
 
         let manifest_path = app_root.join(".forklaunch").join("manifest.toml");
 
-        // Validate application exists on platform
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-        writeln!(stdout, "[INFO] Validating application on platform...")?;
-        stdout.reset()?;
+        // Integrate with platform application
+        log_info!(stdout, "Integrating with platform application...");
 
         let url = format!(
-            "{}/applications/{}",
+            "{}/applications/{}/integrate",
             get_platform_management_api_url(),
             application_id
         );
         let client = Client::new();
         let response = client
-            .get(&url)
+            .post(&url)
             .bearer_auth(&token)
             .send()
             .with_context(|| ERROR_FAILED_TO_SEND_REQUEST)?;
 
-        if !response.status().is_success() {
+        let status = response.status();
+        if status == reqwest::StatusCode::CONFLICT {
             bail!(
-                "Failed to find application: {} (Status: {})",
+                "This platform application is already integrated with another local app. Each platform application can only be linked to one local app at a time."
+            );
+        }
+
+        if !status.is_success() {
+            bail!(
+                "Failed to integrate application: {} (Status: {})",
                 application_id,
-                response.status()
+                status
             );
         }
 
@@ -98,44 +109,34 @@ impl CliCommand for IntegrateCommand {
             .json()
             .with_context(|| "Failed to parse application response")?;
 
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-        writeln!(stdout, "[OK] Found application: {}", app_data.name)?;
-        stdout.reset()?;
+        log_ok!(stdout, "Integrated with application: {}", app_data.name);
 
-        // Read current manifest
         let manifest_content = std::fs::read_to_string(&manifest_path)
             .with_context(|| format!("Failed to read manifest at {:?}", manifest_path))?;
 
         let mut manifest: ApplicationManifestData =
             toml::from_str(&manifest_content).with_context(|| "Failed to parse manifest.toml")?;
 
-        // Update manifest with platform integration
         manifest.platform_application_id = Some(application_id.clone());
         manifest.platform_organization_id = Some(app_data.organization_id.clone());
 
-        // Write updated manifest
         let updated_manifest =
             to_string_pretty(&manifest).with_context(|| "Failed to serialize updated manifest")?;
 
         write(&manifest_path, updated_manifest)
             .with_context(|| format!("Failed to write manifest at {:?}", manifest_path))?;
 
-        // Success output
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true))?;
-        writeln!(stdout, "\n[OK] Application integrated successfully!")?;
-        stdout.reset()?;
+        log_header!(stdout, Color::Green, "\nApplication integrated successfully!");
 
-        writeln!(stdout, "[INFO] Platform App ID: {}", application_id)?;
-        writeln!(stdout, "[INFO] Application Name: {}", app_data.name)?;
+        log_info!(stdout, "Platform App ID: {}", application_id);
+        log_info!(stdout, "Application Name: {}", app_data.name);
         writeln!(
             stdout,
             "[INFO] Organization ID: {}",
             app_data.organization_id
         )?;
 
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
-        writeln!(stdout, "\n[INFO] You can now use:")?;
-        stdout.reset()?;
+        log_info!(stdout, "\nYou can now use:");
         writeln!(stdout, "  forklaunch release create --version <version>")?;
         writeln!(
             stdout,

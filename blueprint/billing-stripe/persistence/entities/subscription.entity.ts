@@ -1,45 +1,26 @@
-import { SqlBaseEntity } from '@forklaunch/blueprint-core';
+import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 import { BillingProviderEnum } from '@forklaunch/implementation-billing-stripe/enum';
-import { Entity, Enum, Property, Unique } from '@mikro-orm/core';
+import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
 import Stripe from 'stripe';
 import { PartyEnum } from '../../domain/enum/party.enum';
 
-@Entity()
-export class Subscription extends SqlBaseEntity {
-  // maybe have billing period here as well
-  @Property()
-  partyId!: string;
-
-  @Enum(() => PartyEnum)
-  partyType!: PartyEnum;
-
-  @Property()
-  description?: string;
-
-  @Property()
-  active!: boolean;
-
-  // can make one to many, but for now, just store the id
-  @Property()
-  productId!: string;
-
-  // access billing provider information pointer -- especially about entitlements, that can be grabbed later
-  @Property({ type: 'json' })
-  providerFields!: Stripe.Subscription;
-
-  @Property()
-  @Unique()
-  externalId!: string;
-
-  @Enum({ items: () => BillingProviderEnum, nullable: true })
-  billingProvider?: BillingProviderEnum;
-
-  @Property()
-  startDate!: Date;
-
-  @Property({ nullable: true })
-  endDate?: Date;
-
-  @Property()
-  status!: string;
-}
+export const Subscription = defineComplianceEntity({
+  name: 'Subscription',
+  properties: {
+    ...sqlBaseProperties,
+    // maybe have billing period here as well
+    partyId: fp.string().compliance('none'),
+    partyType: fp.enum(() => PartyEnum).compliance('none'),
+    description: fp.string().nullable().compliance('none'),
+    active: fp.boolean().compliance('none'),
+    // can make one to many, but for now, just store the id
+    productId: fp.string().compliance('none'),
+    // access billing provider information pointer -- especially about entitlements, that can be grabbed later
+    providerFields: fp.json<Stripe.Subscription>().compliance('none'),
+    externalId: fp.string().unique().compliance('none'),
+    billingProvider: fp.enum(() => BillingProviderEnum).compliance('none'),
+    startDate: fp.datetime().compliance('none'),
+    endDate: fp.datetime().nullable().compliance('none'),
+    status: fp.string().compliance('none')
+  }
+});

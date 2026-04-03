@@ -8,9 +8,11 @@ import {
 import { Metrics, metrics } from '@forklaunch/blueprint-monitoring';
 import { OpenTelemetryCollector } from '@forklaunch/core/http';
 import {
+  ComplianceDataService,
   createConfigInjector,
   getEnvVar,
-  Lifetime
+  Lifetime,
+  RetentionService
 } from '@forklaunch/core/services';
 import {
   BaseOrganizationService,
@@ -122,7 +124,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
   OpenTelemetryCollector: {
     lifetime: Lifetime.Singleton,
@@ -137,8 +139,16 @@ const runtimeDependencies = environmentConfig.chain({
   EntityManager: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
-    factory: ({ MikroORM }, _resolve, context) =>
-      MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined)
+    factory: (
+      { MikroORM },
+      context: { entityManagerOptions?: ForkOptions; tenantId?: string }
+    ) => {
+      const em = MikroORM.em.fork(context.entityManagerOptions);
+      if (context.tenantId) {
+        em.setFilterParams('tenant', { tenantId: context.tenantId });
+      }
+      return em;
+    }
   }
 });
 
@@ -152,10 +162,10 @@ const serviceDependencies = runtimeDependencies.chain({
       OrganizationMapperTypes,
       OrganizationDtoTypes
     >,
-    factory: ({ EntityManager, OpenTelemetryCollector }, resolve, context) =>
+    factory: ({ EntityManager, OpenTelemetryCollector }, context, resolve) =>
       new BaseOrganizationService(
-        context.entityManagerOptions
-          ? resolve('EntityManager', context)
+        context?.entityManagerOptions
+          ? resolve?.('EntityManager', context)
           : EntityManager,
         OpenTelemetryCollector,
         schemaValidator,
@@ -173,7 +183,7 @@ const serviceDependencies = runtimeDependencies.chain({
       PermissionMapperTypes,
       PermissionDtoTypes
     >,
-    factory: ({ EntityManager, OpenTelemetryCollector }, resolve, context) =>
+    factory: ({ EntityManager, OpenTelemetryCollector }, context, resolve) =>
       new BasePermissionService(
         context.entityManagerOptions
           ? resolve('EntityManager', context)
@@ -192,7 +202,7 @@ const serviceDependencies = runtimeDependencies.chain({
   RoleService: {
     lifetime: Lifetime.Scoped,
     type: BaseRoleService<SchemaValidator, RoleMapperTypes, RoleDtoTypes>,
-    factory: ({ EntityManager, OpenTelemetryCollector }, resolve, context) =>
+    factory: ({ EntityManager, OpenTelemetryCollector }, context, resolve) =>
       new BaseRoleService(
         context.entityManagerOptions
           ? resolve('EntityManager', context)
@@ -214,7 +224,7 @@ const serviceDependencies = runtimeDependencies.chain({
       UserMapperTypes,
       UserDtoTypes
     >,
-    factory: ({ EntityManager, OpenTelemetryCollector }, resolve, context) =>
+    factory: ({ EntityManager, OpenTelemetryCollector }, context, resolve) =>
       new BaseUserService(
         EntityManager,
         () => resolve('RoleService', context),
@@ -227,6 +237,20 @@ const serviceDependencies = runtimeDependencies.chain({
           UpdateUserMapper
         }
       )
+  },
+  ComplianceDataService: {
+    lifetime: Lifetime.Singleton,
+    type: ComplianceDataService,
+    factory: ({ MikroORM, OpenTelemetryCollector }) =>
+      new ComplianceDataService(MikroORM, OpenTelemetryCollector, {
+        User: 'id'
+      })
+  },
+  RetentionService: {
+    lifetime: Lifetime.Singleton,
+    type: RetentionService,
+    factory: ({ MikroORM, OpenTelemetryCollector }) =>
+      new RetentionService(MikroORM, OpenTelemetryCollector)
   }
 });
 

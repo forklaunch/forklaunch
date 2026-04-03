@@ -35,9 +35,9 @@ import {
 
 // billing portal mappers
 export type BillingPortalMapperTypes = {
-  BillingPortalMapper: BillingPortal;
-  CreateBillingPortalMapper: BillingPortal;
-  UpdateBillingPortalMapper: BillingPortal;
+  BillingPortalMapper: typeof BillingPortal;
+  CreateBillingPortalMapper: typeof BillingPortal;
+  UpdateBillingPortalMapper: typeof BillingPortal;
 };
 
 // billing portal dto types
@@ -58,9 +58,9 @@ export type BillingPortalDtoTypes = {
 
 // checkout session mappers
 export type CheckoutSessionMapperTypes = {
-  CheckoutSessionMapper: CheckoutSession;
-  CreateCheckoutSessionMapper: CheckoutSession;
-  UpdateCheckoutSessionMapper: CheckoutSession;
+  CheckoutSessionMapper: typeof CheckoutSession;
+  CreateCheckoutSessionMapper: typeof CheckoutSession;
+  UpdateCheckoutSessionMapper: typeof CheckoutSession;
 };
 
 // checkout session dto types
@@ -81,9 +81,9 @@ export type CheckoutSessionDtoTypes = {
 
 // payment link mappers
 export type PaymentLinkMapperTypes = {
-  PaymentLinkMapper: PaymentLink;
-  CreatePaymentLinkMapper: PaymentLink;
-  UpdatePaymentLinkMapper: PaymentLink;
+  PaymentLinkMapper: typeof PaymentLink;
+  CreatePaymentLinkMapper: typeof PaymentLink;
+  UpdatePaymentLinkMapper: typeof PaymentLink;
 };
 
 // payment link dto types
@@ -101,9 +101,9 @@ export type PaymentLinkDtoTypes = {
 
 // plan mappers
 export type PlanMapperTypes = {
-  PlanMapper: Plan;
-  CreatePlanMapper: Plan;
-  UpdatePlanMapper: Plan;
+  PlanMapper: typeof Plan;
+  CreatePlanMapper: typeof Plan;
+  UpdatePlanMapper: typeof Plan;
 };
 
 // plan dto types
@@ -115,9 +115,9 @@ export type PlanDtoTypes = {
 
 // subscription mappers
 export type SubscriptionMapperTypes = {
-  SubscriptionMapper: Subscription;
-  CreateSubscriptionMapper: Subscription;
-  UpdateSubscriptionMapper: Subscription;
+  SubscriptionMapper: typeof Subscription;
+  CreateSubscriptionMapper: typeof Subscription;
+  UpdateSubscriptionMapper: typeof Subscription;
 };
 
 // subscription dto types

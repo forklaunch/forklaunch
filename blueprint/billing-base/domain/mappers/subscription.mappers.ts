@@ -15,14 +15,10 @@ export const CreateSubscriptionMapper = requestMapper({
   entity: Subscription,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return Subscription.create(
-        {
-          ...dto,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        },
-        em
-      );
+      return em.create(Subscription, {
+        ...dto,
+        providerFields: dto.providerFields ?? null
+      });
     }
   }
 });
@@ -36,7 +32,9 @@ export const UpdateSubscriptionMapper = requestMapper({
   entity: Subscription,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return Subscription.update(dto, em);
+      const entity = await em.findOneOrFail(Subscription, { id: dto.id });
+      em.assign(entity, { ...dto });
+      return entity;
     }
   }
 });
@@ -49,10 +47,11 @@ export const SubscriptionMapper = responseMapper({
   ),
   entity: Subscription,
   mapperDefinition: {
-    toDto: async (entity: Subscription) => {
+    toDto: async (entity) => {
       return {
-        ...(await entity.read()),
-        endDate: entity.endDate || undefined
+        ...entity,
+        endDate: entity.endDate ?? undefined,
+        description: entity.description ?? undefined
       };
     }
   }

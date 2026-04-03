@@ -61,6 +61,30 @@ describe('extractArgumentNames', () => {
     expect(extractArgumentNames(fn)).toEqual(['arg1', 'arg2', 'arg3']);
   });
 
+  it('should handle multiline object destructuring', () => {
+    const fn = ({ name, age }: { name: string; age: number }) => {};
+    expect(extractArgumentNames(fn)).toEqual(['{name,age}']);
+  });
+
+  it('should handle multiline object destructuring with multiple args', () => {
+    const fn = (
+      {
+        name,
+        age
+      }: {
+        name: string;
+        age: number;
+      },
+      resolve: () => void,
+      context: Record<string, unknown>
+    ) => {};
+    expect(extractArgumentNames(fn)).toEqual([
+      '{name,age}',
+      'resolve',
+      'context'
+    ]);
+  });
+
   it('should return empty array for invalid function string', () => {
     const invalidFn = { toString: () => 'not a function' };
     expect(extractArgumentNames(invalidFn)).toEqual([]);

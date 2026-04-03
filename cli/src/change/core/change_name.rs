@@ -12,14 +12,17 @@ use crate::{
     constants::Runtime,
     core::{
         client_sdk::change_project_in_client_sdk,
-        docker::{Command, DependsOn, DockerBuild, DockerCompose, DockerService, Healthcheck},
+        docker::{
+            Command, DependsOn, DockerBuild, DockerCompose, DockerService, HealthTest,
+            Healthcheck,
+        },
         manifest::{MutableManifestData, ProjectEntry, ProjectType},
-        move_template::{MoveTemplate, MoveTemplateType},
+        move_template::MoveTemplate,
         package_json::{
             application_package_json::ApplicationPackageJson,
             project_package_json::ProjectPackageJson, replace_project_in_workspace_definition,
         },
-        removal_template::{RemovalTemplate, RemovalTemplateType},
+        removal_template::RemovalTemplate,
         rendered_template::{RenderedTemplate, RenderedTemplatesCache},
         string::short_circuit_replacement,
         tsconfig::update_project_in_modules_tsconfig,
@@ -108,7 +111,6 @@ pub(crate) fn change_name_in_files(
             if relative_path.to_string_lossy().to_string() != new_file_name.clone() {
                 removal_templates.push(RemovalTemplate {
                     path: entry.path().to_path_buf(),
-                    r#type: RemovalTemplateType::File,
                 })
             }
         }
@@ -279,22 +281,27 @@ pub(crate) fn change_name(
                                         .collect(),
                                 ),
                             }),
-                            entrypoint: value.entrypoint.as_ref().map(|entrypoint| {
-                                entrypoint
-                                    .iter()
-                                    .map(|entrypoint| entrypoint.replace(&existing_name, &name))
-                                    .collect()
+                            entrypoint: value.entrypoint.as_ref().map(|entrypoint| match entrypoint {
+                                Command::Simple(s) => {
+                                    Command::Simple(s.replace(&existing_name, &name))
+                                }
+                                Command::Multiple(args) => Command::Multiple(
+                                    args
+                                        .iter()
+                                        .map(|arg| arg.replace(&existing_name, &name))
+                                        .collect(),
+                                ),
                             }),
                             healthcheck: value.healthcheck.as_ref().map(|healthcheck| {
                                 Healthcheck {
                                     test: match &healthcheck.test {
-                                        crate::core::docker::HealthTest::String(s) => {
-                                            crate::core::docker::HealthTest::String(
+                                        HealthTest::String(s) => {
+                                            HealthTest::String(
                                                 s.replace(&existing_name, &name),
                                             )
                                         }
-                                        crate::core::docker::HealthTest::List(list) => {
-                                            crate::core::docker::HealthTest::List(
+                                        HealthTest::List(list) => {
+                                            HealthTest::List(
                                                 list.iter()
                                                     .map(|item| item.replace(&existing_name, &name))
                                                     .collect(),
@@ -381,6 +388,5 @@ pub(crate) fn change_name(
     Ok(MoveTemplate {
         path: base_path.to_path_buf(),
         target: base_path.parent().unwrap().join(name),
-        r#type: MoveTemplateType::Directory,
     })
 }

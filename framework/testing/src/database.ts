@@ -7,7 +7,7 @@ export interface MikroOrmTestConfig {
   /**
    * MikroORM config object (imported from mikro-orm.config)
    */
-  mikroOrmConfig: Options;
+  mikroOrmConfig: Partial<Options>;
 
   /**
    * Database type (postgres, mysql, mongodb, etc.)
@@ -16,8 +16,8 @@ export interface MikroOrmTestConfig {
 
   /**
    * Whether to use migrations (true) or schema generation (false)
-   * - true: IAM blueprints (uses getMigrator().up())
-   * - false: Billing blueprints (uses getSchemaGenerator().createSchema())
+   * - true: IAM blueprints (uses orm.migrator.up())
+   * - false: Billing blueprints (uses orm.schema.create())
    */
   useMigrations?: boolean;
 
@@ -49,7 +49,6 @@ function getDatabasePort(type: DatabaseType): number {
     case 'mssql':
       return 1433;
     case 'sqlite':
-    case 'better-sqlite':
     case 'libsql':
       return 0; // SQLite is file-based, no port
     default:
@@ -73,12 +72,8 @@ export async function setupTestORM(
   const dbPort = getDatabasePort(databaseType);
 
   // SQLite databases are file-based
-  let ormConfig: Options = {};
-  if (
-    databaseType === 'sqlite' ||
-    databaseType === 'better-sqlite' ||
-    databaseType === 'libsql'
-  ) {
+  let ormConfig: Partial<Options> = {};
+  if (databaseType === 'sqlite' || databaseType === 'libsql') {
     ormConfig = {
       ...mikroOrmConfig,
       dbName: ':memory:', // In-memory SQLite for tests
@@ -98,7 +93,6 @@ export async function setupTestORM(
           })
     };
   } else if (container) {
-    // Container-based databases
     ormConfig = {
       ...mikroOrmConfig,
       dbName: 'test_db',
@@ -126,11 +120,10 @@ export async function setupTestORM(
 
   const orm = await MikroORM.init(ormConfig);
 
-  // Initialize database schema
   if (useMigrations) {
-    await orm.getMigrator().up();
+    await orm.migrator.up();
   } else {
-    await orm.getSchemaGenerator().createSchema();
+    await orm.schema.create();
   }
 
   return orm;
@@ -145,12 +138,10 @@ export async function clearTestDatabase(options?: {
 }): Promise<void> {
   const { orm, redis } = options || {};
 
-  // Clear Redis if provided
   if (redis) {
     await redis.flushall();
   }
 
-  // Clear all database entities (if ORM is provided)
   if (orm) {
     const em = orm.em.fork();
     const entities = Object.values(orm.getMetadata().getAll());

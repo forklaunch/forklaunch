@@ -75,6 +75,10 @@ pub(crate) struct ProjectScripts {
     pub(crate) start_worker: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) test: Option<String>,
+    #[serde(rename = "up:latest", skip_serializing_if = "Option::is_none")]
+    pub(crate) up_latest: Option<String>,
+    #[serde(rename = "retention:enforce", skip_serializing_if = "Option::is_none")]
+    pub(crate) retention_enforce: Option<String>,
 
     #[serde(flatten)]
     pub(crate) additional_scripts: HashMap<String, String>,
@@ -118,6 +122,8 @@ impl<'de> Deserialize<'de> for ProjectScripts {
                     start_server: None,
                     start_worker: None,
                     test: None,
+                    up_latest: None,
+                    retention_enforce: None,
                     additional_scripts: HashMap::new(),
                 };
 
@@ -142,6 +148,8 @@ impl<'de> Deserialize<'de> for ProjectScripts {
                         "start:server" => scripts.start_server = Some(value),
                         "start:worker" => scripts.start_worker = Some(value),
                         "test" => scripts.test = Some(value),
+                        "up:latest" => scripts.up_latest = Some(value),
+                        "retention:enforce" => scripts.retention_enforce = Some(value),
                         _ => {
                             scripts.additional_scripts.insert(key, value);
                         }
@@ -191,6 +199,9 @@ pub(crate) struct ProjectDependencies {
     pub(crate) mikro_orm_reflection: Option<String>,
     pub(crate) mikro_orm_seeder: Option<String>,
     pub(crate) opentelemetry_api: Option<String>,
+    pub(crate) types_express: Option<String>,
+    pub(crate) types_express_serve_static_core: Option<String>,
+    pub(crate) types_qs: Option<String>,
     pub(crate) typebox: Option<String>,
     pub(crate) ajv: Option<String>,
     pub(crate) better_auth: Option<String>,
@@ -316,6 +327,15 @@ impl Serialize for ProjectDependencies {
         }
         if let Some(ref v) = self.opentelemetry_api {
             map.serialize_entry("@opentelemetry/api", v)?;
+        }
+        if let Some(ref v) = self.types_express {
+            map.serialize_entry("@types/express", v)?;
+        }
+        if let Some(ref v) = self.types_express_serve_static_core {
+            map.serialize_entry("@types/express-serve-static-core", v)?;
+        }
+        if let Some(ref v) = self.types_qs {
+            map.serialize_entry("@types/qs", v)?;
         }
         if let Some(ref v) = self.typebox {
             map.serialize_entry("@sinclair/typebox", v)?;
@@ -540,6 +560,11 @@ impl<'de> Deserialize<'de> for ProjectDependencies {
                         "@mikro-orm/reflection" => deps.mikro_orm_reflection = Some(value),
                         "@mikro-orm/seeder" => deps.mikro_orm_seeder = Some(value),
                         "@opentelemetry/api" => deps.opentelemetry_api = Some(value),
+                        "@types/express" => deps.types_express = Some(value),
+                        "@types/express-serve-static-core" => {
+                            deps.types_express_serve_static_core = Some(value)
+                        }
+                        "@types/qs" => deps.types_qs = Some(value),
                         "@sinclair/typebox" => deps.typebox = Some(value),
                         "ajv" => deps.ajv = Some(value),
                         "better-auth" => deps.better_auth = Some(value),
@@ -580,17 +605,8 @@ pub(crate) struct ProjectDevDependencies {
     pub(crate) testing: Option<String>,
     #[serde(rename = "@mikro-orm/cli", skip_serializing_if = "Option::is_none")]
     pub(crate) mikro_orm_cli: Option<String>,
-    #[serde(rename = "@types/express", skip_serializing_if = "Option::is_none")]
-    pub(crate) types_express: Option<String>,
     #[serde(rename = "@types/jest", skip_serializing_if = "Option::is_none")]
     pub(crate) types_jest: Option<String>,
-    #[serde(
-        rename = "@types/express-serve-static-core",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub(crate) types_express_serve_static_core: Option<String>,
-    #[serde(rename = "@types/qs", skip_serializing_if = "Option::is_none")]
-    pub(crate) types_qs: Option<String>,
     #[serde(rename = "@types/uuid", skip_serializing_if = "Option::is_none")]
     pub(crate) types_uuid: Option<String>,
     #[serde(rename = "@types/pino", skip_serializing_if = "Option::is_none")]
@@ -641,10 +657,7 @@ impl<'de> Deserialize<'de> for ProjectDevDependencies {
                     eslint_js: None,
                     testing: None,
                     mikro_orm_cli: None,
-                    types_express: None,
-                    types_express_serve_static_core: None,
                     types_jest: None,
-                    types_qs: None,
                     types_uuid: None,
                     types_pino: None,
                     types_ioredis: None,
@@ -665,12 +678,7 @@ impl<'de> Deserialize<'de> for ProjectDevDependencies {
                         "@eslint/js" => deps.eslint_js = Some(value),
                         "@forklaunch/testing" => deps.testing = Some(value),
                         "@mikro-orm/cli" => deps.mikro_orm_cli = Some(value),
-                        "@types/express" => deps.types_express = Some(value),
-                        "@types/express-serve-static-core" => {
-                            deps.types_express_serve_static_core = Some(value)
-                        }
                         "@types/jest" => deps.types_jest = Some(value),
-                        "@types/qs" => deps.types_qs = Some(value),
                         "@types/uuid" => deps.types_uuid = Some(value),
                         "@types/pino" => deps.types_pino = Some(value),
                         "@types/ioredis" => deps.types_ioredis = Some(value),

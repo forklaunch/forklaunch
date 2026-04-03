@@ -81,7 +81,7 @@ export class BaseBillingPortalService<
     );
 
     if (this.enableDatabaseBackup) {
-      await this.em.persistAndFlush(billingPortal);
+      await this.em.persist(billingPortal).flush();
     }
 
     const createdBillingPortalDto =
@@ -104,7 +104,7 @@ export class BaseBillingPortalService<
     }
 
     const billingPortalDetails = await this.cache.readRecord<
-      MapperEntities['BillingPortalMapper']
+      MapperDomains['BillingPortalMapper']
     >(this.createCacheKey(idDto.id));
 
     if (!billingPortalDetails) {
@@ -147,9 +147,7 @@ export class BaseBillingPortalService<
     );
 
     if (this.enableDatabaseBackup) {
-      await this.em.persistAndFlush({
-        billingPortal
-      });
+      await this.em.persist(billingPortal).flush();
     }
 
     const updatedBillingPortalDto = {

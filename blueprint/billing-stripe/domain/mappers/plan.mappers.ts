@@ -15,15 +15,18 @@ export const CreatePlanMapper = requestMapper({
       em: EntityManager,
       providerFields: Stripe.Product
     ) => {
-      return Plan.create(
-        {
-          ...dto,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          providerFields
-        },
-        em
-      );
+      return em.create(Plan, {
+        name: dto.name,
+        description: dto.description ?? null,
+        price: dto.price,
+        cadence: dto.cadence,
+        currency: dto.currency,
+        features: dto.features ?? null,
+        externalId: dto.externalId,
+        billingProvider: dto.billingProvider,
+        active: dto.active,
+        providerFields
+      });
     }
   }
 });
@@ -38,15 +41,14 @@ export const UpdatePlanMapper = requestMapper({
       em: EntityManager,
       providerFields: Stripe.Product
     ) => {
-      const existingPlan = await em.findOneOrFail(Plan, { id: dto.id });
-
-      Object.assign(existingPlan, {
-        ...dto,
-        providerFields,
-        updatedAt: new Date()
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { stripeFields, ...rest } = dto;
+      const entity = await em.findOneOrFail(Plan, { id: rest.id });
+      em.assign(entity, {
+        ...rest,
+        providerFields
       });
-
-      return existingPlan;
+      return entity;
     }
   }
 });
@@ -56,10 +58,12 @@ export const PlanMapper = responseMapper({
   schema: PlanSchemas.PlanSchema,
   entity: Plan,
   mapperDefinition: {
-    toDto: async (entity: Plan) => {
-      const baseData = await entity.read();
+    toDto: async (entity) => {
       return {
-        ...baseData,
+        ...entity,
+        price: Number(entity.price),
+        description: entity.description ?? undefined,
+        features: entity.features ?? undefined,
         stripeFields: entity.providerFields
       };
     }

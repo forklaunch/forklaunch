@@ -7,10 +7,13 @@ import {
 } from '@forklaunch/blueprint-core';
 import { Metrics, metrics } from '@forklaunch/blueprint-monitoring';
 import { OpenTelemetryCollector } from '@forklaunch/core/http';
+import { FieldEncryptor } from '@forklaunch/core/persistence';
 import {
+  ComplianceDataService,
   createConfigInjector,
   getEnvVar,
-  Lifetime
+  Lifetime,
+  RetentionService
 } from '@forklaunch/core/services';
 import {
   BaseBillingPortalService,
@@ -20,7 +23,8 @@ import {
   BaseSubscriptionService
 } from '@forklaunch/implementation-billing-base/services';
 import { RedisTtlCache } from '@forklaunch/infrastructure-redis';
-import { EntityManager, ForkOptions, MikroORM } from '@mikro-orm/core';
+import { ForkOptions } from '@mikro-orm/core';
+import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
 import { BillingProviderEnum } from './domain/enum/billingProvider.enum';
 import { CurrencyEnum } from './domain/enum/currency.enum';
 import { PartyEnum } from './domain/enum/party.enum';
@@ -132,6 +136,16 @@ const environmentConfig = configInjector.chain({
     lifetime: Lifetime.Singleton,
     type: string,
     value: getEnvVar('JWKS_PUBLIC_KEY_URL')
+  },
+  IAM_URL: {
+    lifetime: Lifetime.Singleton,
+    type: string,
+    value: getEnvVar('IAM_URL')
+  },
+  ENCRYPTION_KEY: {
+    lifetime: Lifetime.Singleton,
+    type: string,
+    value: getEnvVar('ENCRYPTION_KEY')
   }
 });
 
@@ -140,7 +154,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
   OpenTelemetryCollector: {
     lifetime: Lifetime.Singleton,
@@ -155,7 +169,12 @@ const runtimeDependencies = environmentConfig.chain({
   TtlCache: {
     lifetime: Lifetime.Singleton,
     type: RedisTtlCache,
-    factory: ({ REDIS_URL, OpenTelemetryCollector, OTEL_LEVEL }) =>
+    factory: ({
+      REDIS_URL,
+      OpenTelemetryCollector,
+      OTEL_LEVEL,
+      ENCRYPTION_KEY
+    }) =>
       new RedisTtlCache(
         60 * 60 * 1000,
         OpenTelemetryCollector,
@@ -165,14 +184,25 @@ const runtimeDependencies = environmentConfig.chain({
         {
           enabled: true,
           level: OTEL_LEVEL || 'info'
+        },
+        {
+          encryptor: new FieldEncryptor(ENCRYPTION_KEY)
         }
       )
   },
   EntityManager: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
-    factory: ({ MikroORM }, _resolve, context) =>
-      MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined)
+    factory: (
+      { MikroORM },
+      context: { entityManagerOptions?: ForkOptions; tenantId?: string }
+    ) => {
+      const em = MikroORM.em.fork(context.entityManagerOptions);
+      if (context.tenantId) {
+        em.setFilterParams('tenant', { tenantId: context.tenantId });
+      }
+      return em;
+    }
   }
 });
 
@@ -187,8 +217,8 @@ const serviceDependencies = runtimeDependencies.chain({
     >,
     factory: (
       { EntityManager, TtlCache, OpenTelemetryCollector },
-      resolve,
-      context
+      context,
+      resolve
     ) =>
       new BaseBillingPortalService(
         context.entityManagerOptions
@@ -216,8 +246,8 @@ const serviceDependencies = runtimeDependencies.chain({
     >,
     factory: (
       { EntityManager, TtlCache, OpenTelemetryCollector },
-      resolve,
-      context
+      context,
+      resolve
     ) =>
       new BaseCheckoutSessionService(
         context.entityManagerOptions
@@ -245,8 +275,8 @@ const serviceDependencies = runtimeDependencies.chain({
     >,
     factory: (
       { EntityManager, TtlCache, OpenTelemetryCollector },
-      resolve,
-      context
+      context,
+      resolve
     ) =>
       new BasePaymentLinkService(
         context.entityManagerOptions
@@ -272,7 +302,7 @@ const serviceDependencies = runtimeDependencies.chain({
       PlanMapperTypes,
       PlanDtoTypes
     >,
-    factory: ({ EntityManager, OpenTelemetryCollector }, resolve, context) =>
+    factory: ({ EntityManager, OpenTelemetryCollector }, context, resolve) =>
       new BasePlanService(
         context.entityManagerOptions
           ? resolve('EntityManager', context)
@@ -295,7 +325,7 @@ const serviceDependencies = runtimeDependencies.chain({
       SubscriptionMapperTypes,
       SubscriptionDtoTypes
     >,
-    factory: ({ EntityManager, OpenTelemetryCollector }, resolve, context) =>
+    factory: ({ EntityManager, OpenTelemetryCollector }, context, resolve) =>
       new BaseSubscriptionService(
         context.entityManagerOptions
           ? resolve('EntityManager', context)
@@ -308,6 +338,23 @@ const serviceDependencies = runtimeDependencies.chain({
           UpdateSubscriptionMapper
         }
       )
+  },
+  ComplianceDataService: {
+    lifetime: Lifetime.Singleton,
+    type: ComplianceDataService,
+    factory: ({ MikroORM, OpenTelemetryCollector }) =>
+      new ComplianceDataService(MikroORM, OpenTelemetryCollector, {
+        Subscription: 'partyId',
+        CheckoutSession: 'customerId',
+        PaymentLink: 'customerId',
+        BillingPortal: 'customerId'
+      })
+  },
+  RetentionService: {
+    lifetime: Lifetime.Singleton,
+    type: RetentionService,
+    factory: ({ MikroORM, OpenTelemetryCollector }) =>
+      new RetentionService(MikroORM, OpenTelemetryCollector)
   }
 });
 

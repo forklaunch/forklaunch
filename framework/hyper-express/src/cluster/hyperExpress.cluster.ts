@@ -109,7 +109,6 @@ export function startHyperExpressCluster(config: ClusterConfig<Server>) {
       process.exit(1);
     }
 
-    // Handle shutdown signal from primary
     process.on('message', (msg: { type: string }) => {
       if (msg?.type === 'shutdown') {
         openTelemetryCollector.info(
@@ -132,7 +131,6 @@ export function startHyperExpressCluster(config: ClusterConfig<Server>) {
       process.exit(0);
     });
 
-    // Memory monitoring
     setInterval(() => {
       const memUsage = process.memoryUsage();
       const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
@@ -144,7 +142,6 @@ export function startHyperExpressCluster(config: ClusterConfig<Server>) {
       }
     }, 30000);
 
-    // Error handling
     process.on('uncaughtException', (err) => {
       openTelemetryCollector.error(
         `Uncaught exception on worker ${process.pid}:`,

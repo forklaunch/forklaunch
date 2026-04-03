@@ -19,6 +19,7 @@ export const createCheckoutSession = handlers.post(
   '/',
   {
     name: 'Create Checkout Session',
+    access: 'internal',
     summary: 'Create a checkout session',
     auth: {
       hmac: {
@@ -45,6 +46,7 @@ export const getCheckoutSession = handlers.get(
   '/:id',
   {
     name: 'Get Checkout Session',
+    access: 'internal',
     summary: 'Get a checkout session',
     auth: {
       hmac: {
@@ -69,6 +71,7 @@ export const expireCheckoutSession = handlers.get(
   '/:id/expire',
   {
     name: 'Expire Checkout Session',
+    access: 'internal',
     summary: 'Expire a checkout session',
     auth: {
       hmac: {
@@ -94,6 +97,7 @@ export const handleCheckoutSuccess = handlers.get(
   '/:id/success',
   {
     name: 'Handle Checkout Success',
+    access: 'internal',
     summary: 'Handle a checkout success',
     auth: {
       hmac: {
@@ -121,6 +125,7 @@ export const handleCheckoutFailure = handlers.get(
   '/:id/failure',
   {
     name: 'Handle Checkout Failure',
+    access: 'internal',
     summary: 'Handle a checkout failure',
     auth: {
       hmac: {

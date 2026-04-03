@@ -1,5 +1,282 @@
 # @forklaunch/common
 
+## 1.2.6
+
+### Patch Changes
+
+- Encryptor required on redis and s3
+
+## 1.2.5
+
+### Patch Changes
+
+- Make private fields respect interfaces
+
+## 1.2.4
+
+### Patch Changes
+
+- up packages
+
+## 1.2.3
+
+### Patch Changes
+
+- update packages
+
+## 1.2.2
+
+### Patch Changes
+
+- tenant and rls configuration
+
+## 1.2.1
+
+### Patch Changes
+
+- fix compliance entity
+
+## 1.2.0
+
+### Minor Changes
+
+- Validator 25% performance uptick and cleaner Config Injector syntax
+
+## 1.1.8
+
+### Patch Changes
+
+- Simplify property chain for easier consumption
+
+## 1.1.7
+
+### Patch Changes
+
+- More relations covered for compliance entity
+
+## 1.1.6
+
+### Patch Changes
+
+- Restore MaybeOpt
+
+## 1.1.5
+
+### Patch Changes
+
+- cross boundary inference fix compliance entities
+
+## 1.1.4
+
+### Patch Changes
+
+- improve performance of entity branding
+
+## 1.1.3
+
+### Patch Changes
+
+- Package versions and simplified compliance entity typing
+
+## 1.1.2
+
+### Patch Changes
+
+- move FieldEncryptor into persistence (previously not exported)
+
+## 1.1.1
+
+### Patch Changes
+
+- add compliance utilities
+
+## 1.1.0
+
+### Minor Changes
+
+- retention policy update
+
+## 1.0.13
+
+### Patch Changes
+
+- patch working"
+
+## 1.0.12
+
+### Patch Changes
+
+- try removing return type to let inference take over
+
+## 1.0.11
+
+### Patch Changes
+
+- refinement
+
+## 1.0.10
+
+### Patch Changes
+
+- store property as internal property instead of branding
+
+## 1.0.9
+
+### Patch Changes
+
+- branding fixes
+
+## 1.0.8
+
+### Patch Changes
+
+- remove brand from entity
+
+## 1.0.7
+
+### Patch Changes
+
+- inconsistent state
+
+## 1.0.6
+
+### Patch Changes
+
+- string brand instead of symbol
+
+## 1.0.5
+
+### Patch Changes
+
+- entity rework
+- fix compliance brands
+
+## 1.0.4
+
+### Patch Changes
+
+- Handle functional definitions on mikroorm entities
+
+## 1.0.3
+
+### Patch Changes
+
+- Update packages and fix entity type
+
+## 1.0.2
+
+### Patch Changes
+
+- Fix type agreement
+
+## 1.0.1
+
+### Patch Changes
+
+- Version thrash
+
+## 1.0.0
+
+### Major Changes
+
+- Compliance features first party
+
+## 0.7.5
+
+### Patch Changes
+
+- Another fix
+
+## 0.7.4
+
+### Patch Changes
+
+- correct extension for mappers
+
+## 0.7.3
+
+### Patch Changes
+
+- mapper fix
+
+## 0.7.2
+
+### Patch Changes
+
+- Update packages and remove EntityMapper wrapping
+
+## 0.7.1
+
+### Patch Changes
+
+- package upgrades
+
+## 0.7.0
+
+### Minor Changes
+
+- update packages and update to mikro orm v7
+
+## 0.6.38
+
+### Patch Changes
+
+- clean build
+
+## 0.6.37
+
+### Patch Changes
+
+- fix mikroorm
+
+## 0.6.36
+
+### Patch Changes
+
+- internal package bump
+
+## 0.6.35
+
+### Patch Changes
+
+- Downgrade mikro-orm back to normal
+
+## 0.6.34
+
+### Patch Changes
+
+- bump packages and internal proxy await resilience
+
+## 0.6.33
+
+### Patch Changes
+
+- proxy based injection for ci, and openapi path resiliency
+
+## 0.6.32
+
+### Patch Changes
+
+- Small bugs
+
+## 0.6.31
+
+### Patch Changes
+
+- Prevent 404 message hijacking and update packages
+
+## 0.6.30
+
+### Patch Changes
+
+- Fix multiline config injection and update packages
+
+## 0.6.29
+
+### Patch Changes
+
+- WS actually working probably, and package bumps
+
 ## 0.6.28
 
 ### Patch Changes

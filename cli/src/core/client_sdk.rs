@@ -12,6 +12,7 @@ use crate::{
         ERROR_FAILED_TO_PARSE_PACKAGE_JSON, ERROR_FAILED_TO_READ_PACKAGE_JSON,
         error_failed_to_read_file,
     },
+    core::package_json::package_json_constants::CORE_VERSION,
     core::{
         ast::{
             injections::inject_into_client_sdk::{ClientSdkSpecialCase, inject_into_client_sdk},
@@ -92,6 +93,13 @@ pub(crate) fn add_project_to_client_sdk(
             format!("@{}/{}", &kebab_case_app_name, &kebab_case_name),
             "workspace:*".to_string(),
         );
+
+    // Ensure @forklaunch/core is a dependency (needed by compliance.ts)
+    if let Some(ref mut deps) = client_sdk_project_json.dependencies {
+        if deps.forklaunch_core.is_none() {
+            deps.forklaunch_core = Some(CORE_VERSION.to_string());
+        }
+    }
 
     rendered_templates_cache.insert(
         sdk_package_json_path.to_string_lossy().to_string(),

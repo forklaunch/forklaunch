@@ -5,7 +5,8 @@ import {
   TelemetryOptions
 } from '@forklaunch/core/http';
 import { RoleService } from '@forklaunch/interfaces-iam/interfaces';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, FilterQuery, InferEntity } from '@mikro-orm/core';
+import { Role } from '../persistence/entities';
 
 import { IdDto, IdsDto } from '@forklaunch/common';
 import {
@@ -73,7 +74,7 @@ export class BaseRoleService<
     if (em) {
       await em.persist(role);
     } else {
-      await this.em.persistAndFlush(role);
+      await this.em.persist(role).flush();
     }
 
     return this.mappers.RoleMapper.toDto(role);
@@ -97,7 +98,7 @@ export class BaseRoleService<
     if (em) {
       await em.persist(roles);
     } else {
-      await this.em.persistAndFlush(roles);
+      await this.em.persist(roles).flush();
     }
 
     return Promise.all(
@@ -110,11 +111,17 @@ export class BaseRoleService<
       this.openTelemetryCollector.info('Getting role', { id });
     }
 
-    const role = await (em ?? this.em).findOneOrFail('Role', id, {
-      populate: ['id', '*']
-    });
+    const role = await (em ?? this.em).findOneOrFail(
+      this.mappers.RoleMapper.entity as typeof Role,
+      id as FilterQuery<InferEntity<MapperEntities['RoleMapper']>>,
+      {
+        populate: ['id', '*']
+      }
+    );
 
-    return this.mappers.RoleMapper.toDto(role as MapperEntities['RoleMapper']);
+    return this.mappers.RoleMapper.toDto(
+      role as InferEntity<MapperEntities['RoleMapper']>
+    );
   }
 
   async getBatchRoles({ ids }: IdsDto, em?: EntityManager): Promise<RoleDto[]> {
@@ -125,7 +132,7 @@ export class BaseRoleService<
     return Promise.all(
       (
         await (em ?? this.em).find(
-          'Role',
+          this.mappers.RoleMapper.entity as typeof Role,
           {
             id: { $in: ids }
           },
@@ -134,7 +141,9 @@ export class BaseRoleService<
           }
         )
       ).map((role) =>
-        this.mappers.RoleMapper.toDto(role as MapperEntities['RoleMapper'])
+        this.mappers.RoleMapper.toDto(
+          role as InferEntity<MapperEntities['RoleMapper']>
+        )
       )
     );
   }
@@ -157,7 +166,7 @@ export class BaseRoleService<
     if (em) {
       await em.persist(role);
     } else {
-      await this.em.persistAndFlush(role);
+      await this.em.persist(role).flush();
     }
 
     return this.mappers.RoleMapper.toDto(role);
@@ -181,12 +190,10 @@ export class BaseRoleService<
     if (em) {
       await em.persist(roles);
     } else {
-      await this.em.persistAndFlush(roles);
+      await this.em.persist(roles).flush();
     }
     return Promise.all(
-      roles.map((role) =>
-        this.mappers.RoleMapper.toDto(role as MapperEntities['RoleMapper'])
-      )
+      roles.map((role) => this.mappers.RoleMapper.toDto(role))
     );
   }
 
@@ -195,7 +202,10 @@ export class BaseRoleService<
       this.openTelemetryCollector.info('Deleting role', idDto);
     }
 
-    await (em ?? this.em).nativeDelete('Role', idDto);
+    await (em ?? this.em).nativeDelete(
+      this.mappers.RoleMapper.entity as typeof Role,
+      idDto
+    );
   }
 
   async deleteBatchRoles(idsDto: IdsDto, em?: EntityManager): Promise<void> {
@@ -203,6 +213,11 @@ export class BaseRoleService<
       this.openTelemetryCollector.info('Deleting batch roles', idsDto);
     }
 
-    await (em ?? this.em).nativeDelete('Role', { id: { $in: idsDto.ids } });
+    await (em ?? this.em).nativeDelete(
+      this.mappers.RoleMapper.entity as typeof Role,
+      {
+        id: { $in: idsDto.ids }
+      }
+    );
   }
 }

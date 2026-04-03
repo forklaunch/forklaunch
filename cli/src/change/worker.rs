@@ -6,7 +6,7 @@ use convert_case::{Case, Casing};
 use dialoguer::{MultiSelect, theme::ColorfulTheme};
 use ramhorns::Template;
 use rustyline::{Editor, history::DefaultHistory};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use super::core::{
     change_database::{
@@ -18,7 +18,7 @@ use super::core::{
 };
 use crate::{
     CliCommand,
-    change::core::change_database::change_database_seed_script,
+    change::core::change_database::{change_database_retention_script, change_database_seed_script},
     constants::{
         Database, ERROR_FAILED_TO_PARSE_MANIFEST, ERROR_FAILED_TO_READ_DOCKER_COMPOSE,
         ERROR_FAILED_TO_READ_MANIFEST, ERROR_FAILED_TO_READ_PACKAGE_JSON, Infrastructure,
@@ -56,7 +56,7 @@ use crate::{
             package_json_constants::{
                 BULLMQ_VERSION, INFRASTRUCTURE_REDIS_VERSION, IOREDIS_VERSION,
                 MIKRO_ORM_CORE_VERSION, MIKRO_ORM_DATABASE_VERSION, MIKRO_ORM_MIGRATIONS_VERSION,
-                MIKRO_ORM_REFLECTION_VERSION, WORKER_BULLMQ_VERSION, WORKER_DATABASE_VERSION,
+                WORKER_BULLMQ_VERSION, WORKER_DATABASE_VERSION,
                 WORKER_KAFKA_VERSION, WORKER_REDIS_VERSION,
             },
             project_package_json::ProjectPackageJson,
@@ -127,6 +127,8 @@ fn change_type(
     rendered_templates_cache: &mut RenderedTemplatesCache,
     removal_templates: &mut Vec<RemovalTemplate>,
 ) -> Result<()> {
+    let next_redis_partition = crate::core::manifest::next_available_redis_partition(&manifest_data.projects);
+
     let project_entry = manifest_data
         .projects
         .iter_mut()
@@ -210,12 +212,14 @@ fn change_type(
                 .unwrap()
                 .ioredis = Some(IOREDIS_VERSION.to_string());
             resources.cache = Some(WorkerType::RedisCache.to_string());
+            resources.redis_partition = Some(next_redis_partition);
             let _ = add_redis_to_docker_compose(
                 &manifest_data.app_name,
                 docker_compose_data,
                 &mut environment,
+                next_redis_partition,
             );
-            env_local_content.redis_url = Some("redis://localhost:6379".to_string());
+            env_local_content.redis_url = Some(format!("redis://localhost:6379/{}", next_redis_partition));
         }
         WorkerType::Database => {
             let db = database.unwrap();
@@ -223,7 +227,6 @@ fn change_type(
             dependencies.databases = HashSet::from([db.clone()]);
             dependencies.mikro_orm_core = Some(MIKRO_ORM_CORE_VERSION.to_string());
             dependencies.mikro_orm_migrations = Some(MIKRO_ORM_MIGRATIONS_VERSION.to_string());
-            dependencies.mikro_orm_reflection = Some(MIKRO_ORM_REFLECTION_VERSION.to_string());
             dependencies.mikro_orm_database = Some(MIKRO_ORM_DATABASE_VERSION.to_string());
             dependencies.forklaunch_implementation_worker_database =
                 Some(WORKER_DATABASE_VERSION.to_string());
@@ -256,8 +259,8 @@ fn change_type(
                 }
             } else {
                 let database_entity = match db {
-                    Database::MongoDB => "nosql.base.entity.ts",
-                    _ => "sql.base.entity.ts",
+                    Database::MongoDB => "nosql.base.properties.ts",
+                    _ => "sql.base.properties.ts",
                 };
                 let entity_template_path = TEMPLATES_DIR
                     .get_file(
@@ -294,6 +297,11 @@ fn change_type(
 
             change_database_postinstall_script(application_package_json, &db);
             change_database_seed_script(project_package_json, &db);
+            change_database_retention_script(
+                project_package_json,
+                &manifest_data.runtime.parse()?,
+                true,
+            );
 
             rendered_templates_cache.insert(
                 base_path.join("mikro-orm.config.ts").to_string_lossy(),
@@ -335,12 +343,14 @@ fn change_type(
                 .unwrap()
                 .ioredis = Some(IOREDIS_VERSION.to_string());
             resources.cache = Some(WorkerType::RedisCache.to_string());
+            resources.redis_partition = Some(next_redis_partition);
             let _ = add_redis_to_docker_compose(
                 &manifest_data.app_name,
                 docker_compose_data,
                 &mut environment,
+                next_redis_partition,
             );
-            env_local_content.redis_url = Some("redis://localhost:6379".to_string());
+            env_local_content.redis_url = Some(format!("redis://localhost:6379/{}", next_redis_partition));
         }
         WorkerType::Kafka => {
             dependencies.forklaunch_implementation_worker_kafka =
@@ -434,6 +444,38 @@ fn change_type(
         );
     }
 
+    // Update worker.ts import source based on new worker type
+    let worker_ts_path = base_path.join("worker.ts");
+    if let Some(template) = rendered_templates_cache.get(&worker_ts_path)? {
+        let pascal_case_name = manifest_data.worker_name.to_case(Case::Pascal);
+        let camel_case_name = manifest_data.worker_name.to_case(Case::Camel);
+        let is_database_worker = *r#type == WorkerType::Database;
+        let mut content = template.content.clone();
+
+        if is_database_worker {
+            // Switch import from types file to entities
+            content = content.replace(
+                &format!("import type {{ {}EventRecord }} from './domain/types/{}EventRecord.types';", pascal_case_name, camel_case_name),
+                &format!("import type {{ {}EventRecord }} from './persistence/entities';", pascal_case_name),
+            );
+        } else {
+            // Switch import from entities to types file
+            content = content.replace(
+                &format!("import type {{ {}EventRecord }} from './persistence/entities';", pascal_case_name),
+                &format!("import type {{ {}EventRecord }} from './domain/types/{}EventRecord.types';", pascal_case_name, camel_case_name),
+            );
+        }
+
+        rendered_templates_cache.insert(
+            worker_ts_path.to_string_lossy().into_owned(),
+            RenderedTemplate {
+                path: worker_ts_path.clone(),
+                content,
+                context: None,
+            },
+        );
+    }
+
     Ok(())
 }
 
@@ -447,7 +489,6 @@ fn worker_to_service(
 ) -> Result<()> {
     let project_name = base_path.file_name().unwrap().to_string_lossy().to_string();
 
-    // 1. Transform registrations.ts
     let registrations_path = base_path.join("registrations.ts");
     let registrations_key = registrations_path.to_string_lossy().into_owned();
     rendered_templates_cache.insert(
@@ -462,7 +503,6 @@ fn worker_to_service(
         },
     );
 
-    // 2. Disable worker.ts
     let worker_ts_path = base_path.join("worker.ts");
     if let Some(template) = rendered_templates_cache.get(&worker_ts_path)? {
         let content = template
@@ -482,7 +522,25 @@ fn worker_to_service(
         );
     }
 
-    // 3. Update package.json
+    // Remove the event record types file (no longer needed after worker→service)
+    let camel_case_name = project_name.to_case(Case::Camel);
+    let event_record_types_path = base_path
+        .join("domain")
+        .join("types")
+        .join(format!("{}EventRecord.types.ts", camel_case_name));
+    if event_record_types_path.exists() {
+        rendered_templates_cache.insert(
+            event_record_types_path.to_string_lossy().to_string(),
+            RenderedTemplate {
+                path: event_record_types_path.clone(),
+                content: String::new(),
+                context: None,
+            },
+        );
+        // Mark for deletion
+        std::fs::remove_file(&event_record_types_path).ok();
+    }
+
     if let Some(scripts) = project_package_json.scripts.as_mut() {
         scripts.dev_worker = None;
         scripts.start_worker = None;
@@ -496,7 +554,6 @@ fn worker_to_service(
         deps.forklaunch_implementation_worker_kafka = None;
     }
 
-    // 4. Update manifest
     manifest_data.projects.iter_mut().for_each(|project| {
         if project.name == project_name {
             project.r#type = ProjectType::Service;
@@ -506,11 +563,9 @@ fn worker_to_service(
         }
     });
 
-    // 5. Update docker-compose
     let worker_service_name = format!("{}-worker", project_name);
     remove_service_from_docker_compose(docker_compose, &worker_service_name)?;
 
-    // 6. Generate README-MIGRATION.md
     let readme_path = base_path.join("README-MIGRATION.md");
     let readme_key = readme_path.to_string_lossy().into_owned();
     let readme_content = format!(
@@ -549,12 +604,7 @@ This worker has been converted back to a service.
         },
     );
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-    writeln!(
-        stdout,
-        "Worker converted to service. See README-MIGRATION.md."
-    )?;
-    stdout.reset()?;
+    log_warn!(stdout, "Worker converted to service. See README-MIGRATION.md.");
 
     Ok(())
 }
@@ -662,7 +712,6 @@ impl CliCommand for WorkerCommand {
         let dryrun = matches.get_flag("dryrun");
         let confirm = matches.get_flag("confirm");
 
-        // Handle worker to service conversion
         if let Some(to) = to {
             if to == "service" {
                 let application_package_json_to_write =
@@ -964,9 +1013,7 @@ impl CliCommand for WorkerCommand {
         move_template_files(&move_templates, dryrun, &mut stdout)?;
 
         if !dryrun {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "{} changed successfully!", &manifest_data.app_name)?;
-            stdout.reset()?;
+            log_ok!(stdout, "{} changed successfully!", &manifest_data.app_name);
             format_code(&worker_base_path, &manifest_data.runtime.parse()?);
         }
 

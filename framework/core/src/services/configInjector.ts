@@ -104,18 +104,58 @@ export class ConfigInjector<
     resolutionPath: (keyof CV)[] = []
   ): ResolvedConfigValidator<SV, CV>[T] {
     if (process.env.FORKLAUNCH_MODE === 'openapi') {
-      return {} as ResolvedConfigValidator<SV, CV>[T];
+      const noopProxy: Record<string, unknown> = new Proxy(
+        function () {} as unknown as Record<string, unknown>,
+        {
+          get(_target, prop) {
+            if (prop === Symbol.toPrimitive) return () => '';
+            if (prop === 'toString' || prop === 'valueOf') return () => '';
+            if (prop === 'then') return undefined;
+            if (prop === Symbol.iterator) return function* () {};
+            if (prop === Symbol.asyncIterator) return async function* () {};
+            return noopProxy;
+          },
+          set() {
+            return true;
+          },
+          has() {
+            return true;
+          },
+          deleteProperty() {
+            return true;
+          },
+          ownKeys() {
+            return ['prototype'];
+          },
+          getOwnPropertyDescriptor(_target, prop) {
+            if (prop === 'prototype') {
+              return { configurable: false, enumerable: false, writable: true };
+            }
+            return { configurable: true, enumerable: true };
+          },
+          apply() {
+            return noopProxy;
+          },
+          construct() {
+            return noopProxy as object;
+          }
+        }
+      );
+      return noopProxy as ResolvedConfigValidator<SV, CV>[T];
     }
 
-    const injectorArgument = extractArgumentNames(definition.factory)[0];
+    const rawInjectorArgument = extractArgumentNames(definition.factory)[0];
     // short circuit as no args
-    if (!injectorArgument || injectorArgument === '_args') {
+    if (!rawInjectorArgument || rawInjectorArgument === '_args') {
       return definition.factory(
         {} as Omit<ResolvedConfigValidator<SV, CV>, T>,
-        this.resolve.bind(this),
-        context ?? ({} as Record<string, unknown>)
+        context ?? {},
+        this.resolve.bind(this)
       );
     }
+
+    // Normalize whitespace to handle both single-line and multiline formatting
+    const injectorArgument = rawInjectorArgument.replace(/\s+/g, '');
 
     if (!injectorArgument.startsWith('{') || !injectorArgument.endsWith('}')) {
       throw new Error(
@@ -126,9 +166,9 @@ export class ConfigInjector<
     }
     const resolvedArguments = Object.fromEntries(
       injectorArgument
-        .replace('{', '')
-        .replace('}', '')
+        .slice(1, -1)
         .split(',')
+        .filter((arg) => arg.length > 0)
         .map((arg) => arg.split(':')[0].trim())
         .map((arg) => {
           const newResolutionPath = [...resolutionPath, token];
@@ -145,8 +185,8 @@ export class ConfigInjector<
     ) as unknown as Omit<ResolvedConfigValidator<SV, CV>, T>;
     return definition.factory(
       resolvedArguments,
-      this.resolve.bind(this),
-      context ?? ({} as Record<string, unknown>)
+      context ?? {},
+      this.resolve.bind(this)
     );
   }
 
@@ -387,9 +427,16 @@ export class ConfigInjector<
     token: T,
     context?: Record<string, unknown>,
     resolutionPath: (keyof CV)[] = []
-  ): (scope?: ConfigInjector<SV, CV>) => ResolvedConfigValidator<SV, CV>[T] {
-    return (scope) =>
-      (scope ?? this.createScope()).resolve<T>(token, context, resolutionPath);
+  ): (options?: {
+    scope?: ConfigInjector<SV, CV>;
+    context?: Record<string, unknown>;
+  }) => ResolvedConfigValidator<SV, CV>[T] {
+    return (options) =>
+      (options?.scope ?? this.createScope()).resolve<T>(
+        token,
+        options?.context ? { ...context, ...options.context } : context,
+        resolutionPath
+      );
   }
 
   createScope(): ConfigInjector<SV, CV> {

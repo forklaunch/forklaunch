@@ -24,6 +24,7 @@ export const createPermission = handlers.post(
   '/',
   {
     name: 'Create Permission',
+    access: 'internal',
     summary: 'Creates a new permission',
     auth: {
       hmac: {
@@ -50,6 +51,7 @@ export const createBatchPermissions = handlers.post(
   '/batch',
   {
     name: 'Create Batch Permissions',
+    access: 'internal',
     summary: 'Creates multiple permissions',
     auth: {
       hmac: {
@@ -76,6 +78,7 @@ export const getPermission = handlers.get(
   '/:id',
   {
     name: 'Get Permission',
+    access: 'protected',
     summary: 'Gets a permission by ID',
     auth: {
       jwt: {
@@ -100,6 +103,7 @@ export const getBatchPermissions = handlers.get(
   '/batch',
   {
     name: 'Get Batch Permissions',
+    access: 'protected',
     summary: 'Gets multiple permissions by IDs',
     auth: {
       jwt: {
@@ -124,6 +128,7 @@ export const updatePermission = handlers.put(
   '/',
   {
     name: 'Update Permission',
+    access: 'internal',
     summary: 'Updates a permission by ID',
     auth: {
       hmac: {
@@ -150,6 +155,7 @@ export const updateBatchPermissions = handlers.put(
   '/batch',
   {
     name: 'Update Batch Permissions',
+    access: 'internal',
     summary: 'Updates multiple permissions by IDs',
     auth: {
       hmac: {
@@ -176,6 +182,7 @@ export const deletePermission = handlers.delete(
   '/:id',
   {
     name: 'Delete Permission',
+    access: 'internal',
     summary: 'Deletes a permission by ID',
     auth: {
       hmac: {
@@ -202,6 +209,7 @@ export const deleteBatchPermissions = handlers.delete(
   '/batch',
   {
     name: 'Delete Batch Permissions',
+    access: 'internal',
     summary: 'Deletes multiple permissions by IDs',
     auth: {
       hmac: {

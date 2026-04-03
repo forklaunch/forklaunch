@@ -43,8 +43,8 @@ describe('serviceFactory', () => {
     c: {
       type: X,
       lifetime: Lifetime.Scoped,
-      factory: ({ a }, resolve, context) => {
-        const b = () => resolve('b') * (context.num as number);
+      factory: ({ a }, context, resolve) => {
+        const b = () => resolve!('b') * (context!.num as number);
         return new X(a, b);
       }
     },
@@ -216,7 +216,9 @@ describe('serviceFactory', () => {
       num: 5
     });
     expect(configInjector.resolve('c').dummy()).toEqual('a20');
-    expect(configInjector.scopedResolver('c')(scope).dummy()).toEqual('a25');
+    expect(configInjector.scopedResolver('c')({ scope }).dummy()).toEqual(
+      'a25'
+    );
   });
 
   test('dispose', () => {
@@ -230,6 +232,43 @@ describe('serviceFactory', () => {
       },
       j: 'a'
     });
+  });
+
+  test('resolve with multiline factory destructuring', () => {
+    const multilineInjector = createConfigInjector(SchemaValidator(), {
+      x: {
+        type: string,
+        lifetime: Lifetime.Singleton,
+        value: 'hello'
+      },
+      y: {
+        type: number,
+        lifetime: Lifetime.Singleton,
+        value: 42
+      },
+      z: {
+        type: string,
+        lifetime: Lifetime.Transient,
+        factory: ({ x, y }: { x: string; y: number }) => `${x}-${y}`
+      }
+    });
+    expect(multilineInjector.resolve('z')).toBe('hello-42');
+  });
+
+  test('resolve with multiline factory destructuring and resolve/context', () => {
+    const multilineInjector = createConfigInjector(SchemaValidator(), {
+      x: {
+        type: string,
+        lifetime: Lifetime.Singleton,
+        value: 'hello'
+      },
+      y: {
+        type: number,
+        lifetime: Lifetime.Transient,
+        factory: ({ x }, context) => x.length + (context!.extra as number)
+      }
+    });
+    expect(multilineInjector.resolve('y', { extra: 10 })).toBe(15);
   });
 
   test('chained config injector', () => {

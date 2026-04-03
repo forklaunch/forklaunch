@@ -19,7 +19,7 @@ describe('port function integration', () => {
     const handlers = port(
       {
         method: 'get',
-        path: '/',
+        path: '/port-test',
         basePath: '',
         schemaValidator: typeboxSchemaValidator,
         openTelemetryCollector: openTelemetryCollector
@@ -27,6 +27,7 @@ describe('port function integration', () => {
       {
         name: 'TestPort',
         summary: 'Test Port Function',
+        access: 'public',
         responses: {
           200: string
         }

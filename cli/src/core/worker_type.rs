@@ -54,14 +54,14 @@ pub(crate) fn get_default_worker_options(r#type: &WorkerType) -> String {
 fn get_database_worker_consumer_factory(pascal_case_name: &str) -> String {
     format!(
         "
-({{ EntityManager, WorkerOptions }}) =>
+({{ EntityMgr, WorkerOptions }}) =>
   (
     processEventsFunction: WorkerProcessFunction<{}EventRecord>,
     failureHandler: WorkerFailureHandler<{}EventRecord>
   ) =>
     new DatabaseWorkerConsumer(
       {}EventRecord,
-      EntityManager,
+      EntityMgr,
       WorkerOptions,
       processEventsFunction,
       failureHandler
@@ -69,45 +69,38 @@ fn get_database_worker_consumer_factory(pascal_case_name: &str) -> String {
         pascal_case_name, pascal_case_name, pascal_case_name
     )
 }
-fn get_bullmq_worker_consumer_factory(pascal_case_name: &str) -> String {
-    format!(
-        "({{ QUEUE_NAME, WorkerOptions }}) =>
+fn get_bullmq_worker_consumer_factory(_pascal_case_name: &str) -> String {
+    "({ QUEUE_NAME, WorkerOptions }) =>
   (
-    processEventsFunction: WorkerProcessFunction<{}EventRecord>,
-    failureHandler: WorkerFailureHandler<{}EventRecord>
+    processEventsFunction: WorkerProcessFunction<EncryptedEventEnvelope>,
+    failureHandler: WorkerFailureHandler<EncryptedEventEnvelope>
   ) =>
     new BullMqWorkerConsumer(
       QUEUE_NAME,
       WorkerOptions,
       processEventsFunction,
       failureHandler
-    )",
-        pascal_case_name, pascal_case_name
-    )
+    )".to_string()
 }
-fn get_kafka_worker_consumer_factory(pascal_case_name: &str) -> String {
-    format!(
-        "({{ QUEUE_NAME, WorkerOptions, OpenTelemetryCollector }}) =>
+fn get_kafka_worker_consumer_factory(_pascal_case_name: &str) -> String {
+    "({ QUEUE_NAME, WorkerOptions, OtelCollector }) =>
   (
-    processEventsFunction: WorkerProcessFunction<{}EventRecord>,
-    failureHandler: WorkerFailureHandler<{}EventRecord>
+    processEventsFunction: WorkerProcessFunction<EncryptedEventEnvelope>,
+    failureHandler: WorkerFailureHandler<EncryptedEventEnvelope>
   ) =>
     new KafkaWorkerConsumer(
       QUEUE_NAME,
       WorkerOptions,
       processEventsFunction,
       failureHandler,
-      OpenTelemetryCollector
-    )",
-        pascal_case_name, pascal_case_name
-    )
+      OtelCollector
+    )".to_string()
 }
-fn get_redis_worker_consumer_factory(pascal_case_name: &str) -> String {
-    format!(
-        "({{ TtlCache, QUEUE_NAME, WorkerOptions }}) =>
+fn get_redis_worker_consumer_factory(_pascal_case_name: &str) -> String {
+    "({ TtlCache, QUEUE_NAME, WorkerOptions }) =>
   (
-    processEventsFunction: WorkerProcessFunction<{}EventRecord>,
-    failureHandler: WorkerFailureHandler<{}EventRecord>
+    processEventsFunction: WorkerProcessFunction<EncryptedEventEnvelope>,
+    failureHandler: WorkerFailureHandler<EncryptedEventEnvelope>
   ) =>
     new RedisWorkerConsumer(
       QUEUE_NAME,
@@ -115,9 +108,7 @@ fn get_redis_worker_consumer_factory(pascal_case_name: &str) -> String {
       WorkerOptions,
       processEventsFunction,
       failureHandler
-    )",
-        pascal_case_name, pascal_case_name
-    )
+    )".to_string()
 }
 
 pub(crate) fn get_worker_consumer_factory(r#type: &WorkerType, pascal_case_name: &str) -> String {
@@ -131,9 +122,9 @@ pub(crate) fn get_worker_consumer_factory(r#type: &WorkerType, pascal_case_name:
 
 const BULLMQ_WORKER_PRODUCER_FACTORY: &str = "({ QUEUE_NAME, WorkerOptions }) =>
    new BullMqWorkerProducer(QUEUE_NAME, WorkerOptions)";
-const DATABASE_WORKER_PRODUCER_FACTORY: &str = "({ EntityManager, WorkerOptions }) =>
+const DATABASE_WORKER_PRODUCER_FACTORY: &str = "({ EntityMgr, WorkerOptions }) =>
   new DatabaseWorkerProducer(
-    EntityManager,
+    EntityMgr,
     WorkerOptions
   )";
 const KAFKA_WORKER_PRODUCER_FACTORY: &str = "({ QUEUE_NAME, WorkerOptions }) =>

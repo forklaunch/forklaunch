@@ -1,16 +1,19 @@
-import { Entity, Property } from '@mikro-orm/core';
-import { {{#is_mongo}}No{{/is_mongo}}SqlBaseEntity } from '@{{app_name}}/core';
+import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
+import type { InferEntity } from '@mikro-orm/core';
+import { {{#is_mongo}}nosql{{/is_mongo}}{{^is_mongo}}sql{{/is_mongo}}BaseProperties } from '@{{app_name}}/core';{{#is_worker}}
+import type { {{pascal_case_name}}EventRecord as {{pascal_case_name}}EventRecordInterface } from '../../domain/types/{{camel_case_name}}EventRecord.types';{{/is_worker}}
 
-// Entity class that defines the structure of the {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Recordtable
-@Entity()
-export class {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record extends {{#is_mongo}}No{{/is_mongo}}SqlBaseEntity {
-  // message property that stores a message string
-  @Property()
-  message!: string;{{#is_worker}}
+export const {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record = defineComplianceEntity({
+  name: '{{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record',
+  properties: {
+    ...{{#is_mongo}}nosql{{/is_mongo}}{{^is_mongo}}sql{{/is_mongo}}BaseProperties,
+    message: fp.string().compliance('none'),{{#is_worker}}
+    processed: fp.boolean().compliance('none'),
+    retryCount: fp.integer().compliance('none'),{{/is_worker}}
+  },
+});
 
-  @Property()
-  processed!: boolean;
+export type {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record = InferEntity<typeof {{pascal_case_name}}{{#is_worker}}Event{{/is_worker}}Record>;{{#is_worker}}
 
-  @Property()
-  retryCount!: number;{{/is_worker}}
-}
+// Compile-time check: entity type must extend the event record interface
+type _AssertEntityExtendsInterface = {{pascal_case_name}}EventRecord extends {{pascal_case_name}}EventRecordInterface ? true : never;{{/is_worker}}

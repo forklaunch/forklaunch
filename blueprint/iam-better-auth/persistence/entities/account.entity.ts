@@ -1,36 +1,31 @@
-import { SqlBaseEntity } from '@forklaunch/blueprint-core';
-import { Entity, ManyToOne, Property } from '@mikro-orm/core';
+import {
+  defineComplianceEntity,
+  fp,
+  RetentionDuration
+} from '@forklaunch/core/persistence';
+import type { InferEntity } from '@mikro-orm/core';
+import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 import { User } from './user.entity';
 
-@Entity()
-export class Account extends SqlBaseEntity {
-  @ManyToOne('User')
-  user!: User;
+export const Account = defineComplianceEntity({
+  name: 'Account',
+  retention: {
+    duration: RetentionDuration.years(7),
+    action: 'anonymize'
+  },
+  properties: {
+    ...sqlBaseProperties,
+    user: () => fp.manyToOne(User),
+    accountId: fp.string().compliance('none'),
+    providerId: fp.string().compliance('none'),
+    accessToken: fp.string().nullable().compliance('pci'),
+    refreshToken: fp.string().nullable().compliance('pci'),
+    accessTokenExpiresAt: fp.datetime().nullable().compliance('none'),
+    refreshTokenExpiresAt: fp.datetime().nullable().compliance('none'),
+    scope: fp.string().nullable().compliance('none'),
+    idToken: fp.string().nullable().compliance('pci'),
+    password: fp.string().nullable().compliance('pci')
+  }
+});
 
-  @Property()
-  accountId!: string;
-
-  @Property()
-  providerId!: string;
-
-  @Property()
-  accessToken?: string;
-
-  @Property()
-  refreshToken?: string;
-
-  @Property()
-  accessTokenExpiresAt?: Date;
-
-  @Property()
-  refreshTokenExpiresAt?: Date;
-
-  @Property()
-  scope?: string;
-
-  @Property()
-  idToken?: string;
-
-  @Property()
-  password?: string;
-}
+export type Account = InferEntity<typeof Account>;

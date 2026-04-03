@@ -1,6 +1,7 @@
 use anyhow::Result;
 use change::ChangeCommand;
 use clap::{ArgMatches, Command, command};
+use compliance::ComplianceCommand;
 use config::ConfigCommand;
 use delete::DeleteCommand;
 use depcheck::DepcheckCommand;
@@ -19,10 +20,12 @@ use sync::SyncCommand;
 
 use crate::sdk::SdkCommand;
 
-mod change;
-mod config;
 mod constants;
+#[macro_use]
 mod core;
+mod change;
+mod compliance;
+mod config;
 mod delete;
 mod depcheck;
 mod deploy;
@@ -49,6 +52,7 @@ fn main() -> Result<()> {
     // inject token into init, config
     let init = InitCommand::new();
     let change = ChangeCommand::new();
+    let compliance = ComplianceCommand::new();
     let config = ConfigCommand::new();
     let delete = DeleteCommand::new();
     let depcheck = DepcheckCommand::new();
@@ -72,6 +76,7 @@ fn main() -> Result<()> {
         .subcommand(init.command())
         .subcommand(delete.command())
         .subcommand(change.command())
+        .subcommand(compliance.command())
         .subcommand(eject.command())
         .subcommand(depcheck.command())
         .subcommand(config.command())
@@ -95,6 +100,7 @@ fn main() -> Result<()> {
     let result = match matches.subcommand() {
         Some(("init", sub_matches)) => init.handler(sub_matches),
         Some(("change", sub_matches)) => change.handler(sub_matches),
+        Some(("compliance", sub_matches)) => compliance.handler(sub_matches),
         Some(("config", sub_matches)) => config.handler(sub_matches),
         Some(("delete", sub_matches)) => delete.handler(sub_matches),
         Some(("depcheck", sub_matches)) => depcheck.handler(sub_matches),

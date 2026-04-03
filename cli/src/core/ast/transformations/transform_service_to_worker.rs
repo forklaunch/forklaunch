@@ -142,10 +142,15 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
         &registrations_text,
     )?;
 
-    // Add worker interfaces import
-    let worker_interfaces_text = "import { WorkerProcessFunction, WorkerFailureHandler } from '@forklaunch/interfaces-worker/types';";
+    // Add worker interfaces imports
+    let is_database_worker = *worker_type == WorkerType::Database;
+    let worker_interfaces_types_text = if is_database_worker {
+        "import { WorkerProcessFunction, WorkerFailureHandler } from '@forklaunch/interfaces-worker/types';".to_string()
+    } else {
+        "import { type EncryptedEventEnvelope, WorkerProcessFunction, WorkerFailureHandler } from '@forklaunch/interfaces-worker/types';".to_string()
+    };
     let mut worker_interfaces_import =
-        parse_ast_program(&allocator, worker_interfaces_text, SourceType::ts());
+        parse_ast_program(&allocator, &worker_interfaces_types_text, SourceType::ts());
     inject_into_import_statement(
         &mut program,
         &mut worker_interfaces_import,
@@ -153,7 +158,50 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
         &registrations_text,
     )?;
 
-    // Add event record entity import
+    if !is_database_worker {
+        // Add encryption imports for non-database workers
+        let encryption_interfaces_text = "import { EncryptingWorkerProducer, withDecryption, withDecryptionFailureHandler } from '@forklaunch/interfaces-worker/interfaces';";
+        let mut encryption_interfaces_import =
+            parse_ast_program(&allocator, encryption_interfaces_text, SourceType::ts());
+        inject_into_import_statement(
+            &mut program,
+            &mut encryption_interfaces_import,
+            "@forklaunch/interfaces-worker/interfaces",
+            &registrations_text,
+        )?;
+
+        let field_encryptor_text = "import { FieldEncryptor } from '@forklaunch/core/persistence';";
+        let mut field_encryptor_import =
+            parse_ast_program(&allocator, field_encryptor_text, SourceType::ts());
+        inject_into_import_statement(
+            &mut program,
+            &mut field_encryptor_import,
+            "@forklaunch/core/persistence",
+            &registrations_text,
+        )?;
+    }
+
+    // Add event record type import for non-database workers (db workers use the entity import)
+    let event_record_type_text = format!(
+        "import type {{ {}EventRecord }} from './domain/types/{}EventRecord.types';",
+        pascal_case_name,
+        project_name.to_case(Case::Camel)
+    );
+    if !is_database_worker {
+        let mut event_record_type_import =
+            parse_ast_program(&allocator, &event_record_type_text, SourceType::ts());
+        inject_into_import_statement(
+            &mut program,
+            &mut event_record_type_import,
+            &format!(
+                "./domain/types/{}EventRecord.types",
+                project_name.to_case(Case::Camel)
+            ),
+            &registrations_text,
+        )?;
+    }
+
+    // Add event record entity import (used at runtime in database worker factory)
     let event_record_text = format!(
         "import {{ {}EventRecord }} from './persistence/entities/{}EventRecord.entity';",
         pascal_case_name,
@@ -171,6 +219,23 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
         &registrations_text,
     )?;
 
+    // Detect naming convention from existing registrations file
+    let otel_token = if registrations_text.contains("OtelCollector:") {
+        "OtelCollector"
+    } else {
+        "OpenTelemetryCollector"
+    };
+    let orm_token = if registrations_text.contains("Orm:") {
+        "Orm"
+    } else {
+        "MikroORM"
+    };
+    let em_token = if registrations_text.contains("EntityMgr:") {
+        "EntityMgr"
+    } else {
+        "EntityManager"
+    };
+
     // Add worker-type-specific infrastructure
     match worker_type {
         WorkerType::BullMQCache => {
@@ -180,10 +245,10 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
         WorkerType::RedisCache => {
             redis_import(&allocator, &registrations_text, &mut program)?;
             redis_url_environment_variable(&allocator, &mut program)?;
-            redis_ttl_cache_runtime_dependency(&allocator, &mut program)?;
+            redis_ttl_cache_runtime_dependency(&allocator, &mut program, otel_token)?;
         }
         WorkerType::Database => {
-            database_entity_manager_runtime_dependency(&allocator, &mut program)?;
+            database_entity_manager_runtime_dependency(&allocator, &mut program, orm_token, em_token)?;
         }
         WorkerType::Kafka => {
             inject_specifier_into_import_statement(
@@ -215,6 +280,41 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
         "environmentConfig",
     )?;
 
+    // Inject ENCRYPTION_KEY and EventEncryptor for non-database workers
+    if !is_database_worker {
+        let encryption_key_text = "const configInjector = createConfigInjector(SchemaValidator(), {
+            ENCRYPTION_KEY: {
+                lifetime: Lifetime.Singleton,
+                type: string,
+                value: getEnvVar('ENCRYPTION_KEY')
+            }
+        });";
+        let mut encryption_key_injection =
+            parse_ast_program(&allocator, encryption_key_text, SourceType::ts());
+        inject_into_registrations_config_injector(
+            &allocator,
+            &mut program,
+            &mut encryption_key_injection,
+            "environmentConfig",
+        )?;
+
+        let event_encryptor_text = "const configInjector = createConfigInjector(SchemaValidator(), {
+            EventEncryptor: {
+                lifetime: Lifetime.Singleton,
+                type: FieldEncryptor,
+                factory: ({ ENCRYPTION_KEY }) => new FieldEncryptor(ENCRYPTION_KEY)
+            }
+        });";
+        let mut event_encryptor_injection =
+            parse_ast_program(&allocator, event_encryptor_text, SourceType::ts());
+        inject_into_registrations_config_injector(
+            &allocator,
+            &mut program,
+            &mut event_encryptor_injection,
+            "runtimeDependencies",
+        )?;
+    }
+
     // Inject WorkerOptions into runtimeDependencies
     let worker_options_text = format!(
         "const configInjector = createConfigInjector(SchemaValidator(), {{
@@ -239,34 +339,82 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
     )?;
 
     // Inject WorkerConsumer and WorkerProducer into serviceDependencies
-    let worker_deps_text = format!(
-        "const configInjector = createConfigInjector(SchemaValidator(), {{
-            WorkerProducer: {{
-                lifetime: Lifetime.Scoped,
-                type: {}WorkerProducer,
-                factory: {}
-            }},
-            WorkerConsumer: {{
-                lifetime: Lifetime.Scoped,
-                type: function_(
-                    [
-                        type<WorkerProcessFunction<{}EventRecord>>(),
-                        type<WorkerFailureHandler<{}EventRecord>>()
-                    ],
-                    type<{}WorkerConsumer<{}EventRecord, {}WorkerOptions>>()
-                ),
-                factory: {}
-            }}
-        }});",
-        worker_type_name,
-        get_worker_producer_factory(worker_type),
-        pascal_case_name,
-        pascal_case_name,
-        worker_type_name,
-        pascal_case_name,
-        worker_type_name,
-        get_worker_consumer_factory(worker_type, &pascal_case_name)
-    );
+    let worker_deps_text = if is_database_worker {
+        format!(
+            "const configInjector = createConfigInjector(SchemaValidator(), {{
+                WorkerProducer: {{
+                    lifetime: Lifetime.Scoped,
+                    type: {}WorkerProducer,
+                    factory: {}
+                }},
+                WorkerConsumer: {{
+                    lifetime: Lifetime.Scoped,
+                    type: function_(
+                        [
+                            type<WorkerProcessFunction<{}EventRecord>>(),
+                            type<WorkerFailureHandler<{}EventRecord>>()
+                        ],
+                        type<{}WorkerConsumer<{}EventRecord, {}WorkerOptions>>()
+                    ),
+                    factory: {}
+                }}
+            }});",
+            worker_type_name,
+            get_worker_producer_factory(worker_type),
+            pascal_case_name,
+            pascal_case_name,
+            worker_type_name,
+            pascal_case_name,
+            worker_type_name,
+            get_worker_consumer_factory(worker_type, &pascal_case_name)
+        )
+    } else {
+        format!(
+            "const configInjector = createConfigInjector(SchemaValidator(), {{
+                WorkerProducer: {{
+                    lifetime: Lifetime.Scoped,
+                    type: EncryptingWorkerProducer,
+                    factory: (container, context) =>
+                        new EncryptingWorkerProducer(
+                            ({})(container),
+                            container.EventEncryptor,
+                            (context?.tenantId as string) ?? ''
+                        )
+                }},
+                WorkerConsumer: {{
+                    lifetime: Lifetime.Scoped,
+                    type: function_(
+                        [
+                            type<WorkerProcessFunction<{}EventRecord>>(),
+                            type<WorkerFailureHandler<{}EventRecord>>()
+                        ],
+                        type<{}WorkerConsumer<EncryptedEventEnvelope, {}WorkerOptions>>()
+                    ),
+                    factory: (container) => {{
+                        const createConsumer = ({})(container);
+                        return (
+                            processEventsFunction: WorkerProcessFunction<{}EventRecord>,
+                            failureHandler: WorkerFailureHandler<{}EventRecord>
+                        ) =>
+                            createConsumer(
+                                withDecryption<{}EventRecord>(processEventsFunction, container.EventEncryptor),
+                                withDecryptionFailureHandler<{}EventRecord>(failureHandler, container.EventEncryptor)
+                            );
+                    }}
+                }}
+            }});",
+            get_worker_producer_factory(worker_type),
+            pascal_case_name,
+            pascal_case_name,
+            worker_type_name,
+            worker_type_name,
+            get_worker_consumer_factory(worker_type, &pascal_case_name),
+            pascal_case_name,
+            pascal_case_name,
+            pascal_case_name,
+            pascal_case_name,
+        )
+    };
     let mut worker_deps_injection =
         parse_ast_program(&allocator, &worker_deps_text, SourceType::ts());
     inject_into_registrations_config_injector(
@@ -351,7 +499,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
   OpenTelemetryCollector: {
     lifetime: Lifetime.Singleton,
@@ -366,7 +514,7 @@ const runtimeDependencies = environmentConfig.chain({
   EntityManager: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
-    factory: ({ MikroORM }, _resolve, context) =>
+    factory: ({ MikroORM }, context) =>
       MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined)
   }
 });
@@ -419,6 +567,17 @@ export const createDependencyContainer = (envFilePath: string) => ({
         // Verify WorkerConsumer and WorkerProducer were added
         assert!(transformed_code.contains("WorkerConsumer"));
         assert!(transformed_code.contains("WorkerProducer"));
+
+        // Verify entity import is present for database workers (not types file)
+        assert!(
+            transformed_code.contains("persistence/entities/testServiceEventRecord.entity"),
+            "Expected entity import in transformed code for database worker: {transformed_code}"
+        );
+        // Types file import should NOT be present for database workers
+        assert!(
+            !transformed_code.contains("EventRecord.types"),
+            "Database worker should not import from types file: {transformed_code}"
+        );
     }
 
     #[test]

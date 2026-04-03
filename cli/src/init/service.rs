@@ -10,7 +10,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use convert_case::{Case, Casing};
 use rustyline::{Editor, history::DefaultHistory};
 use serde_json::to_string_pretty;
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 use toml::from_str;
 
 use crate::{
@@ -55,7 +55,7 @@ use crate::{
                 IAM_BASE_VERSION, IAM_INTERFACES_VERSION, INFRASTRUCTURE_REDIS_VERSION,
                 INFRASTRUCTURE_S3_VERSION, INTERNAL_VERSION, IOREDIS_VERSION, JOSE_VERSION,
                 MIKRO_ORM_CLI_VERSION, MIKRO_ORM_CORE_VERSION, MIKRO_ORM_DATABASE_VERSION,
-                MIKRO_ORM_MIGRATIONS_VERSION, MIKRO_ORM_REFLECTION_VERSION,
+                MIKRO_ORM_MIGRATIONS_VERSION,
                 MIKRO_ORM_SEEDER_VERSION, OPENTELEMETRY_API_VERSION, OXLINT_VERSION, PINO_VERSION,
                 PRETTIER_VERSION, PROJECT_BUILD_SCRIPT, PROJECT_DOCS_SCRIPT, PROJECT_SEED_SCRIPT,
                 SQLITE3_VERSION, STRIPE_VERSION, TESTING_VERSION, TSX_VERSION, TYPEBOX_VERSION,
@@ -64,8 +64,8 @@ use crate::{
                 TYPESCRIPT_ESLINT_VERSION, UNIVERSAL_SDK_VERSION, UUID_VERSION, VALIDATOR_VERSION,
                 ZOD_VERSION, project_clean_script, project_dev_local_script,
                 project_dev_server_script, project_format_script, project_lint_fix_script,
-                project_lint_script, project_migrate_script, project_start_server_script,
-                project_test_script,
+                project_lint_script, project_migrate_script, project_retention_enforce_script,
+                project_start_server_script, project_test_script, project_up_latest_script,
             },
             project_package_json::{
                 MIKRO_ORM_CONFIG_PATHS, ProjectDependencies, ProjectDevDependencies,
@@ -103,8 +103,12 @@ fn generate_basic_service(
         module_id: None,
     };
 
-    let ignore_files = vec![];
-    // Skip mappers directory if with_mappers is false
+    let mut ignore_files = vec![];
+    if !manifest_data.is_database_enabled {
+        ignore_files.push("compliance.controller.ts".to_string());
+        ignore_files.push("compliance.routes.ts".to_string());
+        ignore_files.push("enforce-retention.ts".to_string());
+    }
     let ignore_dirs = if !manifest_data.with_mappers {
         vec!["mappers".to_string()]
     } else {
@@ -133,7 +137,7 @@ fn generate_basic_service(
     )?);
 
     rendered_templates.extend(
-        generate_project_tsconfig(&output_path).with_context(|| ERROR_FAILED_TO_CREATE_TSCONFIG)?,
+        generate_project_tsconfig(&output_path, Some(&["express", "qs"])).with_context(|| ERROR_FAILED_TO_CREATE_TSCONFIG)?,
     );
 
     rendered_templates.extend(
@@ -219,6 +223,7 @@ fn add_service_to_artifacts(
             cache: None,
             queue: None,
             object_store: None,
+            redis_partition: None,
         }),
         Some(vec![manifest_data.service_name.clone()]),
         None,
@@ -360,6 +365,12 @@ pub(crate) fn generate_service_package_json(
                     &manifest_data.runtime.parse()?,
                     manifest_data.database.parse::<Database>().ok(),
                 )),
+                up_latest: project_up_latest_script(&manifest_data.runtime.parse()?),
+                retention_enforce: if manifest_data.is_database_enabled {
+                    Some(project_retention_enforce_script(&manifest_data.runtime.parse()?))
+                } else {
+                    None
+                },
                 ..Default::default()
             }
         }),
@@ -449,13 +460,18 @@ pub(crate) fn generate_service_package_json(
                 mikro_orm_core: Some(MIKRO_ORM_CORE_VERSION.to_string()),
                 mikro_orm_migrations: Some(MIKRO_ORM_MIGRATIONS_VERSION.to_string()),
                 mikro_orm_database: Some(MIKRO_ORM_DATABASE_VERSION.to_string()),
-                mikro_orm_reflection: Some(MIKRO_ORM_REFLECTION_VERSION.to_string()),
+                mikro_orm_reflection: None,
                 mikro_orm_seeder: Some(MIKRO_ORM_SEEDER_VERSION.to_string()),
                 opentelemetry_api: if manifest_data.is_better_auth {
                     Some(OPENTELEMETRY_API_VERSION.to_string())
                 } else {
                     None
                 },
+                types_express: Some(TYPES_EXPRESS_VERSION.to_string()),
+                types_express_serve_static_core: Some(
+                    TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION.to_string(),
+                ),
+                types_qs: Some(TYPES_QS_VERSION.to_string()),
                 typebox: if manifest_data.is_typebox {
                     Some(TYPEBOX_VERSION.to_string())
                 } else {
@@ -540,12 +556,7 @@ pub(crate) fn generate_service_package_json(
                 tsx: Some(TSX_VERSION.to_string()),
                 typedoc: Some(TYPEDOC_VERSION.to_string()),
                 typescript_eslint: Some(TYPESCRIPT_ESLINT_VERSION.to_string()),
-                types_express: Some(TYPES_EXPRESS_VERSION.to_string()),
-                types_express_serve_static_core: Some(
-                    TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION.to_string(),
-                ),
                 types_jest: Some(TYPES_JEST_VERSION.to_string()),
-                types_qs: Some(TYPES_QS_VERSION.to_string()),
                 types_uuid: Some(TYPES_UUID_VERSION.to_string()),
                 types_pino: None,
                 types_ioredis: None,
@@ -774,9 +785,7 @@ impl CliCommand for ServiceCommand {
             is_cache_enabled: infrastructure.contains(&Infrastructure::Redis),
             platform_application_id: manifest_data.platform_application_id.clone(),
             platform_organization_id: manifest_data.platform_organization_id.clone(),
-            release_version: manifest_data.release_version.clone(),
-            release_git_commit: manifest_data.release_git_commit.clone(),
-            release_git_branch: manifest_data.release_git_branch.clone(),
+            compliance: manifest_data.compliance.clone(),
             is_s3_enabled: infrastructure.contains(&Infrastructure::S3),
             is_database_enabled: true,
 
@@ -811,9 +820,9 @@ impl CliCommand for ServiceCommand {
             iam_secret: None,
 
             // These will be properly generated when initialized
-            generated_password_encryption_secret: String::new(),
             generated_better_auth_secret: String::new(),
             generated_hmac_secret: String::new(),
+            otel_token: "OtelCollector".to_string(),
         };
 
         let dryrun = matches.get_flag("dryrun");
@@ -828,9 +837,7 @@ impl CliCommand for ServiceCommand {
         .with_context(|| "Failed to create service")?;
 
         if !dryrun {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-            writeln!(stdout, "{} initialized successfully!", service_name)?;
-            stdout.reset()?;
+            log_ok!(stdout, "{} initialized successfully!", service_name);
             format_code(&base_path, &manifest_data.runtime.parse()?);
         }
 

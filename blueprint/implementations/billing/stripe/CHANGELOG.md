@@ -1,5 +1,265 @@
 # @forklaunch/implementation-billing-stripe
 
+## 1.1.14
+
+### Patch Changes
+
+- upgrade packages
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.14
+  - @forklaunch/interfaces-billing@1.0.13
+
+## 1.1.13
+
+### Patch Changes
+
+- package bumps
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.13
+  - @forklaunch/interfaces-billing@1.0.12
+
+## 1.1.12
+
+### Patch Changes
+
+- update packages
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.12
+  - @forklaunch/interfaces-billing@1.0.11
+
+## 1.1.11
+
+### Patch Changes
+
+- update fl packages
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.11
+
+## 1.1.10
+
+### Patch Changes
+
+- package version increase
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.10
+  - @forklaunch/interfaces-billing@1.0.10
+
+## 1.1.9
+
+### Patch Changes
+
+- shorter brand for compliance entities
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.9
+  - @forklaunch/interfaces-billing@1.0.9
+
+## 1.1.8
+
+### Patch Changes
+
+- update packages
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.8
+  - @forklaunch/interfaces-billing@1.0.8
+
+## 1.1.7
+
+### Patch Changes
+
+- update internal packages
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.7
+  - @forklaunch/interfaces-billing@1.0.7
+
+## 1.1.6
+
+### Patch Changes
+
+- upgrade packages
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.6
+  - @forklaunch/interfaces-billing@1.0.6
+
+## 1.1.5
+
+### Patch Changes
+
+- package updates
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.5
+  - @forklaunch/interfaces-billing@1.0.5
+
+## 1.1.4
+
+### Patch Changes
+
+- update packages
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.4
+  - @forklaunch/interfaces-billing@1.0.4
+
+## 1.1.3
+
+### Patch Changes
+
+- Worker decryption and encryption update
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.3
+  - @forklaunch/interfaces-billing@1.0.3
+
+## 1.1.2
+
+### Patch Changes
+
+- Package updates
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.2
+  - @forklaunch/interfaces-billing@1.0.2
+
+## 1.1.1
+
+### Patch Changes
+
+- update internal package versions
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.1
+  - @forklaunch/interfaces-billing@1.0.1
+
+## 1.1.0
+
+### Minor Changes
+
+- Pass in enum container, not actual enum
+
+## 1.0.1
+
+### Patch Changes
+
+- Pass party enum from constructor
+
+## 1.0.0
+
+### Major Changes
+
+- Compliance framework installed
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.0
+  - @forklaunch/interfaces-billing@1.0.0
+
+## 0.6.0
+
+### Minor Changes
+
+- MikroOrm v7 upgrade
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@0.9.0
+  - @forklaunch/interfaces-billing@0.9.0
+
+## 0.5.23
+
+### Patch Changes
+
+- package bumps
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@0.8.23
+  - @forklaunch/interfaces-billing@0.8.23
+
+## 0.5.22
+
+### Patch Changes
+
+- fix mikro-orm
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@0.8.22
+  - @forklaunch/interfaces-billing@0.8.22
+
+## 0.5.21
+
+### Patch Changes
+
+- internal bump
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@0.8.21
+  - @forklaunch/interfaces-billing@0.8.21
+
+## 0.5.20
+
+### Patch Changes
+
+- revert mikroorm version
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@0.8.20
+  - @forklaunch/interfaces-billing@0.8.20
+
+## 0.5.19
+
+### Patch Changes
+
+- Package bumps
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@0.8.19
+  - @forklaunch/interfaces-billing@0.8.19
+
+## 0.5.18
+
+### Patch Changes
+
+- Package version bumps
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@0.8.18
+  - @forklaunch/interfaces-billing@0.8.18
+
+## 0.5.17
+
+### Patch Changes
+
+- package bump
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@0.8.17
+  - @forklaunch/interfaces-billing@0.8.17
+
+## 0.5.16
+
+### Patch Changes
+
+- small nits
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@0.8.16
+  - @forklaunch/interfaces-billing@0.8.16
+
+## 0.5.15
+
+### Patch Changes
+
+- Update internal package versions
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@0.8.15
+  - @forklaunch/interfaces-billing@0.8.15
+
+## 0.5.14
+
+### Patch Changes
+
+- bump package versions
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@0.8.14
+  - @forklaunch/interfaces-billing@0.8.14
+
+## 0.5.13
+
+### Patch Changes
+
+- package bump
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@0.8.13
+  - @forklaunch/interfaces-billing@0.8.13
+
 ## 0.5.12
 
 ### Patch Changes

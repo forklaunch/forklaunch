@@ -1,5 +1,161 @@
 # @forklaunch/interfaces-worker
 
+## 1.0.13
+
+### Patch Changes
+
+- upgrade packages
+
+## 1.0.12
+
+### Patch Changes
+
+- package bumps
+
+## 1.0.11
+
+### Patch Changes
+
+- update packages
+
+## 1.0.10
+
+### Patch Changes
+
+- package version increase
+
+## 1.0.9
+
+### Patch Changes
+
+- update packages
+
+## 1.0.8
+
+### Patch Changes
+
+- update internal packages
+
+## 1.0.7
+
+### Patch Changes
+
+- upgrade packages
+
+## 1.0.6
+
+### Patch Changes
+
+- package updates
+
+## 1.0.5
+
+### Patch Changes
+
+- update packages
+
+## 1.0.4
+
+### Patch Changes
+
+- Resolve tenantId from controller scope
+
+## 1.0.3
+
+### Patch Changes
+
+- Worker decryption and encryption update
+
+## 1.0.2
+
+### Patch Changes
+
+- Package updates
+
+## 1.0.1
+
+### Patch Changes
+
+- update internal package versions
+
+## 1.0.0
+
+### Major Changes
+
+- Compliance framework installed
+
+## 0.8.0
+
+### Minor Changes
+
+- MikroOrm v7 upgrade
+
+## 0.7.23
+
+### Patch Changes
+
+- package bumps
+
+## 0.7.22
+
+### Patch Changes
+
+- fix mikro-orm
+
+## 0.7.21
+
+### Patch Changes
+
+- internal bump
+
+## 0.7.20
+
+### Patch Changes
+
+- revert mikroorm version
+
+## 0.7.19
+
+### Patch Changes
+
+- Package bumps
+
+## 0.7.18
+
+### Patch Changes
+
+- Package version bumps
+
+## 0.7.17
+
+### Patch Changes
+
+- package bump
+
+## 0.7.16
+
+### Patch Changes
+
+- small nits
+
+## 0.7.15
+
+### Patch Changes
+
+- Update internal package versions
+
+## 0.7.14
+
+### Patch Changes
+
+- bump package versions
+
+## 0.7.13
+
+### Patch Changes
+
+- package bump
+
 ## 0.7.12
 
 ### Patch Changes

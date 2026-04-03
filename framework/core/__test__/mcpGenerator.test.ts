@@ -27,6 +27,7 @@ describe('mcpGenerator tests', () => {
             method: 'get' as const,
             contractDetails: {
               name: 'GetUser',
+              access: 'public',
               summary: 'Get user by ID',
               params: { id: schemaValidator.string },
               responses: {
@@ -62,6 +63,7 @@ describe('mcpGenerator tests', () => {
             method: 'get' as const,
             contractDetails: {
               name: 'GetUser',
+              access: 'public',
               summary: 'Get user by ID',
               params: { id: schemaValidator.string },
               responses: {
@@ -75,6 +77,7 @@ describe('mcpGenerator tests', () => {
             method: 'post' as const,
             contractDetails: {
               name: 'CreateUser',
+              access: 'public',
               summary: 'Create a new user',
               body: testSchema,
               responses: {
@@ -110,6 +113,7 @@ describe('mcpGenerator tests', () => {
             method: 'get' as const,
             contractDetails: {
               name: 'SearchUsers',
+              access: 'public',
               summary: 'Search users with filters',
               query: {
                 q: schemaValidator.string,
@@ -153,6 +157,7 @@ describe('mcpGenerator tests', () => {
             method: 'get' as const,
             contractDetails: {
               name: 'HealthCheck',
+              access: 'public',
               summary: 'Check API health',
               responses: {
                 200: { status: schemaValidator.string }
@@ -170,6 +175,7 @@ describe('mcpGenerator tests', () => {
                 method: 'get' as const,
                 contractDetails: {
                   name: 'GetUserV1',
+                  access: 'public',
                   summary: 'Get user by ID (v1)',
                   params: { id: schemaValidator.string },
                   responses: {
@@ -183,6 +189,7 @@ describe('mcpGenerator tests', () => {
                 method: 'post' as const,
                 contractDetails: {
                   name: 'CreatePost',
+                  access: 'public',
                   summary: 'Create a new post',
                   body: {
                     title: schemaValidator.string,
@@ -209,6 +216,7 @@ describe('mcpGenerator tests', () => {
                     method: 'put' as const,
                     contractDetails: {
                       name: 'UpdateConfig',
+                      access: 'public',
                       summary: 'Update admin configuration',
                       body: {
                         key: schemaValidator.string,
@@ -270,6 +278,7 @@ describe('mcpGenerator tests', () => {
             method: 'get' as const,
             contractDetails: {
               name: 'ProtectedEndpoint',
+              access: 'public',
               summary: 'A protected endpoint',
               responses: {
                 200: { message: schemaValidator.string }

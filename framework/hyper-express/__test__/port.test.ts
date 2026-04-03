@@ -22,6 +22,7 @@ describe('port function integration', () => {
       },
       {
         name: 'TestPort',
+        access: 'public',
         summary: 'Test Port Function',
         responses: {
           200: string

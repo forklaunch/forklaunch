@@ -16,15 +16,19 @@ export const CreateSubscriptionMapper = requestMapper({
       em: EntityManager,
       providerFields: Stripe.Subscription
     ) => {
-      return Subscription.create(
-        {
-          ...dto,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          providerFields
-        },
-        em
-      );
+      return em.create(Subscription, {
+        partyId: dto.partyId,
+        partyType: dto.partyType,
+        productId: dto.productId,
+        description: dto.description ?? null,
+        active: dto.active,
+        externalId: dto.externalId,
+        startDate: dto.startDate,
+        endDate: dto.endDate ?? null,
+        status: dto.status,
+        billingProvider: dto.billingProvider,
+        providerFields
+      });
     }
   }
 });
@@ -39,13 +43,14 @@ export const UpdateSubscriptionMapper = requestMapper({
       em: EntityManager,
       providerFields: Stripe.Subscription
     ) => {
-      return Subscription.update(
-        {
-          ...dto,
-          providerFields
-        },
-        em
-      );
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { stripeFields, ...rest } = dto;
+      const entity = await em.findOneOrFail(Subscription, { id: rest.id });
+      em.assign(entity, {
+        ...rest,
+        providerFields
+      });
+      return entity;
     }
   }
 });
@@ -55,12 +60,11 @@ export const SubscriptionMapper = responseMapper({
   schema: SubscriptionSchemas.SubscriptionSchema(PartyEnum),
   entity: Subscription,
   mapperDefinition: {
-    toDto: async (entity: Subscription) => {
-      const data = await entity.read();
+    toDto: async (entity) => {
       return {
-        ...data,
-        // Convert null endDate to undefined for DTO validation
-        endDate: data.endDate ?? undefined,
+        ...entity,
+        description: entity.description ?? undefined,
+        endDate: entity.endDate ?? undefined,
         stripeFields: entity.providerFields
       };
     }

@@ -22,6 +22,7 @@ export const createPaymentLink = handlers.post(
   '/',
   {
     name: 'Create Payment Link',
+    access: 'internal',
     summary: 'Create a payment link',
     auth: {
       hmac: {
@@ -46,6 +47,7 @@ export const getPaymentLink = handlers.get(
   '/:id',
   {
     name: 'Get Payment Link',
+    access: 'internal',
     summary: 'Get a payment link',
     auth: {
       hmac: {
@@ -70,6 +72,7 @@ export const updatePaymentLink = handlers.put(
   '/:id',
   {
     name: 'Update Payment Link',
+    access: 'internal',
     summary: 'Update a payment link',
     auth: {
       hmac: {
@@ -103,6 +106,7 @@ export const expirePaymentLink = handlers.delete(
   '/:id',
   {
     name: 'Expire Payment Link',
+    access: 'internal',
     summary: 'Expire a payment link',
     auth: {
       hmac: {
@@ -128,6 +132,7 @@ export const handlePaymentSuccess = handlers.get(
   '/:id/success',
   {
     name: 'Handle Payment Success',
+    access: 'internal',
     summary: 'Handle a payment success',
     auth: {
       hmac: {
@@ -153,6 +158,7 @@ export const handlePaymentFailure = handlers.get(
   '/:id/failure',
   {
     name: 'Handle Payment Failure',
+    access: 'internal',
     summary: 'Handle a payment failure',
     auth: {
       hmac: {
@@ -178,6 +184,7 @@ export const listPaymentLinks = handlers.get(
   '/',
   {
     name: 'List Payment Links',
+    access: 'internal',
     summary: 'List payment links',
     query: {
       ids: optional(array(string))

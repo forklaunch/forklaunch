@@ -2,7 +2,7 @@ use std::{fs::remove_file, io::Write};
 
 use anyhow::Result;
 use clap::{ArgMatches, Command};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use crate::{
     CliCommand,
@@ -28,9 +28,7 @@ impl CliCommand for LogoutCommand {
         let token_path = get_token_path()?;
         remove_file(token_path)?;
 
-        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-        writeln!(stdout, "Successfully logged out!")?;
-        stdout.reset()?;
+        log_ok!(stdout, "Successfully logged out!");
         Ok(())
     }
 }

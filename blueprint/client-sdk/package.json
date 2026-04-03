@@ -7,7 +7,7 @@
   "author": "Rohin Bhargava",
   "scripts": {
     "build": "tsc",
-    "clean": "rm -rf dist pnpm.lock.yaml node_modules",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo pnpm.lock.yaml node_modules",
     "docs": "typedoc --out docs *",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
     "lint": "eslint . -c eslint.config.mjs",

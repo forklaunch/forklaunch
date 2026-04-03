@@ -5,13 +5,13 @@ import {
 import { getEnvVar } from '@forklaunch/common';
 import dotenv from 'dotenv';
 import { createDependencyContainer } from './registrations';
-import { {{pascal_case_name}}EventRecord} from './persistence/entities/{{camel_case_name}}EventRecord.entity';
+{{#is_database_worker}}import type { {{pascal_case_name}}EventRecord } from './persistence/entities';{{/is_database_worker}}{{^is_database_worker}}import type { {{pascal_case_name}}EventRecord } from './domain/types/{{camel_case_name}}EventRecord.types';{{/is_database_worker}}
 
 const envFilePath = getEnvVar('DOTENV_FILE_PATH');
 dotenv.config({ path: envFilePath });
 const { ci, tokens } = createDependencyContainer(envFilePath);
 
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 
 const processEvents: WorkerProcessFunction<{{pascal_case_name}}EventRecord> =
   async (events) => {

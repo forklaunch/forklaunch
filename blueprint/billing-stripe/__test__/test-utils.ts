@@ -83,12 +83,12 @@ export const cleanupTestDatabase = async (): Promise<void> => {
   }
 };
 
-export const clearDatabase = async (options?: {
+export async function clearDatabase(options?: {
   orm?: MikroORM;
   redis?: TestSetupResult['redis'];
-}): Promise<void> => {
+}): Promise<void> {
   await clearTestDatabase(options);
-};
+}
 
 export const setupTestData = async (em: EntityManager) => {
   const { CheckoutSession } = await import(
@@ -121,9 +121,7 @@ export const setupTestData = async (em: EntityManager) => {
       success_url: 'https://example.com/success',
       cancel_url: 'https://example.com/cancel',
       expires_at: Math.floor(Date.now() / 1000) + 24 * 60 * 60
-    } as never,
-    createdAt: new Date(),
-    updatedAt: new Date()
+    } as never
   });
 
   em.create(PaymentLink, {
@@ -138,9 +136,7 @@ export const setupTestData = async (em: EntityManager) => {
       object: 'payment_link',
       active: true,
       url: 'https://checkout.stripe.com/c/pay/plink_test_123'
-    } as never,
-    createdAt: new Date(),
-    updatedAt: new Date()
+    } as never
   });
 
   em.create(BillingPortal, {
@@ -154,9 +150,7 @@ export const setupTestData = async (em: EntityManager) => {
       return_url: 'https://example.com/billing',
       url: 'https://billing.stripe.com/session/bps_test_123'
     } as never,
-    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-    createdAt: new Date(),
-    updatedAt: new Date()
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
   });
 
   await em.flush();

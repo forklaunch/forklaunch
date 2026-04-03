@@ -1,9 +1,9 @@
 import { WorkerEventEntity } from '@forklaunch/interfaces-worker/types';
-import { BaseEntity, EntityManager } from '@mikro-orm/core';
+import { EntityManager } from '@mikro-orm/core';
 import { DatabaseWorkerOptions } from '../domain/types/databaseWorker.types';
 
 export class DatabaseWorkerProducer<
-  EventEntity extends WorkerEventEntity & BaseEntity,
+  EventEntity extends WorkerEventEntity,
   Options extends DatabaseWorkerOptions
 > {
   private readonly em: EntityManager;
@@ -15,10 +15,10 @@ export class DatabaseWorkerProducer<
   }
 
   async enqueueJob(event: EventEntity): Promise<void> {
-    await this.em.persistAndFlush(event);
+    await this.em.persist(event).flush();
   }
 
   async enqueueBatchJobs(events: EventEntity[]): Promise<void> {
-    await this.em.persistAndFlush(events);
+    await this.em.persist(events).flush();
   }
 }

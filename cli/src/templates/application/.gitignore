@@ -1,1 +1,10 @@
-../../../../blueprint/.gitignore
+node_modules
+.idea
+.DS_Store
+
+lib
+
+.vscode
+
+*dist
+*lib
