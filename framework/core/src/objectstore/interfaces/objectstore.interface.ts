@@ -1,94 +1,80 @@
 import { Readable } from 'stream';
+import type { ComplianceContext } from '../../cache/types/ttlCacheRecord.types';
 
 /**
- * Interface representing a objectstore.
+ * Interface representing an object store.
+ *
+ * Methods that read or write object bodies accept an optional `compliance` parameter.
+ * When provided, bodies are encrypted on write and decrypted on read using
+ * the tenant ID for key derivation. When omitted, bodies are stored as plaintext.
  */
 export interface ObjectStore<Client> {
   /**
    * Puts a record into the objectstore.
-   *
-   * @param {T} object - The object to put into the objectstore.
-   * @returns {Promise<void>} - A promise that resolves when the record is put into the objectstore.
    */
-  putObject<T>(object: T): Promise<void>;
+  putObject<T>(object: T, compliance?: ComplianceContext): Promise<void>;
 
   /**
    * Puts a batch of records into the objectstore.
-   *
-   * @param {T[]} objects - The objects to put into the objectstore.
-   * @returns {Promise<void>} - A promise that resolves when the records are put into the objectstore.
    */
-  putBatchObjects<T>(objects: T[]): Promise<void>;
+  putBatchObjects<T>(
+    objects: T[],
+    compliance?: ComplianceContext
+  ): Promise<void>;
 
   /**
-   * Enqueues a record into the objectstore.
-   *
-   * @param {T} object - The object to enqueue into the objectstore.
-   * @returns {Promise<void>} - A promise that resolves when the record is enqueued into the objectstore.
+   * Streams an object upload to the objectstore.
    */
-  streamUploadObject<T>(object: T): Promise<void>;
+  streamUploadObject<T>(
+    object: T,
+    compliance?: ComplianceContext
+  ): Promise<void>;
 
   /**
-   *
-   * Enqueues a batch of records into the objectstore.
-   *
-   * @param {T[]} objects - The objects to enqueue into the objectstore.
-   * @returns {Promise<void>} - A promise that resolves when the records are enqueued into the objectstore.
+   * Streams a batch of object uploads to the objectstore.
    */
-  streamUploadBatchObjects<T>(objects: T[]): Promise<void>;
+  streamUploadBatchObjects<T>(
+    objects: T[],
+    compliance?: ComplianceContext
+  ): Promise<void>;
 
   /**
    * Deletes a record from the objectstore.
-   *
-   * @param {string} objectKey - The key of the object to delete.
-   * @returns {Promise<void>} - A promise that resolves when the object is deleted from the objectstore.
    */
   deleteObject(objectKey: string): Promise<void>;
 
   /**
    * Deletes a batch of records from the objectstore.
-   *
-   * @param {string[]} objectKeys - The keys of the objects to delete.
-   * @returns {Promise<void>} - A promise that resolves when the records are deleted from the objectstore.
    */
   deleteBatchObjects(objectKeys: string[]): Promise<void>;
 
   /**
    * Reads a record from the objectstore.
-   *
-   * @param {string} objectKey - The key of the object to read.
-   * @returns {Promise<TtlCacheRecord>} - A promise that resolves with the objectstore record.
    */
-  readObject<T>(objectKey: string): Promise<T>;
+  readObject<T>(objectKey: string, compliance?: ComplianceContext): Promise<T>;
 
   /**
    * Reads a batch of records from the objectstore.
-   *
-   * @param {string[]} objectKeys - The keys of the objects to read.
-   * @returns {Promise<TtlCacheRecord<T>[]>} - A promise that resolves with the objects.
    */
-  readBatchObjects<T>(objectKeys: string[]): Promise<T[]>;
+  readBatchObjects<T>(
+    objectKeys: string[],
+    compliance?: ComplianceContext
+  ): Promise<T[]>;
 
   /**
-   * Peeks at a record in the objectstore to check if it exists.
-   *
-   * @param {string} objectstoreRecordKey - The key of the objectstore record to peek at.
-   * @returns {Promise<Readable>} - A promise that resolves with a boolean indicating if the record exists.
+   * Streams a download from the objectstore.
+   * Note: Streaming bypasses application-level encryption/decryption.
    */
   streamDownloadObject(objectKey: string): Promise<Readable>;
 
   /**
-   * Peeks at a batch of records in the objectstore to check if they exist.
-   *
-   * @param {string[]} objectKeys - The keys of the objectstore records to peek at or a prefix to match.
-   * @returns {Promise<Readable[]>} - A promise that resolves with an array of booleans indicating if the records exist.
+   * Streams multiple downloads from the objectstore.
+   * Note: Streaming bypasses application-level encryption/decryption.
    */
   streamDownloadBatchObjects(objectKeys: string[]): Promise<Readable[]>;
 
   /**
    * Gets the underlying objectstore client instance.
-   *
-   * @returns {Client} The objectstore client instance
    */
   getClient(): Client;
 }

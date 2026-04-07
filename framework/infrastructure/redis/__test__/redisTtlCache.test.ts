@@ -26,8 +26,7 @@ describe('redisTtlCache', () => {
         level: 'info'
       },
       {
-        encryptor: new FieldEncryptor('test-encryption-key-for-redis-tests'),
-        disabled: true
+        encryptor: new FieldEncryptor('test-encryption-key-for-redis-tests')
       }
     );
 

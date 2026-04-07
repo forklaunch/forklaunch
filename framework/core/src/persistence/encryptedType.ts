@@ -114,15 +114,17 @@ export class EncryptedType extends Type<unknown, string | null> {
       return this.deserializeValue(value);
     }
 
-    if (!_encryptor) return value;
-
-    try {
-      const decrypted = _encryptor.decrypt(value, getCurrentTenantId());
-      if (decrypted === null) return null;
-      return this.deserializeValue(decrypted);
-    } catch {
-      return value;
+    if (!_encryptor) {
+      throw new Error(
+        'EncryptedType: no encryptor registered but database contains encrypted value. ' +
+          'Call registerEncryptor() at application bootstrap.'
+      );
     }
+
+    const tenantId = getCurrentTenantId();
+    const decrypted = _encryptor.decrypt(value, tenantId);
+    if (decrypted === null) return null;
+    return this.deserializeValue(decrypted);
   }
 
   override getColumnType(): string {
