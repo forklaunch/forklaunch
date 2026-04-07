@@ -40,7 +40,7 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1025.0",
+    "@aws-sdk/client-s3": "^3.1026.0",
     "@forklaunch/common": "workspace:*",
     "@forklaunch/core": "workspace:*"
   },
