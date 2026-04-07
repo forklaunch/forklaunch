@@ -125,7 +125,7 @@ export function createBillingCacheService(
     async getCachedPlan(organizationId: string, planId: string) {
       try {
         const result = await cache.readRecord<PlanCacheData>(
-          `${PLAN_CACHE_PREFIX}${planId}`,
+          `${PLAN_CACHE_PREFIX}${organizationId}:${planId}`,
           { tenantId: organizationId }
         );
         return result.value;
@@ -141,7 +141,7 @@ export function createBillingCacheService(
       try {
         await cache.putRecord(
           {
-            key: `${PLAN_CACHE_PREFIX}${planId}`,
+            key: `${PLAN_CACHE_PREFIX}${organizationId}:${planId}`,
             value: data,
             ttlMilliseconds: PLAN_TTL
           },

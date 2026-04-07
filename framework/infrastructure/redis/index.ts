@@ -94,11 +94,27 @@ export class RedisTtlCache implements TtlCache {
   private decryptValue(value: string, compliance?: ComplianceContext): string {
     if (!compliance || !this.encryptor) return value;
     if (!isEncrypted(value)) return value;
+    // If a value is encrypted but we cannot decrypt it, treat the entry as
+    // unreadable rather than returning the ciphertext. Returning the raw
+    // bytes lets callers (e.g. cache services that JSON.parse the result)
+    // surface garbage as if it were a successful read, masking key/tenant
+    // mismatches and corrupting downstream consumers. Throwing forces the
+    // caller's catch path (cache miss) to run.
+    let decrypted: string | null;
     try {
-      return this.encryptor.decrypt(value, compliance.tenantId) ?? value;
-    } catch {
-      return value;
+      decrypted = this.encryptor.decrypt(value, compliance.tenantId);
+    } catch (err) {
+      throw new Error(
+        `Redis: failed to decrypt value for tenant ${compliance.tenantId}: ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err }
+      );
     }
+    if (decrypted === null) {
+      throw new Error(
+        `Redis: encrypted value for tenant ${compliance.tenantId} could not be decrypted (null result)`
+      );
+    }
+    return decrypted;
   }
 
   private parseValue<T>(
@@ -314,7 +330,10 @@ export class RedisTtlCache implements TtlCache {
     queueName: string,
     compliance?: ComplianceContext
   ): Promise<T> {
-    const value = await this.client.lRange(queueName, 0, 0);
+    // Queues use lPush + rPop, so the next item to dequeue lives at the
+    // tail of the list, not the head. Reading lRange(0, 0) would return the
+    // most-recently-pushed item — the opposite of dequeue order.
+    const value = await this.client.lRange(queueName, -1, -1);
     return this.parseValue<T>(value[0], compliance);
   }
 
@@ -323,8 +342,13 @@ export class RedisTtlCache implements TtlCache {
     pageSize: number,
     compliance?: ComplianceContext
   ): Promise<T[]> {
-    const values = await this.client.lRange(queueName, 0, pageSize - 1);
+    // Tail-relative range: the last `pageSize` items, where the very last
+    // item is the next to be dequeued. Redis returns them in list order
+    // (oldest-tail-end first), so reverse to put next-to-dequeue first.
+    const values = await this.client.lRange(queueName, -pageSize, -1);
+    if (values.length === 0) return [];
     return values
+      .reverse()
       .map((value) => this.parseValue<T>(value, compliance))
       .filter(Boolean);
   }
