@@ -101,12 +101,12 @@ const environmentConfig = configInjector.chain({
 
 //! defines the runtime dependencies for the application
 const runtimeDependencies = environmentConfig.chain({
-  MikroORM: {
+  Orm: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
     factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
-  OpenTelemetryCollector: {
+  OtelCollector: {
     lifetime: Lifetime.Singleton,
     type: OpenTelemetryCollector<Metrics>,
     factory: ({ OTEL_SERVICE_NAME, OTEL_LEVEL }) =>
@@ -120,10 +120,10 @@ const runtimeDependencies = environmentConfig.chain({
     lifetime: Lifetime.Scoped,
     type: EntityManager,
     factory: (
-      { MikroORM },
+      { Orm },
       context: { entityManagerOptions?: ForkOptions; tenantId?: string }
     ) => {
-      const em = MikroORM.em.fork(context.entityManagerOptions);
+      const em = Orm.em.fork(context.entityManagerOptions);
       if (context.tenantId) {
         em.setFilterParams('tenant', { tenantId: context.tenantId });
       }
@@ -146,18 +146,13 @@ const expressApplicationOptions = serviceDependencies.chain({
   BetterAuth: {
     lifetime: Lifetime.Singleton,
     type: type<unknown>(),
-    factory: ({
-      BETTER_AUTH_BASE_PATH,
-      CORS_ORIGINS,
-      MikroORM,
-      OpenTelemetryCollector
-    }) =>
+    factory: ({ BETTER_AUTH_BASE_PATH, CORS_ORIGINS, Orm, OtelCollector }) =>
       betterAuth(
         betterAuthConfig({
           BETTER_AUTH_BASE_PATH,
           CORS_ORIGINS,
-          orm: MikroORM,
-          openTelemetryCollector: OpenTelemetryCollector
+          orm: Orm,
+          openTelemetryCollector: OtelCollector
         })
       ) as BetterAuth
   },
@@ -234,16 +229,16 @@ const expressApplicationOptions = serviceDependencies.chain({
   ComplianceDataService: {
     lifetime: Lifetime.Singleton,
     type: ComplianceDataService,
-    factory: ({ MikroORM, OpenTelemetryCollector }) =>
-      new ComplianceDataService(MikroORM, OpenTelemetryCollector, {
+    factory: ({ Orm, OtelCollector }) =>
+      new ComplianceDataService(Orm, OtelCollector, {
         User: 'id'
       })
   },
   RetentionService: {
     lifetime: Lifetime.Singleton,
     type: RetentionService,
-    factory: ({ MikroORM, OpenTelemetryCollector }) =>
-      new RetentionService(MikroORM, OpenTelemetryCollector)
+    factory: ({ Orm, OtelCollector }) =>
+      new RetentionService(Orm, OtelCollector)
   }
 });
 

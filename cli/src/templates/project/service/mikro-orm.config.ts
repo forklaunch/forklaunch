@@ -89,7 +89,10 @@ const mikroOrmOptionsConfig = defineConfig({ {{#is_mongo}}
   ),
   port: validConfigInjector.resolve(
     tokens.DB_PORT
-  ),{{/is_in_memory_database}}{{/is_mongo}}
+  ),
+  driverOptions: {
+    ssl: validConfigInjector.resolve(tokens.NODE_ENV) !== 'development'
+  },{{/is_in_memory_database}}{{/is_mongo}}
   entities: Object.values(entities),
   debug: validConfigInjector.resolve(
     tokens.NODE_ENV

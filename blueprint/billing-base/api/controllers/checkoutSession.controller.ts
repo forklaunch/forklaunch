@@ -10,7 +10,7 @@ import {
   CreateCheckoutSessionMapper
 } from '../../domain/mappers/checkoutSession.mappers';
 
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 const serviceFactory = ci.scopedResolver(tokens.CheckoutSessionService);
 const HMAC_SECRET_KEY = ci.resolve(tokens.HMAC_SECRET_KEY);
 

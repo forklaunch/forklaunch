@@ -29,7 +29,7 @@ use crate::{
     },
     core::{
         base_path::{RequiredLocation, find_app_root_path, prompt_base_path},
-        client_sdk::add_project_to_client_sdk,
+        client_sdk::{add_project_to_client_sdk, regenerate_client_sdk_compliance},
         command::command,
         database::{
             add_base_entity_to_core, get_database_port, get_db_driver, is_in_memory_database,
@@ -105,9 +105,11 @@ fn generate_basic_service(
 
     let mut ignore_files = vec![];
     if !manifest_data.is_database_enabled {
+        ignore_files.push("enforce-retention.ts".to_string());
+    }
+    if !manifest_data.is_database_enabled || !manifest_data.is_iam_configured {
         ignore_files.push("compliance.controller.ts".to_string());
         ignore_files.push("compliance.routes.ts".to_string());
-        ignore_files.push("enforce-retention.ts".to_string());
     }
     let ignore_dirs = if !manifest_data.with_mappers {
         vec!["mappers".to_string()]
@@ -177,6 +179,12 @@ fn generate_basic_service(
         &manifest_data.app_name,
         &manifest_data.service_name,
         None,
+    )?;
+
+    regenerate_client_sdk_compliance(
+        &mut rendered_templates_cache,
+        &base_path,
+        &manifest_data.projects,
     )?;
 
     let tsconfig_template = add_project_to_modules_tsconfig(base_path, &manifest_data.service_name)

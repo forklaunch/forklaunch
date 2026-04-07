@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/express",
-  "version": "1.2.13",
+  "version": "1.2.27",
   "description": "Forklaunch framework for express.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -39,7 +39,7 @@
     "@forklaunch/common": "workspace:*",
     "@forklaunch/core": "workspace:*",
     "@forklaunch/validator": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.28.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@scalar/express-api-reference": "^0.9.5",
     "@types/multer": "^2.1.0",
     "body-parser": "^2.2.2",
@@ -65,7 +65,7 @@
     "@types/qs": "^6.15.0",
     "@types/range-parser": "^1.2.7",
     "@types/swagger-ui-express": "^4.1.8",
-    "@typescript/native-preview": "7.0.0-dev.20260327.2",
+    "@typescript/native-preview": "7.0.0-dev.20260331.1",
     "jest": "^30.3.0",
     "kill-port-process": "^4.0.2",
     "prettier": "^3.8.1",
@@ -74,6 +74,6 @@
     "tsup": "^8.5.1",
     "typedoc": "^0.28.18",
     "typescript": "^6.0.2",
-    "typescript-eslint": "^8.57.2"
+    "typescript-eslint": "^8.58.0"
   }
 }

@@ -1,5 +1,69 @@
 # @forklaunch/validator
 
+## 1.2.14
+
+### Patch Changes
+
+- update enum logic
+- Updated dependencies
+  - @forklaunch/common@1.2.14
+
+## 1.2.13
+
+### Patch Changes
+
+- Update packages and enum constraint fix
+- Updated dependencies
+  - @forklaunch/common@1.2.13
+
+## 1.2.12
+
+### Patch Changes
+
+- sync changes across packages
+- Updated dependencies
+  - @forklaunch/common@1.2.12
+
+## 1.2.11
+
+### Patch Changes
+
+- Align package vers
+- Updated dependencies
+  - @forklaunch/common@1.2.11
+
+## 1.2.10
+
+### Patch Changes
+
+- fix nested app and router
+- Updated dependencies
+  - @forklaunch/common@1.2.10
+
+## 1.2.9
+
+### Patch Changes
+
+- Perf improvement
+- Updated dependencies
+  - @forklaunch/common@1.2.9
+
+## 1.2.8
+
+### Patch Changes
+
+- bump package versions
+- Updated dependencies
+  - @forklaunch/common@1.2.8
+
+## 1.2.7
+
+### Patch Changes
+
+- export consolidated retention logic
+- Updated dependencies
+  - @forklaunch/common@1.2.7
+
 ## 1.2.6
 
 ### Patch Changes

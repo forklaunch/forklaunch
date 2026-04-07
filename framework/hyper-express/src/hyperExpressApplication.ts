@@ -199,6 +199,8 @@ export class Application<
       process.exit(0);
     }
 
+    this.validateAllRoutes();
+
     if (typeof arg0 === 'number') {
       const port = arg0 || Number(process.env.PORT);
       const protocol = (process.env.PROTOCOL || 'http') as 'http' | 'https';

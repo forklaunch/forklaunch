@@ -13,8 +13,8 @@ export const { ci, tokens } = createDependencyContainer(envFilePath);
 export type ScopeFactory = typeof ci.createScope;
 
 //! resolves the openTelemetryCollector from the configuration
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
-const orm = ci.resolve(tokens.MikroORM);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
+const orm = ci.resolve(tokens.Orm);
 setupTenantFilter(orm, { logger: openTelemetryCollector });
 setupRls(orm, { logger: openTelemetryCollector });
 

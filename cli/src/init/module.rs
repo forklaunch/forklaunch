@@ -18,7 +18,7 @@ use crate::{
     core::{
         ast::injections::inject_into_client_sdk::ClientSdkSpecialCase,
         base_path::{RequiredLocation, find_app_root_path, prompt_base_path},
-        client_sdk::add_project_to_client_sdk,
+        client_sdk::{add_project_to_client_sdk, regenerate_client_sdk_compliance},
         command::command,
         database::{
             get_database_port, get_database_variants, get_db_driver, is_in_memory_database,
@@ -344,6 +344,12 @@ impl CliCommand for ModuleCommand {
             &service_data.app_name,
             &service_data.service_name,
             special_case,
+        )?;
+
+        regenerate_client_sdk_compliance(
+            &mut rendered_templates_cache,
+            &base_path,
+            &service_data.projects,
         )?;
 
         match runtime {

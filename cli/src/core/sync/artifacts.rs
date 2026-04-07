@@ -13,7 +13,7 @@ use crate::{
         Runtime, WorkerType,
     },
     core::{
-        client_sdk::remove_project_from_client_sdk,
+        client_sdk::{regenerate_client_sdk_compliance, remove_project_from_client_sdk},
         docker::{
             DockerCompose, add_service_definition_to_docker_compose,
             add_worker_definition_to_docker_compose, remove_service_from_docker_compose,
@@ -402,6 +402,8 @@ fn sync_to_client_sdk(
 
     log_ok!(stdout, "Added to universal SDK: {}", metadata.project_name);
 
+    regenerate_client_sdk_compliance(cache, modules_path, &manifest_data.projects)?;
+
     Ok(())
 }
 
@@ -601,6 +603,12 @@ pub fn remove_project_from_artifacts(
                         modules_path,
                         &manifest_data.app_name,
                         project_name,
+                    )?;
+
+                    regenerate_client_sdk_compliance(
+                        rendered_templates_cache,
+                        modules_path,
+                        &manifest_data.projects,
                     )?;
 
                     log_ok!(stdout, "Removed from universal SDK");

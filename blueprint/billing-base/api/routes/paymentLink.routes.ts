@@ -10,7 +10,7 @@ import {
   updatePaymentLink
 } from '../controllers/paymentLink.controller';
 
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 
 export const paymentLinkRouter = forklaunchRouter(
   '/payment-link',
