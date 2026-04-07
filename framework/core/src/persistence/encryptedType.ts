@@ -200,13 +200,22 @@ export class EncryptedType extends Type<unknown, string | null> {
 
     if (!_encryptor) return value;
 
+    // Decrypt failures must throw. Returning the ciphertext silently lets a
+    // bad row hydrate as a malformed value (e.g. `new Date(ciphertext)` →
+    // Invalid Date), which then sits in the identity map and crashes a later
+    // unrelated `flush()` deep inside `serialize()` — far from the real cause.
+    // Surface the failure at the read site instead.
+    let decrypted: string | null;
     try {
-      const decrypted = _encryptor.decrypt(value, getCurrentTenantId());
-      if (decrypted === null) return null;
-      return this.deserialize(decrypted);
-    } catch {
-      return value;
+      decrypted = _encryptor.decrypt(value, getCurrentTenantId());
+    } catch (err) {
+      throw new Error(
+        `Failed to decrypt encrypted column value: ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err }
+      );
     }
+    if (decrypted === null) return null;
+    return this.deserialize(decrypted);
   }
 
   override getColumnType(): string {
