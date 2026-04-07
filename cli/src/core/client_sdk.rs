@@ -22,10 +22,169 @@ use crate::{
                 transform_client_sdk_remove_sdk,
             },
         },
+        manifest::{ProjectEntry, ProjectType},
         package_json::project_package_json::ProjectPackageJson,
         rendered_template::{RenderedTemplate, RenderedTemplatesCache},
     },
 };
+
+/// Regenerates `client-sdk/compliance.ts` based on the current project list.
+///
+/// The generated file imports per-service SDK factories from `./clientSdk` and
+/// hardcodes parallel `Promise.all` calls to each service's
+/// `compliance.eraseUserData` / `exportUserData` method. Result types are
+/// inferred from the SDK factories so callers narrow on the real discriminated
+/// `code` union without casts.
+///
+/// A project participates if:
+/// - it is a Service or Worker (libraries are skipped)
+/// - it has a database resource (compliance erase/export touches persisted data)
+/// - the app has an `iam` project (the generated controller resolves
+///   `JWKS_PUBLIC_KEY_URL`, which only exists when iam is configured)
+///
+/// Special-case: when the iam project's variant is `iam-better-auth`, the
+/// `clientIamSdkClient` factory returns `{ core, betterAuth }`, so compliance
+/// is accessed via `config.iam.core.compliance.*`.
+pub(crate) fn regenerate_client_sdk_compliance(
+    rendered_templates_cache: &mut RenderedTemplatesCache,
+    base_path: &Path,
+    projects: &[ProjectEntry],
+) -> Result<()> {
+    let path = base_path.join("client-sdk").join("compliance.ts");
+
+    let stub = || RenderedTemplate {
+        path: path.clone(),
+        content: "// This file is regenerated automatically when services are added, removed,\n// or renamed. Do not edit by hand — your changes will be overwritten.\n//\n// When at least one db-backed service exists alongside an iam project, this\n// file will export `createComplianceClient` with hardcoded calls to each\n// service's `compliance.eraseUserData` / `exportUserData` SDK method.\n\nexport {};\n".to_string(),
+        context: Some("Failed to write client-sdk compliance.ts".to_string()),
+    };
+
+    // Compliance controllers depend on JWKS_PUBLIC_KEY_URL, which only exists
+    // when an iam project is configured. Without iam, no service exposes a
+    // working `compliance.eraseUserData`/`exportUserData` SDK method.
+    if !projects.iter().any(|p| p.name == "iam") {
+        rendered_templates_cache
+            .insert(path.to_string_lossy().to_string(), stub());
+        return Ok(());
+    }
+
+    let mut compliant: Vec<&ProjectEntry> = projects
+        .iter()
+        .filter(|p| {
+            matches!(p.r#type, ProjectType::Service | ProjectType::Worker)
+                && p.resources
+                    .as_ref()
+                    .and_then(|r| r.database.as_ref())
+                    .is_some()
+        })
+        .collect();
+    compliant.sort_by(|a, b| a.name.cmp(&b.name));
+
+    if compliant.is_empty() {
+        rendered_templates_cache
+            .insert(path.to_string_lossy().to_string(), stub());
+        return Ok(());
+    }
+
+    let mut imports: Vec<String> = Vec::new();
+    let mut type_aliases: Vec<String> = Vec::new();
+    let mut config_fields: Vec<String> = Vec::new();
+    let mut destructure_names: Vec<String> = Vec::new();
+    let mut erase_calls: Vec<String> = Vec::new();
+    let mut export_calls: Vec<String> = Vec::new();
+
+    for project in &compliant {
+        let camel = project.name.to_case(Case::Camel);
+        let pascal = project.name.to_case(Case::Pascal);
+
+        let factory = format!("client{}SdkClient", pascal);
+        let type_alias = format!("{}Client", pascal);
+
+        // `clientIamSdkClient` is emitted as a wrapped `{ core, betterAuth }`
+        // factory when the iam project uses the better-auth variant.
+        let is_better_auth = project.name == "iam"
+            && project.variant.as_deref() == Some("iam-better-auth");
+        let access = if is_better_auth {
+            format!("config.{}.core.compliance", camel)
+        } else {
+            format!("config.{}.compliance", camel)
+        };
+
+        imports.push(factory.clone());
+        type_aliases.push(format!(
+            "type {} = Awaited<ReturnType<typeof {}>>;",
+            type_alias, factory
+        ));
+        config_fields.push(format!("  {}: {};", camel, type_alias));
+        destructure_names.push(camel.clone());
+        erase_calls.push(format!(
+            "        {}.eraseUserData({{ params: {{ userId }}, headers }})",
+            access
+        ));
+        export_calls.push(format!(
+            "        {}.exportUserData({{ params: {{ userId }}, headers }})",
+            access
+        ));
+    }
+
+    let imports_line = format!("import {{ {} }} from './clientSdk';", imports.join(", "));
+    let type_aliases_block = type_aliases.join("\n");
+    let config_fields_block = config_fields.join("\n");
+    let destructure = destructure_names.join(", ");
+    let return_object = destructure_names.join(", ");
+    let erase_block = erase_calls.join(",\n");
+    let export_block = export_calls.join(",\n");
+
+    let content = format!(
+"{imports_line}
+
+{type_aliases_block}
+
+/**
+ * Compliance fan-out client. Calls erase/export on every registered service
+ * in parallel. Per-service responses are the exact discriminated unions
+ * produced by each SDK (e.g. `{{ code: 200; response: {{...}} }} | {{ code: 404; response: string }}`),
+ * so callers narrow on `code` without any casts.
+ *
+ * This file is regenerated when services are added, removed, or renamed.
+ *
+ * Requires a JWT token from a user with SYSTEM role.
+ */
+export function createComplianceClient(config: {{
+  token: string;
+{config_fields_block}
+}}) {{
+  const headers = {{ authorization: `Bearer ${{config.token}}` }} as const;
+
+  return {{
+    async erase(userId: string) {{
+      const [{destructure}] = await Promise.all([
+{erase_block}
+      ]);
+      return {{ {return_object} }};
+    }},
+
+    async export(userId: string) {{
+      const [{destructure}] = await Promise.all([
+{export_block}
+      ]);
+      return {{ {return_object} }};
+    }}
+  }};
+}}
+"
+    );
+
+    rendered_templates_cache.insert(
+        path.to_string_lossy().to_string(),
+        RenderedTemplate {
+            path,
+            content,
+            context: Some("Failed to write client-sdk compliance.ts".to_string()),
+        },
+    );
+
+    Ok(())
+}
 
 pub(crate) fn get_client_sdk_additional_deps(
     app_name: &String,
