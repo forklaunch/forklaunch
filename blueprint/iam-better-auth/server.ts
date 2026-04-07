@@ -12,8 +12,8 @@ import { ci, tokens } from './bootstrapper';
 import { iamSdkClient } from './sdk';
 
 //! resolves the openTelemetryCollector from the configuration
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
-const orm = ci.resolve(tokens.MikroORM);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
+const orm = ci.resolve(tokens.Orm);
 setupTenantFilter(orm, { logger: openTelemetryCollector });
 setupRls(orm, { logger: openTelemetryCollector });
 

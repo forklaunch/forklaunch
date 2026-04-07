@@ -11,7 +11,7 @@ use super::clean_application::clean_application;
 use crate::{
     constants::Runtime,
     core::{
-        client_sdk::change_project_in_client_sdk,
+        client_sdk::{change_project_in_client_sdk, regenerate_client_sdk_compliance},
         docker::{
             Command, DependsOn, DockerBuild, DockerCompose, DockerService, HealthTest,
             Healthcheck,
@@ -134,13 +134,13 @@ pub(crate) fn change_name(
     let existing_name = base_path.file_name().unwrap().to_string_lossy().to_string();
 
     // TODO: change the name of the package in client-sdk if service or worker (could just be simple find/replace)
-    let (runtime, app_name, mut project_entries, project_peer_topology) = match manifest_data {
+    let (runtime, app_name, projects, project_peer_topology) = match manifest_data {
         MutableManifestData::Service(manifest_data) => {
             manifest_data.service_name = name.to_string();
             (
                 manifest_data.runtime.as_mut(),
                 manifest_data.app_name.as_mut(),
-                manifest_data.projects.iter_mut(),
+                &mut manifest_data.projects,
                 manifest_data.project_peer_topology.values_mut(),
             )
         }
@@ -149,7 +149,7 @@ pub(crate) fn change_name(
             (
                 manifest_data.runtime.as_mut(),
                 manifest_data.app_name.as_mut(),
-                manifest_data.projects.iter_mut(),
+                &mut manifest_data.projects,
                 manifest_data.project_peer_topology.values_mut(),
             )
         }
@@ -158,7 +158,7 @@ pub(crate) fn change_name(
             (
                 manifest_data.runtime.as_mut(),
                 manifest_data.app_name.as_mut(),
-                manifest_data.projects.iter_mut(),
+                &mut manifest_data.projects,
                 manifest_data.project_peer_topology.values_mut(),
             )
         }
@@ -167,7 +167,7 @@ pub(crate) fn change_name(
             (
                 manifest_data.runtime.as_mut(),
                 manifest_data.app_name.as_mut(),
-                manifest_data.projects.iter_mut(),
+                &mut manifest_data.projects,
                 manifest_data.project_peer_topology.values_mut(),
             )
         }
@@ -183,7 +183,8 @@ pub(crate) fn change_name(
         rendered_templates_cache,
     )?;
 
-    let project_entry = project_entries
+    let project_entry = projects
+        .iter_mut()
         .find(|project| project.name == existing_name)
         .unwrap();
 
@@ -368,13 +369,23 @@ pub(crate) fn change_name(
         stdout,
     )?);
 
-    if project_entry.r#type == ProjectType::Service || project_entry.r#type == ProjectType::Worker {
+    let project_changed_type = project_entry.r#type.clone();
+    if project_changed_type == ProjectType::Service
+        || project_changed_type == ProjectType::Worker
+    {
         change_project_in_client_sdk(
             rendered_templates_cache,
             base_path.parent().unwrap(),
             &app_name,
             &existing_name,
             &name,
+        )?;
+
+        // project_entry borrow ends above; safe to re-borrow `projects` as &[_]
+        regenerate_client_sdk_compliance(
+            rendered_templates_cache,
+            base_path.parent().unwrap(),
+            projects,
         )?;
     }
 

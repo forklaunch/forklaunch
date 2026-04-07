@@ -1,5 +1,53 @@
 # @forklaunch/interfaces-iam
 
+## 1.0.21
+
+### Patch Changes
+
+- package version bumps
+
+## 1.0.20
+
+### Patch Changes
+
+- update internal packages
+
+## 1.0.19
+
+### Patch Changes
+
+- update packages
+
+## 1.0.18
+
+### Patch Changes
+
+- update packages
+
+## 1.0.17
+
+### Patch Changes
+
+- update package versions
+
+## 1.0.16
+
+### Patch Changes
+
+- update packages
+
+## 1.0.15
+
+### Patch Changes
+
+- bump packages
+
+## 1.0.14
+
+### Patch Changes
+
+- update packages
+
 ## 1.0.13
 
 ### Patch Changes

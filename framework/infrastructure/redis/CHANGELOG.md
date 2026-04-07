@@ -1,5 +1,119 @@
 # @forklaunch/infrastructure-redis
 
+## 1.3.15
+
+### Patch Changes
+
+- update enum logic
+- Updated dependencies
+  - @forklaunch/common@1.2.14
+  - @forklaunch/core@1.3.17
+
+## 1.3.14
+
+### Patch Changes
+
+- Update packages and enum constraint fix
+- Updated dependencies
+  - @forklaunch/common@1.2.13
+  - @forklaunch/core@1.3.16
+
+## 1.3.13
+
+### Patch Changes
+
+- sync changes across packages
+- Updated dependencies
+  - @forklaunch/common@1.2.12
+  - @forklaunch/core@1.3.15
+
+## 1.3.12
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.14
+
+## 1.3.11
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.13
+
+## 1.3.10
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.12
+
+## 1.3.9
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.11
+
+## 1.3.8
+
+### Patch Changes
+
+- Align package vers
+- Updated dependencies
+  - @forklaunch/common@1.2.11
+  - @forklaunch/core@1.3.10
+
+## 1.3.7
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.9
+
+## 1.3.6
+
+### Patch Changes
+
+- fix nested app and router
+- Updated dependencies
+  - @forklaunch/common@1.2.10
+  - @forklaunch/core@1.3.8
+
+## 1.3.5
+
+### Patch Changes
+
+- Perf improvement
+- Updated dependencies
+  - @forklaunch/common@1.2.9
+  - @forklaunch/core@1.3.7
+
+## 1.3.4
+
+### Patch Changes
+
+- bump package versions
+- Updated dependencies
+  - @forklaunch/common@1.2.8
+  - @forklaunch/core@1.3.6
+
+## 1.3.3
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.5
+
+## 1.3.2
+
+### Patch Changes
+
+- export consolidated retention logic
+- Updated dependencies
+  - @forklaunch/common@1.2.7
+  - @forklaunch/core@1.3.4
+
 ## 1.3.1
 
 ### Patch Changes

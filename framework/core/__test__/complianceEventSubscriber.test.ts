@@ -94,7 +94,7 @@ describe('EncryptedType', () => {
     });
 
     it('roundtrips JSON values', () => {
-      const jsonType = new EncryptedType('json');
+      const jsonType = new EncryptedType('any');
       const original = { key: 'value', nested: { a: 1 } };
       const encrypted = jsonType.convertToDatabaseValue(original, platform);
       expect(typeof encrypted).toBe('string');
@@ -117,6 +117,99 @@ describe('EncryptedType', () => {
       expect(encrypted).toMatch(/^v[12]:/);
       const decrypted = boolType.convertToJSValue(encrypted, platform);
       expect(decrypted).toBe(true);
+    });
+
+    it('roundtrips Date values', () => {
+      const dateType = new EncryptedType('Date');
+      const original = new Date('2024-06-15T10:30:00.000Z');
+      const encrypted = dateType.convertToDatabaseValue(original, platform);
+      expect(encrypted).toMatch(/^v[12]:/);
+      const decrypted = dateType.convertToJSValue(encrypted, platform);
+      expect(decrypted).toBeInstanceOf(Date);
+      expect((decrypted as Date).toISOString()).toBe(original.toISOString());
+    });
+
+    it('roundtrips bigint values', () => {
+      const bigintType = new EncryptedType('bigint');
+      const original = BigInt('9007199254740993');
+      const encrypted = bigintType.convertToDatabaseValue(original, platform);
+      expect(encrypted).toMatch(/^v[12]:/);
+      const decrypted = bigintType.convertToJSValue(encrypted, platform);
+      expect(decrypted).toBe(original);
+    });
+
+    it('roundtrips Buffer values', () => {
+      const bufferType = new EncryptedType('Buffer');
+      const original = Buffer.from('binary data');
+      const encrypted = bufferType.convertToDatabaseValue(original, platform);
+      expect(encrypted).toMatch(/^v[12]:/);
+      const decrypted = bufferType.convertToJSValue(encrypted, platform);
+      expect(Buffer.isBuffer(decrypted)).toBe(true);
+      expect((decrypted as Buffer).toString()).toBe('binary data');
+    });
+
+    it('roundtrips float/double as number', () => {
+      const numberType = new EncryptedType('number');
+      const original = 3.14159;
+      const encrypted = numberType.convertToDatabaseValue(original, platform);
+      const decrypted = numberType.convertToJSValue(encrypted, platform);
+      expect(decrypted).toBeCloseTo(original);
+    });
+  });
+
+  describe('array container roundtrip', () => {
+    it('roundtrips array of strings', () => {
+      const type = new EncryptedType('string', true);
+      const original = ['alice', 'bob', 'charlie'];
+      const encrypted = type.convertToDatabaseValue(original, platform);
+      expect(encrypted).toMatch(/^v[12]:/);
+      const decrypted = type.convertToJSValue(encrypted, platform);
+      expect(decrypted).toEqual(original);
+    });
+
+    it('roundtrips array of numbers', () => {
+      const type = new EncryptedType('number', true);
+      const original = [1, 2.5, 42, 0, -7];
+      const encrypted = type.convertToDatabaseValue(original, platform);
+      const decrypted = type.convertToJSValue(encrypted, platform);
+      expect(decrypted).toEqual(original);
+    });
+
+    it('roundtrips array of booleans', () => {
+      const type = new EncryptedType('boolean', true);
+      const original = [true, false, true];
+      const encrypted = type.convertToDatabaseValue(original, platform);
+      const decrypted = type.convertToJSValue(encrypted, platform);
+      expect(decrypted).toEqual(original);
+    });
+
+    it('roundtrips array of Dates', () => {
+      const type = new EncryptedType('Date', true);
+      const original = [
+        new Date('2024-01-01T00:00:00.000Z'),
+        new Date('2024-06-15T10:30:00.000Z')
+      ];
+      const encrypted = type.convertToDatabaseValue(original, platform);
+      const decrypted = type.convertToJSValue(encrypted, platform) as Date[];
+      expect(decrypted).toHaveLength(2);
+      expect(decrypted[0]).toBeInstanceOf(Date);
+      expect(decrypted[0].toISOString()).toBe('2024-01-01T00:00:00.000Z');
+      expect(decrypted[1].toISOString()).toBe('2024-06-15T10:30:00.000Z');
+    });
+
+    it('roundtrips empty array', () => {
+      const type = new EncryptedType('number', true);
+      const encrypted = type.convertToDatabaseValue([], platform);
+      const decrypted = type.convertToJSValue(encrypted, platform);
+      expect(decrypted).toEqual([]);
+    });
+
+    it('roundtrips array of JSON objects', () => {
+      const type = new EncryptedType('any', true);
+      const original = [{ a: 1 }, { b: 'two' }];
+      const encrypted = type.convertToDatabaseValue(original, platform);
+      const decrypted = type.convertToJSValue(encrypted, platform);
+      expect(decrypted).toEqual(original);
     });
   });
 });

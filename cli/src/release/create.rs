@@ -184,7 +184,9 @@ impl CliCommand for CreateCommand {
             .arg(
                 Arg::new("release_version")
                     .long("version")
+                    .visible_alias("release")
                     .short('v')
+                    .visible_short_alias('r')
                     .required(true)
                     .help("Release version (e.g., 1.0.0)"),
             )
@@ -236,7 +238,7 @@ impl CliCommand for CreateCommand {
 
         let version = matches
             .get_one::<String>("release_version")
-            .ok_or_else(|| anyhow::anyhow!("Version is required"))?;
+            .ok_or_else(|| anyhow::anyhow!("Release version is required. Use --version <VERSION> or -v <VERSION> (e.g., --version 1.0.0)"))?;
 
         let dry_run = matches.get_flag("dry-run");
         let flag_local = matches.get_flag("local");

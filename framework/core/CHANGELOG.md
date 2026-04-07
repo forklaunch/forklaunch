@@ -1,5 +1,113 @@
 # @forklaunch/core
 
+## 1.3.17
+
+### Patch Changes
+
+- update enum logic
+- Updated dependencies
+  - @forklaunch/validator@1.2.14
+  - @forklaunch/common@1.2.14
+
+## 1.3.16
+
+### Patch Changes
+
+- Update packages and enum constraint fix
+- Updated dependencies
+  - @forklaunch/validator@1.2.13
+  - @forklaunch/common@1.2.13
+
+## 1.3.15
+
+### Patch Changes
+
+- sync changes across packages
+- Updated dependencies
+  - @forklaunch/validator@1.2.12
+  - @forklaunch/common@1.2.12
+
+## 1.3.14
+
+### Patch Changes
+
+- Handle enums more robustly for ORM
+
+## 1.3.13
+
+### Patch Changes
+
+- no more private fields
+
+## 1.3.12
+
+### Patch Changes
+
+- Turn private into public members
+
+## 1.3.11
+
+### Patch Changes
+
+- exhaustively cover serde
+
+## 1.3.10
+
+### Patch Changes
+
+- Align package vers
+- Updated dependencies
+  - @forklaunch/validator@1.2.11
+  - @forklaunch/common@1.2.11
+
+## 1.3.9
+
+### Patch Changes
+
+- Only validate on real path, not openapi path
+
+## 1.3.8
+
+### Patch Changes
+
+- fix nested app and router
+- Updated dependencies
+  - @forklaunch/validator@1.2.10
+  - @forklaunch/common@1.2.10
+
+## 1.3.7
+
+### Patch Changes
+
+- Perf improvement
+- Updated dependencies
+  - @forklaunch/validator@1.2.9
+  - @forklaunch/common@1.2.9
+
+## 1.3.6
+
+### Patch Changes
+
+- bump package versions
+- Updated dependencies
+  - @forklaunch/validator@1.2.8
+  - @forklaunch/common@1.2.8
+
+## 1.3.5
+
+### Patch Changes
+
+- Access auth respected now
+
+## 1.3.4
+
+### Patch Changes
+
+- export consolidated retention logic
+- Updated dependencies
+  - @forklaunch/validator@1.2.7
+  - @forklaunch/common@1.2.7
+
 ## 1.3.3
 
 ### Patch Changes
