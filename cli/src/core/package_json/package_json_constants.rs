@@ -234,7 +234,7 @@ pub(crate) const BUNRUN_VERSION: &str = "~0.0.2";
 // @forklaunch/common
 pub(crate) const COMMON_VERSION: &str = "~1.2.14";
 // @forklaunch/core
-pub(crate) const CORE_VERSION: &str = "~1.3.17";
+pub(crate) const CORE_VERSION: &str = "~1.4.0";
 // @forklaunch/express
 pub(crate) const EXPRESS_VERSION: &str = "~1.2.27";
 // @forklaunch/hyper-express

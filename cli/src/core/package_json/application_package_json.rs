@@ -280,6 +280,8 @@ pub(crate) struct ApplicationPnpm {
         skip_serializing_if = "Option::is_none"
     )]
     pub(crate) patched_dependencies: Option<HashMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) overrides: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Serialize, Default, Clone)]

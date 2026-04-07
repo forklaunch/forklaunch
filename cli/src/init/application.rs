@@ -51,15 +51,16 @@ use crate::{
         name::validate_name,
         package_json::{
             application_package_json::{
-                ApplicationDevDependencies, ApplicationPackageJson, ApplicationScripts,
+                ApplicationDevDependencies, ApplicationPackageJson, ApplicationPnpm,
+            ApplicationScripts,
             },
             package_json_constants::{
                 AJV_VERSION, APP_DEV_BUILD_SCRIPT, APP_DEV_SCRIPT, APP_PREPARE_SCRIPT,
                 BETTER_AUTH_VERSION, BETTER_SQLITE3_VERSION, BIOME_VERSION, BUNRUN_VERSION,
                 COMMON_VERSION, CORE_VERSION, DOTENV_VERSION, ESLINT_VERSION, EXPRESS_VERSION,
                 GLOBALS_VERSION, HUSKY_VERSION, HYPER_EXPRESS_VERSION, JEST_TYPES_VERSION,
-                JEST_VERSION, LINT_STAGED_VERSION, MIKRO_ORM_CORE_VERSION,
-                MIKRO_ORM_DATABASE_VERSION, MIKRO_ORM_MIGRATIONS_VERSION,
+                JEST_VERSION, LINT_STAGED_VERSION, MIKRO_ORM_CLI_VERSION, MIKRO_ORM_CORE_VERSION,
+                MIKRO_ORM_DATABASE_VERSION, MIKRO_ORM_MIGRATIONS_VERSION, MIKRO_ORM_SEEDER_VERSION,
                 NODE_GYP_VERSION, OXLINT_VERSION, PRETTIER_VERSION,
                 PROJECT_BUILD_SCRIPT, PROJECT_DOCS_SCRIPT, SORT_PACKAGE_JSON_VERSION,
                 SQLITE3_VERSION, TS_JEST_VERSION, TS_NODE_VERSION, TSX_VERSION, TYPEBOX_VERSION,
@@ -257,7 +258,71 @@ fn generate_application_package_json(
             },
             additional_deps: HashMap::new(),
         }),
-        pnpm: None,
+        pnpm: Some(ApplicationPnpm {
+            patched_dependencies: None,
+            overrides: Some(HashMap::from([
+                (
+                    "@forklaunch/core".to_string(),
+                    CORE_VERSION.trim_start_matches(['~', '^']).to_string(),
+                ),
+                (
+                    "@mikro-orm/core".to_string(),
+                    MIKRO_ORM_CORE_VERSION.to_string(),
+                ),
+                (
+                    "@mikro-orm/migrations".to_string(),
+                    MIKRO_ORM_MIGRATIONS_VERSION.to_string(),
+                ),
+                (
+                    "@mikro-orm/migrations-mongodb".to_string(),
+                    MIKRO_ORM_MIGRATIONS_VERSION.to_string(),
+                ),
+                (
+                    "@mikro-orm/knex".to_string(),
+                    MIKRO_ORM_DATABASE_VERSION.to_string(),
+                ),
+                (
+                    "@mikro-orm/postgresql".to_string(),
+                    MIKRO_ORM_DATABASE_VERSION.to_string(),
+                ),
+                (
+                    "@mikro-orm/mongodb".to_string(),
+                    MIKRO_ORM_DATABASE_VERSION.to_string(),
+                ),
+                (
+                    "@mikro-orm/mysql".to_string(),
+                    MIKRO_ORM_DATABASE_VERSION.to_string(),
+                ),
+                (
+                    "@mikro-orm/mariadb".to_string(),
+                    MIKRO_ORM_DATABASE_VERSION.to_string(),
+                ),
+                (
+                    "@mikro-orm/sqlite".to_string(),
+                    MIKRO_ORM_DATABASE_VERSION.to_string(),
+                ),
+                (
+                    "@mikro-orm/better-sqlite".to_string(),
+                    MIKRO_ORM_DATABASE_VERSION.to_string(),
+                ),
+                (
+                    "@mikro-orm/libsql".to_string(),
+                    MIKRO_ORM_DATABASE_VERSION.to_string(),
+                ),
+                (
+                    "@mikro-orm/mssql".to_string(),
+                    MIKRO_ORM_DATABASE_VERSION.to_string(),
+                ),
+                (
+                    "@mikro-orm/seeder".to_string(),
+                    MIKRO_ORM_SEEDER_VERSION.to_string(),
+                ),
+                (
+                    "@mikro-orm/cli".to_string(),
+                    MIKRO_ORM_CLI_VERSION.to_string(),
+                ),
+            ])),
+        }),
         patched_dependencies: None,
         additional_entries: HashMap::new(),
     };
