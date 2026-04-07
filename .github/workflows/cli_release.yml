@@ -122,7 +122,7 @@ jobs:
           copy target\${{ matrix.target }}\release\forklaunch.exe ${{ matrix.artifact }}
       
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: cli/${{ matrix.artifact }}
