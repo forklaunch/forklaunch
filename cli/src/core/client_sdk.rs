@@ -96,7 +96,7 @@ pub(crate) fn regenerate_client_sdk_compliance(
         let camel = project.name.to_case(Case::Camel);
         let pascal = project.name.to_case(Case::Pascal);
 
-        let factory = format!("client{}SdkClient", pascal);
+        let factory = format!("{}SdkClient", camel);
         let type_alias = format!("{}Client", pascal);
 
         // `clientIamSdkClient` is emitted as a wrapped `{ core, betterAuth }`
