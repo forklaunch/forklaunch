@@ -1,5 +1,24 @@
 # @forklaunch/hyper-express
 
+## 1.2.29
+
+### Patch Changes
+
+- chore: update internal package versions
+- Updated dependencies
+  - @forklaunch/validator@1.2.15
+  - @forklaunch/common@1.2.15
+  - @forklaunch/core@1.4.1
+  - @forklaunch/ws@1.2.29
+
+## 1.2.28
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.4.0
+  - @forklaunch/ws@1.2.28
+
 ## 1.2.27
 
 ### Patch Changes

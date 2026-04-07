@@ -4,8 +4,8 @@ import {
   CurrencyEnum,
   PlanCadenceEnum
 } from '@forklaunch/implementation-billing-stripe/enum';
+import { StripeProduct } from '@forklaunch/implementation-billing-stripe/types';
 import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
-import Stripe from 'stripe';
 
 export const Plan = defineComplianceEntity({
   name: 'Plan',
@@ -19,7 +19,7 @@ export const Plan = defineComplianceEntity({
     cadence: fp.enum(() => PlanCadenceEnum).compliance('none'),
     // tie to permissions (slugs)
     features: fp.string().array().nullable().compliance('none'),
-    providerFields: fp.json<Stripe.Product>().compliance('none'),
+    providerFields: fp.json<StripeProduct>().compliance('none'),
     externalId: fp.string().unique().compliance('none'),
     billingProvider: fp.enum(() => BillingProviderEnum).compliance('none')
   }

@@ -12,10 +12,12 @@ import { BillingProviderEnum } from '../../enum/billingProvider.enum';
 import { CurrencyEnum } from '../../enum/currency.enum';
 import { PlanCadenceEnum } from '../../enum/planCadence.enum';
 import {
-  StripeCreatePlanDto,
-  StripePlanDto,
-  StripeUpdatePlanDto
+  StripePlanCreateParams,
+  StripePlanUpdateParams,
+  StripeProduct
 } from '../../types/stripe.dto.types';
+
+type PlanOmissions = 'product' | 'interval' | 'currency';
 
 export const CreatePlanSchema = {
   id: optional(string),
@@ -25,7 +27,7 @@ export const CreatePlanSchema = {
   cadence: enum_(PlanCadenceEnum),
   currency: enum_(CurrencyEnum),
   features: optional(array(string)),
-  stripeFields: type<StripeCreatePlanDto['stripeFields']>(),
+  stripeFields: type<Omit<StripePlanCreateParams, PlanOmissions>>(),
   externalId: string,
   billingProvider: enum_(BillingProviderEnum),
   active: boolean
@@ -39,7 +41,7 @@ export const UpdatePlanSchema = {
   cadence: optional(enum_(PlanCadenceEnum)),
   currency: optional(enum_(CurrencyEnum)),
   features: optional(array(string)),
-  stripeFields: optional(type<StripeUpdatePlanDto['stripeFields']>()),
+  stripeFields: optional(type<Omit<StripePlanUpdateParams, PlanOmissions>>()),
   externalId: optional(string),
   billingProvider: optional(enum_(BillingProviderEnum)),
   active: optional(boolean)
@@ -53,7 +55,7 @@ export const PlanSchema = {
   cadence: enum_(PlanCadenceEnum),
   currency: enum_(CurrencyEnum),
   features: optional(array(string)),
-  stripeFields: type<StripePlanDto['stripeFields']>(),
+  stripeFields: type<StripeProduct>(),
   externalId: string,
   billingProvider: enum_(BillingProviderEnum),
   active: boolean,

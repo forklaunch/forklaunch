@@ -1,5 +1,13 @@
 # @forklaunch/validator
 
+## 1.2.15
+
+### Patch Changes
+
+- chore: update internal package versions
+- Updated dependencies
+  - @forklaunch/common@1.2.15
+
 ## 1.2.14
 
 ### Patch Changes

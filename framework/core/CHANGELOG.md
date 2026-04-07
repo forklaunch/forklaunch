@@ -1,5 +1,20 @@
 # @forklaunch/core
 
+## 1.4.1
+
+### Patch Changes
+
+- chore: update internal package versions
+- Updated dependencies
+  - @forklaunch/validator@1.2.15
+  - @forklaunch/common@1.2.15
+
+## 1.4.0
+
+### Minor Changes
+
+- Encryption and decryption now take tenant id as a first party compliance input
+
 ## 1.3.17
 
 ### Patch Changes

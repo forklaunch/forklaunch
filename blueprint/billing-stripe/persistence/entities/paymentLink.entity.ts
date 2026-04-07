@@ -4,7 +4,7 @@ import {
   CurrencyEnum,
   PaymentMethodEnum
 } from '@forklaunch/implementation-billing-stripe/enum';
-import Stripe from 'stripe';
+import { StripePaymentLink } from '@forklaunch/implementation-billing-stripe/types';
 import { StatusEnum } from '../../domain/enum/status.enum';
 
 // This is to represent connection information for a billing provider
@@ -20,6 +20,6 @@ export const PaymentLink = defineComplianceEntity({
     currency: fp.enum(() => CurrencyEnum).compliance('none'),
     description: fp.string().nullable().compliance('none'),
     status: fp.enum(() => StatusEnum).compliance('none'),
-    providerFields: fp.json<Stripe.PaymentLink>().compliance('none')
+    providerFields: fp.json<StripePaymentLink>().compliance('none')
   }
 });
