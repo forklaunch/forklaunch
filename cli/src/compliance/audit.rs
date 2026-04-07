@@ -230,7 +230,7 @@ impl CliCommand for AuditCommand {
                 );
                 log_info!(
                     stdout,
-                    "For risk scoring, data flow diagrams, and DPIA, configure FORKLAUNCH_HMAC_SECRET and set platform_application_id in manifest.toml"
+                    "For risk scoring, data flow diagrams, and DPIA, log in with `forklaunch login` and set platform_application_id in manifest.toml"
                 );
             }
         }
@@ -254,15 +254,19 @@ fn upload_to_platform(
         .ok_or_else(|| anyhow::anyhow!("--environment flag is required for platform upload"))?;
 
     let auth_mode = AuthMode::detect();
-    if !auth_mode.is_hmac() {
-        anyhow::bail!("FORKLAUNCH_HMAC_SECRET not set — cannot authenticate with platform");
-    }
 
     let api_url = get_platform_management_api_url();
-    let url = format!(
-        "{}/compliance/applications/{}/environments/{}/audit/report",
-        api_url, app_id, env_name
-    );
+    let url = if auth_mode.is_hmac() {
+        format!(
+            "{}/compliance/applications/{}/environments/{}/audit/report",
+            api_url, app_id, env_name
+        )
+    } else {
+        format!(
+            "{}/compliance/applications/{}/environments/{}/audit/report/user",
+            api_url, app_id, env_name
+        )
+    };
 
     let body = serde_json::json!({
         "routes": report.routes,
@@ -412,13 +416,32 @@ fn print_entities(out: &mut StandardStream, report: &ComplianceReport) -> Result
     writeln!(out, "  ── Entity Classifications ──")?;
     out.reset()?;
 
+    // Compute dynamic column width for ENTITY.FIELD based on actual data
+    let min_field_width = "ENTITY.FIELD".len();
+    let max_field_width = report
+        .entities
+        .iter()
+        .flat_map(|e| {
+            e.fields
+                .iter()
+                .map(move |f| format!("{}.{}", e.name, f.name).len())
+        })
+        .max()
+        .unwrap_or(min_field_width);
+    let field_col = max_field_width.max(min_field_width);
+    let class_col = 20;
+    let enc_col = 12;
+
     // Table header
     writeln!(
         out,
-        "  {:<30} {:<20} {:<12} {}",
-        "ENTITY.FIELD", "CLASSIFICATION", "ENCRYPTED", "STATUS"
+        "  {:<field_col$} {:<class_col$} {:<enc_col$} {}",
+        "ENTITY.FIELD", "CLASSIFICATION", "ENCRYPTED", "STATUS",
+        field_col = field_col,
+        class_col = class_col,
+        enc_col = enc_col,
     )?;
-    writeln!(out, "  {}", "─".repeat(74))?;
+    writeln!(out, "  {}", "─".repeat(field_col + class_col + enc_col + 10))?;
 
     for entity in &report.entities {
         for field in &entity.fields {
@@ -440,15 +463,16 @@ fn print_entities(out: &mut StandardStream, report: &ComplianceReport) -> Result
 
             write!(
                 out,
-                "  {:<30} ",
-                format!("{}.{}", entity.name, field.name)
+                "  {:<width$} ",
+                format!("{}.{}", entity.name, field.name),
+                width = field_col,
             )?;
 
             out.set_color(ColorSpec::new().set_fg(Some(classification_color)))?;
-            write!(out, "{:<20} ", field.compliance.to_uppercase())?;
+            write!(out, "{:<width$} ", field.compliance.to_uppercase(), width = class_col)?;
             out.reset()?;
 
-            write!(out, "{:<12} ", if field.encrypted { "yes" } else { "no" })?;
+            write!(out, "{:<width$} ", if field.encrypted { "yes" } else { "no" }, width = enc_col)?;
 
             out.set_color(ColorSpec::new().set_fg(Some(status.1)))?;
             writeln!(out, "{}", status.0)?;

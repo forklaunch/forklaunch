@@ -1,4 +1,4 @@
-export * from '../../../common/src/getEnvVar';
+export { getEnvVar } from '@forklaunch/common';
 export * from '../environment';
 export { createConfigInjector } from './configInjector';
 export type { ConfigInjector, ValidConfigInjector } from './configInjector';
@@ -16,3 +16,4 @@ export {
   type ExportResult,
   type UserIdFieldOverrides
 } from './complianceDataService';
+export { runRetentionEnforcement } from './runRetentionEnforcement';

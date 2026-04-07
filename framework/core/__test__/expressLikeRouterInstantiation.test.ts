@@ -16,8 +16,6 @@ import {
 } from '../src/http';
 import { typedAuthHandler } from '../src/http/handlers/typedAuthHandler';
 
-// TODO: write tests
-
 const contractDetails = {
   name: 'string',
   access: 'protected' as const,

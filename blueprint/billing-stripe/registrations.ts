@@ -164,12 +164,12 @@ const runtimeDependencies = environmentConfig.chain({
     type: Stripe,
     factory: ({ STRIPE_API_KEY }) => new Stripe(STRIPE_API_KEY)
   },
-  MikroORM: {
+  Orm: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
     factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
-  OpenTelemetryCollector: {
+  OtelCollector: {
     lifetime: Lifetime.Singleton,
     type: OpenTelemetryCollector<Metrics>,
     factory: ({ OTEL_SERVICE_NAME, OTEL_LEVEL }) =>
@@ -182,15 +182,10 @@ const runtimeDependencies = environmentConfig.chain({
   TtlCache: {
     lifetime: Lifetime.Singleton,
     type: RedisTtlCache,
-    factory: ({
-      REDIS_URL,
-      OpenTelemetryCollector,
-      OTEL_LEVEL,
-      ENCRYPTION_KEY
-    }) =>
+    factory: ({ REDIS_URL, OtelCollector, OTEL_LEVEL, ENCRYPTION_KEY }) =>
       new RedisTtlCache(
         60 * 60 * 1000,
-        OpenTelemetryCollector,
+        OtelCollector,
         {
           url: REDIS_URL
         },
@@ -207,10 +202,10 @@ const runtimeDependencies = environmentConfig.chain({
     lifetime: Lifetime.Scoped,
     type: EntityManager,
     factory: (
-      { MikroORM },
+      { Orm },
       context: { entityManagerOptions?: ForkOptions; tenantId?: string }
     ) => {
-      const em = MikroORM.em.fork(context.entityManagerOptions);
+      const em = Orm.em.fork(context.entityManagerOptions);
       if (context.tenantId) {
         em.setFilterParams('tenant', { tenantId: context.tenantId });
       }
@@ -229,7 +224,7 @@ const serviceDependencies = runtimeDependencies.chain({
       BillingPortalDtoTypes
     >,
     factory: (
-      { StripeClient, EntityManager, TtlCache, OpenTelemetryCollector },
+      { StripeClient, EntityManager, TtlCache, OtelCollector },
       context,
       resolve
     ) =>
@@ -239,7 +234,7 @@ const serviceDependencies = runtimeDependencies.chain({
           ? resolve('EntityManager', context)
           : EntityManager,
         TtlCache,
-        OpenTelemetryCollector,
+        OtelCollector,
         schemaValidator,
         {
           BillingPortalMapper,
@@ -257,7 +252,7 @@ const serviceDependencies = runtimeDependencies.chain({
       CheckoutSessionDtoTypes
     >,
     factory: (
-      { StripeClient, EntityManager, TtlCache, OpenTelemetryCollector },
+      { StripeClient, EntityManager, TtlCache, OtelCollector },
       context,
       resolve
     ) =>
@@ -267,7 +262,7 @@ const serviceDependencies = runtimeDependencies.chain({
           ? resolve('EntityManager', context)
           : EntityManager,
         TtlCache,
-        OpenTelemetryCollector,
+        OtelCollector,
         schemaValidator,
         {
           CheckoutSessionMapper,
@@ -285,7 +280,7 @@ const serviceDependencies = runtimeDependencies.chain({
       PaymentLinkDtoTypes
     >,
     factory: (
-      { StripeClient, EntityManager, TtlCache, OpenTelemetryCollector },
+      { StripeClient, EntityManager, TtlCache, OtelCollector },
       context,
       resolve
     ) =>
@@ -295,7 +290,7 @@ const serviceDependencies = runtimeDependencies.chain({
           ? resolve('EntityManager', context)
           : EntityManager,
         TtlCache,
-        OpenTelemetryCollector,
+        OtelCollector,
         schemaValidator,
         {
           PaymentLinkMapper,
@@ -308,7 +303,7 @@ const serviceDependencies = runtimeDependencies.chain({
     lifetime: Lifetime.Scoped,
     type: StripePlanService<SchemaValidator, PlanMapperTypes, PlanDtoTypes>,
     factory: (
-      { StripeClient, EntityManager, OpenTelemetryCollector },
+      { StripeClient, EntityManager, OtelCollector },
       context,
       resolve
     ) =>
@@ -317,7 +312,7 @@ const serviceDependencies = runtimeDependencies.chain({
         context.entityManagerOptions
           ? resolve('EntityManager', context)
           : EntityManager,
-        OpenTelemetryCollector,
+        OtelCollector,
         schemaValidator,
         {
           PlanMapper,
@@ -335,7 +330,7 @@ const serviceDependencies = runtimeDependencies.chain({
       SubscriptionDtoTypes
     >,
     factory: (
-      { StripeClient, EntityManager, OpenTelemetryCollector },
+      { StripeClient, EntityManager, OtelCollector },
       context,
       resolve
     ) =>
@@ -344,7 +339,7 @@ const serviceDependencies = runtimeDependencies.chain({
         context.entityManagerOptions
           ? resolve('EntityManager', context)
           : EntityManager,
-        OpenTelemetryCollector,
+        OtelCollector,
         schemaValidator,
         {
           SubscriptionMapper,
@@ -369,7 +364,7 @@ const serviceDependencies = runtimeDependencies.chain({
       {
         StripeClient,
         EntityManager,
-        OpenTelemetryCollector,
+        OtelCollector,
         BillingPortalService,
         CheckoutSessionService,
         PaymentLinkService,
@@ -385,7 +380,7 @@ const serviceDependencies = runtimeDependencies.chain({
           ? resolve('EntityManager', context)
           : EntityManager,
         schemaValidator,
-        OpenTelemetryCollector,
+        OtelCollector,
         BillingPortalService,
         CheckoutSessionService,
         PaymentLinkService,
@@ -397,8 +392,8 @@ const serviceDependencies = runtimeDependencies.chain({
   ComplianceDataService: {
     lifetime: Lifetime.Singleton,
     type: ComplianceDataService,
-    factory: ({ MikroORM, OpenTelemetryCollector }) =>
-      new ComplianceDataService(MikroORM, OpenTelemetryCollector, {
+    factory: ({ Orm, OtelCollector }) =>
+      new ComplianceDataService(Orm, OtelCollector, {
         Subscription: 'partyId',
         CheckoutSession: 'customerId',
         PaymentLink: 'customerId',
@@ -408,8 +403,8 @@ const serviceDependencies = runtimeDependencies.chain({
   RetentionService: {
     lifetime: Lifetime.Singleton,
     type: RetentionService,
-    factory: ({ MikroORM, OpenTelemetryCollector }) =>
-      new RetentionService(MikroORM, OpenTelemetryCollector)
+    factory: ({ Orm, OtelCollector }) =>
+      new RetentionService(Orm, OtelCollector)
   }
 });
 

@@ -29,7 +29,7 @@ use crate::{
     },
     core::{
         base_path::{RequiredLocation, find_app_root_path, prompt_base_path},
-        client_sdk::add_project_to_client_sdk,
+        client_sdk::{add_project_to_client_sdk, regenerate_client_sdk_compliance},
         command::command,
         database::{
             add_base_entity_to_core, get_database_port, get_db_driver, is_in_memory_database,
@@ -183,6 +183,12 @@ fn generate_basic_worker(
         &manifest_data.app_name,
         &manifest_data.worker_name,
         None,
+    )?;
+
+    regenerate_client_sdk_compliance(
+        &mut rendered_templates_cache,
+        &base_path,
+        &manifest_data.projects,
     )?;
 
     let tsconfig_template = add_project_to_modules_tsconfig(base_path, &manifest_data.worker_name)

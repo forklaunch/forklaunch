@@ -51,7 +51,16 @@ export async function getCachedJwks(jwksPublicKeyUrl: string): Promise<JWK[]> {
     return cachedJwks.value;
   } else {
     const jwksResponse = await fetch(jwksPublicKeyUrl);
-    const jwks = (await jwksResponse.json()).keys;
+    const text = await jwksResponse.text();
+    if (!text) {
+      if (cachedJwks.value) {
+        return cachedJwks.value;
+      }
+      throw new Error(
+        `JWKS endpoint returned empty response (status ${jwksResponse.status})`
+      );
+    }
+    const jwks = (JSON.parse(text) as { keys: JWK[] }).keys;
     cachedJwks.value = jwks;
     cachedJwks.lastUpdated = new Date();
     cachedJwks.ttl =

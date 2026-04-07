@@ -168,6 +168,8 @@ export class Application<
       process.exit(0);
     }
 
+    this.validateAllRoutes();
+
     const port =
       typeof args[0] === 'number' ? args[0] : Number(process.env.PORT);
     const host =
