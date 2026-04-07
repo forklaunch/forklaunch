@@ -1,5 +1,5 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
 import { Type, type Platform, type TransformContext } from '@mikro-orm/core';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { FieldEncryptor } from './fieldEncryptor';
 
 const ENCRYPTED_PREFIXES = ['v1:', 'v2:'] as const;
@@ -198,16 +198,17 @@ export class EncryptedType extends Type<unknown, string | null> {
       return this.deserialize(value);
     }
 
-    if (!_encryptor) return value;
+    if (!_encryptor) {
+      throw new Error(
+        'EncryptedType: no encryptor registered but database contains encrypted value. ' +
+          'Call registerEncryptor() at application bootstrap.'
+      );
+    }
 
-    // Decrypt failures must throw. Returning the ciphertext silently lets a
-    // bad row hydrate as a malformed value (e.g. `new Date(ciphertext)` →
-    // Invalid Date), which then sits in the identity map and crashes a later
-    // unrelated `flush()` deep inside `serialize()` — far from the real cause.
-    // Surface the failure at the read site instead.
     let decrypted: string | null;
+    const tenantId = getCurrentTenantId();
     try {
-      decrypted = _encryptor.decrypt(value, getCurrentTenantId());
+      decrypted = _encryptor.decrypt(value, tenantId);
     } catch (err) {
       throw new Error(
         `Failed to decrypt encrypted column value: ${err instanceof Error ? err.message : String(err)}`,

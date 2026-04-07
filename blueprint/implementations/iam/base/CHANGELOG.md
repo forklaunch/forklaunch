@@ -1,5 +1,13 @@
 # @forklaunch/implementation-iam-base
 
+## 1.0.23
+
+### Patch Changes
+
+- chore: bump internal package versions
+- Updated dependencies
+  - @forklaunch/interfaces-iam@1.0.22
+
 ## 1.0.22
 
 ### Patch Changes

@@ -1,5 +1,25 @@
 # @forklaunch/infrastructure-s3
 
+## 1.4.1
+
+### Patch Changes
+
+- chore: update internal package versions
+- Updated dependencies
+  - @forklaunch/common@1.2.15
+  - @forklaunch/core@1.4.1
+
+## 1.4.0
+
+### Minor Changes
+
+- Encryption and decryption now take tenant id as a first party compliance input
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.4.0
+
 ## 1.3.15
 
 ### Patch Changes

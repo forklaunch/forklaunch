@@ -4,7 +4,7 @@ import {
   CurrencyEnum,
   PaymentMethodEnum
 } from '@forklaunch/implementation-billing-stripe/enum';
-import Stripe from 'stripe';
+import { StripeCheckoutSession } from '@forklaunch/implementation-billing-stripe/types';
 import { StatusEnum } from '../../domain/enum/status.enum';
 
 // This is to represent connection information for a billing provider
@@ -23,6 +23,6 @@ export const CheckoutSession = defineComplianceEntity({
     cancelRedirectUri: fp.string().nullable().compliance('none'),
     expiresAt: fp.datetime().compliance('none'),
     status: fp.enum(() => StatusEnum).compliance('none'),
-    providerFields: fp.json<Stripe.Checkout.Session>().compliance('none')
+    providerFields: fp.json<StripeCheckoutSession>().compliance('none')
   }
 });

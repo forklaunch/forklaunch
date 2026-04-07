@@ -54,8 +54,7 @@ function makeStore(): S3ObjectStore {
     { bucket: 'test-bucket', client: fakeClient },
     { enabled: false, level: 'info' },
     {
-      encryptor: new FieldEncryptor('test-encryption-key-for-s3-tests'),
-      disabled: true
+      encryptor: new FieldEncryptor('test-encryption-key-for-s3-tests')
     }
   );
 }

@@ -1,7 +1,7 @@
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 import { BillingProviderEnum } from '@forklaunch/implementation-billing-stripe/enum';
+import { StripeSubscription } from '@forklaunch/implementation-billing-stripe/types';
 import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
-import Stripe from 'stripe';
 import { PartyEnum } from '../../domain/enum/party.enum';
 
 export const Subscription = defineComplianceEntity({
@@ -16,7 +16,7 @@ export const Subscription = defineComplianceEntity({
     // can make one to many, but for now, just store the id
     productId: fp.string().compliance('none'),
     // access billing provider information pointer -- especially about entitlements, that can be grabbed later
-    providerFields: fp.json<Stripe.Subscription>().compliance('none'),
+    providerFields: fp.json<StripeSubscription>().compliance('none'),
     externalId: fp.string().unique().compliance('none'),
     billingProvider: fp.enum(() => BillingProviderEnum).compliance('none'),
     startDate: fp.datetime().compliance('none'),

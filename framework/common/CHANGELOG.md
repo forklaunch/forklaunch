@@ -1,5 +1,11 @@
 # @forklaunch/common
 
+## 1.2.15
+
+### Patch Changes
+
+- chore: update internal package versions
+
 ## 1.2.14
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # @forklaunch/implementation-billing-stripe
 
+## 1.1.23
+
+### Patch Changes
+
+- chore: bump internal package versions
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.23
+  - @forklaunch/interfaces-billing@1.0.22
+
 ## 1.1.22
 
 ### Patch Changes

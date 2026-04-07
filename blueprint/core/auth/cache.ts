@@ -34,7 +34,8 @@ export function createAuthCacheService(cache: TtlCache): AuthCacheService {
     async getCachedRoles(userId: string) {
       try {
         const result = await cache.readRecord<string[]>(
-          `${ROLES_CACHE_PREFIX}${userId}`
+          `${ROLES_CACHE_PREFIX}${userId}`,
+          { tenantId: userId }
         );
         return new Set(result.value);
       } catch {
@@ -44,11 +45,14 @@ export function createAuthCacheService(cache: TtlCache): AuthCacheService {
 
     async setCachedRoles(userId: string, roles: Set<string>) {
       try {
-        await cache.putRecord({
-          key: `${ROLES_CACHE_PREFIX}${userId}`,
-          value: Array.from(roles),
-          ttlMilliseconds: TTL
-        });
+        await cache.putRecord(
+          {
+            key: `${ROLES_CACHE_PREFIX}${userId}`,
+            value: Array.from(roles),
+            ttlMilliseconds: TTL
+          },
+          { tenantId: userId }
+        );
       } catch {
         // Silently fail - cache is not critical
       }
@@ -57,7 +61,8 @@ export function createAuthCacheService(cache: TtlCache): AuthCacheService {
     async getCachedPermissions(userId: string) {
       try {
         const result = await cache.readRecord<string[]>(
-          `${PERMISSIONS_CACHE_PREFIX}${userId}`
+          `${PERMISSIONS_CACHE_PREFIX}${userId}`,
+          { tenantId: userId }
         );
         return new Set(result.value);
       } catch {
@@ -67,11 +72,14 @@ export function createAuthCacheService(cache: TtlCache): AuthCacheService {
 
     async setCachedPermissions(userId: string, permissions: Set<string>) {
       try {
-        await cache.putRecord({
-          key: `${PERMISSIONS_CACHE_PREFIX}${userId}`,
-          value: Array.from(permissions),
-          ttlMilliseconds: TTL
-        });
+        await cache.putRecord(
+          {
+            key: `${PERMISSIONS_CACHE_PREFIX}${userId}`,
+            value: Array.from(permissions),
+            ttlMilliseconds: TTL
+          },
+          { tenantId: userId }
+        );
       } catch {
         // Silently fail - cache is not critical
       }
@@ -120,7 +128,8 @@ export function createAuthCacheService(cache: TtlCache): AuthCacheService {
     async getCachedOrganizationRoles(organizationId: string) {
       try {
         const result = await cache.readRecord<string[]>(
-          `${ORG_ROLES_CACHE_PREFIX}${organizationId}`
+          `${ORG_ROLES_CACHE_PREFIX}${organizationId}`,
+          { tenantId: organizationId }
         );
         return result.value;
       } catch {
@@ -130,11 +139,14 @@ export function createAuthCacheService(cache: TtlCache): AuthCacheService {
 
     async setCachedOrganizationRoles(organizationId: string, roles: string[]) {
       try {
-        await cache.putRecord({
-          key: `${ORG_ROLES_CACHE_PREFIX}${organizationId}`,
-          value: roles,
-          ttlMilliseconds: TTL
-        });
+        await cache.putRecord(
+          {
+            key: `${ORG_ROLES_CACHE_PREFIX}${organizationId}`,
+            value: roles,
+            ttlMilliseconds: TTL
+          },
+          { tenantId: organizationId }
+        );
       } catch {
         // Silently fail
       }
