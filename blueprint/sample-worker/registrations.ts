@@ -305,7 +305,7 @@ const runtimeDependencies = environmentConfig.chain({
       wrapEmWithTenantContext(
         Orm.em.fork(context?.entityManagerOptions),
         context?.tenantId
-      )
+      ) as EntityManager
   }
 });
 

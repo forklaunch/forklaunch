@@ -250,7 +250,7 @@ const runtimeDependencies = environmentConfig.chain({
       wrapEmWithTenantContext(
         Orm.em.fork(context?.entityManagerOptions),
         context?.tenantId
-      ),
+      ) as EntityManager,
   },{{/is_database_enabled}}{{#is_iam_configured}}
   AuthCacheService: {
     lifetime: Lifetime.Singleton,
