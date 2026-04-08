@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/interfaces-billing",
-  "version": "1.0.22",
+  "version": "1.0.23",
   "description": "Billing interfaces for forklaunch",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -43,11 +43,11 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "^1.2.15",
+    "@forklaunch/common": "^1.2.16",
     "@mikro-orm/core": "7.0.9"
   },
   "devDependencies": {
-    "@typescript/native-preview": "7.0.0-dev.20260407.1",
+    "@typescript/native-preview": "7.0.0-dev.20260408.1",
     "depcheck": "^1.4.7",
     "prettier": "^3.8.1",
     "typedoc": "^0.28.18"

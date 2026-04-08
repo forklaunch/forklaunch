@@ -1,5 +1,17 @@
 # @forklaunch/core
 
+## 1.5.0
+
+### Minor Changes
+
+- Export wrapEmWithTenantContext for tenant based filtering
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/validator@1.2.16
+  - @forklaunch/common@1.2.16
+
 ## 1.4.1
 
 ### Patch Changes

@@ -18,6 +18,7 @@ import {
   Lifetime,
   RetentionService
 } from '@forklaunch/core/services';
+import { wrapEmWithTenantContext } from '@forklaunch/core/persistence';
 import { ForkOptions } from '@mikro-orm/core';
 import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
 import { betterAuth } from 'better-auth';
@@ -122,13 +123,11 @@ const runtimeDependencies = environmentConfig.chain({
     factory: (
       { Orm },
       context: { entityManagerOptions?: ForkOptions; tenantId?: string }
-    ) => {
-      const em = Orm.em.fork(context.entityManagerOptions);
-      if (context.tenantId) {
-        em.setFilterParams('tenant', { tenantId: context.tenantId });
-      }
-      return em;
-    }
+    ) =>
+      wrapEmWithTenantContext(
+        Orm.em.fork(context?.entityManagerOptions),
+        context?.tenantId
+      )
   }
 });
 

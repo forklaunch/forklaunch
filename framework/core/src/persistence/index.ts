@@ -32,8 +32,8 @@ export { wrapEmWithNativeQueryBlocking } from './complianceEventSubscriber';
 export {
   EncryptedType,
   registerEncryptor,
-  withEncryptionContext,
   setEncryptionTenantId,
+  withEncryptionContext,
   getCurrentTenantId
 } from './encryptedType';
 
@@ -55,3 +55,7 @@ export {
 
 // PostgreSQL Row-Level Security
 export { setupRls, RlsEventSubscriber, type RlsConfig } from './rls';
+
+// Tenant-scoped EM proxy (wraps every operation in withEncryptionContext to
+// survive AsyncLocalStorage propagation through pg connection pool callbacks)
+export { wrapEmWithTenantContext } from './tenantEm';

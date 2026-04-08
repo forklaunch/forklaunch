@@ -3,6 +3,6 @@
  * @param value - The value to check
  * @returns Always returns true since this is a type guard for the never type
  */
-export function isNever(value: never): value is never {
+export function isNever(_value: never): _value is never {
   return true;
 }

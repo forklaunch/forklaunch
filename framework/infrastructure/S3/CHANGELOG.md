@@ -1,5 +1,14 @@
 # @forklaunch/infrastructure-s3
 
+## 1.4.2
+
+### Patch Changes
+
+- Export wrapEmWithTenantContext for tenant based filtering
+- Updated dependencies
+  - @forklaunch/core@1.5.0
+  - @forklaunch/common@1.2.16
+
 ## 1.4.1
 
 ### Patch Changes

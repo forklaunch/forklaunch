@@ -10,7 +10,7 @@ import {
   Lifetime,
   RetentionService,
 } from "@forklaunch/core/services";
-import { FieldEncryptor } from "@forklaunch/core/persistence";{{#is_worker}}
+import { FieldEncryptor, wrapEmWithTenantContext } from "@forklaunch/core/persistence";{{#is_worker}}
 import { {{worker_type}}WorkerConsumer } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/consumers';
 import { {{worker_type}}WorkerProducer } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/producers';
 import { {{worker_type}}WorkerSchemas } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/schemas';
@@ -245,14 +245,12 @@ const runtimeDependencies = environmentConfig.chain({
     type: EntityManager,
     factory: (
       { Orm },
-      context: { entityManagerOptions?: ForkOptions; tenantId?: string }
-    ) => {
-      const em = Orm.em.fork(context.entityManagerOptions);
-      if (context.tenantId) {
-        em.setFilterParams('tenant', { tenantId: context.tenantId });
-      }
-      return em;
-    },
+      context?: { entityManagerOptions?: ForkOptions; tenantId?: string }
+    ) =>
+      wrapEmWithTenantContext(
+        Orm.em.fork(context?.entityManagerOptions),
+        context?.tenantId
+      ),
   },{{/is_database_enabled}}{{#is_iam_configured}}
   AuthCacheService: {
     lifetime: Lifetime.Singleton,

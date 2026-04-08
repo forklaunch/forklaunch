@@ -29,20 +29,42 @@ export function registerEncryptor(encryptor: FieldEncryptor): void {
 }
 
 /**
- * Run a callback with the given tenant ID available to EncryptedType
- * for per-tenant key derivation.
- */
-export function withEncryptionContext<T>(tenantId: string, fn: () => T): T {
-  return _tenantContext.run({ tenantId }, fn);
-}
-
-/**
  * Set the encryption tenant ID for the current async context.
- * Called automatically by the tenant context middleware — users
- * don't need to call this directly.
+ *
+ * IMPORTANT: this uses `AsyncLocalStorage.enterWith`, which mutates the
+ * current async resource's store. It does NOT reliably propagate through
+ * `pg` connection pool callback async resources — pooled connections are
+ * long-lived async resources created at pool init, and resumption
+ * callbacks run in the pool's resource, not the caller's. As a result,
+ * MikroORM hydration of encrypted columns can read an empty / wrong
+ * tenant id from `getCurrentTenantId()` even when this was called
+ * correctly at the start of the request.
+ *
+ * Prefer `withEncryptionContext(tenantId, fn)` (or the
+ * `wrapEmWithTenantContext` helper) for any code path that hits the
+ * database. `setEncryptionTenantId` remains useful as a best-effort seed
+ * for purely synchronous code paths.
  */
 export function setEncryptionTenantId(tenantId: string): void {
   _tenantContext.enterWith({ tenantId });
+}
+
+/**
+ * Run `fn` inside a fresh AsyncLocalStorage scope bound to `tenantId`.
+ *
+ * Unlike `setEncryptionTenantId`, this uses `AsyncLocalStorage.run`, which
+ * creates a new async resource bound to the store. Node's promise hooks
+ * propagate the store forward through pool callback async resources, so
+ * MikroORM hydration of encrypted columns inside `fn` (even after multiple
+ * awaits and a pg pool roundtrip) sees the correct tenant id.
+ *
+ * Most application code should not call this directly — use
+ * `wrapEmWithTenantContext(em, tenantId)` in your DI EntityManager
+ * factory and every method on the returned EM will be wrapped
+ * automatically.
+ */
+export function withEncryptionContext<T>(tenantId: string, fn: () => T): T {
+  return _tenantContext.run({ tenantId }, fn);
 }
 
 /**

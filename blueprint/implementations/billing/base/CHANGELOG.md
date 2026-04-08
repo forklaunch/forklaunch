@@ -1,5 +1,13 @@
 # @forklaunch/implementation-billing-base
 
+## 1.0.24
+
+### Patch Changes
+
+- chore: update internal packages
+- Updated dependencies
+  - @forklaunch/interfaces-billing@1.0.23
+
 ## 1.0.23
 
 ### Patch Changes

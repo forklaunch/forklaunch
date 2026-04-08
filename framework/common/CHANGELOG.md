@@ -1,5 +1,11 @@
 # @forklaunch/common
 
+## 1.2.16
+
+### Patch Changes
+
+- Export wrapEmWithTenantContext for tenant based filtering
+
 ## 1.2.15
 
 ### Patch Changes
