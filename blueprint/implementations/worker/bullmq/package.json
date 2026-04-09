@@ -58,7 +58,7 @@
     "@forklaunch/interfaces-worker": "workspace:*",
     "@forklaunch/internal": "^1.2.16",
     "@sinclair/typebox": "^0.34.49",
-    "bullmq": "^5.73.1",
+    "bullmq": "^5.73.2",
     "zod": "^4.3.6"
   },
   "devDependencies": {
