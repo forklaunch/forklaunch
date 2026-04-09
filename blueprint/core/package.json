@@ -36,6 +36,6 @@
     "@types/express": "^5.0.6",
     "@types/qs": "^6.15.0",
     "@types/uuid": "^11.0.0",
-    "@typescript/native-preview": "7.0.0-dev.20260408.1"
+    "@typescript/native-preview": "7.0.0-dev.20260409.1"
   }
 }
