@@ -1,5 +1,13 @@
 # @forklaunch/implementation-worker-database
 
+## 1.0.25
+
+### Patch Changes
+
+- chore: update internal packages
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.23
+
 ## 1.0.24
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @forklaunch/interfaces-iam
 
+## 1.0.23
+
+### Patch Changes
+
+- chore: update internal packages
+
 ## 1.0.22
 
 ### Patch Changes

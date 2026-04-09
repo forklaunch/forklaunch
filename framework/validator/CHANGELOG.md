@@ -1,5 +1,13 @@
 # @forklaunch/validator
 
+## 1.2.16
+
+### Patch Changes
+
+- Export wrapEmWithTenantContext for tenant based filtering
+- Updated dependencies
+  - @forklaunch/common@1.2.16
+
 ## 1.2.15
 
 ### Patch Changes

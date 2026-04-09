@@ -8,7 +8,10 @@ import {
 } from '@forklaunch/blueprint-core';
 import { Metrics, metrics } from '@forklaunch/blueprint-monitoring';
 import { OpenTelemetryCollector } from '@forklaunch/core/http';
-import { FieldEncryptor } from '@forklaunch/core/persistence';
+import {
+  FieldEncryptor,
+  wrapEmWithTenantContext
+} from '@forklaunch/core/persistence';
 import {
   createConfigInjector,
   getEnvVar,
@@ -298,13 +301,11 @@ const runtimeDependencies = environmentConfig.chain({
     factory: (
       { Orm },
       context: { entityManagerOptions?: ForkOptions; tenantId?: string }
-    ) => {
-      const em = Orm.em.fork(context.entityManagerOptions);
-      if (context.tenantId) {
-        em.setFilterParams('tenant', { tenantId: context.tenantId });
-      }
-      return em;
-    }
+    ) =>
+      wrapEmWithTenantContext(
+        Orm.em.fork(context?.entityManagerOptions),
+        context?.tenantId
+      ) as EntityManager
   }
 });
 
