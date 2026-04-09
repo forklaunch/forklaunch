@@ -42,7 +42,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^25.5.2",
-    "@typescript/native-preview": "7.0.0-dev.20260408.1",
+    "@typescript/native-preview": "7.0.0-dev.20260409.1",
     "depcheck": "^1.4.7",
     "eslint": "^10.2.0",
     "globals": "^17.4.0",

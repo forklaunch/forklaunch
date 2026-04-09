@@ -79,7 +79,7 @@
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
     "@types/node": "^25.5.2",
-    "@typescript/native-preview": "7.0.0-dev.20260408.1",
+    "@typescript/native-preview": "7.0.0-dev.20260409.1",
     "@vitest/coverage-v8": "^4.1.3",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.5",

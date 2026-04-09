@@ -45,7 +45,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@typescript/native-preview": "7.0.0-dev.20260408.1",
+    "@typescript/native-preview": "7.0.0-dev.20260409.1",
     "jest": "^30.3.0",
     "prettier": "^3.8.1",
     "ts-jest": "^29.4.9",
