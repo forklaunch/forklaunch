@@ -176,7 +176,6 @@ pub(crate) fn get_openapi_upload_urls(
         "{}/releases/openapi-upload-urls",
         get_platform_management_api_url()
     );
-    );
 
     let request_body = serde_json::json!({
         "applicationId": application_id,
