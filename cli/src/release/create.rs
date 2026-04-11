@@ -226,6 +226,13 @@ impl CliCommand for CreateCommand {
                     .action(clap::ArgAction::SetTrue)
                     .help("Skip automatic sync of projects with manifest before creating release"),
             )
+            .arg(
+                Arg::new("yes")
+                    .long("yes")
+                    .short('y')
+                    .action(clap::ArgAction::SetTrue)
+                    .help("Skip confirmation prompts (for non-interactive/CI environments)"),
+            )
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
@@ -244,6 +251,7 @@ impl CliCommand for CreateCommand {
         let flag_local = matches.get_flag("local");
         let flag_git = matches.get_flag("git");
         let skip_sync = matches.get_flag("skip-sync");
+        let auto_yes = matches.get_flag("yes") || auth_mode.is_hmac();
 
         if flag_local && flag_git {
             bail!("Cannot specify both --local and --git flags");
@@ -376,13 +384,15 @@ impl CliCommand for CreateCommand {
             log_warn!(stdout, "Please save any uncommitted work before proceeding.");
             writeln!(stdout)?;
 
-            let confirmed = Confirm::with_theme(&ColorfulTheme::default())
-                .with_prompt("Continue?")
-                .default(true)
-                .interact()?;
+            if !auto_yes {
+                let confirmed = Confirm::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Continue?")
+                    .default(true)
+                    .interact()?;
 
-            if !confirmed {
-                bail!("Release cancelled by user");
+                if !confirmed {
+                    bail!("Release cancelled by user");
+                }
             }
 
             log_header!(stdout, Color::Cyan, "Checking out main branch...");
