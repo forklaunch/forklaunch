@@ -43,6 +43,21 @@ struct ApplicationGitInfo {
     git_repository: Option<String>,
 }
 
+/// Decide release mode from flags. Returns None when an interactive prompt is needed.
+/// When `auto_yes` is set (e.g. --yes or HMAC auth), defaults to local mode to avoid
+/// blocking in non-TTY environments like CI/deployment workers.
+fn resolve_release_mode(flag_local: bool, flag_git: bool, auto_yes: bool) -> Option<bool> {
+    if flag_local {
+        Some(true)
+    } else if flag_git {
+        Some(false)
+    } else if auto_yes {
+        Some(true)
+    } else {
+        None
+    }
+}
+
 /// Opens the platform git integration page and polls until the git repository
 /// URL is configured. Returns the git repository URL.
 fn poll_for_git_repository(
@@ -329,25 +344,23 @@ impl CliCommand for CreateCommand {
         }
 
         // Determine release mode: local (default) or git
-        let local_mode = if flag_local {
-            true
-        } else if flag_git {
-            false
-        } else {
-            // Prompt user to choose
-            let options = [
-                "Package locally (upload code directly)",
-                "Use git (connect GitHub repository)",
-            ];
-            let selection = Select::with_theme(&ColorfulTheme::default())
-                .with_prompt("How would you like to release?")
-                .items(&options)
-                .default(0)
-                .interact()?;
+        let local_mode = match resolve_release_mode(flag_local, flag_git, auto_yes) {
+            Some(mode) => mode,
+            None => {
+                let options = [
+                    "Package locally (upload code directly)",
+                    "Use git (connect GitHub repository)",
+                ];
+                let selection = Select::with_theme(&ColorfulTheme::default())
+                    .with_prompt("How would you like to release?")
+                    .items(&options)
+                    .default(0)
+                    .interact()?;
 
-            match selection {
-                1 => false,
-                _ => true,
+                match selection {
+                    1 => false,
+                    _ => true,
+                }
             }
         };
 
@@ -2952,5 +2965,29 @@ mod tests {
     fn test_should_passthrough_allows_non_localhost() {
         assert!(should_passthrough("SOME_VAR", "production"));
         assert!(should_passthrough("APP_NAME", "my-app"));
+    }
+
+    #[test]
+    fn test_resolve_release_mode_local_flag() {
+        assert_eq!(resolve_release_mode(true, false, false), Some(true));
+        assert_eq!(resolve_release_mode(true, false, true), Some(true));
+    }
+
+    #[test]
+    fn test_resolve_release_mode_git_flag() {
+        assert_eq!(resolve_release_mode(false, true, false), Some(false));
+        assert_eq!(resolve_release_mode(false, true, true), Some(false));
+    }
+
+    #[test]
+    fn test_resolve_release_mode_auto_yes_defaults_local() {
+        // Non-TTY path: auto_yes must resolve without prompting so the CLI
+        // does not fail with "IO error: not a terminal" in deployment workers.
+        assert_eq!(resolve_release_mode(false, false, true), Some(true));
+    }
+
+    #[test]
+    fn test_resolve_release_mode_interactive_requires_prompt() {
+        assert_eq!(resolve_release_mode(false, false, false), None);
     }
 }
