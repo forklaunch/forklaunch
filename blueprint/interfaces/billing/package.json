@@ -44,12 +44,12 @@
   },
   "dependencies": {
     "@forklaunch/common": "^1.2.16",
-    "@mikro-orm/core": "7.0.9"
+    "@mikro-orm/core": "7.0.11"
   },
   "devDependencies": {
     "@typescript/native-preview": "7.0.0-dev.20260408.1",
     "depcheck": "^1.4.7",
-    "prettier": "^3.8.1",
-    "typedoc": "^0.28.18"
+    "prettier": "^3.8.3",
+    "typedoc": "^0.28.19"
   }
 }

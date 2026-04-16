@@ -58,15 +58,15 @@
     "@forklaunch/interfaces-worker": "workspace:*",
     "@forklaunch/internal": "^1.2.16",
     "@sinclair/typebox": "^0.34.49",
-    "bullmq": "^5.73.1",
+    "bullmq": "^5.74.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@typescript/native-preview": "7.0.0-dev.20260408.1",
     "depcheck": "^1.4.7",
     "eslint": "^10.2.0",
-    "prettier": "^3.8.1",
-    "typedoc": "^0.28.18",
-    "typescript-eslint": "^8.58.1"
+    "prettier": "^3.8.3",
+    "typedoc": "^0.28.19",
+    "typescript-eslint": "^8.58.2"
   }
 }
