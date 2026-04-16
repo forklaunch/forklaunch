@@ -895,6 +895,7 @@ export interface {pascal_case_name}EventRecord extends WorkerEventEntity {{
             } else {
                 project.metadata = Some(ProjectMetadata {
                     r#type: Some(worker_type.to_string()),
+                    hosting_type: None,
                 });
             }
         }

@@ -333,6 +333,9 @@ impl CliCommand for CreateCommand {
             true
         } else if flag_git {
             false
+        } else if auto_yes {
+            // Non-interactive: default to git mode if in a git repo, else local
+            !is_git_repo()
         } else {
             // Prompt user to choose
             let options = [

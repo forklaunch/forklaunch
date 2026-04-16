@@ -90,6 +90,7 @@ impl ProjectSyncMetadata {
     fn to_project_metadata(&self) -> Option<ProjectMetadata> {
         self.worker_type.map(|wt| ProjectMetadata {
             r#type: Some(wt.to_string()),
+            hosting_type: None,
         })
     }
 }

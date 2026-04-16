@@ -246,6 +246,8 @@ pub(crate) struct ServiceConfig {
     pub runtime_dependencies: Option<Vec<String>>,
     #[serde(rename = "instanceSize", skip_serializing_if = "Option::is_none")]
     pub instance_size: Option<String>,
+    #[serde(rename = "hostingType", skip_serializing_if = "Option::is_none")]
+    pub hosting_type: Option<String>,
     #[serde(rename = "healthCheck", skip_serializing_if = "Option::is_none")]
     pub health_check: Option<Value>,
     #[serde(rename = "isWorkerService", skip_serializing_if = "Option::is_none")]
@@ -279,6 +281,8 @@ pub(crate) struct WorkerConfig {
     pub runtime_dependencies: Option<Vec<String>>,
     #[serde(rename = "instanceSize", skip_serializing_if = "Option::is_none")]
     pub instance_size: Option<String>,
+    #[serde(rename = "hostingType", skip_serializing_if = "Option::is_none")]
+    pub hosting_type: Option<String>,
     #[serde(rename = "healthCheck", skip_serializing_if = "Option::is_none")]
     pub health_check: Option<Value>,
 }
@@ -488,6 +492,10 @@ pub(crate) fn generate_release_manifest(
                     dependencies: deps,
                     runtime_dependencies: runtime_deps,
                     instance_size: None,
+                    hosting_type: project
+                        .metadata
+                        .as_ref()
+                        .and_then(|m| m.hosting_type.clone()),
                     health_check: None,
                     is_worker_service: None,
                 }),
@@ -622,6 +630,10 @@ pub(crate) fn generate_release_manifest(
                     dependencies: deps.clone(),
                     runtime_dependencies: runtime_deps.clone(),
                     instance_size: None,
+                    hosting_type: project
+                        .metadata
+                        .as_ref()
+                        .and_then(|m| m.hosting_type.clone()),
                     health_check: None,
                     is_worker_service: Some(true),
                 }),
@@ -672,6 +684,10 @@ pub(crate) fn generate_release_manifest(
                 additional: None,
                 runtime_dependencies: runtime_deps,
                 instance_size: None,
+                hosting_type: project
+                    .metadata
+                    .as_ref()
+                    .and_then(|m| m.hosting_type.clone()),
                 health_check: None,
             };
 
