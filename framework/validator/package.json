@@ -78,18 +78,18 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
-    "@types/node": "^25.5.2",
-    "@typescript/native-preview": "7.0.0-dev.20260408.1",
-    "@vitest/coverage-v8": "^4.1.3",
+    "@types/node": "^25.6.0",
+    "@typescript/native-preview": "7.0.0-dev.20260417.1",
+    "@vitest/coverage-v8": "^4.1.4",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.5",
-    "globals": "^17.4.0",
+    "globals": "^17.5.0",
     "jest": "^30.3.0",
     "openapi3-ts": "^4.5.0",
     "ts-jest": "^29.4.9",
     "ts-node": "^10.9.2",
     "tsup": "^8.5.1",
-    "typedoc": "^0.28.18",
-    "typescript-eslint": "^8.58.1"
+    "typedoc": "^0.28.19",
+    "typescript-eslint": "^8.58.2"
   }
 }

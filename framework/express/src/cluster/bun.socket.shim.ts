@@ -325,6 +325,14 @@ export class BunSocketShim extends Duplex implements Socket {
     return this;
   }
 
+  getTypeOfService(): number {
+    return 0;
+  }
+
+  setTypeOfService(_typeOfService: number): this {
+    return this;
+  }
+
   address(): AddressInfo | object {
     if (!this.localAddress || !this.localPort) {
       return {};

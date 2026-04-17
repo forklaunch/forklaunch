@@ -40,22 +40,22 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1027.0",
+    "@aws-sdk/client-s3": "^3.1032.0",
     "@forklaunch/common": "workspace:*",
     "@forklaunch/core": "workspace:*"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
-    "@typescript/native-preview": "7.0.0-dev.20260408.1",
-    "globals": "^17.4.0",
+    "@typescript/native-preview": "7.0.0-dev.20260417.1",
+    "globals": "^17.5.0",
     "jest": "^30.3.0",
-    "prettier": "^3.8.1",
+    "prettier": "^3.8.3",
     "ts-jest": "^29.4.9",
     "ts-node": "^10.9.2",
     "tsup": "^8.5.1",
-    "typedoc": "^0.28.18",
-    "typescript": "^6.0.2",
-    "typescript-eslint": "^8.58.1"
+    "typedoc": "^0.28.19",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.58.2"
   }
 }

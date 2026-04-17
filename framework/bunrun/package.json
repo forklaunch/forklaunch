@@ -41,10 +41,10 @@
     "test": "vitest --passWithNoTests"
   },
   "devDependencies": {
-    "@types/node": "^25.5.2",
-    "@typescript/native-preview": "7.0.0-dev.20260408.1",
+    "@types/node": "^25.6.0",
+    "@typescript/native-preview": "7.0.0-dev.20260417.1",
     "tsup": "^8.5.1",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.3"
   },
   "engines": {
     "bun": ">=1.1.0"
