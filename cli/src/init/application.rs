@@ -2,7 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     env,
     fs::read_to_string,
-    io::Write,
+    io::{IsTerminal, Write},
     path::Path,
 };
 
@@ -568,7 +568,9 @@ impl CliCommand for ApplicationCommand {
             iam: None,
             billing: None,
         };
-        let mut modules: Vec<Module> = if matches.get_many::<String>("modules").is_none() {
+        let mut modules: Vec<Module> = if matches.get_many::<String>("modules").is_none()
+            && std::io::stdin().is_terminal()
+        {
             let mut modules_to_test;
             loop {
                 global_module_config = ModuleConfig {
@@ -595,6 +597,9 @@ impl CliCommand for ApplicationCommand {
                 }
             }
             modules_to_test
+        } else if matches.get_many::<String>("modules").is_none() {
+            // Non-interactive mode with no --modules flag: default to empty
+            vec![]
         } else {
             let modules_to_test = match matches.get_many::<String>("modules") {
                 Some(values) => values.map(|module| module.parse().unwrap()).collect(),
