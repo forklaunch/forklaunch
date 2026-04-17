@@ -1,5 +1,14 @@
 # @forklaunch/core
 
+## 1.5.1
+
+### Patch Changes
+
+- Update internal versions and allow ZodType early release
+- Updated dependencies
+  - @forklaunch/validator@1.2.17
+  - @forklaunch/common@1.2.17
+
 ## 1.5.0
 
 ### Minor Changes

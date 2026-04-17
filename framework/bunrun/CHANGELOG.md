@@ -1,5 +1,11 @@
 # @forklaunch/bunrun
 
+## 1.2.17
+
+### Patch Changes
+
+- Update internal versions and allow ZodType early release
+
 ## 1.2.16
 
 ### Patch Changes

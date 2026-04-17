@@ -1,5 +1,16 @@
 # @forklaunch/hyper-express
 
+## 1.2.31
+
+### Patch Changes
+
+- Update internal versions and allow ZodType early release
+- Updated dependencies
+  - @forklaunch/validator@1.2.17
+  - @forklaunch/common@1.2.17
+  - @forklaunch/core@1.5.1
+  - @forklaunch/ws@1.2.31
+
 ## 1.2.30
 
 ### Patch Changes
