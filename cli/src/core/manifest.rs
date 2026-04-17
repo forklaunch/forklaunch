@@ -118,6 +118,10 @@ pub(crate) fn next_available_redis_partition(projects: &[ProjectEntry]) -> u32 {
 #[derive(Debug, Serialize, Deserialize, Content, Clone)]
 pub(crate) struct ProjectMetadata {
     pub(crate) r#type: Option<String>,
+    /// Backend hosting type. Optional — defaults to "ecs-fargate" on the platform
+    /// when absent. Allowed: "ecs-fargate" | "ecs-ec2".
+    #[serde(rename = "hostingType", alias = "hosting_type", default, skip_serializing_if = "Option::is_none")]
+    pub(crate) hosting_type: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Content, Clone)]
