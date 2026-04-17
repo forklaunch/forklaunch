@@ -1085,4 +1085,88 @@ mod tests {
         let first_route = routes[0].as_object().unwrap();
         assert!(first_route.contains_key("topology"), "Route should have topology");
     }
+
+    #[test]
+    fn test_service_config_hosting_type_ecs_ec2() {
+        let config = ServiceConfig {
+            service_type: ConfigType::Service,
+            controllers: None,
+            integrations: None,
+            open_api_spec: None,
+            dependencies: None,
+            runtime_dependencies: None,
+            instance_size: None,
+            hosting_type: Some("ecs-ec2".to_string()),
+            health_check: None,
+            is_worker_service: None,
+        };
+        let json = serde_json::to_value(&config).unwrap();
+        assert_eq!(json["hostingType"], "ecs-ec2");
+    }
+
+    #[test]
+    fn test_service_config_hosting_type_defaults_absent() {
+        let config = ServiceConfig {
+            service_type: ConfigType::Service,
+            controllers: None,
+            integrations: None,
+            open_api_spec: None,
+            dependencies: None,
+            runtime_dependencies: None,
+            instance_size: None,
+            hosting_type: None,
+            health_check: None,
+            is_worker_service: None,
+        };
+        let json = serde_json::to_value(&config).unwrap();
+        assert!(
+            json.get("hostingType").is_none(),
+            "hostingType should be omitted when None"
+        );
+    }
+
+    #[test]
+    fn test_worker_config_hosting_type_ecs_ec2() {
+        let config = WorkerConfig {
+            config_type: ConfigType::Worker,
+            worker_type: WorkerType::BullMQ,
+            concurrency: None,
+            timeout: None,
+            max_retries: None,
+            queue: None,
+            priority: None,
+            dead_letter_queue: None,
+            additional: None,
+            runtime_dependencies: None,
+            instance_size: None,
+            hosting_type: Some("ecs-ec2".to_string()),
+            health_check: None,
+        };
+        let json = serde_json::to_value(&config).unwrap();
+        assert_eq!(json["hostingType"], "ecs-ec2");
+    }
+
+    #[test]
+    fn test_worker_config_hosting_type_defaults_absent() {
+        let config = WorkerConfig {
+            config_type: ConfigType::Worker,
+            worker_type: WorkerType::BullMQ,
+            concurrency: None,
+            timeout: None,
+            max_retries: None,
+            queue: None,
+            priority: None,
+            dead_letter_queue: None,
+            additional: None,
+            runtime_dependencies: None,
+            instance_size: None,
+            hosting_type: None,
+            health_check: None,
+        };
+        let json = serde_json::to_value(&config).unwrap();
+        assert!(
+            json.get("hostingType").is_none(),
+            "hostingType should be omitted when None"
+        );
+    }
 }
