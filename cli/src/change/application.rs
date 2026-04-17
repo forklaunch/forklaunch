@@ -879,6 +879,19 @@ fn change_runtime(
 
         removal_templates.extend(test_framework_removal_templates);
         symlink_templates.extend(test_framework_symlink_templates);
+    } else if matches!(runtime, Runtime::Bun) {
+        // Bun has no separate test framework; strip any lingering test types from tsconfig.
+        let project_names: Vec<&str> = manifest_data
+            .projects
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect();
+        let tsconfig_templates =
+            update_tsconfig_test_framework_types(base_path, None, &project_names)?;
+        for template in tsconfig_templates {
+            let key = template.path.to_string_lossy().to_string();
+            rendered_templates_cache.insert(key, template);
+        }
     }
 
     let application_package_json_scripts = application_json_to_write.scripts.as_mut().unwrap();
@@ -1469,8 +1482,7 @@ fn change_test_framework(
         .collect();
     let tsconfig_templates = update_tsconfig_test_framework_types(
         base_path,
-        test_framework,
-        existing_test_framework.as_ref(),
+        Some(test_framework),
         &project_names,
     )?;
     for template in tsconfig_templates {
