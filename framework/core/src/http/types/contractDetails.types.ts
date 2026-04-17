@@ -526,7 +526,14 @@ export type AuthMethods<
 export type MapSchema<
   SV extends AnySchemaValidator,
   T extends IdiomaticSchema<SV> | SV['_ValidSchemaObject']
-> = Schema<T, SV> extends infer U ? (T extends U ? unknown : U) : never;
+> =
+  Schema<T, SV> extends infer U
+    ? T extends SV['_SchemaCatchall']
+      ? U
+      : T extends U
+        ? unknown
+        : U
+    : never;
 
 /**
  * Type representing the parameters in a request.

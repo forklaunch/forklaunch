@@ -1,5 +1,14 @@
 # @forklaunch/internal
 
+## 1.2.17
+
+### Patch Changes
+
+- Update internal versions and allow ZodType early release
+- Updated dependencies
+  - @forklaunch/validator@1.2.17
+  - @forklaunch/common@1.2.17
+
 ## 1.2.16
 
 ### Patch Changes

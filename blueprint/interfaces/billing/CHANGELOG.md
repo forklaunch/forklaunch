@@ -1,5 +1,11 @@
 # @forklaunch/interfaces-billing
 
+## 1.0.24
+
+### Patch Changes
+
+- Internal package updates
+
 ## 1.0.23
 
 ### Patch Changes

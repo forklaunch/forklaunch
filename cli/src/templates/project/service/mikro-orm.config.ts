@@ -109,12 +109,12 @@ const mikroOrmOptionsConfig = defineConfig({ {{#is_mongo}}
     }
   },{{/is_mongo}}
   migrations: {
-    path: 'dist/migrations-{{database}}',
-    pathTs: 'migrations-{{database}}'
+    path: 'migrations-{{database}}'
   },
+  // Individual seeders live in persistence/seeders/ and are wired through DatabaseSeeder.
   seeder: {
-    path: 'dist/persistence',
-    glob: 'seeder.js'
+    path: 'persistence',
+    glob: 'seeder.ts'
   }{{#is_better_auth}},
   allowGlobalContext: true{{/is_better_auth}}
 });

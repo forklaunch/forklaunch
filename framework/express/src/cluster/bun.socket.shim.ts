@@ -325,6 +325,14 @@ export class BunSocketShim extends Duplex implements Socket {
     return this;
   }
 
+  getTypeOfService(): number {
+    return 0;
+  }
+
+  setTypeOfService(_typeOfService: number): this {
+    return this;
+  }
+
   address(): AddressInfo | object {
     if (!this.localAddress || !this.localPort) {
       return {};
@@ -458,8 +466,6 @@ export function createSocketFromBunRequest(
     port: number;
   }
 ): Socket {
-  const url = new URL(request.url);
-
   const forwardedFor = request.headers.get('x-forwarded-for');
   const realIP = request.headers.get('x-real-ip');
   const cfConnectingIP = request.headers.get('cf-connecting-ip');

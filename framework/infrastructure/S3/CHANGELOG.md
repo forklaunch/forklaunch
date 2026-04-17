@@ -1,5 +1,14 @@
 # @forklaunch/infrastructure-s3
 
+## 1.4.3
+
+### Patch Changes
+
+- Update internal versions and allow ZodType early release
+- Updated dependencies
+  - @forklaunch/common@1.2.17
+  - @forklaunch/core@1.5.1
+
 ## 1.4.2
 
 ### Patch Changes
