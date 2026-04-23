@@ -16,7 +16,7 @@ importers:
         version: 1.5.1(socks@2.8.7)
       '@forklaunch/express':
         specifier: ^1.2.31
-        version: 1.2.31(jose@6.2.2)(socks@2.8.7)(zod@4.3.6)
+        version: 1.2.31(zod@4.3.6)
       '@forklaunch/hyper-express':
         specifier: ^1.2.31
         version: 1.2.31(express@5.2.1)(socks@2.8.7)
@@ -154,8 +154,8 @@ importers:
         specifier: ^10.3.1
         version: 10.3.1
       uuid:
-        specifier: ^13.0.0
-        version: 13.0.0
+        specifier: ^14.0.0
+        version: 14.0.0
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -278,8 +278,8 @@ importers:
         specifier: ^22.0.2
         version: 22.0.2(@types/node@25.6.0)
       uuid:
-        specifier: ^13.0.0
-        version: 13.0.0
+        specifier: ^14.0.0
+        version: 14.0.0
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -354,8 +354,8 @@ importers:
         specifier: ^0.34.49
         version: 0.34.49
       uuid:
-        specifier: ^13.0.0
-        version: 13.0.0
+        specifier: ^14.0.0
+        version: 14.0.0
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -433,8 +433,8 @@ importers:
         specifier: ^10.3.1
         version: 10.3.1
       uuid:
-        specifier: ^13.0.0
-        version: 13.0.0
+        specifier: ^14.0.0
+        version: 14.0.0
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -539,8 +539,8 @@ importers:
         specifier: ^10.3.1
         version: 10.3.1
       uuid:
-        specifier: ^13.0.0
-        version: 13.0.0
+        specifier: ^14.0.0
+        version: 14.0.0
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -701,8 +701,8 @@ importers:
         specifier: ^8.18.0
         version: 8.18.0
       uuid:
-        specifier: ^13.0.0
-        version: 13.0.0
+        specifier: ^14.0.0
+        version: 14.0.0
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -7468,6 +7468,10 @@ packages:
     resolution: {integrity: sha512-XQegIaBTVUjSHliKqcnFqYypAd4S+WCYt5NIeRs6w/UAry7z8Y9j5ZwRRL4kzq9U3sD6v+85er9FvkEaBpji2w==}
     hasBin: true
 
+  uuid@14.0.0:
+    resolution: {integrity: sha512-Qo+uWgilfSmAhXCMav1uYFynlQO7fMFiMVZsQqZRMIXp0O7rR7qjkj+cPvBHLgBqi960QCoo/PH2/6ZtVqKvrg==}
+    hasBin: true
+
   uuid@8.3.2:
     resolution: {integrity: sha512-+NYs2QeMWy+GWFOEm9xnn6HCDp0l7QBD7ml8zLUmJ+93Q5NF0NocErnwkTkXVFNiX3/fpC6afS8Dhb/gz7R7eg==}
     hasBin: true
@@ -8996,6 +9000,43 @@ snapshots:
       - sury
 
   '@forklaunch/express@1.2.31(jose@6.2.2)(socks@2.8.7)(zod@4.3.6)':
+    dependencies:
+      '@forklaunch/common': 1.2.17
+      '@forklaunch/core': 1.5.1(socks@2.8.7)
+      '@forklaunch/validator': 1.2.17
+      '@modelcontextprotocol/sdk': 1.29.0(zod@4.3.6)
+      '@scalar/express-api-reference': 0.9.8
+      '@types/multer': 2.1.0
+      body-parser: 2.2.2
+      busboy: 1.6.0
+      cors: 2.8.6
+      express: 5.2.1
+      fastmcp: 4.0.0(jose@6.2.2)
+      multer: 2.1.1
+      qs: 6.15.1
+      range-parser: 1.2.1
+      swagger-ui-express: 5.0.1(express@5.2.1)
+    transitivePeerDependencies:
+      - '@aws-sdk/credential-providers'
+      - '@cfworker/json-schema'
+      - '@mongodb-js/zstd'
+      - '@node-rs/xxhash'
+      - '@valibot/to-json-schema'
+      - arktype
+      - dataloader
+      - effect
+      - encoding
+      - gcp-metadata
+      - jose
+      - kerberos
+      - mongodb-client-encryption
+      - snappy
+      - socks
+      - supports-color
+      - sury
+      - zod
+
+  '@forklaunch/express@1.2.31(zod@4.3.6)':
     dependencies:
       '@forklaunch/common': 1.2.17
       '@forklaunch/core': 1.5.1(socks@2.8.7)
@@ -10974,7 +11015,7 @@ snapshots:
 
   '@types/uuid@11.0.0':
     dependencies:
-      uuid: 13.0.0
+      uuid: 14.0.0
 
   '@types/webidl-conversions@7.0.3': {}
 
@@ -15485,6 +15526,8 @@ snapshots:
   uuid@11.1.0: {}
 
   uuid@13.0.0: {}
+
+  uuid@14.0.0: {}
 
   uuid@8.3.2: {}
 
