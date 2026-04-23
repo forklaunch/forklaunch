@@ -62,10 +62,10 @@
     "@sinclair/typebox": "^0.34.49",
     "ajv": "^8.18.0",
     "better-sqlite3": "^12.9.0",
-    "bullmq": "^5.74.1",
+    "bullmq": "^5.76.1",
     "dotenv": "^17.4.2",
     "kafkajs": "^2.2.4",
-    "node-gyp": "^12.2.0",
+    "node-gyp": "^12.3.0",
     "pino": "^10.3.1",
     "sqlite3": "^6.0.1",
     "zod": "^4.3.6"
@@ -85,7 +85,7 @@
     "testcontainers": "^11.14.0",
     "tsx": "^4.21.0",
     "typedoc": "^0.28.19",
-    "typescript-eslint": "^8.58.2"
+    "typescript-eslint": "^8.59.0"
   },
   "mikro-orm": {
     "config_paths": [
