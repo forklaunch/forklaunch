@@ -69,7 +69,7 @@
     "@types/express-serve-static-core": "^5.1.1",
     "@types/qs": "^6.15.0",
     "@types/uuid": "^11.0.0",
-    "@typescript/native-preview": "7.0.0-dev.20260417.1",
+    "@typescript/native-preview": "7.0.0-dev.20260423.1",
     "depcheck": "^1.4.7",
     "ioredis": "^5.10.1",
     "prettier": "^3.8.3",
