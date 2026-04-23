@@ -42,7 +42,7 @@
     "test": "vitest --passWithNoTests"
   },
   "devDependencies": {
-    "@typescript/native-preview": "7.0.0-dev.20260417.1",
+    "@typescript/native-preview": "7.0.0-dev.20260423.1",
     "depcheck": "^1.4.7",
     "eslint": "^10.2.1",
     "prettier": "^3.8.3",
