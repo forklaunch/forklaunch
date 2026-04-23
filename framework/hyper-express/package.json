@@ -58,7 +58,7 @@
     "@types/qs": "^6.15.0",
     "@types/swagger-ui-dist": "^3.30.6",
     "@types/swagger-ui-express": "^4.1.8",
-    "@typescript/native-preview": "7.0.0-dev.20260417.1",
+    "@typescript/native-preview": "7.0.0-dev.20260423.1",
     "jest": "^30.3.0",
     "kill-port-process": "^4.0.2",
     "prettier": "^3.8.3",
