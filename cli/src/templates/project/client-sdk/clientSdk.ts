@@ -5,7 +5,7 @@ import { createAuthClient } from "better-auth/client";{{/is_better_auth}}
 {{#is_better_auth}}import { inferAdditionalFields } from 'better-auth/client/plugins';{{/is_better_auth}}
 {{#is_iam}}
 //! export various service and worker sdk clients
-export const iamSdkClient{{^is_better_auth}}{{/is_better_auth}} = {{#is_better_auth}}({
+export const iamSdkClient{{^is_better_auth}}{{/is_better_auth}} = {{#is_better_auth}}async ({
     host,
     registryOptions
 }: {
