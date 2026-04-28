@@ -969,6 +969,10 @@ impl CliCommand for ApplicationCommand {
             if service_data.service_name == "client-sdk" {
                 service_data.is_iam = global_module_config.iam.is_some();
                 service_data.is_billing = global_module_config.billing.is_some();
+                service_data.is_better_auth = global_module_config
+                    .iam
+                    .as_ref()
+                    .is_some_and(|iam| iam == &IamConfig::BetterAuthIam);
             }
 
             if !HashSet::from([
