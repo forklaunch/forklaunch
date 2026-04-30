@@ -49,25 +49,25 @@
     "@forklaunch/infrastructure-redis": "^1.4.3",
     "@forklaunch/interfaces-billing": "workspace:*",
     "@forklaunch/validator": "^1.2.17",
-    "@mikro-orm/core": "7.0.11",
-    "@mikro-orm/migrations": "7.0.11",
-    "@mikro-orm/mongodb": "7.0.11",
-    "@mikro-orm/mysql": "7.0.11",
-    "@mikro-orm/postgresql": "7.0.11",
-    "@mikro-orm/seeder": "7.0.11",
-    "@mikro-orm/sqlite": "7.0.11",
+    "@mikro-orm/core": "7.0.13",
+    "@mikro-orm/migrations": "7.0.13",
+    "@mikro-orm/mongodb": "7.0.13",
+    "@mikro-orm/mysql": "7.0.13",
+    "@mikro-orm/postgresql": "7.0.13",
+    "@mikro-orm/seeder": "7.0.13",
+    "@mikro-orm/sqlite": "7.0.13",
     "@sinclair/typebox": "^0.34.49",
-    "ajv": "^8.18.0",
+    "ajv": "^8.20.0",
     "dotenv": "^17.4.2",
-    "jose": "^6.2.2",
+    "jose": "^6.2.3",
     "pino": "^10.3.1",
-    "stripe": "^22.0.2",
+    "stripe": "^22.1.0",
     "uuid": "^13.0.0",
-    "zod": "^4.3.6"
+    "zod": "^4.4.1"
   },
   "devDependencies": {
     "@forklaunch/testing": "^1.2.17",
-    "@mikro-orm/cli": "7.0.11",
+    "@mikro-orm/cli": "7.0.13",
     "@types/express": "^5.0.6",
     "@types/express-serve-static-core": "^5.1.1",
     "@types/qs": "^6.15.0",
@@ -79,7 +79,7 @@
     "testcontainers": "^11.14.0",
     "ts-node": "^10.9.2",
     "typedoc": "^0.28.19",
-    "vitest": "^4.1.4"
+    "vitest": "^4.1.5"
   },
   "mikro-orm": {
     "configPaths": [
