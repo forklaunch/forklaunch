@@ -44,7 +44,7 @@ lazy_static = "1.5.0"
 dialoguer = { version = "0.11.0", features = ["fuzzy-select"] }
 glob = "0.3.2"
 getrandom = { version = "0.2", features = ["js"] }
-hmac = "0.12"
+hmac = "0.13"
 sha2 = "0.10"
 rand = "0.8"
 serde-envfile = "0.3.0"
