@@ -1,4 +1,8 @@
-import { NextFunction, Request, Response } from '@forklaunch/blueprint-core';
+import {
+  type NextFunction,
+  type Request,
+  type Response
+} from '@forklaunch/blueprint-core';
 import { Span } from '@opentelemetry/api';
 
 export type BetterAuthRequest = Request & {

@@ -1,4 +1,8 @@
-import { NextFunction, Request, Response } from '@forklaunch/blueprint-core';
+import {
+  type NextFunction,
+  type Request,
+  type Response
+} from '@forklaunch/blueprint-core';
 import { getEnvVar } from '@forklaunch/common';
 import {
   ATTR_API_NAME,
