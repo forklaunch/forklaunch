@@ -48,7 +48,7 @@
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
     "@typescript/native-preview": "7.0.0-dev.20260417.1",
-    "globals": "^17.5.0",
+    "globals": "^17.6.0",
     "jest": "^30.3.0",
     "prettier": "^3.8.3",
     "testcontainers": "^11.14.0",
@@ -57,6 +57,6 @@
     "tsup": "^8.5.1",
     "typedoc": "^0.28.19",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.58.2"
+    "typescript-eslint": "^8.59.2"
   }
 }
