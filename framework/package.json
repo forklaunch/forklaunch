@@ -27,19 +27,19 @@
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
     "@types/jest": "^30.0.0",
-    "@types/node": "^25.6.0",
-    "eslint": "^10.2.1",
-    "globals": "^17.5.0",
-    "jest": "^30.3.0",
-    "lint-staged": "^16.4.0",
+    "@types/node": "^25.7.0",
+    "eslint": "^10.3.0",
+    "globals": "^17.6.0",
+    "jest": "^30.4.2",
+    "lint-staged": "^17.0.4",
     "prettier": "^3.8.3",
     "sort-package-json": "^3.6.1",
     "ts-jest": "^29.4.9",
     "tsx": "^4.21.0",
     "typedoc": "^0.28.19",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.58.2",
-    "vitest": "^4.1.4"
+    "typescript-eslint": "^8.59.3",
+    "vitest": "^4.1.6"
   },
   "dependencies": {
     "@eslint/js": "^10.0.1"

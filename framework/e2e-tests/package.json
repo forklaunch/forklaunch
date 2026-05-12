@@ -36,15 +36,15 @@
     "@sinclair/typebox": "^0.34.49",
     "express": "^5.2.1",
     "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.52.0",
-    "zod": "^4.3.6"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/express-serve-static-core": "^5.1.1",
-    "@types/qs": "^6.15.0",
+    "@types/qs": "^6.15.1",
     "@types/range-parser": "^1.2.7",
-    "@typescript/native-preview": "7.0.0-dev.20260417.1",
-    "jose": "6.2.2",
+    "@typescript/native-preview": "7.0.0-dev.20260511.1",
+    "jose": "6.2.3",
     "tsup": "^8.5.1"
   }
 }
