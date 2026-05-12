@@ -22,11 +22,14 @@ packages:
 - implementations/worker/redis
 - universal-sdk
 
-onlyBuiltDependencies:
-- "@scarf/scarf"
-- cpu-features
-- esbuild
-- protobufjs
-- ssh2
-- tldjs
-- unrs-resolver
+allowBuilds:
+  "@scarf/scarf": true
+  better-sqlite3: true
+  cpu-features: true
+  esbuild: true
+  msgpackr-extract: true
+  protobufjs: true
+  sqlite3: true
+  ssh2: true
+  tldjs: true
+  unrs-resolver: true

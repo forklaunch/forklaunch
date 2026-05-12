@@ -13,11 +13,11 @@ packages:
   - bunrun
   - ws
 
-onlyBuiltDependencies:
-  - "@scarf/scarf"
-  - cpu-features
-  - esbuild
-  - protobufjs
-  - ssh2
-  - tldjs
-  - unrs-resolver
+allowBuilds:
+  "@scarf/scarf": true
+  cpu-features: true
+  esbuild: true
+  protobufjs: true
+  ssh2: true
+  tldjs: true
+  unrs-resolver: true
