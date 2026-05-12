@@ -12,3 +12,12 @@ packages:
   - internal
   - bunrun
   - ws
+
+onlyBuiltDependencies:
+  - "@scarf/scarf"
+  - cpu-features
+  - esbuild
+  - protobufjs
+  - ssh2
+  - tldjs
+  - unrs-resolver

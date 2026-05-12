@@ -21,3 +21,12 @@ packages:
 - implementations/worker/kafka
 - implementations/worker/redis
 - universal-sdk
+
+onlyBuiltDependencies:
+- "@scarf/scarf"
+- cpu-features
+- esbuild
+- protobufjs
+- ssh2
+- tldjs
+- unrs-resolver
