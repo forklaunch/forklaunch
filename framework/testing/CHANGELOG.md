@@ -1,5 +1,11 @@
 # @forklaunch/testing
 
+## 1.2.18
+
+### Patch Changes
+
+- update dependency versions
+
 ## 1.2.17
 
 ### Patch Changes

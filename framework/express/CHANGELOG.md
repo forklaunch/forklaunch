@@ -1,5 +1,15 @@
 # @forklaunch/express
 
+## 1.2.32
+
+### Patch Changes
+
+- update dependency versions
+- Updated dependencies
+  - @forklaunch/validator@1.2.18
+  - @forklaunch/common@1.2.18
+  - @forklaunch/core@1.5.2
+
 ## 1.2.31
 
 ### Patch Changes

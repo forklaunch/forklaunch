@@ -7,7 +7,7 @@ use oxc_ast::ast::SourceType;
 use oxc_codegen::{Codegen, CodegenOptions};
 
 use crate::{
-    constants::{WorkerType, error_failed_to_read_file},
+    constants::{error_failed_to_read_file, WorkerType},
     core::{
         ast::{
             infrastructure::{
@@ -248,7 +248,12 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
             redis_ttl_cache_runtime_dependency(&allocator, &mut program, otel_token)?;
         }
         WorkerType::Database => {
-            database_entity_manager_runtime_dependency(&allocator, &mut program, orm_token, em_token)?;
+            database_entity_manager_runtime_dependency(
+                &allocator,
+                &mut program,
+                orm_token,
+                em_token,
+            )?;
         }
         WorkerType::Kafka => {
             inject_specifier_into_import_statement(
@@ -298,7 +303,8 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
             "environmentConfig",
         )?;
 
-        let event_encryptor_text = "const configInjector = createConfigInjector(SchemaValidator(), {
+        let event_encryptor_text =
+            "const configInjector = createConfigInjector(SchemaValidator(), {
             EventEncryptor: {
                 lifetime: Lifetime.Singleton,
                 type: FieldEncryptor,
@@ -374,12 +380,7 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
                 WorkerProducer: {{
                     lifetime: Lifetime.Scoped,
                     type: EncryptingWorkerProducer,
-                    factory: (container, context) =>
-                        new EncryptingWorkerProducer(
-                            ({})(container),
-                            container.EventEncryptor,
-                            (context?.tenantId as string) ?? ''
-                        )
+                    factory: {}
                 }},
                 WorkerConsumer: {{
                     lifetime: Lifetime.Scoped,
@@ -390,17 +391,7 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
                         ],
                         type<{}WorkerConsumer<EncryptedEventEnvelope, {}WorkerOptions>>()
                     ),
-                    factory: (container) => {{
-                        const createConsumer = ({})(container);
-                        return (
-                            processEventsFunction: WorkerProcessFunction<{}EventRecord>,
-                            failureHandler: WorkerFailureHandler<{}EventRecord>
-                        ) =>
-                            createConsumer(
-                                withDecryption<{}EventRecord>(processEventsFunction, container.EventEncryptor),
-                                withDecryptionFailureHandler<{}EventRecord>(failureHandler, container.EventEncryptor)
-                            );
-                    }}
+                    factory: {}
                 }}
             }});",
             get_worker_producer_factory(worker_type),
@@ -409,10 +400,6 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
             worker_type_name,
             worker_type_name,
             get_worker_consumer_factory(worker_type, &pascal_case_name),
-            pascal_case_name,
-            pascal_case_name,
-            pascal_case_name,
-            pascal_case_name,
         )
     };
     let mut worker_deps_injection =

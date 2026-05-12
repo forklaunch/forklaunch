@@ -7,7 +7,7 @@ use oxc_ast::ast::SourceType;
 use oxc_codegen::{Codegen, CodegenOptions};
 
 use crate::{
-    constants::{WorkerType, error_failed_to_read_file},
+    constants::{error_failed_to_read_file, WorkerType},
     core::{
         ast::{
             deletions::{
@@ -344,7 +344,12 @@ pub(crate) fn transform_registrations_ts_worker_type(
                 &mut mikro_orm_config_import_program,
                 "./mikro-orm.config",
             )?;
-            database_entity_manager_runtime_dependency(&allocator, &mut registration_program, orm_token, em_token)?;
+            database_entity_manager_runtime_dependency(
+                &allocator,
+                &mut registration_program,
+                orm_token,
+                em_token,
+            )?;
         }
         WorkerType::Kafka => {
             inject_specifier_into_import_statement(
@@ -396,7 +401,8 @@ pub(crate) fn transform_registrations_ts_worker_type(
             &registrations_text,
         )?;
 
-        let encrypted_envelope_text = "import { type EncryptedEventEnvelope } from '@forklaunch/interfaces-worker/types';";
+        let encrypted_envelope_text =
+            "import { type EncryptedEventEnvelope } from '@forklaunch/interfaces-worker/types';";
         let mut encrypted_envelope_import =
             parse_ast_program(&allocator, encrypted_envelope_text, SourceType::ts());
         inject_into_import_statement(
@@ -434,7 +440,8 @@ pub(crate) fn transform_registrations_ts_worker_type(
         )?;
 
         // Inject EventEncryptor runtime dependency
-        let event_encryptor_text = "const configInjector = createConfigInjector(SchemaValidator(), {
+        let event_encryptor_text =
+            "const configInjector = createConfigInjector(SchemaValidator(), {
             EventEncryptor: {
                 lifetime: Lifetime.Singleton,
                 type: FieldEncryptor,
@@ -486,12 +493,7 @@ pub(crate) fn transform_registrations_ts_worker_type(
                     WorkerProducer: {{
                         lifetime: Lifetime.Scoped,
                         type: EncryptingWorkerProducer,
-                        factory: (container, context) =>
-                            new EncryptingWorkerProducer(
-                                ({})(container),
-                                container.EventEncryptor,
-                                (context?.tenantId as string) ?? ''
-                            )
+                        factory: {}
                     }},
                     WorkerConsumer: {{
                         lifetime: Lifetime.Scoped,
@@ -502,17 +504,7 @@ pub(crate) fn transform_registrations_ts_worker_type(
                             ],
                             type<{}WorkerConsumer<EncryptedEventEnvelope, {}WorkerOptions>>()
                         ),
-                        factory: (container) => {{
-                            const createConsumer = ({})(container);
-                            return (
-                                processEventsFunction: WorkerProcessFunction<{}EventRecord>,
-                                failureHandler: WorkerFailureHandler<{}EventRecord>
-                            ) =>
-                                createConsumer(
-                                    withDecryption<{}EventRecord>(processEventsFunction, container.EventEncryptor),
-                                    withDecryptionFailureHandler<{}EventRecord>(failureHandler, container.EventEncryptor)
-                                );
-                        }}
+                        factory: {}
                     }}
                 }})",
             get_worker_producer_factory(r#type),
@@ -521,10 +513,6 @@ pub(crate) fn transform_registrations_ts_worker_type(
             worker_type,
             worker_type,
             get_worker_consumer_factory(r#type, &pascal_case_name),
-            pascal_case_name,
-            pascal_case_name,
-            pascal_case_name,
-            pascal_case_name,
         )
     };
     let mut config_injector_service_dependencies_import = parse_ast_program(
@@ -543,8 +531,7 @@ pub(crate) fn transform_registrations_ts_worker_type(
     let camel_case_name = pascal_case_name.to_case(Case::Camel);
     let event_record_type_import_text = format!(
         "import type {{ {}EventRecord }} from './domain/types/{}EventRecord.types';",
-        pascal_case_name,
-        camel_case_name
+        pascal_case_name, camel_case_name
     );
     if is_database_worker {
         // For database workers, remove the types file import (entity import is sufficient)
@@ -558,7 +545,10 @@ pub(crate) fn transform_registrations_ts_worker_type(
         let _ = delete_import_statement(
             &allocator,
             &mut registration_program,
-            &format!("./persistence/entities/{}EventRecord.entity", camel_case_name),
+            &format!(
+                "./persistence/entities/{}EventRecord.entity",
+                camel_case_name
+            ),
         );
         if !registrations_text.contains(&format!("{}EventRecord.types", camel_case_name)) {
             let mut event_record_type_import =
