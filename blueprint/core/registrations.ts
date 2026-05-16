@@ -1,11 +1,11 @@
 import {
-  ExpressApplicationOptions,
   forklaunchExpress,
   forklaunchRouter,
   handlers,
-  NextFunction,
-  Request,
-  Response
+  type ExpressApplicationOptions,
+  type NextFunction,
+  type Request,
+  type Response
 } from '@forklaunch/express';
 import {
   any,
@@ -50,7 +50,7 @@ export {
   date,
   email,
   enum_,
-  ExpressApplicationOptions,
+  type ExpressApplicationOptions,
   file,
   forklaunchExpress,
   forklaunchRouter,
@@ -58,15 +58,15 @@ export {
   handlers,
   literal,
   never,
-  NextFunction,
+  type NextFunction,
   null_,
   nullish,
   number,
   optional,
   promise,
   record,
-  Request,
-  Response,
+  type Request,
+  type Response,
   SchemaValidator,
   string,
   symbol,
