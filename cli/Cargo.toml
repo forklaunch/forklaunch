@@ -22,7 +22,7 @@ oxc_ast = { version = "0.80.0", features = ["serialize"] }
 oxc_codegen = "0.80.0"
 oxc_parser = "0.80.0"
 oxc_ast_visit = "0.80.0"
-oxc_span = "0.80.0"
+oxc_span = "0.124.0"
 paste = "1.0.15"
 pathdiff = "0.2.3"
 ramhorns = "1.0.1"
