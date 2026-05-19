@@ -200,7 +200,7 @@ pub(crate) fn export_service_openapi(
         .spawn()
         .with_context(|| format!("Failed to spawn {} command", resolved_bin))?;
 
-    let timeout = Duration::from_secs(30);
+    let timeout = Duration::from_secs(60);
     let start = Instant::now();
     loop {
         match child.try_wait() {
