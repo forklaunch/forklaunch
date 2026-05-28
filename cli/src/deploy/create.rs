@@ -879,6 +879,10 @@ impl CliCommand for CreateCommand {
 
         let mut retry_count = 0;
         const MAX_RETRIES: u32 = 3;
+        // Track which platform-managed vars were silently filtered on the first attempt.
+        // If they're still missing on a subsequent attempt, Pulumi didn't fix them and the
+        // user needs to intervene manually rather than the CLI looping to exhaustion.
+        let mut silently_filtered_platform_vars: HashSet<String> = HashSet::new();
 
         loop {
             let response =
@@ -933,21 +937,66 @@ impl CliCommand for CreateCommand {
                     }
 
                     // Filter out Pulumi-injected vars (inter-service URLs, auth URLs)
-                    // that the platform will auto-inject at deploy time
+                    // that the platform will auto-inject at deploy time.
+                    //
+                    // Strategy: silently filter on the first attempt (transient Pulumi timing).
+                    // If the same vars are STILL missing on a subsequent attempt they are
+                    // persistently unset and require manual intervention — stop filtering them
+                    // so they fall through to the user-prompt path.
                     let project_names: Vec<String> = manifest.projects.iter().map(|p| p.name.clone()).collect();
                     let mut blocked_error = blocked_error;
+
+                    // Collect all platform vars reported missing this time, before filtering.
+                    let currently_missing_platform_vars: HashSet<String> = blocked_error
+                        .details
+                        .iter()
+                        .flat_map(|d| &d.missing_keys)
+                        .filter(|k| is_pulumi_injected(&k.name, &project_names))
+                        .map(|k| k.name.clone())
+                        .collect();
+
+                    // Vars that were silently filtered last time and are still missing: escalate.
+                    let persistent_platform_vars: HashSet<String> = currently_missing_platform_vars
+                        .intersection(&silently_filtered_platform_vars)
+                        .cloned()
+                        .collect();
+
+                    if !persistent_platform_vars.is_empty() {
+                        log_warn!(
+                            stdout,
+                            "Platform-managed variables were not injected and require manual configuration: {}",
+                            persistent_platform_vars
+                                .iter()
+                                .cloned()
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        );
+                        writeln!(stdout)?;
+                    }
+
                     for detail in &mut blocked_error.details {
                         detail.missing_keys.retain(|k| {
+                            // Always surface: user-supplied vars and persistently-missing platform vars.
+                            // Silently drop: platform vars seen for the first time (give Pulumi one chance).
                             !is_pulumi_injected(&k.name, &project_names)
+                                || persistent_platform_vars.contains(&k.name)
                         });
                     }
                     blocked_error.details.retain(|d| !d.missing_keys.is_empty());
 
-                    // If all vars were Pulumi-injected, nothing left for the user
+                    // Record the vars we're filtering silently this iteration so we can
+                    // detect persistence on the next attempt.
+                    let newly_filtered: HashSet<String> = currently_missing_platform_vars
+                        .difference(&persistent_platform_vars)
+                        .cloned()
+                        .collect();
+                    silently_filtered_platform_vars.extend(newly_filtered);
+
+                    // If all remaining missing vars are platform-managed (and were just filtered),
+                    // retry immediately — Pulumi may need one pass to settle.
                     if blocked_error.details.is_empty() {
                         log_ok!(stdout, "All missing variables are Pulumi-injected — retrying deployment");
                         writeln!(stdout)?;
-                        retry_count += 1;
                         continue;
                     }
 
