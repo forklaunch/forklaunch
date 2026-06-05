@@ -196,6 +196,7 @@ impl CliCommand for AuditCommand {
             Ok(resp) => {
                 if show_all || show_risk_score {
                     print_risk_score(&mut stdout, resp)?;
+                    print_scorecard(&mut stdout, resp)?;
                     print_findings(&mut stdout, resp)?;
                 }
 
@@ -332,6 +333,109 @@ fn print_summary(out: &mut StandardStream, report: &ComplianceReport) -> Result<
         writeln!(out, "(none configured)")?;
     } else {
         writeln!(out, "{}", report.data_residency.allowed_regions.join(", "))?;
+    }
+
+    Ok(())
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+struct DimensionScores {
+    compliance: f64,
+    security: f64,
+    scale: f64,
+    observability: f64,
+    governance: f64,
+    #[serde(default)]
+    coverage: Option<DimensionCoverage>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+struct DimensionCoverage {
+    #[serde(default)]
+    unscored: Vec<String>,
+}
+
+/// Client-side fallback for platforms that predate server-computed
+/// dimension scores: derive the scorecard from finding categories using
+/// the same mapping the platform uses.
+fn derive_dimension_scores(findings: &[PlatformFinding]) -> DimensionScores {
+    fn dims_for(category: &str) -> &'static [&'static str] {
+        match category {
+            "encryption" => &["security", "compliance"],
+            "access-control" => &["security", "governance"],
+            "tenant-isolation" => &["security", "compliance"],
+            "data-retention" => &["compliance", "governance"],
+            "multi-az" | "capacity" => &["scale"],
+            "alerting" => &["observability"],
+            "logging" => &["observability", "governance"],
+            "audit" => &["governance", "compliance"],
+            _ => &["compliance"],
+        }
+    }
+    let mut totals: std::collections::HashMap<&str, f64> = Default::default();
+    let mut touched: std::collections::HashSet<&str> = Default::default();
+    for finding in findings {
+        for dim in dims_for(&finding.category) {
+            *totals.entry(dim).or_insert(0.0) += finding.points;
+            touched.insert(dim);
+        }
+    }
+    let score = |dim: &str| ((100.0 - totals.get(dim).copied().unwrap_or(0.0)).max(0.0) * 10.0).round() / 10.0;
+    DimensionScores {
+        compliance: score("compliance"),
+        security: score("security"),
+        scale: score("scale"),
+        observability: score("observability"),
+        governance: score("governance"),
+        coverage: Some(DimensionCoverage {
+            unscored: ["scale", "observability"]
+                .iter()
+                .filter(|d| !touched.contains(**d))
+                .map(|d| d.to_string())
+                .collect(),
+        }),
+    }
+}
+
+fn print_scorecard(out: &mut StandardStream, resp: &PlatformAuditResponse) -> Result<()> {
+    let scores = resp
+        .dimension_scores
+        .clone()
+        .unwrap_or_else(|| derive_dimension_scores(&resp.findings));
+
+    writeln!(out)?;
+    out.set_color(ColorSpec::new().set_fg(Some(Color::White)).set_bold(true))?;
+    writeln!(out, "  ── Scorecard ──")?;
+    out.reset()?;
+
+    let unscored = scores
+        .coverage
+        .as_ref()
+        .map(|c| c.unscored.clone())
+        .unwrap_or_default();
+    for (label, value) in [
+        ("Compliance", scores.compliance),
+        ("Security", scores.security),
+        ("Scale", scores.scale),
+        ("Observability", scores.observability),
+        ("Governance", scores.governance),
+    ] {
+        let color = if value >= 90.0 {
+            Color::Green
+        } else if value >= 70.0 {
+            Color::Yellow
+        } else {
+            Color::Red
+        };
+        write!(out, "  {:<14}", format!("{}:", label))?;
+        out.set_color(ColorSpec::new().set_fg(Some(color)).set_bold(true))?;
+        write!(out, "{:>5.1}/100", value)?;
+        out.reset()?;
+        if unscored.iter().any(|d| d.eq_ignore_ascii_case(label)) {
+            write!(out, "  (no audit signals yet)")?;
+        }
+        writeln!(out)?;
     }
 
     Ok(())
@@ -701,6 +805,8 @@ struct PlatformAuditResponse {
     risk_score: f64,
     risk_level: String,
     findings: Vec<PlatformFinding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    dimension_scores: Option<DimensionScores>,
     #[serde(skip_serializing_if = "Option::is_none")]
     data_flow_diagram: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

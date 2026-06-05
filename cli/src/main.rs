@@ -9,6 +9,7 @@ use deploy::DeployCommand;
 use eject::EjectCommand;
 use environment::EnvironmentCommand;
 use init::InitCommand;
+use app::AppCommand;
 use integrate::IntegrateCommand;
 use login::LoginCommand;
 use logout::LogoutCommand;
@@ -23,6 +24,7 @@ use crate::sdk::SdkCommand;
 mod constants;
 #[macro_use]
 mod core;
+mod app;
 mod change;
 mod compliance;
 mod config;
@@ -59,6 +61,7 @@ fn main() -> Result<()> {
     let deploy = DeployCommand::new();
     let eject = EjectCommand::new();
     let environment = EnvironmentCommand::new();
+    let app = AppCommand::new();
     let integrate = IntegrateCommand::new();
     let login = LoginCommand::new();
     let logout = LogoutCommand::new();
@@ -73,6 +76,7 @@ fn main() -> Result<()> {
         .propagate_version(true)
         .arg_required_else_help(true)
         .subcommand_required(true)
+        .subcommand(app.command())
         .subcommand(init.command())
         .subcommand(delete.command())
         .subcommand(change.command())
