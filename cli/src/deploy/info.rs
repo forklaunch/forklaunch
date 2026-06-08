@@ -101,50 +101,65 @@ impl CliCommand for InfoCommand {
         let app = require_integration(&manifest)?;
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-        let mut url = format!(
-            "{}/deployments/?applicationId={}&limit=25",
-            get_platform_management_api_url(),
-            app
-        );
-        if let Some(environment) = matches.get_one::<String>("environment") {
-            url.push_str(&format!("&environment={}", environment));
-        }
-        if let Some(region) = matches.get_one::<String>("region") {
-            url.push_str(&format!("&region={}", region));
-        }
-
-        let response = http_client::get(&url).with_context(|| ERROR_FAILED_TO_SEND_REQUEST)?;
-        if !response.status().is_success() {
-            bail!(
-                "Failed to list deployments: {}",
-                response.text().unwrap_or_default()
-            );
-        }
-        let list: DeploymentListResponse = response
-            .json()
-            .with_context(|| "Failed to parse deployment list response")?;
-
-        let deployments: Vec<&DeploymentSummary> =
-            match matches.get_one::<String>("deployment") {
-                Some(id) => {
-                    let Some(found) = list
-                        .deployments
-                        .iter()
-                        .find(|d| d.id.as_deref() == Some(id))
-                    else {
-                        bail!("Deployment '{}' not found in the latest 25.", id);
-                    };
-                    vec![found]
+        // When an explicit deployment id is given, fetch it directly by id so we
+        // never miss deployments that fall outside a capped list page.
+        let owned: Vec<DeploymentSummary> = match matches.get_one::<String>("deployment") {
+            Some(id) => {
+                let url = format!(
+                    "{}/deployments/{}",
+                    get_platform_management_api_url(),
+                    id
+                );
+                let response =
+                    http_client::get(&url).with_context(|| ERROR_FAILED_TO_SEND_REQUEST)?;
+                if response.status().as_u16() == 404 {
+                    bail!("Deployment '{}' not found.", id);
                 }
-                None => list.deployments.iter().take(5).collect(),
-            };
+                if !response.status().is_success() {
+                    bail!(
+                        "Failed to get deployment: {}",
+                        response.text().unwrap_or_default()
+                    );
+                }
+                let deployment: DeploymentSummary = response
+                    .json()
+                    .with_context(|| "Failed to parse deployment response")?;
+                vec![deployment]
+            }
+            None => {
+                let mut url = format!(
+                    "{}/deployments/?applicationId={}&limit=25",
+                    get_platform_management_api_url(),
+                    app
+                );
+                if let Some(environment) = matches.get_one::<String>("environment") {
+                    url.push_str(&format!("&environment={}", environment));
+                }
+                if let Some(region) = matches.get_one::<String>("region") {
+                    url.push_str(&format!("&region={}", region));
+                }
 
-        if deployments.is_empty() {
+                let response =
+                    http_client::get(&url).with_context(|| ERROR_FAILED_TO_SEND_REQUEST)?;
+                if !response.status().is_success() {
+                    bail!(
+                        "Failed to list deployments: {}",
+                        response.text().unwrap_or_default()
+                    );
+                }
+                let list: DeploymentListResponse = response
+                    .json()
+                    .with_context(|| "Failed to parse deployment list response")?;
+                list.deployments.into_iter().take(5).collect()
+            }
+        };
+
+        if owned.is_empty() {
             log_info!(stdout, "No deployments found for the given filters.");
             return Ok(());
         }
 
-        for deployment in deployments {
+        for deployment in &owned {
             writeln!(stdout)?;
             print_field(&mut stdout, "Id:", &deployment.id)?;
             print_field(&mut stdout, "Status:", &deployment.status)?;

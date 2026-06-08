@@ -389,7 +389,7 @@ fn derive_dimension_scores(findings: &[PlatformFinding]) -> DimensionScores {
         observability: score("observability"),
         governance: score("governance"),
         coverage: Some(DimensionCoverage {
-            unscored: ["scale", "observability"]
+            unscored: ["scale", "observability", "compliance", "security", "governance"]
                 .iter()
                 .filter(|d| !touched.contains(**d))
                 .map(|d| d.to_string())
