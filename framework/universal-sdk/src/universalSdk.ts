@@ -1,7 +1,8 @@
 import {
   openApiCompliantPath,
   safeParse,
-  safeStringify
+  safeStringify,
+  toPlainString
 } from '@forklaunch/common';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
@@ -33,7 +34,7 @@ export class UniversalSdk {
     private contentTypeParserMap:
       | Record<string, ResponseContentParserType>
       | undefined
-  ) {}
+  ) { }
 
   /**
    * Creates an instance of UniversalSdk.
@@ -59,14 +60,14 @@ export class UniversalSdk {
     path: string,
     request?: RequestType & {
       method:
-        | 'get'
-        | 'post'
-        | 'put'
-        | 'patch'
-        | 'delete'
-        | 'options'
-        | 'head'
-        | 'trace';
+      | 'get'
+      | 'post'
+      | 'put'
+      | 'patch'
+      | 'delete'
+      | 'options'
+      | 'head'
+      | 'trace';
     } & {
       version?: string;
     }
@@ -202,11 +203,11 @@ export class UniversalSdk {
                   key,
                   item instanceof Blob || item instanceof File
                     ? item
-                    : safeStringify(item)
+                    : toPlainString(item)
                 );
               }
             } else {
-              formData.append(key, safeStringify(value));
+              formData.append(key, toPlainString(value));
             }
           }
         }
@@ -216,7 +217,7 @@ export class UniversalSdk {
         parsedBody = new URLSearchParams(
           Object.entries(body.urlEncodedForm).map(([key, value]) => [
             key,
-            safeStringify(value)
+            toPlainString(value)
           ])
         );
       } else {
@@ -226,7 +227,7 @@ export class UniversalSdk {
 
     if (query) {
       const queryString = new URLSearchParams(
-        Object.entries(query).map(([key, value]) => [key, safeStringify(value)])
+        Object.entries(query).map(([key, value]) => [key, toPlainString(value)])
       ).toString();
       url += queryString ? `?${queryString}` : '';
     }
@@ -245,10 +246,10 @@ export class UniversalSdk {
     const responseOpenApi =
       path != null && method != null
         ? this.registryOpenApiJson?.[version]?.paths?.[
-            openApiCompliantPath(path)
-          ]?.[method?.toLowerCase() as typeof method]?.responses?.[
-            response.status
-          ]
+          openApiCompliantPath(path)
+        ]?.[method?.toLowerCase() as typeof method]?.responses?.[
+        response.status
+        ]
         : null;
 
     if (responseOpenApi == null) {
