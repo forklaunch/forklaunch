@@ -49,5 +49,20 @@ describe('hasPermissionChecks', () => {
     it('when input is an empty object', () => {
       expect(hasPermissionChecks({})).toBe(false);
     });
+
+    it('BUG: should return false when allowedPermissions is null', () => {
+      const auth = { allowedPermissions: null };
+      expect(hasPermissionChecks(auth)).toBe(false);
+    });
+
+    it('BUG: should return false when forbiddenPermissions is undefined', () => {
+      const auth = { forbiddenPermissions: undefined };
+      expect(hasPermissionChecks(auth)).toBe(false);
+    });
+
+    it('BUG: should return false when both are null/undefined', () => {
+      const auth = { allowedPermissions: null, forbiddenPermissions: undefined };
+      expect(hasPermissionChecks(auth)).toBe(false);
+    });
   });
 });
