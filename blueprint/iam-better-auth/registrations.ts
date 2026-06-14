@@ -1,6 +1,6 @@
 import {
   array,
-  ExpressApplicationOptions,
+  type ExpressApplicationOptions,
   number,
   optional,
   promise,
