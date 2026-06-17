@@ -1,11 +1,13 @@
 import { getEnvVar } from '@forklaunch/common';
 import { AnySchemaValidator } from '@forklaunch/validator';
 import { context, trace } from '@opentelemetry/api';
+import { ATTR_SERVICE_NAME as OTEL_ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 import { v4 } from 'uuid';
 import {
   ATTR_CORRELATION_ID,
   ATTR_SERVICE_NAME
 } from '../../telemetry/constants';
+import { httpRequestsInFlightCounter } from '../../telemetry/openTelemetryCollector';
 import {
   ExpressLikeSchemaHandler,
   ForklaunchNextFunction,
@@ -79,18 +81,36 @@ export function createContext<
     ).setHeader('x-correlation-id', correlationId);
 
     req.context = {
-      correlationId: correlationId
+      correlationId: correlationId,
+      requestStartTime: Date.now()
     };
+
+    const serviceName = getEnvVar('OTEL_SERVICE_NAME') || 'unknown';
+    const inFlightAttrs = {
+      [OTEL_ATTR_SERVICE_NAME]: serviceName
+    };
+    let inFlightActive = true;
+
+    const decrementInFlight = () => {
+      if (!inFlightActive) {
+        return;
+      }
+
+      httpRequestsInFlightCounter.add(-1, inFlightAttrs);
+      inFlightActive = false;
+    };
+
+    httpRequestsInFlightCounter.add(1, inFlightAttrs);
+    res.on('finish', decrementInFlight);
+    res.on('close', decrementInFlight);
+    res.on('error', decrementInFlight);
 
     const span = trace.getSpan(context.active());
 
     if (span != null) {
       req.context.span = span;
       req.context.span?.setAttribute(ATTR_CORRELATION_ID, correlationId);
-      req.context.span?.setAttribute(
-        ATTR_SERVICE_NAME,
-        getEnvVar('OTEL_SERVICE_NAME')
-      );
+      req.context.span?.setAttribute(ATTR_SERVICE_NAME, serviceName);
     }
 
     next?.();

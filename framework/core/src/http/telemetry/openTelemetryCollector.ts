@@ -259,3 +259,37 @@ export const httpServerDurationHistogram = metrics
     description: 'Duration of HTTP server requests',
     unit: 's'
   });
+
+export const httpRequestDurationMsHistogram = metrics
+  .getMeter(getEnvVar('OTEL_SERVICE_NAME') || 'unknown')
+  .createHistogram<{
+    [ATTR_SERVICE_NAME]: string;
+    [ATTR_APPLICATION_ID]?: string;
+    [ATTR_API_NAME]: string;
+    [ATTR_HTTP_REQUEST_METHOD]: string;
+    [ATTR_HTTP_ROUTE]: string;
+    [ATTR_HTTP_RESPONSE_STATUS_CODE]: number;
+  }>('http_request_duration_ms', {
+    description: 'Duration of HTTP requests in milliseconds'
+  });
+
+export const httpErrorsTotalCounter = metrics
+  .getMeter(getEnvVar('OTEL_SERVICE_NAME') || 'unknown')
+  .createCounter<{
+    [ATTR_SERVICE_NAME]: string;
+    [ATTR_APPLICATION_ID]?: string;
+    [ATTR_API_NAME]: string;
+    [ATTR_HTTP_REQUEST_METHOD]: string;
+    [ATTR_HTTP_ROUTE]: string;
+    [ATTR_HTTP_RESPONSE_STATUS_CODE]: number;
+  }>('http_errors_total', {
+    description: 'Total number of HTTP errors (4xx/5xx)'
+  });
+
+export const httpRequestsInFlightCounter = metrics
+  .getMeter(getEnvVar('OTEL_SERVICE_NAME') || 'unknown')
+  .createUpDownCounter<{
+    [ATTR_SERVICE_NAME]: string;
+  }>('http_requests_in_flight', {
+    description: 'Number of HTTP requests currently in flight'
+  });
