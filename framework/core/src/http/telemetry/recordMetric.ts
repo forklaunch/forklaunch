@@ -17,7 +17,6 @@ import { ATTR_API_NAME, ATTR_APPLICATION_ID } from './constants';
 import {
   httpErrorsTotalCounter,
   httpRequestDurationMsHistogram,
-  httpRequestsInFlightCounter,
   httpRequestsTotalCounter
 } from './openTelemetryCollector';
 
@@ -54,8 +53,9 @@ export function recordMetric<
     return;
   }
 
+  const serviceName = getEnvVar('OTEL_SERVICE_NAME') || 'unknown';
   const attrs = {
-    [ATTR_SERVICE_NAME]: getEnvVar('OTEL_SERVICE_NAME'),
+    [ATTR_SERVICE_NAME]: serviceName,
     [ATTR_APPLICATION_ID]: getEnvVar('OTEL_APPLICATION_ID'),
     [ATTR_API_NAME]: req.contractDetails?.name,
     [ATTR_HTTP_REQUEST_METHOD]: req.method,
@@ -74,10 +74,6 @@ export function recordMetric<
   if (Number(res.statusCode) >= 400) {
     httpErrorsTotalCounter.add(1, attrs);
   }
-
-  httpRequestsInFlightCounter.add(-1, {
-    [ATTR_SERVICE_NAME]: getEnvVar('OTEL_SERVICE_NAME')
-  });
 
   res.metricRecorded = true;
 }

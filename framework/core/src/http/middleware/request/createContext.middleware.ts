@@ -85,19 +85,32 @@ export function createContext<
       requestStartTime: Date.now()
     };
 
-    httpRequestsInFlightCounter.add(1, {
-      [OTEL_ATTR_SERVICE_NAME]: getEnvVar('OTEL_SERVICE_NAME')
-    });
+    const serviceName = getEnvVar('OTEL_SERVICE_NAME') || 'unknown';
+    const inFlightAttrs = {
+      [OTEL_ATTR_SERVICE_NAME]: serviceName
+    };
+    let inFlightActive = true;
+
+    const decrementInFlight = () => {
+      if (!inFlightActive) {
+        return;
+      }
+
+      httpRequestsInFlightCounter.add(-1, inFlightAttrs);
+      inFlightActive = false;
+    };
+
+    httpRequestsInFlightCounter.add(1, inFlightAttrs);
+    res.on('finish', decrementInFlight);
+    res.on('close', decrementInFlight);
+    res.on('error', decrementInFlight);
 
     const span = trace.getSpan(context.active());
 
     if (span != null) {
       req.context.span = span;
       req.context.span?.setAttribute(ATTR_CORRELATION_ID, correlationId);
-      req.context.span?.setAttribute(
-        ATTR_SERVICE_NAME,
-        getEnvVar('OTEL_SERVICE_NAME')
-      );
+      req.context.span?.setAttribute(ATTR_SERVICE_NAME, serviceName);
     }
 
     next?.();
