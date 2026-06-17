@@ -1,11 +1,13 @@
 import { getEnvVar } from '@forklaunch/common';
 import { AnySchemaValidator } from '@forklaunch/validator';
 import { context, trace } from '@opentelemetry/api';
+import { ATTR_SERVICE_NAME as OTEL_ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 import { v4 } from 'uuid';
 import {
   ATTR_CORRELATION_ID,
   ATTR_SERVICE_NAME
 } from '../../telemetry/constants';
+import { httpRequestsInFlightCounter } from '../../telemetry/openTelemetryCollector';
 import {
   ExpressLikeSchemaHandler,
   ForklaunchNextFunction,
@@ -79,8 +81,13 @@ export function createContext<
     ).setHeader('x-correlation-id', correlationId);
 
     req.context = {
-      correlationId: correlationId
+      correlationId: correlationId,
+      requestStartTime: Date.now()
     };
+
+    httpRequestsInFlightCounter.add(1, {
+      [OTEL_ATTR_SERVICE_NAME]: getEnvVar('OTEL_SERVICE_NAME')
+    });
 
     const span = trace.getSpan(context.active());
 

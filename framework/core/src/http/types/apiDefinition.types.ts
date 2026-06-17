@@ -49,6 +49,8 @@ export interface RequestContext {
   idempotencyKey?: string;
   /** Active OpenTelemetry Span */
   span?: Span;
+  /** Wall-clock timestamp (ms) when the request context was created, used for duration metrics */
+  requestStartTime?: number;
 }
 
 export interface ForklaunchBaseRequest<

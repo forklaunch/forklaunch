@@ -14,7 +14,12 @@ import {
   VersionedRequests
 } from '..';
 import { ATTR_API_NAME, ATTR_APPLICATION_ID } from './constants';
-import { httpRequestsTotalCounter } from './openTelemetryCollector';
+import {
+  httpErrorsTotalCounter,
+  httpRequestDurationMsHistogram,
+  httpRequestsInFlightCounter,
+  httpRequestsTotalCounter
+} from './openTelemetryCollector';
 
 export function recordMetric<
   SV extends AnySchemaValidator,
@@ -49,13 +54,30 @@ export function recordMetric<
     return;
   }
 
-  httpRequestsTotalCounter.add(1, {
+  const attrs = {
     [ATTR_SERVICE_NAME]: getEnvVar('OTEL_SERVICE_NAME'),
     [ATTR_APPLICATION_ID]: getEnvVar('OTEL_APPLICATION_ID'),
     [ATTR_API_NAME]: req.contractDetails?.name,
     [ATTR_HTTP_REQUEST_METHOD]: req.method,
     [ATTR_HTTP_ROUTE]: req.originalPath,
     [ATTR_HTTP_RESPONSE_STATUS_CODE]: Number(res.statusCode) || 0
+  };
+
+  httpRequestsTotalCounter.add(1, attrs);
+
+  const durationMs =
+    req.context?.requestStartTime != null
+      ? Date.now() - req.context.requestStartTime
+      : 0;
+  httpRequestDurationMsHistogram.record(durationMs, attrs);
+
+  if (Number(res.statusCode) >= 400) {
+    httpErrorsTotalCounter.add(1, attrs);
+  }
+
+  httpRequestsInFlightCounter.add(-1, {
+    [ATTR_SERVICE_NAME]: getEnvVar('OTEL_SERVICE_NAME')
   });
+
   res.metricRecorded = true;
 }
