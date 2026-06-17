@@ -208,13 +208,13 @@ impl SignalStatus {
             || self.traces == SignalHealth::Degraded
         {
             SignalHealth::Degraded
-        } else if self.metrics == SignalHealth::Unknown
-            || self.logs == SignalHealth::Unknown
-            || self.traces == SignalHealth::Unknown
+        } else if self.metrics == SignalHealth::Healthy
+            || self.logs == SignalHealth::Healthy
+            || self.traces == SignalHealth::Healthy
         {
-            SignalHealth::Unknown
-        } else {
             SignalHealth::Healthy
+        } else {
+            SignalHealth::Unknown
         }
     }
 }
@@ -347,11 +347,10 @@ fn metric_label(name: &str) -> String {
 }
 
 fn classify_metrics(monitoring: &ApplicationMonitoringResponse) -> SignalHealth {
-    if monitoring.available == Some(false) {
-        return SignalHealth::Unknown;
+    match monitoring.available {
+        Some(true) => SignalHealth::Healthy,
+        Some(false) | None => SignalHealth::Unknown,
     }
-
-    SignalHealth::Healthy
 }
 
 #[cfg(test)]
@@ -389,14 +388,33 @@ mod tests {
     }
 
     #[test]
-    fn unknown_metrics_drive_overall_status() {
+    fn healthy_metrics_drive_overall_status_when_other_signals_are_unknown() {
+        let signals = SignalStatus {
+            metrics: SignalHealth::Healthy,
+            logs: SignalHealth::Unknown,
+            traces: SignalHealth::Unknown,
+        };
+
+        assert_eq!(signals.overall(), SignalHealth::Healthy);
+    }
+
+    #[test]
+    fn all_unknown_signals_drive_unknown_overall_status() {
         let signals = SignalStatus {
             metrics: SignalHealth::Unknown,
-            logs: SignalHealth::Healthy,
-            traces: SignalHealth::Healthy,
+            logs: SignalHealth::Unknown,
+            traces: SignalHealth::Unknown,
         };
 
         assert_eq!(signals.overall(), SignalHealth::Unknown);
+    }
+
+    #[test]
+    fn omitted_availability_is_unknown() {
+        let mut monitoring = monitoring(0.2, 120.0, 99.95);
+        monitoring.available = None;
+
+        assert_eq!(classify_metrics(&monitoring), SignalHealth::Unknown);
     }
 
     #[test]

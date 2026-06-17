@@ -48,14 +48,18 @@ pub(crate) fn get_platform_management_api_url() -> String {
 }
 
 pub(crate) fn get_observability_api_url() -> String {
-    std::env::var("FORKLAUNCH_OBSERVABILITY_API_URL").unwrap_or_else(|_| {
-        if is_dev_build() {
-            DEV_OBSERVABILITY_API_URL
-        } else {
-            PROD_OBSERVABILITY_API_URL
-        }
-        .to_string()
-    })
+    std::env::var("FORKLAUNCH_OBSERVABILITY_API_URL")
+        .ok()
+        .map(|api_url| api_url.trim().to_string())
+        .filter(|api_url| !api_url.is_empty())
+        .unwrap_or_else(|| {
+            if is_dev_build() {
+                DEV_OBSERVABILITY_API_URL
+            } else {
+                PROD_OBSERVABILITY_API_URL
+            }
+            .to_string()
+        })
 }
 
 pub(crate) fn get_iam_api_url() -> String {
