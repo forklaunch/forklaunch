@@ -1,8 +1,9 @@
-use std::io::Write;
+use std::{collections::BTreeMap, io::Write};
 
 use anyhow::{Context, Result};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 use crate::{
@@ -78,7 +79,7 @@ fn fetch_application_monitoring(
     application_id: &str,
     environment: &str,
 ) -> Result<ApplicationMonitoringResponse> {
-    let api_url = get_observability_api_url()?;
+    let api_url = get_observability_api_url();
     let url = format!(
         "{}/applications/{}/monitoring?environment={}&timeRange=1h",
         api_url, application_id, environment
@@ -126,22 +127,14 @@ fn print_status(status: &ObserveStatus) -> Result<()> {
     stdout.set_color(ColorSpec::new().set_bold(true))?;
     writeln!(stdout, "  Metrics")?;
     stdout.reset()?;
-    writeln!(
-        stdout,
-        "    Request rate: {:.2} req/s",
-        status.metrics.request_rate
-    )?;
-    writeln!(
-        stdout,
-        "    Error rate:   {:.2}%",
-        status.metrics.error_rate
-    )?;
-    writeln!(
-        stdout,
-        "    Latency p95:  {:.2} ms",
-        status.metrics.latency_p95
-    )?;
-    writeln!(stdout, "    Uptime:       {:.2}%", status.metrics.uptime)?;
+    for metric in &status.metrics {
+        writeln!(
+            stdout,
+            "    {:<18} {}",
+            format!("{}:", metric.label),
+            metric.display_value
+        )?;
+    }
     writeln!(stdout)?;
 
     Ok(())
@@ -173,7 +166,7 @@ struct ObserveStatus {
     environment: String,
     overall_status: SignalHealth,
     signals: SignalStatus,
-    metrics: StatusMetrics,
+    metrics: Vec<StatusMetric>,
 }
 
 impl ObserveStatus {
@@ -190,12 +183,7 @@ impl ObserveStatus {
             environment,
             overall_status,
             signals,
-            metrics: StatusMetrics {
-                request_rate: monitoring.request_rate,
-                error_rate: monitoring.error_rate,
-                latency_p95: monitoring.latency.p95,
-                uptime: monitoring.uptime,
-            },
+            metrics: monitoring.metrics(),
         }
     }
 }
@@ -253,11 +241,11 @@ impl std::fmt::Display for SignalHealth {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct StatusMetrics {
-    request_rate: f64,
-    error_rate: f64,
-    latency_p95: f64,
-    uptime: f64,
+struct StatusMetric {
+    name: String,
+    label: String,
+    value: Value,
+    display_value: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -269,11 +257,93 @@ struct ApplicationMonitoringResponse {
     uptime: f64,
     #[serde(default)]
     available: Option<bool>,
+    #[serde(flatten)]
+    additional_metrics: BTreeMap<String, Value>,
 }
 
 #[derive(Debug, Deserialize)]
 struct LatencyResponse {
     p95: f64,
+    #[serde(flatten)]
+    additional_percentiles: BTreeMap<String, Value>,
+}
+
+impl ApplicationMonitoringResponse {
+    fn metrics(&self) -> Vec<StatusMetric> {
+        let mut metrics = vec![
+            StatusMetric::number("requestRate", "Request rate", self.request_rate, "req/s"),
+            StatusMetric::number("errorRate", "Error rate", self.error_rate, "%"),
+            StatusMetric::number("latency.p95", "Latency p95", self.latency.p95, "ms"),
+            StatusMetric::number("uptime", "Uptime", self.uptime, "%"),
+        ];
+
+        for (name, value) in &self.latency.additional_percentiles {
+            metrics.push(StatusMetric::from_value(
+                format!("latency.{name}"),
+                format!("Latency {}", metric_label(name)),
+                value.clone(),
+                Some("ms"),
+            ));
+        }
+
+        for (name, value) in &self.additional_metrics {
+            metrics.push(StatusMetric::from_value(
+                name.clone(),
+                metric_label(name),
+                value.clone(),
+                None,
+            ));
+        }
+
+        metrics
+    }
+}
+
+impl StatusMetric {
+    fn number(name: &str, label: &str, value: f64, unit: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            label: label.to_string(),
+            value: Value::from(value),
+            display_value: format!("{value:.2} {unit}"),
+        }
+    }
+
+    fn from_value(name: String, label: String, value: Value, unit: Option<&str>) -> Self {
+        let display_value = match (&value, unit) {
+            (Value::Number(number), Some(unit)) => format!("{number} {unit}"),
+            (Value::Number(number), None) => number.to_string(),
+            (Value::String(value), _) => value.clone(),
+            (Value::Bool(value), _) => value.to_string(),
+            _ => value.to_string(),
+        };
+
+        Self {
+            name,
+            label,
+            value,
+            display_value,
+        }
+    }
+}
+
+fn metric_label(name: &str) -> String {
+    let mut label = String::new();
+
+    for (index, char) in name.chars().enumerate() {
+        if index == 0 {
+            label.push(char.to_ascii_uppercase());
+        } else if char == '_' || char == '-' {
+            label.push(' ');
+        } else if char.is_ascii_uppercase() {
+            label.push(' ');
+            label.push(char.to_ascii_lowercase());
+        } else {
+            label.push(char);
+        }
+    }
+
+    label
 }
 
 fn classify_metrics(monitoring: &ApplicationMonitoringResponse) -> SignalHealth {
@@ -291,10 +361,14 @@ mod tests {
     fn monitoring(error_rate: f64, p95: f64, uptime: f64) -> ApplicationMonitoringResponse {
         ApplicationMonitoringResponse {
             request_rate: 12.0,
-            latency: LatencyResponse { p95 },
+            latency: LatencyResponse {
+                p95,
+                additional_percentiles: BTreeMap::new(),
+            },
             error_rate,
             uptime,
             available: Some(true),
+            additional_metrics: BTreeMap::new(),
         }
     }
 
@@ -323,5 +397,20 @@ mod tests {
         };
 
         assert_eq!(signals.overall(), SignalHealth::Unknown);
+    }
+
+    #[test]
+    fn includes_additional_metrics_in_display_order() {
+        let mut monitoring = monitoring(0.2, 120.0, 99.95);
+        monitoring
+            .additional_metrics
+            .insert("queueDepth".to_string(), Value::from(42));
+
+        let status = ObserveStatus::from_monitoring("dev".to_string(), monitoring);
+
+        assert_eq!(status.metrics.len(), 5);
+        assert_eq!(status.metrics[4].name, "queueDepth");
+        assert_eq!(status.metrics[4].label, "Queue depth");
+        assert_eq!(status.metrics[4].display_value, "42");
     }
 }
