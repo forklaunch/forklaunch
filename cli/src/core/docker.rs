@@ -1938,7 +1938,14 @@ pub(crate) fn add_service_definition_to_docker_compose(
         )?;
     }
 
-    if manifest_data.is_cache_enabled {
+    // Provision a redis service whenever the service actually wires a Redis cache, not only
+    // when redis infra was explicitly requested. The service registrations template uses
+    // RedisTtlCache when `is_request_cache_needed` (= is_cache_enabled || is_iam_configured ||
+    // is_billing_configured), so an iam/billing app's service depends on redis at runtime even
+    // without `-i redis`. Gating compose provisioning on `is_cache_enabled` alone left those
+    // services pointed at a `redis://redis` host that was never provisioned -> ENOTFOUND and
+    // hung requests on first cache use.
+    if manifest_data.is_request_cache_needed {
         add_redis_to_docker_compose(
             &manifest_data.app_name,
             &mut docker_compose,
