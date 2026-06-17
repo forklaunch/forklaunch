@@ -12,6 +12,7 @@ use init::InitCommand;
 use integrate::IntegrateCommand;
 use login::LoginCommand;
 use logout::LogoutCommand;
+use observe::ObserveCommand;
 use openapi::OpenApiCommand;
 use release::ReleaseCommand;
 use version::VersionCommand;
@@ -35,6 +36,7 @@ mod init;
 mod integrate;
 mod login;
 mod logout;
+mod observe;
 mod openapi;
 mod prompt;
 mod release;
@@ -62,6 +64,7 @@ fn main() -> Result<()> {
     let integrate = IntegrateCommand::new();
     let login = LoginCommand::new();
     let logout = LogoutCommand::new();
+    let observe = ObserveCommand::new();
     let openapi = OpenApiCommand::new();
     let release = ReleaseCommand::new();
     let sdk = SdkCommand::new();
@@ -87,6 +90,7 @@ fn main() -> Result<()> {
         .subcommand(release.command())
         .subcommand(login.command())
         .subcommand(logout.command())
+        .subcommand(observe.command())
         .subcommand(sdk.command())
         .subcommand(whoami.command())
         .subcommand(version.command())
@@ -112,6 +116,7 @@ fn main() -> Result<()> {
         Some(("release", sub_matches)) => release.handler(sub_matches),
         Some(("login", sub_matches)) => login.handler(sub_matches),
         Some(("logout", sub_matches)) => logout.handler(sub_matches),
+        Some(("observe", sub_matches)) => observe.handler(sub_matches),
         Some(("sdk", sub_matches)) => sdk.handler(sub_matches),
         Some(("whoami", sub_matches)) => whoami.handler(sub_matches),
         Some(("version", sub_matches)) => version.handler(sub_matches),

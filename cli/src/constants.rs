@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use anyhow::{Result, bail};
+
 use crate::{choice, core::choices::Choice};
 
 // --- Environment Detection ---------------------------------------------------
@@ -8,6 +10,7 @@ use crate::{choice, core::choices::Choice};
 // All URLs can be overridden via environment variables.
 
 const DEV_PLATFORM_MANAGEMENT_API_URL: &str = "http://localhost:8004";
+const DEV_OBSERVABILITY_API_URL: &str = "http://localhost:8007";
 const DEV_IAM_API_URL: &str = "http://localhost:8001";
 const DEV_BILLING_API_URL: &str = "http://localhost:8000";
 const DEV_PLATFORM_UI_URL: &str = "http://localhost:5173";
@@ -43,6 +46,20 @@ pub(crate) fn get_platform_management_api_url() -> String {
         }
         .to_string()
     })
+}
+
+pub(crate) fn get_observability_api_url() -> Result<String> {
+    if let Ok(api_url) = std::env::var("FORKLAUNCH_OBSERVABILITY_API_URL") {
+        return Ok(api_url);
+    }
+
+    if is_dev_build() {
+        return Ok(DEV_OBSERVABILITY_API_URL.to_string());
+    }
+
+    bail!(
+        "FORKLAUNCH_OBSERVABILITY_API_URL is required because the production observability API URL is not configured"
+    )
 }
 
 pub(crate) fn get_iam_api_url() -> String {
