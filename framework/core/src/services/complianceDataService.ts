@@ -104,6 +104,13 @@ export class ComplianceDataService {
     this.userIdFieldOverrides = options?.userIdFieldOverrides ?? {};
     this.disableFilters = options?.disableFilters ?? false;
 
+    console.log(
+      '[DEBUG ComplianceDataService constructor] options:',
+      options,
+      'disableFilters:',
+      this.disableFilters
+    );
+
     if (this.disableFilters) {
       this.otel.warn(
         '[ComplianceDataService] Initialized with filters DISABLED',
@@ -141,60 +148,6 @@ export class ComplianceDataService {
 
     // 4. No link found
     return undefined;
-  }
-
-  /**
-   * Temporarily disable all global filters on the given EntityManager,
-   * returning a function to restore them.
-   *
-   * **SECURITY**: This is only called if `disableFilters: true` was set in
-   * the constructor, which should only happen after superadmin authorization.
-   *
-   * @returns Restore function that re-enables filters to their original state
-   */
-  private withFiltersDisabled(
-    em: ReturnType<MikroORM['em']['fork']>
-  ): () => void {
-    const filters = this.orm.config.get('filters');
-    if (!filters) return () => {}; // No-op if no filters configured
-
-    // Capture current filter state
-    const originalFilterStates = new Map<string, boolean>();
-
-    try {
-      Object.keys(filters).forEach((filterName) => {
-        // Save original state (we can't directly read it, so we assume enabled)
-        originalFilterStates.set(filterName, true);
-
-        // Disable filter
-        em.setFilterParams(filterName, { enabled: false });
-      });
-
-      this.otel.debug('[ComplianceDataService] Filters disabled', {
-        filters: Object.keys(filters)
-      });
-    } catch (err) {
-      this.otel.warn('[ComplianceDataService] Failed to disable filters', {
-        error: String(err)
-      });
-    }
-
-    // Return restore function
-    return () => {
-      try {
-        originalFilterStates.forEach((wasEnabled, filterName) => {
-          em.setFilterParams(filterName, { enabled: wasEnabled });
-        });
-
-        this.otel.debug('[ComplianceDataService] Filters restored', {
-          filters: Array.from(originalFilterStates.keys())
-        });
-      } catch (err) {
-        this.otel.warn('[ComplianceDataService] Failed to restore filters', {
-          error: String(err)
-        });
-      }
-    };
   }
 
   /**
@@ -246,151 +199,171 @@ export class ComplianceDataService {
 
   async erase(userId: string): Promise<EraseResult> {
     const em = this.orm.em.fork();
-
-    // Temporarily disable filters if authorized (superadmin only)
-    // GDPR erasure must work across ALL tenants when filters are disabled
-    const restoreFilters = this.disableFilters
-      ? this.withFiltersDisabled(em)
-      : () => {}; // No-op if filters should remain enabled
-
     const entitiesAffected: string[] = [];
     let recordsDeleted = 0;
 
-    try {
-      const allMetadata = [...this.orm.getMetadata().getAll().values()];
+    const allMetadata = [...this.orm.getMetadata().getAll().values()];
 
-      for (const metadata of allMetadata) {
-        const entityName = metadata.className;
-        const fields = getEntityComplianceFields(entityName);
-        if (!fields) continue;
+    for (const metadata of allMetadata) {
+      const entityName = metadata.className;
+      const fields = getEntityComplianceFields(entityName);
+      console.log('[DEBUG erase] Entity:', entityName, 'fields:', fields);
+      if (!fields) continue;
 
-        const hasPii = [...fields.values()].some(
-          (level) => level === 'pii' || level === 'phi' || level === 'pci'
+      const hasPii = [...fields.values()].some(
+        (level) => level === 'pii' || level === 'phi' || level === 'pci'
+      );
+      if (!hasPii) continue;
+
+      const userIdField = this.resolveUserIdField(
+        entityName,
+        metadata.properties
+      );
+
+      if (!userIdField) {
+        this.otel.warn(
+          '[ComplianceDataService] No user-linking field found — skipping',
+          { entityName, candidates: CANDIDATE_USER_FIELDS }
         );
-        if (!hasPii) continue;
+        continue;
+      }
 
-        const userIdField = this.resolveUserIdField(
+      try {
+        const entityClass = metadata.class ?? metadata.className;
+        const findOptions = {
+          // Pass filters: false to bypass ALL filters when disableFilters is enabled
+          // This is the correct MikroORM approach for GDPR cross-tenant operations
+          filters: this.disableFilters ? false : undefined
+        };
+        console.log(
+          '[DEBUG erase] Entity:',
           entityName,
-          metadata.properties
+          'userIdField:',
+          userIdField,
+          'disableFilters:',
+          this.disableFilters,
+          'findOptions:',
+          findOptions
+        );
+        const records = await em.find(
+          entityClass,
+          { [userIdField]: userId },
+          findOptions
+        );
+        console.log(
+          '[DEBUG erase] Found records:',
+          records.length,
+          'for entity:',
+          entityName
         );
 
-        if (!userIdField) {
-          this.otel.warn(
-            '[ComplianceDataService] No user-linking field found — skipping',
-            { entityName, candidates: CANDIDATE_USER_FIELDS }
-          );
-          continue;
+        if (records.length > 0) {
+          entitiesAffected.push(entityName);
+          recordsDeleted += records.length;
+          records.forEach((r) => em.remove(r));
         }
-
-        try {
-          const entityClass = metadata.class ?? metadata.className;
-          const records = await em.find(entityClass, {
-            [userIdField]: userId
-          });
-
-          if (records.length > 0) {
-            entitiesAffected.push(entityName);
-            recordsDeleted += records.length;
-            records.forEach((r) => em.remove(r));
-          }
-        } catch (err) {
-          this.otel.error('[ComplianceDataService] Failed to erase entity', {
-            entityName,
-            userIdField,
-            error: String(err)
-          });
-        }
+      } catch (err) {
+        this.otel.error('[ComplianceDataService] Failed to erase entity', {
+          entityName,
+          userIdField,
+          error: String(err)
+        });
       }
-
-      if (recordsDeleted > 0) {
-        await em.flush();
-      }
-
-      this.otel.info('[ComplianceDataService] Erase complete', {
-        userId,
-        entitiesAffected: entitiesAffected.join(','),
-        recordsDeleted
-      });
-
-      return { entitiesAffected, recordsDeleted };
-    } finally {
-      // CRITICAL: Always restore filters, even if erase fails
-      restoreFilters();
     }
+
+    if (recordsDeleted > 0) {
+      await em.flush();
+    }
+
+    this.otel.info('[ComplianceDataService] Erase complete', {
+      userId,
+      entitiesAffected: entitiesAffected.join(','),
+      recordsDeleted
+    });
+
+    return { entitiesAffected, recordsDeleted };
   }
 
   async export(userId: string): Promise<ExportResult> {
     const em = this.orm.em.fork();
-
-    // Temporarily disable filters if authorized (superadmin only)
-    const restoreFilters = this.disableFilters
-      ? this.withFiltersDisabled(em)
-      : () => {}; // No-op if filters should remain enabled
-
     const entities: Record<string, unknown[]> = {};
 
-    try {
-      const allMetadata = [...this.orm.getMetadata().getAll().values()];
+    const allMetadata = [...this.orm.getMetadata().getAll().values()];
 
-      for (const metadata of allMetadata) {
-        const entityName = metadata.className;
-        const fields = getEntityComplianceFields(entityName);
-        if (!fields) continue;
+    for (const metadata of allMetadata) {
+      const entityName = metadata.className;
+      const fields = getEntityComplianceFields(entityName);
+      if (!fields) continue;
 
-        const hasPii = [...fields.values()].some(
-          (level) => level === 'pii' || level === 'phi' || level === 'pci'
-        );
-        if (!hasPii) continue;
+      const hasPii = [...fields.values()].some(
+        (level) => level === 'pii' || level === 'phi' || level === 'pci'
+      );
+      if (!hasPii) continue;
 
-        const userIdField = this.resolveUserIdField(
-          entityName,
-          metadata.properties
-        );
+      const userIdField = this.resolveUserIdField(
+        entityName,
+        metadata.properties
+      );
 
-        if (!userIdField) {
-          continue;
-        }
-
-        try {
-          const entityClass = metadata.class ?? metadata.className;
-          const records = await em.find(entityClass, {
-            [userIdField]: userId
-          });
-
-          if (records.length > 0) {
-            const piiFieldNames = [...fields.entries()]
-              .filter(([, level]) => level !== 'none')
-              .map(([name]) => name);
-
-            entities[entityName] = records.map((record) => {
-              const filtered: Record<string, unknown> = {};
-              filtered['id'] = (record as Record<string, unknown>)['id'];
-              for (const fieldName of piiFieldNames) {
-                filtered[fieldName] = (record as Record<string, unknown>)[
-                  fieldName
-                ];
-              }
-              return filtered;
-            });
-          }
-        } catch (err) {
-          this.otel.error('[ComplianceDataService] Failed to export entity', {
-            entityName,
-            userIdField,
-            error: String(err)
-          });
-        }
+      if (!userIdField) {
+        continue;
       }
 
-      this.otel.info('[ComplianceDataService] Export complete', {
-        userId,
-        entityCount: Object.keys(entities).length
-      });
+      try {
+        const entityClass = metadata.class ?? metadata.className;
+        const findOptions = this.disableFilters ? { filters: false } : {};
+        console.log(
+          '[DEBUG erase] Entity:',
+          entityName,
+          'userIdField:',
+          userIdField,
+          'disableFilters:',
+          this.disableFilters,
+          'findOptions:',
+          findOptions
+        );
+        const records = await em.find(
+          entityClass,
+          { [userIdField]: userId },
+          findOptions
+        );
+        console.log(
+          '[DEBUG erase] Found records:',
+          records.length,
+          'for entity:',
+          entityName
+        );
 
-      return { userId, entities };
-    } finally {
-      // CRITICAL: Always restore filters, even if export fails
-      restoreFilters();
+        if (records.length > 0) {
+          const piiFieldNames = [...fields.entries()]
+            .filter(([, level]) => level !== 'none')
+            .map(([name]) => name);
+
+          entities[entityName] = records.map((record) => {
+            const filtered: Record<string, unknown> = {};
+            filtered['id'] = (record as Record<string, unknown>)['id'];
+            for (const fieldName of piiFieldNames) {
+              filtered[fieldName] = (record as Record<string, unknown>)[
+                fieldName
+              ];
+            }
+            return filtered;
+          });
+        }
+      } catch (err) {
+        this.otel.error('[ComplianceDataService] Failed to export entity', {
+          entityName,
+          userIdField,
+          error: String(err)
+        });
+      }
     }
+
+    this.otel.info('[ComplianceDataService] Export complete', {
+      userId,
+      entityCount: Object.keys(entities).length
+    });
+
+    return { userId, entities };
   }
 }
