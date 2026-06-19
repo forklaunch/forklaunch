@@ -52,6 +52,7 @@ tempfile = "3.20.0"
 dirs = "5.0.1"
 colored = "2.1.0"
 derive_more = { version = "2.0.1", features = ["from"] }
+tungstenite = { version = "0.26", features = ["native-tls"] }
 chrono = { version = "0.4", features = ["serde"] }
 ignore = "0.4"
 tar = "0.4"
