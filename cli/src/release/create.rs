@@ -171,6 +171,14 @@ struct CreateReleaseRequest {
     manifest: ReleaseManifest,
     #[serde(rename = "releasedBy", skip_serializing_if = "Option::is_none")]
     released_by: Option<String>,
+    /// Pin the autodeploy fan-out to a specific environment. Honored by
+    /// `FORKLAUNCH_TARGET_ENVIRONMENT` env var (set by the worker when the
+    /// webhook already matched the push to an env via the branch matrix).
+    #[serde(
+        rename = "targetEnvironment",
+        skip_serializing_if = "Option::is_none"
+    )]
+    target_environment: Option<String>,
 }
 
 #[derive(Debug)]
@@ -382,16 +390,31 @@ impl CliCommand for CreateCommand {
         if local_mode {
             log_info!(stdout, "Using local mode - packaging code directly");
         } else if is_git_repo() {
-            // Warn user and checkout main branch with latest changes
-            log_warn!(
+            // Git mode releases whatever commit is checked out, but the working
+            // tree must be clean — uncommitted changes would not be reproducible
+            // from the released commit alone.
+            let status_output = ProcessCommand::new("git")
+                .args(&["status", "--porcelain"])
+                .output()
+                .with_context(|| "Failed to check git status")?;
+            if !status_output.status.success() {
+                bail!("Failed to check git status");
+            }
+            let dirty = !status_output.stdout.is_empty();
+            if dirty {
+                let dirty_text = String::from_utf8_lossy(&status_output.stdout);
+                bail!(
+                    "Working tree has uncommitted changes; commit, stash, or discard them before releasing from git:\n{}",
+                    dirty_text.trim_end()
+                );
+            }
+
+            let current_branch = get_git_branch().unwrap_or_else(|_| "HEAD".to_string());
+            log_info!(
                 stdout,
-                "Releasing from git will checkout the main branch and pull latest changes."
+                "Releasing from current branch '{}' (no checkout, no pull)",
+                current_branch
             );
-            log_warn!(
-                stdout,
-                "Please save any uncommitted work before proceeding."
-            );
-            writeln!(stdout)?;
 
             if !auto_yes {
                 let confirmed = Confirm::with_theme(&ColorfulTheme::default())
@@ -403,35 +426,6 @@ impl CliCommand for CreateCommand {
                     bail!("Release cancelled by user");
                 }
             }
-
-            log_header!(stdout, Color::Cyan, "Checking out main branch...");
-            writeln!(stdout)?;
-
-            let checkout_status = ProcessCommand::new("git")
-                .args(&["checkout", "main"])
-                .status()
-                .with_context(|| "Failed to checkout main branch")?;
-
-            if !checkout_status.success() {
-                bail!("Failed to checkout main branch");
-            }
-
-            log_ok!(stdout, "Checked out main branch");
-
-            log_header!(stdout, Color::Cyan, "Pulling latest changes...");
-            writeln!(stdout)?;
-
-            let pull_status = ProcessCommand::new("git")
-                .args(&["pull"])
-                .status()
-                .with_context(|| "Failed to pull latest changes")?;
-
-            if !pull_status.success() {
-                bail!("Failed to pull latest changes");
-            }
-
-            log_ok!(stdout, "Pulled latest changes");
-            writeln!(stdout)?;
         }
 
         log_header!(stdout, Color::Cyan, "Creating release {}...", version);
@@ -1186,17 +1180,28 @@ fn upload_release(
         application_id: application_id.to_string(),
         manifest,
         released_by: None, // TODO: Get from token
+        target_environment: std::env::var("FORKLAUNCH_TARGET_ENVIRONMENT")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
     };
 
-    let url = if auth_mode.is_hmac() {
-        format!("{}/releases/internal", get_platform_management_api_url())
+    let (url, sign_path) = if auth_mode.is_hmac() {
+        (
+            format!("{}/releases/internal", get_platform_management_api_url()),
+            "/internal",
+        )
     } else {
-        format!("{}/releases", get_platform_management_api_url())
+        (format!("{}/releases", get_platform_management_api_url()), "/")
     };
 
-    let response =
-        http_client::post_with_auth(auth_mode, &url, serde_json::to_value(&request_body)?)
-            .with_context(|| "Failed to create release")?;
+    let response = http_client::post_with_auth_and_sign_path(
+        auth_mode,
+        &url,
+        sign_path,
+        serde_json::to_value(&request_body)?,
+    )
+    .with_context(|| "Failed to create release")?;
 
     let status = response.status();
     let response_body = response.text().unwrap_or_else(|_| "{}".to_string());
@@ -2322,6 +2327,12 @@ fn is_platform_managed_var(var_name: &str) -> bool {
         // Pulumi-generated: derived from other vars at deploy time
         "JWKS_PUBLIC_KEY_URL",
         "BETTER_AUTH_BASE_URL",
+        // Pulumi-generated: derived from the iam service URL (auth.ts wires
+        // BETTER_AUTH_URL = the deployed iam FQDN).
+        "BETTER_AUTH_URL",
+        // Pulumi-generated: derived from the application's public client URL
+        // (CORS_ORIGINS = the deployed frontend origin(s)).
+        "CORS_ORIGINS",
         // Pulumi-generated: IAM-specific database
         "IAM_DB_NAME",
         // Pulumi-generated: database

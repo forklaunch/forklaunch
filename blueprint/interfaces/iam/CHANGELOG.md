@@ -1,5 +1,11 @@
 # @forklaunch/interfaces-iam
 
+## 1.0.25
+
+### Patch Changes
+
+- internal package upgrade
+
 ## 1.0.24
 
 ### Patch Changes

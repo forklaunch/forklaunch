@@ -85,6 +85,24 @@ describe('extractArgumentNames', () => {
     ]);
   });
 
+  it('should handle wrapped arrow functions', () => {
+    const fn = {
+      toString: () =>
+        '(({ QUEUE_NAME, WorkerOptions, EventEncryptor }) => (processEventsFunction, failureHandler) => new BullMqWorkerConsumer(QUEUE_NAME, WorkerOptions, processEventsFunction, failureHandler))'
+    };
+    expect(extractArgumentNames(fn)).toEqual([
+      '{QUEUE_NAME,WorkerOptions,EventEncryptor}'
+    ]);
+  });
+
+  it('should handle destructured arguments with TypeScript annotations in function strings', () => {
+    const fn = {
+      toString: () =>
+        '({ name, age }: { name: string; age: number }, resolve: () => void) => {}'
+    };
+    expect(extractArgumentNames(fn)).toEqual(['{name,age}', 'resolve']);
+  });
+
   it('should return empty array for invalid function string', () => {
     const invalidFn = { toString: () => 'not a function' };
     expect(extractArgumentNames(invalidFn)).toEqual([]);

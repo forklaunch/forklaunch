@@ -291,27 +291,12 @@ const serviceDependencies = runtimeDependencies.chain({ {{#is_worker}}{{#is_data
     ],
       type<{{worker_type}}WorkerConsumer<EncryptedEventEnvelope, {{worker_type}}WorkerOptions>>()
     ),
-    factory: (container) => {
-      const createConsumer = ({{{worker_consumer_factory}}})(container);
-      return (
-        processEventsFunction: WorkerProcessFunction<{{pascal_case_name}}EventRecord>,
-        failureHandler: WorkerFailureHandler<{{pascal_case_name}}EventRecord>
-      ) =>
-        createConsumer(
-          withDecryption<{{pascal_case_name}}EventRecord>(processEventsFunction, container.EventEncryptor),
-          withDecryptionFailureHandler<{{pascal_case_name}}EventRecord>(failureHandler, container.EventEncryptor)
-        );
-    }
+    factory: {{{worker_consumer_factory}}}
   },
   WorkerProducer: {
     lifetime: Lifetime.Scoped,
     type: EncryptingWorkerProducer,
-    factory: (container, context) =>
-      new EncryptingWorkerProducer(
-        ({{{worker_producer_factory}}})(container),
-        container.EventEncryptor,
-        (context?.tenantId as string) ?? ''
-      )
+    factory: {{{worker_producer_factory}}}
   },
   {{/is_database_worker}}{{/is_worker}}{{pascal_case_name}}Service: {
     lifetime: Lifetime.Scoped,

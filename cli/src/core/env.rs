@@ -187,7 +187,9 @@ impl<'de> Deserialize<'de> for Env {
                         Field::Version => env.version = Some(map.next_value()?),
                         Field::DocsPath => env.docs_path = Some(map.next_value()?),
                         Field::BetterAuthSecret => env.better_auth_secret = Some(map.next_value()?),
-                        Field::BetterAuthBasePath => env.better_auth_base_path = Some(map.next_value()?),
+                        Field::BetterAuthBasePath => {
+                            env.better_auth_base_path = Some(map.next_value()?)
+                        }
                         Field::HmacSecretKey => env.hmac_secret_key = Some(map.next_value()?),
                         Field::JwksPublicKeyUrl => {
                             env.jwks_public_key_url = Some(map.next_value()?)
@@ -211,36 +213,74 @@ pub(crate) struct EnvFile {
     pub(crate) variables: HashMap<String, String>,
 }
 
-/// For multiline values `*i` is advanced to the closing-quote line so the caller's
-/// `i += 1` lands on the next key correctly.
+/// Index of the first unescaped closing quote, or None. Double-quoted
+/// values honor backslash escapes; single-quoted values are verbatim.
+fn find_closing_quote(s: &str, quote_char: char) -> Option<usize> {
+    let mut escaped = false;
+    for (idx, ch) in s.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if quote_char == '"' && ch == '\\' {
+            escaped = true;
+            continue;
+        }
+        if ch == quote_char {
+            return Some(idx);
+        }
+    }
+    None
+}
+
+/// Strip an inline comment from an UNQUOTED value: everything from the
+/// first whitespace-followed-by-`#` onward is dropped (e.g.
+/// `DOCKER_HOST=docker # ⚠ REJECTED — replace` parses as `docker`).
+/// A `#` with no preceding whitespace is part of the value (passwords,
+/// URLs with fragments). Quoted values never pass through here.
+fn strip_inline_comment(rest: &str) -> &str {
+    let bytes = rest.as_bytes();
+    for (idx, &b) in bytes.iter().enumerate() {
+        if b == b'#' && (idx == 0 || bytes[idx - 1].is_ascii_whitespace()) {
+            return &rest[..idx];
+        }
+    }
+    rest
+}
+
+/// Extract a value that may be quoted (verbatim, possibly multiline) or
+/// unquoted (inline comments stripped).
+///
+/// Quoted values are taken verbatim up to the first unescaped closing
+/// quote; anything after the closing quote on the same line (e.g. a
+/// trailing ` # comment`) is ignored. For multiline values `*i` is
+/// advanced to the closing-quote line so the caller's `i += 1` lands on
+/// the next key correctly.
 pub(crate) fn extract_env_value(lines: &[&str], i: &mut usize, rest: &str) -> String {
     if rest.starts_with('"') || rest.starts_with('\'') {
         let quote_char = rest.chars().next().unwrap();
         let inner = &rest[1..];
-        if !inner.is_empty() && inner.ends_with(quote_char) {
-            inner[..inner.len() - 1].to_string()
-        } else {
-            let mut value_lines = vec![inner.to_string()];
-            *i += 1;
-            while *i < lines.len() {
-                let next_line = lines[*i];
-                let trimmed = next_line.trim_end();
-                if trimmed.ends_with(quote_char) {
-                    value_lines.push(trimmed[..trimmed.len() - 1].to_string());
-                    break;
-                } else {
-                    value_lines.push(next_line.to_string());
-                    *i += 1;
-                }
+        if let Some(close) = find_closing_quote(inner, quote_char) {
+            // Single-line quoted value; trailing content after the close
+            // (comments, stray text) is intentionally discarded.
+            return inner[..close].to_string();
+        }
+        // Multiline: consume verbatim until a line containing the closing
+        // quote. Content after the close on that final line is discarded.
+        let mut value_lines = vec![inner.to_string()];
+        *i += 1;
+        while *i < lines.len() {
+            let next_line = lines[*i];
+            if let Some(close) = find_closing_quote(next_line, quote_char) {
+                value_lines.push(next_line[..close].to_string());
+                break;
             }
-            value_lines.join("\n")
+            value_lines.push(next_line.to_string());
+            *i += 1;
         }
+        value_lines.join("\n")
     } else {
-        if let Some(comment_pos) = rest.find(" #") {
-            rest[..comment_pos].trim().to_string()
-        } else {
-            rest.trim().to_string()
-        }
+        strip_inline_comment(rest).trim().to_string()
     }
 }
 
@@ -304,28 +344,30 @@ pub(crate) fn load_env_file(path: &Path) -> Result<HashMap<String, String>> {
         .with_context(|| format!("Failed to read env file: {}", path.display()))?;
 
     let mut variables = HashMap::new();
+    let lines: Vec<&str> = content.lines().collect();
+    let mut i = 0;
 
-    for line in content.lines() {
-        let line = line.trim();
+    // Same extraction semantics as parse_env_file_items: quoted values are
+    // verbatim (multiline supported, trailing comments after the closing
+    // quote ignored); unquoted values have inline ` # ...` comments stripped.
+    while i < lines.len() {
+        let line = lines[i].trim();
 
         if line.is_empty() || line.starts_with('#') {
+            i += 1;
             continue;
         }
 
-        if let Some((key, value)) = line.split_once('=') {
-            let key = key.trim().to_string();
-            let value = value.trim().to_string();
-
-            let value = if (value.starts_with('"') && value.ends_with('"'))
-                || (value.starts_with('\'') && value.ends_with('\''))
-            {
-                value[1..value.len() - 1].to_string()
-            } else {
-                value
-            };
-
-            variables.insert(key, value);
+        if let Some(eq_pos) = line.find('=') {
+            let key = line[..eq_pos].trim().to_string();
+            let rest = line[eq_pos + 1..].trim();
+            if !key.is_empty() {
+                let value = extract_env_value(&lines, &mut i, rest);
+                variables.insert(key, value);
+            }
         }
+
+        i += 1;
     }
 
     Ok(variables)
@@ -576,6 +618,35 @@ mod tests {
     }
 
     #[test]
+    fn test_load_env_file_strips_inline_comments_and_keeps_quotes_verbatim() {
+        let temp_dir = TempDir::new().unwrap();
+        let env_path = temp_dir.path().join(".env");
+
+        fs::write(
+            &env_path,
+            concat!(
+                "DOCKER_HOST=docker # ⚠ REJECTED — replace with production value\n",
+                "QUOTED=\"keep # this\" # but drop this\n",
+                "GLUED=pa#ss\n",
+                "PEM=\"-----BEGIN\nabc\n-----END\"\n",
+                "AFTER=ok\n",
+            ),
+        )
+        .unwrap();
+
+        let vars = load_env_file(&env_path).unwrap();
+        assert_eq!(vars.get("DOCKER_HOST"), Some(&"docker".to_string()));
+        assert_eq!(vars.get("QUOTED"), Some(&"keep # this".to_string()));
+        assert_eq!(vars.get("GLUED"), Some(&"pa#ss".to_string()));
+        assert_eq!(
+            vars.get("PEM"),
+            Some(&"-----BEGIN\nabc\n-----END".to_string())
+        );
+        assert_eq!(vars.get("AFTER"), Some(&"ok".to_string()));
+        assert_eq!(vars.len(), 5);
+    }
+
+    #[test]
     fn test_extract_env_value_plain() {
         let lines = vec!["KEY=hello"];
         let mut i = 0;
@@ -592,6 +663,54 @@ mod tests {
             "hello"
         );
         assert_eq!(i, 0);
+    }
+
+    #[test]
+    fn test_extract_env_value_hash_without_space_is_part_of_value() {
+        // Passwords / URL fragments keep a glued '#'.
+        let lines = vec!["KEY=pa#ss"];
+        let mut i = 0;
+        assert_eq!(extract_env_value(&lines, &mut i, "pa#ss"), "pa#ss");
+    }
+
+    #[test]
+    fn test_extract_env_value_quoted_with_trailing_comment() {
+        // The deploy template's exact shape: a quoted value followed by an
+        // annotation. Must NOT be treated as a multiline opener.
+        let lines = vec![
+            "DOCKER_HOST=\"docker\" # ⚠ REJECTED — replace with production value",
+            "NEXT=untouched",
+        ];
+        let mut i = 0;
+        assert_eq!(
+            extract_env_value(
+                &lines,
+                &mut i,
+                "\"docker\" # ⚠ REJECTED — replace with production value"
+            ),
+            "docker"
+        );
+        assert_eq!(i, 0); // must not swallow the next line
+    }
+
+    #[test]
+    fn test_extract_env_value_quoted_keeps_hash_verbatim() {
+        let lines = vec!["KEY=\"value # not a comment\""];
+        let mut i = 0;
+        assert_eq!(
+            extract_env_value(&lines, &mut i, "\"value # not a comment\""),
+            "value # not a comment"
+        );
+    }
+
+    #[test]
+    fn test_extract_env_value_double_quoted_escaped_quote() {
+        let lines = vec![r#"KEY="say \"hi\"""#];
+        let mut i = 0;
+        assert_eq!(
+            extract_env_value(&lines, &mut i, r#""say \"hi\"""#),
+            r#"say \"hi\""#
+        );
     }
 
     #[test]

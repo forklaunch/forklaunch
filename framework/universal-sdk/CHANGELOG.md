@@ -1,5 +1,13 @@
 # @forklaunch/universal-sdk
 
+## 1.2.18
+
+### Patch Changes
+
+- update dependency versions
+- Updated dependencies
+  - @forklaunch/common@1.2.18
+
 ## 1.2.17
 
 ### Patch Changes

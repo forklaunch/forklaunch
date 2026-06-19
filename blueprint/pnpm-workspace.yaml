@@ -21,3 +21,15 @@ packages:
 - implementations/worker/kafka
 - implementations/worker/redis
 - universal-sdk
+
+allowBuilds:
+  "@scarf/scarf": true
+  better-sqlite3: true
+  cpu-features: true
+  esbuild: true
+  msgpackr-extract: true
+  protobufjs: true
+  sqlite3: true
+  ssh2: true
+  tldjs: true
+  unrs-resolver: true
