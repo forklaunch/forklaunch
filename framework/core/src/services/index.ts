@@ -12,7 +12,11 @@ export {
 } from './retentionService';
 export {
   ComplianceDataService,
+  ComplianceEraseError,
+  ComplianceExportError,
   type ComplianceDataServiceOptions,
+  type ComplianceFailure,
+  type EraseAction,
   type EraseResult,
   type ExportResult,
   type UserIdFieldOverrides
