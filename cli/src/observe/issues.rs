@@ -38,7 +38,8 @@ impl CliCommand for IssuesCommand {
                 Arg::new("base_path")
                     .short('p')
                     .long("path")
-                    .help("The application path"),
+                    .help("The application path")
+                    .global(true),
             )
             .arg(
                 Arg::new("environment")
@@ -60,7 +61,8 @@ impl CliCommand for IssuesCommand {
                 Arg::new("json")
                     .long("json")
                     .help("Output raw JSON instead of formatted terminal output")
-                    .action(ArgAction::SetTrue),
+                    .action(ArgAction::SetTrue)
+                    .global(true),
             )
             .subcommand(self.ack.command())
     }
@@ -101,7 +103,7 @@ impl CliCommand for AckCommand {
             .arg(
                 Arg::new("acknowledged_by")
                     .long("acknowledged-by")
-                    .help("User acknowledging the issue (defaults to the logged-in user's email)"),
+                    .help("User acknowledging the issue (defaults to FORKLAUNCH_USER env var, then OS user)"),
             )
             .arg(
                 Arg::new("json")
@@ -284,8 +286,8 @@ fn print_issues(issues: &[Issue]) -> Result<()> {
         let id_display = issue.id.get(..10).unwrap_or(&issue.id);
         let service = issue.service_name.as_deref().unwrap_or("-");
         let title = issue.title.as_deref().unwrap_or("-");
-        let title_truncated = if title.len() > 30 {
-            format!("{}…", &title[..29])
+        let title_truncated = if title.chars().count() > 30 {
+            format!("{}…", title.chars().take(29).collect::<String>())
         } else {
             title.to_string()
         };
@@ -424,32 +426,41 @@ mod tests {
         assert_eq!(severity_color("incident"), Color::Cyan);
     }
 
+    fn with_forklaunch_user<F: FnOnce()>(value: &str, f: F) {
+        use std::sync::Mutex;
+        static ENV_LOCK: Mutex<()> = Mutex::new(());
+        let _guard = ENV_LOCK.lock().unwrap();
+        let prev = std::env::var("FORKLAUNCH_USER").ok();
+        // SAFETY: serialized by ENV_LOCK; no other test mutates FORKLAUNCH_USER concurrently.
+        unsafe { std::env::set_var("FORKLAUNCH_USER", value) };
+        f();
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var("FORKLAUNCH_USER", v),
+                None => std::env::remove_var("FORKLAUNCH_USER"),
+            }
+        }
+    }
+
     #[test]
     fn resolve_current_user_env_var_takes_priority() {
-        // SAFETY: test-only; single-threaded test runner for this module.
-        unsafe { std::env::set_var("FORKLAUNCH_USER", "ci-bot") };
-        let user = resolve_current_user("app-123");
-        unsafe { std::env::remove_var("FORKLAUNCH_USER") };
-        assert_eq!(user, "ci-bot");
+        with_forklaunch_user("ci-bot", || {
+            assert_eq!(resolve_current_user("app-123"), "ci-bot");
+        });
     }
 
     #[test]
     fn resolve_current_user_trims_whitespace() {
-        // SAFETY: test-only; single-threaded test runner for this module.
-        unsafe { std::env::set_var("FORKLAUNCH_USER", "  alice  ") };
-        let user = resolve_current_user("app-123");
-        unsafe { std::env::remove_var("FORKLAUNCH_USER") };
-        assert_eq!(user, "alice");
+        with_forklaunch_user("  alice  ", || {
+            assert_eq!(resolve_current_user("app-123"), "alice");
+        });
     }
 
     #[test]
     fn resolve_current_user_skips_empty_env_var() {
-        // SAFETY: test-only; single-threaded test runner for this module.
-        unsafe { std::env::set_var("FORKLAUNCH_USER", "") };
-        // Don't assert exact value — just verify it doesn't panic and returns non-empty.
-        let user = resolve_current_user("app-123");
-        unsafe { std::env::remove_var("FORKLAUNCH_USER") };
-        assert!(!user.is_empty());
+        with_forklaunch_user("", || {
+            assert!(!resolve_current_user("app-123").is_empty());
+        });
     }
 
     #[test]
@@ -515,11 +526,22 @@ mod tests {
     #[test]
     fn title_truncation_logic() {
         let long_title = "A".repeat(35);
-        let truncated = if long_title.len() > 30 {
-            format!("{}…", &long_title[..29])
+        let truncated = if long_title.chars().count() > 30 {
+            format!("{}…", long_title.chars().take(29).collect::<String>())
         } else {
             long_title.clone()
         };
-        assert_eq!(truncated.chars().count(), 30); // 29 chars + ellipsis char
+        assert_eq!(truncated.chars().count(), 30);
+    }
+
+    #[test]
+    fn title_truncation_handles_multibyte_chars() {
+        let long_title = "é".repeat(35);
+        let truncated = if long_title.chars().count() > 30 {
+            format!("{}…", long_title.chars().take(29).collect::<String>())
+        } else {
+            long_title.clone()
+        };
+        assert_eq!(truncated.chars().count(), 30);
     }
 }
