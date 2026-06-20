@@ -63,6 +63,7 @@ impl CliCommand for LogsCommand {
                 Arg::new("limit")
                     .long("limit")
                     .default_value("100")
+                    .value_parser(clap::value_parser!(u32))
                     .help("Maximum number of log lines to fetch"),
             )
             .arg(
@@ -90,10 +91,7 @@ impl CliCommand for LogsCommand {
         let service = matches.get_one::<String>("service").cloned();
         let level = matches.get_one::<String>("level").cloned();
         let since = matches.get_one::<String>("since").cloned();
-        let limit: u32 = matches
-            .get_one::<String>("limit")
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(100);
+        let limit: u32 = matches.get_one::<u32>("limit").copied().unwrap_or(100);
         let follow = matches.get_flag("follow");
         let json_output = matches.get_flag("json");
 
@@ -153,16 +151,19 @@ fn fetch_logs(
     let api_url = get_observability_api_url();
     let mut url = format!(
         "{}/applications/{}/logs?environment={}&limit={}&direction=backward",
-        api_url, application_id, environment, limit
+        api_url,
+        application_id,
+        urlencoding::encode(environment),
+        limit
     );
     if let Some(svc) = service {
-        url.push_str(&format!("&service={}", svc));
+        url.push_str(&format!("&service={}", urlencoding::encode(svc)));
     }
     if let Some(lvl) = level {
-        url.push_str(&format!("&level={}", lvl));
+        url.push_str(&format!("&level={}", urlencoding::encode(lvl)));
     }
     if let Some(s) = since {
-        url.push_str(&format!("&since={}", urlencoding_encode(s)));
+        url.push_str(&format!("&since={}", urlencoding::encode(s)));
     }
 
     let auth_mode = AuthMode::detect();
@@ -243,6 +244,7 @@ fn stream_logs(
         "applicationId": application_id,
         "environment": environment,
         "serviceName": service,
+        "level": level,
     });
     socket
         .send(tungstenite::Message::Text(
@@ -288,9 +290,6 @@ fn stream_logs(
                 } else {
                     print_logs(&logs)?;
                 }
-
-                // Apply level filter client-side if server doesn't filter
-                let _ = level; // already sent to server; nothing extra needed here
             }
             Ok(tungstenite::Message::Close(_)) => {
                 break;
@@ -319,21 +318,6 @@ fn build_ws_url() -> Result<String> {
     Ok(ws_url)
 }
 
-fn urlencoding_encode(s: &str) -> String {
-    let mut encoded = String::new();
-    for byte in s.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                encoded.push(byte as char);
-            }
-            _ => {
-                encoded.push_str(&format!("%{:02X}", byte));
-            }
-        }
-    }
-    encoded
-}
-
 // ── Display ───────────────────────────────────────────────────────────────────
 
 fn print_logs(logs: &[LogEntry]) -> Result<()> {
@@ -344,7 +328,8 @@ fn print_logs(logs: &[LogEntry]) -> Result<()> {
         let color = level_color(level);
 
         stdout.set_color(ColorSpec::new().set_fg(Some(Color::White)))?;
-        write!(stdout, "{} ", &entry.timestamp[..19].replace('T', " "))?;
+        let ts_display = entry.timestamp.get(..19).unwrap_or(&entry.timestamp).replace('T', " ");
+        write!(stdout, "{} ", ts_display)?;
 
         stdout.set_color(ColorSpec::new().set_fg(Some(color)).set_bold(true))?;
         write!(stdout, "{:<5} ", level.to_uppercase())?;
@@ -383,6 +368,7 @@ struct LogEntry {
 #[serde(rename_all = "camelCase")]
 struct LogsResponse {
     logs: Vec<LogEntry>,
+    #[serde(default)]
     available: bool,
     #[serde(default)]
     has_more: Option<bool>,
