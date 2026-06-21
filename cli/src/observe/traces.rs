@@ -281,7 +281,8 @@ fn print_trace_detail(response: &TraceDetailResponse) -> Result<()> {
         let is_error = span
             .attributes
             .get("otel.status_code")
-            .map(|v| v.as_str() == "ERROR")
+            .and_then(|v| v.as_str())
+            .map(|s| s == "ERROR")
             .unwrap_or(false);
         let color = if is_error {
             Color::Red
