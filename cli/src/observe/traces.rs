@@ -46,7 +46,7 @@ impl CliCommand for TracesCommand {
             .arg(
                 Arg::new("app_id")
                     .long("app-id")
-                    .help("Application ID (defaults to value from forklaunch.json)"),
+                    .help("Application ID (defaults to value from .forklaunch/manifest.toml)"),
             )
             .arg(
                 Arg::new("trace_id")
@@ -57,6 +57,7 @@ impl CliCommand for TracesCommand {
                 Arg::new("limit")
                     .long("limit")
                     .default_value("50")
+                    .value_parser(clap::value_parser!(u32).range(1..))
                     .help("Maximum number of traces to fetch (list mode only)"),
             )
             .arg(
@@ -97,9 +98,10 @@ impl CliCommand for TracesCommand {
             }
         } else {
             let limit = matches
-                .get_one::<String>("limit")
-                .cloned()
-                .unwrap_or_else(|| "50".to_string());
+                .get_one::<u32>("limit")
+                .copied()
+                .unwrap_or(50)
+                .to_string();
             let time_range = matches
                 .get_one::<String>("time_range")
                 .cloned()

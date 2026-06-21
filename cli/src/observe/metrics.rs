@@ -46,7 +46,7 @@ impl CliCommand for MetricsCommand {
             .arg(
                 Arg::new("app_id")
                     .long("app-id")
-                    .help("Application ID (defaults to value from forklaunch.json)"),
+                    .help("Application ID (defaults to value from .forklaunch/manifest.toml)"),
             )
             .arg(
                 Arg::new("time_range")
