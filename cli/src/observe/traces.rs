@@ -278,7 +278,14 @@ fn print_trace_detail(response: &TraceDetailResponse) -> Result<()> {
         let depth = depth_map.get(&span.span_id).copied().unwrap_or(0);
         let indent = "  ".repeat(depth + 1); // base 1-level indent for all spans
 
-        let color = if span.duration_ms > 1000 {
+        let is_error = span
+            .attributes
+            .get("otel.status_code")
+            .map(|v| v.as_str() == "ERROR")
+            .unwrap_or(false);
+        let color = if is_error {
+            Color::Red
+        } else if span.duration_ms > 1000 {
             Color::Yellow
         } else {
             Color::Green
