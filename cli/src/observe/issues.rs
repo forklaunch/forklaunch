@@ -33,38 +33,45 @@ impl IssuesCommand {
 
 impl CliCommand for IssuesCommand {
     fn command(&self) -> Command {
-        command("issues", "List or acknowledge active issues for a ForkLaunch application")
-            .arg(
-                Arg::new("base_path")
-                    .short('p')
-                    .long("path")
-                    .help("The application path")
-                    .global(true),
-            )
-            .arg(
-                Arg::new("environment")
-                    .short('e')
-                    .long("environment")
-                    .help("Environment to inspect (for example: dev, staging, production)"),
-            )
-            .arg(
-                Arg::new("severity")
-                    .long("severity")
-                    .help("Filter by severity (ERROR, ALERT, INCIDENT)"),
-            )
-            .arg(
-                Arg::new("status")
-                    .long("status")
-                    .help("Filter by status (for example: open, acknowledged)"),
-            )
-            .arg(
-                Arg::new("json")
-                    .long("json")
-                    .help("Output raw JSON instead of formatted terminal output")
-                    .action(ArgAction::SetTrue)
-                    .global(true),
-            )
-            .subcommand(self.ack.command())
+        command(
+            "issues",
+            "List or acknowledge active issues for a ForkLaunch application",
+        )
+        // Listing requires --environment; the `ack` subcommand doesn't, so
+        // negate the parent requirement when a subcommand is invoked.
+        .subcommand_negates_reqs(true)
+        .arg(
+            Arg::new("base_path")
+                .short('p')
+                .long("path")
+                .help("The application path")
+                .global(true),
+        )
+        .arg(
+            Arg::new("environment")
+                .short('e')
+                .long("environment")
+                .required(true)
+                .help("Environment to inspect (for example: dev, staging, production)"),
+        )
+        .arg(
+            Arg::new("severity")
+                .long("severity")
+                .help("Filter by severity (ERROR, ALERT, INCIDENT)"),
+        )
+        .arg(
+            Arg::new("status")
+                .long("status")
+                .help("Filter by status (for example: open, acknowledged)"),
+        )
+        .arg(
+            Arg::new("json")
+                .long("json")
+                .help("Output raw JSON instead of formatted terminal output")
+                .action(ArgAction::SetTrue)
+                .global(true),
+        )
+        .subcommand(self.ack.command())
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
@@ -88,29 +95,17 @@ impl AckCommand {
 
 impl CliCommand for AckCommand {
     fn command(&self) -> Command {
+        // base_path and json are inherited from the parent `issues` command as
+        // global args — no need to redeclare them here.
         command("ack", "Acknowledge an active issue")
-            .arg(
-                Arg::new("base_path")
-                    .short('p')
-                    .long("path")
-                    .help("The application path"),
-            )
             .arg(
                 Arg::new("id")
                     .required(true)
                     .help("The issue ID to acknowledge"),
             )
-            .arg(
-                Arg::new("acknowledged_by")
-                    .long("acknowledged-by")
-                    .help("User acknowledging the issue (defaults to FORKLAUNCH_USER env var, then OS user)"),
-            )
-            .arg(
-                Arg::new("json")
-                    .long("json")
-                    .help("Output raw JSON instead of formatted terminal output")
-                    .action(ArgAction::SetTrue),
-            )
+            .arg(Arg::new("acknowledged_by").long("acknowledged-by").help(
+                "User acknowledging the issue (defaults to FORKLAUNCH_USER env var, then OS user)",
+            ))
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
@@ -131,7 +126,12 @@ fn list_issues(matches: &ArgMatches) -> Result<()> {
     let status = matches.get_one::<String>("status").cloned();
     let json_output = matches.get_flag("json");
 
-    let response = fetch_issues(&application_id, &environment, severity.as_deref(), status.as_deref())?;
+    let response = fetch_issues(
+        &application_id,
+        &environment,
+        severity.as_deref(),
+        status.as_deref(),
+    )?;
 
     if json_output {
         println!("{}", serde_json::to_string_pretty(&response)?);
@@ -224,12 +224,16 @@ fn resolve_current_user(_application_id: &str) -> String {
 
 fn post_acknowledge(issue_id: &str, acknowledged_by: &str) -> Result<AckResponse> {
     let api_url = get_observability_api_url();
-    let url = format!("{}/issues/{}/acknowledge", api_url, urlencoding::encode(issue_id));
+    let url = format!(
+        "{}/issues/{}/acknowledge",
+        api_url,
+        urlencoding::encode(issue_id)
+    );
 
     let body = serde_json::json!({ "acknowledgedBy": acknowledged_by });
     let auth_mode = AuthMode::detect();
-    let response =
-        post_with_auth(&auth_mode, &url, body).with_context(|| "Failed to reach observability API")?;
+    let response = post_with_auth(&auth_mode, &url, body)
+        .with_context(|| "Failed to reach observability API")?;
 
     if !response.status().is_success() {
         let http_status = response.status();
@@ -249,6 +253,16 @@ fn post_acknowledge(issue_id: &str, acknowledged_by: &str) -> Result<AckResponse
 fn print_issues(issues: &[Issue]) -> Result<()> {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
+    // Present the feed ranked by score (highest impact first); issues without a
+    // score sort to the bottom.
+    let mut issues: Vec<&Issue> = issues.iter().collect();
+    issues.sort_by(|a, b| {
+        b.score
+            .unwrap_or(f64::MIN)
+            .partial_cmp(&a.score.unwrap_or(f64::MIN))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
     if issues.is_empty() {
         stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
         writeln!(stdout, "No active issues found.")?;
@@ -262,7 +276,7 @@ fn print_issues(issues: &[Issue]) -> Result<()> {
     stdout.set_color(ColorSpec::new().set_bold(true))?;
     writeln!(
         stdout,
-        "  {:<10}  {:<10}  {:<20}  {:<30}  {}",
+        "  {:<10}  {:<36}  {:<20}  {:<30}  {}",
         "SEVERITY", "ID", "SERVICE", "TITLE", "FIRST SEEN"
     )?;
     stdout.reset()?;
@@ -270,12 +284,12 @@ fn print_issues(issues: &[Issue]) -> Result<()> {
     stdout.set_color(ColorSpec::new().set_fg(Some(Color::White)))?;
     writeln!(
         stdout,
-        "  {:-<10}  {:-<10}  {:-<20}  {:-<30}  {:-<19}",
+        "  {:-<10}  {:-<36}  {:-<20}  {:-<30}  {:-<19}",
         "", "", "", "", ""
     )?;
     stdout.reset()?;
 
-    for issue in issues {
+    for issue in &issues {
         let severity = issue.severity.as_deref().unwrap_or("UNKNOWN");
         let color = severity_color(severity);
 
@@ -283,7 +297,8 @@ fn print_issues(issues: &[Issue]) -> Result<()> {
         write!(stdout, "  {:<10}", severity)?;
         stdout.reset()?;
 
-        let id_display = issue.id.get(..10).unwrap_or(&issue.id);
+        // Show the full id — it's needed verbatim for `observe issues ack <id>`.
+        let id_display = issue.id.as_str();
         let service = issue.service_name.as_deref().unwrap_or("-");
         let title = issue.title.as_deref().unwrap_or("-");
         let title_truncated = if title.chars().count() > 30 {
@@ -300,7 +315,7 @@ fn print_issues(issues: &[Issue]) -> Result<()> {
 
         writeln!(
             stdout,
-            "  {:<10}  {:<20}  {:<30}  {}",
+            "  {:<36}  {:<20}  {:<30}  {}",
             id_display, service, title_truncated, first_seen
         )?;
     }
@@ -398,6 +413,40 @@ struct AckResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // The real CLI attaches a version at the root app; add one here so clap's
+    // standalone checks don't trip on missing version propagation.
+    fn issues_cmd() -> Command {
+        IssuesCommand::new().command().version("0.0.0-test")
+    }
+
+    #[test]
+    fn command_definition_is_valid() {
+        // Catches clap misconfiguration (e.g. required arg + global + negates_reqs).
+        issues_cmd().debug_assert();
+    }
+
+    #[test]
+    fn list_requires_environment() {
+        // No --environment and no subcommand → parse error.
+        assert!(issues_cmd().try_get_matches_from(["issues"]).is_err());
+        // With --environment → ok.
+        assert!(
+            issues_cmd()
+                .try_get_matches_from(["issues", "-e", "dev"])
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn ack_does_not_require_environment() {
+        // ack subcommand negates the parent's --environment requirement.
+        assert!(
+            issues_cmd()
+                .try_get_matches_from(["issues", "ack", "issue-123"])
+                .is_ok()
+        );
+    }
 
     #[test]
     fn severity_color_error_is_red() {
