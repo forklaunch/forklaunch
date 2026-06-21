@@ -326,7 +326,7 @@ fn build_depth_map(spans: &[Span]) -> HashMap<String, usize> {
     }
 
     let mut depth_map: HashMap<String, usize> = HashMap::new();
-    // BFS from roots (parent_span_id == None)
+    // DFS from roots (parent_span_id == None)
     let mut queue: Vec<(&Span, usize)> = children
         .get(&None)
         .map(|roots| roots.iter().map(|s| (*s, 0usize)).collect())
