@@ -30,150 +30,90 @@ impl TracesCommand {
 impl CliCommand for TracesCommand {
     fn command(&self) -> Command {
         command("traces", "Query distributed traces for a ForkLaunch application")
-            .subcommand_required(true)
-            .subcommand(
-                command("recent", "List recent traces for an application")
-                    .arg(
-                        Arg::new("base_path")
-                            .short('p')
-                            .long("path")
-                            .help("The application path"),
-                    )
-                    .arg(
-                        Arg::new("environment")
-                            .short('e')
-                            .long("environment")
-                            .required(true)
-                            .help("Environment to inspect (for example: dev, staging, production)"),
-                    )
-                    .arg(
-                        Arg::new("app_id")
-                            .long("app-id")
-                            .help("Application ID (defaults to value from forklaunch.json)"),
-                    )
-                    .arg(
-                        Arg::new("limit")
-                            .long("limit")
-                            .default_value("50")
-                            .help("Maximum number of traces to fetch"),
-                    )
-                    .arg(
-                        Arg::new("time_range")
-                            .long("time-range")
-                            .default_value("1h")
-                            .value_parser(["15m", "1h", "6h", "24h", "7d", "30d"])
-                            .help("Time range for traces (15m, 1h, 6h, 24h, 7d, 30d)"),
-                    )
-                    .arg(
-                        Arg::new("json")
-                            .long("json")
-                            .help("Output raw JSON instead of formatted terminal output")
-                            .action(ArgAction::SetTrue),
-                    ),
+            .arg(
+                Arg::new("base_path")
+                    .short('p')
+                    .long("path")
+                    .help("The application path"),
             )
-            .subcommand(
-                command("show", "Drill into a single trace and display its span tree")
-                    .arg(
-                        Arg::new("base_path")
-                            .short('p')
-                            .long("path")
-                            .help("The application path"),
-                    )
-                    .arg(
-                        Arg::new("environment")
-                            .short('e')
-                            .long("environment")
-                            .required(true)
-                            .help("Environment to inspect (for example: dev, staging, production)"),
-                    )
-                    .arg(
-                        Arg::new("app_id")
-                            .long("app-id")
-                            .help("Application ID (defaults to value from forklaunch.json)"),
-                    )
-                    .arg(
-                        Arg::new("trace_id")
-                            .required(true)
-                            .help("Trace ID to inspect"),
-                    )
-                    .arg(
-                        Arg::new("json")
-                            .long("json")
-                            .help("Output raw JSON instead of formatted terminal output")
-                            .action(ArgAction::SetTrue),
-                    ),
+            .arg(
+                Arg::new("environment")
+                    .short('e')
+                    .long("environment")
+                    .required(true)
+                    .help("Environment to inspect (for example: dev, staging, production)"),
+            )
+            .arg(
+                Arg::new("app_id")
+                    .long("app-id")
+                    .help("Application ID (defaults to value from forklaunch.json)"),
+            )
+            .arg(
+                Arg::new("trace_id")
+                    .long("trace-id")
+                    .help("Trace ID — show full span tree for a single trace"),
+            )
+            .arg(
+                Arg::new("limit")
+                    .long("limit")
+                    .default_value("50")
+                    .help("Maximum number of traces to fetch (list mode only)"),
+            )
+            .arg(
+                Arg::new("time_range")
+                    .long("time-range")
+                    .default_value("1h")
+                    .value_parser(["15m", "1h", "6h", "24h", "7d", "30d"])
+                    .help("Time range for traces (list mode only): 15m, 1h, 6h, 24h, 7d, 30d"),
+            )
+            .arg(
+                Arg::new("json")
+                    .long("json")
+                    .help("Output raw JSON instead of formatted terminal output")
+                    .action(ArgAction::SetTrue),
             )
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        match matches.subcommand() {
-            Some(("recent", sub)) => handle_recent(sub),
-            Some(("show", sub)) => handle_show(sub),
-            _ => unreachable!("subcommand_required enforces a match"),
+        let environment = matches
+            .get_one::<String>("environment")
+            .context("--environment is required")?
+            .to_string();
+        let json_output = matches.get_flag("json");
+
+        let application_id = if let Some(id) = matches.get_one::<String>("app_id").cloned() {
+            id
+        } else {
+            let (_app_root, manifest) = require_manifest(matches)?;
+            require_integration(&manifest)?
+        };
+
+        if let Some(trace_id) = matches.get_one::<String>("trace_id").cloned() {
+            let response = fetch_trace_detail(&application_id, &environment, &trace_id)?;
+            if json_output {
+                println!("{}", serde_json::to_string_pretty(&response)?);
+            } else {
+                print_trace_detail(&response)?;
+            }
+        } else {
+            let limit = matches
+                .get_one::<String>("limit")
+                .cloned()
+                .unwrap_or_else(|| "50".to_string());
+            let time_range = matches
+                .get_one::<String>("time_range")
+                .cloned()
+                .unwrap_or_else(|| "1h".to_string());
+            let response = fetch_traces(&application_id, &environment, &limit, &time_range)?;
+            if json_output {
+                println!("{}", serde_json::to_string_pretty(&response)?);
+            } else {
+                print_traces(&response.traces)?;
+            }
         }
+
+        Ok(())
     }
-}
-
-// ── Subcommand handlers ───────────────────────────────────────────────────────
-
-fn handle_recent(matches: &ArgMatches) -> Result<()> {
-    let environment = matches
-        .get_one::<String>("environment")
-        .context("--environment is required")?
-        .to_string();
-    let time_range = matches
-        .get_one::<String>("time_range")
-        .cloned()
-        .unwrap_or_else(|| "1h".to_string());
-    let limit = matches
-        .get_one::<String>("limit")
-        .cloned()
-        .unwrap_or_else(|| "50".to_string());
-    let json_output = matches.get_flag("json");
-
-    let application_id = if let Some(id) = matches.get_one::<String>("app_id").cloned() {
-        id
-    } else {
-        let (_app_root, manifest) = require_manifest(matches)?;
-        require_integration(&manifest)?
-    };
-
-    let response = fetch_traces(&application_id, &environment, &limit, &time_range)?;
-    if json_output {
-        println!("{}", serde_json::to_string_pretty(&response)?);
-    } else {
-        print_traces(&response.traces)?;
-    }
-
-    Ok(())
-}
-
-fn handle_show(matches: &ArgMatches) -> Result<()> {
-    let environment = matches
-        .get_one::<String>("environment")
-        .context("--environment is required")?
-        .to_string();
-    let trace_id = matches
-        .get_one::<String>("trace_id")
-        .context("trace ID is required")?
-        .to_string();
-    let json_output = matches.get_flag("json");
-
-    let application_id = if let Some(id) = matches.get_one::<String>("app_id").cloned() {
-        id
-    } else {
-        let (_app_root, manifest) = require_manifest(matches)?;
-        require_integration(&manifest)?
-    };
-
-    let response = fetch_trace_detail(&application_id, &environment, &trace_id)?;
-    if json_output {
-        println!("{}", serde_json::to_string_pretty(&response)?);
-    } else {
-        print_trace_detail(&response)?;
-    }
-
-    Ok(())
 }
 
 // ── HTTP helpers ──────────────────────────────────────────────────────────────
@@ -257,7 +197,6 @@ fn print_traces(traces: &[TraceEntry]) -> Result<()> {
         return Ok(());
     }
 
-    // Header
     stdout.set_color(ColorSpec::new().set_bold(true))?;
     writeln!(
         stdout,
