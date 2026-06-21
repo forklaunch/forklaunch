@@ -6,6 +6,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use convert_case::{Case, Casing};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_yml::{Value, from_str, from_value, to_string};
@@ -1771,9 +1772,15 @@ fn create_base_service(
             context: context_path.to_string_lossy().to_string(),
             dockerfile: format!("./Dockerfile"),
         }),
+        // Docker image repository names must be lowercase. The on-disk module dir
+        // (and hostname/working_dir) keep the raw component_name, but the image tag
+        // is kebab-cased so camelCase module names (e.g. "labPanel") don't produce
+        // an invalid tag like "app-labPanel-node:latest".
         image: Some(format!(
             "{}-{}-{}:latest",
-            app_name, component_name, runtime
+            app_name.to_case(Case::Kebab),
+            component_name.to_case(Case::Kebab),
+            runtime
         )),
         environment: Some(environment),
         depends_on: if depends_on.len() > 0 {
@@ -1938,7 +1945,14 @@ pub(crate) fn add_service_definition_to_docker_compose(
         )?;
     }
 
-    if manifest_data.is_cache_enabled {
+    // Provision a redis service whenever the service actually wires a Redis cache, not only
+    // when redis infra was explicitly requested. The service registrations template uses
+    // RedisTtlCache when `is_request_cache_needed` (= is_cache_enabled || is_iam_configured ||
+    // is_billing_configured), so an iam/billing app's service depends on redis at runtime even
+    // without `-i redis`. Gating compose provisioning on `is_cache_enabled` alone left those
+    // services pointed at a `redis://redis` host that was never provisioned -> ENOTFOUND and
+    // hung requests on first cache use.
+    if manifest_data.is_request_cache_needed {
         add_redis_to_docker_compose(
             &manifest_data.app_name,
             &mut docker_compose,

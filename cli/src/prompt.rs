@@ -1,4 +1,7 @@
-use std::{collections::HashMap, io::Write};
+use std::{
+    collections::HashMap,
+    io::{IsTerminal, Write},
+};
 
 use anyhow::{Result, bail};
 use clap::ArgMatches;
@@ -89,6 +92,20 @@ where
                 val.to_string()
             }
             None => {
+                // Refuse to enter an interactive prompt when stdin is not a TTY (CI, a
+                // spawned process with a closed/ignored stdin, etc). dialoguer's
+                // `interact()/interact_text()` read EOF instantly on a dead stdin and the
+                // validation-retry loop then spins at 100% CPU forever — a single
+                // `forklaunch init router` was observed pegging a core for tens of minutes.
+                // A required value can't be defaulted, so bail with an actionable message.
+                if !std::io::stdin().is_terminal() {
+                    bail!(
+                        "'{}' was not provided and stdin is not a TTY, so it cannot be \
+                         prompted for interactively. Pass it as a flag/argument when running \
+                         non-interactively (CI or a spawned process).",
+                        matches_key
+                    );
+                }
                 if let Some(options) = valid_options {
                     let completer = ArrayCompleter {
                         options: options.iter().map(|&s| s.to_string()).collect(),
@@ -149,6 +166,20 @@ pub(crate) fn prompt_comma_separated_list(
     match matches.get_many::<String>(matches_key) {
         Some(values) => Ok(values.cloned().collect()),
         None => {
+            // Non-interactive (no TTY): a MultiSelect here would spin at 100% CPU on a dead
+            // stdin. An optional list (e.g. a router's infrastructure) simply has no
+            // selection in that case — return empty so the command completes headlessly
+            // instead of wedging; a required list cannot be defaulted, so bail.
+            if !std::io::stdin().is_terminal() {
+                if is_optional {
+                    return Ok(vec![]);
+                }
+                bail!(
+                    "'{}' was not provided and stdin is not a TTY for an interactive \
+                     selection. Pass it as a flag/argument when running non-interactively.",
+                    matches_key
+                );
+            }
             let completer = ArrayCompleter {
                 options: valid_options.iter().map(|&s| s.to_string()).collect(),
             };
