@@ -1,4 +1,7 @@
-use std::{collections::HashMap, io::Write};
+use std::{
+    collections::{HashMap, HashSet},
+    io::Write,
+};
 
 use anyhow::{Context, Result};
 use clap::{Arg, ArgAction, ArgMatches, Command};
@@ -29,50 +32,53 @@ impl TracesCommand {
 
 impl CliCommand for TracesCommand {
     fn command(&self) -> Command {
-        command("traces", "Query distributed traces for a ForkLaunch application")
-            .arg(
-                Arg::new("base_path")
-                    .short('p')
-                    .long("path")
-                    .help("The application path"),
-            )
-            .arg(
-                Arg::new("environment")
-                    .short('e')
-                    .long("environment")
-                    .required(true)
-                    .help("Environment to inspect (for example: dev, staging, production)"),
-            )
-            .arg(
-                Arg::new("app_id")
-                    .long("app-id")
-                    .help("Application ID (defaults to value from .forklaunch/manifest.toml)"),
-            )
-            .arg(
-                Arg::new("trace_id")
-                    .long("trace-id")
-                    .help("Trace ID — show full span tree for a single trace"),
-            )
-            .arg(
-                Arg::new("limit")
-                    .long("limit")
-                    .default_value("50")
-                    .value_parser(clap::value_parser!(u32).range(1..))
-                    .help("Maximum number of traces to fetch (list mode only)"),
-            )
-            .arg(
-                Arg::new("time_range")
-                    .long("time-range")
-                    .default_value("1h")
-                    .value_parser(["15m", "1h", "6h", "24h", "7d", "30d"])
-                    .help("Time range for traces (list mode only): 15m, 1h, 6h, 24h, 7d, 30d"),
-            )
-            .arg(
-                Arg::new("json")
-                    .long("json")
-                    .help("Output raw JSON instead of formatted terminal output")
-                    .action(ArgAction::SetTrue),
-            )
+        command(
+            "traces",
+            "Query distributed traces for a ForkLaunch application",
+        )
+        .arg(
+            Arg::new("base_path")
+                .short('p')
+                .long("path")
+                .help("The application path"),
+        )
+        .arg(
+            Arg::new("environment")
+                .short('e')
+                .long("environment")
+                .required(true)
+                .help("Environment to inspect (for example: dev, staging, production)"),
+        )
+        .arg(
+            Arg::new("app_id")
+                .long("app-id")
+                .help("Application ID (defaults to value from .forklaunch/manifest.toml)"),
+        )
+        .arg(
+            Arg::new("trace_id")
+                .long("trace-id")
+                .help("Trace ID — show full span tree for a single trace"),
+        )
+        .arg(
+            Arg::new("limit")
+                .long("limit")
+                .default_value("50")
+                .value_parser(clap::value_parser!(u32).range(1..))
+                .help("Maximum number of traces to fetch (list mode only)"),
+        )
+        .arg(
+            Arg::new("time_range")
+                .long("time-range")
+                .default_value("1h")
+                .value_parser(["15m", "1h", "6h", "24h", "7d", "30d"])
+                .help("Time range for traces (list mode only): 15m, 1h, 6h, 24h, 7d, 30d"),
+        )
+        .arg(
+            Arg::new("json")
+                .long("json")
+                .help("Output raw JSON instead of formatted terminal output")
+                .action(ArgAction::SetTrue),
+        )
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
@@ -218,7 +224,10 @@ fn print_traces(traces: &[TraceEntry]) -> Result<()> {
     for trace in traces {
         let trace_id_short = trace.trace_id.get(..12).unwrap_or(&trace.trace_id);
         let service = if trace.service_name.chars().count() > 20 {
-            format!("{}…", trace.service_name.chars().take(19).collect::<String>())
+            format!(
+                "{}…",
+                trace.service_name.chars().take(19).collect::<String>()
+            )
         } else {
             trace.service_name.clone()
         };
@@ -236,7 +245,11 @@ fn print_traces(traces: &[TraceEntry]) -> Result<()> {
 
         let color = status_color(&trace.status);
         stdout.set_color(ColorSpec::new().set_fg(Some(Color::White)))?;
-        write!(stdout, "  {:<14}  {:<20}  {:<30}  {:<10}  ", trace_id_short, service, route, duration)?;
+        write!(
+            stdout,
+            "  {:<14}  {:<20}  {:<30}  {:<10}  ",
+            trace_id_short, service, route, duration
+        )?;
         stdout.set_color(ColorSpec::new().set_fg(Some(color)).set_bold(true))?;
         write!(stdout, "{:<10}", trace.status)?;
         stdout.reset()?;
@@ -269,10 +282,9 @@ fn print_trace_detail(response: &TraceDetailResponse) -> Result<()> {
         return Ok(());
     }
 
-    let depth_map = build_depth_map(&response.spans);
-
-    for span in &response.spans {
-        let depth = depth_map.get(&span.span_id).copied().unwrap_or(0);
+    // Render in tree order (parent before its children), not the raw order the
+    // API returned them in — otherwise a child can print above its parent.
+    for (span, depth) in build_ordered_spans(&response.spans) {
         let indent = "  ".repeat(depth + 1);
 
         let is_error = span
@@ -307,8 +319,11 @@ fn print_trace_detail(response: &TraceDetailResponse) -> Result<()> {
     Ok(())
 }
 
-/// Returns a map from spanId -> depth (root = 0).
-fn build_depth_map(spans: &[Span]) -> HashMap<String, usize> {
+/// Returns spans in DFS pre-order (parent immediately before its children),
+/// each paired with its depth (root = 0). Siblings keep their original order.
+/// Orphaned spans — whose parent isn't in the set — are appended at the end at
+/// depth 0 so a partial trace still renders every span instead of dropping some.
+fn build_ordered_spans(spans: &[Span]) -> Vec<(&Span, usize)> {
     let mut children: HashMap<Option<String>, Vec<&Span>> = HashMap::new();
     for span in spans {
         children
@@ -317,23 +332,37 @@ fn build_depth_map(spans: &[Span]) -> HashMap<String, usize> {
             .push(span);
     }
 
-    let mut depth_map: HashMap<String, usize> = HashMap::new();
-    // DFS from roots (parent_span_id == None)
-    let mut queue: Vec<(&Span, usize)> = children
-        .get(&None)
-        .map(|roots| roots.iter().map(|s| (*s, 0usize)).collect())
-        .unwrap_or_default();
+    let mut ordered: Vec<(&Span, usize)> = Vec::new();
+    let mut visited: HashSet<String> = HashSet::new();
 
-    while let Some((span, depth)) = queue.pop() {
-        depth_map.insert(span.span_id.clone(), depth);
+    // Stack-based DFS. Push siblings in reverse so they pop in original order
+    // and each subtree is emitted fully before the next sibling.
+    let mut stack: Vec<(&Span, usize)> = Vec::new();
+    if let Some(roots) = children.get(&None) {
+        for root in roots.iter().rev() {
+            stack.push((root, 0));
+        }
+    }
+    while let Some((span, depth)) = stack.pop() {
+        if !visited.insert(span.span_id.clone()) {
+            continue;
+        }
+        ordered.push((span, depth));
         if let Some(kids) = children.get(&Some(span.span_id.clone())) {
-            for kid in kids {
-                queue.push((kid, depth + 1));
+            for kid in kids.iter().rev() {
+                stack.push((kid, depth + 1));
             }
         }
     }
 
-    depth_map
+    // Append orphans (parent not present in the trace) so nothing is dropped.
+    for span in spans {
+        if !visited.contains(&span.span_id) {
+            ordered.push((span, 0));
+        }
+    }
+
+    ordered
 }
 
 fn status_color(status: &str) -> Color {
@@ -396,6 +425,14 @@ struct TraceDetailResponse {
 mod tests {
     use super::*;
 
+    /// spanId -> depth, derived from the tree walk. Test-only convenience.
+    fn build_depth_map(spans: &[Span]) -> HashMap<String, usize> {
+        build_ordered_spans(spans)
+            .into_iter()
+            .map(|(span, depth)| (span.span_id.clone(), depth))
+            .collect()
+    }
+
     fn make_span(span_id: &str, parent_span_id: Option<&str>, name: &str) -> Span {
         Span {
             span_id: span_id.to_string(),
@@ -452,6 +489,54 @@ mod tests {
         ];
         let map = build_depth_map(&spans);
         assert_eq!(map["grand"], 2);
+    }
+
+    #[test]
+    fn ordered_spans_are_tree_order_not_input_order() {
+        // API returns children before parents (chronological-ish). The tree
+        // walk must still emit each parent before its own children.
+        let spans = vec![
+            make_span("grand", Some("child"), "grand-op"),
+            make_span("child", Some("root"), "child-op"),
+            make_span("root", None, "root-op"),
+        ];
+        let order: Vec<&str> = build_ordered_spans(&spans)
+            .iter()
+            .map(|(s, _)| s.span_id.as_str())
+            .collect();
+        assert_eq!(order, vec!["root", "child", "grand"]);
+    }
+
+    #[test]
+    fn ordered_spans_group_subtrees_before_siblings() {
+        // root has two children; each child's subtree must be emitted fully
+        // before moving to the next sibling.
+        let spans = vec![
+            make_span("root", None, "root-op"),
+            make_span("a", Some("root"), "a-op"),
+            make_span("b", Some("root"), "b-op"),
+            make_span("a1", Some("a"), "a1-op"),
+        ];
+        let order: Vec<&str> = build_ordered_spans(&spans)
+            .iter()
+            .map(|(s, _)| s.span_id.as_str())
+            .collect();
+        assert_eq!(order, vec!["root", "a", "a1", "b"]);
+    }
+
+    #[test]
+    fn ordered_spans_keep_orphans() {
+        // A span whose parent isn't present must still render, not vanish.
+        let spans = vec![
+            make_span("root", None, "root-op"),
+            make_span("orphan", Some("missing"), "orphan-op"),
+        ];
+        let ids: Vec<&str> = build_ordered_spans(&spans)
+            .iter()
+            .map(|(s, _)| s.span_id.as_str())
+            .collect();
+        assert!(ids.contains(&"root"));
+        assert!(ids.contains(&"orphan"));
     }
 
     #[test]
