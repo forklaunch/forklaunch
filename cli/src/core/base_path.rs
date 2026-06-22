@@ -1,5 +1,6 @@
 use std::{
     env::current_dir,
+    io::IsTerminal,
     path::{MAIN_SEPARATOR, Path, PathBuf},
 };
 
@@ -53,6 +54,20 @@ pub(crate) fn prompt_base_path(
             .join(project_name.clone()),
         None => app_root_path.join(modules_path.clone()),
     };
+
+    // On a non-interactive stdin (studio/CI pass -p explicitly), the re-prompt loop below can
+    // never make progress: prompt_with_validation reads EOF, the path still doesn't exist, and it
+    // spins at 100% CPU forever. This is the `forklaunch init router -p src/modules/<missing>`
+    // hang — confirmed via live /proc snapshot (state=R, no output). Fail fast with a clear,
+    // actionable error instead of looping.
+    if (!base_path.exists() || !check_base_path(&base_path, path_count)) && !std::io::stdin().is_terminal() {
+        bail!(
+            "base path '{}' does not exist (or has no forklaunch manifest above it) and stdin is \
+             not a TTY to prompt for a correction. Create the target module first, e.g. \
+             `forklaunch init service <name>`.",
+            base_path.display()
+        );
+    }
 
     while !base_path.exists() || !check_base_path(&base_path, path_count) {
         base_path = PathBuf::from(prompt_with_validation(
