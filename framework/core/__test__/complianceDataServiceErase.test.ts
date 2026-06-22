@@ -722,7 +722,13 @@ describe('ComplianceDataService.export', () => {
   it('only exports records for the specified user (validates where-clause filtering)', async () => {
     registerEntity(
       'ExportMultiUser',
-      { id: 'none', userId: 'none', email: 'pii', ssn: 'phi', status: 'none' },
+      {
+        id: 'none',
+        userId: 'none',
+        email: 'pii',
+        phone: 'pii',
+        status: 'none'
+      },
       { userIdField: 'userId' }
     );
 
@@ -734,7 +740,7 @@ describe('ComplianceDataService.export', () => {
             id: { nullable: false },
             userId: { nullable: false },
             email: { nullable: true },
-            ssn: { nullable: true },
+            phone: { nullable: true },
             status: { nullable: false }
           }
         }
@@ -745,28 +751,28 @@ describe('ComplianceDataService.export', () => {
             id: 'e1',
             userId: 'user-1',
             email: 'alice@example.com',
-            ssn: '111-11-1111',
+            phone: '+1-555-0001',
             status: 'active'
           },
           {
             id: 'e2',
             userId: 'user-1',
             email: 'alice-alt@example.com',
-            ssn: '111-11-2222',
+            phone: '+1-555-0002',
             status: 'inactive'
           },
           {
             id: 'e3',
             userId: 'user-2',
             email: 'bob@example.com',
-            ssn: '222-22-2222',
+            phone: '+1-555-0003',
             status: 'active'
           },
           {
             id: 'e4',
             userId: 'user-3',
             email: 'charlie@example.com',
-            ssn: '333-33-3333',
+            phone: '+1-555-0004',
             status: 'active'
           }
         ]
@@ -779,21 +785,21 @@ describe('ComplianceDataService.export', () => {
     expect(result.userId).toBe('user-1');
     expect(result.entities['ExportMultiUser']).toHaveLength(2);
 
-    // Should export only user-1's records with id + PII/PHI fields (not 'status' which is 'none')
+    // Should export only user-1's records with id + PII fields (not 'status' which is 'none')
     expect(result.entities['ExportMultiUser']).toEqual([
-      { id: 'e1', email: 'alice@example.com', ssn: '111-11-1111' },
-      { id: 'e2', email: 'alice-alt@example.com', ssn: '111-11-2222' }
+      { id: 'e1', email: 'alice@example.com', phone: '+1-555-0001' },
+      { id: 'e2', email: 'alice-alt@example.com', phone: '+1-555-0002' }
     ]);
 
     // Verify no data leakage from other users
-    const allExportedRecords = result.entities['ExportMultiUser'];
+    const allExportedRecords = result.entities['ExportMultiUser'] as Array<
+      Record<string, unknown>
+    >;
     const hasUser2Data = allExportedRecords.some(
-      (r: Record<string, unknown>) =>
-        r.email === 'bob@example.com' || r.ssn === '222-22-2222'
+      (r) => r.email === 'bob@example.com' || r.phone === '+1-555-0003'
     );
     const hasUser3Data = allExportedRecords.some(
-      (r: Record<string, unknown>) =>
-        r.email === 'charlie@example.com' || r.ssn === '333-33-3333'
+      (r) => r.email === 'charlie@example.com' || r.phone === '+1-555-0004'
     );
 
     expect(hasUser2Data).toBe(false);
