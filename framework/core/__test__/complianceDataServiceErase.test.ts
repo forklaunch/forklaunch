@@ -53,6 +53,22 @@ function registerEntity(
   }
 }
 
+/**
+ * Deep clone helper for snapshotting record state before a transaction.
+ * Handles nested objects and arrays but not complex types (Date, etc.).
+ */
+function deepClone<T>(obj: T): T {
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(deepClone) as T;
+  const cloned: Record<string, unknown> = {};
+  for (const key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      cloned[key] = deepClone((obj as Record<string, unknown>)[key]);
+    }
+  }
+  return cloned as T;
+}
+
 function makeOrm(
   metas: EntityMeta[],
   recordsByEntity: Record<string, Record<string, unknown>[]>,
@@ -94,13 +110,50 @@ function makeOrm(
   em.transactional = async (
     cb: (tem: unknown) => Promise<unknown>
   ): Promise<unknown> => {
-    const result = await cb(em);
-    if (options.commitFails) {
-      throw new Error(
-        'update or delete on table "user" violates foreign key constraint'
-      );
+    // Snapshot all record state before transaction starts
+    const snapshots = new Map<
+      Record<string, unknown>,
+      Record<string, unknown>
+    >();
+    const removedSnapshot = [...removed];
+
+    for (const records of Object.values(recordsByEntity)) {
+      for (const record of records) {
+        snapshots.set(record, deepClone(record));
+      }
     }
-    return result;
+
+    try {
+      const result = await cb(em);
+
+      // Simulate commit failure AFTER mutations have occurred
+      if (options.commitFails) {
+        throw new Error(
+          'update or delete on table "user" violates foreign key constraint'
+        );
+      }
+
+      // Commit succeeded - snapshots can be discarded
+      return result;
+    } catch (err) {
+      // Rollback: restore all records to their pre-transaction state
+      for (const [record, snapshot] of snapshots.entries()) {
+        // Clear the record and restore all properties
+        for (const key in record) {
+          if (Object.prototype.hasOwnProperty.call(record, key)) {
+            delete record[key];
+          }
+        }
+        Object.assign(record, snapshot);
+      }
+
+      // Rollback removed array
+      removed.length = 0;
+      removed.push(...removedSnapshot);
+
+      // Re-throw the error
+      throw err;
+    }
   };
 
   const orm = {
@@ -254,17 +307,24 @@ describe('ComplianceDataService.erase', () => {
       { userIdField: 'id' }
     );
 
-    const { orm } = makeOrm(
+    const record = {
+      id: 'u1',
+      email: 'sensitive@example.com',
+      complianceErasedAt: null as Date | null
+    };
+
+    const { orm, removed } = makeOrm(
       [
         {
           className: 'EraseCommit',
           properties: {
             id: { nullable: false },
-            email: { nullable: true }
+            email: { nullable: true },
+            complianceErasedAt: { nullable: true }
           }
         }
       ],
-      { EraseCommit: [{ id: 'u1', email: 'x@y.com' }] },
+      { EraseCommit: [record] },
       { commitFails: true }
     );
 
@@ -281,6 +341,12 @@ describe('ComplianceDataService.erase', () => {
       );
       expect(commitFailure).toBeDefined();
       expect(commitFailure?.error).toContain('foreign key');
+
+      // CRITICAL: Validate atomicity guarantee - transaction rollback means
+      // the record should be UNCHANGED (PII still present, no erasure timestamp)
+      expect(record.email).toBe('sensitive@example.com');
+      expect(record.complianceErasedAt).toBeNull();
+      expect(removed).toHaveLength(0);
     }
   });
 
@@ -399,6 +465,152 @@ describe('ComplianceDataService.erase', () => {
     expect(user3Record.complianceErasedAt).toBeNull();
 
     expect(removed).toHaveLength(0);
+  });
+
+  it('rolls back all mutations when transaction commit fails (atomicity guarantee)', async () => {
+    registerEntity(
+      'RollbackUser',
+      { id: 'none', email: 'pii', name: 'pii' },
+      { userIdField: 'id' }
+    );
+    registerEntity(
+      'RollbackProfile',
+      { id: 'none', userId: 'none', bio: 'pii', phone: 'pii' },
+      { userIdField: 'userId' }
+    );
+
+    // Multiple records across multiple entities
+    const userRecord = {
+      id: 'user-1',
+      email: 'alice@example.com',
+      name: 'Alice Smith',
+      complianceErasedAt: null as Date | null
+    };
+
+    const profile1 = {
+      id: 'p1',
+      userId: 'user-1',
+      bio: 'Software engineer',
+      phone: '555-0001',
+      complianceErasedAt: null as Date | null
+    };
+
+    const profile2 = {
+      id: 'p2',
+      userId: 'user-1',
+      bio: 'Data scientist',
+      phone: '555-0002',
+      complianceErasedAt: null as Date | null
+    };
+
+    const { orm, removed } = makeOrm(
+      [
+        {
+          className: 'RollbackUser',
+          properties: {
+            id: { nullable: false },
+            email: { nullable: true },
+            name: { nullable: true },
+            complianceErasedAt: { nullable: true }
+          }
+        },
+        {
+          className: 'RollbackProfile',
+          properties: {
+            id: { nullable: false },
+            userId: { nullable: false },
+            bio: { nullable: true },
+            phone: { nullable: true },
+            complianceErasedAt: { nullable: true }
+          }
+        }
+      ],
+      {
+        RollbackUser: [userRecord],
+        RollbackProfile: [profile1, profile2]
+      },
+      { commitFails: true }
+    );
+
+    const service = new ComplianceDataService(orm as never, otel);
+
+    try {
+      await service.erase('user-1');
+      expect.unreachable('erase should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ComplianceEraseError);
+
+      // ALL records should be rolled back to original state
+      expect(userRecord.email).toBe('alice@example.com');
+      expect(userRecord.name).toBe('Alice Smith');
+      expect(userRecord.complianceErasedAt).toBeNull();
+
+      expect(profile1.bio).toBe('Software engineer');
+      expect(profile1.phone).toBe('555-0001');
+      expect(profile1.complianceErasedAt).toBeNull();
+
+      expect(profile2.bio).toBe('Data scientist');
+      expect(profile2.phone).toBe('555-0002');
+      expect(profile2.complianceErasedAt).toBeNull();
+
+      // No records should be in the remove queue
+      expect(removed).toHaveLength(0);
+    }
+  });
+
+  it('rolls back delete operations when transaction commit fails', async () => {
+    registerEntity(
+      'RollbackDelete',
+      { id: 'none', token: 'pii' },
+      {
+        userIdField: 'userId',
+        retention: { duration: 'P30D', action: 'delete' }
+      }
+    );
+
+    const session1 = {
+      id: 's1',
+      userId: 'user-1',
+      token: 'session-token-1'
+    };
+    const session2 = {
+      id: 's2',
+      userId: 'user-1',
+      token: 'session-token-2'
+    };
+
+    const { orm, removed } = makeOrm(
+      [
+        {
+          className: 'RollbackDelete',
+          properties: {
+            id: { nullable: false },
+            userId: { nullable: false },
+            token: { nullable: true }
+          }
+        }
+      ],
+      {
+        RollbackDelete: [session1, session2]
+      },
+      { commitFails: true }
+    );
+
+    const service = new ComplianceDataService(orm as never, otel);
+
+    try {
+      await service.erase('user-1');
+      expect.unreachable('erase should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ComplianceEraseError);
+
+      // Records should still have their original values
+      expect(session1.token).toBe('session-token-1');
+      expect(session2.token).toBe('session-token-2');
+
+      // The remove queue should be rolled back (empty)
+      expect(removed).toHaveLength(0);
+    }
   });
 
   it('returns zero records when userIdField does not match any records', async () => {

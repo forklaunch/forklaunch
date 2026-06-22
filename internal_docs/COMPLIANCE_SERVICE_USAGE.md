@@ -28,7 +28,9 @@ export class ComplianceController {
     // Filters are enabled - only finds users in current tenant
     const result = await this.complianceService.erase(req.params.userId);
     
-    if (result.recordsDeleted === 0) {
+    // Check BOTH counters - erase() can anonymize OR delete records
+    const totalProcessed = result.recordsDeleted + result.recordsAnonymized;
+    if (totalProcessed === 0) {
       return res.status(404).json({ error: 'User not found in your organization' });
     }
     
@@ -38,6 +40,12 @@ export class ComplianceController {
 ```
 
 **What happens**: Queries include tenant filters, so only data within the current tenant is accessible.
+
+**Important**: The `EraseResult` includes TWO counters:
+- `recordsDeleted` — rows hard-deleted (entities with a `delete` retention policy)
+- `recordsAnonymized` — rows where PII was scrubbed but the row was kept (the default)
+
+Always check **both** counters to determine if a user was found. Checking only `recordsDeleted` will incorrectly return 404 for users whose data was successfully anonymized but not deleted.
 
 ---
 
@@ -66,11 +74,10 @@ export class SuperadminComplianceController {
     }
 
     // AUDIT LOG: Record who performed cross-tenant operation
+    // NOTE: Do NOT log PII like email addresses or raw IPs in compliance operations
     this.otel.info('[Compliance] Cross-tenant erasure initiated', {
       targetUserId: req.params.userId,
       performedBy: req.user.id,
-      performedByEmail: req.user.email,
-      ipAddress: req.ip,
       timestamp: new Date().toISOString()
     });
 
@@ -86,6 +93,7 @@ export class SuperadminComplianceController {
     this.otel.info('[Compliance] Cross-tenant erasure completed', {
       targetUserId: req.params.userId,
       recordsDeleted: result.recordsDeleted,
+      recordsAnonymized: result.recordsAnonymized,
       entitiesAffected: result.entitiesAffected,
       performedBy: req.user.id
     });
@@ -123,11 +131,10 @@ export function requireSuperAdmin(
 
   if (!req.user.isSuperAdmin) {
     // Log unauthorized attempt
+    // NOTE: Do NOT log PII like email addresses or raw IPs
     logger.warn('[Security] Unauthorized superadmin access attempt', {
       userId: req.user.id,
-      email: req.user.email,
-      path: req.path,
-      ip: req.ip
+      path: req.path
     });
 
     return res.status(403).json({ 
@@ -202,9 +209,33 @@ Before using `disableFilters: true`, ensure:
 - [ ] User is authenticated
 - [ ] User has superadmin role
 - [ ] Operation is logged (who, what, when)
-- [ ] Result is logged (what was deleted)
+- [ ] Result is logged (what was deleted AND anonymized)
 - [ ] Authorization check happens BEFORE instantiating service
 - [ ] Route is protected with authorization middleware
+- [ ] Audit logs do NOT contain PII (no emails, IPs, or sensitive data)
+
+### PII in Audit Logs
+
+**DO NOT log personal data in compliance operation logs.** This creates a compliance paradox: you're logging PII while processing a request to delete PII.
+
+❌ **Bad** - Logs contain PII:
+```typescript
+logger.info('GDPR erasure', {
+  email: user.email,              // ❌ PII
+  ipAddress: req.ip,              // ❌ PII
+  fullName: user.name             // ❌ PII
+});
+```
+
+✅ **Good** - Use IDs and non-PII identifiers:
+```typescript
+logger.info('GDPR erasure', {
+  userId: user.id,                // ✅ ID (not PII)
+  performedBy: req.user.id,       // ✅ ID (not PII)
+  recordsAnonymized: result.recordsAnonymized,
+  recordsDeleted: result.recordsDeleted
+});
+```
 
 ---
 
@@ -257,24 +288,28 @@ async erase(userId: string) {
 // Old workaround in forklaunch-platform:
 const em = this.orm.em.fork();
 
-// Manually disable filters
-const filterNames = Object.keys(this.orm.config.get('filters'));
-filterNames.forEach(name => {
-  em.setFilterParams(name, { enabled: false });
-});
-
 try {
-  // Delete entities manually
-  const accounts = await em.find(Account, { user: userId });
+  // Delete entities manually, disabling filters per-query (MikroORM 7.0 approach)
+  const accounts = await em.find(
+    Account, 
+    { user: userId },
+    { filters: false }  // Disable ALL filters for this query
+  );
   accounts.forEach(a => em.remove(a));
   await em.flush();
   
+  // Repeat for each entity type...
+  const subscriptions = await em.find(
+    Subscription,
+    { userId },
+    { filters: false }
+  );
+  subscriptions.forEach(s => em.remove(s));
+  await em.flush();
+  
   // ... more manual deletions ...
-} finally {
-  // Manually restore filters
-  filterNames.forEach(name => {
-    em.setFilterParams(name, { enabled: true });
-  });
+} catch (err) {
+  throw new Error(`Manual deletion failed: ${err}`);
 }
 ```
 
@@ -365,6 +400,7 @@ export class AuditedComplianceService {
       await this.auditLog.update({
         status: 'completed',
         recordsDeleted: result.recordsDeleted,
+        recordsAnonymized: result.recordsAnonymized,
         entitiesAffected: result.entitiesAffected,
         completedAt: new Date()
       });
