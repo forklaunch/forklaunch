@@ -301,10 +301,15 @@ export class ComplianceDataService {
           );
 
           if (!userIdField) {
-            this.otel.warn(
-              '[ComplianceDataService] No user-linking field found — skipping',
-              { entityName, candidates: CANDIDATE_USER_FIELDS }
-            );
+            // Fail loudly: a compliance-registered entity with PII but no user link
+            // is a configuration error that would result in incomplete erasure.
+            failures.push({
+              entityName,
+              error:
+                `No user-linking field found. Entity has PII but cannot be linked to users. ` +
+                `Candidates tried: ${CANDIDATE_USER_FIELDS.join(', ')}. ` +
+                `Fix: specify userIdField in defineComplianceEntity() or constructor options.`
+            });
             continue;
           }
 
@@ -450,6 +455,15 @@ export class ComplianceDataService {
       );
 
       if (!userIdField) {
+        // Fail loudly: a compliance-registered entity with PII but no user link
+        // is a configuration error that would result in incomplete export.
+        failures.push({
+          entityName,
+          error:
+            `No user-linking field found. Entity has PII but cannot be linked to users. ` +
+            `Candidates tried: ${CANDIDATE_USER_FIELDS.join(', ')}. ` +
+            `Fix: specify userIdField in defineComplianceEntity() or constructor options.`
+        });
         continue;
       }
 

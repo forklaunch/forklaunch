@@ -613,6 +613,55 @@ describe('ComplianceDataService.erase', () => {
     }
   });
 
+  it('fails loudly when an entity has PII but no resolvable user ID field', async () => {
+    registerEntity(
+      'NoUserLinkEntity',
+      { pk: 'none', actorId: 'none', secret: 'pii' }
+      // ❌ No userIdField specified, and neither 'pk' nor 'actorId' are in CANDIDATE_USER_FIELDS
+    );
+
+    const record = { pk: 'n1', actorId: 'user-1', secret: 'sensitive-data' };
+
+    const { orm, removed } = makeOrm(
+      [
+        {
+          className: 'NoUserLinkEntity',
+          properties: {
+            pk: { nullable: false },
+            actorId: { nullable: false },
+            secret: { nullable: true }
+          }
+        }
+      ],
+      {
+        NoUserLinkEntity: [record]
+      }
+    );
+
+    const service = new ComplianceDataService(orm as never, otel);
+
+    await expect(service.erase('user-1')).rejects.toThrow(ComplianceEraseError);
+
+    try {
+      await service.erase('user-1');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ComplianceEraseError);
+      const eraseErr = err as ComplianceEraseError;
+
+      // Should fail with a clear error message about the missing user link
+      const noLinkFailure = eraseErr.failures.find(
+        (f) => f.entityName === 'NoUserLinkEntity'
+      );
+      expect(noLinkFailure).toBeDefined();
+      expect(noLinkFailure?.error).toContain('No user-linking field found');
+      expect(noLinkFailure?.error).toContain('defineComplianceEntity');
+
+      // The record should NOT have been modified (transaction rolled back)
+      expect(record.secret).toBe('sensitive-data');
+      expect(removed).toHaveLength(0);
+    }
+  });
+
   it('returns zero records when userIdField does not match any records', async () => {
     registerEntity(
       'NoMatchEntity',
@@ -838,5 +887,49 @@ describe('ComplianceDataService.export', () => {
     expect(result.userId).toBe('user-1');
     // Entity should not appear in result when no records match
     expect(result.entities['ExportNoMatch']).toBeUndefined();
+  });
+
+  it('fails loudly when an entity has PII but no resolvable user ID field', async () => {
+    registerEntity(
+      'ExportNoUserLink',
+      { pk: 'none', performerId: 'none', apiKey: 'pii' }
+      // ❌ No userIdField specified, and neither 'pk' nor 'performerId' are in CANDIDATE_USER_FIELDS
+    );
+
+    const { orm } = makeOrm(
+      [
+        {
+          className: 'ExportNoUserLink',
+          properties: {
+            pk: { nullable: false },
+            performerId: { nullable: false },
+            apiKey: { nullable: true }
+          }
+        }
+      ],
+      {
+        ExportNoUserLink: [
+          { pk: 'k1', performerId: 'user-1', apiKey: 'secret-key-123' }
+        ]
+      }
+    );
+
+    const service = new ComplianceDataService(orm as never, otel);
+
+    try {
+      await service.export('user-1');
+      expect.unreachable('export should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ComplianceExportError);
+      const exportErr = err as ComplianceExportError;
+
+      // Should fail with a clear error message about the missing user link
+      const noLinkFailure = exportErr.failures.find(
+        (f) => f.entityName === 'ExportNoUserLink'
+      );
+      expect(noLinkFailure).toBeDefined();
+      expect(noLinkFailure?.error).toContain('No user-linking field found');
+      expect(noLinkFailure?.error).toContain('defineComplianceEntity');
+    }
   });
 });
