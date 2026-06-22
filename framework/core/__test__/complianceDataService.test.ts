@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { fp } from '../src/persistence/compliancePropertyBuilder';
 import { defineComplianceEntity } from '../src/persistence/defineComplianceEntity';
 import {
+  clearComplianceRegistries,
   getEntityComplianceFields,
   getEntityUserIdField
 } from '../src/persistence/complianceTypes';
@@ -21,6 +22,10 @@ import {
  * compliance metadata when entities are defined.
  */
 describe('ComplianceDataService entity discovery', () => {
+  beforeEach(() => {
+    // Clear global registries before each test to prevent cross-test pollution
+    clearComplianceRegistries();
+  });
   it('defineComplianceEntity registers entities in compliance registry', () => {
     // Define entities exactly as they would be in forklaunch-platform
     defineComplianceEntity({

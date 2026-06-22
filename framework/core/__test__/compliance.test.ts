@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { Platform } from '@mikro-orm/core';
 import { fp } from '../src/persistence/compliancePropertyBuilder';
 import { defineComplianceEntity } from '../src/persistence/defineComplianceEntity';
 import {
+  clearComplianceRegistries,
   getComplianceMetadata,
   getEntityComplianceFields,
   entityHasEncryptedFields,
@@ -54,6 +55,11 @@ describe('fp property builder', () => {
 });
 
 describe('defineComplianceEntity', () => {
+  beforeEach(() => {
+    // Clear global registries before each test to prevent cross-test pollution
+    clearComplianceRegistries();
+  });
+
   it('registers compliance metadata for all fields', () => {
     defineComplianceEntity({
       name: 'TestUser',

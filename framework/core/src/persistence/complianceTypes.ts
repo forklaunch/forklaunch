@@ -192,6 +192,24 @@ export function getAllRetentionPolicies(): ReadonlyMap<
 }
 
 // ---------------------------------------------------------------------------
+// Registry cleanup — for testing only
+// ---------------------------------------------------------------------------
+
+/**
+ * Clear all compliance registries. **For testing only.**
+ *
+ * Since the registries are globalThis singletons, test registrations persist
+ * across test files and can cause order-dependent failures. Call this in a
+ * `beforeEach` hook to reset state between tests.
+ */
+export function clearComplianceRegistries(): void {
+  const registries = getGlobalRegistries();
+  registries.compliance.clear();
+  registries.retention.clear();
+  registries.userIdField.clear();
+}
+
+// ---------------------------------------------------------------------------
 // Module augmentation — adds .compliance() via PropertyOptions
 // ---------------------------------------------------------------------------
 

@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  clearComplianceRegistries,
   registerEntityCompliance,
   registerEntityRetention,
   registerEntityUserIdField,
@@ -106,6 +107,10 @@ const otel: any = {
 };
 
 describe('ComplianceDataService.erase', () => {
+  beforeEach(() => {
+    // Clear global registries before each test to prevent cross-test pollution
+    clearComplianceRegistries();
+  });
   it('anonymizes (scrubs nullable PII, keeps row) by default when no retention policy is set', async () => {
     registerEntity(
       'EraseUser',
@@ -298,6 +303,11 @@ describe('ComplianceDataService.erase', () => {
 });
 
 describe('ComplianceDataService.export', () => {
+  beforeEach(() => {
+    // Clear global registries before each test to prevent cross-test pollution
+    clearComplianceRegistries();
+  });
+
   it('exports only id + PII fields for matching records', async () => {
     registerEntity(
       'ExportAccount',
