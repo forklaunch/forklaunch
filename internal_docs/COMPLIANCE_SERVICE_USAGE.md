@@ -239,44 +239,41 @@ logger.info('GDPR erasure', {
 
 ---
 
-## Filter Restoration Guarantees
+## Filter Isolation
 
-The service **automatically restores filters** after each operation, even if the operation fails:
+The service uses **per-query filter control** for maximum isolation and safety:
 
 ```typescript
 const service = new ComplianceDataService(orm, otel, { 
   disableFilters: true 
 });
 
-try {
-  await service.erase('user-123');
-} catch (err) {
-  // Filters are STILL restored here, even though erase failed
-  console.log('Erase failed, but filters are back to normal');
-}
-
-// Filters are restored after this point
-// Subsequent queries use filters normally
+await service.erase('user-123');
+// Each query inside erase() uses: em.find(Entity, where, { filters: false })
+// Filters are NEVER globally disabled on the entity manager
+// Other concurrent operations using the same ORM instance are unaffected
 ```
 
-This is implemented with try-finally blocks internally:
+### How It Works
+
+When `disableFilters: true` is set, the service passes `{ filters: false }` to **each individual query**:
 
 ```typescript
-async erase(userId: string) {
-  const em = this.orm.em.fork();
-  const restoreFilters = this.disableFilters 
-    ? this.withFiltersDisabled(em) 
-    : () => {};
-
-  try {
-    // ... perform erase ...
-    return result;
-  } finally {
-    // ALWAYS runs, even on error
-    restoreFilters();
-  }
-}
+const findOptions = {
+  filters: this.disableFilters ? false : undefined
+};
+const records = await em.find(entityClass, { [userIdField]: userId }, findOptions);
 ```
+
+**Why per-query is safer than global**:
+- ✅ No global state mutation
+- ✅ No risk of forgetting to restore filters
+- ✅ Concurrent operations are isolated
+- ✅ Works correctly even if the operation throws mid-execution
+
+**Filtered mode (default)**: `findOptions` is `{}`, so queries respect all configured filters.
+
+**Unfiltered mode**: `findOptions` is `{ filters: false }`, bypassing tenant/soft-delete/other filters for GDPR compliance.
 
 ---
 
@@ -419,6 +416,106 @@ export class AuditedComplianceService {
   }
 }
 ```
+
+---
+
+## Configuration Errors and Fail-Loud Behavior
+
+The service follows a **fail-loud** contract: any configuration error that would result in incomplete erasure or export causes an immediate failure with a structured error.
+
+### Missing User ID Field
+
+If a compliance-registered entity has PII but no resolvable user ID field, the operation fails:
+
+```typescript
+// ❌ Misconfigured entity
+defineComplianceEntity({
+  name: 'AuditLog',
+  properties: {
+    pk: fp.uuid().primary().compliance('none'),
+    actorId: fp.uuid().compliance('none'),  // Non-standard field name
+    ipAddress: fp.string().compliance('pii')
+  }
+  // Missing: userIdField specification
+  // 'actorId' is not in CANDIDATE_USER_FIELDS: userId, user, id, partyId, etc.
+});
+
+// Attempt erasure
+const service = new ComplianceDataService(orm, otel);
+await service.erase('user-123');
+// ❌ Throws ComplianceEraseError with structured failures
+```
+
+**Error message**:
+```
+ComplianceEraseError: Erase aborted: one or more entities could not be erased
+failures: [
+  {
+    entityName: 'AuditLog',
+    error: 'No user-linking field found. Entity has PII but cannot be linked to users. 
+            Candidates tried: userId, user, id, partyId, customerId, ownerId, createdBy, email. 
+            Fix: specify userIdField in defineComplianceEntity() or constructor options.'
+  }
+]
+```
+
+### How to Fix
+
+**Option 1**: Specify `userIdField` in entity definition:
+```typescript
+defineComplianceEntity({
+  name: 'AuditLog',
+  properties: {
+    pk: fp.uuid().primary().compliance('none'),
+    actorId: fp.uuid().compliance('none'),
+    ipAddress: fp.string().compliance('pii')
+  },
+  userIdField: 'actorId'  // ✅ Explicitly specify the linking field
+});
+```
+
+**Option 2**: Override in service constructor:
+```typescript
+const service = new ComplianceDataService(orm, otel, {
+  userIdFieldOverrides: {
+    AuditLog: 'actorId'  // ✅ Override per entity
+  }
+});
+```
+
+**Option 3**: Use a standard field name that's automatically detected:
+```typescript
+defineComplianceEntity({
+  name: 'AuditLog',
+  properties: {
+    id: fp.uuid().primary().compliance('none'),
+    userId: fp.uuid().compliance('none'),  // ✅ Standard name, auto-detected
+    ipAddress: fp.string().compliance('pii')
+  }
+  // No userIdField needed - 'userId' is in CANDIDATE_USER_FIELDS
+});
+```
+
+### Why Fail-Loud?
+
+**Without fail-loud** (old behavior):
+```typescript
+await service.erase('user-123');
+// ✅ Returns success
+// ❌ But AuditLog PII was silently skipped!
+// 🚨 GDPR compliance violation - incomplete erasure reported as complete
+```
+
+**With fail-loud** (current behavior):
+```typescript
+await service.erase('user-123');
+// ❌ Throws ComplianceEraseError immediately
+// ✅ Transaction rolled back - no partial erasure
+// ✅ Clear error message with fix instructions
+// ✅ Audit logs show configuration error, not successful erasure
+```
+
+**The contract**: A successful return (`EraseResult` or `ExportResult`) **guarantees** the operation fully succeeded. Any entity that couldn't be processed causes the entire operation to fail.
 
 ---
 
