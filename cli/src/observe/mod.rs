@@ -5,16 +5,22 @@ use crate::{CliCommand, core::command::command};
 
 mod issues;
 mod logs;
+mod metrics;
 mod status;
+mod traces;
 
 use issues::IssuesCommand;
 use logs::LogsCommand;
+use metrics::MetricsCommand;
 use status::StatusCommand;
+use traces::TracesCommand;
 
 #[derive(Debug)]
 pub(crate) struct ObserveCommand {
     status: StatusCommand,
     logs: LogsCommand,
+    metrics: MetricsCommand,
+    traces: TracesCommand,
     issues: IssuesCommand,
 }
 
@@ -23,6 +29,8 @@ impl ObserveCommand {
         Self {
             status: StatusCommand::new(),
             logs: LogsCommand::new(),
+            metrics: MetricsCommand::new(),
+            traces: TracesCommand::new(),
             issues: IssuesCommand::new(),
         }
     }
@@ -36,6 +44,8 @@ impl CliCommand for ObserveCommand {
         )
         .subcommand(self.status.command())
         .subcommand(self.logs.command())
+        .subcommand(self.metrics.command())
+        .subcommand(self.traces.command())
         .subcommand(self.issues.command())
         .subcommand_required(true)
     }
@@ -44,6 +54,8 @@ impl CliCommand for ObserveCommand {
         match matches.subcommand() {
             Some(("status", sub_matches)) => self.status.handler(sub_matches),
             Some(("logs", sub_matches)) => self.logs.handler(sub_matches),
+            Some(("metrics", sub_matches)) => self.metrics.handler(sub_matches),
+            Some(("traces", sub_matches)) => self.traces.handler(sub_matches),
             Some(("issues", sub_matches)) => self.issues.handler(sub_matches),
             _ => unreachable!(),
         }
