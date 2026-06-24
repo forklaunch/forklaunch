@@ -5,6 +5,7 @@ export {
   getComplianceMetadata,
   getEntityComplianceFields,
   entityHasEncryptedFields,
+  clearComplianceRegistries,
   // Retention
   RetentionAction,
   type RetentionAction as RetentionActionType,

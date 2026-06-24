@@ -8,34 +8,39 @@ import {
   EncryptedType,
   registerEncryptor
 } from '../src/persistence/encryptedType';
+import { clearComplianceRegistries } from '../src/persistence/complianceTypes';
 
 const MASTER_KEY = 'test-master-key-for-unit-tests-32ch';
 
-// Register test entities
-defineComplianceEntity({
-  name: 'Patient',
-  properties: {
-    id: fp.uuid().primary().compliance('none'),
-    name: fp.string().compliance('pii'),
-    ssn: fp.string().compliance('phi'),
-    cardNumber: fp.string().compliance('pci'),
-    status: fp.string().compliance('none')
-  }
-});
+// Helper function to register test entities (called in beforeEach)
+function registerTestEntities(): void {
+  defineComplianceEntity({
+    name: 'Patient',
+    properties: {
+      id: fp.uuid().primary().compliance('none'),
+      name: fp.string().compliance('pii'),
+      ssn: fp.string().compliance('phi'),
+      cardNumber: fp.string().compliance('pci'),
+      status: fp.string().compliance('none')
+    }
+  });
 
-defineComplianceEntity({
-  name: 'PublicEntity',
-  properties: {
-    id: fp.uuid().primary().compliance('none'),
-    label: fp.string().compliance('none')
-  }
-});
+  defineComplianceEntity({
+    name: 'PublicEntity',
+    properties: {
+      id: fp.uuid().primary().compliance('none'),
+      label: fp.string().compliance('none')
+    }
+  });
+}
 
 describe('EncryptedType', () => {
   let encryptedType: EncryptedType;
   const platform = {} as Platform;
 
   beforeEach(() => {
+    clearComplianceRegistries();
+    registerTestEntities();
     const encryptor = new FieldEncryptor(MASTER_KEY);
     registerEncryptor(encryptor);
     encryptedType = new EncryptedType('string');
@@ -215,6 +220,11 @@ describe('EncryptedType', () => {
 });
 
 describe('wrapEmWithNativeQueryBlocking', () => {
+  beforeEach(() => {
+    clearComplianceRegistries();
+    registerTestEntities();
+  });
+
   function makeMockEm() {
     return {
       nativeInsert: (..._args: unknown[]) => Promise.resolve(),
