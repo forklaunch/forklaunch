@@ -1,0 +1,396 @@
+# ComplianceDataService Usage Guide
+
+## Overview
+
+The `ComplianceDataService` provides GDPR compliance operations (erasure and export) for entities defined with `defineComplianceEntity`.
+
+**SECURITY CRITICAL**: The service can operate in two modes:
+1. **Filtered mode** (default): Respects tenant/organization filters
+2. **Unfiltered mode**: Operates across ALL tenants (requires superadmin authorization)
+
+## Basic Usage (Filtered Mode - Default)
+
+Use this for **tenant-scoped compliance operations** where users can only access their own organization's data:
+
+```typescript
+import { ComplianceDataService } from '@forklaunch/core/services';
+
+// In your controller/service:
+export class ComplianceController {
+  private complianceService: ComplianceDataService;
+
+  constructor(orm: MikroORM, otel: OpenTelemetryCollector) {
+    // Default: filters remain enabled
+    this.complianceService = new ComplianceDataService(orm, otel);
+  }
+
+  async eraseUserData(req: Request, res: Response) {
+    // Filters are enabled - only finds users in current tenant
+    const result = await this.complianceService.erase(req.params.userId);
+    
+    if (result.recordsDeleted === 0) {
+      return res.status(404).json({ error: 'User not found in your organization' });
+    }
+    
+    return res.json(result);
+  }
+}
+```
+
+**What happens**: Queries include tenant filters, so only data within the current tenant is accessible.
+
+---
+
+## Superadmin Usage (Unfiltered Mode)
+
+Use this for **platform-wide GDPR operations** where a superadmin must erase data across ALL tenants:
+
+### Step 1: Verify Authorization
+
+```typescript
+import { ComplianceDataService } from '@forklaunch/core/services';
+import { ForbiddenError } from '@forklaunch/core/http';
+
+export class SuperadminComplianceController {
+  constructor(
+    private orm: MikroORM,
+    private otel: OpenTelemetryCollector
+  ) {}
+
+  async eraseUserDataAcrossAllTenants(req: Request, res: Response) {
+    // CRITICAL: Check authorization FIRST
+    if (!req.user?.isSuperAdmin) {
+      throw new ForbiddenError(
+        'Cross-tenant GDPR operations require superadmin role'
+      );
+    }
+
+    // AUDIT LOG: Record who performed cross-tenant operation
+    this.otel.info('[Compliance] Cross-tenant erasure initiated', {
+      targetUserId: req.params.userId,
+      performedBy: req.user.id,
+      performedByEmail: req.user.email,
+      ipAddress: req.ip,
+      timestamp: new Date().toISOString()
+    });
+
+    // Step 2: Create service with filters disabled
+    const service = new ComplianceDataService(this.orm, this.otel, {
+      disableFilters: true  // Safe because we checked authorization above
+    });
+
+    // Step 3: Perform operation
+    const result = await service.erase(req.params.userId);
+
+    // AUDIT LOG: Record result
+    this.otel.info('[Compliance] Cross-tenant erasure completed', {
+      targetUserId: req.params.userId,
+      recordsDeleted: result.recordsDeleted,
+      entitiesAffected: result.entitiesAffected,
+      performedBy: req.user.id
+    });
+
+    return res.json(result);
+  }
+}
+```
+
+### Step 2: Route Protection
+
+```typescript
+// In your router:
+router.delete(
+  '/superadmin/compliance/erase/:userId',
+  requireSuperAdmin,  // Middleware that checks req.user.isSuperAdmin
+  auditLog({ action: 'gdpr.erase.cross_tenant' }),
+  controller.eraseUserDataAcrossAllTenants
+);
+```
+
+---
+
+## Authorization Middleware Example
+
+```typescript
+export function requireSuperAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  if (!req.user.isSuperAdmin) {
+    // Log unauthorized attempt
+    logger.warn('[Security] Unauthorized superadmin access attempt', {
+      userId: req.user.id,
+      email: req.user.email,
+      path: req.path,
+      ip: req.ip
+    });
+
+    return res.status(403).json({ 
+      error: 'This operation requires superadmin privileges' 
+    });
+  }
+
+  next();
+}
+```
+
+---
+
+## Understanding Filter Behavior
+
+### Example: Tenant Filter
+
+Let's say your app has a tenant filter configured:
+
+```typescript
+// In your ORM config:
+filters: {
+  tenant: {
+    name: 'tenant',
+    cond: { organizationId: () => getCurrentTenantId() },
+    entity: ['User', 'Account', 'Order']
+  }
+}
+```
+
+### Scenario 1: Filtered Mode (Default)
+
+```typescript
+const service = new ComplianceDataService(orm, otel);
+// OR explicitly:
+const service = new ComplianceDataService(orm, otel, { disableFilters: false });
+
+// When you call erase:
+await service.erase('user-123');
+
+// Queries run with filters:
+// SELECT * FROM user WHERE id = 'user-123' AND organization_id = 'current-tenant'
+// SELECT * FROM account WHERE user_id = 'user-123' AND organization_id = 'current-tenant'
+```
+
+**Result**: Only deletes data within the current tenant.
+
+### Scenario 2: Unfiltered Mode (Superadmin)
+
+```typescript
+// After verifying superadmin authorization:
+const service = new ComplianceDataService(orm, otel, { 
+  disableFilters: true 
+});
+
+// When you call erase:
+await service.erase('user-123');
+
+// Queries run WITHOUT filters:
+// SELECT * FROM user WHERE id = 'user-123'
+// SELECT * FROM account WHERE user_id = 'user-123'
+```
+
+**Result**: Deletes data across ALL tenants.
+
+---
+
+## Security Checklist
+
+Before using `disableFilters: true`, ensure:
+
+- [ ] User is authenticated
+- [ ] User has superadmin role
+- [ ] Operation is logged (who, what, when)
+- [ ] Result is logged (what was deleted)
+- [ ] Authorization check happens BEFORE instantiating service
+- [ ] Route is protected with authorization middleware
+
+---
+
+## Filter Restoration Guarantees
+
+The service **automatically restores filters** after each operation, even if the operation fails:
+
+```typescript
+const service = new ComplianceDataService(orm, otel, { 
+  disableFilters: true 
+});
+
+try {
+  await service.erase('user-123');
+} catch (err) {
+  // Filters are STILL restored here, even though erase failed
+  console.log('Erase failed, but filters are back to normal');
+}
+
+// Filters are restored after this point
+// Subsequent queries use filters normally
+```
+
+This is implemented with try-finally blocks internally:
+
+```typescript
+async erase(userId: string) {
+  const em = this.orm.em.fork();
+  const restoreFilters = this.disableFilters 
+    ? this.withFiltersDisabled(em) 
+    : () => {};
+
+  try {
+    // ... perform erase ...
+    return result;
+  } finally {
+    // ALWAYS runs, even on error
+    restoreFilters();
+  }
+}
+```
+
+---
+
+## Migration from Old Code
+
+### Before (Manual Implementation)
+
+```typescript
+// Old workaround in forklaunch-platform:
+const em = this.orm.em.fork();
+
+// Manually disable filters
+const filterNames = Object.keys(this.orm.config.get('filters'));
+filterNames.forEach(name => {
+  em.setFilterParams(name, { enabled: false });
+});
+
+try {
+  // Delete entities manually
+  const accounts = await em.find(Account, { user: userId });
+  accounts.forEach(a => em.remove(a));
+  await em.flush();
+  
+  // ... more manual deletions ...
+} finally {
+  // Manually restore filters
+  filterNames.forEach(name => {
+    em.setFilterParams(name, { enabled: true });
+  });
+}
+```
+
+### After (Using Framework)
+
+```typescript
+// In controller (after checking authorization):
+const service = new ComplianceDataService(orm, otel, {
+  disableFilters: true  // Safe - already checked req.user.isSuperAdmin
+});
+
+const result = await service.erase(userId);
+// Filters automatically restored!
+```
+
+---
+
+## Common Pitfalls
+
+### ❌ Wrong: Creating service at module/class level
+
+```typescript
+// BAD: Service is created once with disableFilters=true
+export class ComplianceController {
+  private service = new ComplianceDataService(orm, otel, {
+    disableFilters: true  // INSECURE: Bypasses filters for ALL requests!
+  });
+
+  async erase(req: Request) {
+    // Problem: No per-request authorization check!
+    return await this.service.erase(req.params.userId);
+  }
+}
+```
+
+### ✅ Right: Creating service per-request after authorization
+
+```typescript
+// GOOD: Service is created per-request after auth check
+export class ComplianceController {
+  constructor(private orm: MikroORM, private otel: OpenTelemetryCollector) {}
+
+  async erase(req: Request) {
+    // Check authorization first
+    if (!req.user.isSuperAdmin) {
+      throw new ForbiddenError();
+    }
+
+    // Create service after authorization
+    const service = new ComplianceDataService(this.orm, this.otel, {
+      disableFilters: true
+    });
+
+    return await service.erase(req.params.userId);
+  }
+}
+```
+
+---
+
+## Audit Logging Example
+
+```typescript
+export class AuditedComplianceService {
+  async eraseWithAudit(
+    userId: string,
+    performedBy: User,
+    reason: string
+  ): Promise<EraseResult> {
+    // Log start
+    await this.auditLog.create({
+      action: 'compliance.erase',
+      targetUserId: userId,
+      performedBy: performedBy.id,
+      reason,
+      startedAt: new Date(),
+      status: 'in_progress'
+    });
+
+    try {
+      const service = new ComplianceDataService(this.orm, this.otel, {
+        disableFilters: true
+      });
+
+      const result = await service.erase(userId);
+
+      // Log success
+      await this.auditLog.update({
+        status: 'completed',
+        recordsDeleted: result.recordsDeleted,
+        entitiesAffected: result.entitiesAffected,
+        completedAt: new Date()
+      });
+
+      return result;
+    } catch (err) {
+      // Log failure
+      await this.auditLog.update({
+        status: 'failed',
+        error: String(err),
+        completedAt: new Date()
+      });
+
+      throw err;
+    }
+  }
+}
+```
+
+---
+
+## Summary
+
+| Mode | disableFilters | Use Case | Authorization Required |
+|------|----------------|----------|------------------------|
+| Filtered (default) | `false` or omitted | Tenant-scoped compliance | Organization admin |
+| Unfiltered | `true` | Platform-wide GDPR | Superadmin only |
+
+**Key principle**: Authorization happens at the **controller/handler level** BEFORE instantiating the service, not inside the service itself.

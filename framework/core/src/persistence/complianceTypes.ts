@@ -10,10 +10,45 @@ export type ComplianceLevel =
 export const COMPLIANCE_KEY = '~compliance' as const;
 
 // ---------------------------------------------------------------------------
+// Global singleton registries
+//
+// These registries hold process-wide compliance metadata. They MUST be true
+// singletons. Each bundle entry point (persistence, services, ...) is built
+// independently with tsup `--no-splitting`, which inlines a separate copy of
+// this module — and therefore a separate `new Map()` — into every bundle.
+// Without the globalThis backing below, the writer (defineComplianceEntity, in
+// the persistence bundle) and the reader (ComplianceDataService/RetentionService,
+// in the services bundle) would operate on different Maps, silently breaking
+// erase/export/retention. Keying on a global Symbol guarantees a single shared
+// instance across CJS, ESM, and duplicate package installs.
+// ---------------------------------------------------------------------------
+
+type ComplianceRegistries = {
+  compliance: Map<string, Map<string, ComplianceLevel>>;
+  retention: Map<string, RetentionPolicy>;
+  userIdField: Map<string, string>;
+};
+
+const GLOBAL_REGISTRY_KEY = Symbol.for(
+  '@forklaunch/core/persistence/complianceRegistries'
+);
+
+function getGlobalRegistries(): ComplianceRegistries {
+  const globalScope = globalThis as typeof globalThis & {
+    [GLOBAL_REGISTRY_KEY]?: ComplianceRegistries;
+  };
+  return (globalScope[GLOBAL_REGISTRY_KEY] ??= {
+    compliance: new Map(),
+    retention: new Map(),
+    userIdField: new Map()
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Registry
 // ---------------------------------------------------------------------------
 
-const complianceRegistry = new Map<string, Map<string, ComplianceLevel>>();
+const complianceRegistry = getGlobalRegistries().compliance;
 
 export function registerEntityCompliance(
   entityName: string,
@@ -112,14 +147,14 @@ export function subtractDuration(from: Date, duration: ParsedDuration): Date {
   return result;
 }
 
-const retentionRegistry = new Map<string, RetentionPolicy>();
+const retentionRegistry = getGlobalRegistries().retention;
 
 // ---------------------------------------------------------------------------
 // User ID field registry — maps entity name to the field linking records to a user
 // ---------------------------------------------------------------------------
 
 const DEFAULT_USER_ID_FIELD = 'userId';
-const userIdFieldRegistry = new Map<string, string>();
+const userIdFieldRegistry = getGlobalRegistries().userIdField;
 
 export function registerEntityUserIdField(
   entityName: string,
