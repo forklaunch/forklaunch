@@ -3,11 +3,13 @@ use clap::{ArgMatches, Command};
 
 use crate::{CliCommand, core::command::command};
 
+mod issues;
 mod logs;
 mod metrics;
 mod status;
 mod traces;
 
+use issues::IssuesCommand;
 use logs::LogsCommand;
 use metrics::MetricsCommand;
 use status::StatusCommand;
@@ -19,6 +21,7 @@ pub(crate) struct ObserveCommand {
     logs: LogsCommand,
     metrics: MetricsCommand,
     traces: TracesCommand,
+    issues: IssuesCommand,
 }
 
 impl ObserveCommand {
@@ -28,6 +31,7 @@ impl ObserveCommand {
             logs: LogsCommand::new(),
             metrics: MetricsCommand::new(),
             traces: TracesCommand::new(),
+            issues: IssuesCommand::new(),
         }
     }
 }
@@ -42,6 +46,7 @@ impl CliCommand for ObserveCommand {
         .subcommand(self.logs.command())
         .subcommand(self.metrics.command())
         .subcommand(self.traces.command())
+        .subcommand(self.issues.command())
         .subcommand_required(true)
     }
 
@@ -51,6 +56,7 @@ impl CliCommand for ObserveCommand {
             Some(("logs", sub_matches)) => self.logs.handler(sub_matches),
             Some(("metrics", sub_matches)) => self.metrics.handler(sub_matches),
             Some(("traces", sub_matches)) => self.traces.handler(sub_matches),
+            Some(("issues", sub_matches)) => self.issues.handler(sub_matches),
             _ => unreachable!(),
         }
     }
