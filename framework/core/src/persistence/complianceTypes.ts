@@ -2,19 +2,38 @@ export const ComplianceLevel = {
   pii: 'pii',
   phi: 'phi',
   pci: 'pci',
+  sox: 'sox',
   none: 'none'
 } as const;
 export type ComplianceLevel =
   (typeof ComplianceLevel)[keyof typeof ComplianceLevel];
 
+/**
+ * Check if a compliance level requires data protection (non-'none').
+ */
+export function isProtectedData(level: ComplianceLevel): boolean {
+  return level !== 'none';
+}
+
 export const COMPLIANCE_KEY = '~compliance' as const;
 
 // ---------------------------------------------------------------------------
-// Registry
+// Registry (DEPRECATED - kept for backward compatibility)
+// ---------------------------------------------------------------------------
+// These functions are deprecated. Compliance metadata is now stored directly
+// in EntitySchema.meta.compliance and accessed via ORM metadata.
+// For new code, use:
+// - Auto-discovery: new ComplianceDataService(orm, otel) // reads from ORM
+// - Explicit: new ComplianceDataService(orm, otel, { entities: [...] })
 // ---------------------------------------------------------------------------
 
 const complianceRegistry = new Map<string, Map<string, ComplianceLevel>>();
 
+/**
+ * @deprecated Use EntitySchema.meta.compliance instead. This function is kept
+ * for backward compatibility only. defineComplianceEntity now stores metadata
+ * in the EntitySchema, making this registry unnecessary.
+ */
 export function registerEntityCompliance(
   entityName: string,
   fields: Map<string, ComplianceLevel>
@@ -22,6 +41,10 @@ export function registerEntityCompliance(
   complianceRegistry.set(entityName, fields);
 }
 
+/**
+ * @deprecated Use EntitySchema.meta.compliance.fields instead. This function
+ * reads from the legacy global registry and should not be used in new code.
+ */
 export function getComplianceMetadata(
   entityName: string,
   fieldName: string
@@ -29,6 +52,10 @@ export function getComplianceMetadata(
   return complianceRegistry.get(entityName)?.get(fieldName) ?? 'none';
 }
 
+/**
+ * @deprecated Use EntitySchema.meta.compliance.fields instead. This function
+ * reads from the legacy global registry and should not be used in new code.
+ */
 export function getEntityComplianceFields(
   entityName: string
 ): Map<string, ComplianceLevel> | undefined {
@@ -39,7 +66,7 @@ export function entityHasEncryptedFields(entityName: string): boolean {
   const fields = complianceRegistry.get(entityName);
   if (!fields) return false;
   for (const level of fields.values()) {
-    if (level === 'phi' || level === 'pci') return true;
+    if (level === 'phi' || level === 'pci' || level === 'sox') return true;
   }
   return false;
 }
@@ -115,12 +142,16 @@ export function subtractDuration(from: Date, duration: ParsedDuration): Date {
 const retentionRegistry = new Map<string, RetentionPolicy>();
 
 // ---------------------------------------------------------------------------
-// User ID field registry — maps entity name to the field linking records to a user
+// User ID field registry (DEPRECATED) — maps entity name to the field linking records to a user
 // ---------------------------------------------------------------------------
 
 const DEFAULT_USER_ID_FIELD = 'userId';
 const userIdFieldRegistry = new Map<string, string>();
 
+/**
+ * @deprecated Use EntitySchema.meta.compliance.userIdField instead. This
+ * function is kept for backward compatibility only.
+ */
 export function registerEntityUserIdField(
   entityName: string,
   field: string
@@ -128,14 +159,26 @@ export function registerEntityUserIdField(
   userIdFieldRegistry.set(entityName, field);
 }
 
+/**
+ * @deprecated Use EntitySchema.meta.compliance.userIdField instead. This
+ * function reads from the legacy global registry and should not be used in new code.
+ */
 export function getEntityUserIdField(entityName: string): string {
   return userIdFieldRegistry.get(entityName) ?? DEFAULT_USER_ID_FIELD;
 }
 
+/**
+ * @deprecated Use EntitySchema.meta.compliance.userIdField instead. This
+ * function reads from the legacy global registry and should not be used in new code.
+ */
 export function getAllUserIdFields(): ReadonlyMap<string, string> {
   return userIdFieldRegistry;
 }
 
+/**
+ * @deprecated Use EntitySchema.meta.compliance.retention instead. This
+ * function is kept for backward compatibility only.
+ */
 export function registerEntityRetention(
   entityName: string,
   policy: RetentionPolicy
@@ -143,12 +186,20 @@ export function registerEntityRetention(
   retentionRegistry.set(entityName, policy);
 }
 
+/**
+ * @deprecated Use EntitySchema.meta.compliance.retention instead. This
+ * function reads from the legacy global registry and should not be used in new code.
+ */
 export function getEntityRetention(
   entityName: string
 ): RetentionPolicy | undefined {
   return retentionRegistry.get(entityName);
 }
 
+/**
+ * @deprecated Use EntitySchema.meta.compliance.retention instead. This
+ * function reads from the legacy global registry and should not be used in new code.
+ */
 export function getAllRetentionPolicies(): ReadonlyMap<
   string,
   RetentionPolicy
@@ -157,7 +208,17 @@ export function getAllRetentionPolicies(): ReadonlyMap<
 }
 
 // ---------------------------------------------------------------------------
-// Module augmentation — adds .compliance() via PropertyOptions
+// Compliance metadata structure stored in EntitySchema.meta
+// ---------------------------------------------------------------------------
+
+export interface EntityComplianceMetadata {
+  fields: Map<string, ComplianceLevel>;
+  userIdField?: string;
+  retention?: RetentionPolicy;
+}
+
+// ---------------------------------------------------------------------------
+// Module augmentation — adds .compliance() via PropertyOptions and extends EntityMetadata
 // ---------------------------------------------------------------------------
 
 /**
@@ -165,6 +226,9 @@ export function getAllRetentionPolicies(): ReadonlyMap<
  * for all scalar/enum/embedded builders (PropertyOptions is extended by
  * EnumOptions and EmbeddedOptions). Relation builders use ReferenceOptions
  * instead, so they don't get .compliance() — which is what we want.
+ *
+ * Also extends EntityMetadata to store compliance metadata directly in the ORM's
+ * entity metadata structure, eliminating the need for a separate global registry.
  */
 declare module '@mikro-orm/core' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -183,5 +247,9 @@ declare module '@mikro-orm/core' {
       >,
       IncludeKeys & keyof UniversalPropertyOptionsBuilder<never, never, never>
     >;
+  }
+
+  interface EntityMetadata {
+    compliance?: EntityComplianceMetadata;
   }
 }
