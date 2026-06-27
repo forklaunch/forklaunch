@@ -112,16 +112,17 @@ describe('defineComplianceEntity', () => {
     expect(entityHasEncryptedFields('PiiOnlyEntity')).toBe(false);
   });
 
-  it('throws on missing compliance at runtime', () => {
-    expect(() => {
-      defineComplianceEntity({
-        name: 'BadEntity',
-        properties: {
-          // @ts-expect-error — intentionally omitting .compliance() to test runtime validation
-          email: fp.string()
-        }
-      });
-    }).toThrow(/missing compliance classification/);
+  it('defaults to none when compliance is missing', () => {
+    const entity = defineComplianceEntity({
+      name: 'DefaultEntity',
+      properties: {
+        // @ts-expect-error — intentionally omitting .compliance() to test default behavior
+        email: fp.string()
+      }
+    });
+
+    // Should default to 'none' instead of throwing
+    expect(entity.meta.compliance?.fields.get('email')).toBe('none');
   });
 
   it('registers relations as none', () => {

@@ -72,19 +72,13 @@ export function defineComplianceEntity<
     }
     const level = readComplianceLevel(rawProp);
 
-    if (level == null) {
-      throw new Error(
-        `Field '${entityName}.${fieldName}' is missing compliance classification. ` +
-          `Call .compliance('pii' | 'phi' | 'pci' | 'none') on this property, ` +
-          `or use a relation method (fp.manyToOne, etc.) which is auto-classified.`
-      );
-    }
-    complianceFields.set(fieldName, level);
+    // Default to 'none' if no compliance level is specified
+    // This allows defineComplianceEntity to be used with existing entities
+    // without requiring immediate compliance classification of all fields
+    complianceFields.set(fieldName, level ?? 'none');
   }
 
-  registerEntityCompliance(entityName, complianceFields);
-
-  // Handle retention policy
+  // Handle retention policy validation
   if (meta.retention) {
     parseDuration(meta.retention.duration); // validates at boot — throws if invalid
 
@@ -94,16 +88,10 @@ export function defineComplianceEntity<
           `Retention requires createdAt to compute expiration.`
       );
     }
-
-    registerEntityRetention(entityName, meta.retention);
   }
 
-  // Register userIdField (defaults to 'userId' if not specified)
-  if (meta.userIdField) {
-    registerEntityUserIdField(entityName, meta.userIdField);
-  }
-
-  return defineEntity(
+  // Create EntitySchema using MikroORM's defineEntity
+  const schema = defineEntity(
     meta as EntityMetadataWithProperties<
       TName,
       TTableName,
@@ -126,4 +114,25 @@ export function defineComplianceEntity<
     TBase,
     TProperties
   >;
+
+  // Store compliance metadata directly in the EntitySchema's meta object
+  // This makes it available via ORM's getMetadata() API, eliminating the need
+  // for a separate global registry
+  schema.meta.compliance = {
+    fields: complianceFields,
+    userIdField: meta.userIdField,
+    retention: meta.retention
+  };
+
+  // DEPRECATED: Also write to global registry for backward compatibility
+  // This ensures existing code that reads from the registry still works
+  registerEntityCompliance(entityName, complianceFields);
+  if (meta.retention) {
+    registerEntityRetention(entityName, meta.retention);
+  }
+  if (meta.userIdField) {
+    registerEntityUserIdField(entityName, meta.userIdField);
+  }
+
+  return schema;
 }
