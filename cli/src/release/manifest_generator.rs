@@ -252,6 +252,8 @@ pub(crate) struct ServiceConfig {
     pub health_check: Option<Value>,
     #[serde(rename = "isWorkerService", skip_serializing_if = "Option::is_none")]
     pub is_worker_service: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privileged: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -285,6 +287,8 @@ pub(crate) struct WorkerConfig {
     pub hosting_type: Option<String>,
     #[serde(rename = "healthCheck", skip_serializing_if = "Option::is_none")]
     pub health_check: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privileged: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -498,6 +502,7 @@ pub(crate) fn generate_release_manifest(
                         .and_then(|m| m.hosting_type.clone()),
                     health_check: None,
                     is_worker_service: None,
+                    privileged: project.metadata.as_ref().and_then(|m| m.privileged),
                 }),
                 build_context: if app_root
                     .join(&manifest.modules_path)
@@ -636,6 +641,7 @@ pub(crate) fn generate_release_manifest(
                         .and_then(|m| m.hosting_type.clone()),
                     health_check: None,
                     is_worker_service: Some(true),
+                    privileged: project.metadata.as_ref().and_then(|m| m.privileged),
                 }),
                 build_context: if app_root
                     .join(&manifest.modules_path)
@@ -689,6 +695,7 @@ pub(crate) fn generate_release_manifest(
                     .as_ref()
                     .and_then(|m| m.hosting_type.clone()),
                 health_check: None,
+                privileged: project.metadata.as_ref().and_then(|m| m.privileged),
             };
 
             services.push(ServiceDefinition {
@@ -1099,6 +1106,7 @@ mod tests {
             hosting_type: Some("ecs-ec2".to_string()),
             health_check: None,
             is_worker_service: None,
+            privileged: None,
         };
         let json = serde_json::to_value(&config).unwrap();
         assert_eq!(json["hostingType"], "ecs-ec2");
@@ -1117,6 +1125,7 @@ mod tests {
             hosting_type: None,
             health_check: None,
             is_worker_service: None,
+            privileged: None,
         };
         let json = serde_json::to_value(&config).unwrap();
         assert!(
@@ -1141,9 +1150,57 @@ mod tests {
             instance_size: None,
             hosting_type: Some("ecs-ec2".to_string()),
             health_check: None,
+            privileged: None,
         };
         let json = serde_json::to_value(&config).unwrap();
         assert_eq!(json["hostingType"], "ecs-ec2");
+    }
+
+    #[test]
+    fn test_worker_config_privileged_round_trips() {
+        let config = WorkerConfig {
+            config_type: ConfigType::Worker,
+            worker_type: WorkerType::BullMQ,
+            concurrency: None,
+            timeout: None,
+            max_retries: None,
+            queue: None,
+            priority: None,
+            dead_letter_queue: None,
+            additional: None,
+            runtime_dependencies: None,
+            instance_size: None,
+            hosting_type: Some("ecs-ec2".to_string()),
+            health_check: None,
+            privileged: Some(true),
+        };
+        let json = serde_json::to_value(&config).unwrap();
+        assert_eq!(json["privileged"], true);
+    }
+
+    #[test]
+    fn test_worker_config_privileged_omitted_when_absent() {
+        let config = WorkerConfig {
+            config_type: ConfigType::Worker,
+            worker_type: WorkerType::BullMQ,
+            concurrency: None,
+            timeout: None,
+            max_retries: None,
+            queue: None,
+            priority: None,
+            dead_letter_queue: None,
+            additional: None,
+            runtime_dependencies: None,
+            instance_size: None,
+            hosting_type: None,
+            health_check: None,
+            privileged: None,
+        };
+        let json = serde_json::to_value(&config).unwrap();
+        assert!(
+            json.get("privileged").is_none(),
+            "privileged should be omitted when None"
+        );
     }
 
     #[test]
@@ -1162,6 +1219,7 @@ mod tests {
             instance_size: None,
             hosting_type: None,
             health_check: None,
+            privileged: None,
         };
         let json = serde_json::to_value(&config).unwrap();
         assert!(

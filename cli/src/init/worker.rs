@@ -257,6 +257,7 @@ fn add_worker_to_artifacts(
         Some(ProjectMetadata {
             r#type: Some(manifest_data.worker_type_lowercase.clone()),
             hosting_type: None,
+            privileged: None,
         }),
     )
     .with_context(|| ERROR_FAILED_TO_ADD_PROJECT_METADATA_TO_MANIFEST)?;

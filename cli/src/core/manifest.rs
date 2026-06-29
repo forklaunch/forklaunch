@@ -122,6 +122,16 @@ pub(crate) struct ProjectMetadata {
     /// when absent. Allowed: "ecs-fargate" | "ecs-ec2".
     #[serde(rename = "hostingType", alias = "hosting_type", default, skip_serializing_if = "Option::is_none")]
     pub(crate) hosting_type: Option<String>,
+    /// Run the component's container in privileged mode. Required for nsjail's
+    /// namespace clone in the deploy sandbox; only valid with hostingType
+    /// "ecs-ec2" (Fargate forbids privileged mode). Optional — absent means false.
+    #[serde(
+        rename = "privileged",
+        alias = "privileged",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub(crate) privileged: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Content, Clone)]

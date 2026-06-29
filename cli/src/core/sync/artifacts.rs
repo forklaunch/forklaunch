@@ -91,6 +91,7 @@ impl ProjectSyncMetadata {
         self.worker_type.map(|wt| ProjectMetadata {
             r#type: Some(wt.to_string()),
             hosting_type: None,
+            privileged: None,
         })
     }
 }
