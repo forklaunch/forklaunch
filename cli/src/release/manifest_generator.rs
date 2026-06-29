@@ -16,8 +16,10 @@ use crate::{
             Topology, ImportScanner, LibraryDefinition, parse_route_file,
             scan_project_libraries,
         },
-        manifest::{ProjectType, ResourceInventory, application::ApplicationManifestData},
-        sync::detection::detect_routers_from_service,
+        manifest::{
+            ProjectEntry, ProjectType, ResourceInventory, application::ApplicationManifestData,
+        },
+        sync::detection::{detect_database_from_mikro_orm_config, detect_routers_from_service},
     },
 };
 
@@ -721,7 +723,18 @@ pub(crate) fn generate_release_manifest(
 
     let mut resources = Vec::new();
     for project in &manifest.projects {
-        if let Some(project_resources) = &project.resources {
+        if matches!(project.r#type, ProjectType::Library) {
+            continue;
+        }
+
+        let project_resources = effective_resource_inventory(
+            project,
+            manifest,
+            project_runtime_deps,
+            &modules_root,
+        );
+
+        if let Some(project_resources) = project_resources {
             let user_managed_db = user_managed_db_projects.contains(&project.name);
 
             // For worker projects, resources need to be accessible to both
@@ -730,26 +743,26 @@ pub(crate) fn generate_release_manifest(
                 if user_managed_db {
                     // When DB is user-managed, emit a single detached DB resource (no service_name)
                     // to avoid duplicates, then add non-DB resources for each component
-                    add_resources_from_inventory(&project.name, project_resources, &mut resources, true);
+                    add_resources_from_inventory(&project.name, &project_resources, &mut resources, true);
 
                     // Add non-DB resources for service and worker components
                     let service_name = format!("{}-service", project.name);
-                    add_non_db_resources(&service_name, project_resources, &mut resources);
+                    add_non_db_resources(&service_name, &project_resources, &mut resources);
 
                     let worker_name = format!("{}-worker", project.name);
-                    add_non_db_resources(&worker_name, project_resources, &mut resources);
+                    add_non_db_resources(&worker_name, &project_resources, &mut resources);
                 } else {
                     // Create resources for the worker-service component
                     let service_name = format!("{}-service", project.name);
-                    add_resources_from_inventory(&service_name, project_resources, &mut resources, false);
+                    add_resources_from_inventory(&service_name, &project_resources, &mut resources, false);
 
                     // Create resources for the worker-worker component
                     let worker_name = format!("{}-worker", project.name);
-                    add_resources_from_inventory(&worker_name, project_resources, &mut resources, false);
+                    add_resources_from_inventory(&worker_name, &project_resources, &mut resources, false);
                 }
             } else {
                 // For regular service projects, create resources with the project name
-                add_resources_from_inventory(&project.name, project_resources, &mut resources, user_managed_db);
+                add_resources_from_inventory(&project.name, &project_resources, &mut resources, user_managed_db);
             }
         }
     }
@@ -845,6 +858,70 @@ pub(crate) fn generate_release_manifest(
         libraries: scan_project_libraries(&app_root.join("package.json")).ok(),
         compliance: compliance_data,
     })
+}
+
+/// Merge manifest `[projects.resources]` with runtime dependency detection so
+/// `infrastructure.resources` is populated even when manifest.toml is incomplete.
+fn effective_resource_inventory(
+    project: &ProjectEntry,
+    manifest: &ApplicationManifestData,
+    project_runtime_deps: &HashMap<String, Vec<String>>,
+    modules_root: &Path,
+) -> Option<ResourceInventory> {
+    let mut inv = project.resources.clone().unwrap_or(ResourceInventory {
+        database: None,
+        cache: None,
+        queue: None,
+        object_store: None,
+        redis_partition: None,
+    });
+
+    let Some(runtime_types) = project_runtime_deps.get(&project.name) else {
+        return if inv.database.is_some()
+            || inv.cache.is_some()
+            || inv.queue.is_some()
+            || inv.object_store.is_some()
+        {
+            Some(inv)
+        } else {
+            None
+        };
+    };
+
+    if inv.database.is_none() && runtime_types.iter().any(|t| t == "database") {
+        let project_path = modules_root.join(&project.name);
+        inv.database = detect_database_from_mikro_orm_config(&project_path)
+            .ok()
+            .flatten()
+            .map(|db| db.to_string())
+            .or_else(|| Some(manifest.database.clone()));
+    }
+
+    if inv.cache.is_none() && runtime_types.iter().any(|t| t == "cache") {
+        inv.cache = Some("redis".to_string());
+    }
+
+    if inv.object_store.is_none() && runtime_types.iter().any(|t| t == "storage") {
+        inv.object_store = Some("s3".to_string());
+    }
+
+    if inv.queue.is_none() && runtime_types.iter().any(|t| t == "queue") {
+        inv.queue = project
+            .metadata
+            .as_ref()
+            .and_then(|m| m.r#type.clone())
+            .or(Some("kafka".to_string()));
+    }
+
+    if inv.database.is_some()
+        || inv.cache.is_some()
+        || inv.queue.is_some()
+        || inv.object_store.is_some()
+    {
+        Some(inv)
+    } else {
+        None
+    }
 }
 
 fn add_resources_from_inventory(

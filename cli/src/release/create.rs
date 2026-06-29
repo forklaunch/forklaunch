@@ -960,6 +960,41 @@ impl CliCommand for CreateCommand {
         let project_names_for_origin: Vec<String> =
             manifest.projects.iter().map(|p| p.name.clone()).collect();
 
+        // Detect projects where DB_HOST is user-managed (set in .env.local).
+        // Must happen before enrich_provisioned_env_components so we can suppress
+        // database component metadata for BYOC projects.
+        let mut user_managed_db_projects: HashSet<String> = HashSet::new();
+        for project in &manifest.projects {
+            let env_local_path = app_root
+                .join(&manifest.modules_path)
+                .join(&project.name)
+                .join(".env.local");
+            if let Ok(contents) = read_to_string(&env_local_path) {
+                let has_user_db_host = contents
+                    .lines()
+                    .filter(|line| !line.trim().is_empty() && !line.starts_with('#'))
+                    .any(|line| {
+                        line.split('=')
+                            .next()
+                            .is_some_and(|k| k.trim() == "DB_HOST")
+                    });
+                if has_user_db_host {
+                    user_managed_db_projects.insert(project.name.clone());
+                }
+            }
+        }
+
+        // If every service/worker is user-managed (BYOC database), suppress the
+        // database component metadata so the platform does not attempt Pulumi injection.
+        let all_projects_user_managed_db = !manifest.projects.is_empty()
+            && manifest
+                .projects
+                .iter()
+                .filter(|p| matches!(p.r#type, ProjectType::Service | ProjectType::Worker))
+                .all(|p| user_managed_db_projects.contains(&p.name));
+
+        enrich_provisioned_env_components(&mut env_var_components, all_projects_user_managed_db);
+
         let required_env_vars: Vec<EnvironmentVariableRequirement> = scoped_env_vars
             .iter()
             .map(|v| EnvironmentVariableRequirement {
@@ -1083,28 +1118,6 @@ impl CliCommand for CreateCommand {
         } else {
             HashMap::new()
         };
-
-        // Detect projects where DB_HOST is user-managed (set in .env.local)
-        let mut user_managed_db_projects: HashSet<String> = HashSet::new();
-        for project in &manifest.projects {
-            let env_local_path = app_root
-                .join(&manifest.modules_path)
-                .join(&project.name)
-                .join(".env.local");
-            if let Ok(contents) = read_to_string(&env_local_path) {
-                let has_user_db_host = contents
-                    .lines()
-                    .filter(|line| !line.trim().is_empty() && !line.starts_with('#'))
-                    .any(|line| {
-                        line.split('=')
-                            .next()
-                            .is_some_and(|k| k.trim() == "DB_HOST")
-                    });
-                if has_user_db_host {
-                    user_managed_db_projects.insert(project.name.clone());
-                }
-            }
-        }
 
         let release_manifest = generate_release_manifest(
             &app_root,
@@ -1976,6 +1989,55 @@ fn is_cli_generated_key_var(key_upper: &str) -> bool {
     CLI_GENERATED_KEY_VARS
         .iter()
         .any(|allowed| allowed == &key_upper)
+}
+
+/// Attach component metadata for platform-provisioned env vars when docker-compose
+/// inference did not run (e.g. empty values). Without this, the platform cannot
+/// resolve injected values via `resolveComponentInitialValue` at deploy time.
+///
+/// When `skip_database_entries` is true (all projects are BYOC / user-managed DB),
+/// database component metadata is omitted so the platform does not attempt Pulumi
+/// injection over manually-configured values.
+fn enrich_provisioned_env_components(
+    components: &mut HashMap<
+        String,
+        (
+            EnvironmentVariableComponentType,
+            EnvironmentVariableComponentProperty,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        ),
+    >,
+    skip_database_entries: bool,
+) {
+    const DB_ENTRIES: &[(&str, EnvironmentVariableComponentType, EnvironmentVariableComponentProperty)] = &[
+        ("DB_HOST",     EnvironmentVariableComponentType::Database, EnvironmentVariableComponentProperty::Host),
+        ("DB_PORT",     EnvironmentVariableComponentType::Database, EnvironmentVariableComponentProperty::Port),
+        ("DB_USER",     EnvironmentVariableComponentType::Database, EnvironmentVariableComponentProperty::User),
+        ("DB_PASSWORD", EnvironmentVariableComponentType::Database, EnvironmentVariableComponentProperty::Password),
+        ("DB_NAME",     EnvironmentVariableComponentType::Database, EnvironmentVariableComponentProperty::DbName),
+    ];
+
+    const INFRA_ENTRIES: &[(&str, EnvironmentVariableComponentType, EnvironmentVariableComponentProperty)] = &[
+        ("REDIS_URL",                 EnvironmentVariableComponentType::Cache, EnvironmentVariableComponentProperty::Url),
+        ("REDIS_HOST",                EnvironmentVariableComponentType::Cache, EnvironmentVariableComponentProperty::Host),
+        ("REDIS_PORT",                EnvironmentVariableComponentType::Cache, EnvironmentVariableComponentProperty::Port),
+        ("KAFKA_BROKERS",             EnvironmentVariableComponentType::Queue, EnvironmentVariableComponentProperty::Connection),
+        ("KAFKA_BOOTSTRAP_SERVERS",   EnvironmentVariableComponentType::Queue, EnvironmentVariableComponentProperty::Connection),
+    ];
+
+    let all_entries: Vec<_> = if skip_database_entries {
+        INFRA_ENTRIES.iter().collect()
+    } else {
+        DB_ENTRIES.iter().chain(INFRA_ENTRIES.iter()).collect()
+    };
+
+    for (name, component_type, property) in all_entries {
+        components
+            .entry(name.to_string())
+            .or_insert_with(|| (component_type.clone(), property.clone(), None, None, None));
+    }
 }
 
 fn is_allowed_application_var(
