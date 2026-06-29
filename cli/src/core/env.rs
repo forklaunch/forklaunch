@@ -302,6 +302,12 @@ pub(crate) fn parse_env_file_items(path: &Path) -> Result<Vec<EnvFileItem>> {
     let content = fs::read_to_string(path)
         .with_context(|| format!("Failed to read env file: {}", path.display()))?;
 
+    Ok(parse_env_items_from_str(&content))
+}
+
+/// String-based variant of `parse_env_file_items` for content fetched over
+/// the wire (e.g. `config set` pulling the current scope before merging).
+pub(crate) fn parse_env_items_from_str(content: &str) -> Vec<EnvFileItem> {
     let lines: Vec<&str> = content.lines().collect();
     let mut items: Vec<EnvFileItem> = Vec::new();
     let mut i = 0;
@@ -332,7 +338,7 @@ pub(crate) fn parse_env_file_items(path: &Path) -> Result<Vec<EnvFileItem>> {
         i += 1;
     }
 
-    Ok(items)
+    items
 }
 
 pub(crate) fn load_env_file(path: &Path) -> Result<HashMap<String, String>> {
