@@ -1,4 +1,4 @@
-import { safeStringify } from '@forklaunch/common';
+import { toPlainString } from '@forklaunch/common';
 import {
   enrichExpressLikeSend,
   ForklaunchSendableData,
@@ -140,13 +140,12 @@ export function enrichResponseTransmission<SV extends AnySchemaValidator>(
    * ```
    */
   res.setHeader = function (name: string, value: unknown | unknown[]) {
-    let stringifiedValue;
     if (Array.isArray(value)) {
-      stringifiedValue = value.map((v) => safeStringify(v)).join('\n');
-    } else {
-      stringifiedValue = safeStringify(value);
+      const mappedArray = value.map((v) => toPlainString(v));
+      // @ts-expect-error - Node.js setHeader accepts string[] but Express types only allow string
+      return originalSetHeader.call(this, name, mappedArray);
     }
-    return originalSetHeader.call(this, name, stringifiedValue);
+    return originalSetHeader.call(this, name, toPlainString(value));
   };
 
   res.sseEmitter = async function (
