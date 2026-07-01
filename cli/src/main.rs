@@ -4,6 +4,7 @@ use change::ChangeCommand;
 use clap::{ArgMatches, Command, command};
 use compliance::ComplianceCommand;
 use config::ConfigCommand;
+use context::ContextCommand;
 use delete::DeleteCommand;
 use depcheck::DepcheckCommand;
 use deploy::DeployCommand;
@@ -29,6 +30,7 @@ mod core;
 mod change;
 mod compliance;
 mod config;
+mod context;
 mod delete;
 mod depcheck;
 mod deploy;
@@ -59,6 +61,7 @@ fn main() -> Result<()> {
     let change = ChangeCommand::new();
     let compliance = ComplianceCommand::new();
     let config = ConfigCommand::new();
+    let context = ContextCommand::new();
     let delete = DeleteCommand::new();
     let depcheck = DepcheckCommand::new();
     let deploy = DeployCommand::new();
@@ -87,6 +90,7 @@ fn main() -> Result<()> {
         .subcommand(eject.command())
         .subcommand(depcheck.command())
         .subcommand(config.command())
+        .subcommand(context.command())
         .subcommand(deploy.command())
         .subcommand(environment.command())
         .subcommand(integrate.command())
@@ -111,6 +115,7 @@ fn main() -> Result<()> {
         Some(("change", sub_matches)) => change.handler(sub_matches),
         Some(("compliance", sub_matches)) => compliance.handler(sub_matches),
         Some(("config", sub_matches)) => config.handler(sub_matches),
+        Some(("context", sub_matches)) => context.handler(sub_matches),
         Some(("delete", sub_matches)) => delete.handler(sub_matches),
         Some(("depcheck", sub_matches)) => depcheck.handler(sub_matches),
         Some(("deploy", sub_matches)) => deploy.handler(sub_matches),
