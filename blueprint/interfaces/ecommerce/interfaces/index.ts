@@ -1,2 +1,2 @@
-// Service interfaces are added incrementally as each entity's PR lands — none yet.
-export {};
+export * from './variant.service.interface';
+// Remaining service interfaces are added incrementally as each entity's PR lands.

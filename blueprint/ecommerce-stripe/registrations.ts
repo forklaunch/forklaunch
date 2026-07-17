@@ -17,8 +17,18 @@ import {
   getEnvVar,
   Lifetime
 } from '@forklaunch/core/services';
+import { BaseVariantService } from '@forklaunch/implementation-ecommerce-base/services';
 import { ForkOptions } from '@mikro-orm/core';
 import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
+import {
+  CreateVariantMapper,
+  UpdateVariantMapper,
+  VariantMapper
+} from './domain/mappers/variant.mappers';
+import {
+  VariantDtoTypes,
+  VariantMapperTypes
+} from './domain/types/ecommerceMappers.types';
 import mikroOrmOptionsConfig from './mikro-orm.config';
 
 //! defines the configuration schema for the application
@@ -155,10 +165,28 @@ const runtimeDependencies = environmentConfig.chain({
   }
 });
 
+//! defines the service dependencies for the application — one `.chain()`
+//! link per entity, added incrementally as each entity's PR lands.
+const serviceDependencies = runtimeDependencies.chain({
+  VariantService: {
+    lifetime: Lifetime.Scoped,
+    type: BaseVariantService<SchemaValidator, VariantMapperTypes, VariantDtoTypes>,
+    factory: ({ EntityManager, OtelCollector }, context, resolve) =>
+      new BaseVariantService(
+        context.entityManagerOptions
+          ? resolve('EntityManager', context)
+          : EntityManager,
+        OtelCollector,
+        schemaValidator,
+        { VariantMapper, CreateVariantMapper, UpdateVariantMapper }
+      )
+  }
+});
+
 //! validates the configuration and returns the dependencies for the application
 export const createDependencyContainer = (envFilePath: string) => {
-  const ci = runtimeDependencies.validateConfigSingletons(envFilePath);
-  const tokens = runtimeDependencies.tokens();
+  const ci = serviceDependencies.validateConfigSingletons(envFilePath);
+  const tokens = serviceDependencies.tokens();
   return {
     ci,
     tokens

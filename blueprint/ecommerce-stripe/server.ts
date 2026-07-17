@@ -5,6 +5,7 @@ import {
   schemaValidator
 } from './schema';
 import { setupRls, setupTenantFilter } from '@forklaunch/core/persistence';
+import { variantRouter } from './api/routes/variant.routes';
 import { ci, tokens } from './bootstrapper';
 
 //! resolves the openTelemetryCollector from the configuration
@@ -35,7 +36,8 @@ const port = ci.resolve(tokens.PORT);
 const version = ci.resolve(tokens.VERSION);
 const docsPath = ci.resolve(tokens.DOCS_PATH);
 
-//! routes are mounted here as each entity's PR lands — none yet.
+//! routes are mounted here incrementally as each entity's PR lands.
+app.use(variantRouter);
 
 //! starts the server
 app.listen(port, host, () => {
