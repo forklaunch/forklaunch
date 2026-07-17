@@ -19,6 +19,7 @@ import {
 } from '@forklaunch/core/services';
 import {
   BaseInventoryService,
+  BaseProductService,
   BaseVariantService
 } from '@forklaunch/implementation-ecommerce-base/services';
 import { ForkOptions } from '@mikro-orm/core';
@@ -29,6 +30,11 @@ import {
   UpdateInventoryMapper
 } from './domain/mappers/inventory.mappers';
 import {
+  CreateProductMapper,
+  ProductMapper,
+  UpdateProductMapper
+} from './domain/mappers/product.mappers';
+import {
   CreateVariantMapper,
   UpdateVariantMapper,
   VariantMapper
@@ -36,6 +42,8 @@ import {
 import {
   InventoryDtoTypes,
   InventoryMapperTypes,
+  ProductDtoTypes,
+  ProductMapperTypes,
   VariantDtoTypes,
   VariantMapperTypes
 } from './domain/types/ecommerceMappers.types';
@@ -178,6 +186,19 @@ const runtimeDependencies = environmentConfig.chain({
 //! defines the service dependencies for the application — one `.chain()`
 //! link per entity, added incrementally as each entity's PR lands.
 const serviceDependencies = runtimeDependencies.chain({
+  ProductService: {
+    lifetime: Lifetime.Scoped,
+    type: BaseProductService<SchemaValidator, ProductMapperTypes, ProductDtoTypes>,
+    factory: ({ EntityManager, OtelCollector }, context, resolve) =>
+      new BaseProductService(
+        context.entityManagerOptions
+          ? resolve('EntityManager', context)
+          : EntityManager,
+        OtelCollector,
+        schemaValidator,
+        { ProductMapper, CreateProductMapper, UpdateProductMapper }
+      )
+  },
   VariantService: {
     lifetime: Lifetime.Scoped,
     type: BaseVariantService<SchemaValidator, VariantMapperTypes, VariantDtoTypes>,
