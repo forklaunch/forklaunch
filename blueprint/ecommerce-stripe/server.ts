@@ -5,6 +5,7 @@ import {
   schemaValidator
 } from './schema';
 import { setupRls, setupTenantFilter } from '@forklaunch/core/persistence';
+import { inventoryRouter } from './api/routes/inventory.routes';
 import { variantRouter } from './api/routes/variant.routes';
 import { ci, tokens } from './bootstrapper';
 
@@ -38,6 +39,7 @@ const docsPath = ci.resolve(tokens.DOCS_PATH);
 
 //! routes are mounted here incrementally as each entity's PR lands.
 app.use(variantRouter);
+app.use(inventoryRouter);
 
 //! starts the server
 app.listen(port, host, () => {
