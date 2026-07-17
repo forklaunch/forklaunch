@@ -1,8 +1,11 @@
 import { SchemaValidator } from './schema';
 import { MapToSdk } from '@forklaunch/core/http';
 import {
+  adjustStock,
+  checkStock,
   createVariant,
   deleteVariant,
+  getInventory,
   getVariant,
   listVariants,
   listVariantsByProduct,
@@ -19,6 +22,11 @@ export type EcommerceSdk = {
     deleteVariant: typeof deleteVariant;
     listVariants: typeof listVariants;
   };
+  inventory: {
+    getInventory: typeof getInventory;
+    adjustStock: typeof adjustStock;
+    checkStock: typeof checkStock;
+  };
 };
 
 export const ecommerceSdkClient = {
@@ -29,6 +37,11 @@ export const ecommerceSdkClient = {
     updateVariant,
     deleteVariant,
     listVariants
+  },
+  inventory: {
+    getInventory,
+    adjustStock,
+    checkStock
   }
 } satisfies EcommerceSdk;
 
