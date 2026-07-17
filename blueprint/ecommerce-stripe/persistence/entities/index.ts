@@ -1,2 +1,2 @@
-// Entities are added incrementally as each entity's PR lands — none yet.
-export {};
+export { Variant } from './variant.entity';
+// Remaining entities are added incrementally as each PR lands.

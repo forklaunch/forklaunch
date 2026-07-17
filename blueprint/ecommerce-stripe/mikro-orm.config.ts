@@ -12,6 +12,7 @@ import { Platform, TextType, Type } from '@mikro-orm/core';
 import { Migrator } from '@mikro-orm/migrations';
 import { defineConfig } from '@mikro-orm/postgresql';
 import dotenv from 'dotenv';
+import * as entities from './persistence/entities';
 
 dotenv.config({ path: getEnvVar('DOTENV_FILE_PATH') });
 
@@ -75,10 +76,7 @@ const mikroOrmOptionsConfig = defineConfig({
   user: validConfigInjector.resolve(tokens.DB_USER),
   password: validConfigInjector.resolve(tokens.DB_PASSWORD),
   port: validConfigInjector.resolve(tokens.DB_PORT),
-  // No entities registered yet at this stage of the module — added
-  // incrementally as each entity's PR lands (see Object.values(entities)
-  // once the entities barrel is non-empty).
-  entities: [],
+  entities: Object.values(entities),
   debug: validConfigInjector.resolve(tokens.NODE_ENV) === 'development',
   extensions: [Migrator],
   discovery: {
