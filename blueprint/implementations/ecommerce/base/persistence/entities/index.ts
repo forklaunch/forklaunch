@@ -1,4 +1,5 @@
 import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
+import { ProductImage, ProductOption } from '@forklaunch/interfaces-ecommerce/types';
 
 /**
  * Base template entities — the typing scaffolds the generic base services
@@ -11,6 +12,23 @@ import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
  *
  * Added incrementally as each entity's PR lands.
  */
+export const Product = defineComplianceEntity({
+  name: 'Product',
+  properties: {
+    id: fp.string().primary().compliance('none'),
+    externalId: fp.string().compliance('none'),
+    handle: fp.string().compliance('none'),
+    sourceUrl: fp.string().nullable().compliance('none'),
+    title: fp.string().compliance('none'),
+    descriptionHtml: fp.string().nullable().compliance('none'),
+    vendor: fp.string().nullable().compliance('none'),
+    productType: fp.string().nullable().compliance('none'),
+    tags: fp.string().array().nullable().compliance('none'),
+    options: fp.json<ProductOption[]>().nullable().compliance('none'),
+    images: fp.json<ProductImage[]>().nullable().compliance('none')
+  }
+});
+
 export const Variant = defineComplianceEntity({
   name: 'Variant',
   properties: {

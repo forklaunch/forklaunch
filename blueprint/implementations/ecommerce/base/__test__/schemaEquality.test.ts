@@ -2,9 +2,12 @@ import { isTrue } from '@forklaunch/common';
 import { describe, expect, it } from 'vitest';
 import {
   CreateInventoryDto,
+  CreateProductDto,
   CreateVariantDto,
   InventoryDto,
+  ProductDto,
   UpdateInventoryDto,
+  UpdateProductDto,
   UpdateVariantDto,
   VariantDto
 } from '@forklaunch/interfaces-ecommerce/types';
@@ -14,6 +17,11 @@ import {
   InventorySchema as TypeboxInventorySchema
 } from '../domain/schemas/typebox/inventory.schema';
 import { CreateInventorySchema as TypeboxCreateInventorySchema } from '../domain/schemas/typebox/inventory.schema';
+import {
+  ProductSchema as TypeboxProductSchema,
+  UpdateProductSchema as TypeboxUpdateProductSchema
+} from '../domain/schemas/typebox/product.schema';
+import { CreateProductSchema as TypeboxCreateProductSchema } from '../domain/schemas/typebox/product.schema';
 import {
   VariantSchema as TypeboxVariantSchema,
   UpdateVariantSchema as TypeboxUpdateVariantSchema
@@ -25,10 +33,23 @@ import {
 } from '../domain/schemas/zod/inventory.schema';
 import { CreateInventorySchema as ZodCreateInventorySchema } from '../domain/schemas/zod/inventory.schema';
 import {
+  ProductSchema as ZodProductSchema,
+  UpdateProductSchema as ZodUpdateProductSchema
+} from '../domain/schemas/zod/product.schema';
+import { CreateProductSchema as ZodCreateProductSchema } from '../domain/schemas/zod/product.schema';
+import {
   VariantSchema as ZodVariantSchema,
   UpdateVariantSchema as ZodUpdateVariantSchema
 } from '../domain/schemas/zod/variant.schema';
 import { CreateVariantSchema as ZodCreateVariantSchema } from '../domain/schemas/zod/variant.schema';
+
+const zodUpdateProductSchema = ZodUpdateProductSchema({ uuidId: false });
+const typeboxUpdateProductSchema = TypeboxUpdateProductSchema({ uuidId: false });
+const zodProductSchema = ZodProductSchema({ uuidId: false });
+const typeboxProductSchema = TypeboxProductSchema({ uuidId: false });
+
+const sampleOptions = [{ name: 'Size', isPackQuantity: false, values: ['S'] }];
+const sampleImages = [{ src: 'https://example.com/a.jpg', position: 1 }];
 
 const zodUpdateVariantSchema = ZodUpdateVariantSchema({ uuidId: false });
 const typeboxUpdateVariantSchema = TypeboxUpdateVariantSchema({ uuidId: false });
@@ -46,6 +67,55 @@ const typeboxInventorySchema = TypeboxInventorySchema({ uuidId: false });
 // incrementally as each entity's PR lands.
 
 describe('schema equality', () => {
+  it('should be equal for product', () => {
+    expect(
+      isTrue(
+        testSchemaEquality<CreateProductDto>()(
+          ZodCreateProductSchema,
+          TypeboxCreateProductSchema,
+          {
+            externalId: 'ext-1',
+            handle: 'test-product',
+            sourceUrl: 'https://example.com/products/test-product',
+            title: 'Test Product',
+            descriptionHtml: '<p>desc</p>',
+            vendor: 'Test Vendor',
+            productType: 'Supplement',
+            tags: ['a', 'b'],
+            options: sampleOptions,
+            images: sampleImages
+          }
+        )
+      )
+    ).toBeTruthy();
+
+    expect(
+      isTrue(
+        testSchemaEquality<UpdateProductDto>()(
+          zodUpdateProductSchema,
+          typeboxUpdateProductSchema,
+          {
+            id: 'test',
+            title: 'Updated'
+          }
+        )
+      )
+    ).toBeTruthy();
+
+    expect(
+      isTrue(
+        testSchemaEquality<ProductDto>()(zodProductSchema, typeboxProductSchema, {
+          id: 'test',
+          externalId: 'ext-1',
+          handle: 'test-product',
+          title: 'Test Product',
+          options: sampleOptions,
+          images: sampleImages
+        })
+      )
+    ).toBeTruthy();
+  });
+
   it('should be equal for variant', () => {
     expect(
       isTrue(
