@@ -17,15 +17,25 @@ import {
   getEnvVar,
   Lifetime
 } from '@forklaunch/core/services';
-import { BaseVariantService } from '@forklaunch/implementation-ecommerce-base/services';
+import {
+  BaseInventoryService,
+  BaseVariantService
+} from '@forklaunch/implementation-ecommerce-base/services';
 import { ForkOptions } from '@mikro-orm/core';
 import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
+import {
+  CreateInventoryMapper,
+  InventoryMapper,
+  UpdateInventoryMapper
+} from './domain/mappers/inventory.mappers';
 import {
   CreateVariantMapper,
   UpdateVariantMapper,
   VariantMapper
 } from './domain/mappers/variant.mappers';
 import {
+  InventoryDtoTypes,
+  InventoryMapperTypes,
   VariantDtoTypes,
   VariantMapperTypes
 } from './domain/types/ecommerceMappers.types';
@@ -179,6 +189,23 @@ const serviceDependencies = runtimeDependencies.chain({
         OtelCollector,
         schemaValidator,
         { VariantMapper, CreateVariantMapper, UpdateVariantMapper }
+      )
+  },
+  InventoryService: {
+    lifetime: Lifetime.Scoped,
+    type: BaseInventoryService<
+      SchemaValidator,
+      InventoryMapperTypes,
+      InventoryDtoTypes
+    >,
+    factory: ({ EntityManager, OtelCollector }, context, resolve) =>
+      new BaseInventoryService(
+        context.entityManagerOptions
+          ? resolve('EntityManager', context)
+          : EntityManager,
+        OtelCollector,
+        schemaValidator,
+        { InventoryMapper, CreateInventoryMapper, UpdateInventoryMapper }
       )
   }
 });
