@@ -1,4 +1,11 @@
-import { Inventory, Variant } from '../../persistence/entities';
+import { Inventory, Product, Variant } from '../../persistence/entities';
+
+// product entity types
+export type BaseProductEntities = {
+  ProductMapper: { '~entity': (typeof Product)['~entity'] };
+  CreateProductMapper: { '~entity': (typeof Product)['~entity'] };
+  UpdateProductMapper: { '~entity': (typeof Product)['~entity'] };
+};
 
 // variant entity types
 export type BaseVariantEntities = {
