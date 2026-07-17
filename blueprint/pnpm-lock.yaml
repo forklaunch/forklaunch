@@ -396,9 +396,15 @@ importers:
       '@forklaunch/hyper-express':
         specifier: ^1.2.32
         version: 1.2.32(express@5.2.1)
+      '@forklaunch/implementation-ecommerce-base':
+        specifier: workspace:*
+        version: link:../implementations/ecommerce/base
       '@forklaunch/infrastructure-redis':
         specifier: ^1.4.4
         version: 1.4.4(@opentelemetry/api@1.9.1)
+      '@forklaunch/interfaces-ecommerce':
+        specifier: workspace:*
+        version: link:../interfaces/ecommerce
       '@forklaunch/validator':
         specifier: ^1.2.18
         version: 1.2.18
