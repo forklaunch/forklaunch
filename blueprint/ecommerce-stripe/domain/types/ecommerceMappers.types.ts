@@ -1,16 +1,33 @@
 import { SchemaValidator } from '../../schema';
 import { Schema } from '@forklaunch/validator';
-import { Inventory, Variant } from '../../persistence/entities';
+import { Inventory, Product, Variant } from '../../persistence/entities';
 import {
   CreateInventoryMapper,
   InventoryMapper,
   UpdateInventoryMapper
 } from '../mappers/inventory.mappers';
 import {
+  CreateProductMapper,
+  ProductMapper,
+  UpdateProductMapper
+} from '../mappers/product.mappers';
+import {
   CreateVariantMapper,
   UpdateVariantMapper,
   VariantMapper
 } from '../mappers/variant.mappers';
+
+// product
+export type ProductMapperTypes = {
+  ProductMapper: typeof Product;
+  CreateProductMapper: typeof Product;
+  UpdateProductMapper: typeof Product;
+};
+export type ProductDtoTypes = {
+  ProductMapper: Schema<typeof ProductMapper.schema, SchemaValidator>;
+  CreateProductMapper: Schema<typeof CreateProductMapper.schema, SchemaValidator>;
+  UpdateProductMapper: Schema<typeof UpdateProductMapper.schema, SchemaValidator>;
+};
 
 // variant
 export type VariantMapperTypes = {

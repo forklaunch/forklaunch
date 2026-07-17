@@ -1,11 +1,21 @@
 import {
   CreateInventoryDto,
+  CreateProductDto,
   CreateVariantDto,
   InventoryDto,
+  ProductDto,
   UpdateInventoryDto,
+  UpdateProductDto,
   UpdateVariantDto,
   VariantDto
 } from '@forklaunch/interfaces-ecommerce/types';
+
+// product dto types
+export type BaseProductDtos = {
+  ProductMapper: ProductDto;
+  CreateProductMapper: CreateProductDto;
+  UpdateProductMapper: UpdateProductDto;
+};
 
 // variant dto types
 export type BaseVariantDtos = {
