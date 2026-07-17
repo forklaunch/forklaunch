@@ -25,3 +25,12 @@ export const Variant = defineComplianceEntity({
     requiresShipping: fp.boolean().compliance('none')
   }
 });
+
+export const Inventory = defineComplianceEntity({
+  name: 'Inventory',
+  properties: {
+    id: fp.string().primary().compliance('none'),
+    variantId: fp.string().compliance('none'),
+    stock: fp.integer().compliance('none')
+  }
+});
