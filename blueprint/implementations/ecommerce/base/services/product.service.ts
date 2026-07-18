@@ -176,9 +176,8 @@ export class BaseProductService<
       em ?? this.em,
       ...args
     );
-    const updatedProduct = await (em ?? this.em).upsert(product);
-    await (em ?? this.em).transactional(async (innerEm) => {
-      await innerEm.persist(product);
+    const updatedProduct = await (em ?? this.em).transactional(async (innerEm) => {
+      return await innerEm.upsert(product);
     });
     return this.mappers.ProductMapper.toDto(updatedProduct);
   }
