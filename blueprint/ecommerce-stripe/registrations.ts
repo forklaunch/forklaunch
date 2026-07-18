@@ -173,7 +173,7 @@ const serviceDependencies = runtimeDependencies.chain({
     type: BaseVariantService<SchemaValidator, VariantMapperTypes, VariantDtoTypes>,
     factory: ({ EntityManager, OtelCollector }, context, resolve) =>
       new BaseVariantService(
-        context.entityManagerOptions
+        context?.entityManagerOptions
           ? resolve('EntityManager', context)
           : EntityManager,
         OtelCollector,
