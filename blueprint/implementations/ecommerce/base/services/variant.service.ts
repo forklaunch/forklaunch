@@ -166,9 +166,8 @@ export class BaseVariantService<
       em ?? this.em,
       ...args
     );
-    const updatedVariant = await (em ?? this.em).upsert(variant);
-    await (em ?? this.em).transactional(async (innerEm) => {
-      await innerEm.persist(variant);
+    const updatedVariant = await (em ?? this.em).transactional(async (innerEm) => {
+      return await innerEm.upsert(variant);
     });
     return this.mappers.VariantMapper.toDto(updatedVariant);
   }
