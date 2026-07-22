@@ -18,12 +18,18 @@ import {
   Lifetime
 } from '@forklaunch/core/services';
 import {
+  BaseCartService,
   BaseInventoryService,
   BaseProductService,
   BaseVariantService
 } from '@forklaunch/implementation-ecommerce-base/services';
 import { ForkOptions } from '@mikro-orm/core';
 import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
+import {
+  CartMapper,
+  CreateCartMapper,
+  UpdateCartMapper
+} from './domain/mappers/cart.mappers';
 import {
   CreateInventoryMapper,
   InventoryMapper,
@@ -40,6 +46,8 @@ import {
   VariantMapper
 } from './domain/mappers/variant.mappers';
 import {
+  CartDtoTypes,
+  CartMapperTypes,
   InventoryDtoTypes,
   InventoryMapperTypes,
   ProductDtoTypes,
@@ -186,12 +194,26 @@ const runtimeDependencies = environmentConfig.chain({
 //! defines the service dependencies for the application — one `.chain()`
 //! link per entity, added incrementally as each entity's PR lands.
 const serviceDependencies = runtimeDependencies.chain({
+  CartService: {
+    lifetime: Lifetime.Scoped,
+    type: BaseCartService<SchemaValidator, CartMapperTypes, CartDtoTypes>,
+    factory: ({ EntityManager, OtelCollector, TtlCache }, context, resolve) =>
+      new BaseCartService(
+        context?.entityManagerOptions
+          ? resolve('EntityManager', context)
+          : EntityManager,
+        OtelCollector,
+        schemaValidator,
+        { CartMapper, CreateCartMapper, UpdateCartMapper },
+        { cache: TtlCache }
+      )
+  },
   ProductService: {
     lifetime: Lifetime.Scoped,
     type: BaseProductService<SchemaValidator, ProductMapperTypes, ProductDtoTypes>,
     factory: ({ EntityManager, OtelCollector }, context, resolve) =>
       new BaseProductService(
-        context.entityManagerOptions
+        context?.entityManagerOptions
           ? resolve('EntityManager', context)
           : EntityManager,
         OtelCollector,
@@ -221,7 +243,7 @@ const serviceDependencies = runtimeDependencies.chain({
     >,
     factory: ({ EntityManager, OtelCollector }, context, resolve) =>
       new BaseInventoryService(
-        context.entityManagerOptions
+        context?.entityManagerOptions
           ? resolve('EntityManager', context)
           : EntityManager,
         OtelCollector,

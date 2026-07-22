@@ -1,3 +1,4 @@
+export * from './cart.service';
 export * from './inventory.service';
 export * from './product.service';
 export * from './variant.service';
