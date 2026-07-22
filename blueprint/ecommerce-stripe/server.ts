@@ -5,6 +5,7 @@ import {
   schemaValidator
 } from './schema';
 import { setupRls, setupTenantFilter } from '@forklaunch/core/persistence';
+import { cartRouter } from './api/routes/cart.routes';
 import { catalogImportRouter } from './api/routes/catalogImport.routes';
 import { inventoryRouter } from './api/routes/inventory.routes';
 import { productRouter } from './api/routes/product.routes';
@@ -44,6 +45,7 @@ app.use(productRouter);
 app.use(variantRouter);
 app.use(inventoryRouter);
 app.use(catalogImportRouter);
+app.use(cartRouter);
 
 //! starts the server
 app.listen(port, host, () => {

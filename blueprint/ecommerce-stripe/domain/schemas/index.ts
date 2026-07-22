@@ -1,6 +1,7 @@
 import { SchemaValidator, schemaValidator } from '../../schema';
 import { mapServiceSchemas } from '@forklaunch/core/mappers';
 import {
+  BaseCartServiceSchemas,
   BaseInventoryServiceSchemas,
   BaseProductServiceSchemas,
   BaseVariantServiceSchemas
@@ -10,6 +11,7 @@ import {
 // mikro-orm's uuid column type — uuidId: false matches sqlBaseProperties.
 const schemas = mapServiceSchemas(
   {
+    CartSchemas: BaseCartServiceSchemas<SchemaValidator>,
     InventorySchemas: BaseInventoryServiceSchemas<SchemaValidator>,
     ProductSchemas: BaseProductServiceSchemas<SchemaValidator>,
     VariantSchemas: BaseVariantServiceSchemas<SchemaValidator>
@@ -21,4 +23,4 @@ const schemas = mapServiceSchemas(
   }
 );
 
-export const { InventorySchemas, ProductSchemas, VariantSchemas } = schemas;
+export const { CartSchemas, InventorySchemas, ProductSchemas, VariantSchemas } = schemas;
