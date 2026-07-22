@@ -1,3 +1,4 @@
+export * from './cart.controller';
 export * from './catalogImport.controller';
 export * from './inventory.controller';
 export * from './product.controller';
