@@ -1,6 +1,11 @@
 import { SchemaValidator } from '../../schema';
 import { Schema } from '@forklaunch/validator';
-import { Inventory, Product, Variant } from '../../persistence/entities';
+import { Cart, Inventory, Product, Variant } from '../../persistence/entities';
+import {
+  CartMapper,
+  CreateCartMapper,
+  UpdateCartMapper
+} from '../mappers/cart.mappers';
 import {
   CreateInventoryMapper,
   InventoryMapper,
@@ -57,6 +62,18 @@ export type InventoryDtoTypes = {
     typeof UpdateInventoryMapper.schema,
     SchemaValidator
   >;
+};
+
+// cart
+export type CartMapperTypes = {
+  CartMapper: typeof Cart;
+  CreateCartMapper: typeof Cart;
+  UpdateCartMapper: typeof Cart;
+};
+export type CartDtoTypes = {
+  CartMapper: Schema<typeof CartMapper.schema, SchemaValidator>;
+  CreateCartMapper: Schema<typeof CreateCartMapper.schema, SchemaValidator>;
+  UpdateCartMapper: Schema<typeof UpdateCartMapper.schema, SchemaValidator>;
 };
 
 // Remaining entities' mapper/DTO types are added incrementally as each PR lands.
