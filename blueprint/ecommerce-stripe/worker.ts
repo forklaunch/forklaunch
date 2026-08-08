@@ -58,12 +58,24 @@ const processOrderEvents: WorkerProcessFunction<OrderEventRecord> = async (
         await applyStockDeltas(-1);
       } else if (
         event.toStatus === OrderStatus.CANCELLED &&
-        event.fromStatus === OrderStatus.PAID
+        // Restock only if stock was actually decremented earlier — that
+        // happens exactly once, at PENDING -> PAID. So restock on
+        // cancellation from any state that implies stock was already
+        // taken: PAID (ORDER_TRANSITIONS in order.service.ts allows
+        // PAID -> CANCELLED directly) or FULFILLED (FULFILLED -> CANCELLED
+        // is also legal — this order already passed through PAID to get
+        // there, so stock was decremented then and was never restocked in
+        // between). SHIPPED and DELIVERED are excluded not because stock
+        // wasn't taken (it was), but because ORDER_TRANSITIONS doesn't
+        // allow cancelling from either state — this branch can never
+        // observe fromStatus SHIPPED/DELIVERED in practice. Cancelling
+        // directly from PENDING never touched stock (found by testing: a
+        // pending->cancelled order was blindly restocking anyway,
+        // inflating stock for something that was never removed), so it's
+        // still deliberately excluded here.
+        (event.fromStatus === OrderStatus.PAID ||
+          event.fromStatus === OrderStatus.FULFILLED)
       ) {
-        // Only restock if inventory was actually decremented earlier —
-        // cancelling directly from pending never touched stock (found by
-        // testing: a pending->cancelled order was blindly restocking
-        // anyway, inflating stock for something that was never removed).
         await applyStockDeltas(1);
       }
 
