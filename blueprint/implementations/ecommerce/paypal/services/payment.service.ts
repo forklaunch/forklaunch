@@ -83,15 +83,46 @@ export class PaypalPaymentService<
   }
 
   /**
-   * Captures the PayPal order, then marks the payment succeeded. Driven by the
-   * PayPal webhook (verified at the controller layer). Idempotent — PayPal's
-   * capture is safe to re-invoke, and base confirm is a no-op once succeeded.
+   * Unlike Stripe's, this confirm has an external side effect: capturing the
+   * order moves real money. The base service's guard only protects the DB
+   * write, so calling captureOrder before it meant every redelivery of a
+   * CHECKOUT.ORDER.APPROVED webhook — routine under at-least-once delivery —
+   * re-invoked a live capture.
+   *
+   * The claim below is an atomic conditional update: only the caller that
+   * flips pending -> succeeded captures. A loser (redelivery, or a concurrent
+   * delivery that got past the webhook ledger's non-exclusive 'retry' path)
+   * affects zero rows, skips the capture, and returns the already-confirmed
+   * payment. If the capture then fails we roll the status back so a genuine
+   * retry can still claim it.
    */
   async confirmPayment(
     confirmDto: ConfirmPaymentDto,
     em?: EntityManager
   ): Promise<Dto['PaymentMapper']> {
-    await this.paypalClient.captureOrder(confirmDto.providerRef);
+    const claimed = await this.basePaymentService.claimForConfirmation(
+      confirmDto.providerRef,
+      em
+    );
+
+    if (!claimed) {
+      // Already captured by someone else, or already failed — do not charge
+      // again. The base confirm finds by providerRef and skips its write when
+      // the status is already succeeded, so this just returns the current DTO
+      // (and still throws if the providerRef is genuinely unknown).
+      return this.basePaymentService.confirmPayment(confirmDto, em);
+    }
+
+    try {
+      await this.paypalClient.captureOrder(confirmDto.providerRef);
+    } catch (error) {
+      await this.basePaymentService.releaseConfirmationClaim(
+        confirmDto.providerRef,
+        em
+      );
+      throw error;
+    }
+
     return this.basePaymentService.confirmPayment(confirmDto, em);
   }
 
