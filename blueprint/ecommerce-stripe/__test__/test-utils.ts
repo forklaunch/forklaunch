@@ -21,10 +21,33 @@ export const setupTestDatabase = async (): Promise<TestSetupResult> => {
     },
     databaseType: (process.env.DATABASE_TYPE ?? 'postgresql') as DatabaseType,
     useMigrations: false,
-    needsRedis: false,
+    // This module's DI graph genuinely needs Redis: the cart is Redis-cached
+    // (TtlCache) and the order-event producer publishes to a Redis-backed
+    // queue. With needsRedis:false the harness starts no Redis container, so
+    // container construction fails before the EntityManager is ever resolved
+    // — which surfaced as a bare "Cannot read properties of undefined
+    // (reading 'fork')" on Orm.em rather than anything mentioning Redis.
+    needsRedis: true,
     customEnvVars: {
-      STRIPE_API_KEY: process.env.STRIPE_API_KEY ?? '',
-      STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET ?? '',
+      // Placeholders are fine: the purchase-loop test drives this module's own
+      // handlers and never calls a provider. They cannot be empty strings
+      // though — the Stripe SDK throws at construction on an empty key, and
+      // FieldEncryptor throws MissingEncryptionKeyError on a falsy master key.
+      STRIPE_API_KEY:
+        process.env.STRIPE_API_KEY || 'sk_test_placeholder_not_a_real_key',
+      STRIPE_WEBHOOK_SECRET:
+        process.env.STRIPE_WEBHOOK_SECRET ||
+        'whsec_test_placeholder_not_a_real_secret',
+      ENCRYPTION_KEY:
+        process.env.ENCRYPTION_KEY || 'test-encryption-key-not-a-real-secret',
+      PAYPAL_CLIENT_ID: process.env.PAYPAL_CLIENT_ID || 'test-paypal-client-id',
+      PAYPAL_CLIENT_SECRET:
+        process.env.PAYPAL_CLIENT_SECRET || 'test-paypal-client-secret',
+      PAYPAL_BASE_URL:
+        process.env.PAYPAL_BASE_URL || 'https://api-m.sandbox.paypal.com',
+      PAYPAL_WEBHOOK_ID:
+        process.env.PAYPAL_WEBHOOK_ID || 'test-paypal-webhook-id',
+      ORDER_EVENT_QUEUE: process.env.ORDER_EVENT_QUEUE || 'test-order-events',
       HMAC_SECRET_KEY: TEST_HMAC_SECRET
     }
   });
