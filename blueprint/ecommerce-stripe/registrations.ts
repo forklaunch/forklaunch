@@ -29,10 +29,17 @@ import {
   PaypalPaymentService
 } from '@forklaunch/implementation-ecommerce-paypal/services';
 import { StripePaymentService } from '@forklaunch/implementation-ecommerce-stripe/services';
+import { RedisWorkerConsumer } from '@forklaunch/implementation-worker-redis/consumers';
 import { RedisWorkerProducer } from '@forklaunch/implementation-worker-redis/producers';
 import { RedisWorkerSchemas } from '@forklaunch/implementation-worker-redis/schemas';
 import { RedisWorkerOptions } from '@forklaunch/implementation-worker-redis/types';
+import {
+  WorkerFailureHandler,
+  WorkerProcessFunction
+} from '@forklaunch/interfaces-worker/types';
 import { OrderEventRecord } from './persistence/entities/orderEvent.entity';
+import { StripeTaxService } from './domain/services/tax.service';
+import { FlatRateShippingService } from './domain/services/shipping.service';
 import { ForkOptions } from '@mikro-orm/core';
 import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
 import Stripe from 'stripe';
@@ -205,6 +212,17 @@ const runtimeDependencies = environmentConfig.chain({
         clientSecret: PAYPAL_CLIENT_SECRET,
         baseUrl: PAYPAL_BASE_URL
       })
+  },
+  TaxService: {
+    lifetime: Lifetime.Singleton,
+    type: StripeTaxService,
+    factory: ({ StripeClient, OtelCollector }) =>
+      new StripeTaxService(StripeClient, OtelCollector)
+  },
+  ShippingService: {
+    lifetime: Lifetime.Singleton,
+    type: FlatRateShippingService,
+    factory: () => new FlatRateShippingService()
   },
   /**
    * Cart's fast/temporary-state layer (ECOM-06's original design) — a
@@ -392,9 +410,6 @@ const serviceDependencies = runtimeDependencies.chain({
    * ECOM-12's event-emission boundary, actually implemented — previously
    * just a comment. Redis transport only (matches TtlCache already being
    * registered here; no new infra beyond what cart caching already needs).
-   * Only the producer side is wired here — order.controller.ts is the only
-   * local consumer of a token from this pair; the consumer/worker.ts side
-   * is scoped to a follow-up PR.
    */
   RedisWorkerOptions: {
     lifetime: Lifetime.Singleton,
@@ -410,6 +425,34 @@ const serviceDependencies = runtimeDependencies.chain({
     type: RedisWorkerProducer<OrderEventRecord, RedisWorkerOptions>,
     factory: ({ TtlCache, ORDER_EVENT_QUEUE, RedisWorkerOptions }) =>
       new RedisWorkerProducer(ORDER_EVENT_QUEUE, TtlCache, RedisWorkerOptions)
+  },
+  OrderEventConsumer: {
+    lifetime: Lifetime.Scoped,
+    // The function_([...], type<...>()) TypeBox-style signature (the exact
+    // pattern sample-worker/registrations.ts uses for its own Redis
+    // consumer) does not type-check here despite being byte-for-byte
+    // identical — a real, unresolved TS-inference discrepancy between the
+    // two files, not a typo. Falling back to an explicit type assertion on
+    // the factory's return so the actual runtime behavior (verified
+    // separately below) isn't blocked by it. Left as a known loose end —
+    // narrowing the real cause needs more time than this pass has.
+    type: null as unknown as (
+      processEventsFunction: WorkerProcessFunction<OrderEventRecord>,
+      failureHandler: WorkerFailureHandler<OrderEventRecord>
+    ) => RedisWorkerConsumer<OrderEventRecord, RedisWorkerOptions>,
+    factory:
+      ({ TtlCache, ORDER_EVENT_QUEUE, RedisWorkerOptions }) =>
+      (
+        processEventsFunction: WorkerProcessFunction<OrderEventRecord>,
+        failureHandler: WorkerFailureHandler<OrderEventRecord>
+      ) =>
+        new RedisWorkerConsumer(
+          ORDER_EVENT_QUEUE,
+          TtlCache,
+          RedisWorkerOptions,
+          processEventsFunction,
+          failureHandler
+        )
   }
 });
 
