@@ -62,21 +62,37 @@ export class StripePaymentService<
     );
   }
 
-  /** Creates the Stripe PaymentIntent, then persists the pending record with its id as providerRef. */
+  /**
+   * Creates the Stripe PaymentIntent, then persists the pending record with
+   * its id as providerRef. The PaymentIntent's `client_secret` is bolted
+   * onto the returned DTO (never persisted — Payment has no clientSecret
+   * column, deliberately: it's a one-time, provider-issued credential the
+   * frontend needs *right now* to actually collect the charge via
+   * Stripe.js, not something that should still be fetchable from GET
+   * /payment/:id later). This widens the return type over the
+   * PaymentService interface's `Promise<Params['PaymentDto']>` — a covariant,
+   * backward-compatible narrowing (an intersection type is always assignable
+   * to its base), the same relationship StripePaymentMappers already has to
+   * the base PaymentMappers for this class's mapper argument.
+   */
   async createPayment(
     paymentDto: CreatePaymentDto,
     em?: EntityManager
-  ): Promise<Dto['PaymentMapper']> {
+  ): Promise<Dto['PaymentMapper'] & { clientSecret?: string }> {
     const paymentIntent = await this.stripeClient.paymentIntents.create({
       amount: paymentDto.amountCents,
       currency: paymentDto.currency,
       metadata: { orderId: paymentDto.orderId }
     });
-    return this.basePaymentService.createPayment(
+    const payment = await this.basePaymentService.createPayment(
       paymentDto,
       em ?? this.em,
       paymentIntent
     );
+    return {
+      ...payment,
+      clientSecret: paymentIntent.client_secret ?? undefined
+    };
   }
 
   async getPayment(

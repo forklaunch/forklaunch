@@ -1,6 +1,9 @@
-import { handlers, schemaValidator, string } from '../../schema';
-import { ShippingAddressSchema } from '../../domain/schemas/checkout.schema';
-import { OrderMapper } from '../../domain/mappers/order.mappers';
+import { enum_, handlers, optional, schemaValidator, string } from '../../schema';
+import {
+  CheckoutResultSchema,
+  ShippingAddressSchema
+} from '../../domain/schemas/checkout.schema';
+import { PaymentProvider } from '../../domain/enum/paymentProvider.enum';
 import { ci, tokens } from '../../bootstrapper';
 
 const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
@@ -10,14 +13,32 @@ const inventoryServiceFactory = ci.scopedResolver(tokens.InventoryService);
 const orderServiceFactory = ci.scopedResolver(tokens.OrderService);
 const taxServiceFactory = ci.scopedResolver(tokens.TaxService);
 const shippingServiceFactory = ci.scopedResolver(tokens.ShippingService);
+const stripePaymentServiceFactory = ci.scopedResolver(tokens.PaymentService);
+const paypalPaymentServiceFactory = ci.scopedResolver(
+  tokens.PaypalPaymentService
+);
 const HMAC_SECRET_KEY = ci.resolve(tokens.HMAC_SECRET_KEY);
 
 /**
- * The unified checkout orchestration (ECOM-09): cart -> order in one call,
- * with stock validated up front so a customer never pays for something
- * that's not actually there. Tax (Stripe Tax) and shipping (flat-rate) are
- * both real, not stubs — a shipping address is required because both need
- * one.
+ * All amounts in this module are USD cents — matches the existing
+ * assumption elsewhere in this checkout flow (StripeTaxService hardcodes
+ * `currency: 'usd'` for its tax.calculations.create call; nothing upstream
+ * of here — cart, variant pricing, order — carries a currency field at
+ * all). Not introduced by this change, just made explicit at the one new
+ * call site (payment creation) that also needs a currency.
+ */
+const CHECKOUT_CURRENCY = 'usd';
+
+/**
+ * The unified checkout orchestration (ECOM-09/10): cart -> order -> payment
+ * in one call, with stock validated up front so a customer never pays for
+ * something that's not actually there. Tax (Stripe Tax) and shipping
+ * (flat-rate) are both real, not stubs — a shipping address is required
+ * because both need one.
+ *
+ * Order creation and payment creation are two separate calls (Payment.
+ * orderId is required, so the order must exist first) — see the payment
+ * try/catch below for what happens if the second one fails.
  *
  * Promo codes and gift cards are a later phase (order entity already
  * carries discountCents/giftCardCents from the order slice, so this PR
@@ -30,15 +51,18 @@ export const checkout = handlers.post(
   {
     name: 'Checkout',
     access: 'internal',
-    summary: 'Convert a cart into an order, validating stock first',
+    summary:
+      'Convert a cart into an order, validating stock first, and initiate payment for its total. provider defaults to stripe.',
     auth: { hmac: { secretKeys: { default: HMAC_SECRET_KEY } } },
     body: {
       cartId: string,
-      shippingAddress: ShippingAddressSchema
+      shippingAddress: ShippingAddressSchema,
+      provider: optional(enum_(PaymentProvider))
     },
     responses: {
-      200: OrderMapper.schema,
-      400: string
+      200: CheckoutResultSchema,
+      400: string,
+      502: string
     }
   },
   async (req, res) => {
@@ -140,12 +164,71 @@ export const checkout = handlers.post(
       totalCents
     });
 
+    // Payment is created against the order's total, routed by provider the
+    // same way payment.controller.ts's own createPayment endpoint routes
+    // (provider defaults to stripe). Payment.orderId is required, so this
+    // can only happen once the order exists — order creation and payment
+    // creation can't be one atomic step.
+    const paymentServiceFactory =
+      req.body.provider === PaymentProvider.PAYPAL
+        ? paypalPaymentServiceFactory
+        : stripePaymentServiceFactory;
+
+    let payment;
+    try {
+      payment = await paymentServiceFactory().createPayment({
+        orderId: order.id,
+        amountCents: order.totalCents,
+        currency: CHECKOUT_CURRENCY
+      });
+    } catch (error) {
+      // Deliberately NOT rolled back or cancelled: the order stays PENDING,
+      // which is still an honest state — nothing downstream treats PENDING
+      // as success. In particular, worker.ts only decrements inventory on
+      // the PAID transition, and that transition is now driven exclusively
+      // by the payment webhook (see webhook.controller.ts), never by
+      // checkout itself — so a PENDING order with no successful payment
+      // ties up nothing. The cart is deliberately NOT cleared either (see
+      // below) — the same items are still there for the customer (or a
+      // "retry checkout" call) to try again with, rather than forcing a
+      // manual re-add of everything.
+      openTelemetryCollector.error(
+        'Payment could not be initiated for order — order left pending, cart left intact',
+        { orderId: order.id, cartId: cart.id, error }
+      );
+      res
+        .status(502)
+        .send(
+          `Order ${order.id} was created but payment could not be initiated. Please retry checkout.`
+        );
+      return;
+    }
+
+    // Cart is only cleared once a payment attempt has actually been
+    // initiated with the provider — clearing it any earlier (e.g.
+    // immediately after order creation, as this endpoint used to) would
+    // strand the customer with an empty cart and a PENDING order they
+    // can't easily retry from if payment initiation fails above.
     await cartServiceFactory().clearCart({ id: cart.id });
 
     openTelemetryCollector.info('Checkout completed', {
       cartId: cart.id,
-      orderId: order.id
+      orderId: order.id,
+      paymentId: payment.id
     });
-    res.status(200).json(order);
+    // Only StripePaymentService's createPayment returns clientSecret —
+    // PayPal's payment DTO never has it (see checkout.schema.ts). The
+    // `typeof` check (rather than just `'clientSecret' in payment`) is
+    // what actually narrows this to `string | undefined` for the response
+    // schema below — `in` alone leaves it typed `unknown` on this union.
+    const clientSecret =
+      'clientSecret' in payment && typeof payment.clientSecret === 'string'
+        ? payment.clientSecret
+        : undefined;
+    res.status(200).json({
+      order,
+      payment,
+      clientSecret
+    });
   }
 );

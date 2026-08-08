@@ -22,6 +22,7 @@ export {
   optional,
   record,
   string,
+  unknown,
   uuid
 } from '@forklaunch/validator/zod';
 export {
