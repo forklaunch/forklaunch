@@ -1,6 +1,13 @@
 import { SchemaValidator } from '../../schema';
 import { Schema } from '@forklaunch/validator';
-import { Cart, Inventory, Order, Product, Variant } from '../../persistence/entities';
+import {
+  Cart,
+  Inventory,
+  Order,
+  Payment,
+  Product,
+  Variant
+} from '../../persistence/entities';
 import {
   CartMapper,
   CreateCartMapper,
@@ -16,6 +23,7 @@ import {
   OrderMapper,
   UpdateOrderMapper
 } from '../mappers/order.mappers';
+import { CreatePaymentMapper, PaymentMapper } from '../mappers/payment.mappers';
 import {
   CreateProductMapper,
   ProductMapper,
@@ -91,6 +99,16 @@ export type OrderDtoTypes = {
   OrderMapper: Schema<typeof OrderMapper.schema, SchemaValidator>;
   CreateOrderMapper: Schema<typeof CreateOrderMapper.schema, SchemaValidator>;
   UpdateOrderMapper: Schema<typeof UpdateOrderMapper.schema, SchemaValidator>;
+};
+
+// payment (no update mapper — confirm/fail are provider-driven, not user-editable)
+export type PaymentMapperTypes = {
+  PaymentMapper: typeof Payment;
+  CreatePaymentMapper: typeof Payment;
+};
+export type PaymentDtoTypes = {
+  PaymentMapper: Schema<typeof PaymentMapper.schema, SchemaValidator>;
+  CreatePaymentMapper: Schema<typeof CreatePaymentMapper.schema, SchemaValidator>;
 };
 
 // Remaining entities' mapper/DTO types are added incrementally as each PR lands.

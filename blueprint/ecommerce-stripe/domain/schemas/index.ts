@@ -4,6 +4,7 @@ import {
   BaseCartServiceSchemas,
   BaseInventoryServiceSchemas,
   BaseOrderServiceSchemas,
+  BasePaymentServiceSchemas,
   BaseProductServiceSchemas,
   BaseVariantServiceSchemas
 } from '@forklaunch/implementation-ecommerce-base/schemas';
@@ -15,6 +16,7 @@ const schemas = mapServiceSchemas(
     CartSchemas: BaseCartServiceSchemas<SchemaValidator>,
     InventorySchemas: BaseInventoryServiceSchemas<SchemaValidator>,
     OrderSchemas: BaseOrderServiceSchemas<SchemaValidator>,
+    PaymentSchemas: BasePaymentServiceSchemas<SchemaValidator>,
     ProductSchemas: BaseProductServiceSchemas<SchemaValidator>,
     VariantSchemas: BaseVariantServiceSchemas<SchemaValidator>
     // Remaining entities' schemas are added incrementally as each PR lands.
@@ -29,6 +31,7 @@ export const {
   CartSchemas,
   InventorySchemas,
   OrderSchemas,
+  PaymentSchemas,
   ProductSchemas,
   VariantSchemas
 } = schemas;

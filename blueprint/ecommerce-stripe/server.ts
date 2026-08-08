@@ -9,6 +9,7 @@ import { cartRouter } from './api/routes/cart.routes';
 import { catalogImportRouter } from './api/routes/catalogImport.routes';
 import { inventoryRouter } from './api/routes/inventory.routes';
 import { orderRouter } from './api/routes/order.routes';
+import { paymentRouter } from './api/routes/payment.routes';
 import { productRouter } from './api/routes/product.routes';
 import { variantRouter } from './api/routes/variant.routes';
 import { ci, tokens } from './bootstrapper';
@@ -48,6 +49,7 @@ app.use(inventoryRouter);
 app.use(catalogImportRouter);
 app.use(cartRouter);
 app.use(orderRouter);
+app.use(paymentRouter);
 
 //! starts the server
 app.listen(port, host, () => {
