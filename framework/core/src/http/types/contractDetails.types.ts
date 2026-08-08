@@ -81,43 +81,44 @@ type ExclusiveResponseBodyBase<SV extends AnySchemaValidator> = {
 };
 
 type ExclusiveSchemaCatchall<SV extends AnySchemaValidator> = {
-  [K in keyof SV['_SchemaCatchall'] as string extends K
-    ? never
-    : number extends K
+  [
+    K in keyof SV['_SchemaCatchall'] as string extends K
       ? never
-      : symbol extends K
+      : number extends K
         ? never
-        : K]?: undefined;
+        : symbol extends K
+          ? never
+          : K
+  ]?: undefined;
 };
 
 export type TypedResponseBody<SV extends AnySchemaValidator> =
   | {
-      [K in keyof (ExclusiveSchemaCatchall<SV> &
-        ExclusiveResponseBodyBase<SV>)]?: K extends keyof TextBody<SV>
-        ? TextBody<SV>[K]
-        : undefined;
+      [
+        K in keyof (ExclusiveSchemaCatchall<SV> & ExclusiveResponseBodyBase<SV>)
+      ]?: K extends keyof TextBody<SV> ? TextBody<SV>[K] : undefined;
     }
   | {
-      [K in keyof (ExclusiveSchemaCatchall<SV> &
-        ExclusiveResponseBodyBase<SV>)]?: K extends keyof JsonBody<SV>
-        ? JsonBody<SV>[K]
-        : undefined;
+      [
+        K in keyof (ExclusiveSchemaCatchall<SV> & ExclusiveResponseBodyBase<SV>)
+      ]?: K extends keyof JsonBody<SV> ? JsonBody<SV>[K] : undefined;
     }
   | {
-      [K in keyof (ExclusiveSchemaCatchall<SV> &
-        ExclusiveResponseBodyBase<SV>)]?: K extends keyof FileBody<SV>
-        ? FileBody<SV>[K]
-        : undefined;
+      [
+        K in keyof (ExclusiveSchemaCatchall<SV> & ExclusiveResponseBodyBase<SV>)
+      ]?: K extends keyof FileBody<SV> ? FileBody<SV>[K] : undefined;
     }
   | {
-      [K in keyof (ExclusiveSchemaCatchall<SV> &
-        ExclusiveResponseBodyBase<SV>)]?: K extends keyof ServerSentEventBody<SV>
+      [
+        K in keyof (ExclusiveSchemaCatchall<SV> & ExclusiveResponseBodyBase<SV>)
+      ]?: K extends keyof ServerSentEventBody<SV>
         ? ServerSentEventBody<SV>[K]
         : undefined;
     }
   | {
-      [K in keyof (ExclusiveSchemaCatchall<SV> &
-        ExclusiveResponseBodyBase<SV>)]?: K extends keyof UnknownResponseBody<SV>
+      [
+        K in keyof (ExclusiveSchemaCatchall<SV> & ExclusiveResponseBodyBase<SV>)
+      ]?: K extends keyof UnknownResponseBody<SV>
         ? UnknownResponseBody<SV>[K]
         : undefined;
     };
@@ -244,40 +245,36 @@ type ExclusiveRequestBodyBase<SV extends AnySchemaValidator> = {
 
 export type TypedRequestBody<SV extends AnySchemaValidator> =
   | {
-      [K in keyof (ExclusiveSchemaCatchall<SV> &
-        ExclusiveRequestBodyBase<SV>)]?: K extends keyof TextBody<SV>
-        ? TextBody<SV>[K]
-        : undefined;
+      [
+        K in keyof (ExclusiveSchemaCatchall<SV> & ExclusiveRequestBodyBase<SV>)
+      ]?: K extends keyof TextBody<SV> ? TextBody<SV>[K] : undefined;
     }
   | {
-      [K in keyof (ExclusiveSchemaCatchall<SV> &
-        ExclusiveRequestBodyBase<SV>)]?: K extends keyof JsonBody<SV>
-        ? JsonBody<SV>[K]
-        : undefined;
+      [
+        K in keyof (ExclusiveSchemaCatchall<SV> & ExclusiveRequestBodyBase<SV>)
+      ]?: K extends keyof JsonBody<SV> ? JsonBody<SV>[K] : undefined;
     }
   | {
-      [K in keyof (ExclusiveSchemaCatchall<SV> &
-        ExclusiveRequestBodyBase<SV>)]?: K extends keyof FileBody<SV>
-        ? FileBody<SV>[K]
-        : undefined;
+      [
+        K in keyof (ExclusiveSchemaCatchall<SV> & ExclusiveRequestBodyBase<SV>)
+      ]?: K extends keyof FileBody<SV> ? FileBody<SV>[K] : undefined;
     }
   | {
-      [K in keyof (ExclusiveSchemaCatchall<SV> &
-        ExclusiveRequestBodyBase<SV>)]?: K extends keyof MultipartForm<SV>
-        ? MultipartForm<SV>[K]
-        : undefined;
+      [
+        K in keyof (ExclusiveSchemaCatchall<SV> & ExclusiveRequestBodyBase<SV>)
+      ]?: K extends keyof MultipartForm<SV> ? MultipartForm<SV>[K] : undefined;
     }
   | {
-      [K in keyof (ExclusiveSchemaCatchall<SV> &
-        ExclusiveRequestBodyBase<SV>)]?: K extends keyof UrlEncodedForm<SV>
+      [
+        K in keyof (ExclusiveSchemaCatchall<SV> & ExclusiveRequestBodyBase<SV>)
+      ]?: K extends keyof UrlEncodedForm<SV>
         ? UrlEncodedForm<SV>[K]
         : undefined;
     }
   | {
-      [K in keyof (ExclusiveSchemaCatchall<SV> &
-        ExclusiveRequestBodyBase<SV>)]?: K extends keyof UnknownBody<SV>
-        ? UnknownBody<SV>[K]
-        : undefined;
+      [
+        K in keyof (ExclusiveSchemaCatchall<SV> & ExclusiveRequestBodyBase<SV>)
+      ]?: K extends keyof UnknownBody<SV> ? UnknownBody<SV>[K] : undefined;
     };
 
 export type TypedBody<SV extends AnySchemaValidator> =

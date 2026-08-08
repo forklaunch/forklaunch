@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/universal-sdk",
-  "version": "1.2.18",
+  "version": "1.2.23",
   "description": "Cross runtime fetch library for forklaunch router sdks",
   "keywords": [
     "fetch",
@@ -24,6 +24,9 @@
       "import": "./lib/index.mjs",
       "require": "./lib/index.js",
       "default": "./lib/index.js"
+    },
+    "./*": {
+      "types": "./lib/*.d.ts"
     }
   },
   "types": "lib/index.d.ts",
@@ -31,7 +34,7 @@
     "lib/**"
   ],
   "scripts": {
-    "build": "tsgo --noEmit && tsup index.ts --format cjs,esm --no-splitting --dts --tsconfig tsconfig.json --out-dir lib --clean",
+    "build": "tsgo --noEmit && tsup index.ts --format cjs,esm --no-splitting --tsconfig tsconfig.json --out-dir lib --clean && tsgo -p tsconfig.build.json --emitDeclarationOnly",
     "clean": "rm -rf lib pnpm.lock.yaml node_modules",
     "docs": "typedoc --out docs *",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
@@ -42,19 +45,19 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "workspace:*",
+    "@forklaunch/common": "workspace:^",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1"
   },
   "devDependencies": {
-    "@types/node": "^25.7.0",
-    "@typescript/native-preview": "7.0.0-dev.20260511.1",
+    "@types/node": "^26.1.2",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "fetch-mock": "^12.6.0",
     "jest": "^30.4.2",
-    "openapi3-ts": "^4.5.0",
-    "prettier": "^3.8.3",
-    "ts-jest": "^29.4.9",
+    "openapi3-ts": "^4.6.1",
+    "prettier": "^3.9.6",
+    "ts-jest": "^29.4.12",
     "tsup": "^8.5.1",
-    "typedoc": "^0.28.19"
+    "typedoc": "^0.28.20"
   }
 }

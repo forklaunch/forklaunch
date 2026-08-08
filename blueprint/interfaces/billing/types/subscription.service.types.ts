@@ -18,10 +18,13 @@ export type UpdateSubscriptionDto<PartyType, BillingProviderType> = Partial<
   CreateSubscriptionDto<PartyType, BillingProviderType>
 > &
   IdDto;
-export type SubscriptionDto<PartyType, BillingProviderType> =
-  CreateSubscriptionDto<PartyType, BillingProviderType> &
-    IdDto &
-    Partial<RecordTimingDto>;
+export type SubscriptionDto<PartyType, BillingProviderType> = Omit<
+  CreateSubscriptionDto<PartyType, BillingProviderType>,
+  'billingProvider'
+> & {
+  billingProvider?: BillingProviderType[keyof BillingProviderType];
+} & IdDto &
+  Partial<RecordTimingDto>;
 
 export type SubscriptionServiceParameters<PartyType, BillingProviderType> = {
   CreateSubscriptionDto: CreateSubscriptionDto<PartyType, BillingProviderType>;

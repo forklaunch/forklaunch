@@ -2,11 +2,18 @@ import {
   WorkerFailureHandler,
   WorkerProcessFunction
 } from '@forklaunch/interfaces-worker/types';
+import { setupRls, setupTenantFilter } from '@forklaunch/core/persistence';
 import { ci, tokens } from './bootstrapper';
 import { type SampleWorkerEventRecord } from './persistence/entities/sampleWorkerRecord.entity';
 
 const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 const s3 = ci.resolve(tokens.S3ObjectStore);
+
+//! registers tenant isolation on the worker's ORM so background jobs are
+//! gated the same way as request handling
+const orm = ci.resolve(tokens.Orm);
+setupTenantFilter(orm, { logger: openTelemetryCollector });
+setupRls(orm, { logger: openTelemetryCollector });
 
 const processEvents: (
   name: string

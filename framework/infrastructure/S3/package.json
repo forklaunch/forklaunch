@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/infrastructure-s3",
-  "version": "1.4.4",
+  "version": "1.4.9",
   "description": "S3 infrastructure for ForkLaunch components.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -18,6 +18,9 @@
       "import": "./lib/index.mjs",
       "require": "./lib/index.js",
       "default": "./lib/index.js"
+    },
+    "./*": {
+      "types": "./lib/*.d.ts"
     }
   },
   "types": "lib/index.d.ts",
@@ -28,7 +31,7 @@
     "lib/**"
   ],
   "scripts": {
-    "build": "tsgo --noEmit && tsup ./index.ts --format cjs,esm --no-splitting --dts --tsconfig tsconfig.json --out-dir lib --clean --sourcemap && if [ -f eject-infrastructure-package.bash ]; then pnpm package:eject; fi",
+    "build": "tsgo --noEmit && tsup ./index.ts --format cjs,esm --no-splitting --tsconfig tsconfig.json --out-dir lib --clean --sourcemap && tsgo -p tsconfig.build.json --emitDeclarationOnly && if [ -f eject-infrastructure-package.bash ]; then pnpm package:eject; fi",
     "clean": "rm -rf lib pnpm.lock.yaml node_modules",
     "docs": "typedoc --out docs *",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
@@ -40,22 +43,22 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1045.0",
-    "@forklaunch/common": "workspace:*",
-    "@forklaunch/core": "workspace:*"
+    "@aws-sdk/client-s3": "^3.1098.0",
+    "@forklaunch/common": "workspace:^",
+    "@forklaunch/core": "workspace:^"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
-    "@typescript/native-preview": "7.0.0-dev.20260511.1",
-    "globals": "^17.6.0",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
+    "globals": "^17.8.0",
     "jest": "^30.4.2",
-    "prettier": "^3.8.3",
-    "ts-jest": "^29.4.9",
+    "prettier": "^3.9.6",
+    "ts-jest": "^29.4.12",
     "ts-node": "^10.9.2",
     "tsup": "^8.5.1",
-    "typedoc": "^0.28.19",
-    "typescript": "^6.0.3",
-    "typescript-eslint": "^8.59.3"
+    "typedoc": "^0.28.20",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "typescript-eslint": "^8.65.0"
   }
 }

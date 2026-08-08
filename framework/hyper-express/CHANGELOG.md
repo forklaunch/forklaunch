@@ -1,5 +1,27 @@
 # @forklaunch/hyper-express
 
+## 1.2.34
+
+### Patch Changes
+
+- update packages
+- Updated dependencies
+  - @forklaunch/validator@1.2.20
+  - @forklaunch/common@1.2.20
+  - @forklaunch/core@1.5.4
+  - @forklaunch/ws@1.2.34
+
+## 1.2.33
+
+### Patch Changes
+
+- 92c06f9: dep upgrades
+- Updated dependencies [92c06f9]
+  - @forklaunch/validator@1.2.19
+  - @forklaunch/common@1.2.19
+  - @forklaunch/core@1.5.3
+  - @forklaunch/ws@1.2.33
+
 ## 1.2.32
 
 ### Patch Changes

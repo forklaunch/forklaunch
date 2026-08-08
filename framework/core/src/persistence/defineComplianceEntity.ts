@@ -17,8 +17,7 @@ import {
 
 type ValidateProperties<T> = {
   [K in keyof T]: T[K] extends
-    | { '~options': { readonly '~c': true } }
-    | ((...args: never[]) => unknown)
+    { '~options': { readonly '~c': true } } | ((...args: never[]) => unknown)
     ? T[K]
     : { '~options': { readonly '~c': true } };
 };
@@ -26,8 +25,7 @@ type ValidateProperties<T> = {
 function readComplianceLevel(builder: unknown): ComplianceLevel | undefined {
   if (builder == null || typeof builder !== 'object') return undefined;
   return (builder as Record<string, unknown>)[COMPLIANCE_KEY] as
-    | ComplianceLevel
-    | undefined;
+    ComplianceLevel | undefined;
 }
 
 export function defineComplianceEntity<

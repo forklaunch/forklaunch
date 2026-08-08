@@ -17,7 +17,10 @@ export const Subscription = defineComplianceEntity({
     // access billing provider information pointer -- especially about entitlements, that can be grabbed later
     providerFields: fp.json<unknown>().nullable().compliance('none'),
     externalId: fp.string().unique().compliance('none'),
-    billingProvider: fp.enum(() => BillingProviderEnum).compliance('none'),
+    billingProvider: fp
+      .enum(() => BillingProviderEnum)
+      .nullable()
+      .compliance('none'),
     startDate: fp.datetime().compliance('none'),
     endDate: fp.datetime().nullable().compliance('none'),
     status: fp.string().compliance('none')

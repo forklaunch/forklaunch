@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/express",
-  "version": "1.2.32",
+  "version": "1.2.37",
   "description": "Forklaunch framework for express.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -18,6 +18,9 @@
       "import": "./lib/index.mjs",
       "require": "./lib/index.js",
       "default": "./lib/index.js"
+    },
+    "./*": {
+      "types": "./lib/*.d.ts"
     }
   },
   "types": "lib/index.d.ts",
@@ -25,7 +28,7 @@
     "lib/**"
   ],
   "scripts": {
-    "build": "tsgo --noEmit && tsup index.ts --format cjs,esm --no-splitting --tsconfig tsconfig.json --outDir lib --dts --clean",
+    "build": "tsgo --noEmit && tsup index.ts --format cjs,esm --no-splitting --tsconfig tsconfig.json --outDir lib --clean && tsgo -p tsconfig.build.json --emitDeclarationOnly",
     "clean": "rm -rf lib pnpm.lock.yaml node_modules",
     "docs": "typedoc --out docs *",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
@@ -36,44 +39,44 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "workspace:*",
-    "@forklaunch/core": "workspace:*",
-    "@forklaunch/validator": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "@scalar/express-api-reference": "^0.9.14",
-    "@types/multer": "^2.1.0",
-    "body-parser": "^2.2.2",
+    "@forklaunch/common": "workspace:^",
+    "@forklaunch/core": "workspace:^",
+    "@forklaunch/validator": "workspace:^",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@scalar/express-api-reference": "^0.10.11",
+    "@types/multer": "^2.2.0",
+    "body-parser": "^2.3.0",
     "busboy": "^1.6.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "fastmcp": "^4.0.1",
-    "multer": "2.1.1",
-    "qs": "^6.15.1",
-    "range-parser": "^1.2.1",
+    "fastmcp": "^4.12.1",
+    "multer": "2.2.0",
+    "qs": "^6.15.3",
+    "range-parser": "^1.3.0",
     "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/body-parser": "^1.19.6",
-    "@types/bun": "^1.3.13",
+    "@types/bun": "^1.3.14",
     "@types/busboy": "^1.5.4",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
-    "@types/express-serve-static-core": "^5.1.1",
+    "@types/express-serve-static-core": "^5.1.2",
     "@types/jest": "^30.0.0",
-    "@types/node": "^25.7.0",
+    "@types/node": "^26.1.2",
     "@types/qs": "^6.15.1",
     "@types/range-parser": "^1.2.7",
     "@types/swagger-ui-express": "^4.1.8",
-    "@typescript/native-preview": "7.0.0-dev.20260511.1",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "jest": "^30.4.2",
     "kill-port-process": "^4.0.2",
-    "prettier": "^3.8.3",
-    "ts-jest": "^29.4.9",
+    "prettier": "^3.9.6",
+    "ts-jest": "^29.4.12",
     "ts-node": "^10.9.2",
     "tsup": "^8.5.1",
-    "typedoc": "^0.28.19",
-    "typescript": "^6.0.3",
-    "typescript-eslint": "^8.59.3"
+    "typedoc": "^0.28.20",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "typescript-eslint": "^8.65.0"
   }
 }

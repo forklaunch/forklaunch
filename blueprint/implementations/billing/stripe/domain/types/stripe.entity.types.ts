@@ -81,21 +81,30 @@ export type StripePlanEntities = {
     '~entity': (typeof Plan)['~entity'] & {
       cadence: PlanCadenceEnum[keyof PlanCadenceEnum];
       currency: CurrencyEnum[keyof CurrencyEnum];
-      billingProvider: BillingProviderEnum[keyof BillingProviderEnum];
+      billingProvider:
+        | BillingProviderEnum[keyof BillingProviderEnum]
+        | null
+        | undefined;
     };
   };
   CreatePlanMapper: {
     '~entity': (typeof Plan)['~entity'] & {
       cadence: PlanCadenceEnum[keyof PlanCadenceEnum];
       currency: CurrencyEnum[keyof CurrencyEnum];
-      billingProvider: BillingProviderEnum[keyof BillingProviderEnum];
+      billingProvider:
+        | BillingProviderEnum[keyof BillingProviderEnum]
+        | null
+        | undefined;
     };
   };
   UpdatePlanMapper: {
     '~entity': (typeof Plan)['~entity'] & {
       cadence: PlanCadenceEnum[keyof PlanCadenceEnum];
       currency: CurrencyEnum[keyof CurrencyEnum];
-      billingProvider: BillingProviderEnum[keyof BillingProviderEnum];
+      billingProvider:
+        | BillingProviderEnum[keyof BillingProviderEnum]
+        | null
+        | undefined;
     };
   };
 };
@@ -105,19 +114,28 @@ export type StripeSubscriptionEntities<PartyTypeEnum> = {
   SubscriptionMapper: {
     '~entity': (typeof Subscription)['~entity'] & {
       partyType: PartyTypeEnum[keyof PartyTypeEnum];
-      billingProvider: BillingProviderEnum[keyof BillingProviderEnum];
+      billingProvider:
+        | BillingProviderEnum[keyof BillingProviderEnum]
+        | null
+        | undefined;
     };
   };
   CreateSubscriptionMapper: {
     '~entity': (typeof Subscription)['~entity'] & {
       partyType: PartyTypeEnum[keyof PartyTypeEnum];
-      billingProvider: BillingProviderEnum[keyof BillingProviderEnum];
+      billingProvider:
+        | BillingProviderEnum[keyof BillingProviderEnum]
+        | null
+        | undefined;
     };
   };
   UpdateSubscriptionMapper: {
     '~entity': (typeof Subscription)['~entity'] & {
       partyType: PartyTypeEnum[keyof PartyTypeEnum];
-      billingProvider: BillingProviderEnum[keyof BillingProviderEnum];
+      billingProvider:
+        | BillingProviderEnum[keyof BillingProviderEnum]
+        | null
+        | undefined;
     };
   };
 };

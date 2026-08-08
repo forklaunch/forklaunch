@@ -1,5 +1,17 @@
-import type { MikroORM } from '@mikro-orm/core';
+import type { EntityManager, MetadataStorage } from '@mikro-orm/core';
 import type { OpenTelemetryCollector } from '../http/telemetry/openTelemetryCollector';
+
+/**
+ * Structural subset of `MikroORM` used by the compliance services. Typed
+ * structurally (rather than as `MikroORM`) because the class's `Entities`
+ * type parameter defaults to a mutable array while `MikroORM.init()` returns
+ * a readonly one, making concrete instances unassignable to a bare
+ * `MikroORM` parameter.
+ */
+export interface ComplianceOrm {
+  em: Pick<EntityManager, 'fork'>;
+  getMetadata(): MetadataStorage;
+}
 import { MetricsDefinition } from '../http/types/openTelemetryCollector.types';
 import {
   getEntityComplianceFields,
@@ -58,7 +70,7 @@ export class ComplianceDataService {
   private readonly userIdFieldOverrides: UserIdFieldOverrides;
 
   constructor(
-    private readonly orm: MikroORM,
+    private readonly orm: ComplianceOrm,
     private readonly otel: OpenTelemetryCollector<MetricsDefinition>,
     userIdFieldOverrides?: UserIdFieldOverrides
   ) {

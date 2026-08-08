@@ -1174,9 +1174,10 @@ fn change_runtime(
                 "pnpm-workspace.yaml".to_string(),
                 RenderedTemplate {
                     path: base_path.join("pnpm-workspace.yaml"),
-                    content: serde_yml::to_string(&PnpmWorkspace {
-                        packages: existing_workspaces,
-                    })?,
+                    content: crate::core::pnpm_workspace::render_pnpm_workspace_with_packages(
+                        base_path,
+                        existing_workspaces,
+                    )?,
                     context: None,
                 },
             );

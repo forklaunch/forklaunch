@@ -57,7 +57,7 @@ export const PlanSchema = {
   features: optional(array(string)),
   stripeFields: type<StripeProduct>(),
   externalId: string,
-  billingProvider: enum_(BillingProviderEnum),
+  billingProvider: optional(enum_(BillingProviderEnum)),
   active: boolean,
   createdAt: optional(date),
   updatedAt: optional(date)

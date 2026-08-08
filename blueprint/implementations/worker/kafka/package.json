@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/implementation-worker-kafka",
-  "version": "1.0.27",
+  "version": "1.0.30",
   "description": "Kafka implementation for forklaunch workers",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -36,13 +36,25 @@
       "import": "./lib/domain/types/index.mjs",
       "require": "./lib/domain/types/index.js",
       "default": "./lib/domain/types/index.js"
+    },
+    "./consumers/*": {
+      "types": "./lib/consumers/*.d.ts"
+    },
+    "./producers/*": {
+      "types": "./lib/producers/*.d.ts"
+    },
+    "./schemas/*": {
+      "types": "./lib/domain/schemas/*.d.ts"
+    },
+    "./types/*": {
+      "types": "./lib/domain/types/*.d.ts"
     }
   },
   "files": [
     "lib/**"
   ],
   "scripts": {
-    "build": "tsgo --noEmit && tsup producers/index.ts consumers/index.ts domain/schemas/index.ts domain/types/index.ts --format cjs,esm --no-splitting --dts --tsconfig tsconfig.json --out-dir lib --clean && if [ -f eject-package.bash ]; then pnpm package:eject; fi",
+    "build": "tsgo --noEmit && tsup producers/index.ts consumers/index.ts domain/schemas/index.ts domain/types/index.ts --format cjs,esm --no-splitting --tsconfig tsconfig.json --out-dir lib --clean && tsgo -p tsconfig.build.json --emitDeclarationOnly && if [ -f eject-package.bash ]; then pnpm package:eject; fi",
     "clean": "rm -rf lib pnpm.lock.yaml node_modules",
     "docs": "typedoc --out docs *",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
@@ -54,19 +66,22 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/core": "^1.5.2",
-    "@forklaunch/interfaces-worker": "workspace:*",
-    "@forklaunch/internal": "^1.2.18",
-    "@sinclair/typebox": "^0.34.49",
+    "@forklaunch/core": "^1.5.6",
+    "@forklaunch/interfaces-worker": "workspace:^",
+    "@forklaunch/internal": "^1.2.20",
+    "@sinclair/typebox": "^0.34.52",
     "kafkajs": "^2.2.4",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@typescript/native-preview": "7.0.0-dev.20260511.1",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "depcheck": "^1.4.7",
-    "eslint": "^10.3.0",
-    "prettier": "^3.8.3",
-    "typedoc": "^0.28.19",
-    "typescript-eslint": "^8.59.3"
+    "eslint": "^10.8.0",
+    "prettier": "^3.9.6",
+    "typedoc": "^0.28.20",
+    "typescript-eslint": "^8.65.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

@@ -205,14 +205,14 @@ new NodeSDK({
     exportIntervalMillis: 5000
   }),
   logRecordProcessors: [
-    new BatchLogRecordProcessor(
-      new OTLPLogExporter({
+    new BatchLogRecordProcessor({
+      exporter: new OTLPLogExporter({
         url: `${
           getEnvVar('OTEL_EXPORTER_OTLP_ENDPOINT') ?? 'http://localhost:4318'
         }/v1/logs`,
         headers: otelHeaders
       })
-    )
+    })
   ],
   instrumentations: [
     new HttpInstrumentation({

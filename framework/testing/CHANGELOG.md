@@ -1,5 +1,43 @@
 # @forklaunch/testing
 
+
+## 1.2.23
+
+### Patch Changes
+
+- restrict wildcard subpath exports to the types condition
+- setupTestORM returns AnyMikroORM to match the relaxed harness contract
+
+## 1.2.22
+
+### Patch Changes
+
+- add wildcard subpath exports for per-file declaration output
+
+## 1.2.21
+
+### Patch Changes
+
+- relax harness ORM types to AnyMikroORM (MikroORM v7 readonly entities arrays)
+
+## 1.2.19
+
+### Patch Changes
+
+- TypeScript 7 build pipeline: tsgo declaration emit replaces tsup --dts
+
+## 1.2.20
+
+### Patch Changes
+
+- update packages
+
+## 1.2.19
+
+### Patch Changes
+
+- 92c06f9: dep upgrades
+
 ## 1.2.18
 
 ### Patch Changes

@@ -1,5 +1,5 @@
-import type { MikroORM } from '@mikro-orm/core';
 import type { OpenTelemetryCollector } from '../http/telemetry/openTelemetryCollector';
+import type { ComplianceOrm } from './complianceDataService';
 import {
   getAllRetentionPolicies,
   getEntityComplianceFields,
@@ -33,7 +33,7 @@ export class RetentionService {
   private readonly DEFAULT_BATCH_SIZE = 1000;
 
   constructor(
-    private readonly orm: MikroORM,
+    private readonly orm: ComplianceOrm,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private readonly otel: OpenTelemetryCollector<any>
   ) {}

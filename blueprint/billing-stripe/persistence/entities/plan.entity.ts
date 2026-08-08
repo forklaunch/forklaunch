@@ -21,6 +21,9 @@ export const Plan = defineComplianceEntity({
     features: fp.string().array().nullable().compliance('none'),
     providerFields: fp.json<StripeProduct>().compliance('none'),
     externalId: fp.string().unique().compliance('none'),
-    billingProvider: fp.enum(() => BillingProviderEnum).compliance('none')
+    billingProvider: fp
+      .enum(() => BillingProviderEnum)
+      .nullable()
+      .compliance('none')
   }
 });

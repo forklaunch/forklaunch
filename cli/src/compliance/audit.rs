@@ -160,11 +160,19 @@ impl CliCommand for AuditCommand {
             );
         }
 
+        // Run offline wiring + sensitive-field checks
+        let local_findings = super::checks::run_local_checks(&modules_path_buf)
+            .unwrap_or_else(|e| {
+                let _ = writeln!(stdout, "[WARN] Failed to run local compliance checks: {}", e);
+                Vec::new()
+            });
+
         // Build the local report
         let report = ComplianceReport {
             generated_at: chrono::Utc::now().to_rfc3339(),
             routes,
             entities,
+            local_findings,
             secrets: SecretsReport {
                 declared: compliance.secrets.clone(),
                 count: compliance.secrets.len(),
@@ -218,6 +226,7 @@ impl CliCommand for AuditCommand {
                     print_findings(&mut stdout, resp)?;
                 }
 
+                print_local_checks(&mut stdout, &report)?;
                 print_entities(&mut stdout, &report)?;
                 print_routes(&mut stdout, &report)?;
 
@@ -238,6 +247,7 @@ impl CliCommand for AuditCommand {
             }
             Err(e) => {
                 // Fallback: local-only display
+                print_local_checks(&mut stdout, &report)?;
                 print_entities(&mut stdout, &report)?;
                 print_routes(&mut stdout, &report)?;
 
@@ -434,6 +444,47 @@ fn print_findings(out: &mut StandardStream, resp: &PlatformAuditResponse) -> Res
         out.reset()?;
 
         writeln!(out, " {}", finding.description)?;
+    }
+
+    Ok(())
+}
+
+fn print_local_checks(out: &mut StandardStream, report: &ComplianceReport) -> Result<()> {
+    writeln!(out)?;
+    out.set_color(ColorSpec::new().set_fg(Some(Color::White)).set_bold(true))?;
+    writeln!(
+        out,
+        "  ── Local checks ({}) ──",
+        report.local_findings.len()
+    )?;
+    out.reset()?;
+
+    if report.local_findings.is_empty() {
+        out.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
+        writeln!(
+            out,
+            "  ✓ Tenant isolation, retention/erasure wiring, and field classifications look consistent"
+        )?;
+        out.reset()?;
+        return Ok(());
+    }
+
+    for finding in &report.local_findings {
+        let (icon, color, label) = match finding.severity {
+            super::checks::Severity::Warning => ("▲", Color::Yellow, "WARNING"),
+            super::checks::Severity::Info => ("●", Color::Cyan, "REVIEW"),
+        };
+
+        write!(out, "  ")?;
+        out.set_color(ColorSpec::new().set_fg(Some(color)).set_bold(true))?;
+        write!(out, "{} [{:>7}]", icon, label)?;
+        out.reset()?;
+
+        out.set_color(ColorSpec::new().set_fg(Some(Color::White)))?;
+        write!(out, " [{}] {}:{}", finding.check, finding.project, finding.subject)?;
+        out.reset()?;
+
+        writeln!(out, " — {}", finding.message)?;
     }
 
     Ok(())
@@ -673,6 +724,7 @@ struct ComplianceReport {
     generated_at: String,
     routes: Vec<RouteReport>,
     entities: Vec<EntityReport>,
+    local_findings: Vec<super::checks::LocalFinding>,
     secrets: SecretsReport,
     data_residency: DataResidencyReport,
 }

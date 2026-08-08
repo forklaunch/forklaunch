@@ -21,21 +21,24 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "^1.2.18",
-    "@forklaunch/core": "^1.5.2",
-    "@forklaunch/express": "^1.2.32",
-    "@forklaunch/hyper-express": "^1.2.32",
-    "@forklaunch/validator": "^1.2.18",
-    "@mikro-orm/core": "7.0.15",
-    "@mikro-orm/mongodb": "7.0.15",
-    "@sinclair/typebox": "^0.34.49",
-    "uuid": "^14.0.0",
+    "@forklaunch/common": "^1.2.20",
+    "@forklaunch/core": "^1.5.6",
+    "@forklaunch/express": "^1.2.34",
+    "@forklaunch/hyper-express": "^1.2.34",
+    "@forklaunch/validator": "^1.2.20",
+    "@mikro-orm/core": "7.1.8",
+    "@mikro-orm/mongodb": "7.1.8",
+    "@sinclair/typebox": "^0.34.52",
+    "uuid": "^14.0.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/qs": "^6.15.1",
     "@types/uuid": "^11.0.0",
-    "@typescript/native-preview": "7.0.0-dev.20260511.1"
+    "@typescript/native-preview": "7.0.0-dev.20260707.2"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

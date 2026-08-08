@@ -99,6 +99,17 @@ export interface ForklaunchBaseRequest<
  * @template ReqQuery - A type for the request query, defaulting to ParsedQs.
  * @template Headers - A type for the request headers, defaulting to IncomingHttpHeaders.
  */
+/**
+ * First-party session claims the platform understands. Multi-tenant
+ * scaffolds read `organizationId` to scope the tenant filter, so it is
+ * typed here rather than cast at every call site. Applications extend the
+ * session further via their `SessionSchema` type parameter.
+ */
+export interface ForklaunchBaseSession {
+  /** Active organization (tenant) for the authenticated session. */
+  organizationId?: string;
+}
+
 export interface ForklaunchRequest<
   SV extends AnySchemaValidator,
   P extends ParamsDictionary,
@@ -153,7 +164,7 @@ export interface ForklaunchRequest<
   openTelemetryCollector?: OpenTelemetryCollector<MetricsDefinition>;
 
   /** Session */
-  session: JWTPayload & SessionSchema;
+  session: JWTPayload & ForklaunchBaseSession & SessionSchema;
 
   /** Parsed versions */
   _parsedVersions: string[] | number;
@@ -391,8 +402,7 @@ export interface ForklaunchResponse<
 
   /** Response schema, compiled */
   responseSchemas:
-    | ResponseCompiledSchema
-    | Record<string, ResponseCompiledSchema>;
+    ResponseCompiledSchema | Record<string, ResponseCompiledSchema>;
 
   /** Whether the metric has been recorded */
   metricRecorded: boolean;
@@ -546,15 +556,17 @@ type ResolvedForklaunchResponseBase<
 > = unknown extends BaseResponse
   ? ForklaunchResponse<BaseResponse, ResBodyMap, ResHeaders, LocalsObj, Version>
   : (string extends Version ? unknown : { version?: Version }) & {
-      [K in
-        | keyof BaseResponse
-        | keyof ForklaunchResponse<
-            BaseResponse,
-            ResBodyMap,
-            ResHeaders,
-            LocalsObj,
-            Version
-          >]: K extends keyof ForklaunchResponse<
+      [
+        K in
+          | keyof BaseResponse
+          | keyof ForklaunchResponse<
+              BaseResponse,
+              ResBodyMap,
+              ResHeaders,
+              LocalsObj,
+              Version
+            >
+      ]: K extends keyof ForklaunchResponse<
         BaseResponse,
         ResBodyMap,
         ResHeaders,
@@ -761,7 +773,9 @@ export type MapVersionedReqsSchema<
   SV extends AnySchemaValidator,
   VersionedReqs extends VersionSchema<SV, Method>
 > = {
-  [K in keyof VersionedReqs]: (VersionedReqs[K]['requestHeaders'] extends HeadersObject<SV>
+  [
+    K in keyof VersionedReqs
+  ]: (VersionedReqs[K]['requestHeaders'] extends HeadersObject<SV>
     ? {
         requestHeaders: MapReqHeadersSchema<
           SV,
@@ -789,7 +803,9 @@ export type MapVersionedRespsSchema<
   SV extends AnySchemaValidator,
   VersionedResps extends VersionSchema<SV, Method>
 > = {
-  [K in keyof VersionedResps]: (VersionedResps[K]['responseHeaders'] extends HeadersObject<SV>
+  [
+    K in keyof VersionedResps
+  ]: (VersionedResps[K]['responseHeaders'] extends HeadersObject<SV>
     ? {
         responseHeaders: MapResHeadersSchema<
           SV,
@@ -925,7 +941,7 @@ export type ExpressLikeAuthMapper<
   SessionSchema extends Record<string, unknown>,
   BaseRequest
 > = (
-  payload: JWTPayload & SessionSchema,
+  payload: JWTPayload & ForklaunchBaseSession & SessionSchema,
   req?: ResolvedForklaunchRequest<
     SV,
     P,

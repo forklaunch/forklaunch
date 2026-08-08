@@ -288,15 +288,13 @@ export type MapHandlerToLiveSdk<
       : QueryObject<SV>
     : QueryObject<SV>,
   T['contractDetails']['requestHeaders'] extends
-    | infer RequestHeaders
-    | undefined
+    infer RequestHeaders | undefined
     ? RequestHeaders extends HeadersObject<SV>
       ? RequestHeaders
       : HeadersObject<SV>
     : HeadersObject<SV>,
   T['contractDetails']['responseHeaders'] extends
-    | infer ResponseHeaders
-    | undefined
+    infer ResponseHeaders | undefined
     ? ResponseHeaders extends HeadersObject<SV>
       ? ResponseHeaders
       : HeadersObject<SV>
@@ -362,15 +360,13 @@ export type ExtractLiveTypeFn<
       : QueryObject<SV>
     : QueryObject<SV>,
   Entry['contractDetails']['requestHeaders'] extends
-    | infer RequestHeaders
-    | undefined
+    infer RequestHeaders | undefined
     ? RequestHeaders extends HeadersObject<SV>
       ? RequestHeaders
       : HeadersObject<SV>
     : HeadersObject<SV>,
   Entry['contractDetails']['responseHeaders'] extends
-    | infer ResponseHeaders
-    | undefined
+    infer ResponseHeaders | undefined
     ? ResponseHeaders extends HeadersObject<SV>
       ? ResponseHeaders
       : HeadersObject<SV>
@@ -414,14 +410,16 @@ export type ToFetchMap<
   SV extends AnySchemaValidator,
   RouterBasePath extends `/${string}`
 > = Prettify<{
-  [K in keyof T as T[K]['_path'] extends infer P | undefined
-    ? P extends `/${string}`
-      ? `${RouterBasePath}${P}`
+  [
+    K in keyof T as T[K]['_path'] extends infer P | undefined
+      ? P extends `/${string}`
+        ? `${RouterBasePath}${P}`
+        : never
       : never
-    : never]: {
-    [M in T[K]['_method'] as M extends Method
-      ? Uppercase<M>
-      : never]: ExtractLiveTypeFn<
+  ]: {
+    [
+      M in T[K]['_method'] as M extends Method ? Uppercase<M> : never
+    ]: ExtractLiveTypeFn<
       Extract<
         T[K],
         {

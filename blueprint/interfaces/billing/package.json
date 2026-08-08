@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/interfaces-billing",
-  "version": "1.0.25",
+  "version": "1.0.29",
   "description": "Billing interfaces for forklaunch",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -24,6 +24,12 @@
       "import": "./lib/types/index.mjs",
       "require": "./lib/types/index.js",
       "default": "./lib/types/index.js"
+    },
+    "./interfaces/*": {
+      "types": "./lib/interfaces/*.d.ts"
+    },
+    "./types/*": {
+      "types": "./lib/types/*.d.ts"
     }
   },
   "types": "lib/index.d.ts",
@@ -31,7 +37,7 @@
     "lib/**"
   ],
   "scripts": {
-    "build": "tsgo --noEmit && tsup interfaces/index.ts types/index.ts --format cjs,esm --no-splitting --dts --tsconfig tsconfig.json --out-dir lib --clean && if [ -f eject-package.bash ]; then pnpm package:eject; fi",
+    "build": "tsgo --noEmit && tsup interfaces/index.ts types/index.ts --format cjs,esm --no-splitting --tsconfig tsconfig.json --out-dir lib --clean && tsgo -p tsconfig.build.json --emitDeclarationOnly && if [ -f eject-package.bash ]; then pnpm package:eject; fi",
     "clean": "rm -rf lib tsconfig.tsbuildinfo pnpm.lock.yaml node_modules",
     "docs": "typedoc --out docs *",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
@@ -43,13 +49,16 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "^1.2.18",
-    "@mikro-orm/core": "7.0.15"
+    "@forklaunch/common": "^1.2.20",
+    "@mikro-orm/core": "7.1.8"
   },
   "devDependencies": {
-    "@typescript/native-preview": "7.0.0-dev.20260511.1",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "depcheck": "^1.4.7",
-    "prettier": "^3.8.3",
-    "typedoc": "^0.28.19"
+    "prettier": "^3.9.6",
+    "typedoc": "^0.28.20"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

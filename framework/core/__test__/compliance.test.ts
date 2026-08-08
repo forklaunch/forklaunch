@@ -159,8 +159,7 @@ describe('defineComplianceEntity', () => {
 describe('fp encrypted type resolution', () => {
   function getEncryptedType(builder: unknown): EncryptedType | undefined {
     const opts = (builder as Record<string | symbol, unknown>)['~options'] as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     const type = opts?.type;
     return type instanceof EncryptedType ? type : undefined;
   }
@@ -337,8 +336,7 @@ describe('fp encrypted type resolution', () => {
     const Status = { Active: 'active', Inactive: 'inactive' } as const;
     const builder = fp.enum(() => Status).compliance('pii');
     const opts = (builder as Record<string | symbol, unknown>)['~options'] as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     // enum metadata should be removed so MikroORM won't generate check constraints
     expect(opts?.items).toBeUndefined();
     expect(opts?.enum).toBeUndefined();

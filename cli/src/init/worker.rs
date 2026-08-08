@@ -111,7 +111,7 @@ fn generate_basic_worker(
         module_id: None,
     };
 
-    let ignore_files = if !manifest_data.is_database_enabled {
+    let mut ignore_files = if !manifest_data.is_database_enabled {
         vec![
             "mikro-orm.config.ts".to_string(),
             "seeder.ts".to_string(),
@@ -122,6 +122,15 @@ fn generate_basic_worker(
     } else {
         vec!["consts.ts".to_string()]
     };
+    // compliance endpoints authenticate via IAM-issued JWTs
+    // (JWKS_PUBLIC_KEY_URL is only registered when IAM is configured)
+    if !manifest_data.is_iam_configured {
+        for file in ["compliance.controller.ts", "compliance.routes.ts"] {
+            if !ignore_files.iter().any(|f| f == file) {
+                ignore_files.push(file.to_string());
+            }
+        }
+    }
     let mut ignore_dirs = if !manifest_data.is_database_enabled {
         let mut dirs = vec!["seeder".to_string(), "seed.data.ts".to_string()];
         if !manifest_data.with_mappers {
@@ -815,6 +824,7 @@ impl CliCommand for WorkerCommand {
             // Worker-specific fields
             worker_name: worker_name.clone(),
             camel_case_name: worker_name.to_case(Case::Camel),
+            snake_case_name: worker_name.to_case(Case::Snake),
             pascal_case_name: worker_name.to_case(Case::Pascal),
             kebab_case_name: worker_name.to_case(Case::Kebab),
             title_case_name: worker_name.to_case(Case::Title),

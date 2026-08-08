@@ -517,10 +517,7 @@ export function serveExpress(
 
         end(
           chunk?:
-            | string
-            | Uint8Array
-            | Buffer
-            | ((error?: Error | null) => void),
+            string | Uint8Array | Buffer | ((error?: Error | null) => void),
           encoding?: BufferEncoding | ((error?: Error | null) => void),
           callback?: (error?: Error | null) => void
         ): ExpressResponse {
@@ -945,8 +942,7 @@ export function serveExpress(
         render: (
           view: string,
           locals?:
-            | Record<string, unknown>
-            | ((err: Error, html: string) => void),
+            Record<string, unknown> | ((err: Error, html: string) => void),
           callback?: (err: Error, html: string) => void
         ) => {
           const errback = typeof locals === 'function' ? locals : callback;
@@ -1108,6 +1104,7 @@ export function serveExpress(
 
       req = Object.assign(reqEE, {
         method: request.method,
+        signal: request.signal,
         url: url.pathname + url.search,
         originalUrl: url.pathname + url.search,
         headers,
@@ -1424,13 +1421,26 @@ export function serveExpress(
       };
       abort.signal.addEventListener('abort', onAbort);
 
+      // client disconnects surface on the fetch request signal; forward them
+      // so writer/responsePromise are released
+      const onClientAbort = () => abort.abort();
+      if (request.signal.aborted) {
+        abort.abort();
+      } else {
+        request.signal.addEventListener('abort', onClientAbort, {
+          once: true
+        });
+      }
+
       res.once('finish', cleanup);
       res.once('close', cleanup);
       res.once('finish', () => {
         abort.signal.removeEventListener('abort', onAbort);
+        request.signal.removeEventListener('abort', onClientAbort);
       });
       res.once('close', () => {
         abort.signal.removeEventListener('abort', onAbort);
+        request.signal.removeEventListener('abort', onClientAbort);
       });
 
       try {

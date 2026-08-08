@@ -31,6 +31,7 @@ config_struct!(
         pub(crate) worker_name: String,
         #[serde(skip_serializing, skip_deserializing)]
         pub(crate) camel_case_name: String,
+        pub(crate) snake_case_name: String,
         #[serde(skip_serializing, skip_deserializing)]
         pub(crate) pascal_case_name: String,
         #[serde(skip_serializing, skip_deserializing)]
@@ -159,6 +160,7 @@ impl InitializableManifestConfig for WorkerManifestData {
         Self {
             worker_name: worker_name.clone(),
             camel_case_name: worker_name.clone().to_case(Case::Camel),
+            snake_case_name: worker_name.clone().to_case(Case::Snake),
             pascal_case_name: worker_name.clone().to_case(Case::Pascal),
             kebab_case_name: worker_name.clone().to_case(Case::Kebab),
             database: database.map(|d| d.to_string()),

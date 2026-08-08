@@ -1,5 +1,17 @@
 # @forklaunch/common
 
+## 1.2.20
+
+### Patch Changes
+
+- update packages
+
+## 1.2.19
+
+### Patch Changes
+
+- 92c06f9: dep upgrades
+
 ## 1.2.18
 
 ### Patch Changes

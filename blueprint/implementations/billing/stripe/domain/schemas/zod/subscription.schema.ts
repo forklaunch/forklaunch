@@ -70,7 +70,7 @@ export const SubscriptionSchema = <T extends Record<string, LiteralSchema>>(
   startDate: date,
   endDate: optional(date),
   status: string,
-  billingProvider: enum_(BillingProviderEnum),
+  billingProvider: optional(enum_(BillingProviderEnum)),
   stripeFields: type<StripeSubscription>(),
   createdAt: optional(date),
   updatedAt: optional(date)

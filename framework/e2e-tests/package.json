@@ -26,25 +26,25 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "workspace:*",
-    "@forklaunch/core": "workspace:*",
-    "@forklaunch/express": "workspace:*",
-    "@forklaunch/hyper-express": "workspace:*",
+    "@forklaunch/common": "workspace:^",
+    "@forklaunch/core": "workspace:^",
+    "@forklaunch/express": "workspace:^",
+    "@forklaunch/hyper-express": "workspace:^",
     "@forklaunch/hyper-express-fork": "^6.17.35",
-    "@forklaunch/universal-sdk": "workspace:*",
-    "@forklaunch/validator": "workspace:*",
-    "@sinclair/typebox": "^0.34.49",
+    "@forklaunch/universal-sdk": "workspace:^",
+    "@forklaunch/validator": "workspace:^",
+    "@sinclair/typebox": "^0.34.52",
     "express": "^5.2.1",
     "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.52.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
-    "@types/express-serve-static-core": "^5.1.1",
+    "@types/express-serve-static-core": "^5.1.2",
     "@types/qs": "^6.15.1",
     "@types/range-parser": "^1.2.7",
-    "@typescript/native-preview": "7.0.0-dev.20260511.1",
-    "jose": "6.2.3",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
+    "jose": "6.2.4",
     "tsup": "^8.5.1"
   }
 }

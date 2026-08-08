@@ -1,5 +1,55 @@
 # @forklaunch/core
 
+
+## 1.5.9
+
+### Patch Changes
+
+- restrict wildcard subpath exports to the types condition (no runtime targets are emitted for deep files)
+
+## 1.5.8
+
+### Patch Changes
+
+- add wildcard subpath exports so per-file declaration output is addressable by consumers
+
+## 1.5.7
+
+### Patch Changes
+
+- publish internal @forklaunch dependencies as caret ranges (workspace:^) instead of exact pins
+
+## 1.5.6
+
+### Patch Changes
+
+- accept structural ORM types in setupRls, ComplianceDataService, and RetentionService (MikroORM v7 init returns a readonly entities array that a bare MikroORM parameter rejects)
+
+## 1.5.5
+
+### Patch Changes
+
+- TypeScript 7 build pipeline: tsgo declaration emit replaces tsup --dts
+- BatchLogRecordProcessor options-object API (@opentelemetry/sdk-logs 0.221)
+
+## 1.5.4
+
+### Patch Changes
+
+- update packages
+- Updated dependencies
+  - @forklaunch/validator@1.2.20
+  - @forklaunch/common@1.2.20
+
+## 1.5.3
+
+### Patch Changes
+
+- 92c06f9: dep upgrades
+- Updated dependencies [92c06f9]
+  - @forklaunch/validator@1.2.19
+  - @forklaunch/common@1.2.19
+
 ## 1.5.2
 
 ### Patch Changes

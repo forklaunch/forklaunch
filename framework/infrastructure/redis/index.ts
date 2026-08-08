@@ -18,12 +18,7 @@ import { createClient, RedisClientOptions } from 'redis';
  * Can be a string, number, Buffer, null, undefined, or array of raw replies.
  */
 type RedisCommandRawReply =
-  | string
-  | number
-  | Buffer
-  | null
-  | undefined
-  | Array<RedisCommandRawReply>;
+  string | number | Buffer | null | undefined | Array<RedisCommandRawReply>;
 
 const ENCRYPTED_PREFIXES = ['v1:', 'v2:'] as const;
 

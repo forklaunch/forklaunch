@@ -386,13 +386,11 @@ export function generateOpenApiSpecs<SV extends AnySchemaValidator>(
       const { name, summary, params, versions, auth, options } =
         route.contractDetails;
 
-      if (
-        !(
-          options?.openapi ??
-          router.routerOptions?.openapi ??
-          appOptions !== false
-        )
-      ) {
+      if (!(
+        options?.openapi ??
+        router.routerOptions?.openapi ??
+        appOptions !== false
+      )) {
         return;
       }
 

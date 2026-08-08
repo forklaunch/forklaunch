@@ -2079,9 +2079,9 @@ export class ForklaunchExpressLikeRouter<
     Router extends ConstrainedForklaunchRouter<SV, RouterHandler>,
     VersionedApi extends VersionSchema<SV, 'middleware'>,
     SessionSchema extends SessionObject<SV>,
-    ResolvedSchema extends SessionObject<SV> extends SessionSchema
+    ResolvedSchema extends (SessionObject<SV> extends SessionSchema
       ? RouterSession
-      : SessionSchema,
+      : SessionSchema),
     Auth extends SchemaAuthMethods<
       SV,
       P,
@@ -2191,18 +2191,22 @@ export class ForklaunchExpressLikeRouter<
       ...middlewareOrMiddlewareWithTypedHandler
     ) as this & {
       _fetchMap: FetchMap & {
-        [Key in keyof Router['_fetchMap'] as Key extends string
-          ? SanitizePathSlashes<`${BasePath}${Key}`>
-          : never]: Router['_fetchMap'][Key];
+        [
+          Key in keyof Router['_fetchMap'] as Key extends string
+            ? SanitizePathSlashes<`${BasePath}${Key}`>
+            : never
+        ]: Router['_fetchMap'][Key];
       };
       sdk: Sdk & {
-        [Key in PrettyCamelCase<
-          Router extends { sdkName?: string; basePath: string }
-            ? string extends Router['sdkName']
-              ? Router['basePath']
-              : Router['sdkName']
-            : never
-        >]: Router['sdk'];
+        [
+          Key in PrettyCamelCase<
+            Router extends { sdkName?: string; basePath: string }
+              ? string extends Router['sdkName']
+                ? Router['basePath']
+                : Router['sdkName']
+              : never
+          >
+        ]: Router['sdk'];
       };
     };
   };

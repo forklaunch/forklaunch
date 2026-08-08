@@ -56,7 +56,8 @@ export const PlanMapper = responseMapper({
         ...entity,
         price: Number(entity.price),
         description: entity.description ?? undefined,
-        features: entity.features ?? undefined
+        features: entity.features ?? undefined,
+        billingProvider: entity.billingProvider ?? undefined
       };
     }
   }

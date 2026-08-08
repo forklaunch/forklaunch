@@ -87,21 +87,30 @@ export type BasePlanEntities<
     '~entity': (typeof Plan)['~entity'] & {
       cadence: PlanCadenceEnum[keyof PlanCadenceEnum];
       currency: CurrencyEnum[keyof CurrencyEnum];
-      billingProvider: BillingProviderEnum[keyof BillingProviderEnum];
+      billingProvider:
+        | BillingProviderEnum[keyof BillingProviderEnum]
+        | null
+        | undefined;
     };
   };
   CreatePlanMapper: {
     '~entity': (typeof Plan)['~entity'] & {
       cadence: PlanCadenceEnum[keyof PlanCadenceEnum];
       currency: CurrencyEnum[keyof CurrencyEnum];
-      billingProvider: BillingProviderEnum[keyof BillingProviderEnum];
+      billingProvider:
+        | BillingProviderEnum[keyof BillingProviderEnum]
+        | null
+        | undefined;
     };
   };
   UpdatePlanMapper: {
     '~entity': (typeof Plan)['~entity'] & {
       cadence: PlanCadenceEnum[keyof PlanCadenceEnum];
       currency: CurrencyEnum[keyof CurrencyEnum];
-      billingProvider: BillingProviderEnum[keyof BillingProviderEnum];
+      billingProvider:
+        | BillingProviderEnum[keyof BillingProviderEnum]
+        | null
+        | undefined;
     };
   };
 };
@@ -111,19 +120,28 @@ export type BaseSubscriptionEntities<PartyType, BillingProviderType> = {
   SubscriptionMapper: {
     '~entity': (typeof Subscription)['~entity'] & {
       partyType: PartyType[keyof PartyType];
-      billingProvider: BillingProviderType[keyof BillingProviderType];
+      billingProvider:
+        | BillingProviderType[keyof BillingProviderType]
+        | null
+        | undefined;
     };
   };
   CreateSubscriptionMapper: {
     '~entity': (typeof Subscription)['~entity'] & {
       partyType: PartyType[keyof PartyType];
-      billingProvider: BillingProviderType[keyof BillingProviderType];
+      billingProvider:
+        | BillingProviderType[keyof BillingProviderType]
+        | null
+        | undefined;
     };
   };
   UpdateSubscriptionMapper: {
     '~entity': (typeof Subscription)['~entity'] & {
       partyType: PartyType[keyof PartyType];
-      billingProvider: BillingProviderType[keyof BillingProviderType];
+      billingProvider:
+        | BillingProviderType[keyof BillingProviderType]
+        | null
+        | undefined;
     };
   };
 };

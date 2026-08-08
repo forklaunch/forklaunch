@@ -28,6 +28,7 @@ config_struct!(
         pub(crate) service_path: String,
         #[serde(skip_serializing, skip_deserializing)]
         pub(crate) camel_case_name: String,
+        pub(crate) snake_case_name: String,
         #[serde(skip_serializing, skip_deserializing)]
         pub(crate) pascal_case_name: String,
         #[serde(skip_serializing, skip_deserializing)]
@@ -162,6 +163,7 @@ impl InitializableManifestConfig for ServiceManifestData {
         Self {
             service_name: service_name.clone(),
             camel_case_name: service_name.clone().to_case(Case::Camel),
+            snake_case_name: service_name.clone().to_case(Case::Snake),
             pascal_case_name: service_name.clone().to_case(Case::Pascal),
             kebab_case_name: service_name.clone().to_case(Case::Kebab),
             database: database.to_string(),

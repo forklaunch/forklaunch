@@ -91,8 +91,16 @@ const mikroOrmOptionsConfig = defineConfig({ {{#is_mongo}}
     tokens.DB_PORT
   ),
   driverOptions: {
-    ssl: validConfigInjector.resolve(tokens.NODE_ENV) !== 'development'
-  },{{/is_in_memory_database}}{{/is_mongo}}
+    // DB_SSL=true enables TLS with FULL certificate verification — never
+    // disable rejectUnauthorized; RDS trust comes from the CA bundle baked
+    // into the image via NODE_EXTRA_CA_CERTS
+    ssl:
+      getEnvVar('DB_SSL') != null
+        ? getEnvVar('DB_SSL') === 'true'
+        : validConfigInjector.resolve(tokens.NODE_ENV) !== 'development'
+  },{{#is_postgres}}
+  // per-app schema on shared-infrastructure tiers (one database, many schemas)
+  schema: getEnvVar('DB_SCHEMA') || 'public',{{/is_postgres}}{{/is_in_memory_database}}{{/is_mongo}}
   entities: Object.values(entities),
   debug: validConfigInjector.resolve(
     tokens.NODE_ENV
@@ -109,7 +117,10 @@ const mikroOrmOptionsConfig = defineConfig({ {{#is_mongo}}
     }
   },{{/is_mongo}}
   migrations: {
-    path: 'migrations-{{database}}'
+    path: 'migrations-{{database}}',
+    // distinct per-service table so services can share one database on
+    // shared-infrastructure tiers
+    tableName: 'mikro_orm_migrations_{{snake_case_name}}'
   },
   // Individual seeders live in persistence/seeders/ and are wired through DatabaseSeeder.
   seeder: {

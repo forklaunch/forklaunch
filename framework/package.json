@@ -1,5 +1,6 @@
 {
   "name": "@forklaunch/monorepo",
+  "private": true,
   "version": "0.1.0",
   "description": "",
   "keywords": [],
@@ -25,21 +26,21 @@
     "!**/*package.json": ""
   },
   "devDependencies": {
-    "@changesets/cli": "^2.31.0",
+    "@changesets/cli": "^2.31.1",
     "@types/jest": "^30.0.0",
-    "@types/node": "^25.7.0",
-    "eslint": "^10.3.0",
-    "globals": "^17.6.0",
+    "@types/node": "^26.1.2",
+    "eslint": "^10.8.0",
+    "globals": "^17.8.0",
     "jest": "^30.4.2",
-    "lint-staged": "^17.0.4",
-    "prettier": "^3.8.3",
-    "sort-package-json": "^3.6.1",
-    "ts-jest": "^29.4.9",
-    "tsx": "^4.21.0",
-    "typedoc": "^0.28.19",
-    "typescript": "^6.0.3",
-    "typescript-eslint": "^8.59.3",
-    "vitest": "^4.1.6"
+    "lint-staged": "^17.2.0",
+    "prettier": "^3.9.6",
+    "sort-package-json": "^4.0.0",
+    "ts-jest": "^29.4.12",
+    "tsx": "^4.23.1",
+    "typedoc": "^0.28.20",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "typescript-eslint": "^8.65.0",
+    "vitest": "^4.1.10"
   },
   "dependencies": {
     "@eslint/js": "^10.0.1"

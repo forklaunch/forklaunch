@@ -1,5 +1,18 @@
-import type { EntityManager, EventSubscriber, MikroORM } from '@mikro-orm/core';
+import type { EntityManager, EventSubscriber } from '@mikro-orm/core';
 import { TENANT_FILTER_NAME } from './tenantFilter';
+
+/**
+ * Structural subset of `MikroORM` used by RLS setup. Typed structurally
+ * (rather than as `MikroORM`) because the class's `Entities` type parameter
+ * defaults to a mutable array while `MikroORM.init()` returns a readonly one,
+ * making concrete instances unassignable to a bare `MikroORM` parameter.
+ */
+export interface RlsOrm {
+  em: Pick<
+    EntityManager,
+    'getEventManager' | 'getMetadata' | 'getConnection' | 'getPlatform'
+  >;
+}
 
 /**
  * Structural subset of {@link TransactionEventArgs} used by
@@ -76,8 +89,7 @@ export class RlsEventSubscriber implements EventSubscriber {
     em: Pick<EntityManager, 'getFilterParams'>
   ): string | undefined {
     const params = em.getFilterParams(TENANT_FILTER_NAME) as
-      | { tenantId?: string }
-      | undefined;
+      { tenantId?: string } | undefined;
     return params?.tenantId;
   }
 }
@@ -98,7 +110,7 @@ export class RlsEventSubscriber implements EventSubscriber {
  * @param orm - The initialized MikroORM instance
  * @param config - RLS configuration (enabled defaults to auto-detect PostgreSQL)
  */
-export function setupRls(orm: MikroORM, config: RlsConfig = {}): void {
+export function setupRls(orm: RlsOrm, config: RlsConfig = {}): void {
   const isPostgres = isPostgresDriver(orm);
   const enabled = config.enabled ?? isPostgres;
   const log = config.logger ?? { info: console.info, warn: console.warn };
@@ -144,7 +156,7 @@ export function setupRls(orm: MikroORM, config: RlsConfig = {}): void {
  * Checks that tenant-scoped entities have RLS policies on their tables.
  * Logs warnings with the SQL needed to create missing policies.
  */
-async function validateRlsPolicies(orm: MikroORM): Promise<void> {
+async function validateRlsPolicies(orm: RlsOrm): Promise<void> {
   const metadata = orm.em.getMetadata().getAll();
 
   for (const meta of Object.values(metadata)) {
@@ -191,7 +203,7 @@ async function validateRlsPolicies(orm: MikroORM): Promise<void> {
  * Detect whether the ORM is using a PostgreSQL driver.
  * Checks the platform constructor name which is 'PostgreSqlPlatform' for PG.
  */
-function isPostgresDriver(orm: MikroORM): boolean {
+function isPostgresDriver(orm: RlsOrm): boolean {
   try {
     const platform = orm.em.getPlatform();
     const name = platform.constructor.name.toLowerCase();

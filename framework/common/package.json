@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/common",
-  "version": "1.2.18",
+  "version": "1.2.22",
   "description": "Common package for base types, interfaces, implementations.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -18,6 +18,9 @@
       "import": "./lib/index.mjs",
       "require": "./lib/index.js",
       "default": "./lib/index.js"
+    },
+    "./*": {
+      "types": "./lib/*.d.ts"
     }
   },
   "types": "lib/index.d.ts",
@@ -28,7 +31,7 @@
     "lib/**"
   ],
   "scripts": {
-    "build": "tsgo --noEmit && tsup index.ts --format cjs,esm --no-splitting --tsconfig tsconfig.json --outDir lib --dts --clean",
+    "build": "tsgo --noEmit && tsup index.ts --format cjs,esm --no-splitting --tsconfig tsconfig.json --outDir lib --clean && tsgo --emitDeclarationOnly",
     "check": "depcheck",
     "clean": "rm -rf lib pnpm.lock.yaml node_modules",
     "docs": "typedoc --out docs *",
@@ -41,15 +44,15 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^25.7.0",
-    "@typescript/native-preview": "7.0.0-dev.20260511.1",
+    "@types/node": "^26.1.2",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "depcheck": "^1.4.7",
-    "eslint": "^10.3.0",
-    "globals": "^17.6.0",
+    "eslint": "^10.8.0",
+    "globals": "^17.8.0",
     "tsup": "^8.5.1",
-    "typedoc": "^0.28.19",
-    "typescript": "^6.0.3",
-    "typescript-eslint": "^8.59.3",
-    "vitest": "^4.1.6"
+    "typedoc": "^0.28.20",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "typescript-eslint": "^8.65.0",
+    "vitest": "^4.1.10"
   }
 }

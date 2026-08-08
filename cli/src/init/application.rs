@@ -873,6 +873,7 @@ impl CliCommand for ApplicationCommand {
                 service_name: template_dir.output_path.clone(),
                 service_path: template_dir.output_path.to_string(),
                 camel_case_name: template_dir.output_path.to_case(Case::Camel),
+                snake_case_name: template_dir.output_path.to_case(Case::Snake),
                 pascal_case_name: template_dir.output_path.to_case(Case::Pascal),
                 kebab_case_name: template_dir.output_path.to_case(Case::Kebab),
                 title_case_name: template_dir.output_path.to_case(Case::Title),

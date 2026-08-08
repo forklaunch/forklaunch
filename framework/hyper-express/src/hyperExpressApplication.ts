@@ -70,14 +70,11 @@ export class Application<
 > {
   private docsConfiguration: DocsConfiguration | undefined;
   private mcpConfiguration:
-    | ExpressApplicationOptions<SV, SessionSchema>['mcp']
-    | undefined;
+    ExpressApplicationOptions<SV, SessionSchema>['mcp'] | undefined;
   private openapiConfiguration:
-    | ExpressApplicationOptions<SV, SessionSchema>['openapi']
-    | undefined;
+    ExpressApplicationOptions<SV, SessionSchema>['openapi'] | undefined;
   private hostingConfiguration:
-    | ExpressApplicationOptions<SV, SessionSchema>['hosting']
-    | undefined;
+    ExpressApplicationOptions<SV, SessionSchema>['hosting'] | undefined;
   /**
    * Creates an instance of the Application class.
    *

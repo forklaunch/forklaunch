@@ -770,6 +770,7 @@ impl CliCommand for ServiceCommand {
             service_name: service_name.clone(),
             service_path: service_name.clone(),
             camel_case_name: service_name.to_case(Case::Camel),
+            snake_case_name: service_name.to_case(Case::Snake),
             pascal_case_name: service_name.to_case(Case::Pascal),
             kebab_case_name: service_name.to_case(Case::Kebab),
             title_case_name: service_name.to_case(Case::Title),

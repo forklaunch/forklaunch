@@ -114,7 +114,10 @@ export const betterAuthConfig = ({
 }: {
   BETTER_AUTH_BASE_PATH: string;
   CORS_ORIGINS: string[];
-  orm: MikroORM;
+  // relaxed type params: MikroORM.init() returns a readonly entities array,
+  // which a bare `MikroORM` annotation rejects
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  orm: MikroORM<any, any, any>;
   openTelemetryCollector: OpenTelemetryCollector<Metrics>;
 }) => {
   const baseURL =

@@ -43,7 +43,7 @@ export const Plan = defineComplianceEntity({
     externalId: fp.string().compliance('none'),
     cadence: fp.enum().compliance('none'),
     currency: fp.enum().compliance('none'),
-    billingProvider: fp.enum().compliance('none'),
+    billingProvider: fp.enum().nullable().compliance('none'),
     providerFields: fp.json<Stripe.Product>().compliance('pci')
   }
 });
@@ -55,7 +55,7 @@ export const Subscription = defineComplianceEntity({
     partyId: fp.string().compliance('none'),
     externalId: fp.string().compliance('none'),
     partyType: fp.enum().compliance('none'),
-    billingProvider: fp.enum().compliance('none'),
+    billingProvider: fp.enum().nullable().compliance('none'),
     active: fp.boolean().compliance('none'),
     providerFields: fp.json<Stripe.Subscription>().compliance('pci')
   }

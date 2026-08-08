@@ -16,17 +16,17 @@
     "test": "pnpm vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "^0.6.28",
-    "@forklaunch/universal-sdk": "^0.7.28",
+    "@forklaunch/common": "^1.2.20",
+    "@forklaunch/universal-sdk": "^1.2.20",
     "better-auth": "^1.4.18"
   },
   "devDependencies": {
-    "@forklaunch/blueprint-billing-base": "workspace:*",
-    "@forklaunch/blueprint-billing-stripe": "workspace:*",
-    "@forklaunch/blueprint-core": "workspace:*",
-    "@forklaunch/blueprint-iam-base": "workspace:*",
-    "@forklaunch/blueprint-iam-better-auth": "workspace:*",
-    "@forklaunch/blueprint-sample-worker": "workspace:*",
-    "@forklaunch/core": "^0.18.1"
+    "@forklaunch/blueprint-billing-base": "workspace:^",
+    "@forklaunch/blueprint-billing-stripe": "workspace:^",
+    "@forklaunch/blueprint-core": "workspace:^",
+    "@forklaunch/blueprint-iam-base": "workspace:^",
+    "@forklaunch/blueprint-iam-better-auth": "workspace:^",
+    "@forklaunch/blueprint-sample-worker": "workspace:^",
+    "@forklaunch/core": "^1.5.6"
   }
 }

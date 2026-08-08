@@ -40,3 +40,6 @@ allowBuilds:
   ssh2: true
   tldjs: true
   unrs-resolver: true
+
+overrides:
+  "@forklaunch/core": ^1.5.6

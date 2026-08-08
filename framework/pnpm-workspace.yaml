@@ -13,6 +13,8 @@ packages:
   - bunrun
   - ws
 
+blockExoticSubdeps: false
+
 allowBuilds:
   "@scarf/scarf": true
   cpu-features: true

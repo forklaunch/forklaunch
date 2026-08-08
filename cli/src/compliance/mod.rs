@@ -4,6 +4,7 @@ use clap::{ArgMatches, Command};
 use crate::{CliCommand, core::command::command};
 
 mod audit;
+mod checks;
 
 use audit::AuditCommand;
 

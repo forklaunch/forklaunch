@@ -59,8 +59,7 @@ export function enrichDetails<
   contractDetails: HttpContractDetails<SV> | PathParamHttpContractDetails<SV>,
   requestSchema: unknown | Record<string, unknown>,
   responseSchemas:
-    | ResponseCompiledSchema
-    | Record<string, ResponseCompiledSchema>,
+    ResponseCompiledSchema | Record<string, ResponseCompiledSchema>,
   openTelemetryCollector?: OpenTelemetryCollector<MetricsDefinition>,
   globalOptions?: () => ExpressLikeRouterOptions<SV, SessionSchema> | undefined
 ): ExpressLikeSchemaHandler<

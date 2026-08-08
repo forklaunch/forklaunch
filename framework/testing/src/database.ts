@@ -1,4 +1,13 @@
 import { MikroORM, Options } from '@mikro-orm/core';
+
+/**
+ * `MikroORM` with relaxed type parameters. `MikroORM.init()` returns an
+ * instance whose `Entities` parameter is a readonly array, which is not
+ * assignable to a bare `MikroORM` annotation (its `Entities` default is a
+ * mutable array) — so the harness accepts any concrete instance instead.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type AnyMikroORM = MikroORM<any, any, any>;
 import Redis from 'ioredis';
 import { StartedTestContainer } from 'testcontainers';
 import { DatabaseType } from './containers';
@@ -61,7 +70,7 @@ function getDatabasePort(type: DatabaseType): number {
  */
 export async function setupTestORM(
   config: MikroOrmTestConfig
-): Promise<MikroORM> {
+): Promise<AnyMikroORM> {
   const {
     mikroOrmConfig,
     databaseType,
@@ -133,7 +142,7 @@ export async function setupTestORM(
  * Clear all data from the test database and/or cache
  */
 export async function clearTestDatabase(options?: {
-  orm?: MikroORM;
+  orm?: AnyMikroORM;
   redis?: Redis;
 }): Promise<void> {
   const { orm, redis } = options || {};

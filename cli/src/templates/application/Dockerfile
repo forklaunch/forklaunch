@@ -5,6 +5,13 @@ WORKDIR /{{app_name}}
 
 # Copy source code
 COPY . .
+
+# Trust the AWS RDS certificate authorities with full verification.
+# NODE_EXTRA_CA_CERTS appends to (never replaces) the default trust store;
+# honored by node and by bun >= 1.2.3 (earlier bun reads only the first
+# certificate from a multi-cert bundle).
+COPY core/certs/aws-rds-global-bundle.pem /etc/ssl/certs/aws-rds-global-bundle.pem
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/aws-rds-global-bundle.pem
 {{#is_node}}{{#is_in_memory_database}}
 # Install sqlite dependencies
 RUN apk add --no-cache python3 py3-pip make build-base sqlite-dev

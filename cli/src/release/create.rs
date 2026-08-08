@@ -463,9 +463,20 @@ impl CliCommand for CreateCommand {
                 vec!["install"]
             };
 
-            let install_status = ProcessCommand::new(&resolved)
+            let mut install_command = ProcessCommand::new(&resolved);
+            install_command
                 .args(&install_args)
-                .current_dir(&modules_path)
+                .current_dir(&modules_path);
+            // Bun's installer can be blocked by its temporary-directory
+            // sandbox in restricted environments; point it at a project-local
+            // temp dir that is always writable.
+            if manifest.runtime == "bun" {
+                let bun_tmp = modules_path.join(".forklaunch-tmp");
+                std::fs::create_dir_all(&bun_tmp)
+                    .with_context(|| "Failed to create bun temp directory")?;
+                install_command.env("TMPDIR", &bun_tmp);
+            }
+            let install_status = install_command
                 .status()
                 .with_context(|| format!("Failed to run {} install", runtime_cmd))?;
 

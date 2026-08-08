@@ -15,7 +15,7 @@
   "type": "module",
   "types": "lib/index.d.ts",
   "scripts": {
-    "build": "tsc",
+    "build": "tsgo",
     "clean": "rm -rf lib tsconfig.tsbuildinfo pnpm.lock.yaml node_modules",
     "docs": "typedoc --out docs *",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
@@ -25,6 +25,12 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/core": "^1.5.2"
+    "@forklaunch/core": "^1.5.6"
+  },
+  "devDependencies": {
+    "@typescript/native-preview": "7.0.0-dev.20260707.2"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

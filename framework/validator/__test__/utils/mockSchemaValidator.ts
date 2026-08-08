@@ -32,11 +32,20 @@ type SerializeStringArray<T extends string[]> = T extends [
   : '';
 
 /**
+ * Function type for creating a typed mock schema.
+ *
+ * Named (rather than written inline as the first type argument) so declaration
+ * emit does not produce `SchemaValidator<<T>...`, which the TypeScript 7
+ * native compiler fails to re-parse.
+ */
+type MockTypeFunction = <T>() => T;
+
+/**
  * A mock implementation of SchemaValidator for testing purposes.
  * This validator represents schemas as strings and provides simple string-based operations.
  */
 export class MockSchemaValidator implements SchemaValidator<
-  <T>() => T,
+  MockTypeFunction,
   <T extends string>(schema: T) => T,
   <T extends string>(schema: T) => T,
   <T extends string>(schema: T) => `optional ${T}`,

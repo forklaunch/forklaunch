@@ -568,11 +568,7 @@ export async function parseRequestAuth<
   next?: ForklaunchNextFunction
 ) {
   const access = req.contractDetails.access as
-    | 'public'
-    | 'authenticated'
-    | 'protected'
-    | 'internal'
-    | undefined;
+    'public' | 'authenticated' | 'protected' | 'internal' | undefined;
 
   // Public routes skip auth entirely
   if (access === 'public') {

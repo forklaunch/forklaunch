@@ -75,7 +75,7 @@ export const PlanSchema =
     currency: enum_(CurrencyEnum),
     features: optional(array(string)),
     externalId: string,
-    billingProvider: enum_(BillingProviderEnum),
+    billingProvider: optional(enum_(BillingProviderEnum)),
     active: boolean,
     providerFields: optional(unknown),
     createdAt: optional(date),

@@ -29,7 +29,7 @@ export {
   forklaunchRouter,
   handlers
 } from '@forklaunch/express';
-export { PERMISSIONS, ROLES } from '../core/auth/rbac';
+export { PERMISSIONS, ROLES } from '@forklaunch/blueprint-core';
 
 export const schemaValidator = SchemaValidatorFactory();
 export type SchemaValidator = ReturnType<typeof SchemaValidatorFactory>;

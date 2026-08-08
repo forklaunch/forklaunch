@@ -169,6 +169,7 @@ impl CliCommand for ModuleCommand {
             service_name: get_service_module_name(&module),
             service_path: get_service_module_name(&module),
             camel_case_name: get_service_module_name(&module).to_case(Case::Camel),
+            snake_case_name: get_service_module_name(&module).to_case(Case::Snake),
             pascal_case_name: get_service_module_name(&module).to_case(Case::Pascal),
             kebab_case_name: get_service_module_name(&module).to_case(Case::Kebab),
             title_case_name: get_service_module_name(&module).to_case(Case::Title),

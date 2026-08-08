@@ -1,8 +1,4 @@
-import {
-  number,
-  SchemaValidator,
-  string
-} from '@forklaunch/validator/zod';
+import { number, SchemaValidator, string } from '@forklaunch/validator/zod';
 import {
   FieldEncryptor,
   registerEncryptor

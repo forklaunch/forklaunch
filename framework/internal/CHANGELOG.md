@@ -1,5 +1,23 @@
 # @forklaunch/internal
 
+## 1.2.20
+
+### Patch Changes
+
+- update packages
+- Updated dependencies
+  - @forklaunch/validator@1.2.20
+  - @forklaunch/common@1.2.20
+
+## 1.2.19
+
+### Patch Changes
+
+- 92c06f9: dep upgrades
+- Updated dependencies [92c06f9]
+  - @forklaunch/validator@1.2.19
+  - @forklaunch/common@1.2.19
+
 ## 1.2.18
 
 ### Patch Changes
