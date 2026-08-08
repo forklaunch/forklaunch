@@ -18,6 +18,7 @@ use crate::{
         ERROR_FAILED_TO_ADD_PROJECT_METADATA_TO_MANIFEST, ERROR_FAILED_TO_COPY_STOREFRONT_SITE,
         ERROR_FAILED_TO_PARSE_MANIFEST, ERROR_FAILED_TO_PARSE_STOREFRONT_MANIFEST,
         ERROR_FAILED_TO_READ_MANIFEST, ERROR_FAILED_TO_READ_STOREFRONT_MANIFEST,
+        ERROR_STOREFRONT_PROJECT_ALREADY_EXISTS,
     },
     core::{
         base_path::{RequiredLocation, find_app_root_path, prompt_base_path},
@@ -37,14 +38,30 @@ use crate::{
 /// The variant tag written to the project's `ProjectEntry` in manifest.toml.
 ///
 /// A migrated storefront is registered as `ProjectType::Library` (see
-/// `handler` below) rather than a new `ProjectType` variant. Adding a real
-/// enum variant would require updating every exhaustive match over
-/// `ProjectType` across release, sync, deploy, env_scope, openapi_export and
-/// client_sdk — cross-cutting work with real product decisions attached that
-/// is out of scope here. Tagging the project with a plain string variant
-/// instead mirrors how `init/module.rs` tags service variants (e.g.
-/// "better-auth-iam") and touches no enums, so every existing exhaustive
-/// match keeps compiling unchanged.
+/// `handler` below) rather than a new `ProjectType` variant, mirroring how
+/// `init/module.rs` tags service variants (e.g. "better-auth-iam").
+///
+/// The blast radius of a real variant is smaller than it looks: every
+/// `match` over `ProjectType` in release/ and env_scope has a `_ =>`
+/// fallback, openapi_export and client_sdk use `==`/`matches!` filters that
+/// already exclude anything but Service/Worker, and deploy/ never mentions
+/// `ProjectType` at all. The genuinely exhaustive matches are over
+/// `ManifestData`, in `core/template.rs`, `core/github_configs.rs` and
+/// `core/base_path.rs` — a `ManifestData::Storefront` would have to answer
+/// for each of those rendering paths.
+///
+/// KNOWN TRADEOFF, flagged for review: reusing `Library` means the manifest
+/// advertises a contract this command does not fulfil. `init/library.rs`
+/// additionally registers the project in `pnpm-workspace.yaml` and the root
+/// `package.json`, generates a `package.json` and tsconfig entry, and creates
+/// symlinks. A storefront gets none of those, because a captured static site
+/// is not a pnpm package. Consumers keyed on `ProjectType::Library`
+/// (`sync/library.rs`, `change/library.rs`, `delete/library.rs`) therefore
+/// see an entry whose artifacts are absent; `delete` tolerates this because
+/// its removal helpers no-op on missing entries, but that is the callee being
+/// forgiving, not a guarantee. A real `ProjectType::Storefront` would make
+/// the exhaustiveness checker enforce these decisions instead of leaving them
+/// implicit — worth doing if storefronts ever need to sync or deploy.
 const STOREFRONT_VARIANT: &str = "storefront";
 
 /// The `manifest.json` `schemaVersion` this command knows how to read. Bump
@@ -290,6 +307,20 @@ impl CliCommand for StorefrontCommand {
         let dryrun = matches.get_flag("dryrun");
         let project_output_path = base_path.join(&project_name);
 
+        // Bail before writing anything. add_project_definition_to_manifest
+        // no-ops when a project of this name already exists, so without this
+        // guard a re-run against a different capture would silently copy the
+        // new site over the old one, leave the previous capture's files behind
+        // alongside it, and still print the new manifest's page list — a
+        // mixed-provenance directory reported as a clean scaffold.
+        if !dryrun && project_output_path.exists() {
+            bail!(
+                "{} ({})",
+                ERROR_STOREFRONT_PROJECT_ALREADY_EXISTS,
+                project_output_path.display()
+            );
+        }
+
         let forklaunch_definition_buffer = add_project_definition_to_manifest(
             ProjectType::Library,
             &mut storefront_manifest_data,
@@ -314,7 +345,7 @@ impl CliCommand for StorefrontCommand {
             // compiled-in TEMPLATES_DIR and renders text through Handlebars into a
             // String, but a captured site has binary assets (images, fonts)
             // discovered at capture time, not baked into the CLI binary.
-            // fs_extra::dir::copy (same approach as eject.rs's dependency copy)
+            // fs_extra::dir::copy (same options as eject.rs's dependency copy)
             // copies the directory byte-for-byte instead.
             create_dir_all(&project_output_path).with_context(|| {
                 format!(
@@ -324,7 +355,20 @@ impl CliCommand for StorefrontCommand {
             })?;
 
             let mut copy_options = CopyOptions::new();
-            copy_options.overwrite = true;
+            // Put the CONTENTS of site/ at the project root so the layout
+            // matches every other init command (base_path/name/...).
+            //
+            // This must be content_only, not copy_inside. fs_extra pushes the
+            // source basename when `(to.exists() || !copy_inside) &&
+            // !content_only` (dir.rs:591) — and `to` always exists here,
+            // because create_dir_all just made it. So copy_inside alone still
+            // buries the capture at <project>/site/; only content_only
+            // suppresses the push unconditionally.
+            copy_options.content_only = true;
+            // Match eject.rs: fail loudly on a conflicting file rather than
+            // silently overwriting. The guard above should make this
+            // unreachable; it is defence in depth, not the primary check.
+            copy_options.overwrite = false;
 
             copy(&site_source_path, &project_output_path, &copy_options)
                 .with_context(|| ERROR_FAILED_TO_COPY_STOREFRONT_SITE)?;
