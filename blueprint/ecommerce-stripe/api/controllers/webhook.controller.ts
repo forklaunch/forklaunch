@@ -143,9 +143,11 @@ export const handleStripeWebhook = handlers.post(
     }
   },
   async (req, res) => {
-    // Captured by the `verify` hook on the app's json body-parser (see
-    // server.ts) — Stripe's signature is computed over the exact raw bytes
-    // it sent, so the already-JSON-parsed req.body (property order/
+    // Captured by the `verify` hook on this router's own json body-parser
+    // (see webhook.routes.ts — the hook is scoped to this router, not the
+    // app's json body-parser, precisely so other routes' JSON parsing is
+    // unaffected) — Stripe's signature is computed over the exact raw
+    // bytes it sent, so the already-JSON-parsed req.body (property order/
     // whitespace not guaranteed identical) cannot be used here.
     const rawBody = (req as unknown as { rawBody?: Buffer }).rawBody;
     const signature = req.headers['stripe-signature'];
