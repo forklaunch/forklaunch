@@ -97,4 +97,50 @@ export class PaypalClient {
     }
     return (await res.json()) as PaypalOrder;
   }
+
+  /**
+   * Verifies a webhook event's transmission signature against PayPal's
+   * `/v1/notifications/verify-webhook-signature` API — the officially
+   * documented way to validate a PayPal webhook server-side (PayPal does
+   * the actual cryptographic verification against its own record of what it
+   * sent for `transmissionId`; there's no local public-key/cert-pinning
+   * logic to get subtly wrong here). Fails closed: any non-2xx response
+   * from PayPal, or any status other than the literal 'SUCCESS', is treated
+   * as an unverified event, never as a passed check.
+   */
+  async verifyWebhookSignature(params: {
+    transmissionId: string;
+    transmissionTime: string;
+    transmissionSig: string;
+    certUrl: string;
+    authAlgo: string;
+    webhookId: string;
+    webhookEvent: unknown;
+  }): Promise<boolean> {
+    const accessToken = await this.getAccessToken();
+    const res = await fetch(
+      `${this.baseUrl}/v1/notifications/verify-webhook-signature`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          transmission_id: params.transmissionId,
+          transmission_time: params.transmissionTime,
+          cert_url: params.certUrl,
+          auth_algo: params.authAlgo,
+          transmission_sig: params.transmissionSig,
+          webhook_id: params.webhookId,
+          webhook_event: params.webhookEvent
+        })
+      }
+    );
+    if (!res.ok) {
+      return false;
+    }
+    const body = (await res.json()) as { verification_status?: string };
+    return body.verification_status === 'SUCCESS';
+  }
 }
