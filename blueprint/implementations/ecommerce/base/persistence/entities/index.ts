@@ -1,8 +1,11 @@
 import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
 import {
   CartItemDto,
+  OrderItemDto,
   ProductImage,
-  ProductOption
+  ProductOption,
+  ShippingAddressDto,
+  TaxLineDto
 } from '@forklaunch/interfaces-ecommerce/types';
 
 /**
@@ -66,5 +69,23 @@ export const Inventory = defineComplianceEntity({
     id: fp.string().primary().compliance('none'),
     variantId: fp.string().compliance('none'),
     stock: fp.integer().compliance('none')
+  }
+});
+
+export const Order = defineComplianceEntity({
+  name: 'Order',
+  properties: {
+    id: fp.string().primary().compliance('none'),
+    customerId: fp.string().nullable().compliance('none'),
+    status: fp.string().compliance('none'),
+    items: fp.json<OrderItemDto[]>().compliance('none'),
+    shippingAddress: fp.json<ShippingAddressDto>().compliance('pii'),
+    subtotalCents: fp.integer().compliance('none'),
+    discountCents: fp.integer().compliance('none'),
+    taxCents: fp.integer().compliance('none'),
+    taxBreakdown: fp.json<TaxLineDto[]>().compliance('none'),
+    shippingCents: fp.integer().compliance('none'),
+    giftCardCents: fp.integer().compliance('none'),
+    totalCents: fp.integer().compliance('none')
   }
 });
