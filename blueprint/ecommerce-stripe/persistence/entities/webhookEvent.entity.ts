@@ -7,10 +7,11 @@ import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
  * those callers safe against at-least-once delivery). One row per
  * (provider, provider event id) pair.
  *
- * `providerEventId` is namespaced with the provider (`stripe:evt_...` /
- * `paypal:<id>`) rather than relying on a composite unique constraint —
- * Stripe and PayPal event id formats don't collide in practice, but
- * namespacing makes that an explicit guarantee instead of an assumption.
+ * `providerEventId` is the provider's own, unprefixed event id (Stripe's
+ * `evt_...`, PayPal's own id) — both call sites in webhook.controller.ts
+ * pass it through as-is. Uniqueness is enforced as a genuine composite
+ * constraint on `(provider, providerEventId)` below, rather than assuming
+ * Stripe and PayPal event id formats never collide.
  *
  * `processed` mirrors the exact pattern OrderEventRecord already uses for
  * the same reason: a webhook that we saw and started handling but that
@@ -25,8 +26,9 @@ export const WebhookEvent = defineComplianceEntity({
   properties: {
     ...sqlBaseProperties,
     provider: fp.string().compliance('none'),
-    providerEventId: fp.string().unique().compliance('none'),
+    providerEventId: fp.string().compliance('none'),
     eventType: fp.string().compliance('none'),
     processed: fp.boolean().compliance('none')
-  }
+  },
+  uniques: [{ properties: ['provider', 'providerEventId'] }]
 });
