@@ -99,6 +99,41 @@ export class BasePaymentService<
   }
 
   /** Idempotent: re-confirming an already-succeeded payment is a no-op, not an error. */
+  /**
+   * Atomically flips pending -> succeeded, returning whether this caller won.
+   *
+   * Providers whose confirm has an external side effect (PayPal captures real
+   * funds) must call this BEFORE that side effect, so only one caller can
+   * trigger it. Webhooks are at-least-once, so a redelivery would otherwise
+   * re-invoke a live capture. `releaseConfirmationClaim` puts the status back
+   * if the side effect then fails, so a genuine retry can claim it again.
+   *
+   * Lives here rather than in the provider packages because this class owns
+   * persistence and is the only layer with the concrete entity type.
+   */
+  async claimForConfirmation(
+    providerRef: string,
+    em?: EntityManager
+  ): Promise<boolean> {
+    const affected = await (em ?? this.em).nativeUpdate(
+      this.mappers.PaymentMapper.entity as typeof Payment,
+      { providerRef, status: PaymentStatus.PENDING },
+      { status: PaymentStatus.SUCCEEDED }
+    );
+    return affected > 0;
+  }
+
+  async releaseConfirmationClaim(
+    providerRef: string,
+    em?: EntityManager
+  ): Promise<void> {
+    await (em ?? this.em).nativeUpdate(
+      this.mappers.PaymentMapper.entity as typeof Payment,
+      { providerRef, status: PaymentStatus.SUCCEEDED },
+      { status: PaymentStatus.PENDING }
+    );
+  }
+
   async confirmPayment(
     confirmDto: ConfirmPaymentDto,
     em?: EntityManager

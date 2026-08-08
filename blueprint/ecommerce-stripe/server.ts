@@ -35,18 +35,6 @@ const app = forklaunchExpress(schemaValidator, openTelemetryCollector, {
       //! return the roles for the user, this is a placeholder
       return new Set([ROLES.ADMIN]);
     }
-  },
-  // Captures the exact raw request bytes onto `req.rawBody` for every
-  // JSON-bodied route in this app, before Express's json() parser
-  // reformats them into a JS object. Only webhook.controller.ts's Stripe
-  // handler actually reads it (Stripe's signature is computed over those
-  // literal bytes — the already-parsed body, with keys potentially
-  // reordered, will not reproduce the same signature) — harmless no-op
-  // extra buffer for every other route.
-  json: {
-    verify: (req, _res, buf) => {
-      (req as unknown as { rawBody?: Buffer }).rawBody = Buffer.from(buf);
-    }
   }
 });
 
