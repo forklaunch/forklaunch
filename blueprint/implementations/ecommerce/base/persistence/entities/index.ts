@@ -89,3 +89,18 @@ export const Order = defineComplianceEntity({
     totalCents: fp.integer().compliance('none')
   }
 });
+
+export const Payment = defineComplianceEntity({
+  name: 'Payment',
+  properties: {
+    id: fp.string().primary().compliance('none'),
+    orderId: fp.string().compliance('none'),
+    amountCents: fp.integer().compliance('none'),
+    currency: fp.string().compliance('none'),
+    status: fp.string().compliance('none'),
+    // Provider payment-intent id — not itself a card/account number, so
+    // compliance('none') is appropriate; raw card data is never stored here
+    // (Stripe/PayPal hold it — see commerce-security convention).
+    providerRef: fp.string().nullable().unique().compliance('none')
+  }
+});
