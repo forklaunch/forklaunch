@@ -54,6 +54,12 @@ const hmacIdx = argv.indexOf('--hmac-secret');
 const HMAC_SECRET = hmacIdx > -1 ? argv[hmacIdx + 1] : null;
 const pagesIdx = argv.indexOf('--pages');
 const MAX_PAGES = pagesIdx > -1 ? parseInt(argv[pagesIdx + 1], 10) || 20 : 20;
+// Guaranteed nav-destination allocation, outside the normal page budget (see
+// HARD_CAP below). Raised from 12: mega-menus routinely carry more than a
+// dozen real category destinations (e.g. Men's/Women's split doubles every
+// top-level category), and every one of them is a highly-visible dead link
+// if missed.
+const NAV_MUST_CAP = 20;
 
 const assetMap = new Map();          // absolute asset url -> local rel path
 let totalBytes = 0;
@@ -223,11 +229,27 @@ function injectBeforeBody(html, script) {
           .map(e => e.getAttribute('data-menu-trigger') ||
                     (e.textContent || '').trim().toLowerCase())
           .filter(x => x && x.length < 24));
-      const navLinks = await page.evaluate(() =>
-        [...document.querySelectorAll('a[href]')]
-          .filter(a => { const r = a.getBoundingClientRect();
-                         return r.top >= 0 && r.top < 340 && r.width > 20; })
-          .map(a => a.getAttribute('href')));
+      // Scoped to header/nav CONTAINERS, not viewport visibility. Mega-menu
+      // dropdown items (category links nested under a hover/click trigger)
+      // are display:none until interaction, so a bounding-box filter (top
+      // strip, width>0) sees only the trigger itself and never the real
+      // destinations underneath it — those then never get captured and the
+      // nav link is dead. Structural scoping catches them regardless of
+      // whether the submenu happens to be open right now.
+      const navLinks = await page.evaluate(() => {
+        const containers = [...document.querySelectorAll('header, nav, [role="navigation"]')];
+        const scope = containers.length ? containers : [document];
+        const seen = new Set(), out = [];
+        for (const c of scope) {
+          for (const a of c.querySelectorAll('a[href]')) {
+            const h = a.getAttribute('href');
+            if (h && !seen.has(h)) { seen.add(h); out.push(h); }
+            if (out.length >= 80) break;
+          }
+          if (out.length >= 80) break;
+        }
+        return out;
+      });
       return { html, links, navTriggers, navLinks, finalUrl: page.url() };
     } catch (_) { return null; }
     finally { await page.close().catch(() => {}); }
@@ -364,7 +386,7 @@ function injectBeforeBody(html, script) {
     // subsequent fetch.
     // Nav first, then split what's left. MAX_PAGES is raised by the nav count
     // so guaranteeing the nav never eats the product budget.
-    const navTake = navMust.slice(0, 12);
+    const navTake = navMust.slice(0, NAV_MUST_CAP);
     for (const q of navTake) if (!wanted.has(q)) wanted.set(q, pageFileFor(q));
     const budget = Math.max(0, MAX_PAGES - 1);
     // Products first — they ARE the store. The old order (up to 5 info pages,
@@ -414,7 +436,7 @@ function injectBeforeBody(html, script) {
     const PAGE_DELAY_MS = 900;
     let consecutiveFails = 0;
 
-    const HARD_CAP = MAX_PAGES + navMust.slice(0, 12).length;
+    const HARD_CAP = MAX_PAGES + navMust.slice(0, NAV_MUST_CAP).length;
     while (queue.length && captured.size < HARD_CAP) {
       const p = queue.shift();
       if (visited > 0) await new Promise(r => setTimeout(r, PAGE_DELAY_MS));
@@ -519,6 +541,18 @@ function injectBeforeBody(html, script) {
       if (m) capturedFiles.add(m.file);
     }
 
+    // Nav-menu destinations (see navMust above) that the page budget still
+    // didn't reach — a real category the crawl ran out of room for, or a
+    // guessed candidate (/collections/men vs /collections/mens) that never
+    // resolved. These are the most-clicked links on the page; never leave
+    // one pointing at a missing local file or eject the viewer to the live
+    // site. Land on the nearest captured collection instead — same "browse
+    // the catalog" intent, just not the exact category — or the homepage
+    // if nothing was captured at all.
+    const navPathSet = new Set(navMust);
+    const navFallback = [...capturedFiles].find(f => f.startsWith('collections/')) ||
+                         (capturedFiles.has('index.html') ? 'index.html' : null);
+
     for (const [pth, rawHtml] of captured) {
       const meta = wanted.get(pth) || { file: 'index.html', depth: 0 };
       const up = '../'.repeat(meta.depth);
@@ -554,6 +588,13 @@ function injectBeforeBody(html, script) {
         const tgt = pageFileFor(p);
         if (tgt && capturedFiles.has(tgt.file)) {
           return `href="${up}${tgt.file}"`;                 // -> local copy
+        }
+        // A real nav-menu destination the budget didn't reach (or a guessed
+        // trigger candidate that never resolved). It's the most-clicked kind
+        // of link on the page — never leave it dead or send it off-site;
+        // land on the nearest captured collection instead.
+        if (navPathSet.has(p) && navFallback) {
+          return `href="${up}${navFallback}"`;
         }
         // A storefront page we didn't capture. Outside demo mode, send it to
         // the live site so a click never 404s. In demo mode that is wrong —
@@ -645,7 +686,9 @@ function injectBeforeBody(html, script) {
         if (t) linkMap[pth] = t.file;
       }
       const relinkShim = '<script>(function(){var M=' + JSON.stringify(linkMap) +
-        ',UP=' + JSON.stringify(up) + ',H=' + JSON.stringify(domain) + ';' +
+        ',UP=' + JSON.stringify(up) + ',H=' + JSON.stringify(domain) +
+        ',NAVSET=' + JSON.stringify([...navPathSet]) +
+        ',FALLBACK=' + JSON.stringify(navFallback) + ';' +
         'function norm(u){try{var a=new URL(u,location.href);' +
         'if(a.hostname&&a.hostname.replace(/^www\\./,"")!==H.replace(/^www\\./,"")' +
         '&&a.protocol!=="file:"&&a.hostname!==location.hostname)return null;' +
@@ -654,7 +697,13 @@ function injectBeforeBody(html, script) {
         'for(var i=0;i<a.length;i++){var e=a[i],h=e.getAttribute("href");' +
         'if(!h||/^(#|mailto:|tel:|javascript:)/i.test(h))continue;' +
         'if(/\\.html($|[?#])/.test(h))continue;' +
-        'var p=norm(h);if(!p)continue;var f=M[p];if(f)e.setAttribute("href",UP+f);}}' +
+        'var p=norm(h);if(!p)continue;var f=M[p];' +
+        // Hydration re-renders nav-menu links too, same as any other anchor.
+        // If it's a known nav destination we still don't have a page for,
+        // land on the nearest captured collection rather than leaving the
+        // framework's own (live, off-origin) href in place.
+        'if(!f&&FALLBACK&&NAVSET.indexOf(p)>=0)f=FALLBACK;' +
+        'if(f)e.setAttribute("href",UP+f);}}' +
         'fix();if(document.readyState!=="complete")window.addEventListener("load",fix);' +
         'setTimeout(fix,600);setTimeout(fix,1800);setTimeout(fix,4000);' +
         'var t=null;new MutationObserver(function(){clearTimeout(t);t=setTimeout(fix,150);})' +
