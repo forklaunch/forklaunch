@@ -113,6 +113,23 @@ function fetchWithTimeout(resp, ms) {
   return Promise.race([resp.body(), new Promise(r => setTimeout(() => r(null), ms))]);
 }
 
+// Insert `script` immediately before the first </body> (case-insensitive),
+// WITHOUT going through String.replace's string-replacement form. That form
+// treats $&, $`, $', $1-$99 in the replacement as special patterns; any
+// injected script that happens to contain one of those sequences (a literal
+// '$' price prefix, a regex source, JSON with a lone "$'" substring, etc.)
+// gets silently corrupted into invalid JS — the bridge script then throws a
+// SyntaxError before window.fetch is ever patched, and every /cart/add.js
+// call falls through to the static 404 body instead. Slicing around the
+// match index inserts the text verbatim, no special-character interpretation
+// possible. If there's no </body> at all, append at the end rather than
+// dropping the script silently.
+function injectBeforeBody(html, script) {
+  const m = /<\/body>/i.exec(html);
+  if (!m) return html + script;
+  return html.slice(0, m.index) + script + html.slice(m.index);
+}
+
 (async () => {
   const result = { domain, ok: false, pages: 0, assets: 0, bytes: 0, reason: null,
                    startedAt: Date.now(), captured: [] };
@@ -602,7 +619,7 @@ function fetchWithTimeout(resp, ms) {
         'if(/^(#|mailto:|tel:|javascript:)/i.test(h))return;' +
         'e.stopImmediatePropagation();e.preventDefault();window.location.href=a.href;' +
         '},true);})();</' + 'script>';
-      html = html.replace(/<\/body>/i, navShim + '</body>');
+      html = injectBeforeBody(html, navShim);
 
       // React/Next hydration re-renders anchors from its own props and throws
       // away the hrefs we rewrote at build time — the page looks right but
@@ -630,7 +647,7 @@ function fetchWithTimeout(resp, ms) {
         'var t=null;new MutationObserver(function(){clearTimeout(t);t=setTimeout(fix,150);})' +
         '.observe(document.documentElement,{childList:true,subtree:true});' +
         '})();</' + 'script>';
-      html = html.replace(/<\/body>/i, relinkShim + '</body>');
+      html = injectBeforeBody(html, relinkShim);
 
       // Commerce bridge: answer the storefront's cart/search/filter/sort API
       // calls so add-to-cart, filtering, sorting, and search actually work.
@@ -638,19 +655,10 @@ function fetchWithTimeout(resp, ms) {
       // --hmac-secret), otherwise runs a local cart in the browser and leaves
       // filter/sort/search controls exactly as captured.
       //
-      // NOTE: passed as a replacer FUNCTION, not a string — String.replace's
-      // string form treats $&, $`, $', $1-$99 as special patterns, and the
-      // bridge's own source (e.g. the literal '$' price prefix) can contain
-      // those sequences by coincidence, silently corrupting the injected
-      // script. A function return value is inserted verbatim, no exceptions.
-      // (The other html.replace(/<\/body>/i, X + '</body>') call sites in
-      // this file below have the same latent exposure — none of their
-      // current shim text happens to contain $&/$`/$'/$<digit>, so it's
-      // never fired, but it's the same bug class. Flagged, not fixed here —
-      // out of scope for this ticket.)
-      html = html.replace(/<\/body>/i, function () {
-        return buildBridge({ apiBase: API_BASE, hmacSecret: HMAC_SECRET }) + '</body>';
-      });
+      // Uses injectBeforeBody (see its docstring) — the bridge's own source
+      // (e.g. the literal '$' price prefix) can contain $&/$`/$'/$<digit>
+      // sequences that would corrupt a string-form replace.
+      html = injectBeforeBody(html, buildBridge({ apiBase: API_BASE, hmacSecret: HMAC_SECRET }));
 
       // Storefronts often put top-level nav on <button data-menu-trigger="men">
       // rather than a link — the button opens a mega-menu in JS. Offline that
@@ -690,7 +698,7 @@ function fetchWithTimeout(resp, ms) {
         'for(var k=w.length-1;k>=0&&!m;k--){m=match(w[k]);}}' +
         'if(m) window.location.href=UP+m.f;},260);' +
         '},true);})();</' + 'script>';
-      html = html.replace(/<\/body>/i, triggerShim + '</body>');
+      html = injectBeforeBody(html, triggerShim);
 
       // React sets image srcs at runtime, so static rewriting never sees them.
       // Framework image proxies (/_next/image?url=…, /cdn-cgi/image/…) have no
@@ -723,7 +731,7 @@ function fetchWithTimeout(resp, ms) {
         '.observe(document.documentElement,{childList:true,subtree:true,attributes:true,' +
         'attributeFilter:["src","srcset"]});' +
         '})();</' + 'script>';
-      html = html.replace(/<\/body>/i, imgShim + '</body>');
+      html = injectBeforeBody(html, imgShim);
 
       // Some storefronts re-render sliders/grids from JS on load. Offline that
       // fetch fails and the component empties itself, leaving a tall blank box
@@ -746,7 +754,7 @@ function fetchWithTimeout(resp, ms) {
         'else window.addEventListener("load",sweep);' +
         'setTimeout(sweep,1500);setTimeout(sweep,3500);' +
         '})();</' + 'script>';
-      html = html.replace(/<\/body>/i, collapseShim + '</body>');
+      html = injectBeforeBody(html, collapseShim);
 
       // In demo mode, don't let account/cart/checkout links jump to the real
       // store mid-presentation. They are non-functional in the clone either
@@ -772,7 +780,7 @@ function fetchWithTimeout(resp, ms) {
             'flex-direction:column;gap:3px">' +
             items.replace(/<a /g, '<a style="color:#8ab4ff;text-decoration:none" ') +
             '</div></details></div>';
-          html = html.replace(/<\/body>/i, idx + '</body>');
+          html = injectBeforeBody(html, idx);
         }
       }
 
@@ -806,7 +814,7 @@ function fetchWithTimeout(resp, ms) {
           'try{var _a=window.open;window.open=function(u){if(u&&!local(u)){toast();return null;}' +
           'return _a.apply(window,arguments);};}catch(e){}' +
           '})();</' + 'script>';
-        html = html.replace(/<\/body>/i, navGuard + '</body>');
+        html = injectBeforeBody(html, navGuard);
       }
 
       if (CLEAN) {
@@ -827,7 +835,7 @@ function fetchWithTimeout(resp, ms) {
             document.documentElement.style.overflow='';document.body.style.overflow='';}
           f();setTimeout(f,800);setTimeout(f,2500);
           new MutationObserver(f).observe(document.body,{childList:true,subtree:true});})();</` + `script>`;
-        html = html.replace(/<\/body>/i, shim + '</body>');
+        html = injectBeforeBody(html, shim);
       }
 
       const dst = path.join(outdir, 'site', meta.file);
