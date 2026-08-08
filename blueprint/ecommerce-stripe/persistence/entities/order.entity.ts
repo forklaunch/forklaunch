@@ -12,6 +12,15 @@ export const Order = defineComplianceEntity({
   properties: {
     ...sqlBaseProperties,
     customerId: fp.string().nullable().compliance('none'),
+    // Set only for orders created via the checkout endpoint (see
+    // checkout.controller.ts) — null for orders created directly through
+    // order.controller.ts's own createOrder. It's how checkout recognizes
+    // "this cart already has an in-flight or just-created PENDING order"
+    // on a retry, instead of creating a second order (and a second
+    // payment/charge) for the same cart. Deliberately not unique: a cart
+    // can legitimately be reused for a second, later checkout once the
+    // first order it produced has moved past PENDING.
+    cartId: fp.string().nullable().index().compliance('none'),
     status: fp.enum(() => OrderStatus).compliance('none'),
     items: fp.json<OrderItemDto[]>().compliance('none'),
     // A name + street address is real PII — tagged 'pii' (not 'none') so

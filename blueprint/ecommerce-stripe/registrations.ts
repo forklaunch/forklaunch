@@ -41,6 +41,7 @@ import { OrderEventRecord } from './persistence/entities/orderEvent.entity';
 import { StripeTaxService } from './domain/services/tax.service';
 import { FlatRateShippingService } from './domain/services/shipping.service';
 import { WebhookEventService } from './domain/services/webhookEvent.service';
+import { OrderCartLookupService } from './domain/services/orderCartLookup.service';
 import { ForkOptions } from '@mikro-orm/core';
 import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
 import Stripe from 'stripe';
@@ -440,6 +441,22 @@ const serviceDependencies = runtimeDependencies.chain({
           ? resolve('EntityManager', context)
           : EntityManager,
         OtelCollector
+      )
+  },
+  /**
+   * Checkout-idempotency lookup (ECOM-09/10) — see OrderCartLookupService's
+   * doc comment for why this is its own service rather than a
+   * BaseOrderService method. Scoped, same lifetime/EntityManager-resolution
+   * pattern as OrderService/WebhookEventService.
+   */
+  OrderCartLookupService: {
+    lifetime: Lifetime.Scoped,
+    type: OrderCartLookupService,
+    factory: ({ EntityManager }, context, resolve) =>
+      new OrderCartLookupService(
+        context?.entityManagerOptions
+          ? resolve('EntityManager', context)
+          : EntityManager
       )
   },
   /**
