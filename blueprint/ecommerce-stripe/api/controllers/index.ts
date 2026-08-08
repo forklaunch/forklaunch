@@ -6,4 +6,5 @@ export * from './order.controller';
 export * from './payment.controller';
 export * from './product.controller';
 export * from './variant.controller';
+export * from './webhook.controller';
 // Remaining controllers are added incrementally as each PR lands.
