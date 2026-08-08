@@ -150,19 +150,43 @@ export class BaseOrderService<
       this.openTelemetryCollector.info('Transitioning order', transitionDto);
     }
     const entityManager = em ?? this.em;
-    const order = await entityManager.findOneOrFail(
-      this.mappers.OrderMapper.entity as typeof Order,
-      { id: transitionDto.id }
-    );
+    const entity = this.mappers.OrderMapper.entity as typeof Order;
+    const order = await entityManager.findOneOrFail(entity, {
+      id: transitionDto.id
+    });
     const currentStatus = order.status as OrderStatusType;
     const legalNextStates = ORDER_TRANSITIONS[currentStatus] ?? [];
     if (!legalNextStates.includes(transitionDto.to)) {
       throw new IllegalOrderTransitionError(currentStatus, transitionDto.to);
     }
+
+    // Atomic conditional transition, same nativeUpdate idiom as
+    // Inventory.adjustStock. The status we validated against goes in the
+    // WHERE clause, so the check and the write cannot be split by a
+    // concurrent transition. Read-then-write here let two callers both read
+    // PENDING, both pass the legality check, and both persist — which made
+    // order.controller.ts enqueue two order events for one order, and the
+    // worker decrement inventory twice. Webhook retries make that a routine
+    // occurrence, not a rare race.
+    const affected = await entityManager.nativeUpdate(
+      entity,
+      { id: transitionDto.id, status: currentStatus },
+      { status: transitionDto.to }
+    );
+
+    if (affected === 0) {
+      // Someone else transitioned this order between our read and our write.
+      // Re-read to report the status it actually landed in.
+      const current = await entityManager.findOneOrFail(entity, {
+        id: transitionDto.id
+      });
+      throw new IllegalOrderTransitionError(
+        current.status as OrderStatusType,
+        transitionDto.to
+      );
+    }
+
     entityManager.assign(order, { status: transitionDto.to });
-    await entityManager.transactional(async (innerEm) => {
-      await innerEm.persist(order);
-    });
     return this.mappers.OrderMapper.toDto(
       order as InferEntity<MapperEntities['OrderMapper']>
     );
