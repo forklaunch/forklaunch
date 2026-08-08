@@ -402,12 +402,18 @@ importers:
       '@forklaunch/implementation-ecommerce-base':
         specifier: workspace:*
         version: link:../implementations/ecommerce/base
+      '@forklaunch/implementation-worker-redis':
+        specifier: workspace:*
+        version: link:../implementations/worker/redis
       '@forklaunch/infrastructure-redis':
         specifier: ^1.4.6
         version: 1.4.6(@opentelemetry/api@1.9.1)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)
       '@forklaunch/interfaces-ecommerce':
         specifier: workspace:*
         version: link:../interfaces/ecommerce
+      '@forklaunch/interfaces-worker':
+        specifier: workspace:*
+        version: link:../interfaces/worker
       '@forklaunch/validator':
         specifier: ^1.2.20
         version: 1.2.20
