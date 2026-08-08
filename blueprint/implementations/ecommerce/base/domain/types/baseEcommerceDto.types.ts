@@ -2,12 +2,15 @@ import {
   CartDto,
   CreateCartDto,
   CreateInventoryDto,
+  CreateOrderDto,
   CreateProductDto,
   CreateVariantDto,
   InventoryDto,
+  OrderDto,
   ProductDto,
   UpdateCartDto,
   UpdateInventoryDto,
+  UpdateOrderDto,
   UpdateProductDto,
   UpdateVariantDto,
   VariantDto
@@ -42,3 +45,10 @@ export type BaseCartDtos = {
 };
 
 // Remaining entities' Dto aggregates are added incrementally as each PR lands.
+
+// order dto types
+export type BaseOrderDtos = {
+  OrderMapper: OrderDto;
+  CreateOrderMapper: CreateOrderDto;
+  UpdateOrderMapper: UpdateOrderDto;
+};
