@@ -5,6 +5,7 @@ use library::LibraryCommand;
 use module::ModuleCommand;
 use router::RouterCommand;
 use service::ServiceCommand;
+use storefront::StorefrontCommand;
 use worker::WorkerCommand;
 
 use crate::{CliCommand, core::command::command};
@@ -14,6 +15,7 @@ pub(crate) mod library;
 pub(crate) mod module;
 pub(crate) mod router;
 pub(crate) mod service;
+pub(crate) mod storefront;
 pub(crate) mod worker;
 
 // TODO: add injected token into struct
@@ -24,6 +26,7 @@ pub(crate) struct InitCommand {
     module: ModuleCommand,
     router: RouterCommand,
     service: ServiceCommand,
+    storefront: StorefrontCommand,
     worker: WorkerCommand,
 }
 
@@ -35,6 +38,7 @@ impl InitCommand {
             module: ModuleCommand::new(),
             router: RouterCommand::new(),
             service: ServiceCommand::new(),
+            storefront: StorefrontCommand::new(),
             worker: WorkerCommand::new(),
         }
     }
@@ -50,6 +54,7 @@ impl CliCommand for InitCommand {
             .subcommand(self.module.command())
             .subcommand(self.router.command())
             .subcommand(self.service.command())
+            .subcommand(self.storefront.command())
             .subcommand(self.worker.command())
     }
 
@@ -60,6 +65,7 @@ impl CliCommand for InitCommand {
             Some(("module", sub_matches)) => self.module.handler(sub_matches),
             Some(("service", sub_matches)) => self.service.handler(sub_matches),
             Some(("router", sub_matches)) => self.router.handler(sub_matches),
+            Some(("storefront", sub_matches)) => self.storefront.handler(sub_matches),
             Some(("worker", sub_matches)) => self.worker.handler(sub_matches),
             _ => unreachable!(),
         }
