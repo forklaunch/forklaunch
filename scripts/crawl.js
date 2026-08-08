@@ -29,6 +29,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { buildBridge } = require('./bridge.js');
+const { buildCommerceOverlay } = require('./commerce.js');
 
 const VIEWPORT = { width: 1280, height: 800 };
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
@@ -626,6 +627,26 @@ function injectBeforeBody(html, script) {
           : `href="https://${domain}${p}"`;
       });
 
+      // Product-card click nav fix (demo mode only): many themes (Taylor
+      // Stitch especially) rewrite their own product/collection card hrefs
+      // to "#" at RUNTIME for client-side routing — offline, that router
+      // can't resolve anything, so the click dead-ends even though the href
+      // above was already rewritten to a perfectly good local .html file.
+      // Stamp the (already-rewritten, so it's the LOCAL destination) href
+      // onto a data-fl-href attribute the theme's JS has no reason to ever
+      // touch, so a delegated click handler (see navFlHrefShim below) can
+      // always recover the real destination regardless of what the theme
+      // does to the href attribute itself. Scoped to anchors that resolved
+      // to a captured .html file, i.e. exactly the links that are actually
+      // clickable in the clone.
+      if (CLEAN) {
+        html = html.replace(/<a\b([^>]*?)\shref="([^"]*\.html(?:[?#][^"]*)?)"([^>]*)>/gi,
+          (m, pre, href, post) => {
+            if (/\bdata-fl-href=/.test(pre) || /\bdata-fl-href=/.test(post)) return m;
+            return `<a${pre} href="${href}"${post} data-fl-href="${href}">`;
+          });
+      }
+
       // responsive-image pathname fallback
       html = html.replace(/(https?:)?\/\/[a-z0-9.-]+\/(?:cdn|s\/files)\/[^\s"')]+/gi, (m) => {
         try {
@@ -695,6 +716,35 @@ function injectBeforeBody(html, script) {
         'e.stopImmediatePropagation();e.preventDefault();window.location.href=a.href;' +
         '},true);})();</' + 'script>';
       html = injectBeforeBody(html, navShim);
+
+      // Product-card click nav fix (demo mode only, see the data-fl-href
+      // stamping pass above). navShim (just above) already recovers a click
+      // whose CURRENT href attribute still says "*.html" — but themes like
+      // Taylor Stitch rewrite their own product/collection card hrefs to
+      // "#" at page-JS-init time, well before any click, specifically so
+      // their own client-side router owns the navigation. By the time a
+      // click happens the href is already mangled and navShim's own check
+      // (which reads the live href) never matches. data-fl-href is a
+      // custom attribute the theme's routing JS has no reason to read or
+      // write, so it still holds the real local destination — this
+      // listener reads THAT instead of the (possibly mangled) href.
+      // Capture-phase on window, same as navShim, so it runs before the
+      // theme's own bubble-phase card handler ever fires. Real form
+      // controls/variant swatches nested inside a card (radio/checkbox/
+      // select/button/swatch elements) are excluded so picking a color or
+      // size still behaves normally instead of navigating away.
+      if (CLEAN) {
+        const flHrefShim = '<script>(function(){window.addEventListener("click",function(e){' +
+          'var t=e.target;if(!t||!t.closest)return;' +
+          'var host=t.closest("[data-fl-href]");if(!host)return;' +
+          'var ctrl=t.closest&&t.closest(\'input,select,textarea,button,[role="radio"],' +
+          '[type="radio"],[type="checkbox"],[class*="swatch" i],[class*="variant" i]\');' +
+          'if(ctrl&&host.contains(ctrl)&&ctrl!==host)return;' +   // let real controls behave normally
+          'var href=host.getAttribute("data-fl-href");if(!href)return;' +
+          'e.stopImmediatePropagation();e.preventDefault();window.location.href=href;' +
+          '},true);})();</' + 'script>';
+        html = injectBeforeBody(html, flHrefShim);
+      }
 
       // React/Next hydration re-renders anchors from its own props and throws
       // away the hrefs we rewrote at build time — the page looks right but
@@ -985,6 +1035,57 @@ function injectBeforeBody(html, script) {
           f();setTimeout(f,800);setTimeout(f,2500);
           new MutationObserver(f).observe(document.body,{childList:true,subtree:true});})();</` + `script>`;
         html = injectBeforeBody(html, shim);
+      }
+
+      // "Store paused" neutralizer (demo mode only). Some Shopify stores
+      // (merchant-paused, e.g. shopseeti.com at the time this was written)
+      // render a system announcement bar reading "The Store is Paused For
+      // Now" and mark every product Sold Out. The Sold Out state doesn't
+      // need fixing — the commerce overlay injected below always ships its
+      // own guaranteed Add to Cart button on product pages regardless of
+      // what the theme's own (offline-broken) buy button says — but the
+      // announcement banner is a jarring, obviously-wrong artifact in a
+      // demo and is worth stripping. Matched generically on the message
+      // text (/store is paused/i), not on any store-specific selector, so
+      // it applies to any storefront that shows the same Shopify system
+      // banner rather than just the one this was diagnosed against.
+      if (CLEAN) {
+        const pausedShim = '<script>(function(){' +
+          'function sweep(){' +
+          'var all=document.querySelectorAll("body *");' +
+          'for(var i=0;i<all.length;i++){var e=all[i];' +
+          'var t=(e.textContent||"").trim();' +
+          'if(!t||t.length>300||!/store is paused/i.test(t))continue;' +
+          // Walk up from the matching (often innermost) element to the
+          // largest ancestor that still looks banner-sized — a handful of
+          // descendants and a short combined text — so the whole bar gets
+          // hidden rather than just the text node's immediate wrapper.
+          'var node=e;' +
+          'while(node.parentElement&&node.parentElement!==document.body&&' +
+          'node.parentElement.querySelectorAll("*").length<25&&' +
+          '(node.parentElement.textContent||"").trim().length<400){' +
+          'node=node.parentElement;}' +
+          'node.style.display="none";}}' +
+          'sweep();document.addEventListener("DOMContentLoaded",sweep);' +
+          'setTimeout(sweep,500);setTimeout(sweep,1500);' +
+          'new MutationObserver(sweep).observe(document.documentElement,{childList:true,subtree:true});' +
+          '})();</' + 'script>';
+        html = injectBeforeBody(html, pausedShim);
+      }
+
+      // ForkLaunch commerce overlay (demo mode only) — the piece that turns
+      // the clone into something actually shoppable end-to-end: a cart
+      // button + drawer, a full checkout page, and an order-confirmation
+      // screen, plus a guaranteed Add to Cart button on product pages (see
+      // commerce.js's own docstring — this is the same overlay proven by
+      // hand against shopseeti.com and taylorstitch.com, now baked into the
+      // capture itself instead of hand-injected afterward). Injected last,
+      // via injectBeforeBody — never html.replace's string form, which
+      // corrupts injected scripts containing literal '$' sequences (this
+      // one has several, e.g. the '$' price prefix — see injectBeforeBody's
+      // own docstring above).
+      if (CLEAN) {
+        html = injectBeforeBody(html, buildCommerceOverlay());
       }
 
       const dst = path.join(outdir, 'site', meta.file);
