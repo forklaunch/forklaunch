@@ -3,6 +3,12 @@ import { handlers, schemaValidator, string, unknown } from '../../schema';
 import { OrderStatus } from '@forklaunch/interfaces-ecommerce/types';
 import { default as Stripe, default as stripe } from 'stripe';
 import {
+  getPaypalAmountCents,
+  getPaypalCurrency,
+  getPaypalRelatedOrderId,
+  getPaypalResourceId,
+  PaypalWebhookEventDto,
+  PaypalWebhookEventSchema,
   PaypalWebhookHeadersSchema,
   StripeWebhookHeadersSchema
 } from '../../domain/schemas/webhook.schema';
@@ -209,48 +215,17 @@ export const handleStripeWebhook = handlers.post(
     }
 
     await webhookEventServiceFactory().markProcessed({
+      provider: 'stripe',
       providerEventId: event.id
     });
     res.status(200).send('Webhook event processed');
   }
 );
 
-interface PaypalWebhookEvent {
-  id: string;
-  event_type: string;
-  resource: {
-    id?: string;
-    supplementary_data?: {
-      related_ids?: {
-        order_id?: string;
-      };
-    };
-    purchase_units?: {
-      amount?: { value?: string; currency_code?: string };
-    }[];
-  };
-}
-
-function isPaypalWebhookEvent(body: unknown): body is PaypalWebhookEvent {
-  return (
-    typeof body === 'object' &&
-    body !== null &&
-    typeof (body as { id?: unknown }).id === 'string' &&
-    typeof (body as { event_type?: unknown }).event_type === 'string' &&
-    typeof (body as { resource?: unknown }).resource === 'object' &&
-    (body as { resource?: unknown }).resource !== null
-  );
-}
-
-/** Major-units decimal string (PayPal's amount format, e.g. "54.00") -> integer cents. */
-function toCents(value: string): number {
-  return Math.round(Number.parseFloat(value) * 100);
-}
-
 async function handlePaypalOrderApproved(
-  event: PaypalWebhookEvent
+  event: PaypalWebhookEventDto
 ): Promise<void> {
-  const providerRef = event.resource.id;
+  const providerRef = getPaypalResourceId(event);
   if (!providerRef) {
     openTelemetryCollector.error(
       'PayPal CHECKOUT.ORDER.APPROVED event missing resource.id — cannot resolve payment',
@@ -276,9 +251,8 @@ async function handlePaypalOrderApproved(
   // trusting it enough to transition the order (and drive the inventory
   // decrement that comes with it). Purely a drift/bug detector, same
   // reasoning as handleStripePaymentSucceeded above.
-  const amount = event.resource.purchase_units?.[0]?.amount;
-  const eventAmountCents = amount?.value ? toCents(amount.value) : undefined;
-  const eventCurrency = amount?.currency_code?.toLowerCase();
+  const eventAmountCents = getPaypalAmountCents(event);
+  const eventCurrency = getPaypalCurrency(event);
   if (
     eventAmountCents === undefined ||
     eventCurrency === undefined ||
@@ -303,11 +277,11 @@ async function handlePaypalOrderApproved(
 }
 
 async function handlePaypalCaptureDenied(
-  event: PaypalWebhookEvent
+  event: PaypalWebhookEventDto
 ): Promise<void> {
   // A capture's own id is NOT the order id we stored as providerRef —
   // PayPal links the two via supplementary_data.related_ids.order_id.
-  const providerRef = event.resource.supplementary_data?.related_ids?.order_id;
+  const providerRef = getPaypalRelatedOrderId(event);
   if (!providerRef) {
     openTelemetryCollector.error(
       'PayPal PAYMENT.CAPTURE.DENIED event missing resource.supplementary_data.related_ids.order_id — cannot resolve payment',
@@ -336,7 +310,11 @@ export const handlePaypalWebhook = handlers.post(
     // signature is verified by hand below instead.
     access: 'public',
     summary: "Handle a PayPal order-approval/capture-denial webhook event (PayPal's own signature verification, not this app's HMAC)",
-    body: unknown,
+    // Runs through the schema pipeline like every other endpoint now —
+    // previously `unknown`, with shape validation duck-typed by hand via an
+    // inline type guard (see webhook.schema.ts's PaypalWebhookEventSchema
+    // doc comment for why that moved).
+    body: PaypalWebhookEventSchema,
     requestHeaders: PaypalWebhookHeadersSchema,
     responses: {
       200: string,
@@ -345,10 +323,6 @@ export const handlePaypalWebhook = handlers.post(
   },
   async (req, res) => {
     const event = req.body;
-    if (!isPaypalWebhookEvent(event)) {
-      res.status(400).send('Malformed webhook payload');
-      return;
-    }
 
     // PayPal verifies the transmission signature against its own record of
     // what it sent (matched by transmission id) — unlike Stripe, this does
@@ -409,6 +383,7 @@ export const handlePaypalWebhook = handlers.post(
     }
 
     await webhookEventServiceFactory().markProcessed({
+      provider: 'paypal',
       providerEventId: event.id
     });
     res.status(200).send('Webhook event processed');
