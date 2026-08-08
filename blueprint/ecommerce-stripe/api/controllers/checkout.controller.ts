@@ -11,6 +11,9 @@ const cartServiceFactory = ci.scopedResolver(tokens.CartService);
 const variantServiceFactory = ci.scopedResolver(tokens.VariantService);
 const inventoryServiceFactory = ci.scopedResolver(tokens.InventoryService);
 const orderServiceFactory = ci.scopedResolver(tokens.OrderService);
+const orderCartLookupServiceFactory = ci.scopedResolver(
+  tokens.OrderCartLookupService
+);
 const taxServiceFactory = ci.scopedResolver(tokens.TaxService);
 const shippingServiceFactory = ci.scopedResolver(tokens.ShippingService);
 const stripePaymentServiceFactory = ci.scopedResolver(tokens.PaymentService);
@@ -73,96 +76,137 @@ export const checkout = handlers.post(
       return;
     }
 
-    // Stock check up front, before anything is priced or persisted — a
-    // customer should never be told an order succeeded and then find out
-    // separately that an item was unavailable.
-    const stockChecks = await Promise.all(
-      cart.items.map((item) =>
-        inventoryServiceFactory().checkStock({
-          variantId: item.variantId,
-          requested: item.quantity
+    // Checkout idempotency (ECOM-09/10 retry safety). If this cart already
+    // has a still-PENDING order — e.g. an earlier checkout call for it got
+    // as far as creating the order but never got as far as (or failed at)
+    // creating the payment, see the payment try/catch below — reuse that
+    // order rather than creating a second one, so a retry doesn't also end
+    // up creating a second live payment for the same cart.
+    //
+    // Scoped to PENDING specifically, not just cartId: a cart can
+    // legitimately be reused for a second, later checkout once the order it
+    // produced has moved past PENDING (see order.entity.ts's cartId
+    // comment) — matching on cartId alone would wrongly "reuse" (and thus
+    // block a fresh checkout for) a cart whose prior order already
+    // succeeded or was cancelled. OrderCartLookupService's query already
+    // encodes this by filtering on status = PENDING, not just cartId.
+    const existingPendingOrderId =
+      await orderCartLookupServiceFactory().findPendingOrderIdByCartId(
+        cart.id
+      );
+
+    let order;
+    if (existingPendingOrderId) {
+      order = await orderServiceFactory().getOrder({
+        id: existingPendingOrderId
+      });
+      openTelemetryCollector.info(
+        'Reusing existing pending order for checkout retry',
+        { cartId: cart.id, orderId: order.id }
+      );
+    } else {
+      // Stock check up front, before anything is priced or persisted — a
+      // customer should never be told an order succeeded and then find out
+      // separately that an item was unavailable.
+      const stockChecks = await Promise.all(
+        cart.items.map((item) =>
+          inventoryServiceFactory().checkStock({
+            variantId: item.variantId,
+            requested: item.quantity
+          })
+        )
+      );
+      const outOfStock = stockChecks.filter((check) => !check.available);
+      if (outOfStock.length) {
+        res
+          .status(400)
+          .send(
+            `Insufficient stock for variant(s): ${outOfStock
+              .map((c) => c.variantId)
+              .join(', ')}`
+          );
+        return;
+      }
+
+      // Price each line from the variant's current price — the cart itself
+      // only carries variantId + quantity, never a price (prices can move
+      // between add-to-cart and checkout; checkout always uses the price at
+      // the moment of purchase).
+      const variants = await Promise.all(
+        cart.items.map((item) =>
+          variantServiceFactory().getVariant({ id: item.variantId })
+        )
+      );
+      const orderItems = cart.items.map((item, i) => ({
+        variantId: item.variantId,
+        quantity: item.quantity,
+        unitPriceCents: variants[i].priceCents
+      }));
+
+      const subtotalCents = orderItems.reduce(
+        (sum, item) => sum + item.quantity * item.unitPriceCents,
+        0
+      );
+
+      // No promo code in this slice — discount is always 0 until the
+      // promotions PR lands (see the module-level comment above).
+      const discountCents = 0;
+      const discountedSubtotalCents = Math.max(
+        0,
+        subtotalCents - discountCents
+      );
+
+      const [taxResult, shippingResult] = await Promise.all([
+        taxServiceFactory().calculate({
+          // Taxed on the discounted amount, as one line — not prorated
+          // across the original per-item lines, a reasonable v1
+          // simplification.
+          lineItemCents: [discountedSubtotalCents],
+          shippingAddress: req.body.shippingAddress
+        }),
+        shippingServiceFactory().calculate({
+          shippingAddress: req.body.shippingAddress,
+          subtotalCents: discountedSubtotalCents
         })
-      )
-    );
-    const outOfStock = stockChecks.filter((check) => !check.available);
-    if (outOfStock.length) {
-      res
-        .status(400)
-        .send(
-          `Insufficient stock for variant(s): ${outOfStock
-            .map((c) => c.variantId)
-            .join(', ')}`
+      ]);
+      if (taxResult.estimated) {
+        openTelemetryCollector.warn(
+          'Order tax is a flat estimate — Stripe Tax was unreachable',
+          { cartId: cart.id }
         );
-      return;
-    }
+      }
 
-    // Price each line from the variant's current price — the cart itself
-    // only carries variantId + quantity, never a price (prices can move
-    // between add-to-cart and checkout; checkout always uses the price at
-    // the moment of purchase).
-    const variants = await Promise.all(
-      cart.items.map((item) =>
-        variantServiceFactory().getVariant({ id: item.variantId })
-      )
-    );
-    const orderItems = cart.items.map((item, i) => ({
-      variantId: item.variantId,
-      quantity: item.quantity,
-      unitPriceCents: variants[i].priceCents
-    }));
+      // No gift card in this slice — applied amount is always 0 until the
+      // promotions PR lands (see the module-level comment above).
+      const giftCardCents = 0;
+      const totalCents = Math.max(
+        0,
+        discountedSubtotalCents +
+          taxResult.taxCents +
+          shippingResult.shippingCents -
+          giftCardCents
+      );
 
-    const subtotalCents = orderItems.reduce(
-      (sum, item) => sum + item.quantity * item.unitPriceCents,
-      0
-    );
-
-    // No promo code in this slice — discount is always 0 until the
-    // promotions PR lands (see the module-level comment above).
-    const discountCents = 0;
-    const discountedSubtotalCents = Math.max(0, subtotalCents - discountCents);
-
-    const [taxResult, shippingResult] = await Promise.all([
-      taxServiceFactory().calculate({
-        // Taxed on the discounted amount, as one line — not prorated across
-        // the original per-item lines, a reasonable v1 simplification.
-        lineItemCents: [discountedSubtotalCents],
-        shippingAddress: req.body.shippingAddress
-      }),
-      shippingServiceFactory().calculate({
-        shippingAddress: req.body.shippingAddress,
-        subtotalCents: discountedSubtotalCents
-      })
-    ]);
-    if (taxResult.estimated) {
-      openTelemetryCollector.warn(
-        'Order tax is a flat estimate — Stripe Tax was unreachable',
-        { cartId: cart.id }
+      // 3rd arg is the cartId association (see order.mappers.ts's
+      // CreateOrderMapper.toEntity) — what makes the reuse lookup above
+      // possible on a future retry for this same cart.
+      order = await orderServiceFactory().createOrder(
+        {
+          customerId: cart.customerId,
+          items: orderItems,
+          shippingAddress: req.body.shippingAddress,
+          subtotalCents,
+          discountCents,
+          taxCents: taxResult.taxCents,
+          taxBreakdown: taxResult.breakdown,
+          shippingCents: shippingResult.shippingCents,
+          giftCardCents,
+          totalCents
+        },
+        undefined,
+        cart.id
       );
     }
-
-    // No gift card in this slice — applied amount is always 0 until the
-    // promotions PR lands (see the module-level comment above).
-    const giftCardCents = 0;
-    const totalCents = Math.max(
-      0,
-      discountedSubtotalCents +
-        taxResult.taxCents +
-        shippingResult.shippingCents -
-        giftCardCents
-    );
-
-    const order = await orderServiceFactory().createOrder({
-      customerId: cart.customerId,
-      items: orderItems,
-      shippingAddress: req.body.shippingAddress,
-      subtotalCents,
-      discountCents,
-      taxCents: taxResult.taxCents,
-      taxBreakdown: taxResult.breakdown,
-      shippingCents: shippingResult.shippingCents,
-      giftCardCents,
-      totalCents
-    });
 
     // Payment is created against the order's total, routed by provider the
     // same way payment.controller.ts's own createPayment endpoint routes
@@ -209,7 +253,27 @@ export const checkout = handlers.post(
     // immediately after order creation, as this endpoint used to) would
     // strand the customer with an empty cart and a PENDING order they
     // can't easily retry from if payment initiation fails above.
-    await cartServiceFactory().clearCart({ id: cart.id });
+    //
+    // Guarded on its own, separate from the payment try/catch above: by
+    // this point a Payment row and a live provider PaymentIntent/PayPal
+    // order both already exist, so checkout has, in every way that
+    // matters, already succeeded — a clearCart failure here must not turn
+    // into an unhandled 500. Letting it propagate would (a) tell the
+    // client checkout failed when it didn't, and (b) with the cart
+    // deliberately left intact for retry (same reasoning as the payment
+    // catch above), invite a retry that — thanks to the cartId reuse above
+    // — would not create a second order, but *would* create a second live
+    // payment for the reused order, since nothing here dedupes Payment the
+    // way the reuse lookup dedupes Order. A stale, uncleared cart is a
+    // minor, recoverable inconvenience; a duplicate charge is not.
+    try {
+      await cartServiceFactory().clearCart({ id: cart.id });
+    } catch (error) {
+      openTelemetryCollector.error(
+        'Cart could not be cleared after successful payment initiation — order and payment both succeeded, continuing',
+        { orderId: order.id, cartId: cart.id, error }
+      );
+    }
 
     openTelemetryCollector.info('Checkout completed', {
       cartId: cart.id,
