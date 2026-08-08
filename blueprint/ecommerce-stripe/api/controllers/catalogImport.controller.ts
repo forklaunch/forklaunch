@@ -1,14 +1,6 @@
 import { NotFoundError } from '@mikro-orm/core';
-import {
-  array,
-  boolean,
-  handlers,
-  number,
-  optional,
-  record,
-  schemaValidator,
-  string
-} from '../../schema';
+import { array, handlers, number, schemaValidator } from '../../schema';
+import { ImportProductSchema } from '../../domain/schemas/catalogImport.schema';
 import { ci, tokens } from '../../bootstrapper';
 
 const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
@@ -16,43 +8,6 @@ const productServiceFactory = ci.scopedResolver(tokens.ProductService);
 const variantServiceFactory = ci.scopedResolver(tokens.VariantService);
 const inventoryServiceFactory = ci.scopedResolver(tokens.InventoryService);
 const HMAC_SECRET_KEY = ci.resolve(tokens.HMAC_SECRET_KEY);
-
-const ImportOptionSchema = {
-  name: string,
-  isPackQuantity: boolean,
-  values: array(string)
-};
-
-const ImportImageSchema = {
-  src: string,
-  position: number
-};
-
-const ImportVariantSchema = {
-  externalId: string,
-  sku: optional(string),
-  title: string,
-  optionValues: optional(record(string, string)),
-  priceCents: number,
-  compareAtPriceCents: optional(number),
-  requiresShipping: optional(boolean),
-  /** Seed stock — no reservation semantics in v1 (ECOM-04). */
-  initialStock: optional(number)
-};
-
-const ImportProductSchema = {
-  externalId: string,
-  handle: string,
-  sourceUrl: optional(string),
-  title: string,
-  descriptionHtml: optional(string),
-  vendor: optional(string),
-  productType: optional(string),
-  tags: optional(array(string)),
-  options: optional(array(ImportOptionSchema)),
-  images: optional(array(ImportImageSchema)),
-  variants: array(ImportVariantSchema)
-};
 
 /**
  * The bulk catalog-import door — this is the one API surface Guild's
