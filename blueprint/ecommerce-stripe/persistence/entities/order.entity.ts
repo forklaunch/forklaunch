@@ -6,6 +6,7 @@ import {
   TaxLineDto
 } from '@forklaunch/interfaces-ecommerce/types';
 import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
+import { raw } from '@mikro-orm/core';
 
 export const Order = defineComplianceEntity({
   name: 'Order',
@@ -17,9 +18,15 @@ export const Order = defineComplianceEntity({
     // order.controller.ts's own createOrder. It's how checkout recognizes
     // "this cart already has an in-flight or just-created PENDING order"
     // on a retry, instead of creating a second order (and a second
-    // payment/charge) for the same cart. Deliberately not unique: a cart
-    // can legitimately be reused for a second, later checkout once the
-    // first order it produced has moved past PENDING.
+    // payment/charge) for the same cart. Not globally unique — a cart can
+    // legitimately be reused for a second, later checkout once the first
+    // order it produced has moved past PENDING — but the partial unique
+    // index below (cartId where status = PENDING) guarantees at most one
+    // PENDING order can exist per cart at a time, so two concurrent
+    // checkout calls for the same cart (a double-clicked "Pay", or a
+    // client retry racing the original) can't both create a live
+    // order/payment. See checkout.controller.ts's handling of the
+    // resulting UniqueConstraintViolationException.
     cartId: fp.string().nullable().index().compliance('none'),
     status: fp.enum(() => OrderStatus).compliance('none'),
     items: fp.json<OrderItemDto[]>().compliance('none'),
@@ -40,5 +47,24 @@ export const Order = defineComplianceEntity({
     // pre-tax discount) — 0 when no gift card was used.
     giftCardCents: fp.integer().compliance('none'),
     totalCents: fp.integer().compliance('none')
-  }
+  },
+  uniques: [
+    {
+      name: 'order_cart_id_pending_unique',
+      // A partial unique index, not a plain `properties: ['cartId']`
+      // unique — cartId is intentionally reusable across orders once the
+      // earlier order for that cart has moved past PENDING (see the
+      // cartId comment above), so a blanket unique constraint would be
+      // wrong. Postgres has no declarative "unique except when X"; a WHERE
+      // clause on the index is the standard way to express "unique among
+      // PENDING rows only", hence the raw expression here instead of a
+      // plain properties-based unique like WebhookEvent's (see
+      // webhookEvent.entity.ts).
+      expression: (columns, table, indexName) =>
+        raw(
+          `create unique index ?? on ?? (??) where ?? = '${OrderStatus.PENDING}'`,
+          [indexName, table, columns.cartId, columns.status]
+        )
+    }
+  ]
 });

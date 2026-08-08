@@ -5,6 +5,7 @@ import {
 } from '../../domain/schemas/checkout.schema';
 import { PaymentProvider } from '../../domain/enum/paymentProvider.enum';
 import { ci, tokens } from '../../bootstrapper';
+import { UniqueConstraintViolationException } from '@mikro-orm/core';
 
 const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 const cartServiceFactory = ci.scopedResolver(tokens.CartService);
@@ -190,22 +191,58 @@ export const checkout = handlers.post(
       // 3rd arg is the cartId association (see order.mappers.ts's
       // CreateOrderMapper.toEntity) — what makes the reuse lookup above
       // possible on a future retry for this same cart.
-      order = await orderServiceFactory().createOrder(
-        {
-          customerId: cart.customerId,
-          items: orderItems,
-          shippingAddress: req.body.shippingAddress,
-          subtotalCents,
-          discountCents,
-          taxCents: taxResult.taxCents,
-          taxBreakdown: taxResult.breakdown,
-          shippingCents: shippingResult.shippingCents,
-          giftCardCents,
-          totalCents
-        },
-        undefined,
-        cart.id
-      );
+      //
+      // The existingPendingOrderId lookup above is a plain findOne, not a
+      // lock — two concurrent checkout calls for the same cart (a
+      // double-clicked "Pay", or a client retry racing the original) can
+      // both read no-pending-order and both reach this createOrder call.
+      // order.entity.ts's partial unique index on (cartId where status =
+      // PENDING) is what actually closes that race: only one of the two
+      // inserts can succeed, and the loser gets a
+      // UniqueConstraintViolationException here rather than silently
+      // creating a second order (and, worse, a second live payment) for
+      // the same cart.
+      try {
+        order = await orderServiceFactory().createOrder(
+          {
+            customerId: cart.customerId,
+            items: orderItems,
+            shippingAddress: req.body.shippingAddress,
+            subtotalCents,
+            discountCents,
+            taxCents: taxResult.taxCents,
+            taxBreakdown: taxResult.breakdown,
+            shippingCents: shippingResult.shippingCents,
+            giftCardCents,
+            totalCents
+          },
+          undefined,
+          cart.id
+        );
+      } catch (error) {
+        if (!(error instanceof UniqueConstraintViolationException)) {
+          throw error;
+        }
+        // Lost the race — the same insert-first-then-look-up-the-winner
+        // pattern WebhookEventService.beginProcessing uses for its own
+        // unique-constraint race. The winning request's order is now
+        // committed (that's what caused our own insert to fail), so this
+        // lookup will find it.
+        const raceWinnerOrderId =
+          await orderCartLookupServiceFactory().findPendingOrderIdByCartId(
+            cart.id
+          );
+        if (!raceWinnerOrderId) {
+          throw error;
+        }
+        order = await orderServiceFactory().getOrder({
+          id: raceWinnerOrderId
+        });
+        openTelemetryCollector.info(
+          'Lost race to a concurrent checkout for this cart — reusing the pending order it created',
+          { cartId: cart.id, orderId: order.id }
+        );
+      }
     }
 
     // Payment is created against the order's total, routed by provider the
