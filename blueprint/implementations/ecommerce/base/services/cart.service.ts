@@ -173,6 +173,20 @@ export class BaseCartService<
     if (this.evaluatedTelemetryOptions.logging) {
       this.openTelemetryCollector.info('Adding cart item', addItemDto);
     }
+    // The schema layer types quantity as a bare number (the codebase-wide
+    // convention), so nothing upstream rejects zero, negatives or fractions.
+    // That matters here because cart quantities flow straight into checkout
+    // pricing and the worker's stock deltas: a negative quantity drives the
+    // order subtotal down (and the final Math.max(0, ...) clamp turns a
+    // crafted cart into a ~$0 total), and flips the worker's `-quantity`
+    // into a positive delta that inflates stock for goods never removed.
+    // Enforce the invariant here, where it holds regardless of transport.
+    if (!Number.isInteger(addItemDto.quantity) || addItemDto.quantity < 1) {
+      throw new Error(
+        `Cart item quantity must be a positive integer, received ${addItemDto.quantity}`
+      );
+    }
+
     const entityManager = em ?? this.em;
     const cart = await entityManager.findOneOrFail(
       this.mappers.CartMapper.entity as typeof Cart,
