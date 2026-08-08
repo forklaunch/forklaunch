@@ -127,3 +127,10 @@ export type {
   ProductMappers,
   VariantMappers
 } from '@forklaunch/implementation-ecommerce-base/types';
+
+// Same TS2883 anchor requirement as above, but for the two payment-provider
+// packages: their StripePaymentMappers/PaypalPaymentMappers types are what
+// the dependency container infers through StripePaymentService/
+// PaypalPaymentService's constructor generics.
+export type { StripePaymentMappers } from '@forklaunch/implementation-ecommerce-stripe/types';
+export type { PaypalPaymentMappers } from '@forklaunch/implementation-ecommerce-paypal/types';
