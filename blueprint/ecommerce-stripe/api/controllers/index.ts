@@ -1,5 +1,6 @@
 export * from './cart.controller';
 export * from './catalogImport.controller';
+export * from './checkout.controller';
 export * from './inventory.controller';
 export * from './order.controller';
 export * from './payment.controller';
