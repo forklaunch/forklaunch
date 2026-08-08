@@ -40,6 +40,8 @@
     "@forklaunch/express": "^1.2.34",
     "@forklaunch/hyper-express": "^1.2.34",
     "@forklaunch/implementation-ecommerce-base": "workspace:*",
+    "@forklaunch/implementation-ecommerce-paypal": "workspace:*",
+    "@forklaunch/implementation-ecommerce-stripe": "workspace:*",
     "@forklaunch/implementation-worker-redis": "workspace:*",
     "@forklaunch/infrastructure-redis": "^1.4.6",
     "@forklaunch/interfaces-ecommerce": "workspace:*",
