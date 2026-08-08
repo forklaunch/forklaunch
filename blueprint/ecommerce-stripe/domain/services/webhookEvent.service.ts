@@ -47,8 +47,12 @@ export class WebhookEventService {
         throw error;
       }
       // Someone else's insert (this request or an earlier delivery) won
-      // the race — find out whether it actually finished.
+      // the race — find out whether it actually finished. Matched on the
+      // full (provider, providerEventId) composite, same as the unique
+      // constraint itself — providerEventId alone is only unique per
+      // provider (see WebhookEvent's entity comment).
       const existing = await this.em.findOneOrFail(WebhookEvent, {
+        provider: params.provider,
         providerEventId: params.providerEventId
       });
       if (existing.processed) {
@@ -67,9 +71,11 @@ export class WebhookEventService {
   }
 
   async markProcessed(params: {
+    provider: string;
     providerEventId: string;
   }): Promise<void> {
     const event = await this.em.findOneOrFail(WebhookEvent, {
+      provider: params.provider,
       providerEventId: params.providerEventId
     });
     this.em.assign(event, { processed: true });
