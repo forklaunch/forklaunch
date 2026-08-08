@@ -762,6 +762,72 @@ function injectBeforeBody(html, script) {
         '},true);})();</' + 'script>';
       html = injectBeforeBody(html, triggerShim);
 
+      // Buy button "present but not clickable": third-party app scripts
+      // (Swym wishlist, loyalty widgets, chat, etc.) are blocked offline, so
+      // the transient state class they set on <html>/<body> while loading
+      // (swym-loading, no-js, ...) is never cleared, and some drive an
+      // invisible full-viewport pseudo-overlay that never gets torn down
+      // either. Either one makes the browser's own hit-test resolve a click
+      // at the CTA's center to <body> (or the leftover overlay) instead of
+      // the button underneath — proven with Playwright's own interception
+      // error, not a test artifact; a real mouse user would be blocked too.
+      // Clear the stuck state, neutralize any leftover full-viewport
+      // interceptor (never one with real visible content — only empty
+      // chrome left behind by a script that stopped running), and — because
+      // the theme's OWN add-to-cart JS is blocked offline too, so even a
+      // click that lands cleanly may still do nothing — add a delegated,
+      // fetch-based handler on common buy-button selectors so the click
+      // adds to cart regardless of whether the theme's script ever ran.
+      const interactionShim =
+        '<style id="_mirror-clickable">html,body{pointer-events:auto !important}</style>' +
+        '<script>(function(){' +
+        'var PAT=/(^|\\s)([\\w-]*-loading|is-loading|js-loading|loading|no-js|' +
+        'overflow-hidden|no-scroll|drawer-open|menu-open|nav-open|modal-open)(\\s|$)/gi;' +
+        'function declass(){[document.documentElement,document.body].forEach(function(el){' +
+        'if(!el||typeof el.className!=="string")return;' +
+        'var c=el.className.replace(PAT," ").replace(/\\s+/g," ").trim();' +
+        'if(c!==el.className)el.className=c;});}' +
+        'function neutralizeOverlays(){if(!document.body)return;var vw=innerWidth,vh=innerHeight;' +
+        'var all=document.body.querySelectorAll("*");' +
+        'for(var i=0;i<all.length;i++){var n=all[i];var s=getComputedStyle(n);' +
+        'if(s.position!=="fixed"&&s.position!=="sticky")continue;' +
+        'if(s.pointerEvents==="none")continue;' +
+        'var r=n.getBoundingClientRect();' +
+        'var coversMost=r.width>=vw*0.8&&r.height>=vh*0.5&&r.top<=vh*0.2;' +
+        'if(!coversMost)continue;' +
+        'var hasContent=(n.textContent||"").trim().length>0||' +
+        'n.querySelector("img,svg,video,button,input,a[href]");' +
+        'if(hasContent)continue;' +
+        'n.style.setProperty("pointer-events","none","important");}}' +
+        'function fix(){declass();neutralizeOverlays();}' +
+        'fix();document.addEventListener("DOMContentLoaded",fix);' +
+        '[100,400,900,1800,3000].forEach(function(t){setTimeout(fix,t);});' +
+        'var CTA=\'[name="add"],button[type="submit"],[class*="add-to-cart"],\'+' +
+        '\'[class*="AddToCart"],[data-testid*="add"],[data-action="addCart"],\'+' +
+        '\'[data-action="add-to-cart"],.js-product-cta,.product-form__submit,\'+' +
+        '\'[data-add-to-cart]\';' +
+        'function resolveVariantId(btn){' +
+        'var checked=document.querySelector("input[name=\\"id\\"]:checked,select[name=\\"id\\"]");' +
+        'if(checked&&checked.value&&/^\\d+$/.test(checked.value))return checked.value;' +
+        'var dv=btn.getAttribute("data-variant-id")||' +
+        '(btn.closest("[data-variant-id]")&&btn.closest("[data-variant-id]").getAttribute("data-variant-id"));' +
+        'if(dv&&/^\\d+$/.test(dv))return dv;' +
+        'var sw=document.querySelector("[data-variant-id].is-selected,[data-variant-id][aria-checked=\\"true\\"],[data-variant-id].active");' +
+        'if(sw)return sw.getAttribute("data-variant-id");' +
+        'var m=document.documentElement.innerHTML.match(/"variants":\\s*\\[\\s*\\{[^}]*?"id":\\s*(\\d+)/);' +
+        'if(m)return m[1];' +
+        'var any=document.querySelector("[data-variant-id]");' +
+        'return any?any.getAttribute("data-variant-id"):null;}' +
+        'document.addEventListener("click",function(e){' +
+        'var btn=e.target&&e.target.closest?e.target.closest(CTA):null;if(!btn)return;' +
+        'if(btn.closest("a[href]"))return;' +
+        'var id=resolveVariantId(btn);if(!id)return;' +
+        'fetch("/cart/add.js",{method:"POST",headers:{"Content-Type":"application/json"},' +
+        'body:JSON.stringify({id:id,quantity:1})}).catch(function(){});' +
+        '},true);' +
+        '})();</' + 'script>';
+      html = injectBeforeBody(html, interactionShim);
+
       // React sets image srcs at runtime, so static rewriting never sees them.
       // Framework image proxies (/_next/image?url=…, /cdn-cgi/image/…) have no
       // server behind them offline, so those images 404. Unwrap each proxy URL
