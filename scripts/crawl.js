@@ -1,0 +1,861 @@
+#!/usr/bin/env node
+/**
+ * Multi-page storefront crawl — produces a BROWSABLE local clone.
+ *
+ * capture.js saves one page; its links still point at the live site, so the
+ * result is a photograph. This crawls the homepage plus collection and product
+ * pages, shares one asset pool across all of them, then rewrites inter-page
+ * links to point at the local copies. The result can actually be clicked through.
+ *
+ *   node crawl.js <domain> <outdir> [--pages N] [--clean]
+ *     [--api <url>] [--hmac-secret <secret>]
+ *
+ * --api points the commerce bridge (bridge.js) at a running ForkLaunch
+ * ecommerce module instead of the in-browser local cart — this is also
+ * what wires up filters/sort/search against real GET /product data.
+ * --hmac-secret must match that module's HMAC_SECRET_KEY; the module's
+ * product/variant list endpoints are HMAC-authenticated (access:
+ * 'internal'), so filter/sort/search calls will 403 without it even
+ * though --api alone is enough for the (unauthenticated) cart forwarding.
+ *
+ * Layout produced:
+ *   site/index.html
+ *   site/collections/<handle>.html
+ *   site/products/<handle>.html
+ *   site/_a/{css,js,fonts,img}/...
+ */
+const { chromium } = require('playwright');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const { buildBridge } = require('./bridge.js');
+
+const VIEWPORT = { width: 1280, height: 800 };
+const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
+           '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+const MAX_BYTES = 700 * 1024 * 1024;
+
+const EXT_DIR = { css:'css', js:'js', woff:'fonts', woff2:'fonts', ttf:'fonts',
+                  otf:'fonts', eot:'fonts', png:'img', jpg:'img', jpeg:'img',
+                  gif:'img', webp:'img', svg:'img', avif:'img', ico:'img' };
+
+const argv = process.argv.slice(2);
+const domain = argv[0];
+const outdir = argv[1];
+const CLEAN = argv.includes('--clean');
+const apiIdx = argv.indexOf('--api');
+const API_BASE = apiIdx > -1 ? argv[apiIdx + 1] : null;
+const hmacIdx = argv.indexOf('--hmac-secret');
+// The real module's GET /product and GET /variant are HMAC-authenticated
+// (access: 'internal') — see bridge.js's filtersMain docstring for the
+// exact scheme. Without a matching secret, backend-mode filter/sort/search
+// calls will 403; add-to-cart (unauthenticated forwarding, pre-existing)
+// is unaffected either way.
+const HMAC_SECRET = hmacIdx > -1 ? argv[hmacIdx + 1] : null;
+const pagesIdx = argv.indexOf('--pages');
+const MAX_PAGES = pagesIdx > -1 ? parseInt(argv[pagesIdx + 1], 10) || 20 : 20;
+
+const assetMap = new Map();          // absolute asset url -> local rel path
+let totalBytes = 0;
+
+function localFor(url) {
+  const u = new URL(url);
+  const clean = u.pathname.split('/').pop() || 'index';
+  let ext = (clean.includes('.') ? clean.split('.').pop() : '').toLowerCase();
+  if (!EXT_DIR[ext]) ext = 'bin';
+  const sub = EXT_DIR[ext] || 'other';
+  const h = crypto.createHash('md5').update(url).digest('hex').slice(0, 10);
+  const base = clean.replace(/[^A-Za-z0-9._-]/g, '_').replace(/\.[^.]*$/, '').slice(0, 48) || 'a';
+  return `_a/${sub}/${base}.${h}.${ext}`;
+}
+
+// ---- page identity ---------------------------------------------------------
+// A storefront path maps to a local file. Depth matters for relative rewriting.
+function pageFileFor(pathname) {
+  const p = pathname.replace(/\/+$/, '') || '/';
+  if (p === '/') return { file: 'index.html', depth: 0 };
+  let m = p.match(/^\/products\/([^/]+)/);
+  if (m) return { file: `products/${safe(m[1])}.html`, depth: 1 };
+  m = p.match(/^\/collections\/([^/]+)\/products\/([^/]+)/);
+  if (m) return { file: `products/${safe(m[2])}.html`, depth: 1 };
+  m = p.match(/^\/collections\/([^/]+)/);
+  if (m) return { file: `collections/${safe(m[1])}.html`, depth: 1 };
+  m = p.match(/^\/pages\/([^/]+)/);
+  if (m) return { file: `pages/${safe(m[1])}.html`, depth: 1 };
+
+  // Generic fallback. Plenty of Shopify stores rewrite their URLs — one used
+  // /bath, /bedding and /collection/doorbusters with no /products/ anywhere.
+  // Mirror any ordinary internal path, preserving one level of structure.
+  if (SKIP_PATH.test(p)) return null;                 // cart/account/asset noise
+  const segs = p.split('/').filter(Boolean);
+  if (!segs.length || segs.length > 3) return null;
+  if (/\.[a-z0-9]{2,5}$/i.test(segs[segs.length - 1])) return null;  // it's a file
+  if (segs.length === 1) return { file: `${safe(segs[0])}.html`, depth: 0 };
+  return { file: `${safe(segs[0])}/${safe(segs.slice(1).join('-'))}.html`, depth: 1 };
+}
+
+// ---- page type --------------------------------------------------------
+// Classification for the manifest's page index (see manifest.js). Mirrors
+// pageFileFor's own precedence — a nested /collections/y/products/x is a
+// product page, not a collection page, same as it is on the file layout.
+function pageTypeFor(pathname) {
+  if (pathname === '/') return 'home';
+  if (/\/products\//.test(pathname)) return 'product';
+  if (/^\/collections\//.test(pathname)) return 'collection';
+  return 'page';
+}
+
+// Paths that are never storefront pages worth mirroring.
+const SKIP_PATH = /^\/(cart|checkout|account|orders|search|apps|admin|cdn|_a|assets|api|services|tools|policies|challenge|password|a\/|wpm@|\.well-known)(\/|$)/i;
+const safe = s => s.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 80);
+
+function fetchWithTimeout(resp, ms) {
+  return Promise.race([resp.body(), new Promise(r => setTimeout(() => r(null), ms))]);
+}
+
+(async () => {
+  const result = { domain, ok: false, pages: 0, assets: 0, bytes: 0, reason: null,
+                   startedAt: Date.now(), captured: [] };
+  // Per-page route/file/title, for manifest.js. Kept out of crawl.json/result
+  // entirely (rather than added to `captured`) so crawl.json's existing shape
+  // stays exactly as-is for anything already reading it.
+  const pageIndex = [];
+  fs.mkdirSync(path.join(outdir, 'site'), { recursive: true });
+
+  const browser = await chromium.launch({ headless: true });
+  const ctx = await browser.newContext({ viewport: VIEWPORT, userAgent: UA,
+                                         ignoreHTTPSErrors: true });
+
+  const pending = [];
+  const attach = (page) => {
+    page.on('response', async (resp) => {
+      try {
+        const url = resp.url();
+        if (!/^https?:/.test(url)) return;
+        const ct = (resp.headers()['content-type'] || '').split(';')[0];
+        if (ct.startsWith('text/html')) return;
+        if (resp.status() >= 400 || assetMap.has(url)) return;
+        const rel = localFor(url);
+        assetMap.set(url, rel);
+        pending.push((async () => {
+          try {
+            const buf = await fetchWithTimeout(resp, 8000);
+            if (!buf || !buf.length || totalBytes + buf.length > MAX_BYTES) return;
+            totalBytes += buf.length;
+            const dst = path.join(outdir, 'site', rel);
+            fs.mkdirSync(path.dirname(dst), { recursive: true });
+            fs.writeFileSync(dst, buf);
+          } catch (_) {}
+        })());
+      } catch (_) {}
+    });
+  };
+
+  const SCROLL = async (page) => {
+    await page.evaluate(async () => {
+      await new Promise(res => {
+        let y = 0, i = 0;
+        const step = () => {
+          y += 700; i++;
+          window.scrollTo(0, y);
+          const done = i >= 60 || y >= 40000 || y >= document.body.scrollHeight + 1000;
+          if (!done) setTimeout(step, 80);
+          else { window.scrollTo(0, 0); setTimeout(res, 500); }
+        };
+        step();
+      });
+    }).catch(() => {});
+  };
+
+  // Grab a page's post-JS DOM plus the storefront links it contains.
+  async function grab(url) {
+    const page = await ctx.newPage();
+    attach(page);
+    try {
+      const r = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 40000 });
+      // 404 = this page simply doesn't exist (we guessed a URL). That is NOT a
+      // sign of throttling and must not count toward the backoff, or a few
+      // speculative misses will abort an otherwise healthy crawl.
+      if (r && r.status() === 404) return { notFound: true };
+      if (!r || r.status() >= 400) return null;
+      try { await page.waitForLoadState('networkidle', { timeout: 15000 }); } catch (_) {}
+      await SCROLL(page);
+      try { await page.waitForLoadState('networkidle', { timeout: 8000 }); } catch (_) {}
+      await page.waitForTimeout(1200);
+
+      // materialize CSSOM (styled-components/emotion leave <style> empty)
+      await page.evaluate(() => {
+        for (const s of Array.from(document.styleSheets)) {
+          const n = s.ownerNode;
+          if (!n || n.tagName !== 'STYLE') continue;
+          if (n.textContent && n.textContent.trim().length) continue;
+          let rules; try { rules = s.cssRules; } catch (_) { continue; }
+          if (!rules || !rules.length) continue;
+          try { n.textContent = Array.from(rules).map(x => x.cssText).join('\n'); } catch (_) {}
+        }
+      }).catch(() => {});
+
+      const html = await page.content();
+      const links = await page.evaluate(() =>
+        [...document.querySelectorAll('a[href]')].map(a => a.getAttribute('href')));
+      // Top-nav items are frequently <button data-menu-trigger="men"> rather
+      // than links. They are the most-clicked things on the page, so their
+      // destinations must be captured or the primary nav is dead.
+      const navTriggers = await page.evaluate(() =>
+        [...document.querySelectorAll('[data-menu-trigger],[aria-controls]')]
+          .map(e => e.getAttribute('data-menu-trigger') ||
+                    (e.textContent || '').trim().toLowerCase())
+          .filter(x => x && x.length < 24));
+      const navLinks = await page.evaluate(() =>
+        [...document.querySelectorAll('a[href]')]
+          .filter(a => { const r = a.getBoundingClientRect();
+                         return r.top >= 0 && r.top < 340 && r.width > 20; })
+          .map(a => a.getAttribute('href')));
+      return { html, links, navTriggers, navLinks, finalUrl: page.url() };
+    } catch (_) { return null; }
+    finally { await page.close().catch(() => {}); }
+  }
+
+  try {
+    // ---- 1. homepage, then discover pages to visit -------------------------
+    const home = await grab(`https://${domain}/`);
+    if (!home) { result.reason = 'homepage_failed'; throw new Error('home'); }
+
+    const wanted = new Map();        // pathname -> {file, depth}
+    wanted.set('/', { file: 'index.html', depth: 0 });
+
+    const norm = (href) => {
+      try {
+        const u = new URL(href, `https://${domain}/`);
+        if (u.hostname.replace(/^www\./, '') !== domain.replace(/^www\./, '')) return null;
+        return u.pathname.replace(/\/+$/, '') || '/';
+      } catch (_) { return null; }
+    };
+
+    // Sitemap discovery. Scraping <a href> misses stores whose nav is built in
+    // JavaScript without real hrefs — one store had a 1MB homepage and zero
+    // internal links. Every Shopify store publishes /sitemap.xml, which lists
+    // the true catalog regardless of how the nav is rendered.
+    // Sitemap XML escapes ampersands; an undecoded &amp; corrupts the query
+    // string and the child sitemap 404s.
+    const deent = (u) => u.replace(/&amp;/g, '&').replace(/&#38;/g, '&').trim();
+
+    async function sitemapLinks() {
+      const found = [];
+      const seenMaps = new Set();
+      const fetchXml = async (u) => {
+        try {
+          const r = await fetch(u, { headers: { 'User-Agent': UA },
+                                     signal: AbortSignal.timeout(12000) });
+          return r.ok ? await r.text() : null;
+        } catch (_) { return null; }
+      };
+      const root = await fetchXml(`https://${domain}/sitemap.xml`);
+      if (!root) return found;
+      const locs = [...root.matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => deent(m[1]));
+      // top level lists child sitemaps (products, collections, pages)
+      const children = locs.filter(u => /sitemap[^"]*\.xml/i.test(u)).slice(0, 6);
+      const targets = children.length ? children : [];
+      for (const c of targets) {
+        if (seenMaps.has(c)) continue;
+        seenMaps.add(c);
+        const xml = await fetchXml(c);
+        if (!xml) continue;
+        for (const m of xml.matchAll(/<loc>([^<]+)<\/loc>/g)) found.push(deent(m[1]));
+        await new Promise(r => setTimeout(r, 300));
+      }
+      if (!targets.length) found.push(...locs);
+      return found;
+    }
+
+    const cols = [], prods = [], infoPages = [];
+    for (const h of home.links) {
+      const p = norm(h);
+      if (!p) continue;
+      const pf = pageFileFor(p);
+      if (!pf || wanted.has(p)) continue;
+      if (/^\/collections\/[^/]+$/.test(p) && !cols.includes(p)) cols.push(p);
+      else if (/\/products\//.test(p) && !prods.includes(p)) prods.push(p);
+      // /pages/* are the header nav items (Delivery, Contact, About). Missing
+      // them is very visible: the top nav is the first thing anyone clicks, and
+      // an uncaptured link bounces them to the live store mid-demo.
+      else if (/^\/pages\//.test(p) && !infoPages.includes(p)) infoPages.push(p);
+    }
+    // Prefer breadth of what the homepage actually links to. Every uncaptured
+    // link falls back to the live site, which breaks the illusion the moment
+    // someone clicks it — so capture as much of the visible nav as the budget
+    // allows, collections first (they carry the most onward links).
+    // Nav-trigger destinations first. For data-menu-trigger="men" try
+    // /collections/men and /collections/mens — whichever exists is the page the
+    // header button should reach.
+    // Every top-nav destination must be captured — these are the most-clicked
+    // elements on the page, and a dead one is immediately visible. They get a
+    // GUARANTEED allocation outside the normal budget split; previously they
+    // competed with collections/products and simply displaced them.
+    const navMust = [];
+    for (const t of (home.navTriggers || [])) {
+      const base = String(t).toLowerCase().replace(/[^a-z0-9-]/g, '');
+      if (!base || base.length < 2) continue;
+      for (const cand of [`/collections/${base}`, `/collections/${base}s`,
+                          `/collections/${base}-mens`, `/collections/${base}-womens`]) {
+        if (!navMust.includes(cand)) navMust.push(cand);
+      }
+    }
+    // header anchors that already point at real pages
+    for (const h of (home.navLinks || [])) {
+      const q = norm(h);
+      if (q && pageFileFor(q) && !navMust.includes(q)) navMust.push(q);
+    }
+    if (navMust.length) console.error(`[crawl] nav destinations (guaranteed): ${navMust.length}`);
+
+    // Supplement anchor discovery with the sitemap. Cheap (a few requests) and
+    // it is the only reliable source when the nav is JS-driven.
+    if (cols.length + prods.length + infoPages.length < 8) {
+      const sm = await sitemapLinks();
+      let added = 0;
+      for (const u of sm) {
+        const p = norm(u);
+        if (!p) continue;
+        const f = pageFileFor(p);
+        if (!f) continue;
+        if (/^\/collections\/[^/]+$/.test(p) && !cols.includes(p)) { cols.push(p); added++; }
+        else if (/\/products\//.test(p) && !prods.includes(p)) { prods.push(p); added++; }
+        else if (!infoPages.includes(p) && !cols.includes(p) && !prods.includes(p)) { infoPages.push(p); added++; }
+      }
+      // A sitemap is mostly editorial and account plumbing. Rank by how
+      // shop-like a path looks so the page budget buys product and category
+      // pages, not /author/abby-wilson and /campaign/catalog-unsubscribe.
+      const NOISE = /(article|blog|news|journal|stories|author|campaign|tag|legal|policy|policies|terms|privacy|unsubscribe|careers|faq|help|support|gift-?card|sitemap)/i;
+      const SHOPPY = /(product|collection|shop|store|catalog|category|all-)/i;
+      const score = (u) => {
+        const segs = u.split('/').filter(Boolean);
+        let sc = 0;
+        if (SHOPPY.test(u)) sc -= 10;          // lower is better
+        if (NOISE.test(u)) sc += 10;
+        sc += segs.length;                     // shallower paths are more central
+        return sc;
+      };
+      infoPages.sort((a, b) => score(a) - score(b));
+      if (added) console.error(`[crawl] sitemap added ${added} URLs ` +
+                               `(homepage anchors were sparse)`);
+    }
+
+    // Header nav pages first — they are always visible and always clicked.
+    // Every take must be clamped to >= 0. A negative end index in slice()
+    // silently returns almost the WHOLE array — that queued 78 pages against a
+    // budget of 4 on one store, which then rate-limited us and failed every
+    // subsequent fetch.
+    // Nav first, then split what's left. MAX_PAGES is raised by the nav count
+    // so guaranteeing the nav never eats the product budget.
+    const navTake = navMust.slice(0, 12);
+    for (const q of navTake) if (!wanted.has(q)) wanted.set(q, pageFileFor(q));
+    const budget = Math.max(0, MAX_PAGES - 1);
+    const infoTake = infoPages.slice(0, Math.max(0, Math.min(infoPages.length, 5, budget)));
+    const rest = Math.max(0, budget - infoTake.length);
+    const colTake = Math.max(0, Math.min(cols.length, rest, Math.max(2, Math.round(rest * 0.35))));
+    const prodTake = Math.max(0, rest - colTake);
+    const pick = [...infoTake,
+                  ...cols.slice(0, colTake),
+                  ...prods.slice(0, prodTake)];
+    for (const p of pick) wanted.set(p, pageFileFor(p));
+
+    console.error(`[crawl] discovered ${cols.length} collections, ${prods.length} products; ` +
+                  `capturing ${wanted.size} pages`);
+
+    // ---- 2. capture each page, discovering as we go ------------------------
+    // The homepage links only a handful of products. Collection pages list the
+    // whole catalog, so harvest their links too — that's what makes a complete
+    // clone of a mid-market store possible instead of a 20-page sample.
+    const captured = new Map();      // pathname -> html
+    captured.set('/', home.html);
+
+    // Dedupe by OUTPUT FILE, not path: Shopify serves the same product at both
+    // /products/x and /collections/y/products/x. Path-keyed dedup captures it
+    // twice, burning half the page budget on duplicates.
+    const queue = [...wanted.keys()].filter(p => p !== '/');
+    const seenFiles = new Set(['index.html']);
+    for (const p of queue) { const f = pageFileFor(p); if (f) seenFiles.add(f.file); }
+    let visited = 0;
+
+    // Be a polite client. Back-to-back page loads look like an attack and get
+    // you rate-limited — which is both rude and self-defeating, since a
+    // throttled store then fails every remaining fetch. A short gap between
+    // pages, and a hard stop once failures cluster, keeps us welcome.
+    const PAGE_DELAY_MS = 900;
+    let consecutiveFails = 0;
+
+    const HARD_CAP = MAX_PAGES + navMust.slice(0, 12).length;
+    while (queue.length && captured.size < HARD_CAP) {
+      const p = queue.shift();
+      if (visited > 0) await new Promise(r => setTimeout(r, PAGE_DELAY_MS));
+      const g = await grab(`https://${domain}${p}`);
+      visited++;
+      if (g && g.notFound) { continue; }           // guessed URL, no such page
+      if (!g) {
+        console.error(`[crawl]   ✗ ${p}`);
+        if (++consecutiveFails >= 4) {
+          console.error('[crawl] stopping: 4 consecutive failures — the store is ' +
+                        'likely rate-limiting us. Keeping what we have.');
+          result.throttled = true;
+          break;
+        }
+        continue;
+      }
+      consecutiveFails = 0;
+      captured.set(p, g.html);
+      if (!wanted.has(p)) wanted.set(p, pageFileFor(p));
+      console.error(`[crawl]   ✓ ${p}`);
+
+      // harvest onward product links from collection pages
+      if (/^\/collections\//.test(p) && captured.size < MAX_PAGES) {
+        let added = 0;
+        for (const h of g.links) {
+          if (captured.size + queue.length >= HARD_CAP) break;
+          const q = norm(h);
+          if (!q) continue;
+          if (!/\/products\//.test(q)) continue;
+          const f = pageFileFor(q);
+          if (!f || seenFiles.has(f.file)) continue;
+          seenFiles.add(f.file); queue.push(q); added++;
+        }
+        if (added) console.error(`[crawl]     +${added} products from this collection`);
+      }
+    }
+
+    await Promise.race([Promise.allSettled(pending),
+                        new Promise(r => setTimeout(r, 30000))]);
+    result.assets = assetMap.size;
+    result.bytes = totalBytes;
+
+    // recover assets whose body never arrived
+    const missed = [...assetMap.entries()]
+      .filter(([, rel]) => !fs.existsSync(path.join(outdir, 'site', rel)));
+    await Promise.allSettled(missed.slice(0, 600).map(async ([abs, rel]) => {
+      try {
+        const r = await fetch(abs, { headers: { 'User-Agent': UA },
+                                     signal: AbortSignal.timeout(9000) });
+        if (!r.ok) return;
+        const buf = Buffer.from(await r.arrayBuffer());
+        if (!buf.length) return;
+        const dst = path.join(outdir, 'site', rel);
+        fs.mkdirSync(path.dirname(dst), { recursive: true });
+        fs.writeFileSync(dst, buf);
+      } catch (_) {}
+    }));
+
+    // ---- 3. rewrite each page ---------------------------------------------
+    // Drop any asset whose body never made it to disk. Pointing at a local
+    // path with no file behind it yields a guaranteed broken image; leaving the
+    // URL alone lets it load from the origin CDN instead.
+    for (const [abs, rel] of [...assetMap]) {
+      if (!fs.existsSync(path.join(outdir, 'site', rel))) assetMap.delete(abs);
+    }
+
+    const byPath = new Map();
+    const byFull = new Map();   // pathname+query -> local; distinguishes proxy URLs
+    for (const [abs, rel] of assetMap) {
+      try {
+        const u = new URL(abs);
+        if (!byPath.has(u.pathname)) byPath.set(u.pathname, rel);
+        byFull.set(u.pathname + u.search, rel);
+      } catch (_) {}
+    }
+    const sortedAssets = [...assetMap.entries()].sort((a, b) => b[0].length - a[0].length);
+
+    // Rewrite url() inside captured CSS. Refs there resolve relative to the
+    // STYLESHEET, not the page, so one rewrite works from every page depth.
+    // Without this, @font-face src="Foo.woff2" dangles and text silently falls
+    // back to Times — no console error, just the wrong typeface everywhere.
+    for (const [abs, rel] of assetMap) {
+      if (!rel.endsWith('.css')) continue;
+      const p = path.join(outdir, 'site', rel);
+      if (!fs.existsSync(p)) continue;
+      let css = fs.readFileSync(p, 'utf8');
+      css = css.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, (m, q, ref) => {
+        if (/^(data:|#)/.test(ref)) return m;
+        let target;
+        try { target = new URL(ref, abs).toString(); } catch (_) { return m; }
+        let loc = assetMap.get(target);
+        if (!loc) { try { loc = byPath.get(new URL(target).pathname); } catch (_) {} }
+        return loc ? `url("../${loc.slice(3)}")` : m;   // _a/x/y -> ../x/y
+      });
+      fs.writeFileSync(p, css);
+    }
+
+    // every page file we actually wrote, for link matching
+    const capturedFiles = new Set();
+    for (const pth of captured.keys()) {
+      const m = wanted.get(pth) || pageFileFor(pth);
+      if (m) capturedFiles.add(m.file);
+    }
+
+    for (const [pth, rawHtml] of captured) {
+      const meta = wanted.get(pth) || { file: 'index.html', depth: 0 };
+      const up = '../'.repeat(meta.depth);
+      let html = rawHtml;
+
+      // assets: exact URL, then protocol-relative, then pathname fallback
+      for (const [abs, rel] of sortedAssets) {
+        const noProto = abs.replace(/^https?:/, '');
+        html = html.split(abs).join(up + rel).split(noProto).join(up + rel);
+      }
+      html = html.replace(/((?:src|href|data-src|poster)=")(\/\/[^"]+)"/gi, (m, pre, u) => {
+        let p = null; try { p = new URL('https:' + u).pathname; } catch (_) {}
+        const loc = p && byPath.get(p);
+        return loc ? `${pre}${up}${loc}"` : `${pre}https:${u}"`;
+      });
+
+      // ---- inter-page links: THE thing that makes it browsable ----
+      html = html.replace(/href="([^"]+)"/gi, (m, href) => {
+        if (/^(#|mailto:|tel:|javascript:|data:)/i.test(href)) return m;
+        if (href.startsWith(up + '_a/') || href.startsWith('_a/')) return m;
+        const p = norm(href);
+        if (!p) return m;                                   // off-site: leave alone
+        // An href can point at an ASSET (stylesheet, preload) rather than a
+        // page. Those must map to the local copy — absolutising them to the
+        // live origin loses the CSS we already captured, and the clone renders
+        // in Times at several thousand px wide.
+        const asset = byPath.get(p);
+        if (asset) return `href="${up}${asset}"`;
+        // Match on the OUTPUT FILE, not the URL path. Shopify exposes the same
+        // product at both /products/x and /collections/y/products/x; those are
+        // different paths that resolve to one captured file, so a path-keyed
+        // lookup misses half the links and sends them to the live store.
+        const tgt = pageFileFor(p);
+        if (tgt && capturedFiles.has(tgt.file)) {
+          return `href="${up}${tgt.file}"`;                 // -> local copy
+        }
+        // A storefront page we didn't capture. Outside demo mode, send it to
+        // the live site so a click never 404s. In demo mode that is wrong —
+        // clicking a link must never eject the viewer into the real store
+        // mid-presentation — so mark it inert instead.
+        return CLEAN
+          ? `href="#" data-mirror-uncaptured="${p}"`
+          : `href="https://${domain}${p}"`;
+      });
+
+      // responsive-image pathname fallback
+      html = html.replace(/(https?:)?\/\/[a-z0-9.-]+\/(?:cdn|s\/files)\/[^\s"')]+/gi, (m) => {
+        try {
+          const p = new URL(m.startsWith('//') ? 'https:' + m : m).pathname;
+          const loc = byPath.get(p);
+          return loc ? up + loc : m;
+        } catch (_) { return m; }
+      });
+
+      // uncaptured same-origin assets -> live origin (never break)
+      html = html.replace(/((?:src|poster)=")(\/[^\/"][^"]*)"/gi, (m, pre, p) => {
+        // Query-aware first. Image proxies (/_next/image?url=…&w=640) share ONE
+        // pathname across every image on the page, so a pathname-only lookup
+        // maps them all to whichever was captured first and the rest 404.
+        const full = byFull.get(p);
+        if (full) return `${pre}${up}${full}"`;
+        const c = p.split('?')[0];
+        const bare = byPath.get(c);
+        if (bare && !p.includes('?')) return `${pre}${up}${bare}"`;
+        // Uncaptured proxy URL: unwrap it to the origin image it wraps, which
+        // is a real CDN asset that loads without the proxy behind it.
+        const inner = /[?&]url=([^&]+)/.exec(p);
+        if (inner) {
+          try {
+            const dec = decodeURIComponent(inner[1]);
+            if (/^https?:\/\//.test(dec)) {
+              const loc = byFull.get(new URL(dec).pathname + new URL(dec).search) ||
+                          byPath.get(new URL(dec).pathname);
+              if (loc) return `${pre}${up}${loc}"`;
+              // Not captured. Send it to the LIVE origin's own image proxy
+              // rather than the underlying CDN — some CDNs (Sanity, Contentful)
+              // refuse direct loads, and the proxy is what the real site uses.
+              return `${pre}https://${domain}${p}"`;
+            }
+          } catch (_) {}
+        }
+        return `${pre}https://${domain}${p}"`;
+      });
+      html = html.replace(/<link\b[^>]*>/gi, (tag) => {
+        if (!/rel\s*=\s*["']?stylesheet/i.test(tag)) return tag;
+        return tag.replace(/href="(\/[^\/"][^"]*)"/i, (m, p) =>
+          byPath.has(p.split('?')[0]) ? m : `href="https://${domain}${p}"`);
+      });
+
+      html = html.replace(/\sintegrity="[^"]*"/g, '').replace(/\scrossorigin="[^"]*"/g, '');
+      html = html.replace(/<base[^>]*>/gi, '');
+
+      const consentCss = '<style id="_mirror-consent">' +
+        '[id*="Cybot"],[class*="Cybot"],[id*="onetrust"],[class*="onetrust"],' +
+        '[id*="ot-sdk"],[class*="ot-sdk"],[id*="truste"],[class*="truste"],' +
+        '[id*="klaro"],[class*="klaro"],[id*="osano"],[class*="osano"],' +
+        '[id*="didomi"],[class*="didomi"],[id*="usercentrics"],[class*="usercentrics"],' +
+        '[class*="cookie-consent"],[id*="cookie-consent"],[class*="CookieConsent"]' +
+        '{display:none !important}</style>';
+      html = html.replace(/<\/head>/i, consentCss + '</head>');
+
+      // Storefronts route clicks in JavaScript (SPA / Hydrogen / prefetch
+      // handlers). Offline the router can't resolve anything, so it swallows
+      // the click and nothing happens. A capture-phase listener on window runs
+      // before those bubble-phase handlers, so local page links do a real
+      // navigation. Scoped to .html targets only — off-site links behave normally.
+      const navShim = '<script>(function(){window.addEventListener("click",function(e){' +
+        'var a=e.target&&e.target.closest?e.target.closest("a[href]"):null;if(!a)return;' +
+        'var h=a.getAttribute("href")||"";' +
+        'if(!/\\.html($|[?#])/.test(h))return;' +
+        'if(/^(#|mailto:|tel:|javascript:)/i.test(h))return;' +
+        'e.stopImmediatePropagation();e.preventDefault();window.location.href=a.href;' +
+        '},true);})();</' + 'script>';
+      html = html.replace(/<\/body>/i, navShim + '</body>');
+
+      // React/Next hydration re-renders anchors from its own props and throws
+      // away the hrefs we rewrote at build time — the page looks right but
+      // every link points back at the live store. Ship the path->file map into
+      // the page and re-apply it after hydration, then keep applying it as the
+      // app re-renders.
+      const linkMap = {};
+      for (const [pth] of captured) {
+        const t = wanted.get(pth) || pageFileFor(pth);
+        if (t) linkMap[pth] = t.file;
+      }
+      const relinkShim = '<script>(function(){var M=' + JSON.stringify(linkMap) +
+        ',UP=' + JSON.stringify(up) + ',H=' + JSON.stringify(domain) + ';' +
+        'function norm(u){try{var a=new URL(u,location.href);' +
+        'if(a.hostname&&a.hostname.replace(/^www\\./,"")!==H.replace(/^www\\./,"")' +
+        '&&a.protocol!=="file:"&&a.hostname!==location.hostname)return null;' +
+        'return a.pathname.replace(/\\/+$/,"")||"/";}catch(e){return null}}' +
+        'function fix(){var a=document.getElementsByTagName("a");' +
+        'for(var i=0;i<a.length;i++){var e=a[i],h=e.getAttribute("href");' +
+        'if(!h||/^(#|mailto:|tel:|javascript:)/i.test(h))continue;' +
+        'if(/\\.html($|[?#])/.test(h))continue;' +
+        'var p=norm(h);if(!p)continue;var f=M[p];if(f)e.setAttribute("href",UP+f);}}' +
+        'fix();if(document.readyState!=="complete")window.addEventListener("load",fix);' +
+        'setTimeout(fix,600);setTimeout(fix,1800);setTimeout(fix,4000);' +
+        'var t=null;new MutationObserver(function(){clearTimeout(t);t=setTimeout(fix,150);})' +
+        '.observe(document.documentElement,{childList:true,subtree:true});' +
+        '})();</' + 'script>';
+      html = html.replace(/<\/body>/i, relinkShim + '</body>');
+
+      // Commerce bridge: answer the storefront's cart/search/filter/sort API
+      // calls so add-to-cart, filtering, sorting, and search actually work.
+      // Points at the ForkLaunch module when --api is given (HMAC-signed with
+      // --hmac-secret), otherwise runs a local cart in the browser and leaves
+      // filter/sort/search controls exactly as captured.
+      //
+      // NOTE: passed as a replacer FUNCTION, not a string — String.replace's
+      // string form treats $&, $`, $', $1-$99 as special patterns, and the
+      // bridge's own source (e.g. the literal '$' price prefix) can contain
+      // those sequences by coincidence, silently corrupting the injected
+      // script. A function return value is inserted verbatim, no exceptions.
+      // (The other html.replace(/<\/body>/i, X + '</body>') call sites in
+      // this file below have the same latent exposure — none of their
+      // current shim text happens to contain $&/$`/$'/$<digit>, so it's
+      // never fired, but it's the same bug class. Flagged, not fixed here —
+      // out of scope for this ticket.)
+      html = html.replace(/<\/body>/i, function () {
+        return buildBridge({ apiBase: API_BASE, hmacSecret: HMAC_SECRET }) + '</body>';
+      });
+
+      // Storefronts often put top-level nav on <button data-menu-trigger="men">
+      // rather than a link — the button opens a mega-menu in JS. Offline that
+      // handler frequently does nothing, so the most prominent nav item in the
+      // header appears dead. If we captured a page that matches the trigger,
+      // fall back to navigating there so the nav is usable.
+      const triggerShim = '<script>(function(){var M=' + JSON.stringify(linkMap) +
+        ',UP=' + JSON.stringify(up) + ';' +
+        'var files=Object.keys(M).map(function(k){return {p:k,f:M[k]};});' +
+        'function match(name){name=(name||"").toLowerCase().replace(/[^a-z0-9]/g,"");' +
+        'if(!name)return null;var exact=null,partial=null;' +
+        'files.forEach(function(x){var seg=x.f.replace(/\\.html$/,"").split("/").pop()' +
+        '.toLowerCase().replace(/[^a-z0-9]/g,"");' +
+        'if(seg===name||seg===name+"s"||seg===name.replace(/s$/,"")){exact=exact||x;}' +
+        // Fall back to a partial match: a "Sale" trigger on a store with no
+        // /collections/sale should still reach sale-mens or sale-womens.
+        'else if(!partial&&seg.indexOf(name)===0){partial=x;}});' +
+        'return exact||partial;}' +
+        'document.addEventListener("click",function(e){' +
+        // Also catch plain <button> elements with no href. Storefronts render
+        // calls-to-action like "Shop Mens" / "Shop Women\'s Sale" as buttons
+        // wired up in JS; offline they do nothing, and an audit found dozens
+        // dead across collection pages. If the label resolves to a page we
+        // captured, navigate there.
+        'var t=e.target&&e.target.closest?e.target.closest("[data-menu-trigger],[aria-haspopup],button"):null;' +
+        'if(!t)return; if(t.closest("a[href]"))return;' +
+        'setTimeout(function(){' +
+        // only act if the click produced no visible menu
+        'var opened=document.querySelector("[aria-expanded=\'true\'],[data-menu-open],.menu-open");' +
+        'if(opened)return;' +
+        'var n=t.getAttribute("data-menu-trigger")||t.getAttribute("aria-controls")||t.textContent;' +
+        'var m=match(n);' +
+        // "Shop Mens" -> "mens"; "Shop Women\'s Sale" -> "womenssale" -> "sale-womens"
+        'if(!m&&n){var strip=String(n).replace(/^\\s*shop\\s+/i,"");m=match(strip);}' +
+        'if(!m&&n){var w=String(n).toLowerCase().replace(/[^a-z0-9 ]/g,"").split(/\\s+/)' +
+        '.filter(function(x){return x&&x!=="shop";});' +
+        'for(var k=w.length-1;k>=0&&!m;k--){m=match(w[k]);}}' +
+        'if(m) window.location.href=UP+m.f;},260);' +
+        '},true);})();</' + 'script>';
+      html = html.replace(/<\/body>/i, triggerShim + '</body>');
+
+      // React sets image srcs at runtime, so static rewriting never sees them.
+      // Framework image proxies (/_next/image?url=…, /cdn-cgi/image/…) have no
+      // server behind them offline, so those images 404. Unwrap each proxy URL
+      // to the origin CDN asset it wraps, which loads on its own.
+      const imgShim = '<script>(function(){var H=' + JSON.stringify(domain) + ';' +
+        'function unwrap(u){try{' +
+        'var m=/[?&]url=([^&]+)/.exec(u);if(!m)return null;' +
+        'var d=decodeURIComponent(m[1]);' +
+        'return /^https?:\\/\\//.test(d)?d:null;}catch(e){return null}}' +
+        'function fix(){var im=document.getElementsByTagName("img");' +
+        'for(var i=0;i<im.length;i++){var e=im[i],s=e.getAttribute("src")||"";' +
+        'if(!/(_next\\/image|\\/cdn-cgi\\/image|\\/_image)/.test(s))continue;' +
+        // Prefer the LIVE origin's own proxy: it is exactly what the real site
+        // serves, so it always works. Unwrapping to the underlying CDN is the
+        // fallback, and some CDNs (Sanity) refuse direct loads.
+        'if(/^https?:/.test(s)&&s.indexOf(location.origin)!==0){}' +
+        'else{var rel=s.replace(location.origin,"");' +
+        'if(rel.charAt(0)!=="/")rel="/"+rel.replace(/^\\.\\//,"");' +
+        'e.setAttribute("src","https://"+H+rel);continue;}' +
+        'var t=unwrap(s);if(t&&t!==s)e.setAttribute("src",t);' +
+        'var ss=e.getAttribute("srcset");' +
+        'if(ss&&/(_next\\/image|\\/cdn-cgi\\/image)/.test(ss)){' +
+        'e.setAttribute("srcset",ss.split(",").map(function(p){' +
+        'var b=p.trim().split(/\\s+/);var v=unwrap(b[0]);if(v)b[0]=v;' +
+        'return b.join(" ");}).join(", "));}}}' +
+        'fix();if(document.readyState!=="complete")window.addEventListener("load",fix);' +
+        'setTimeout(fix,700);setTimeout(fix,2000);setTimeout(fix,4500);' +
+        'var t=null;new MutationObserver(function(){clearTimeout(t);t=setTimeout(fix,200);})' +
+        '.observe(document.documentElement,{childList:true,subtree:true,attributes:true,' +
+        'attributeFilter:["src","srcset"]});' +
+        '})();</' + 'script>';
+      html = html.replace(/<\/body>/i, imgShim + '</body>');
+
+      // Some storefronts re-render sliders/grids from JS on load. Offline that
+      // fetch fails and the component empties itself, leaving a tall blank box
+      // where products were. The captured markup was fine; the store's own
+      // script cleared it. Collapse containers that ended up genuinely empty —
+      // no children, no text, no background — so the page reads clean instead
+      // of showing dead space. Nothing with content is ever touched.
+      const collapseShim = '<script>(function(){' +
+        'function sweep(){' +
+        'var n=document.querySelectorAll("div,section,ul,slider-component");' +
+        'for(var i=0;i<n.length;i++){var e=n[i];' +
+        'if(e.children.length)continue;' +
+        'if((e.textContent||"").trim())continue;' +
+        'var r=e.getBoundingClientRect();if(r.height<160||r.width<160)continue;' +
+        'var c=getComputedStyle(e);' +
+        'if(c.backgroundImage&&c.backgroundImage!=="none")continue;' +
+        'if(e.querySelector("img,svg,video,canvas,iframe"))continue;' +
+        'e.style.display="none";}}' +
+        'if(document.readyState==="complete")sweep();' +
+        'else window.addEventListener("load",sweep);' +
+        'setTimeout(sweep,1500);setTimeout(sweep,3500);' +
+        '})();</' + 'script>';
+      html = html.replace(/<\/body>/i, collapseShim + '</body>');
+
+      // In demo mode, don't let account/cart/checkout links jump to the real
+      // store mid-presentation. They are non-functional in the clone either
+      // way; a dead click is better than silently leaving the demo.
+      // Some storefronts build their nav in JavaScript with no <a href> at all,
+      // so there is nothing to rewrite and the clone has no clickable route to
+      // the pages we captured. In demo mode, add a small index of captured
+      // pages so every clone is navigable regardless of how its nav is built.
+      if (CLEAN) {
+        const items = [...captured.keys()]
+          .map(k => ({ p: k, f: (wanted.get(k) || pageFileFor(k) || {}).file }))
+          .filter(x => x.f && x.f !== 'index.html')
+          .slice(0, 40)
+          .map(x => `<a href="${up}${x.f}">${x.p.replace(/^\//, '').slice(0, 46)}</a>`)
+          .join('');
+        if (items) {
+          const idx = '<div id="_mirror-index" style="position:fixed;left:12px;bottom:12px;' +
+            'z-index:2147483000;font:12px/1.5 system-ui,sans-serif;max-width:300px">' +
+            '<details style="background:#111;color:#fff;border-radius:8px;padding:8px 10px;' +
+            'box-shadow:0 4px 14px rgba(0,0,0,.35)">' +
+            '<summary style="cursor:pointer;outline:none">Captured pages</summary>' +
+            '<div style="max-height:320px;overflow:auto;margin-top:6px;display:flex;' +
+            'flex-direction:column;gap:3px">' +
+            items.replace(/<a /g, '<a style="color:#8ab4ff;text-decoration:none" ') +
+            '</div></details></div>';
+          html = html.replace(/<\/body>/i, idx + '</body>');
+        }
+      }
+
+      // Demo mode: hard navigation guard. Rewriting every link correctly is
+      // not achievable — country-variant domains, JS-driven navigation, form
+      // actions and third-party widgets all provide escape routes. Instead,
+      // block ANY navigation that would leave the local origin. Nothing can
+      // eject the viewer back into the real storefront mid-presentation.
+      if (CLEAN) {
+        const navGuard = '<script>(function(){' +
+          'function local(u){try{var a=new URL(u,location.href);' +
+          'return a.origin===location.origin||a.protocol==="javascript:"||a.hash;}catch(e){return true}}' +
+          'function toast(){var t=document.getElementById("_mg");if(!t){' +
+          't=document.createElement("div");t.id="_mg";' +
+          't.style.cssText="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);' +
+          'background:#111;color:#fff;padding:9px 15px;border-radius:8px;z-index:2147483600;' +
+          'font:13px system-ui,sans-serif;opacity:0;transition:opacity .18s";' +
+          'document.body.appendChild(t);}' +
+          't.textContent="External link disabled in this demo";t.style.opacity="1";' +
+          'clearTimeout(t._h);t._h=setTimeout(function(){t.style.opacity="0"},1600);}' +
+          'document.addEventListener("click",function(e){' +
+          'var a=e.target&&e.target.closest?e.target.closest("a[href]"):null;if(!a)return;' +
+          'var h=a.getAttribute("href")||"";' +
+          'if(/^(mailto:|tel:)/i.test(h))return;' +
+          'if(!local(h)){e.preventDefault();e.stopImmediatePropagation();toast();}' +
+          '},true);' +
+          'document.addEventListener("submit",function(e){' +
+          'var f=e.target;if(f&&f.action&&!local(f.action)){' +
+          'e.preventDefault();e.stopImmediatePropagation();toast();}},true);' +
+          // block programmatic escapes too
+          'try{var _a=window.open;window.open=function(u){if(u&&!local(u)){toast();return null;}' +
+          'return _a.apply(window,arguments);};}catch(e){}' +
+          '})();</' + 'script>';
+        html = html.replace(/<\/body>/i, navGuard + '</body>');
+      }
+
+      if (CLEAN) {
+        html = html.replace(
+          new RegExp(`href="https://${domain.replace(/\\./g, '\\\\.')}(\\/(?:account|cart|checkout|policies)[^"]*)?"`, 'gi'),
+          'href="#" data-mirror-inert="1"');
+      }
+
+      if (CLEAN) {
+        const shim = `<script>(function(){var S=['[class*="klaviyo"]','[id*="klaviyo"]',
+          '[class*="kl-private"]','[class*="attentive"]','[id*="attentive"]',
+          '[class*="privy"]','[id*="privy"]','[class*="justuno"]','[class*="wisepops"]',
+          '[class*="postscript"]'];
+          function f(){S.forEach(function(s){document.querySelectorAll(s).forEach(function(e){
+            var c=getComputedStyle(e);
+            if((c.position==='fixed'||c.position==='absolute')&&e.getBoundingClientRect().width>200)
+              e.style.display='none';});});
+            document.documentElement.style.overflow='';document.body.style.overflow='';}
+          f();setTimeout(f,800);setTimeout(f,2500);
+          new MutationObserver(f).observe(document.body,{childList:true,subtree:true});})();</` + `script>`;
+        html = html.replace(/<\/body>/i, shim + '</body>');
+      }
+
+      const dst = path.join(outdir, 'site', meta.file);
+      fs.mkdirSync(path.dirname(dst), { recursive: true });
+      fs.writeFileSync(dst, html);
+      result.captured.push(meta.file);
+
+      // <title> survives every rewrite above untouched, so it's safe to pull
+      // from the final html rather than re-reading the file back off disk.
+      const titleMatch = /<title[^>]*>([^<]*)<\/title>/i.exec(html);
+      pageIndex.push({
+        route: pth,
+        file: meta.file,
+        type: pageTypeFor(pth),
+        title: titleMatch ? (titleMatch[1].replace(/\s+/g, ' ').trim() || null) : null,
+      });
+    }
+
+    result.pages = captured.size;
+    result.ok = true;
+  } catch (e) {
+    if (!result.reason) result.reason = String(e.message || e).slice(0, 120);
+  } finally {
+    result.elapsedMs = Date.now() - result.startedAt;
+    await browser.close().catch(() => {});
+    fs.writeFileSync(path.join(outdir, 'crawl.json'), JSON.stringify(result, null, 1));
+    // Sidecar for manifest.js — see pageIndex declaration above.
+    fs.writeFileSync(path.join(outdir, 'pages.json'), JSON.stringify(pageIndex, null, 1));
+    console.log(JSON.stringify(result));
+  }
+})();
