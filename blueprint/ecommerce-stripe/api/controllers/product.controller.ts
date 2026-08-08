@@ -1,13 +1,5 @@
-import {
-  array,
-  boolean,
-  handlers,
-  IdSchema,
-  number,
-  optional,
-  schemaValidator,
-  string
-} from '../../schema';
+import { array, handlers, IdSchema, schemaValidator, string } from '../../schema';
+import { ProductSearchQuerySchema } from '../../domain/schemas/productSearch.schema';
 import { ci, tokens } from '../../bootstrapper';
 import {
   CreateProductMapper,
@@ -20,16 +12,6 @@ const serviceFactory = ci.scopedResolver(tokens.ProductService);
 const variantServiceFactory = ci.scopedResolver(tokens.VariantService);
 const inventoryServiceFactory = ci.scopedResolver(tokens.InventoryService);
 const HMAC_SECRET_KEY = ci.resolve(tokens.HMAC_SECRET_KEY);
-
-const ProductSearchQuerySchema = {
-  ids: optional(array(string)),
-  title: optional(string),
-  minPriceCents: optional(number),
-  maxPriceCents: optional(number),
-  inStock: optional(boolean),
-  optionName: optional(string),
-  optionValue: optional(string)
-};
 
 export const createProduct = handlers.post(
   schemaValidator,
@@ -170,7 +152,11 @@ export const listProducts = handlers.get(
           (v) => v.optionValues?.[optionName] === optionValue
         );
       }
-      if (inStock) {
+      // `!= null`, not truthiness: `inStock=false` is a real filter for
+      // out-of-stock variants. Testing `if (inStock)` skipped the check
+      // entirely on `false`, so the endpoint returned variants regardless of
+      // stock while implying it had filtered them.
+      if (inStock != null) {
         const stockChecks = await Promise.all(
           candidateVariants.map(async (v) => {
             try {
@@ -184,7 +170,9 @@ export const listProducts = handlers.get(
             }
           })
         );
-        candidateVariants = candidateVariants.filter((_, i) => stockChecks[i]);
+        candidateVariants = candidateVariants.filter(
+          (_, i) => stockChecks[i] === inStock
+        );
       }
 
       const candidateProductIds = [
