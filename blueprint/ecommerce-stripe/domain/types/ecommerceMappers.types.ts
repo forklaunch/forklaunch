@@ -60,3 +60,13 @@ export type InventoryDtoTypes = {
 };
 
 // Remaining entities' mapper/DTO types are added incrementally as each PR lands.
+
+// Re-exported so the emitted declaration can name these types without
+// reaching into implementation-ecommerce-base's internal paths. Without this,
+// tsc raises TS2883 ("inferred type cannot be named... not portable") on the
+// dependency container, which infers through the Base*Service generics.
+export type {
+  InventoryMappers,
+  ProductMappers,
+  VariantMappers
+} from '@forklaunch/implementation-ecommerce-base/types';
