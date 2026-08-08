@@ -367,13 +367,26 @@ function injectBeforeBody(html, script) {
     const navTake = navMust.slice(0, 12);
     for (const q of navTake) if (!wanted.has(q)) wanted.set(q, pageFileFor(q));
     const budget = Math.max(0, MAX_PAGES - 1);
-    const infoTake = infoPages.slice(0, Math.max(0, Math.min(infoPages.length, 5, budget)));
-    const rest = Math.max(0, budget - infoTake.length);
-    const colTake = Math.max(0, Math.min(cols.length, rest, Math.max(2, Math.round(rest * 0.35))));
-    const prodTake = Math.max(0, rest - colTake);
-    const pick = [...infoTake,
-                  ...cols.slice(0, colTake),
-                  ...prods.slice(0, prodTake)];
+    // Products first — they ARE the store. The old order (up to 5 info pages,
+    // then a 2-collection floor, then "the rest") allocated ZERO product pages
+    // at any budget below 10: a store migration with no product pages. Give
+    // the catalog at least half the budget up front, then collections (the
+    // browse structure), then info pages (about/press) with whatever remains.
+    let nProd = Math.min(prods.length,
+      Math.max(Math.ceil(budget * 0.5), Math.min(prods.length, Math.min(budget, 3))));
+    let afterProd = Math.max(0, budget - nProd);
+    let nCol = Math.min(cols.length, afterProd,
+      Math.max(cols.length > 0 && afterProd > 0 ? 1 : 0, Math.round(afterProd * 0.6)));
+    let afterCol = Math.max(0, afterProd - nCol);
+    let nInfo = Math.min(infoPages.length, afterCol);
+    // Top-up: never leave budget unused when a bucket can still fill it.
+    let left = budget - (nProd + nCol + nInfo);
+    if (left > 0) { const t = Math.min(left, prods.length - nProd); nProd += t; left -= t; }
+    if (left > 0) { const t = Math.min(left, cols.length - nCol);  nCol  += t; left -= t; }
+    if (left > 0) { const t = Math.min(left, infoPages.length - nInfo); nInfo += t; left -= t; }
+    const pick = [...prods.slice(0, nProd),
+                  ...cols.slice(0, nCol),
+                  ...infoPages.slice(0, nInfo)];
     for (const p of pick) wanted.set(p, pageFileFor(p));
 
     console.error(`[crawl] discovered ${cols.length} collections, ${prods.length} products; ` +
