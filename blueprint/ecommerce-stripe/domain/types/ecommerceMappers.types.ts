@@ -60,3 +60,17 @@ export type InventoryDtoTypes = {
 };
 
 // Remaining entities' mapper/DTO types are added incrementally as each PR lands.
+
+// TS2883 workaround. The dependency container infers through the Base*Service
+// generics, and without at least one of these mapper types nameable here, tsc
+// refuses to emit its declaration ("inferred type cannot be named... not
+// portable"). Empirically one anchor is enough — the compiler then inlines the
+// rest as import("...") in the emitted .d.ts — but all three are re-exported
+// so the list is obvious rather than looking arbitrary. New entities do not
+// strictly need adding here; if TS2883 reappears after a compiler upgrade,
+// this block is the place to look.
+export type {
+  InventoryMappers,
+  ProductMappers,
+  VariantMappers
+} from '@forklaunch/implementation-ecommerce-base/types';
