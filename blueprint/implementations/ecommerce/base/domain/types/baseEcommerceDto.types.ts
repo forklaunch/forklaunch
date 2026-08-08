@@ -3,10 +3,12 @@ import {
   CreateCartDto,
   CreateInventoryDto,
   CreateOrderDto,
+  CreatePaymentDto,
   CreateProductDto,
   CreateVariantDto,
   InventoryDto,
   OrderDto,
+  PaymentDto,
   ProductDto,
   UpdateCartDto,
   UpdateInventoryDto,
@@ -51,4 +53,10 @@ export type BaseOrderDtos = {
   OrderMapper: OrderDto;
   CreateOrderMapper: CreateOrderDto;
   UpdateOrderMapper: UpdateOrderDto;
+};
+
+// payment dto types
+export type BasePaymentDtos = {
+  PaymentMapper: PaymentDto;
+  CreatePaymentMapper: CreatePaymentDto;
 };
