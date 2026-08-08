@@ -33,13 +33,29 @@ const processOrderEvents: WorkerProcessFunction<OrderEventRecord> = async (
       // per request rather than a module-level singleton.
       const inventoryService = inventoryServiceFactory();
 
+      // All items in one transaction, so the adjustment is all-or-nothing.
+      // Without this the loop had no per-item checkpoint: if item 2 threw
+      // (oversell guard, transient DB error), item 1's decrement had already
+      // committed, the whole event was requeued unchanged, and the retry
+      // decremented item 1 a second time — stock permanently wrong, then
+      // silently dropped once retryCount exceeded the consumer's limit.
+      // Rolling back on failure means the retry starts from a clean slate.
+      const applyStockDeltas = async (sign: 1 | -1) => {
+        await inventoryService.em.transactional(async (innerEm) => {
+          for (const item of event.items) {
+            await inventoryService.adjustStock(
+              {
+                variantId: item.variantId,
+                delta: sign * item.quantity
+              },
+              innerEm
+            );
+          }
+        });
+      };
+
       if (event.toStatus === OrderStatus.PAID) {
-        for (const item of event.items) {
-          await inventoryService.adjustStock({
-            variantId: item.variantId,
-            delta: -item.quantity
-          });
-        }
+        await applyStockDeltas(-1);
       } else if (
         event.toStatus === OrderStatus.CANCELLED &&
         event.fromStatus === OrderStatus.PAID
@@ -48,12 +64,7 @@ const processOrderEvents: WorkerProcessFunction<OrderEventRecord> = async (
         // cancelling directly from pending never touched stock (found by
         // testing: a pending->cancelled order was blindly restocking
         // anyway, inflating stock for something that was never removed).
-        for (const item of event.items) {
-          await inventoryService.adjustStock({
-            variantId: item.variantId,
-            delta: item.quantity
-          });
-        }
+        await applyStockDeltas(1);
       }
 
       event.processed = true;
