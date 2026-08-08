@@ -20,6 +20,23 @@ import { Cart } from '../persistence/entities';
 
 const cartCacheKey = (id: string) => `cart:${id}`;
 
+/**
+ * A caller-input problem (e.g. a non-positive/non-integer cart quantity),
+ * distinct from an infrastructure/unexpected failure — same split
+ * `IllegalOrderTransitionError` (order.service.ts) draws for order
+ * transitions. Controllers can catch this type specifically and map it to a
+ * 400, the same way order.controller.ts's `transitionOrder` handler maps
+ * `IllegalOrderTransitionError` (there, any thrown Error) to a 400, rather
+ * than string-matching the message or letting it fall through to the
+ * generic handler as an opaque 500.
+ */
+export class CartValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CartValidationError';
+  }
+}
+
 /** Cache calls must NEVER hang the caller — a try/catch alone doesn't
  *  protect against this: a promise that never settles (which the
  *  underlying Redis client can do when unreachable, confirmed by hand)
@@ -182,7 +199,7 @@ export class BaseCartService<
     // into a positive delta that inflates stock for goods never removed.
     // Enforce the invariant here, where it holds regardless of transport.
     if (!Number.isInteger(addItemDto.quantity) || addItemDto.quantity < 1) {
-      throw new Error(
+      throw new CartValidationError(
         `Cart item quantity must be a positive integer, received ${addItemDto.quantity}`
       );
     }
