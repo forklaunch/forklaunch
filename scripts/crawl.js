@@ -435,19 +435,40 @@ function injectBeforeBody(html, script) {
     // pages, and a hard stop once failures cluster, keeps us welcome.
     const PAGE_DELAY_MS = 900;
     let consecutiveFails = 0;
+    const retries = new Map();   // path -> attempts so far
 
     const HARD_CAP = MAX_PAGES + navMust.slice(0, NAV_MUST_CAP).length;
     while (queue.length && captured.size < HARD_CAP) {
       const p = queue.shift();
-      if (visited > 0) await new Promise(r => setTimeout(r, PAGE_DELAY_MS));
+      if (visited > 0) {
+        // Slow down further the more failures we're seeing in a row — a
+        // burst of them is usually a short-lived rate-limit window, not a
+        // permanently dead store, and hammering it every 900ms just keeps
+        // extending the block. This is politeness (waiting longer), not
+        // evasion (no UA/IP rotation, no header spoofing) — capped so a
+        // truly unresponsive store still gives up in reasonable time.
+        const delay = consecutiveFails > 0
+          ? Math.min(12000, PAGE_DELAY_MS * Math.pow(2, consecutiveFails))
+          : PAGE_DELAY_MS;
+        await new Promise(r => setTimeout(r, delay));
+      }
       const g = await grab(`https://${domain}${p}`);
       visited++;
       if (g && g.notFound) { continue; }           // guessed URL, no such page
       if (!g) {
-        console.error(`[crawl]   ✗ ${p}`);
-        if (++consecutiveFails >= 4) {
-          console.error('[crawl] stopping: 4 consecutive failures — the store is ' +
-                        'likely rate-limiting us. Keeping what we have.');
+        const attempts = (retries.get(p) || 0) + 1;
+        retries.set(p, attempts);
+        // One retry, after backing off, before writing a page off — a single
+        // failure is very often the rate limit noted above, not a dead page.
+        if (attempts <= 2) queue.push(p);
+        console.error(`[crawl]   ✗ ${p}${attempts > 1 ? ` (attempt ${attempts})` : ''}`);
+        // Six, not four: the backoff above already makes each successive
+        // attempt slower, so this triggers only once genuine back-to-back
+        // failures persist THROUGH increasing delays, not on the first
+        // short blip a real rate-limit window recovers from within seconds.
+        if (++consecutiveFails >= 6) {
+          console.error('[crawl] stopping: repeated failures even after backing off — ' +
+                        'the store is rate-limiting us. Keeping what we have.');
           result.throttled = true;
           break;
         }
