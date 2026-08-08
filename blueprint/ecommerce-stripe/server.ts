@@ -7,6 +7,7 @@ import {
 import { setupRls, setupTenantFilter } from '@forklaunch/core/persistence';
 import { cartRouter } from './api/routes/cart.routes';
 import { catalogImportRouter } from './api/routes/catalogImport.routes';
+import { checkoutRouter } from './api/routes/checkout.routes';
 import { inventoryRouter } from './api/routes/inventory.routes';
 import { orderRouter } from './api/routes/order.routes';
 import { paymentRouter } from './api/routes/payment.routes';
@@ -48,6 +49,7 @@ app.use(variantRouter);
 app.use(inventoryRouter);
 app.use(catalogImportRouter);
 app.use(cartRouter);
+app.use(checkoutRouter);
 app.use(orderRouter);
 app.use(paymentRouter);
 
