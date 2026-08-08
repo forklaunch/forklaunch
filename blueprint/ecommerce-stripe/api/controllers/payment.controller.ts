@@ -8,13 +8,12 @@ import {
   string
 } from '../../schema';
 import { ci, tokens } from '../../bootstrapper';
+import { PaymentProvider } from '../../domain/enum/paymentProvider.enum';
 import { PaymentMapper } from '../../domain/mappers/payment.mappers';
 
 const stripeServiceFactory = ci.scopedResolver(tokens.PaymentService);
 const paypalServiceFactory = ci.scopedResolver(tokens.PaypalPaymentService);
 const HMAC_SECRET_KEY = ci.resolve(tokens.HMAC_SECRET_KEY);
-
-const PaymentProvider = { STRIPE: 'stripe', PAYPAL: 'paypal' } as const;
 
 /** Provider is a routing choice, not a persisted field — Payment has no
  *  "provider" column, only providerRef (the chosen provider's own id). */

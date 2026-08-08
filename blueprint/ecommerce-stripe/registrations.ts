@@ -40,6 +40,7 @@ import {
 import { OrderEventRecord } from './persistence/entities/orderEvent.entity';
 import { StripeTaxService } from './domain/services/tax.service';
 import { FlatRateShippingService } from './domain/services/shipping.service';
+import { WebhookEventService } from './domain/services/webhookEvent.service';
 import { ForkOptions } from '@mikro-orm/core';
 import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
 import Stripe from 'stripe';
@@ -148,6 +149,25 @@ const environmentConfig = configInjector.chain({
     lifetime: Lifetime.Singleton,
     type: string,
     value: getEnvVar('STRIPE_API_KEY')
+  },
+  /** Stripe's webhook signing secret (`whsec_...`) — used by
+   *  stripe.webhooks.constructEvent to verify `stripe-signature`, never to
+   *  call the Stripe API itself (that's STRIPE_API_KEY). Already
+   *  anticipated by __test__/test-utils.ts's customEnvVars, ahead of this
+   *  PR actually consuming it. */
+  STRIPE_WEBHOOK_SECRET: {
+    lifetime: Lifetime.Singleton,
+    type: string,
+    value: getEnvVar('STRIPE_WEBHOOK_SECRET')
+  },
+  /** The webhook's own id, assigned by PayPal when the webhook URL is
+   *  registered in the developer dashboard — required by PayPal's
+   *  verify-webhook-signature API alongside the per-request transmission
+   *  headers. */
+  PAYPAL_WEBHOOK_ID: {
+    lifetime: Lifetime.Singleton,
+    type: string,
+    value: getEnvVar('PAYPAL_WEBHOOK_ID')
   },
   HMAC_SECRET_KEY: {
     lifetime: Lifetime.Singleton,
@@ -404,6 +424,22 @@ const serviceDependencies = runtimeDependencies.chain({
             PaymentDtoTypes
           >
         >[4]
+      )
+  },
+  /**
+   * The webhook idempotency gate (ECOM-10's other half) — Scoped, same
+   * lifetime as PaymentService/OrderService, since it holds a
+   * per-request-scoped EntityManager the same way they do.
+   */
+  WebhookEventService: {
+    lifetime: Lifetime.Scoped,
+    type: WebhookEventService,
+    factory: ({ EntityManager, OtelCollector }, context, resolve) =>
+      new WebhookEventService(
+        context?.entityManagerOptions
+          ? resolve('EntityManager', context)
+          : EntityManager,
+        OtelCollector
       )
   },
   /**
