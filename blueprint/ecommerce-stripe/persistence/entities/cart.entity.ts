@@ -1,4 +1,4 @@
-import { sqlBaseProperties } from '../../../core/persistence/sql.base.properties';
+import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 import { CartItemDto } from '@forklaunch/interfaces-ecommerce/types';
 import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
 
