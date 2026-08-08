@@ -20,9 +20,14 @@ import {
 import {
   BaseCartService,
   BaseInventoryService,
+  BaseOrderService,
   BaseProductService,
   BaseVariantService
 } from '@forklaunch/implementation-ecommerce-base/services';
+import { RedisWorkerProducer } from '@forklaunch/implementation-worker-redis/producers';
+import { RedisWorkerSchemas } from '@forklaunch/implementation-worker-redis/schemas';
+import { RedisWorkerOptions } from '@forklaunch/implementation-worker-redis/types';
+import { OrderEventRecord } from './persistence/entities/orderEvent.entity';
 import { ForkOptions } from '@mikro-orm/core';
 import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
 import {
@@ -35,6 +40,11 @@ import {
   InventoryMapper,
   UpdateInventoryMapper
 } from './domain/mappers/inventory.mappers';
+import {
+  CreateOrderMapper,
+  OrderMapper,
+  UpdateOrderMapper
+} from './domain/mappers/order.mappers';
 import {
   CreateProductMapper,
   ProductMapper,
@@ -50,12 +60,18 @@ import {
   CartMapperTypes,
   InventoryDtoTypes,
   InventoryMapperTypes,
+  OrderDtoTypes,
+  OrderMapperTypes,
   ProductDtoTypes,
   ProductMapperTypes,
   VariantDtoTypes,
   VariantMapperTypes
 } from './domain/types/ecommerceMappers.types';
 import mikroOrmOptionsConfig from './mikro-orm.config';
+
+const RedisWorkerOptionsSchema = RedisWorkerSchemas({
+  validator: schemaValidator
+});
 
 //! defines the configuration schema for the application
 const configInjector = createConfigInjector(schemaValidator, {
@@ -250,6 +266,42 @@ const serviceDependencies = runtimeDependencies.chain({
         schemaValidator,
         { InventoryMapper, CreateInventoryMapper, UpdateInventoryMapper }
       )
+  },
+  OrderService: {
+    lifetime: Lifetime.Scoped,
+    type: BaseOrderService<SchemaValidator, OrderMapperTypes, OrderDtoTypes>,
+    factory: ({ EntityManager, OtelCollector }, context, resolve) =>
+      new BaseOrderService(
+        context?.entityManagerOptions
+          ? resolve('EntityManager', context)
+          : EntityManager,
+        OtelCollector,
+        schemaValidator,
+        { OrderMapper, CreateOrderMapper, UpdateOrderMapper }
+      )
+  },
+  /**
+   * ECOM-12's event-emission boundary, actually implemented — previously
+   * just a comment. Redis transport only (matches TtlCache already being
+   * registered here; no new infra beyond what cart caching already needs).
+   * Only the producer side is wired here — order.controller.ts is the only
+   * local consumer of a token from this pair; the consumer/worker.ts side
+   * is scoped to a follow-up PR.
+   */
+  RedisWorkerOptions: {
+    lifetime: Lifetime.Singleton,
+    type: RedisWorkerOptionsSchema,
+    value: {
+      pageSize: 100,
+      retries: 3,
+      interval: 5000
+    }
+  },
+  OrderEventProducer: {
+    lifetime: Lifetime.Scoped,
+    type: RedisWorkerProducer<OrderEventRecord, RedisWorkerOptions>,
+    factory: ({ TtlCache, ORDER_EVENT_QUEUE, RedisWorkerOptions }) =>
+      new RedisWorkerProducer(ORDER_EVENT_QUEUE, TtlCache, RedisWorkerOptions)
   }
 });
 
