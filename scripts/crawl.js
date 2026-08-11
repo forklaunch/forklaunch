@@ -63,15 +63,70 @@ const MAX_PAGES = pagesIdx > -1 ? parseInt(argv[pagesIdx + 1], 10) || 20 : 20;
 const NAV_MUST_CAP = 20;
 
 const assetMap = new Map();          // absolute asset url -> local rel path
+const capturingRel = new Set();      // local rel paths already fetched/queued —
+                                      // every width/version variant of one image
+                                      // now shares a rel (see localFor below), so
+                                      // this stops the same picture being
+                                      // downloaded once per srcset candidate.
 let totalBytes = 0;
 
+// ---- responsive-image normalization ----------------------------------
+// Shopify (and most storefront CDNs) serve one base image at many sizes by
+// appending resize hints to the query string — the same
+// MS_T_VAR6_HERO_....webp is requested as ?width=216, ?width=288, ?v=123,
+// ?v=123&width=432, etc. Every one of those is byte-for-byte the same
+// picture at a different scale, so they must collapse to ONE captured
+// file. If they don't: (a) we capture/store the same image N times, and
+// (b) far worse, an <img>'s src or a srcset candidate whose exact query
+// was never itself network-captured falls through to a literal
+// substring/prefix match against a DIFFERENT query variant that WAS
+// captured, leaving the un-matched tail of the query (e.g. "&width=432")
+// dangling on the rewritten local path — a path no file on disk has.
+//
+// Framework image PROXIES (/_next/image?url=…, /cdn-cgi/image/…) are the
+// opposite case: one proxy pathname serves every image on the page, and
+// the query (or an encoded path segment) is what tells them apart — for
+// those the query must never be stripped. isProxyImageUrl distinguishes
+// the two so only genuine direct-CDN resize hints get normalized away.
+const IMG_RESIZE_PARAMS = ['width', 'height', 'crop', 'v', 'format', 'quality', 'dpr', 'pad_color'];
+
+function isImageExt(pathname) {
+  const clean = pathname.split('/').pop() || '';
+  const ext = (clean.includes('.') ? clean.split('.').pop() : '').toLowerCase();
+  return EXT_DIR[ext] === 'img';
+}
+
+// Proxy pathnames known to multiplex many distinct images behind one route,
+// plus the generic tell (a `url=` query param wrapping the real image URL) —
+// same signal the proxy-unwrap logic elsewhere in this file already relies on.
+function isProxyImageUrl(u) {
+  if (/(^|\/)(_next\/image|cdn-cgi\/image|_image)(\/|$)/.test(u.pathname)) return true;
+  if (u.searchParams.has('url')) return true;
+  return false;
+}
+
+// Strips known resize/version query params from a direct (non-proxy) CDN
+// image URL so every size variant of one base image normalizes to the same
+// string. Proxy URLs and non-image URLs pass through untouched.
+function normalizeImageUrl(url) {
+  let u;
+  try { u = new URL(url); } catch (_) { return url; }
+  if (!isImageExt(u.pathname) || isProxyImageUrl(u)) return url;
+  let changed = false;
+  for (const p of IMG_RESIZE_PARAMS) {
+    if (u.searchParams.has(p)) { u.searchParams.delete(p); changed = true; }
+  }
+  return changed ? u.toString() : url;
+}
+
 function localFor(url) {
-  const u = new URL(url);
+  const key = normalizeImageUrl(url);
+  const u = new URL(key);
   const clean = u.pathname.split('/').pop() || 'index';
   let ext = (clean.includes('.') ? clean.split('.').pop() : '').toLowerCase();
   if (!EXT_DIR[ext]) ext = 'bin';
   const sub = EXT_DIR[ext] || 'other';
-  const h = crypto.createHash('md5').update(url).digest('hex').slice(0, 10);
+  const h = crypto.createHash('md5').update(key).digest('hex').slice(0, 10);
   const base = clean.replace(/[^A-Za-z0-9._-]/g, '_').replace(/\.[^.]*$/, '').slice(0, 48) || 'a';
   return `_a/${sub}/${base}.${h}.${ext}`;
 }
@@ -161,6 +216,11 @@ function injectBeforeBody(html, script) {
         if (resp.status() >= 400 || assetMap.has(url)) return;
         const rel = localFor(url);
         assetMap.set(url, rel);
+        // A same-image resize variant we've already captured (or queued) —
+        // localFor now maps every width/version of one CDN image to the same
+        // rel, so this keys the download itself, not just the eventual path.
+        if (capturingRel.has(rel)) return;
+        capturingRel.add(rel);
         pending.push((async () => {
           try {
             const buf = await fetchWithTimeout(resp, 8000);
@@ -501,9 +561,17 @@ function injectBeforeBody(html, script) {
     result.assets = assetMap.size;
     result.bytes = totalBytes;
 
-    // recover assets whose body never arrived
-    const missed = [...assetMap.entries()]
-      .filter(([, rel]) => !fs.existsSync(path.join(outdir, 'site', rel)));
+    // recover assets whose body never arrived. Dedupe by rel first — many
+    // different abs urls (srcset width/version variants) now share one rel
+    // (see localFor), so without this a single missing image could burn
+    // several slots of the 600-item budget below retrying the same file.
+    const missedByRel = new Map();
+    for (const [abs, rel] of assetMap) {
+      if (!fs.existsSync(path.join(outdir, 'site', rel)) && !missedByRel.has(rel)) {
+        missedByRel.set(rel, abs);
+      }
+    }
+    const missed = [...missedByRel].map(([rel, abs]) => [abs, rel]);
     await Promise.allSettled(missed.slice(0, 600).map(async ([abs, rel]) => {
       try {
         const r = await fetch(abs, { headers: { 'User-Agent': UA },
@@ -534,7 +602,49 @@ function injectBeforeBody(html, script) {
         byFull.set(u.pathname + u.search, rel);
       } catch (_) {}
     }
-    const sortedAssets = [...assetMap.entries()].sort((a, b) => b[0].length - a[0].length);
+    // Split captured assets into direct (non-proxy) images vs everything
+    // else. Images get a query-AWARE rewrite below (imgRewrites): the base
+    // url is matched with an OPTIONAL trailing query and the whole thing —
+    // base plus whatever query text actually follows it in this page's
+    // markup — is replaced with the clean local path. A literal
+    // html.split(exactCapturedUrl).join(...) can't do this safely for
+    // images: if the exact query string this particular abs was captured
+    // with (e.g. "?v=123", no width) happens to be a PREFIX of a longer
+    // query on some other occurrence of the same base image in the page
+    // (e.g. "?v=123&width=432" in a srcset candidate), the literal replace
+    // only consumes the matched prefix and leaves the rest — "&width=432"
+    // — dangling on the rewritten local path, pointing at a file that
+    // doesn't exist under that name. Non-image assets (css/js/fonts) and
+    // proxy image urls (/_next/image?url=…, /cdn-cgi/image/…, where the
+    // query IS the identity, not a resize hint) keep the exact literal
+    // match — see localFor / isProxyImageUrl above for why those two cases
+    // are handled differently.
+    const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const imgBaseRel = new Map();     // normalized (query-stripped) image url -> rel
+    const otherAssets = [];
+    for (const [abs, rel] of assetMap) {
+      let u;
+      try { u = new URL(abs); } catch (_) { otherAssets.push([abs, rel]); continue; }
+      if (isImageExt(u.pathname) && !isProxyImageUrl(u)) {
+        const base = normalizeImageUrl(abs);
+        if (!imgBaseRel.has(base)) imgBaseRel.set(base, rel);
+      } else {
+        otherAssets.push([abs, rel]);
+      }
+    }
+    const sortedAssets = otherAssets.sort((a, b) => b[0].length - a[0].length);
+    const imgRewrites = [...imgBaseRel.entries()]
+      .sort((a, b) => b[0].length - a[0].length)
+      .map(([base, rel]) => {
+        const noProto = base.replace(/^https?:/, '');
+        const pattern = noProto !== base
+          ? `(?:${escapeRe(base)}|${escapeRe(noProto)})`
+          : escapeRe(base);
+        // trailing query, if this occurrence in the page's html has one —
+        // matched permissively (it may still carry HTML-entity-encoded
+        // "&amp;" from page.content()'s serialization) and discarded whole.
+        return { re: new RegExp(pattern + '(?:\\?[^\\s"\'()<>]*)?', 'g'), rel };
+      });
 
     // Rewrite url() inside captured CSS. Refs there resolve relative to the
     // STYLESHEET, not the page, so one rewrite works from every page depth.
@@ -580,7 +690,11 @@ function injectBeforeBody(html, script) {
       const up = '../'.repeat(meta.depth);
       let html = rawHtml;
 
-      // assets: exact URL, then protocol-relative, then pathname fallback
+      // direct CDN images first (query-aware — see imgRewrites above),
+      // THEN everything else: exact URL, then protocol-relative fallback.
+      for (const { re, rel } of imgRewrites) {
+        html = html.replace(re, up + rel);
+      }
       for (const [abs, rel] of sortedAssets) {
         const noProto = abs.replace(/^https?:/, '');
         html = html.split(abs).join(up + rel).split(noProto).join(up + rel);
@@ -665,7 +779,17 @@ function injectBeforeBody(html, script) {
         if (full) return `${pre}${up}${full}"`;
         const c = p.split('?')[0];
         const bare = byPath.get(c);
-        if (bare && !p.includes('?')) return `${pre}${up}${bare}"`;
+        if (bare) {
+          // A direct (non-proxy) asset with a query still attached — that
+          // query is just a resize/version hint (see normalizeImageUrl
+          // above), safe to drop once the base pathname resolves. Proxy
+          // pathnames genuinely need the query as part of the asset's
+          // identity (byFull, above, is what resolves those), so leave
+          // this fallback query-blind ONLY for them.
+          const proxyLike = p.includes('?') &&
+            (/(^|\/)(_next\/image|cdn-cgi\/image|_image)(\/|$)/.test(c) || /[?&]url=/.test(p));
+          if (!proxyLike) return `${pre}${up}${bare}"`;
+        }
         // Uncaptured proxy URL: unwrap it to the origin image it wraps, which
         // is a real CDN asset that loads without the proxy behind it.
         const inner = /[?&]url=([^&]+)/.exec(p);
