@@ -782,6 +782,37 @@ function injectBeforeBody(html, script) {
         '})();</' + 'script>';
       html = injectBeforeBody(html, relinkShim);
 
+      // Dead-link click rescue (demo mode). A click on a content link whose
+      // destination we didn't capture must never be a silent no-op. The
+      // relink shim rewrites the href, but many themes re-mangle their own
+      // product/collection card hrefs back to "#" at runtime for client-side
+      // routing — so rewriting the attribute isn't enough. Intercept at CLICK
+      // time (robust to any href re-rendering) and land on the nearest
+      // captured page of the same kind: an uncaptured product -> a captured
+      // product, anything else -> the nearest captured collection. Never a
+      // dead click, never an ejection off-site. (For a real credentialed
+      // migration the whole catalog is captured and this never fires.)
+      if (CLEAN) {
+        const capFiles = Object.values(linkMap);
+        const prodFB = capFiles.find(f => /^products\//.test(f)) || '';
+        const collFB = capFiles.find(f => /^collections\//.test(f)) || prodFB || 'index.html';
+        const rescueShim = '<script>(function(){' +
+          'var PRODFB=' + JSON.stringify(prodFB) + ',COLLFB=' + JSON.stringify(collFB) + ';' +
+          'if(!PRODFB&&!COLLFB)return;' +
+          'function up(){var d=location.pathname.split("/").length-2;return d>0?Array(d+1).join("../"):"";}' +
+          'document.addEventListener("click",function(ev){' +
+          'var e=ev.target&&ev.target.closest?ev.target.closest("a"):null;if(!e)return;' +
+          'if(e.closest("button,[role=button],[class*=swatch],[class*=quick],[class*=menu],[class*=search],[class*=cart],[class*=account],[class*=nav-toggle],[class*=header__icon],#fl-drawer,#fl-co,#fl-cart-btn,#fl-add"))return;' +
+          'if(e.getAttribute("data-fl-href"))return;' +
+          'var h=e.getAttribute("href")||"",un=e.getAttribute("data-mirror-uncaptured")||"";' +
+          'if(!(h==="#"||h===""||h.charAt(0)==="#")&&!un)return;' +
+          'var isP=/\\/products\\//.test(un)||/product/i.test(e.className||"")||(e.querySelector&&e.querySelector("[class*=price],[class*=money]"));' +
+          'var t=isP?(PRODFB||COLLFB):(COLLFB||PRODFB);if(!t)return;' +
+          'ev.preventDefault();ev.stopImmediatePropagation();window.location.href=up()+t;' +
+          '},true);})();</' + 'script>';
+        html = injectBeforeBody(html, rescueShim);
+      }
+
       // Commerce bridge: answer the storefront's cart/search/filter/sort API
       // calls so add-to-cart, filtering, sorting, and search actually work.
       // Points at the ForkLaunch module when --api is given (HMAC-signed with
