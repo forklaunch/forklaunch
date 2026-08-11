@@ -279,6 +279,28 @@ function injectBeforeBody(html, script) {
         }
       }).catch(() => {});
 
+      // Promote lazy-loaded images before serializing. Many themes defer image
+      // URLs in data-src/data-srcset and swap them onto src via an
+      // IntersectionObserver that does not reliably fire under headless
+      // capture — so the image is never fetched (never captured) and never
+      // shown offline. Copy the deferred URL onto the real attribute, then let
+      // the browser fetch it: that both pulls the bytes into the asset map and
+      // makes the served clone display the image without the lazy library.
+      await page.evaluate(() => {
+        const SRC = ['data-src', 'data-original', 'data-lazy-src', 'data-lazy',
+                     'data-image', 'data-fallback-src', 'data-srcurl', 'data-echo'];
+        const SET = ['data-srcset', 'data-lazy-srcset'];
+        const placeholder = s => !s || /^data:image\/(gif|svg)|placeholder|blank|1x1|spacer|lazy|transparent/i.test(s);
+        for (const el of document.querySelectorAll('img, source')) {
+          for (const a of SRC) { const v = el.getAttribute(a); if (v && placeholder(el.getAttribute('src'))) { el.setAttribute('src', v); break; } }
+          for (const a of SET) { const v = el.getAttribute(a); if (v && !el.getAttribute('srcset')) { el.setAttribute('srcset', v); break; } }
+          el.removeAttribute('loading');
+          if (el.classList) el.classList.remove('lazy', 'lazyload', 'lazyloading');
+        }
+      }).catch(() => {});
+      try { await page.waitForLoadState('networkidle', { timeout: 6000 }); } catch (_) {}
+      await page.waitForTimeout(500);
+
       const html = await page.content();
       const links = await page.evaluate(() =>
         [...document.querySelectorAll('a[href]')].map(a => a.getAttribute('href')));
