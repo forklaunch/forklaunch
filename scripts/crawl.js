@@ -88,7 +88,16 @@ let totalBytes = 0;
 // the query (or an encoded path segment) is what tells them apart — for
 // those the query must never be stripped. isProxyImageUrl distinguishes
 // the two so only genuine direct-CDN resize hints get normalized away.
-const IMG_RESIZE_PARAMS = ['width', 'height', 'crop', 'v', 'format', 'quality', 'dpr', 'pad_color'];
+// Resize/format/version query params that identify a *variant* of one image
+// rather than a different image. Stripped (image URLs only) so every variant
+// dedupes to one captured file with no dangling query on the local path.
+// Long names are Shopify's; short ones (w/h/q/fm/fit/auto/...) are what
+// Contentful, imgix and Next/image-passthrough CDNs use — e.g. ruggable
+// serves images.ctfassets.net/...jpg?fm=avif&w=384&q=75.
+const IMG_RESIZE_PARAMS = [
+  'width', 'height', 'crop', 'v', 'format', 'quality', 'dpr', 'pad_color',
+  'w', 'h', 'q', 'fm', 'fit', 'auto', 'bg', 'ar', 'cs', 'blur', 'sharpen', 'usm', 'ixlib'
+];
 
 function isImageExt(pathname) {
   const clean = pathname.split('/').pop() || '';
