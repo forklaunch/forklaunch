@@ -414,7 +414,11 @@ const ADMIN_PRODUCTS_QUERY = `query($cursor: String) {
 }`;
 
 async function adminGraphql(shop: string, token: string, query: string, variables: unknown): Promise<any> {
-  const url = `https://${shop}/admin/api/${ADMIN_API_VERSION}/graphql.json`;
+  // ADMIN_API_ENDPOINT overrides the live Shopify URL — used only to point the
+  // pull at a mock server in tests. Unset in real use, so production always
+  // hits the merchant's real Admin API.
+  const url = process.env.ADMIN_API_ENDPOINT ||
+    `https://${shop}/admin/api/${ADMIN_API_VERSION}/graphql.json`;
   for (let attempt = 0; attempt < 6; attempt++) {
     const res = await fetch(url, {
       method: 'POST',
