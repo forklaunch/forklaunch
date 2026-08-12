@@ -18,7 +18,7 @@ import { writeFileSync, readFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { normalizeShopify } from './normalize.ts';
 import { extractBrand } from './brand.ts';
-import type { GapNote, NormalizedCatalog } from './model.ts';
+import type { GapNote, NormalizedCatalog, NormalizedProduct, NormalizedVariant } from './model.ts';
 
 function shopSlug(url: string): string {
   return url.replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
@@ -138,7 +138,7 @@ function signHmac(secretKey: string, method: string, signedPath: string, body: u
 
 /** Maps our source-agnostic normalized catalog onto the real module's
  *  /catalog-import request schema (ecommerce-stripe/api/controllers/catalogImport.controller.ts). */
-function toImportPayload(cat: NormalizedCatalog) {
+export function toImportPayload(cat: NormalizedCatalog) {
   return {
     products: cat.products.map((p) => ({
       externalId: p.externalId,
@@ -159,10 +159,12 @@ function toImportPayload(cat: NormalizedCatalog) {
         priceCents: v.priceCents,
         compareAtPriceCents: v.compareAtPriceCents ?? undefined,
         requiresShipping: v.requiresShipping,
-        // The source platform's public catalog feed carries no stock
-        // numbers — seed a placeholder; a real migration reconciles this
-        // against the merchant's actual inventory before cutover.
-        initialStock: v.available ? 100 : 0
+        // Use the REAL on-hand count when we have it (an Admin pull fills
+        // inventoryQuantity). Only when it's null — a public products.json pull,
+        // which carries no stock numbers — do we seed a placeholder from the
+        // `available` boolean, to be reconciled before cutover. A migration
+        // that has the real number should never ship the placeholder.
+        initialStock: v.inventoryQuantity != null ? v.inventoryQuantity : (v.available ? 100 : 0)
       }))
     }))
   };
@@ -323,6 +325,146 @@ async function cmdRehost(normalizedPath: string, opts: { out?: string; base?: st
   if (failures.length) console.log(`  ${failures.length} unreachable images left at source URL (see rehost-report.json)`);
 }
 
+// ---- credentialed Admin API pull (real inventory + SKUs) ------------------
+// The public products.json feed cannot expose stock counts, unpublished
+// products, or reliable SKUs. The Admin GraphQL API can, with a merchant's
+// access token — and that is what turns a seeded demo into an EXACT migration:
+// real inventoryQuantity per variant flows straight through normalize -> import
+// -> the module's on-hand stock, with no placeholder. normalizeAdminProduct is
+// a pure function (unit-tested against a fixture); adminGraphql/cmdPullAdmin are
+// the token-gated live adapters (their end-to-end run needs a real dev-store
+// token, but the mapping they depend on is fully tested without one).
+const ADMIN_API_VERSION = '2024-10';
+
+function weightToGrams(value: number, unit: string): number {
+  switch ((unit || '').toUpperCase()) {
+    case 'KILOGRAMS': return Math.round(value * 1000);
+    case 'GRAMS': return Math.round(value);
+    case 'OUNCES': return Math.round(value * 28.3495);
+    case 'POUNDS': return Math.round(value * 453.592);
+    default: return Math.round(value || 0);
+  }
+}
+
+function moneyToCents(m: string | number | null | undefined): number | null {
+  if (m == null || m === '') return null;
+  const n = typeof m === 'number' ? m : parseFloat(m);
+  return Number.isFinite(n) ? Math.round(n * 100) : null;
+}
+
+/** Map one Shopify Admin GraphQL Product node onto the normalized model. Pure
+ *  and total — every field defaulted so a sparse node never throws. */
+export function normalizeAdminProduct(node: any, shopBaseUrl: string): NormalizedProduct {
+  const handle = node.handle ?? '';
+  const options = (node.options ?? []).map((o: any) => ({
+    name: o.name ?? '', isPackQuantity: false, values: o.values ?? [],
+  }));
+  const images = (node.images?.edges ?? [])
+    .map((e: any, i: number) => ({ src: e.node?.url ?? '', position: i + 1 }))
+    .filter((im: any) => im.src);
+  const variants: NormalizedVariant[] = (node.variants?.edges ?? []).map((e: any) => {
+    const v = e.node ?? {};
+    const optionValues: Record<string, string> = {};
+    for (const so of v.selectedOptions ?? []) if (so?.name) optionValues[so.name] = so.value ?? '';
+    const inv = v.inventoryItem ?? {};
+    const weight = inv.measurement?.weight;
+    return {
+      externalId: String(v.legacyResourceId ?? v.id ?? ''),
+      sku: v.sku ?? '',
+      title: v.title ?? '',
+      optionValues,
+      priceCents: moneyToCents(v.price) ?? 0,
+      compareAtPriceCents: moneyToCents(v.compareAtPrice),
+      available: v.availableForSale ?? true,
+      // The whole point of the Admin pull: the real number, not a placeholder.
+      inventoryQuantity: typeof v.inventoryQuantity === 'number' ? v.inventoryQuantity : null,
+      requiresShipping: inv.requiresShipping ?? true,
+      grams: weight ? weightToGrams(weight.value, weight.unit) : 0,
+    };
+  });
+  return {
+    externalId: String(node.legacyResourceId ?? node.id ?? ''),
+    handle,
+    sourceUrl: `${shopBaseUrl.replace(/\/$/, '')}/products/${handle}`,
+    title: node.title ?? '',
+    descriptionHtml: node.descriptionHtml ?? '',
+    vendor: node.vendor ?? '',
+    productType: node.productType ?? '',
+    tags: node.tags ?? [],
+    options,
+    images,
+    variants,
+  };
+}
+
+const ADMIN_PRODUCTS_QUERY = `query($cursor: String) {
+  products(first: 50, after: $cursor) {
+    edges { node {
+      legacyResourceId handle title descriptionHtml vendor productType tags status
+      options { name values }
+      images(first: 50) { edges { node { url altText } } }
+      variants(first: 100) { edges { node {
+        legacyResourceId sku title price compareAtPrice inventoryQuantity availableForSale
+        selectedOptions { name value }
+        inventoryItem { requiresShipping measurement { weight { value unit } } }
+      } } }
+    } }
+    pageInfo { hasNextPage endCursor }
+  }
+}`;
+
+async function adminGraphql(shop: string, token: string, query: string, variables: unknown): Promise<any> {
+  const url = `https://${shop}/admin/api/${ADMIN_API_VERSION}/graphql.json`;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'X-Shopify-Access-Token': token },
+      body: JSON.stringify({ query, variables }),
+    });
+    if (res.status === 429) { await sleep(2000 * (attempt + 1)); continue; } // REST-style rate cap
+    if (res.status === 401 || res.status === 403)
+      throw new Error(`Admin API auth failed (${res.status}) — check the access token and its scopes ` +
+        `(needs read_products, read_inventory).`);
+    const body: any = await res.json();
+    if (body.errors) {
+      // GraphQL cost limiter returns THROTTLED as an error, not a 429 — back off and retry.
+      if (JSON.stringify(body.errors).includes('THROTTLED')) { await sleep(2000 * (attempt + 1)); continue; }
+      throw new Error(`Admin API error: ${JSON.stringify(body.errors)}`);
+    }
+    return body.data;
+  }
+  throw new Error('Admin API: exhausted retries against the cost limiter');
+}
+
+async function cmdPullAdmin(shopUrl: string, token: string) {
+  const shop = shopUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  const base = `https://${shop}`;
+  const products: NormalizedProduct[] = [];
+  let cursor: string | null = null;
+  do {
+    const data = await adminGraphql(shop, token, ADMIN_PRODUCTS_QUERY, { cursor });
+    for (const edge of data.products.edges) products.push(normalizeAdminProduct(edge.node, base));
+    cursor = data.products.pageInfo.hasNextPage ? data.products.pageInfo.endCursor : null;
+    console.log(`  pulled ${products.length} products...`);
+    if (cursor) await sleep(500);
+  } while (cursor);
+
+  const cat: NormalizedCatalog = {
+    source: {
+      shop, sourceUrl: base, platform: 'shopify', pulledAt: new Date().toISOString(),
+      rawProductCount: products.length, keptProductCount: products.length, filteredProductCount: 0,
+    },
+    products,
+  };
+  const path = join('data', shopSlug(shopUrl), 'normalized.json');
+  out(path, JSON.stringify(cat, null, 2));
+  const totalV = products.reduce((s, p) => s + p.variants.length, 0);
+  const withStock = products.reduce((s, p) => s + p.variants.filter((v) => v.inventoryQuantity != null).length, 0);
+  console.log(`admin pull: ${products.length} products / ${totalV} variants ` +
+    `(${withStock} with real stock counts) -> ${path}`);
+  console.log('  (Admin pull writes normalized.json directly — no separate normalize step needed.)');
+}
+
 // ---- parity verification (cutover gate) -----------------------------------
 // Before a store goes live on ForkLaunch, prove the imported catalog matches
 // the source EXACTLY — counts, prices, SKUs, variant sets. Loading data and
@@ -346,7 +488,7 @@ interface ParityReport {
   parityScore: number;
 }
 
-function diffCatalogs(source: NormalizedCatalog, target: NormalizedCatalog): ParityReport {
+export function diffCatalogs(source: NormalizedCatalog, target: NormalizedCatalog): ParityReport {
   const sMap = new Map(source.products.map((p) => [p.externalId, p]));
   const tMap = new Map(target.products.map((p) => [p.externalId, p]));
   const missingFromTarget: string[] = [];
@@ -409,9 +551,16 @@ function cmdVerify(sourcePath: string, readbackPath: string) {
   if (!report.pass) process.exit(2);
 }
 
-const [, , cmd, arg] = process.argv;
-try {
+if (import.meta.main) {
+  const [, , cmd, arg] = process.argv;
+  try {
   if (cmd === 'pull' && arg) await cmdPull(arg);
+  else if (cmd === 'pull-admin' && arg) {
+    const tokenIdx = process.argv.indexOf('--token');
+    const token = (tokenIdx > -1 ? process.argv[tokenIdx + 1] : '') || process.env.SHOPIFY_ADMIN_TOKEN || '';
+    if (!token) { console.error('pull-admin needs --token <access-token> or SHOPIFY_ADMIN_TOKEN env'); process.exit(1); }
+    await cmdPullAdmin(arg, token);
+  }
   else if (cmd === 'normalize' && arg) cmdNormalize(arg);
   else if (cmd === 'brand' && arg) await cmdBrand(arg);
   else if (cmd === 'rehost' && arg) {
@@ -441,6 +590,7 @@ try {
   else {
     console.log('usage:');
     console.log('  bun src/cli.ts pull <shop-url>');
+    console.log('  bun src/cli.ts pull-admin <shop-url> --token <admin-access-token>   (real inventory + SKUs)');
     console.log('  bun src/cli.ts normalize <raw.json> <shop-url>');
     console.log('  bun src/cli.ts brand <shop-url>');
     console.log('  bun src/cli.ts rehost <normalized.json> [--out <dir>] [--base <url>]');
@@ -448,7 +598,8 @@ try {
     console.log('  bun src/cli.ts import <normalized.json> [server-url] [hmac-secret]');
     process.exit(1);
   }
-} catch (e: any) {
-  console.error('error:', e.message);
-  process.exit(1);
+  } catch (e: any) {
+    console.error('error:', e.message);
+    process.exit(1);
+  }
 }
