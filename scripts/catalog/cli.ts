@@ -323,6 +323,92 @@ async function cmdRehost(normalizedPath: string, opts: { out?: string; base?: st
   if (failures.length) console.log(`  ${failures.length} unreachable images left at source URL (see rehost-report.json)`);
 }
 
+// ---- parity verification (cutover gate) -----------------------------------
+// Before a store goes live on ForkLaunch, prove the imported catalog matches
+// the source EXACTLY — counts, prices, SKUs, variant sets. Loading data and
+// trusting it is not a migration; a cutover gate that blocks on any mismatch
+// is. diffCatalogs is a pure function (fully unit-testable) keyed on the
+// source platform's stable externalIds so re-ordering or re-pagination can't
+// create false diffs. The command compares the source normalized.json against
+// a READBACK of what the module actually stored (a normalized dump of the
+// module's list/get endpoints — that thin fetch adapter is the one piece that
+// needs the running module, and is intentionally kept separate from this
+// pure, testable core).
+interface ParityReport {
+  pass: boolean;
+  sourceProducts: number;
+  targetProducts: number;
+  matchedProducts: number;
+  missingFromTarget: string[];
+  extraInTarget: string[];
+  productMismatches: Array<{ externalId: string; handle: string; field: string; source: unknown; target: unknown }>;
+  variantMismatches: Array<{ product: string; variant: string; field: string; source: unknown; target: unknown }>;
+  parityScore: number;
+}
+
+function diffCatalogs(source: NormalizedCatalog, target: NormalizedCatalog): ParityReport {
+  const sMap = new Map(source.products.map((p) => [p.externalId, p]));
+  const tMap = new Map(target.products.map((p) => [p.externalId, p]));
+  const missingFromTarget: string[] = [];
+  const extraInTarget: string[] = [];
+  const productMismatches: ParityReport['productMismatches'] = [];
+  const variantMismatches: ParityReport['variantMismatches'] = [];
+
+  for (const id of sMap.keys()) if (!tMap.has(id)) missingFromTarget.push(id);
+  for (const id of tMap.keys()) if (!sMap.has(id)) extraInTarget.push(id);
+
+  let matched = 0;
+  for (const [id, sp] of sMap) {
+    const tp = tMap.get(id);
+    if (!tp) continue;
+    matched++;
+    if (sp.title !== tp.title)
+      productMismatches.push({ externalId: id, handle: sp.handle, field: 'title', source: sp.title, target: tp.title });
+
+    const sv = new Map(sp.variants.map((v) => [v.externalId, v]));
+    const tv = new Map(tp.variants.map((v) => [v.externalId, v]));
+    for (const [vid, svar] of sv) {
+      const tvar = tv.get(vid);
+      if (!tvar) { variantMismatches.push({ product: id, variant: vid, field: 'presence', source: 'present', target: 'missing' }); continue; }
+      if (svar.priceCents !== tvar.priceCents)
+        variantMismatches.push({ product: id, variant: vid, field: 'priceCents', source: svar.priceCents, target: tvar.priceCents });
+      if ((svar.sku || '') !== (tvar.sku || ''))
+        variantMismatches.push({ product: id, variant: vid, field: 'sku', source: svar.sku, target: tvar.sku });
+    }
+    for (const vid of tv.keys()) if (!sv.has(vid))
+      variantMismatches.push({ product: id, variant: vid, field: 'presence', source: 'missing', target: 'extra' });
+  }
+
+  const totalChecks = sMap.size + [...sMap.values()].reduce((s, p) => s + p.variants.length, 0);
+  const problems = missingFromTarget.length + extraInTarget.length + productMismatches.length + variantMismatches.length;
+  return {
+    pass: problems === 0,
+    sourceProducts: sMap.size,
+    targetProducts: tMap.size,
+    matchedProducts: matched,
+    missingFromTarget, extraInTarget, productMismatches, variantMismatches,
+    parityScore: totalChecks ? Math.max(0, 1 - problems / totalChecks) : 1,
+  };
+}
+
+function cmdVerify(sourcePath: string, readbackPath: string) {
+  const source: NormalizedCatalog = JSON.parse(readFileSync(sourcePath, 'utf8'));
+  const target: NormalizedCatalog = JSON.parse(readFileSync(readbackPath, 'utf8'));
+  const report = diffCatalogs(source, target);
+  const outPath = join(dirname(sourcePath), 'parity-report.json');
+  out(outPath, JSON.stringify(report, null, 2));
+  console.log(`parity: ${report.matchedProducts}/${report.sourceProducts} products matched, ` +
+    `score ${(report.parityScore * 100).toFixed(2)}%`);
+  if (report.missingFromTarget.length) console.log(`  ✗ ${report.missingFromTarget.length} products missing from target`);
+  if (report.extraInTarget.length) console.log(`  ✗ ${report.extraInTarget.length} extra products in target`);
+  if (report.productMismatches.length) console.log(`  ✗ ${report.productMismatches.length} product field mismatches`);
+  if (report.variantMismatches.length) console.log(`  ✗ ${report.variantMismatches.length} variant mismatches`);
+  console.log(report.pass
+    ? '  PASS — exact parity, safe to cut over'
+    : `  FAIL — do NOT cut over. See ${outPath}`);
+  if (!report.pass) process.exit(2);
+}
+
 const [, , cmd, arg] = process.argv;
 try {
   if (cmd === 'pull' && arg) await cmdPull(arg);
@@ -335,6 +421,11 @@ try {
       out: outIdx > -1 ? process.argv[outIdx + 1] : undefined,
       base: baseIdx > -1 ? process.argv[baseIdx + 1] : undefined,
     });
+  }
+  else if (cmd === 'verify' && arg) {
+    const readback = process.argv[4];
+    if (!readback) { console.error('verify needs: <source-normalized.json> <module-readback.json>'); process.exit(1); }
+    cmdVerify(arg, readback);
   }
   else if (cmd === 'import' && arg) {
     const serverUrl = process.argv[4] ?? 'http://localhost:8001';
@@ -353,6 +444,7 @@ try {
     console.log('  bun src/cli.ts normalize <raw.json> <shop-url>');
     console.log('  bun src/cli.ts brand <shop-url>');
     console.log('  bun src/cli.ts rehost <normalized.json> [--out <dir>] [--base <url>]');
+    console.log('  bun src/cli.ts verify <source-normalized.json> <module-readback.json>');
     console.log('  bun src/cli.ts import <normalized.json> [server-url] [hmac-secret]');
     process.exit(1);
   }
