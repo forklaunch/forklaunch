@@ -8,27 +8,37 @@
  * own buy button is frequently Sold Out or JS-broken once offline (see
  * crawl.js's --clean store-paused neutralizer for exactly that case).
  *
- * Reads/writes cart state in localStorage under `_fl_cart` — the SAME key
- * bridge.js's local-mode cart uses, so add-to-cart flows that go through a
- * theme's own JS (intercepted by bridge.js's fetch('/cart/add.js') patch)
- * and flows that go through this overlay's own click-delegation both land
- * in one cart.
+ * Reads/writes cart state in localStorage under `_flc_demo` — decoupled from
+ * bridge.js's own `_fl_cart` local-mode cart so a single native add can't be
+ * counted twice (once by the theme's intercepted fetch, once by this overlay).
  *
- * This is a byte-for-byte port of the overlay proven manually against
- * shopseeti.com and taylorstitch.com (add -> drawer -> checkout -> place
- * order -> "Order confirmed #FL-xxxxxx"), now wired into crawl.js's --clean
- * capture path so it is baked in at capture time instead of hand-injected.
+ * HYDRATION-PROOF DESIGN. This block is injected into <head> (via crawl.js's
+ * injectIntoHead), NOT before </body>. Body-level inline <script> tags do not
+ * survive on React/Hydrogen/Remix SSR storefronts: client hydration reconciles
+ * the <body> and the inline script never takes effect (observed on
+ * jonesroadbeauty.com — the overlay elements survived but window.FL was
+ * undefined and the <script> was absent from the runtime DOM). A <head> inline
+ * script instead runs at parse time, before any body hydration, and the
+ * `window.FL` global it defines then persists for the life of the page
+ * regardless of what hydration does to the DOM.
+ *
+ * Because the script now lives in <head> (where buttons/divs are invalid and
+ * would not render), it BUILDS its own DOM into <body> at DOMContentLoaded,
+ * idempotently, and re-asserts it via a MutationObserver so a store whose
+ * hydration wipes body children gets the overlay put back. All click handling
+ * is delegated on `document` (capture phase), so it works even across DOM
+ * teardown/rebuild.
  *
  * Exported as a function (mirrors bridge.js's buildBridge) so crawl.js can
- * inline it per page via injectBeforeBody — never via html.replace's
- * string-replacement form, which corrupts injected scripts containing
- * literal '$' sequences (see crawl.js's injectBeforeBody docstring).
+ * inline it per page — never via html.replace's string-replacement form,
+ * which corrupts injected scripts containing literal '$' sequences (this one
+ * has several, e.g. the '$' price prefix — see injectBeforeBody's docstring).
  */
 function buildCommerceOverlay() {
-  return COMMERCE_HTML;
+  return COMMERCE_HEAD;
 }
 
-const COMMERCE_HTML = `<!--fl-commerce--><style>
+const CSS = `
 #fl-cart-btn{position:fixed;top:16px;right:16px;z-index:2147483000;background:#111;color:#fff;border:none;border-radius:999px;padding:10px 16px;font:600 13px system-ui;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25)}
 #fl-cart-btn .n{background:#fff;color:#111;border-radius:999px;padding:1px 7px;margin-left:6px;font-weight:700}
 #fl-drawer{position:fixed;top:0;right:-420px;width:390px;max-width:92vw;height:100%;background:#fff;z-index:2147483200;box-shadow:-8px 0 30px rgba(0,0,0,.2);transition:right .28s;display:flex;flex-direction:column;font:14px/1.5 system-ui;color:#111}
@@ -66,8 +76,12 @@ const COMMERCE_HTML = `<!--fl-commerce--><style>
 #fl-done.open{display:block}
 #fl-done .chk{width:64px;height:64px;border-radius:50%;background:#111;color:#fff;font-size:32px;line-height:64px;margin:0 auto 20px}
 #fl-add{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:2147483000;background:#111;color:#fff;border:none;border-radius:12px;padding:15px 28px;font:600 16px system-ui;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.3);display:none}#fl-add small{display:block;font-size:10px;font-weight:600;opacity:.7;letter-spacing:.05em;margin-top:2px}
-</style>
-<div id="fl-ov"></div>
+`;
+
+// The overlay's DOM, wrapped in a single #fl-root container so the
+// MutationObserver can detect a wipe with one getElementById and re-mount the
+// whole thing in one shot.
+const ELEMENTS = `<div id="fl-ov"></div>
 <button id="fl-add">Add to Cart<small>FORKLAUNCH COMMERCE</small></button>
 <button id="fl-cart-btn">Cart <span class="n">0</span></button>
 <div id="fl-drawer">
@@ -88,49 +102,65 @@ const COMMERCE_HTML = `<!--fl-commerce--><style>
   </div>
   <div class="fl-summary"><div id="fl-co-items"></div><div class="tot"><span>Total</span><span id="fl-co-tot">$0.00</span></div></div>
   <div id="fl-done"><div class="chk">✓</div><h1>Order confirmed</h1><p>Thanks! Your ForkLaunch order <b id="fl-ordno"></b> is placed.</p><button id="fl-place" style="max-width:200px" onclick="FL.reset()">Continue shopping</button></div>
-</div></div>
+</div></div>`;
+
+const COMMERCE_HEAD = `<!--fl-commerce--><style>${CSS}</style>
 <script>(function(){
-  var KEY='_fl_cart';
+  try{
+  var KEY='_flc_demo';
+  var ELEMENTS=${JSON.stringify(ELEMENTS)};
   function load(){try{return JSON.parse(localStorage.getItem(KEY))||{items:[]}}catch(e){return{items:[]}}}
-  function save(c){localStorage.setItem(KEY,JSON.stringify(c))}
+  function save(c){try{localStorage.setItem(KEY,JSON.stringify(c))}catch(e){}}
   function money(c){return '$'+((c||0)/100).toFixed(2)}
   function priceFromPage(){
-    var m=(document.body.innerText||'').match(/\\$\\s?([0-9]+(?:\\.[0-9]{2})?)/);
-    return m?Math.round(parseFloat(m[1])*100):Math.round((1500+Math.random()*3000));
+    var m=(document.body&&document.body.innerText||'').match(/\\$\\s?([0-9]+(?:\\.[0-9]{2})?)/);
+    return m?Math.round(parseFloat(m[1])*100):1500+Math.round(Math.random()*3000);
   }
   function titleFromPage(){var h=document.querySelector('h1');return (h&&h.innerText.trim())||document.title.split(/[|–\\-]/)[0].trim()||'Item';}
   function imgFromPage(){var i=document.querySelector('main img,.product img,[class*=product] img,img');return i?i.currentSrc||i.src:'';}
+  function el(id){return document.getElementById(id)}
   function n(){return load().items.reduce(function(s,i){return s+i.quantity},0)}
   function sub(){return load().items.reduce(function(s,i){return s+i.price*i.quantity},0)}
   function render(){
-    document.querySelector('#fl-cart-btn .n').textContent=n();
-    var c=load(),box=document.getElementById('fl-items');
+    var cn=document.querySelector('#fl-cart-btn .n'); if(cn)cn.textContent=n();
+    var c=load(),box=el('fl-items'); if(!box)return;
     if(!c.items.length){box.innerHTML='<div id="fl-empty">Your cart is empty.<br>Add something to get started.</div>';}
-    else{box.innerHTML=c.items.map(function(i,ix){return '<div class="fl-it"><img src="'+(i.image||'')+'"><div class="t"><b>'+i.title+'</b><br>'+money(i.price)+' × '+i.quantity+'</div><button class="rm" onclick="FL.remove('+ix+')">Remove</button></div>'}).join('');}
-    document.getElementById('fl-sub').textContent=money(sub());
+    else{box.innerHTML=c.items.map(function(i,ix){return '<div class="fl-it"><img src="'+(i.image||'')+'"><div class="t"><b>'+i.title+'</b><br>'+money(i.price)+' \\u00d7 '+i.quantity+'</div><button class="rm" onclick="FL.remove('+ix+')">Remove</button></div>'}).join('');}
+    var s=el('fl-sub'); if(s)s.textContent=money(sub());
   }
   window.FL={
     add:function(o){var c=load();var f=c.items.find(function(i){return i.title===o.title});if(f)f.quantity++;else c.items.push({title:o.title,price:o.price,image:o.image,quantity:1});save(c);render();this.open();},
     remove:function(ix){var c=load();c.items.splice(ix,1);save(c);render();},
-    open:function(){document.getElementById('fl-drawer').classList.add('open');document.getElementById('fl-ov').classList.add('open');},
-    close:function(){document.getElementById('fl-drawer').classList.remove('open');document.getElementById('fl-ov').classList.remove('open');},
-    checkout:function(){if(!n())return;var c=load();document.getElementById('fl-co-items').innerHTML=c.items.map(function(i){return '<div class="li"><span>'+i.title+' × '+i.quantity+'</span><span>'+money(i.price*i.quantity)+'</span></div>'}).join('');document.getElementById('fl-co-tot').textContent=money(sub());document.getElementById('fl-co').classList.add('open');},
-    place:function(){document.querySelector('#fl-co .fl-co-wrap').style.display='none';var d=document.getElementById('fl-done');d.classList.add('open');document.getElementById('fl-ordno').textContent='#FL-'+Math.floor(100000+Math.random()*899999);localStorage.removeItem(KEY);},
-    reset:function(){document.getElementById('fl-co').classList.remove('open');document.querySelector('#fl-co .fl-co-wrap').style.display='';document.getElementById('fl-done').classList.remove('open');render();this.close();}
+    open:function(){var d=el('fl-drawer'),o=el('fl-ov');if(d)d.classList.add('open');if(o)o.classList.add('open');},
+    close:function(){var d=el('fl-drawer'),o=el('fl-ov');if(d)d.classList.remove('open');if(o)o.classList.remove('open');},
+    checkout:function(){if(!n())return;var c=load();var ci=el('fl-co-items');if(ci)ci.innerHTML=c.items.map(function(i){return '<div class="li"><span>'+i.title+' \\u00d7 '+i.quantity+'</span><span>'+money(i.price*i.quantity)+'</span></div>'}).join('');var ct=el('fl-co-tot');if(ct)ct.textContent=money(sub());var co=el('fl-co');if(co)co.classList.add('open');},
+    place:function(){var w=document.querySelector('#fl-co .fl-co-wrap');if(w)w.style.display='none';var d=el('fl-done');if(d)d.classList.add('open');var on=el('fl-ordno');if(on)on.textContent='#FL-'+Math.floor(100000+Math.random()*899999);localStorage.removeItem(KEY);},
+    reset:function(){var co=el('fl-co');if(co)co.classList.remove('open');var w=document.querySelector('#fl-co .fl-co-wrap');if(w)w.style.display='';var d=el('fl-done');if(d)d.classList.remove('open');render();this.close();}
   };
-  document.getElementById('fl-cart-btn').addEventListener('click',function(){FL.open()});
-  // Guaranteed add-to-cart on product pages (store's own button may be Sold Out / JS-broken offline).
-  if(/\\/products\\//.test(location.pathname)){
-    var addb=document.getElementById('fl-add');
-    var pr=priceFromPage();
-    addb.innerHTML='Add to Cart &nbsp; '+money(pr)+'<small>FORKLAUNCH COMMERCE</small>';
-    addb.style.display='block';
-    addb.addEventListener('click',function(){FL.add({title:titleFromPage(),price:pr,image:imgFromPage()});});
+  // Build (or rebuild) the overlay DOM into <body>. Idempotent: only acts when
+  // #fl-root is missing, so it is safe to call repeatedly from the observer.
+  function mount(){
+    if(!document.body)return;
+    if(!el('fl-root')){
+      var root=document.createElement('div');
+      root.id='fl-root';
+      root.innerHTML=ELEMENTS;
+      document.body.appendChild(root);
+    }
+    var cb=el('fl-cart-btn'); if(cb&&!cb._flw){cb._flw=1;cb.addEventListener('click',function(){FL.open()});}
+    var ov=el('fl-ov'); if(ov&&!ov._flw){ov._flw=1;ov.addEventListener('click',function(){FL.close()});}
+    if(/\\/products\\//.test(location.pathname)){
+      var addb=el('fl-add');
+      if(addb&&!addb._flw){addb._flw=1;var pr=priceFromPage();addb.innerHTML='Add to Cart &nbsp; '+money(pr)+'<small>FORKLAUNCH COMMERCE</small>';addb.style.display='block';addb.addEventListener('click',function(ev){ev.preventDefault();FL.add({title:titleFromPage(),price:pr,image:imgFromPage()});});}
+    }
+    render();
   }
-  document.getElementById('fl-ov').addEventListener('click',function(){FL.close()});
-  // intercept ANY add-to-cart button on the page
+  // Delegated add-to-cart intercept for the STORE'S OWN buy button (which may
+  // be Sold Out / JS-broken offline). Skips our own overlay chrome entirely —
+  // #fl-add is handled by its own listener above — so nothing double-adds.
   document.addEventListener('click',function(e){
     var t=e.target; if(!t||!t.closest)return;
+    if(t.closest('#fl-root'))return;
     var b=t.closest('[name="add"],[data-action*="addCart"],[data-action*="add-to-cart"],.product-form__submit,button[class*="add"],[class*="add-to-cart"],[class*="AddToCart"],[class*="product-cta"],button,[type="submit"],a.button,a.btn,a[class*="button"]');
     if(!b)return;
     var txt=((b.innerText||b.value||b.getAttribute('aria-label')||'')+'').trim().toLowerCase();
@@ -141,7 +171,13 @@ const COMMERCE_HTML = `<!--fl-commerce--><style>
       FL.add({title:titleFromPage(),price:priceFromPage(),image:imgFromPage()});
     }
   },true);
-  render();
+  // Mount now if the body already exists, else at DOMContentLoaded.
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',mount);}else{mount();}
+  // Self-heal: if a store's client hydration wipes body children, put the
+  // overlay back. Guarded so re-appending #fl-root doesn't loop.
+  function watch(){try{new MutationObserver(function(){if(!el('fl-root')||!el('fl-cart-btn'))mount();}).observe(document.body,{childList:true});}catch(e){}}
+  if(document.body)watch();else document.addEventListener('DOMContentLoaded',watch);
+  }catch(err){try{console.warn('[fl-commerce] init failed',err)}catch(e){}}
 })();</script>
 `;
 

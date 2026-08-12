@@ -201,6 +201,31 @@ function injectBeforeBody(html, script) {
   return html.slice(0, m.index) + script + html.slice(m.index);
 }
 
+// Insert into <head> using slice/concat (never html.replace, whose $-substitution
+// corrupts injected scripts containing literal '$' — see injectBeforeBody).
+function injectIntoHead(html, script) {
+  const m = /<\/head>/i.exec(html);
+  if (!m) return injectBeforeBody(html, script);
+  return html.slice(0, m.index) + script + html.slice(m.index);
+}
+
+// Insert immediately after the opening <html> tag — the ABSOLUTE first thing the
+// parser sees. Used for the commerce overlay because some captured storefronts
+// serialize an inline <script> whose body contains a premature "</script>"
+// sequence (a JSON/string literal); the HTML parser then flips into raw-text
+// mode and silently swallows every tag AFTER it — including a <head>- or
+// <body>-injected overlay (observed on jonesroadbeauty.com: our <script> tag
+// never entered the DOM even with all other JS blocked). Parsing our overlay
+// FIRST, before that malformed script, guarantees window.FL is defined and its
+// MutationObserver is installed no matter how the rest of the document parses.
+// Uses slice/concat, never html.replace ($-safe). Falls back to a prepend.
+function injectAtDocStart(html, script) {
+  const m = /<html[^>]*>/i.exec(html);
+  if (!m) return script + html;
+  const at = m.index + m[0].length;
+  return html.slice(0, at) + script + html.slice(at);
+}
+
 (async () => {
   const result = { domain, ok: false, pages: 0, assets: 0, bytes: 0, reason: null,
                    startedAt: Date.now(), captured: [] };
@@ -957,15 +982,35 @@ function injectBeforeBody(html, script) {
           'function up(){var d=location.pathname.split("/").length-2;return d>0?Array(d+1).join("../"):"";}' +
           'document.addEventListener("click",function(ev){' +
           'var e=ev.target&&ev.target.closest?ev.target.closest("a"):null;if(!e)return;' +
-          'if(e.closest("button,[role=button],[class*=swatch],[class*=quick],[class*=menu],[class*=search],[class*=cart],[class*=account],[class*=nav-toggle],[class*=header__icon],#fl-drawer,#fl-co,#fl-cart-btn,#fl-add"))return;' +
+          // Never touch our own overlay chrome (ancestor match is correct here).
+          'if(e.closest("#fl-drawer,#fl-co,#fl-cart-btn,#fl-add"))return;' +
+          // Skip genuine icon CONTROLS (search/cart/account/hamburger toggles) by
+          // inspecting the ANCHOR ITSELF only — matching a distant ancestor is
+          // wrong: many themes wrap whole page regions in cart-state classes
+          // (e.g. jonesroadbeauty.com nests content under `js-ajax-cart-empty`),
+          // and a [class*=cart] closest() there would wrongly exclude real
+          // category links. A megamenu PARENT like "Skin"/"Get The Look" is a
+          // text link whose hover-submenu is dead offline, so a click must still
+          // land somewhere rather than no-op.
+          'var cc=((e.className||"")+" "+(e.getAttribute("aria-label")||""));' +
+          'if(/swatch|quick-?(add|view|shop)|(^|[^a-z])search|hamburger|nav-?toggle|header__icon|mini-?cart|cart-(link|toggle|icon|button)|(^|[^a-z])account|wishlist|(^|[^a-z])log ?in/i.test(cc))return;' +
           'if(e.getAttribute("data-fl-href"))return;' +
+          // Only rescue links that carry visible TEXT — an icon-only toggle
+          // (no text) is a control, not a destination, and must be left alone.
+          'var txt=(e.textContent||"").replace(/\\s+/g," ").trim();if(txt.length<2)return;' +
           'var h=e.getAttribute("href")||"",un=e.getAttribute("data-mirror-uncaptured")||"";' +
-          'if(!(h==="#"||h===""||h.charAt(0)==="#")&&!un)return;' +
+          'var voidH=(h==="#"||h===""||h.charAt(0)==="#"||/^javascript:/i.test(h));' +
+          'if(!voidH&&!un)return;' +
           'var isP=/\\/products\\//.test(un)||/product/i.test(e.className||"")||(e.querySelector&&e.querySelector("[class*=price],[class*=money]"));' +
           'var t=isP?(PRODFB||COLLFB):(COLLFB||PRODFB);if(!t)return;' +
           'ev.preventDefault();ev.stopImmediatePropagation();window.location.href=up()+t;' +
           '},true);})();</' + 'script>';
-        html = injectBeforeBody(html, rescueShim);
+        // Inject at document start (like the commerce overlay): a delegated
+        // capture-phase click listener that must survive even when a captured
+        // page's malformed inline <script> flips the parser into raw-text mode
+        // and swallows every later tag (see injectAtDocStart). A before-</body>
+        // rescue shim is silently dropped on exactly the stores that need it.
+        html = injectAtDocStart(html, rescueShim);
       }
 
       // Commerce bridge: answer the storefront's cart/search/filter/sort API
@@ -1263,15 +1308,19 @@ function injectBeforeBody(html, script) {
       // the clone into something actually shoppable end-to-end: a cart
       // button + drawer, a full checkout page, and an order-confirmation
       // screen, plus a guaranteed Add to Cart button on product pages (see
-      // commerce.js's own docstring — this is the same overlay proven by
-      // hand against shopseeti.com and taylorstitch.com, now baked into the
-      // capture itself instead of hand-injected afterward). Injected last,
-      // via injectBeforeBody — never html.replace's string form, which
-      // corrupts injected scripts containing literal '$' sequences (this
-      // one has several, e.g. the '$' price prefix — see injectBeforeBody's
-      // own docstring above).
+      // commerce.js's own docstring). Injected at DOCUMENT START via
+      // injectAtDocStart — before every one of the captured page's own
+      // scripts. This is what makes it hydration-proof AND parser-robust: the
+      // overlay defines window.FL and installs its self-healing
+      // MutationObserver at the very first moment of parse, so neither a
+      // React/Hydrogen/Remix client re-render (which drops body-level inline
+      // scripts) nor a malformed captured inline <script> that flips the
+      // parser into raw-text mode (which swallows every later tag — see
+      // injectAtDocStart's docstring, observed on jonesroadbeauty.com) can
+      // stop it. The overlay builds its own DOM into <body> at
+      // DOMContentLoaded and re-asserts it on any wipe.
       if (CLEAN) {
-        html = injectBeforeBody(html, buildCommerceOverlay());
+        html = injectAtDocStart(html, buildCommerceOverlay());
       }
 
       const dst = path.join(outdir, 'site', meta.file);
