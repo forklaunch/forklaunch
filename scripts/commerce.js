@@ -122,6 +122,12 @@ const COMMERCE_HEAD = `<!--fl-commerce--><style>${CSS}</style>
   function n(){return load().items.reduce(function(s,i){return s+i.quantity},0)}
   function sub(){return load().items.reduce(function(s,i){return s+i.price*i.quantity},0)}
   function render(){
+    // Self-heal the count badge: some themes re-render the header in response
+    // to the DOM change from opening the drawer and strip our .n span (seen on
+    // hellotushy.com — add worked, cart populated, but the badge vanished so
+    // the count read empty). Rebuild the button's guts if the span is gone.
+    var btn=el('fl-cart-btn');
+    if(btn&&!btn.querySelector('.n')){btn.innerHTML='Cart <span class="n">0</span>';}
     var cn=document.querySelector('#fl-cart-btn .n'); if(cn)cn.textContent=n();
     var c=load(),box=el('fl-items'); if(!box)return;
     if(!c.items.length){box.innerHTML='<div id="fl-empty">Your cart is empty.<br>Add something to get started.</div>';}
@@ -173,9 +179,15 @@ const COMMERCE_HEAD = `<!--fl-commerce--><style>${CSS}</style>
   },true);
   // Mount now if the body already exists, else at DOMContentLoaded.
   if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',mount);}else{mount();}
-  // Self-heal: if a store's client hydration wipes body children, put the
-  // overlay back. Guarded so re-appending #fl-root doesn't loop.
-  function watch(){try{new MutationObserver(function(){if(!el('fl-root')||!el('fl-cart-btn'))mount();}).observe(document.body,{childList:true});}catch(e){}}
+  // Self-heal: if a store's client hydration wipes body children — or a header
+  // re-render strips just the count badge — put the overlay back. subtree so a
+  // deep removal (the .n span) is caught, debounced so a busy page doesn't
+  // thrash, and guarded so re-appending #fl-root doesn't loop.
+  function watch(){try{var t=null;new MutationObserver(function(){
+    if(t)return; t=setTimeout(function(){t=null;
+      if(!el('fl-root')||!el('fl-cart-btn')||!document.querySelector('#fl-cart-btn .n'))mount();
+    },50);
+  }).observe(document.body,{childList:true,subtree:true});}catch(e){}}
   if(document.body)watch();else document.addEventListener('DOMContentLoaded',watch);
   }catch(err){try{console.warn('[fl-commerce] init failed',err)}catch(e){}}
 })();</script>
