@@ -232,7 +232,7 @@ function serve(root) {
     if (prod) {
       await p.goto(`${base}/${prod}`, { waitUntil: 'domcontentloaded' });
       await p.waitForTimeout(3000);
-      await p.evaluate(() => { try { localStorage.removeItem('_fl_cart'); } catch (e) {} });
+      await p.evaluate(() => { try { localStorage.removeItem('_fl_cart'); localStorage.removeItem('_flc_demo'); } catch (e) {} });
 
       const visibleBuy = () => p.evaluateHandle(() => {
         const cands = [...document.querySelectorAll('button,a,input[type=submit]')]
@@ -272,6 +272,16 @@ function serve(root) {
         await p.waitForTimeout(2500);
       }
       const cartAfter = await p.evaluate(async () => {
+        // The demo overlay (commerce.js) is the source of truth for the
+        // shoppable clone: its delegated handler intercepts the native buy
+        // button and records the add under _flc_demo / #fl-cart-btn. Check it
+        // first, then fall back to the bridge's local cart (/cart.js -> _fl_cart).
+        try {
+          const el = document.querySelector('#fl-cart-btn .n');
+          if (el) { const n = parseInt(el.textContent.trim(), 10); if (n > 0) return n; }
+          const c = JSON.parse(localStorage.getItem('_flc_demo') || '{}');
+          if (c.items && c.items.length) return c.items.reduce((s, i) => s + (i.quantity || 1), 0);
+        } catch (e) {}
         try { return (await fetch('/cart.js').then(r => r.json())).item_count || 0; }
         catch (e) { return -1; }
       });
