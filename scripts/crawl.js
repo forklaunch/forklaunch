@@ -553,6 +553,17 @@ function injectAtDocStart(html, script) {
     const PAGE_DELAY_MS = 900;
     let consecutiveFails = 0;
     const retries = new Map();   // path -> attempts so far
+    // Patient cooldown schedule: most storefront rate-limiting is a SLIDING
+    // WINDOW (N requests / minute) that resets after a quiet period, not a
+    // permanent block. So when short exponential backoff (below) stops being
+    // enough, we don't quit — we wait out the window with an escalating
+    // cooldown and RESUME. This is politeness taken to its limit (wait longer),
+    // never evasion (same UA, same IP, no header games). We stop only when a
+    // full cooldown buys ZERO new pages (a hard block, not a window) or the
+    // schedule is exhausted — so a genuinely dead store still terminates.
+    const COOLDOWNS_MS = [60000, 150000, 300000, 600000];
+    let longCooldowns = 0;
+    let sizeAtLastCooldown = 0;
 
     const HARD_CAP = MAX_PAGES + navMust.slice(0, NAV_MUST_CAP).length;
     while (queue.length && captured.size < HARD_CAP) {
@@ -575,19 +586,36 @@ function injectAtDocStart(html, script) {
       if (!g) {
         const attempts = (retries.get(p) || 0) + 1;
         retries.set(p, attempts);
-        // One retry, after backing off, before writing a page off — a single
-        // failure is very often the rate limit noted above, not a dead page.
-        if (attempts <= 2) queue.push(p);
+        // Requeue for a later attempt — a fetch failure is usually the rate
+        // limit noted above, not a dead page. Allow several, since a cooldown
+        // below may rescue the page after the window resets.
+        if (attempts <= 4) queue.push(p);
         console.error(`[crawl]   ✗ ${p}${attempts > 1 ? ` (attempt ${attempts})` : ''}`);
-        // Six, not four: the backoff above already makes each successive
-        // attempt slower, so this triggers only once genuine back-to-back
-        // failures persist THROUGH increasing delays, not on the first
-        // short blip a real rate-limit window recovers from within seconds.
+        // A cluster of failures through the short exponential backoff means the
+        // window is real. Instead of quitting, wait it out with an escalating
+        // cooldown and resume — as long as we keep making progress across
+        // cooldowns. Give up only when a full cooldown captured nothing new
+        // (hard block) or the schedule is spent.
         if (++consecutiveFails >= 6) {
-          console.error('[crawl] stopping: repeated failures even after backing off — ' +
-                        'the store is rate-limiting us. Keeping what we have.');
-          result.throttled = true;
-          break;
+          const madeProgress = captured.size > sizeAtLastCooldown;
+          if (longCooldowns > 0 && !madeProgress) {
+            console.error('[crawl] stopping: a full cooldown captured nothing new — ' +
+                          'this is a hard block, not a rate-limit window. Keeping what we have.');
+            result.throttled = true;
+            break;
+          }
+          if (longCooldowns >= COOLDOWNS_MS.length) {
+            console.error('[crawl] stopping: exhausted patient cooldowns — the store keeps ' +
+                          'rate-limiting through long waits. Keeping what we have.');
+            result.throttled = true;
+            break;
+          }
+          const cd = COOLDOWNS_MS[longCooldowns++];
+          sizeAtLastCooldown = captured.size;
+          console.error(`[crawl] rate-limited at ${captured.size} pages — cooling down ` +
+                        `${Math.round(cd / 1000)}s to outlast the window, then resuming...`);
+          await new Promise(r => setTimeout(r, cd));
+          consecutiveFails = 0;
         }
         continue;
       }
