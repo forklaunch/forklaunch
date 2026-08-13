@@ -235,9 +235,23 @@ function injectAtDocStart(html, script) {
   const pageIndex = [];
   fs.mkdirSync(path.join(outdir, 'site'), { recursive: true });
 
-  const browser = await chromium.launch({ headless: true });
-  const ctx = await browser.newContext({ viewport: VIEWPORT, userAgent: UA,
-                                         ignoreHTTPSErrors: true });
+  let browser = await chromium.launch({ headless: true });
+  let ctx = await browser.newContext({ viewport: VIEWPORT, userAgent: UA,
+                                       ignoreHTTPSErrors: true });
+
+  // Heavy/script-bloated storefronts can crash the headless renderer mid-crawl
+  // (observed on getmaude.com: the browser closed after ~6 pages and, because
+  // pages are written only at the end, the whole capture was lost). Relaunch a
+  // dead browser so the crawl continues — the captured pages live in the
+  // `captured` Map, not in the browser, so nothing already grabbed is lost.
+  async function ensureBrowser() {
+    if (browser.isConnected()) return;
+    console.error('[crawl] renderer crashed — relaunching browser to continue');
+    try { await browser.close(); } catch (_) {}
+    browser = await chromium.launch({ headless: true });
+    ctx = await browser.newContext({ viewport: VIEWPORT, userAgent: UA,
+                                     ignoreHTTPSErrors: true });
+  }
 
   const pending = [];
   const attach = (page) => {
@@ -287,9 +301,14 @@ function injectAtDocStart(html, script) {
 
   // Grab a page's post-JS DOM plus the storefront links it contains.
   async function grab(url) {
-    const page = await ctx.newPage();
-    attach(page);
+    // newPage() is inside the try: on a crashed browser it throws
+    // "Target page, context or browser has been closed", which must degrade to
+    // a null (a normal fetch failure the caller can retry / recover from) rather
+    // than propagate up and abort the whole crawl, discarding everything.
+    let page;
     try {
+      page = await ctx.newPage();
+      attach(page);
       const r = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 40000 });
       // 404 = this page simply doesn't exist (we guessed a URL). That is NOT a
       // sign of throttling and must not count toward the backoff, or a few
@@ -369,7 +388,7 @@ function injectAtDocStart(html, script) {
       });
       return { html, links, navTriggers, navLinks, finalUrl: page.url() };
     } catch (_) { return null; }
-    finally { await page.close().catch(() => {}); }
+    finally { if (page) await page.close().catch(() => {}); }
   }
 
   try {
@@ -584,6 +603,10 @@ function injectAtDocStart(html, script) {
       visited++;
       if (g && g.notFound) { continue; }           // guessed URL, no such page
       if (!g) {
+        // If the failure was the renderer crashing, relaunch before the next
+        // attempt so the requeued page retries on a live browser instead of
+        // failing every remaining fetch against a dead one.
+        await ensureBrowser();
         const attempts = (retries.get(p) || 0) + 1;
         retries.set(p, attempts);
         // Requeue for a later attempt — a fetch failure is usually the rate
