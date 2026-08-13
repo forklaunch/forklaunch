@@ -160,9 +160,17 @@ Bun.serve({
 async function shopifyCart() {
   const cid = cartId; if (!cid) return { item_count: 0, items: [], total_price: 0 };
   const r = await mod('GET', `/cart/${cid}`, `/${cid}`);
-  const items = (r.body?.items || []).map((it: any) => ({
-    quantity: it.quantity, title: it.variantTitle || it.title, price: it.unitPriceCents ?? it.priceCents ?? 0,
-  }));
+  // The module's cart carries only variantId + quantity; enrich each line with
+  // the variant's price/title so the captured theme's drawer shows real money.
+  const items: any[] = [];
+  for (const it of r.body?.items || []) {
+    let price = 0, title = 'Item';
+    try {
+      const v = await mod('GET', `/variant/${it.variantId}`, `/${it.variantId}`);
+      if (v.code === 200) { price = v.body.priceCents ?? v.body.price_cents ?? 0; title = v.body.title || title; }
+    } catch {}
+    items.push({ quantity: it.quantity, title, price, line_price: price * it.quantity });
+  }
   const count = items.reduce((s: number, i: any) => s + i.quantity, 0);
   const total = items.reduce((s: number, i: any) => s + i.price * i.quantity, 0);
   return { token: 'fl-cart', item_count: count, total_price: total, currency: 'USD', items };
