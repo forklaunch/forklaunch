@@ -183,33 +183,44 @@ Two things genuinely stop it:
 how a walled capture gets FINISHED, not an optional extra.** Rate limiting
 is never a reason to deliver a partial migration: these are public pages,
 and a person opening them in their own browser is ordinary use of the site.
-In a real migration the operator (whoever is running the migration — Guild,
-an implementer, or the merchant themselves) works with the merchant's
-consent; the operator opens the store in Chrome (logged in if the store is
-gated), and Claude, via the Claude-in-Chrome extension, walks the missing
-pages at human pace, reads each rendered DOM, and files it into the capture
-with `scripts/import-dom.mjs` — repeating until check-complete is green:
+In a real migration the operator (whoever runs it — an implementer or the
+merchant) works with the merchant's consent and captures the missing pages
+by hand.
+
+The capture is **operator-driven by design, not agent-driven**: an agent
+cannot read a real browser's page content out (the Claude-in-Chrome bridge
+blocks page HTML/DOM from being returned — a deliberate exfiltration guard),
+and stores' CSP blocks a page from POSTing itself to a local server. So the
+transfer rides on a genuine human click via a **bookmarklet** (Chrome blocks
+gesture-less downloads; a bookmarklet click is a real gesture, and a Blob
+download makes no network request so CSP is irrelevant):
 
 ```
-# 1. run the automated capture as far as it politely gets
+# 1. automated capture, as far as it politely gets
 node scripts/crawl.js <domain> <outdir> --complete --clean
 # 2. list exactly what is missing
 node scripts/check-complete.mjs <outdir> <domain>
-# 3. for each missing path: navigate the owner's Chrome tab there, then pipe
-#    the rendered DOM (document.documentElement.outerHTML) in:
-node scripts/import-dom.mjs <outdir> <missing-path>   # html on stdin
-# 4. resume — imported pages are treated as captured; rewrite runs over them
+# 3. one-time: build the bookmarklet and have the operator save it as a
+#    bookmark (drag to bookmarks bar / New Bookmark with this as the URL)
+node scripts/make-bookmarklet.mjs
+# 4. the operator opens each missing page in their browser (logged in if
+#    the store is gated) and CLICKS THE BOOKMARKLET — it downloads that
+#    page's DOM as flcap__<path>.html. Pace it like a person.
+# 5. ingest everything the operator downloaded
+node scripts/import-folder.mjs <outdir> [downloads-dir] [--move]
+# 6. resume — imported pages are treated as captured; rewrite runs over them
 node scripts/crawl.js <domain> <outdir> --complete --clean
-# 5. re-run the gate until it is green
+# 7. re-run the gate until it is green
 node scripts/check-complete.mjs <outdir> <domain>
 ```
 
-Pace the Chrome walk like a person, not a crawler — a few seconds per page —
-and if the site blocks even the real browser, respect that and stop. This
-path is for consensual migrations; what stays out of bounds is fingerprint
-spoofing, proxy rotation, or CAPTCHA solving to defeat a block. Assisted
-pages keep absolute asset URLs (they load from the live CDN — the clone is
-browsable; full asset localization for assisted pages is a known follow-up).
+`import-dom.mjs` is the single-page primitive (URL + HTML on stdin) the
+folder importer is built on, for scripted one-offs. If the site blocks even
+the real browser, respect that and stop — what stays out of bounds is
+fingerprint spoofing, proxy rotation, or CAPTCHA solving to defeat a block,
+never the polite human-paced browsing above. Assisted pages keep absolute
+asset URLs (they load from the live CDN — the clone is browsable; full asset
+localization for assisted pages is a known follow-up).
 
 ## Fidelity, honestly
 
