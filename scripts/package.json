@@ -1,0 +1,17 @@
+{
+  "name": "forklaunch-storefront-capture",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Capture a live storefront as a browsable local clone.",
+  "main": "crawl.js",
+  "type": "commonjs",
+  "scripts": {
+    "migrate": "node bin/migrate.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.61.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

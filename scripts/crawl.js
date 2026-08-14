@@ -30,11 +30,16 @@ const path = require('path');
 const crypto = require('crypto');
 const { buildBridge } = require('./bridge.js');
 const { buildCommerceOverlay } = require('./commerce.js');
+const { pageFileFor, pageTypeFor, safe, SKIP_PATH } = require('./urlmap.js');
 
 const VIEWPORT = { width: 1280, height: 800 };
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
            '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-const MAX_BYTES = 700 * 1024 * 1024;
+// 700MB for a normal representative capture; effectively unbounded (20GB) for
+// --complete, where a full catalog's images can run to several gigabytes.
+const MAX_BYTES = process.argv.includes('--complete')
+  ? 20 * 1024 * 1024 * 1024
+  : 700 * 1024 * 1024;
 
 const EXT_DIR = { css:'css', js:'js', woff:'fonts', woff2:'fonts', ttf:'fonts',
                   otf:'fonts', eot:'fonts', png:'img', jpg:'img', jpeg:'img',
@@ -54,7 +59,14 @@ const hmacIdx = argv.indexOf('--hmac-secret');
 // is unaffected either way.
 const HMAC_SECRET = hmacIdx > -1 ? argv[hmacIdx + 1] : null;
 const pagesIdx = argv.indexOf('--pages');
-const MAX_PAGES = pagesIdx > -1 ? parseInt(argv[pagesIdx + 1], 10) || 20 : 20;
+// --complete: photographic mode — capture EVERY public page the store's
+// sitemap lists (products, collections, pages, blogs), no budget, no cap.
+// Slower and larger, but it means no page is a stand-in. In this mode the
+// page/byte ceilings are effectively removed and enumeration comes from the
+// full sitemap rather than a budgeted homepage/anchor discovery.
+const COMPLETE = argv.includes('--complete');
+const MAX_PAGES = COMPLETE ? Number.MAX_SAFE_INTEGER
+  : (pagesIdx > -1 ? parseInt(argv[pagesIdx + 1], 10) || 20 : 20);
 // Guaranteed nav-destination allocation, outside the normal page budget (see
 // HARD_CAP below). Raised from 12: mega-menus routinely carry more than a
 // dozen real category destinations (e.g. Men's/Women's split doubles every
@@ -141,44 +153,10 @@ function localFor(url) {
 }
 
 // ---- page identity ---------------------------------------------------------
-// A storefront path maps to a local file. Depth matters for relative rewriting.
-function pageFileFor(pathname) {
-  const p = pathname.replace(/\/+$/, '') || '/';
-  if (p === '/') return { file: 'index.html', depth: 0 };
-  let m = p.match(/^\/products\/([^/]+)/);
-  if (m) return { file: `products/${safe(m[1])}.html`, depth: 1 };
-  m = p.match(/^\/collections\/([^/]+)\/products\/([^/]+)/);
-  if (m) return { file: `products/${safe(m[2])}.html`, depth: 1 };
-  m = p.match(/^\/collections\/([^/]+)/);
-  if (m) return { file: `collections/${safe(m[1])}.html`, depth: 1 };
-  m = p.match(/^\/pages\/([^/]+)/);
-  if (m) return { file: `pages/${safe(m[1])}.html`, depth: 1 };
-
-  // Generic fallback. Plenty of Shopify stores rewrite their URLs — one used
-  // /bath, /bedding and /collection/doorbusters with no /products/ anywhere.
-  // Mirror any ordinary internal path, preserving one level of structure.
-  if (SKIP_PATH.test(p)) return null;                 // cart/account/asset noise
-  const segs = p.split('/').filter(Boolean);
-  if (!segs.length || segs.length > 3) return null;
-  if (/\.[a-z0-9]{2,5}$/i.test(segs[segs.length - 1])) return null;  // it's a file
-  if (segs.length === 1) return { file: `${safe(segs[0])}.html`, depth: 0 };
-  return { file: `${safe(segs[0])}/${safe(segs.slice(1).join('-'))}.html`, depth: 1 };
-}
-
-// ---- page type --------------------------------------------------------
-// Classification for the manifest's page index (see manifest.js). Mirrors
-// pageFileFor's own precedence — a nested /collections/y/products/x is a
-// product page, not a collection page, same as it is on the file layout.
-function pageTypeFor(pathname) {
-  if (pathname === '/') return 'home';
-  if (/\/products\//.test(pathname)) return 'product';
-  if (/^\/collections\//.test(pathname)) return 'collection';
-  return 'page';
-}
-
-// Paths that are never storefront pages worth mirroring.
-const SKIP_PATH = /^\/(cart|checkout|account|orders|search|apps|admin|cdn|_a|assets|api|services|tools|policies|challenge|password|a\/|wpm@|\.well-known)(\/|$)/i;
-const safe = s => s.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 80);
+// pageFileFor / pageTypeFor / safe / SKIP_PATH live in urlmap.js — the SINGLE
+// source of truth shared with check-complete.mjs's fidelity verifier, so the
+// "did we capture every page?" check can never drift from where the crawler
+// actually writes them. See urlmap.js and its test (check-complete.test.mjs).
 
 function fetchWithTimeout(resp, ms) {
   return Promise.race([resp.body(), new Promise(r => setTimeout(() => r(null), ms))]);
@@ -415,29 +393,37 @@ function injectAtDocStart(html, script) {
     // string and the child sitemap 404s.
     const deent = (u) => u.replace(/&amp;/g, '&').replace(/&#38;/g, '&').trim();
 
-    async function sitemapLinks() {
+    // all=false: a cheap supplement (first 6 child sitemaps) for the budgeted
+    // path. all=true (--complete): every child sitemap, including the paginated
+    // sitemap_products_N.xml set, so we enumerate the ENTIRE catalog.
+    async function sitemapLinks(all = false) {
       const found = [];
       const seenMaps = new Set();
       const fetchXml = async (u) => {
         try {
           const r = await fetch(u, { headers: { 'User-Agent': UA },
-                                     signal: AbortSignal.timeout(12000) });
+                                     signal: AbortSignal.timeout(20000) });
           return r.ok ? await r.text() : null;
         } catch (_) { return null; }
       };
       const root = await fetchXml(`https://${domain}/sitemap.xml`);
       if (!root) return found;
       const locs = [...root.matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => deent(m[1]));
-      // top level lists child sitemaps (products, collections, pages)
-      const children = locs.filter(u => /sitemap[^"]*\.xml/i.test(u)).slice(0, 6);
-      const targets = children.length ? children : [];
+      // top level lists child sitemaps (products, collections, pages, blogs)
+      const childMaps = locs.filter(u => /sitemap[^"]*\.xml/i.test(u));
+      const targets = all ? childMaps : childMaps.slice(0, 6);
       for (const c of targets) {
         if (seenMaps.has(c)) continue;
         seenMaps.add(c);
         const xml = await fetchXml(c);
         if (!xml) continue;
-        for (const m of xml.matchAll(/<loc>([^<]+)<\/loc>/g)) found.push(deent(m[1]));
-        await new Promise(r => setTimeout(r, 300));
+        for (const m of xml.matchAll(/<loc>([^<]+)<\/loc>/g)) {
+          const u = deent(m[1]);
+          // a child sitemap can itself index further sitemaps (deep pagination)
+          if (all && /sitemap[^"]*\.xml/i.test(u) && !seenMaps.has(u)) targets.push(u);
+          else found.push(u);
+        }
+        await new Promise(r => setTimeout(r, all ? 150 : 300));
       }
       if (!targets.length) found.push(...locs);
       return found;
@@ -542,13 +528,34 @@ function injectAtDocStart(html, script) {
     if (left > 0) { const t = Math.min(left, prods.length - nProd); nProd += t; left -= t; }
     if (left > 0) { const t = Math.min(left, cols.length - nCol);  nCol  += t; left -= t; }
     if (left > 0) { const t = Math.min(left, infoPages.length - nInfo); nInfo += t; left -= t; }
-    const pick = [...prods.slice(0, nProd),
-                  ...cols.slice(0, nCol),
-                  ...infoPages.slice(0, nInfo)];
-    for (const p of pick) wanted.set(p, pageFileFor(p));
-
-    console.error(`[crawl] discovered ${cols.length} collections, ${prods.length} products; ` +
-                  `capturing ${wanted.size} pages`);
+    if (COMPLETE) {
+      // Photographic mode: enumerate EVERY URL the sitemap lists and queue all
+      // of them — no budget, no sampling. This is what makes the clone a true
+      // reproduction rather than a representative slice.
+      const all = await sitemapLinks(true);
+      let added = 0;
+      for (const u of all) {
+        const p = norm(u);
+        if (!p) continue;
+        const f = pageFileFor(p);
+        if (!f) continue;                       // real product/collection/page/blog only
+        if (!wanted.has(p)) { wanted.set(p, f); added++; }
+      }
+      // fold in anything anchors/nav already surfaced that the sitemap missed
+      for (const p of [...cols, ...prods, ...infoPages, ...navTake]) {
+        const f = pageFileFor(p);
+        if (f && !wanted.has(p)) wanted.set(p, f);
+      }
+      console.error(`[crawl] COMPLETE: sitemap enumerated ${added} URLs — ` +
+                    `capturing ${wanted.size} pages (every public page)`);
+    } else {
+      const pick = [...prods.slice(0, nProd),
+                    ...cols.slice(0, nCol),
+                    ...infoPages.slice(0, nInfo)];
+      for (const p of pick) wanted.set(p, pageFileFor(p));
+      console.error(`[crawl] discovered ${cols.length} collections, ${prods.length} products; ` +
+                    `capturing ${wanted.size} pages`);
+    }
 
     // ---- 2. capture each page, discovering as we go ------------------------
     // The homepage links only a handful of products. Collection pages list the
@@ -557,12 +564,30 @@ function injectAtDocStart(html, script) {
     const captured = new Map();      // pathname -> html
     captured.set('/', home.html);
 
+    // Resumability (--complete only): a full-store crawl runs for hours, so we
+    // checkpoint each page's RAW html under <out>/.raw/ as it's captured. On a
+    // re-run of the same command, we reload those and skip re-fetching — an
+    // interrupted crawl picks up where it left off instead of starting over.
+    // Gated to complete mode so normal captures are byte-for-byte unchanged.
+    const rawDir = path.join(outdir, '.raw');
+    const rawPath = (p) => { const f = (wanted.get(p) || pageFileFor(p)); return f ? path.join(rawDir, f.file) : null; };
+    if (COMPLETE) {
+      fs.mkdirSync(rawDir, { recursive: true });
+      let resumed = 0;
+      for (const [p, f] of wanted) {
+        if (p === '/' || !f) continue;
+        const rf = path.join(rawDir, f.file);
+        if (fs.existsSync(rf)) { try { captured.set(p, fs.readFileSync(rf, 'utf8')); resumed++; } catch (_) {} }
+      }
+      if (resumed) console.error(`[crawl] resume: ${resumed} pages already captured, ${wanted.size - resumed} to go`);
+    }
+
     // Dedupe by OUTPUT FILE, not path: Shopify serves the same product at both
     // /products/x and /collections/y/products/x. Path-keyed dedup captures it
     // twice, burning half the page budget on duplicates.
-    const queue = [...wanted.keys()].filter(p => p !== '/');
+    const queue = [...wanted.keys()].filter(p => p !== '/' && !captured.has(p));
     const seenFiles = new Set(['index.html']);
-    for (const p of queue) { const f = pageFileFor(p); if (f) seenFiles.add(f.file); }
+    for (const p of [...queue, ...captured.keys()]) { const f = pageFileFor(p); if (f) seenFiles.add(f.file); }
     let visited = 0;
 
     // Be a polite client. Back-to-back page loads look like an attack and get
@@ -585,15 +610,30 @@ function injectAtDocStart(html, script) {
     let sizeAtLastCooldown = 0;
 
     const HARD_CAP = MAX_PAGES + navMust.slice(0, NAV_MUST_CAP).length;
-    while (queue.length && captured.size < HARD_CAP) {
-      const p = queue.shift();
+    // Capture pages. NORMAL mode runs one page at a time (CONC=1 below — the
+    // exact old sequential loop, so every prior validation still holds).
+    // --complete mode runs a BOUNDED worker pool: almost all of a page's ~30s
+    // is spent WAITING on networkidle timeouts at ~0% CPU (heavy SPAs never go
+    // network-idle — analytics beacons keep the connection count above zero —
+    // so those waits run to their full timeout even though the page rendered
+    // seconds ago). Running several pages at once is therefore nearly free and
+    // cuts a full-store capture severalfold. The bound is a hard SAFETY CEILING
+    // (never the runaway-Chrome pileup that a fan-out of full processes causes),
+    // NOT a throttle — it is strictly faster than sequential. Concurrency runs
+    // whole pages in parallel and changes NO per-page capture wait, so fidelity
+    // is identical to sequential (no under-capture risk). FL_CONCURRENCY
+    // overrides the default for beefier machines / more tolerant stores.
+    const CONC = COMPLETE ? Math.max(1, Number(process.env.FL_CONCURRENCY) || 5) : 1;
+    let coolingDown = null;   // a promise while a patient cooldown is in progress
+    let stopAll = false;      // hard block / cooldowns exhausted: drain everyone
+
+    async function handlePage(p) {
       if (visited > 0) {
-        // Slow down further the more failures we're seeing in a row — a
-        // burst of them is usually a short-lived rate-limit window, not a
-        // permanently dead store, and hammering it every 900ms just keeps
-        // extending the block. This is politeness (waiting longer), not
-        // evasion (no UA/IP rotation, no header spoofing) — capped so a
-        // truly unresponsive store still gives up in reasonable time.
+        // Slow down further the more failures we're seeing in a row — a burst
+        // is usually a short-lived rate-limit window, not a permanently dead
+        // store, and hammering it every 900ms just extends the block. This is
+        // politeness (waiting longer), not evasion (no UA/IP rotation, no
+        // header spoofing) — capped so a truly dead store still gives up.
         const delay = consecutiveFails > 0
           ? Math.min(12000, PAGE_DELAY_MS * Math.pow(2, consecutiveFails))
           : PAGE_DELAY_MS;
@@ -601,7 +641,7 @@ function injectAtDocStart(html, script) {
       }
       const g = await grab(`https://${domain}${p}`);
       visited++;
-      if (g && g.notFound) { continue; }           // guessed URL, no such page
+      if (g && g.notFound) return;                 // guessed URL, no such page
       if (!g) {
         // If the failure was the renderer crashing, relaunch before the next
         // attempt so the requeued page retries on a live browser instead of
@@ -616,35 +656,41 @@ function injectAtDocStart(html, script) {
         console.error(`[crawl]   ✗ ${p}${attempts > 1 ? ` (attempt ${attempts})` : ''}`);
         // A cluster of failures through the short exponential backoff means the
         // window is real. Instead of quitting, wait it out with an escalating
-        // cooldown and resume — as long as we keep making progress across
-        // cooldowns. Give up only when a full cooldown captured nothing new
-        // (hard block) or the schedule is spent.
-        if (++consecutiveFails >= 6) {
+        // cooldown that ALL workers pause on, and resume — as long as we keep
+        // making progress across cooldowns. Only one worker runs the cooldown
+        // at a time (guarded by coolingDown). Give up only when a full cooldown
+        // captured nothing new (hard block) or the schedule is spent.
+        if (++consecutiveFails >= 6 && !coolingDown) {
           const madeProgress = captured.size > sizeAtLastCooldown;
           if (longCooldowns > 0 && !madeProgress) {
             console.error('[crawl] stopping: a full cooldown captured nothing new — ' +
                           'this is a hard block, not a rate-limit window. Keeping what we have.');
-            result.throttled = true;
-            break;
+            result.throttled = true; stopAll = true; return;
           }
           if (longCooldowns >= COOLDOWNS_MS.length) {
             console.error('[crawl] stopping: exhausted patient cooldowns — the store keeps ' +
                           'rate-limiting through long waits. Keeping what we have.');
-            result.throttled = true;
-            break;
+            result.throttled = true; stopAll = true; return;
           }
           const cd = COOLDOWNS_MS[longCooldowns++];
           sizeAtLastCooldown = captured.size;
           console.error(`[crawl] rate-limited at ${captured.size} pages — cooling down ` +
                         `${Math.round(cd / 1000)}s to outlast the window, then resuming...`);
+          let release;
+          coolingDown = new Promise(r => (release = r));
           await new Promise(r => setTimeout(r, cd));
           consecutiveFails = 0;
+          coolingDown = null;
+          release();
         }
-        continue;
+        return;
       }
       consecutiveFails = 0;
       captured.set(p, g.html);
       if (!wanted.has(p)) wanted.set(p, pageFileFor(p));
+      // Checkpoint the raw page immediately (--complete) so an interrupted
+      // multi-hour crawl can resume without re-fetching what it already has.
+      if (COMPLETE) { const rf = rawPath(p); if (rf) { try { fs.mkdirSync(path.dirname(rf), { recursive: true }); fs.writeFileSync(rf, g.html); } catch (_) {} } }
       console.error(`[crawl]   ✓ ${p}`);
 
       // harvest onward product links from collection pages
@@ -662,6 +708,30 @@ function injectAtDocStart(html, script) {
         if (added) console.error(`[crawl]     +${added} products from this collection`);
       }
     }
+
+    // Bounded worker pool. CONC=1 (normal mode) is exactly the old sequential
+    // loop. Workers share the queue; a worker exits only when the queue is
+    // empty AND no other worker is still in-flight — an in-flight collection
+    // page may still enqueue freshly-harvested product links, so a worker that
+    // finds the queue momentarily empty must wait for peers before deciding
+    // the crawl is done.
+    let inFlight = 0;
+    const worker = async () => {
+      while (!stopAll && captured.size < HARD_CAP) {
+        if (coolingDown) { await coolingDown; continue; }
+        const p = queue.shift();
+        if (p === undefined) {
+          if (inFlight === 0) break;
+          await new Promise(r => setTimeout(r, 200));
+          continue;
+        }
+        inFlight++;
+        try { await handlePage(p); }
+        catch (e) { console.error(`[crawl]   ✗ ${p} (${(e && e.message) || e})`); }
+        inFlight--;
+      }
+    };
+    await Promise.all(Array.from({ length: CONC }, () => worker()));
 
     await Promise.race([Promise.allSettled(pending),
                         new Promise(r => setTimeout(r, 30000))]);
