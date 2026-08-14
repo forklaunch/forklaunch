@@ -34,12 +34,19 @@ export class WebhookEventService {
   }): Promise<WebhookEventOutcome> {
     try {
       await this.em.transactional(async (innerEm) => {
-        await innerEm.insert(WebhookEvent, {
+        // create()+persist, NOT insert(): em.insert() is a raw fast-path that
+        // bypasses the unit of work, so sqlBaseProperties' onCreate hooks
+        // (id/createdAt/updatedAt) never run and the INSERT sends null id ->
+        // NotNullConstraintViolation. The unique-constraint race is still
+        // enforced at flush, so idempotency is unchanged.
+        const event = innerEm.create(WebhookEvent, {
           provider: params.provider,
           providerEventId: params.providerEventId,
           eventType: params.eventType,
           processed: false
         });
+        innerEm.persist(event);
+        await innerEm.flush();
       });
       return 'new';
     } catch (error) {
