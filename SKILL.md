@@ -1,0 +1,232 @@
+---
+name: storefront-migrate
+description: Capture any live Shopify (or similar) storefront as a browsable, visually faithful local clone — homepage, collection pages and product pages, with working page-to-page navigation. Use when asked to migrate, clone, mirror, copy, or reproduce a storefront, to demo what a store would look like on ForkLaunch, or when given just a store URL and "clone this" / "migrate this".
+---
+
+# Storefront capture
+
+Turns a live storefront URL into a browsable local clone. Front half of the
+ForkLaunch migration pipeline: reproduce what the shopper sees, then wire the
+commerce backend underneath it.
+
+## Running it
+
+One command. Dependencies install themselves on first run (~150MB Chromium
+download, once).
+
+```bash
+node scripts/bin/migrate.mjs <store-url> --clean
+```
+
+It captures, then serves at **http://127.0.0.1:4173**. Give the user that URL.
+
+### Pre-flight comes first — read it out
+
+Every run opens with an assessment of the target, before any work happens:
+
+```
+● GREEN  deathwishcoffee.com
+stack: Shopify theme: Dawn
+Expect a faithful, browsable clone (~110s, ~12 pages).
+```
+
+```
+● RED  olipop.com
+✗ The store refused an automated browser. This is anti-bot protection
+  (Cloudflare / DataDome / similar). We cannot capture it without the
+  merchant's cooperation — and we don't build ways around it.
+```
+
+GREEN = expect a faithful clone. AMBER = works, caveats named. RED = expect
+failure, reason given. It also prints the permanent limits every time.
+
+**Relay the verdict to the user before proceeding.** Setting expectations up
+front is the whole point of the feature — especially if someone is watching a
+live run.
+
+Useful flags:
+
+| Flag | Use |
+|---|---|
+| `--clean` | hide vendor marketing popups AND make cart/account/checkout inert so a click can't jump to the live store. **Use for demos.** |
+| `--pages N` | product/collection page budget (default 20). **Not a hard total** — every destination in the site nav is captured *on top* of this (up to 12 more), so nothing in the menu links back to the live store. `--pages 3` on a typical store really captures ~13; the default really captures ~31. |
+| `--no-preflight` | skip the assessment |
+| `--single` | homepage only — faster, but NOT browsable (links go to the live site) |
+| `--out DIR` | where to write. Defaults to `output/<domain>/` **relative to this skill's `scripts/` directory, not your current directory** — pass `--out` explicitly if you want it somewhere you'll find it. |
+| `--no-serve` | capture only |
+| `--no-catalog` | skip the product-data pull (see Requirements — needs bun) |
+| `--measure` | score fidelity vs live (dev signal, not the deliverable) |
+
+### How long it takes, and why it looks stuck
+
+Roughly **20–35 seconds per page**, so a default-scope run is **10–20 minutes**
+and 100MB+. A measured 13-page capture took 253s and 116MB.
+
+**HTML pages are only written at the very end of the crawl.** Mid-run the
+output directory fills with assets and contains *zero* browsable pages. This
+looks exactly like a hang. It isn't — but if you kill it, you get nothing
+usable and there is no resume. For a quick first look, use `--pages 3`
+(~13 pages, ~4 minutes) rather than the default.
+
+Progress prints one line per captured page. Long silences during asset
+downloads are normal.
+
+### Did it work?
+
+The run ends with `✓ N pages, N assets, NMB` and writes `manifest.json` beside
+`site/`. That file is the record of what actually came across — page list,
+catalog counts, and a `gaps` array naming anything that did not. If
+`manifest.json` is absent, the run did not finish. If `catalog` is `null`,
+the product-data pull did not run (almost always missing bun — see
+Requirements); the clone is still browsable, but there is no product data to
+import into ForkLaunch.
+
+## Reporting back
+
+Tell the user the local URL and what was captured (page count, asset count).
+Say plainly that navigation works but cart/search/checkout do not.
+
+**Always serve over HTTP.** Opening the HTML with `file://` breaks module
+scripts and CORS, and the clone will look broken for reasons unrelated to the
+capture. `migrate.mjs` serves automatically; to serve later:
+
+```bash
+python3 scripts/serve.py 4173 <outdir>/site
+```
+
+## What it does and does not do
+
+**Does:** reproduce the visual storefront — layout, styling, webfonts, imagery,
+product photography, prices, swatches, size grids — for any store that renders
+in a browser. Works on classic Liquid themes and on headless React storefronts
+(Hydrogen, Next.js) alike. Page-to-page navigation works.
+
+**Does not**, without merchant credentials:
+
+- **Cart, search, variant switching, add-to-cart** — visual only. They need a
+  backend; that backend is the ForkLaunch ecommerce module.
+- **Checkout** — Shopify's is closed and hosted. It gets rebuilt, never migrated.
+- **Inventory counts** — the public catalog exposes an in-stock boolean, never
+  quantities. Seed real stock from the Admin API at cutover.
+- **Fields never rendered** — SKU, weight, tax flags, cost, barcode, metafields.
+  Not on the page, so not recoverable by looking at it.
+- **Third-party app data** — reviews, loyalty balances, subscription contracts.
+  These live in other vendors' databases (Bazaarvoice, Yotpo, Klaviyo), not in
+  Shopify, and do not come across.
+
+Do not tell a user this produces a working store. It produces a faithful,
+clickable *render* of one.
+
+## Next: getting it into ForkLaunch
+
+Capture is the front half. Everything below turns the render into a store, and
+each step is documented in `references/` — **read those files, they are not
+optional and nothing else links to them**:
+
+| Step | What it does | Read |
+|---|---|---|
+| 1. Capture | this document | — |
+| 2. Register the project | adds the captured site to an existing ForkLaunch app as a project | `references/manifest-schema.md` |
+| 3. Import the catalog | pushes captured products/variants into the ecommerce module over an HMAC-signed endpoint | `references/catalog-import-contract.md` |
+| 4. Run the backend | Postgres, Redis, env config, migrations, worker — what cart/checkout/filters actually need | `references/self-hosting.md` |
+| 5. Point the clone at it | re-serve with `--api <module-url>` so cart and filters hit the real backend instead of being inert | this document, below |
+
+**Be honest about step 4's cost.** It is not a one-liner: it needs Postgres and
+Redis running, roughly twenty environment variables, secrets you generate
+yourself (`HMAC_SECRET_KEY`, `ENCRYPTION_KEY`), Stripe/PayPal credentials for
+payments, and a separate worker process. `references/self-hosting.md` walks
+through it. If someone just wants to *see* the storefront, stop after step 1 —
+don't send them down this path unnecessarily.
+
+### Registering the project
+
+`forklaunch init storefront --from <path-to-manifest.json>` registers a capture
+as a project in an existing ForkLaunch app, reading the `manifest.json` written
+beside `site/`.
+
+**Check that your CLI has it** — `forklaunch init --help` should list
+`storefront`. If it doesn't, your CLI predates the command and you'll need a
+build that includes it. Older notes describing this command as "planned" are
+out of date.
+
+### Pointing the clone at the backend
+
+Once the module is running and the catalog is imported:
+
+```bash
+node scripts/bin/migrate.mjs <store-url> --clean --api http://localhost:<port>
+```
+
+`--api` switches the runtime bridge from its offline cart to the real module.
+Without it, cart actions are handled locally in the browser and filters/search
+do nothing — they are inert by design rather than faked, because a filter that
+silently returns wrong results is worse than one that visibly does nothing.
+
+## When a store won't capture
+
+**Client-rendered / headless stores are fine** — a real browser runs their
+JavaScript. Being "headless" is not an obstacle.
+
+Two things genuinely stop it:
+
+1. **Anti-bot protection / rate limiting.** Some stores refuse automated
+   browsers or throttle a crawl until it stops (the crawler waits out
+   rate-limit windows patiently, then keeps what it has). If a human can
+   plainly open the site but capture fails or stalls, this is almost
+   certainly why. Say so and stop the automated path. **Do not build or
+   suggest evasion** — fingerprint spoofing, proxy rotation, CAPTCHA solving —
+   against a store the user does not own.
+2. **Login-gated catalogs.** Wholesale/B2B/private stores show nothing without
+   an account. Rare among consumer storefronts.
+
+**Assisted capture (the owner's browser) covers both.** For a real migration
+the merchant is the one asking, and browsing their own store in their own
+browser is theirs to do — so the fallback is not evasion, it's consent: the
+owner opens the store in Chrome (logged in if the store is gated), and
+Claude, via the Claude-in-Chrome extension, walks the missing pages, reads
+each rendered DOM, and files it into the capture with
+`scripts/import-dom.mjs`:
+
+```
+# 1. run the automated capture as far as it politely gets
+node scripts/crawl.js <domain> <outdir> --complete --clean
+# 2. list exactly what is missing
+node scripts/check-complete.mjs <outdir> <domain>
+# 3. for each missing path: navigate the owner's Chrome tab there, then pipe
+#    the rendered DOM (document.documentElement.outerHTML) in:
+node scripts/import-dom.mjs <outdir> <missing-path>   # html on stdin
+# 4. resume — imported pages are treated as captured; rewrite runs over them
+node scripts/crawl.js <domain> <outdir> --complete --clean
+# 5. re-run the gate until it is green
+node scripts/check-complete.mjs <outdir> <domain>
+```
+
+Pace the Chrome walk like a person, not a crawler — a few seconds per page.
+This is for stores the user owns or is migrating with the owner; it is not a
+workaround for capturing someone else's walled store. Assisted pages keep
+absolute asset URLs (they load from the live CDN — the clone is browsable;
+full asset localization for assisted pages is a known follow-up).
+
+## Fidelity, honestly
+
+Some storefronts render differently on every load (A/B tests, personalization —
+one measured store changed 38% of its elements between two loads five seconds
+apart). For those, "matches the live site" has no fixed answer. The tool
+captures **one coherent version**; judge it against that capture, not against a
+moving live page. `scripts/check_browsable.js <domain> <outdir>` verifies a
+clone stands on its own without comparing to live.
+
+## Requirements
+
+**Node 18+ and Python 3.** Playwright and its Chromium build install
+themselves on first run (~150MB, once).
+
+**bun — required for the product catalog, and it does NOT self-install.** The
+catalog pipeline is TypeScript executed by bun. Without it the capture still
+succeeds and the clone is still browsable, but `manifest.json` comes back with
+`catalog: null` and there is no product data to import into ForkLaunch. There
+is no loud error — check the manifest. Install from https://bun.sh if
+`command -v bun` finds nothing.
+
+Cart, checkout and filters additionally need the ForkLaunch ecommerce module
+running — see **Next: getting it into ForkLaunch** above for what that costs.
