@@ -179,13 +179,16 @@ Two things genuinely stop it:
 2. **Login-gated catalogs.** Wholesale/B2B/private stores show nothing without
    an account. Rare among consumer storefronts.
 
-**Assisted capture (the owner's browser) covers both.** For a real migration
-the merchant is the one asking, and browsing their own store in their own
-browser is theirs to do — so the fallback is not evasion, it's consent: the
-owner opens the store in Chrome (logged in if the store is gated), and
-Claude, via the Claude-in-Chrome extension, walks the missing pages, reads
-each rendered DOM, and files it into the capture with
-`scripts/import-dom.mjs`:
+**Assisted capture (a real browser, a real person) covers both — and it is
+how a walled capture gets FINISHED, not an optional extra.** Rate limiting
+is never a reason to deliver a partial migration: these are public pages,
+and a person opening them in their own browser is ordinary use of the site.
+In a real migration the operator (whoever is running the migration — Guild,
+an implementer, or the merchant themselves) works with the merchant's
+consent; the operator opens the store in Chrome (logged in if the store is
+gated), and Claude, via the Claude-in-Chrome extension, walks the missing
+pages at human pace, reads each rendered DOM, and files it into the capture
+with `scripts/import-dom.mjs` — repeating until check-complete is green:
 
 ```
 # 1. run the automated capture as far as it politely gets
@@ -201,11 +204,12 @@ node scripts/crawl.js <domain> <outdir> --complete --clean
 node scripts/check-complete.mjs <outdir> <domain>
 ```
 
-Pace the Chrome walk like a person, not a crawler — a few seconds per page.
-This is for stores the user owns or is migrating with the owner; it is not a
-workaround for capturing someone else's walled store. Assisted pages keep
-absolute asset URLs (they load from the live CDN — the clone is browsable;
-full asset localization for assisted pages is a known follow-up).
+Pace the Chrome walk like a person, not a crawler — a few seconds per page —
+and if the site blocks even the real browser, respect that and stop. This
+path is for consensual migrations; what stays out of bounds is fingerprint
+spoofing, proxy rotation, or CAPTCHA solving to defeat a block. Assisted
+pages keep absolute asset URLs (they load from the live CDN — the clone is
+browsable; full asset localization for assisted pages is a known follow-up).
 
 ## Fidelity, honestly
 
