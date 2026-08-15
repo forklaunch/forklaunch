@@ -498,6 +498,11 @@ pub(crate) const ERROR_FAILED_TO_CREATE_DATABASE_EXPORT_INDEX_TS: &str =
     "Failed to create database export index.ts in core/persistence.";
 pub(crate) const ERROR_FAILED_TO_CREATE_LIBRARY_PACKAGE_JSON: &str =
     "Failed to create library package.json.";
+pub(crate) const ERROR_FAILED_TO_READ_STOREFRONT_MANIFEST: &str =
+    "Failed to read the storefront manifest.json. Please check the --from path is correct.";
+pub(crate) const ERROR_FAILED_TO_PARSE_STOREFRONT_MANIFEST: &str = "Failed to parse the storefront manifest.json. Please verify the file is valid json produced by the storefront capture tool.";
+pub(crate) const ERROR_STOREFRONT_PROJECT_ALREADY_EXISTS: &str = "A project directory with this name already exists. Please choose a different name or remove the existing directory.";
+pub(crate) const ERROR_FAILED_TO_COPY_STOREFRONT_SITE: &str = "Failed to copy captured storefront site assets. Please check the source site/ directory and target directory are accessible.";
 pub(crate) const ERROR_FAILED_TO_ADD_SERVICE_METADATA_TO_ARTIFACTS: &str =
     "Failed to add service metadata to artifacts.";
 pub(crate) const ERROR_FAILED_TO_UPDATE_APPLICATION_PACKAGE_JSON: &str =
