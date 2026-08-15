@@ -321,6 +321,24 @@ impl CliCommand for StorefrontCommand {
             );
         }
 
+        // The directory check alone is not enough: if the manifest already
+        // registers this project but its directory was removed,
+        // add_project_definition_to_manifest no-ops and preserves the OLD
+        // definition, so the command would copy the new capture in and report
+        // success while the manifest still describes the previous one. Reject
+        // the name whatever state the directory is in.
+        if !dryrun
+            && existing_manifest_data
+                .projects
+                .iter()
+                .any(|project_entry| project_entry.name == project_name)
+        {
+            bail!(
+                "{} (already defined in manifest.toml)",
+                ERROR_STOREFRONT_PROJECT_ALREADY_EXISTS
+            );
+        }
+
         let forklaunch_definition_buffer = add_project_definition_to_manifest(
             ProjectType::Library,
             &mut storefront_manifest_data,
@@ -330,15 +348,6 @@ impl CliCommand for StorefrontCommand {
             None,
         )
         .with_context(|| ERROR_FAILED_TO_ADD_PROJECT_METADATA_TO_MANIFEST)?;
-
-        let rendered_templates = vec![RenderedTemplate {
-            path: manifest_path.clone(),
-            content: forklaunch_definition_buffer,
-            context: Some(ERROR_FAILED_TO_ADD_PROJECT_METADATA_TO_MANIFEST.to_string()),
-        }];
-
-        write_rendered_templates(&rendered_templates, dryrun, &mut stdout)
-            .with_context(|| "Failed to write storefront project metadata to manifest")?;
 
         if !dryrun {
             // generate_with_template can't carry this: it reads from the
@@ -373,6 +382,22 @@ impl CliCommand for StorefrontCommand {
             copy(&site_source_path, &project_output_path, &copy_options)
                 .with_context(|| ERROR_FAILED_TO_COPY_STOREFRONT_SITE)?;
         }
+
+        // Register the project only once its assets are on disk. Writing the
+        // manifest first meant a failed create_dir_all/copy left the
+        // application manifest advertising a storefront project whose
+        // directory never materialised — a half-migrated app that later
+        // commands would treat as real. Staging the assets first makes the
+        // manifest write the last, smallest step.
+        let rendered_templates = vec![RenderedTemplate {
+            path: manifest_path.clone(),
+            content: forklaunch_definition_buffer,
+            context: Some(ERROR_FAILED_TO_ADD_PROJECT_METADATA_TO_MANIFEST.to_string()),
+        }];
+
+        write_rendered_templates(&rendered_templates, dryrun, &mut stdout)
+            .with_context(|| "Failed to write storefront project metadata to manifest")?;
+
 
         print_summary(
             &mut stdout,
