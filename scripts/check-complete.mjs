@@ -75,31 +75,59 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const absent = [];
   for (const [f, p] of wanted) if (!fs.existsSync(path.join(siteDir, f))) absent.push(p);
 
-  // A sitemap URL with no captured file is only a real GAP if a shopper would
-  // actually hit a dead page there. Sitemaps routinely list URLs that 3xx to
-  // a canonical page (renamed collections, consolidated handles) — the
-  // crawler follows the redirect and captures the TARGET, so the source path
-  // is reachable (it bounces to a real page), not missing. Probe each absent
-  // URL live and only count non-redirecting ones (2xx/4xx/5xx) as gaps.
+  // A sitemap URL with no captured file is only a NOT a gap when it redirects
+  // to a page we DID capture — the shopper bounces to real content. Verifying
+  // the 3xx alone is not enough and silently inflates coverage: an anti-bot
+  // layer answers with a 302 to a challenge page, so a fully bot-walled store
+  // scores 100% while every one of those routes is dead in the clone. (Seen
+  // for real: a store returned 3xx under rate limiting, then 429 once the
+  // limiter engaged — 38% of its sitemap was being counted as covered.)
+  // So: follow the redirect, map where it LANDS, and require that file.
+  const origin = `https://${domain.replace(/^https?:\/\//, '').replace(/\/.*/, '')}`;
   const missing = [];
   const redirected = [];
+  const blocked = [];
   await Promise.all(absent.map(async (p) => {
-    let status = 0;
+    let status = 0, location = null;
     try {
-      const r = await fetch(`https://${domain.replace(/^https?:\/\//, '').replace(/\/.*/, '')}${p}`,
+      const r = await fetch(`${origin}${p}`,
         { method: 'HEAD', redirect: 'manual', headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(15000) });
       status = r.status;
+      location = r.headers.get('location');
     } catch { status = 0; }
-    if (status >= 300 && status < 400) redirected.push(p);
-    else missing.push(p);
+
+    // Rate limiting / bot walls are neither "captured" nor "a missing page" —
+    // they mean the probe could not determine anything. Surfacing them
+    // separately keeps them from being silently scored either way.
+    if (status === 429 || status === 403) { blocked.push(p); return; }
+
+    if (status >= 300 && status < 400 && location) {
+      let targetPath;
+      try { targetPath = new URL(location, origin).pathname; } catch { targetPath = null; }
+      const targetFile = targetPath ? pageFileFor(targetPath) : null;
+      if (targetFile && fs.existsSync(path.join(siteDir, targetFile.file))) {
+        redirected.push(`${p} -> ${targetPath}`);
+        return;
+      }
+    }
+    missing.push(p);
   }));
 
-  const total = wanted.size, present = total - missing.length;
+  // Blocked probes count against coverage, not for it: an unverifiable page is
+  // not a captured page, and treating it as one is how a bot-walled store
+  // reports 100%.
+  const total = wanted.size;
+  const present = total - missing.length - blocked.length;
   const pct = total ? (present / total * 100) : 100;
-  console.log(`fidelity: ${present}/${total} public pages captured (${pct.toFixed(2)}%)`);
+  console.log(`fidelity: ${present}/${total} public pages verified captured (${pct.toFixed(2)}%)`);
   if (redirected.length) {
-    console.log(`  ${redirected.length} sitemap URL(s) redirect (3xx) to a captured page — reachable, not counted as gaps:`);
+    console.log(`  ${redirected.length} sitemap URL(s) redirect to a page we captured — reachable, not gaps:`);
     for (const p of redirected.slice(0, 10)) console.log(`    ↪ ${p}`);
+  }
+  if (blocked.length) {
+    console.log(`  ${blocked.length} URL(s) returned 429/403 — the store is rate limiting or bot walling this probe,`);
+    console.log(`    so coverage for them is UNKNOWN, not verified. Re-run later or capture them assisted:`);
+    for (const p of blocked.slice(0, 10)) console.log(`    ⏳ ${p}`);
   }
   if (missing.length) {
     console.log(`  ${missing.length} MISSING (reachable on the real store, not on ours):`);
