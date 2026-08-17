@@ -1,6 +1,6 @@
 ---
 name: storefront-migrate
-description: Capture any live Shopify (or similar) storefront as a browsable, visually faithful local clone — homepage, collection pages and product pages, with working page-to-page navigation. Use when asked to migrate, clone, mirror, copy, or reproduce a storefront, to demo what a store would look like on ForkLaunch, or when given just a store URL and "clone this" / "migrate this".
+description: Migrate a live Shopify (or similar) storefront onto ForkLaunch — capture every public page as a browsable, visually faithful clone, pull and import the product catalog, and wire the clone's cart and checkout to the real ecommerce module so it takes actual orders. Also does capture-only when a visual demo is all that's wanted. Use this whenever a store URL shows up alongside words like migrate, clone, mirror, copy, reproduce, move over, or "what would this look like on our platform" — and also for the individual pieces: capturing a store's pages, pulling or importing a Shopify catalog, checking capture fidelity or dead links, or standing a captured storefront up against a running ForkLaunch backend. Reach for it even when the request names only one of those steps rather than a whole migration.
 ---
 
 # Storefront capture
@@ -161,6 +161,47 @@ node scripts/bin/migrate.mjs <store-url> --clean --api http://localhost:<port>
 Without it, cart actions are handled locally in the browser and filters/search
 do nothing — they are inert by design rather than faked, because a filter that
 silently returns wrong results is worse than one that visibly does nothing.
+
+**Already captured the store? Don't re-crawl.** `--api` is baked in at capture
+time, so using it on an existing capture means walking the whole store again —
+wasteful on a 200+ page site, and another round of load on the merchant's
+origin. `heroserve-fl.ts` serves a capture you already have and proxies its
+cart and checkout to the module instead:
+
+```bash
+bun scripts/catalog/heroserve-fl.ts <capture>/site <port> <module-url> <hmac-secret>
+```
+
+It intercepts the captured pages' native Shopify cart calls, maps them onto the
+module's `/cart`, `/cart/items` and `/checkout` endpoints with HMAC auth, and
+serves an order-confirmation page at `/__fl/checkout`. A shopper browses the
+migrated storefront and every commerce action lands in the real module — the
+same one the catalog was imported into.
+
+### Getting the catalog in
+
+The three commands below are the whole pipeline. Their argument shapes are easy
+to get wrong, so they're written out exactly:
+
+```bash
+# 1. pull — needs a FULL url; a bare domain fails with "fetch() URL is invalid"
+bun scripts/catalog/cli.ts pull https://thestore.com
+
+# 2. normalize — takes the path to raw.json, not a shop name
+bun scripts/catalog/cli.ts normalize data/<slug>/raw.json
+
+# 3. import — POSITIONAL args, not flags: <normalized.json> <module-url> <secret>
+bun scripts/catalog/cli.ts import data/<slug>/normalized.json http://localhost:8001 <hmac-secret>
+```
+
+`normalize` writes to `data/<slug>/` derived from the raw file, and falls back
+to `data/unknown-shop/` when it can't infer the shop — harmless, but check the
+path it prints rather than assuming, or the import step won't find the file.
+
+Public-catalog pulls carry no real stock counts (Shopify's public feed exposes
+only an in-stock boolean), so imported inventory is a placeholder. Use
+`pull-admin <shop> --token <t>` with the merchant's read-only Admin token when
+the numbers need to be real.
 
 ## When a store won't capture
 
