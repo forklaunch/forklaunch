@@ -62,3 +62,20 @@ for (const f of files) {
   ok++;
 }
 console.log(`imported ${ok}, skipped ${skipped}`);
+
+// Imported pages land in .raw/ (the checkpoint store the crawler resumes from),
+// not in site/ (what actually gets served and what check-complete grades). So
+// an import on its own leaves the fidelity gate exactly where it was, which
+// reads as "the import silently did nothing" unless you know the rewrite is a
+// separate phase. Say so here rather than letting the next gate run look like a
+// failure.
+if (ok > 0) {
+  const domainGuess = path.basename(path.resolve(dir)).replace(/^(cc_|complete_)/, '');
+  console.log(
+    '\nNext: resume the capture so these are rewritten into site/, then re-check:\n' +
+      `  node scripts/crawl.js <domain> ${dir} --complete --clean\n` +
+      `  node scripts/check-complete.mjs ${dir} <domain>\n` +
+      `(the resume re-fetches nothing that is already checkpointed — for ${domainGuess} it` +
+      ' will report them as "already captured")'
+  );
+}
