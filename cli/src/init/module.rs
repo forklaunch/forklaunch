@@ -41,12 +41,18 @@ use crate::{
     prompt::{ArrayCompleter, prompt_with_validation},
 };
 
+use super::storefront::StorefrontCommand;
+
 #[derive(Debug)]
-pub(super) struct ModuleCommand;
+pub(super) struct ModuleCommand {
+    storefront: StorefrontCommand,
+}
 
 impl ModuleCommand {
     pub(super) fn new() -> Self {
-        Self {}
+        Self {
+            storefront: StorefrontCommand::new(),
+        }
     }
 }
 
@@ -54,6 +60,7 @@ impl CliCommand for ModuleCommand {
     fn command(&self) -> Command {
         command("module", "Initialize a preconfigured module")
             .alias("mod")
+            .subcommand(self.storefront.command())
             .arg(Arg::new("name").help("The name of the module"))
             .arg(
                 Arg::new("base_path")
@@ -86,6 +93,13 @@ impl CliCommand for ModuleCommand {
 
     // pass token in from parent and perform get token above?
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
+        // `init module storefront …` nests the storefront generator under the
+        // module surface (review feedback on #241): a storefront extends an
+        // existing app the same way any module does, it is not a new project
+        // kind. Leaf behaviour (`init module -m …`) is unchanged.
+        if let Some(("storefront", sub_matches)) = matches.subcommand() {
+            return self.storefront.handler(sub_matches);
+        }
         let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
