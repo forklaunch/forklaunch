@@ -14,3 +14,5 @@ target
 agentic-capital
 
 .gstack
+.worktrees/
+cli/.worktrees/
