@@ -459,3 +459,79 @@ fn print_summary(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn url_shaped_from_values_are_rejected() {
+        for value in [
+            "https://shop.example.com",
+            "http://shop.example.com",
+            "ftp://shop.example.com",
+            "s3://bucket/manifest.json",
+        ] {
+            assert!(looks_like_url(value), "{value} should be treated as a URL");
+        }
+    }
+
+    #[test]
+    fn filesystem_paths_are_accepted() {
+        for value in [
+            "./captures/shop/manifest.json",
+            "/tmp/captures/shop/manifest.json",
+            "captures/shop",
+            "manifest.json",
+        ] {
+            assert!(!looks_like_url(value), "{value} should be treated as a path");
+        }
+    }
+
+    /// The capture tool writes this file and the CLI only reads it, so the
+    /// field names below are a wire format between two programs. Renaming a
+    /// field in either one turns every capture into "Failed to parse the
+    /// storefront manifest.json" at runtime.
+    #[test]
+    fn parses_a_captured_manifest() {
+        let manifest: CapturedManifest = serde_json::from_str(
+            r#"{
+                "schemaVersion": 1,
+                "source": { "domain": "shop.example.com" },
+                "pages": [
+                    { "route": "/", "type": "home" },
+                    { "route": "/products/hat", "type": "product" }
+                ],
+                "catalog": { "productCount": 12, "variantCount": 34 },
+                "limits": ["checkout not captured"]
+            }"#,
+        )
+        .expect("a well-formed capture must parse");
+
+        assert_eq!(manifest.schema_version, 1);
+        assert_eq!(manifest.source.domain, "shop.example.com");
+        assert_eq!(manifest.pages.len(), 2);
+        assert_eq!(manifest.pages[1].route, "/products/hat");
+        assert_eq!(manifest.pages[1].page_type, "product");
+        let catalog = manifest.catalog.expect("catalog was present");
+        assert_eq!(catalog.product_count, 12);
+        assert_eq!(catalog.variant_count, 34);
+        assert_eq!(manifest.limits, vec!["checkout not captured"]);
+    }
+
+    /// A capture that pulled no catalog still has to scaffold.
+    #[test]
+    fn catalog_is_optional() {
+        let manifest: CapturedManifest = serde_json::from_str(
+            r#"{
+                "schemaVersion": 1,
+                "source": { "domain": "shop.example.com" },
+                "pages": [],
+                "limits": []
+            }"#,
+        )
+        .expect("a capture without a catalog must still parse");
+
+        assert!(manifest.catalog.is_none());
+    }
+}
