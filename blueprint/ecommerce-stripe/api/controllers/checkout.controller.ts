@@ -21,6 +21,9 @@ const orderServiceFactory = ci.scopedResolver(tokens.OrderService);
 const orderCartLookupServiceFactory = ci.scopedResolver(
   tokens.OrderCartLookupService
 );
+const paymentOrderLookupServiceFactory = ci.scopedResolver(
+  tokens.PaymentOrderLookupService
+);
 const taxServiceFactory = ci.scopedResolver(tokens.TaxService);
 const shippingServiceFactory = ci.scopedResolver(tokens.ShippingService);
 const stripePaymentServiceFactory = ci.scopedResolver(tokens.PaymentService);
@@ -38,6 +41,13 @@ const HMAC_SECRET_KEY = ci.resolve(tokens.HMAC_SECRET_KEY);
  * call site (payment creation) that also needs a currency.
  */
 const CHECKOUT_CURRENCY = 'usd';
+
+/**
+ * Stripe object-id prefix for a PaymentIntent. Used to tell which provider
+ * an existing payment belongs to, since Payment has no provider column —
+ * see the payment-reuse block below.
+ */
+const STRIPE_PAYMENT_INTENT_PREFIX = 'pi_';
 
 /**
  * The unified checkout orchestration: cart -> order -> payment
@@ -87,8 +97,11 @@ export const checkout = handlers.post(
     // has a still-PENDING order — e.g. an earlier checkout call for it got
     // as far as creating the order but never got as far as (or failed at)
     // creating the payment, see the payment try/catch below — reuse that
-    // order rather than creating a second one, so a retry doesn't also end
-    // up creating a second live payment for the same cart.
+    // order rather than creating a second one.
+    //
+    // Reusing the order is only half of it: the payment-reuse block further
+    // down is what stops the retry opening a second live provider payment
+    // against that reused order. Neither half is sufficient alone.
     //
     // Scoped to PENDING specifically, not just cartId: a cart can
     // legitimately be reused for a second, later checkout once the order it
@@ -254,18 +267,63 @@ export const checkout = handlers.post(
     // (provider defaults to stripe). Payment.orderId is required, so this
     // can only happen once the order exists — order creation and payment
     // creation can't be one atomic step.
-    const paymentServiceFactory =
-      req.body.provider === PaymentProvider.PAYPAL
-        ? paypalPaymentServiceFactory
-        : stripePaymentServiceFactory;
+    const usePaypal = req.body.provider === PaymentProvider.PAYPAL;
+    const paymentServiceFactory = usePaypal
+      ? paypalPaymentServiceFactory
+      : stripePaymentServiceFactory;
+
+    // The payment half of the idempotency above. A retry that reused the
+    // pending order has to reuse that order's pending payment too, because
+    // creating a second one leaves two independently confirmable provider
+    // payments for a single order. Both downstream guards still hold in
+    // that state — the state machine rejects the second PAID transition and
+    // worker.ts never decrements stock twice — so order state and inventory
+    // stay correct and the damage lands entirely on the customer: two
+    // charges for one order, with nothing to refund the surplus.
+    //
+    // Reuse is scoped to the provider being asked for now. Which provider
+    // created a payment is only recoverable from the shape of its reference
+    // (Stripe PaymentIntent ids are prefixed `pi_`; PayPal order ids are
+    // not), because Payment has no provider column. If the customer swaps
+    // providers mid-retry the old payment is left as it is and a fresh one
+    // is created for the new provider, which reopens the two-live-payments
+    // window for that case alone. Putting the provider on Payment is the
+    // real fix for it and is deliberately not in this change.
+    const existingPending =
+      await paymentOrderLookupServiceFactory().findPendingPaymentByOrderId(
+        order.id
+      );
+    const existingIsStripe =
+      existingPending?.providerRef.startsWith(STRIPE_PAYMENT_INTENT_PREFIX) ??
+      false;
+    const reusablePaymentId =
+      existingPending && existingIsStripe !== usePaypal
+        ? existingPending.id
+        : null;
 
     let payment;
     try {
-      payment = await paymentServiceFactory().createPayment({
-        orderId: order.id,
-        amountCents: order.totalCents,
-        currency: CHECKOUT_CURRENCY
-      });
+      if (reusablePaymentId === null) {
+        payment = await paymentServiceFactory().createPayment({
+          orderId: order.id,
+          amountCents: order.totalCents,
+          currency: CHECKOUT_CURRENCY
+        });
+      } else if (usePaypal) {
+        // PayPal needs nothing reissued: providerRef *is* the PayPal order
+        // id, which is all the PayPal JS SDK needs to render its approval
+        // buttons (see checkout.schema.ts), so the stored record is already
+        // everything the client gets on a first-time checkout.
+        payment = await paypalPaymentServiceFactory().getPayment({
+          id: reusablePaymentId
+        });
+      } else {
+        // Stripe does need one: client_secret is never persisted, so
+        // resuming means fetching the intent back from Stripe.
+        payment = await stripePaymentServiceFactory().resumePayment({
+          id: reusablePaymentId
+        });
+      }
     } catch (error) {
       // Deliberately NOT rolled back or cancelled: the order stays PENDING,
       // which is still an honest state — nothing downstream treats PENDING

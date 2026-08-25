@@ -180,6 +180,44 @@ export class StripePaymentService<
     };
   }
 
+  /**
+   * Re-issues the client_secret for a payment that already has a live
+   * PaymentIntent, so a checkout retry resumes that intent instead of
+   * opening a second one against the same order. Two live intents for one
+   * order are both confirmable, and a customer who confirms both is charged
+   * twice — see PaymentOrderLookupService in ecommerce-stripe for the full
+   * failure mode.
+   *
+   * The secret has to be fetched back from Stripe because it is
+   * deliberately never persisted (see createPayment) — Stripe is the only
+   * place it exists after that first response.
+   *
+   * A payment with no providerRef never reached Stripe, so there is no
+   * intent to resume and the record is returned unchanged, without a
+   * secret. The caller treats that the same way it treats no payment at
+   * all: create a fresh one.
+   */
+  async resumePayment(
+    idDto: { id: string },
+    em?: EntityManager
+  ): Promise<Dto['PaymentMapper'] & { clientSecret?: string }> {
+    const payment = await this.basePaymentService.getPayment(idDto, em);
+    if (!payment.providerRef) {
+      return payment;
+    }
+    const paymentIntent = await this.stripeClient.paymentIntents.retrieve(
+      payment.providerRef,
+      {},
+      this.connect
+        ? { stripeAccount: this.connect.connectedAccountId }
+        : undefined
+    );
+    return {
+      ...payment,
+      clientSecret: paymentIntent.client_secret ?? undefined
+    };
+  }
+
   async getPayment(
     idDto: { id: string },
     em?: EntityManager

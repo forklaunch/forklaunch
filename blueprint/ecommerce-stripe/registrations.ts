@@ -42,6 +42,7 @@ import { StripeTaxService } from './domain/services/tax.service';
 import { FlatRateShippingService } from './domain/services/shipping.service';
 import { WebhookEventService } from './domain/services/webhookEvent.service';
 import { OrderCartLookupService } from './domain/services/orderCartLookup.service';
+import { PaymentOrderLookupService } from './domain/services/paymentOrderLookup.service';
 import { ForkOptions } from '@mikro-orm/core';
 import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
 import Stripe from 'stripe';
@@ -492,6 +493,21 @@ const serviceDependencies = runtimeDependencies.chain({
     type: OrderCartLookupService,
     factory: ({ EntityManager }, context, resolve) =>
       new OrderCartLookupService(
+        context?.entityManagerOptions
+          ? resolve('EntityManager', context)
+          : EntityManager
+      )
+  },
+  /**
+   * The payment half of the same checkout-idempotency story — see
+   * PaymentOrderLookupService's doc comment. Registered exactly like the
+   * order lookup above: scoped, same EntityManager-resolution pattern.
+   */
+  PaymentOrderLookupService: {
+    lifetime: Lifetime.Scoped,
+    type: PaymentOrderLookupService,
+    factory: ({ EntityManager }, context, resolve) =>
+      new PaymentOrderLookupService(
         context?.entityManagerOptions
           ? resolve('EntityManager', context)
           : EntityManager
