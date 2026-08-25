@@ -15,12 +15,23 @@ with inventory that can't oversell and payments through Stripe or PayPal.
 ```bash
 cp .env.example .env.local   # then fill it in — every variable is explained there
 pnpm install
-pnpm dev                     # runs migrate:up, then serves on http://localhost:8000
+pnpm migrate:init            # first run only — see below
+pnpm dev                     # applies migrations, then serves on http://localhost:8000
 pnpm dev:worker              # separate process — see below
 ```
 
-`pnpm dev` applies the committed migration (8 tables) before starting; run
-`pnpm migrate:up` on its own if you only want the schema.
+A scaffolded project ships no migrations — generate one from the entities the
+first time, then apply it:
+
+```bash
+pnpm migrate:init   # writes migrations/Migration<timestamp>.ts from the entities
+pnpm migrate:up     # applies it, creating the 8 tables
+```
+
+`pnpm dev` runs `migrate:up` on the way in, so once the migration exists you do
+not need to run it again by hand. It does not run `migrate:init`, and
+`migrate:up` with no migration files is a silent no-op — the service then starts
+and fails on the first query with `relation does not exist`.
 
 **The worker is not optional.** Order transitions publish events to Redis, and
 the worker is what consumes them to adjust inventory. Without it running,
