@@ -439,15 +439,22 @@ pub(crate) fn project_test_script(
 }
 
 pub(crate) fn project_migrate_script(command: &str) -> String {
-    let base = "[ -z $DOTENV_FILE_PATH ] && export DOTENV_FILE_PATH=.env.local; NODE_OPTIONS='--import=tsx' mikro-orm migration:";
+    let env = "[ -z $DOTENV_FILE_PATH ] && export DOTENV_FILE_PATH=.env.local;";
+    let orm = "NODE_OPTIONS='--import=tsx' mikro-orm";
+    let base = format!("{} {} migration:", env, orm);
     match command {
         "create" => format!("{}{}", base, "create"),
         "down" => format!("{}{}", base, "down"),
+        // The migrations directory is named per database driver
+        // (migrations-postgresql, migrations-mysql, ...), so the guard has to
+        // glob for any of them. Checking a hardcoded `migrations/` never
+        // matched, and re-running create --initial against an existing
+        // migration is an error rather than a no-op.
         "init" => format!(
-            "if [ ! -f migrations/Migration* ]; then {}{}; fi",
+            "if ! ls migrations*/Migration* >/dev/null 2>&1; then {}{}; fi",
             base, "create --initial"
         ),
-        "up" => format!("{}{}", base, "up"),
+        "up" => format!("{}up", base),
         _ => panic!("Unsupported migration command"),
     }
 }

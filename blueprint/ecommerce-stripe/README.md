@@ -15,6 +15,7 @@ with inventory that can't oversell and payments through Stripe or PayPal.
 ```bash
 cp .env.example .env.local   # then fill it in — every variable is explained there
 pnpm install
+pnpm build                   # the app's own core/monitoring libs, needed below
 pnpm migrate:init            # first run only — see below
 pnpm dev                     # applies migrations, then serves on http://localhost:8000
 pnpm dev:worker              # separate process — see below
