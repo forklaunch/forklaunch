@@ -508,7 +508,7 @@ pub(crate) fn project_dev_local_worker_script(
 ) -> String {
     String::from(match runtime {
         Runtime::Bun => format!(
-            "{}DOTENV_FILE_PATH=.env.local bun --watch server.ts && DOTENV_FILE_PATH=.env.local bun --watch worker.ts",
+            "{}DOTENV_FILE_PATH=.env.local bun --watch server.ts & DOTENV_FILE_PATH=.env.local bun --watch worker.ts",
             if database.is_some_and(|db| db != Database::MongoDB) {
                 "DOTENV_FILE_PATH=.env.local bun run migrate:up && "
             } else {
@@ -516,7 +516,7 @@ pub(crate) fn project_dev_local_worker_script(
             }
         ),
         Runtime::Node => format!(
-            "{}DOTENV_FILE_PATH=.env.local pnpm tsx watch server.ts && DOTENV_FILE_PATH=.env.local pnpm tsx watch worker.ts",
+            "{}DOTENV_FILE_PATH=.env.local pnpm tsx watch server.ts & DOTENV_FILE_PATH=.env.local pnpm tsx watch worker.ts",
             if database.is_some_and(|db| db != Database::MongoDB) {
                 "DOTENV_FILE_PATH=.env.local pnpm migrate:up && "
             } else {

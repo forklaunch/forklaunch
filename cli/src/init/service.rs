@@ -69,7 +69,9 @@ use crate::{
                 ZOD_VERSION, project_clean_script, project_dev_local_script,
                 project_dev_server_script, project_format_script, project_lint_fix_script,
                 project_lint_script, project_migrate_script, project_retention_enforce_script,
-                project_start_server_script, project_test_script, project_up_latest_script,
+                project_dev_local_worker_script, project_dev_worker_client_script,
+                project_start_server_script, project_start_worker_script, project_test_script,
+                project_up_latest_script,
             },
             project_package_json::{
                 MIKRO_ORM_CONFIG_PATHS, ProjectDependencies, ProjectDevDependencies,
@@ -351,10 +353,17 @@ pub(crate) fn generate_service_package_json(
                     &manifest_data.runtime.parse()?,
                     manifest_data.database.parse::<Database>().ok(),
                 )),
-                dev_local: Some(project_dev_local_script(
-                    &manifest_data.runtime.parse()?,
-                    manifest_data.database.parse::<Database>().ok(),
-                )),
+                dev_local: Some(if manifest_data.ships_worker {
+                    project_dev_local_worker_script(
+                        &manifest_data.runtime.parse()?,
+                        manifest_data.database.parse::<Database>().ok(),
+                    )
+                } else {
+                    project_dev_local_script(
+                        &manifest_data.runtime.parse()?,
+                        manifest_data.database.parse::<Database>().ok(),
+                    )
+                }),
                 test: project_test_script(&manifest_data.runtime.parse()?, &test_framework),
                 docs: Some(PROJECT_DOCS_SCRIPT.to_string()),
                 format: Some(project_format_script(&manifest_data.formatter.parse()?)),
@@ -380,6 +389,24 @@ pub(crate) fn generate_service_package_json(
                 up_latest: project_up_latest_script(&manifest_data.runtime.parse()?),
                 retention_enforce: if manifest_data.is_database_enabled {
                     Some(project_retention_enforce_script(&manifest_data.runtime.parse()?))
+                } else {
+                    None
+                },
+                // A module that ships worker.ts needs a way to run it. Without
+                // these the file scaffolds and nothing ever starts it: order
+                // events never drain, stock never moves, and nothing errors.
+                dev_worker: if manifest_data.ships_worker {
+                    Some(project_dev_worker_client_script(
+                        &manifest_data.runtime.parse()?,
+                    ))
+                } else {
+                    None
+                },
+                start_worker: if manifest_data.ships_worker {
+                    Some(project_start_worker_script(
+                        &manifest_data.runtime.parse()?,
+                        manifest_data.database.parse::<Database>().ok(),
+                    ))
                 } else {
                     None
                 },
@@ -856,6 +883,7 @@ impl CliCommand for ServiceCommand {
             is_stripe: false,
             is_twilio: false,
             is_ecommerce: false,
+            ships_worker: false,
 
             is_iam_configured: manifest_data.projects.iter().any(|project_entry| {
                 if project_entry.name == "iam" {

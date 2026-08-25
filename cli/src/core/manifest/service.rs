@@ -90,6 +90,14 @@ config_struct!(
         #[serde(skip_serializing, skip_deserializing)]
         pub(crate) is_ecommerce: bool,
 
+        /// True when the module's template includes a worker.ts, so the
+        /// generated package.json needs entry points that start it. Kept
+        /// separate from is_ecommerce: shipping a worker is the property the
+        /// scripts depend on, and the next module to ship one should not have
+        /// to be called ecommerce to get them.
+        #[serde(skip_serializing, skip_deserializing)]
+        pub(crate) ships_worker: bool,
+
         #[serde(skip_serializing, skip_deserializing)]
         pub(crate) is_iam_configured: bool,
         #[serde(skip_serializing, skip_deserializing)]
