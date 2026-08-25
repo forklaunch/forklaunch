@@ -212,11 +212,50 @@ pub(crate) fn get_routers_from_standard_package(package: Module) -> Option<Vec<S
             String::from("variant"),
             String::from("inventory"),
             String::from("cart"),
+            String::from("checkout"),
             String::from("order"),
             String::from("payment"),
-            String::from("subscription"),
             String::from("webhook"),
             String::from("catalogImport"),
         ]),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::rendered_template::TEMPLATES_DIR;
+
+    /// The routers a module declares land in the scaffolded app's
+    /// manifest.toml, and sync, analyze, delete and the release manifest all
+    /// read that list. Nothing else compares it against the templates, so a
+    /// router added to a blueprint without a matching entry here silently
+    /// produces a manifest naming routes the app does not serve, and omitting
+    /// ones it does. That is how "subscription" survived here with no
+    /// subscription route, while checkout shipped undeclared.
+    ///
+    /// Only ecommerce is asserted. billing-stripe and iam-base drift the same
+    /// way today on main — billing omits compliance, iam omits compliance and
+    /// discovery — and correcting those belongs with those modules, not here.
+    fn routers_in_template(project: &str) -> Vec<String> {
+        let dir = TEMPLATES_DIR
+            .get_dir(format!("project/{project}/api/routes"))
+            .unwrap_or_else(|| panic!("no routes dir for {project}"));
+        let mut found: Vec<String> = dir
+            .files()
+            .filter_map(|f| f.path().file_name()?.to_str())
+            .filter_map(|n| n.strip_suffix(".routes.ts"))
+            .map(str::to_string)
+            .collect();
+        found.sort();
+        found
+    }
+
+    #[test]
+    fn ecommerce_declares_exactly_the_routers_it_ships() {
+        let mut declared =
+            get_routers_from_standard_package(Module::StripeEcommerce).unwrap_or_default();
+        declared.sort();
+        assert_eq!(declared, routers_in_template("ecommerce-stripe"));
     }
 }
