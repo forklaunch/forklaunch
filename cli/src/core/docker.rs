@@ -2033,7 +2033,7 @@ pub(crate) fn add_service_definition_to_docker_compose(
     let service_name = manifest_data.service_name.clone();
     if !docker_compose.services.contains_key(&service_name) {
         docker_compose.services.insert(
-            service_name,
+            service_name.clone(),
             create_base_service(
                 &manifest_data.app_name,
                 &manifest_data.service_name,
@@ -2043,14 +2043,44 @@ pub(crate) fn add_service_definition_to_docker_compose(
                 manifest_data.is_s3_enabled,
                 manifest_data.is_in_memory_database,
                 Some(port_number),
-                environment,
-                volumes,
+                environment.clone(),
+                volumes.clone(),
                 None,
                 "dev",
                 vec![],
                 &context_path,
             ),
         );
+    }
+
+    // A module that ships a worker needs it running as its own container, the
+    // same way init/worker.rs emits one. Without this `docker compose up`
+    // starts the API alone: order events pile up in Redis, inventory is never
+    // adjusted, and nothing reports an error — the store just quietly stops
+    // decrementing stock.
+    if manifest_data.ships_worker {
+        let worker_service_name = format!("{}-worker", manifest_data.service_name);
+        if !docker_compose.services.contains_key(&worker_service_name) {
+            docker_compose.services.insert(
+                worker_service_name,
+                create_base_service(
+                    &manifest_data.app_name,
+                    &manifest_data.service_name,
+                    &manifest_data.runtime,
+                    &Some(manifest_data.database.clone()),
+                    manifest_data.is_cache_enabled,
+                    manifest_data.is_s3_enabled,
+                    manifest_data.is_in_memory_database,
+                    None,
+                    environment,
+                    volumes,
+                    Some("worker"),
+                    "dev:worker",
+                    vec![service_name],
+                    &context_path,
+                ),
+            );
+        }
     }
 
     Ok(to_string(&docker_compose)
