@@ -281,48 +281,77 @@ export const checkout = handlers.post(
     // stay correct and the damage lands entirely on the customer: two
     // charges for one order, with nothing to refund the surplus.
     //
-    // Reuse is scoped to the provider being asked for now. Which provider
-    // created a payment is only recoverable from the shape of its reference
-    // (Stripe PaymentIntent ids are prefixed `pi_`; PayPal order ids are
-    // not), because Payment has no provider column. If the customer swaps
-    // providers mid-retry the old payment is left as it is and a fresh one
-    // is created for the new provider, which reopens the two-live-payments
-    // window for that case alone. Putting the provider on Payment is the
-    // real fix for it and is deliberately not in this change.
+    // An order carries at most one live payment, enforced by Payment's
+    // payment_order_id_pending_unique partial index. That is deliberately
+    // provider-agnostic: which provider created a payment is only
+    // recoverable from the shape of its reference (Stripe PaymentIntent ids
+    // are prefixed `pi_`; PayPal order ids are not), because Payment has no
+    // provider column. So a customer who checks out with Stripe and retries
+    // asking for PayPal resumes the Stripe payment rather than opening a
+    // PayPal one alongside it — switching providers requires the current
+    // attempt to fail first. Two live payments for one order is the worse
+    // outcome, and a provider column on Payment is the real fix for the
+    // restriction.
+    const resumeExistingPayment = async (existing: {
+      id: string;
+      providerRef: string;
+    }) =>
+      existing.providerRef.startsWith(STRIPE_PAYMENT_INTENT_PREFIX)
+        ? // Stripe needs the intent refetched: client_secret is never
+          // persisted (see checkout.schema.ts), so resuming means asking
+          // Stripe for it again.
+          stripePaymentServiceFactory().resumePayment({ id: existing.id })
+        : // PayPal needs nothing reissued — providerRef *is* the PayPal
+          // order id, which is all the PayPal JS SDK needs to render its
+          // approval buttons, so the stored record already carries
+          // everything a first-time checkout would have returned.
+          paypalPaymentServiceFactory().getPayment({ id: existing.id });
+
     const existingPending =
       await paymentOrderLookupServiceFactory().findPendingPaymentByOrderId(
         order.id
       );
-    const existingIsStripe =
-      existingPending?.providerRef.startsWith(STRIPE_PAYMENT_INTENT_PREFIX) ??
-      false;
-    const reusablePaymentId =
-      existingPending && existingIsStripe !== usePaypal
-        ? existingPending.id
-        : null;
 
     let payment;
     try {
-      if (reusablePaymentId === null) {
-        payment = await paymentServiceFactory().createPayment({
-          orderId: order.id,
-          amountCents: order.totalCents,
-          currency: CHECKOUT_CURRENCY
-        });
-      } else if (usePaypal) {
-        // PayPal needs nothing reissued: providerRef *is* the PayPal order
-        // id, which is all the PayPal JS SDK needs to render its approval
-        // buttons (see checkout.schema.ts), so the stored record is already
-        // everything the client gets on a first-time checkout.
-        payment = await paypalPaymentServiceFactory().getPayment({
-          id: reusablePaymentId
-        });
+      if (existingPending) {
+        payment = await resumeExistingPayment(existingPending);
+        openTelemetryCollector.info(
+          'Reusing existing pending payment for checkout retry',
+          { orderId: order.id, paymentId: existingPending.id }
+        );
       } else {
-        // Stripe does need one: client_secret is never persisted, so
-        // resuming means fetching the intent back from Stripe.
-        payment = await stripePaymentServiceFactory().resumePayment({
-          id: reusablePaymentId
-        });
+        try {
+          payment = await paymentServiceFactory().createPayment({
+            orderId: order.id,
+            amountCents: order.totalCents,
+            currency: CHECKOUT_CURRENCY
+          });
+        } catch (error) {
+          if (!(error instanceof UniqueConstraintViolationException)) {
+            throw error;
+          }
+          // Lost the race to a concurrent checkout for this same order — the
+          // lookup above is a plain findOne, not a lock, so two requests can
+          // both see no pending payment and both try to insert. The partial
+          // index lets exactly one through; this is the loser, and the same
+          // insert-first-then-look-up-the-winner recovery the order path uses
+          // a few lines up applies here. Without it the double-clicked "Pay"
+          // that this index exists to stop would surface as a 502 instead of
+          // quietly resuming the payment that did get created.
+          const raceWinner =
+            await paymentOrderLookupServiceFactory().findPendingPaymentByOrderId(
+              order.id
+            );
+          if (!raceWinner) {
+            throw error;
+          }
+          payment = await resumeExistingPayment(raceWinner);
+          openTelemetryCollector.info(
+            'Lost race to a concurrent checkout for this order — resuming the payment it created',
+            { orderId: order.id, paymentId: raceWinner.id }
+          );
+        }
       }
     } catch (error) {
       // Deliberately NOT rolled back or cancelled: the order stays PENDING,

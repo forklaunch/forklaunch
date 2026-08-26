@@ -53,8 +53,15 @@ signing secret (`whsec_…`) into `STRIPE_WEBHOOK_SECRET`.
 [developer.paypal.com](https://developer.paypal.com/dashboard/applications/)
 (Sandbox tab while testing). Copy the Client ID and Secret. On the same page
 add a webhook pointing at `https://<your-host>/webhook/paypal`, subscribe to
-`PAYMENT.CAPTURE.COMPLETED` and `PAYMENT.CAPTURE.DENIED`, and copy the Webhook
+`CHECKOUT.ORDER.APPROVED` and `PAYMENT.CAPTURE.DENIED`, and copy the Webhook
 ID.
+
+> Subscribe to **`CHECKOUT.ORDER.APPROVED`**, not `PAYMENT.CAPTURE.COMPLETED`.
+> Unlike Stripe, nothing captures a PayPal order until this app does: the
+> approval event is what triggers the capture *and* the move to `paid` (see
+> webhook.controller.ts's switch). Subscribing to the capture event instead
+> means the capture never happens, so the completion event never fires either
+> and every order stays `pending`.
 
 > Webhooks need a **publicly reachable HTTPS URL**, so you can only register
 > them once the store is deployed. Until then, use the Stripe CLI
