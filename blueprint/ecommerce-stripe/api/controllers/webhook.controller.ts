@@ -21,6 +21,10 @@ const paypalPaymentServiceFactory = ci.scopedResolver(
 );
 const paypalClient = ci.resolve(tokens.PaypalClient);
 const orderServiceFactory = ci.scopedResolver(tokens.OrderService);
+const cartServiceFactory = ci.scopedResolver(tokens.CartService);
+const orderCartLookupServiceFactory = ci.scopedResolver(
+  tokens.OrderCartLookupService
+);
 const orderEventProducerFactory = ci.scopedResolver(tokens.OrderEventProducer);
 const webhookEventServiceFactory = ci.scopedResolver(
   tokens.WebhookEventService
@@ -66,6 +70,35 @@ async function transitionOrderToPaid(orderId: string): Promise<void> {
     createdAt: now,
     updatedAt: now
   });
+
+  // The cart is emptied here, alongside the inventory event, because this is
+  // the first moment the basket has actually been bought.
+  //
+  // Checkout used to clear it as soon as a payment intent existed, which is
+  // not the same thing: a shopper who reaches the payment step and does not
+  // finish — most of them — came back to an empty cart and a live order.
+  // Realising they had forgotten something and adding it produced a cart
+  // holding only the new item, with the earlier ones reachable solely through
+  // an order they never completed.
+  //
+  // Failing to clear must never fail the webhook. The payment has been taken
+  // and the order is already PAID; throwing here would answer the provider
+  // with a non-2xx and invite redelivery of an event that was fully handled.
+  // A cart outliving its order is a visible, minor annoyance; a retried
+  // payment webhook is not.
+  try {
+    const cartId = await orderCartLookupServiceFactory().findCartIdByOrderId(
+      updated.id
+    );
+    if (cartId) {
+      await cartServiceFactory().clearCart({ id: cartId });
+    }
+  } catch (error) {
+    openTelemetryCollector.error(
+      'Cart could not be cleared after the order was paid — order and payment both succeeded, continuing',
+      { orderId: updated.id, error }
+    );
+  }
 }
 
 async function handleStripePaymentSucceeded(

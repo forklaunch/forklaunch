@@ -1,3 +1,4 @@
+import { OrderStatus } from '@forklaunch/interfaces-ecommerce/types';
 import {
   enum_,
   handlers,
@@ -126,7 +127,29 @@ export const checkout = handlers.post(
     }
 
     let order;
-    if (existingPendingOrderId) {
+    // A pending order for this cart means one of two very different things,
+    // and telling them apart is what stops a shopper being charged for the
+    // wrong basket.
+    //
+    // If the cart is empty, checkout already consumed it: the order IS the
+    // basket, and resuming is exactly right.
+    //
+    // If the cart has items again, the shopper went back and changed their
+    // mind — added something, removed something — and the order is now a
+    // snapshot of a basket that no longer exists. Reusing it silently bills
+    // them for the old contents and drops whatever they added, with nothing
+    // on screen to say so. Observed directly: add a second product, return to
+    // checkout, and the total is unchanged at the first product's price.
+    //
+    // The stale order is cancelled and a fresh one priced from the current
+    // cart. Cancelling rather than repricing keeps one order meaning one
+    // basket at one price, and leaves an auditable trail of what was
+    // abandoned instead of mutating an order's contents underneath a payment
+    // that was already quoted against them.
+    const cartChangedSinceOrder =
+      existingPendingOrderId != null && cart.items.length > 0;
+
+    if (existingPendingOrderId && !cartChangedSinceOrder) {
       order = await orderServiceFactory().getOrder({
         id: existingPendingOrderId
       });
@@ -135,6 +158,20 @@ export const checkout = handlers.post(
         { cartId: cart.id, orderId: order.id }
       );
     } else {
+      if (cartChangedSinceOrder && existingPendingOrderId) {
+        // Cancelling frees the cart's partial unique index so the new order
+        // can take its place — that index permits only one PENDING order per
+        // cart, which is what makes this an explicit replacement rather than
+        // a second live order for the same basket.
+        await orderServiceFactory().transitionOrder({
+          id: existingPendingOrderId,
+          to: OrderStatus.CANCELLED
+        });
+        openTelemetryCollector.info(
+          'Cart changed after checkout — cancelled the stale order and repriced',
+          { cartId: cart.id, cancelledOrderId: existingPendingOrderId }
+        );
+      }
       // Stock check up front, before anything is priced or persisted — a
       // customer should never be told an order succeeded and then find out
       // separately that an item was unavailable.
@@ -406,14 +443,6 @@ export const checkout = handlers.post(
     // payment for the reused order, since nothing here dedupes Payment the
     // way the reuse lookup dedupes Order. A stale, uncleared cart is a
     // minor, recoverable inconvenience; a duplicate charge is not.
-    try {
-      await cartServiceFactory().clearCart({ id: cart.id });
-    } catch (error) {
-      openTelemetryCollector.error(
-        'Cart could not be cleared after successful payment initiation — order and payment both succeeded, continuing',
-        { orderId: order.id, cartId: cart.id, error }
-      );
-    }
 
     openTelemetryCollector.info('Checkout completed', {
       cartId: cart.id,

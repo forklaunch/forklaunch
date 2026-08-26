@@ -31,6 +31,20 @@ export class OrderCartLookupService {
    * Matching on cartId alone would wrongly block that legitimate reuse by
    * resurrecting an order that already succeeded (or was cancelled).
    */
+  /**
+   * The cart an order was checked out from, or null if it has none.
+   *
+   * The reverse of the lookup below, and needed for the same reason: cartId
+   * is an ecommerce-stripe-only column, absent from the shared base package's
+   * Order template and therefore from the DTO every service returns. The
+   * webhook handler empties the cart once an order is paid and can only get
+   * there from the order it was handed.
+   */
+  async findCartIdByOrderId(orderId: string): Promise<string | null> {
+    const order = await this.em.findOne(Order, { id: orderId });
+    return order?.cartId ?? null;
+  }
+
   async findPendingOrderIdByCartId(cartId: string): Promise<string | null> {
     const order = await this.em.findOne(Order, {
       cartId,
