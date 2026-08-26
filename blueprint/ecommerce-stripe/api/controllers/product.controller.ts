@@ -2,10 +2,13 @@ import {
   array,
   handlers,
   IdSchema,
+  number,
+  optional,
   schemaValidator,
   string
 } from '../../schema';
 import { ProductSearchQuerySchema } from '../../domain/schemas/productSearch.schema';
+import { CatalogPageSchema } from '../../domain/schemas/catalog.schema';
 import { ci, tokens } from '../../bootstrapper';
 import {
   CreateProductMapper,
@@ -17,6 +20,18 @@ const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 const serviceFactory = ci.scopedResolver(tokens.ProductService);
 const variantServiceFactory = ci.scopedResolver(tokens.VariantService);
 const inventoryServiceFactory = ci.scopedResolver(tokens.InventoryService);
+const catalogLookupServiceFactory = ci.scopedResolver(
+  tokens.CatalogLookupService
+);
+
+/**
+ * Cap on how many products one catalog request may return. A storefront
+ * asking for more than this is almost certainly trying to render its whole
+ * catalog in one page, which is the behaviour this endpoint exists to
+ * replace — not something to serve faster.
+ */
+const CATALOG_MAX_LIMIT = 100;
+const CATALOG_DEFAULT_LIMIT = 24;
 const HMAC_SECRET_KEY = ci.resolve(tokens.HMAC_SECRET_KEY);
 
 export const createProduct = handlers.post(
@@ -108,6 +123,99 @@ export const deleteProduct = handlers.delete(
  * carries no price — so they're resolved here by narrowing variants first,
  * then constraining the product query to the productIds that survive.
  */
+/**
+ * The whole catalog page in one request.
+ *
+ * Rendering a storefront listing previously meant one call for the products,
+ * one per product for its variants, and one per variant for its stock — 223
+ * HMAC-signed round trips for a 79-product store, each its own database hit.
+ * Nothing about the data requires that: products, variants and stock are
+ * three queries, and joining them here once is cheaper than a client doing
+ * it N times over HTTP.
+ *
+ * Deliberately paginated. Unpaginated this would still be one request, but
+ * its cost would track the size of the merchant's catalog rather than what
+ * the page displays — the same failure one layer along.
+ *
+ * Filtering is product-level only (`ids`, `title`). The variant-level
+ * filters on GET /product — price, stock, option values — need every variant
+ * in the store loaded before they can select products, which is the cost
+ * this endpoint exists to avoid. A storefront that needs them can search
+ * there for ids and pass those here.
+ */
+export const listCatalog = handlers.get(
+  schemaValidator,
+  '/catalog',
+  {
+    name: 'List Catalog',
+    access: 'internal',
+    summary:
+      'Products with their variants and stock in one paginated call — the storefront listing read',
+    auth: { hmac: { secretKeys: { default: HMAC_SECRET_KEY } } },
+    query: {
+      ids: optional(array(string)),
+      title: optional(string),
+      limit: optional(number),
+      offset: optional(number)
+    },
+    responses: { 200: CatalogPageSchema }
+  },
+  async (req, res) => {
+    const { ids, title } = req.query;
+    const limit = Math.min(
+      Math.max(req.query.limit ?? CATALOG_DEFAULT_LIMIT, 1),
+      CATALOG_MAX_LIMIT
+    );
+    const offset = Math.max(req.query.offset ?? 0, 0);
+
+    const products = await serviceFactory().listProducts(
+      ids ? { ids } : undefined
+    );
+    const matched =
+      title != null
+        ? products.filter((product) =>
+            product.title.toLowerCase().includes(title.toLowerCase())
+          )
+        : products;
+    const page = matched.slice(offset, offset + limit);
+
+    // Two queries for the whole page, however many products it holds.
+    const catalogLookup = catalogLookupServiceFactory();
+    const variantIds = await catalogLookup.findVariantIdsByProductIds(
+      page.map((product) => product.id)
+    );
+    const [variants, stock] = await Promise.all([
+      variantIds.length
+        ? variantServiceFactory().listVariants({ ids: variantIds })
+        : Promise.resolve([]),
+      catalogLookup.findStockByVariantIds(variantIds)
+    ]);
+
+    const variantsByProduct = new Map<string, typeof variants>();
+    for (const variant of variants) {
+      const bucket = variantsByProduct.get(variant.productId);
+      if (bucket) {
+        bucket.push(variant);
+      } else {
+        variantsByProduct.set(variant.productId, [variant]);
+      }
+    }
+
+    res.status(200).json({
+      products: page.map((product) => ({
+        ...product,
+        variants: (variantsByProduct.get(product.id) ?? []).map((variant) => ({
+          ...variant,
+          stock: stock[variant.id]
+        }))
+      })),
+      total: matched.length,
+      limit,
+      offset
+    });
+  }
+);
+
 export const listProducts = handlers.get(
   schemaValidator,
   '/',

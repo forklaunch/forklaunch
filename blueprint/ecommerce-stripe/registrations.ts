@@ -43,6 +43,7 @@ import { FlatRateShippingService } from './domain/services/shipping.service';
 import { WebhookEventService } from './domain/services/webhookEvent.service';
 import { OrderCartLookupService } from './domain/services/orderCartLookup.service';
 import { PaymentOrderLookupService } from './domain/services/paymentOrderLookup.service';
+import { CatalogLookupService } from './domain/services/catalogLookup.service';
 import { ForkOptions } from '@mikro-orm/core';
 import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
 import Stripe from 'stripe';
@@ -508,6 +509,21 @@ const serviceDependencies = runtimeDependencies.chain({
     type: PaymentOrderLookupService,
     factory: ({ EntityManager }, context, resolve) =>
       new PaymentOrderLookupService(
+        context?.entityManagerOptions
+          ? resolve('EntityManager', context)
+          : EntityManager
+      )
+  },
+  /**
+   * The bulk reads behind the catalog endpoint — see CatalogLookupService's
+   * doc comment. Registered exactly like the two lookups above: scoped, same
+   * EntityManager-resolution pattern.
+   */
+  CatalogLookupService: {
+    lifetime: Lifetime.Scoped,
+    type: CatalogLookupService,
+    factory: ({ EntityManager }, context, resolve) =>
+      new CatalogLookupService(
         context?.entityManagerOptions
           ? resolve('EntityManager', context)
           : EntityManager

@@ -5,6 +5,7 @@ import {
   deleteProduct,
   getProduct,
   getProductByHandle,
+  listCatalog,
   listProducts,
   updateProduct
 } from '../controllers/product.controller';
@@ -19,6 +20,7 @@ export const productRouter = forklaunchRouter(
 
 export const createProductRoute = productRouter.post('/', createProduct);
 export const listProductsRoute = productRouter.get('/', listProducts);
+export const listCatalogRoute = productRouter.get('/catalog', listCatalog);
 export const getProductByHandleRoute = productRouter.get(
   '/handle/:handle',
   getProductByHandle
