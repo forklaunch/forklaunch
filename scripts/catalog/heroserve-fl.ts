@@ -21,6 +21,7 @@
  * order itself is created regardless.
  */
 import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } from 'node:fs';
+import { brotliCompressSync, constants as zlibConstants, gzipSync } from 'node:zlib';
 import { join, extname } from 'node:path';
 import { createHmac, randomUUID } from 'node:crypto';
 
@@ -450,7 +451,64 @@ function sniffMime(fp: string, ext: string): string | null {
   return null;
 }
 
-function serveFile(fp: string, range?: string | null, ifNoneMatch?: string | null): Response | null {
+/**
+ * Compress text on the way out.
+ *
+ * Every real web server does this and this one did not, which is most of why a
+ * captured storefront looked so heavy: 6.3MB of JavaScript and 3.8MB of JSON
+ * were going over the wire raw. Text of that kind compresses several times
+ * over, so the untouched total was never an honest measure of what the page
+ * costs a visitor — it was a measure of a missing feature.
+ *
+ * Only text is worth compressing. Images, fonts and video are already
+ * compressed formats; running them through brotli spends CPU to make them
+ * marginally larger. Range responses are excluded too — a byte range of a
+ * compressed body does not mean what the client asked for.
+ *
+ * Results are cached because the capture is immutable: the same bytes are
+ * served for the life of the process, so compressing once and reusing costs a
+ * little memory and saves the work on every later request.
+ */
+const COMPRESSIBLE = /^(text\/|application\/(javascript|json|xml)|image\/svg\+xml)/;
+const compressed = new Map<string, { encoding: string; body: Buffer }>();
+
+function compressFor(
+  key: string,
+  body: Buffer,
+  type: string,
+  acceptEncoding: string | null
+): { encoding: string; body: Buffer } | null {
+  if (!COMPRESSIBLE.test(type)) return null;
+  // Not worth a round trip through the compressor, and the header overhead can
+  // exceed the saving on very small files.
+  if (body.length < 1024) return null;
+
+  const accepts = acceptEncoding ?? '';
+  const wantsBrotli = accepts.includes('br');
+  const wantsGzip = accepts.includes('gzip');
+  if (!wantsBrotli && !wantsGzip) return null;
+
+  const cacheKey = `${key}:${wantsBrotli ? 'br' : 'gzip'}`;
+  const hit = compressed.get(cacheKey);
+  if (hit) return hit;
+
+  const result = wantsBrotli
+    ? {
+        encoding: 'br',
+        // Quality 5 rather than the default 11: on a multi-megabyte bundle the
+        // top setting takes seconds for a few percent, and this runs on first
+        // request while someone is waiting for the page.
+        body: brotliCompressSync(body, {
+          params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 5 }
+        })
+      }
+    : { encoding: 'gzip', body: gzipSync(body, { level: 6 }) };
+
+  compressed.set(cacheKey, result);
+  return result;
+}
+
+function serveFile(fp: string, range?: string | null, ifNoneMatch?: string | null, acceptEncoding?: string | null): Response | null {
   if (!existsSync(fp) || statSync(fp).isDirectory()) return null;
   const ext = extname(fp).toLowerCase();
   let body: Buffer | string = readFileSync(fp);
@@ -533,6 +591,13 @@ function serveFile(fp: string, range?: string | null, ifNoneMatch?: string | nul
         }
       }
     }
+  }
+  const encoded = compressFor(fp, body as Buffer, type, acceptEncoding ?? null);
+  if (encoded) {
+    headers['content-encoding'] = encoded.encoding;
+    headers['vary'] = 'Accept-Encoding';
+    headers['content-length'] = String(encoded.body.length);
+    return new Response(encoded.body, { headers });
   }
   return new Response(body, { headers });
 }
@@ -631,7 +696,7 @@ Bun.serve({
         const cand = join(siteRoot, rel.replace(/\/$/, '') + '.html');
         if (existsSync(cand)) rel = rel.replace(/\/$/, '') + '.html';
       }
-      const r = serveFile(join(siteRoot, rel), req.headers.get('range'), req.headers.get('if-none-match'));
+      const r = serveFile(join(siteRoot, rel), req.headers.get('range'), req.headers.get('if-none-match'), req.headers.get('accept-encoding'));
       if (r) return r;
 
       // A product page the crawl never reached. The catalog import pulls every
