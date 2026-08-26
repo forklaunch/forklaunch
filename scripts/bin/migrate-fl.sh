@@ -60,8 +60,10 @@ echo "==> [3/4] Importing catalog into the ForkLaunch module ($MODULE) ..."
 
 if [ "$SERVE" = "1" ]; then
   echo "==> [4/4] Serving the migrated store (wired to ForkLaunch) at http://localhost:$PORT ..."
-  exec "$BUN" "$CATALOG/heroserve-fl.ts" "$SITE" "$PORT" "$MODULE" "$SECRET"
+  # 5th arg is Stripe's publishable key: present -> checkout collects a card,
+  # absent -> checkout just creates the order (keyless visual demo).
+  exec "$BUN" "$CATALOG/heroserve-fl.ts" "$SITE" "$PORT" "$MODULE" "$SECRET" "${STRIPE_PUBLISHABLE_KEY:-}"
 else
   echo "==> Done (import only). Serve later with:"
-  echo "    $BUN $CATALOG/heroserve-fl.ts $SITE $PORT $MODULE <secret>"
+  echo "    $BUN $CATALOG/heroserve-fl.ts $SITE $PORT $MODULE <secret> [stripe-publishable-key]"
 fi

@@ -169,14 +169,38 @@ origin. `heroserve-fl.ts` serves a capture you already have and proxies its
 cart and checkout to the module instead:
 
 ```bash
-bun scripts/catalog/heroserve-fl.ts <capture>/site <port> <module-url> <hmac-secret>
+bun scripts/catalog/heroserve-fl.ts <capture>/site <port> <module-url> <hmac-secret> [stripe-publishable-key]
 ```
 
 It intercepts the captured pages' native Shopify cart calls, maps them onto the
-module's `/cart`, `/cart/items` and `/checkout` endpoints with HMAC auth, and
-serves an order-confirmation page at `/__fl/checkout`. A shopper browses the
-migrated storefront and every commerce action lands in the real module — the
-same one the catalog was imported into.
+module's `/cart`, `/cart/items` and `/checkout` endpoints with HMAC auth. A
+shopper browses the migrated storefront and every commerce action lands in the
+real module — the same one the catalog was imported into.
+
+Pass the merchant's Stripe **publishable** key (`pk_…`) as the fifth argument
+and `/__fl/checkout` becomes a genuine card page: address form, Stripe Payment
+Element, and a confirmation screen once the charge clears. The browser gets
+only the publishable key and a per-order client secret, so card details go
+straight from the shopper to Stripe and never touch this server or the module.
+
+**Products whose pages were never captured still work.** The catalog import
+pulls every product from the source platform's API, while the capture only
+saves pages the crawler actually walked to — on graza.co that is 79 products
+against 8 captured pages, so most product links would be dead. Any
+`/products/<handle>` (or `/collections/<x>/products/<handle>`) that has no
+captured file is rendered from the module's own catalog instead: real title,
+price, image, variant picker, and an add-to-cart wired to the same bridge the
+captured pages use. A handle that isn't in the catalog either still 404s.
+That took graza.co from 8 reachable product pages to 79.
+
+Omit the key and checkout keeps its original one-shot behaviour — it creates
+the order and shows the confirmation without collecting payment, which is what
+a visual demo without Stripe credentials wants.
+
+> A card charge is not the end of the story: the order only becomes `paid` when
+> Stripe's webhook reaches the module, and stock only moves when the worker
+> consumes the resulting event. Both must be running, or a paid-looking
+> checkout leaves an order stuck at `pending` and inventory untouched.
 
 ### Getting the catalog in
 
