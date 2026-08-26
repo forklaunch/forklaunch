@@ -384,11 +384,16 @@ function sniffMime(fp: string, ext: string): string | null {
     // Matroska/WebM: EBML magic.
     if (head[0] === 0x1a && head[1] === 0x45 && head[2] === 0xdf && head[3] === 0xa3) return 'video/webm';
     if (head.subarray(0, 3).toString('latin1') === 'ID3') return 'audio/mpeg';
+    // The bucket is not only media: this capture put a 3.8MB JSON animation
+    // in it. Typed as octet-stream a browser will not compress or parse it as
+    // text, and some consumers refetch rather than reuse it.
+    const lead = head.toString('latin1').trimStart()[0];
+    if (lead === '{' || lead === '[') return 'application/json';
   } catch { /* fall through to the generic type */ }
   return null;
 }
 
-function serveFile(fp: string, range?: string | null): Response | null {
+function serveFile(fp: string, range?: string | null, ifNoneMatch?: string | null): Response | null {
   if (!existsSync(fp) || statSync(fp).isDirectory()) return null;
   const ext = extname(fp).toLowerCase();
   let body: Buffer | string = readFileSync(fp);
@@ -421,13 +426,37 @@ function serveFile(fp: string, range?: string | null): Response | null {
   const headers: Record<string, string> = {
     'content-type': sniffMime(fp, ext) || 'application/octet-stream'
   };
-  if (ext === '.html') headers['cache-control'] = 'no-store, must-revalidate';
+  if (ext === '.html') {
+    headers['cache-control'] = 'no-store, must-revalidate';
+  } else {
+    // Captured assets are content-addressed — crawl.js writes the file's own
+    // hash into the name (graza-fun-fact.d7d3f07cc0.bin), so a given URL can
+    // never change meaning. Without a cache header the browser refetched all
+    // of them on every navigation: 30MB and 6.9MB of JavaScript re-parsed
+    // each time a shopper clicked a link, which is what made browsing a
+    // migrated store expensive rather than merely large. One 3.8MB file was
+    // being pulled twice within a single page load.
+    headers['cache-control'] = 'public, max-age=31536000, immutable';
+    // ETag as well, so a client that ignores the above (or revalidates
+    // anyway) gets a 304 instead of the body.
+    const stat = statSync(fp);
+    // Strong, not weak. A weak validator cannot be used to revalidate a range
+    // request, so video — the one asset type that always uses ranges, and the
+    // largest thing on the page — was refetched in full on every visit. These
+    // files are static and content-addressed, so byte-for-byte equality is
+    // exactly what the validator can promise.
+    headers['etag'] = `"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`;
+  }
 
   // Media has to be range-servable or the correct content-type buys nothing:
   // a browser that cannot ask for byte ranges falls back to fetching the
   // whole file before it can play, which is the behaviour this is trying to
   // avoid. Advertising acceptance and honouring the header lets it stream the
   // few seconds it actually needs.
+  if (ifNoneMatch && headers['etag'] && ifNoneMatch === headers['etag']) {
+    return new Response(null, { status: 304, headers });
+  }
+
   const type = headers['content-type'];
   if (type.startsWith('video/') || type.startsWith('audio/')) {
     headers['accept-ranges'] = 'bytes';
@@ -545,7 +574,7 @@ Bun.serve({
         const cand = join(siteRoot, rel.replace(/\/$/, '') + '.html');
         if (existsSync(cand)) rel = rel.replace(/\/$/, '') + '.html';
       }
-      const r = serveFile(join(siteRoot, rel), req.headers.get('range'));
+      const r = serveFile(join(siteRoot, rel), req.headers.get('range'), req.headers.get('if-none-match'));
       if (r) return r;
 
       // A product page the crawl never reached. The catalog import pulls every
