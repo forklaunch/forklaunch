@@ -88,11 +88,6 @@ export const checkout = handlers.post(
   async (req, res) => {
     const cart = await cartServiceFactory().getCart({ id: req.body.cartId });
 
-    if (!cart.items.length) {
-      res.status(400).send('Cannot checkout an empty cart');
-      return;
-    }
-
     // Checkout idempotency (retry safety). If this cart already
     // has a still-PENDING order — e.g. an earlier checkout call for it got
     // as far as creating the order but never got as far as (or failed at)
@@ -112,6 +107,23 @@ export const checkout = handlers.post(
     // encodes this by filtering on status = PENDING, not just cartId.
     const existingPendingOrderId =
       await orderCartLookupServiceFactory().findPendingOrderIdByCartId(cart.id);
+
+    // The empty-cart rejection is deliberately *after* that lookup, not
+    // before it. A successful checkout clears the cart (see the clearCart
+    // call below), so on any retry this cart is empty — and rejecting empty
+    // carts first made the reuse path above unreachable in precisely the
+    // situation it exists for. The client got a 400 and, having no order to
+    // resume, went on to build a fresh cart and open a second order for the
+    // same purchase. Observed live: swapping payment provider at checkout
+    // produced two orders for one basket, the abandoned one still holding an
+    // open provider payment.
+    //
+    // An empty cart with no pending order is still a genuine error: there is
+    // nothing to buy and nothing to resume.
+    if (!cart.items.length && !existingPendingOrderId) {
+      res.status(400).send('Cannot checkout an empty cart');
+      return;
+    }
 
     let order;
     if (existingPendingOrderId) {
