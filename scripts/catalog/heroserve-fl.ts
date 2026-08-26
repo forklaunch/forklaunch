@@ -82,7 +82,23 @@ async function ensureCart(): Promise<string> {
 
 // Map a source-platform variant id (from the captured page) to the module's
 // own variant UUID via the product's handle.
+// Catalog data does not change while the server is up, so every lookup below
+// is cached. Without this each add-to-cart re-resolved the same handle and
+// re-fetched the same variant, and the cart redraw did it again per line —
+// six HMAC-signed round trips for one click, all sequential.
+const variantIdCache = new Map<string, string | null>();
+const variantCache = new Map<string, { priceCents: number; title: string; productId?: string }>();
+
 async function resolveVariant(handle: string, shopifyVariantId?: string): Promise<string | null> {
+  const key = handle + '\u0000' + (shopifyVariantId ?? '');
+  const hit = variantIdCache.get(key);
+  if (hit !== undefined) return hit;
+  const resolved = await resolveVariantUncached(handle, shopifyVariantId);
+  variantIdCache.set(key, resolved);
+  return resolved;
+}
+
+async function resolveVariantUncached(handle: string, shopifyVariantId?: string): Promise<string | null> {
   const p = await mod('GET', `/product/handle/${handle}`, `/handle/${handle}`);
   if (p.code !== 200) return null;
   const productId = p.body.id;
@@ -110,6 +126,70 @@ const SHIM = `<script>(function(){
   // the tokenizer into raw-text mode; without a marker that is invisible and
   // easy to mistake for a logic bug.
   window.__flShim = (window.__flShim || 0) + 1;
+
+  // Serve-time rewriting stripped autoplay and set preload=none so nothing
+  // downloads up front. Restore the original look by loading and playing each
+  // video only while it is on screen, pausing it when it leaves — so at most
+  // the one or two in view are ever decoding, instead of all five at once.
+  // Pausing reactively cannot win: the theme re-calls play() on its own
+  // videos after we pause them, so three stayed running while invisible.
+  // Gate play() itself instead — an off-screen video simply does not start,
+  // and the IntersectionObserver above starts it when it scrolls into view.
+  try{
+    var _play = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function(){
+      try{
+        if(this.tagName === 'VIDEO' && !this.__flWantsPlay){
+          var b = this.getBoundingClientRect();
+          var cs = getComputedStyle(this);
+          var onScreen = b.width > 10 && b.height > 10 &&
+            cs.visibility !== 'hidden' && cs.display !== 'none' &&
+            b.bottom > -200 && b.top < (innerHeight + 200);
+          if(!onScreen) return Promise.resolve();
+        }
+      }catch(e){}
+      return _play.apply(this, arguments);
+    };
+  }catch(e){}
+
+  function flLazyVideo(v){
+    if(v.__flLazy)return; v.__flLazy=1;
+    // Videos the client renders (React/Hydrogen builds some of its media after
+    // hydration) never passed through the serve-time rewrite, so they still
+    // carry the theme's autoplay and start downloading on creation. Strip it
+    // here too, and stop anything already running: on graza.co's homepage
+    // three autoplaying videos were decoding while invisible.
+    try{ v.removeAttribute('autoplay'); v.autoplay=false; v.muted=true;
+         if(!v.paused) v.pause();
+         if(v.preload!=='none' && v.readyState===0) v.preload='none'; }catch(e){}
+    if(!('IntersectionObserver' in window)){v.preload='auto';return;}
+    new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting){v.preload='auto';v.muted=true;v.__flWantsPlay=1;var p=v.play();if(p&&p.catch)p.catch(function(){});}
+        else{v.__flWantsPlay=0;try{v.pause()}catch(err){}}
+      });
+    },{rootMargin:'200px'}).observe(v);
+  }
+  function flScanVideos(root){
+    if(!root||!root.querySelectorAll)return;
+    var vs=root.querySelectorAll('video');
+    for(var i=0;i<vs.length;i++)flLazyVideo(vs[i]);
+  }
+  document.addEventListener('DOMContentLoaded',function(){flScanVideos(document)});
+  try{
+    new MutationObserver(function(ms){
+      for(var i=0;i<ms.length;i++){
+        var an=ms[i].addedNodes;
+        for(var j=0;j<an.length;j++){
+          var n=an[j];
+          if(n.nodeType===1){
+            if(n.matches&&n.matches('video'))flLazyVideo(n);
+            flScanVideos(n);
+          }
+        }
+      }
+    }).observe(document.documentElement,{childList:true,subtree:true});
+  }catch(e){}
 
   // Capture-time development furniture. Both are baked into the saved pages,
   // and both look like defects to anyone being shown the migrated store: the
@@ -198,6 +278,33 @@ const SHIM = `<script>(function(){
     get:function(){return _fl},set:function(v){_fl=bind(v)}});}catch(e){}}
 })();</script>`;
 
+/**
+ * Captured storefronts are far heavier than they look. One graza.co product
+ * page pulls 632 requests and 63MB, of which 49MB is five hero videos the
+ * theme marks autoplay+loop — so each downloads in full and runs a decoder for
+ * as long as the tab is open, regardless of the preload="metadata" hint that
+ * autoplay overrides. On a low-memory machine that alone is fatal. It is the
+ * merchant's own page weight faithfully reproduced, not something the
+ * migration added, but a demo has no reason to pay it.
+ *
+ * Rewritten at serve time rather than at runtime because by the time an
+ * injected script runs the parser has already begun fetching. The look is
+ * preserved: the runtime half of this plays each video while it is on screen,
+ * so it still autoplays and loops as the shopper scrolls to it.
+ */
+function lightenMedia(html: string): string {
+  return html
+    .replace(/<video\b[^>]*>/gi, (tag) =>
+      tag
+        .replace(/\sautoplay(=(["'])[^"']*\2)?/gi, '')
+        .replace(/\spreload=(["'])[^"']*\1/gi, '')
+        .replace(/^<video\b/i, '<video data-fl-lazy muted playsinline preload="none"'))
+    .replace(/<link\b[^>]*\brel=(["'])prefetch\1[^>]*>/gi, '')
+    // Below-the-fold images cost another 1.4MB up front on that same page.
+    .replace(/<img\b(?![^>]*\sloading=)[^>]*>/gi, (tag) =>
+      tag.replace(/^<img\b/i, '<img loading="lazy" decoding="async"'));
+}
+
 function serveFile(fp: string): Response | null {
   if (!existsSync(fp) || statSync(fp).isDirectory()) return null;
   const ext = extname(fp).toLowerCase();
@@ -218,7 +325,7 @@ function serveFile(fp: string): Response | null {
     // and the overlay's own drawer markup contains one inside a JavaScript
     // string — matching it injects a <script> tag into the middle of a string
     // literal and silently kills every script on the page.
-    const html = body.toString('utf8');
+    const html = lightenMedia(body.toString('utf8'));
     const at = /<html(?=[\s>])[^>]*>/i;
     body = at.test(html)
       ? html.replace(at, (tag) => tag + SHIM)
@@ -360,12 +467,20 @@ async function shopifyCart() {
   const r = await mod('GET', `/cart/${cid}`, `/${cid}`);
   // The module's cart carries only variantId + quantity; enrich each line with
   // the variant's price/title so the captured theme's drawer shows real money.
-  const items: any[] = [];
-  for (const it of r.body?.items || []) {
+  // Lines are resolved concurrently rather than one after another: a five-line
+  // cart used to cost five sequential round trips, so redraw latency grew with
+  // cart size. Bounded by the cart's own item count, which the module caps —
+  // this is not an unbounded fan-out over a whole catalog.
+  const lines = r.body?.items || [];
+  const items = await Promise.all(lines.map(async (it: any) => {
     let price = 0, title = 'Item';
     try {
-      const v = await mod('GET', `/variant/${it.variantId}`, `/${it.variantId}`);
+      const cached = variantCache.get(it.variantId);
+      const v = cached
+        ? { code: 200, body: cached }
+        : await mod('GET', `/variant/${it.variantId}`, `/${it.variantId}`);
       if (v.code === 200) {
+        if (!cached) variantCache.set(it.variantId, v.body);
         price = v.body.priceCents ?? v.body.price_cents ?? 0;
         // Shopify names the sole variant of a single-variant product
         // "Default Title", which is a placeholder rather than something a
@@ -376,8 +491,8 @@ async function shopifyCart() {
         title = [product, variant].filter(Boolean).join(' - ') || title;
       }
     } catch {}
-    items.push({ quantity: it.quantity, title, price, line_price: price * it.quantity });
-  }
+    return { quantity: it.quantity, title, price, line_price: price * it.quantity };
+  }));
   const count = items.reduce((s: number, i: any) => s + i.quantity, 0);
   const total = items.reduce((s: number, i: any) => s + i.price * i.quantity, 0);
   return { token: 'fl-cart', item_count: count, total_price: total, currency: 'USD', items };
