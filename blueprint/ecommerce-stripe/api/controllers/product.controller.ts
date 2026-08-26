@@ -168,19 +168,28 @@ export const listCatalog = handlers.get(
     );
     const offset = Math.max(req.query.offset ?? 0, 0);
 
-    const products = await serviceFactory().listProducts(
-      ids ? { ids } : undefined
-    );
-    const matched =
-      title != null
-        ? products.filter((product) =>
-            product.title.toLowerCase().includes(title.toLowerCase())
-          )
-        : products;
-    const page = matched.slice(offset, offset + limit);
-
-    // Two queries for the whole page, however many products it holds.
+    // The page is taken in SQL, not sliced out of the whole catalog in
+    // memory: the response was already bounded, but reading every product to
+    // return a couple of dozen left the database doing work proportional to
+    // the merchant's catalog rather than to the screen being rendered.
     const catalogLookup = catalogLookupServiceFactory();
+    const { ids: pageIds, total } = await catalogLookup.findProductPage({
+      ...(ids ? { ids } : {}),
+      ...(title != null ? { title } : {}),
+      limit,
+      offset
+    });
+    // listProducts does not promise an order, so restore the one the page was
+    // taken in — otherwise page 2 could repeat or skip what page 1 showed.
+    const fetched = pageIds.length
+      ? await serviceFactory().listProducts({ ids: pageIds })
+      : [];
+    const byId = new Map(fetched.map((product) => [product.id, product]));
+    const page = pageIds
+      .map((id) => byId.get(id))
+      .filter(
+        (product): product is NonNullable<typeof product> => product != null
+      );
     const variantIds = await catalogLookup.findVariantIdsByProductIds(
       page.map((product) => product.id)
     );
@@ -209,7 +218,7 @@ export const listCatalog = handlers.get(
           stock: stock[variant.id]
         }))
       })),
-      total: matched.length,
+      total,
       limit,
       offset
     });
