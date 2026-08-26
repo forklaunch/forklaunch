@@ -134,6 +134,63 @@ const MIME: Record<string, string> = {
 // Client shim injected into every served HTML page: intercept the native
 // Shopify cart calls and the checkout click, and route them to /__fl/*.
 const SHIM = `<script>(function(){
+  // Presentation, for a store being shown to a client. commerce.js is built
+  // for a standalone offline demo, so it labels its own controls — a
+  // "FORKLAUNCH COMMERCE" caption on the buy button and a "Secured by
+  // ForkLaunch Commerce" line in the drawer. On a migration of somebody's
+  // real storefront that reads as a watermark on their brand.
+  //
+  // The theme's own header counter is the other half: it renders from the
+  // platform cart this bridge replaced, so it sits at zero no matter what the
+  // shopper adds, and the overlay's separate button means two disagreeing
+  // counts on screen. Keeping the theme's counter truthful is what makes the
+  // page feel native, so it is updated from the module's cart instead.
+  function flDebrand(){
+    document.querySelectorAll('#fl-add small').forEach(function(n){n.remove()});
+    document.querySelectorAll('.fl-brand').forEach(function(n){
+      if(/forklaunch/i.test(n.textContent||''))n.remove();
+    });
+  }
+
+  // The theme writes its count as "Cart [0]", "Cart (0)", "Cart 0" or a bare
+  // number in a dedicated node, depending on the store. Rewriting the digits
+  // inside whatever node already displays it keeps the theme's own styling.
+  function flSyncCount(n){
+    try{
+      // The count is rarely a single text node — themes wrap it, so
+      // "Cart[0]" is often three nodes deep. Match on the element's whole
+      // text, then rewrite the digits in whichever descendant text node
+      // actually holds them, which preserves the theme's own markup.
+      var els=document.querySelectorAll('a,button,span,div');
+      for(var i=0;i<els.length;i++){
+        var e=els[i];
+        var t=(e.textContent||'').trim();
+        if(t.length>12)continue;
+        if(!/^cart\\s*[\\[\\(]?\\s*\\d+\\s*[\\]\\)]?$/i.test(t))continue;
+        var w=document.createTreeWalker(e,NodeFilter.SHOW_TEXT,null);
+        var node;
+        while((node=w.nextNode())){
+          if(/\\d/.test(node.nodeValue||'')){
+            node.nodeValue=node.nodeValue.replace(/\\d+/,String(n));
+            break;
+          }
+        }
+      }
+    }catch(e){}
+  }
+
+  async function flRefreshCount(){
+    try{
+      var r=await of('/__fl/cart');
+      var c=await r.json();
+      flSyncCount(c && typeof c.item_count==='number' ? c.item_count : 0);
+    }catch(e){}
+  }
+  document.addEventListener('DOMContentLoaded',function(){
+    flDebrand(); flRefreshCount();
+    new MutationObserver(flDebrand).observe(document.documentElement,{childList:true,subtree:true});
+  });
+
   // Diagnostic marker. Whether this script executes at all depends on where
   // the parser relocates it and whether a captured inline script has flipped
   // the tokenizer into raw-text mode; without a marker that is invisible and
@@ -269,7 +326,7 @@ const SHIM = `<script>(function(){
       var url=(''+((u&&u.url)||u));
       if(/\\/cart\\/add(\\.js)?/.test(url)){
         var id='';try{var b=o&&o.body;if(b instanceof FormData){id=b.get('id')}else if(typeof b==='string'){var mm=b.match(/[?&]?id=([^&]+)/);id=mm?decodeURIComponent(mm[1]):(JSON.parse(b).id||'')}}catch(e){}
-        return of('/__fl/add',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({handle:handle(),variantExternalId:String(id||'')})}).then(function(r){return r.json()}).then(function(c){flToast();return new Response(JSON.stringify(c),{headers:{'content-type':'application/json'}})});
+        return of('/__fl/add',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({handle:handle(),variantExternalId:String(id||'')})}).then(function(r){return r.json()}).then(function(c){flToast();flSyncCount(c&&c.item_count||0);return new Response(JSON.stringify(c),{headers:{'content-type':'application/json'}})});
       }
       if(/\\/cart(\\.js|\\.json)(\\?|$)/.test(url))return of('/__fl/cart');
     }catch(e){}
@@ -312,7 +369,7 @@ const SHIM = `<script>(function(){
     FL.add=function(o){
       try{origAdd.call(FL,o)}catch(e){}          // keep the drawer looking right
       of('/__fl/add',{method:'POST',headers:{'content-type':'application/json'},
-        body:JSON.stringify({handle:handle(),variantExternalId:''})}).then(flToast).catch(function(){});
+        body:JSON.stringify({handle:handle(),variantExternalId:''})}).then(function(){flToast();flRefreshCount();}).catch(function(){});
     };
     FL.checkout=function(){location.href='/__fl/checkout'};
     FL.place=function(){location.href='/__fl/checkout'};
@@ -900,6 +957,22 @@ function orderPage(r: { code: number; body: any }): string {
   </div>
   <p style="text-align:center;margin-top:24px"><a href="/">← Continue shopping</a></p>
 </body></html>`;
+}
+
+// Fail loudly if the shim does not parse. It is assembled as a template
+// literal, which quietly eats a backslash — so a regex written \s becomes s —
+// and a stray backtick truncates the script entirely. Both have happened, and
+// both times the markup still contained a plausible-looking <script> while
+// every page was inert: the store looked fine, served 200s, and silently did
+// nothing. Parsing it once at startup turns that into an immediate, obvious
+// failure instead of a silent one discovered by hand later.
+try {
+  const body = SHIM.replace(/^<script>/, '').replace(/<\/script>$/, '');
+  new Function(body);
+} catch (err) {
+  console.error('FATAL: the injected client shim does not parse — every page would load inert.');
+  console.error(String(err));
+  process.exit(1);
 }
 
 console.log(`storefront (wired to ForkLaunch module ${MODULE}) on http://localhost:${PORT}`);
