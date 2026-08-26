@@ -20,7 +20,7 @@
  * needs a real STRIPE_API_KEY in the module's env to complete the charge; the
  * order itself is created regardless.
  */
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { createHmac, randomUUID } from 'node:crypto';
 
@@ -94,7 +94,10 @@ async function resolveVariant(handle: string, shopifyVariantId?: string): Promis
   const hit = variantIdCache.get(key);
   if (hit !== undefined) return hit;
   const resolved = await resolveVariantUncached(handle, shopifyVariantId);
-  variantIdCache.set(key, resolved);
+  // Only cache a hit. A miss is usually transient — the module restarting, the
+  // database briefly unreachable — and caching it pins a 404 on that product
+  // for the life of the process even after the module comes back.
+  if (resolved !== null) variantIdCache.set(key, resolved);
   return resolved;
 }
 
@@ -116,6 +119,16 @@ const MIME: Record<string, string> = {
   '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.avif': 'image/avif', '.gif': 'image/gif',
   '.woff': 'font/woff', '.woff2': 'font/woff2', '.ico': 'image/x-icon',
+  // Video types matter more than they look. Served as the
+  // application/octet-stream fallback, a <video> source is not media the
+  // browser can stream — it fetches the whole file up front instead of
+  // range-requesting as it plays, and preload="none" cannot help because the
+  // response never looks like media. On graza.co that was 34.5MB across nine
+  // files for one homepage visit.
+  '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.webm': 'video/webm',
+  '.mov': 'video/quicktime', '.ogv': 'video/ogg',
+  '.m3u8': 'application/vnd.apple.mpegurl', '.ts': 'video/mp2t',
+  '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.ogg': 'audio/ogg',
 };
 
 // Client shim injected into every served HTML page: intercept the native
@@ -165,11 +178,44 @@ const SHIM = `<script>(function(){
     if(!('IntersectionObserver' in window)){v.preload='auto';return;}
     new IntersectionObserver(function(es){
       es.forEach(function(e){
-        if(e.isIntersecting){v.preload='auto';v.muted=true;v.__flWantsPlay=1;var p=v.play();if(p&&p.catch)p.catch(function(){});}
+        // isIntersecting is geometry only. A video can sit inside the
+        // viewport while visibility:hidden or display:none — a carousel
+        // slide, a closed drawer — and IntersectionObserver still reports it
+        // as intersecting, so it would play and keep playing unseen. Check
+        // that it is genuinely rendered too.
+        var cs=getComputedStyle(v);
+        var shown=e.isIntersecting && cs.visibility!=='hidden' && cs.display!=='none' && v.offsetParent!==null;
+        if(shown){
+          // Restore the deferred source the first time it is genuinely shown.
+          if(!v.__flSrcOn){
+            v.__flSrcOn=1;
+            var ds=v.getAttribute('data-fl-src'); if(ds)v.src=ds;
+            var ss=v.querySelectorAll('source[data-fl-src]');
+            for(var k=0;k<ss.length;k++)ss[k].src=ss[k].getAttribute('data-fl-src');
+            if(ds||ss.length)try{v.load()}catch(err){}
+          }
+          v.preload='auto';v.muted=true;v.__flWantsPlay=1;
+          var p=v.play();if(p&&p.catch)p.catch(function(){});
+        }
         else{v.__flWantsPlay=0;try{v.pause()}catch(err){}}
       });
     },{rootMargin:'200px'}).observe(v);
   }
+  // A video can also be hidden *after* it starts — hydration swapping a
+  // carousel slide, a drawer closing. The play() gate only judges at call
+  // time, so sweep periodically and stop anything now playing unseen.
+  setInterval(function(){
+    var vs=document.querySelectorAll('video');
+    for(var i=0;i<vs.length;i++){
+      var v=vs[i];
+      if(v.paused)continue;
+      var cs=getComputedStyle(v);
+      if(cs.visibility==='hidden'||cs.display==='none'||v.offsetParent===null){
+        v.__flWantsPlay=0; try{v.pause()}catch(e){}
+      }
+    }
+  },1000);
+
   function flScanVideos(root){
     if(!root||!root.querySelectorAll)return;
     var vs=root.querySelectorAll('video');
@@ -294,18 +340,55 @@ const SHIM = `<script>(function(){
  */
 function lightenMedia(html: string): string {
   return html
+    // Deferring the source, not just the playback. preload="none" is only a
+    // hint — the theme's own script calls load() or play() and the browser
+    // fetches the whole file regardless, which is how a 13MB hero video still
+    // arrived on a page where it was never visible. An element with no src
+    // has nothing to fetch; the runtime half restores it when the video is
+    // actually shown.
     .replace(/<video\b[^>]*>/gi, (tag) =>
       tag
         .replace(/\sautoplay(=(["'])[^"']*\2)?/gi, '')
         .replace(/\spreload=(["'])[^"']*\1/gi, '')
+        .replace(/\ssrc=/gi, ' data-fl-src=')
         .replace(/^<video\b/i, '<video data-fl-lazy muted playsinline preload="none"'))
+    .replace(/<source\b[^>]*>/gi, (tag) =>
+      /type=(["'])video/i.test(tag) || /\.(mp4|webm|mov|m4v|bin)(\?|["'])/i.test(tag)
+        ? tag.replace(/\ssrc=/gi, ' data-fl-src=')
+        : tag)
     .replace(/<link\b[^>]*\brel=(["'])prefetch\1[^>]*>/gi, '')
     // Below-the-fold images cost another 1.4MB up front on that same page.
     .replace(/<img\b(?![^>]*\sloading=)[^>]*>/gi, (tag) =>
       tag.replace(/^<img\b/i, '<img loading="lazy" decoding="async"'));
 }
 
-function serveFile(fp: string): Response | null {
+/**
+ * The capture writes anything it cannot classify into _a/other with a .bin
+ * extension, and on a Shopify storefront that bucket is mostly video: nine
+ * MP4 files, 34.5MB, on graza.co's homepage alone. Served as
+ * application/octet-stream the browser cannot treat them as media — it has no
+ * reason to range-request, so it downloads each one in full before playing a
+ * frame, and preload="none" cannot help because the response never looks like
+ * a video. Sniffing the container recovers the right type without needing the
+ * capture to have guessed the extension.
+ */
+function sniffMime(fp: string, ext: string): string | null {
+  if (MIME[ext]) return MIME[ext];
+  if (ext !== '.bin' && ext !== '') return null;
+  try {
+    const head = Buffer.alloc(16);
+    const fd = openSync(fp, 'r');
+    try { readSync(fd, head, 0, 16, 0); } finally { closeSync(fd); }
+    // ISO base media (mp4/m4v/mov): 'ftyp' at offset 4.
+    if (head.subarray(4, 8).toString('latin1') === 'ftyp') return 'video/mp4';
+    // Matroska/WebM: EBML magic.
+    if (head[0] === 0x1a && head[1] === 0x45 && head[2] === 0xdf && head[3] === 0xa3) return 'video/webm';
+    if (head.subarray(0, 3).toString('latin1') === 'ID3') return 'audio/mpeg';
+  } catch { /* fall through to the generic type */ }
+  return null;
+}
+
+function serveFile(fp: string, range?: string | null): Response | null {
   if (!existsSync(fp) || statSync(fp).isDirectory()) return null;
   const ext = extname(fp).toLowerCase();
   let body: Buffer | string = readFileSync(fp);
@@ -336,9 +419,35 @@ function serveFile(fp: string): Response | null {
   // holding a heuristically-cached copy silently serves markup from before the
   // last edit — which is indistinguishable from the injection not working.
   const headers: Record<string, string> = {
-    'content-type': MIME[ext] || 'application/octet-stream'
+    'content-type': sniffMime(fp, ext) || 'application/octet-stream'
   };
   if (ext === '.html') headers['cache-control'] = 'no-store, must-revalidate';
+
+  // Media has to be range-servable or the correct content-type buys nothing:
+  // a browser that cannot ask for byte ranges falls back to fetching the
+  // whole file before it can play, which is the behaviour this is trying to
+  // avoid. Advertising acceptance and honouring the header lets it stream the
+  // few seconds it actually needs.
+  const type = headers['content-type'];
+  if (type.startsWith('video/') || type.startsWith('audio/')) {
+    headers['accept-ranges'] = 'bytes';
+    const total = (body as Buffer).length;
+    if (range) {
+      const m = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+      if (m) {
+        const start = m[1] ? Number(m[1]) : 0;
+        const end = m[2] ? Math.min(Number(m[2]), total - 1) : total - 1;
+        if (start <= end && start < total) {
+          headers['content-range'] = `bytes ${start}-${end}/${total}`;
+          headers['content-length'] = String(end - start + 1);
+          return new Response((body as Buffer).subarray(start, end + 1), {
+            status: 206,
+            headers
+          });
+        }
+      }
+    }
+  }
   return new Response(body, { headers });
 }
 
@@ -436,7 +545,7 @@ Bun.serve({
         const cand = join(siteRoot, rel.replace(/\/$/, '') + '.html');
         if (existsSync(cand)) rel = rel.replace(/\/$/, '') + '.html';
       }
-      const r = serveFile(join(siteRoot, rel));
+      const r = serveFile(join(siteRoot, rel), req.headers.get('range'));
       if (r) return r;
 
       // A product page the crawl never reached. The catalog import pulls every
