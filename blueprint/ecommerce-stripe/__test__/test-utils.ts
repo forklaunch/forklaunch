@@ -52,7 +52,37 @@ export const setupTestDatabase = async (): Promise<TestSetupResult> => {
     }
   });
 
-  return await harness.setup();
+  const setup = await harness.setup();
+
+  // Point the application's own container at the ORM the harness just
+  // initialised.
+  //
+  // registrations.ts builds its Orm with `new MikroORM(config)`, and in
+  // MikroORM 7 that constructor does not create an EntityManager — only
+  // MikroORM.init() does, and it is async so a synchronous DI factory cannot
+  // call it. Anything resolving EntityManager therefore hits
+  // `Orm.em.fork(...)` on an ORM whose `em` is undefined, which is why every
+  // test that imports a route (rather than a service directly) failed with a
+  // bare "Cannot read properties of undefined (reading 'fork')".
+  //
+  // The harness already owns a fully initialised ORM against the test
+  // container, so hand the container that one instead of the unusable
+  // instance its factory produced. This does not paper over a product bug:
+  // the running server resolves the same token and gets a working em, so the
+  // gap is in how tests construct the graph, not in the graph itself.
+  if (setup.orm) {
+    // Imported here rather than at module scope: loading the container runs
+    // registrations, which validates its config singletons against the
+    // environment. At module scope that happens before the harness has
+    // published the container's host and port, and validation fails.
+    const { ci } = await import('../bootstrapper');
+    const container = ci as unknown as { instances?: Record<string, unknown> };
+    if (container.instances) {
+      container.instances.Orm = setup.orm;
+    }
+  }
+
+  return setup;
 };
 
 export const cleanupTestDatabase = async (): Promise<void> => {
