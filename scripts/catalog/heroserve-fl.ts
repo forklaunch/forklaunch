@@ -20,9 +20,9 @@
  * needs a real STRIPE_API_KEY in the module's env to complete the charge; the
  * order itself is created regardless.
  */
-import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, statSync } from 'node:fs';
 import { brotliCompressSync, constants as zlibConstants, gzipSync } from 'node:zlib';
-import { join, extname } from 'node:path';
+import { basename, dirname, extname, join } from 'node:path';
 import { createHmac, randomUUID } from 'node:crypto';
 
 const [siteRoot, portArg, moduleUrl, secret] = process.argv.slice(2);
@@ -233,6 +233,46 @@ const SHIM = `<script>(function(){
     try{ v.removeAttribute('autoplay'); v.autoplay=false; v.muted=true;
          if(!v.paused) v.pause();
          if(v.preload!=='none' && v.readyState===0) v.preload='none'; }catch(e){}
+    // Only ONE video is ever allowed to decode at a time.
+    //
+    // Hiding invisible video was not enough. A storefront homepage stacks
+    // video sections, and with a 200px root margin three or four of them are
+    // legitimately on screen at once during a scroll. Each one is a separate
+    // hardware decode session, and the media engine has only a few; past that
+    // the system falls back to decoding on the CPU. On an 8GB laptop that
+    // starved the compositor badly enough that macOS's watchdog declared
+    // WindowServer unresponsive after 40 seconds and killed it, which logs
+    // the user out and reads to them as the machine crashing.
+    //
+    // The arbiter keeps the most-visible video playing and pauses the rest.
+    // A storefront never intends several videos to compete for attention
+    // anyway, so nothing is lost visually: whichever one the shopper is
+    // actually looking at is the one that runs.
+    //
+    // preload is also granted only to the winner. Setting it to 'auto' on
+    // every on-screen video pulled all of their bytes at once, which is the
+    // same problem one layer down.
+    if(!window.__flArb){
+      window.__flArb=1;
+      window.flArbitrate=function(){
+        var vs=document.querySelectorAll('video'),best=null,bestR=-1;
+        for(var i=0;i<vs.length;i++){
+          var v=vs[i];
+          if(!v.__flWantsPlay)continue;
+          var r=v.__flRatio||0;
+          if(r>bestR){bestR=r;best=v;}
+        }
+        for(var j=0;j<vs.length;j++){
+          var w=vs[j];
+          if(w===best){
+            if(w.preload!=='auto')w.preload='auto';
+            if(w.paused){var pr=w.play();if(pr&&pr.catch)pr.catch(function(){});}
+          }else if(!w.paused){
+            try{w.pause()}catch(e){}
+          }
+        }
+      };
+    }
     if(!('IntersectionObserver' in window)){v.preload='auto';return;}
     new IntersectionObserver(function(es){
       es.forEach(function(e){
@@ -252,10 +292,10 @@ const SHIM = `<script>(function(){
             for(var k=0;k<ss.length;k++)ss[k].src=ss[k].getAttribute('data-fl-src');
             if(ds||ss.length)try{v.load()}catch(err){}
           }
-          v.preload='auto';v.muted=true;v.__flWantsPlay=1;
-          var p=v.play();if(p&&p.catch)p.catch(function(){});
+          v.muted=true;v.__flWantsPlay=1;v.__flRatio=e.intersectionRatio||0;
+          flArbitrate();
         }
-        else{v.__flWantsPlay=0;try{v.pause()}catch(err){}}
+        else{v.__flWantsPlay=0;v.__flRatio=0;try{v.pause()}catch(err){}flArbitrate();}
       });
     },{rootMargin:'200px'}).observe(v);
   }
@@ -269,9 +309,10 @@ const SHIM = `<script>(function(){
       if(v.paused)continue;
       var cs=getComputedStyle(v);
       if(cs.visibility==='hidden'||cs.display==='none'||v.offsetParent===null){
-        v.__flWantsPlay=0; try{v.pause()}catch(e){}
+        v.__flWantsPlay=0; v.__flRatio=0; try{v.pause()}catch(e){}
       }
     }
+    flArbitrate();
   },1000);
 
   function flScanVideos(root){
@@ -508,6 +549,114 @@ function compressFor(
   return result;
 }
 
+/**
+ * The capture is a real storefront, so it still carries the original site's
+ * advertising and analytics stack: one page view reached 44 external hosts
+ * (Sentry, Klaviyo, Facebook, DoubleClick, several ad exchanges, Shopify
+ * telemetry). Three problems with that in a demo:
+ *
+ *   - it is not offline. The demo phones home from whatever machine it runs
+ *     on, which for a client means their network, not ours.
+ *   - it is somebody else's telemetry. Those beacons carry the referring URL
+ *     and land in the original merchant's analytics.
+ *   - it throws. The scripts load in an environment they were not built for
+ *     and fail loudly: `fbq is not defined`, `webPixelsManager.createShopify\
+ *     Extend is not a function`. Console noise that looks like our bugs.
+ *
+ * A server-side denylist cannot fix this: those URLs are absolute, so the
+ * browser requests them directly and never asks us. CSP can, because the
+ * browser enforces it on our behalf before the request leaves the machine.
+ *
+ * Default-deny, then name the exceptions: self for the capture, and the two
+ * payment SDKs that genuinely must load remotely. 'unsafe-inline' and
+ * 'unsafe-eval' are required — the captured markup is full of inline
+ * handlers we did not write and cannot hash.
+ */
+// Wildcards, not a hand-listed set. Naming four Stripe hosts looked tidy and
+// broke card payment outright: Stripe.js also talks to m.stripe.com,
+// r.stripe.com and merchant-ui-api.stripe.com from the parent page, and a
+// blocked call there makes confirmPayment fail with no obvious cause. The
+// symptom was an order that stayed pending while the webhook log showed
+// payment_intent.created and never payment_intent.succeeded.
+const PAYMENT_HOSTS = [
+  'https://*.stripe.com',
+  'https://*.stripe.network',
+  'https://*.paypal.com',
+  'https://*.paypalobjects.com'
+].join(' ');
+
+const CSP = [
+  `default-src 'self'`,
+  `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${PAYMENT_HOSTS}`,
+  `connect-src 'self' ${PAYMENT_HOSTS}`,
+  // Stripe and PayPal both mount their card fields in an iframe.
+  `frame-src 'self' ${PAYMENT_HOSTS}`,
+  `style-src 'self' 'unsafe-inline'`,
+  // data: covers inlined SVG in the capture; blob: covers video the page
+  // assembles itself.
+  `img-src 'self' data: blob:`,
+  `media-src 'self' blob:`,
+  `font-src 'self' data:`,
+  // Nothing in a storefront demo should be submitting a form off-site.
+  `form-action 'self' ${PAYMENT_HOSTS}`,
+  `base-uri 'self'`,
+  `object-src 'none'`
+].join('; ');
+
+/**
+ * Find the captured file for a request whose name is missing the crawl's
+ * content hash: `<dir>/<base>.<ext>` -> `<dir>/<base>.<10-hex>.<ext>`.
+ *
+ * Cached both ways, including misses. A page that asks for a genuinely absent
+ * asset asks for it on every navigation, and re-reading the directory each
+ * time turned a missing file into a disk scan per request.
+ */
+const siblingCache = new Map<string, string | null>();
+
+function resolveHashedSibling(fp: string): string | null {
+  if (siblingCache.has(fp)) return siblingCache.get(fp)!;
+
+  let found: string | null = null;
+  const file = basename(fp);
+  // Look beside the requested path first, then across every asset bucket.
+  //
+  // The second pass is what rescues a theme built by webpack. Its runtime
+  // resolves lazy chunks against __webpack_require__.p, a publicPath baked
+  // into the bundle at build time as the merchant's CDN origin. Rewriting the
+  // markup cannot reach it: the URL is assembled from a chunk-id table at the
+  // moment the chunk is needed. So the page asks for /cdn/shop/t/38/assets/
+  // sharedUtils.<themehash>.js while the crawl saved that exact file as
+  // _a/js/sharedUtils.<themehash>.<crawlhash>.js.
+  //
+  // Left unresolved it read as a styling bug, not a missing file. The theme's
+  // layout module never ran, so --header-height was never measured, and every
+  // h-header / top-header / mt-header utility collapsed to zero: the
+  // announcement bar, the wordmark and the cart pill all painted at y=0 on
+  // top of each other.
+  const dirs = [dirname(fp), ...['js', 'css', 'img', 'font', 'fonts', 'other', 'ext']
+    .map((b) => join(siteRoot, '_a', b))];
+  const dot = file.lastIndexOf('.');
+  if (dot > 0) {
+    const base = file.slice(0, dot);
+    const ext = file.slice(dot + 1);
+    // Anchored on both sides so `app.js` cannot match `app.worker.<hash>.js`.
+    const want = new RegExp(
+      '^' + base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\.[0-9a-f]{10}\\.' +
+      ext.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$'
+    );
+    // An exact name in another bucket counts too: the crawl only appends its
+    // hash when the name would otherwise collide.
+    for (const d of dirs) {
+      if (found || !existsSync(d)) continue;
+      for (const name of readdirSync(d)) {
+        if (name === file || want.test(name)) { found = join(d, name); break; }
+      }
+    }
+  }
+  siblingCache.set(fp, found);
+  return found;
+}
+
 function serveFile(fp: string, range?: string | null, ifNoneMatch?: string | null, acceptEncoding?: string | null): Response | null {
   if (!existsSync(fp) || statSync(fp).isDirectory()) return null;
   const ext = extname(fp).toLowerCase();
@@ -543,6 +692,24 @@ function serveFile(fp: string, range?: string | null, ifNoneMatch?: string | nul
   };
   if (ext === '.html') {
     headers['cache-control'] = 'no-store, must-revalidate';
+    // A default-deny policy, which does three things at once here.
+    //
+    // It stops the capture phoning home: a real storefront carries the
+    // original merchant's advertising and analytics, and a demo must not
+    // beacon to it from a client's machine.
+    //
+    // It makes the page fast. Those beacons do not fail quickly — they hang
+    // until they time out, and the load event waits for them. On graza.co that
+    // was the difference between 3051ms and 848ms to load a product page. The
+    // sluggishness that felt like a slow backend was the original site's ad
+    // stack timing out; the module answers in 35ms warm.
+    //
+    // And it costs nothing visually. That was worth checking rather than
+    // assuming, in both directions: the policy was blamed for missing selected
+    // states and a collapsed header, then cleared by rendering the same page
+    // with the policy on, off, and bypassed and getting identical output. The
+    // remaining visual defects come from the capture, not from this.
+    headers['content-security-policy'] = CSP;
   } else {
     // Captured assets are content-addressed — crawl.js writes the file's own
     // hash into the name (graza-fun-fact.d7d3f07cc0.bin), so a given URL can
@@ -650,7 +817,9 @@ Bun.serve({
         if (!STRIPE_PK && !PAYPAL_CLIENT_ID) {
           const cid = await ensureCart();
           const r = await mod('POST', '/checkout', '/', { cartId: cid, provider: 'stripe', shippingAddress: DEMO_ADDRESS });
-          cartId = null; // start a fresh cart after an attempt
+          // The cart is deliberately kept. The module empties it when the
+          // order reaches paid, not when a payment intent is created, so a
+          // shopper who leaves the payment step still has their basket.
           return new Response(orderPage(r), { headers: { 'content-type': 'text/html' } });
         }
         const cart = await shopifyCart();
@@ -670,7 +839,9 @@ Bun.serve({
         if (r.code !== 200) {
           return Response.json({ error: typeof r.body === 'string' ? r.body : (r.body?.message ?? 'checkout failed') }, { status: r.code });
         }
-        cartId = null; // the module cleared this cart; the next add starts a new one
+        // Keep the cart id. Dropping it here used to hand the next request a
+        // brand-new empty cart, so abandoning checkout and coming back showed
+        // an empty bag while a live pending order sat behind it.
         // Stripe gets clientSecret; PayPal gets providerRef, which *is* the
         // PayPal order id and all its JS SDK needs (see checkout.schema.ts).
         return Response.json({
@@ -698,6 +869,33 @@ Bun.serve({
       }
       const r = serveFile(join(siteRoot, rel), req.headers.get('range'), req.headers.get('if-none-match'), req.headers.get('accept-encoding'));
       if (r) return r;
+
+      // Content-addressed sibling lookup.
+      //
+      // The crawl saves every asset under a hashed name — chunk.init_X.esm.js
+      // becomes chunk.init_X.esm.ae77cba974.js — and rewrites the references
+      // it can see: HTML attributes and CSS url(). It cannot see the ones
+      // inside JavaScript. An ES module that does `import('./chunk.init_X.esm
+      // .js')` resolves that against its own location at runtime, long after
+      // any rewrite, and asks for the unhashed name.
+      //
+      // On graza.co that was 172 dead requests on a single product page. The
+      // files were all present; nothing could find them. The theme's own
+      // modules never loaded, so the page kept its photography and lost its
+      // behaviour — selected states stopped painting and the header collapsed
+      // onto itself. It looked like a bad capture and was in fact a naming
+      // mismatch.
+      //
+      // Resolving it here rather than by rewriting the JavaScript is
+      // deliberate: a specifier assembled at runtime from variables can never
+      // be rewritten statically, and rewriting inside minified bundles risks
+      // corrupting them. Matching on the name the page actually asks for
+      // catches every case, whatever built it.
+      const alias = resolveHashedSibling(join(siteRoot, rel));
+      if (alias) {
+        const ar = serveFile(alias, req.headers.get('range'), req.headers.get('if-none-match'), req.headers.get('accept-encoding'));
+        if (ar) return ar;
+      }
 
       // A product page the crawl never reached. The catalog import pulls every
       // product from the source platform's API, while the capture only saves
@@ -928,17 +1126,18 @@ function loadPaypal(){return new Promise((ok,no)=>{
  sc.onload=ok; sc.onerror=()=>no(new Error('PayPal SDK failed to load'));
  document.head.appendChild(sc);});}
 
-async function waitForPaid(){
+async function waitForPaid(who){
+ who=who||'The provider';
  for(let i=0;i<40;i++){
   try{const r=await fetch('/__fl/order-status/'+orderId);
    const d=await r.json();
-   if(d.status==='paid'){done('Payment received','PayPal captured the charge and the module marked the order paid.');return;}
-   if(d.status==='cancelled'){done('Payment failed','PayPal declined the capture.');return;}
+   if(d.status==='paid'){done('Payment received',who+' captured the charge and the module marked the order paid.');return;}
+   if(d.status==='cancelled'){done('Payment failed',who+' declined the capture.');return;}
   }catch(e){}
   await new Promise(r=>setTimeout(r,1500));
  }
  done('Approved, awaiting confirmation',
-  'PayPal has the approval. The order moves to paid when the webhook reaches the module - if it is still pending, check that the tunnel is up and CHECKOUT.ORDER.APPROVED is subscribed.');
+  who+' has the approval. The order moves to paid when the webhook reaches the module - if it is still pending, check that the tunnel is up and the approval event is subscribed.');
 }
 
 function done(title,msg){
@@ -947,6 +1146,31 @@ function done(title,msg){
   '<p style="color:#888">Order '+(orderId||'')+'</p>'+
   '<p style="margin-top:26px"><a href="/">&larr; Continue shopping</a></p></div>';
 }
+// Coming back from a redirect payment method. Stripe returns the shopper to
+// return_url with payment_intent_client_secret and redirect_status appended.
+// Without this branch the page just rebuilt an empty checkout and the shopper
+// saw no acknowledgement of a payment they had already authorised.
+(function resumeFromRedirect(){
+ var q=new URLSearchParams(location.search);
+ var secret=q.get('payment_intent_client_secret');
+ if(!secret||!stripe) return;
+ orderId=q.get('fl_order')||'';
+ // Ask Stripe rather than trusting redirect_status in the URL: the shopper
+ // controls the address bar, and money must never be confirmed from it.
+ stripe.retrievePaymentIntent(secret).then(function(res){
+  var pi=res&&res.paymentIntent;
+  var st=pi&&pi.status;
+  if(st==='succeeded'||st==='processing'){
+   done('Payment authorised','Waiting for the provider to confirm. The module marks the order paid when the webhook arrives.');
+   waitForPaid('Stripe');
+  }else if(st==='requires_payment_method'){
+   done('Payment not completed','That payment method was declined or cancelled. Your bag is untouched, so you can try again.');
+  }else{
+   done('Payment status unknown','Stripe reports "'+String(st)+'". The order stays pending until a webhook resolves it.');
+  }
+ }).catch(function(e){$('err').textContent=String(e&&e.message||e);});
+})();
+
 $('go').onclick=async()=>{
  const b=$('go');b.disabled=true;b.textContent='Creating order...';
  try{
@@ -977,7 +1201,7 @@ $('go').onclick=async()=>{
     createOrder:()=>d.providerRef,
     // Deliberately no actions.order.capture(): the module captures when
     // PayPal's approval webhook arrives. Capturing here would double-charge.
-    onApprove:()=>{$('pp').innerHTML='<p style="color:#888">Approved. Waiting for PayPal to confirm the capture...</p>';return waitForPaid();},
+    onApprove:()=>{$('pp').innerHTML='<p style="color:#888">Approved. Waiting for PayPal to confirm the capture...</p>';return waitForPaid('PayPal');},
     onError:(e)=>{$('err').textContent=String(e&&e.message||e);}
    }).render('#pp');
   }else{
@@ -995,7 +1219,7 @@ $('pay').onclick=async()=>{
  // method (Affirm, Cash App Pay, bank); Stripe rejects the confirmation
  // without it even though card payments stay inline and never navigate.
  const {error}=await stripe.confirmPayment({elements,redirect:'if_required',
-   confirmParams:{return_url:window.location.href}});
+   confirmParams:{return_url:location.origin+'/__fl/checkout?fl_order='+encodeURIComponent(orderId||'')}});
  if(error){$('err').textContent=error.message;b.disabled=false;b.textContent='Pay';return;}
  done('Payment received','Stripe confirmed the charge. The module marks the order paid '+
   'when the webhook arrives, and the worker adjusts inventory.');
