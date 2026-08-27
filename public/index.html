@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ForkLaunch Supply</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@600&display=swap">
+<style>
+  :root{
+    --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --serif:"IBM Plex Serif",Georgia,serif;
+    --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+    /* Dark by default: the merch illustrations are light garments, so a deep
+       neutral ground gives them the contrast a product shot needs. Warm-biased
+       toward the flame accent rather than a flat grey. */
+    --paper:#131215; --card:#1B1A1F; --ink:#F3F1EF; --soft:#9C958E;
+    --rule:#2E2C33; --flame:#FF5B32; --ember:#FF9E40; --gold:#FFD852;
+    --brand:#FF6A3D; --tint:#241C1A;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font:400 16px/1.6 var(--sans);
+    -webkit-font-smoothing:antialiased}
+
+  header{border-bottom:1px solid var(--rule);background:var(--card);position:sticky;top:0;z-index:20}
+  .bar{max-width:74rem;margin:0 auto;padding:1rem 1.5rem;display:flex;align-items:center;gap:.75rem}
+  .bar svg{width:30px;height:auto;display:block}
+  .wordmark{font:600 .82rem/1 var(--mono);letter-spacing:.14em;text-transform:uppercase}
+  .sub{font:400 .72rem/1 var(--mono);color:var(--soft);letter-spacing:.1em;text-transform:uppercase}
+  .spacer{flex:1}
+  .demo-flag{font:500 .66rem/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;
+    background:var(--tint);color:var(--brand);border:1px solid var(--brand);
+    border-radius:2px;padding:.32rem .5rem}
+  .cart-btn{font:500 .8rem/1 var(--mono);background:var(--flame);color:#fff;border:0;
+    border-radius:3px;padding:.62rem .9rem;cursor:pointer}
+  .cart-btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+
+  .cascade{display:flex;height:3px}
+  .cascade i{display:block}
+  .cascade i:nth-child(1){width:44%;background:var(--flame)}
+  .cascade i:nth-child(2){width:33%;background:var(--ember)}
+  .cascade i:nth-child(3){width:23%;background:var(--gold)}
+
+  .hero{max-width:74rem;margin:0 auto;padding:3.2rem 1.5rem 1.4rem}
+  .hero h1{font:600 2.5rem/1.1 var(--serif);margin:0 0 .5rem;letter-spacing:-.02em;text-wrap:balance}
+  .hero p{margin:0;color:var(--soft);max-width:34rem}
+
+  main{max-width:74rem;margin:0 auto;padding:1.5rem 1.5rem 6rem}
+  .grid{display:block}
+
+  .card{background:var(--card);border:1px solid var(--rule);border-radius:12px;overflow:hidden;
+    display:flex;flex-direction:column;
+    transition:transform .3s cubic-bezier(.2,.7,.3,1), border-color .3s, box-shadow .3s}
+  .card:hover{transform:translateY(-4px);border-color:#3a3742;
+    box-shadow:0 18px 40px rgba(0,0,0,.42)}
+  .thumb{aspect-ratio:1/1;max-height:22rem;display:grid;place-items:center;border-bottom:1px solid var(--rule);
+    background:
+      radial-gradient(120% 90% at 50% 22%, rgba(255,91,50,.16), transparent 62%),
+      linear-gradient(165deg,#26242c,#17161c);
+    position:relative;overflow:hidden}
+  .thumb::after{content:'';position:absolute;left:14%;right:14%;bottom:7%;height:12%;
+    background:radial-gradient(50% 50% at 50% 50%, rgba(0,0,0,.5), transparent 70%);
+    filter:blur(6px);pointer-events:none}
+  .thumb svg{width:74%;max-width:15rem;height:auto;opacity:1;
+    filter:drop-shadow(0 22px 34px rgba(0,0,0,.55));
+    transition:transform .45s cubic-bezier(.2,.7,.3,1)}
+  .card:hover .thumb svg{transform:scale(1.055) translateY(-2px)}
+  .body{padding:1.35rem 1.4rem 1.5rem;display:flex;flex-direction:column;gap:.6rem;flex:1}
+  .title{font:600 1.18rem/1.3 var(--sans);margin:0;letter-spacing:-.01em}
+  .title a{color:inherit;text-decoration:none}
+  .title a:hover{color:var(--brand,#FF5B32)}
+  a.thumb{text-decoration:none;color:inherit}
+  .desc{font-size:.86rem;line-height:1.55;color:var(--soft);margin:0;flex:1}
+  .price{font:600 1.22rem/1 var(--mono);letter-spacing:-.01em;margin-top:.15rem}
+  .opts{display:flex;flex-wrap:wrap;gap:.34rem}
+  .opt{font:500 .74rem/1 var(--mono);border:1px solid var(--rule);background:transparent;
+    color:var(--ink);border-radius:2px;padding:.4rem .55rem;cursor:pointer}
+  .opt[aria-pressed="true"]{border-color:var(--brand);background:var(--tint);color:var(--brand)}
+  .opt:disabled{opacity:.35;cursor:not-allowed;text-decoration:line-through}
+  .opt:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+  .add{font:500 .82rem/1 var(--mono);background:var(--brand);color:#fff;border:0;border-radius:3px;
+    padding:.7rem;cursor:pointer;width:100%}
+  .add:disabled{background:var(--soft);cursor:not-allowed}
+  .add:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+  .stock{font:400 .72rem/1 var(--mono);color:var(--soft)}
+
+  .drawer{position:fixed;inset:0 0 0 auto;width:min(25rem,100%);background:var(--card);
+    border-left:1px solid var(--rule);transform:translateX(100%);transition:transform .22s ease;
+    display:flex;flex-direction:column;z-index:40}
+  .drawer[data-open="true"]{transform:none}
+  @media (prefers-reduced-motion:reduce){.drawer{transition:none}}
+  .drawer h2{font:600 .76rem/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;
+    color:var(--soft);margin:0;padding:1.2rem 1.3rem;border-bottom:1px solid var(--rule)}
+  .lines{flex:1;overflow:auto;padding:.6rem 1.3rem}
+  .line{display:flex;gap:.7rem;padding:.75rem 0;border-bottom:1px solid var(--rule);font-size:.88rem}
+  .line .g{flex:1}
+  .line .q{font:400 .78rem/1 var(--mono);color:var(--soft)}
+  .foot{border-top:1px solid var(--rule);padding:1.1rem 1.3rem;display:flex;flex-direction:column;gap:.7rem}
+  .tot{display:flex;justify-content:space-between;font:500 .95rem/1 var(--mono)}
+  .empty{color:var(--soft);font-size:.88rem;padding:1.4rem 0}
+  .scrim{position:fixed;inset:0;background:#0008;opacity:0;pointer-events:none;
+    transition:opacity .22s ease;z-index:30}
+  .scrim[data-open="true"]{opacity:1;pointer-events:auto}
+  .close{background:none;border:0;color:var(--soft);font:500 1.2rem/1 var(--sans);cursor:pointer;
+    position:absolute;right:.9rem;top:.95rem}
+
+  .note{max-width:74rem;margin:0 auto;padding:0 1.5rem 3rem;color:var(--soft);font-size:.83rem}
+  .note code{font:400 .84em var(--mono);background:var(--tint);padding:.1em .35em;border-radius:3px}
+
+  .group{margin:2.6rem 0 0}
+  .ghead{font:600 .78rem/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;
+    color:var(--soft);display:flex;align-items:center;gap:.6rem;margin:0 0 1rem}
+  .ghead::after{content:"";flex:1;height:1px;background:var(--rule)}
+  .ghead span{color:var(--flame)}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(17rem,1fr));gap:1.4rem}
+  @media(max-width:640px){.cards{grid-template-columns:1fr;gap:1.2rem}}
+  .flag{position:absolute;top:.9rem;left:.9rem;font:600 .64rem/1 var(--mono);z-index:2;
+    box-shadow:0 4px 12px rgba(0,0,0,.35);
+    letter-spacing:.08em;text-transform:uppercase;background:var(--flame);color:#fff;
+    border-radius:2px;padding:.28rem .45rem}
+  .price s{color:var(--soft);font-weight:400;margin-left:.5rem;font-size:.85em}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="bar">
+    <svg viewBox="76 105 1842 1147" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ForkLaunch">
+      <path fill="#FF5B32" d="M1542,416.1H527.9l68.9-127.5c61-112.8,178.9-183.2,307.2-183.2H1918l-68.9,127.5C1788.2,345.8,1670.2,416.1,1542,416.1z"/>
+      <path fill="#FF9E40" d="M938.8,830H304.2l68.9-127.5c61-112.8,178.9-183.2,307.2-183.2h634.6L1246,646.9C1185,759.7,1067.1,830,938.8,830z"/>
+      <path fill="#FFD852" d="M258,1252.4H76l68.9-127.5c61-112.8,178.9-183.2,307.2-183.2h182l-68.9,127.5C504.2,1182.1,386.3,1252.4,258,1252.4z"/>
+    </svg>
+    <div>
+      <div class="wordmark">ForkLaunch Supply</div>
+      <div class="sub">Running on the ecommerce module</div>
+    </div>
+    <span class="spacer"></span>
+    <span class="demo-flag">Demo · test mode</span>
+    <button class="cart-btn" id="openCart" aria-haspopup="dialog">Cart (<span id="count">0</span>)</button>
+  </div>
+  <div class="cascade" aria-hidden="true"><i></i><i></i><i></i></div>
+</header>
+
+<section class="hero">
+  <h1>Merch, served by our own backend.</h1>
+  <p>Every product, price and stock count on this page is read live from a ForkLaunch
+     ecommerce module — catalog, cart, checkout and inventory, running as generated code.</p>
+</section>
+
+<main>
+  <div class="grid" id="grid" aria-busy="true"></div>
+</main>
+
+<p class="note" id="footnote"></p>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-label="Cart" data-open="false">
+  <h2>Your cart</h2>
+  <button class="close" id="closeCart" aria-label="Close cart">×</button>
+  <div class="lines" id="lines"><p class="empty">Nothing in the cart yet.</p></div>
+  <div class="foot">
+    <div class="tot"><span>Subtotal</span><span id="subtotal">$0.00</span></div>
+    <button class="ghost" id="viewbag">View bag</button>
+    <button class="add" id="checkout" disabled>Checkout</button>
+    <div class="stock">Test mode — no card is charged and nothing ships.</div>
+  </div>
+</aside>
+
+<script src="/art.js"></script>
+<script>
+const ART = window.FL_ART, MARK = window.FL_MARK;
+const state = { products: [], picked: {}, cart: [] };
+const money = c => '$' + (c/100).toFixed(2);
+
+function render() {
+  const grid = document.getElementById('grid');
+  grid.setAttribute('aria-busy','false');
+  const ORDER = ['Apparel','Desk','Small goods'];
+  const groups = new Map();
+  for (const p of state.products) {
+    const k = p.productType || 'Other';
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(p);
+  }
+  const keys = [...groups.keys()].sort((a,b) => {
+    const ia = ORDER.indexOf(a), ib = ORDER.indexOf(b);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  });
+  grid.innerHTML = keys.map(k => {
+    const items = groups.get(k);
+    const cards = items.map(p => {
+      const vs = p.variants ?? [];
+      const sel = state.picked[p.id] ?? vs.find(v => v.stock > 0)?.id ?? vs[0]?.id;
+      const cur = vs.find(v => v.id === sel);
+      const single = vs.length === 1;
+      const was = cur?.compareAtPriceCents;
+      const soldOut = vs.every(v => (v.stock ?? 0) <= 0);
+      return `<article class="card">
+        <a class="thumb" href="/products/${encodeURIComponent(p.handle)}"
+           aria-label="${p.title}">${ART[p.handle] ?? MARK}${was ? '<span class="flag">Sale</span>' : ''}</a>
+        <div class="body">
+          <h3 class="title"><a href="/products/${encodeURIComponent(p.handle)}">${p.title}</a></h3>
+          <p class="desc">${(p.descriptionHtml ?? '').replace(/<[^>]*>/g,'')}</p>
+          <div class="price">${money(cur?.priceCents ?? 0)}${was ? `<s>${money(was)}</s>` : ''}</div>
+          ${single ? '' : `<div class="opts">${vs.map(v => `<button class="opt" data-pick="${p.id}" data-vid="${v.id}"
+              aria-pressed="${v.id===sel}" ${v.stock<=0?'disabled':''}>${(v.optionValues?.Size)??'—'}</button>`).join('')}</div>`}
+          <div class="stock">${soldOut ? 'Sold out' : (cur?.stock ?? 0) + ' in stock'}</div>
+          <button class="add" data-add="${sel}" ${soldOut?'disabled':''}>${soldOut?'Sold out':'Add to cart'}</button>
+        </div></article>`;
+    }).join('');
+    return `<section class="group"><h2 class="ghead">${k}<span>${items.length}</span></h2>
+      <div class="cards">${cards}</div></section>`;
+  }).join('');
+  grid.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => {
+    state.picked[b.dataset.pick] = b.dataset.vid; render();
+  });
+  grid.querySelectorAll('[data-add]').forEach(b => b.onclick = () => addToCart(b.dataset.add));
+}
+
+
+function findVariant(id) {
+  for (const p of state.products) { const v = (p.variants??[]).find(v => v.id === id); if (v) return { p, v }; }
+  return null;
+}
+
+// The cart is the module's, not the browser's. We create one on first add and
+// keep only its id locally; every line item is written through the API so the
+// row in Postgres (and the Redis read-through cache) is the source of truth.
+async function ensureCart() {
+  if (state.cartId) return state.cartId;
+  const r = await fetch('/shop/cart', { method: 'POST' });
+  if (!r.ok) throw new Error('could not create cart');
+  const c = await r.json();
+  state.cartId = c.id;
+  try { localStorage.setItem('fl_cart', c.id); } catch {}
+  return c.id;
+}
+
+async function addToCart(variantId) {
+  const hit = findVariant(variantId); if (!hit) return;
+  const btn = document.querySelector(`[data-add="${variantId}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
+  try {
+    const cartId = await ensureCart();
+    const r = await fetch('/shop/cart/items', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cartId, variantId, quantity: 1 })
+    });
+    if (!r.ok) throw new Error(await r.text() || 'add failed');
+    await syncCart();
+    openDrawer(true);
+  } catch (e) {
+    if (btn) { btn.textContent = 'Unavailable'; setTimeout(() => { btn.textContent = 'Add to cart'; btn.disabled = false; }, 1800); }
+    return;
+  }
+  if (btn) { btn.disabled = false; btn.textContent = 'Add to cart'; }
+}
+
+// Re-read the cart from the module so what's drawn is what's stored.
+async function syncCart() {
+  if (!state.cartId) return;
+  const r = await fetch('/shop/cart/' + state.cartId);
+  if (!r.ok) return;
+  const c = await r.json();
+  state.cart = (c.items ?? []).map(it => {
+    const hit = findVariant(it.variantId);
+    return { variantId: it.variantId, qty: it.quantity,
+             title: hit ? hit.p.title : 'Item',
+             opt: hit ? ((hit.v.optionValues?.Size) ?? '') : '',
+             priceCents: hit ? hit.v.priceCents : (it.unitPriceCents ?? 0) };
+  });
+  drawCart();
+}
+
+function drawCart() {
+  const lines = document.getElementById('lines');
+  const total = state.cart.reduce((s,l)=>s+l.priceCents*l.qty,0);
+  document.getElementById('count').textContent = state.cart.reduce((s,l)=>s+l.qty,0);
+  document.getElementById('subtotal').textContent = money(total);
+  document.getElementById('checkout').disabled = state.cart.length === 0;
+  lines.innerHTML = state.cart.length ? state.cart.map(l =>
+    `<div class="line"><div class="g"><div>${l.title}</div>
+      <div class="q">${l.opt ? l.opt + ' · ' : ''}qty ${l.qty}</div></div>
+      <div class="q">${money(l.priceCents*l.qty)}</div></div>`).join('')
+    : '<p class="empty">Nothing in the cart yet.</p>';
+}
+
+const drawer = document.getElementById('drawer'), scrim = document.getElementById('scrim');
+const openDrawer = o => { drawer.dataset.open = o; scrim.dataset.open = o; };
+document.getElementById('openCart').onclick = () => openDrawer(true);
+document.getElementById('closeCart').onclick = () => openDrawer(false);
+scrim.onclick = () => openDrawer(false);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') openDrawer(false); });
+
+// Checkout is its own page — shipping details and card entry live there,
+// the same way any real storefront separates the cart from the payment step.
+document.getElementById('checkout').onclick = () => { window.location.href = '/checkout'; };
+
+try { state.cartId = localStorage.getItem('fl_cart') || null; } catch {}
+fetch('/shop/products').then(r=>r.json()).then(d => {
+  state.products = Array.isArray(d) ? d : [];
+  render(); drawCart();
+  // Hydrate the cart from the module on load. It was only ever synced after an
+  // add, so returning to the shop — a reload, a link, coming back from
+  // checkout — drew an empty drawer and a disabled Checkout button while the
+  // items sat safely on the server. The cart looked lost and there was no way
+  // to reach payment without adding something again.
+  if (state.cartId) syncCart();
+  const skus = state.products.reduce((s,p)=>s+(p.variants?.length??0),0);
+  document.getElementById('footnote').innerHTML =
+    `${state.products.length} products · ${skus} variants, read live from <code>GET /product</code>, ` +
+    `<code>/variant</code> and <code>/inventory/:id</code> on the ecommerce module.`;
+}).catch(() => {
+  document.getElementById('grid').innerHTML =
+    '<p class="empty">Catalog unavailable — is the ecommerce module running on :8020?</p>';
+});
+</script>
+</body>
+</html>

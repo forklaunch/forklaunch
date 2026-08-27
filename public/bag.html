@@ -1,0 +1,229 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Bag — ForkLaunch Supply</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root{
+    --bg:#141317; --card:#1b1a20; --rule:#2a2830; --ink:#f4f1ee; --soft:#a09aa8;
+    --brand:#FF5B32; --ember:#FF9E40; --gold:#FFD852; --tint:rgba(255,91,50,.12);
+    --mono:ui-monospace,"SFMono-Regular",Menlo,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    --serif:"Iowan Old Style","Palatino Linotype",Georgia,serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--sans)}
+  header{display:flex;align-items:center;gap:14px;padding:18px 28px;border-bottom:1px solid var(--rule)}
+  .brand{font:600 12px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;white-space:nowrap}
+  .brand span{display:block;color:var(--soft);font-size:10px;margin-top:4px;letter-spacing:.1em}
+  header .bar{height:3px;flex:1;background:linear-gradient(90deg,var(--brand),var(--ember),var(--gold))}
+  header a{color:var(--soft);font:600 11px/1 var(--mono);letter-spacing:.1em;
+           text-transform:uppercase;text-decoration:none;white-space:nowrap}
+  header a:hover{color:var(--ink)}
+
+  main{max-width:68rem;margin:0 auto;padding:2.6rem 1.5rem 6rem;
+       display:grid;grid-template-columns:1fr 20rem;gap:2.4rem;align-items:start}
+  @media(max-width:800px){main{grid-template-columns:1fr;gap:1.6rem}}
+  h1{font:600 2rem/1.1 var(--serif);margin:0 0 .3rem;letter-spacing:-.02em}
+  .count{color:var(--soft);margin:0 0 1.8rem;font-size:.92rem}
+
+  .line{display:grid;grid-template-columns:7.5rem 1fr auto;gap:1.3rem;
+        padding:1.4rem 0;border-bottom:1px solid var(--rule)}
+  .line:first-of-type{border-top:1px solid var(--rule)}
+  .shot{aspect-ratio:1/1;border-radius:10px;display:grid;place-items:center;overflow:hidden;
+        background:radial-gradient(120% 90% at 50% 25%, rgba(255,91,50,.15), transparent 62%),
+                   linear-gradient(165deg,#26242c,#17161c)}
+  .shot svg{width:76%;height:auto;filter:drop-shadow(0 10px 16px rgba(0,0,0,.5))}
+  .info h3{font:600 1.05rem/1.3 var(--sans);margin:0 0 .3rem}
+  .info .opt{color:var(--soft);font:400 .84rem/1.4 var(--sans);margin:0 0 .1rem}
+  .info .unit{color:var(--soft);font:400 .82rem/1.4 var(--mono);margin:.35rem 0 0}
+  .info .low{color:var(--ember);font:500 .78rem/1.4 var(--mono);margin:.4rem 0 0}
+
+  .qty{display:inline-flex;align-items:center;border:1px solid var(--rule);border-radius:6px;
+       margin-top:.7rem;overflow:hidden}
+  .qty button{background:transparent;border:0;color:var(--ink);font:500 1rem/1 var(--mono);
+              padding:.5rem .75rem;cursor:pointer}
+  .qty button:hover:not(:disabled){background:var(--tint);color:var(--brand)}
+  .qty button:disabled{opacity:.3;cursor:not-allowed}
+  .qty .n{min-width:2.2rem;text-align:center;font:500 .9rem/1 var(--mono);
+          border-left:1px solid var(--rule);border-right:1px solid var(--rule);padding:.5rem 0}
+  .remove{background:none;border:0;color:var(--soft);font:400 .8rem/1 var(--sans);
+          text-decoration:underline;cursor:pointer;padding:0;margin-top:.75rem;margin-left:.9rem}
+  .remove:hover{color:var(--brand)}
+  .money{font:600 1.05rem/1 var(--mono);text-align:right;white-space:nowrap}
+
+  aside{background:var(--card);border:1px solid var(--rule);border-radius:12px;
+        padding:1.5rem 1.5rem 1.6rem;position:sticky;top:1.5rem}
+  aside h2{font:600 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;
+           color:var(--soft);margin:0 0 1.1rem}
+  .row{display:flex;justify-content:space-between;padding:.42rem 0;font-size:.92rem}
+  .row.total{border-top:1px solid var(--rule);margin-top:.7rem;padding-top:.9rem;
+             font:600 1.2rem/1 var(--mono)}
+  .row .q{color:var(--soft)}
+  .cta{width:100%;margin-top:1.2rem;background:var(--brand);color:#fff;border:0;border-radius:7px;
+       padding:.95rem;font:600 .92rem/1 var(--mono);cursor:pointer}
+  .cta:hover{background:#ff6d47}
+  .cta:disabled{background:#3a3740;color:var(--soft);cursor:not-allowed}
+  .keep{display:block;text-align:center;margin-top:.9rem;color:var(--soft);
+        font-size:.85rem;text-decoration:none}
+  .keep:hover{color:var(--ink)}
+  .note{color:var(--soft);font-size:.78rem;margin:.9rem 0 0;line-height:1.5}
+
+  .empty{grid-column:1/-1;text-align:center;padding:5rem 1rem;color:var(--soft)}
+  .empty h1{margin-bottom:.6rem}
+  .empty a{color:var(--brand)}
+</style>
+
+<header>
+  <div class="brand">ForkLaunch Supply<span>your bag</span></div>
+  <div class="bar"></div>
+  <a href="/">&larr; Keep shopping</a>
+</header>
+
+<main id="main"><p class="count">Loading your bag…</p></main>
+
+<script>
+const money = (c) => '$' + ((c || 0) / 100).toFixed(2);
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) =>
+  ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]);
+
+let cartId = null, products = [];
+
+/** Cart lines carry variantId and quantity only — price and name live on the catalog. */
+function lookup(variantId) {
+  for (const p of products) {
+    const v = (p.variants ?? []).find((x) => x.id === variantId);
+    if (v) return { product: p, variant: v };
+  }
+  return null;
+}
+
+function artFor(handle) {
+  // The shop page owns the artwork. Rather than duplicate it, reuse the mark
+  // as a stand-in here — the bag is about what you chose, not a second gallery.
+  return `<svg viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M56 92h120l-22 30H34z" fill="#FF5B32"/>
+    <path d="M74 128h96l-20 28H54z" fill="#FF9E40"/>
+    <path d="M92 162h64l-18 26H74z" fill="#FFD852"/></svg>`;
+}
+
+async function load() {
+  try { cartId = localStorage.getItem('fl_cart'); } catch {}
+  products = await fetch('/shop/products').then((r) => r.json()).catch(() => []);
+
+  const cart = cartId
+    ? await fetch('/shop/cart/' + cartId).then((r) => r.json()).catch(() => null)
+    : null;
+  const items = (cart && cart.items) || [];
+
+  if (!items.length) {
+    $('main').innerHTML = `<div class="empty">
+      <h1>Your bag is empty</h1>
+      <p>Nothing in here yet.</p>
+      <p style="margin-top:1.6rem"><a href="/">Browse the shop &rarr;</a></p></div>`;
+    return;
+  }
+
+  let subtotal = 0, units = 0;
+  const rows = items.map((it) => {
+    const hit = lookup(it.variantId);
+    const unit = hit ? hit.variant.priceCents : 0;
+    const lineTotal = unit * it.quantity;
+    subtotal += lineTotal;
+    units += it.quantity;
+    const opt = hit && hit.variant.optionValues && Object.values(hit.variant.optionValues)[0];
+    const stock = hit ? (hit.variant.stock ?? 0) : 0;
+    return `<div class="line">
+      <div class="shot">${artFor(hit ? hit.product.handle : '')}</div>
+      <div class="info">
+        <h3>${esc(hit ? hit.product.title : 'Item')}</h3>
+        ${opt && opt !== (hit && hit.product.title) ? `<p class="opt">${esc(opt)}</p>` : ''}
+        <p class="unit">${money(unit)} each</p>
+        ${stock > 0 && stock <= 5 ? `<p class="low">Only ${stock} left</p>` : ''}
+        <div>
+          <span class="qty">
+            <button data-dec="${esc(it.variantId)}" aria-label="Decrease">&minus;</button>
+            <span class="n">${it.quantity}</span>
+            <button data-inc="${esc(it.variantId)}" aria-label="Increase"
+              ${it.quantity >= stock ? 'disabled' : ''}>+</button>
+          </span>
+          <button class="remove" data-del="${esc(it.variantId)}">Remove</button>
+        </div>
+      </div>
+      <div class="money">${money(lineTotal)}</div>
+    </div>`;
+  }).join('');
+
+  $('main').innerHTML = `
+    <section>
+      <h1>Your bag</h1>
+      <p class="count">${units} item${units === 1 ? '' : 's'}</p>
+      ${rows}
+    </section>
+    <aside>
+      <h2>Summary</h2>
+      <div class="row"><span>Subtotal</span><span>${money(subtotal)}</span></div>
+      <div class="row"><span class="q">Tax</span><span class="q">at checkout</span></div>
+      <div class="row"><span class="q">Shipping</span><span class="q">at checkout</span></div>
+      <div class="row total"><span>Total</span><span>${money(subtotal)}</span></div>
+      <button class="cta" id="go">Checkout</button>
+      <a class="keep" href="/">Keep shopping</a>
+      <p class="note">Tax and shipping are calculated by the ecommerce module when
+        the order is created, so the total here is the subtotal only.</p>
+    </aside>`;
+
+  $('go').onclick = () => { location.href = '/checkout'; };
+
+  // Quantity changes go through add and remove, which is all the module
+  // exposes. Increasing adds one; decreasing removes the line and re-adds it
+  // at the lower count, because there is no "set quantity" operation.
+  document.querySelectorAll('[data-inc]').forEach((b) => {
+    b.onclick = () => change(b.dataset.inc, +1, b);
+  });
+  document.querySelectorAll('[data-dec]').forEach((b) => {
+    b.onclick = () => change(b.dataset.dec, -1, b);
+  });
+  document.querySelectorAll('[data-del]').forEach((b) => {
+    b.onclick = () => remove(b.dataset.del, b);
+  });
+}
+
+function busy(btn, on) {
+  document.querySelectorAll('.qty button, .remove').forEach((b) => (b.disabled = on));
+  if (btn && on) btn.textContent = '…';
+}
+
+async function change(variantId, delta, btn) {
+  busy(btn, true);
+  try {
+    if (delta > 0) {
+      await fetch('/shop/cart/items', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cartId, variantId, quantity: 1 })
+      });
+    } else {
+      const cart = await fetch('/shop/cart/' + cartId).then((r) => r.json());
+      const line = (cart.items || []).find((i) => i.variantId === variantId);
+      const next = (line ? line.quantity : 1) - 1;
+      await fetch(`/shop/cart/${cartId}/items/${variantId}`, { method: 'DELETE' });
+      if (next > 0) {
+        await fetch('/shop/cart/items', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cartId, variantId, quantity: next })
+        });
+      }
+    }
+  } catch {}
+  load();
+}
+
+async function remove(variantId, btn) {
+  busy(btn, true);
+  try {
+    await fetch(`/shop/cart/${cartId}/items/${variantId}`, { method: 'DELETE' });
+  } catch {}
+  load();
+}
+
+load();
+</script>

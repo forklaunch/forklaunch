@@ -1,0 +1,4 @@
+allowBuilds:
+  '@scarf/scarf': set this to true or false
+  protobufjs: set this to true or false
+  tldjs: set this to true or false

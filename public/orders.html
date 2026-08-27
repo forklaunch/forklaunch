@@ -1,0 +1,151 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Orders — ForkLaunch Supply</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root{
+    --bg:#141317; --panel:#1b1a20; --line:#2a2830; --ink:#f4f1ee; --dim:#a09aa8;
+    --brand:#FF5B32; --amber:#FF9E40; --gold:#FFD852;
+    --ok:#4ade80; --wait:#fbbf24; --dead:#6b7280;
+    --mono:ui-monospace,"SFMono-Regular",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+  header{display:flex;align-items:center;gap:14px;padding:18px 28px;border-bottom:1px solid var(--line)}
+  .brand{font:600 12px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;white-space:nowrap}
+  .brand span{display:block;color:var(--dim);font-size:10px;margin-top:4px;letter-spacing:.1em}
+  header .bar{height:3px;flex:1;background:linear-gradient(90deg,var(--brand),var(--amber),var(--gold))}
+  header a{color:var(--dim);font:600 11px/1 var(--mono);letter-spacing:.1em;
+           text-transform:uppercase;text-decoration:none;white-space:nowrap}
+  header a:hover{color:var(--ink)}
+  main{max-width:1000px;margin:0 auto;padding:34px 28px 80px}
+  h1{font-size:1.6rem;margin:0 0 4px}
+  .sub{color:var(--dim);margin:0 0 26px;font-size:.92rem}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:28px}
+  .tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .tile .k{font:600 10px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+  .tile .v{font:600 1.5rem/1.2 var(--mono);margin-top:8px}
+  .order{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+         padding:18px 20px;margin-bottom:12px}
+  .top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .id{font:600 13px var(--mono);color:var(--dim)}
+  .total{margin-left:auto;font:600 1.1rem var(--mono)}
+  .pill{font:600 10px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;
+        padding:5px 9px;border-radius:20px;border:1px solid}
+  .paid{color:var(--ok);border-color:rgba(74,222,128,.35);background:rgba(74,222,128,.1)}
+  .pending{color:var(--wait);border-color:rgba(251,191,36,.35);background:rgba(251,191,36,.1)}
+  .cancelled{color:var(--dead);border-color:rgba(107,114,128,.4);background:rgba(107,114,128,.12)}
+  .other{color:var(--amber);border-color:rgba(255,158,64,.35);background:rgba(255,158,64,.1)}
+  .lines{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+  .line{display:flex;justify-content:space-between;padding:4px 0;font-size:.9rem}
+  .line .q{color:var(--dim)}
+  .meta{margin-top:12px;display:flex;gap:20px;flex-wrap:wrap;color:var(--dim);font-size:.8rem}
+  .empty{color:var(--dim);text-align:center;padding:70px 20px}
+  .empty a{color:var(--brand)}
+</style>
+
+<header>
+  <div class="brand">ForkLaunch Supply<span>orders</span></div>
+  <div class="bar"></div>
+  <a href="/">&larr; Store</a>
+</header>
+
+<main>
+  <h1>Orders</h1>
+  <p class="sub">Read live from the ecommerce module. Every order this store has taken.</p>
+  <div class="tiles" id="tiles"></div>
+  <div id="list"><p class="sub">Loading…</p></div>
+</main>
+
+<script>
+const money = (c) => '$' + ((c || 0) / 100).toFixed(2);
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) =>
+  ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]);
+
+// Orders carry variantIds, not names. The catalog turns them back into
+// something a person can read.
+function nameFor(products, variantId) {
+  for (const p of products) {
+    const v = (p.variants ?? []).find((x) => x.id === variantId);
+    if (v) {
+      const opt = v.optionValues && Object.values(v.optionValues)[0];
+      return p.title + (opt && opt !== p.title ? ' — ' + opt : '');
+    }
+  }
+  return 'Item';
+}
+
+const pillClass = (s) =>
+  s === 'paid' ? 'paid' : s === 'pending' ? 'pending' : s === 'cancelled' ? 'cancelled' : 'other';
+
+(async () => {
+  // The orders view is gated. The token comes from ?key= once and is kept for
+  // the tab only — sessionStorage, not localStorage, so closing the tab ends
+  // access rather than leaving it on the machine.
+  const url = new URL(location.href);
+  const fromUrl = url.searchParams.get('key');
+  if (fromUrl) {
+    try { sessionStorage.setItem('fl_admin', fromUrl); } catch {}
+    url.searchParams.delete('key');
+    history.replaceState(null, '', url.pathname);  // keep it out of the address bar
+  }
+  let token = '';
+  try { token = sessionStorage.getItem('fl_admin') || ''; } catch {}
+
+  const res = await fetch('/shop/orders', {
+    headers: token ? { authorization: 'Bearer ' + token } : {}
+  });
+  if (res.status === 401 || res.status === 503) {
+    const why = res.status === 503
+      ? 'This view is switched off. Start the storefront with ADMIN_TOKEN set.'
+      : 'This view needs a token. Open it as /orders?key=YOUR_TOKEN';
+    document.getElementById('list').innerHTML =
+      '<div class="empty">' + why + '<br><br><a href="/">Back to the store &rarr;</a></div>';
+    return;
+  }
+  const orders = await res.json().catch(() => []);
+  const products = await fetch('/shop/products').then((r) => r.json()).catch(() => []);
+
+  if (!Array.isArray(orders) || !orders.length) {
+    document.getElementById('list').innerHTML =
+      '<div class="empty">No orders yet.<br><br><a href="/">Go buy something &rarr;</a></div>';
+    return;
+  }
+
+  // Revenue counts paid orders only — a pending order is money nobody has.
+  const paid = orders.filter((o) => o.status === 'paid');
+  const revenue = paid.reduce((s, o) => s + (o.totalCents || 0), 0);
+  document.getElementById('tiles').innerHTML = `
+    <div class="tile"><div class="k">Orders</div><div class="v">${orders.length}</div></div>
+    <div class="tile"><div class="k">Paid</div><div class="v">${paid.length}</div></div>
+    <div class="tile"><div class="k">Revenue</div><div class="v">${money(revenue)}</div></div>
+    <div class="tile"><div class="k">Awaiting payment</div><div class="v">${orders.filter((o) => o.status === 'pending').length}</div></div>`;
+
+  document.getElementById('list').innerHTML = orders.map((o) => {
+    const when = o.createdAt ? new Date(o.createdAt).toLocaleString() : '';
+    const lines = (o.items ?? []).map((it) =>
+      `<div class="line"><span>${esc(nameFor(products, it.variantId))}
+        <span class="q">&times;${it.quantity}</span></span>
+        <span class="q">${money((it.unitPriceCents ?? 0) * it.quantity)}</span></div>`).join('');
+    const ship = o.shippingAddress;
+    const shipTxt = ship
+      ? [ship.name, ship.line1, ship.city, ship.postalCode].filter(Boolean).join(', ')
+      : '';
+    return `<div class="order">
+      <div class="top">
+        <span class="id">${esc(String(o.id).slice(0, 8))}</span>
+        <span class="pill ${pillClass(o.status)}">${esc(o.status)}</span>
+        <span class="total">${money(o.totalCents)}</span>
+      </div>
+      <div class="lines">${lines || '<div class="line q">no lines</div>'}</div>
+      <div class="meta">
+        <span>${esc(when)}</span>
+        ${o.taxCents ? `<span>tax ${money(o.taxCents)}</span>` : ''}
+        ${o.shippingCents ? `<span>shipping ${money(o.shippingCents)}</span>` : ''}
+        ${shipTxt ? `<span>${esc(shipTxt)}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+})();
+</script>

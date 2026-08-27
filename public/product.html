@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ForkLaunch Supply</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@600&display=swap">
+<style>
+  /* Palette, type scale and chrome are lifted from the shop page on purpose:
+     a product page that reads as a different site breaks the illusion faster
+     than any missing feature would. */
+  :root{
+    --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --serif:"IBM Plex Serif",Georgia,serif;
+    --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+    --paper:#131215; --card:#1B1A1F; --ink:#F3F1EF; --soft:#9C958E;
+    --rule:#2E2C33; --flame:#FF5B32; --ember:#FF9E40; --gold:#FFD852;
+    --brand:#FF6A3D; --tint:#241C1A;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font:400 16px/1.6 var(--sans);
+    -webkit-font-smoothing:antialiased}
+
+  header{border-bottom:1px solid var(--rule);background:var(--card);position:sticky;top:0;z-index:20}
+  .bar{max-width:74rem;margin:0 auto;padding:1rem 1.5rem;display:flex;align-items:center;gap:.75rem}
+  .bar svg{width:30px;height:auto;display:block}
+  .bar a.home{display:flex;align-items:center;gap:.75rem;text-decoration:none;color:inherit}
+  .wordmark{font:600 .82rem/1 var(--mono);letter-spacing:.14em;text-transform:uppercase}
+  .sub{font:400 .72rem/1 var(--mono);color:var(--soft);letter-spacing:.1em;text-transform:uppercase}
+  .spacer{flex:1}
+  .demo-flag{font:500 .66rem/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;
+    background:var(--tint);color:var(--brand);border:1px solid var(--brand);
+    border-radius:2px;padding:.32rem .5rem}
+  .cart-btn{font:500 .8rem/1 var(--mono);background:var(--flame);color:#fff;border:0;
+    border-radius:3px;padding:.62rem .9rem;cursor:pointer;text-decoration:none;display:inline-block}
+  .cascade{display:flex;height:3px}
+  .cascade i{display:block}
+  .cascade i:nth-child(1){width:44%;background:var(--flame)}
+  .cascade i:nth-child(2){width:33%;background:var(--ember)}
+  .cascade i:nth-child(3){width:23%;background:var(--gold)}
+
+  .crumbs{max-width:74rem;margin:0 auto;padding:1.5rem 1.5rem 0;
+          color:var(--soft);font:400 .84rem/1 var(--sans)}
+  .crumbs a{color:var(--soft);text-decoration:none}
+  .crumbs a:hover{color:var(--ink)}
+
+  main{max-width:74rem;margin:0 auto;padding:1.4rem 1.5rem 6rem;
+       display:grid;grid-template-columns:1.1fr 1fr;gap:3.5rem;align-items:start}
+  @media(max-width:880px){main{grid-template-columns:1fr;gap:2rem}}
+
+  /* Same lighting as the shop tile, scaled up: a warm pool behind the garment
+     and a soft contact shadow under it, so flat SVG art reads as an object
+     sitting on a surface rather than a sticker on a panel. */
+  .stage{aspect-ratio:1/1;border:1px solid var(--rule);border-radius:14px;overflow:hidden;
+    display:grid;place-items:center;position:relative;
+    background:radial-gradient(120% 90% at 50% 18%, #383540 0%, #201F25 58%, #1A191E 100%)}
+  .stage svg{width:72%;max-width:24rem;height:auto;
+    filter:drop-shadow(0 26px 38px rgba(0,0,0,.55))}
+  .stage::after{content:'';position:absolute;left:16%;right:16%;bottom:7%;height:11%;
+    background:radial-gradient(50% 50% at 50% 50%, rgba(0,0,0,.55), transparent 70%);
+    filter:blur(7px);pointer-events:none}
+  .flag{position:absolute;top:1rem;left:1rem;font:500 .66rem/1 var(--mono);
+    letter-spacing:.08em;text-transform:uppercase;background:var(--flame);color:#fff;
+    border-radius:2px;padding:.32rem .5rem}
+
+  .cat{color:var(--soft);font:500 .7rem/1 var(--mono);letter-spacing:.14em;
+       text-transform:uppercase;margin:.2rem 0 .9rem}
+  h1{font:600 2.4rem/1.08 var(--serif);margin:0 0 .6rem;letter-spacing:-.02em;text-wrap:balance}
+  .price{font:500 1.6rem/1 var(--mono);margin:.4rem 0 1.2rem}
+  .price s{color:var(--soft);font-weight:400;margin-left:.5rem;font-size:.7em}
+  .blurb{color:var(--soft);margin:0 0 1.8rem;max-width:32rem}
+
+  .lbl{font:500 .7rem/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;
+       color:var(--soft);margin:0 0 .65rem;display:flex;gap:.6rem;align-items:baseline}
+  .lbl em{font-style:normal;color:var(--ink);text-transform:none;
+          letter-spacing:0;font-family:var(--sans);font-size:.95rem}
+  .opts{display:flex;flex-wrap:wrap;gap:.45rem;margin-bottom:1.6rem}
+  .opt{min-width:3.4rem;font:400 .85rem/1 var(--mono);border:1px solid var(--rule);
+    background:transparent;color:var(--ink);padding:.7rem .75rem;border-radius:4px;cursor:pointer}
+  .opt:hover:not(:disabled){border-color:#4a4650}
+  .opt[aria-pressed="true"]{border-color:var(--brand);background:var(--tint);color:var(--brand)}
+  .opt:disabled{opacity:.3;cursor:not-allowed;text-decoration:line-through}
+
+  .add{width:100%;max-width:22rem;background:var(--flame);color:#fff;border:0;border-radius:4px;
+    padding:1rem;font:500 .92rem/1 var(--mono);cursor:pointer}
+  .add:hover:not(:disabled){background:#ff6d47}
+  .add:disabled{background:#33303a;color:var(--soft);cursor:not-allowed}
+  .stock{font:400 .82rem/1 var(--mono);color:var(--soft);margin:.85rem 0 0}
+  .stock.low{color:var(--ember)}
+
+  .facts{margin-top:2.4rem;border-top:1px solid var(--rule);padding-top:1.5rem}
+  .facts h2{font:500 .7rem/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;
+            color:var(--soft);margin:0 0 .9rem}
+  .facts ul{margin:0;padding-left:1.1rem}
+  .facts li{color:var(--soft);font-size:.9rem;margin-bottom:.45rem}
+
+  .toast{position:fixed;right:1.2rem;bottom:1.2rem;background:var(--card);
+    border:1px solid var(--rule);border-left:3px solid var(--flame);border-radius:8px;
+    padding:.9rem 1.1rem;font-size:.9rem;box-shadow:0 14px 34px rgba(0,0,0,.5);
+    transform:translateY(160%);transition:transform .3s cubic-bezier(.2,.7,.3,1);z-index:30}
+  .toast.on{transform:none}
+  .toast a{color:var(--brand);text-decoration:none;margin-left:.8rem;font-weight:500}
+
+  .missing{grid-column:1/-1;text-align:center;padding:5rem 1rem;color:var(--soft)}
+  .missing a{color:var(--brand)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="bar">
+    <a class="home" href="/">
+      <svg viewBox="76 105 1842 1147" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ForkLaunch">
+        <path fill="#FF5B32" d="M1542,416.1H527.9l68.9-127.5c61-112.8,178.9-183.2,307.2-183.2H1918l-68.9,127.5C1788.2,345.8,1670.2,416.1,1542,416.1z"/>
+        <path fill="#FF9E40" d="M938.8,830H304.2l68.9-127.5c61-112.8,178.9-183.2,307.2-183.2h634.6L1246,646.9C1185,759.7,1067.1,830,938.8,830z"/>
+        <path fill="#FFD852" d="M258,1252.4H76l68.9-127.5c61-112.8,178.9-183.2,307.2-183.2h182l-68.9,127.5C504.2,1182.1,386.3,1252.4,258,1252.4z"/>
+      </svg>
+      <div>
+        <div class="wordmark">ForkLaunch Supply</div>
+        <div class="sub">Running on the ecommerce module</div>
+      </div>
+    </a>
+    <span class="spacer"></span>
+    <span class="demo-flag">Demo · test mode</span>
+    <a class="cart-btn" href="/bag">Bag (<span id="count">0</span>)</a>
+  </div>
+  <div class="cascade" aria-hidden="true"><i></i><i></i><i></i></div>
+</header>
+
+<div class="crumbs" id="crumbs"></div>
+<main id="main"></main>
+<div class="toast" id="toast"></div>
+
+<script src="/art.js"></script>
+<script>
+const ART = window.FL_ART, MARK = window.FL_MARK;
+const money = (c) => '$' + ((c ?? 0) / 100).toFixed(2);
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g,
+  (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+let product = null, picked = null, cartId = null;
+
+// The handle is the last path segment. Serving one file for every product URL
+// means the server needs no per-product route.
+const wantedHandle = () => {
+  const m = location.pathname.match(/\/products\/([^/?#]+)/);
+  return m ? decodeURIComponent(m[1]) : '';
+};
+
+/** A browser that has only looked at products has no cart yet; make one lazily. */
+async function ensureCart() {
+  try { cartId = cartId ?? localStorage.getItem('fl_cart'); } catch {}
+  if (cartId) return cartId;
+  const c = await fetch('/shop/cart', { method: 'POST' }).then(r => r.json());
+  cartId = c.id;
+  try { localStorage.setItem('fl_cart', cartId); } catch {}
+  return cartId;
+}
+
+/** Header count comes from the module, not from a local tally that can drift. */
+async function syncCount() {
+  let id = null;
+  try { id = localStorage.getItem('fl_cart'); } catch {}
+  if (!id) return;
+  const cart = await fetch('/shop/cart/' + id).then(r => r.json()).catch(() => null);
+  const n = (cart?.items ?? []).reduce((s, i) => s + i.quantity, 0);
+  $('count').textContent = n;
+}
+
+const sizeOf = (v) => v?.optionValues?.Size ?? Object.values(v?.optionValues ?? {})[0] ?? '—';
+
+function render() {
+  const vs = product.variants ?? [];
+  const cur = vs.find(v => v.id === picked) ?? vs[0];
+  const stock = cur?.stock ?? 0;
+  const was = cur?.compareAtPriceCents;
+  const single = vs.length === 1;
+
+  $('crumbs').innerHTML =
+    `<a href="/">Shop</a> &nbsp;/&nbsp; ${esc(product.productType ?? 'All')} &nbsp;/&nbsp; ${esc(product.title)}`;
+
+  $('main').innerHTML = `
+    <div class="stage">${ART[product.handle] ?? MARK}${was ? '<span class="flag">Sale</span>' : ''}</div>
+    <section>
+      <p class="cat">${esc(product.productType ?? 'ForkLaunch Supply')}</p>
+      <h1>${esc(product.title)}</h1>
+      <div class="price">${money(cur?.priceCents)}${was ? `<s>${money(was)}</s>` : ''}</div>
+      <p class="blurb">${esc((product.descriptionHtml ?? '').replace(/<[^>]*>/g, ''))}</p>
+
+      ${single ? '' : `
+        <p class="lbl">Size <em>${esc(sizeOf(cur))}</em></p>
+        <div class="opts">${vs.map(v => `
+          <button class="opt" data-vid="${esc(v.id)}" aria-pressed="${v.id === cur?.id}"
+            ${(v.stock ?? 0) <= 0 ? 'disabled' : ''}>${esc(sizeOf(v))}</button>`).join('')}
+        </div>`}
+
+      <button class="add" id="add" ${stock <= 0 ? 'disabled' : ''}>
+        ${stock <= 0 ? 'Sold out' : 'Add to bag'}</button>
+      <p class="stock ${stock > 0 && stock <= 5 ? 'low' : ''}">${
+        stock <= 0 ? 'Out of stock'
+        : stock <= 5 ? `Only ${stock} left`
+        : `${stock} in stock`}</p>
+
+      <div class="facts">
+        <h2>Details</h2>
+        <ul>
+          <li>Ships in 2&ndash;4 business days</li>
+          <li>Free returns within 30 days</li>
+          <li>Price and stock are read live from the ecommerce module</li>
+        </ul>
+      </div>
+    </section>`;
+
+  document.querySelectorAll('.opt').forEach(b => {
+    b.onclick = () => { picked = b.dataset.vid; render(); };
+  });
+  $('add').onclick = () => addToBag(cur);
+}
+
+async function addToBag(variant) {
+  const btn = $('add');
+  btn.disabled = true;
+  btn.textContent = 'Adding…';
+  try {
+    const id = await ensureCart();
+    const r = await fetch('/shop/cart/items', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cartId: id, variantId: variant.id, quantity: 1 })
+    });
+    if (!r.ok) throw new Error(String(r.status));
+    btn.textContent = 'Added ✓';
+    toast(`${product.title} — ${sizeOf(variant)} added`);
+    await syncCount();
+    setTimeout(() => { btn.textContent = 'Add to bag'; btn.disabled = false; }, 1500);
+  } catch {
+    // Say so rather than pretending it worked; a silent failure here reads as
+    // a lost item and is exactly what the storefront must never do.
+    btn.textContent = 'Could not add';
+    setTimeout(() => { btn.textContent = 'Add to bag'; btn.disabled = false; }, 1800);
+  }
+}
+
+function toast(msg) {
+  const t = $('toast');
+  t.innerHTML = `${esc(msg)}<a href="/bag">View bag &rarr;</a>`;
+  t.classList.add('on');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.remove('on'), 4500);
+}
+
+(async () => {
+  syncCount();
+  const want = wantedHandle();
+  const products = await fetch('/shop/products').then(r => r.json()).catch(() => []);
+  product = products.find(p => p.handle === want);
+  if (!product) {
+    $('main').innerHTML = `<div class="missing">
+      <h1>Not found</h1>
+      <p>No product with the handle <code>${esc(want)}</code>.</p>
+      <p style="margin-top:1.6rem"><a href="/">Back to the shop &rarr;</a></p></div>`;
+    return;
+  }
+  picked = (product.variants ?? []).find(v => (v.stock ?? 0) > 0)?.id
+        ?? (product.variants ?? [])[0]?.id;
+  render();
+})();
+</script>
+</body>
+</html>

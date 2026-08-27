@@ -1,0 +1,317 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Checkout — ForkLaunch Supply</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="https://js.stripe.com/v3/"></script>
+<style>
+  :root{
+    --bg:#141317; --panel:#1b1a20; --line:#2a2830; --ink:#f4f1ee; --dim:#a09aa8;
+    --brand:#FF5B32; --amber:#FF9E40; --gold:#FFD852; --ok:#4ade80;
+    --mono:ui-monospace,"SFMono-Regular",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+  header{display:flex;align-items:center;gap:12px;padding:18px 28px;border-bottom:1px solid var(--line)}
+  header .bar{height:3px;flex:1;background:linear-gradient(90deg,var(--brand),var(--amber),var(--gold))}
+  .brand{font:600 12px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase}
+  .brand span{display:block;color:var(--dim);font-size:10px;margin-top:4px;letter-spacing:.1em}
+  main{max-width:960px;margin:0 auto;padding:34px 28px 80px;display:grid;
+       grid-template-columns:1fr 340px;gap:34px;align-items:start}
+  @media(max-width:820px){main{grid-template-columns:1fr}}
+  h1{font-size:1.55rem;margin:0 0 6px}
+  .sub{color:var(--dim);margin:0 0 26px;font-size:.92rem}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:22px}
+  .card + .card{margin-top:18px}
+  h2{font:600 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;
+     color:var(--dim);margin:0 0 16px}
+  label{display:block;font-size:.78rem;color:var(--dim);margin:0 0 5px}
+  input{width:100%;background:#141319;border:1px solid var(--line);border-radius:6px;
+        color:var(--ink);padding:10px 12px;font:14px inherit}
+  input:focus{outline:none;border-color:var(--brand)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .row3{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px}
+  .f{margin-bottom:13px}
+  button{width:100%;background:var(--brand);color:#fff;border:0;border-radius:6px;
+         padding:13px;font:600 14px var(--mono);cursor:pointer}
+  button:disabled{background:#3a3740;color:var(--dim);cursor:not-allowed}
+  #summary .line{display:flex;justify-content:space-between;padding:7px 0;font-size:.9rem}
+  #summary .line.total{border-top:1px solid var(--line);margin-top:10px;padding-top:12px;
+                       font:600 1.05rem var(--mono)}
+  .muted{color:var(--dim)}
+  #stripeBox{background:#141319;border:1px solid var(--line);border-radius:6px;padding:14px;min-height:44px}
+  .err{color:#f87171;font-size:.83rem;margin-top:10px;min-height:18px}
+  .step{opacity:.35;pointer-events:none;transition:opacity .2s}
+  .step.on{opacity:1;pointer-events:auto}
+  .done{text-align:center;padding:60px 20px}
+  .done .tick{width:56px;height:56px;border-radius:50%;background:rgba(74,222,128,.12);
+              color:var(--ok);display:grid;place-items:center;margin:0 auto 18px;font-size:26px}
+  .done h1{color:var(--ok)}
+  code{font:12px var(--mono);color:var(--amber)}
+  .test{font:11px var(--mono);color:var(--dim);border:1px dashed var(--line);
+        border-radius:5px;padding:9px 11px;margin-top:14px}
+</style>
+
+<header>
+  <div class="brand">ForkLaunch Supply<span>secure checkout</span></div>
+  <div class="bar"></div>
+</header>
+
+<main id="main">
+  <div>
+    <h1>Checkout</h1>
+    <p class="sub" id="sub">Payments run through Stripe in test mode. No real card is charged.</p>
+
+    <div class="card step on" id="step1">
+      <h2>Shipping address</h2>
+      <div class="f"><label>Full name</label><input id="name" value="Ada Lovelace"></div>
+      <div class="f"><label>Address</label><input id="line1" value="1 Market Street"></div>
+      <div class="row3">
+        <div class="f"><label>City</label><input id="city" value="San Francisco"></div>
+        <div class="f"><label>State</label><input id="state" value="CA"></div>
+        <div class="f"><label>ZIP</label><input id="postalCode" value="94105"></div>
+      </div>
+      <button id="toPayment">Continue to payment</button>
+    </div>
+
+    <div class="card step" id="step2">
+      <h2>Card details</h2>
+      <div id="stripeBox"></div>
+      <div class="err" id="err"></div>
+      <div class="test">Test card <code>4242 4242 4242 4242</code> · any future expiry · any CVC</div>
+      <button id="pay" style="margin-top:16px">Pay</button>
+    </div>
+  </div>
+
+  <div class="card" id="summary">
+    <h2>Order summary</h2>
+    <div id="lines"><div class="muted">Loading cart…</div></div>
+  </div>
+</main>
+
+<script>
+const money = c => '$' + (c/100).toFixed(2);
+const $ = id => document.getElementById(id);
+let stripe, elements, clientSecret, orderId, cartId, products = [];
+
+
+// The empty state is reached most often immediately after a successful
+// purchase — the cart is cleared because it became an order. Offering no way
+// onward turns a finished checkout into a dead end.
+function emptyCartHtml() {
+  return '<div class="muted">Your cart is empty.<br><br>' +
+         '<a href="/" style="color:var(--brand)">Continue shopping &rarr;</a></div>';
+}
+
+function addr() {
+  return { name:$('name').value, line1:$('line1').value, city:$('city').value,
+           state:$('state').value, postalCode:$('postalCode').value, country:'US' };
+}
+
+async function boot() {
+  try { cartId = localStorage.getItem('fl_cart'); } catch {}
+
+  // Coming back from a redirect payment method. Klarna, Affirm, Cash App and
+  // Amazon Pay all take the shopper to their own site to authorise, then send
+  // them back here with the intent's id in the query string. Without handling
+  // that return the page boots as though nothing happened — the shopper paid
+  // and is shown a checkout form, which is how a working payment method ends
+  // up looking broken.
+  const params = new URLSearchParams(location.search);
+  const returned = params.get('payment_intent_client_secret');
+  if (returned) {
+    const cfg = await fetch('/shop/config').then(r => r.json()).catch(() => ({}));
+    if (cfg.publishableKey) {
+      stripe = Stripe(cfg.publishableKey);
+      const { paymentIntent } = await stripe.retrievePaymentIntent(returned);
+      // Stripe is the authority on what happened, not the redirect_status in
+      // the URL, which a shopper can edit.
+      return showRedirectResult(paymentIntent);
+    }
+  }
+  if (!cartId) { $('lines').innerHTML = emptyCartHtml();
+                 $('toPayment').disabled = true; return; }
+
+  const [cfg, cart, prods] = await Promise.all([
+    fetch('/shop/config').then(r=>r.json()),
+    fetch('/shop/cart/' + cartId).then(r=>r.json()),
+    fetch('/shop/products').then(r=>r.json())
+  ]);
+  products = prods;
+
+  if (!cfg.publishableKey) {
+    $('lines').innerHTML = '<div class="muted">Stripe not configured.</div>';
+    $('toPayment').disabled = true; return;
+  }
+  stripe = Stripe(cfg.publishableKey);
+
+  const items = cart.items ?? [];
+  if (!items.length) {
+    // An empty cart is not necessarily an empty basket. Checkout clears the
+    // cart once an order exists, so a shopper who reached the payment step and
+    // wandered off comes back to one — with an order still waiting to be paid.
+    // Refusing here strands them: the order is live, the payment intent is
+    // open, and the page tells them they have nothing to buy.
+    //
+    // Asking the module is safe. Checking out an empty cart either resumes the
+    // pending order it already produced, or is rejected — it cannot create a
+    // new order out of nothing.
+    const resumed = await resumeOrder();
+    if (!resumed) {
+      $('lines').innerHTML = emptyCartHtml();
+      $('toPayment').disabled = true;
+    }
+    return;
+  }
+
+  let sub = 0;
+  $('lines').innerHTML = items.map(it => {
+    const found = find(it.variantId);
+    const cents = (found?.priceCents ?? 0) * it.quantity;
+    sub += cents;
+    return `<div class="line"><span>${found ? found.title : 'Item'} ×${it.quantity}</span>
+            <span>${money(cents)}</span></div>`;
+  }).join('') +
+  `<div class="line muted"><span>Tax &amp; shipping</span><span>calculated at payment</span></div>
+   <div class="line total"><span>Subtotal</span><span>${money(sub)}</span></div>`;
+}
+
+
+// Renders the outcome of a redirect-based payment. `succeeded` and
+// `processing` are both wins for the shopper — some methods settle
+// asynchronously, and the order moves to paid when the webhook lands either
+// way — so only a genuine failure sends them back to the form.
+function showRedirectResult(pi) {
+  if (!pi) { location.replace('/checkout'); return; }
+  if (pi.status === 'succeeded' || pi.status === 'processing') {
+    try { localStorage.removeItem('fl_cart'); } catch {}
+    $('main').innerHTML =
+      `<div class="done" style="grid-column:1/-1">
+         <div class="tick">\u2713</div>
+         <h1>${pi.status === 'succeeded' ? 'Payment received' : 'Payment processing'}</h1>
+         <p class="sub">${pi.status === 'succeeded'
+           ? 'Your payment is confirmed. The order is being prepared.'
+           : 'Your provider is still settling this payment. The order updates as soon as it clears.'}</p>
+         <p style="margin-top:26px"><a href="/" style="color:var(--brand)">Back to the store</a></p>
+       </div>`;
+    return;
+  }
+  // requires_payment_method means they cancelled or it was declined — drop
+  // them back on a clean checkout rather than a dead-end screen.
+  location.replace('/checkout');
+}
+
+// Cart items store only variantId and quantity — price lives on the variant,
+// and the authoritative total comes back from checkout. This is display only.
+function find(vid) {
+  for (const p of products) {
+    const v = (p.variants ?? []).find(v => v.id === vid);
+    if (v) return { title: p.title + (v.optionValues?.Size ? ' — ' + v.optionValues.Size : ''),
+                    priceCents: v.priceCents ?? 0 };
+  }
+  return null;
+}
+
+
+// Picks up an order that was created but never paid, and drops the shopper
+// straight at the payment step — the address was captured when the order was
+// made, so asking for it again would be asking twice.
+async function resumeOrder() {
+  try {
+    const r = await fetch('/shop/checkout', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cartId, shippingAddress: addr() })
+    });
+    if (!r.ok) return false;
+    const out = await r.json();
+    if (!out.clientSecret || !out.order) return false;
+
+    clientSecret = out.clientSecret;
+    orderId = out.order.id;
+    const o = out.order;
+    $('lines').innerHTML =
+      `<div class="line"><span>Subtotal</span><span>${money(o.subtotalCents)}</span></div>
+       <div class="line"><span>Tax</span><span>${money(o.taxCents)}</span></div>
+       <div class="line"><span>Shipping</span><span>${o.shippingCents ? money(o.shippingCents) : 'Free'}</span></div>
+       <div class="line total"><span>Total</span><span>${money(o.totalCents)}</span></div>`;
+
+    $('step1').classList.remove('on');
+    $('toPayment').disabled = true;
+    $('toPayment').textContent = 'Order ready \u2713';
+    $('step2').classList.add('on');
+    $('pay').textContent = 'Pay ' + money(o.totalCents);
+    elements = stripe.elements({ clientSecret, appearance: { theme: 'night',
+      variables: { colorPrimary: '#FF5B32', colorBackground: '#141319', borderRadius: '6px' } } });
+    elements.create('payment', { layout: 'tabs' }).mount('#stripeBox');
+    $('sub') && ($('sub').textContent = 'Picking up where you left off.');
+    return true;
+  } catch { return false; }
+}
+
+$('toPayment').onclick = async () => {
+  const b = $('toPayment'); b.disabled = true; b.textContent = 'Creating order…';
+  try {
+    const r = await fetch('/shop/checkout', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ cartId, shippingAddress: addr() })
+    });
+    const out = await r.json();
+    if (!r.ok) throw new Error(out.error ?? ('checkout ' + r.status));
+
+    clientSecret = out.clientSecret;
+    orderId = out.order?.id;
+    if (!clientSecret) throw new Error('no client secret returned');
+
+    const o = out.order;
+    $('lines').innerHTML =
+      `<div class="line"><span>Subtotal</span><span>${money(o.subtotalCents)}</span></div>
+       ${o.discountCents ? `<div class="line"><span>Discount</span><span>-${money(o.discountCents)}</span></div>` : ''}
+       <div class="line"><span>Tax</span><span>${money(o.taxCents)}</span></div>
+       <div class="line"><span>Shipping</span><span>${o.shippingCents ? money(o.shippingCents) : 'Free'}</span></div>
+       <div class="line total"><span>Total</span><span>${money(o.totalCents)}</span></div>`;
+
+    elements = stripe.elements({ clientSecret, appearance: { theme:'night',
+      variables:{ colorPrimary:'#FF5B32', colorBackground:'#141319', borderRadius:'6px' } } });
+    elements.create('payment', { layout:'tabs' }).mount('#stripeBox');
+
+    $('step1').classList.remove('on');
+    $('step2').classList.add('on');
+    b.textContent = 'Shipping to ' + $('city').value + ' \u2713';
+    $('pay').textContent = 'Pay ' + money(o.totalCents);
+    $('step2').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) {
+    $('err').textContent = e.message;
+    b.disabled = false; b.textContent = 'Continue to payment';
+  }
+};
+
+$('pay').onclick = async () => {
+  const b = $('pay'); b.disabled = true; b.textContent = 'Processing…';
+  $('err').textContent = '';
+  // return_url is required whenever the shopper picks a redirect-based method
+  // (Affirm, Cash App Pay, bank) — Stripe rejects the confirmation without it,
+  // even though `redirect: 'if_required'` keeps card payments inline and never
+  // actually navigates. Coming back here re-reads the intent from the URL.
+  const { error } = await stripe.confirmPayment({
+    elements, redirect:'if_required',
+    confirmParams: { return_url: window.location.href }
+  });
+  if (error) {
+    $('err').textContent = error.message;
+    b.disabled = false; b.textContent = 'Pay';
+    return;
+  }
+  try { localStorage.removeItem('fl_cart'); } catch {}
+  $('main').innerHTML =
+    `<div class="done" style="grid-column:1/-1">
+       <div class="tick">✓</div>
+       <h1>Payment received</h1>
+       <p class="sub">Stripe confirmed the charge. The webhook moves the order to
+          <code>paid</code> and the worker decrements stock.</p>
+       <p class="muted">Order <code>${orderId ?? ''}</code></p>
+       <p style="margin-top:26px"><a href="/" style="color:var(--brand)">Back to the store</a></p>
+     </div>`;
+};
+
+boot();
+</script>

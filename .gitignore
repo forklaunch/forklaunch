@@ -1,0 +1,9 @@
+node_modules
+
+# Runtime configuration. This app takes its Stripe keys, HMAC secret and admin
+# token from the environment — see the header of server.mjs — so nothing
+# sensitive should ever land in the tree. Ignoring these anyway means a stray
+# .env from a debugging session cannot be committed by accident.
+.env
+.env.*
+*.log
