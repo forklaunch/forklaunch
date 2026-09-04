@@ -282,7 +282,9 @@ export const SNAPSHOT = function () {
   for (const [sel, nameOf] of [['header,[role=banner]', 'banner'], ['nav,[role=navigation]', 'navigation'],
     ['main,[role=main]', 'main'], ['footer,[role=contentinfo]', 'contentinfo'],
     ['form[role=search],[role=search]', 'search']]) {
-    if ([...document.querySelectorAll(sel)].some(visible)) landmarks.push(nameOf);
+    // A landmark inside a vendor widget (Yotpo's review-search box is a
+    // role=search) belongs to the vendor, not to the page's chrome.
+    if ([...document.querySelectorAll(sel)].some((el) => visible(el) && !vendorOf(el))) landmarks.push(nameOf);
   }
 
   // ---- media -------------------------------------------------------------
@@ -310,9 +312,11 @@ export const SNAPSHOT = function () {
     // Background images are how storefronts ship most of their art, and they
     // never appear in document.images. Counting them separately stops a clone
     // that lost every hero from scoring the same as one that lost none.
+    // Vendor widgets' own art (Yotpo's 13 review borders on gorillamind.com)
+    // is not the storefront's art; counted out so the floor is the theme's.
     backgroundImages: [...document.querySelectorAll('*')].filter((el) => {
       const b = getComputedStyle(el).backgroundImage;
-      return b && b !== 'none' && b.includes('url(');
+      return b && b !== 'none' && b.includes('url(') && !vendorOf(el);
     }).length
   };
 

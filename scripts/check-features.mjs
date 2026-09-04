@@ -100,7 +100,8 @@ function harnessFail(msg, hint) {
 //    feature keys (inventory.mjs featureKey / hrefKey).
 // 8: templateId / templateVaries in the live requirement.
 // 9: headingDynamic / dynamic flags (recommendation & upsell content).
-const REQUIREMENT_SCHEMA = 9;
+// 10: landmarks and background counts exclude vendor widgets.
+const REQUIREMENT_SCHEMA = 10;
 
 const results = [];
 const check = (name, pass, detail = '') => results.push({ name, pass: !!pass, state: pass ? 'PASS' : 'FAIL', detail });
