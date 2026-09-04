@@ -401,8 +401,8 @@ async function main() {
       'start it first: bun catalog/heroserve-fl.ts <site> <port>');
   }
 
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-  const page = await ctx.newPage();
+  let ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  let page = await ctx.newPage();
 
   const routes = await chooseRoutes(page);
   console.log(`\nroutes: ${routes.join(', ')}`);
@@ -424,9 +424,31 @@ async function main() {
     try {
       got = await inventoryRoute(page, cloneUrlFor(route));
     } catch (e) {
-      await browser.close();
-      harnessFail(`could not load the clone page ${cloneUrlFor(route)} — ${e.message}`,
-        'is the storefront still serving?');
+      // A crashed renderer (a page that ate the machine's memory — seen as a
+      // 4GB headless process on deathwishcoffee.com) kills the tab, not the
+      // storefront. Retry once in a fresh context; if it crashes again, that
+      // PAGE is the defect and the other routes still get judged. Anything
+      // that is not a crash means the server is gone: a harness failure.
+      if (/crash/i.test(String(e.message))) {
+        try { await ctx.close(); } catch {}
+        ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+        page = await ctx.newPage();
+        try {
+          got = await inventoryRoute(page, cloneUrlFor(route));
+        } catch (e2) {
+          const L0 = route === '/' ? 'home' : route;
+          check(`${L0}: page renders`, false, `the browser crashed loading this page twice (${String(e2.message).slice(0, 60)}) — runaway script or media`);
+          defect('page', `${route} crashes the browser (out of memory)`, null, route);
+          try { await ctx.close(); } catch {}
+          ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+          page = await ctx.newPage();
+          continue;
+        }
+      } else {
+        await browser.close();
+        harnessFail(`could not load the clone page ${cloneUrlFor(route)} — ${e.message}`,
+          'is the storefront still serving?');
+      }
     }
     const L = route === '/' ? 'home' : route;
     const req = want ? want[route] : null;
