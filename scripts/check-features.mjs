@@ -172,7 +172,7 @@ async function redeclaredByVendor(page, route, ident, origins, hosts, storeHost)
     if (d.origin) {
       try {
         const o = new URL(d.origin); const h = o.host.replace(/^www\./, '');
-        if (h !== storeHost && (h !== 'cdn.shopify.com' || /\/extensions\//.test(o.pathname))) return h;
+        if (h !== storeHost && (h !== 'cdn.shopify.com' || /\/(extensions|shopifycloud)\//.test(o.pathname))) return h;
       } catch {}
     }
     const t = d.text.slice(0, 6000);
@@ -568,7 +568,11 @@ async function main() {
         try {
           const o = new URL(origins[fm[1]]);
           const oh = o.host.replace(/^www\./, '');
-          if (oh !== storeHost && (oh !== 'cdn.shopify.com' || /\/extensions\//.test(o.pathname))) return true;
+          // cdn.shopify.com hosts the merchant's theme files under /s/files/…,
+          // app scripts under /extensions/, and Shopify's own platform code
+          // (web pixels, consent, checkout) under /shopifycloud/. The last
+          // two are third parties to the capture — by contract of the path.
+          if (oh !== storeHost && (oh !== 'cdn.shopify.com' || /\/(extensions|shopifycloud)\//.test(o.pathname))) return true;
         } catch {}
       }
       // On the clone, third-party scripts we chose to localise live under
