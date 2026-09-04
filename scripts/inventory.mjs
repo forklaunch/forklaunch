@@ -250,7 +250,7 @@ export const SNAPSHOT = function () {
   // The feature is that the block exists and is filled. Anything inside such
   // a container is tagged with the container so the gate compares presence,
   // not names. Matched on the container's own id/class/tag — evidence.
-  const DYNAMIC_SIG = /recommend|upsell|also-like|complete-the-look|complete-your|frequently-bought|related-products|cross-sell|you-may|bundle-and-save|recently-viewed/i;
+  const DYNAMIC_SIG = /recommend|upsell|also-like|complete-the-look|complete-your|frequently-bought|related-products|cross-sell|you-may|bundle-and-save|recently-viewed|cart-drawer|drawer-cart|mini-cart|cart__drawer|cart-notification/i;
   const dynamicOf = (el) => {
     let n = el, d = 0;
     while (n && n.nodeType === 1 && d++ < 12) {
@@ -269,7 +269,7 @@ export const SNAPSHOT = function () {
   // active. Live and clone sit on different slides at different moments, so
   // slide content is judged by "the carousel has content", never slide by
   // slide. Matched on the slide libraries' own class names — evidence.
-  const SLIDE_SIG = /keen-slider__slide|swiper-slide|slick-slide|flickity-cell|splide__slide|glide__slide|carousel__slide|carousel-item|slider__slide|\bslide\b/i;
+  const SLIDE_SIG = /slide|swiper-slide|slick-slide|flickity-cell|splide__slide|glide__slide|carousel__slide|carousel-item/i;
   const inSlide = (el) => { let n = el, d = 0; while (n && n.nodeType === 1 && d++ < 8) { if (SLIDE_SIG.test(typeof n.className === 'string' ? n.className : '')) return true; n = n.parentElement; } return false; };
   const headingSlide = {};
   for (const h of document.querySelectorAll('h1,h2,h3,h4,[role="heading"]')) {
@@ -395,7 +395,11 @@ export const SNAPSHOT = function () {
   // theme, on a headless React PDP, and on a bespoke one.
   const optionGroups = [];
   const addForms = [...document.querySelectorAll('form')].filter((f) => /\/cart\/add/.test(f.getAttribute('action') || ''));
-  const scopes = addForms.length ? addForms : [document.body];
+  // Variant pickers live in add-to-cart forms. Without one on the page there
+  // are none — a collection page's filter facets (colour, size, "bundle
+  // savings") are filters, asserted separately, not pickers. Scanning the
+  // whole body on such pages reported brooklinen's facets as 8 missing pickers.
+  const scopes = addForms;
   // A picker inside the cart drawer (an upsell's variant select) exists only
   // once the cart has an item. Recorded so the gate can treat it as a
   // cart-state feature: provable with a module, not in browse-only mode.

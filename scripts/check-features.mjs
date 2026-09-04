@@ -102,7 +102,8 @@ function harnessFail(msg, hint) {
 // 9: headingDynamic / dynamic flags (recommendation & upsell content).
 // 10: landmarks and background counts exclude vendor widgets.
 // 11: headingSlide (carousel slide content).
-const REQUIREMENT_SCHEMA = 11;
+// 12: pickers only inside add-to-cart forms; slide/dynamic signatures widened.
+const REQUIREMENT_SCHEMA = 12;
 
 const results = [];
 const check = (name, pass, detail = '') => results.push({ name, pass: !!pass, state: pass ? 'PASS' : 'FAIL', detail });
