@@ -180,10 +180,17 @@ const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
     // top of that range), not a flat constant. The old estimate ignored page
     // count entirely, so it read ~110s for a run that genuinely takes 10x
     // that — the single most misleading number the tool printed.
-    const perPage = probe.imgs > 120 ? 35 : 25;
+    // Measured, not guessed: graza.co (image-heavy, 44 trackers, never goes
+    // network-idle) ran ~37s/page sequential. The old 25/35 constants printed
+    // ~620s for a run that took 18 minutes — and that is the number a person
+    // watching the terminal remembers. Pages now capture in a worker pool
+    // (crawl.js CONC, default 3 in normal mode) which changes no per-page wait,
+    // so wall time is ceil(pages / workers) * perPage, not pages * perPage.
+    const perPage = probe.imgs > 120 ? 40 : 30;
+    const workers = Math.max(1, Number(process.env.FL_CONCURRENCY) || 3);
 
     r.expect = {
-      seconds: Math.round(20 + pages * perPage),
+      seconds: Math.round(20 + Math.ceil(pages / workers) * perPage),
       pages,
       browsable: r.verdict !== 'RED' && hasNav,
     };

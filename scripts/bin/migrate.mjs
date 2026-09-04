@@ -11,8 +11,18 @@
  * Steps:
  *   1. capture   — headless browser loads the store, runs its JS, saves the
  *                  post-render DOM + every asset, rewrites URLs to local paths
- *   2. serve     — static server on 127.0.0.1 so you can view the clone
- *   3. measure   — (optional) scores local vs live fidelity for iteration
+ *   2. catalog   — pull the real product data and normalise it
+ *   3. finish    — verify against the LIVE site and repair until the clone has
+ *                  every feature the live storefront has, then serve
+ *
+ * Step 3 is why this is one command rather than three. Capture, verify and
+ * repair all existed and all worked; nothing chained them, so every migration
+ * needed a person who remembered the right order — and the failures they catch
+ * are silent, because a broken capture serves 200s and looks perfectly fine
+ * right up until a client is looking at the screen. bin/finish.mjs runs the
+ * feature gate, applies the repair each reported defect maps to, and re-gates,
+ * until the missing-feature list is empty or the budget runs out. It stops on
+ * a LIST, never on a percentage or a round count.
  *
  * This reproduces what a visitor SEES. It does not recover the store's backend,
  * inventory counts, or third-party app data (reviews, loyalty) — those require
@@ -23,6 +33,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { ensureDeps } from './bootstrap.mjs';
+import { checkPrereqs, refuse } from '../check-prereqs.mjs';
 import { existsSync as _exists } from 'node:fs';
 import { execSync } from 'node:child_process';
 
@@ -54,7 +65,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
 
 function parseArgs(argv) {
-  const a = { serve: true, measure: false, out: null, url: null, clean: false, pages: 20, noPreflight: false, noCatalog: false, server: null, secret: null, api: null, noVerify: false };
+  const a = { serve: true, measure: false, out: null, url: null, clean: false, pages: 20, noPreflight: false, noCatalog: false, server: null, secret: null, api: null, noVerify: false, rounds: 5, budgetMin: 30, port: '4173', stripePk: null, paypalId: null, allowRecapture: true };
   for (let i = 0; i < argv.length; i++) {
     const t = argv[i];
     if (t === '--no-serve') a.serve = false;
@@ -64,6 +75,15 @@ function parseArgs(argv) {
     else if (t === '--no-preflight') a.noPreflight = true;
     else if (t === '--no-catalog') a.noCatalog = true;
     else if (t === '--no-verify') a.noVerify = true;
+    else if (t === '--rounds') a.rounds = parseInt(argv[++i], 10) || 5;
+    else if (t === '--budget-min') a.budgetMin = parseInt(argv[++i], 10) || 30;
+    else if (t === '--port') a.port = argv[++i];
+    else if (t === '--stripe-pk') a.stripePk = argv[++i];
+    else if (t === '--paypal-id') a.paypalId = argv[++i];
+    // A re-crawl is hours of work and sustained load on the merchant's origin.
+    // On by default here because this command is already crawling that store
+    // with the operator's intent — but it has to stay refusable.
+    else if (t === '--no-recapture') a.allowRecapture = false;
     else if (t === '--server') a.server = argv[++i];
     else if (t === '--api') a.api = argv[++i];
     else if (t === '--secret') a.secret = argv[++i];
@@ -127,7 +147,10 @@ function runCapture(domain, outdir, clean, pages, apiBase) {
 
 const args = parseArgs(process.argv.slice(2));
 if (!args.url) {
-  console.error('usage: node bin/migrate.mjs <store-url> [--out DIR] [--pages N] [--single] [--api URL] [--server URL] [--secret KEY] [--no-catalog] [--no-verify] [--no-serve] [--measure] [--clean]');
+  console.error('usage: node bin/migrate.mjs <store-url> [--out DIR] [--pages N] [--single] [--clean]\n' +
+                '                              [--port 4173] [--rounds 5] [--budget-min 30] [--no-recapture]\n' +
+                '                              [--api URL] [--server URL] [--secret KEY] [--stripe-pk pk_…] [--paypal-id …]\n' +
+                '                              [--no-catalog] [--no-verify] [--no-serve] [--measure]');
   process.exit(2);
 }
 
@@ -141,19 +164,34 @@ console.log(`  output: ${outdir}\n`);
 // self-install on first run so the receiver has no setup step
 ensureDeps();
 
+// Refuse to start without the tools that do NOT self-install. Each of them
+// fails silently: no chromium and the gates emit nothing (which reads as "no
+// failures"), no ffmpeg and check-budget's height probe returns 0 and PASSES,
+// no bun and the storefront never serves. Only what this particular run will
+// actually use is required — a capture-only run genuinely does not need bun.
+{
+  const need = ['playwright'];
+  if (!args.noCatalog || !args.noVerify) need.push('bun');
+  if (!args.noVerify) need.push('ffmpeg');
+  if (args.noVerify && args.serve) need.push('python');
+  const missing = await checkPrereqs(need);
+  if (missing.length) refuse(missing);
+  console.log(`   ✓ prerequisites: ${need.join(', ')}`);
+}
+
 // Pre-flight first: say what to expect BEFORE doing the work, so a hard store
 // is announced up front rather than explained away afterwards.
 let preflightStack = null;
 if (!args.noPreflight) {
-  console.log('0/‌3  assessing storefront…');
+  console.log('0/‌4  assessing storefront…');
   const preflightOut = await runPreflight(domain);
   const stackMatch = /^\s*stack:\s*(.+)$/m.exec(preflightOut);
   if (stackMatch) preflightStack = stackMatch[1].trim();
 }
 
 console.log(args.pages === 1
-  ? '1/‌3  capturing homepage (headless render + assets)…'
-  : `1/‌3  crawling storefront (up to ${args.pages} pages, headless render + assets)…`);
+  ? '1/‌4  capturing homepage (headless render + assets)…'
+  : `1/‌4  crawling storefront (up to ${args.pages} pages, headless render + assets)…`);
 const cap = await runCapture(domain, outdir, args.clean, args.pages, args.api);
 if (!cap.ok) {
   console.error(`\n✗ capture failed: ${cap.reason}`);
@@ -169,7 +207,7 @@ const indexPath = join(outdir, 'site', 'index.html');
 if (!existsSync(indexPath)) { console.error('✗ no index.html produced'); process.exit(1); }
 
 if (args.measure) {
-  console.log('\n2/‌3  measuring fidelity vs live…');
+  console.log('\n2/‌4  measuring fidelity vs live…');
   try {
     await run('node', [join(ROOT, 'measure.js'), domain, indexPath,
                         join(outdir, 'measure.json')]);
@@ -230,25 +268,51 @@ try {
   console.error(`   manifest step failed: ${e.message}`);
 }
 
-// Self-verification. Every capture reports its own condition rather than
-// relying on someone remembering to check. loop_test walks the actual purchase
-// journey (home -> nav -> collection -> product -> add to cart); repeated
-// regressions reached the user because earlier checks only counted images and
-// links and never clicked anything.
-if (!args.noVerify) {
-  console.log('\n▸ verifying…');
-  try {
-    await run('node', [join(ROOT, 'loop_test.js'), outdir]);
-  } catch (e) {
-    console.error(`   (verification could not run: ${e.message})`);
+// ---- verify and repair, then serve ---------------------------------------
+// This is the half that used to be a checklist somebody ran by hand, and the
+// reason a migration could not be one-shot. finish.mjs discovers this theme's
+// controls, serves the capture through the same bridge that will ship, runs
+// the feature gate against the LIVE storefront, applies the repair each
+// reported defect maps to, and re-gates — stopping when the missing-feature
+// list is EMPTY, not at a round count and not at a score.
+//
+// It also serves, so there is exactly one server in the picture: the gates
+// measure the same process the viewer will open, rather than one that merely
+// resembles it. loop_test.js used to run here; the feature gate subsumes it
+// (it walks the same journey and asks harder questions of it) and loop_test
+// remains as a standalone tool.
+if (args.noVerify) {
+  if (!args.serve) {
+    console.log(`\n✓ done. Serve later with:\n  python3 ${join(ROOT, 'serve.py')} ${args.port} ${join(outdir, 'site')}\n`);
+    process.exit(0);
   }
-}
+  console.log(`\n3/‌4  serving locally (UNVERIFIED — --no-verify was passed)…`);
+  console.log(`   open  http://127.0.0.1:${args.port}\n   (Ctrl-C to stop)\n`);
+  await run('python3', [join(ROOT, 'serve.py'), args.port, join(outdir, 'site')]);
+} else {
+  console.log(`\n3/‌4  verifying against the live storefront, and repairing…`);
+  const finishArgs = [join(ROOT, 'bin', 'finish.mjs'), join(outdir, 'site'),
+    '--live', `https://${domain}`, '--port', String(args.port),
+    '--out', outdir, '--rounds', String(args.rounds), '--budget-min', String(args.budgetMin)];
+  if (args.allowRecapture) finishArgs.push('--allow-recapture');
+  if (args.server) finishArgs.push('--module', args.server);
+  if (args.secret) finishArgs.push('--hmac', args.secret);
+  if (args.stripePk) finishArgs.push('--stripe-pk', args.stripePk);
+  if (args.paypalId) finishArgs.push('--paypal-id', args.paypalId);
+  if (args.serve) finishArgs.push('--serve-after');
 
-if (!args.serve) {
-  console.log(`\n✓ done. Serve later with:\n  python3 ${join(ROOT, 'serve.py')} 4173 ${join(outdir, 'site')}\n`);
-  process.exit(0);
+  // finish.mjs's exit code IS the migration's exit code, and its three values
+  // mean genuinely different things: 0 verified, 1 features still missing (the
+  // report names them), 2 the gates could not run so nothing was proved.
+  // Collapsing 2 into either of the others is the exact failure this rewrite
+  // exists to prevent.
+  const code = await new Promise((res) => {
+    const p = spawn('node', finishArgs, { stdio: 'inherit' });
+    p.on('exit', (c) => res(c ?? 1));
+    p.on('error', () => res(2));
+  });
+  if (code === 0 && !args.serve) {
+    console.log(`\n✓ verified. Serve later with:\n  bun ${join(ROOT, 'catalog', 'heroserve-fl.ts')} ${join(outdir, 'site')} ${args.port}\n`);
+  }
+  process.exit(code);
 }
-
-console.log('\n3/‌3  serving locally…');
-console.log(`   open  http://127.0.0.1:4173\n   (Ctrl-C to stop)\n`);
-await run('python3', [join(ROOT, 'serve.py'), '4173', join(outdir, 'site')]);

@@ -204,4 +204,8 @@ async function main() {
   process.exit(failed.length ? 1 : 0);
 }
 
-main().catch((e) => { console.error('check-budget crashed:', e.message); process.exit(2); });
+// HARNESS-FAIL, not FAIL: the repair loop must be able to tell "the gate broke"
+// from "the capture is broken". Reading the first as the second sent a good
+// storefront round a repair loop it did not need; reading it as a pass shipped
+// a broken one.
+main().catch((e) => { console.error('\nHARNESS-FAIL: check-budget crashed — ' + e.message); process.exit(2); });

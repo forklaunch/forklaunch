@@ -30,10 +30,18 @@
  * to the original merchant's analytics from a client's machine. They are
  * excluded here rather than blocked later, so the replica needs no policy at
  * runtime and cannot be broken by one.
+ *
+ * IDEMPOTENT. Inside a repair loop the browser pass has to run every time —
+ * the point is to see what the page requests NOW, after the last repair — but
+ * the network half does not. A marker records every URL already stored and
+ * every URL already found dead, so the second pass re-drives the pages, finds
+ * that everything it discovered is accounted for, rewrites nothing, and exits
+ * in seconds instead of re-downloading a theme's whole bundle. It also stops a
+ * dead CDN reference from costing a fresh round of timeouts on every round.
  */
 import { chromium } from 'playwright';
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, extname, basename } from 'node:path';
 
 const SITE = process.argv[2];
@@ -74,8 +82,21 @@ const isText = (buf) => {
   return true;
 };
 
+/**
+ * Walk the capture's files.
+ *
+ * Skips this tool's own marker files, and that is not tidiness — it is a bug
+ * fix. The rewrite pass below replaces every external URL it finds in every
+ * text file under the capture. The marker is a text file under the capture,
+ * and its KEYS are external URLs. So the first run happily rewrote its own
+ * memory into `{"/_a/ext/foo.js": "/_a/ext/foo.js"}` — after which no lookup
+ * could ever match, every later round re-downloaded all 80 subresources, and
+ * the summary said "reused 0 already local" on a capture where everything was
+ * already local. An idempotence marker that destroys itself is worse than none.
+ */
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
+    if (name.startsWith('.fl-')) continue;
     const p = join(dir, name);
     statSync(p).isDirectory() ? walk(p, out) : out.push(p);
   }
@@ -136,11 +157,27 @@ if (!external.size) process.exit(0);
 const outDir = join(SITE, '_a', 'ext');
 mkdirSync(outDir, { recursive: true });
 
+const MARKER = join(SITE, '_a', '.fl-runtime.json');
+let marker = { fetched: {}, dead: {} };
+try { if (existsSync(MARKER)) marker = { fetched: {}, dead: {}, ...JSON.parse(readFileSync(MARKER, 'utf8')) }; } catch (_) {}
+/** Same reasoning as localize-fonts: remembered, not blacklisted forever. */
+const DEAD_TTL_MS = 6 * 60 * 60 * 1000;
+
 const EXT_FOR = { script: '.js', stylesheet: '.css', font: '.woff2', image: '.img', media: '.bin' };
 const localFor = new Map();
 let got = 0, failed = 0;
 
+let reused = 0, knownDead = 0;
 for (const [u, type] of external) {
+  // Already stored, and the file is still there. Re-fetching it would produce
+  // byte-identical content under an identical content-addressed name.
+  const prior = marker.fetched[u];
+  if (prior && existsSync(join(SITE, prior.replace(/^\//, '')))) {
+    localFor.set(u, prior);
+    reused++;
+    continue;
+  }
+  if (marker.dead[u] && Date.now() - marker.dead[u].at < DEAD_TTL_MS) { knownDead++; continue; }
   try {
     const res = await fetch(u, { redirect: 'follow' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -151,12 +188,17 @@ for (const [u, type] of external) {
     const name = `${clean.replace(new RegExp(ext.replace('.', '\\.') + '$'), '')}.${hash}${ext}`;
     writeFileSync(join(outDir, name), bytes);
     localFor.set(u, `/_a/ext/${name}`);
+    marker.fetched[u] = `/_a/ext/${name}`;
+    delete marker.dead[u];
     got++;
   } catch (e) {
     // Left pointing at its origin: a working remote reference beats a local 404.
     failed++;
+    marker.dead[u] = { at: Date.now(), why: String(e.message).slice(0, 80) };
   }
 }
+
+try { writeFileSync(MARKER, JSON.stringify(marker, null, 1)); } catch (_) {}
 
 // Rewrite references. Both the absolute URL and its protocol-relative form
 // appear in captured CSS and JS.
@@ -174,4 +216,11 @@ for (const f of walk(SITE)) {
   if (s !== before) { writeFileSync(f, s); edits++; }
 }
 
-console.log(`fetched ${got}, failed ${failed}, rewrote ${edits} file(s) -> /_a/ext/`);
+// Reporting `reused` separately matters in a loop: on the second round the
+// right answer is "fetched 0" and a summary that cannot say why looks like a
+// repair that stopped working.
+console.log(`fetched ${got}, reused ${reused} already local, ` +
+  `${knownDead} already known dead, failed ${failed}, rewrote ${edits} file(s) -> /_a/ext/`);
+// Nothing new and nothing rewritten is the steady state. Say so, so the loop's
+// operator can see the repair has converged rather than stalled.
+if (!got && !edits) console.log('  converged — every subresource this page requests is already local');

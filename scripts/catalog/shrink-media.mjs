@@ -22,9 +22,26 @@
  * names so nothing that references them has to change. Anything that fails to
  * transcode is left exactly as it was: a slightly heavy video is a bad demo,
  * a corrupted one is a broken page.
+ *
+ * IDEMPOTENT, and that is not a nicety. This runs inside a repair loop that
+ * may call it several times in one migration. h264 is lossy: a file that has
+ * already been scaled to 720p and re-encoded at 1400k loses quality on every
+ * further pass while saving almost nothing, so a loop that ran this four times
+ * shipped visibly mushy video and called it a success. Two independent guards
+ * stop that:
+ *
+ *   1. the file's real height, straight from the container — the ground truth,
+ *      and correct even if every marker on disk is deleted;
+ *   2. a marker beside the assets recording what was already shrunk, keyed by
+ *      byte size so a file replaced by a later capture is not mistaken for one
+ *      that has already been processed.
+ *
+ * The marker is the fast path (ffprobe on 24 files is not free); the height
+ * check is the one that cannot be wrong.
  */
 import { execFileSync } from 'node:child_process';
-import { readdirSync, statSync, renameSync, unlinkSync, openSync, readSync, closeSync } from 'node:fs';
+import { readdirSync, statSync, renameSync, unlinkSync, openSync, readSync, closeSync,
+         existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const dir = process.argv[2];
@@ -43,7 +60,20 @@ function isMp4(fp) {
   } catch { return false; }
 }
 
+/** Ground truth from the container. The page cannot be asked, and the marker
+ *  can be stale — this can be neither. */
+function probeHeight(fp) {
+  try {
+    const out = execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0',
+      '-show_entries', 'stream=height', '-of', 'csv=p=0', fp], { encoding: 'utf8' });
+    return Number(out.trim().split('\n')[0]) || 0;
+  } catch { return 0; }
+}
+
 const assets = join(dir, '_a');
+const MARKER = join(assets, '.fl-shrunk.json');
+let marker = {};
+try { if (existsSync(MARKER)) marker = JSON.parse(readFileSync(MARKER, 'utf8')); } catch (_) {}
 const targets = [];
 for (const sub of ['other', 'video', 'img']) {
   let names = [];
@@ -55,7 +85,7 @@ for (const sub of ['other', 'video', 'img']) {
 }
 
 const mb = (b) => (b / 1048576).toFixed(1);
-let before = 0, after = 0, done = 0, skipped = 0, failed = 0;
+let before = 0, after = 0, done = 0, skipped = 0, failed = 0, alreadyDone = 0;
 
 console.log(`shrink-media: ${targets.length} video file(s) under ${assets}\n`);
 
@@ -66,6 +96,21 @@ for (const fp of targets) {
   // Anything already small is left alone; re-encoding it would only lose
   // quality for no meaningful saving.
   if (size < 1_500_000) { after += size; skipped++; continue; }
+
+  // Already done. Size-keyed: a recapture that replaced this content-addressed
+  // name with different bytes must NOT inherit the old file's marker.
+  const key = fp.slice(assets.length + 1);
+  const mark = marker[key];
+  if (mark && mark.size === size && mark.height <= HEIGHT) { after += size; alreadyDone++; continue; }
+
+  // The check that cannot be wrong. A 720p file re-encoded at 720p is pure
+  // quality loss, so height alone is enough to refuse the work — and it holds
+  // even on a capture whose marker was never written or was deleted.
+  const h = probeHeight(fp);
+  if (h && h <= HEIGHT) {
+    marker[key] = { size, height: h, at: Date.now() };
+    after += size; alreadyDone++; continue;
+  }
   if (DRY) { console.log(`  would shrink  ${mb(size)}MB  ${fp.split('/').pop()}`); after += size; continue; }
 
   const tmp = fp + '.shrunk.mp4';
@@ -88,6 +133,7 @@ for (const fp of targets) {
     // Refuse a "shrink" that grew, which happens on already-efficient files.
     if (newSize >= size) { unlinkSync(tmp); after += size; skipped++; continue; }
     renameSync(tmp, fp);          // keep the content-addressed name
+    marker[fp.slice(assets.length + 1)] = { size: newSize, height: HEIGHT, at: Date.now() };
     after += newSize;
     done++;
     console.log(`  ${mb(size).padStart(6)}MB -> ${mb(newSize).padStart(6)}MB  ${fp.split('/').pop().slice(0, 52)}`);
@@ -99,4 +145,10 @@ for (const fp of targets) {
   }
 }
 
-console.log(`\n  ${mb(before)}MB -> ${mb(after)}MB   (${done} shrunk, ${skipped} left alone, ${failed} failed)`);
+if (!DRY) { try { writeFileSync(MARKER, JSON.stringify(marker, null, 1)); } catch (_) {} }
+
+// `already at or below <h>p` is reported separately from `left alone`. In a
+// loop, "0 shrunk" on the second pass is the CORRECT outcome, and a summary
+// that cannot distinguish it from "nothing matched" makes a working repair
+// look like a broken one.
+console.log(`\n  ${mb(before)}MB -> ${mb(after)}MB   (${done} shrunk, ${alreadyDone} already at or below ${HEIGHT}p, ${skipped} left alone, ${failed} failed)`);

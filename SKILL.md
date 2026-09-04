@@ -11,14 +11,100 @@ commerce backend underneath it.
 
 ## Running it
 
-One command. Dependencies install themselves on first run (~150MB Chromium
-download, once).
+One command. Three prerequisites must already be on the machine — bun, ffmpeg,
+and Playwright's Chromium (`cd scripts && npm install && npx playwright install
+chromium`, a ~150MB download, once). The command checks all three first and
+REFUSES to start if one is missing, printing the exact install line; it never
+installs anything itself. `MANUAL.md` has the same three lines for a person.
 
 ```bash
 node scripts/bin/migrate.mjs <store-url> --clean
 ```
 
-It captures, then serves at **http://127.0.0.1:4173**. Give the user that URL.
+It captures, **verifies against the live storefront, repairs what it finds**,
+then serves at **http://127.0.0.1:4173**. Give the user that URL.
+
+One command is the whole point. Capture, verify and repair all existed before
+and all worked; nothing chained them, so every migration needed somebody who
+remembered the right order — and the defects they catch are silent, because a
+broken capture serves 200s and looks perfect until a client is at the screen.
+
+### How a link is judged present
+
+An internal link is identified by its destination path, never by its text. A
+product card's accessible name carries whatever sits inside it — a vendor's
+star rating, a sale badge, a price — and all of those legitimately differ
+between the live site and an offline clone. Same destination, same feature.
+Sale phrasing ("Original price:", "20% off") is stripped from every feature
+key for the same reason: it is a value, and values are not compared.
+
+### When the live site changes under you
+
+Shopify stamps every section with the template that rendered it. If the live
+page is served from a different template than the capture (an A/B test, or a
+theme change since the crawl), the gate reports one condition — `same template
+as live` — routes it to a targeted recapture of that route, and skips the
+section/control/picker comparison there rather than reporting phantom
+defects. If two live samples disagree with each other, the store is A/B
+testing and the structural comparison is skipped with that reason. Both are
+named in the report; neither is a capture failure.
+
+### What the server does that a static server cannot
+
+`catalog/heroserve-fl.ts` is not a file server. Two things it does are the
+difference between a clone that renders and one whose theme JavaScript dies
+mid-initialisation:
+
+- **Shopify's runtime API** (`catalog/shopify-runtime.ts`): `/products/<handle>.js`
+  and `.json`, `/cart.js`, `/cart/add.js` and friends, `?sections=` and
+  `?section_id=` fragments, `/recommendations/products.json`,
+  `/search/suggest.json`, and Shopify's telemetry pings. Answered from the
+  catalog pull and the captured pages; a local in-memory cart when no module
+  is wired. Every Liquid theme assumes these exist.
+- **Dead overlays**: a third-party pop-up captured in its open state (a promo
+  scratch card, a newsletter form) can never be closed on the clone because its
+  vendor script is blocked. The served shim removes known pop-up vendor roots
+  and any fixed element at the browser's maximum z-index covering most of the
+  viewport, and marks them `data-fl-dead-overlay`.
+
+### What "done" means
+
+Not a percentage, and not a round count. The run finishes when the
+**missing-feature list is empty**.
+
+`scripts/check-features.mjs` visits the LIVE storefront, enumerates what it has
+— sections, images, fonts, controls by role and accessible name, nav
+destinations, variant pickers — then visits the clone and requires each one to
+be present and to RESPOND. The specification is the merchant's own site, so it
+updates itself when they change it, and features nobody anticipated are covered
+without anyone writing an assertion for them.
+
+It asserts a feature EXISTS and RESPONDS. It never asserts a value matches.
+Live stock counts, rotating banners, "N people viewing", A/B buckets and
+personalisation legitimately differ, and three mechanisms keep them out of the
+report: the live page is sampled twice and only what both loads contain becomes
+a requirement; every run of digits in a comparison key collapses to `#`, so
+"4540 Reviews" and "4561 Reviews" are the same feature; and a control that does
+nothing on the live site is not a feature and is never held against the clone.
+
+`--rounds` and `--budget-min` are **crash guards, not goals**. Hitting either is
+reported as "ran out of budget with N features still missing", never as success.
+A round that makes the score worse is rolled back rather than built on.
+
+### Exit codes mean three different things
+
+| Code | Meaning |
+|---|---|
+| 0 | every live feature is present and responding |
+| 1 | features still missing — the report names each one and its repair |
+| 2 | **harness failure**: the gates could not run, so nothing was proved |
+
+2 exists because of a real incident. Playwright's browser was not installed, the
+gates produced no output, and the loop read "no assertions" as "nothing to
+repair" and declared the storefront needed a person. It was one `npx` command
+from green. **A gate that cannot run is not a gate that passed** — every gate
+now prints a line beginning `HARNESS-FAIL` and exits 2 when it could not run,
+and nothing downstream is allowed to conflate that with a fidelity failure.
 
 ### Pre-flight comes first — read it out
 
@@ -56,6 +142,12 @@ Useful flags:
 | `--no-serve` | capture only |
 | `--no-catalog` | skip the product-data pull (see Requirements — needs bun) |
 | `--measure` | score fidelity vs live (dev signal, not the deliverable) |
+| `--no-verify` | capture only, skip the feature gate and the repair loop. The clone is then **unverified** — say so when reporting. |
+| `--rounds N` | verify/repair round cap (default 5). A crash guard, not a target. |
+| `--budget-min N` | wall-clock cap on the verify/repair loop (default 30). Also a crash guard. |
+| `--no-recapture` | do not let the repair loop re-crawl to fill dead links. The re-crawl is targeted: it fetches exactly the dead paths the gate named (about a minute each), never the whole sitemap. It is on by default here because this command is already crawling that store, and off in `finish.mjs`. |
+| `--port N` | serve port (default 4173) |
+| `--stripe-pk`, `--paypal-id` | publishable keys; turn `/__fl/checkout` into a real card page |
 
 ### How long it takes, and why it looks stuck
 
@@ -71,6 +163,61 @@ usable and there is no resume. For a quick first look, use `--pages 3`
 Progress prints one line per captured page. Long silences during asset
 downloads are normal.
 
+### Finishing a capture you already have
+
+`migrate.mjs` runs this itself. Use it directly on an existing capture:
+
+```bash
+node scripts/bin/finish.mjs <outdir>/site --live https://the-store.com [--module <url> --hmac <secret>]
+```
+
+It discovers this theme's controls, serves the capture through the same bridge
+that ships, runs the feature gate, applies the repair each defect maps to, and
+re-gates until the list is empty. Defects map to repairs like this:
+
+| Defect | Repair |
+|---|---|
+| subresources still fetched from the internet | `catalog/localize-runtime.mjs` |
+| a brand typeface falling back | `catalog/localize-fonts.mjs` |
+| video over the decode budget | `catalog/shrink-media.mjs` |
+| an asset name the page asks for that the crawl saved under a hashed or query-suffixed name | resolved at serve time in `catalog/heroserve-fl.ts` |
+| a 404 on **our own** origin — the crawl rewrote the reference but never fetched the file (lazily-imported chunks) | `catalog/refetch-missing.mjs`, which finds the file by name on the live site and puts it where the clone was looking |
+| a dead internal link | a targeted re-crawl of exactly those paths (`crawl.js --only /a,/b`) — opt-in |
+| a vendor's inline snippet broken by the demo-mode link rewrite (`location.href="#" data-mirror-uncaptured=…` is a syntax error) | `catalog/fix-script-hrefs.mjs`, always run; `crawl.js` no longer rewrites inside `<script>` bodies |
+
+All four repair scripts are **idempotent**, which they had to become before a
+loop could run them repeatedly: `shrink-media` refuses a file already at or
+below the target height (h264 is lossy, and four passes shipped visibly mushy
+video), and the two localisers remember what they already fetched and what is
+already known unreachable instead of re-reporting "fetched 0, failed 8" every
+round.
+
+### Cart and checkout: not configured is not broken
+
+Without a ForkLaunch module behind the bridge, the cart and checkout gates
+report **SKIP**, not FAIL, and say what would prove them. They used to fail —
+`heroserve` swallows the connection error and answers `{item_count: 0}`, so an
+add-to-cart check saw 0 → 0 and called it broken. A red line nobody can act on
+teaches everyone to skim past red lines, and that is the one line that must
+never be skimmed when a real backend IS attached. `GET /__fl/health` on the
+served storefront reports `configured` and `reachable` separately.
+
+### Checkout interception is discovered, not assumed
+
+Add-to-cart interception works on every theme because `POST /cart/add.js` is a
+**contract**. Checkout has none, and used to be matched with `[name="checkout"],
+[href*="/checkout"], [href="/cart"]` — an accurate description of Dawn and its
+descendants and of nothing else. When that guess misses, the button is present,
+looks right, and clicking it walks the viewer out of the demo and onto the
+merchant's real Shopify checkout, mid-presentation. (graza.co's own cart link is
+`<a href="#">`; the old selector matched none of it.)
+
+`scripts/discover-controls.mjs` now classifies every control by role and
+accessible name, opening disclosures first so a drawer's Checkout button is
+found, and writes `<site>/_fl-controls.json`. The bridge reads that AND runs the
+same name matching live in the page, so controls built after load are caught
+too. Three layers, weakest last: contract, then name, then selector.
+
 ### Did it work?
 
 The run ends with `✓ N pages, N assets, NMB` and writes `manifest.json` beside
@@ -81,10 +228,32 @@ the product-data pull did not run (almost always missing bun — see
 Requirements); the clone is still browsable, but there is no product data to
 import into ForkLaunch.
 
+The verify/repair phase writes two more files beside `site/`:
+
+- **`features.json`** — the machine-readable verdict. `results` is every
+  assertion, `missing` is the blocking defects with the repair each maps to,
+  `policy` is what we deliberately did not migrate and which vendor owns it.
+  Read this before saying anything about fidelity.
+- **`feature-inventory.json`** — the cached live requirement, reused across
+  repair rounds so a loop costs the merchant's origin one polite pass rather
+  than six. Delete it (or pass `--refresh-live`) to re-measure the live site.
+
 ## Reporting back
 
-Tell the user the local URL and what was captured (page count, asset count).
-Say plainly that navigation works but cart/search/checkout do not.
+Tell the user the local URL and what was captured (page count, asset count),
+and then the verdict — which is now a list, not an impression:
+
+- **exit 0** — every feature the live storefront has, the clone has and
+  responds to. Say so, and name the third-party features under `policy` that
+  were deliberately not migrated (reviews, loyalty, the hosted checkout).
+- **exit 1** — read `features.json` and relay the actual missing features and
+  the repair each needs. Do not summarise it as a percentage.
+- **exit 2** — the gates could not run. **Nothing was proved about this
+  capture.** Say exactly that; do not describe the clone as working or broken,
+  because neither was measured.
+
+Say plainly that cart and checkout are visual only until a ForkLaunch module is
+attached — the gates report those as SKIP, not PASS, for the same reason.
 
 **Always serve over HTTP.** Opening the HTML with `file://` breaks module
 scripts and CORS, and the clone will look broken for reasons unrelated to the
@@ -193,6 +362,44 @@ price, image, variant picker, and an add-to-cart wired to the same bridge the
 captured pages use. A handle that isn't in the catalog either still 404s.
 That took graza.co from 8 reachable product pages to 79.
 
+#### The two bridges are NOT interchangeable — do not delete `--api`
+
+It is tempting to drop `--api` on the grounds that `heroserve-fl.ts` does the
+same job at serve time without a re-crawl. It does not. They overlap on
+add-to-cart and diverge everywhere else, and the divergence is in both
+directions:
+
+**Only `--api` / `bridge.js` (capture-time) has:**
+
+- **collection filters, sort, and predictive search wired to the module.** This
+  is 533 lines of `filtersMain` mapping Shopify's `filter.v.price.*`,
+  `filter.v.availability`, `filter.v.option.*` and `sort_by` vocabulary onto
+  `GET /product` and `GET /variant`, HMAC-signed from the browser. It is
+  careful work — sorts with no backing data are *disabled* rather than silently
+  ignored. `heroserve-fl.ts` contains none of it.
+- **XMLHttpRequest interception.** `bridge.js` patches `fetch` *and* XHR;
+  heroserve's shim patches `fetch` only. A theme that adds to cart over XHR is
+  unhandled by heroserve.
+- **`/cart/change`, `/cart/update`, `/cart/clear`.** heroserve handles
+  `/cart/add` and cart reads. Changing a line quantity or removing an item from
+  a captured cart drawer does not reach the module through heroserve.
+
+**Only `heroserve-fl.ts` (serve-time) has:**
+
+- HMAC-signed cart calls with **source-variant-id → module-variant-UUID
+  mapping**. `bridge.js`'s backend cart mode forwards raw Shopify paths
+  (`<api>/cart/add.js`) to the module, which has no such route.
+- the real checkout page, Stripe/PayPal, order polling
+- catalog-rendered pages for products the crawl never reached
+- content-addressed sibling and query-suffix asset resolution
+
+So: **use `heroserve-fl.ts` for cart and checkout on an existing capture** (no
+re-crawl, and it is the one wired correctly to the module's actual routes), and
+**re-capture with `--api` only when the demo needs working collection filters
+and search**. Closing the gap properly means porting `filtersMain` and the XHR
+patch into heroserve's shim; until that is done, deleting `--api` deletes
+working functionality with no replacement.
+
 Omit the key and checkout keeps its original one-shot behaviour — it creates
 the order and shows the confirmation without collecting payment, which is what
 a visual demo without Stripe credentials wants.
@@ -287,6 +494,32 @@ never the polite human-paced browsing above. Assisted pages keep absolute
 asset URLs (they load from the live CDN — the clone is browsable; full asset
 localization for assisted pages is a known follow-up).
 
+## What will never come across, and why
+
+The feature gate splits its report in two, and the split is the honest part.
+
+**Missing** — things we caused, each with the repair that answers it. The run
+is not done while this list is non-empty.
+
+**Deliberately not migrated** — third-party apps: reviews (Okendo, Yotpo,
+Judge.me, Loox, Junip), loyalty (Smile), subscriptions (Recharge), chat
+(Gorgias), and Shopify's own hosted checkout bundle. Their data lives in those
+vendors' databases, not the storefront's, and their scripts are blocked so an
+offline demo cannot beacon from a client's machine. These are reported with the
+vendor named — never hidden, never counted as failures. A bar that can only be
+cleared by abandoning the offline guarantee is not a bar, it is a permanent red
+light, and a permanent red light gets ignored.
+
+Two consequences worth knowing when you read a report:
+
+- a blocked tracking pixel is an `<img>` with no pixels. Every "broken image" on
+  graza.co's clone was one (bidr.io, roeye.com, dstillery.com). Only broken
+  images served from **our** origin are counted.
+- a page whose analytics script we refused then throws on the global that script
+  was going to define (`fbq is not defined`). Console errors are classified by
+  the origin they name and by whether anything of ours actually 404'd, not by a
+  vendor keyword list that goes stale.
+
 ## Fidelity, honestly
 
 Some storefronts render differently on every load (A/B tests, personalization —
@@ -298,8 +531,25 @@ clone stands on its own without comparing to live.
 
 ## Requirements
 
-**Node 18+ and Python 3.** Playwright and its Chromium build install
-themselves on first run (~150MB, once).
+**Checked before anything runs.** `migrate.mjs` and `finish.mjs` both call
+`scripts/check-prereqs.mjs` up front and refuse to start if something is
+missing, naming it and the command that fixes it. That gate exists because all
+three of these fail *silently*:
+
+| Missing | What you see instead of an error |
+|---|---|
+| playwright's chromium | the gates emit **nothing** — which reads as "no failures", not "did not run". This cost an afternoon once. |
+| bun | `manifest.json` comes back `catalog: null` and the storefront never serves |
+| ffmpeg / ffprobe | `shrink-media` reports every file "FAILED (left as-is)", and `check-budget`'s height probe returns 0 — which compares as `0 <= 720` and **passes** |
+
+A budget gate that passes because it could not measure is worse than no gate,
+because it is believed. Run it standalone with
+`node scripts/check-prereqs.mjs`.
+
+**Node 18+ and Python 3.** The Playwright npm package installs itself on first
+run, but **its ~150MB Chromium build is a separate download that does not**:
+`npx playwright install chromium` inside `scripts/`. The prerequisite check
+looks for the browser executable on disk, not for the package.
 
 **bun — required for the product catalog, and it does NOT self-install.** The
 catalog pipeline is TypeScript executed by bun. Without it the capture still

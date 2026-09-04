@@ -24,10 +24,21 @@ import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, s
 import { brotliCompressSync, constants as zlibConstants, gzipSync } from 'node:zlib';
 import { basename, dirname, extname, join } from 'node:path';
 import { createHmac, randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
+import { shopifyRuntime } from './shopify-runtime.ts';
+// The crawl names page files through urlmap.js (the single source of truth —
+// blog posts fold to blogs/<blog>-<post>.html). A direct URL must resolve
+// the same way, or a link that works when clicked 404s when pasted.
+const { pageFileFor } = createRequire(import.meta.url)('../urlmap.js') as
+  { pageFileFor: (p: string) => { file: string; depth: number } | null };
 
 const [siteRoot, portArg, moduleUrl, secret] = process.argv.slice(2);
 const PORT = Number(portArg ?? 4700);
 const MODULE = (moduleUrl ?? 'http://localhost:8001').replace(/\/$/, '');
+// MODULE has a default, so its value never tells you whether anyone actually
+// asked for a backend. This does. /__fl/health reports it so a gate can say
+// "skipped, not configured" instead of "failed".
+const MODULE_CONFIGURED = !!moduleUrl;
 const SECRET = secret ?? process.env.HMAC_SECRET_KEY ?? '';
 // Stripe's publishable key (pk_...). Safe to serve to the browser — it can only
 // create payment methods and confirm an intent whose client secret it was
@@ -115,6 +126,32 @@ async function resolveVariantUncached(handle: string, shopifyVariantId?: string)
   return vs.body[0].id; // fall back to the first variant
 }
 
+/**
+ * Per-capture control map, written by discover-controls.mjs.
+ *
+ * The add-to-cart interception below works on every theme ever shipped because
+ * `POST /cart/add.js` is a CONTRACT — intercept the path and you have
+ * intercepted the feature, whatever the button looks like. Checkout has no
+ * such contract, and it used to be matched with `[name="checkout"],
+ * [href*="/checkout"], [href="/cart"]`: an accurate description of Dawn and
+ * its descendants, and of nothing else.
+ *
+ * When that guess misses, the failure is silent and it is the worst one
+ * available — the button is present, it looks right, and clicking it walks the
+ * viewer out of the demo and onto the merchant's real Shopify checkout.
+ *
+ * So checkout is now identified three ways, weakest last: the /cart/add
+ * contract (for what to LEAVE ALONE), then the control's accessible name
+ * computed live in the page, then selectors this file discovered for this
+ * particular capture. Missing file is fine — the name matcher alone still
+ * covers every theme that labels its button in words.
+ */
+let CONTROLS: { kinds?: Record<string, { sel: string }[]>; names?: Record<string, string[]> } = {};
+try {
+  const cf = join(siteRoot, '_fl-controls.json');
+  if (existsSync(cf)) CONTROLS = JSON.parse(readFileSync(cf, 'utf8'));
+} catch (_) { /* a corrupt map is no worse than no map */ }
+
 const MIME: Record<string, string> = {
   '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css',
   '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg',
@@ -198,6 +235,42 @@ const SHIM = `<script>(function(){
   // easy to mistake for a logic bug.
   window.__flShim = (window.__flShim || 0) + 1;
 
+  // Dead overlays. A third-party pop-up captured in its OPEN state (Alia's
+  // scratch card on gorillamind.com sat over the header and product hero on
+  // all 44 pages) can never be closed here: its vendor script is blocked.
+  // Removed on evidence, not on a guess — a known pop-up vendor's root, or a
+  // fixed element at the browser's maximum z-index covering most of the
+  // viewport, a position only injected pop-ups occupy. Marked with
+  // data-fl-dead-overlay so the report can say what was removed and why.
+  var FL_POPUP_SEL='[id^="alia-popup-root"],.klaviyo-form-overlay,[class*="kl-private-reset-css"] [data-testid="POPUP"],.needsclick[data-testid="POPUP"],.privy-popup-container,#privy-popup-container,[id^="justuno"],[id^="ju_Con"],.wisepops-root,[id^="wisepops"],[id^="attentive_overlay"],[id^="attentive_creative"],.ps-popup,[id^="ps-popup"],.optimonk-overlay,[id^="wheelio"],[id^="tada-"],.sleeknote-overlay,[id^="sleeknote"]';
+  var flKillPending=0;
+  function flKillOverlays(){
+    flKillPending=0;
+    try{
+      var i,n,els=document.querySelectorAll(FL_POPUP_SEL);
+      for(i=0;i<els.length;i++){n=els[i];if(n.__flDead)continue;n.__flDead=1;n.setAttribute('data-fl-dead-overlay','vendor');n.style.setProperty('display','none','important');}
+      if(!document.body)return;
+      var vw=window.innerWidth,vh=window.innerHeight,all=document.body.children;
+      for(i=0;i<all.length;i++){n=all[i];if(n.__flDead||/^(SCRIPT|STYLE|LINK|HEADER|NAV|MAIN|FOOTER|TEMPLATE)$/.test(n.tagName))continue;
+        if(n.id&&/^fl-|^__fl/.test(n.id))continue;
+        var cs=getComputedStyle(n);if(cs.position!=='fixed'&&cs.position!=='absolute')continue;
+        var z=parseInt(cs.zIndex,10);if(!(z>=2147483000))continue;
+        if(cs.display==='none'||cs.visibility==='hidden')continue;
+        var r=n.getBoundingClientRect();if(r.width*r.height<0.5*vw*vh)continue;
+        n.__flDead=1;n.setAttribute('data-fl-dead-overlay','max-z');n.style.setProperty('display','none','important');}
+      if(document.querySelector('[data-fl-dead-overlay]')){
+        var bo=getComputedStyle(document.body).overflow;
+        if(/hidden/.test(bo))document.body.style.setProperty('overflow','auto','important');
+        var ho=getComputedStyle(document.documentElement).overflow;
+        if(/hidden/.test(ho))document.documentElement.style.setProperty('overflow','auto','important');
+      }
+    }catch(e){}
+  }
+  function flKillSoon(){if(flKillPending)return;flKillPending=1;setTimeout(flKillOverlays,150);}
+  document.addEventListener('DOMContentLoaded',flKillOverlays);
+  setTimeout(flKillOverlays,300);setTimeout(flKillOverlays,1500);setTimeout(flKillOverlays,4000);
+  try{new MutationObserver(flKillSoon).observe(document.documentElement,{childList:true,subtree:true});}catch(e){}
+
   // Serve-time rewriting stripped autoplay and set preload=none so nothing
   // downloads up front. Restore the original look by loading and playing each
   // video only while it is on screen, pausing it when it leaves — so at most
@@ -252,8 +325,12 @@ const SHIM = `<script>(function(){
     // preload is also granted only to the winner. Setting it to 'auto' on
     // every on-screen video pulled all of their bytes at once, which is the
     // same problem one layer down.
-    if(!window.__flArb){
-      window.__flArb=1;
+    // Defined whenever it is missing, not behind a once-per-window flag: the
+    // arbiter is stateless (it re-reads the DOM on every call), so redefining
+    // it is harmless, whereas a flag set without the function — seen as
+    // "flArbitrate is not defined" on gorillamind.com — leaves every observer
+    // below calling a name that does not exist.
+    if(typeof window.flArbitrate!=='function'){
       window.flArbitrate=function(){
         var vs=document.querySelectorAll('video'),best=null,bestR=-1;
         for(var i=0;i<vs.length;i++){
@@ -293,9 +370,9 @@ const SHIM = `<script>(function(){
             if(ds||ss.length)try{v.load()}catch(err){}
           }
           v.muted=true;v.__flWantsPlay=1;v.__flRatio=e.intersectionRatio||0;
-          flArbitrate();
+          if(window.flArbitrate)window.flArbitrate();
         }
-        else{v.__flWantsPlay=0;v.__flRatio=0;try{v.pause()}catch(err){}flArbitrate();}
+        else{v.__flWantsPlay=0;v.__flRatio=0;try{v.pause()}catch(err){}if(window.flArbitrate)window.flArbitrate();}
       });
     },{rootMargin:'200px'}).observe(v);
   }
@@ -312,7 +389,7 @@ const SHIM = `<script>(function(){
         v.__flWantsPlay=0; v.__flRatio=0; try{v.pause()}catch(e){}
       }
     }
-    flArbitrate();
+    if(window.flArbitrate)window.flArbitrate();
   },1000);
 
   function flScanVideos(root){
@@ -376,7 +453,64 @@ const SHIM = `<script>(function(){
   };
   function flToast(){var t=document.getElementById('fl-toast');if(!t){t=document.createElement('div');t.id='fl-toast';t.style.cssText='position:fixed;top:16px;right:16px;z-index:2147483000;background:#111;color:#fff;padding:12px 18px;border-radius:10px;font:600 14px system-ui;box-shadow:0 6px 20px rgba(0,0,0,.3)';document.body.appendChild(t)}t.innerHTML='\\u2713 Added to cart &nbsp; <a href="/__fl/checkout" style="color:#8bf">Checkout \\u2192</a>';}
   document.addEventListener('submit',function(e){var f=e.target;if(f&&f.action&&/\\/cart\\/add/.test(f.action)){e.preventDefault();var fd=new FormData(f);window.fetch('/cart/add.js',{method:'POST',body:fd});}},true);
-  document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('[name="checkout"],[href*="/checkout"],[href="/cart"]');if(a){e.preventDefault();location.href='/__fl/checkout';}},true);
+
+  // ---- checkout interception, discovered rather than assumed ----------------
+  // Three layers, weakest last. Layer 2 (the accessible name, computed here at
+  // click time) is the one that makes this theme-independent: it also catches
+  // controls that did not exist when the capture was walked, such as the
+  // Checkout button inside a cart drawer that is built when the drawer opens.
+  //
+  // No regex literals and no string escapes in this block on purpose. This
+  // source passes through a template literal and then into HTML before a
+  // browser parses it, and a backslash that survives one layer does not always
+  // survive the next — a dropped escape here silently kills every script on
+  // the page, which has happened three times.
+  var FLC = ${JSON.stringify(CONTROLS)};
+  function flNorm(s){s=String(s||'');var o='',p=true;for(var i=0;i<s.length;i++){var c=s.charCodeAt(i);if(c<=32){if(!p){o+=' ';p=true}}else{o+=s[i];p=false}}return o.trim().toLowerCase().slice(0,120)}
+  function flName(el){
+    var s=(el.getAttribute&&el.getAttribute('aria-label'))||'';
+    if(!flNorm(s))s=el.textContent||'';
+    if(!flNorm(s)){var im=el.querySelector&&el.querySelector('img[alt]');if(im)s=im.getAttribute('alt')||''}
+    if(!flNorm(s))s=(el.getAttribute&&(el.getAttribute('title')||el.getAttribute('name')))||'';
+    return flNorm(s);
+  }
+  var FLRE={
+    checkout:new RegExp('^(checkout|check out|proceed to checkout|continue to checkout|place (the )?order|pay now|complete (my )?order|secure checkout|go to checkout|buy now|buy it now)'),
+    cart:new RegExp('^(cart|bag|basket|shopping (cart|bag|basket)|view (cart|bag)|open (cart|bag)|your (cart|bag)|my (cart|bag))'),
+    // "Buy it now" is NOT in this list. Shopify's dynamic checkout button does
+    // not add to a cart — it jumps straight to the hosted checkout, so
+    // exempting it from interception walks the viewer out of the demo and onto
+    // the merchant's real store mid-presentation. It is classified as checkout
+    // above, where it belongs.
+    add:new RegExp('^(add to (cart|bag|basket|order)|add$|add to my (cart|bag))')
+  };
+  function flMatchesSel(el,kind){
+    var list=(FLC.kinds&&FLC.kinds[kind])||[];
+    for(var i=0;i<list.length;i++){try{if(el.matches&&el.matches(list[i].sel))return true}catch(_e){}}
+    return false;
+  }
+  function flIsKind(el,kind){
+    if(flMatchesSel(el,kind))return true;
+    var n=flName(el);
+    if(!n)return false;
+    var known=(FLC.names&&FLC.names[kind])||[];
+    if(known.indexOf(n)!==-1)return true;
+    return FLRE[kind]?FLRE[kind].test(n):false;
+  }
+  document.addEventListener('click',function(e){
+    var el=e.target.closest&&e.target.closest('a,button,input,summary,[role=button],[onclick]');
+    if(!el)return;
+    // Add-to-cart is intercepted by the /cart/add contract above, not here.
+    // Catching it twice would send a shopper to checkout instead of adding
+    // their item, so the specific case is checked first and bails out.
+    var form=el.closest&&el.closest('form');
+    var action=(form&&form.getAttribute('action'))||'';
+    if(action.indexOf('/cart/add')!==-1||FLRE.add.test(flName(el)))return;
+    var href=(el.getAttribute&&el.getAttribute('href'))||'';
+    var isCheckout=flIsKind(el,'checkout')||href.indexOf('/checkout')!==-1;
+    var isCart=flIsKind(el,'cart')||href==='/cart'||href.indexOf('/cart?')===0;
+    if(isCheckout||isCart){e.preventDefault();e.stopPropagation();location.href='/__fl/checkout';}
+  },true);
 
   // The capture's asset localiser treats the site root as a fetchable asset,
   // so a logo whose href was "/" comes back rewritten to something like
@@ -437,6 +571,34 @@ const SHIM = `<script>(function(){
  * preserved: the runtime half of this plays each video while it is on screen,
  * so it still autoplays and loops as the shopper scrolls to it.
  */
+/**
+ * Absolutise capture paths that appear INSIDE <script> blocks.
+ *
+ * The crawl rewrites asset references to paths relative to the site root:
+ * `_a/js/foo.<hash>.js`, no leading slash. In an HTML attribute that is fine —
+ * the browser resolves it against the document. Inside a script it is not,
+ * because a module specifier is not a URL: `import("_a/js/foo.js")` is a BARE
+ * specifier, and the browser rejects it outright with "Failed to resolve
+ * module specifier" rather than trying to fetch anything.
+ *
+ * graza.co's homepage carries Shopify's shop-js loader, whose module table the
+ * crawl faithfully rewrote into exactly that shape. The result: an uncaught
+ * error on every page load and one of the theme's modules never running. The
+ * page looked completely fine, which is the recurring theme of every defect
+ * this file works around.
+ *
+ * Done at serve time and scoped to script content only, because the same
+ * relative form in an `href` or `src` attribute IS correct and rewriting it
+ * would break the pages that rely on it.
+ */
+function absolutiseScriptPaths(html: string): string {
+  return html.replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gi, (whole, inner) => {
+    if (!inner.includes('_a/')) return whole;
+    const fixed = inner.replace(/(["'`])_a\//g, '$1/_a/');
+    return fixed === inner ? whole : whole.replace(inner, fixed);
+  });
+}
+
 function lightenMedia(html: string): string {
   return html
     // Deferring the source, not just the playback. preload="none" is only a
@@ -677,7 +839,7 @@ function serveFile(fp: string, range?: string | null, ifNoneMatch?: string | nul
     // and the overlay's own drawer markup contains one inside a JavaScript
     // string — matching it injects a <script> tag into the middle of a string
     // literal and silently kills every script on the page.
-    const html = lightenMedia(body.toString('utf8'));
+    const html = absolutiseScriptPaths(lightenMedia(body.toString('utf8')));
     const at = /<html(?=[\s>])[^>]*>/i;
     body = at.test(html)
       ? html.replace(at, (tag) => tag + SHIM)
@@ -799,6 +961,21 @@ Bun.serve({
     const url = new URL(req.url);
     const p = decodeURIComponent(url.pathname);
     try {
+      // ---- Shopify's runtime API, answered from the capture ----
+      // /products/<h>.js, /cart.js, ?sections=, recommendations, suggest,
+      // telemetry sinks. See shopify-runtime.ts for why a theme needs these.
+      const rt = await shopifyRuntime(req, url, p, {
+        siteRoot, hasModule: !!moduleUrl, cart: shopifyCart,
+        add: async (handle, variantExternalId, quantity) => {
+          const variantId = await resolveVariant(handle, variantExternalId);
+          if (!variantId) return { item_count: 0, error: 'variant not found' };
+          const cid = await ensureCart();
+          await mod('POST', '/cart/items', '/items', { cartId: cid, variantId, quantity });
+          return shopifyCart();
+        },
+      });
+      if (rt) return rt;
+
       // ---- storefront -> module bridge ----
       if (p === '/__fl/add' && req.method === 'POST') {
         const { handle, variantExternalId } = await req.json();
@@ -809,6 +986,58 @@ Bun.serve({
         return Response.json(await shopifyCart());
       }
       if (p === '/__fl/cart') return Response.json(await shopifyCart());
+
+      // A shopper who CLICKS the cart control lands on /__fl/checkout, because
+      // the injected bridge sends them there. A shopper who navigates to /cart
+      // directly — from a bookmark, a footer link, or the "Cart" entry in the
+      // site nav — used to get a 404, because the crawl never captured a page
+      // at that path (Shopify renders /cart server-side from session state, so
+      // there is nothing static to capture).
+      //
+      // Two doors to the same feature that disagree is a defect in itself, and
+      // this one is visible: the storefront's own nav offers a link that dead
+      // ends. Same destination either way.
+      if (p === '/cart' || p === '/cart/') {
+        return new Response(null, { status: 302, headers: { location: '/__fl/checkout' } });
+      }
+
+      // ---- is the commerce half actually configured? ----------------------
+      // Without this, "no ForkLaunch module running" and "the module is broken"
+      // look identical from outside: shopifyCart() swallows the connection
+      // error and answers `{item_count: 0}`, so an add-to-cart gate sees 0 -> 0
+      // and reports FAIL. That is a lie in the expensive direction — it trains
+      // whoever reads the report to ignore a red cart line, which is exactly
+      // the line that must never be ignored when a real backend IS attached.
+      //
+      // `configured` is whether a module URL was passed at all (MODULE has a
+      // default, so its value proves nothing); `reachable` is whether it
+      // answers. A gate can then report SKIP for the first case and FAIL only
+      // for the second.
+      if (p === '/__fl/health') {
+        let reachable = false;
+        if (MODULE_CONFIGURED) {
+          try {
+            const r = await fetch(MODULE + '/health', { signal: AbortSignal.timeout(2500) });
+            reachable = r.status < 500;
+          } catch {
+            // No /health on the module is fine — any answer at all proves it is
+            // there. Fall back to a request we know the module implements.
+            try {
+              const r = await mod('GET', '/product/handle/__fl_probe__', '/handle/__fl_probe__');
+              reachable = r.code > 0 && r.code !== 0;
+            } catch { reachable = false; }
+          }
+        }
+        return Response.json({
+          module: MODULE,
+          configured: MODULE_CONFIGURED,
+          reachable,
+          hmac: !!SECRET,
+          stripe: !!STRIPE_PK,
+          paypal: !!PAYPAL_CLIENT_ID,
+          controls: Object.fromEntries(Object.entries(CONTROLS.kinds || {}).map(([k, v]) => [k, v.length]))
+        });
+      }
       // Checkout is two steps when a publishable key is present: this page
       // collects the address and card, then posts to /__fl/order below. With
       // no key there is nothing to collect a card with, so keep the original
@@ -866,6 +1095,10 @@ Bun.serve({
       if (!extname(rel)) {
         const cand = join(siteRoot, rel.replace(/\/$/, '') + '.html');
         if (existsSync(cand)) rel = rel.replace(/\/$/, '') + '.html';
+        else {
+          const m = pageFileFor(rel);
+          if (m && existsSync(join(siteRoot, m.file))) rel = '/' + m.file;
+        }
       }
       const r = serveFile(join(siteRoot, rel), req.headers.get('range'), req.headers.get('if-none-match'), req.headers.get('accept-encoding'));
       if (r) return r;
@@ -895,6 +1128,33 @@ Bun.serve({
       if (alias) {
         const ar = serveFile(alias, req.headers.get('range'), req.headers.get('if-none-match'), req.headers.get('accept-encoding'));
         if (ar) return ar;
+      }
+
+      // Query junk welded onto an already-rewritten path.
+      //
+      // Shopify themes build image URLs by appending transform parameters to a
+      // base they were handed: `src = base + '&width=800&crop=center'`, on the
+      // assumption that `base` already carries a `?`. The crawl rewrote that
+      // base to a local path with no query at all, so the browser asks for
+      //
+      //   /_a/img/e6dba157-….d863971fa1.jpg&crop=center
+      //
+      // — a path that has never existed, for a file that is sitting right
+      // there. Seven of them on one graza.co product page, and the symptom is
+      // simply blank product photography: no error, no console message the
+      // page bothers to surface, just holes where the images were.
+      //
+      // Cutting at the first `&` or `?` recovers the real name. Done here
+      // rather than by rewriting the theme's JavaScript for the same reason as
+      // the hashed-sibling lookup above: the URL is assembled at runtime from
+      // variables and can never be rewritten statically.
+      const cut = rel.search(/[&?]/);
+      if (cut > 0) {
+        const trimmed = rel.slice(0, cut);
+        const tr = serveFile(join(siteRoot, trimmed), req.headers.get('range'), req.headers.get('if-none-match'), req.headers.get('accept-encoding'))
+          ?? (() => { const a = resolveHashedSibling(join(siteRoot, trimmed));
+                      return a ? serveFile(a, req.headers.get('range'), req.headers.get('if-none-match'), req.headers.get('accept-encoding')) : null; })();
+        if (tr) return tr;
       }
 
       // A product page the crawl never reached. The catalog import pulls every

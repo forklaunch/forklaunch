@@ -64,9 +64,37 @@ const FORBIDDEN_COPY = [
 
 const results = [];
 const check = (name, pass, detail = '') =>
-  results.push({ name, pass: !!pass, detail });
+  results.push({ name, pass: !!pass, state: pass ? 'PASS' : 'FAIL', detail });
+
+/**
+ * NOT CONFIGURED IS NOT BROKEN.
+ *
+ * Without a ForkLaunch module behind the bridge, `/__fl/cart` answers
+ * `{item_count: 0}` — heroserve swallows the connection error — so the
+ * add-to-cart assertion saw 0 -> 0 and reported FAIL on every keyless visual
+ * demo. That is a lie in the expensive direction: a red line nobody can act on
+ * teaches everyone to skim past red lines, and this is the one that must never
+ * be skimmed past when a real backend IS attached.
+ *
+ * A skipped check is not counted as passed and is not counted as failed. It is
+ * counted as unproven, and says what would prove it.
+ */
+const skip = (name, why) =>
+  results.push({ name, pass: true, state: 'SKIP', detail: why });
+
+/** Whether the bridge was given a module at all (see heroserve's /__fl/health). */
+async function moduleHealth(base) {
+  try {
+    const r = await fetch(base + '/__fl/health', { signal: AbortSignal.timeout(6000) });
+    if (r.ok) return await r.json();
+  } catch (_) { /* an older heroserve has no health route */ }
+  return { configured: false, reachable: false, module: null };
+}
+
+let HEALTH = { configured: false, reachable: false, module: null };
 
 async function main() {
+  HEALTH = await moduleHealth(BASE);
   const browser = await chromium.launch({ headless: true });
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
@@ -174,7 +202,15 @@ async function main() {
         cartDetail = 'no add-to-cart control found';
       }
     }
-    check('add to cart reaches the module', cartProved, cartDetail);
+    if (!HEALTH.configured) {
+      skip('add to cart reaches the module',
+        'no ForkLaunch module configured — re-run with --module <url> to prove the wiring');
+    } else if (!HEALTH.reachable) {
+      check('add to cart reaches the module', false,
+        `module ${HEALTH.module} configured but not answering`);
+    } else {
+      check('add to cart reaches the module', cartProved, cartDetail);
+    }
 
     // ---- checkout offers what it was configured with --------------------
     await page.goto(BASE + '/__fl/checkout', { waitUntil: 'load', timeout: 45000 });
@@ -187,19 +223,26 @@ async function main() {
         forbidden: txt
       };
     });
-    check('checkout collects an address', checkout.hasForm, checkout.hasForm ? '' : 'no shipping form rendered');
+    if (!HEALTH.configured) {
+      skip('checkout collects an address',
+        'no ForkLaunch module configured — checkout is not wired in this run');
+    } else {
+      check('checkout collects an address', checkout.hasForm, checkout.hasForm ? '' : 'no shipping form rendered');
+    }
     const badCopy = FORBIDDEN_COPY.filter((p) => checkout.forbidden.includes(p));
     check('no demo copy on checkout', badCopy.length === 0, badCopy.join(', '));
   } finally {
     await browser.close();
   }
 
-  const failed = results.filter((r) => !r.pass);
+  const failed = results.filter((r) => r.state === 'FAIL');
+  const skipped = results.filter((r) => r.state === 'SKIP');
   console.log('\ncheck-wired — ' + BASE + '\n');
   for (const r of results) {
-    console.log(`  ${r.pass ? 'PASS' : 'FAIL'}  ${r.name}${r.detail ? '   (' + r.detail + ')' : ''}`);
+    console.log(`  ${r.state}  ${r.name}${r.detail ? '   (' + r.detail + ')' : ''}`);
   }
-  console.log(`\n${results.length - failed.length}/${results.length} passed\n`);
+  console.log(`\n${results.length - failed.length - skipped.length}/${results.length - skipped.length} passed` +
+    (skipped.length ? `, ${skipped.length} skipped (not configured)` : '') + '\n');
   process.exit(failed.length ? 1 : 0);
 }
 
@@ -223,7 +266,10 @@ async function firstProductPath(page, base) {
   return new URL(href, base + '/').pathname;
 }
 
+// Exit 2 with the HARNESS-FAIL marker the repair loop keys off. A gate that
+// could not run must never be mistaken for a gate that passed, and must not be
+// mistaken for a capture defect either.
 main().catch((e) => {
-  console.error('check-wired crashed:', e.message);
+  console.error('\nHARNESS-FAIL: check-wired crashed — ' + e.message);
   process.exit(2);
 });

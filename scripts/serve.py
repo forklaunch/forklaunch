@@ -37,6 +37,15 @@ class H(http.server.SimpleHTTPRequestHandler):
                 idx = base + "/index.html"
                 if os.path.isfile(super().translate_path(idx)):
                     path = idx
+                else:
+                    # urlmap.js folds deeper paths into one file:
+                    # /blogs/recipes/<post> -> blogs/recipes-<post>.html.
+                    # A direct URL to such a page must resolve the same way.
+                    segs = [x for x in base.split("/") if x]
+                    if 2 <= len(segs) <= 3:
+                        fold = "/" + segs[0] + "/" + "-".join(segs[1:]) + ".html"
+                        if os.path.isfile(super().translate_path(fold)):
+                            path = fold
         return super().translate_path(path)
 
     def end_headers(self):

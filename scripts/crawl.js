@@ -7,7 +7,7 @@
  * pages, shares one asset pool across all of them, then rewrites inter-page
  * links to point at the local copies. The result can actually be clicked through.
  *
- *   node crawl.js <domain> <outdir> [--pages N] [--clean]
+ *   node crawl.js <domain> <outdir> [--pages N] [--clean] [--complete] [--only /a,/b]
  *     [--api <url>] [--hmac-secret <secret>]
  *
  * --api points the commerce bridge (bridge.js) at a running ForkLaunch
@@ -65,6 +65,46 @@ const pagesIdx = argv.indexOf('--pages');
 // page/byte ceilings are effectively removed and enumeration comes from the
 // full sitemap rather than a budgeted homepage/anchor discovery.
 const COMPLETE = argv.includes('--complete');
+// --only /a,/b: TARGETED mode — capture exactly the named paths and ADD them
+// to an existing capture, touching nothing else. This is what the verify loop
+// runs when the gate names dead internal links: the answer to "four footer
+// pages are missing" is four page loads, not a walk of the whole sitemap
+// (graza.co's blog sitemap alone lists 693 URLs — six hours to fix a footer).
+// Assets already on disk are never rewritten (the existsSync guard at the
+// asset writer), so repairs applied to shared CSS/JS survive; the homepage is
+// still loaded (discovery keys off it) but NOT rewritten; links from the new
+// pages resolve against every page already on disk, not just this run's; and
+// crawl.json / pages.json are merged into, not replaced.
+const onlyIdx = argv.indexOf('--only');
+const ONLY = onlyIdx > -1
+  ? new Set(String(argv[onlyIdx + 1] || '').split(',').map((s) => s.trim()).filter(Boolean))
+  : null;
+// Apply a replace only OUTSIDE <script>…</script> bodies. The demo-mode link
+// rewrite once ran over a vendor's inline `location.href="/checkout"` and
+// produced `location.href="#" data-mirror-uncaptured="/checkout"` — a syntax
+// error that took the whole inline script down (graza.co /pages/subscribe).
+// Asset-URL rewrites still run inside scripts on purpose; only this one
+// injects an attribute, and an attribute has no meaning inside JavaScript.
+function replaceOutsideScripts(html, re, fn) {
+  return html.split(/(<script\b[^>]*>[\s\S]*?<\/script>)/i)
+             .map((seg, i) => (i % 2 ? seg : seg.replace(re, fn)))
+             .join('');
+}
+// Output files already present from the earlier capture (targeted mode only).
+const ONLY_ON_DISK = new Set();
+if (ONLY) {
+  const siteDir = path.join(outdir, 'site');
+  const walk = (d, rel) => {
+    let ents = []; try { ents = fs.readdirSync(d, { withFileTypes: true }); } catch (_) { return; }
+    for (const e of ents) {
+      if (e.name === '_a' || e.name.startsWith('.')) continue;
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) walk(path.join(d, e.name), r);
+      else if (e.name.endsWith('.html')) ONLY_ON_DISK.add(r);
+    }
+  };
+  walk(siteDir, '');
+}
 const MAX_PAGES = COMPLETE ? Number.MAX_SAFE_INTEGER
   : (pagesIdx > -1 ? parseInt(argv[pagesIdx + 1], 10) || 20 : 20);
 // Guaranteed nav-destination allocation, outside the normal page budget (see
@@ -247,6 +287,11 @@ function injectAtDocStart(html, script) {
         // rel, so this keys the download itself, not just the eventual path.
         if (capturingRel.has(rel)) return;
         capturingRel.add(rel);
+        // Targeted mode: a file already on disk under its content-addressed
+        // name IS this asset — possibly the shrunk / localized version of it.
+        // Re-writing the original undid shrink-media on the homepage's videos
+        // every recapture (60MB re-downloaded and re-encoded per round).
+        if (ONLY && fs.existsSync(path.join(outdir, 'site', rel))) return;
         pending.push((async () => {
           try {
             const buf = await fetchWithTimeout(resp, 8000);
@@ -556,6 +601,19 @@ function injectAtDocStart(html, script) {
       console.error(`[crawl] discovered ${cols.length} collections, ${prods.length} products; ` +
                     `capturing ${wanted.size} pages`);
     }
+    if (ONLY) {
+      // Targeted mode replaces the discovered set wholesale. '/' stays (the
+      // rewrite pass keys off it) but is skipped at write-out.
+      for (const k of [...wanted.keys()]) if (k !== '/') wanted.delete(k);
+      const unmappable = [];
+      for (const p of ONLY) {
+        const f = pageFileFor(p);
+        if (f) wanted.set(p, f); else unmappable.push(p);
+      }
+      console.error(`[crawl] ONLY: capturing ${wanted.size - 1} named page(s) on top of ` +
+        `${ONLY_ON_DISK.size} already on disk` +
+        (unmappable.length ? ` — ${unmappable.length} never captured by design (${unmappable.join(', ')})` : ''));
+    }
 
     // ---- 2. capture each page, discovering as we go ------------------------
     // The homepage links only a handful of products. Collection pages list the
@@ -623,7 +681,14 @@ function injectAtDocStart(html, script) {
     // whole pages in parallel and changes NO per-page capture wait, so fidelity
     // is identical to sequential (no under-capture risk). FL_CONCURRENCY
     // overrides the default for beefier machines / more tolerant stores.
-    const CONC = COMPLETE ? Math.max(1, Number(process.env.FL_CONCURRENCY) || 5) : 1;
+    // Normal mode ran ONE page at a time purely so earlier validations stayed
+    // comparable — the pool itself changes no per-page wait, so fidelity is
+    // identical. Measured cost of sequential: ~38s/page, almost all of it idle
+    // in networkidle ceilings that ad-heavy stores always run to the limit.
+    // Three workers is the conservative default (a modest load on someone's
+    // production store); --complete keeps five. FL_CONCURRENCY overrides both.
+    const CONC = COMPLETE ? Math.max(1, Number(process.env.FL_CONCURRENCY) || 5)
+                          : Math.max(1, Number(process.env.FL_CONCURRENCY) || 3);
     let coolingDown = null;   // a promise while a patient cooldown is in progress
     let stopAll = false;      // hard block / cooldowns exhausted: drain everyone
 
@@ -694,7 +759,7 @@ function injectAtDocStart(html, script) {
       console.error(`[crawl]   ✓ ${p}`);
 
       // harvest onward product links from collection pages
-      if (/^\/collections\//.test(p) && captured.size < MAX_PAGES) {
+      if (/^\/collections\//.test(p) && captured.size < MAX_PAGES && !ONLY) {
         let added = 0;
         for (const h of g.links) {
           if (captured.size + queue.length >= HARD_CAP) break;
@@ -849,6 +914,14 @@ function injectAtDocStart(html, script) {
       const m = wanted.get(pth) || pageFileFor(pth);
       if (m) capturedFiles.add(m.file);
     }
+    // Targeted mode: the new pages link to products and collections captured
+    // by the EARLIER run. Those are on disk, so they are real destinations —
+    // without this every such link would be marked uncaptured and made inert.
+    let onlyPrevIndex = [];
+    if (ONLY) {
+      for (const f of ONLY_ON_DISK) capturedFiles.add(f);
+      try { onlyPrevIndex = JSON.parse(fs.readFileSync(path.join(outdir, 'pages.json'), 'utf8')); } catch (_) {}
+    }
 
     // Nav-menu destinations (see navMust above) that the page budget still
     // didn't reach — a real category the crawl ran out of room for, or a
@@ -863,9 +936,11 @@ function injectAtDocStart(html, script) {
                          (capturedFiles.has('index.html') ? 'index.html' : null);
 
     for (const [pth, rawHtml] of captured) {
+      if (ONLY && !ONLY.has(pth)) continue;      // targeted: write only the named pages
       const meta = wanted.get(pth) || { file: 'index.html', depth: 0 };
       const up = '../'.repeat(meta.depth);
       let html = rawHtml;
+
 
       // direct CDN images first (query-aware — see imgRewrites above),
       // THEN everything else: exact URL, then protocol-relative fallback.
@@ -883,7 +958,7 @@ function injectAtDocStart(html, script) {
       });
 
       // ---- inter-page links: THE thing that makes it browsable ----
-      html = html.replace(/href="([^"]+)"/gi, (m, href) => {
+      html = replaceOutsideScripts(html, /href="([^"]+)"/gi, (m, href) => {
         if (/^(#|mailto:|tel:|javascript:|data:)/i.test(href)) return m;
         if (href.startsWith(up + '_a/') || href.startsWith('_a/')) return m;
         const p = norm(href);
@@ -1057,6 +1132,7 @@ function injectAtDocStart(html, script) {
         const t = wanted.get(pth) || pageFileFor(pth);
         if (t) linkMap[pth] = t.file;
       }
+      for (const x of onlyPrevIndex) if (x.route && x.file && !linkMap[x.route]) linkMap[x.route] = x.file;
       const relinkShim = '<script>(function(){var M=' + JSON.stringify(linkMap) +
         ',UP=' + JSON.stringify(up) + ',H=' + JSON.stringify(domain) +
         ',NAVSET=' + JSON.stringify([...navPathSet]) +
@@ -1467,6 +1543,38 @@ function injectAtDocStart(html, script) {
   } finally {
     result.elapsedMs = Date.now() - result.startedAt;
     await browser.close().catch(() => {});
+    // Where every local asset came from. check-features reads this to tell a
+    // vendor script failing without its backend (policy) from a theme script
+    // failing because the capture broke it (defect) — by ORIGIN, which is
+    // evidence, rather than by guessing from a file name. Always merged, so a
+    // targeted recapture adds to the record instead of replacing it.
+    try {
+      const of = path.join(outdir, 'site', '_a', '.fl-origins.json');
+      let origins = {};
+      try { origins = JSON.parse(fs.readFileSync(of, 'utf8')); } catch (_) {}
+      for (const [abs, rel] of assetMap) {
+        if (rel && fs.existsSync(path.join(outdir, 'site', rel))) origins[rel] = abs;
+      }
+      fs.mkdirSync(path.dirname(of), { recursive: true });
+      fs.writeFileSync(of, JSON.stringify(origins));
+    } catch (_) {}
+    if (ONLY) {
+      // Targeted mode ADDS to an existing capture: merge into its records
+      // rather than replacing a 33-page crawl.json with a 5-page one.
+      try {
+        const prev = JSON.parse(fs.readFileSync(path.join(outdir, 'crawl.json'), 'utf8'));
+        const files = new Set([...(prev.captured || []), ...result.captured]);
+        result.captured = [...files];
+        result.pages = files.size;
+        result.assets = (prev.assets || 0) + result.assets;
+        result.bytes = (prev.bytes || 0) + result.bytes;
+      } catch (_) {}
+      try {
+        const prevIdx = JSON.parse(fs.readFileSync(path.join(outdir, 'pages.json'), 'utf8'));
+        const seen = new Set(pageIndex.map((x) => x.route));
+        for (const x of prevIdx) if (!seen.has(x.route)) pageIndex.push(x);
+      } catch (_) {}
+    }
     fs.writeFileSync(path.join(outdir, 'crawl.json'), JSON.stringify(result, null, 1));
     // Sidecar for manifest.js — see pageIndex declaration above.
     fs.writeFileSync(path.join(outdir, 'pages.json'), JSON.stringify(pageIndex, null, 1));
