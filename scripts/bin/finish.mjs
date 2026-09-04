@@ -81,7 +81,13 @@ const OFFLINE = has('--offline');
 const SERVE_AFTER = has('--serve-after');
 const OUT = resolve(arg('--out', dirname(SITE)));
 const BASE = `http://localhost:${PORT}`;
-const DEADLINE = Date.now() + BUDGET_MS;
+let DEADLINE = Date.now() + BUDGET_MS;
+// The budget must scale with the work the gate names. A store with a 105-link
+// menu asked for a 31-page recapture inside a 30-minute window and the loop
+// killed it, then reported round 1 as the verdict. When a recapture is chosen,
+// the deadline grows to fit it (about 50s a page plus a gate), under a hard
+// cap so a pathological store still ends.
+const HARD_CAP = Date.now() + Math.max(BUDGET_MS, 150 * 60_000);
 
 if (!SITE || !existsSync(SITE)) {
   console.error('usage: finish.mjs <site-dir> [--live <url>] [--port 4180] [--module <url>] [--offline]');
@@ -537,6 +543,14 @@ function chooseRepairs(v) {
     lastChosen = chosen.join(',');
     prev = v.score;
 
+    if (chosen.includes('recapture') && pendingRecapture.length) {
+      const need = Date.now() + pendingRecapture.length * 50_000 + 8 * 60_000;
+      if (need > DEADLINE) {
+        const to = Math.min(need, HARD_CAP);
+        log(`  budget extended by ${Math.round((to - DEADLINE) / 60000)} min for a ${pendingRecapture.length}-page recapture`);
+        DEADLINE = to;
+      }
+    }
     step(`repair — round ${round}: ${chosen.join(', ')}`);
     if (chosen.includes('recapture')) {
       log(pendingRecapture.length

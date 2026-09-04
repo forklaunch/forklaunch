@@ -112,7 +112,7 @@ const MAX_PAGES = COMPLETE ? Number.MAX_SAFE_INTEGER
 // dozen real category destinations (e.g. Men's/Women's split doubles every
 // top-level category), and every one of them is a highly-visible dead link
 // if missed.
-const NAV_MUST_CAP = 20;
+const NAV_MUST_CAP = 40;   // brooklinen.com's menu has 105 destinations; 20 left 27 dead links for the loop to chase
 
 const assetMap = new Map();          // absolute asset url -> local rel path
 const capturingRel = new Set();      // local rel paths already fetched/queued —
