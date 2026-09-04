@@ -215,6 +215,26 @@ async function menuRevealedKeys(page, got) {
   return keys;
 }
 
+async function inlineScriptVendor(page, route, line, hosts) {
+  const html = await cloneHtml(page, route);
+  if (!html) return null;
+  const lines = html.split('\n');
+  const idx = line - 1;
+  if (idx < 0 || idx >= lines.length) return null;
+  let start = idx; while (start >= 0 && !/<script\b/i.test(lines[start])) start--;
+  if (start < 0) return null;
+  let end = idx; while (end < lines.length && !/<\/script>/i.test(lines[end])) end++;
+  const text = lines.slice(start, Math.min(end + 1, start + 400)).join('\n').slice(0, 8000);
+  if (/\bsrc=/.test(lines[start].match(/<script\b[^>]*>/i)?.[0] || '')) return null;   // external: origin rules own it
+  const vm = VENDOR_TEXT.exec(text);
+  if (vm) return vm[1];
+  for (const h of hosts) {
+    const label = (h.split('.').slice(-2, -1)[0] || '').toLowerCase();
+    if (label.length >= 4 && new RegExp('\\b' + label + '\\b', 'i').test(text)) return h;
+  }
+  return null;
+}
+
 const defect = (kind, what, repair = null, where = '', policy = null, url = '') =>
   missing.push({ kind, what, repair, where, ...(policy ? { policy } : {}), ...(url ? { url } : {}) });
 
@@ -636,6 +656,13 @@ async function main() {
       const rm = /Identifier '([A-Za-z_$][\w$]*)' has already been declared/.exec(e.text);
       if (rm) {
         const v = await redeclaredByVendor(page, route, rm[1], origins, vendorHosts, storeHost);
+        if (v) { defect('script', e.text.slice(0, 120), null, route, v); continue; }
+      }
+      // Thrown from an inline script on the page itself: find that script by
+      // line and ask whether its own text names a vendor (GTM tags, app
+      // snippets injected at runtime and captured inline).
+      if (e.line && (!e.url || e.url.replace(/[?#].*$/, '') === cloneUrlFor(route).replace(/[?#].*$/, ''))) {
+        const v = await inlineScriptVendor(page, route, e.line, vendorHosts);
         if (v) { defect('script', e.text.slice(0, 120), null, route, v); continue; }
       }
       realErrors.push(e);

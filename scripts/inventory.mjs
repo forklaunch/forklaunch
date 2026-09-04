@@ -533,8 +533,10 @@ export async function inventoryRoute(page, url, { settle = 4000, scroll = true }
   // mis-reported as capture defects on graza.co.
   const onPageError = (e) => {
     const stack = String(e.stack || '');
-    const frame = stack.match(/\((https?:\/\/[^)\s]+?)(?::\d+){0,2}\)/) || stack.match(/at (https?:\/\/[^\s]+?)(?::\d+){0,2}(?:\s|$)/);
-    consoleErrors.push({ text: 'uncaught: ' + String(e.message).slice(0, 200), url: frame ? frame[1] : '' });
+    const frame = stack.match(/\((https?:\/\/[^)\s]+?)(?::(\d+))?(?::\d+)?\)/) || stack.match(/at (https?:\/\/[^\s:]+?)(?::(\d+))?(?::\d+)?(?:\s|$)/);
+    // Keep the LINE too: an error thrown from an inline script has the page
+    // as its frame, and only the line can say which inline script it was.
+    consoleErrors.push({ text: 'uncaught: ' + String(e.message).slice(0, 200), url: frame ? frame[1] : '', line: frame && frame[2] ? Number(frame[2]) : 0 });
   };
   // Host and reason are both kept. Without them a deliberate offline block —
   // a tracker refused by the served CSP, which is the guarantee working — is
