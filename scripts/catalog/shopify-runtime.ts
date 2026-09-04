@@ -182,6 +182,9 @@ function extractSection(html: string, id: string): string | null {
   return null;
 }
 
+/** The browse-only cart, for a cart page when no module is wired. */
+export function getLocalCart() { return localCart(); }
+
 export async function shopifyRuntime(req: Request, url: URL, p: string, ctx: RuntimeCtx): Promise<Response | null> {
   const method = req.method.toUpperCase();
   const json = (body: any, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });

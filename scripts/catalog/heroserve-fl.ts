@@ -25,7 +25,7 @@ import { brotliCompressSync, constants as zlibConstants, gzipSync } from 'node:z
 import { basename, dirname, extname, join } from 'node:path';
 import { createHmac, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { shopifyRuntime } from './shopify-runtime.ts';
+import { shopifyRuntime, getLocalCart } from './shopify-runtime.ts';
 // The crawl names page files through urlmap.js (the single source of truth —
 // blog posts fold to blogs/<blog>-<post>.html). A direct URL must resolve
 // the same way, or a link that works when clicked 404s when pasted.
@@ -998,6 +998,10 @@ Bun.serve({
       // this one is visible: the storefront's own nav offers a link that dead
       // ends. Same destination either way.
       if (p === '/cart' || p === '/cart/') {
+        // Browse-only clone (no module): a real cart page from the local
+        // cart, never a redirect into a checkout that needs a backend — that
+        // was a 500 on every page's cart link, reported as a dead destination.
+        if (!MODULE_CONFIGURED) return new Response(browseCartPage(getLocalCart()), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
         return new Response(null, { status: 302, headers: { location: '/__fl/checkout' } });
       }
 
@@ -1043,6 +1047,7 @@ Bun.serve({
       // no key there is nothing to collect a card with, so keep the original
       // one-shot behaviour and go straight to the order confirmation.
       if (p === '/__fl/checkout') {
+        if (!MODULE_CONFIGURED) return new Response(browseCartPage(getLocalCart()), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
         if (!STRIPE_PK && !PAYPAL_CLIENT_ID) {
           const cid = await ensureCart();
           const r = await mod('POST', '/checkout', '/', { cartId: cid, provider: 'stripe', shippingAddress: DEMO_ADDRESS });
@@ -1243,6 +1248,14 @@ function productHandleFromPath(pathname: string): string | null {
  * that doesn't. Returns null when the handle isn't in the catalog either, so
  * the caller can fall through to a real 404.
  */
+/** Cart page for the browse-only clone: what is in the basket, and why checkout stops here. */
+function browseCartPage(cart: any): string {
+  const e = (t: any) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
+  const money = (c: number) => '$' + (Number(c || 0) / 100).toFixed(2);
+  const rows = (cart.items || []).map((i: any) => `<li style="display:flex;gap:14px;align-items:center;padding:12px 0;border-bottom:1px solid #eee;list-style:none">${i.image ? `<img src="${e(i.image)}" alt="" width="64" height="64" style="object-fit:cover;border-radius:6px">` : ''}<span style="flex:1"><strong>${e(i.product_title || i.title)}</strong>${i.variant_title ? `<br><span style="color:#666">${e(i.variant_title)}</span>` : ''}</span><span>× ${e(i.quantity)}</span><span style="min-width:80px;text-align:right">${money(i.line_price)}</span></li>`).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Your cart</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="font:16px/1.4 system-ui,sans-serif;max-width:720px;margin:40px auto;padding:0 20px"><h1 style="font-size:24px">Your cart</h1>${rows ? `<ul style="padding:0">${rows}</ul><p style="text-align:right;font-size:18px"><strong>Subtotal ${money(cart.total_price)}</strong></p>` : '<p>Your cart is empty.</p>'}<p style="background:#f6f6f6;padding:12px 14px;border-radius:8px;color:#444">This is a browse-only clone: the cart works, checkout is not wired. Run the migration with <code>--server</code> to connect the ForkLaunch ecommerce module and take real orders.</p><p><a href="/">← Continue shopping</a></p></body></html>`;
+}
+
 async function productFallbackPage(handle: string): Promise<string | null> {
   const p = await mod('GET', `/product/handle/${handle}`, `/handle/${handle}`);
   if (p.code !== 200 || !p.body?.id) return null;

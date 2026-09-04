@@ -55,6 +55,8 @@
  *   2  harness failure — the gates could not run; nothing was proved
  */
 import { spawn, spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+const { pageFileFor } = createRequire(import.meta.url)('../urlmap.js');
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync,
          rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -397,7 +399,10 @@ function chooseRepairs(v) {
   pendingRecapture = [...new Set(v.missing
     .filter((m) => m.repair === 'recapture')
     .map((m) => (m.kind === 'nav' ? String(m.what).split(' -> ')[0] : String(m.where || '')).trim())
-    .filter((p) => p.startsWith('/')))];
+    .filter((p) => p.startsWith('/'))
+    // /cart, /account, /search… are never captured (urlmap SKIP_PATH): the
+    // server answers them itself. Naming them here burned two rounds on graza.
+    .filter((p) => p === '/' || !!pageFileFor(p)))];
   for (const r of PATTERN_REPAIRS) if (r.when(v.text)) wanted.add(r.name);
   if (wanted.has('recapture') && (!ALLOW_RECAPTURE || !DOMAIN)) {
     wanted.delete('recapture');

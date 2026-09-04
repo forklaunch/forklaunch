@@ -614,7 +614,7 @@ async function main() {
       // offline guarantee working, one frame later. The list mirrors the
       // TRACKERS list in localize-runtime.mjs — the vendors we deliberately do
       // not localise — so the two cannot drift into disagreeing.
-      if (/\b(fbq|gtag|dataLayer|ga|_learnq|klaviyo|ttq|snaptr|pintrk|webPixelsManager|Shopify\.analytics|clarity|amplitude|mixpanel|heap|attentive|Yotpo|okendo)\b/.test(e.text) &&
+      if (/\b(fbq|gtag|dataLayer|ga|_learnq|klaviyo|ttq|snaptr|pintrk|webPixelsManager|createShopifyExtend|Shopify\.analytics|clarity|amplitude|mixpanel|heap|attentive|Yotpo|okendo)\b/.test(e.text) &&
           /is not defined|is not a function|undefined/.test(e.text)) return true;
       // Derived rather than listed: pull the identifiers out of the error and
       // check them against the third-party hosts the LIVE page loaded scripts
