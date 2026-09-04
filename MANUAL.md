@@ -22,13 +22,21 @@ is what the skill does for you, and how to do it by hand if you prefer.
 
 ## Before the first run
 
-Three tools have to be on the machine. It checks and refuses to start without them.
+Run everything from the unpacked folder (the one containing `scripts/`,
+`MANUAL.md` and `SKILL.md`). Output lands in `scripts/output/<store-domain>/`.
+
+Three tools have to be on the machine. Check first (`bun --version`,
+`ffmpeg -version`, `node --version`); install only what is missing. The tool
+checks too and refuses to start without them.
 
 ```bash
 curl -fsSL https://bun.sh/install | bash        # bun — catalog pull
 brew install ffmpeg                             # ffmpeg — video shrink
 cd scripts && npm install && npx playwright install chromium   # browser — the gates
 ```
+
+`npx playwright install chromium` prints nothing when the browser is already
+there. That is success.
 
 If it says `HARNESS-FAIL` at any point, one of these is missing. It will name
 which and print the fix.
@@ -39,16 +47,22 @@ which and print the fix.
 node scripts/bin/migrate.mjs https://www.the-store.com --clean
 ```
 
-That is the whole thing. Budget **about 40 seconds per page**, measured: a
-15-page boutique is ~10 minutes, a 30-page store ~20, a 100-page catalog over an
-hour. It prints each phase as it goes: `0/4` preflight, `1/4` crawl, `2/4`
+That is the whole thing. A page takes **6 to 40 seconds** depending on how much
+the store keeps talking to analytics after it has rendered (a quiet store: 6;
+an ad-heavy one: 40). The preflight (`0/4`) prints an estimate for the store
+in front of it; trust that over any rule of thumb. It prints each phase as it goes: `0/4` preflight, `1/4` crawl, `2/4`
 catalog, `3/4` verify. The verify phase starts by serving the clone locally
 (that is when the URL appears), then checks it against the live site, repairs,
 and re-checks until it converges.
 
 After the crawl, the verify phase loads the live site twice and the clone once
 for a sample of pages (a few minutes), then repairs. If it finds dead links it
-re-crawls **only those pages**, about a minute each, never the whole store.
+re-crawls **only the pages it named**, never the whole store; on a store with a
+big menu that can still be thirty or forty pages, and the budget extends to fit
+them. It re-crawls a given page at most once per run, and stops early when a
+round of repairs changes nothing ("the repairs have converged"). The report may
+then suggest `crawl.js --only …` for what is left: the run already did that;
+do not start a second run of the same store to chase it.
 
 **It looks stuck during the crawl.** It is not. Almost all of each page's time is
 spent waiting for the page to go quiet, and stores with a lot of analytics never
@@ -79,6 +93,27 @@ the verify phase to take 30 to 55 minutes on top of the crawl.
 
 Exit 2 is the one to be careful with. It is not "the clone is bad" — it is "I
 could not check." A clone that got exit 2 has not been verified at all.
+
+## Headless stores (Hydrogen, Next.js, "React storefront")
+
+Some Shopify stores are headless: a React app in the browser draws product
+grids and product pages from an API on every visit. The preflight says so
+(`stack: Hydrogen` or `Next.js`, verdict AMBER, a note explaining why). What
+you get: the homepage and content pages capture well; collection and product
+pages come through thin or empty, because the data they render from is not
+reachable offline; the catalog step usually fails (below). Showing such a
+client their homepage is fine. Migrating their shop needs the merchant's
+Storefront API access, which is outside this tool today.
+
+## If the catalog step fails
+
+Phase `2/4` can print `catalog step failed`. It means the store publishes no
+readable public catalog feed: headless stores, and stores that turned the feed
+off. The run continues and the clone still browses; what is missing is the
+product data behind the cart mapping and the ForkLaunch import. With the
+merchant's admin token, `bun scripts/catalog/cli.ts pull-admin <shop-url>
+--token <token>` pulls the real catalog (with inventory and SKUs, which the
+public feed never has).
 
 ## Things that will show as different, and are fine
 
@@ -114,6 +149,7 @@ works, never that a number matches.
 | Flag | What it does |
 |---|---|
 | `--pages N` | page budget for the crawl (default 20). Menu destinations (up to 40) are captured on top of it, so a 20-page budget on a store with a big menu captures 40 to 60 pages. |
+| `--clean` | demo mode (always use it): strips trackers, keeps every click on the clone, adds the cart overlay |
 | `--no-serve` | exit with the verdict's code instead of staying up serving |
 | `--port N` | serve on another port (default 4173) |
 | `--rounds N`, `--budget-min N` | verify/repair budget (default 5 rounds, 30 minutes) |
@@ -143,6 +179,19 @@ starts — do not retry against a block.
 The clone's cart works offline for browsing. To take real orders it needs a
 ForkLaunch app with the ecommerce module running. `WIRING.md` is the whole path,
 six numbered steps with the exact commands and what each has been tested on.
+
+## Serving a clone later
+
+After `--no-serve`, or any time after a run, serve an existing clone without
+re-crawling:
+
+```bash
+bun scripts/catalog/heroserve-fl.ts scripts/output/the-store.com/site 4173
+```
+
+That is the same server the verification used (cart, search page, product
+JSON all work). `python3 scripts/serve.py 4173 scripts/output/the-store.com/site`
+is a plain static fallback when bun is not around.
 
 ## If something is wrong
 

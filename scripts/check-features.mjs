@@ -780,7 +780,7 @@ async function main() {
         const lostG = lostAll.filter((g) => !(g.inCart && !health.configured) && !g.dynamic);
         const provable = req.optionGroups.length - cartOnly.length - dynOnly.length;
         if (dynOnly.length) skip(`${L}: ${dynOnly.length} picker(s) inside recommendation blocks`, 'a recommender\'s picks are values, judged by the block being filled');
-        if (cartOnly.length) skip(`${L}: ${cartOnly.length} cart-drawer picker(s)`, 'need an item in the cart — run with --module <url> to prove this');
+        if (cartOnly.length) skip(`${L}: ${cartOnly.length} cart-drawer picker(s)`, 'need an item in the cart — run migrate with --server <url> --secret <key> to prove this');
         if (provable) {
           check(`${L}: variant pickers present`, lostG.length === 0,
             lostG.length ? `${lostG.length} of ${provable} missing` : `${provable} group(s)`);
@@ -802,7 +802,7 @@ async function main() {
       check(`${L}: add-to-cart responds`, r.responded, `"${addCtl.name}" — ${r.why}`);
       if (!r.responded) defect('behaviour', `add-to-cart inert on ${route}`, 'localize-runtime', route);
       if (!health.configured) {
-        skip(`${L}: add-to-cart reaches the module`, 'no ForkLaunch module configured — run with --module <url> to prove this');
+        skip(`${L}: add-to-cart reaches the module`, 'no ForkLaunch module configured — run migrate with --server <url> --secret <key> to prove this');
       } else if (!health.reachable) {
         check(`${L}: add-to-cart reaches the module`, false, `module ${health.module} configured but unreachable`);
         defect('backend', `module ${health.module} unreachable`, null, route);

@@ -156,6 +156,19 @@ const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
       r.confidence = 'high';
     }
 
+    // Headless storefronts (Hydrogen, Next.js) render product grids and
+    // product pages in the browser from an API the offline clone cannot
+    // reach, and usually publish no public catalog feed. The landing pages
+    // capture; the shop does not. Say so before anyone spends an hour on it.
+    if (probe.hydrogen || probe.nextjs) {
+      if (r.verdict === 'GREEN') { r.verdict = 'AMBER'; r.confidence = 'medium'; }
+      r.reasons.push('headless');
+      r.notes.push('This is a headless (React) storefront. Its product grids and product ' +
+        'pages are rendered in the browser from an API the clone cannot reach offline, ' +
+        'and the public catalog feed is usually absent. Expect the homepage and content ' +
+        'pages to capture well and collection/product pages to come through thin or empty. ' +
+        'A full migration of a headless store needs the merchant\'s Storefront API access.');
+    }
     if (churn !== null && churn > 0.15) {
       r.notes.push(`This store renders differently on each visit (~${Math.round(churn * 100)}% ` +
         'height difference between two loads) — A/B testing or personalization. ' +

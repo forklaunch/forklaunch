@@ -183,15 +183,15 @@ ensureDeps();
 // is announced up front rather than explained away afterwards.
 let preflightStack = null;
 if (!args.noPreflight) {
-  console.log('0/‌4  assessing storefront…');
+  console.log('0/4  assessing storefront…');
   const preflightOut = await runPreflight(domain);
   const stackMatch = /^\s*stack:\s*(.+)$/m.exec(preflightOut);
   if (stackMatch) preflightStack = stackMatch[1].trim();
 }
 
 console.log(args.pages === 1
-  ? '1/‌4  capturing homepage (headless render + assets)…'
-  : `1/‌4  crawling storefront (up to ${args.pages} pages, headless render + assets)…`);
+  ? '1/4  capturing homepage (headless render + assets)…'
+  : `1/4  crawling storefront (up to ${args.pages} pages, headless render + assets)…`);
 const cap = await runCapture(domain, outdir, args.clean, args.pages, args.api);
 if (!cap.ok) {
   console.error(`\n✗ capture failed: ${cap.reason}`);
@@ -207,7 +207,7 @@ const indexPath = join(outdir, 'site', 'index.html');
 if (!existsSync(indexPath)) { console.error('✗ no index.html produced'); process.exit(1); }
 
 if (args.measure) {
-  console.log('\n2/‌4  measuring fidelity vs live…');
+  console.log('\n2/4  measuring fidelity vs live…');
   try {
     await run('node', [join(ROOT, 'measure.js'), domain, indexPath,
                         join(outdir, 'measure.json')]);
@@ -226,7 +226,7 @@ if (args.measure) {
 // this run's catalog.
 let catalogReady = false;
 if (!args.noCatalog) {
-  console.log('\n2/‌4  migrating catalog…');
+  console.log('\n2/4  migrating catalog…');
   const cat = join(ROOT, 'catalog');
   const BUN = ensureBun();
   if (!BUN) {
@@ -248,6 +248,11 @@ if (!args.noCatalog) {
     }
   } catch (e) {
     console.error(`   catalog step failed: ${e.message}`);
+    console.error('   The store published no readable public catalog (/products.json). Headless ' +
+                  'storefronts and stores that disabled the feed do this. The clone still ' +
+                  'captures and browses; product-data endpoints, the cart mapping and the ' +
+                  'catalog import have nothing to draw from until a catalog is pulled with ' +
+                  "merchant access: bun scripts/catalog/cli.ts pull-admin <shop-url> --token <admin-token>");
   }
   }
 }
@@ -286,11 +291,11 @@ if (args.noVerify) {
     console.log(`\n✓ done. Serve later with:\n  python3 ${join(ROOT, 'serve.py')} ${args.port} ${join(outdir, 'site')}\n`);
     process.exit(0);
   }
-  console.log(`\n3/‌4  serving locally (UNVERIFIED — --no-verify was passed)…`);
+  console.log(`\n3/4  serving locally (UNVERIFIED — --no-verify was passed)…`);
   console.log(`   open  http://127.0.0.1:${args.port}\n   (Ctrl-C to stop)\n`);
   await run('python3', [join(ROOT, 'serve.py'), args.port, join(outdir, 'site')]);
 } else {
-  console.log(`\n3/‌4  verifying against the live storefront, and repairing…`);
+  console.log(`\n3/4  verifying against the live storefront, and repairing…`);
   const finishArgs = [join(ROOT, 'bin', 'finish.mjs'), join(outdir, 'site'),
     '--live', `https://${domain}`, '--port', String(args.port),
     '--out', outdir, '--rounds', String(args.rounds), '--budget-min', String(args.budgetMin)];
