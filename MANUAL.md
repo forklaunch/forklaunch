@@ -65,7 +65,9 @@ fidelity` means 0, `✗ did not reach complete feature fidelity` means 1. Pass
 `--no-serve` if you want the process to exit with that code instead.
 
 The verify phase has a budget: 5 rounds or 30 minutes, whichever comes first
-(`--rounds`, `--budget-min`). If it stops on budget it says so ("wall-clock
+(`--rounds`, `--budget-min`). When a repair needs a re-crawl of many pages it
+extends the budget to fit that re-crawl (it says so, with the minutes added),
+under a hard cap of 150 minutes. If it stops on budget it says so ("wall-clock
 budget spent") and reports what was still missing. On a 40-page store expect
 the verify phase to take 30 to 55 minutes on top of the crawl.
 
@@ -111,7 +113,7 @@ works, never that a number matches.
 
 | Flag | What it does |
 |---|---|
-| `--pages N` | page budget for the crawl (default 20). Every menu destination is captured on top of it, so a 20-page budget on a store with a 62-link menu captures ~40 pages. |
+| `--pages N` | page budget for the crawl (default 20). Menu destinations (up to 40) are captured on top of it, so a 20-page budget on a store with a big menu captures 40 to 60 pages. |
 | `--no-serve` | exit with the verdict's code instead of staying up serving |
 | `--port N` | serve on another port (default 4173) |
 | `--rounds N`, `--budget-min N` | verify/repair budget (default 5 rounds, 30 minutes) |
