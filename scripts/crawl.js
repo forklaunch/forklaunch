@@ -885,7 +885,11 @@ function injectAtDocStart(html, script) {
         // trailing query, if this occurrence in the page's html has one —
         // matched permissively (it may still carry HTML-entity-encoded
         // "&amp;" from page.content()'s serialization) and discarded whole.
-        return { re: new RegExp(pattern + '(?:\\?[^\\s"\'()<>]*)?', 'g'), rel };
+        // …but never through an HTML-escaped quote: inside a style attribute
+        // the URL sits in url(&quot;…&quot;), and eating the closing &quot;
+        // left url(&quot;_a/img/x.jpg); — an unterminated CSS string whose
+        // request then carried ");" (seen on olipop and kotn).
+        return { re: new RegExp(pattern + '(?:\\?(?:(?!&quot;|&#39;|&#34;|&apos;)[^\\s"\'()<>])*)?', 'g'), rel };
       });
 
     // Rewrite url() inside captured CSS. Refs there resolve relative to the
