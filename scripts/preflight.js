@@ -185,9 +185,12 @@ const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
     // budget (crawl.js HARD_CAP = MAX_PAGES + up to 12 nav links), so the
     // real count is well above the budget. Estimating only the budgeted
     // pages is what made this promise ~12 and then capture 31.
-    const navExtra = Math.min(12, probe.navLinks || 0);
-    const pages = Math.min(12, 1 + Math.min(5, probe.collectionLinks) +
-      Math.min(6, probe.productLinks)) + navExtra;
+    // Mirrors crawl.js: a 20-page budget plus every menu destination up to
+    // NAV_MUST_CAP (40). The old cap of 12 here promised 24 pages for a store
+    // the crawl then captured 52 of.
+    const navExtra = Math.min(40, probe.navLinks || 0);
+    const pages = Math.min(20, 1 + Math.min(5, probe.collectionLinks) +
+      Math.min(14, probe.productLinks)) + navExtra;
 
     // Seconds: measured throughput is 20-35s/page (image-heavy stores at the
     // top of that range), not a flat constant. The old estimate ignored page
