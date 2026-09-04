@@ -101,7 +101,8 @@ function harnessFail(msg, hint) {
 // 8: templateId / templateVaries in the live requirement.
 // 9: headingDynamic / dynamic flags (recommendation & upsell content).
 // 10: landmarks and background counts exclude vendor widgets.
-const REQUIREMENT_SCHEMA = 10;
+// 11: headingSlide (carousel slide content).
+const REQUIREMENT_SCHEMA = 11;
 
 const results = [];
 const check = (name, pass, detail = '') => results.push({ name, pass: !!pass, state: pass ? 'PASS' : 'FAIL', detail });
@@ -462,7 +463,15 @@ async function main() {
     if (structural) {
       const hs = new Set(got.headings);
       const allLost = req.headings.filter((h) => !hs.has(h));
-      const lost = allLost.filter((h) => !req.headingVendor?.[h] && !req.headingDynamic?.[h]);
+      const lost = allLost.filter((h) => !req.headingVendor?.[h] && !req.headingDynamic?.[h] && !req.headingSlide?.[h]);
+      // Carousel slides: judged by the carousel having content on the clone.
+      const slideLost = allLost.filter((h) => req.headingSlide?.[h] && !req.headingVendor?.[h]);
+      if (slideLost.length) {
+        const cloneSlides = Object.keys(got.headingSlide || {}).length;
+        check(`${L}: carousel content present`, cloneSlides > 0,
+          cloneSlides > 0 ? `${cloneSlides} slide heading(s) on the clone (live showed ${slideLost.length} other slide(s), as carousels do)` : 'no carousel slide content on the clone');
+        if (!cloneSlides) defect('dynamic', `carousel content missing: ${slideLost.slice(0, 2).map((h) => JSON.stringify(h.slice(0, 30))).join(', ')}`, 'recapture', route);
+      }
       const vendorLost = allLost.filter((h) => req.headingVendor?.[h]);
       // Headings inside a recommendations / upsell block are that block's
       // current picks — a value. Judged once, by whether the block is filled.
@@ -585,9 +594,18 @@ async function main() {
       // the store's host or from cdn.shopify.com/s/files/…/t/… and never
       // match here, so a genuine theme error is still reported.
       const fm = u.match(/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/(_a\/[^?#]+)/);
-      if (fm && origins[fm[1]]) {
+      // The sibling resolver serves a hashed asset under the unhashed name a
+      // module asked for (_a/chunks/x.esm.js for _a/js/x.esm.<hash>.js); match
+      // the origin by base name when the exact key is absent.
+      const originOf = (rel) => {
+        if (origins[rel]) return origins[rel];
+        const base = rel.split('/').pop().replace(/\.[0-9a-f]{10}(\.[a-z0-9]+)$/i, '$1');
+        for (const k of Object.keys(origins)) if (k.split('/').pop().replace(/\.[0-9a-f]{10}(\.[a-z0-9]+)$/i, '$1') === base) return origins[k];
+        return null;
+      };
+      if (fm && originOf(fm[1])) {
         try {
-          const o = new URL(origins[fm[1]]);
+          const o = new URL(originOf(fm[1]));
           const oh = o.host.replace(/^www\./, '');
           // cdn.shopify.com hosts the merchant's theme files under /s/files/…,
           // app scripts under /extensions/, and Shopify's own platform code

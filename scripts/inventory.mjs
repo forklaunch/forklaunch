@@ -265,6 +265,13 @@ export const SNAPSHOT = function () {
   const headings = [];
   const headingVendor = {};
   const headingDynamic = {};
+  // A heading inside a carousel slide is visible only while its slide is
+  // active. Live and clone sit on different slides at different moments, so
+  // slide content is judged by "the carousel has content", never slide by
+  // slide. Matched on the slide libraries' own class names — evidence.
+  const SLIDE_SIG = /keen-slider__slide|swiper-slide|slick-slide|flickity-cell|splide__slide|glide__slide|carousel__slide|carousel-item|slider__slide|\bslide\b/i;
+  const inSlide = (el) => { let n = el, d = 0; while (n && n.nodeType === 1 && d++ < 8) { if (SLIDE_SIG.test(typeof n.className === 'string' ? n.className : '')) return true; n = n.parentElement; } return false; };
+  const headingSlide = {};
   for (const h of document.querySelectorAll('h1,h2,h3,h4,[role="heading"]')) {
     if (!visible(h)) continue;
     const t = norm(h.textContent);
@@ -275,6 +282,7 @@ export const SNAPSHOT = function () {
     if (v) headingVendor[k] = v;
     const dy = dynamicOf(h);
     if (dy) headingDynamic[k] = dy;
+    if (inSlide(h)) headingSlide[k] = true;
   }
 
   // ---- landmarks ---------------------------------------------------------
@@ -431,7 +439,7 @@ export const SNAPSHOT = function () {
 
   return {
     title: norm(document.title),
-    headings: [...new Set(headings)], headingVendor, headingDynamic,
+    headings: [...new Set(headings)], headingVendor, headingDynamic, headingSlide,
     // Which theme template rendered this page. Shopify stamps every section
     // with it; a store running an A/B test (or switching templates mid-day,
     // as gorillamind.com did) serves a different one than the capture, and
@@ -523,9 +531,9 @@ export async function inventoryRoute(page, url, { settle = 4000, scroll = true }
   // a file", so the location is kept.
   const onConsole = (m) => {
     if (m.type() !== 'error') return;
-    let where = '';
-    try { where = m.location()?.url || ''; } catch (_) {}
-    consoleErrors.push({ text: m.text().slice(0, 200), url: where.slice(0, 200) });
+    let where = '', line = 0;
+    try { where = m.location()?.url || ''; line = m.location()?.lineNumber || 0; } catch (_) {}
+    consoleErrors.push({ text: m.text().slice(0, 200), url: where.slice(0, 200), line });
   };
   // Keep WHERE the error came from, not just what it said. The classifier's
   // strongest test is origin — an error thrown by a vendor's script is that
@@ -618,6 +626,15 @@ export async function inventoryRoute(page, url, { settle = 4000, scroll = true }
       await page.waitForTimeout(1800);
     }
     const snap = await page.evaluate(SNAPSHOT);
+    // On Linux Chromium the pageerror event often carries no frame at all,
+    // while the console's own "Uncaught …" line for the same error has the
+    // URL and line. Give the frameless entry that location.
+    for (const e of consoleErrors) {
+      if (e.url || !/^uncaught: /.test(e.text)) continue;
+      const msg = e.text.slice('uncaught: '.length, 'uncaught: '.length + 80);
+      const twin = consoleErrors.find((c) => c !== e && c.url && !/^uncaught: /.test(c.text) && c.text.includes(msg));
+      if (twin) { e.url = twin.url; e.line = twin.line || e.line || 0; }
+    }
     // Enrich type-name-only rejections with the contents recorded above, in
     // the order they happened.
     try {
@@ -663,6 +680,7 @@ export function stable(a, b) {
     headings: both(a.headings, b.headings),
     headingVendor: { ...b.headingVendor, ...a.headingVendor },
     headingDynamic: { ...b.headingDynamic, ...a.headingDynamic },
+    headingSlide: { ...b.headingSlide, ...a.headingSlide },
     // Two live samples on different templates = an A/B test in progress.
     templateId: a.templateId === b.templateId ? (a.templateId || null) : null,
     templateVaries: !!(a.templateId && b.templateId && a.templateId !== b.templateId),
