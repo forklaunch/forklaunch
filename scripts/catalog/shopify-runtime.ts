@@ -159,7 +159,12 @@ function pageHtmlFor(siteRoot: string, p: string): string | null {
   return null;
 }
 function extractSection(html: string, id: string): string | null {
-  const re = new RegExp(`<(div|section)\\b[^>]*\\bid="shopify-section-${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"[^>]*>`, 'i');
+  // A theme asks for a section by its short name ("drawer-navigation");
+  // Shopify resolves that to the section-group instance on the page, whose
+  // id carries a prefix ("shopify-section-sections--1898…__drawer-navigation").
+  // Match the exact id or that suffix form, on any element the theme used.
+  const esc = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`<(div|section|aside|header|footer|nav)\\b[^>]*\\bid="shopify-section-(?:[^"]*__)?${esc}"[^>]*>`, 'i');
   const m = re.exec(html);
   if (!m) return null;
   const tag = m[1].toLowerCase();

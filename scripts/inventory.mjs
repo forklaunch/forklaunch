@@ -92,11 +92,16 @@ export const SNAPSHOT = function () {
   const hrefKey = (el) => {
     try {
       if (!el.getAttribute) return null;
-      const h = el.getAttribute('href');
+      // The clone rewrites a link to an uncaptured page (search, cart,
+      // account) to "#" and keeps the original path in data-mirror-uncaptured;
+      // a link it resolved locally keeps its target in data-fl-href. Either is
+      // the destination the live site has.
+      const h = el.getAttribute('data-mirror-uncaptured') || el.getAttribute('data-fl-href') || el.getAttribute('href');
       if (!h || /^(#|mailto:|tel:|javascript:|data:)/i.test(h)) return null;
       const u = new URL(h, location.href);
       if (u.host && u.host.replace(/^www\./, '') !== location.host.replace(/^www\./, '')) return null;
-      const p = u.pathname.replace(/\.html$/, '').replace(/\/+$/, '').replace(/^\/+/, '') || '/';
+      let p = u.pathname.replace(/\.html$/, '').replace(/\/+$/, '').replace(/^\/+/, '') || '/';
+      if (p === 'index') p = '/';                       // the clone's homepage file
       return 'href:' + p.toLowerCase();
     } catch (_) { return null; }
   };

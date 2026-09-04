@@ -30,14 +30,18 @@ function* htmlFiles(d) {
 }
 
 const BROKEN = /href="#" data-mirror-uncaptured="([^"]*)"/g;
-let files = 0, fixed = 0, reverted = 0;
+let files = 0, fixed = 0, reverted = 0, logos = 0;
 for (const f of htmlFiles(SITE)) {
   files++;
   const html = readFileSync(f, 'utf8');
   let n = 0;
-  const out = html.split(/(<script\b[^>]*>[\s\S]*?<\/script>)/i)
+  let out = html.split(/(<script\b[^>]*>[\s\S]*?<\/script>)/i)
     .map((seg, i) => (i % 2 ? seg.replace(BROKEN, (m, p) => { n++; return `href="${p}"`; }) : seg))
     .join('');
-  if (n) { writeFileSync(f, out); fixed++; reverted += n; }
+  // Older captures rewrote the logo's href="/" to the homepage's own HTML
+  // recorded as an asset (_a/other/index.<hash>.bin). Point it at index.html.
+  let l = 0;
+  out = out.replace(/href="((?:\.\.\/)*)_a\/other\/index\.[0-9a-f]{10}\.bin"/g, (m, up) => { l++; return `href="${up}index.html"`; });
+  if (n || l) { writeFileSync(f, out); fixed++; reverted += n; logos += l; }
 }
-console.log(`fix-script-hrefs: ${files} page(s) scanned, ${fixed} repaired, ${reverted} rewrite(s) reverted inside scripts`);
+console.log(`fix-script-hrefs: ${files} page(s) scanned, ${fixed} repaired, ${reverted} rewrite(s) reverted inside scripts, ${logos} home link(s) pointed back at index.html`);

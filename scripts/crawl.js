@@ -967,16 +967,19 @@ function injectAtDocStart(html, script) {
         // page. Those must map to the local copy — absolutising them to the
         // live origin loses the CSS we already captured, and the clone renders
         // in Times at several thousand px wide.
-        const asset = byPath.get(p);
-        if (asset) return `href="${up}${asset}"`;
         // Match on the OUTPUT FILE, not the URL path. Shopify exposes the same
         // product at both /products/x and /collections/y/products/x; those are
         // different paths that resolve to one captured file, so a path-keyed
         // lookup misses half the links and sends them to the live store.
+        // A captured PAGE wins over an asset recorded at the same path: the
+        // homepage's own HTML is also in the asset map under "/", and the
+        // logo's href="/" was being rewritten to _a/other/index.<hash>.bin.
         const tgt = pageFileFor(p);
         if (tgt && capturedFiles.has(tgt.file)) {
           return `href="${up}${tgt.file}"`;                 // -> local copy
         }
+        const asset = byPath.get(p);
+        if (asset && !/\/_a\/other\/index\.[0-9a-f]{10}\.bin$/.test('/' + asset)) return `href="${up}${asset}"`;
         // A real nav-menu destination the budget didn't reach (or a guessed
         // trigger candidate that never resolved). It's the most-clicked kind
         // of link on the page — never leave it dead or send it off-site;
