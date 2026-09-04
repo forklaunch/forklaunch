@@ -932,11 +932,10 @@ function injectAtDocStart(html, script) {
     // the catalog" intent, just not the exact category — or the homepage
     // if nothing was captured at all.
     const navPathSet = new Set(navMust);
-    const navFallback = [...capturedFiles].find(f => f.startsWith('collections/')) ||
-                         (capturedFiles.has('index.html') ? 'index.html' : null);
+    const navFallback = null;   // see the note at the href rewrite: no silent redirects
 
     for (const [pth, rawHtml] of captured) {
-      if (ONLY && !ONLY.has(pth)) continue;      // targeted: write only the named pages
+      if (ONLY && !ONLY.has(pth)) continue;      // targeted: write only the named pages ('/' too, when named)
       const meta = wanted.get(pth) || { file: 'index.html', depth: 0 };
       const up = '../'.repeat(meta.depth);
       let html = rawHtml;
@@ -980,13 +979,12 @@ function injectAtDocStart(html, script) {
         }
         const asset = byPath.get(p);
         if (asset && !/\/_a\/other\/index\.[0-9a-f]{10}\.bin$/.test('/' + asset)) return `href="${up}${asset}"`;
-        // A real nav-menu destination the budget didn't reach (or a guessed
-        // trigger candidate that never resolved). It's the most-clicked kind
-        // of link on the page — never leave it dead or send it off-site;
-        // land on the nearest captured collection instead.
-        if (navPathSet.has(p) && navFallback) {
-          return `href="${up}${navFallback}"`;
-        }
+        // A nav-menu destination the budget didn't reach used to be sent to
+        // the nearest captured collection. That hid the gap from the gate (the
+        // link exists, it just goes to the wrong page) and threw away the real
+        // destination, so the targeted recapture could never repair it. It now
+        // falls through to the uncaptured marker below: inert in demo mode,
+        // honest, and the gate names it as a dead destination to re-crawl.
         // A storefront page we didn't capture. Outside demo mode, send it to
         // the live site so a click never 404s. In demo mode that is wrong —
         // clicking a link must never eject the viewer into the real store
