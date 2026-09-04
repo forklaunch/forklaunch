@@ -99,7 +99,8 @@ function harnessFail(msg, hint) {
 // 7: link controls keyed by destination path; sale phrases stripped from
 //    feature keys (inventory.mjs featureKey / hrefKey).
 // 8: templateId / templateVaries in the live requirement.
-const REQUIREMENT_SCHEMA = 8;
+// 9: headingDynamic / dynamic flags (recommendation & upsell content).
+const REQUIREMENT_SCHEMA = 9;
 
 const results = [];
 const check = (name, pass, detail = '') => results.push({ name, pass: !!pass, state: pass ? 'PASS' : 'FAIL', detail });
@@ -185,6 +186,33 @@ async function redeclaredByVendor(page, route, ident, origins, hosts, storeHost)
   };
   const vendors = declarers.map(vendorOf);
   return vendors.every(Boolean) ? [...new Set(vendors)].join(' + ') : null;
+}
+
+// Links a theme renders only when a menu opens. On the live site the menu's
+// panels are usually in the DOM at rest; a clone captured at rest can carry
+// them in a portal the theme fills on hover (gorillamind.com's mega menu).
+// The link is there either way — open the menus and count what appears.
+async function menuRevealedKeys(page, got) {
+  const keys = new Set();
+  const menus = got.controls.filter((c) => c.kind === 'menu').slice(0, 3);
+  if (!menus.length) return keys;
+  for (const m of menus) { try { await actuate(page, m.ctl, { wait: 900, key: m.key }); } catch {} }
+  try {
+    const list = await page.evaluate(() => [...document.querySelectorAll('a')].map((a) => {
+      try {
+        const h = a.getAttribute('data-mirror-uncaptured') || a.getAttribute('data-fl-href') || a.getAttribute('href');
+        if (!h || /^(#|mailto:|tel:|javascript:|data:)/i.test(h)) return null;
+        const u = new URL(h, location.href);
+        if (u.host && u.host.replace(/^www\./, '') !== location.host.replace(/^www\./, '')) return null;
+        let p = u.pathname.replace(/\.html$/, '').replace(/\/+$/, '').replace(/^\/+/, '') || '/';
+        if (p === 'index') p = '/';
+        return 'link href:' + p.toLowerCase();
+      } catch { return null; }
+    }).filter(Boolean));
+    for (const k of list) keys.add(k);
+  } catch {}
+  try { await page.keyboard.press('Escape'); } catch {}
+  return keys;
 }
 
 const defect = (kind, what, repair = null, where = '', policy = null, url = '') =>
@@ -413,13 +441,24 @@ async function main() {
     if (structural) {
       const hs = new Set(got.headings);
       const allLost = req.headings.filter((h) => !hs.has(h));
-      const lost = allLost.filter((h) => !req.headingVendor?.[h]);
+      const lost = allLost.filter((h) => !req.headingVendor?.[h] && !req.headingDynamic?.[h]);
       const vendorLost = allLost.filter((h) => req.headingVendor?.[h]);
+      // Headings inside a recommendations / upsell block are that block's
+      // current picks — a value. Judged once, by whether the block is filled.
+      const dynamicLost = allLost.filter((h) => req.headingDynamic?.[h] && !req.headingVendor?.[h]);
       check(`${L}: every live section present`, lost.length === 0,
         lost.length ? `${lost.length} of ${req.headings.length} missing: ${lost.slice(0, 3).map((x) => JSON.stringify(x.slice(0, 32))).join(', ')}`
                     : `${req.headings.length} section(s)` + (vendorLost.length ? `, ${vendorLost.length} third-party` : ''));
       for (const h of lost) defect('section', `heading "${h.slice(0, 60)}"`, 'recapture', route);
       for (const h of vendorLost) defect('section', `heading "${h.slice(0, 50)}"`, null, route, req.headingVendor[h]);
+      if (dynamicLost.length) {
+        const filled = Object.keys(got.headingDynamic || {}).length > 0 || got.controls.some((c) => c.dynamic);
+        const blocks = [...new Set(dynamicLost.map((h) => req.headingDynamic[h]))];
+        check(`${L}: recommendation blocks filled`, filled,
+          filled ? `${blocks.length} block(s) filled with the clone's own picks (live's ${dynamicLost.length} picks differ, as picks do)`
+                 : `${blocks.join(', ')} empty on the clone`);
+        if (!filled) defect('dynamic', `recommendation / upsell block empty: ${blocks.join(', ')}`, null, route);
+      }
 
       const lm = new Set(got.landmarks);
       const lostLm = req.landmarks.filter((x) => !lm.has(x));
@@ -651,9 +690,14 @@ async function main() {
     // ---- controls ---------------------------------------------------------
     if (structural) {
       const haveKeys = new Set(got.controls.map((c) => c.key));
-      const allLostCtl = req.controls.filter((c) => !haveKeys.has(c.key));
-      const lostCtl = allLostCtl.filter((c) => !c.vendor);
+      const lateKeys = await menuRevealedKeys(page, got);
+      const allLostCtl = req.controls.filter((c) => !haveKeys.has(c.key) && !lateKeys.has(c.key));
+      const lostCtl = allLostCtl.filter((c) => !c.vendor && !c.dynamic);
       const vendorCtl = allLostCtl.filter((c) => c.vendor);
+      const dynamicCtl = allLostCtl.filter((c) => c.dynamic && !c.vendor);
+      if (dynamicCtl.length && !got.controls.some((c) => c.dynamic) && !Object.keys(got.headingDynamic || {}).length) {
+        defect('dynamic', `${dynamicCtl.length} control(s) inside an empty recommendation / upsell block`, null, route);
+      }
       // Grouped by kind so the report says "the cart drawer is gone", not
       // "17 elements differ".
       const byKind = {};
@@ -681,8 +725,10 @@ async function main() {
         // cannot be exercised, so the feature is unprovable here — the same
         // line add-to-cart draws below — not missing.
         const cartOnly = lostAll.filter((g) => g.inCart && !health.configured);
-        const lostG = lostAll.filter((g) => !(g.inCart && !health.configured));
-        const provable = req.optionGroups.length - cartOnly.length;
+        const dynOnly = lostAll.filter((g) => g.dynamic && !(g.inCart && !health.configured));
+        const lostG = lostAll.filter((g) => !(g.inCart && !health.configured) && !g.dynamic);
+        const provable = req.optionGroups.length - cartOnly.length - dynOnly.length;
+        if (dynOnly.length) skip(`${L}: ${dynOnly.length} picker(s) inside recommendation blocks`, 'a recommender\'s picks are values, judged by the block being filled');
         if (cartOnly.length) skip(`${L}: ${cartOnly.length} cart-drawer picker(s)`, 'need an item in the cart — run with --module <url> to prove this');
         if (provable) {
           check(`${L}: variant pickers present`, lostG.length === 0,

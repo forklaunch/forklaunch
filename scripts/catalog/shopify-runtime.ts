@@ -266,6 +266,29 @@ export async function shopifyRuntime(req: Request, url: URL, p: string, ctx: Run
     const page = Math.max(1, Number(url.searchParams.get('page')) || 1);
     return json({ products: raw.products.slice((page - 1) * limit, page * limit) });
   }
+  // Recommendations asked for as a SECTION (Dawn's product-recommendations
+  // element and most themes): the theme fetches its own section rendered
+  // with the recommended products and REPLACES the block with the response.
+  // Answer with the section as captured on that product's page — the
+  // recommendations the live site showed at crawl time — so the block is
+  // filled rather than emptied. Falls back to plain cards if the page has no
+  // such section.
+  if (method === 'GET' && /^\/recommendations\/products(\.json)?$/.test(p) && url.searchParams.get('section_id')) {
+    const sid = url.searchParams.get('section_id')!;
+    const pid = url.searchParams.get('product_id');
+    const prod = pid ? raw.products.find((x) => String(x.id) === String(pid)) : null;
+    const html = prod ? pageHtmlFor(ctx.siteRoot, `/products/${prod.handle}`) : null;
+    const frag = html ? extractSection(html, sid) : null;
+    if (frag && (frag.match(/<a /g) || []).length >= 2) {
+      return new Response(frag, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
+    }
+    const limit = Math.min(12, Number(url.searchParams.get('limit')) || 4);
+    const esc = (t: any) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
+    const picks = raw.products.filter((x) => String(x.id) !== String(pid)).slice(0, limit);
+    const cards = picks.map((x) => `<li class="grid__item" style="list-style:none"><a href="/products/${esc(x.handle)}" class="full-unstyled-link" style="display:block;text-decoration:none;color:inherit">${x.images?.[0]?.src ? `<img src="${esc(x.images[0].src)}" alt="${esc(x.title)}" loading="lazy" style="width:100%;height:auto">` : ''}<div style="padding:8px 0"><span>${esc(x.title)}</span><br><span>$${esc(x.variants?.[0]?.price ?? '')}</span></div></a></li>`).join('');
+    const body = `<div id="shopify-section-${esc(sid)}" class="shopify-section"><product-recommendations><div class="page-width"><h2 class="h2">Recommended products</h2><ul class="grid product-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;padding:0">${cards}</ul></div></product-recommendations></div>`;
+    return new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
+  }
   if (method === 'GET' && p === '/recommendations/products.json') {
     const limit = Math.min(20, Number(url.searchParams.get('limit')) || 4);
     const exclude = url.searchParams.get('product_id');

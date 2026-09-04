@@ -244,9 +244,27 @@ export const SNAPSHOT = function () {
     return null;
   };
 
+  // Content a recommender renders is a VALUE, not a feature: which products
+  // "You may also like" shows, their titles, flavor selects and add buttons
+  // differ from visit to visit and certainly from live to an offline clone.
+  // The feature is that the block exists and is filled. Anything inside such
+  // a container is tagged with the container so the gate compares presence,
+  // not names. Matched on the container's own id/class/tag — evidence.
+  const DYNAMIC_SIG = /recommend|upsell|also-like|complete-the-look|complete-your|frequently-bought|related-products|cross-sell|you-may|bundle-and-save|recently-viewed/i;
+  const dynamicOf = (el) => {
+    let n = el, d = 0;
+    while (n && n.nodeType === 1 && d++ < 12) {
+      const sig = n.tagName + ' ' + (n.id || '') + ' ' + (typeof n.className === 'string' ? n.className : '');
+      if (DYNAMIC_SIG.test(sig)) return (n.id || n.tagName.toLowerCase()).slice(0, 60);
+      n = n.parentElement;
+    }
+    return null;
+  };
+
   // ---- headings: the section skeleton ------------------------------------
   const headings = [];
   const headingVendor = {};
+  const headingDynamic = {};
   for (const h of document.querySelectorAll('h1,h2,h3,h4,[role="heading"]')) {
     if (!visible(h)) continue;
     const t = norm(h.textContent);
@@ -255,6 +273,8 @@ export const SNAPSHOT = function () {
     headings.push(k);
     const v = vendorOf(h);
     if (v) headingVendor[k] = v;
+    const dy = dynamicOf(h);
+    if (dy) headingDynamic[k] = dy;
   }
 
   // ---- landmarks ---------------------------------------------------------
@@ -350,7 +370,7 @@ export const SNAPSHOT = function () {
     const id = ++stamp;
     try { el.setAttribute('data-fl-ctl', String(id)); } catch (_) {}
     controls.push({
-      ctl: id, role: r, name, key, kind, vendor: vendorOf(el),
+      ctl: id, role: r, name, key, kind, vendor: vendorOf(el), dynamic: dynamicOf(el),
       visible: visible(el),
       href: el.getAttribute && el.getAttribute('href') || null
     });
@@ -378,14 +398,15 @@ export const SNAPSHOT = function () {
   };
   for (const scope of scopes) {
     const inCart = inCartDrawer(scope);
+    const dyn = dynamicOf(scope);
     const byName = new Map();
     for (const inp of scope.querySelectorAll('input[type=radio],input[type=checkbox]')) {
       const n = inp.name || accName(inp);
       byName.set(n, (byName.get(n) || 0) + 1);
     }
-    for (const [n, count] of byName) if (count >= 2) optionGroups.push({ kind: 'radios', name: norm(n).toLowerCase(), count, inCart });
+    for (const [n, count] of byName) if (count >= 2) optionGroups.push({ kind: 'radios', name: norm(n).toLowerCase(), count, inCart, dynamic: dyn });
     for (const sel of scope.querySelectorAll('select')) {
-      if (sel.options && sel.options.length >= 2) optionGroups.push({ kind: 'select', name: accName(sel).toLowerCase(), count: sel.options.length, inCart: inCart || inCartDrawer(sel) });
+      if (sel.options && sel.options.length >= 2) optionGroups.push({ kind: 'select', name: accName(sel).toLowerCase(), count: sel.options.length, inCart: inCart || inCartDrawer(sel), dynamic: dyn || dynamicOf(sel) });
     }
     // Swatch/size buttons: several sibling buttons or labels with short text
     // inside one container is the universal shape of a variant picker.
@@ -406,7 +427,7 @@ export const SNAPSHOT = function () {
 
   return {
     title: norm(document.title),
-    headings: [...new Set(headings)], headingVendor,
+    headings: [...new Set(headings)], headingVendor, headingDynamic,
     // Which theme template rendered this page. Shopify stamps every section
     // with it; a store running an A/B test (or switching templates mid-day,
     // as gorillamind.com did) serves a different one than the capture, and
@@ -635,6 +656,7 @@ export function stable(a, b) {
     title: a.title,
     headings: both(a.headings, b.headings),
     headingVendor: { ...b.headingVendor, ...a.headingVendor },
+    headingDynamic: { ...b.headingDynamic, ...a.headingDynamic },
     // Two live samples on different templates = an A/B test in progress.
     templateId: a.templateId === b.templateId ? (a.templateId || null) : null,
     templateVaries: !!(a.templateId && b.templateId && a.templateId !== b.templateId),
