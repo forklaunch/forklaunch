@@ -51,8 +51,8 @@ for (const f of htmlFiles(SITE)) {
   const up = '../'.repeat(depth);
   out = out.replace(/href="#" data-mirror-uncaptured="(\/[^"]*)"/g, (m, p) => {
     const t = pageFileFor(p.split('?')[0].split('#')[0]);
-    if (!t || !existsSync(join(SITE, t.file))) return m;
     r++;
+    if (!t || !existsSync(join(SITE, t.file))) return `href="${p}" data-mirror-uncaptured="${p}"`;   // still uncaptured: real href, inert by marker
     return `href="${up}${t.file}" data-fl-href="${up}${t.file}"`;
   });
   if (n || l || r) { writeFileSync(f, out); fixed++; reverted += n; logos += l; relinked += r; }

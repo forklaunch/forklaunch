@@ -990,7 +990,7 @@ function injectAtDocStart(html, script) {
         // clicking a link must never eject the viewer into the real store
         // mid-presentation — so mark it inert instead.
         return CLEAN
-          ? `href="#" data-mirror-uncaptured="${p}"`
+          ? `href="${p}" data-mirror-uncaptured="${p}"`
           : `href="https://${domain}${p}"`;
       });
 
@@ -1421,18 +1421,23 @@ function injectAtDocStart(html, script) {
         const navGuard = '<script>(function(){' +
           'function local(u){try{var a=new URL(u,location.href);' +
           'return a.origin===location.origin||a.protocol==="javascript:"||a.hash;}catch(e){return true}}' +
-          'function toast(){var t=document.getElementById("_mg");if(!t){' +
+          'function toast(msg){var t=document.getElementById("_mg");if(!t){' +
           't=document.createElement("div");t.id="_mg";' +
           't.style.cssText="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);' +
           'background:#111;color:#fff;padding:9px 15px;border-radius:8px;z-index:2147483600;' +
           'font:13px system-ui,sans-serif;opacity:0;transition:opacity .18s";' +
           'document.body.appendChild(t);}' +
-          't.textContent="External link disabled in this demo";t.style.opacity="1";' +
+          't.textContent=msg||"External link disabled in this demo";t.style.opacity="1";' +
           'clearTimeout(t._h);t._h=setTimeout(function(){t.style.opacity="0"},1600);}' +
           'document.addEventListener("click",function(e){' +
           'var a=e.target&&e.target.closest?e.target.closest("a[href]"):null;if(!a)return;' +
           'var h=a.getAttribute("href")||"";' +
           'if(/^(mailto:|tel:)/i.test(h))return;' +
+          // A page the capture does not have keeps its REAL href (a theme that
+          // rebuilds its menus drops "#" links — gorillamind.com lost 41 of 62)
+          // and is made inert here, by the marker, with a toast that says why.
+          'if(a.hasAttribute("data-mirror-uncaptured")||a.hasAttribute("data-mirror-inert")){' +
+          'e.preventDefault();e.stopImmediatePropagation();toast("Not captured in this demo");return;}' +
           'if(!local(h)){e.preventDefault();e.stopImmediatePropagation();toast();}' +
           '},true);' +
           'document.addEventListener("submit",function(e){' +
@@ -1448,7 +1453,7 @@ function injectAtDocStart(html, script) {
       if (CLEAN) {
         html = html.replace(
           new RegExp(`href="https://${domain.replace(/\\./g, '\\\\.')}(\\/(?:account|cart|checkout|policies)[^"]*)?"`, 'gi'),
-          'href="#" data-mirror-inert="1"');
+          (m, path) => `href="${path || '/'}" data-mirror-inert="1"`);
       }
 
       if (CLEAN) {
