@@ -370,6 +370,10 @@ const REPAIR_CMD = {
 // The dead internal paths the last gate named — set by chooseRepairs, read by
 // REPAIR_CMD.recapture above.
 let pendingRecapture = [];
+// A page re-captured once this run cannot gain anything from a second
+// identical fetch; the loop re-captured olipop's homepage four times for
+// review quotes a recapture can never produce.
+const recapturedThisRun = new Set();
 const ALLOW_RECAPTURE = has('--allow-recapture');
 const DOMAIN = (LIVE || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '');
 
@@ -402,7 +406,13 @@ function chooseRepairs(v) {
     .filter((p) => p.startsWith('/'))
     // /cart, /account, /search… are never captured (urlmap SKIP_PATH): the
     // server answers them itself. Naming them here burned two rounds on graza.
-    .filter((p) => p === '/' || !!pageFileFor(p)))];
+    .filter((p) => p === '/' || !!pageFileFor(p))
+    .filter((p) => !recapturedThisRun.has(p)))];
+  if (wanted.has('recapture') && !pendingRecapture.length && v.missing.some((m) => m.repair === 'recapture')) {
+    // Everything a recapture could reach has been re-captured already.
+    wanted.delete('recapture');
+    log('  · the pages a re-crawl could fix were already re-captured this run — not repeating it');
+  }
   for (const r of PATTERN_REPAIRS) if (r.when(v.text)) wanted.add(r.name);
   if (wanted.has('recapture') && (!ALLOW_RECAPTURE || !DOMAIN)) {
     wanted.delete('recapture');
@@ -536,6 +546,7 @@ function chooseRepairs(v) {
     if (!snapshot()) log('  ! could not snapshot for rollback; this round is not reversible');
     for (const name of chosen) {
       const [cmd, args] = REPAIR_CMD[name]();
+      if (name === 'recapture') for (const p of pendingRecapture) recapturedThisRun.add(p);
       // No repair outlives the budget. Without this bound a recapture ran to
       // completion and only THEN did the loop notice the deadline had passed.
       const timeoutMs = Math.max(60_000, DEADLINE - Date.now());
