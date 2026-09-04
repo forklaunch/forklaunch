@@ -139,8 +139,8 @@ starts — do not retry against a block.
 ## When the clone needs a backend
 
 The clone's cart works offline for browsing. To take real orders it needs a
-ForkLaunch app with the ecommerce module running. That is the platform's job, not
-this tool's — see `SKILL.md` → "Next: getting it into ForkLaunch" for the handoff.
+ForkLaunch app with the ecommerce module running. `WIRING.md` is the whole path,
+six numbered steps with the exact commands and what each has been tested on.
 
 ## If something is wrong
 

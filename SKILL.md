@@ -288,6 +288,10 @@ clickable *render* of one.
 
 ## Next: getting it into ForkLaunch
 
+`WIRING.md` at the skill root is the short, human version of this section:
+six steps, exact commands, tested-or-not per step. Hand it to a person; read
+the rest of this section yourself.
+
 Capture is the front half. Everything below turns the render into a store, and
 each step is documented in `references/` — **read those files, they are not
 optional and nothing else links to them**:
