@@ -253,7 +253,7 @@ function injectAtDocStart(html, script) {
   const pageIndex = [];
   fs.mkdirSync(path.join(outdir, 'site'), { recursive: true });
 
-  let browser = await chromium.launch({ headless: true });
+  let browser = await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage', '--js-flags=--max-old-space-size=1536'] });
   let ctx = await browser.newContext({ viewport: VIEWPORT, userAgent: UA,
                                        ignoreHTTPSErrors: true });
 
@@ -266,7 +266,7 @@ function injectAtDocStart(html, script) {
     if (browser.isConnected()) return;
     console.error('[crawl] renderer crashed — relaunching browser to continue');
     try { await browser.close(); } catch (_) {}
-    browser = await chromium.launch({ headless: true });
+    browser = await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage', '--js-flags=--max-old-space-size=1536'] });
     ctx = await browser.newContext({ viewport: VIEWPORT, userAgent: UA,
                                      ignoreHTTPSErrors: true });
   }

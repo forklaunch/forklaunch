@@ -384,7 +384,7 @@ async function probeKinds(page, snap, kinds) {
 async function main() {
   let browser;
   try {
-    browser = await chromium.launch({ headless: true });
+    browser = await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage', '--js-flags=--max-old-space-size=1536'] });
   } catch (e) {
     harnessFail(`Playwright could not launch a browser — ${e.message}`, 'npx playwright install chromium');
   }

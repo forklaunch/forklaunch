@@ -117,7 +117,7 @@ async function choosePages(page) {
   return ['/', ...found.map((h) => (h.startsWith('/') ? h : '/' + h))];
 }
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage', '--js-flags=--max-old-space-size=1536'] });
 // bypassCSP so this run sees what the page wants, not what a policy allows.
 const ctx = await browser.newContext({ bypassCSP: true, viewport: { width: 1440, height: 900 } });
 const page = await ctx.newPage();

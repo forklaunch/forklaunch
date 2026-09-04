@@ -55,7 +55,7 @@ let marker = { fetched: {}, unavailable: {} };
 try { if (existsSync(MARKER)) marker = { fetched: {}, unavailable: {}, ...JSON.parse(readFileSync(MARKER, 'utf8')) }; } catch (_) {}
 const UNAVAILABLE_TTL_MS = 6 * 60 * 60 * 1000;
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage', '--js-flags=--max-old-space-size=1536'] });
 const ctx = await browser.newContext({ bypassCSP: true, viewport: { width: 1440, height: 900 } });
 const page = await ctx.newPage();
 

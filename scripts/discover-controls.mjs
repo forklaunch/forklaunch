@@ -96,7 +96,7 @@ const DURABLE_SELECTOR = function (el) {
 
 const WANTED = new Set(['checkout', 'cart', 'addcart', 'search', 'menu', 'filter', 'carousel']);
 
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage', '--js-flags=--max-old-space-size=1536'] });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 const page = await ctx.newPage();
 

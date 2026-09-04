@@ -27,7 +27,7 @@ const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
 
   let browser;
   try {
-    browser = await chromium.launch({ headless: true });
+    browser = await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage', '--js-flags=--max-old-space-size=1536'] });
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 },
                                            userAgent: UA, ignoreHTTPSErrors: true });
     const page = await ctx.newPage();
