@@ -11,6 +11,13 @@ commerce backend underneath it.
 
 ## Running it
 
+## Where the scripts are
+
+`${CLAUDE_SKILL_DIR}` is this skill's directory (Claude Code substitutes it).
+Every command below is written against it so it works from any working
+directory. Output lands in `${CLAUDE_SKILL_DIR}/scripts/output/<store-domain>/`
+unless `--out` says otherwise.
+
 One command. Three prerequisites must already be on the machine — bun, ffmpeg,
 and Playwright's Chromium (`cd scripts && npm install && npx playwright install
 chromium`, a ~150MB download, once). The command checks all three first and
@@ -18,7 +25,7 @@ REFUSES to start if one is missing, printing the exact install line; it never
 installs anything itself. `MANUAL.md` has the same three lines for a person.
 
 ```bash
-node scripts/bin/migrate.mjs <store-url> --clean
+node ${CLAUDE_SKILL_DIR}/scripts/bin/migrate.mjs <store-url> --clean
 ```
 
 It captures, **verifies against the live storefront, repairs what it finds**,
@@ -168,7 +175,7 @@ downloads are normal.
 `migrate.mjs` runs this itself. Use it directly on an existing capture:
 
 ```bash
-node scripts/bin/finish.mjs <outdir>/site --live https://the-store.com [--module <url> --hmac <secret>]
+node ${CLAUDE_SKILL_DIR}/scripts/bin/finish.mjs <outdir>/site --live https://the-store.com [--module <url> --hmac <secret>]
 ```
 
 It discovers this theme's controls, serves the capture through the same bridge
@@ -260,7 +267,7 @@ scripts and CORS, and the clone will look broken for reasons unrelated to the
 capture. `migrate.mjs` serves automatically; to serve later:
 
 ```bash
-python3 scripts/serve.py 4173 <outdir>/site
+python3 ${CLAUDE_SKILL_DIR}/scripts/serve.py 4173 <outdir>/site
 ```
 
 ## What it does and does not do
@@ -327,7 +334,7 @@ out of date.
 Once the module is running and the catalog is imported:
 
 ```bash
-node scripts/bin/migrate.mjs <store-url> --clean --api http://localhost:<port>
+node ${CLAUDE_SKILL_DIR}/scripts/bin/migrate.mjs <store-url> --clean --api http://localhost:<port>
 ```
 
 `--api` switches the runtime bridge from its offline cart to the real module.
@@ -342,7 +349,7 @@ origin. `heroserve-fl.ts` serves a capture you already have and proxies its
 cart and checkout to the module instead:
 
 ```bash
-bun scripts/catalog/heroserve-fl.ts <capture>/site <port> <module-url> <hmac-secret> [stripe-publishable-key]
+bun ${CLAUDE_SKILL_DIR}/scripts/catalog/heroserve-fl.ts <capture>/site <port> <module-url> <hmac-secret> [stripe-publishable-key]
 ```
 
 It intercepts the captured pages' native Shopify cart calls, maps them onto the
@@ -420,13 +427,13 @@ to get wrong, so they're written out exactly:
 
 ```bash
 # 1. pull — needs a FULL url; a bare domain fails with "fetch() URL is invalid"
-bun scripts/catalog/cli.ts pull https://thestore.com
+bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts pull https://thestore.com
 
 # 2. normalize — takes the path to raw.json, not a shop name
-bun scripts/catalog/cli.ts normalize data/<slug>/raw.json
+bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts normalize data/<slug>/raw.json
 
 # 3. import — POSITIONAL args, not flags: <normalized.json> <module-url> <secret>
-bun scripts/catalog/cli.ts import data/<slug>/normalized.json http://localhost:8001 <hmac-secret>
+bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts import data/<slug>/normalized.json http://localhost:8001 <hmac-secret>
 ```
 
 `normalize` writes to `data/<slug>/` derived from the raw file, and falls back
@@ -473,21 +480,21 @@ download makes no network request so CSP is irrelevant):
 
 ```
 # 1. automated capture, as far as it politely gets
-node scripts/crawl.js <domain> <outdir> --complete --clean
+node ${CLAUDE_SKILL_DIR}/scripts/crawl.js <domain> <outdir> --complete --clean
 # 2. list exactly what is missing
-node scripts/check-complete.mjs <outdir> <domain>
+node ${CLAUDE_SKILL_DIR}/scripts/check-complete.mjs <outdir> <domain>
 # 3. one-time: build the bookmarklet and have the operator save it as a
 #    bookmark (drag to bookmarks bar / New Bookmark with this as the URL)
-node scripts/make-bookmarklet.mjs
+node ${CLAUDE_SKILL_DIR}/scripts/make-bookmarklet.mjs
 # 4. the operator opens each missing page in their browser (logged in if
 #    the store is gated) and CLICKS THE BOOKMARKLET — it downloads that
 #    page's DOM as flcap__<path>.html. Pace it like a person.
 # 5. ingest everything the operator downloaded
-node scripts/import-folder.mjs <outdir> [downloads-dir] [--move]
+node ${CLAUDE_SKILL_DIR}/scripts/import-folder.mjs <outdir> [downloads-dir] [--move]
 # 6. resume — imported pages are treated as captured; rewrite runs over them
-node scripts/crawl.js <domain> <outdir> --complete --clean
+node ${CLAUDE_SKILL_DIR}/scripts/crawl.js <domain> <outdir> --complete --clean
 # 7. re-run the gate until it is green
-node scripts/check-complete.mjs <outdir> <domain>
+node ${CLAUDE_SKILL_DIR}/scripts/check-complete.mjs <outdir> <domain>
 ```
 
 `import-dom.mjs` is the single-page primitive (URL + HTML on stdin) the
