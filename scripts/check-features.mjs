@@ -51,6 +51,7 @@
  * and exits 2, and the loop keys off that, not off a guess.
  */
 import { chromium } from 'playwright';
+import { Script as VmScript } from 'node:vm';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { inventoryRoute, stable, actuate, SNAPSHOT } from './inventory.mjs';
@@ -235,6 +236,32 @@ async function inlineScriptVendor(page, route, line, hosts) {
   for (const h of hosts) {
     const label = (h.split('.').slice(-2, -1)[0] || '').toLowerCase();
     if (label.length >= 4 && new RegExp('\\b' + label + '\\b', 'i').test(text)) return h;
+  }
+  return null;
+}
+
+// A SyntaxError in an inline script never carries a frame: the parser fails
+// before there is one. Find the script by parsing the clone page's inline
+// classic scripts ourselves; then the same vendor evidence applies, and when
+// it is not vendor code the report shows the script's head so a person can
+// see what broke (a rewrite of ours, once — see fix-script-hrefs).
+async function syntaxErrorSource(page, route, hosts) {
+  const html = await cloneHtml(page, route);
+  if (!html) return null;
+  for (const m of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
+    const a = m[1];
+    if (/\bsrc=/.test(a) || /type="(?!text\/javascript|application\/javascript|module)[^"]*"/i.test(a)) continue;
+    const body = m[2];
+    if (!body.trim()) continue;
+    try { new VmScript(/type="module"/.test(a) ? '(async()=>{' + body + '\n})' : body); }
+    catch (e) {
+      const head = body.trim().slice(0, 160).replace(/\s+/g, ' ');
+      const t = body.slice(0, 6000);
+      const vm = VENDOR_TEXT.exec(t);
+      let vendor = vm ? vm[1] : null;
+      if (!vendor) for (const h of hosts) { const label = (h.split('.').slice(-2, -1)[0] || '').toLowerCase(); if (label.length >= 4 && new RegExp('\\b' + label + '\\b', 'i').test(t)) { vendor = h; break; } }
+      return { message: String(e.message).slice(0, 80), head, vendor };
+    }
   }
   return null;
 }
@@ -707,6 +734,11 @@ async function main() {
       if (e.line && (!e.url || e.url.replace(/[?#].*$/, '') === cloneUrlFor(route).replace(/[?#].*$/, ''))) {
         const v = await inlineScriptVendor(page, route, e.line, vendorHosts);
         if (v) { defect('script', e.text.slice(0, 120), null, route, v); continue; }
+      }
+      if (!e.url && /Invalid or unexpected token|Unexpected (token|identifier|end of input|string|number)|missing \) after/.test(e.text)) {
+        const src = await syntaxErrorSource(page, route, vendorHosts);
+        if (src && src.vendor) { defect('script', `${e.text.slice(0, 80)} — in a ${src.vendor} inline snippet`, null, route, src.vendor); continue; }
+        if (src) e.text = `${e.text.slice(0, 80)} — inline script starting: ${src.head.slice(0, 90)}`;
       }
       realErrors.push(e);
     }
