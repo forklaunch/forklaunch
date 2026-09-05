@@ -501,10 +501,19 @@ async function main() {
     // defects. Say the one true thing instead, and route it to a targeted
     // recapture, which picks up whichever template the store now serves.
     const templateChanged = !!(req && req.templateId && got.templateId && req.templateId !== got.templateId);
+    // Recaptured this run and STILL a different template than live: the
+    // store assigns templates per visitor (fromourplace.com's product page),
+    // and a re-crawl cannot change which one we get. A live condition, named;
+    // not a feature the clone is missing.
+    const recapturedRoutes = new Set((arg('--recaptured') || '').split(',').filter(Boolean));
+    const templateAB = templateChanged && recapturedRoutes.has(route);
     if (req && req.templateVaries) {
       skip(`${L}: structural comparison`, 'live is A/B testing templates — two samples rendered different templates');
     }
-    if (templateChanged) {
+    if (templateAB) {
+      skip(`${L}: same template as live`, `live serves ${req.templateId}, the capture is ${got.templateId} even after a re-crawl — the store assigns templates per visitor; the clone is one of its variants`);
+      defect('page', `live serves a different template than the capture on ${route} (A/B test)`, null, route, 'live A/B test');
+    } else if (templateChanged) {
       check(`${L}: same template as live`, false,
         `live serves ${req.templateId}, the capture is ${got.templateId} — A/B test or theme change since the crawl`);
       defect('page', `template changed on ${route}: live ${req.templateId}, captured ${got.templateId}`, 'recapture', route);
@@ -911,8 +920,12 @@ async function main() {
     // Ordering costs nothing and removes a whole class of phantom failure.
     const kinds = ['menu', 'search', 'carousel', 'filter', 'cart'];
     const oracle = req?.oracle || {};
+    if (templateChanged) {
+      skip(`${L}: behaviours`, 'live is serving a different template than the capture on this page — its controls are not this page\'s controls');
+    }
     const cloneProbe = await probeKinds(page, got, kinds);
     for (const kind of kinds) {
+      if (templateChanged) break;
       const liveWorks = req ? oracle[kind]?.responded : undefined;
       const mine = cloneProbe[kind];
       if (req && !oracle[kind]) continue;                 // live has no such control
