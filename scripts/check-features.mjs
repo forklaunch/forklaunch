@@ -342,7 +342,7 @@ async function buildLiveRequirement(browser, routes) {
  * responded. One per kind, not all of them: the question is "does this theme's
  * carousel work", and clicking twenty Next buttons answers it twenty times.
  */
-async function probeKinds(page, snap, kinds) {
+async function probeKinds(page, snap, kinds, { wait } = {}) {
   const out = {};
   let live = snap;
   for (const kind of kinds) {
@@ -367,7 +367,7 @@ async function probeKinds(page, snap, kinds) {
     // after the first navigating one reported "control no longer in the DOM"
     // and scored as a broken feature — a harness bug reported as a fidelity
     // bug, which is the precise thing this tool exists to stop.
-    const r = await actuate(page, c.ctl, { key: c.key }).catch((e) => ({ ok: false, responded: false, why: e.message }));
+    const r = await actuate(page, c.ctl, { key: c.key, ...(wait ? { wait } : {}) }).catch((e) => ({ ok: false, responded: false, why: e.message }));
     out[kind] = { name: c.name, responded: r.responded, why: r.why, vendor: c.vendor || null };
     if (r.navigated) {
       await page.goBack({ waitUntil: 'load', timeout: 30000 }).catch(() => {});
@@ -892,8 +892,17 @@ async function main() {
         defect('behaviour', `${kind} ("${mine.name}") renders but is inert: it is part of the ${oracle[kind].vendor} widget`, null, route, oracle[kind].vendor);
         continue;
       }
-      check(`${L}: ${kind} responds`, mine.responded, mine.why);
-      if (!mine.responded) defect('behaviour', `${kind} ("${mine.name}") does not respond on ${route}`, 'localize-runtime', route);
+      // A slow machine (a 2-vCPU box running three crawls) can miss a drawer
+      // that opens late. One retry with a longer wait before "does not respond"
+      // counts — the same control, the same page, more patience.
+      let verdictProbe = mine;
+      if (!mine.responded) {
+        const fresh = (await page.evaluate(SNAPSHOT).catch(() => null)) || got;
+        const again = await probeKinds(page, fresh, [kind], { wait: 3000 }).catch(() => ({}));
+        if (again[kind]) verdictProbe = again[kind];
+      }
+      check(`${L}: ${kind} responds`, verdictProbe.responded, verdictProbe.why);
+      if (!verdictProbe.responded) defect('behaviour', `${kind} ("${mine.name}") does not respond on ${route}`, 'localize-runtime', route);
     }
 
   }
