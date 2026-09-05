@@ -598,7 +598,6 @@ function injectAtDocStart(html, script) {
                     ...cols.slice(0, nCol),
                     ...infoPages.slice(0, nInfo)];
       for (const p of pick) wanted.set(p, pageFileFor(p));
-      console.error(`[crawl] workers: ${CONC} (FL_CONCURRENCY)`);
       console.error(`[crawl] discovered ${cols.length} collections, ${prods.length} products; ` +
                     `capturing ${wanted.size} pages`);
     }
@@ -690,6 +689,7 @@ function injectAtDocStart(html, script) {
     // production store); --complete keeps five. FL_CONCURRENCY overrides both.
     const CONC = COMPLETE ? Math.max(1, Number(process.env.FL_CONCURRENCY) || 5)
                           : Math.max(1, Number(process.env.FL_CONCURRENCY) || 3);
+    console.error(`[crawl] workers: ${CONC} (FL_CONCURRENCY)`);
     let coolingDown = null;   // a promise while a patient cooldown is in progress
     let stopAll = false;      // hard block / cooldowns exhausted: drain everyone
 
