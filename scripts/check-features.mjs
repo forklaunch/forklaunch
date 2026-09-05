@@ -655,7 +655,7 @@ async function main() {
       // offline guarantee working, one frame later. The list mirrors the
       // TRACKERS list in localize-runtime.mjs — the vendors we deliberately do
       // not localise — so the two cannot drift into disagreeing.
-      if (/\b(fbq|gtag|dataLayer|ga|_learnq|klaviyo|ttq|snaptr|pintrk|webPixelsManager|createShopifyExtend|Shopify\.analytics|clarity|amplitude|mixpanel|heap|attentive|Yotpo|okendo)\b/.test(e.text) &&
+      if (/\b(fbq|gtag|dataLayer|ga|hj|_hsq|uetq|twq|rdt|obApi|_learnq|klaviyo|ttq|snaptr|pintrk|webPixelsManager|createShopifyExtend|Shopify\.analytics|clarity|amplitude|mixpanel|heap|attentive|Yotpo|okendo|UserWay\w*|usercentrics|OneTrust|Optanon)\b/.test(e.text) &&
           /is not defined|is not a function|undefined/.test(e.text)) return true;
       // Derived rather than listed: pull the identifiers out of the error and
       // check them against the third-party hosts the LIVE page loaded scripts
@@ -734,7 +734,10 @@ async function main() {
         // index to answer a bare GET with, and the search CONTROL is asserted
         // on its own below ("search responds"), so the destination sits on the
         // same policy line as /account and /checkouts — not a defect.
-        .filter((p) => !/^\/(cdn|checkouts?|account|challenge|search)\b/.test(p)))].slice(0, 40);
+        .filter((p) => !/^\/(cdn|checkouts?|account|challenge|search)\b/.test(p))
+        // javascript:void(0) and friends are not destinations (hiyahealth.com
+        // reported "void(0) -> ERR" on every page).
+        .filter((p) => !/^\/?(void|javascript)/i.test(p)))].slice(0, 40);
       const dead = [];
       for (const p of internal) {
         const r = await page.request.get(CLONE + p, { timeout: 15000 }).catch(() => null);
