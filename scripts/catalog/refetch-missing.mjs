@@ -144,7 +144,7 @@ for (const [path, name] of missing) {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const bytes = Buffer.from(await res.arrayBuffer());
     const dest = join(SITE, path.replace(/^\//, ''));
-    mkdirSync(join(dest, '..'), { recursive: true });
+    try { mkdirSync(join(dest, '..'), { recursive: true }); } catch (e) { if (e && e.code === 'EEXIST') { console.log('  ✗ ' + String(dest || '').slice(-60) + ' — a path nested under a file name; cannot be served as a file'); continue; } throw e; }
     // Written under the EXACT name that 404'd, so the next request hits the
     // direct path and needs no sibling resolution to find it.
     writeFileSync(dest, bytes);
