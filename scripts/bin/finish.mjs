@@ -285,6 +285,9 @@ const ROUTES = routesFromCapture();
 
 async function runGates() {
   const featArgs = [join(SCRIPTS, 'check-features.mjs'), '--clone', BASE,
+    // Routes re-captured this run: a template mismatch that survives one is
+    // the store assigning templates per visitor, which the gate then names.
+    ...(recapturedThisRun.size ? ['--recaptured', [...recapturedThisRun].join(',')] : []),
     '--json', FEATURES_JSON, '--cache', LIVE_CACHE];
   if (ROUTES) featArgs.push('--routes', ROUTES.join(','));
   if (OFFLINE) featArgs.push('--offline'); else featArgs.push('--live', LIVE);
