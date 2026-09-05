@@ -566,8 +566,11 @@ function chooseRepairs(v) {
       const timeoutMs = Math.max(60_000, DEADLINE - Date.now());
       const { code, out } = await run(cmd, args, { timeoutMs });
       const tail = out.trim().split('\n').filter(Boolean).slice(-2).join(' · ');
-      log(`  ${code === 0 ? '✓' : '!'} ${name}  ${tail.slice(0, 110)}`);
-      if (code !== 0) {
+      // A repair that exits 0 but reports an item it could not fix (✗) is not
+      // a success; a ✓ beside a ✗ misled a blank agent on taylorstitch.com.
+      const failed = code !== 0 || /✗/.test(tail);
+      log(`  ${failed ? '!' : '✓'} ${name}  ${tail.slice(0, 110)}`);
+      if (failed) {
         // Two lines of a stack trace are not an error message. Keep the whole
         // output where a person can read it and say where it went.
         const lf = join(OUT, `repair-${name}-round${round}.log`);

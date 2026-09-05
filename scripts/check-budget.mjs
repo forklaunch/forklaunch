@@ -100,7 +100,8 @@ async function main() {
         if (!st.isFile() || !isMp4(fp)) continue;
         count++; bytes += st.size;
         const h = videoHeight(fp);
-        if (h > MAX_VIDEO_HEIGHT) offenders.push(`${n.slice(0, 40)} ${h}p`);
+        // Encoders round to macroblocks: a 731p file IS the 720p rendition.
+        if (h > MAX_VIDEO_HEIGHT * 1.03) offenders.push(`${n.slice(0, 40)} ${h}p`);
       }
     }
     check(`no captured video above ${MAX_VIDEO_HEIGHT}p`, offenders.length === 0,

@@ -598,6 +598,7 @@ function injectAtDocStart(html, script) {
                     ...cols.slice(0, nCol),
                     ...infoPages.slice(0, nInfo)];
       for (const p of pick) wanted.set(p, pageFileFor(p));
+      console.error(`[crawl] workers: ${CONC} (FL_CONCURRENCY)`);
       console.error(`[crawl] discovered ${cols.length} collections, ${prods.length} products; ` +
                     `capturing ${wanted.size} pages`);
     }

@@ -319,5 +319,6 @@ if (args.noVerify) {
   if (code === 0 && !args.serve) {
     console.log(`\n✓ verified. Serve later with:\n  bun ${join(ROOT, 'catalog', 'heroserve-fl.ts')} ${join(outdir, 'site')} ${args.port}\n`);
   }
+  console.log(`\n  exit code ${code} — ${code === 0 ? 'every live feature present' : code === 1 ? 'features still missing (named above)' : 'the check could not run; nothing proved'}`);
   process.exit(code);
 }

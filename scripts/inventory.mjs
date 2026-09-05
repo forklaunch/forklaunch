@@ -102,6 +102,13 @@ export const SNAPSHOT = function () {
       if (u.host && u.host.replace(/^www\./, '') !== location.host.replace(/^www\./, '')) return null;
       let p = u.pathname.replace(/\.html$/, '').replace(/\/+$/, '').replace(/^\/+/, '') || '/';
       if (p === 'index') p = '/';                       // the clone's homepage file
+      // Canonical form on BOTH sides, mirroring urlmap.js: a product under a
+      // collection is the product; a deeper path folds to a/b-c, which is the
+      // file the clone stores it as, so its href already reads that way.
+      const cp = p.match(/^collections\/[^/]+\/products\/([^/]+)$/);
+      if (cp) p = 'products/' + cp[1];
+      const segs = p.split('/');
+      if (segs.length === 3 && !/^(products|collections|pages)$/.test(segs[0])) p = segs[0] + '/' + segs[1] + '-' + segs[2];
       return 'href:' + p.toLowerCase();
     } catch (_) { return null; }
   };

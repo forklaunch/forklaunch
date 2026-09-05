@@ -32,7 +32,7 @@ checks too and refuses to start without them.
 ```bash
 curl -fsSL https://bun.sh/install | bash        # bun — catalog pull
 brew install ffmpeg                             # ffmpeg — video shrink
-cd scripts && npm install && npx playwright install chromium   # browser — the gates
+(cd scripts && npm install && npx playwright install chromium)   # browser — the gates
 ```
 
 `npx playwright install chromium` prints nothing when the browser is already
@@ -129,6 +129,8 @@ render, by design:
   removed on the clone: their script is blocked, so a captured pop-up could
   never be closed and would sit over the page forever
 - Shopify's own hosted checkout page — the clone stops at the cart
+- Account pages (`/account`, login, orders) — logged-in Shopify features with
+  nothing public to capture
 
 The report lists these under "not migrated by policy" with the vendor named,
 separately from the missing features. Anything it could not attribute to a
@@ -150,7 +152,7 @@ works, never that a number matches.
 |---|---|
 | `--pages N` | page budget for the crawl (default 20). Menu destinations (up to 40) are captured on top of it, so a 20-page budget on a store with a big menu captures 40 to 60 pages. |
 | `--clean` | demo mode (always use it): strips trackers, keeps every click on the clone, adds the cart overlay |
-| `--no-serve` | exit with the verdict's code instead of staying up serving |
+| `--no-serve` | exit with the verdict's code instead of staying up serving; the last line printed is `exit code N — …` |
 | `--port N` | serve on another port (default 4173) |
 | `--rounds N`, `--budget-min N` | verify/repair budget (default 5 rounds, 30 minutes) |
 | `--server URL --secret KEY` | import the catalog into a running ForkLaunch ecommerce module and wire the cart to it; without these the cart is browse-only |

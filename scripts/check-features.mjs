@@ -103,7 +103,8 @@ function harnessFail(msg, hint) {
 // 10: landmarks and background counts exclude vendor widgets.
 // 11: headingSlide (carousel slide content).
 // 12: pickers only inside add-to-cart forms; slide/dynamic signatures widened.
-const REQUIREMENT_SCHEMA = 12;
+// 13: hrefKey canonical fold (collections/x/products/y → products/y; a/b/c → a/b-c).
+const REQUIREMENT_SCHEMA = 13;
 
 const results = [];
 const check = (name, pass, detail = '') => results.push({ name, pass: !!pass, state: pass ? 'PASS' : 'FAIL', detail });
@@ -655,7 +656,7 @@ async function main() {
       // offline guarantee working, one frame later. The list mirrors the
       // TRACKERS list in localize-runtime.mjs — the vendors we deliberately do
       // not localise — so the two cannot drift into disagreeing.
-      if (/\b(fbq|gtag|dataLayer|ga|hj|_hsq|uetq|twq|rdt|obApi|_learnq|klaviyo|ttq|snaptr|pintrk|webPixelsManager|createShopifyExtend|Shopify\.analytics|clarity|amplitude|mixpanel|heap|attentive|Yotpo|okendo|UserWay\w*|usercentrics|OneTrust|Optanon)\b/.test(e.text) &&
+      if (/\b(fbq|gtag|dataLayer|ga|hj|_hsq|uetq|twq|rdt|obApi|_learnq|klaviyo|ttq|snaptr|pintrk|webPixelsManager|createShopifyExtend|Shopify\.analytics|clarity|amplitude|mixpanel|heap|attentive|Yotpo|okendo|UserWay\w*|updatePageElementsList|usercentrics|OneTrust|Optanon|CookieConsent|cookieconsent)\b/.test(e.text) &&
           /is not defined|is not a function|undefined/.test(e.text)) return true;
       // Derived rather than listed: pull the identifiers out of the error and
       // check them against the third-party hosts the LIVE page loaded scripts

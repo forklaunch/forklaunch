@@ -169,6 +169,9 @@ async function main() {
       [...document.querySelectorAll('a[href]')]
         .map((a) => a.getAttribute('href'))
         .filter((h) => h && !/^(https?:|mailto:|tel:|#|javascript:)/i.test(h))
+        // Served by heroserve or never captured by design (urlmap SKIP_PATH):
+        // a 404 there is not a dead link in the clone.
+        .filter((h) => !/^\/?(account|cart|checkouts?|search|policies|apps)(\/|$|\?)/i.test(h))
         .slice(0, 25)
     );
     const dead = [];

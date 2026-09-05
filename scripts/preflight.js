@@ -189,8 +189,10 @@ const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
     // NAV_MUST_CAP (40). The old cap of 12 here promised 24 pages for a store
     // the crawl then captured 52 of.
     const navExtra = Math.min(40, probe.navLinks || 0);
-    const pages = Math.min(20, 1 + Math.min(5, probe.collectionLinks) +
-      Math.min(14, probe.productLinks)) + navExtra;
+    // On any real store the 20-page budget fills (collection pages harvest
+    // products into it), so the estimate is the budget plus the menu.
+    const pages = (hasNav ? 20 : Math.min(20, 1 + Math.min(5, probe.collectionLinks) +
+      Math.min(14, probe.productLinks))) + navExtra;
 
     // Seconds: measured throughput is 20-35s/page (image-heavy stores at the
     // top of that range), not a flat constant. The old estimate ignored page

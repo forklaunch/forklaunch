@@ -1097,6 +1097,10 @@ Bun.serve({
 
       // ---- static site ----
       let rel = p === '/' ? '/index.html' : p;
+      // A module that resolves './script.js' against its own URL asks for
+      // <loader.js>/script.js — a path under a file. Serve the sibling.
+      const underFile = rel.match(/^(.*)\/[^/]+\.(?:m?js|css)\/([^/]+)$/);
+      if (underFile) rel = `${underFile[1]}/${underFile[2]}`;
       if (!extname(rel)) {
         const cand = join(siteRoot, rel.replace(/\/$/, '') + '.html');
         if (existsSync(cand)) rel = rel.replace(/\/$/, '') + '.html';
@@ -1537,4 +1541,6 @@ try {
   process.exit(1);
 }
 
-console.log(`storefront (wired to ForkLaunch module ${MODULE}) on http://localhost:${PORT}`);
+console.log(MODULE_CONFIGURED
+  ? `storefront (wired to ForkLaunch module ${MODULE}) on http://localhost:${PORT}`
+  : `storefront (browse-only: no ForkLaunch module wired; cart works, checkout stops) on http://localhost:${PORT}`);
