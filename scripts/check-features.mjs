@@ -105,7 +105,8 @@ function harnessFail(msg, hint) {
 // 11: headingSlide (carousel slide content).
 // 12: pickers only inside add-to-cart forms; slide/dynamic signatures widened.
 // 13: hrefKey canonical fold (collections/x/products/y → products/y; a/b/c → a/b-c).
-const REQUIREMENT_SCHEMA = 13;
+// 14: store-locator vendor signature; policies pages now captured.
+const REQUIREMENT_SCHEMA = 14;
 
 const results = [];
 const check = (name, pass, detail = '') => results.push({ name, pass: !!pass, state: pass ? 'PASS' : 'FAIL', detail });
@@ -596,7 +597,20 @@ async function main() {
     // there is a genuine disagreement between the capture and the page, and
     // that is the one that shows up as a page which looks fine and does
     // nothing.
-    const ourDead = got.deadRequests.filter((d) => d.ours && /\/_a\/(js|css|img|fonts?|ext)\//.test(d.path));
+    // A request under one of our localised VENDOR files (OneTrust asking
+    // <otSDKStub.js>/consent/<id>.json) is that vendor's runtime, refused by
+    // design — not an asset the capture failed to save.
+    const originsDead = await loadOrigins(page);
+    const vendorFileRequest = (p) => {
+      const m = p.match(/^\/(_a\/[^?#]*?\.(?:m?js|css))\/.+/);
+      if (!m) return false;
+      const rel = m[1];
+      let origin = originsDead[rel];
+      if (!origin) { const base = rel.split('/').pop().replace(/\.[0-9a-f]{10}(\.[a-z0-9]+)$/i, '$1'); for (const k of Object.keys(originsDead)) if (k.split('/').pop().replace(/\.[0-9a-f]{10}(\.[a-z0-9]+)$/i, '$1') === base) { origin = originsDead[k]; break; } }
+      if (!origin) return false;
+      try { const o = new URL(origin); const oh = o.host.replace(/^www\./, ''); const sh = (() => { try { return new URL(LIVE).host.replace(/^www\./, ''); } catch { return ''; } })(); return oh !== sh && (oh !== 'cdn.shopify.com' || /\/(extensions|shopifycloud)\//.test(o.pathname)); } catch { return false; }
+    };
+    const ourDead = got.deadRequests.filter((d) => d.ours && /\/_a\/(js|css|img|fonts?|ext)\//.test(d.path) && !vendorFileRequest(d.path));
     const blocked = got.deadRequests.filter((d) => !d.ours).length;
     // A 404 on our origin OUTSIDE the asset buckets is a third-party endpoint
     // the crawl rewrote to a local path and we never saved — Shopify's own
@@ -671,6 +685,18 @@ async function main() {
       // the offline guarantee, not a capture defect. The theme's own bundles
       // live under /_a/js/, so this cannot swallow a genuine theme error.
       if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/_a\/ext\//.test(u)) return true;
+      // The message names one of OUR localised files (a vendor script that
+      // parses its own src and chokes on the relative path: "Failed to parse
+      // scriptSrc: ../_a/js/novel-storefront…"). Attribute by that file's
+      // origin, exactly like a frame.
+      const pm = e.text.match(/_a\/[^\s'"()]+/);
+      if (pm && originOf(pm[0])) {
+        try {
+          const o = new URL(originOf(pm[0]));
+          const oh = o.host.replace(/^www\./, '');
+          if (oh !== storeHost && (oh !== 'cdn.shopify.com' || /\/(extensions|shopifycloud)\//.test(o.pathname))) return true;
+        } catch {}
+      }
       if (/refused|blocked|Content Security Policy|ERR_BLOCKED|violates the following/i.test(e.text)) return true;
       // The message TEXT naming an external host is the same evidence as the
       // location naming one — Chrome puts the URL in one or the other

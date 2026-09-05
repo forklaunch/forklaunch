@@ -238,7 +238,12 @@ export const SNAPSHOT = function () {
     // names. The banner's markup is captured but its script is blocked, so it
     // never shows on the clone — a POLICY outcome, and one every EU-facing
     // store will hit ("we take privacy seriously" on gorillamind.com).
-    ['cookie-consent', /polaris-consent|consent[_-]app|cookie[-_]?consent|consentmo|cookiebot|onetrust|pandectes|cc-window|cookie[-_]?banner/i]
+    ['cookie-consent', /polaris-consent|consent[_-]app|cookie[-_]?consent|consentmo|cookiebot|onetrust|pandectes|cc-window|cookie[-_]?banner/i],
+    // Store locators render from a maps vendor at runtime (liquiddeath.com's
+    // /pages/where-to-buy: "find your product", product-type selects, "Open
+    // this area in Google Maps"). Matched on the locator apps' own prefixes
+    // and Google Maps' container classes.
+    ['store-locator', /storepoint|storemapper|stockist|store-?locator|storelocator|gm-style|pac-container|maps-widget|closeby|storerocket/i]
   ];
   const vendorOf = (el) => {
     let n = el, depth = 0;

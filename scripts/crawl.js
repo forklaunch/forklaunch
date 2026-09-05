@@ -1457,7 +1457,7 @@ function injectAtDocStart(html, script) {
 
       if (CLEAN) {
         html = html.replace(
-          new RegExp(`href="https://${domain.replace(/\\./g, '\\\\.')}(\\/(?:account|cart|checkout|policies)[^"]*)?"`, 'gi'),
+          new RegExp(`href="https://${domain.replace(/\\./g, '\\\\.')}(\\/(?:account|cart|checkout)[^"]*)?"`, 'gi'),
           (m, path) => `href="${path || '/'}" data-mirror-inert="1"`);
       }
 

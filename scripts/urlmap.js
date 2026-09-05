@@ -6,7 +6,7 @@
  * check could pass while the real capture put pages elsewhere — a false green.
  * check-complete.test.mjs pins the behavior so it can't drift.
  */
-const SKIP_PATH = /^\/(cart|checkout|account|orders|search|apps|admin|cdn|_a|assets|api|services|tools|policies|challenge|password|a\/|wpm@|\.well-known)(\/|$)/i;
+const SKIP_PATH = /^\/(cart|checkout|account|orders|search|apps|admin|cdn|_a|assets|api|services|tools|challenge|password|a\/|wpm@|\.well-known)(\/|$)/i;
 const safe = (s) => s.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 80);
 
 // A storefront path -> { file, depth } (depth drives relative-link rewriting),
