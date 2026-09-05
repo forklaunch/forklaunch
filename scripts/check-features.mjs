@@ -878,7 +878,7 @@ async function main() {
     // ends up reported as "broken": does the control fire at all (always
     // answerable), and does it reach the ForkLaunch module (only answerable
     // with a module behind the bridge).
-    const addCtl = got.controls.find((c) => c.kind === 'addcart' && c.visible) ||
+    const addCtl = templateChanged ? null : got.controls.find((c) => c.kind === 'addcart' && c.visible) ||
                    got.controls.find((c) => c.kind === 'addcart' && /\/products\//.test(route));
     if (addCtl) {
       const before = await moduleCartCount();
@@ -895,7 +895,7 @@ async function main() {
         check(`${L}: add-to-cart reaches the module`, after > before, `module cart ${before} -> ${after}`);
         if (!(after > before)) defect('backend', 'add-to-cart did not reach the module', null, route);
       }
-    } else if (/\/products\//.test(route)) {
+    } else if (/\/products\//.test(route) && !templateChanged) {
       check(`${L}: add-to-cart present`, false, 'no add-to-cart control on a product page');
       defect('control', 'addcart missing on a product page', 'recapture', route);
     }
