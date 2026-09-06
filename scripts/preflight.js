@@ -82,6 +82,30 @@ const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
         theme: (() => { try { return window.Shopify && window.Shopify.theme
                  ? (window.Shopify.theme.schema_name || 'custom') : null; } catch (_) { return null; } })(),
         nextjs: !!document.querySelector('script[src*="/_next/"], #__NEXT_DATA__'),
+        nuxt: !!(document.querySelector('#__nuxt, script[src*="/_nuxt/"]') || window.__NUXT__),
+        // Shopify app-proxy routes (/a/..., /apps/...) are a third-party app's
+        // own web app mounted under the store's domain. When the shop itself
+        // lives there (kettleandfire.com: every product link goes to
+        // /a/collections/products, a Nuxt app), the theme pages capture and
+        // the app does not.
+        appProxyLinks: (() => {
+          const seen = new Set();
+          for (const a of document.querySelectorAll('a[href]')) {
+            const h = (a.getAttribute('href') || '').replace(/^https?:\/\/[^/]+/, '');
+            if (/^\/(a|apps)\//.test(h)) seen.add(h.split('?')[0]);
+          }
+          return seen.size;
+        })(),
+        // ...and how many of those look like the shop itself rather than a
+        // help centre or rewards page.
+        appProxyShopLinks: (() => {
+          const seen = new Set();
+          for (const a of document.querySelectorAll('a[href]')) {
+            const h = (a.getAttribute('href') || '').replace(/^https?:\/\/[^/]+/, '');
+            if (/^\/(a|apps)\/.*(shop|collection|product|store|bundle|catalog|build)/i.test(h)) seen.add(h.split('?')[0]);
+          }
+          return seen.size;
+        })(),
         hydrogen: /hydrogen|oxygen/i.test(document.documentElement.innerHTML.slice(0, 60000)),
         challenge: /just a moment|checking your browser|verify you are human|attention required/i
                      .test(txt.slice(0, 3000)),
@@ -168,6 +192,18 @@ const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
         'and the public catalog feed is usually absent. Expect the homepage and content ' +
         'pages to capture well and collection/product pages to come through thin or empty. ' +
         'A full migration of a headless store needs the merchant\'s Storefront API access.');
+    }
+    // The shop behind an app proxy: same warning shape as headless, because
+    // it is the same failure (a browser-rendered app with no offline data).
+    if (probe.appProxyShopLinks >= 1 || probe.nuxt || (probe.appProxyLinks >= 3 && probe.productLinks === 0)) {
+      if (r.verdict === 'GREEN') { r.verdict = 'AMBER'; r.confidence = 'medium'; }
+      r.reasons.push('app_proxy');
+      r.notes.push(`Some shop pages are served by a Shopify app under /a/ or /apps/ ` +
+        `(${probe.appProxyLinks} link(s) on the homepage${probe.productLinks === 0 ? ', and no direct /products/ links' : ''}). ` +
+        'That is a separate web app rendered in the browser, not the theme. Expect the ' +
+        'homepage and content pages to be faithful and the app\'s product grid or shop ' +
+        'page to come through thin, with console errors from the app. Those show up ' +
+        'as named items in the report, not as a tool failure.');
     }
     if (churn !== null && churn > 0.15) {
       r.notes.push(`This store renders differently on each visit (~${Math.round(churn * 100)}% ` +

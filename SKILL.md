@@ -25,11 +25,27 @@ REFUSES to start if one is missing, printing the exact install line; it never
 installs anything itself. `MANUAL.md` has the same three lines for a person.
 
 ```bash
-node ${CLAUDE_SKILL_DIR}/scripts/bin/migrate.mjs <store-url> --clean
+node ${CLAUDE_SKILL_DIR}/scripts/bin/migrate.mjs <store-url> --clean --no-serve
 ```
 
 It captures, **verifies against the live storefront, repairs what it finds**,
-then serves at **http://127.0.0.1:4173**. Give the user that URL.
+then exits. `--no-serve` matters for an agent: without it the process finishes
+the verify loop and then blocks on "(still serving at http://localhost:4173,
+Ctrl-C to stop)", so the exit code never comes back. With it, the last line
+printed is `exit code N` and the process exits with that code. Read the code,
+THEN serve the result in the background and confirm it answers:
+
+```bash
+nohup bun ${CLAUDE_SKILL_DIR}/scripts/catalog/heroserve-fl.ts <outdir>/site <port> > <outdir>/serve.log 2>&1 &
+curl -sI http://127.0.0.1:<port>/ | head -1
+```
+
+`<outdir>` is `${CLAUDE_SKILL_DIR}/scripts/output/<store-domain>` unless you
+passed `--out`; `<port>` is conventionally 4173. `heroserve-fl.ts` is the
+server to hand a client: it supplies the Shopify runtime endpoints and the
+popup shim. `python3 ${CLAUDE_SKILL_DIR}/scripts/serve.py <port> <outdir>/site`
+is only a fallback when bun is missing, and cart, search and filters are inert
+under it. Give the user the served URL.
 
 One command is the whole point. Capture, verify and repair all existed before
 and all worked; nothing chained them, so every migration needed somebody who
@@ -133,20 +149,21 @@ Expect a faithful, browsable clone (~110s, ~12 pages).
 GREEN = expect a faithful clone. AMBER = works, caveats named. RED = expect
 failure, reason given. It also prints the permanent limits every time.
 
-**Relay the verdict to the user before proceeding.** Setting expectations up
-front is the whole point of the feature — especially if someone is watching a
-live run.
+The preflight verdict (GREEN, AMBER or RED, with reasons) is printed at the
+top of the run output; in a one-command run the crawl starts right after it
+with no pause. **Quote it verbatim in the report.** If it is RED, stop and
+report instead of retrying.
 
 Useful flags:
 
 | Flag | Use |
 |---|---|
 | `--clean` | hide vendor marketing popups AND make cart/account/checkout inert so a click can't jump to the live store. **Use for demos.** |
-| `--pages N` | product/collection page budget (default 20). **Not a hard total** — every destination in the site nav is captured *on top* of this (up to 12 more), so nothing in the menu links back to the live store. `--pages 3` on a typical store really captures ~13; the default really captures ~31. |
+| `--pages N` | bounds only the additional product and collection pages (default 20). Navigation pages (home, every menu target, content pages) are always captured, so nothing in the menu links back to the live store. **Not a hard total**: real totals run 30 to 60 pages on a normal store. |
 | `--no-preflight` | skip the assessment |
 | `--single` | homepage only — faster, but NOT browsable (links go to the live site) |
 | `--out DIR` | where to write. Defaults to `output/<domain>/` **relative to this skill's `scripts/` directory, not your current directory** — pass `--out` explicitly if you want it somewhere you'll find it. |
-| `--no-serve` | capture only |
+| `--no-serve` | still captures, verifies and repairs, but exits with the verdict's code instead of blocking on the serve; the last line printed is `exit code N`. Use it in every agent-driven run, then serve with `heroserve-fl.ts` as shown above. |
 | `--no-catalog` | skip the product-data pull (see Requirements — needs bun) |
 | `--measure` | score fidelity vs live (dev signal, not the deliverable) |
 | `--no-verify` | capture only, skip the feature gate and the repair loop. The clone is then **unverified** — say so when reporting. |
@@ -158,14 +175,17 @@ Useful flags:
 
 ### How long it takes, and why it looks stuck
 
-Roughly **20–35 seconds per page**, so a default-scope run is **10–20 minutes**
-and 100MB+. A measured 13-page capture took 253s and 116MB.
+Roughly **20–35 seconds per page** for the crawl, and 100MB+. The preflight
+estimate covers the crawl only; the verify and repair loop adds up to
+`--budget-min` (default 30) minutes on top of it. Expect **15 to 60 minutes
+wall clock** for a typical store, longer for image-heavy ones. A measured
+13-page crawl took 253s and 116MB before verify started.
 
 **HTML pages are only written at the very end of the crawl.** Mid-run the
 output directory fills with assets and contains *zero* browsable pages. This
 looks exactly like a hang. It isn't — but if you kill it, you get nothing
-usable and there is no resume. For a quick first look, use `--pages 3`
-(~13 pages, ~4 minutes) rather than the default.
+usable and there is no resume. For a quick first look, use `--pages 3` (three
+product/collection pages plus the navigation pages) rather than the default.
 
 Progress prints one line per captured page. Long silences during asset
 downloads are normal.
@@ -225,6 +245,10 @@ found, and writes `<site>/_fl-controls.json`. The bridge reads that AND runs the
 same name matching live in the page, so controls built after load are caught
 too. Three layers, weakest last: contract, then name, then selector.
 
+The run may print `note: no checkout control identified by selector`, followed
+by "the runtime name matcher is the only thing intercepting checkout on this
+capture". That is informational and harmless in a browse-only (`--clean`) run.
+
 ### Did it work?
 
 The run ends with `✓ N pages, N assets, NMB` and writes `manifest.json` beside
@@ -233,7 +257,10 @@ catalog counts, and a `gaps` array naming anything that did not. If
 `manifest.json` is absent, the run did not finish. If `catalog` is `null`,
 the product-data pull did not run (almost always missing bun — see
 Requirements); the clone is still browsable, but there is no product data to
-import into ForkLaunch.
+import into ForkLaunch. When the pull did run, its files are NOT under `--out`:
+the catalog step writes `raw.json` and `normalized.json` to
+`${CLAUDE_SKILL_DIR}/scripts/catalog/data/<shop-domain-with-dashes>/`
+regardless of `--out`.
 
 The verify/repair phase writes two more files beside `site/`:
 
@@ -264,11 +291,18 @@ attached — the gates report those as SKIP, not PASS, for the same reason.
 
 **Always serve over HTTP.** Opening the HTML with `file://` breaks module
 scripts and CORS, and the clone will look broken for reasons unrelated to the
-capture. `migrate.mjs` serves automatically; to serve later:
+capture. To serve an existing capture (after `--no-serve`, or any time later),
+use `heroserve-fl.ts`, in the background so the command returns:
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/serve.py 4173 <outdir>/site
+nohup bun ${CLAUDE_SKILL_DIR}/scripts/catalog/heroserve-fl.ts <outdir>/site <port> > <outdir>/serve.log 2>&1 &
+curl -sI http://127.0.0.1:<port>/ | head -1
 ```
+
+That is the server to hand a client; it supplies the Shopify runtime endpoints
+and the popup shim. `python3 ${CLAUDE_SKILL_DIR}/scripts/serve.py <port> <outdir>/site`
+is only a fallback when bun is missing, and cart, search and filters are inert
+under it.
 
 ## What it does and does not do
 
@@ -440,6 +474,11 @@ bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts import data/<slug>/normalized.jso
 to `data/unknown-shop/` when it can't infer the shop — harmless, but check the
 path it prints rather than assuming, or the import step won't find the file.
 
+Whether `migrate.mjs` ran the pull or you did, the output lives in
+`${CLAUDE_SKILL_DIR}/scripts/catalog/data/<shop-domain-with-dashes>/`
+(`raw.json`, `normalized.json`) regardless of `--out`. Look there, not in the
+capture's output directory.
+
 Public-catalog pulls carry no real stock counts (Shopify's public feed exposes
 only an in-stock boolean), so imported inventory is a placeholder. Use
 `pull-admin <shop> --token <t>` with the merchant's read-only Admin token when
@@ -449,6 +488,15 @@ the numbers need to be real.
 
 **Client-rendered / headless stores are fine** — a real browser runs their
 JavaScript. Being "headless" is not an obstacle.
+
+**Shops behind a Shopify app proxy, and filter-app collection grids.** Some
+stores keep their shop behind an app proxy (`/a/...` or `/apps/...` routes,
+often a Nuxt or React app; kettleandfire.com is one), and some draw their
+collection grids with a filter app such as Boost. Preflight says AMBER with
+reason `app_proxy`. The theme pages capture faithfully; the app's pages come
+through thin, with the app's console errors. The report lists those as named
+items and the run exits 1. That is the honest result, not a tool failure:
+relay the named items as the report gives them.
 
 Two things genuinely stop it:
 
@@ -571,3 +619,10 @@ is no loud error — check the manifest. Install from https://bun.sh if
 
 Cart, checkout and filters additionally need the ForkLaunch ecommerce module
 running — see **Next: getting it into ForkLaunch** above for what that costs.
+
+## Machine notes
+
+- There is no `setsid` on macOS. To keep a server alive after the command
+  returns, use `nohup <cmd> > log 2>&1 &`.
+- Never run `pkill -f headless_shell` while a migration is still running: it
+  kills that run's browser, and there is no resume.

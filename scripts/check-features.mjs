@@ -106,7 +106,7 @@ function harnessFail(msg, hint) {
 // 12: pickers only inside add-to-cart forms; slide/dynamic signatures widened.
 // 13: hrefKey canonical fold (collections/x/products/y → products/y; a/b/c → a/b-c).
 // 14: store-locator vendor signature; policies pages now captured.
-const REQUIREMENT_SCHEMA = 14;
+const REQUIREMENT_SCHEMA = 15; // 15: lazy images flipped eager before the media count
 
 const results = [];
 const check = (name, pass, detail = '') => results.push({ name, pass: !!pass, state: pass ? 'PASS' : 'FAIL', detail });
@@ -822,13 +822,27 @@ async function main() {
       // there is nothing on the merchant's side to capture. It is the same
       // policy line as the review widgets, drawn at a URL instead of a DOM
       // subtree — and it is a CONTRACT (the prefix is reserved), not a guess.
-      const deadApp = dead.filter((d) => /^\/apps\//.test(d));
-      const deadReal = dead.filter((d) => !/^\/apps\//.test(d));
+      // Shopify reserves four app-proxy prefixes, not one: /apps, /a,
+      // /community and /tools (kettleandfire's shop is under /a/).
+      const APP_PROXY = /^\/(apps|a|community|tools)\//;
+      const deadApp = dead.filter((d) => APP_PROXY.test(d));
+      // A destination that is dead on the LIVE site too (kettleandfire's menu
+      // carries a literal "/[" that 404s upstream) is the merchant's bug, not
+      // a capture gap. Ask live before blaming the clone.
+      const deadLive = [];
+      const deadReal = [];
+      for (const d of dead.filter((d) => !APP_PROXY.test(d))) {
+        const path = d.split(' -> ')[0];
+        const lr = await page.request.get(LIVE + path, { timeout: 15000, maxRedirects: 5 }).catch(() => null);
+        if (lr && lr.status() >= 400) deadLive.push(d); else deadReal.push(d);
+      }
       check(`${L}: every live destination is served`, deadReal.length === 0,
         deadReal.length ? `${deadReal.length} of ${internal.length} dead: ${deadReal.slice(0, 3).join(', ')}`
-                        : `${internal.length} destination(s)` + (deadApp.length ? `, ${deadApp.length} third-party app proxy` : ''));
+                        : `${internal.length} destination(s)` + (deadApp.length ? `, ${deadApp.length} third-party app proxy` : '')
+                          + (deadLive.length ? `, ${deadLive.length} dead on the live site too` : ''));
       for (const d of deadReal) defect('nav', d, 'recapture', route);
       for (const d of deadApp) defect('nav', d, null, route, 'shopify app proxy');
+      for (const d of deadLive) defect('nav', d, null, route, 'dead on the live site too');
     }
 
     // ---- controls ---------------------------------------------------------

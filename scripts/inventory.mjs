@@ -641,6 +641,21 @@ export async function inventoryRoute(page, url, { settle = 4000, scroll = true }
       }).catch(() => {});
       await page.waitForTimeout(1800);
     }
+    // "imagery renders" asks whether the images CAN load, not when. The clone
+    // server marks every image loading="lazy" to keep first paint cheap
+    // (heroserve-fl.ts), the crawl strips it, and live themes mix both, so
+    // the same page counted three different ways depending on which side and
+    // which scroll pass. Kettleandfire's clone read 37 rendered vs 98 live
+    // with every file served fine. Equalise: flip lazy to eager on whichever
+    // side we are measuring and wait for the loads (capped) before counting.
+    await page.evaluate(async () => {
+      const imgs = [...document.images].filter((i) => !(i.complete && i.naturalWidth > 0));
+      for (const i of imgs) { if (i.loading === 'lazy') i.loading = 'eager'; }
+      const deadline = Date.now() + 8000;
+      while (Date.now() < deadline && imgs.some((i) => !i.complete)) {
+        await new Promise((r) => setTimeout(r, 150));
+      }
+    }).catch(() => {});
     const snap = await page.evaluate(SNAPSHOT);
     // On Linux Chromium the pageerror event often carries no frame at all,
     // while the console's own "Uncaught …" line for the same error has the

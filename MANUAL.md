@@ -85,7 +85,11 @@ node scripts/bin/migrate.mjs https://www.the-store.com --clean
 That is the whole thing. A page takes **6 to 40 seconds** depending on how much
 the store keeps talking to analytics after it has rendered (a quiet store: 6;
 an ad-heavy one: 40). The preflight (`0/4`) prints an estimate for the store
-in front of it; trust that over any rule of thumb. It prints each phase as it goes: `0/4` preflight, `1/4` crawl, `2/4`
+in front of it; trust that over any rule of thumb. That estimate covers the
+crawl only: the verify and repair loop adds up to `--budget-min` (default 30)
+minutes on top of it. Expect 15 to 60 minutes wall clock for a typical store,
+longer for image-heavy ones, and do not kill it mid-run, because a partial
+capture is not resumed. It prints each phase as it goes: `0/4` preflight, `1/4` crawl, `2/4`
 catalog, `3/4` verify. The verify phase starts by serving the clone locally
 (that is when the URL appears), then checks it against the live site, repairs,
 and re-checks until it converges.
@@ -185,7 +189,7 @@ works, never that a number matches.
 
 | Flag | What it does |
 |---|---|
-| `--pages N` | page budget for the crawl (default 20). Menu destinations (up to 40) are captured on top of it, so a 20-page budget on a store with a big menu captures 40 to 60 pages. |
+| `--pages N` | bounds only the additional product and collection pages (default 20). Navigation pages (home, every menu target, content pages) are always captured, so real totals run 30 to 60 pages on a normal store. |
 | `--clean` | demo mode (always use it): strips trackers, keeps every click on the clone, adds the cart overlay |
 | `--no-serve` | exit with the verdict's code instead of staying up serving; the last line printed is `exit code N — …` |
 | `--port N` | serve on another port (default 4173) |
@@ -195,7 +199,9 @@ works, never that a number matches.
 
 Output goes to `scripts/output/<store-domain>/` (`--out DIR` to change): the
 `site/` folder is the clone, `features.json` the report, `manifest.json` the
-handoff file for ForkLaunch.
+handoff file for ForkLaunch. The catalog pull (phase `2/4`) is the exception:
+it writes `raw.json` and `normalized.json` to
+`scripts/catalog/data/<shop-domain-with-dashes>/` regardless of `--out`.
 
 The verify phase samples four pages: the homepage, one collection, one
 product, one content page. It checks each against the live site twice.
@@ -207,7 +213,7 @@ Showing a merchant their own store is fine. Putting the clone on a public URL, o
 showing store A's clone to store B, is not.
 
 **A crawl is real traffic on a live site.** A big store is hundreds of requests.
-Run it once and keep the capture; do not re-run to fiddle. If a store blocks
+Run it once and keep the capture; do not re-run to fiddle. If a run is interrupted (Ctrl-C, closed terminal, laptop asleep), run the same command again with `--clean`. It starts the crawl over; a partial capture is not resumed. If a store blocks
 you, the preflight (phase `0/4`) says `RED` with the reason before any crawl
 starts. Do not retry against a block.
 
@@ -223,12 +229,17 @@ After `--no-serve`, or any time after a run, serve an existing clone without
 re-crawling:
 
 ```bash
-bun scripts/catalog/heroserve-fl.ts scripts/output/the-store.com/site 4173
+nohup bun scripts/catalog/heroserve-fl.ts scripts/output/the-store.com/site 4173 > scripts/output/the-store.com/serve.log 2>&1 &
+curl -sI http://127.0.0.1:4173/ | head -1
 ```
 
-That is the same server the verification used (cart, search page, product
-JSON all work). `python3 scripts/serve.py 4173 scripts/output/the-store.com/site`
-is a plain static fallback when bun is not around.
+`heroserve-fl.ts` is the same server the verification used and the one to put
+in front of a client: it supplies the Shopify runtime endpoints (cart, search
+page, product JSON) and the popup shim. The `nohup ... &` form keeps it alive
+after the command returns; `serve.log` holds its output.
+`python3 scripts/serve.py 4173 scripts/output/the-store.com/site` is a plain
+static fallback only when bun is not around, and cart, search and filters are
+inert under it.
 
 ## If something is wrong
 
