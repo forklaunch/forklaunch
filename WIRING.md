@@ -74,7 +74,10 @@ The HMAC secret never reaches the browser: heroserve signs every module call
 server-side. Pass a PayPal client id as a sixth argument for the PayPal button.
 
 Tested: yes, real Stripe test payment, order to `paid`, stock decremented
-(graza.co clone, 2026-09-01). PayPal: proven on the module, not through this
+(graza.co clone, 2026-09-01). Re-proven 2026-09-06 on two stores, graza.co and
+gorillamind.com, with `scripts/check-purchase.mjs`: 12 of 12 checks each,
+including declined card leaving stock untouched and the return URL being
+verified with Stripe rather than trusted. PayPal: proven on the module, not through this
 server.
 
 ## 4. Register the clone as a ForkLaunch project

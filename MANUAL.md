@@ -1,24 +1,59 @@
-# Storefront Migrate — how to use it
+# Storefront Migrate: how to use it
 
 Point it at a Shopify store. It produces a faithful, browsable, offline clone of
 that store's public pages, verifies the clone against the live site, and repairs
 what it can. One command. It stops when the clone has every feature the live
 site has, or tells you exactly what it could not fix.
 
-## Install it as a Claude skill (the normal way)
+## Install it
 
-This is a Claude Code skill. Unpack the tarball into your skills folder and
-Claude Code picks it up on its own:
+There are two routes. Route 1 works today. Route 2 is the team route and needs
+access to the repo first.
+
+### Route 1: the tarball (works today)
+
+This is a Claude Code skill. Unpack `storefront-migrate.tgz` anywhere and
+install its dependencies (the `package.json` is inside `scripts/`):
 
 ```bash
-mkdir -p ~/.claude/skills/storefront-migrate
-tar -xzf storefront-migrate.tgz -C ~/.claude/skills/storefront-migrate
+mkdir -p storefront-migrate
+tar -xzf storefront-migrate.tgz -C storefront-migrate
+cd storefront-migrate
+(cd scripts && npm install)
 ```
 
-Then, in Claude Code, say what you want: "clone https://www.the-store.com so I
-can show the client". The skill reads this manual itself, runs the setup below,
-runs the one command, and reports the exit code. Everything after this heading
-is what the skill does for you, and how to do it by hand if you prefer.
+Then either run it from that folder:
+
+```bash
+node scripts/bin/migrate.mjs https://www.the-store.com --clean
+```
+
+or copy the folder to your skills folder, and Claude Code picks it up as a
+skill on its own:
+
+```bash
+mkdir -p ~/.claude/skills
+cp -R . ~/.claude/skills/storefront-migrate
+```
+
+### Route 2: the plugin (team route, once you have been given access to the repo)
+
+The repo is private today, so the repo owner has to add you as a collaborator
+first. Then install it as a Claude Code plugin:
+
+```
+claude plugin marketplace add SrikarChittemsetty/forklaunch-tools
+claude plugin install storefront-migrate@forklaunch-tools
+```
+
+Then in any Claude Code session say "migrate https://<store> with
+storefront-migrate" and the skill runs.
+
+With either route, in Claude Code, say what you want: "clone
+https://www.the-store.com so I can show the client". The skill reads this
+manual itself, runs the setup below, runs the one command, and reports the exit
+code. Everything after this heading is what the skill does for you, and how to
+do it by hand if you prefer.
 
 ## Before the first run
 
@@ -66,7 +101,7 @@ do not start a second run of the same store to chase it.
 
 **It looks stuck during the crawl.** It is not. Almost all of each page's time is
 spent waiting for the page to go quiet, and stores with a lot of analytics never
-do — so the wait runs to its ceiling even though the page rendered seconds ago.
+do, so the wait runs to its ceiling even though the page rendered seconds ago.
 It also pauses ~1s between pages on purpose so it is not hammering someone's
 production site.
 
@@ -91,7 +126,7 @@ the verify phase to take 30 to 55 minutes on top of the crawl.
 | **1** | Some features are still missing. The report names each one and its repair. | Read the list. Most are fixable; some are policy (below). |
 | **2** | The tools could not run, so **nothing was proved**. | Fix what it names (usually a missing prerequisite) and re-run. Do not treat this as a fidelity result. |
 
-Exit 2 is the one to be careful with. It is not "the clone is bad" — it is "I
+Exit 2 is the one to be careful with. It is not "the clone is bad"; it is "I
 could not check." A clone that got exit 2 has not been verified at all.
 
 ## Headless stores (Hydrogen, Next.js, "React storefront")
@@ -117,19 +152,19 @@ public feed never has).
 
 ## Things that will show as different, and are fine
 
-The clone is fully offline — it never contacts any third party. That is what makes
+The clone is fully offline: it never contacts any third party. That is what makes
 it safe to demo anywhere. It also means some things from the live site will not
 render, by design:
 
-- Review widgets (Okendo, Judge.me, Yotpo) — their data lives on their servers
-- Chat bubbles, Instagram feeds, "recently viewed" — same reason
-- Cookie-consent banners (Shopify's own, Consentmo, OneTrust…) — the markup is
+- Review widgets (Okendo, Judge.me, Yotpo): their data lives on their servers
+- Chat bubbles, Instagram feeds, "recently viewed": same reason
+- Cookie-consent banners (Shopify's own, Consentmo, OneTrust…): the markup is
   captured but the script that shows it is blocked
-- Promo pop-ups and spin/scratch games (Alia, Klaviyo forms, Privy, Justuno…) —
-  removed on the clone: their script is blocked, so a captured pop-up could
+- Promo pop-ups and spin/scratch games (Alia, Klaviyo forms, Privy, Justuno…):
+  removed on the clone. Their script is blocked, so a captured pop-up could
   never be closed and would sit over the page forever
-- Shopify's own hosted checkout page — the clone stops at the cart
-- Account pages (`/account`, login, orders) — logged-in Shopify features with
+- Shopify's own hosted checkout page: the clone stops at the cart
+- Account pages (`/account`, login, orders): logged-in Shopify features with
   nothing public to capture
 
 The report lists these under "not migrated by policy" with the vendor named,
@@ -143,7 +178,7 @@ crawl, the report says `same template as live` for that page and re-crawls it;
 that line is the live site changing, not the clone breaking.
 
 Live stock counts, sale timers and rotating banners will also differ from the live
-site. The gate ignores those on purpose — it checks that a feature exists and
+site. The gate ignores those on purpose: it checks that a feature exists and
 works, never that a number matches.
 
 ## Knobs you may need
@@ -156,14 +191,14 @@ works, never that a number matches.
 | `--port N` | serve on another port (default 4173) |
 | `--rounds N`, `--budget-min N` | verify/repair budget (default 5 rounds, 30 minutes) |
 | `--server URL --secret KEY` | import the catalog into a running ForkLaunch ecommerce module and wire the cart to it; without these the cart is browse-only |
-| `FL_CONCURRENCY=N` | pages captured at once (default 3; use 1 on a small laptop — one browser is about 450 MB) |
+| `FL_CONCURRENCY=N` | pages captured at once (default 3; use 1 on a small laptop, since one browser is about 450 MB) |
 
 Output goes to `scripts/output/<store-domain>/` (`--out DIR` to change): the
 `site/` folder is the clone, `features.json` the report, `manifest.json` the
 handoff file for ForkLaunch.
 
-The verify phase samples four pages — the homepage, one collection, one
-product, one content page — and checks each against the live site twice.
+The verify phase samples four pages: the homepage, one collection, one
+product, one content page. It checks each against the live site twice.
 
 ## Two things to know before pointing it at a store
 
@@ -174,7 +209,7 @@ showing store A's clone to store B, is not.
 **A crawl is real traffic on a live site.** A big store is hundreds of requests.
 Run it once and keep the capture; do not re-run to fiddle. If a store blocks
 you, the preflight (phase `0/4`) says `RED` with the reason before any crawl
-starts — do not retry against a block.
+starts. Do not retry against a block.
 
 ## When the clone needs a backend
 
