@@ -262,6 +262,92 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
         denials: [{ carcCode: 'CO-16', category: 'required_fields' }]
       });
     });
+
+    it('a mistyped/nonexistent procedure code gets flagged as required_fields', async () => {
+      const em = setup.orm!.em.fork();
+      // Not in MOCK_PROCEDURE_CODES at all — none of NCCI PTP/MUE/LCD-NCD
+      // catch this on their own (they only match a code against a table of
+      // *known* codes; an unrecognized code just never matches, silently),
+      // so this is ClaimService's own unknown-procedure-code check, not
+      // ScrubbingService's.
+      const encounterId = await seedEncounter(em, {
+        mrn: 'E2E-REQFIELDS-UNKNOWNCODE-001',
+        icd10Code: 'J06.9',
+        procedureCode: 'PROC-0001' // a plausible typo of PROC-001
+      });
+
+      const built = await call(baseUrl, '/claim/build', {
+        method: 'POST',
+        body: { encounterId },
+        token: jwt
+      });
+      const claimId = (built.body as { id: string }).id;
+      const scrubbed = await call(baseUrl, `/claim/${claimId}/scrub`, {
+        method: 'POST',
+        token: jwt
+      });
+
+      expect(scrubbed.body).toEqual({
+        status: 'denied',
+        denials: [{ carcCode: 'CO-16', category: 'required_fields' }]
+      });
+    });
+
+    it('a recognized procedure code with no crosswalk entry is not flagged as unrecognized', async () => {
+      const em = setup.orm!.em.fork();
+      // PROC-999 is a real entry in MOCK_PROCEDURE_CODES with no
+      // MOCK_LCD_CROSSWALK/NCCI data behind it — proves the new check only
+      // catches codes the code-set provider has never heard of, not every
+      // code lacking a crosswalk entry.
+      const encounterId = await seedEncounter(em, {
+        mrn: 'E2E-REQFIELDS-KNOWNUNMAPPED-001',
+        icd10Code: 'J06.9',
+        procedureCode: 'PROC-999'
+      });
+
+      const built = await call(baseUrl, '/claim/build', {
+        method: 'POST',
+        body: { encounterId },
+        token: jwt
+      });
+      const claimId = (built.body as { id: string }).id;
+      const scrubbed = await call(baseUrl, `/claim/${claimId}/scrub`, {
+        method: 'POST',
+        token: jwt
+      });
+
+      expect(scrubbed.body).toEqual({ status: 'ready', denials: [] });
+    });
+
+    it('a mistyped/nonexistent ICD-10-CM diagnosis code gets flagged as required_fields', async () => {
+      const em = setup.orm!.em.fork();
+      // PROC-999 is recognized with no crosswalk entry (isolates this
+      // finding from an unrelated LCD/NCD one) — the diagnosis code itself
+      // is what's unrecognized here, checked against the real Icd10Code
+      // reference table via CodeValidationService, not against any mock
+      // procedure data.
+      const encounterId = await seedEncounter(em, {
+        mrn: 'E2E-REQFIELDS-UNKNOWNDIAG-001',
+        icd10Code: 'NOT-A-REAL-ICD10-CODE',
+        procedureCode: 'PROC-999'
+      });
+
+      const built = await call(baseUrl, '/claim/build', {
+        method: 'POST',
+        body: { encounterId },
+        token: jwt
+      });
+      const claimId = (built.body as { id: string }).id;
+      const scrubbed = await call(baseUrl, `/claim/${claimId}/scrub`, {
+        method: 'POST',
+        token: jwt
+      });
+
+      expect(scrubbed.body).toEqual({
+        status: 'denied',
+        denials: [{ carcCode: 'CO-16', category: 'required_fields' }]
+      });
+    });
   });
 
   describe('denial worklist', () => {

@@ -1,4 +1,5 @@
 import { getEnvVar } from '@forklaunch/common';
+import { OpenTelemetryCollector } from '@forklaunch/core/http';
 import { FieldEncryptor, registerEncryptor } from '@forklaunch/core/persistence';
 import {
   BlueprintTestHarness,
@@ -217,8 +218,39 @@ export const setupTestDatabase = async (): Promise<TestSetupResult> => {
     }
   });
 
-  return await harness.setup();
+  const setup = await harness.setup();
+  await seedIcd10ReferenceCodes(setup);
+  return setup;
 };
+
+// ClaimService.scrubClaim now validates every diagnosis code against the
+// real Icd10Code reference table (CodeValidationService) — a genuinely
+// empty table (the default for a fresh migration) would make every claim
+// in this suite fail with an "unrecognized diagnosis" finding, including
+// the ones testing completely unrelated layers. Uses the real
+// CodeSetLoaderService/ETL path (an in-memory row source instead of a CSV
+// file — the loader itself doesn't care which), not a raw insert, so this
+// stays a genuine exercise of the same pipeline scripts/refresh-code-sets.ts
+// runs in production. Only the codes this suite's own tests actually use.
+async function seedIcd10ReferenceCodes(setup: TestSetupResult): Promise<void> {
+  if (!setup.orm) return;
+  const { CodeSetLoaderService } = await import(
+    '../../persistence/etl/codeSetLoader.service'
+  );
+  const { Icd10Code } = await import(
+    '../../persistence/entities/icd10Code.entity'
+  );
+  const em = setup.orm.em.fork();
+  const loader = new CodeSetLoaderService(
+    em,
+    new OpenTelemetryCollector('test', 'info', {})
+  );
+  await loader.load(Icd10Code, [
+    { code: 'J06.9', description: 'Acute upper respiratory infection, unspecified' },
+    { code: 'Z00.00', description: 'Encounter for general adult medical exam w/o abnormal findings' },
+    { code: 'R73.09', description: 'Other abnormal glucose' }
+  ]);
+}
 
 export const cleanupTestDatabase = async (): Promise<void> => {
   await stopTestServer();

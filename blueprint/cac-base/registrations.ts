@@ -190,12 +190,14 @@ const serviceDependencies = runtimeDependencies.chain({
       EntityManager,
       ScrubbingService,
       CodeSetProviderResolver,
+      CodeValidationService,
       OtelCollector
     }) =>
       new ClaimService(
         EntityManager,
         ScrubbingService,
         CodeSetProviderResolver,
+        CodeValidationService,
         OtelCollector
       )
   },

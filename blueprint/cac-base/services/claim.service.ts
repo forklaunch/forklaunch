@@ -3,7 +3,10 @@ import {
   OpenTelemetryCollector
 } from '@forklaunch/core/http';
 import { ScrubbingService } from '@forklaunch/implementation-cac-base/services';
-import type { DenialReasonCategory as MockDenialReasonCategory } from '@forklaunch/implementation-cac-base/services';
+import type {
+  DenialReasonCategory as MockDenialReasonCategory,
+  ScrubbingFinding
+} from '@forklaunch/implementation-cac-base/services';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { ClaimStatus } from '../domain/enum/claimStatus.enum';
 import { CodeSetProviderType } from '../domain/enum/codeSetProviderType.enum';
@@ -13,6 +16,7 @@ import { Claim } from '../persistence/entities/claim.entity';
 import { Denial } from '../persistence/entities/denial.entity';
 import { Encounter } from '../persistence/entities/encounter.entity';
 import { CodeSetProviderResolver } from './codeSetProviderResolver.service';
+import { CodeValidationService } from './codeValidation.service';
 
 export interface ScrubClaimResult {
   status: ClaimStatus;
@@ -31,6 +35,7 @@ export class ClaimService {
     private readonly em: EntityManager,
     private readonly scrubbingService: ScrubbingService,
     private readonly codeSetProviderResolver: CodeSetProviderResolver,
+    private readonly codeValidationService: CodeValidationService,
     private readonly otel: OpenTelemetryCollector<MetricsDefinition>
   ) {}
 
@@ -96,9 +101,69 @@ export class ClaimService {
       .getItems()
       .map((diagnosis) => diagnosis.icd10Code);
 
-    const result = this.scrubbingService.scrub(lines, diagnosisCodes);
+    // Unknown-procedure-code check. ScrubbingService is a pure function
+    // with no DB dependency (see the class comment above) and can't answer
+    // "does this code actually exist" itself — none of its three original
+    // layers do either: NCCI PTP/MUE only match a code against a table of
+    // *known* codes (an unrecognized code just never matches, silently),
+    // and LCD/NCD only fires for a procedure that already has a crosswalk
+    // entry. A well-formed but mistyped/nonexistent code (e.g. a stray
+    // digit) previously scrubbed clean regardless. Closing that gap needs
+    // the organization's actual CodeSetProvider — an async, DB-backed
+    // lookup — so it lives here rather than in the pure scrubbing engine.
+    // Re-resolves rather than trusting claim.codeSetType: unlike which
+    // provider *built* this claim (§5's "never retroactively recoded"
+    // rule, which only governs that historical record), whether a code
+    // exists is a fact about the present code set, checked fresh every
+    // scrub.
+    const codeSetProvider =
+      await this.codeSetProviderResolver.resolve(organizationId);
+    const unknownProcedureFindings: ScrubbingFinding[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      const known = await codeSetProvider.lookupProcedureCode({
+        code: lines[i].procedureCode
+      });
+      if (!known) {
+        unknownProcedureFindings.push({
+          category: 'required_fields',
+          carcCode: 'CO-16',
+          message: `Charge line ${i + 1} references procedure code "${lines[i].procedureCode}", which is not recognized by the active code-set provider`
+        });
+      }
+    }
 
-    const denials = result.findings.map((finding) =>
+    // Unknown-diagnosis-code check. ICD-10-CM is a free, public code set —
+    // unlike procedure codes, there's a real reference-table validator for
+    // it already (CodeValidationService, backing the standalone
+    // /codeValidation/icd10/:code endpoint) — it just was never called from
+    // anywhere in the claim-building/scrubbing path until now. Same
+    // reasoning as the procedure check above: LCD/NCD only asks "does this
+    // diagnosis justify this procedure," never "is this a real diagnosis
+    // code at all," so a mistyped/nonexistent ICD-10 code previously
+    // scrubbed clean as long as it happened not to match any crosswalk
+    // entry.
+    const unknownDiagnosisFindings: ScrubbingFinding[] = [];
+    for (let i = 0; i < diagnosisCodes.length; i++) {
+      const validated = await this.codeValidationService.validateIcd10(
+        diagnosisCodes[i]
+      );
+      if (!validated.valid) {
+        unknownDiagnosisFindings.push({
+          category: 'required_fields',
+          carcCode: 'CO-16',
+          message: `Diagnosis ${i + 1} references ICD-10-CM code "${diagnosisCodes[i]}", which is not a recognized code`
+        });
+      }
+    }
+
+    const result = this.scrubbingService.scrub(lines, diagnosisCodes);
+    const findings = [
+      ...unknownProcedureFindings,
+      ...unknownDiagnosisFindings,
+      ...result.findings
+    ];
+
+    const denials = findings.map((finding) =>
       this.em.create(Denial, {
         organizationId: claim.organizationId,
         claim,
@@ -108,7 +173,7 @@ export class ClaimService {
       })
     );
 
-    claim.status = result.clean ? ClaimStatus.READY : ClaimStatus.DENIED;
+    claim.status = findings.length === 0 ? ClaimStatus.READY : ClaimStatus.DENIED;
 
     if (denials.length > 0) {
       this.em.persist(denials);
@@ -118,7 +183,7 @@ export class ClaimService {
     this.otel.info('Scrubbed claim', {
       claimId,
       status: claim.status,
-      findingCount: result.findings.length
+      findingCount: findings.length
     });
 
     return { status: claim.status, denials };
