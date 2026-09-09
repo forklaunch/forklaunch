@@ -17,6 +17,20 @@ export const MOCK_LCD_CROSSWALK: Record<string, ReadonlyArray<string>> = {
   'PROC-002': ['Z00.00'], // Encounter for general adult medical exam w/o abnormal findings
   // Diagnostic Lab Panel — justified by a finding that warrants lab workup.
   'PROC-003': ['R73.09'], // Other abnormal glucose
+  // Blood Pressure Management Visit — justified by a hypertension diagnosis.
+  'PROC-004': ['I10'], // Essential (primary) hypertension
+  // Diabetes Management Visit — justified by a diabetes diagnosis.
+  'PROC-005': ['E11.9'], // Type 2 diabetes mellitus without complications
+  // Behavioral Health Counseling — justified by a depression diagnosis.
+  'PROC-006': ['F32.9'], // Major depressive disorder, single episode, unspecified
+  // Pulmonary Function Test — justified by an asthma diagnosis.
+  'PROC-007': ['J45.909'], // Unspecified asthma, uncomplicated
+  // Upper GI Endoscopy — justified by a GERD diagnosis.
+  'PROC-008': ['K21.9'], // Gastro-esophageal reflux disease without esophagitis
+  // Urinalysis — justified by a UTI diagnosis.
+  'PROC-009': ['N39.0'], // Urinary tract infection, site not specified
+  // Wrist X-ray — justified by a wrist fracture diagnosis.
+  'PROC-010': ['S62.90XA'], // Unspecified fracture of the wrist, initial encounter
   ...CPT_SHAPED_LCD_CROSSWALK
 };
 
