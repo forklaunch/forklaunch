@@ -166,6 +166,8 @@ fn sync_to_manifest(
         resources: metadata.to_resource_inventory(),
         routers,
         metadata: metadata.to_project_metadata(),
+        // Recorded by `openapi export`; a freshly synced project has none yet.
+        ports: None,
     });
 
     manifest_data

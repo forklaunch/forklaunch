@@ -755,6 +755,7 @@ impl CliCommand for ApplicationCommand {
                 resources: None,
                 routers: None,
                 metadata: None,
+                ports: None,
             },
             ProjectEntry {
                 r#type: ProjectType::Library,
@@ -764,6 +765,7 @@ impl CliCommand for ApplicationCommand {
                 resources: None,
                 routers: None,
                 metadata: None,
+                ports: None,
             },
             ProjectEntry {
                 r#type: ProjectType::Library,
@@ -773,6 +775,7 @@ impl CliCommand for ApplicationCommand {
                 resources: None,
                 routers: None,
                 metadata: None,
+                ports: None,
             },
         ];
         additional_projects.extend(modules.clone().into_iter().map(|package| ProjectEntry {
@@ -789,6 +792,8 @@ impl CliCommand for ApplicationCommand {
             }),
             routers: get_routers_from_standard_package(package),
             metadata: None,
+            // Recorded by `openapi export` once the service can be run.
+            ports: None,
         }));
 
         let additional_projects_names = additional_projects

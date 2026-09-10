@@ -1,4 +1,4 @@
-use std::{env, fs, io::Read as _, path::Path, process::{Command as ProcessCommand, Stdio}, thread, time::{Duration, Instant}};
+use std::{collections::HashMap, env, fs, io::Read as _, path::Path, process::{Command as ProcessCommand, Stdio}, thread, time::{Duration, Instant}};
 
 use anyhow::{Context, Result, bail};
 
@@ -60,7 +60,7 @@ use crate::{
     constants::Runtime,
     core::{
         ast::infrastructure::env::{EnvVarUsage, find_all_env_vars},
-        manifest::{ProjectType, application::ApplicationManifestData},
+        manifest::{ProjectType, ServingPort, application::ApplicationManifestData},
         rendered_template::RenderedTemplatesCache,
     },
 };
@@ -243,12 +243,48 @@ pub(crate) fn export_service_openapi(
     Ok(())
 }
 
+/// Read the `ports` the framework recorded into the export payload.
+///
+/// The running process registers every port it bound to serve traffic, so this
+/// is what the service actually listens on rather than what its env var names
+/// suggest. Absent on services built with an older framework, in which case
+/// the caller leaves the manifest alone and deployment keeps inferring.
+fn read_serving_ports(openapi_file: &Path) -> Option<Vec<ServingPort>> {
+    let content = fs::read_to_string(openapi_file).ok()?;
+    let parsed: serde_json::Value = serde_json::from_str(&content).ok()?;
+    let ports = parsed.get("ports")?.as_array()?;
+
+    let collected: Vec<ServingPort> = ports
+        .iter()
+        .filter_map(|entry| {
+            let port = u16::try_from(entry.get("port")?.as_u64()?).ok()?;
+            Some(ServingPort {
+                port,
+                protocol: entry.get("protocol")?.as_str()?.to_string(),
+                health_path: entry
+                    .get("healthPath")
+                    .and_then(|p| p.as_str())
+                    .unwrap_or("/health")
+                    .to_string(),
+            })
+        })
+        .collect();
+
+    if collected.is_empty() {
+        None
+    } else {
+        Some(collected)
+    }
+}
+
 pub(crate) fn export_all_services(
     app_root: &Path,
     manifest: &ApplicationManifestData,
     output_dir: &Path,
-) -> Result<Vec<String>> {
+) -> Result<(Vec<String>, HashMap<String, Vec<ServingPort>>)> {
     let mut exported_services = Vec::new();
+    // Keyed by project name; only services whose framework reported ports.
+    let mut serving_ports: HashMap<String, Vec<ServingPort>> = HashMap::new();
 
     let runtime = manifest.runtime.as_str();
     let modules_path = app_root.join(&manifest.modules_path);
@@ -336,8 +372,12 @@ pub(crate) fn export_all_services(
             iam_port,
         )?;
 
+        if let Some(ports) = read_serving_ports(&openapi_file) {
+            serving_ports.insert(service.name.clone(), ports);
+        }
+
         exported_services.push(service.name.clone());
     }
 
-    Ok(exported_services)
+    Ok((exported_services, serving_ports))
 }

@@ -8,6 +8,7 @@ use crate::{
     CliCommand,
     core::{
         command::command,
+        manifest::{ManifestConfig, apply_serving_ports},
         openapi_export::export_all_services,
     },
 };
@@ -42,7 +43,7 @@ impl CliCommand for ExportCommand {
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-        let (app_root, manifest) = crate::core::validate::require_manifest(matches)?;
+        let (app_root, mut manifest) = crate::core::validate::require_manifest(matches)?;
 
         let output_dir = matches.get_one::<String>("output").unwrap();
         let output_path = app_root.join(output_dir);
@@ -58,12 +59,30 @@ impl CliCommand for ExportCommand {
         writeln!(stdout)?;
 
         match result {
-            Ok(exported_services) => {
+            Ok((exported_services, serving_ports)) => {
                 log_header!(stdout, Color::Green, "Successfully exported {} OpenAPI specification(s)", exported_services.len());
                 writeln!(stdout, "  Output: {}", output_path.display())?;
 
                 for service_name in &exported_services {
                     log_ok!(stdout, "  - {}", service_name);
+                }
+
+                // Record the ports each process reported it bound. Deployment
+                // reads these instead of inferring from env var names, which
+                // provisioned load balancers for ports nothing served.
+                if apply_serving_ports(manifest.projects_mut(), &serving_ports) {
+                    let manifest_path =
+                        app_root.join(".forklaunch").join("manifest.toml");
+                    std::fs::write(
+                        &manifest_path,
+                        toml::to_string_pretty(&manifest).with_context(|| {
+                            "Failed to serialize manifest with serving ports"
+                        })?,
+                    )
+                    .with_context(|| {
+                        format!("Failed to write {}", manifest_path.display())
+                    })?;
+                    log_ok!(stdout, "  recorded serving ports in manifest.toml");
                 }
             }
             Err(e) => {

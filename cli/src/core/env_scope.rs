@@ -362,6 +362,7 @@ mod tests {
                     }),
                     routers: None,
                     metadata: None,
+                    ports: None,
                 })
                 .collect(),
             project_peer_topology: HashMap::new(),

@@ -578,7 +578,8 @@ impl CliCommand for CreateCommand {
         create_dir_all(&openapi_path).with_context(|| "Failed to create openapi directory")?;
         let _openapi_guard = RemoveDirGuard::new(openapi_path.clone());
 
-        let exported_services = export_all_services(&app_root, &manifest, &openapi_path)?;
+        let (exported_services, _serving_ports) =
+            export_all_services(&app_root, &manifest, &openapi_path)?;
 
         log_ok!(
             stdout,
@@ -2486,6 +2487,7 @@ mod tests {
                     }),
                     routers: None,
                     metadata: None,
+                    ports: None,
                 })
                 .collect(),
             project_peer_topology: HashMap::new(),

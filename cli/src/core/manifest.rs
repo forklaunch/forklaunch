@@ -134,6 +134,25 @@ pub(crate) struct ProjectMetadata {
     pub(crate) privileged: Option<bool>,
 }
 
+/// A port this project serves traffic on, recorded from what the running
+/// process actually bound during `openapi export`.
+///
+/// Deployment used to infer this from environment variable NAMES — anything
+/// ending `_PORT`, minus a denylist of dependency ports — which provisioned a
+/// load balancer for a scaffolded `WS_PORT` no code read, and a container port
+/// mapping for a Redis port the service only connects to. Recording what was
+/// bound removes the guess, and carries the real value: a websocket server on
+/// 12000 is written as 12000, not the conventional 11000.
+#[derive(Debug, Serialize, Deserialize, Content, Clone)]
+pub(crate) struct ServingPort {
+    pub(crate) port: u16,
+    /// "http" or "ws". Drives the target group's protocol.
+    pub(crate) protocol: String,
+    /// A path on THIS port answering 2xx to a plain GET. The load balancer
+    /// health-checks the port it forwards to, so every serving port needs one.
+    pub(crate) health_path: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Content, Clone)]
 pub(crate) struct ProjectEntry {
     pub(crate) r#type: ProjectType,
@@ -143,6 +162,10 @@ pub(crate) struct ProjectEntry {
     pub(crate) resources: Option<ResourceInventory>,
     pub(crate) routers: Option<Vec<String>>,
     pub(crate) metadata: Option<ProjectMetadata>,
+    /// Absent on manifests written before this existed, which is what keeps
+    /// the old inference alive as a fallback instead of forcing a flag day.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) ports: Option<Vec<ServingPort>>,
 }
 
 /// Compliance configuration stored in the `[compliance]` section of `manifest.toml`.
@@ -371,6 +394,48 @@ macro_rules! config_struct {
     };
 }
 
+/// Record the ports each project reported during `openapi export`.
+///
+/// Returns true when anything changed, so the caller only rewrites the
+/// manifest when there is something new to persist. A project missing from
+/// `reported` is left untouched rather than cleared: a service that failed to
+/// export, or one built with a framework that does not yet report, must not
+/// silently lose a declaration it already had.
+pub(crate) fn apply_serving_ports(
+    projects: &mut [ProjectEntry],
+    reported: &std::collections::HashMap<String, Vec<ServingPort>>,
+) -> bool {
+    let mut changed = false;
+
+    for project in projects.iter_mut() {
+        let Some(ports) = reported.get(&project.name) else {
+            continue;
+        };
+
+        let mut sorted = ports.clone();
+        sorted.sort_by_key(|p| p.port);
+
+        let differs = match &project.ports {
+            Some(existing) => {
+                existing.len() != sorted.len()
+                    || existing.iter().zip(sorted.iter()).any(|(a, b)| {
+                        a.port != b.port
+                            || a.protocol != b.protocol
+                            || a.health_path != b.health_path
+                    })
+            }
+            None => true,
+        };
+
+        if differs {
+            project.ports = Some(sorted);
+            changed = true;
+        }
+    }
+
+    changed
+}
+
 pub(crate) fn generate_manifest(
     path_dir: &String,
     data: &ApplicationManifestData,
@@ -418,6 +483,8 @@ pub(crate) fn add_project_definition_to_manifest<
         resources,
         routers,
         metadata,
+        // Filled in by `openapi export`, from what the running process bound.
+        ports: None,
     });
 
     let app_name = manifest_data.app_name().to_owned();
@@ -513,4 +580,93 @@ pub(crate) fn remove_router_definition_from_manifest(
 
     Ok(to_string_pretty(&manifest_data)
         .with_context(|| ERROR_FAILED_TO_REMOVE_PROJECT_METADATA_FROM_MANIFEST)?)
+}
+
+#[cfg(test)]
+mod serving_port_tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn project(name: &str, ports: Option<Vec<ServingPort>>) -> ProjectEntry {
+        ProjectEntry {
+            r#type: ProjectType::Service,
+            name: name.to_string(),
+            description: String::new(),
+            variant: None,
+            resources: None,
+            routers: None,
+            metadata: None,
+            ports,
+        }
+    }
+
+    fn port(port: u16, protocol: &str) -> ServingPort {
+        ServingPort {
+            port,
+            protocol: protocol.to_string(),
+            health_path: "/health".to_string(),
+        }
+    }
+
+    #[test]
+    fn records_reported_ports_in_port_order() {
+        let mut projects = vec![project("vault", None)];
+        let mut reported = HashMap::new();
+        reported.insert(
+            "vault".to_string(),
+            vec![port(11000, "ws"), port(8000, "http")],
+        );
+
+        assert!(apply_serving_ports(&mut projects, &reported));
+
+        let recorded = projects[0].ports.as_ref().unwrap();
+        assert_eq!(recorded[0].port, 8000);
+        assert_eq!(recorded[1].port, 11000);
+    }
+
+    #[test]
+    fn reports_no_change_when_ports_already_match() {
+        // The caller only rewrites manifest.toml when something changed, so a
+        // re-export of an unchanged app must not dirty the file.
+        let mut projects = vec![project("vault", Some(vec![port(8000, "http")]))];
+        let mut reported = HashMap::new();
+        reported.insert("vault".to_string(), vec![port(8000, "http")]);
+
+        assert!(!apply_serving_ports(&mut projects, &reported));
+    }
+
+    #[test]
+    fn leaves_a_project_that_reported_nothing_untouched() {
+        // A service that failed to export, or one built with a framework that
+        // does not report yet, must not lose a declaration it already had.
+        let mut projects = vec![
+            project("vault", Some(vec![port(8000, "http")])),
+            project("iam", None),
+        ];
+        let reported = HashMap::new();
+
+        assert!(!apply_serving_ports(&mut projects, &reported));
+        assert_eq!(projects[0].ports.as_ref().unwrap()[0].port, 8000);
+        assert!(projects[1].ports.is_none());
+    }
+
+    #[test]
+    fn notices_a_port_that_moved() {
+        // WS_PORT is not fixed at 11000; a service that rebinds must be
+        // re-recorded rather than kept at the old value.
+        let mut projects = vec![project("vault", Some(vec![port(11000, "ws")]))];
+        let mut reported = HashMap::new();
+        reported.insert("vault".to_string(), vec![port(12000, "ws")]);
+
+        assert!(apply_serving_ports(&mut projects, &reported));
+        assert_eq!(projects[0].ports.as_ref().unwrap()[0].port, 12000);
+    }
+
+    #[test]
+    fn omits_ports_from_a_manifest_that_has_none() {
+        // skip_serializing_if keeps old manifests byte-identical, so adding
+        // the field cannot churn every project's TOML.
+        let rendered = to_string_pretty(&project("vault", None)).unwrap();
+        assert!(!rendered.contains("ports"));
+    }
 }
