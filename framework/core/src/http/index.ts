@@ -4,6 +4,7 @@ export * from './cluster/cluster.types';
 export * from './cluster/isPortBound';
 export * from './createHmacToken';
 export * from './generateHmacAuthHeaders';
+export * from './servingPorts';
 export * from './discriminateAuthMethod';
 export * from './guards/isForklaunchRequest';
 export * from './guards/isForklaunchRouter';

@@ -11,7 +11,9 @@ import {
   MetricsDefinition,
   OPENAPI_DEFAULT_VERSION,
   OpenTelemetryCollector,
-  SessionObject
+  SessionObject,
+  registerServingPort,
+  getServingPorts
 } from '@forklaunch/core/http';
 import { findApplicationRoot } from '@forklaunch/core/environment';
 import {
@@ -162,6 +164,13 @@ export class Application<
     arg1?: string | ((listen_socket: uWebsockets.us_listen_socket) => void),
     arg2?: (listen_socket: uWebsockets.us_listen_socket) => void
   ): Promise<uWebsockets.us_listen_socket> {
+    // Recorded before the openapi short-circuit — see expressApplication.
+    registerServingPort({
+      port: typeof arg0 === 'number' ? arg0 : Number(process.env.PORT ?? 8000),
+      protocol: 'http',
+      healthPath: '/health'
+    });
+
     if (process.env.FORKLAUNCH_MODE === 'openapi') {
       const openApiSpec = generateOpenApiSpecs<SV>(
         this.schemaValidator,
@@ -181,19 +190,25 @@ export class Application<
           serviceName,
           'openapi.json'
         );
-      fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-      fs.writeFileSync(
-        outputPath,
-        JSON.stringify(
-          {
-            ...openApiSpec,
-            '': openApiSpec[OPENAPI_DEFAULT_VERSION]
-          },
-          null,
-          2
-        )
-      );
-      process.exit(0);
+      // Deferred so a websocket server constructed after listen() still
+      // registers its port before the export is written.
+      setImmediate(() => {
+        fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+        fs.writeFileSync(
+          outputPath,
+          JSON.stringify(
+            {
+              ...openApiSpec,
+              '': openApiSpec[OPENAPI_DEFAULT_VERSION],
+              ports: getServingPorts()
+            },
+            null,
+            2
+          )
+        );
+        process.exit(0);
+      });
+      return undefined as unknown as uWebsockets.us_listen_socket;
     }
 
     this.validateAllRoutes();

@@ -1,3 +1,4 @@
+import { registerServingPort } from '@forklaunch/core/http';
 import {
   createWebSocketSchemas,
   EventSchema,
@@ -149,6 +150,17 @@ export class ForklaunchWebSocketServer<
     options?: ConstructorParameters<typeof WebSocketServer>[0],
     callback?: () => void
   ) {
+    // Record the bound port before super(), which is allowed because this
+    // touches no `this`. Only the `{ port }` form is visible here; a server
+    // built on an existing http server (`{ server }`) knows its port at the
+    // `listen()` call and registers there instead.
+    if (typeof options?.port === 'number') {
+      registerServingPort({
+        port: options.port,
+        protocol: 'ws',
+        healthPath: '/health'
+      });
+    }
     super(options, callback);
     this.schemaValidator = schemaValidator;
     this.eventSchemas = eventSchemas;

@@ -13,6 +13,8 @@ import {
   MetricsDefinition,
   OPENAPI_DEFAULT_VERSION,
   OpenTelemetryCollector,
+  registerServingPort,
+  getServingPorts,
   SessionObject
 } from '@forklaunch/core/http';
 import { findApplicationRoot } from '@forklaunch/core/environment';
@@ -140,6 +142,19 @@ export class Application<
   listen(path: string, callback?: () => void): Server;
   listen(handle: unknown, listeningListener?: () => void): Server;
   listen(...args: unknown[]): Server {
+    // Record the port BEFORE the openapi short-circuit, using the same
+    // resolution the real listen path uses below. Deployment reads this to
+    // decide what gets a target group and a container port mapping; inferring
+    // it from env var names guessed wrong in both directions.
+    registerServingPort({
+      port:
+        typeof args[0] === 'number'
+          ? args[0]
+          : Number(process.env.PORT ?? 8000),
+      protocol: 'http',
+      healthPath: '/health'
+    });
+
     if (process.env.FORKLAUNCH_MODE === 'openapi') {
       const openApiSpec = generateOpenApiSpecs<SV>(
         this.schemaValidator,
@@ -159,19 +174,30 @@ export class Application<
           serviceName,
           'openapi.json'
         );
-      fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-      fs.writeFileSync(
-        outputPath,
-        JSON.stringify(
-          {
-            ...openApiSpec,
-            '': openApiSpec[OPENAPI_DEFAULT_VERSION]
-          },
-          null,
-          2
-        )
-      );
-      process.exit(0);
+      // Deferred by a tick, and RETURN rather than exit inline.
+      //
+      // A websocket server is typically constructed AFTER app.listen() in
+      // server.ts. Exiting here meant it never ran, so its port could never be
+      // recorded — the export would claim the service serves only HTTP. Letting
+      // the synchronous remainder of server.ts run first is what makes the port
+      // list complete; anything binding a port registers on the way past.
+      setImmediate(() => {
+        fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+        fs.writeFileSync(
+          outputPath,
+          JSON.stringify(
+            {
+              ...openApiSpec,
+              '': openApiSpec[OPENAPI_DEFAULT_VERSION],
+              ports: getServingPorts()
+            },
+            null,
+            2
+          )
+        );
+        process.exit(0);
+      });
+      return undefined as unknown as Server;
     }
 
     this.validateAllRoutes();
