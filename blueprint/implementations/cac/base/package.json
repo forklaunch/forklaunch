@@ -44,7 +44,7 @@
     "@forklaunch/interfaces-cac": "workspace:^",
     "@forklaunch/internal": "^1.2.29",
     "@forklaunch/validator": "^1.2.27",
-    "@mikro-orm/core": "7.1.15"
+    "@mikro-orm/core": "7.2.0"
   },
   "devDependencies": {
     "depcheck": "^1.4.7",
