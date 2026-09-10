@@ -41,7 +41,7 @@
     "test": "vitest --passWithNoTests"
   },
   "devDependencies": {
-    "@types/node": "^26.4.0",
+    "@types/node": "^26.4.1",
     "tsup": "^8.5.1",
     "typescript": "^7.0.2"
   },
