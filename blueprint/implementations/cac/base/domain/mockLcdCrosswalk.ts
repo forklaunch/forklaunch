@@ -31,6 +31,8 @@ export const MOCK_LCD_CROSSWALK: Record<string, ReadonlyArray<string>> = {
   'PROC-009': ['N39.0'], // Urinary tract infection, site not specified
   // Wrist X-ray — justified by a wrist fracture diagnosis.
   'PROC-010': ['S62.90XA'], // Unspecified fracture of the wrist, initial encounter
+  // Leg X-ray — justified by a leg fracture diagnosis.
+  'PROC-011': ['S82.90XA'], // Unspecified fracture of unspecified lower leg, initial encounter
   ...CPT_SHAPED_LCD_CROSSWALK
 };
 

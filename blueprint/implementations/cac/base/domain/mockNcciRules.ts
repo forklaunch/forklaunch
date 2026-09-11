@@ -38,5 +38,6 @@ export const MOCK_NCCI_MUE_CAPS: Record<string, number> = {
   'PROC-008': 1,
   'PROC-009': 1,
   'PROC-010': 2,
+  'PROC-011': 2,
   ...CPT_SHAPED_MUE_CAPS
 };

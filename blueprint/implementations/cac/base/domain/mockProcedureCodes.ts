@@ -14,6 +14,7 @@ export const MOCK_PROCEDURE_CODES: Record<string, ProcedureCodeDto> = {
   'PROC-008': { code: 'PROC-008', description: 'Upper GI Endoscopy' },
   'PROC-009': { code: 'PROC-009', description: 'Urinalysis' },
   'PROC-010': { code: 'PROC-010', description: 'Wrist X-ray' },
+  'PROC-011': { code: 'PROC-011', description: 'Leg X-ray' },
   // Recognized, but deliberately has no MOCK_LCD_CROSSWALK/NCCI entry —
   // the fixture used by tests that need a real, known code the other
   // three scrubbing layers have nothing to say about.
