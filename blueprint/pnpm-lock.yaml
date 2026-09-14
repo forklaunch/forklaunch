@@ -359,6 +359,9 @@ importers:
       '@forklaunch/implementation-cac-base':
         specifier: workspace:^
         version: link:../implementations/cac/base
+      '@forklaunch/infrastructure-redis':
+        specifier: ^1.4.11
+        version: 1.4.13(@opentelemetry/api@1.9.1)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/interfaces-cac':
         specifier: workspace:^
         version: link:../interfaces/cac

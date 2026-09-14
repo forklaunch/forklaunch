@@ -27,6 +27,7 @@ import {
   ALL_CAC_PERMISSIONS,
   cleanupTestDatabase,
   clearDatabase,
+  forkPostgresEm,
   getClaimCodeSetType,
   seedEncounter,
   seedEncounterWithCharges,
@@ -83,7 +84,7 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
 
   describe('build + scrub', () => {
     it('a matching diagnosis and procedure scrubs clean', async () => {
-      const em = setup.orm!.em.fork();
+      const em = forkPostgresEm(setup);
       const encounterId = await seedEncounter(em, {
         mrn: 'E2E-CLEAN-001',
         icd10Code: 'J06.9', // Acute upper respiratory infection
@@ -108,7 +109,7 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
     });
 
     it('a mismatched diagnosis and procedure gets flagged', async () => {
-      const em = setup.orm!.em.fork();
+      const em = forkPostgresEm(setup);
       const encounterId = await seedEncounter(em, {
         mrn: 'E2E-FLAGGED-001',
         icd10Code: 'Z00.00', // routine physical — does not justify PROC-001
@@ -133,7 +134,7 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
     });
 
     it('an unrealistic unit count gets flagged as an NCCI MUE violation', async () => {
-      const em = setup.orm!.em.fork();
+      const em = forkPostgresEm(setup);
       const encounterId = await seedEncounter(em, {
         mrn: 'E2E-MUE-001',
         icd10Code: 'J06.9',
@@ -161,7 +162,7 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
     });
 
     it('two procedures that conflict under NCCI PTP get flagged together', async () => {
-      const em = setup.orm!.em.fork();
+      const em = forkPostgresEm(setup);
       // PROC-001 + PROC-002 is a mock PTP conflict pair
       // (MOCK_NCCI_PTP_CONFLICTS) — each diagnosis justifies its own
       // procedure per the mock LCD/NCD crosswalk, so PTP is the only
@@ -190,7 +191,7 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
     });
 
     it('procedures that do not conflict under NCCI PTP scrub clean', async () => {
-      const em = setup.orm!.em.fork();
+      const em = forkPostgresEm(setup);
       // PROC-001 + PROC-003 is not a mock PTP conflict pair — the negative
       // case, proving the check is pair-specific and not "any two charges."
       const encounterId = await seedEncounterWithCharges(em, {
@@ -214,7 +215,7 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
     });
 
     it('a claim with no diagnosis codes gets flagged as required_fields', async () => {
-      const em = setup.orm!.em.fork();
+      const em = forkPostgresEm(setup);
       const encounterId = await seedEncounterWithCharges(em, {
         mrn: 'E2E-REQFIELDS-NODIAG-001',
         icd10Code: [], // no diagnoses on this encounter at all
@@ -239,7 +240,7 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
     });
 
     it('a charge line with an invalid unit count gets flagged as required_fields', async () => {
-      const em = setup.orm!.em.fork();
+      const em = forkPostgresEm(setup);
       const encounterId = await seedEncounterWithCharges(em, {
         mrn: 'E2E-REQFIELDS-UNITS-001',
         icd10Code: 'J06.9',
@@ -264,7 +265,7 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
     });
 
     it('a mistyped/nonexistent procedure code gets flagged as required_fields', async () => {
-      const em = setup.orm!.em.fork();
+      const em = forkPostgresEm(setup);
       // Not in MOCK_PROCEDURE_CODES at all — none of NCCI PTP/MUE/LCD-NCD
       // catch this on their own (they only match a code against a table of
       // *known* codes; an unrecognized code just never matches, silently),
@@ -294,7 +295,7 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
     });
 
     it('a recognized procedure code with no crosswalk entry is not flagged as unrecognized', async () => {
-      const em = setup.orm!.em.fork();
+      const em = forkPostgresEm(setup);
       // PROC-999 is a real entry in MOCK_PROCEDURE_CODES with no
       // MOCK_LCD_CROSSWALK/NCCI data behind it — proves the new check only
       // catches codes the code-set provider has never heard of, not every
@@ -320,7 +321,7 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
     });
 
     it('a mistyped/nonexistent ICD-10-CM diagnosis code gets flagged as required_fields', async () => {
-      const em = setup.orm!.em.fork();
+      const em = forkPostgresEm(setup);
       // PROC-999 is recognized with no crosswalk entry (isolates this
       // finding from an unrelated LCD/NCD one) — the diagnosis code itself
       // is what's unrecognized here, checked against the real Icd10Code
@@ -352,7 +353,7 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
 
   describe('denial worklist', () => {
     it('lists a flagged claim and resolves it', async () => {
-      const em = setup.orm!.em.fork();
+      const em = forkPostgresEm(setup);
       const encounterId = await seedEncounter(em, {
         mrn: 'E2E-WORKLIST-001',
         icd10Code: 'Z00.00',
@@ -396,7 +397,7 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
 
   describe('analytics', () => {
     it('reports clean/denial rates across a clean and a flagged claim', async () => {
-      const em = setup.orm!.em.fork();
+      const em = forkPostgresEm(setup);
       const cleanId = await seedEncounter(em, {
         mrn: 'E2E-ANALYTICS-CLEAN',
         icd10Code: 'J06.9',
@@ -449,7 +450,7 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
 
   describe('tenant isolation', () => {
     it("never returns another organization's denials", async () => {
-      const em = setup.orm!.em.fork();
+      const em = forkPostgresEm(setup);
       const otherOrgEncounterId = await seedEncounter(em, {
         mrn: 'E2E-OTHER-ORG-001',
         icd10Code: 'Z00.00',
@@ -484,7 +485,7 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
     });
 
     it('describes the real CPT provider once the organization license is active', async () => {
-      const em = setup.orm!.em.fork();
+      const em = forkPostgresEm(setup);
       await activateCptLicense(em);
 
       const described = await call(baseUrl, '/codeSet', { token: jwt });
@@ -494,7 +495,7 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
 
   describe('code-set cutover (§5)', () => {
     it('claims built before a license activation stay on mock after it, only new claims pick up CPT', async () => {
-      const em = setup.orm!.em.fork();
+      const em = forkPostgresEm(setup);
 
       // 1. Build a claim under the organization's default (unlicensed) state.
       const encounterBefore = await seedEncounter(em, {
@@ -532,14 +533,14 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
 
       // 4. The earlier claim is never retroactively recoded — still 'mock'.
       const codeSetTypeAfterFlip = await getClaimCodeSetType(
-        setup.orm!.em.fork(),
+        forkPostgresEm(setup),
         claimBeforeId
       );
       expect(codeSetTypeAfterFlip).toBe('mock');
     });
 
     it('a license active for one organization never affects another organization\'s claims', async () => {
-      const em = setup.orm!.em.fork();
+      const em = forkPostgresEm(setup);
       const otherOrgId = '88888888-8888-8888-8888-888888888888';
 
       await activateCptLicense(em, TEST_ORGANIZATION_ID);

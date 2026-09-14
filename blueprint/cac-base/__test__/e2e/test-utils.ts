@@ -14,6 +14,18 @@ import * as path from 'path';
 
 export { TestSetupResult };
 
+// `TestSetupResult.orm` is `@forklaunch/testing`'s driver-agnostic
+// `AnyMikroORM` (the harness supports postgres/mysql/mongodb/etc.), so its
+// `.em` is the generic `EntityManager<IDatabaseDriver<Connection>>` from
+// `@mikro-orm/core` — missing the Postgres-only members (createQueryBuilder,
+// qb, getKysely, ...) that a Postgres-specific `EntityManager` (from
+// `@mikro-orm/postgresql`, e.g. `CodeSetLoaderService`'s constructor) needs.
+// This suite always configures `databaseType: 'postgres'`, so the narrowing
+// is safe; centralized here instead of an `as` at each of the ~20 call sites.
+export function forkPostgresEm(setup: TestSetupResult): EntityManager {
+  return setup.orm!.em.fork() as EntityManager;
+}
+
 dotenv.config({ path: path.join(__dirname, '../../.env.test') });
 
 // Compliance entities (Patient, CodeSetLicense, ...) require a registered
@@ -240,7 +252,7 @@ async function seedIcd10ReferenceCodes(setup: TestSetupResult): Promise<void> {
   const { Icd10Code } = await import(
     '../../persistence/entities/icd10Code.entity'
   );
-  const em = setup.orm.em.fork();
+  const em = forkPostgresEm(setup);
   const loader = new CodeSetLoaderService(
     em,
     new OpenTelemetryCollector('test', 'info', {})
