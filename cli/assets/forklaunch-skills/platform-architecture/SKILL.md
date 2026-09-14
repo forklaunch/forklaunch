@@ -80,10 +80,12 @@ Core service managing applications, services, deployments, and infrastructure.
 **Routers:**
 
 - `application`: Application CRUD operations
+- `compute-pool`: Shared compute pool management (shared hosting tiers)
 - `controller`: Controller management
 - `deployment`: Deployment lifecycle
 - `eject`: Pulumi code ejection
 - `environment`: Environment management
+- `hosting-drift`: Hosting configuration drift detection
 - `instance-size`: EC2 instance sizing
 - `release`: Release management
 - `resource`: Infrastructure resources
@@ -166,6 +168,7 @@ Orchestrates deployments and infrastructure provisioning using Pulumi.
 - `rollback`: Rollback operations
 - `dlq`: Failed job recovery
 - `deployment-agent-worker`: Worker metadata
+- `substrate-migration`: Cross-tier substrate migrations
 
 **Infrastructure:** BullMQ (Redis-backed queue)
 **Location:** `src/modules/deployment-agent-worker/`
@@ -177,6 +180,8 @@ Orchestrates deployments and infrastructure provisioning using Pulumi.
 - `DeploymentProcessorService`: Orchestrates deployment flow
 - `RollbackProcessorService`: Handles rollback logic
 - `CheckpointProcessorService`: Manages deployment checkpoints
+- `SubstrateMigrationService`: Handles cross-tier substrate migrations
+- `SubstrateBootstrapService`: Bootstraps shared substrates
 
 ## Domain-Driven Design Patterns
 
@@ -315,15 +320,14 @@ async generatePulumiCode(
 - ECR repositories
 - CloudWatch log groups
 - IAM roles and policies
-- VPC endpoints (S3, ECR, ECS, Secrets Manager, etc.)
+- VPC endpoints (S3, ECR, ECS, Secrets Manager, etc.) - only for new VPCs; existing VPCs use shared endpoints provisioned by deployment preflight
 - Service Discovery (AWS Cloud Map)
 - Auto-scaling policies
-- DNS firewall rules
+- AWS Network Firewall (per-app domain egress control)
+- DNS firewall rules (legacy Route 53 Resolver)
 - CloudTrail audit logging
 
 **Location:** `src/modules/deployment-agent-worker/domain/services/pulumi-generator.service.ts`
-
-**Known bug (fix in PR #233, not yet merged): deploys with a dedicated-only cache resource crash with `error TS2304: Cannot find name 'centralizedRedis'`.** In `generateOutputs()`, the cache-export branching only checked `resourceAnalysis.sharedCaches.length > 0`; a service with a *dedicated* cache and no shared cache (`resourceAnalysis.dedicatedCaches.length > 0` only) falls through to a legacy fallback branch that hardcodes a reference to a `centralizedRedis` Pulumi resource that is never declared anywhere for that case — the real ElastiCache instance for dedicated-cache consumers is actually created under a different name (`distributedRedis`, via a "synthesize a shared-cache-like entry" step in `generateCache()`). The fallback branch's fix is to stop emitting those outputs rather than reference a name matching nothing: `} else if (hasCache && config.cache) { /* no resource named centralizedRedis is ever declared here — omit instead of referencing it */ }`. If you hit this on a deploy before the PR merges, there's no app-side workaround — it's a platform bug.
 
 ### Pulumi Executor Service
 

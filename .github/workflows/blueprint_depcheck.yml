@@ -7,11 +7,11 @@ on:
       - main
     paths:
       - 'blueprint/**/package.json'
-      - 'cli/src/init/core/package_json/package_json_constants.rs'
+      - 'cli/src/core/package_json/package_json_constants.rs'
   pull_request:
     paths:
       - 'blueprint/**/package.json'
-      - 'cli/src/init/core/package_json/package_json_constants.rs'
+      - 'cli/src/core/package_json/package_json_constants.rs'
 
 jobs:
   depcheck:
@@ -39,4 +39,11 @@ jobs:
       - name: Run blueprint dependency version check
         run: |
           cd .github/workflows/scripts/check_blueprint_deps
-          cargo run --bin check_blueprint_deps
+          if ! cargo run --bin check_blueprint_deps; then
+            echo
+            echo "::error::package_json_constants.rs has drifted from the blueprint package.json files."
+            echo "Fix it by running, from the repository root:"
+            echo "  cd .github/workflows/scripts/check_blueprint_deps && cargo run --bin check_blueprint_deps -- --fix"
+            echo "or trigger the 'Blueprint Dependency Sync' workflow, which opens a PR with the same change."
+            exit 1
+          fi

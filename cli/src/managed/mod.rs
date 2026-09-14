@@ -4,6 +4,7 @@ use clap::{ArgMatches, Command};
 use crate::{CliCommand, core::command::command};
 
 mod client;
+pub(crate) mod detect;
 mod instance;
 mod summary;
 mod template;

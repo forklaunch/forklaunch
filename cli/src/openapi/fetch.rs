@@ -30,7 +30,7 @@ impl CliCommand for FetchCommand {
             Arg::new("service")
                 .long("service")
                 .required(true)
-                .help("The deployed service id"),
+                .help("The deployed service's id (not its name) — see `fl app services --json`"),
         )
         .arg(
             Arg::new("route_version")
@@ -65,7 +65,9 @@ impl CliCommand for FetchCommand {
         let response = http_client::get(&url).with_context(|| ERROR_FAILED_TO_SEND_REQUEST)?;
         if response.status().as_u16() == 404 {
             bail!(
-                "Service '{}' not found, or has no OpenAPI spec in its release manifest.",
+                "Service '{}' not found, or has no OpenAPI spec in its release manifest. \
+                 --service takes the service's id, not its name — run `fl app services --json` \
+                 to look up the id.",
                 service_id
             );
         }

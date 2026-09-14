@@ -4,6 +4,44 @@ use anyhow::Result;
 use oxc_allocator::{Allocator, CloneIn};
 use oxc_ast::ast::{Argument, Expression, ObjectPropertyKind, Program, PropertyKey, Statement};
 
+/// Returns, in source order, the names of every `const <name> = <expr>.chain({ … })`
+/// declaration in a registrations.ts program.
+///
+/// The config-injector pattern builds its dependency graph as a chain of
+/// `.chain({ … })` calls: `configInjector` -> `environmentConfig` ->
+/// `runtimeDependencies` -> `serviceDependencies` -> `expressApplicationOptions`.
+/// Locating the chains structurally (by the `.chain(...)` call shape) lets a
+/// caller target "the environment chain" or "the terminal chain" without
+/// hardcoding a specific sibling entry's text, so a customized iam whose entries
+/// have drifted is still wired correctly.
+pub(crate) fn find_config_injector_chain_names(program: &Program<'_>) -> Vec<String> {
+    let mut names = Vec::new();
+
+    for statement in &program.body {
+        let Statement::VariableDeclaration(decl) = statement else {
+            continue;
+        };
+
+        for declarator in &decl.declarations {
+            let Some(name) = declarator.id.get_identifier_name() else {
+                continue;
+            };
+
+            let Some(Expression::CallExpression(call)) = &declarator.init else {
+                continue;
+            };
+
+            if let Expression::StaticMemberExpression(member) = &call.callee
+                && member.property.name == "chain"
+            {
+                names.push(name.to_string());
+            }
+        }
+    }
+
+    names
+}
+
 pub(crate) fn inject_into_registrations_config_injector<'a>(
     allocator: &'a Allocator,
     registrations_program: &mut Program<'a>,
@@ -120,6 +158,71 @@ mod tests {
             .with_options(CodegenOptions::default())
             .build(program)
             .code
+    }
+
+    #[test]
+    fn test_find_config_injector_chain_names_orders_the_chain() {
+        let allocator = Allocator::default();
+
+        // Mirrors the real registrations.ts shape: createConfigInjector(...) is
+        // NOT a `.chain(...)` call, so only the four chained declarations count,
+        // in source order, with the terminal chain last.
+        let registrations = r#"
+const configInjector = createConfigInjector(schemaValidator, {});
+const environmentConfig = configInjector.chain({});
+const runtimeDependencies = environmentConfig.chain({});
+const serviceDependencies = runtimeDependencies.chain({});
+const expressApplicationOptions = serviceDependencies.chain({});
+export const createDependencyContainer = (envFilePath) => ({});
+"#;
+        let program = parse_ast_program(&allocator, registrations, SourceType::ts());
+
+        let names = super::find_config_injector_chain_names(&program);
+
+        assert_eq!(
+            names,
+            vec![
+                "environmentConfig".to_string(),
+                "runtimeDependencies".to_string(),
+                "serviceDependencies".to_string(),
+                "expressApplicationOptions".to_string(),
+            ]
+        );
+        // The terminal chain is the last entry regardless of its name, which is
+        // how the relay targets the chain where BetterAuth is in scope.
+        assert_eq!(names.last().unwrap(), "expressApplicationOptions");
+    }
+
+    #[test]
+    fn test_find_config_injector_chain_names_handles_a_renamed_terminal_chain() {
+        let allocator = Allocator::default();
+
+        // A drifted iam whose terminal chain is renamed: the finder still returns
+        // it as the last (terminal) chain, so no verbatim name is required.
+        let registrations = r#"
+const environmentConfig = configInjector.chain({});
+const runtimeDependencies = environmentConfig.chain({});
+const applicationOptions = runtimeDependencies.chain({});
+"#;
+        let program = parse_ast_program(&allocator, registrations, SourceType::ts());
+
+        let names = super::find_config_injector_chain_names(&program);
+
+        assert_eq!(names.last().unwrap(), "applicationOptions");
+        assert_eq!(names.len(), 3);
+    }
+
+    #[test]
+    fn test_find_config_injector_chain_names_empty_when_no_chains() {
+        let allocator = Allocator::default();
+
+        let registrations = r#"
+const foo = 'bar';
+const baz = someFn({});
+"#;
+        let program = parse_ast_program(&allocator, registrations, SourceType::ts());
+
+        assert!(super::find_config_injector_chain_names(&program).is_empty());
     }
 
     #[test]

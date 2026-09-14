@@ -223,6 +223,9 @@ fn is_observability_var(var_name: &str) -> bool {
     upper.starts_with("OTEL_")
         || upper.starts_with("LOKI_")
         || upper.starts_with("TEMPO_")
+        || upper.starts_with("MIMIR_")
+        // Retained for back-compat: projects scaffolded before the Mimir
+        // migration may still carry PROMETHEUS_* vars.
         || upper.starts_with("PROMETHEUS_")
 }
 
@@ -425,6 +428,7 @@ mod tests {
     fn test_loki_tempo_prometheus_promoted() {
         assert!(is_observability_var("LOKI_URL"));
         assert!(is_observability_var("TEMPO_ENDPOINT"));
+        assert!(is_observability_var("MIMIR_URL"));
         assert!(is_observability_var("PROMETHEUS_PUSH_GATEWAY"));
         assert!(is_observability_var("OTEL_EXPORTER_OTLP_ENDPOINT"));
         assert!(!is_observability_var("DB_HOST"));

@@ -1,5 +1,55 @@
 # @forklaunch/infrastructure-s3
 
+## 1.4.13
+
+### Patch Changes
+
+- Release the framework set together so every package depends on the same
+  `@forklaunch/core`.
+
+  `core` was bumped to pin `@mikro-orm/*` exactly, but `express`, `hyper-express`,
+  `ws` and the `infrastructure-*` packages were still published against the
+  previous `core`. A consumer therefore resolved two copies of
+  `@forklaunch/core`, and through them two copies of `@mikro-orm/core` — which is
+  the duplication the `core` bump exists to remove. `EntityManager` and
+  `EntitySchema` carry a `#private` brand, so two copies are structurally
+  incompatible and the consumer stops compiling.
+
+  No source changes here; these packages move so the set stays internally
+  consistent.
+
+- Updated dependencies
+  - @forklaunch/common@1.2.26
+
+## 1.4.12
+
+### Patch Changes
+
+- Refresh dependencies to their latest published versions.
+
+  Runtime dependency changes, which is why these five packages release rather
+  than the whole workspace: `zod` 4.4.3 → 4.5.4 (core, validator), `fastmcp`
+  4.16.10 → 4.17.1 (core, express), `qs` 6.15.3 → 6.16.0 and
+  `@scalar/express-api-reference` 0.10.16 → 0.10.17 (express, hyper-express),
+  `multer` 2.2.0 → 2.3.0 (express), and `@aws-sdk/client-s3` 3.1120.0 → 3.1121.0
+  (infrastructure-s3). All are patch or minor upstream releases with no API
+  change on our side; the build and test suites pass unmodified.
+
+  The remaining packages only saw devDependency movement (`jest` 30.4.2 → 30.5.0,
+  `tsx` 4.23.12 → 4.23.13), which no consumer installs, so they are not released.
+
+  `jest` 30.5.0 pulls in `@parcel/watcher` as a new transitive dependency, and
+  pnpm requires an explicit build decision for it. It is set to `false` in
+  `pnpm-workspace.yaml`: it arrives only through `jest-haste-map`, so it is
+  dev-only and never reaches a published package, and the platform prebuilt
+  binary is already resolved, so the native build script has nothing to add.
+  Without that entry `pnpm install` fails outright — pnpm writes a literal
+  `set this to true or false` placeholder into the file, which is not valid
+  configuration.
+
+- Updated dependencies
+  - @forklaunch/core@1.5.17
+
 ## 1.4.11
 
 ### Patch Changes

@@ -74,7 +74,7 @@ fn show_status() -> Result<()> {
     let url = format!("{}/cloud-accounts", get_platform_management_api_url());
     let response = http_client::get(&url).with_context(|| ERROR_FAILED_TO_SEND_REQUEST)?;
 
-    if response.status().as_u16() == 404 {
+    if response.status().as_u16() == 404 || response.status().as_u16() == 204 {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
         writeln!(
             stdout,

@@ -1,13 +1,21 @@
-/**
- * Minimal PayPal Orders v2 REST client — deliberately no PayPal SDK dependency.
- * A thin fetch wrapper is enough for the v1 payment seam (create + capture),
- * keeps the dependency surface clean, and avoids pulling an SDK the rest of the
- * monorepo doesn't use. Venmo needs no extra code: it rides on PayPal orders as
- * a funding source (US, mobile) exposed automatically at the PayPal checkout.
- */
+import {
+  isAccessTokenResponse,
+  isPaypalOrder,
+  isVerificationResponse
+} from '../domain/guards/paypal.guards';
+
+/** Order-level status values from PayPal's Orders v2 API. */
+export type PaypalOrderStatus =
+  | 'CREATED'
+  | 'SAVED'
+  | 'APPROVED'
+  | 'PAYER_ACTION_REQUIRED'
+  | 'VOIDED'
+  | 'COMPLETED';
+
 export interface PaypalOrder {
   id: string;
-  status: string;
+  status: PaypalOrderStatus;
 }
 
 export interface PaypalClientOptions {
@@ -17,6 +25,7 @@ export interface PaypalClientOptions {
   baseUrl: string;
 }
 
+/** Minimal PayPal Orders v2 REST client (create + capture) — no PayPal SDK. */
 export class PaypalClient {
   private readonly clientId: string;
   private readonly clientSecret: string;
@@ -43,11 +52,16 @@ export class PaypalClient {
     if (!res.ok) {
       throw new Error(`PayPal auth failed (status ${res.status})`);
     }
-    const body = (await res.json()) as { access_token: string };
+    const body: unknown = await res.json();
+    if (!isAccessTokenResponse(body)) {
+      throw new Error(
+        'PayPal auth response missing a string access_token field'
+      );
+    }
     return body.access_token;
   }
 
-  /** Creates a PayPal order (money in major units + ISO currency). */
+  /** Creates a PayPal order (amount in minor units + ISO currency). */
   async createOrder(params: {
     amountCents: number;
     currency: string;
@@ -76,10 +90,16 @@ export class PaypalClient {
     if (!res.ok) {
       throw new Error(`PayPal create order failed (status ${res.status})`);
     }
-    return (await res.json()) as PaypalOrder;
+    const body: unknown = await res.json();
+    if (!isPaypalOrder(body)) {
+      throw new Error(
+        `PayPal create order returned an unexpected body (reference ${params.referenceId})`
+      );
+    }
+    return body;
   }
 
-  /** Captures a previously-approved order (idempotent on PayPal's side by order id). */
+  /** Captures a previously-approved order (idempotent by order id). */
   async captureOrder(orderId: string): Promise<PaypalOrder> {
     const accessToken = await this.getAccessToken();
     const res = await fetch(
@@ -95,19 +115,16 @@ export class PaypalClient {
     if (!res.ok) {
       throw new Error(`PayPal capture failed (status ${res.status})`);
     }
-    return (await res.json()) as PaypalOrder;
+    const body: unknown = await res.json();
+    if (!isPaypalOrder(body)) {
+      throw new Error(
+        `PayPal capture returned an unexpected body (order ${orderId})`
+      );
+    }
+    return body;
   }
 
-  /**
-   * Verifies a webhook event's transmission signature against PayPal's
-   * `/v1/notifications/verify-webhook-signature` API — the officially
-   * documented way to validate a PayPal webhook server-side (PayPal does
-   * the actual cryptographic verification against its own record of what it
-   * sent for `transmissionId`; there's no local public-key/cert-pinning
-   * logic to get subtly wrong here). Fails closed: any non-2xx response
-   * from PayPal, or any status other than the literal 'SUCCESS', is treated
-   * as an unverified event, never as a passed check.
-   */
+  /** Verifies a webhook signature via PayPal's API. Fails closed. */
   async verifyWebhookSignature(params: {
     transmissionId: string;
     transmissionTime: string;
@@ -140,7 +157,10 @@ export class PaypalClient {
     if (!res.ok) {
       return false;
     }
-    const body = (await res.json()) as { verification_status?: string };
+    const body: unknown = await res.json();
+    if (!isVerificationResponse(body)) {
+      return false;
+    }
     return body.verification_status === 'SUCCESS';
   }
 }

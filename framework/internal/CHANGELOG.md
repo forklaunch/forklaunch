@@ -1,5 +1,67 @@
 # @forklaunch/internal
 
+## 1.2.29
+
+### Patch Changes
+
+- Re-emit the intra-framework dependency ranges so `core` and `internal` track
+  the rest of the set.
+
+  Both declare `@forklaunch/common` and `@forklaunch/validator` as `workspace:^`,
+  which is frozen into a concrete range at publish time. They were published one
+  wave ahead of `common` and `validator`, so they went out pinned to the previous
+  pair. A consumer then resolved two copies of each — and duplicated packages are
+  the whole class of bug this release exists to remove.
+
+  No source changes; this republishes them against the current set.
+
+## 1.2.28
+
+### Patch Changes
+
+- Pin `@mikro-orm/*` to an exact version instead of a caret range.
+
+  These three packages ranged on `^7.1.14` while `@forklaunch/interfaces-*` and
+  `@forklaunch/implementation-*-base` pinned `7.1.14` exactly. When MikroORM
+  published 7.1.15 the carets took it and the exact pins did not, so every
+  consumer resolved **two copies of `@mikro-orm/core`**.
+
+  That is not a harmless duplication. `EntityManager` and `EntitySchema` carry a
+  `#private` field, which TypeScript treats as a per-class brand, so the same
+  class coming from two copies is structurally incompatible and every generated
+  app stops compiling:
+
+      error TS2741: Property '#private' is missing in type
+        'PostgreSqlEntityManager<PostgreSqlDriver>' but required in 'EntityManager'
+      error TS2883: The inferred type of 'ci' cannot be named without a reference
+        to 'Connection' from '.bun/@mikro-orm+core@7.1.14/node_modules/@mikro-orm/core'
+
+  7.1.15 itself is not a breaking change — `EntityName` and `EntitySchema` are
+  byte-identical to 7.1.14. Only the duplication broke.
+
+  An exact pin here matches what the rest of the family already does, so a future
+  MikroORM patch cannot split the tree again by moving one half of it.
+
+## 1.2.27
+
+### Patch Changes
+
+- Release the rest of the workspace alongside the dependency refresh, so every
+  published package moves together on this pass.
+
+  `up:packages` reached these differently than the five that changed runtime
+  dependencies: `universal-sdk`, `ws` and `infrastructure-redis` picked up
+  devDependency movement only (`jest` 30.4.2 → 30.5.0), and `bunrun`, `common`,
+  `internal` and `testing` saw no manifest change at all. Their emitted output is
+  therefore unchanged.
+
+  They are released regardless to keep the whole set on one refresh, rather than
+  leaving consumers to work out which packages a given update did and did not
+  touch.
+
+- Updated dependencies
+  - @forklaunch/common@1.2.25
+
 ## 1.2.26
 
 ### Patch Changes

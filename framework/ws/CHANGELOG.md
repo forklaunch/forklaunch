@@ -1,5 +1,47 @@
 # @forklaunch/ws
 
+## 1.2.41
+
+### Patch Changes
+
+- Release the framework set together so every package depends on the same
+  `@forklaunch/core`.
+
+  `core` was bumped to pin `@mikro-orm/*` exactly, but `express`, `hyper-express`,
+  `ws` and the `infrastructure-*` packages were still published against the
+  previous `core`. A consumer therefore resolved two copies of
+  `@forklaunch/core`, and through them two copies of `@mikro-orm/core` — which is
+  the duplication the `core` bump exists to remove. `EntityManager` and
+  `EntitySchema` carry a `#private` brand, so two copies are structurally
+  incompatible and the consumer stops compiling.
+
+  No source changes here; these packages move so the set stays internally
+  consistent.
+
+- Updated dependencies
+  - @forklaunch/common@1.2.26
+  - @forklaunch/validator@1.2.27
+
+## 1.2.40
+
+### Patch Changes
+
+- Release the rest of the workspace alongside the dependency refresh, so every
+  published package moves together on this pass.
+
+  `up:packages` reached these differently than the five that changed runtime
+  dependencies: `universal-sdk`, `ws` and `infrastructure-redis` picked up
+  devDependency movement only (`jest` 30.4.2 → 30.5.0), and `bunrun`, `common`,
+  `internal` and `testing` saw no manifest change at all. Their emitted output is
+  therefore unchanged.
+
+  They are released regardless to keep the whole set on one refresh, rather than
+  leaving consumers to work out which packages a given update did and did not
+  touch.
+
+- Updated dependencies
+  - @forklaunch/common@1.2.25
+
 ## 1.2.39
 
 ### Patch Changes

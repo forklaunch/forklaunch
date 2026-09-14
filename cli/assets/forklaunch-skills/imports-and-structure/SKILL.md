@@ -38,7 +38,6 @@ import {
   file,
   binary,
   null_,
-  nullish,
   void_,
   never,
   bigint,
@@ -60,8 +59,8 @@ import {
 // Auth
 import {
   SHARED_SESSION_SCHEMA,
-  generateHmacAuthHeaders,
 } from "@{{app-name}}/core";
+import { generateHmacAuthHeaders } from "@forklaunch/core/http";
 
 // Shared schemas
 import { IdSchema, IdsSchema } from "@{{app-name}}/core";
@@ -88,6 +87,8 @@ import {
   PLATFORM_ADMIN_ROLES,
 } from "@{{app-name}}/core";
 ```
+
+Do not assume every helper from older examples is exported by the current generated package. Recent Studio scaffolds do not export `nullish`; use `optional(value.nullable())` for nullable fields unless the local core package proves otherwise.
 
 ### What is NOT in core (import directly)
 
@@ -126,10 +127,12 @@ import { ForklaunchWebSocket, ForklaunchWebSocketServer } from "@forklaunch/ws";
 import { BlueprintTestHarness, TEST_TOKENS } from "@forklaunch/testing";
 ```
 
+For Studio-generated entity files, the usual direct persistence import is `defineComplianceEntity` and `fp` from `@forklaunch/core/persistence`. Do not import `defineEntity` from that package unless a sibling generated entity already does so.
+
 ### Cross-module imports
 
 ```typescript
-import { generateHmacAuthHeaders } from "@{{app-name}}/core";
+import { generateHmacAuthHeaders } from "@forklaunch/core/http";
 import type { DeploymentAgentWorkerSdkClient } from "@{{app-name}}/deployment-agent-worker";
 import type { IamSdkClient } from "@{{app-name}}/iam";
 ```
@@ -163,11 +166,10 @@ import {
   SqlBaseEntity,
 } from "@{{app-name}}/core";
 import { isRecord } from "@forklaunch/common";
-import { OpenTelemetryCollector } from "@forklaunch/core/http";
+import { generateHmacAuthHeaders, OpenTelemetryCollector } from "@forklaunch/core/http";
 import { Lifetime, createConfigInjector } from "@forklaunch/core/services";
 
 // 4. Cross-module imports (other modules in monorepo)
-import { generateHmacAuthHeaders } from "@{{app-name}}/core";
 import type { DeploymentAgentWorkerSdkClient } from "@{{app-name}}/deployment-agent-worker";
 
 // 5. Local persistence layer

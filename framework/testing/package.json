@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/testing",
-  "version": "1.2.29",
+  "version": "1.2.31",
   "description": "Testing utilities for forklaunch-js blueprints including testcontainer management",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -42,7 +42,7 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@mikro-orm/core": "^7.1.14",
+    "@mikro-orm/core": "7.1.15",
     "ioredis": "^6.0.0",
     "testcontainers": "^12.1.0"
   },

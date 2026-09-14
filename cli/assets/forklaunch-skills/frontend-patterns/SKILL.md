@@ -17,13 +17,35 @@ Use when the user asks to:
 - Work with authentication or authorization on the frontend
 - Add data fetching, polling, or mutations
 
+## Studio-Generated Client Override
+
+In ForkLaunch Studio generated apps, the client is usually `apps/client` with Vite + React + TanStack Router, not the older dashboard Next.js app structure below. When working in Studio:
+
+- Prefer the local generated scaffold over this skill's older Next.js examples.
+- Route files live under `apps/client/src/routes` and must export `Route`; do not edit `routeTree.gen.ts`.
+- Use `import.meta.env.BASE_URL` for the Studio preview base path and avoid hardcoded localhost service ports.
+- For pre-wiring frontend implementation, use realistic local fixtures and interactive state only.
+- For wiring, call `describe_backend`, use the generated `@<app-name>/client-sdk`, and add only thin TanStack Query helpers around SDK calls when needed.
+- If JSX strings contain apostrophes, use double-quoted JS strings or escaped apostrophes so Vite/esbuild never receives invalid TypeScript.
+
 ## Running
+
+**Legacy Next.js dashboard app** (`client/` — not Studio-generated apps, see the override above):
 
 ```bash
 cd client && pnpm install    # Install frontend deps
 cd client && pnpm dev        # Next.js dev server (default: localhost:3000)
-cd client && pnpm tsc --noEmit  # Type check (pre-existing errors in resource explorers — ignore those)
+cd client && pnpm tsc --noEmit   # Type check (pre-existing errors in resource explorers — ignore those)
 cd client && pnpm build      # Production build
+```
+
+**Studio-generated apps** (`apps/client/` — Vite + React + TanStack Router):
+
+```bash
+cd apps/client && pnpm install
+cd apps/client && pnpm dev       # Vite dev server
+cd apps/client && pnpm tsc --noEmit
+cd apps/client && pnpm build
 ```
 
 **Prerequisite:** Backend services must be running (`docker compose up -d` + `pnpm dev` from repo root or individual modules).
@@ -49,7 +71,7 @@ import { useEffect, useState } from "react"
 import { useApi, useMutation } from "@/lib/hooks/use-api"
 import { platformApi } from "@/lib/api"
 import { useAuth } from "@/contexts/auth-context"
-import { useToast } from "@/hooks/use-toast"
+import { toast } from "sonner"
 import { useFeatureAccess } from "@/hooks/use-feature-access"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -60,7 +82,6 @@ export default function ServiceDetailPage() {
   const params = useParams()
   const router = useRouter()
   const { getToken } = useAuth()
-  const { toast } = useToast()
   const { checkFeature } = useFeatureAccess()
 
   // --- Data Fetching ---
@@ -89,10 +110,10 @@ export default function ServiceDetailPage() {
         headers: { authorization: `Bearer ${token}` }
       })
       if (response.code === 200) {
-        toast({ description: "Service updated successfully" })
+        toast.success("Service updated successfully")
         await refetch()
       } else {
-        toast({ variant: "destructive", description: "Failed to update" })
+        toast.error("Failed to update")
       }
     })
   }
@@ -255,10 +276,10 @@ const handleSave = async () => {
       headers: { authorization: `Bearer ${token}` },
     });
     if (res.code === 200) {
-      toast({ description: "Saved!" });
+      toast.success("Saved!");
       await refetch();
     } else {
-      toast({ variant: "destructive", description: "Failed" });
+      toast.error("Failed");
     }
   });
 };
@@ -568,23 +589,24 @@ function ServiceTable({
 
 ## Toast Pattern
 
-```typescript
-import { useToast } from "@/hooks/use-toast";
+Toasts use [Sonner](https://sonner.emilkowal.ski/). The `<Toaster>` is mounted once in `client/app/root-layout.tsx`, so in any component you only need to import and call `toast`:
 
-const { toast } = useToast();
+```typescript
+import { toast } from "sonner";
 
 // Success
-toast({ description: "Service created successfully" });
+toast.success("Service created successfully");
 
 // Error
-toast({ variant: "destructive", description: "Failed to create service" });
+toast.error("Failed to create service");
 
-// With title
-toast({
-  title: "Deployment Started",
+// With description
+toast.success("Deployment Started", {
   description: "Your service is being deployed...",
 });
 ```
+
+Do NOT use the legacy `useToast` hook from `@/hooks/use-toast` — its shadcn `<Toaster>` renderer was removed, so toasts dispatched through it never render.
 
 ## Frontend Directory Structure
 

@@ -379,17 +379,24 @@ fn change_type(
         },
     );
 
-    docker_compose_data
-        .services
-        .get_mut(&format!("{}-worker", &manifest_data.worker_name))
-        .unwrap()
-        .environment = Some(environment.clone());
+    let worker_service_name = format!("{}-worker", &manifest_data.worker_name);
+    if let Some(worker_service) = docker_compose_data.services.get_mut(&worker_service_name) {
+        worker_service.environment = Some(environment.clone());
+    }
 
-    docker_compose_data
-        .services
-        .get_mut(&format!("{}-server", &manifest_data.worker_name))
-        .unwrap()
-        .environment = Some(environment.clone());
+    // The worker's HTTP server service is usually "{name}-server", but apps
+    // scaffolded by older CLI versions name it with the bare project name (or
+    // "-service"). Resolve whichever key actually exists rather than assuming
+    // "-server" and panicking on the unwrap when it is absent.
+    let server_service_name = ["-server", "", "-service"]
+        .iter()
+        .map(|suffix| format!("{}{}", &manifest_data.worker_name, suffix))
+        .find(|name| docker_compose_data.services.contains_key(name));
+    if let Some(server_service) =
+        server_service_name.and_then(|name| docker_compose_data.services.get_mut(&name))
+    {
+        server_service.environment = Some(environment.clone());
+    }
 
     let _ = clean_up_unused_infrastructure_services(
         docker_compose_data,
@@ -927,17 +934,40 @@ impl CliCommand for WorkerCommand {
         )?;
 
         if let Some(r#type) = r#type {
-            change_type(
-                &worker_base_path,
-                &r#type.parse()?,
-                database,
-                &mut manifest_data,
-                &mut application_package_json_to_write,
-                &mut project_json_to_write,
-                &mut docker_compose_data,
-                &mut rendered_templates_cache,
-                &mut removal_templates,
-            )?
+            let requested_type = r#type.parse::<WorkerType>()?;
+            let current_type = manifest_data.worker_type.parse::<WorkerType>().ok();
+            let current_database = manifest_data
+                .database
+                .as_ref()
+                .and_then(|db| db.parse::<Database>().ok());
+
+            // Re-running a change to the type the worker already is (same type,
+            // and same database for database workers) is a no-op. Skip the type
+            // transformation instead of running it, which resets resources and
+            // can panic on legacy docker-compose layouts.
+            let already_that_type = current_type == Some(requested_type)
+                && (requested_type != WorkerType::Database || current_database == database);
+
+            if already_that_type {
+                log_info!(
+                    stdout,
+                    "worker {} is already type {}, skipping type change",
+                    manifest_data.worker_name,
+                    requested_type.to_string()
+                );
+            } else {
+                change_type(
+                    &worker_base_path,
+                    &requested_type,
+                    database,
+                    &mut manifest_data,
+                    &mut application_package_json_to_write,
+                    &mut project_json_to_write,
+                    &mut docker_compose_data,
+                    &mut rendered_templates_cache,
+                    &mut removal_templates,
+                )?
+            }
         }
 
         if let Some(description) = description {
@@ -1014,5 +1044,192 @@ impl CliCommand for WorkerCommand {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::write;
+
+    use indexmap::IndexMap;
+    use tempfile::TempDir;
+
+    use super::*;
+    use crate::{
+        constants::WorkerType,
+        core::{
+            docker::{DockerCompose, DockerService},
+            manifest::{
+                InitializableManifestConfig, InitializableManifestConfigMetadata,
+                ProjectInitializationMetadata, worker::WorkerManifestData,
+            },
+            package_json::{
+                application_package_json::ApplicationPackageJson,
+                project_package_json::{ProjectDependencies, ProjectPackageJson},
+            },
+            rendered_template::RenderedTemplatesCache,
+        },
+    };
+
+    // A real bullmq worker registrations.ts, as scaffolded by the CLI.
+    const BULLMQ_WORKER_REGISTRATIONS_TS: &str =
+        include_str!("test_fixtures/bullmq_worker_registrations.ts");
+
+    // A worker manifest whose worker is already a bullmq worker.
+    const BULLMQ_WORKER_MANIFEST_TOML: &str = r#"
+id = "test-id"
+cli_version = "0.0.0"
+app_name = "test-app"
+modules_path = "src/modules"
+app_description = "test"
+linter = "eslint"
+formatter = "prettier"
+validator = "zod"
+http_framework = "express"
+runtime = "node"
+author = "test"
+license = "MIT"
+
+[project_peer_topology]
+
+[[projects]]
+type = "Worker"
+name = "myworkr"
+description = "test worker"
+variant = "BullMq"
+routers = ["myworkr"]
+
+[projects.resources]
+cache = "bullmq"
+redis_partition = 0
+
+[projects.metadata]
+type = "bullmq"
+"#;
+
+    fn setup_bullmq_worker(
+        server_service_name: &str,
+    ) -> (
+        TempDir,
+        WorkerManifestData,
+        DockerCompose,
+        ApplicationPackageJson,
+        ProjectPackageJson,
+        RenderedTemplatesCache,
+    ) {
+        let tmp = TempDir::new().unwrap();
+        let base = tmp.path();
+
+        write(base.join("registrations.ts"), BULLMQ_WORKER_REGISTRATIONS_TS).unwrap();
+        write(base.join(".env.local"), "").unwrap();
+
+        let raw: WorkerManifestData = toml::from_str(BULLMQ_WORKER_MANIFEST_TOML).unwrap();
+        let manifest = raw.initialize(InitializableManifestConfigMetadata::Project(
+            ProjectInitializationMetadata {
+                project_name: "myworkr".to_string(),
+                database: None,
+                infrastructure: None,
+                description: None,
+                worker_type: None,
+            },
+        ));
+
+        // Reproduce the docker-compose layout that triggered the panic: the
+        // worker's HTTP server service uses a caller-chosen key (older CLI
+        // versions used the bare project name instead of "{name}-server").
+        let mut docker_compose = DockerCompose::default();
+        docker_compose.services.insert(
+            server_service_name.to_string(),
+            DockerService {
+                environment: None,
+                ..Default::default()
+            },
+        );
+        docker_compose.services.insert(
+            "myworkr-worker".to_string(),
+            DockerService {
+                environment: Some(IndexMap::new()),
+                ..Default::default()
+            },
+        );
+
+        let app_pkg = ApplicationPackageJson::default();
+        let pkg = ProjectPackageJson {
+            dependencies: Some(ProjectDependencies::default()),
+            ..Default::default()
+        };
+
+        let cache = RenderedTemplatesCache::new();
+
+        (tmp, manifest, docker_compose, app_pkg, pkg, cache)
+    }
+
+    // Changing a worker to the type it already is (bullmq -> bullmq) must not
+    // panic, even when the server service is named with the bare project name
+    // rather than "{name}-server". This is the exact shape that panicked on the
+    // managed-apps worker (worker.rs:391 `.unwrap()` on a missing service).
+    #[test]
+    fn test_change_type_bullmq_same_type_bare_server_service_does_not_panic() {
+        let (_tmp, mut manifest, mut docker, mut app_pkg, mut pkg, mut cache) =
+            setup_bullmq_worker("myworkr");
+        let base = _tmp.path();
+
+        let mut removal_templates = vec![];
+
+        change_type(
+            base,
+            &WorkerType::BullMQCache,
+            None,
+            &mut manifest,
+            &mut app_pkg,
+            &mut pkg,
+            &mut docker,
+            &mut cache,
+            &mut removal_templates,
+        )
+        .expect("change_type to the same bullmq type must not panic or error");
+
+        // The env must be applied to the bare-named server service, not lost.
+        let server_env = docker.services["myworkr"]
+            .environment
+            .as_ref()
+            .expect("bare-named server service must receive an environment");
+        assert!(
+            server_env.contains_key("REDIS_URL"),
+            "expected REDIS_URL injected into the resolved server service, got: {:?}",
+            server_env.keys().collect::<Vec<_>>()
+        );
+    }
+
+    // The conventional "{name}-server" naming must keep working unchanged.
+    #[test]
+    fn test_change_type_bullmq_conventional_server_service_still_updates() {
+        let (_tmp, mut manifest, mut docker, mut app_pkg, mut pkg, mut cache) =
+            setup_bullmq_worker("myworkr-server");
+        let base = _tmp.path();
+
+        let mut removal_templates = vec![];
+
+        change_type(
+            base,
+            &WorkerType::BullMQCache,
+            None,
+            &mut manifest,
+            &mut app_pkg,
+            &mut pkg,
+            &mut docker,
+            &mut cache,
+            &mut removal_templates,
+        )
+        .expect("change_type must succeed for conventional -server naming");
+
+        let server_env = docker.services["myworkr-server"]
+            .environment
+            .as_ref()
+            .expect("conventional server service must receive an environment");
+        assert!(
+            server_env.contains_key("REDIS_URL"),
+            "expected REDIS_URL injected into myworkr-server"
+        );
     }
 }

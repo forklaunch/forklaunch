@@ -1079,7 +1079,7 @@ This avoids `bootstrapper.ts` → `registrations.ts` → `MikroORM.initSync()` w
 
 ### Core Package Must Be Built Before Services Can Import
 
-The `@{{app-name}}/core` package has `"main": "lib/index.js"` — this means you must run `pnpm build` (which runs `tsc` in all workspace packages) before services can resolve core imports. If you see `ERR_MODULE_NOT_FOUND` for `@{{app-name}}/core/lib/index.js`, the fix is:
+The `@{{app-name}}/core` package has `"main": "lib/index.js"` — this means you must run `pnpm build` before services can resolve core imports. If you see `ERR_MODULE_NOT_FOUND` for `@{{app-name}}/core/lib/index.js`, the fix is:
 
 ```bash
 cd src/modules && pnpm build

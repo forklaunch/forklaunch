@@ -145,7 +145,7 @@ knock-on effects:
 
 ```
 Dashboard -> your app -> Custom Domain
-GET /applications/:applicationId/custom-domain    # status + validation records
+GET /applications/:applicationId/custom-domain    # status + delegation/validation records
 ```
 
 So an agent cannot detect or configure this from the CLI. **Ask the user whether a custom domain
@@ -154,13 +154,18 @@ generated `*.app.forklaunch.com` hostnames, every env var has to be rewritten la
 
 ### The DNS step is the user's, and it blocks everything
 
-Adding a domain provisions an ACM certificate that starts at `PENDING_VALIDATION`. ForkLaunch
-returns CNAME validation records; the user must add them at their DNS registrar. Nothing resolves
-until status reaches `VALIDATED`, and it goes to `FAILED` if the records never appear. Tell them
-plainly:
+The default is **delegated** mode: ForkLaunch creates a hosted zone and returns its name servers
+(`nsRecords` on the response); the customer adds one NS record at their registrar delegating the
+subdomain to them, and status starts at `PENDING_DELEGATION`. Once public DNS sees the NS
+records, ForkLaunch writes the certificate validation records itself — the customer has nothing
+more to do. **Manual** mode (the previous behaviour, for customers who keep their own zone)
+instead returns CNAME validation records the customer must add themselves, starting at
+`PENDING_VALIDATION`. Either way nothing resolves until status reaches `VALIDATED`, and manual
+mode goes to `FAILED` if the records never appear. Tell them plainly:
 
-> Add these CNAME records at your DNS provider, then wait for the domain to show **Validated**.
-> Until then the custom hostnames will not resolve and I should not put them in Vercel.
+> Add the NS record (delegated mode) or CNAME records (manual mode) shown on the dashboard, then
+> wait for the domain to show **Validated**. Until then the custom hostnames will not resolve
+> and I should not put them in Vercel.
 
 ### Get the hostname format right — non-prod environments are suffixed
 

@@ -56,7 +56,6 @@ import {
   IdSchema,
   IdsSchema,
   SHARED_SESSION_SCHEMA,
-  generateHmacAuthHeaders,
 } from "@{{app-name}}/core";
 
 // Types
@@ -71,7 +70,7 @@ Other @forklaunch packages imported directly when NOT in core:
 ```typescript
 import { isRecord, camelCase } from "@forklaunch/common";
 import { createCacheKey } from "@forklaunch/core/cache";
-import { OpenTelemetryCollector } from "@forklaunch/core/http";
+import { generateHmacAuthHeaders, OpenTelemetryCollector } from "@forklaunch/core/http";
 import { Lifetime, createConfigInjector } from "@forklaunch/core/services";
 import { requestMapper, responseMapper } from "@forklaunch/core/mappers";
 import { RedisTtlCache } from "@forklaunch/infrastructure-redis";
@@ -171,6 +170,53 @@ export const ServiceSchemas = {
 - Complex types: `type<TypeScriptType>()` -- **WARNING:** `type<X>()` resolves to `unknown` at runtime. You will need `as X` casts when passing validated values to typed functions. For arrays of objects, consider using `array()` with a flat schema instead.
 - Nullable: `string.nullable()`, `optional(string.nullable())`
 - Reusable fragments: extract as local `const` and reference inline
+
+### Common Studio Repair Gotchas
+
+- Treat `tsx watch` runtime churn as informational unless the latest block contains a real stack trace and the service does not return to "Server is running". Lines such as `change in ... Restarting`, repeated `Shutting down application`, `Process didn't exit in 5s. Force killing`, and `MaxListenersExceededWarning` are watch-mode noise during live edits, not repair targets.
+- Repair build-blocking output first. For `TS...` errors, open the named file at the reported line plus the directly referenced schema/service/interface. Patch that contract mismatch and rerun the scoped build. Do not spend iterations listing or reading broad scaffold directories to rediscover the generated layout.
+- Studio parallelizes backend work by product server group, not by every package that happens to have a `server.ts`. Worker packages can include `server.ts` for health/control endpoints; that does not make them independent product servers. If a task owns an API service plus file-parser/analysis/insight/notification workers, treat them as one capability group with one canonical domain contract.
+- In a server-scoped backend group, update the HTTP service and workers together: request/response schemas, queue/job payload schemas, event records, service interfaces, controller responses, route exports, SDK exports, tests, seed data, and worker processors must agree in the same patch. Do not let each worker invent its own `reportId`, `jobId`, `message`, `status`, or biomarker shape.
+- Contract-first passes are not complete until starter residue is gone from the assigned group. Scan for generic `{ message: string }`, `response.message`, seed rows with `message`, test fixtures with `message`, and worker logs reading `event.message`; either remove them or isolate them behind a dedicated starter-only schema that is not reused by domain routes.
+- Validator `number` is a schema primitive value; entity `fp` builders are different. Do not write `fp.number()` unless the generated package exports it. For persisted numeric fields, use the sibling scaffold pattern: usually `fp.integer()` for counts/limits/retries and `fp.double()` for currency, percentages, scores, and measured values.
+- Do not write `nullish(...)` in schemas. It is not exported by the current generated validator surface. Use `optional(field.nullable())` or the closest sibling nullable pattern.
+- Do not pass readonly arrays to `enum_`. It expects a generated enum object/record. For literal choices, define a local enum-like object or use `union([literal("a"), literal("b")])` when sibling schemas use that pattern.
+- Do not import `defineEntity` from `@forklaunch/core/persistence`; recent generated packages do not export it there. Prefer `defineComplianceEntity` for Studio-generated entities, with `.compliance("none")` on non-sensitive scalar fields.
+- Keep schemas, services, controllers, tests, and mappers on the same contract. If a schema was changed from starter `{ message: string }` to domain fields, remove `data.message` from service/controller/test code in the same pass.
+- Handler response schemas must match the JSON actually sent for that status. If `responses: { 200: FooResponseSchema }` now describes a domain entity, the handler must return that DTO/entity shape; do not keep `res.json({ message: "Foo" })` against a domain response schema. If retaining scaffold starter routes/tests, isolate them behind dedicated starter request/response schemas.
+- When a service method changes from a primitive parameter to a command object, update all controller call sites in the same patch. For body-shaped commands, pass `req.body`; for mixed route/body commands, pass `{ ...req.params, ...req.body }` or an explicit object with the service's exact keys. Do not pass `req.body.message` or `req.params.id` to a method that expects an object.
+- Controller body schemas are handler config fields. If a request body is an object schema, wrap/pass it exactly as sibling controllers do. When a generated schema type is wider than the command, cast validated `req.body` only at the controller/service boundary; do not reshape it into a primitive.
+- Current Studio-generated services often type methods with `Schema<typeof RequestSchema, SchemaValidator>` and return schema DTOs directly when no mapper exists. Follow the sibling generated service shape; do not introduce a mapper/entity-return architecture just to satisfy older examples.
+- Mapper DTOs should normalize nullable entity fields to optional API fields with `value ?? undefined` when the response schema uses `optional(...)`. Do not return `null` to an optional-only schema.
+- Entity creation must satisfy required persistence fields, not just request fields. If entities require `userId`, `organizationId`, `tokenHash`, `jobId`, or timestamps, derive them in the controller/service from `req.session`, params, generated IDs, or hash helpers before `em.create(...)`. Never pass a partial request DTO directly to persistence when required entity fields are missing.
+- **Multi-tenant create args:** if an entity has a `tenantId` field, every service method that creates or queries that entity must accept `tenantId` in its argument object and pass it through to `em.create({ ..., tenantId })` or the `where` clause. Controllers source `tenantId` from `req.session.organizationId`. Do not drop `tenantId` because the schema validator did not flag it — the entity contract requires it and `tsgo -b` will fail with `Property 'tenantId' is missing in type ...`.
+- **Date vs ISO string at the API boundary:** entity timestamp/date fields (`collectedAt`, `dateOfBirth`, `createdAt`, etc.) are `Date` in MikroORM but response schemas typed with the validator expect `string` (ISO). On the way in, parse: `collectedAt: new Date(input.collectedAt)`. On the way out (or when assigning into a typed response object), serialize: `collectedAt: entity.collectedAt.toISOString()`. Never assign a raw `Date` to a field typed `string | RawQueryFragment<string>` — that error means the schema is string-shaped and the value is still a `Date`.
+- **null → undefined for optional fields:** MikroORM nullable columns are typed `T | null | undefined` but response/optional schemas use `T | undefined`. Normalize with `?? undefined` (e.g. `rawValue: entity.rawValue ?? undefined`, `minValue: entity.minValue ?? undefined`) when building the response DTO. The error `Type 'null' is not assignable to type 'string | undefined'` is this exact mismatch.
+- **MikroORM EntityManager has no `createQueryBuilder`.** Use `em.qb(EntityName)` (or `em.find/findOne/findOneOrFail` with a `where` clause) for queries. `em.getKnex()` is only available when you need raw SQL. Do not call `em.createQueryBuilder(...)` — it does not exist on the current `EntityManager<IDatabaseDriver<Connection>>` type and will fail typecheck.
+- **MikroORM v7 removed `persistAndFlush` / `removeAndFlush`.** Use `em.persist(entity); await em.flush();` (or `em.remove(entity); await em.flush();`) — two calls, not one. The error `Property 'persistAndFlush' does not exist on type 'EntityManager<...>'` is this exact mismatch.
+- **Handler response must be an OBJECT, not a string.** `res.status(N).json(...)` must receive an object matching the response schema for that status. Even if the schema looks like it could accept a primitive (e.g. just `{ jobId }`), return `{ jobId: '...' }`, not `res.json("...")`. The error `Type 'string' is not assignable to type 'ResponseBody<ZodSchemaValidator>'` is this exact mismatch. If you genuinely want a string body, the schema field type itself must be a string-typed schema (e.g. literal/string primitive at the body root).
+- **TEST_TOKENS only exports what the local `__test__/test-utils.ts` actually contains.** Most generated scaffolds expose `AUTH` and `HMAC`, NOT `JWT`. Open the file and grep before using `TEST_TOKENS.X` — `TEST_TOKENS.JWT` is the most common false reference. Same caveat applies to `SHARED_SESSION_SCHEMA` and `PLATFORM_*` role constants.
+- **Controller export / SDK export / test invocation MUST share the exact identifier.** If you rename a controller from `ingestionGet` to `uploadGetJob`, you must update `routes/*.routes.ts`, `sdk.ts`, AND every `__test__/*.test.ts` invocation in the same patch. The error `Property 'X' does not exist on type '{ Y: ... }'` from a test file means the controller was renamed but the test wasn't.
+- **MikroORM v7 entity field wrapper types.** Fields read from `em.create/em.findOne/em.find` carry `Opt<T>` and `NonNullable<string | number>` wrapper types that do NOT auto-narrow to a plain DTO. When a service method declares return `Promise<XResponseSchema>` and you build the return object from an entity, you MUST coerce each non-plain field:
+  - `id: entity.id` → `id: entity.id as string`
+  - `minValue: entity.minValue` (numeric column) → `minValue: Number(entity.minValue)` or `as number`
+  - `createdAt: entity.createdAt` → `createdAt: entity.createdAt as Date`
+  - Or end the return with `as Schema<typeof XResponseSchema, SchemaValidator>`.
+  The error signature is `Type '{ id: Opt<string>; ... minValue: NonNullable<string | number>; ... }' is not assignable to type '{ id: string; ... minValue: number; ... }'`. NEVER `return entity` directly when the function return type is the schema DTO.
+- **Return-type completeness:** if a service method's declared return type lists fields (`{ id, patientId, tenantId, collectedAt, labName, status, ... }`), every property in that list must be present on the returned object. Don't return a partial entity and rely on caller behavior — `tsgo -b` will surface `Property 'X' is missing in type ...`. If a field is optional in the schema, mark it optional in the return type too; otherwise populate it.
+- Avoid over-typing mapper callback parameters with MikroORM inferred entity types from a specific package path. Studio workspaces can contain duplicate `.pnpm/@mikro-orm/core` paths, making structurally identical entity types incompatible. Let mapper callbacks infer from the local entity/schema, or map to a plain DTO object with the response schema as the contract.
+- When replacing starter data, update every seed/test fixture in the same pass: `persistence/seed.data.ts`, `persistence/seeders/*`, `__test__/test-utils.ts`, and tests that still query `{ message: ... }`. Do not leave scaffold `{ message: string }` fixture rows after domain fields replace the starter schema; include required entity fields such as `reportId`, `sourceType`, `userId`, and `organizationId`.
+- Do not define a persisted event/record interface by extending multiple `Partial<...Payload>` variants when the payloads have conflicting discriminants such as `kind: "analysis-complete"` and `kind: "critical-flags"`. Use a shared base plus optional non-discriminant fields, or a discriminated union.
+- Worker event records, worker services, renderers, controllers, routes, and SDK exports must use one canonical event contract. If implementation code needs `organizationId`, `requestId`, `recipientEmail`, `pushToken`, `channels`, `severity`, or `flaggedBiomarkers`, add those fields to the event schema/record and fixtures; otherwise remove those reads. Do not mix `channel` and `channels`, `fileMimeType` and `mimeType`, or event kinds not present in the enum/schema.
+- If the worker/event schema uses `message`, use `message` everywhere; do not invent `summary` unless it is added to schema, record, service, fixtures, and renderer together. If a renderer returns `{ subject, text, html, pushTitle, pushBody }`, controller `responses`, service return types, and tests must use that object shape; if it returns `string`, tests must assert a string.
+- Before assigning generated event payloads or DTOs, narrow optional strings to required strings with explicit guards/defaults. For arrays like `flaggedBiomarkers`, map/filter wider domain rows so every emitted item has required fields such as `biomarkerCode: string`, `severity`, and `shortLabel: string`.
+- If a test imports a fixture helper such as `buildEventRecord`, export it from `__test__/test-utils.ts` in the same patch or update the test to the existing helper name.
+- Route files and SDK entrypoints import exported controller names. If you add `enqueueNotification`, `previewNotification`, or `getQueueInfo` routes, those exact functions must be exported from the controller file and `api/controllers/index.ts`; otherwise update routes and SDK to the actual generated handler names.
+- Do not edit generated runtime registrations to satisfy a service constructor mismatch. Prefer matching the service constructor to the generated factory signature, unless the local scaffold already wires the dependency.
+- Never cast a typed injector function directly to `Record<string, unknown>` in generated registrations. If registration typing fails, restore the scaffold registration shape and fix the service constructor/factory contract instead.
+- Read local exports before reporting missing framework exports. `@<app-name>/core` and `@forklaunch/core/persistence` are scaffold/version-specific.
+- Generated client-sdk methods are named from actual handlers/routes. Tests and wiring must use the exported SDK names; do not invent generic helpers like `apiGet`, `servicePost`, `workerPost`, or `insightWorkerPost`.
+- Use write tools for edits. Do not run mutating shell commands such as `sed -i` through `run_command`.
 
 ## Handler/Controller Pattern
 
@@ -757,6 +803,8 @@ auth: {
 }
 
 // HMAC (service-to-service — receiving end)
+const HMAC_SECRET_KEY = ci.resolve(tokens.HMAC_SECRET_KEY);
+
 access: 'internal',
 auth: {
   hmac: { secretKeys: { default: HMAC_SECRET_KEY } }
@@ -773,6 +821,8 @@ forklaunchExpress(SchemaValidator(), otel, {
 });
 ```
 
+**Mandatory internal route rule:** `access: 'internal'` and `auth.hmac` are a pair. If a controller uses `access: 'internal'`, the same handler config must include `auth: { hmac: { secretKeys: { default: HMAC_SECRET_KEY } } }`, and the controller must resolve `HMAC_SECRET_KEY` from `ci.resolve(tokens.HMAC_SECRET_KEY)`. Do not use JWT/session/roles for internal routes, and do not omit `auth`; the handler type will reject it.
+
 **A route-level `auth.surfaceRoles` is silently never invoked once the app already wires a global one** via `forklaunchExpress`'s `auth` option above (or via `createAuthOptions()` in a CLI-scaffolded app's `server.ts` — see below). Don't hand-roll a per-route `surfaceRoles`/`surfacePermissions` callback expecting it to run; only the app/router-level one is called. If you need route-specific role logic, filter inside the app-level surfacing function instead.
 
 **CLI-scaffolded apps (v1.2.6) wire cross-service RBAC inline in `server.ts`**, not via the `registrations.ts` → `bootstrapper.ts` pattern below: `server.ts` defines a local `createAuthOptions()` that calls `createSurfaceRoles()` / `createSurfacePermissions()` (imported from the app's own generated `@{{app-name}}/iam` package, exported from a `surfacing.ts` file for other services to consume) and passes the result straight to `forklaunchExpress`. This works, but diverges from the canonical pattern this repo's own modules follow — check `server.ts` first before adding a new surfacing wire-up, and consider migrating it into `registrations.ts` for consistency if you're touching that file anyway.
@@ -780,9 +830,10 @@ forklaunchExpress(SchemaValidator(), otel, {
 ### Making HMAC Calls (Service-to-Service)
 
 Use `generateHmacAuthHeaders` to call HMAC-protected endpoints from other services.
+For route SDK tests, prefer `TEST_TOKENS.HMAC` from local `test-utils`/`@forklaunch/testing` when available. Do not use `Bearer test-token` for internal/HMAC routes; their SDK header type is `HMAC keyId=...`.
 
 ```typescript
-import { generateHmacAuthHeaders } from "@{{app-name}}/core";
+import { generateHmacAuthHeaders } from "@forklaunch/core/http";
 
 // GET request
 const headers = generateHmacAuthHeaders({
@@ -967,6 +1018,12 @@ Earlier the code had both (DI tokens + `surface-features.util.ts` with `surfaceO
 ### Applies across every module
 
 platform-management, observability-api, developer-tools, deployment-agent-worker, resource-management, and billing all use this pattern. If you find factory calls inline in a `server.ts`, that's a regression — move them into `createDependencyContainer`.
+
+> **Exception:** `deployment-agent-worker/domain/services/pulumi-executor.service.ts` must use lazy dynamic imports for `ci`/`tokens` to avoid a circular dependency with `registrations.ts`:
+> ```typescript
+> const { ci, tokens } = await import('../../bootstrapper');
+> ```
+> Do NOT add a top-level `import { ci, tokens }` in that file.
 
 ### Don't make surfacing lazy to appease scripts
 

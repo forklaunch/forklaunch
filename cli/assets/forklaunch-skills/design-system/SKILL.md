@@ -441,3 +441,40 @@ npx skills add hamen/material-3-skill        # Android/Flutter: Material 3
 After building, ask: "If someone saw this and I said 'an AI made it,' would they believe it instantly?" If yes, you used defaults. Go back and make intentional choices. A designed interface makes people ask "how was this made?" not "which AI made this?"
 
 Sources: [impeccable.style](https://impeccable.style/), [Stripe Dashboard](https://docs.stripe.com/stripe-apps/design), [Linear Method](https://linear.app/method/introduction), [Robinhood Design](https://robinhood.com/us/en/newsroom/the-top-secret-robinhood-design-story/)
+
+## Production Polish Bar (Replit/Lovable caliber — NON-NEGOTIABLE)
+
+A chosen philosophy is not enough; execution is what separates "beautiful" from "an AI made it."
+Every generated screen must clear ALL of these before it's considered done:
+
+**Type scale** — never one size everywhere. A real scale: page title (2xl–3xl, tight tracking,
+semibold+), section headings (lg–xl), body (sm–base, relaxed leading), meta/labels (xs, muted,
+often uppercase tracking-wide). Numbers that matter are the biggest thing on the screen.
+
+**Spacing rhythm** — a consistent 4/8px system. Generous whitespace; let content breathe. Align
+everything to a grid — nothing one pixel off. Group related items tight, separate groups with air.
+
+**Color discipline** — ONE accent, used sparingly for the primary action + key data. Everything else
+is surface/text/border tokens. Never a wall of default Tailwind grays; use the studio design tokens.
+Semantic colors (success/warn/danger) only for state, never decoration.
+
+**Depth & surfaces** — layered surfaces (bg → card → elevated), each separated by a subtle border
+AND/OR soft shadow. No flat gray boxes floating on flat gray. Cards have real radius (consistent
+across the app) and hairline borders.
+
+**Hierarchy** — exactly one primary action per screen (filled accent button); everything else is
+secondary (ghost/outline) or tertiary (text). The eye should land on the most important thing first.
+
+**Every state designed** — loading = skeletons (never a bare spinner on a blank page); empty =
+a centered illustration/icon + one-line explanation + a CTA (never "No data"); error = inline,
+actionable. Interactive elements have hover, active, AND focus-visible styles.
+
+**Motion** — subtle, fast (120–180ms ease-out) transitions on hover/appear. Nothing bounces or
+lingers. Respect prefers-reduced-motion.
+
+**Craft details** — tabular-nums for aligned numbers; truncation with title on overflow; icons
+optically aligned to text; consistent icon size; responsive (works at 375px and 1440px); real
+copy, not lorem/placeholder.
+
+**The test (run it):** "If I said an AI built this, would people believe it instantly?" If yes,
+you used defaults — go back and make intentional choices. Aim for "how was this made?"

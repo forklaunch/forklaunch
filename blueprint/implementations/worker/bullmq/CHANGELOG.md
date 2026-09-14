@@ -1,5 +1,44 @@
 # @forklaunch/implementation-worker-bullmq
 
+## 1.0.33
+
+### Patch Changes
+
+- Refresh dependencies to their latest published versions and drop the pnpm
+  overrides block.
+
+  Consumes the newly published framework packages (@forklaunch/core 1.5.17,
+  validator 1.2.26, common 1.2.25, express and hyper-express 1.2.42, internal
+  1.2.27, universal-sdk 1.2.26, infrastructure-redis and -s3 1.4.12, testing
+  1.2.30, ws 1.2.40, bunrun 1.2.23) along with MikroORM 7.1.14, stripe 22.6.0,
+  zod 4.5.4, jose 6.2.10, uuid 14.0.2 and vitest 4.1.11.
+
+  The `overrides` block is gone. It had pinned @mikro-orm/* to 7.1.13 to keep a
+  single copy resolving workspace-wide, and pinned @forklaunch/core to a floor
+  that silently held it back -- the override replaces the requested range, so core
+  stayed on 1.5.16 no matter what the manifests asked for. Every package now
+  declares the versions it actually wants and resolution agrees without help:
+  one copy each of @mikro-orm/core, @forklaunch/core, validator and common.
+
+  Three source changes were required by the upgrades:
+
+  - MikroORM 7.1.14 made a MikroORM instance's entity list `readonly`, so the
+    local `clearDatabase` helpers no longer accepted the orm they are handed.
+    They now type that parameter as `TestSetupResult['orm']`, matching both the
+    value's real origin and the adjacent `redis` field, instead of a bare
+    `MikroORM` whose type argument defaulted to a mutable array. Six test-utils
+    files across billing, iam, messaging and sample-worker.
+  - stripe 22.6.0 moved its pinned API version literal, so the two billing-stripe
+    scripts now request '2026-08-26.dahlia'.
+  - `@forklaunch/blueprint-core` had to be rebuilt from clean. Its gitignored
+    `lib/` still held declarations emitted against an older core, in which
+    `.compliance('none')` produced a `'~c': true` marker rather than a
+    `ComplianceLevel`. That stale output alone accounted for 13 of the 17
+    compile errors this upgrade first surfaced, none of which were real.
+
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.31
+
 ## 1.0.32
 
 ### Patch Changes

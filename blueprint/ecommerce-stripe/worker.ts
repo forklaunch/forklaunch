@@ -79,7 +79,10 @@ const processOrderEvents: WorkerProcessFunction<OrderEventRecord> = async (
 
       event.processed = true;
     } catch (error) {
-      failedEvents.push({ value: event, error: error as Error });
+      failedEvents.push({
+        value: event,
+        error: error instanceof Error ? error : new Error(String(error))
+      });
     }
   }
 

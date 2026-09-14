@@ -95,3 +95,85 @@ pub(crate) fn is_git_repo() -> bool {
         .map(|output| output.status.success())
         .unwrap_or(false)
 }
+
+/// The `origin` remote of the current checkout as an `https://` URL, or None
+/// when there is no remote. Normalises the SSH and `.git` spellings so the
+/// value matches what the platform stores for a connected repository:
+///   git@github.com:acme/app.git      -> https://github.com/acme/app
+///   ssh://git@github.com/acme/app.git -> https://github.com/acme/app
+///   https://github.com/acme/app.git  -> https://github.com/acme/app
+pub(crate) fn get_git_remote_url() -> Option<String> {
+    let output = Command::new("git")
+        .args(&["remote", "get-url", "origin"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let raw = String::from_utf8(output.stdout).ok()?;
+    normalize_git_remote_url(raw.trim())
+}
+
+pub(crate) fn normalize_git_remote_url(raw: &str) -> Option<String> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let without_scheme = if let Some(rest) = raw.strip_prefix("ssh://") {
+        // ssh://git@host/owner/repo(.git)
+        let rest = rest.split_once('@').map(|(_, r)| r).unwrap_or(rest);
+        rest.to_string()
+    } else if let Some(rest) = raw.strip_prefix("git@") {
+        // git@host:owner/repo(.git)
+        rest.replacen(':', "/", 1)
+    } else if let Some(rest) = raw
+        .strip_prefix("https://")
+        .or_else(|| raw.strip_prefix("http://"))
+    {
+        // https://[user[:token]@]host/owner/repo(.git)
+        rest.rsplit_once('@')
+            .map(|(_, r)| r)
+            .unwrap_or(rest)
+            .to_string()
+    } else {
+        return None;
+    };
+    let trimmed = without_scheme
+        .trim_end_matches('/')
+        .trim_end_matches(".git")
+        .trim_end_matches('/');
+    if trimmed.split('/').count() < 3 {
+        return None;
+    }
+    Some(format!("https://{}", trimmed))
+}
+
+#[cfg(test)]
+mod remote_url_tests {
+    use super::normalize_git_remote_url;
+
+    #[test]
+    fn normalizes_ssh_https_and_git_suffix() {
+        for raw in [
+            "git@github.com:acme/app.git",
+            "ssh://git@github.com/acme/app.git",
+            "https://github.com/acme/app.git",
+            "https://github.com/acme/app",
+            "https://x-access-token:tok@github.com/acme/app.git",
+            "https://github.com/acme/app/",
+        ] {
+            assert_eq!(
+                normalize_git_remote_url(raw).as_deref(),
+                Some("https://github.com/acme/app"),
+                "{raw}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_empty_and_local_paths() {
+        assert_eq!(normalize_git_remote_url(""), None);
+        assert_eq!(normalize_git_remote_url("/srv/git/app.git"), None);
+        assert_eq!(normalize_git_remote_url("https://github.com/acme"), None);
+    }
+}

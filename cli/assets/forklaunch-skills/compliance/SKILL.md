@@ -28,7 +28,7 @@ Use when the user asks about:
 The compliance framework is enforced at the framework level — architecturally impossible to skip:
 
 1. **`fp` property builder** — Proxy over MikroORM's `p` that requires `.compliance()` classification on every scalar field
-2. **`defineComplianceEntity`** — Validates all properties have compliance classification at compile time
+2. **`defineComplianceEntity`** — Validates all properties have compliance classification at **compile time** via `ValidateProperties<T>` generic
 3. **Access levels** — Required on every route handler (`public`, `authenticated`, `protected`, `internal`)
 4. **Field encryption** — AES-256-GCM with per-tenant HKDF key derivation for PII/PHI/PCI fields where configured
 5. **Tenant isolation** — MikroORM global filter (mandatory) + optional PostgreSQL RLS
@@ -54,6 +54,8 @@ export const UserEntity = defineComplianceEntity({
     name: fp.string().compliance("pii"),
     ssn: fp.string().nullable().compliance("phi"),
     cardNumber: fp.string().nullable().compliance("pci"),
+    loginCount: fp.integer().default(0).compliance("none"),
+    riskScore: fp.double().nullable().compliance("none"),
     role: fp.enum(() => RoleEnum).compliance("none"),
     metadata: fp.json<Metadata>().nullable().compliance("none"),
 
@@ -81,10 +83,20 @@ export const UserEntity = defineComplianceEntity({
 - **Base properties** (`createdAt`, `updatedAt`, etc.) in `defineBaseProperties` must also use `fp` with `.compliance('none')`
 - Omitting `.compliance()` on a scalar is a **compile-time error**
 
+### Numeric Builder Rules
+
+Do not write `fp.number()` unless the generated persistence package actually exports it. In current generated ForkLaunch entities:
+
+- Use `fp.integer()` for whole-number fields: counts, limits, retries, priorities, CPU/memory sizes, concurrency, age-like integer values.
+- Use `fp.double()` for decimal fields: currency amounts, percentages, scores, measurements, ratios.
+- Validator schemas still use the `number` primitive from `@<app-name>/core`; that does not imply an `fp.number()` entity builder exists.
+- If a numeric field's shape is ambiguous, copy the nearest generated entity pattern rather than inventing a builder.
+
 ### `defineComplianceEntity` vs `defineEntity`
 
 - `defineComplianceEntity` — Validates all properties have compliance classification. **Use this for all entities.**
-- `defineEntity` — No compliance validation. Only for framework internals or third-party entities.
+- `defineEntity` — No compliance validation. Only for framework internals or third-party entities. Do not import `defineEntity` from `@forklaunch/core/persistence` in Studio-generated services; recent generated persistence packages do not export it there.
+- For catalog/reference data with no sensitive fields, still use `defineComplianceEntity` and classify scalar fields as `"none"`.
 
 The return type of `defineComplianceEntity` is identical to `defineEntity` — the `ClassifiedProperty` wrapper is stripped at the type level. MikroORM sees the same entity structure.
 
@@ -148,28 +160,110 @@ EncryptionService: {
 },
 ```
 
+### Reclassifying an existing field (MUST migrate existing data)
+
+Changing a field's classification (e.g. `.compliance("none")` →
+`.compliance("pii")`) or otherwise enabling encryption on it only affects rows
+written **after** the change — rows already in the database stay plaintext, and
+reads through `EncryptedType` will either return them as-is or fail to decrypt.
+
+**MUST**: ship a data migration in the same change that rewrites existing rows
+through the same encryption path the entity now uses (`FieldEncryptor` /
+`EncryptionService`, under the correct per-tenant context — see the symmetry
+rule below). The migration must be idempotent: a `v1:`/`v2:` prefix alone is
+not proof a value is already (validly) encrypted — a malformed or
+wrong-tenant-key value can carry the same prefix. Under the correct tenant
+context, attempt `FieldEncryptor.decrypt`/`EncryptionService` decryption first;
+skip the row only if that decryption authenticates and parses successfully,
+and encrypt it (even if prefixed) if decryption fails. Cover this with tests
+for plaintext values, well-formed `v1:`/`v2:` values, and malformed values
+carrying either prefix. A schema-only migration that alters the column but
+leaves old plaintext values in place is not acceptable.
+
 ## Tenant Isolation
 
 ### EntityMgr Factory Pattern
 
-`EntityMgr` in DI returns a factory `(tenantId?: string | null) => EntityManager`. This sets the tenant filter on the forked EM for per-tenant encryption key derivation.
+Two different things have to be bound before a tenant-scoped read is safe, and
+they are easy to confuse:
 
-**In registrations.ts:**
+| | what it does | what it does NOT do |
+|---|---|---|
+| `setFilterParams('tenant', …)` | filters **which rows** a query returns | anything to encryption |
+| `wrapEmWithTenantContext(em, tenantId)` | filter params **plus** the encryption key context, plus a proxy that keeps it alive across the connection pool | — |
+
+`setFilterParams` alone is the single most damaging mistake in this whole
+system, because it *looks* correct. Rows come back correctly scoped, so the
+service appears tenant-aware and every test that does not read an encrypted
+column passes. Encrypted columns keep deriving the **no-tenant** key, and the
+failure only appears once a real tenant id exists — in production. Three
+endpoints (sign-up, onboarding `/me`, an invitation lookup) went down in one
+week from exactly this, in services whose factories had drifted this way.
+
+**Always use the helper. In registrations.ts:**
 
 ```typescript
+import { wrapEmWithTenantContext } from '@forklaunch/core/persistence';
+
 EntityMgr: {
   lifetime: Lifetime.Scoped,
-  type: (tenantId?: string | null) => EntityManager,
-  factory: ({ Orm }, _resolve, context) =>
-    (tenantId?: string | null) => {
-      const em = Orm.em.fork(context?.entityManagerOptions as ForkOptions | undefined);
-      if (tenantId) {
-        em.setFilterParams('tenant', { tenantId });
-      }
-      return em;
-    },
+  type: EntityManager,
+  factory: (
+    { Orm },
+    context?: { entityManagerOptions?: ForkOptions; tenantId?: string }
+  ) =>
+    wrapEmWithTenantContext(
+      Orm.em.fork(context?.entityManagerOptions),
+      context?.tenantId
+    )
 },
 ```
+
+**Never this:**
+
+```typescript
+// WRONG. Rows are filtered; encrypted columns still use the no-tenant key.
+const em = Orm.em.fork(context?.entityManagerOptions);
+if (context?.tenantId) {
+  em.setFilterParams('tenant', { tenantId: context.tenantId });
+}
+return em;
+```
+
+`forklaunch audit` flags this as `tenant-context-half-wired`. If you are adding
+a guard of your own, assert that any `registrations.ts` containing
+`setFilterParams('tenant'` also contains `wrapEmWithTenantContext` — that one
+check catches the whole class.
+
+### `fork()` drops the encryption context
+
+`wrapEmWithTenantContext` returns a **proxy**. Forking off it — directly, or via
+`getSuperAdminContext(em)`, which is `em.fork()` with the tenant filter disabled
+— produces a plain EntityManager that no longer carries the tenant, because the
+proxy is what was carrying it.
+
+```typescript
+// WRONG: the fork drops the tenant, so encrypted columns decrypt with '' and throw.
+const admins = await getSuperAdminContext(em).find(UserEntity, { … });
+```
+
+Decide what you actually need:
+
+- **Cross-tenant rows, one known key** — the common case. Disable the row filter
+  but re-bind the tenant you already know:
+
+  ```typescript
+  const crossTenantEm = wrapEmWithTenantContext(
+    getSuperAdminContext(em),
+    organizationId
+  );
+  ```
+
+- **Genuinely cross-tenant encrypted data** — there is no single key that
+  decrypts rows belonging to different tenants, so this is not a thing you can
+  do in one query. Either resolve each row's tenant and read it under
+  `withEncryptionContext(thatTenant, …)`, or select around the encrypted
+  columns entirely with `fields: [...]`.
 
 **In controllers** — create the tenant-scoped EM via DI context:
 

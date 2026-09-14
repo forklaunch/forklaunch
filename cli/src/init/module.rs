@@ -149,6 +149,20 @@ impl CliCommand for ModuleCommand {
         )?
         .parse()?;
 
+        // The relay module is not a new service - it injects the managed-apps
+        // OAuth session-ingest endpoint into the app's existing iam service, so
+        // it takes no database of its own and skips the whole service-scaffold
+        // path below. Branch here (mirroring how storefront extends an existing
+        // app) before the database prompt so `-d` is never required.
+        if module == Module::Relay {
+            return super::relay::add_relay_module(
+                &manifest_data,
+                &base_path,
+                matches.get_flag("dryrun"),
+                &mut stdout,
+            );
+        }
+
         let runtime = manifest_data.runtime.parse()?;
         let database_variants = get_database_variants(&runtime);
 

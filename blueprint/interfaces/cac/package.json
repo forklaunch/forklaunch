@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/interfaces-cac",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "description": "Computer-assisted coding interfaces for forklaunch",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -49,8 +49,8 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "^1.2.24",
-    "@mikro-orm/core": "^7.1.11"
+    "@forklaunch/common": "^1.2.26",
+    "@mikro-orm/core": "7.1.15"
   },
   "devDependencies": {
     "depcheck": "^1.4.7",

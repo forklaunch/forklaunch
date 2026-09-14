@@ -3,10 +3,10 @@ use std::{
     env,
     fs::read_to_string,
     io::{IsTerminal, Write},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use convert_case::{Case, Casing};
 use rustyline::{Editor, history::DefaultHistory};
@@ -281,6 +281,59 @@ impl ApplicationCommand {
     pub(super) fn new() -> Self {
         Self {}
     }
+}
+
+/// Render a path relative to the current directory when it is underneath it,
+/// so the hint reads `./my-app` rather than a wall of absolute path.
+fn display_path(path: &Path) -> String {
+    let rendered = std::env::current_dir()
+        .ok()
+        .and_then(|cwd| path.strip_prefix(&cwd).ok().map(|p| p.to_path_buf()))
+        .map(|relative| {
+            if relative.as_os_str().is_empty() {
+                PathBuf::from(".")
+            } else {
+                PathBuf::from(".").join(relative)
+            }
+        })
+        .unwrap_or_else(|| path.to_path_buf());
+    rendered.to_string_lossy().to_string()
+}
+
+/// A scaffolded application has TWO roots, and they are not the same directory.
+///
+/// The manifest lives at the application root; the pnpm/bun workspace lives
+/// inside `--modules-path`. So `forklaunch` commands run in one place and
+/// package-manager commands run in another, and running `pnpm install` at the
+/// application root fails with `ERR_PNPM_NO_PKG_MANIFEST` — which reads as a
+/// broken scaffold rather than as the wrong directory.
+///
+/// Nothing said so at the one moment the user is guaranteed to be looking: the
+/// end of `init`. Saying it once here is cheaper than every user rediscovering
+/// it, and cheaper than the support answer.
+fn next_steps(app_root: &Path, workspace_root: &Path, runtime: &str) -> String {
+    let package_manager = if runtime == "bun" { "bun" } else { "pnpm" };
+    let app = display_path(app_root);
+    let workspace = display_path(workspace_root);
+
+    // When modules-path is empty the two roots coincide and there is no trap to
+    // warn about — do not invent a distinction the user does not have.
+    if app == workspace {
+        return format!(
+            "\nNext steps\n  cd {app}\n  {package_manager} install\n  forklaunch score --offline\n"
+        );
+    }
+
+    format!(
+        "\nTwo directories, and they are not the same one:\n\
+         \n  {app:<width$}  forklaunch commands run here (.forklaunch/manifest.toml)\
+         \n  {workspace:<width$}  {package_manager} commands run here (package.json, workspace root)\
+         \n\
+         \nNext steps\n  cd {workspace} && {package_manager} install\n  cd {app} && forklaunch score --offline\n\
+         \n`{package_manager} install` at {app} fails with a \"no package.json\" error.\n\
+         That is the wrong directory, not a broken scaffold.\n",
+        width = app.len().max(workspace.len())
+    )
 }
 
 impl CliCommand for ApplicationCommand {
@@ -575,6 +628,7 @@ impl CliCommand for ApplicationCommand {
             ecommerce: None,
             messaging: None,
             cac: None,
+            relay: None,
             };
         let mut modules: Vec<Module> = if matches.get_many::<String>("modules").is_none()
             && std::io::stdin().is_terminal()
@@ -587,6 +641,7 @@ impl CliCommand for ApplicationCommand {
                     ecommerce: None,
                     messaging: None,
                     cac: None,
+                    relay: None,
                     };
                 modules_to_test = prompt_comma_separated_list(
                     &mut line_editor,
@@ -620,6 +675,18 @@ impl CliCommand for ApplicationCommand {
             modules_to_test
         };
 
+        // Relay is not a standalone service - it injects into an existing iam
+        // service and so cannot be part of a fresh application scaffold. Point
+        // the user at the module surface instead of scaffolding a broken
+        // "relay" project.
+        if modules.contains(&Module::Relay) {
+            bail!(
+                "The 'relay' module extends an existing iam service and cannot be added during \
+                 `init application`. Scaffold the app first, then run \
+                 `forklaunch init module -m relay -p <app>`."
+            );
+        }
+
         modules.sort_by_key(|module| {
             match module {
                 Module::BaseIam | Module::BetterAuthIam => 0,
@@ -627,6 +694,7 @@ impl CliCommand for ApplicationCommand {
                 Module::StripeEcommerce => 2,
                 Module::BaseMessaging | Module::TwilioMessaging => 3,
                 Module::BaseCac => 4,
+                Module::Relay => 5,
             }
         });
 
@@ -1305,6 +1373,11 @@ impl CliCommand for ApplicationCommand {
 
         if !dryrun {
             log_ok!(stdout, "{} initialized successfully!", name);
+            write!(
+                stdout,
+                "{}",
+                next_steps(&origin_path, &generation_path, &data.runtime)
+            )?;
             format_code(&Path::new(&application_path), &data.runtime.parse()?);
         }
 
@@ -1373,5 +1446,47 @@ mod tests {
         let new_condition = matches.get_many::<String>("modules").is_none();
         assert!(!old_condition, "old condition incorrectly returns false with name arg");
         assert!(new_condition, "new condition correctly identifies modules prompt is needed");
+    }
+}
+
+#[cfg(test)]
+mod next_steps_tests {
+    use super::*;
+
+    /// The trap this exists to prevent: `pnpm install` at the application root,
+    /// which fails in a way that reads as a broken scaffold.
+    #[test]
+    fn names_both_roots_and_the_failure_they_cause() {
+        let out = next_steps(
+            Path::new("/tmp/my-app"),
+            Path::new("/tmp/my-app/src/modules"),
+            "node",
+        );
+        assert!(out.contains("/tmp/my-app"), "{out}");
+        assert!(out.contains("/tmp/my-app/src/modules"), "{out}");
+        assert!(out.contains("forklaunch commands run here"), "{out}");
+        assert!(out.contains("pnpm commands run here"), "{out}");
+        assert!(out.contains("wrong directory"), "{out}");
+    }
+
+    #[test]
+    fn names_the_runtimes_own_package_manager() {
+        let bun = next_steps(
+            Path::new("/tmp/a"),
+            Path::new("/tmp/a/modules"),
+            "bun",
+        );
+        assert!(bun.contains("bun install"), "{bun}");
+        assert!(!bun.contains("pnpm"), "{bun}");
+    }
+
+    /// With no modules path the two roots coincide. Warning about a distinction
+    /// the user does not have would be noise, and worse, confusing.
+    #[test]
+    fn says_nothing_about_two_roots_when_there_is_only_one() {
+        let out = next_steps(Path::new("/tmp/a"), Path::new("/tmp/a"), "node");
+        assert!(!out.contains("Two directories"), "{out}");
+        assert!(!out.contains("wrong directory"), "{out}");
+        assert!(out.contains("pnpm install"), "{out}");
     }
 }

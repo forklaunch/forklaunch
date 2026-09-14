@@ -612,34 +612,14 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
         );
     }
 
-    // Redpanda (Kafka-compatible broker for Tempo ingest)
-    docker_compose.services.insert(
-        "redpanda".to_string(),
-        DockerService {
-            image: Some("redpandadata/redpanda:latest".to_string()),
-            command: Some(Command::Simple(
-                "redpanda start --overprovisioned --mode=dev-container --kafka-addr=PLAINTEXT://0.0.0.0:9092 --advertise-kafka-addr=PLAINTEXT://redpanda:9092".to_string(),
-            )),
-            ports: None,
-            networks: Some(vec![format!("{}-network", app_name)]),
-            healthcheck: Some(Healthcheck {
-                test: HealthTest::List(vec![
-                    "CMD".to_string(),
-                    "rpk".to_string(),
-                    "cluster".to_string(),
-                    "health".to_string(),
-                ]),
-                interval: "30s".to_string(),
-                timeout: "10s".to_string(),
-                retries: 3,
-                start_period: "30s".to_string(),
-                additional_properties: HashMap::new(),
-            }),
-            ..Default::default()
-        },
-    );
+    // NOTE ON IMAGE PINS: every image below is pinned to the same version the
+    // ForkLaunch deployment agent runs in production. Floating `:latest` is what
+    // allowed this stack to drift away from production -- production moved to
+    // Mimir while local kept running Prometheus, so no local test could
+    // reproduce production behaviour and a health-check mismatch reached prod.
+    // Bump these deliberately, in step with the production template.
 
-    // MinIO (S3-compatible object store for Tempo, Loki, Thanos)
+    // MinIO (S3-compatible object store for Tempo, Loki and Mimir)
     if !docker_compose.services.contains_key("minio") {
         let mut minio_environment = IndexMap::new();
         minio_environment.insert("MINIO_ROOT_USER".to_string(), "minioadmin".to_string());
@@ -648,7 +628,7 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
         docker_compose.services.insert(
             "minio".to_string(),
             DockerService {
-                image: Some("minio/minio".to_string()),
+                image: Some("minio/minio:RELEASE.2025-04-22T22-12-26Z".to_string()),
                 container_name: Some(format!("{}-minio", app_name)),
                 restart: Some(Restart::Always),
                 environment: Some(minio_environment),
@@ -690,7 +670,7 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
     docker_compose.services.insert(
         "minio-init".to_string(),
         DockerService {
-            image: Some("minio/mc:latest".to_string()),
+            image: Some("minio/mc:RELEASE.2025-04-16T18-13-26Z".to_string()),
             networks: Some(vec![format!("{}-network", app_name)]),
             depends_on: Some(IndexMap::from([(
                 "minio".to_string(),
@@ -709,28 +689,26 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
     docker_compose.services.insert(
         "tempo".to_string(),
         DockerService {
-            image: Some("grafana/tempo:latest".to_string()),
+            image: Some("grafana/tempo:3.0.0".to_string()),
             command: Some(Command::Simple("-target=all -config.file=/etc/tempo.yaml".to_string())),
-            ports: Some(vec!["3200:3200".to_string(), "4317:4317".to_string()]),
-            volumes: Some(vec![format!(
-                "{}/monitoring/tempo.yaml:/etc/tempo.yaml",
-                context_path.to_string_lossy()
-            )]),
+            // Host port 4317 is deliberately not published: the OTel collector
+            // is the only front door for OTLP and reaches Tempo over the
+            // compose network.
+            ports: Some(vec!["3200:3200".to_string()]),
+            volumes: Some(vec![
+                format!(
+                    "{}/monitoring/tempo.yaml:/etc/tempo.yaml",
+                    context_path.to_string_lossy()
+                ),
+                "tempo-data:/var/tempo".to_string(),
+            ]),
             networks: Some(vec![format!("{}-network", app_name)]),
-            depends_on: Some(IndexMap::from([
-                (
-                    "minio-init".to_string(),
-                    DependsOn {
-                        condition: DependencyCondition::ServiceCompletedSuccessfully,
-                    },
-                ),
-                (
-                    "redpanda".to_string(),
-                    DependsOn {
-                        condition: DependencyCondition::ServiceHealthy,
-                    },
-                ),
-            ])),
+            depends_on: Some(IndexMap::from([(
+                "minio-init".to_string(),
+                DependsOn {
+                    condition: DependencyCondition::ServiceCompletedSuccessfully,
+                },
+            )])),
             healthcheck: Some(Healthcheck {
                 test: HealthTest::List(vec![
                     "CMD".to_string(),
@@ -740,10 +718,10 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
                     "--spider".to_string(),
                     "http://localhost:3200/ready".to_string(),
                 ]),
-                interval: "30s".to_string(),
+                interval: "10s".to_string(),
                 timeout: "10s".to_string(),
-                retries: 3,
-                start_period: "60s".to_string(),
+                retries: 12,
+                start_period: "30s".to_string(),
                 additional_properties: HashMap::new(),
             }),
             ..Default::default()
@@ -754,13 +732,16 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
     docker_compose.services.insert(
         "loki".to_string(),
         DockerService {
-            image: Some("grafana/loki:latest".to_string()),
+            image: Some("grafana/loki:3.7.7".to_string()),
             command: Some(Command::Simple("-config.file=/etc/loki/local-config.yaml".to_string())),
             ports: Some(vec!["3100:3100".to_string()]),
-            volumes: Some(vec![format!(
-                "{}/monitoring/loki.yaml:/etc/loki/local-config.yaml",
-                context_path.to_string_lossy()
-            )]),
+            volumes: Some(vec![
+                format!(
+                    "{}/monitoring/loki.yaml:/etc/loki/local-config.yaml",
+                    context_path.to_string_lossy()
+                ),
+                "loki-data:/loki".to_string(),
+            ]),
             networks: Some(vec![format!("{}-network", app_name)]),
             depends_on: Some(IndexMap::from([(
                 "minio-init".to_string(),
@@ -777,9 +758,9 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
                     "--spider".to_string(),
                     "http://localhost:3100/ready".to_string(),
                 ]),
-                interval: "30s".to_string(),
+                interval: "10s".to_string(),
                 timeout: "10s".to_string(),
-                retries: 3,
+                retries: 12,
                 start_period: "30s".to_string(),
                 additional_properties: HashMap::new(),
             }),
@@ -787,44 +768,56 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
         },
     );
 
-    // Prometheus (metrics)
-    if !docker_compose.volumes.contains_key("prometheus-data") {
-        docker_compose.volumes.insert(
-            "prometheus-data".to_string(),
-            DockerVolume {
-                driver: "local".to_string(),
-                ..Default::default()
-            },
-        );
+    // Mimir (metrics). Replaces Prometheus + the Thanos sidecar, matching what
+    // the deployment agent runs in production.
+    //
+    // The health path MUST be /ready. Mimir answers Prometheus's /-/healthy with
+    // a 404 -- that exact mismatch, left behind after the production migration,
+    // failed every ALB health check and crash-looped the production monitoring
+    // task. Keeping the local stack on the same engine and the same path is the
+    // point of this definition.
+    for volume in ["mimir-data", "loki-data", "tempo-data"] {
+        if !docker_compose.volumes.contains_key(volume) {
+            docker_compose.volumes.insert(
+                volume.to_string(),
+                DockerVolume {
+                    driver: "local".to_string(),
+                    ..Default::default()
+                },
+            );
+        }
     }
 
     docker_compose.services.insert(
-        "prometheus".to_string(),
+        "mimir".to_string(),
         DockerService {
-            image: Some("prom/prometheus:latest".to_string()),
+            image: Some("grafana/mimir:3.2.0".to_string()),
             ports: Some(vec!["9090:9090".to_string()]),
             volumes: Some(vec![
                 format!(
-                    "{}/monitoring/prometheus.yaml:/etc/prometheus/prometheus.yml",
+                    "{}/monitoring/mimir.yaml:/etc/mimir/mimir.yaml",
                     context_path.to_string_lossy()
                 ),
-                "prometheus-data:/prometheus".to_string(),
+                "mimir-data:/data".to_string(),
             ]),
-            command: Some(Command::Multiple(vec![
-                "--config.file=/etc/prometheus/prometheus.yml".to_string(),
-                "--storage.tsdb.path=/prometheus".to_string(),
-                "--storage.tsdb.min-block-duration=2h".to_string(),
-                "--storage.tsdb.max-block-duration=2h".to_string(),
-                "--web.console.libraries=/usr/share/prometheus/console_libraries".to_string(),
-                "--web.console.templates=/usr/share/prometheus/consoles".to_string(),
-            ])),
+            command: Some(Command::Simple(
+                "-config.file=/etc/mimir/mimir.yaml".to_string(),
+            )),
             networks: Some(vec![format!("{}-network", app_name)]),
-            depends_on: Some(IndexMap::from([(
-                "minio-init".to_string(),
-                DependsOn {
-                    condition: DependencyCondition::ServiceCompletedSuccessfully,
-                },
-            )])),
+            depends_on: Some(IndexMap::from([
+                (
+                    "minio-init".to_string(),
+                    DependsOn {
+                        condition: DependencyCondition::ServiceCompletedSuccessfully,
+                    },
+                ),
+                (
+                    "memcached".to_string(),
+                    DependsOn {
+                        condition: DependencyCondition::ServiceStarted,
+                    },
+                ),
+            ])),
             healthcheck: Some(Healthcheck {
                 test: HealthTest::List(vec![
                     "CMD".to_string(),
@@ -832,11 +825,11 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
                     "--no-verbose".to_string(),
                     "--tries=1".to_string(),
                     "--spider".to_string(),
-                    "http://localhost:9090/-/healthy".to_string(),
+                    "http://localhost:9090/ready".to_string(),
                 ]),
-                interval: "30s".to_string(),
+                interval: "10s".to_string(),
                 timeout: "10s".to_string(),
-                retries: 3,
+                retries: 12,
                 start_period: "30s".to_string(),
                 additional_properties: HashMap::new(),
             }),
@@ -844,11 +837,23 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
         },
     );
 
-    // Grafana (dashboards)
+    // memcached: query cache for Mimir's bucket store. Present in production.
+    docker_compose.services.insert(
+        "memcached".to_string(),
+        DockerService {
+            image: Some("memcached:1.6-alpine".to_string()),
+            command: Some(Command::Simple("-m 64".to_string())),
+            networks: Some(vec![format!("{}-network", app_name)]),
+            ..Default::default()
+        },
+    );
+
+    // Grafana (dashboards). LOCAL ONLY -- production runs no Grafana; the
+    // ForkLaunch dashboard queries the backends directly.
     docker_compose.services.insert(
         "grafana".to_string(),
         DockerService {
-            image: Some("grafana/grafana:latest".to_string()),
+            image: Some("grafana/grafana:12.3.1".to_string()),
             ports: Some(vec!["3000:3000".to_string()]),
             volumes: Some(vec![
                 format!("{}/monitoring/grafana-provisioning/datasources:/etc/grafana/provisioning/datasources", context_path.to_string_lossy()),
@@ -874,57 +879,64 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
         },
     );
 
-    // OTel Collector
+    // OTel Collector.
+    //
+    // Must be the `-contrib` distribution: metrics reach Mimir through the
+    // `prometheus_remote_write` exporter, which the core image does not ship.
+    // Port 8889 is gone with Prometheus -- it was the scrape endpoint Prometheus
+    // pulled from. Mimir does not scrape; the collector pushes to it.
     docker_compose.services.insert(
         "otel-collector".to_string(),
         DockerService {
-            image: Some("otel/opentelemetry-collector:latest".to_string()),
+            image: Some("otel/opentelemetry-collector-contrib:0.159.0".to_string()),
             command: Some(Command::Simple(
                 "--config=/etc/otel-collector-config.yaml".to_string(),
             )),
-            ports: Some(vec!["4318:4318".to_string(), "8889:8889".to_string()]),
+            ports: Some(vec![
+                "4317:4317".to_string(),
+                "4318:4318".to_string(),
+                "13133:13133".to_string(),
+            ]),
             volumes: Some(vec![format!(
                 "{}/monitoring/otel-collector-config.yaml:/etc/otel-collector-config.yaml",
                 context_path.to_string_lossy()
             )]),
             networks: Some(vec![format!("{}-network", app_name)]),
-            ..Default::default()
-        },
-    );
-
-    // Thanos sidecar (long-term metric storage via S3)
-    docker_compose.services.insert(
-        "thanos-sidecar".to_string(),
-        DockerService {
-            image: Some("thanosio/thanos:v0.41.0".to_string()),
-            command: Some(Command::Multiple(vec![
-                "sidecar".to_string(),
-                "--tsdb.path=/prometheus".to_string(),
-                "--prometheus.url=http://prometheus:9090".to_string(),
-                "--objstore.config-file=/etc/thanos/objstore.yaml".to_string(),
-            ])),
-            volumes: Some(vec![
-                "prometheus-data:/prometheus".to_string(),
-                format!(
-                    "{}/monitoring/thanos-objstore.yaml:/etc/thanos/objstore.yaml",
-                    context_path.to_string_lossy()
-                ),
-            ]),
-            networks: Some(vec![format!("{}-network", app_name)]),
             depends_on: Some(IndexMap::from([
                 (
-                    "prometheus".to_string(),
+                    "mimir".to_string(),
                     DependsOn {
-                        condition: DependencyCondition::ServiceHealthy,
+                        condition: DependencyCondition::ServiceStarted,
                     },
                 ),
                 (
-                    "minio".to_string(),
+                    "loki".to_string(),
                     DependsOn {
-                        condition: DependencyCondition::ServiceHealthy,
+                        condition: DependencyCondition::ServiceStarted,
+                    },
+                ),
+                (
+                    "tempo".to_string(),
+                    DependsOn {
+                        condition: DependencyCondition::ServiceStarted,
                     },
                 ),
             ])),
+            healthcheck: Some(Healthcheck {
+                test: HealthTest::List(vec![
+                    "CMD".to_string(),
+                    "wget".to_string(),
+                    "--no-verbose".to_string(),
+                    "--tries=1".to_string(),
+                    "--spider".to_string(),
+                    "http://localhost:13133/".to_string(),
+                ]),
+                interval: "10s".to_string(),
+                timeout: "10s".to_string(),
+                retries: 12,
+                start_period: "20s".to_string(),
+                additional_properties: HashMap::new(),
+            }),
             ..Default::default()
         },
     );
@@ -1847,16 +1859,20 @@ fn add_iam_environment_variables_to_docker_compose(
     environment: &mut IndexMap<String, String>,
     hmac_secret: &str,
 ) -> Result<()> {
-    environment.insert("HMAC_SECRET_KEY".to_string(), hmac_secret.to_string());
+    // A project literally named "iam" only carries a `variant` when it came from the real
+    // `iam-base`/`iam-better-auth` module preset. A plain custom service happens to be named
+    // "iam" has no variant — skip IAM wiring entirely (including the HMAC secret, which it has
+    // no use for) instead of panicking; it isn't a real auth module.
+    let Some(iam_project_variant) = projects
+        .iter()
+        .find(|project| project.name == "iam")
+        .and_then(|project| project.variant.as_ref())
+        .and_then(|variant| variant.parse::<Module>().ok())
+    else {
+        return Ok(());
+    };
 
-    let iam_project = projects.iter().find(|project| project.name == "iam");
-    let iam_project_variant = iam_project
-        .unwrap()
-        .variant
-        .as_ref()
-        .unwrap()
-        .parse::<Module>()
-        .unwrap();
+    environment.insert("HMAC_SECRET_KEY".to_string(), hmac_secret.to_string());
 
     let iam_port = if service_name == "iam" {
         port_number
@@ -2569,6 +2585,216 @@ pub(crate) fn sync_docker_compose_env_vars(
 mod tests {
     use super::*;
     use crate::constants::Runtime;
+    use crate::core::manifest::{ProjectEntry, ProjectType, application::ApplicationManifestData};
+
+    #[test]
+    fn test_add_iam_environment_variables_skips_gracefully_when_iam_project_has_no_variant() {
+        // A plain custom service that merely happens to be named "iam" (not scaffolded via
+        // the `iam-base`/`iam-better-auth` module preset) has no `variant`. This must not
+        // panic — it should just skip IAM wiring for the caller.
+        let projects = vec![ProjectEntry {
+            r#type: ProjectType::Service,
+            name: "iam".to_string(),
+            description: "a plain custom service named iam".to_string(),
+            variant: None,
+            resources: None,
+            routers: None,
+            metadata: None,
+        }];
+        let docker_compose = DockerCompose {
+            version: None,
+            volumes: IndexMap::new(),
+            networks: IndexMap::new(),
+            services: IndexMap::new(),
+            additional_entries: HashMap::new(),
+        };
+        let mut environment = IndexMap::new();
+
+        let result = add_iam_environment_variables_to_docker_compose(
+            "test-app",
+            "other-service",
+            8000,
+            projects,
+            &docker_compose,
+            &mut environment,
+            "hmac-secret",
+        );
+
+        assert!(result.is_ok());
+        assert!(!environment.contains_key("JWKS_PUBLIC_KEY_URL"));
+        assert!(!environment.contains_key("HMAC_SECRET_KEY"));
+    }
+
+    /// Minimal manifest for exercising `add_otel_to_docker_compose`.
+    fn otel_test_manifest() -> ApplicationManifestData {
+        ApplicationManifestData {
+            id: "test-id".to_string(),
+            cli_version: "1.0.0".to_string(),
+            app_name: "testapp".to_string(),
+            camel_case_app_name: "testapp".to_string(),
+            pascal_case_app_name: "Testapp".to_string(),
+            kebab_case_app_name: "testapp".to_string(),
+            title_case_app_name: "Testapp".to_string(),
+            modules_path: "src/modules".to_string(),
+            docker_compose_path: None,
+            dockerfile: None,
+            git_repository: None,
+            runtime: "node".to_string(),
+            formatter: "prettier".to_string(),
+            linter: "eslint".to_string(),
+            validator: "zod".to_string(),
+            http_framework: "express".to_string(),
+            test_framework: None,
+            app_description: "Test app".to_string(),
+            author: "Test".to_string(),
+            license: "MIT".to_string(),
+            projects: Vec::<ProjectEntry>::new(),
+            project_peer_topology: HashMap::new(),
+            database: "postgresql".to_string(),
+            is_postgres: true,
+            is_sqlite: false,
+            is_mysql: false,
+            is_mariadb: false,
+            is_better_sqlite: false,
+            is_libsql: false,
+            is_mssql: false,
+            is_mongo: false,
+            is_in_memory_database: false,
+            is_eslint: true,
+            is_biome: false,
+            is_oxlint: false,
+            is_prettier: true,
+            is_express: true,
+            is_hyper_express: false,
+            is_zod: true,
+            is_typebox: false,
+            is_bun: false,
+            is_node: true,
+            is_vitest: false,
+            is_jest: false,
+            platform_application_id: None,
+            platform_organization_id: None,
+            compliance: None,
+        }
+    }
+
+    fn generated_otel_compose() -> DockerCompose {
+        let mut compose = DockerCompose::default();
+        let manifest = otel_test_manifest();
+        add_otel_to_docker_compose("testapp", &mut compose, &manifest).unwrap();
+        compose
+    }
+
+    fn healthcheck_target(compose: &DockerCompose, service: &str) -> String {
+        match &compose
+            .services
+            .get(service)
+            .unwrap_or_else(|| panic!("missing service {service}"))
+            .healthcheck
+            .as_ref()
+            .unwrap_or_else(|| panic!("service {service} has no healthcheck"))
+            .test
+        {
+            HealthTest::List(parts) => parts.join(" "),
+            HealthTest::String(cmd) => cmd.clone(),
+        }
+    }
+
+    /// Regression test for the production outage this stack was migrated to
+    /// prevent. Production replaced Prometheus with Mimir on port 9090 but left
+    /// the load balancer health check on Prometheus's `/-/healthy`, which Mimir
+    /// answers with a 404. Every target failed its health check and ECS
+    /// crash-looped the task. Nothing local reproduced it, because the local
+    /// stack still ran real Prometheus.
+    ///
+    /// The local stack must therefore run the same engine on the same health
+    /// path as production.
+    #[test]
+    fn test_otel_stack_runs_mimir_on_ready_not_prometheus_on_healthy() {
+        let compose = generated_otel_compose();
+
+        // Mimir replaces Prometheus + the Thanos sidecar.
+        assert!(
+            compose.services.contains_key("mimir"),
+            "monitoring stack must run Mimir for metrics"
+        );
+        assert!(
+            !compose.services.contains_key("prometheus"),
+            "Prometheus must not come back: production runs Mimir"
+        );
+        assert!(
+            !compose.services.contains_key("thanos-sidecar"),
+            "the Thanos sidecar is part of the pre-migration architecture"
+        );
+
+        let mimir_health = healthcheck_target(&compose, "mimir");
+        assert!(
+            mimir_health.contains("/ready"),
+            "Mimir's health path must be /ready, got: {mimir_health}"
+        );
+        assert!(
+            !mimir_health.contains("/-/healthy"),
+            "/-/healthy is a Prometheus path; Mimir returns 404 for it. \
+             This exact mismatch caused a production outage. Got: {mimir_health}"
+        );
+
+        // Loki and Tempo are the same dskit stack and use the same path.
+        assert!(healthcheck_target(&compose, "loki").contains("/ready"));
+        assert!(healthcheck_target(&compose, "tempo").contains("/ready"));
+    }
+
+    /// Metrics reach Mimir via the `prometheus_remote_write` exporter, which
+    /// only ships in the `-contrib` collector distribution. The core image
+    /// would start and then silently drop every metric.
+    #[test]
+    fn test_otel_collector_uses_contrib_distribution() {
+        let compose = generated_otel_compose();
+        let image = compose
+            .services
+            .get("otel-collector")
+            .unwrap()
+            .image
+            .clone()
+            .unwrap();
+        assert!(
+            image.starts_with("otel/opentelemetry-collector-contrib:"),
+            "collector must be the -contrib build, got: {image}"
+        );
+    }
+
+    /// Floating `:latest` is how the local stack drifted away from production
+    /// in the first place, and it is separately why the pinned Tempo config had
+    /// stopped parsing. Every monitoring image must carry an explicit tag.
+    #[test]
+    fn test_monitoring_images_are_pinned() {
+        let compose = generated_otel_compose();
+        for service in [
+            "mimir",
+            "loki",
+            "tempo",
+            "grafana",
+            "otel-collector",
+            "memcached",
+            "minio",
+            "minio-init",
+        ] {
+            let image = compose
+                .services
+                .get(service)
+                .unwrap_or_else(|| panic!("missing service {service}"))
+                .image
+                .clone()
+                .unwrap_or_else(|| panic!("service {service} has no image"));
+            assert!(
+                image.contains(':'),
+                "{service} image must be pinned to a tag, got: {image}"
+            );
+            assert!(
+                !image.ends_with(":latest"),
+                "{service} must not float on :latest, got: {image}"
+            );
+        }
+    }
 
     #[test]
     fn test_update_dockerfile_contents_inserts_addendum_after_last_copy() {

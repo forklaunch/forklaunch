@@ -12,6 +12,21 @@ Docs: tanstack.com/start/latest
 
 ## Project Setup
 
+## Studio Preview Rules
+
+ForkLaunch Studio serves the client behind `/preview/<sessionId>/`. In generated Vite/TanStack Router clients, configure router `basepath` from `import.meta.env.BASE_URL`:
+
+```ts
+createRouter({
+  routeTree,
+  basepath: (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "") || "/",
+})
+```
+
+Do not hardcode `/`, `/preview/...`, or localhost service ports in route code. Route files under `apps/client/src/routes` must export `Route`; route-local helper files should be prefixed with `-` or moved outside `routes`. Never edit `routeTree.gen.ts` manually.
+
+Use one file-route style for each URL. If the scaffold uses nested routes such as `dashboard/reports/$reportId.tsx`, do not also create a flat sibling such as `dashboard/reports.$reportId.tsx` for the same URL. Prefer the existing scaffold convention and make every non-root route file export `Route = createFileRoute(...)` for its exact path. `__root.tsx` is the exception — it exports `Route = createRootRoute(...)` (or `createRootRouteWithContext(...)`), not `createFileRoute`.
+
 ### Install
 ```bash
 npm i @tanstack/react-start @tanstack/react-router react react-dom

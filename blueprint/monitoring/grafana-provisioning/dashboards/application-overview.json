@@ -24,7 +24,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "DS_PROMETHEUS"
+        "uid": "DS_MIMIR"
       },
       "fieldConfig": {
         "defaults": {
@@ -84,7 +84,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "DS_MIMIR"
           },
           "editorMode": "code",
           "expr": "(\n  sum by(api_name, http_response_status_code) (\n    http_requests_total{\n      service_name=~\"$service\",\n      api_name=~\"$api\",\n      correlation_id=~\"$correlation_id\"\n    }\n  )\n) - (\n  (\n    sum by(api_name, http_response_status_code) (\n      http_requests_total{\n        service_name=~\"$service\",\n        api_name=~\"$api\",\n        correlation_id=~\"$correlation_id\"\n      } offset $__range\n    )\n  ) or on(api_name, http_response_status_code) (\n    sum by(api_name, http_response_status_code) (\n      http_requests_total{\n        service_name=~\"$service\",\n        api_name=~\"$api\",\n        correlation_id=~\"$correlation_id\"\n      }\n    ) * 0\n  )\n)",
@@ -250,7 +250,7 @@
         },
         "datasource": {
           "type": "prometheus",
-          "uid": "DS_PROMETHEUS"
+          "uid": "DS_MIMIR"
         },
         "definition": "label_values(service_name)",
         "includeAll": true,
@@ -271,7 +271,7 @@
         },
         "datasource": {
           "type": "prometheus",
-          "uid": "DS_PROMETHEUS"
+          "uid": "DS_MIMIR"
         },
         "definition": "label_values({service_name=~\"$service\"}, api_name)",
         "includeAll": true,
@@ -292,7 +292,7 @@
         },
         "datasource": {
           "type": "prometheus",
-          "uid": "DS_PROMETHEUS"
+          "uid": "DS_MIMIR"
         },
         "definition": "label_values({service_name=~\"$service\", api_name=~\"$api\"}, correlation_id)",
         "includeAll": true,

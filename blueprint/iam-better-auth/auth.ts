@@ -1,4 +1,5 @@
 import { mikroOrmAdapter } from '@forklaunch/better-auth-mikro-orm-fork';
+import { logBetterAuthApiError } from './domain/utils/betterAuthErrorLogging.util';
 import { PERMISSIONS, ROLES } from '@forklaunch/blueprint-core';
 import { Metrics } from '@forklaunch/blueprint-monitoring';
 import { getEnvVar } from '@forklaunch/common';
@@ -170,6 +171,17 @@ export const betterAuthConfig = ({
     advanced: {
       database: {
         generateId: false
+      }
+    },
+    // Better Auth owns /api/auth/* and handles its own failures, so nothing it
+    // throws passes through the middleware that logs everything else. Without
+    // this hook a 500 from sign-up, sign-in or callback reaches the caller and
+    // leaves NO trace — `logger` below is for Better Auth's own diagnostics,
+    // not for API errors. That combination cost a full day of production
+    // debugging before the hook existed.
+    onAPIError: {
+      onError: (error, ctx) => {
+        logBetterAuthApiError(openTelemetryCollector, error, ctx);
       }
     },
     logger: openTelemetryCollector

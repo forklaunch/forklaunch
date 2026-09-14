@@ -44,32 +44,32 @@
     "up:packages": "pnpm -r update --latest \"!uWebSockets.js\""
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.10",
+    "@biomejs/biome": "2.5.11",
     "@changesets/cli": "^3.0.1",
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
     "@types/node": "^26.4.0",
     "eslint": "^10.9.1",
     "globals": "^17.11.0",
-    "jest": "^30.4.2",
+    "jest": "^30.5.0",
     "lint-staged": "^17.4.1",
     "oxlint": "^1.80.0",
     "prettier": "^3.9.6",
     "sort-package-json": "^4.0.0",
     "ts-jest": "^29.4.12",
     "tsup": "^8.5.1",
-    "tsx": "^4.23.12",
+    "tsx": "^4.23.13",
     "typescript": "^7.0.2",
     "typescript-eslint": "^8.68.0",
     "vitest": "^4.1.11"
   },
   "dependencies": {
-    "@forklaunch/common": "^1.2.24",
-    "@forklaunch/core": "^1.5.16",
-    "@forklaunch/express": "^1.2.41",
-    "@forklaunch/hyper-express": "^1.2.41",
-    "@forklaunch/universal-sdk": "^1.2.25",
-    "@forklaunch/validator": "^1.2.25",
+    "@forklaunch/common": "^1.2.26",
+    "@forklaunch/core": "^1.5.19",
+    "@forklaunch/express": "^1.2.43",
+    "@forklaunch/hyper-express": "^1.2.43",
+    "@forklaunch/universal-sdk": "^1.2.27",
+    "@forklaunch/validator": "^1.2.27",
     "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.52.0"
   }
 }

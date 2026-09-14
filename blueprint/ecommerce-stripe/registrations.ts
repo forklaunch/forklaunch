@@ -450,21 +450,7 @@ const serviceDependencies = runtimeDependencies.chain({
           : EntityManager,
         OtelCollector,
         schemaValidator,
-        // Same runtime shape as Stripe's mappers (toEntity only reads `.id`
-        // off the 3rd arg) — PaypalPaymentMappers narrows the type to
-        // PaypalOrder; the cast bridges the two provider-specific static
-        // types over one shared runtime mapper object, same as
-        // StripePaymentService does internally for its own 3rd-arg type.
-        {
-          PaymentMapper,
-          CreatePaymentMapper
-        } as unknown as ConstructorParameters<
-          typeof PaypalPaymentService<
-            SchemaValidator,
-            PaymentMapperTypes,
-            PaymentDtoTypes
-          >
-        >[4]
+        { PaymentMapper, CreatePaymentMapper }
       )
   },
   /**

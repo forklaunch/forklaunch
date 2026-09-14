@@ -26,6 +26,8 @@ pub(crate) struct DeploymentEndpoints {
 pub(crate) fn stream_deployment_status(
     auth_mode: &AuthMode,
     deployment_id: &str,
+    environment: Option<&str>,
+    region: Option<&str>,
     stdout: &mut StandardStream,
 ) -> Result<()> {
     use crate::core::http_client;
@@ -88,10 +90,26 @@ pub(crate) fn stream_deployment_status(
             "failed" => {
                 log_header!(stdout, Color::Red, "\nOperation failed");
 
-                if let Some(error) = status.error {
+                if let Some(error) = &status.error {
                     log_error!(stdout, "Error: {}", error);
+                    // A synchronous deploy is the case where someone is actually
+                    // watching. Making them run a second command to find out
+                    // which component wanted which key — and then work out what
+                    // to do about it alone — is where the session dies. Show the
+                    // fix and a prompt they can hand to an agent, here.
+                    crate::deploy::info::print_remediation(
+                        stdout, error, environment, region,
+                    )?;
                 }
-                bail!("Operation failed");
+
+                // Carry the reason into the error itself. `bail!("Operation
+                // failed")` put the cause on stdout and nothing in the error, so
+                // any caller reading only the failure — CI, or an agent reading
+                // the last line — lost it entirely.
+                match &status.error {
+                    Some(error) => bail!("Deployment failed: {}", error),
+                    None => bail!("Deployment failed (no reason reported)"),
+                }
             }
             "cancelled" => {
                 log_header!(stdout, Color::Yellow, "\n[CANCELLED] Deployment was cancelled");

@@ -1,6 +1,7 @@
 import { schemaValidator } from '../../schema';
 import { requestMapper, responseMapper } from '@forklaunch/core/mappers';
 import { PaymentStatus } from '@forklaunch/interfaces-ecommerce/types';
+import { PaypalOrder } from '@forklaunch/implementation-ecommerce-paypal/services';
 import { EntityManager } from '@mikro-orm/core';
 import Stripe from 'stripe';
 import { Payment } from '../../persistence/entities/payment.entity';
@@ -14,7 +15,7 @@ export const CreatePaymentMapper = requestMapper({
     toEntity: async (
       dto,
       em: EntityManager,
-      paymentIntent: Stripe.PaymentIntent
+      paymentIntent: Stripe.PaymentIntent | PaypalOrder
     ) => {
       return em.create(Payment, {
         orderId: dto.orderId,

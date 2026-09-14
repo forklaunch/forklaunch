@@ -26,7 +26,7 @@ pnpm install         # install dependencies
 pnpm run <script>    # run a package.json script
 pnpm build           # build
 pnpm dev             # local dev server
-pnpm tsc --noEmit   # type-check (frontend)
+pnpm tsc --noEmit    # type-check (frontend)
 ```
 
 > Never mix package managers. If a project has a `bun.lockb`, use bun. If it has `pnpm-lock.yaml`, use pnpm.

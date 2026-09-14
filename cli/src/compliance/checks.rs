@@ -133,6 +133,22 @@ const TENANT_BINDING_MARKERS: &[&str] = &[
     "setEncryptionTenantId(",
 ];
 
+/// An EntityManager factory that sets the tenant QUERY FILTER but never the
+/// tenant ENCRYPTION context.
+///
+/// `wrapEmWithTenantContext(em, tenantId)` does three things: sets the filter
+/// params, sets the encryption tenant, and wraps the EM so the context survives
+/// the pg connection pool. A factory that only calls `setFilterParams('tenant',
+/// ..)` does the first and skips the rest, so every call site that passes a
+/// tenant id gets row filtering, reasonably believes it is tenant-scoped, and
+/// still decrypts with the no-tenant key.
+///
+/// Not hypothetical: it took down sign-up, the onboarding /me call and an
+/// invitation lookup in one week on a service whose factory had drifted this
+/// way, while the generated blueprints — which all use the helper — were fine.
+const TENANT_FILTER_ONLY_MARKER: &str = "setFilterParams('tenant'";
+const TENANT_CONTEXT_HELPER: &str = "wrapEmWithTenantContext(";
+
 /// Where the encryptor is registered. Without it `EncryptedType` does not fail
 /// loudly on write — it falls through to `this.serialize(value)` and stores
 /// PLAINTEXT in a column declared `pii`/`pci`/`phi`. The read side does throw
@@ -373,6 +389,21 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
                         check: "tenant-em-wiring".to_string(),
                         subject: "registrations.ts".to_string(),
                         message: "entities hold classified data but no encryption tenant is ever bound — encrypted columns can only use the no-tenant key, and will stop decrypting if a tenant is introduced later. Note this is about the ENCRYPTION context specifically: setFilterParams('tenant', ..) scopes queries but does not set it".to_string(),
+                    });
+                }
+
+                // The factory binds the tenant FILTER but not the tenant
+                // ENCRYPTION context — the divergence that makes every later
+                // read in the service fragile.
+                if sources.contains(TENANT_FILTER_ONLY_MARKER)
+                    && !sources.contains(TENANT_CONTEXT_HELPER)
+                {
+                    findings.push(LocalFinding {
+                        severity: Severity::Warning,
+                        project: project.clone(),
+                        check: "tenant-context-half-wired".to_string(),
+                        subject: "registrations.ts".to_string(),
+                        message: "the EntityManager factory calls setFilterParams('tenant', ..) but never wrapEmWithTenantContext — callers get row filtering and believe they are tenant-scoped, while encrypted columns still decrypt with the no-tenant key".to_string(),
                     });
                 }
             }
@@ -618,6 +649,54 @@ mod fs_tests {
         // A deliberately single-tenant service is not broken, so this must not
         // be a warning — the helper no-ops when the tenant id is undefined.
         assert!(matches!(f.severity, Severity::Info));
+    }
+
+    #[test]
+    fn test_flags_factory_that_filters_without_binding_encryption() {
+        // The exact drift that took down sign-up, /me and an invitation lookup
+        // in one week: filter params set, encryption tenant never bound.
+        let dir = std::env::temp_dir().join("fl-checks-half-wired");
+        let proj = dir.join("iam");
+        let _ = std::fs::remove_dir_all(&dir);
+        write_project_with_classified_entity(
+            &proj,
+            "registerEncryptor(enc); em.setFilterParams('tenant', { tenantId });",
+        );
+
+        let findings = run_local_checks(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(
+            findings
+                .iter()
+                .any(|f| f.check == "tenant-context-half-wired"),
+            "expected the half-wired finding, got: {:?}",
+            findings
+        );
+    }
+
+    #[test]
+    fn test_factory_using_the_helper_is_not_flagged() {
+        // What every generated blueprint does, and what the drifted services
+        // should return to. Both markers present must NOT flag.
+        let dir = std::env::temp_dir().join("fl-checks-fully-wired");
+        let proj = dir.join("iam");
+        let _ = std::fs::remove_dir_all(&dir);
+        write_project_with_classified_entity(
+            &proj,
+            "registerEncryptor(enc); wrapEmWithTenantContext(Orm.em.fork(), context?.tenantId);",
+        );
+
+        let findings = run_local_checks(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(
+            !findings
+                .iter()
+                .any(|f| f.check == "tenant-context-half-wired"),
+            "a factory using the helper must not be flagged, got: {:?}",
+            findings
+        );
     }
 
     #[test]

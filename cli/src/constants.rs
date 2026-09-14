@@ -12,6 +12,7 @@ const DEV_OBSERVABILITY_API_URL: &str = "http://localhost:8007";
 const DEV_IAM_API_URL: &str = "http://localhost:8001";
 const DEV_BILLING_API_URL: &str = "http://localhost:8000";
 const DEV_PLATFORM_UI_URL: &str = "http://localhost:5173";
+const DEV_STUDIO_ORCHESTRATOR_API_URL: &str = "http://localhost:8008";
 const DEV_RESOURCE_MANAGEMENT_API_URL: &str = "http://localhost:8005";
 const DEV_DEVELOPER_TOOLS_API_URL: &str = "http://localhost:8006";
 
@@ -20,6 +21,7 @@ const PROD_OBSERVABILITY_API_URL: &str = "https://observability-api.forklaunch.c
 const PROD_IAM_API_URL: &str = "https://iam.forklaunch.com";
 const PROD_BILLING_API_URL: &str = "https://billing.forklaunch.com";
 const PROD_PLATFORM_UI_URL: &str = "https://forklaunch.com";
+const PROD_STUDIO_ORCHESTRATOR_API_URL: &str = "https://studio-orchestrator.forklaunch.com";
 const PROD_RESOURCE_MANAGEMENT_API_URL: &str = "https://resource-management.forklaunch.com";
 // NOT A STABLE ALIAS, unlike the other services above: developer-tools has
 // no custom domain configured yet, so this is the raw per-deployment
@@ -394,6 +396,11 @@ choice! {
             id: "cac-base",
             description: Some("computer-assisted coding hooks only"),
             exclusive_files: Some(&["cac-base"]),
+        },
+        Relay = Choice {
+            id: "relay",
+            description: Some("managed-apps OAuth relay session-ingest endpoint (adds to an existing iam service)"),
+            exclusive_files: Some(&["relay"]),
         }
     }
 
@@ -582,6 +589,11 @@ pub(crate) fn get_service_module_name(service_type: &Module) -> String {
         Module::StripeEcommerce => "ecommerce".to_string(),
         Module::BaseMessaging | Module::TwilioMessaging => "messaging".to_string(),
         Module::BaseCac => "cac".to_string(),
+        // Relay does not scaffold its own service - it injects the
+        // session-ingest endpoint into the existing iam service (see
+        // init/relay.rs). This name is only used for conflict detection, so it
+        // gets its own class rather than colliding with "iam".
+        Module::Relay => "relay".to_string(),
     }
 }
 
@@ -596,6 +608,7 @@ pub(crate) fn get_service_module_description(name: &str, service_type: &Module) 
             Module::StripeEcommerce => "ecommerce service APIs",
             Module::BaseMessaging | Module::TwilioMessaging => "messaging service APIs",
             Module::BaseCac => "computer-assisted coding service APIs",
+            Module::Relay => "the managed-apps OAuth relay session-ingest endpoint",
         }
     )
 }
@@ -658,4 +671,18 @@ mod tests {
         assert_eq!(get_service_module_cache(&Module::BaseIam), None);
         assert_eq!(get_service_module_cache(&Module::BetterAuthIam), None);
     }
+}
+
+/// Studio orchestrator, which owns the analysis + report-card endpoints. Mirrors
+/// the client's `STUDIO_API_URL` resolution so the CLI and the dashboard reach
+/// the same service.
+pub(crate) fn get_studio_orchestrator_api_url() -> String {
+    std::env::var("FORKLAUNCH_STUDIO_ORCHESTRATOR_API_URL").unwrap_or_else(|_| {
+        if is_dev_build() {
+            DEV_STUDIO_ORCHESTRATOR_API_URL
+        } else {
+            PROD_STUDIO_ORCHESTRATOR_API_URL
+        }
+        .to_string()
+    })
 }

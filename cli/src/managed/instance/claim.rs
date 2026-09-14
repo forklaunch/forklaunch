@@ -66,8 +66,11 @@ impl CliCommand for ClaimCommand {
         .arg(
             Arg::new("id")
                 .long("id")
-                .required(true)
-                .help("Id of the instance being claimed (from the claim link you were given)"),
+                .required(false)
+                .help(
+                    "Ignored. The token alone identifies the instance; accepted so older \
+                     instructions that pass --id keep working",
+                ),
         )
         .arg(
             Arg::new("token")
@@ -101,9 +104,6 @@ impl CliCommand for ClaimCommand {
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-        let id = matches
-            .get_one::<String>("id")
-            .context("--id is required")?;
         let token = matches
             .get_one::<String>("token")
             .context("--token is required")?;
@@ -111,13 +111,15 @@ impl CliCommand for ClaimCommand {
             .get_one::<String>("backup_public_key")
             .context("--backup-public-key is required")?;
 
-        let path = format!("/instances/{}/claim", urlencoding::encode(id));
+        // No instance id in the path: the platform resolves the instance from the
+        // token (POST /managed-mode/claim). Requiring an id would only let a caller
+        // probe which ids exist, which is why the id-scoped route was retired.
+        let path = "/claim".to_string();
         let body = json!({ "token": token, "backupPublicKey": backup_public_key });
 
         if matches.get_flag("dryrun") {
             println!(
-                "[DRYRUN] this would CONSUME the one-time claim for instance {}.",
-                id
+                "[DRYRUN] this would CONSUME the one-time claim for the instance this token names."
             );
             // The token is the credential. Echoing it into a dry-run transcript that
             // people paste into issues would be the easiest way to leak one, so show the

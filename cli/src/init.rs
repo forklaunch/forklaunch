@@ -12,6 +12,7 @@ use crate::{CliCommand, core::command::command};
 pub(crate) mod application;
 pub(crate) mod library;
 pub(crate) mod module;
+pub(crate) mod relay;
 pub(crate) mod router;
 pub(crate) mod service;
 pub(crate) mod storefront;

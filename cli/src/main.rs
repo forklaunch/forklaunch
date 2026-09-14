@@ -1,5 +1,6 @@
 use alerts::AlertsCommand;
 use analyze::AnalyzeCommand;
+use score::ScoreCommand;
 use anyhow::Result;
 use change::ChangeCommand;
 use clap::{ArgMatches, Command, command};
@@ -36,6 +37,7 @@ use crate::sdk::SdkCommand;
 
 mod alerts;
 mod analyze;
+mod score;
 mod constants;
 #[macro_use]
 mod core;
@@ -81,6 +83,7 @@ fn main() -> Result<()> {
     let alerts = AlertsCommand::new();
     let init = InitCommand::new();
     let analyze = AnalyzeCommand::new();
+    let score = ScoreCommand::new();
     let change = ChangeCommand::new();
     let cloud_account = CloudAccountCommand::new();
     let compliance = ComplianceCommand::new();
@@ -119,6 +122,7 @@ fn main() -> Result<()> {
         .subcommand(app.command())
         .subcommand(init.command())
         .subcommand(analyze.command())
+        .subcommand(score.command())
         .subcommand(delete.command())
         .subcommand(change.command())
         .subcommand(cloud_account.command())
@@ -158,6 +162,7 @@ fn main() -> Result<()> {
         Some(("app", sub_matches)) => app.handler(sub_matches),
         Some(("init", sub_matches)) => init.handler(sub_matches),
         Some(("analyze", sub_matches)) => analyze.handler(sub_matches),
+        Some(("score", sub_matches)) => score.handler(sub_matches),
         Some(("change", sub_matches)) => change.handler(sub_matches),
         Some(("cloud-account", sub_matches)) => cloud_account.handler(sub_matches),
         Some(("compliance", sub_matches)) => compliance.handler(sub_matches),

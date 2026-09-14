@@ -115,7 +115,7 @@ export const listVariants = handlers.get(
       .status(200)
       .json(
         await serviceFactory().listVariants(
-          req.query.ids ? (req.query as { ids: string[] }) : undefined
+          req.query.ids ? { ids: req.query.ids } : undefined
         )
       );
   }

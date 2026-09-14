@@ -1,3 +1,4 @@
+import { ResolvedEntity } from '@forklaunch/core/persistence';
 import {
   Cart,
   Inventory,
@@ -9,42 +10,55 @@ import {
 
 // product entity types
 export type BaseProductEntities = {
-  ProductMapper: { '~entity': (typeof Product)['~entity'] };
-  CreateProductMapper: { '~entity': (typeof Product)['~entity'] };
-  UpdateProductMapper: { '~entity': (typeof Product)['~entity'] };
+  ProductMapper: { '~entity': ResolvedEntity<(typeof Product)['~entity']> };
+  CreateProductMapper: {
+    '~entity': ResolvedEntity<(typeof Product)['~entity']>;
+  };
+  UpdateProductMapper: {
+    '~entity': ResolvedEntity<(typeof Product)['~entity']>;
+  };
 };
 
 // variant entity types
 export type BaseVariantEntities = {
-  VariantMapper: { '~entity': (typeof Variant)['~entity'] };
-  CreateVariantMapper: { '~entity': (typeof Variant)['~entity'] };
-  UpdateVariantMapper: { '~entity': (typeof Variant)['~entity'] };
+  VariantMapper: { '~entity': ResolvedEntity<(typeof Variant)['~entity']> };
+  CreateVariantMapper: {
+    '~entity': ResolvedEntity<(typeof Variant)['~entity']>;
+  };
+  UpdateVariantMapper: {
+    '~entity': ResolvedEntity<(typeof Variant)['~entity']>;
+  };
 };
 
 // inventory entity types
 export type BaseInventoryEntities = {
-  InventoryMapper: { '~entity': (typeof Inventory)['~entity'] };
-  CreateInventoryMapper: { '~entity': (typeof Inventory)['~entity'] };
-  UpdateInventoryMapper: { '~entity': (typeof Inventory)['~entity'] };
+  InventoryMapper: { '~entity': ResolvedEntity<(typeof Inventory)['~entity']> };
+  CreateInventoryMapper: {
+    '~entity': ResolvedEntity<(typeof Inventory)['~entity']>;
+  };
+  UpdateInventoryMapper: {
+    '~entity': ResolvedEntity<(typeof Inventory)['~entity']>;
+  };
 };
 
 // cart entity types
 export type BaseCartEntities = {
-  CartMapper: { '~entity': (typeof Cart)['~entity'] };
-  CreateCartMapper: { '~entity': (typeof Cart)['~entity'] };
-  UpdateCartMapper: { '~entity': (typeof Cart)['~entity'] };
+  CartMapper: { '~entity': ResolvedEntity<(typeof Cart)['~entity']> };
+  CreateCartMapper: { '~entity': ResolvedEntity<(typeof Cart)['~entity']> };
+  UpdateCartMapper: { '~entity': ResolvedEntity<(typeof Cart)['~entity']> };
 };
-
 
 // order entity types
 export type BaseOrderEntities = {
-  OrderMapper: { '~entity': (typeof Order)['~entity'] };
-  CreateOrderMapper: { '~entity': (typeof Order)['~entity'] };
-  UpdateOrderMapper: { '~entity': (typeof Order)['~entity'] };
+  OrderMapper: { '~entity': ResolvedEntity<(typeof Order)['~entity']> };
+  CreateOrderMapper: { '~entity': ResolvedEntity<(typeof Order)['~entity']> };
+  UpdateOrderMapper: { '~entity': ResolvedEntity<(typeof Order)['~entity']> };
 };
 
 // payment entity types
 export type BasePaymentEntities = {
-  PaymentMapper: { '~entity': (typeof Payment)['~entity'] };
-  CreatePaymentMapper: { '~entity': (typeof Payment)['~entity'] };
+  PaymentMapper: { '~entity': ResolvedEntity<(typeof Payment)['~entity']> };
+  CreatePaymentMapper: {
+    '~entity': ResolvedEntity<(typeof Payment)['~entity']>;
+  };
 };

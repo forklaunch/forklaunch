@@ -12,7 +12,7 @@ import {
   UpdateProductDto
 } from '@forklaunch/interfaces-ecommerce/types';
 import { AnySchemaValidator } from '@forklaunch/validator';
-import { EntityManager, InferEntity } from '@mikro-orm/core';
+import { EntityManager, FilterQuery, InferEntity } from '@mikro-orm/core';
 import { BaseProductDtos } from '../domain/types/baseEcommerceDto.types';
 import { BaseProductEntities } from '../domain/types/baseEcommerceEntity.types';
 import { ProductMappers } from '../domain/types/product.mapper.types';
@@ -71,7 +71,7 @@ export class BaseProductService<
       this.openTelemetryCollector.info('Listing products', searchDto);
     }
 
-    const where: Record<string, unknown> = {};
+    const where: FilterQuery<InferEntity<typeof Product>> = {};
     if (searchDto?.ids?.length) {
       where.id = { $in: searchDto.ids };
     }

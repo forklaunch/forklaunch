@@ -32,6 +32,11 @@ pub(crate) enum CacConfig {
     BaseCac,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum RelayConfig {
+    Relay,
+}
+
 #[derive(Debug, PartialEq, Eq, Default)]
 pub(crate) struct ModuleConfig {
     pub(crate) iam: Option<IamConfig>,
@@ -39,6 +44,7 @@ pub(crate) struct ModuleConfig {
     pub(crate) ecommerce: Option<EcommerceConfig>,
     pub(crate) messaging: Option<MessagingConfig>,
     pub(crate) cac: Option<CacConfig>,
+    pub(crate) relay: Option<RelayConfig>,
 }
 
 pub(crate) fn validate_modules(
@@ -72,6 +78,9 @@ pub(crate) fn validate_modules(
             }
             Module::BaseCac => {
                 global_module_config.cac = Some(CacConfig::BaseCac);
+            }
+            Module::Relay => {
+                global_module_config.relay = Some(RelayConfig::Relay);
             }
         }
 

@@ -18,6 +18,24 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # The pack `forklaunch context` writes into a user's project is vendored
+      # here and embedded into the binary. Two ways it silently rots, both of
+      # which have already happened:
+      #
+      #   - the README index and the shipped skills disagree, so an agent is
+      #     told to invoke something that is not there -- or, worse, never told
+      #     a skill exists at all;
+      #   - the allowlist in cli/assets/skills.toml and the vendored directory
+      #     disagree, so the next `sync-skills.bash` silently DELETES skills
+      #     that currently ship.
+      #
+      # Both checks are offline and take milliseconds. Neither was wired up,
+      # which is why nine skills and SETUP.md sat outside the allowlist.
+      - name: Skill pack is self-consistent
+        run: |
+          bash cli/scripts/check-skill-index.sh
+          bash cli/scripts/check-skill-allowlist.sh
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 

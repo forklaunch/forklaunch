@@ -58,6 +58,20 @@ pub(crate) fn create_app_tarball(
             continue;
         }
 
+        // Never ship any .env* file. Deployed containers must receive
+        // configuration ONLY from injected env vars; a stray .env in the
+        // release artifact (a tracked .env.template/.env.test, or a local
+        // .env.local) can shadow the real environment once baked into the
+        // image. .gitignore already drops .env.local, but this covers the
+        // tracked placeholders and anything .gitignore misses.
+        if path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map_or(false, |n| n.starts_with(".env"))
+        {
+            continue;
+        }
+
         if path == output_path {
             continue;
         }

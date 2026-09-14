@@ -3,41 +3,42 @@
 # This is an auto-generated file. Modifications are encouraged but may inhibit automated upgrades.
 
 packages:
-- core
-- monitoring
-- billing-base
-- billing-stripe
-- cac-base
-- ecommerce-stripe
-- iam-base
-- iam-better-auth
-- messaging-base
-- messaging-twilio
-- sample-worker
-- interfaces/billing
-- interfaces/cac
-- interfaces/ecommerce
-- interfaces/iam
-- interfaces/messaging
-- interfaces/worker
-- implementations/billing/base
-- implementations/billing/stripe
-- implementations/cac/base
-- implementations/messaging/base
-- implementations/messaging/twilio
-- implementations/ecommerce/base
-- implementations/ecommerce/stripe
-- implementations/ecommerce/paypal
-- implementations/iam/base
-- implementations/worker/bullmq
-- implementations/worker/database
-- implementations/worker/kafka
-- implementations/worker/redis
-- client-sdk
+  - cac-base
+  - core
+  - monitoring
+  - billing-base
+  - billing-stripe
+  - ecommerce-stripe
+  - iam-base
+  - iam-better-auth
+  - messaging-base
+  - messaging-twilio
+  - sample-worker
+  - interfaces/billing
+  - interfaces/cac
+  - interfaces/ecommerce
+  - interfaces/iam
+  - interfaces/messaging
+  - interfaces/worker
+  - implementations/billing/base
+  - implementations/billing/stripe
+  - implementations/messaging/base
+  - implementations/messaging/twilio
+  - implementations/cac/base
+  - implementations/ecommerce/base
+  - implementations/ecommerce/stripe
+  - implementations/ecommerce/paypal
+  - implementations/iam/base
+  - implementations/worker/bullmq
+  - implementations/worker/database
+  - implementations/worker/kafka
+  - implementations/worker/redis
+  - client-sdk
 
 blockExoticSubdeps: false
 
 allowBuilds:
+  '@parcel/watcher': false
   "@scarf/scarf": true
   better-sqlite3: true
   cpu-features: true
@@ -49,15 +50,3 @@ allowBuilds:
   tldjs: true
   unrs-resolver: true
 
-overrides:
-  "@forklaunch/core": ^1.5.15
-  # One MikroORM, workspace-wide. Three copies (7.1.8, 7.1.11, 7.1.13) were
-  # resolving at once, and MikroORM's entity types carry a private `_meta`
-  # field — so an entity defined against one copy is not assignable to a
-  # parameter typed by another. That surfaces as "Types have separate
-  # declarations of a private property '_meta'" and stops the ecommerce
-  # implementation packages building at all.
-  "@mikro-orm/core": 7.1.13
-  "@mikro-orm/postgresql": 7.1.13
-  "@mikro-orm/migrations": 7.1.13
-  "@mikro-orm/sql": 7.1.13

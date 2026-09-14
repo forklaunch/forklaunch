@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/implementation-messaging-base",
-  "version": "1.1.0",
+  "version": "1.1.2",
   "description": "Messaging basic implementation for forklaunch",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -75,15 +75,15 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "^1.2.24",
-    "@forklaunch/core": "^1.5.16",
+    "@forklaunch/common": "^1.2.26",
+    "@forklaunch/core": "^1.5.19",
     "@forklaunch/interfaces-messaging": "workspace:^",
-    "@forklaunch/internal": "^1.2.26",
-    "@forklaunch/validator": "^1.2.25",
-    "@mikro-orm/core": "7.1.14",
+    "@forklaunch/internal": "^1.2.29",
+    "@forklaunch/validator": "^1.2.27",
+    "@mikro-orm/core": "7.1.15",
     "@sinclair/typebox": "^0.34.52",
     "ajv": "^8.20.0",
-    "zod": "^4.4.3"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "depcheck": "^1.4.7",

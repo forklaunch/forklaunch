@@ -1,10 +1,12 @@
 use anyhow::Result;
 use clap::{ArgMatches, Command};
+use status::StatusCommand;
 use sync::SyncCommand;
 use validate::ValidateCommand;
 
 use crate::{CliCommand, core::command::command};
 
+pub(crate) mod status;
 pub(crate) mod sync;
 pub(crate) mod validate;
 
@@ -12,6 +14,7 @@ pub(crate) mod validate;
 pub(crate) struct EnvironmentCommand {
     validate: ValidateCommand,
     sync: SyncCommand,
+    status: StatusCommand,
 }
 
 impl EnvironmentCommand {
@@ -19,6 +22,7 @@ impl EnvironmentCommand {
         Self {
             validate: ValidateCommand::new(),
             sync: SyncCommand::new(),
+            status: StatusCommand::new(),
         }
     }
 }
@@ -33,12 +37,14 @@ impl CliCommand for EnvironmentCommand {
         .subcommand_required(true)
         .subcommand(self.validate.command())
         .subcommand(self.sync.command())
+        .subcommand(self.status.command())
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         match matches.subcommand() {
             Some(("validate", sub_matches)) => self.validate.handler(sub_matches),
             Some(("sync", sub_matches)) => self.sync.handler(sub_matches),
+            Some(("status", sub_matches)) => self.status.handler(sub_matches),
             _ => unreachable!(),
         }
     }

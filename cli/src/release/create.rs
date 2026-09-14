@@ -128,7 +128,7 @@ use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 use toml::to_string_pretty;
 
 use super::{
-    git::{get_git_branch, get_git_commit, is_git_repo},
+    git::{get_git_branch, get_git_commit, get_git_remote_url, is_git_repo},
     manifest_generator::{
         EnvironmentVariableComponent, EnvironmentVariableComponentProperty,
         EnvironmentVariableComponentType, EnvironmentVariableRequirement, EnvironmentVariableScope,
@@ -174,10 +174,7 @@ struct CreateReleaseRequest {
     /// Pin the autodeploy fan-out to a specific environment. Honored by
     /// `FORKLAUNCH_TARGET_ENVIRONMENT` env var (set by the worker when the
     /// webhook already matched the push to an env via the branch matrix).
-    #[serde(
-        rename = "targetEnvironment",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "targetEnvironment", skip_serializing_if = "Option::is_none")]
     target_environment: Option<String>,
 }
 
@@ -541,6 +538,40 @@ impl CliCommand for CreateCommand {
             },
             git_branch.as_deref().unwrap_or("unknown")
         );
+
+        // A git-mode release from inside a checkout must also say WHICH repo the
+        // commit lives in, or the deploy has nothing to clone. Record the origin
+        // remote of the checkout in the manifest; a manifest that already names
+        // a different repository is kept but flagged.
+        if !local_mode && is_git_repo() {
+            match (get_git_remote_url(), manifest.git_repository.as_deref()) {
+                (Some(remote), Some(existing)) if existing.trim_end_matches('/') != remote => {
+                    log_warn!(
+                        stdout,
+                        "manifest.toml names git_repository {} but this checkout's origin is {}; the release will be built from {}",
+                        existing,
+                        remote,
+                        existing
+                    );
+                }
+                (Some(_), Some(_)) => {}
+                (Some(remote), None) => {
+                    manifest.git_repository = Some(remote.clone());
+                    let manifest_str = to_string_pretty(&manifest)
+                        .with_context(|| "Failed to serialize manifest")?;
+                    fs::write(&manifest_path, manifest_str)
+                        .with_context(|| "Failed to write manifest")?;
+                    log_ok!(stdout, "Git repository recorded from origin: {}", remote);
+                }
+                (None, Some(_)) => {}
+                (None, None) => {
+                    log_warn!(
+                        stdout,
+                        "No 'origin' remote found; the deploy will use the repository connected to this application on the platform"
+                    );
+                }
+            }
+        }
 
         // Step 2: Export OpenAPI specs
         let openapi_path = app_root.join(".forklaunch").join("openapi");
@@ -1214,7 +1245,10 @@ fn upload_release(
             "/internal",
         )
     } else {
-        (format!("{}/releases", get_platform_management_api_url()), "/")
+        (
+            format!("{}/releases", get_platform_management_api_url()),
+            "/",
+        )
     };
 
     let response = http_client::post_with_auth_and_sign_path(
@@ -2390,6 +2424,8 @@ fn is_platform_managed_var(var_name: &str) -> bool {
         "OTEL_METRICS_EXPORTER",
         "OTEL_LOGS_EXPORTER",
         "OTEL_LEVEL",
+        "MIMIR_URL",
+        // Retained for back-compat with projects scaffolded pre-Mimir.
         "PROMETHEUS_URL",
         "LOKI_URL",
         "TEMPO_URL",

@@ -35,7 +35,7 @@ If you are running low on context or the user asks you to compress: Step 0 > Tes
 * Handler `name` field: no forward slashes (use PascalCase).
 * MikroORM: ALWAYS use `strategy: 'select-in'` for 2+ OneToMany/ManyToMany populates. NEVER query inside loops — batch with `{ $in: ids }`.
 * Tenant-encrypted PII/PHI/PCI: NEVER hydrate `UserEntity`, `InvitationEntity`, organization display records, or other encrypted rows from an unscoped EM just to discover ownership. First raw-select the unencrypted owner FK or use a lookup-hash column, then fork `EntityMgr` with `{ context: { tenantId } }` before hydration.
-* HMAC: sign the route path (NOT full URL, NOT including query params). Body MUST be passed to `generateHmacAuthHeaders` for POST/PUT/PATCH/DELETE.
+* HMAC: sign the route path (NOT full URL, NOT including query params). Body MUST be passed to `generateHmacAuthHeaders` from `@forklaunch/core/http` for POST/PUT/PATCH/DELETE.
 * Static routes BEFORE parameterized `/:id` routes (Express ordering).
 * Controller exports in `api/controllers/index.ts` for SDK auto-generation.
 * **Frontend placement:** Frontend code (React/Next.js) MUST live in `apps/` (top-level, sibling to `modules/`), NOT inside `modules/`. Each frontend app gets its own directory under `apps/` with its own `package.json`. Workspace config depends on runtime: for pnpm projects, add to `pnpm-workspace.yaml`; for bun projects, add to the root `package.json` `workspaces` array. If a plan introduces new frontend code inside `modules/`, flag it and recommend moving it to `apps/` with the appropriate workspace entry.

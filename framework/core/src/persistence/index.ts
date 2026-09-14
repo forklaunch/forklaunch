@@ -23,6 +23,10 @@ export {
   type SelectionAvoidsEncryptedColumns
 } from './complianceTypes';
 export {
+  wrapEmWithForgivingDecryption,
+  type ForgivingDecryptionLogger
+} from './forgivingDecryptionEm';
+export {
   asEncryptionSafe,
   type ContextFreeKeysOfSchema,
   type ContextFreeReadOptions,

@@ -51,12 +51,22 @@ By default, you will not need to run any scripts to get going, but if your modul
 | `messaging-base` | Messaging hooks only | Base messaging infrastructure with an extensible delivery provider interface |
 | `messaging-twilio` | Twilio SMS implementation | Twilio-backed SMS sending with delivery-status webhook handling |
 | `cac-base` | Computer-assisted coding hooks only | Base medical claim coding/scrubbing infrastructure with an extensible procedure code-set provider interface |
+| `relay` | Managed-apps OAuth relay session-ingest endpoint | Injects the instance-side `/relay/session-ingest` endpoint into an existing better-auth iam service (HMAC verify, nonce replay guard, one-time handoff ticket, session cookie); leaves token storage as one hook |
+
+> Note: `relay` is not a standalone service. Unlike the other modules it does
+> not scaffold a new project - it injects the managed-apps OAuth session-ingest
+> endpoint into your existing better-auth iam service, so it takes no `-d`
+> database of its own. Run it after the iam service exists:
+> `forklaunch init module -m relay -p <app>`. It writes the endpoint, a nonce
+> replay-guard entity + migration, and the browser handoff, and leaves one
+> clearly-marked hook (`establishSessionFromRelayTokens` in
+> `iam/domain/hooks/relayHooks.ts`) for where your app stores the OAuth tokens.
 
 ### Init Command Options
 
 | Option | Short | Description | Valid Values |
 | :----- | :---- | :---------- | :----------- |
-| `--module` | `-m` | The module type to initialize | `billing-base`, `billing-stripe`, `iam-base`, `iam-better-auth`, `messaging-base`, `messaging-twilio`, `cac-base` |
+| `--module` | `-m` | The module type to initialize | `billing-base`, `billing-stripe`, `iam-base`, `iam-better-auth`, `messaging-base`, `messaging-twilio`, `cac-base`, `relay` |
 | `--database` | `-d` | The database to use | `postgresql`, `mysql`, `mariadb`, `mssql`, `mongodb`, `libsql`, `sqlite`, `better-sqlite` |
 | `--path` | `-p` | The application path to initialize the module in | Any valid directory path |
 | `--dryrun` | `-n` | Dry run the command | Flag (no value) |

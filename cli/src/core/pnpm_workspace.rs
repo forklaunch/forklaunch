@@ -116,6 +116,43 @@ fn sanitize_minimum_release_age_exclude(pnpm_workspace: &mut PnpmWorkspace) {
     *entries = normalized;
 }
 
+/// The scope pattern that exempts every first-party package from the age gate.
+const FORKLAUNCH_RELEASE_AGE_EXCLUDE: &str = "@forklaunch/*";
+
+/// Add the first-party exemption, rather than only normalising entries that
+/// happen to already be there.
+///
+/// `sanitize_minimum_release_age_exclude` states the rule -- first-party
+/// packages should always be exempt -- but it can only rewrite a list that
+/// exists. A freshly generated app has no `minimumReleaseAgeExclude` at all,
+/// just the `minimumReleaseAge: 1440` default, so for the first 24 hours after
+/// a framework release every `@forklaunch/*` version the CLI pins is younger
+/// than the gate and `pnpm install` fails outright:
+///
+///     No version matching "@forklaunch/core" found for specifier "~1.5.17"
+///     (blocked by minimum-release-age: 86400 seconds)
+///
+/// That is a release-day trap rather than a real supply-chain risk: the gate
+/// exists to slow down compromised third-party publishes, and these are our
+/// own packages, pinned by the CLI to versions it was built against. A single
+/// scope pattern covers packages published later without needing another
+/// entry here.
+fn ensure_minimum_release_age_exclude(pnpm_workspace: &mut PnpmWorkspace) {
+    let entry = pnpm_workspace
+        .other
+        .entry("minimumReleaseAgeExclude".to_string())
+        .or_insert_with(|| Value::Sequence(Vec::new()));
+    let Value::Sequence(entries) = entry else {
+        return;
+    };
+    let already_covered = entries.iter().any(|value| {
+        matches!(value, Value::String(spec) if spec == FORKLAUNCH_RELEASE_AGE_EXCLUDE)
+    });
+    if !already_covered {
+        entries.push(Value::String(FORKLAUNCH_RELEASE_AGE_EXCLUDE.to_string()));
+    }
+}
+
 /// Set-if-missing on every rewrite path, not just initial creation, so an
 /// app that already existed before this default was introduced (or had the
 /// key stripped) still gets it back.
@@ -133,8 +170,22 @@ fn ensure_minimum_release_age(pnpm_workspace: &mut PnpmWorkspace) {
 /// lockfile. Setting it explicitly makes local resolution skip too-new
 /// versions the same way deploy does, so the generated lockfile is already
 /// compliant. Same value as forklaunch-platform's own pnpm-workspace.yaml.
+///
+/// The first-party exemption ships with the default rather than being applied
+/// afterwards, because `generate_pnpm_workspace` -- the initial-creation path --
+/// serialises this map directly without running the `ensure_*` helpers. Leaving
+/// it out there is what makes a newly scaffolded app fail to install for the
+/// first 24 hours after a framework release.
 fn default_other() -> BTreeMap<String, Value> {
-    BTreeMap::from([("minimumReleaseAge".to_string(), Value::Number(1440.into()))])
+    BTreeMap::from([
+        ("minimumReleaseAge".to_string(), Value::Number(1440.into())),
+        (
+            "minimumReleaseAgeExclude".to_string(),
+            Value::Sequence(vec![Value::String(
+                FORKLAUNCH_RELEASE_AGE_EXCLUDE.to_string(),
+            )]),
+        ),
+    ])
 }
 
 pub(crate) fn generate_pnpm_workspace(
@@ -182,6 +233,7 @@ pub(crate) fn render_pnpm_workspace_with_packages(
     pnpm_workspace.packages = packages;
     sanitize_allow_builds(&mut pnpm_workspace);
     sanitize_minimum_release_age_exclude(&mut pnpm_workspace);
+    ensure_minimum_release_age_exclude(&mut pnpm_workspace);
     ensure_minimum_release_age(&mut pnpm_workspace);
     Ok(to_string(&pnpm_workspace)
         .with_context(|| ERROR_FAILED_TO_GENERATE_PNPM_WORKSPACE)?)
@@ -204,6 +256,7 @@ pub(crate) fn add_project_definition_to_pnpm_workspace<
     }
     sanitize_allow_builds(&mut pnpm_workspace);
     sanitize_minimum_release_age_exclude(&mut pnpm_workspace);
+    ensure_minimum_release_age_exclude(&mut pnpm_workspace);
     ensure_minimum_release_age(&mut pnpm_workspace);
     Ok(to_string(&pnpm_workspace)
         .with_context(|| ERROR_FAILED_TO_ADD_PROJECT_METADATA_TO_PNPM_WORKSPACE)?)
@@ -228,6 +281,7 @@ pub(crate) fn remove_project_definition_to_pnpm_workspace(
     }
     sanitize_allow_builds(&mut pnpm_workspace);
     sanitize_minimum_release_age_exclude(&mut pnpm_workspace);
+    ensure_minimum_release_age_exclude(&mut pnpm_workspace);
     ensure_minimum_release_age(&mut pnpm_workspace);
 
     Ok(to_string(&pnpm_workspace)
@@ -251,6 +305,81 @@ mod tests {
         // duplicates collapse, non-forklaunch entries untouched
         assert_eq!(rendered.matches("@forklaunch/core").count(), 1);
         assert!(rendered.contains("left-pad@1.3.0"));
+    }
+
+    #[test]
+    fn test_generated_workspace_exempts_forklaunch_from_the_age_gate() {
+        // Covers the initial-creation path specifically: it serialises
+        // default_other() directly and runs none of the ensure_* helpers, so
+        // the exemption has to be in the default itself.
+        let dir = std::env::temp_dir().join("fl-pnpm-ws-generate");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let rendered = generate_pnpm_workspace(dir.to_str().unwrap(), &Vec::new())
+            .unwrap()
+            .expect("a fresh directory should produce a workspace file");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(
+            rendered.content.contains("minimumReleaseAgeExclude"),
+            "generated workspace must carry the exclude list: {}",
+            rendered.content
+        );
+        assert!(
+            rendered.content.contains("@forklaunch/*"),
+            "generated workspace must exempt the first-party scope: {}",
+            rendered.content
+        );
+        assert!(
+            rendered.content.contains("minimumReleaseAge"),
+            "the age gate itself must still be set: {}",
+            rendered.content
+        );
+    }
+
+    #[test]
+    fn test_forklaunch_scope_is_exempted_when_no_list_exists() {
+        // The release-day case: a fresh app has minimumReleaseAge but no
+        // exclude list, so every just-published @forklaunch/* version is
+        // younger than the gate and `pnpm install` fails outright.
+        let mut ws: PnpmWorkspace = from_str("packages:\n- core\n").unwrap();
+        ensure_minimum_release_age_exclude(&mut ws);
+
+        let Some(Value::Sequence(entries)) = ws.other.get("minimumReleaseAgeExclude") else {
+            panic!("expected the exclude list to be created");
+        };
+        assert_eq!(entries, &vec![Value::String("@forklaunch/*".to_string())]);
+    }
+
+    #[test]
+    fn test_forklaunch_scope_is_not_duplicated() {
+        let mut ws: PnpmWorkspace =
+            from_str("packages:\n- core\nminimumReleaseAgeExclude:\n- '@forklaunch/*'\n")
+                .unwrap();
+        ensure_minimum_release_age_exclude(&mut ws);
+        ensure_minimum_release_age_exclude(&mut ws);
+
+        let Some(Value::Sequence(entries)) = ws.other.get("minimumReleaseAgeExclude") else {
+            panic!("expected the exclude list to survive");
+        };
+        assert_eq!(entries.len(), 1, "rewrites must be idempotent: {entries:?}");
+    }
+
+    #[test]
+    fn test_third_party_exclusions_are_preserved() {
+        // The scope pattern is added alongside whatever a consumer put there;
+        // it must never replace their entries.
+        let mut ws: PnpmWorkspace =
+            from_str("packages:\n- core\nminimumReleaseAgeExclude:\n- 'some-vendor-pkg'\n")
+                .unwrap();
+        ensure_minimum_release_age_exclude(&mut ws);
+
+        let Some(Value::Sequence(entries)) = ws.other.get("minimumReleaseAgeExclude") else {
+            panic!("expected the exclude list");
+        };
+        assert!(entries.contains(&Value::String("some-vendor-pkg".to_string())));
+        assert!(entries.contains(&Value::String("@forklaunch/*".to_string())));
     }
 
     #[test]

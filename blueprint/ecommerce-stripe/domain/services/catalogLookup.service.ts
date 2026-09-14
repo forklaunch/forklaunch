@@ -1,4 +1,4 @@
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, FilterQuery, InferEntity } from '@mikro-orm/core';
 import { Inventory } from '../../persistence/entities/inventory.entity';
 import { Variant } from '../../persistence/entities/variant.entity';
 import { Product } from '../../persistence/entities/product.entity';
@@ -47,7 +47,7 @@ export class CatalogLookupService {
     limit: number;
     offset: number;
   }) {
-    const where: Record<string, unknown> = {};
+    const where: FilterQuery<InferEntity<typeof Product>> = {};
     if (options.ids?.length) {
       where.id = { $in: options.ids };
     }

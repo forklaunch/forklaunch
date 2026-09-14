@@ -191,7 +191,7 @@ pub(crate) fn run_mutation(req: MutationRequest) -> Result<()> {
     // `fl infra` is JWT/session-only (resource-management has no HMAC support on
     // these routes); `stream_deployment_status` is shared with `deploy create`,
     // which still supports HMAC, so it takes an AuthMode — always JWT from here.
-    stream_deployment_status(&AuthMode::Jwt, &response.deployment_id, &mut stdout)?;
+    stream_deployment_status(&AuthMode::Jwt, &response.deployment_id, None, None, &mut stdout)?;
 
     Ok(())
 }

@@ -6,31 +6,53 @@
 #
 # `include` is an allowlist, not a mirror — anything not listed here is never
 # vendored, even if it exists upstream. Excluded on purpose:
-#   - gstack, plan-design-review, plan-devex-review: third-party workflow
-#     tooling, not ForkLaunch documentation.
+#   - gstack: third-party workflow tooling, not ForkLaunch documentation.
 #   - db-query.md: a production-database runbook, not agent-facing content.
+#
+# The list below is EVERYTHING ELSE under .claude/skills. It used to be a
+# shorter hand-maintained subset, which drifted: nine skills and SETUP.md were
+# vendored while absent from the allowlist, so the next sync would have deleted
+# them -- including getting-started, score, security, and the SETUP.md that
+# /prereqs and /getting-started both link to. Add new skills here when they land
+# upstream, or `sync-skills.bash --check` fails the build.
 
 source_repo = "forklaunch-platform"
-source_commit = "0b009cd578824b9f78b42906271275613859f952"
+source_commit = "09d93a97b828512a1035ec586739dcfb5201ff94"
 
 include = [
   "README.md",
+  "SETUP.md",
   "backend-patterns",
   "cli",
   "common-tasks",
   "compliance",
+  "deploy-mode",
+  "deployment-approvals",
   "design-system",
   "development-guidelines",
   "framework",
   "frontend-patterns",
+  "getting-started",
   "imports-and-structure",
   "infra",
   "infrastructure-and-utilities",
+  "integrations",
+  "investigator",
+  "managed-apps",
+  "managed-provisioning",
+  "managed-relay",
+  "observability",
   "plan",
   "plan-ceo-review",
+  "plan-design-review",
+  "plan-devex-review",
   "plan-eng-review",
   "platform-architecture",
+  "prereqs",
   "quick-reference",
+  "score",
+  "score-self-heal",
+  "security",
   "studio",
   "tanstack",
   "vercel-frontend",

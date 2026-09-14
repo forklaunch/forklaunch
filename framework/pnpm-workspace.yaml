@@ -16,6 +16,7 @@ packages:
 blockExoticSubdeps: false
 
 allowBuilds:
+  '@parcel/watcher': false
   "@scarf/scarf": true
   cpu-features: true
   esbuild: true

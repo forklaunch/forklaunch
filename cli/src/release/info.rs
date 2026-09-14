@@ -1,46 +1,17 @@
 use std::io::Write;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use clap::{Arg, ArgMatches, Command};
-use serde::Deserialize;
 use termcolor::{ColorChoice, ColorSpec, StandardStream, WriteColor};
 
+use super::shared::fetch_releases;
 use crate::{
     CliCommand,
-    constants::{ERROR_FAILED_TO_SEND_REQUEST, get_platform_management_api_url},
     core::{
         command::command,
-        http_client,
         validate::{require_auth, require_integration, require_manifest},
     },
 };
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ReleaseSummary {
-    #[serde(default)]
-    id: Option<String>,
-    #[serde(default)]
-    version: Option<String>,
-    #[serde(default)]
-    status: Option<String>,
-    #[serde(default)]
-    created_at: Option<String>,
-    #[serde(default)]
-    git_commit: Option<String>,
-    #[serde(default)]
-    git_branch: Option<String>,
-    #[serde(default)]
-    released_by: Option<String>,
-    #[serde(default)]
-    notes: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ReleaseListResponse {
-    #[serde(default)]
-    releases: Vec<ReleaseSummary>,
-}
 
 fn print_field(out: &mut StandardStream, label: &str, value: &Option<String>) -> Result<()> {
     if let Some(v) = value {
@@ -84,33 +55,18 @@ impl CliCommand for InfoCommand {
         let app = require_integration(&manifest)?;
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-        let url = format!(
-            "{}/releases/?applicationId={}&limit=50",
-            get_platform_management_api_url(),
-            app
-        );
-        let response = http_client::get(&url).with_context(|| ERROR_FAILED_TO_SEND_REQUEST)?;
-        if !response.status().is_success() {
-            bail!(
-                "Failed to list releases: {}",
-                response.text().unwrap_or_default()
-            );
-        }
-        let list: ReleaseListResponse = response
-            .json()
-            .with_context(|| "Failed to parse release list response")?;
+        let releases = fetch_releases(&app, 50)?;
 
         match matches.get_one::<String>("version") {
             Some(version) => {
-                let Some(release) = list
-                    .releases
+                let Some(release) = releases
                     .iter()
                     .find(|r| r.version.as_deref() == Some(version))
                 else {
                     bail!(
                         "Release '{}' not found. Known versions: {}",
                         version,
-                        list.releases
+                        releases
                             .iter()
                             .filter_map(|r| r.version.clone())
                             .take(10)
@@ -130,7 +86,7 @@ impl CliCommand for InfoCommand {
             }
             None => {
                 writeln!(stdout)?;
-                for release in list.releases.iter().take(5) {
+                for release in releases.iter().take(5) {
                     writeln!(
                         stdout,
                         "  {}  {}  {}",
@@ -139,7 +95,7 @@ impl CliCommand for InfoCommand {
                         release.created_at.clone().unwrap_or_default()
                     )?;
                 }
-                if list.releases.is_empty() {
+                if releases.is_empty() {
                     log_info!(stdout, "No releases yet. Create one with: forklaunch release create --version <version>");
                 }
             }
