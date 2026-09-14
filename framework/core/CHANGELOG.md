@@ -1,5 +1,37 @@
 # @forklaunch/core
 
+## 1.5.20
+
+### Patch Changes
+
+- **Security:** authorization failures no longer log the credential.
+
+  `parseRequestAuth` wrote the raw `Authorization` header value into the
+  "JWT Verification Failed" and "Authorization Failed" log lines. For bearer
+  auth that is a token that stays valid until it expires; for basic auth it is
+  a password. Affected: every release up to and including 1.5.19. If your
+  application logs are shipped outside your own infrastructure, rotate any
+  token that failed authorization while on an affected version.
+
+  The log line now carries what the credential was for, not the credential:
+
+  - `reason`: `jwt_expired`, `jwt_bad_signature`, `jwt_malformed`,
+    `jwks_no_key`, `jwks_unavailable`, `jwt_claim_<name>`. Previously an
+    expired token and a forged one produced identical lines.
+  - `claimed`: the decoded, **unverified** `sub`, `organizationId`, `iss`,
+    `exp` and `kid`. Labelled `claimed` because on a failed verification they
+    are whatever the caller wrote. `email` is deliberately omitted.
+  - `tokenFingerprint`: the first 8 hex characters of SHA-256 of the header
+    value, to correlate retries and match a token you hold against a line.
+    Not reversible.
+  - `hasToken`.
+
+  Both lines move from `error` to `warn`: an expired token is normal traffic.
+
+  The JWKS verification path now surfaces the last `jose` error instead of
+  swallowing it, so `reason` is populated for `jwksPublicKeyUrl` consumers.
+  Status codes and response bodies are unchanged.
+
 ## 1.5.19
 
 ### Patch Changes
