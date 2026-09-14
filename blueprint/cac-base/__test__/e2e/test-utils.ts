@@ -475,7 +475,15 @@ export async function seedEncounterWithCharges(
     });
   }
 
-  await em.persist([patient, encounter]).flush();
+  // Two statements, not `em.persist(...).flush()` — `persist()` returns
+  // `this` from the *unproxied* target (Reflect.get + .apply preserves the
+  // original identity), so a chained `.flush()` would silently run outside
+  // wrapEmWithTenantContext's per-call `withEncryptionContext` wrapping,
+  // falling back to the fragile ambient AsyncLocalStorage seed alone —
+  // exactly the pooled-connection edge case tenantEm.ts's own doc comment
+  // warns about. Calling `.flush()` directly on `em` keeps it on the proxy.
+  em.persist([patient, encounter]);
+  await em.flush();
   return encounter.id;
 }
 

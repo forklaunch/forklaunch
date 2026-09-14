@@ -10,8 +10,13 @@ export class Migration00000000000000 extends Migration {
     this.addSql(
       `create table "patient" ("id" uuid not null, "created_at" timestamptz not null, "updated_at" timestamptz not null, "retention_anonymized_at" timestamptz null, "organization_id" uuid not null, "mrn" text not null, "first_name" text not null, "last_name" text not null, "date_of_birth" text not null, "address_line1" text null, "city" text null, "state" text null, "postal_code" text null, "phone_number" text null, "email" text null, "ssn" text null, constraint "patient_pkey" primary key ("id"));`
     );
+    // Composite (organization_id, mrn), not a single-column constraint on
+    // "mrn" alone — an MRN is only unique within the hospital/clinic that
+    // issued it (same reasoning as cpt_code's (organization_id, code)
+    // below); two different organizations can otherwise legitimately reuse
+    // the same MRN for two different patients.
     this.addSql(
-      `alter table "patient" add constraint "patient_mrn_unique" unique ("mrn");`
+      `alter table "patient" add constraint "patient_organization_id_mrn_unique" unique ("organization_id", "mrn");`
     );
 
     this.addSql(
@@ -124,5 +129,6 @@ export class Migration00000000000000 extends Migration {
     this.addSql(`drop table if exists "code_set_license" cascade;`);
     this.addSql(`drop table if exists "hcpcs_code" cascade;`);
     this.addSql(`drop table if exists "icd10_code" cascade;`);
+    this.addSql(`drop table if exists "cpt_code" cascade;`);
   }
 }

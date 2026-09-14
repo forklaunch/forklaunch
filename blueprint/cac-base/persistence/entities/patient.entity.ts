@@ -14,7 +14,11 @@ export const Patient = defineComplianceEntity({
     organizationId: fp.uuid().compliance('none'),
     // Internal surrogate identifier — used as the reference everywhere in
     // the domain model instead of SSN, per HIPAA "minimum necessary" (§4).
-    mrn: fp.string().unique().compliance('none'),
+    // Uniqueness is (organizationId, mrn) — see the composite unique
+    // constraint in migrations/, same reasoning as cptCode.entity.ts — not
+    // a single-column constraint here, since an MRN is only unique within
+    // the hospital/clinic that issued it.
+    mrn: fp.string().compliance('none'),
     firstName: fp.string().compliance('phi'),
     lastName: fp.string().compliance('phi'),
     dateOfBirth: fp.datetime().compliance('phi'),

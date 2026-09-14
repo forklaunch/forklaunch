@@ -475,6 +475,37 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
       const listedAsTestOrg = await call(baseUrl, '/denial', { token: jwt }); // TEST_ORGANIZATION_ID, not the other org
       expect(listedAsTestOrg.body).toEqual([]);
     });
+
+    // Regression test for Patient.mrn's uniqueness: an MRN is only unique
+    // within the hospital/clinic that issued it (organizationId, mrn), not
+    // globally — two different organizations legitimately reuse the same
+    // MRN scheme (e.g. both starting patient numbering at "MRN-000001").
+    // Before this fix (migrations/Migration00000000000000.ts's
+    // patient_organization_id_mrn_unique constraint), the second insert
+    // below would fail outright on a single-column unique violation on
+    // "mrn" alone, regardless of organizationId.
+    it('allows two different organizations to reuse the same MRN', async () => {
+      const em = forkPostgresEm(setup);
+      const sharedMrn = 'E2E-SHARED-MRN-001';
+      const otherOrgId = '77777777-7777-7777-7777-777777777777';
+
+      await expect(
+        seedEncounter(em, {
+          mrn: sharedMrn,
+          icd10Code: 'Z00.00',
+          procedureCode: 'PROC-001'
+        })
+      ).resolves.toEqual(expect.any(String));
+
+      await expect(
+        seedEncounter(em, {
+          mrn: sharedMrn,
+          icd10Code: 'Z00.00',
+          procedureCode: 'PROC-001',
+          organizationId: otherOrgId
+        })
+      ).resolves.toEqual(expect.any(String));
+    });
   });
 
   describe('code-set feature gate (§5)', () => {
