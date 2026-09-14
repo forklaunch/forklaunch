@@ -18,6 +18,15 @@ export const Patient = defineComplianceEntity({
     // constraint in migrations/, same reasoning as cptCode.entity.ts — not
     // a single-column constraint here, since an MRN is only unique within
     // the hospital/clinic that issued it.
+    //
+    // compliance('none'), deliberately, though an MRN is HIPAA Safe Harbor
+    // identifier #8: it's the join key every query in this module (and the
+    // (organizationId, mrn) uniqueness above) needs unencrypted, and it's
+    // also excluded from ComplianceDataService's export by this same
+    // classification. If plaintext-for-lookup ever needs to be
+    // reconsidered, that's a real trade-off to revisit here, not an
+    // oversight. Recorded per plan/cac/ §4's compliance-classification
+    // review.
     mrn: fp.string().compliance('none'),
     firstName: fp.string().compliance('phi'),
     lastName: fp.string().compliance('phi'),
