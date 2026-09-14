@@ -76,6 +76,7 @@ describe('auth middleware - scope hierarchy validation', () => {
             requestSchema: {},
             openTelemetryCollector: {
                 error: () => { },
+                warn: () => { },
                 debug: () => { }
             } as unknown as OpenTelemetryCollector<MetricsDefinition>,
             version: {} as never,

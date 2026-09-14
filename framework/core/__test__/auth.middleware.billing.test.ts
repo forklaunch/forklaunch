@@ -3,7 +3,7 @@ import {
   mockSchemaValidator
 } from '@forklaunch/validator/tests/mockSchemaValidator';
 import { JWTPayload, SignJWT, exportJWK, generateKeyPair } from 'jose';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   ForklaunchRequest,
   ForklaunchResponse,
@@ -45,6 +45,12 @@ describe('auth middleware - billing features', () => {
       .sign(privateKey);
   }
 
+  /** Everything the middleware logged through the collector, per test. */
+  let logged: unknown[][] = [];
+  beforeEach(() => {
+    logged = [];
+  });
+
   function createMockRequest(
     token?: string,
     contractAuth?: Record<string, unknown>,
@@ -75,7 +81,8 @@ describe('auth middleware - billing features', () => {
       query: {},
       requestSchema: {},
       openTelemetryCollector: {
-        error: () => {},
+        error: (...args: unknown[]) => logged.push(args),
+        warn: (...args: unknown[]) => logged.push(args),
         debug: () => {}
       } as unknown as OpenTelemetryCollector<MetricsDefinition>,
       version: {} as never,
@@ -219,6 +226,34 @@ describe('auth middleware - billing features', () => {
 
       expect(res.getStatus()).toBe(403);
       expect(res.getSentData()).toContain('Active subscription required');
+
+      // The failure is logged, but the credential itself never is; only a
+      // fingerprint and the claims the token asserted.
+      const serialized = JSON.stringify(logged);
+      expect(logged.length).toBeGreaterThan(0);
+      expect(serialized).not.toContain(token);
+      expect(serialized).toContain('"tokenFingerprint"');
+      expect(serialized).toContain('"sub":"user123"');
+    });
+
+    it('logs a reason and no credential when the JWT signature is invalid', async () => {
+      const token = (await createSignedJWT({ sub: 'user123' })).replace(
+        /.$/,
+        (c) => (c === 'a' ? 'b' : 'a')
+      );
+
+      const req = createMockRequest(token, {
+        jwt: { jwksPublicKeyUrl: jwksUrl },
+        allowedRoles: new Set(['user'])
+      });
+
+      const res = createMockResponse();
+      await parseRequestAuth(req, res, () => {});
+
+      expect(res.getStatus()).toBe(403);
+      const serialized = JSON.stringify(logged);
+      expect(serialized).not.toContain(token);
+      expect(serialized).toContain('"reason":"jwt_bad_signature"');
     });
 
     it('should reject request when surfaceSubscription is not provided but required', async () => {
