@@ -44,6 +44,8 @@ struct TrialStatusResponse {
     is_active: bool,
     #[serde(rename = "hasSubscription")]
     has_subscription: bool,
+    #[serde(default, rename = "planName")]
+    plan_name: Option<String>,
 }
 
 /// Validates that the account has an active trial or subscription.
@@ -67,15 +69,28 @@ pub(crate) fn require_active_account(auth_mode: &AuthMode) -> Result<()> {
         .header("Authorization", format!("Bearer {}", token))
         .send();
 
+    // This is a courtesy pre-check so the user hears "upgrade" before a long
+    // release upload, not the enforcement point: the release and deploy
+    // endpoints check the plan themselves. So it blocks ONLY on a clean
+    // answer that says no, and proceeds on anything it cannot read.
     match response {
-        Ok(resp) if resp.status().is_success() => {
-            if let Ok(status) = resp.json::<TrialStatusResponse>() {
-                if status.is_active || status.has_subscription {
-                    return Ok(());
-                }
+        Ok(resp) if resp.status().is_success() => match resp.json::<TrialStatusResponse>() {
+            Ok(status) if status.is_active || status.has_subscription => Ok(()),
+            Ok(status) => {
+                let plan = status
+                    .plan_name
+                    .map(|p| format!(" (current plan: {})", p))
+                    .unwrap_or_default();
+                bail!(
+                    "Your free trial has expired{}. Please upgrade at https://forklaunch.com/checkout?plan=pro to continue using the CLI.",
+                    plan
+                );
             }
-            bail!("Your free trial has expired. Please upgrade at https://forklaunch.com/checkout?plan=pro to continue using the CLI.");
-        }
+            Err(_) => {
+                eprintln!("Warning: Could not read account status response. Proceeding.");
+                Ok(())
+            }
+        },
         Ok(resp) => {
             // Non-success status — allow through to avoid blocking on transient errors
             eprintln!(

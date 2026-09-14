@@ -54,10 +54,19 @@ forklaunch config push --region <region> --environment <env> [options]
 **Optional:**
 - `-i, --input <file>` - Input file path (defaults to `<environment>.env`)
 - `-p, --path <path>` - Path to application root
+- `--replace` - Treat the file as the whole truth for every scope it contains
+- `-y, --yes` - Skip the confirmation `--replace` asks for
 
-> Push is authoritative per scope. Any variable that exists on the platform in a
-> scope the file touches, but is missing from the file, is marked unset **and its
-> stored value is erased**. Use `config unset` to retire a single variable.
+Push **merges** by default: only the keys named in the file change. A key that
+exists on the platform but is not in the file is left as it was. To clear a key,
+give it an empty value in the file (`STRIPE_KEY=`) or use `config unset`.
+
+> `--replace` is the older, authoritative behaviour: any variable in a scope the
+> file touches that is missing from the file is marked unset **and its stored
+> value is erased**. A component-scope unset also hides the application-level
+> value of the same name, so `--replace` first lists every key it will clear,
+> flags the ones that hide an application value, and asks. Non-interactive runs
+> (HMAC auth, or no terminal) refuse unless `--yes` is passed.
 
 ### set
 

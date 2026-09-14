@@ -70,7 +70,10 @@ pub fn login_with_token(api_token: &str) -> Result<()> {
     let token_storage = TokenData {
         access_token: api_token.to_string(),
         refresh_token: String::new(), // API tokens don't have refresh tokens
-        expires_at: i64::MAX, // API tokens are long-lived
+        // Read the real expiry from the token when it has one. Recording
+        // "never" meant the CLI kept presenting an expired token until the
+        // server's 401 wiped the login file.
+        expires_at: crate::core::token::jwt_expiry(api_token).unwrap_or(i64::MAX),
     };
 
     let token_path = get_token_path()?;
