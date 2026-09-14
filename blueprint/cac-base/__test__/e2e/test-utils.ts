@@ -1,6 +1,10 @@
 import { getEnvVar } from '@forklaunch/common';
 import { OpenTelemetryCollector } from '@forklaunch/core/http';
-import { FieldEncryptor, registerEncryptor } from '@forklaunch/core/persistence';
+import {
+  FieldEncryptor,
+  registerEncryptor,
+  wrapEmWithTenantContext
+} from '@forklaunch/core/persistence';
 import {
   BlueprintTestHarness,
   DatabaseType,
@@ -427,6 +431,13 @@ export async function seedEncounterWithCharges(
   const { Charge } = await import('../../persistence/entities/charge.entity');
 
   const organizationId = opts.organizationId ?? TEST_ORGANIZATION_ID;
+  // Patient.dateOfBirth is PHI (EncryptedType), derived from the master key
+  // + tenantId (framework/core/src/persistence/fieldEncryptor.ts). Writing
+  // it through a plain, unwrapped em would encrypt under the "no tenant"
+  // (empty-string) key — permanently unreadable once the real controllers
+  // (which now pass organizationId as tenantId, see claim.controller.ts)
+  // try to decrypt it with the real per-org key.
+  em = wrapEmWithTenantContext(em, organizationId) as EntityManager;
 
   const patient = em.create(Patient, {
     organizationId,

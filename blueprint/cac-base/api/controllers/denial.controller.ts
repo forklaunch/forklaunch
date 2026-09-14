@@ -65,7 +65,7 @@ export const listDenials = handlers.get(
       claimId,
       worklistStatus
     });
-    const denials = await serviceFactory().listDenials(organizationId, {
+    const denials = await serviceFactory({ context: { tenantId: organizationId } }).listDenials(organizationId, {
       claimId,
       worklistStatus: worklistStatus as WorklistStatus | undefined
     });
@@ -109,7 +109,7 @@ export const getDenial = handlers.get(
   async (req, res) => {
     const { id } = req.params;
     const organizationId = req.session?.organizationId;
-    const denial = await serviceFactory().getDenial(organizationId, id);
+    const denial = await serviceFactory({ context: { tenantId: organizationId } }).getDenial(organizationId, id);
 
     if (!denial) {
       res.status(404).send(`Denial '${id}' not found`);
@@ -154,7 +154,7 @@ export const resolveDenial = handlers.post(
   async (req, res) => {
     const { id } = req.params;
     const organizationId = req.session?.organizationId;
-    const denial = await serviceFactory().resolveDenial(organizationId, id);
+    const denial = await serviceFactory({ context: { tenantId: organizationId } }).resolveDenial(organizationId, id);
 
     if (!denial) {
       res.status(404).send(`Denial '${id}' not found`);

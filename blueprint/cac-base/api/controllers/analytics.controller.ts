@@ -70,7 +70,7 @@ export const getClaimAnalyticsSummary = handlers.get(
       return;
     }
 
-    const summary = await serviceFactory().getClaimSummary(organizationId, {
+    const summary = await serviceFactory({ context: { tenantId: organizationId } }).getClaimSummary(organizationId, {
       since: sinceDate,
       until: untilDate
     });

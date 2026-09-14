@@ -24,14 +24,16 @@ const MANAGE_CLAIMS_PERMISSIONS = new Set(['coder:manage_claims']);
 // (RBAC verification pass, §14 PR 5).
 //
 // sessionSchema + explicit organizationId passed into every service call —
-// NOT "tenant scoping stays automatic," which this comment used to claim.
-// The framework's own MikroORM tenant filter fails OPEN when no tenant
-// context is set (its own source comment: "safe: tenant-scoped endpoints
-// always set filter params before querying" — which nothing here was
-// doing), and no service method filtered by organizationId itself either.
-// Found via the e2e suite: a valid token for one organization could read
-// and resolve another organization's claims/denials. See
-// plan/cac/MEDICAL-CODING-IMPLEMENTATION-PLAN.md §12 for the writeup.
+// belt AND suspenders, not either/or. The service methods filter their own
+// queries by organizationId (found via the e2e suite: a valid token for one
+// organization could read and resolve another organization's
+// claims/denials — see plan/cac/MEDICAL-CODING-IMPLEMENTATION-PLAN.md §12).
+// That alone left the DI-level EntityManager itself unscoped: the
+// framework's MikroORM tenant filter fails OPEN when no tenant context is
+// set, and PHI would be encrypted under one shared key for every org
+// instead of each org's own key. `serviceFactory({ context: { tenantId } })`
+// is what actually engages both — see wrapEmWithTenantContext's own doc
+// comment in framework/core/src/persistence/tenantEm.ts.
 export const buildClaim = handlers.post(
   schemaValidator,
   '/build',
@@ -64,7 +66,7 @@ export const buildClaim = handlers.post(
     const { encounterId } = req.body;
     const organizationId = req.session?.organizationId;
     openTelemetryCollector.debug('Building claim', { encounterId });
-    const claim = await serviceFactory().buildClaim(organizationId, encounterId);
+    const claim = await serviceFactory({ context: { tenantId: organizationId } }).buildClaim(organizationId, encounterId);
     res
       .status(200)
       .json({ id: claim.id, status: claim.status, codeSetType: claim.codeSetType });
@@ -105,7 +107,7 @@ export const scrubClaim = handlers.post(
     const { id } = req.params;
     const organizationId = req.session?.organizationId;
     openTelemetryCollector.debug('Scrubbing claim', { id });
-    const result = await serviceFactory().scrubClaim(organizationId, id);
+    const result = await serviceFactory({ context: { tenantId: organizationId } }).scrubClaim(organizationId, id);
     res.status(200).json({
       status: result.status,
       denials: result.denials.map((denial) => ({

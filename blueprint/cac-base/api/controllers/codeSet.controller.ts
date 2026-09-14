@@ -41,7 +41,7 @@ export const describeCodeSet = handlers.get(
   },
   async (req, res) => {
     const organizationId = req.session?.organizationId;
-    const codeSetProvider = await resolverFactory().resolve(organizationId);
+    const codeSetProvider = await resolverFactory({ context: { tenantId: organizationId } }).resolve(organizationId);
     const descriptor = codeSetProvider.describe();
     openTelemetryCollector.debug('Describing active code set', {
       organizationId,
@@ -86,7 +86,7 @@ export const lookupProcedureCode = handlers.get(
       code,
       organizationId
     });
-    const codeSetProvider = await resolverFactory().resolve(organizationId);
+    const codeSetProvider = await resolverFactory({ context: { tenantId: organizationId } }).resolve(organizationId);
     const result = await codeSetProvider.lookupProcedureCode({ code });
 
     if (!result) {
