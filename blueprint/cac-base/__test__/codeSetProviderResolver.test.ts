@@ -71,16 +71,18 @@ describe('CodeSetProviderResolver', () => {
     });
   });
 
-  it('fails closed to the mock provider when the license lookup throws', async () => {
+  // A license-lookup failure must propagate, not silently fall back to
+  // mock: a transient DB blip for a *licensed* org would otherwise stamp
+  // the claim codeSetType: 'mock' permanently (buildClaim never re-resolves
+  // it, §5's "never retroactively recoded" rule), and every real CPT line
+  // then reads as unrecognized to scrubClaim — falsely denying a clean
+  // claim. A retryable 500 is safer than silently miscoding it.
+  it('propagates a license lookup failure rather than falling back to mock', async () => {
     const resolver = new CodeSetProviderResolver(
       fakeEm(null, true),
       openTelemetryCollector
     );
 
-    const provider = await resolver.resolve('org-1');
-    expect(provider.describe()).toEqual({
-      codeSetType: 'mock',
-      licensed: false
-    });
+    await expect(resolver.resolve('org-1')).rejects.toThrow('db unavailable');
   });
 });

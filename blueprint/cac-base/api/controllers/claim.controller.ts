@@ -3,6 +3,7 @@ import {
   schemaValidator,
   string
 } from '@forklaunch/blueprint-core';
+import { UniqueConstraintViolationException } from '@mikro-orm/core';
 import { ci, tokens } from '../../bootstrapper';
 
 const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
@@ -59,17 +60,37 @@ export const buildClaim = handlers.post(
         id: string,
         status: string,
         codeSetType: string
-      }
+      },
+      404: string,
+      409: string
     }
   },
   async (req, res) => {
     const { encounterId } = req.body;
     const organizationId = req.session?.organizationId;
     openTelemetryCollector.debug('Building claim', { encounterId });
-    const claim = await serviceFactory({ context: { tenantId: organizationId } }).buildClaim(organizationId, encounterId);
-    res
-      .status(200)
-      .json({ id: claim.id, status: claim.status, codeSetType: claim.codeSetType });
+    try {
+      const claim = await serviceFactory({
+        context: { tenantId: organizationId }
+      }).buildClaim(organizationId, encounterId);
+      if (!claim) {
+        res.status(404).send(`Encounter '${encounterId}' not found`);
+        return;
+      }
+      res
+        .status(200)
+        .json({ id: claim.id, status: claim.status, codeSetType: claim.codeSetType });
+    } catch (error: unknown) {
+      // One claim per encounter (claim_encounter_id_unique, migrations/) —
+      // a double-submit races two claims from the same encounter otherwise.
+      if (error instanceof UniqueConstraintViolationException) {
+        res
+          .status(409)
+          .send(`A claim already exists for encounter '${encounterId}'`);
+        return;
+      }
+      throw error;
+    }
   }
 );
 
@@ -100,14 +121,21 @@ export const scrubClaim = handlers.post(
           carcCode: string,
           category: string
         })
-      }
+      },
+      404: string
     }
   },
   async (req, res) => {
     const { id } = req.params;
     const organizationId = req.session?.organizationId;
     openTelemetryCollector.debug('Scrubbing claim', { id });
-    const result = await serviceFactory({ context: { tenantId: organizationId } }).scrubClaim(organizationId, id);
+    const result = await serviceFactory({
+      context: { tenantId: organizationId }
+    }).scrubClaim(organizationId, id);
+    if (!result) {
+      res.status(404).send(`Claim '${id}' not found`);
+      return;
+    }
     res.status(200).json({
       status: result.status,
       denials: result.denials.map((denial) => ({

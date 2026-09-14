@@ -22,65 +22,74 @@ import { loadIcd10Codes } from '../persistence/etl/icd10.loader';
 async function main() {
   const orm = ci.resolve(tokens.Orm);
   const otel = ci.resolve(tokens.OtelCollector);
-  const loader = new CodeSetLoaderService(orm.em, otel);
 
-  const icd10SourcePath = getEnvVar('ICD10_SOURCE_PATH');
-  const hcpcsSourcePath = getEnvVar('HCPCS_SOURCE_PATH');
+  try {
+    const loader = new CodeSetLoaderService(orm.em, otel);
 
-  if (icd10SourcePath) {
-    const result = await loadIcd10Codes(
-      loader,
-      createReadStream(icd10SourcePath, { encoding: 'utf-8' })
-    );
-    otel.info('[refresh-code-sets] ICD-10-CM refresh complete', result);
-  } else {
-    otel.warn(
-      '[refresh-code-sets] ICD10_SOURCE_PATH not set — skipping ICD-10-CM refresh'
-    );
-  }
+    const icd10SourcePath = getEnvVar('ICD10_SOURCE_PATH');
+    const hcpcsSourcePath = getEnvVar('HCPCS_SOURCE_PATH');
 
-  if (hcpcsSourcePath) {
-    const result = await loadHcpcsCodes(
-      loader,
-      createReadStream(hcpcsSourcePath, { encoding: 'utf-8' })
-    );
-    otel.info('[refresh-code-sets] HCPCS refresh complete', result);
-  } else {
-    otel.warn(
-      '[refresh-code-sets] HCPCS_SOURCE_PATH not set — skipping HCPCS refresh'
-    );
-  }
+    if (icd10SourcePath) {
+      const result = await loadIcd10Codes(
+        loader,
+        createReadStream(icd10SourcePath, { encoding: 'utf-8' })
+      );
+      otel.info('[refresh-code-sets] ICD-10-CM refresh complete', result);
+    } else {
+      otel.warn(
+        '[refresh-code-sets] ICD10_SOURCE_PATH not set — skipping ICD-10-CM refresh'
+      );
+    }
 
-  // Real CPT (§5) — only runs when an organization has actually pointed
-  // this at their own licensed feed. Column positions are configurable
-  // (no sane default, unlike ICD-10/HCPCS) because there's no one standard
-  // file shape for a real CPT feed the way there is for CDC/CMS releases.
-  const cptSourcePath = getEnvVar('CPT_SOURCE_PATH');
-  const cptOrganizationId = getEnvVar('CPT_ORGANIZATION_ID');
+    if (hcpcsSourcePath) {
+      const result = await loadHcpcsCodes(
+        loader,
+        createReadStream(hcpcsSourcePath, { encoding: 'utf-8' })
+      );
+      otel.info('[refresh-code-sets] HCPCS refresh complete', result);
+    } else {
+      otel.warn(
+        '[refresh-code-sets] HCPCS_SOURCE_PATH not set — skipping HCPCS refresh'
+      );
+    }
 
-  if (cptSourcePath && cptOrganizationId) {
-    const result = await loadCptCodes(
-      loader,
-      createReadStream(cptSourcePath, { encoding: 'utf-8' }),
-      {
-        code: Number(getEnvVar('CPT_CODE_COLUMN') ?? '0'),
-        description: Number(getEnvVar('CPT_DESCRIPTION_COLUMN') ?? '1'),
-        hasHeader: getEnvVar('CPT_HAS_HEADER') !== 'false'
-      },
-      cptOrganizationId
-    );
-    otel.info('[refresh-code-sets] CPT refresh complete', {
-      organizationId: cptOrganizationId,
-      ...result
-    });
-  } else if (cptSourcePath || cptOrganizationId) {
-    otel.warn(
-      '[refresh-code-sets] CPT_SOURCE_PATH and CPT_ORGANIZATION_ID must both be set — skipping CPT refresh'
-    );
-  } else {
-    otel.warn(
-      '[refresh-code-sets] CPT_SOURCE_PATH not set — skipping CPT refresh (expected until an organization wires in their own licensed feed, §5)'
-    );
+    // Real CPT (§5) — only runs when an organization has actually pointed
+    // this at their own licensed feed. Column positions are configurable
+    // (no sane default, unlike ICD-10/HCPCS) because there's no one
+    // standard file shape for a real CPT feed the way there is for
+    // CDC/CMS releases.
+    const cptSourcePath = getEnvVar('CPT_SOURCE_PATH');
+    const cptOrganizationId = getEnvVar('CPT_ORGANIZATION_ID');
+
+    if (cptSourcePath && cptOrganizationId) {
+      const result = await loadCptCodes(
+        loader,
+        createReadStream(cptSourcePath, { encoding: 'utf-8' }),
+        {
+          code: Number(getEnvVar('CPT_CODE_COLUMN') ?? '0'),
+          description: Number(getEnvVar('CPT_DESCRIPTION_COLUMN') ?? '1'),
+          hasHeader: getEnvVar('CPT_HAS_HEADER') !== 'false'
+        },
+        cptOrganizationId
+      );
+      otel.info('[refresh-code-sets] CPT refresh complete', {
+        organizationId: cptOrganizationId,
+        ...result
+      });
+    } else if (cptSourcePath || cptOrganizationId) {
+      otel.warn(
+        '[refresh-code-sets] CPT_SOURCE_PATH and CPT_ORGANIZATION_ID must both be set — skipping CPT refresh'
+      );
+    } else {
+      otel.warn(
+        '[refresh-code-sets] CPT_SOURCE_PATH not set — skipping CPT refresh (expected until an organization wires in their own licensed feed, §5)'
+      );
+    }
+  } finally {
+    // Without this, the open Postgres connection pool keeps the process
+    // alive indefinitely on the success path — a k8s CronJob/cloud
+    // scheduler invocation of this script would never actually complete.
+    await orm.close();
   }
 }
 

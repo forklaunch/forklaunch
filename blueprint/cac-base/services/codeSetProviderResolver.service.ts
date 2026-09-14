@@ -41,33 +41,22 @@ export class CodeSetProviderResolver {
       return mockProvider;
     }
 
-    try {
-      const license = await this.em.findOne(CodeSetLicense, {
-        organizationId,
-        codeSetType: CodeSetType.CPT,
-        status: LicenseStatus.ACTIVE
-      });
+    const license = await this.em.findOne(CodeSetLicense, {
+      organizationId,
+      codeSetType: CodeSetType.CPT,
+      status: LicenseStatus.ACTIVE
+    });
 
-      if (!license) {
-        return mockProvider;
-      }
-
-      this.otel.debug('Resolved real-CPT provider for organization', {
-        organizationId
-      });
-      return new CptCodeProvider(
-        new EntityManagerCptCodeSource(this.em, organizationId),
-        this.otel
-      );
-    } catch (error) {
-      // Fail closed (§5): a license-lookup failure must never block the
-      // request — it just means this organization doesn't get real CPT
-      // this time, and falls back to mock like an unlicensed org would.
-      this.otel.warn(
-        'CodeSetLicense lookup failed, falling back to mock provider',
-        { organizationId, error: String(error) }
-      );
+    if (!license) {
       return mockProvider;
     }
+
+    this.otel.debug('Resolved real-CPT provider for organization', {
+      organizationId
+    });
+    return new CptCodeProvider(
+      new EntityManagerCptCodeSource(this.em, organizationId),
+      this.otel
+    );
   }
 }

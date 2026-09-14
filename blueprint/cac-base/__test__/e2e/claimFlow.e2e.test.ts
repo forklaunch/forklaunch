@@ -351,6 +351,87 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
     });
   });
 
+  describe('claim lifecycle', () => {
+    it('re-scrubbing a claim replaces stale OPEN denials instead of duplicating them', async () => {
+      const em = forkPostgresEm(setup);
+      const encounterId = await seedEncounter(em, {
+        mrn: 'E2E-RESCRUB-001',
+        icd10Code: 'Z00.00', // does not justify PROC-001 — denied both times
+        procedureCode: 'PROC-001'
+      });
+
+      const built = await call(baseUrl, '/claim/build', {
+        method: 'POST',
+        body: { encounterId },
+        token: jwt
+      });
+      const claimId = (built.body as { id: string }).id;
+
+      const firstScrub = await call(baseUrl, `/claim/${claimId}/scrub`, {
+        method: 'POST',
+        token: jwt
+      });
+      expect(
+        (firstScrub.body as { denials: unknown[] }).denials
+      ).toHaveLength(1);
+
+      const secondScrub = await call(baseUrl, `/claim/${claimId}/scrub`, {
+        method: 'POST',
+        token: jwt
+      });
+      expect(
+        (secondScrub.body as { denials: unknown[] }).denials
+      ).toHaveLength(1);
+
+      const worklist = await call(baseUrl, '/denial', { token: jwt });
+      const forThisClaim = (
+        worklist.body as Array<{ claimId: string }>
+      ).filter((denial) => denial.claimId === claimId);
+      expect(forThisClaim).toHaveLength(1);
+    });
+
+    it('rejects a second claim built from the same encounter', async () => {
+      const em = forkPostgresEm(setup);
+      const encounterId = await seedEncounter(em, {
+        mrn: 'E2E-DUPCLAIM-001',
+        icd10Code: 'J06.9',
+        procedureCode: 'PROC-001'
+      });
+
+      const first = await call(baseUrl, '/claim/build', {
+        method: 'POST',
+        body: { encounterId },
+        token: jwt
+      });
+      expect(first.status).toBe(200);
+
+      const second = await call(baseUrl, '/claim/build', {
+        method: 'POST',
+        body: { encounterId },
+        token: jwt
+      });
+      expect(second.status).toBe(409);
+    });
+
+    it('returns 404 building a claim from a nonexistent encounter', async () => {
+      const result = await call(baseUrl, '/claim/build', {
+        method: 'POST',
+        body: { encounterId: '00000000-0000-0000-0000-000000000000' },
+        token: jwt
+      });
+      expect(result.status).toBe(404);
+    });
+
+    it('returns 404 scrubbing a nonexistent claim', async () => {
+      const result = await call(
+        baseUrl,
+        '/claim/00000000-0000-0000-0000-000000000000/scrub',
+        { method: 'POST', token: jwt }
+      );
+      expect(result.status).toBe(404);
+    });
+  });
+
   describe('denial worklist', () => {
     it('lists a flagged claim and resolves it', async () => {
       const em = forkPostgresEm(setup);
@@ -432,6 +513,45 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
         denialRate: 50,
         denialsByCategory: { lcd_ncd: 1 }
       });
+    });
+
+    it('rejects a date range where since is after until', async () => {
+      const result = await call(
+        baseUrl,
+        '/analytics/claims/summary?since=2026-09-12&until=2026-09-01',
+        { token: jwt }
+      );
+      expect(result.status).toBe(400);
+    });
+
+    it('treats a date-only "until" as inclusive of that whole day', async () => {
+      const em = forkPostgresEm(setup);
+      const encounterId = await seedEncounter(em, {
+        mrn: 'E2E-ANALYTICS-DATEONLY',
+        icd10Code: 'J06.9',
+        procedureCode: 'PROC-001'
+      });
+      const built = await call(baseUrl, '/claim/build', {
+        method: 'POST',
+        body: { encounterId },
+        token: jwt
+      });
+      const claimId = (built.body as { id: string }).id;
+      await call(baseUrl, `/claim/${claimId}/scrub`, {
+        method: 'POST',
+        token: jwt
+      });
+
+      const today = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+      const summary = await call(
+        baseUrl,
+        `/analytics/claims/summary?until=${today}`,
+        { token: jwt }
+      );
+
+      expect(
+        (summary.body as { totalScrubbedClaims: number }).totalScrubbedClaims
+      ).toBeGreaterThanOrEqual(1);
     });
   });
 

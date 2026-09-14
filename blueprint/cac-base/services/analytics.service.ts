@@ -2,7 +2,7 @@ import {
   MetricsDefinition,
   OpenTelemetryCollector
 } from '@forklaunch/core/http';
-import { EntityManager } from '@mikro-orm/postgresql';
+import { EntityManager, raw } from '@mikro-orm/postgresql';
 import { ClaimStatus } from '../domain/enum/claimStatus.enum';
 import { Claim } from '../persistence/entities/claim.entity';
 import { Denial } from '../persistence/entities/denial.entity';
@@ -38,7 +38,7 @@ export class AnalyticsService {
   ): Promise<ClaimAnalyticsSummary> {
     const createdAtFilter = buildDateFilter(range);
 
-    const [readyCount, deniedCount, denials] = await Promise.all([
+    const [readyCount, deniedCount, categoryCounts] = await Promise.all([
       this.em.count(Claim, {
         organizationId,
         status: ClaimStatus.READY,
@@ -49,15 +49,23 @@ export class AnalyticsService {
         status: ClaimStatus.DENIED,
         ...(createdAtFilter ? { createdAt: createdAtFilter } : {})
       }),
+      // Grouped/counted in the DB, not hydrated row-by-row — an
+      // organization's full denial history can run far larger than any one
+      // summary request needs to pull into memory just to tally categories.
       // Filtered by the parent claim's createdAt, not the denial's own —
       // a claim can be built on one day and scrubbed (denial created) on
       // another, and this must stay in the same date window as
       // readyCount/deniedCount above or denialsByCategory silently drifts
       // out of sync with deniedCount.
-      this.em.find(Denial, {
-        organizationId,
-        ...(createdAtFilter ? { claim: { createdAt: createdAtFilter } } : {})
-      })
+      this.em
+        .createQueryBuilder(Denial, 'd')
+        .select(['d.category', raw('count(*) as count')])
+        .where({
+          organizationId,
+          ...(createdAtFilter ? { claim: { createdAt: createdAtFilter } } : {})
+        })
+        .groupBy('d.category')
+        .execute<{ category: string; count: string }[]>('all', false)
     ]);
 
     const totalScrubbedClaims = readyCount + deniedCount;
@@ -66,10 +74,10 @@ export class AnalyticsService {
     const denialRate =
       totalScrubbedClaims === 0 ? 0 : (deniedCount / totalScrubbedClaims) * 100;
 
+    // Postgres COUNT(*) comes back as a string (bigint) from the driver.
     const denialsByCategory: Record<string, number> = {};
-    for (const denial of denials) {
-      denialsByCategory[denial.category] =
-        (denialsByCategory[denial.category] ?? 0) + 1;
+    for (const row of categoryCounts) {
+      denialsByCategory[row.category] = Number(row.count);
     }
 
     const summary: ClaimAnalyticsSummary = {

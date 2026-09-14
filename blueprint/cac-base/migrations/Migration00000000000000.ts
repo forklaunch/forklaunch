@@ -38,6 +38,14 @@ export class Migration00000000000000 extends Migration {
     this.addSql(
       `create table "claim" ("id" uuid not null, "created_at" timestamptz not null, "updated_at" timestamptz not null, "retention_anonymized_at" timestamptz null, "organization_id" uuid not null, "patient_id" uuid not null, "encounter_id" uuid not null, "payer_id" uuid null, "status" text not null default 'draft', "code_set_type" text not null default 'mock', constraint "claim_pkey" primary key ("id"));`
     );
+    // One claim per encounter — without this, a double-submit to
+    // /claim/build races two claims from the same encounter into
+    // existence, both get scrubbed, and both count in analytics.
+    // claim.controller.ts relies on this constraint to turn that race into
+    // a 409 rather than silent duplication.
+    this.addSql(
+      `alter table "claim" add constraint "claim_encounter_id_unique" unique ("encounter_id");`
+    );
 
     this.addSql(
       `create table "remittance" ("id" uuid not null, "created_at" timestamptz not null, "updated_at" timestamptz not null, "retention_anonymized_at" timestamptz null, "organization_id" uuid not null, "claim_id" uuid not null, "paid_amount" double precision not null, "carc_codes" text[] null, "rarc_codes" text[] null, "received_at" timestamptz not null, constraint "remittance_pkey" primary key ("id"));`

@@ -61,12 +61,26 @@ export const getClaimAnalyticsSummary = handlers.get(
     });
 
     const sinceDate = since ? new Date(since) : undefined;
-    const untilDate = until ? new Date(until) : undefined;
+    let untilDate = until ? new Date(until) : undefined;
     if (
       (sinceDate && Number.isNaN(sinceDate.getTime())) ||
       (untilDate && Number.isNaN(untilDate.getTime()))
     ) {
       res.status(400).send('since/until must be valid ISO date strings');
+      return;
+    }
+
+    // A date-only `until` (e.g. "2026-09-12") parses to that day's midnight
+    // UTC, and since the filter is createdAt <= until, that excludes the
+    // entire day the caller almost certainly meant to include. Bump it to
+    // the last instant of that day; a full timestamp with its own time
+    // component is left exactly as given.
+    if (untilDate && until && /^\d{4}-\d{2}-\d{2}$/.test(until)) {
+      untilDate = new Date(untilDate.getTime() + 24 * 60 * 60 * 1000 - 1);
+    }
+
+    if (sinceDate && untilDate && sinceDate.getTime() > untilDate.getTime()) {
+      res.status(400).send('since must not be after until');
       return;
     }
 
