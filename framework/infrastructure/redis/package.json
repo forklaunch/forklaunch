@@ -50,8 +50,8 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
-    "globals": "^17.11.0",
-    "jest": "^30.5.0",
+    "globals": "^17.12.0",
+    "jest": "^30.5.1",
     "prettier": "^3.9.6",
     "testcontainers": "^12.1.0",
     "ts-jest": "^29.4.12",
@@ -59,6 +59,6 @@
     "tsup": "^8.5.1",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2",
-    "typescript-eslint": "^8.68.0"
+    "typescript-eslint": "^8.70.0"
   }
 }
