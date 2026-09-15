@@ -499,6 +499,7 @@ mod tests {
             resources: None,
             routers: None,
             metadata: None,
+            serves: None,
         }
     }
 

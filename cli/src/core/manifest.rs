@@ -134,6 +134,31 @@ pub(crate) struct ProjectMetadata {
     pub(crate) privileged: Option<bool>,
 }
 
+/// A port a project serves beyond its main HTTP port, declared as
+/// `[[projects.serves]]` in `manifest.toml`.
+///
+/// Names the ENV VAR rather than the number because the value is
+/// environment-specific (a service can bind 8002 in compose and 8000 in
+/// production); the platform resolves `port_env` against the target
+/// environment at deploy time. HTTP (`PORT`) and MCP are framework conventions
+/// and are never declared here — only ports the project actually constructs a
+/// server for, such as a websocket server on `WS_PORT`.
+#[derive(Debug, Serialize, Deserialize, Content, Clone)]
+pub(crate) struct ServingPort {
+    /// "ws" | "http" | "mcp"
+    pub(crate) protocol: String,
+    #[serde(rename = "port_env", alias = "portEnv")]
+    pub(crate) port_env: String,
+    /// Must answer 2xx to a plain GET; the platform defaults it to `/health`.
+    #[serde(
+        rename = "health_path",
+        alias = "healthPath",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub(crate) health_path: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Content, Clone)]
 pub(crate) struct ProjectEntry {
     pub(crate) r#type: ProjectType,
@@ -143,6 +168,10 @@ pub(crate) struct ProjectEntry {
     pub(crate) resources: Option<ResourceInventory>,
     pub(crate) routers: Option<Vec<String>>,
     pub(crate) metadata: Option<ProjectMetadata>,
+    /// Extra serving ports, forwarded verbatim into the release manifest.
+    /// Absent means nothing beyond HTTP (and MCP) is fronted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) serves: Option<Vec<ServingPort>>,
 }
 
 /// Compliance configuration stored in the `[compliance]` section of `manifest.toml`.
@@ -418,6 +447,7 @@ pub(crate) fn add_project_definition_to_manifest<
         resources,
         routers,
         metadata,
+        serves: None,
     });
 
     let app_name = manifest_data.app_name().to_owned();
