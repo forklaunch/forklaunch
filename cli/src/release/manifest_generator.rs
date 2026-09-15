@@ -264,6 +264,40 @@ pub(crate) struct ServiceConfig {
     pub is_worker_service: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub privileged: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub serves: Option<Vec<ServingPortDefinition>>,
+}
+
+/// Release-manifest shape of a `[[projects.serves]]` entry. The platform
+/// creates a listener, target group and security-group ingress for each one,
+/// resolving `portEnv` against the deployed environment's variables.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct ServingPortDefinition {
+    pub protocol: String,
+    #[serde(rename = "portEnv")]
+    pub port_env: String,
+    #[serde(rename = "healthPath", skip_serializing_if = "Option::is_none")]
+    pub health_path: Option<String>,
+}
+
+impl From<&crate::core::manifest::ServingPort> for ServingPortDefinition {
+    fn from(port: &crate::core::manifest::ServingPort) -> Self {
+        Self {
+            protocol: port.protocol.clone(),
+            port_env: port.port_env.clone(),
+            health_path: port.health_path.clone(),
+        }
+    }
+}
+
+fn serving_ports(
+    project: &crate::core::manifest::ProjectEntry,
+) -> Option<Vec<ServingPortDefinition>> {
+    project
+        .serves
+        .as_ref()
+        .filter(|ports| !ports.is_empty())
+        .map(|ports| ports.iter().map(ServingPortDefinition::from).collect())
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -299,6 +333,8 @@ pub(crate) struct WorkerConfig {
     pub health_check: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub privileged: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub serves: Option<Vec<ServingPortDefinition>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -513,6 +549,7 @@ pub(crate) fn generate_release_manifest(
                     health_check: None,
                     is_worker_service: None,
                     privileged: project.metadata.as_ref().and_then(|m| m.privileged),
+                    serves: serving_ports(project),
                 }),
                 build_context: if app_root
                     .join(&manifest.modules_path)
@@ -652,6 +689,7 @@ pub(crate) fn generate_release_manifest(
                     health_check: None,
                     is_worker_service: Some(true),
                     privileged: project.metadata.as_ref().and_then(|m| m.privileged),
+                    serves: serving_ports(project),
                 }),
                 build_context: if app_root
                     .join(&manifest.modules_path)
@@ -706,6 +744,7 @@ pub(crate) fn generate_release_manifest(
                     .and_then(|m| m.hosting_type.clone()),
                 health_check: None,
                 privileged: project.metadata.as_ref().and_then(|m| m.privileged),
+                serves: serving_ports(project),
             };
 
             services.push(ServiceDefinition {
@@ -1168,6 +1207,7 @@ mod tests {
             health_check: None,
             is_worker_service: None,
             privileged: None,
+            serves: None,
         };
         let json = serde_json::to_value(&config).unwrap();
         assert_eq!(json["hostingType"], "ecs-ec2");
@@ -1187,6 +1227,7 @@ mod tests {
             health_check: None,
             is_worker_service: None,
             privileged: None,
+            serves: None,
         };
         let json = serde_json::to_value(&config).unwrap();
         assert!(
@@ -1212,6 +1253,7 @@ mod tests {
             hosting_type: Some("ecs-ec2".to_string()),
             health_check: None,
             privileged: None,
+            serves: None,
         };
         let json = serde_json::to_value(&config).unwrap();
         assert_eq!(json["hostingType"], "ecs-ec2");
@@ -1234,6 +1276,7 @@ mod tests {
             hosting_type: Some("ecs-ec2".to_string()),
             health_check: None,
             privileged: Some(true),
+            serves: None,
         };
         let json = serde_json::to_value(&config).unwrap();
         assert_eq!(json["privileged"], true);
@@ -1256,6 +1299,7 @@ mod tests {
             hosting_type: None,
             health_check: None,
             privileged: None,
+            serves: None,
         };
         let json = serde_json::to_value(&config).unwrap();
         assert!(
@@ -1281,11 +1325,53 @@ mod tests {
             hosting_type: None,
             health_check: None,
             privileged: None,
+            serves: None,
         };
         let json = serde_json::to_value(&config).unwrap();
         assert!(
             json.get("hostingType").is_none(),
             "hostingType should be omitted when None"
         );
+    }
+
+    #[test]
+    fn test_serving_ports_reach_the_release_manifest_in_camel_case() {
+        // `[[projects.serves]]` in manifest.toml is the ONLY way the platform
+        // learns that a service binds a websocket port. It used to be dropped on
+        // the floor here, so nothing ever fronted WS_PORT.
+        let project: crate::core::manifest::ProjectEntry = toml::from_str(
+            r#"
+type = "Service"
+name = "platform-management"
+description = "control plane"
+
+[[serves]]
+protocol = "ws"
+port_env = "WS_PORT"
+health_path = "/health"
+"#,
+        )
+        .unwrap();
+
+        let serves = serving_ports(&project).expect("declared ports are forwarded");
+        let json = serde_json::to_value(&serves).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!([{
+                "protocol": "ws",
+                "portEnv": "WS_PORT",
+                "healthPath": "/health"
+            }])
+        );
+
+        // The manifest keeps the declaration when the CLI rewrites it, and a
+        // project that declares nothing serializes without the key at all.
+        let rewritten = toml::to_string(&project).unwrap();
+        assert!(rewritten.contains("port_env = \"WS_PORT\""), "{rewritten}");
+        let bare: crate::core::manifest::ProjectEntry =
+            toml::from_str("type = \"Service\"\nname = \"iam\"\ndescription = \"\"\n")
+                .unwrap();
+        assert!(serving_ports(&bare).is_none());
+        assert!(!toml::to_string(&bare).unwrap().contains("serves"));
     }
 }
