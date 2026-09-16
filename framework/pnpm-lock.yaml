@@ -118,11 +118,11 @@ importers:
         specifier: workspace:^
         version: link:../validator
       '@mikro-orm/core':
-        specifier: 7.1.15
-        version: 7.1.15
+        specifier: 7.2.0
+        version: 7.2.0
       '@mikro-orm/mongodb':
-        specifier: 7.1.15
-        version: 7.1.15(@mikro-orm/core@7.1.15)
+        specifier: 7.2.0
+        version: 7.2.0(@mikro-orm/core@7.2.0)
       '@opentelemetry/api':
         specifier: ^1.9.1
         version: 1.9.1
@@ -616,8 +616,8 @@ importers:
         specifier: workspace:^
         version: link:../validator
       '@mikro-orm/core':
-        specifier: 7.1.15
-        version: 7.1.15
+        specifier: 7.2.0
+        version: 7.2.0
     devDependencies:
       '@eslint/js':
         specifier: ^10.0.1
@@ -653,8 +653,8 @@ importers:
   testing:
     dependencies:
       '@mikro-orm/core':
-        specifier: 7.1.15
-        version: 7.1.15
+        specifier: 7.2.0
+        version: 7.2.0
       ioredis:
         specifier: ^6.0.0
         version: 6.0.0
@@ -1769,8 +1769,8 @@ packages:
     resolution: {integrity: sha512-6QEf6yqFbETdwGITKq57aYoPfX/3K8XFNwsAlx0C1M7o8cb79sv1M3w+tWuWvIcSbNqrLF7OD7YpZMVVz335hQ==}
     engines: {node: '>=20.0.0'}
 
-  '@mikro-orm/core@7.1.15':
-    resolution: {integrity: sha512-2u7UuZ3IXRsqEnOVNxh1Lf8R3rzTj1Uqem/Xdo/iEpeRls3QUOAIar3Qm0LjpaSyaRIVOrohXFg2Wk+acJEbeA==}
+  '@mikro-orm/core@7.2.0':
+    resolution: {integrity: sha512-a4RoZXfzVJqiaOwsw2k7EH1Vv+BOdOokB+F4TofUz0mLz4XPewwaKUQIUeqRNmf0fKpOFJxlgTxsZYXhZoFxCQ==}
     engines: {node: '>= 22.17.0'}
     peerDependencies:
       dataloader: 2.2.3
@@ -1778,11 +1778,11 @@ packages:
       dataloader:
         optional: true
 
-  '@mikro-orm/mongodb@7.1.15':
-    resolution: {integrity: sha512-thdNkrQr0KrJt327/6Q8JwmYiUTu7LaH2AIq/YheKDuQiX0vuAtXhxLcMa2b9SMwFUJgM5SaM4iSZ3Z4RHbi7A==}
+  '@mikro-orm/mongodb@7.2.0':
+    resolution: {integrity: sha512-+YL0RDDdKvgsJMs/06RAxUkq22i8pDFffwOQT05SEEQVcRsUlExU5eegd0LyAQy10g+xK0YFap/bFSfv3M70CA==}
     engines: {node: '>= 22.17.0'}
     peerDependencies:
-      '@mikro-orm/core': 7.1.15
+      '@mikro-orm/core': 7.2.0
 
   '@modelcontextprotocol/client@2.0.0':
     resolution: {integrity: sha512-8f1OghQ2rjzIOfqgUCP+8GiUWqRs89njoWLNqAe8kWmDePv3s1fZXseej+QXemssEuuOvLLmLO/kqM3IQHtISw==}
@@ -6192,7 +6192,7 @@ packages:
     hasBin: true
 
   uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3:
-    resolution: {gitHosted: true, tarball: https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3}
+    resolution: {gitHosted: true, integrity: sha512-1eSUhK/WLig+fbq6dB18hsmkoaC+6YGVkAp2r0tQ6PGBxsOPpLUmMsKN/7ANoYtWiou+lU46+Bnf8JBYES9EsA==, tarball: https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3}
     version: 20.52.0
 
   uc.micro@2.1.0:
@@ -7609,11 +7609,11 @@ snapshots:
       tinyglobby: 0.2.17
       yaml: 2.9.1
 
-  '@mikro-orm/core@7.1.15': {}
+  '@mikro-orm/core@7.2.0': {}
 
-  '@mikro-orm/mongodb@7.1.15(@mikro-orm/core@7.1.15)':
+  '@mikro-orm/mongodb@7.2.0(@mikro-orm/core@7.2.0)':
     dependencies:
-      '@mikro-orm/core': 7.1.15
+      '@mikro-orm/core': 7.2.0
       mongodb: 7.6.0
     transitivePeerDependencies:
       - '@aws-sdk/credential-providers'
