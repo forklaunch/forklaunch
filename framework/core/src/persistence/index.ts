@@ -62,8 +62,31 @@ export {
   FieldEncryptor,
   MissingEncryptionKeyError,
   DecryptionError,
-  EncryptionRequiredError
+  EncryptionRequiredError,
+  parseEncryptionKeyList,
+  encryptionKeyId,
+  ENCRYPTION_KEY_ENV,
+  LEGACY_ENCRYPTION_KEYS_ENV,
+  LEGACY_ENCRYPTION_KEY_ENV,
+  type FieldEncryptorOptions,
+  type OpenedCiphertext
 } from './fieldEncryptor';
+
+// Key rotation sweep (rewrite values still under a previous key)
+export {
+  reencryptEncryptedColumns,
+  classifyEncryptedValue,
+  collectFallbackTenantIds,
+  defaultTenantIdsFor,
+  entityMetadataList,
+  rotationTotals,
+  isEncryptedValue,
+  type ReencryptOptions,
+  type RotationOutcome,
+  type RotationTableReport,
+  type SqlExecute,
+  type EntityMetadataLike
+} from './keyRotation';
 
 // Tenant isolation filter
 export {
