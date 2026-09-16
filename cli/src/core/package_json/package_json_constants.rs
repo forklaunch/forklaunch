@@ -232,7 +232,7 @@ pub(crate) const BUNRUN_VERSION: &str = "~0.0.2";
 // @forklaunch/common
 pub(crate) const COMMON_VERSION: &str = "~1.2.26";
 // @forklaunch/core
-pub(crate) const CORE_VERSION: &str = "~1.5.19";
+pub(crate) const CORE_VERSION: &str = "~1.6.0";
 // @forklaunch/express
 pub(crate) const EXPRESS_VERSION: &str = "~1.2.43";
 // @forklaunch/hyper-express
@@ -269,9 +269,9 @@ pub(crate) const WORKER_DATABASE_VERSION: &str = "~1.0.35";
 // @forklaunch/implementation-worker-kafka
 pub(crate) const WORKER_KAFKA_VERSION: &str = "~1.0.33";
 // @forklaunch/infrastructure-redis
-pub(crate) const INFRASTRUCTURE_REDIS_VERSION: &str = "~1.4.13";
+pub(crate) const INFRASTRUCTURE_REDIS_VERSION: &str = "~1.4.14";
 // @forklaunch/infrastructure-s3
-pub(crate) const INFRASTRUCTURE_S3_VERSION: &str = "~1.4.13";
+pub(crate) const INFRASTRUCTURE_S3_VERSION: &str = "~1.4.14";
 // @forklaunch/interfaces-billing
 pub(crate) const BILLING_INTERFACES_VERSION: &str = "~1.0.34";
 // @forklaunch/interfaces-ecommerce
