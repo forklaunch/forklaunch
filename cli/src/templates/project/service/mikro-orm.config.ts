@@ -1,8 +1,8 @@
 import { createConfigInjector, getEnvVar, Lifetime } from '@forklaunch/core/services';
-import { FieldEncryptor, registerEncryptor } from '@forklaunch/core/persistence';
+import { FieldEncryptor, parseEncryptionKeyList, registerEncryptor } from '@forklaunch/core/persistence';
 
 import { Migrator } from '@mikro-orm/migrations{{#is_mongo}}-mongodb{{/is_mongo}}';
-import { number, SchemaValidator, string } from '@{{app_name}}/core';
+import { number, optional, SchemaValidator, string } from '@{{app_name}}/core';
 {{^is_mongo}}import { Platform, TextType, Type } from '@mikro-orm/core';{{/is_mongo}}
 import { defineConfig } from '@mikro-orm/{{database}}';
 import dotenv from 'dotenv';
@@ -49,6 +49,11 @@ const configInjector = createConfigInjector(
       lifetime: Lifetime.Singleton,
       type: string,
       value: getEnvVar('ENCRYPTION_KEY')
+    },
+    LEGACY_ENCRYPTION_KEYS: {
+      lifetime: Lifetime.Singleton,
+      type: optional(string),
+      value: getEnvVar('LEGACY_ENCRYPTION_KEYS')
     }
   }
 );
@@ -60,7 +65,13 @@ export const validConfigInjector = configInjector.validateConfigSingletons(
 const tokens = validConfigInjector.tokens();
 
 //! Register the field encryptor
-registerEncryptor(new FieldEncryptor(validConfigInjector.resolve(tokens.ENCRYPTION_KEY)));
+registerEncryptor(
+  new FieldEncryptor(validConfigInjector.resolve(tokens.ENCRYPTION_KEY), {
+    previousKeys: parseEncryptionKeyList(
+      validConfigInjector.resolve(tokens.LEGACY_ENCRYPTION_KEYS)
+    )
+  })
+);
 
 //! Define the mikro-orm options config
 const mikroOrmOptionsConfig = defineConfig({ {{#is_mongo}}
