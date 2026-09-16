@@ -116,7 +116,8 @@ describe('tenant candidates and totals', () => {
       rewritten: 1,
       unreadable: 0,
       unreadableIds: [],
-      byKeyId: {}
+      byKeyId: {},
+      missingKeyIds: {}
     });
     expect(rotationTotals([report(3), report(5)])).toEqual({
       tables: 2,
@@ -126,5 +127,31 @@ describe('tenant candidates and totals', () => {
       plaintext: 0,
       unreadable: 0
     });
+  });
+});
+
+describe('format upgrade to v3', () => {
+  const v3 = new FieldEncryptor(CURRENT, {
+    previousKeys: [PREVIOUS],
+    format: 'v3'
+  });
+
+  it('rewrites unstamped current-key values when the encryptor writes v3', () => {
+    const outcome = classifyEncryptedValue(current.encrypt('a', org), v3, [
+      org
+    ]);
+    expect(outcome.kind).toBe('rewritten');
+    if (outcome.kind !== 'rewritten') return;
+    expect(outcome.keyId).toBe(encryptionKeyId(CURRENT));
+    expect(outcome.next).toBe(v3.encrypt('a', org));
+    expect(classifyEncryptedValue(outcome.next, v3, [org]).kind).toBe(
+      'current'
+    );
+  });
+
+  it('leaves stamped current-key values alone under a v2 writer', () => {
+    expect(classifyEncryptedValue(v3.encrypt('a', org), ring, [org]).kind).toBe(
+      'current'
+    );
   });
 });

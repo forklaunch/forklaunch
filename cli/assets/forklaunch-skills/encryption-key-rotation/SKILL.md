@@ -132,6 +132,34 @@ it constructs a `FieldEncryptor` (cache, object store, `registerEncryptor`).
    forklaunch config unset -r <region> -e <env> -s <service> LEGACY_ENCRYPTION_KEYS
    ```
 
+## Stamped Values (`v3`)
+
+`v1`/`v2` values name no key, so a read has to try every key in the ring and
+a decrypt failure cannot say which key is missing. The `v3` envelope,
+`v3:{keyId}:{iv}:{tag}:{data}`, stamps each value with the fingerprint of the
+key that wrote it. Reads resolve the key directly, a missing key fails by
+name ("stamped with key c3d4…, which is not in the ring"), and the rows
+still under a key can be counted without decrypting anything
+(`countValuesByKeyId`, or `WHERE value LIKE 'v3:c3d4…:%'`).
+
+Writing `v3` is opt-in: `ENCRYPTION_FORMAT=v3` (or `format: 'v3'`).
+Reads accept every envelope regardless of the setting.
+
+**Sequencing rule.** Deterministic encryption means an equality lookup
+compares ciphertext bytes, and a `v3` write never byte-matches a `v2` row
+of the same plaintext. So an app moves to `v3` in this order and no other:
+
+1. Deploy a release whose encryptor can read `v3` (this one), still writing `v2`.
+2. Run the rotation sweep with `ENCRYPTION_FORMAT=v3` set for the migration
+   only, or with `encryptor: FieldEncryptor.fromEnv().withFormat('v3')`.
+   Every row is rewritten as `v3` under the current key; the report counts
+   them as rewritten.
+3. Set `ENCRYPTION_FORMAT=v3` for the service and deploy. From here on every
+   write is stamped, and dropping a key is a count check: zero rows stamped
+   with it.
+
+Skipping step 2 makes lookups on encrypted columns miss until the sweep runs.
+
 ## Reading the Report
 
 The sweep logs one line per table:

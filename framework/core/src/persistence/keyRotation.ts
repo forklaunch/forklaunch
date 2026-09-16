@@ -1,6 +1,10 @@
 import type { EntityManager } from '@mikro-orm/core';
 import { getEntityComplianceFields } from './complianceTypes';
-import type { FieldEncryptor } from './fieldEncryptor';
+import {
+  isEncryptedCiphertext,
+  stampedKeyId,
+  type FieldEncryptor
+} from './fieldEncryptor';
 
 /**
  * Rotation sweep: rewrite every compliance-encrypted column that is still
@@ -15,9 +19,10 @@ import type { FieldEncryptor } from './fieldEncryptor';
  *
  * Per value:
  *   plaintext  - not a `v1:`/`v2:` ciphertext; left alone
- *   current    - opens with the current key; left alone
- *   rewritten  - opens only with a previous key; re-encrypted under the
- *                current key with the SAME tenant id it was written with
+ *   current    - opens with the current key in the current format; left alone
+ *   rewritten  - opens only with a previous key, or is unstamped while the
+ *                encryptor writes v3; re-encrypted under the current key in
+ *                the current format with the SAME tenant id it was written with
  *   unreadable - opens with no key under any candidate tenant; left alone
  *                and reported by row id
  *
@@ -36,9 +41,7 @@ import type { FieldEncryptor } from './fieldEncryptor';
 
 const ENCRYPTED_LEVELS = new Set(['pii', 'phi', 'pci']);
 
-export const isEncryptedValue = (value: unknown): value is string =>
-  typeof value === 'string' &&
-  (value.startsWith('v1:') || value.startsWith('v2:'));
+export const isEncryptedValue = isEncryptedCiphertext;
 
 export type RotationOutcome =
   | { kind: 'plaintext' }
@@ -78,7 +81,7 @@ export function classifyEncryptedValue(
   for (const tenantId of candidates) {
     const opened = tryOpen(encryptor, value, tenantId);
     if (!opened) continue;
-    if (opened.current) {
+    if (!opened.stale) {
       return { kind: 'current', tenantId, keyId: opened.keyId };
     }
     const next = encryptor.encrypt(opened.plaintext, tenantId);
@@ -101,6 +104,8 @@ export interface RotationTableReport {
   unreadableIds: string[];
   /** How many values each previous key still held before this pass. */
   byKeyId: Record<string, number>;
+  /** Stamped key ids seen on unreadable values: keys that must be added to the ring. */
+  missingKeyIds: Record<string, number>;
 }
 
 export type SqlExecute = (sql: string, params?: unknown[]) => Promise<unknown>;
@@ -261,7 +266,8 @@ export async function reencryptEncryptedColumns(
       rewritten: 0,
       unreadable: 0,
       unreadableIds: [],
-      byKeyId: {}
+      byKeyId: {},
+      missingKeyIds: {}
     };
 
     // An entity can be registered before its table exists (some auth
@@ -309,6 +315,10 @@ export async function reencryptEncryptedColumns(
         } else {
           report.unreadable += 1;
           rowUnreadable = true;
+          const missing = stampedKeyId(String(row[column]));
+          if (missing)
+            report.missingKeyIds[missing] =
+              (report.missingKeyIds[missing] ?? 0) + 1;
         }
       }
       if (rowUnreadable) report.unreadableIds.push(String(row[pkColumn]));
@@ -326,15 +336,46 @@ export async function reencryptEncryptedColumns(
     const byKey = Object.entries(report.byKeyId)
       .map(([k, n]) => `${k}: ${n}`)
       .join(', ');
+    const missing = Object.entries(report.missingKeyIds)
+      .map(([k, n]) => `${k}: ${n}`)
+      .join(', ');
     log(
       `[key-rotation] ${meta.tableName}: scanned ${report.scanned} rows, ` +
         `${report.rewritten} values ${dryRun ? 'would be ' : ''}rewritten${byKey ? ` (from ${byKey})` : ''}, ` +
         `${report.current} already current, ${report.plaintext} plaintext, ` +
-        `${report.unreadable} unreadable${report.unreadableIds.length ? ` (rows ${report.unreadableIds.slice(0, 10).join(', ')}${report.unreadableIds.length > 10 ? ', ...' : ''})` : ''}`
+        `${report.unreadable} unreadable${missing ? ` (stamped with keys not in the ring: ${missing})` : ''}${report.unreadableIds.length ? ` (rows ${report.unreadableIds.slice(0, 10).join(', ')}${report.unreadableIds.length > 10 ? ', ...' : ''})` : ''}`
     );
     reports.push(report);
   }
   return reports;
+}
+
+/**
+ * How many values in a column are stamped with each key (`v3`), and how
+ * many are unstamped (`v1`/`v2`). Cheap, read-only, no decryption: the
+ * answer to "can this key be dropped yet?" once a table is on `v3`.
+ */
+export async function countValuesByKeyId(
+  execute: SqlExecute,
+  table: string,
+  column: string
+): Promise<{
+  byKeyId: Record<string, number>;
+  unstamped: number;
+  plaintext: number;
+}> {
+  const rows = (await execute(
+    `select case when ${quote(column)} like 'v3:%' then split_part(${quote(column)}, ':', 2) when ${quote(column)} like 'v1:%' or ${quote(column)} like 'v2:%' then '' else null end as key_id, count(*)::int as n from ${quote(table)} group by 1`
+  )) as { key_id: string | null; n: number }[];
+  const byKeyId: Record<string, number> = {};
+  let unstamped = 0;
+  let plaintext = 0;
+  for (const { key_id, n } of rows) {
+    if (key_id === null) plaintext += Number(n);
+    else if (key_id === '') unstamped += Number(n);
+    else byKeyId[key_id] = (byKeyId[key_id] ?? 0) + Number(n);
+  }
+  return { byKeyId, unstamped, plaintext };
 }
 
 /** Sum a report field across tables. */

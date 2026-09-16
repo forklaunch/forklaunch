@@ -65,11 +65,17 @@ export {
   EncryptionRequiredError,
   parseEncryptionKeyList,
   encryptionKeyId,
+  stampedKeyId,
+  stampedPrefix,
+  isEncryptedCiphertext,
+  ENCRYPTED_PREFIXES,
+  ENCRYPTION_FORMAT_ENV,
   ENCRYPTION_KEY_ENV,
   LEGACY_ENCRYPTION_KEYS_ENV,
   LEGACY_ENCRYPTION_KEY_ENV,
   type FieldEncryptorOptions,
-  type OpenedCiphertext
+  type OpenedCiphertext,
+  type CiphertextFormat
 } from './fieldEncryptor';
 
 // Key rotation sweep (rewrite values still under a previous key)
@@ -80,6 +86,7 @@ export {
   defaultTenantIdsFor,
   entityMetadataList,
   rotationTotals,
+  countValuesByKeyId,
   isEncryptedValue,
   type ReencryptOptions,
   type RotationOutcome,

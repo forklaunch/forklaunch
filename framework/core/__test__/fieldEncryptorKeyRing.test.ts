@@ -4,7 +4,10 @@ import {
   FieldEncryptor,
   MissingEncryptionKeyError,
   encryptionKeyId,
-  parseEncryptionKeyList
+  isEncryptedCiphertext,
+  parseEncryptionKeyList,
+  stampedKeyId,
+  stampedPrefix
 } from '../src/persistence/fieldEncryptor';
 
 const CURRENT = 'current-master-key-2026-09';
@@ -46,7 +49,9 @@ describe('FieldEncryptor key ring', () => {
     expect(opened).toEqual({
       plaintext: 'b',
       keyId: encryptionKeyId(PREVIOUS),
-      current: false
+      current: false,
+      version: 'v2',
+      stale: true
     });
     expect(ring.open(current.encrypt('a', org)!, org).current).toBe(true);
     expect(ring.keyIds).toEqual({
@@ -115,5 +120,92 @@ describe('FieldEncryptor.fromEnv', () => {
       'e'
     ]);
     expect(parseEncryptionKeyList(undefined, '')).toEqual([]);
+  });
+});
+
+describe('v3 stamped envelope', () => {
+  const v3 = new FieldEncryptor(CURRENT, {
+    previousKeys: [PREVIOUS],
+    format: 'v3'
+  });
+
+  it('stamps new values with the current key fingerprint', () => {
+    const value = v3.encrypt('x', org)!;
+    expect(value.startsWith(stampedPrefix(encryptionKeyId(CURRENT)))).toBe(
+      true
+    );
+    expect(stampedKeyId(value)).toBe(encryptionKeyId(CURRENT));
+    expect(stampedKeyId(current.encrypt('x', org)!)).toBeNull();
+    expect(isEncryptedCiphertext(value)).toBe(true);
+    expect(value.split(':')).toHaveLength(5);
+  });
+
+  it('is deterministic and byte-different from v2 of the same plaintext', () => {
+    expect(v3.encrypt('x', org)).toBe(v3.encrypt('x', org));
+    expect(v3.encrypt('x', org)).not.toBe(current.encrypt('x', org));
+  });
+
+  it('reads v3 by the stamped key and v1/v2 by trial, in either format', () => {
+    const stamped = v3.encrypt('a', org)!;
+    expect(v3.decrypt(stamped, org)).toBe('a');
+    expect(ring.decrypt(stamped, org)).toBe('a'); // a v2 writer still reads v3
+    expect(v3.decrypt(previous.encrypt('b', org), org)).toBe('b');
+    expect(v3.open(stamped, org)).toMatchObject({
+      keyId: encryptionKeyId(CURRENT),
+      current: true,
+      version: 'v3',
+      stale: false
+    });
+  });
+
+  it('names the missing key when a stamped value is not in the ring', () => {
+    const other = new FieldEncryptor(OLDEST, { format: 'v3' });
+    const value = other.encrypt('c', org)!;
+    expect(() => v3.decrypt(value, org)).toThrow(encryptionKeyId(OLDEST));
+    expect(() => v3.decrypt(value, org)).toThrow(DecryptionError);
+    expect(v3.withPreviousKeys([PREVIOUS, OLDEST]).decrypt(value, org)).toBe(
+      'c'
+    );
+  });
+
+  it('still rejects the wrong tenant for a stamped value', () => {
+    expect(() => v3.decrypt(v3.encrypt('a', org)!, '')).toThrow(
+      DecryptionError
+    );
+  });
+
+  it('treats unstamped current-key values as stale only when writing v3', () => {
+    const unstamped = current.encrypt('u', org)!;
+    expect(ring.needsRotation(unstamped, org)).toBe(false);
+    expect(ring.rotate(unstamped, org)).toBe(unstamped);
+    expect(v3.needsRotation(unstamped, org)).toBe(true);
+    const rotated = v3.rotate(unstamped, org)!;
+    expect(rotated).toBe(v3.encrypt('u', org));
+    expect(v3.needsRotation(rotated, org)).toBe(false);
+  });
+
+  it('a v2 writer leaves a current-key v3 value alone', () => {
+    const stamped = v3.encrypt('a', org)!;
+    expect(ring.needsRotation(stamped, org)).toBe(false);
+    expect(ring.rotate(stamped, org)).toBe(stamped);
+  });
+
+  it('fromEnv reads ENCRYPTION_FORMAT and rejects other values', () => {
+    expect(
+      FieldEncryptor.fromEnv({
+        ENCRYPTION_KEY: CURRENT,
+        ENCRYPTION_FORMAT: 'v3'
+      }).format
+    ).toBe('v3');
+    expect(FieldEncryptor.fromEnv({ ENCRYPTION_KEY: CURRENT }).format).toBe(
+      'v2'
+    );
+    expect(() =>
+      FieldEncryptor.fromEnv({
+        ENCRYPTION_KEY: CURRENT,
+        ENCRYPTION_FORMAT: 'v9'
+      })
+    ).toThrow('ENCRYPTION_FORMAT');
+    expect(current.withFormat('v3').format).toBe('v3');
   });
 });
