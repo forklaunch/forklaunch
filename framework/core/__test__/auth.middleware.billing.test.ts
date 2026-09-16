@@ -237,9 +237,15 @@ describe('auth middleware - billing features', () => {
     });
 
     it('logs a reason and no credential when the JWT signature is invalid', async () => {
+      // Corrupt the FIRST character of the signature. The last character of
+      // a base64url signature carries only two meaningful bits (a 64-byte
+      // signature is 512 bits over 86 characters), so flipping it leaves the
+      // decoded signature unchanged for a quarter of all keys and the token
+      // still verifies; the request then proceeds and fails later with 500.
       const token = (await createSignedJWT({ sub: 'user123' })).replace(
-        /.$/,
-        (c) => (c === 'a' ? 'b' : 'a')
+        /\.([^.])([^.]*)$/,
+        (_m, first: string, rest: string) =>
+          `.${first === 'a' ? 'b' : 'a'}${rest}`
       );
 
       const req = createMockRequest(token, {
