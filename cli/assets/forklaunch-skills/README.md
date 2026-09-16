@@ -47,6 +47,7 @@ Three rules that keep this honest:
 - `/imports-and-structure` — Import layers, module structure, file naming. **Always import from `@{{app-name}}/core`.**
 - `/websockets-and-mappers` — WebSockets, real-time, log streaming, requestMapper/responseMapper.
 - `/compliance` — fp property builder, defineComplianceEntity, access levels, audit CLI, encryption, tenant isolation.
+- `/encryption-key-rotation` — The key ring (`ENCRYPTION_KEY` + `LEGACY_ENCRYPTION_KEYS`), rotating a key without downtime, the re-encryption sweep migration and its report, recovering when a key was replaced under live data.
 - `/score` — Generate and read an Enterprise-Readiness Report Card, gate CI on a minimum score, and know what the deterministic checks can and cannot judge.
 - `/score-self-heal` — run the ForkLaunch Score during development, fix the lowest-scoring criteria from their `fix`es, re-score until the threshold passes.
 - `/security` — Auth surfaces, device flow, rate limiting, security events, secrets hygiene, HMAC, branch protection.
