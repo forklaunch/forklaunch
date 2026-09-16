@@ -1,4 +1,4 @@
-import { {{#is_kafka_enabled}}array, {{/is_kafka_enabled}}{{#is_iam_configured}}createAuthCacheService, type AuthCacheService, {{/is_iam_configured}}{{#is_billing_configured}}createBillingCacheService, type BillingCacheService, {{/is_billing_configured}}{{#is_worker}}function_, {{/is_worker}}number, SchemaValidator, string{{#is_type_needed}}, type{{/is_type_needed}} } from "@{{app_name}}/core";
+import { {{#is_kafka_enabled}}array, {{/is_kafka_enabled}}{{#is_iam_configured}}createAuthCacheService, type AuthCacheService, {{/is_iam_configured}}{{#is_billing_configured}}createBillingCacheService, type BillingCacheService, {{/is_billing_configured}}{{#is_worker}}function_, {{/is_worker}}number, optional, SchemaValidator, string{{#is_type_needed}}, type{{/is_type_needed}} } from "@{{app_name}}/core";
 import { metrics } from "@{{app_name}}/monitoring";{{#is_request_cache_needed}}
 import { RedisTtlCache } from "@forklaunch/infrastructure-redis";{{/is_request_cache_needed}}{{#is_s3_enabled}}
 import { S3ObjectStore } from "@forklaunch/infrastructure-s3";{{/is_s3_enabled}}
@@ -10,7 +10,7 @@ import {
   Lifetime,
   RetentionService,
 } from "@forklaunch/core/services";
-import { FieldEncryptor, wrapEmWithTenantContext } from "@forklaunch/core/persistence";{{#is_worker}}
+import { FieldEncryptor, parseEncryptionKeyList, wrapEmWithTenantContext } from "@forklaunch/core/persistence";{{#is_worker}}
 import { {{worker_type}}WorkerConsumer } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/consumers';
 import { {{worker_type}}WorkerProducer } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/producers';
 import { {{worker_type}}WorkerSchemas } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/schemas';
@@ -156,6 +156,12 @@ const environmentConfig = configInjector.chain({
     lifetime: Lifetime.Singleton,
     type: string,
     value: getEnvVar('ENCRYPTION_KEY')
+  },
+  //! previous encryption keys, comma separated; read-only, so a key can be rotated without downtime
+  LEGACY_ENCRYPTION_KEYS: {
+    lifetime: Lifetime.Singleton,
+    type: optional(string),
+    value: getEnvVar('LEGACY_ENCRYPTION_KEYS')
   }
 });
 
@@ -187,14 +193,14 @@ const runtimeDependencies = environmentConfig.chain({
   TtlCache: {
     lifetime: Lifetime.Singleton,
     type: RedisTtlCache,
-    factory: ({ REDIS_URL, OtelCollector, ENCRYPTION_KEY }) =>
+    factory: ({ REDIS_URL, OtelCollector, ENCRYPTION_KEY, LEGACY_ENCRYPTION_KEYS }) =>
       new RedisTtlCache(60 * 60 * 1000, OtelCollector, {
         url: REDIS_URL,
       }, {
         enabled: true,
         level: "info",
       }, {
-        encryptor: new FieldEncryptor(ENCRYPTION_KEY),
+        encryptor: new FieldEncryptor(ENCRYPTION_KEY, { previousKeys: parseEncryptionKeyList(LEGACY_ENCRYPTION_KEYS) }),
       }),
   },{{/is_request_cache_needed}}{{#is_s3_enabled}}
   ObjectStore: {
@@ -208,7 +214,8 @@ const runtimeDependencies = environmentConfig.chain({
       S3_SECRET_ACCESS_KEY,
       S3_URL,
       S3_BUCKET,
-      ENCRYPTION_KEY
+      ENCRYPTION_KEY,
+      LEGACY_ENCRYPTION_KEYS
     }) =>
       new S3ObjectStore(
         OtelCollector,
@@ -229,15 +236,15 @@ const runtimeDependencies = environmentConfig.chain({
           level: OTEL_LEVEL || 'info'
         },
         {
-          encryptor: new FieldEncryptor(ENCRYPTION_KEY),
+          encryptor: new FieldEncryptor(ENCRYPTION_KEY, { previousKeys: parseEncryptionKeyList(LEGACY_ENCRYPTION_KEYS) }),
         }
       )
   },
   {{/is_s3_enabled}}{{#is_worker}}{{^is_database_worker}}EventEncryptor: {
     lifetime: Lifetime.Singleton,
     type: FieldEncryptor,
-    factory: ({ ENCRYPTION_KEY }) =>
-      new FieldEncryptor(ENCRYPTION_KEY)
+    factory: ({ ENCRYPTION_KEY, LEGACY_ENCRYPTION_KEYS }) =>
+      new FieldEncryptor(ENCRYPTION_KEY, { previousKeys: parseEncryptionKeyList(LEGACY_ENCRYPTION_KEYS) })
   },
   {{/is_database_worker}}{{/is_worker}}{{#is_database_enabled}}
   EntityMgr: {
