@@ -26,6 +26,7 @@ include = [
   "cli",
   "common-tasks",
   "compliance",
+  "encryption-key-rotation",
   "deploy-mode",
   "deployment-approvals",
   "design-system",
