@@ -71,7 +71,7 @@
     "@forklaunch/internal": "^1.2.29",
     "@sinclair/typebox": "^0.34.52",
     "kafkajs": "^2.2.4",
-    "zod": "^4.5.4"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "depcheck": "^1.4.7",
@@ -79,7 +79,7 @@
     "prettier": "^3.9.6",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2",
-    "typescript-eslint": "^8.68.0"
+    "typescript-eslint": "^8.70.0"
   },
   "publishConfig": {
     "access": "public"

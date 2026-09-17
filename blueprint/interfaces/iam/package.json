@@ -49,7 +49,7 @@
   },
   "dependencies": {
     "@forklaunch/common": "^1.2.26",
-    "@mikro-orm/core": "7.1.15"
+    "@mikro-orm/core": "7.2.0"
   },
   "devDependencies": {
     "depcheck": "^1.4.7",

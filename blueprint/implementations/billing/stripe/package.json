@@ -81,14 +81,14 @@
     "@forklaunch/interfaces-billing": "workspace:^",
     "@forklaunch/internal": "^1.2.29",
     "@forklaunch/validator": "^1.2.27",
-    "@mikro-orm/core": "7.1.15",
+    "@mikro-orm/core": "7.2.0",
     "@sinclair/typebox": "^0.34.52",
     "ajv": "^8.20.0",
-    "stripe": "^22.6.0",
-    "zod": "^4.5.4"
+    "stripe": "^22.6.2",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@mikro-orm/sqlite": "7.1.15",
+    "@mikro-orm/sqlite": "7.2.0",
     "depcheck": "^1.4.7",
     "prettier": "^3.9.6",
     "typedoc": "^0.28.20",
