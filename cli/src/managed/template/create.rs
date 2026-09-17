@@ -10,7 +10,7 @@ use crate::{
     core::command::command,
     managed::{
         client::{Missing, post_json, print_dryrun, require_managed_mode, resolve_managed_auth},
-        types::AppTemplate,
+        types::{AppTemplate, TEMPLATE_CLUSTER_TYPES},
     },
 };
 
@@ -33,10 +33,14 @@ impl CliCommand for CreateCommand {
                  \x20 1. `template publish`          — add a version (a semver pinned to a git ref)\n\
                  \x20 2. `template publish-template` — move the template itself to `published`\n\n\
                  This command takes exactly what the control plane's create API accepts:\n\
-                 slug, name, source repo, and an optional description. The Stripe product is\n\
-                 set afterwards with `template update --stripe-product <id>`. The base domain\n\
-                 is not settable through the API at all — instances use the platform-wide\n\
-                 default.",
+                 slug, name, source repo, an optional description, and an optional cluster\n\
+                 type. The Stripe product is set afterwards with `template update\n\
+                 --stripe-product <id>`. The base domain is not settable through the API at\n\
+                 all — instances use the platform-wide default.\n\n\
+                 --cluster-type decides where every instance of this template runs. It is\n\
+                 the publisher's call, made once here; a customer launching an instance is\n\
+                 never asked. Unset means org-shared (your organization's shared hosts).\n\
+                 A hosting type a component declares in the repo's manifest still wins.",
             )
             .arg(
                 Arg::new("slug")
@@ -60,6 +64,12 @@ impl CliCommand for CreateCommand {
                 Arg::new("description")
                     .long("description")
                     .help("Optional description shown alongside the template"),
+            )
+            .arg(
+                Arg::new("cluster_type")
+                    .long("cluster-type")
+                    .value_parser(TEMPLATE_CLUSTER_TYPES.to_vec())
+                    .help("Where instances of this template run: org-shared (default; your org's shared hosts), platform-shared, or dedicated"),
             )
             .arg(
                 Arg::new("dryrun")
@@ -97,6 +107,9 @@ impl CliCommand for CreateCommand {
         body.insert("sourceRepo".to_string(), json!(repo));
         if let Some(description) = matches.get_one::<String>("description") {
             body.insert("description".to_string(), json!(description));
+        }
+        if let Some(cluster_type) = matches.get_one::<String>("cluster_type") {
+            body.insert("clusterType".to_string(), json!(cluster_type));
         }
 
         let body = Value::Object(body);

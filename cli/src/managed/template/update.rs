@@ -10,7 +10,7 @@ use crate::{
     core::command::command,
     managed::{
         client::{Missing, patch_json, print_dryrun, require_managed_mode, resolve_managed_auth},
-        types::{AppTemplate, TEMPLATE_STATUSES},
+        types::{AppTemplate, TEMPLATE_CLUSTER_TYPES, TEMPLATE_STATUSES},
     },
 };
 
@@ -26,6 +26,8 @@ pub(super) struct TemplateUpdate<'a> {
     pub(super) description: Option<&'a String>,
     pub(super) status: Option<&'a str>,
     pub(super) stripe_product: Option<&'a String>,
+    pub(super) cluster_type: Option<&'a String>,
+    pub(super) frontend_domain: Option<&'a String>,
     pub(super) dryrun: bool,
     pub(super) json: bool,
 }
@@ -43,10 +45,10 @@ impl CliCommand for UpdateCommand {
     fn command(&self) -> Command {
         command(
             "update",
-            "Change a template's name, description, status, or Stripe product",
+            "Change a template's name, description, status, Stripe product, or cluster type",
         )
         .long_about(
-            "Change a template's name, description, status, or Stripe product.\n\n\
+            "Change a template's name, description, status, Stripe product, or cluster type.\n\n\
              Only the fields you pass are changed; everything else is left alone.\n\n\
              --status is the important one. A template is created as `draft`, and\n\
              `instance create` will only launch from a `published` template, so a template\n\
@@ -88,6 +90,17 @@ impl CliCommand for UpdateCommand {
                 .help("Stripe product id to record against the template (not yet read by billing)"),
         )
         .arg(
+            Arg::new("cluster_type")
+                .long("cluster-type")
+                .value_parser(TEMPLATE_CLUSTER_TYPES.to_vec())
+                .help("Where instances of this template run: org-shared (your org's shared hosts), platform-shared, or dedicated. Applies to instances launched from now on"),
+        )
+        .arg(
+            Arg::new("frontend_domain")
+                .long("frontend-domain")
+                .help("Domain the product's frontend is served from (e.g. app.example.com). Each instance's UI is <hostPrefix>.<domain>; the claim page and `instance list` hand that URL out"),
+        )
+        .arg(
             Arg::new("dryrun")
                 .long("dryrun")
                 .help("Print the request that would be sent without sending it")
@@ -113,6 +126,8 @@ impl CliCommand for UpdateCommand {
                 description: matches.get_one::<String>("description"),
                 status: matches.get_one::<String>("status").map(String::as_str),
                 stripe_product: matches.get_one::<String>("stripe_product"),
+                cluster_type: matches.get_one::<String>("cluster_type"),
+                frontend_domain: matches.get_one::<String>("frontend_domain"),
                 dryrun: matches.get_flag("dryrun"),
                 json: matches.get_flag("json"),
             },
@@ -137,6 +152,12 @@ pub(super) fn update_template(slug: &str, update: TemplateUpdate<'_>) -> Result<
     if let Some(stripe_product) = update.stripe_product {
         body.insert("stripeProductId".to_string(), json!(stripe_product));
     }
+    if let Some(cluster_type) = update.cluster_type {
+        body.insert("clusterType".to_string(), json!(cluster_type));
+    }
+    if let Some(frontend_domain) = update.frontend_domain {
+        body.insert("frontendDomain".to_string(), json!(frontend_domain));
+    }
 
     // An empty PATCH is accepted by the control plane and changes nothing, so it would
     // report success while having done nothing at all. Refuse instead — someone who
@@ -144,9 +165,9 @@ pub(super) fn update_template(slug: &str, update: TemplateUpdate<'_>) -> Result<
     // something had happened.
     if body.is_empty() {
         bail!(
-            "nothing to update — pass at least one of --name, --description, --status, or \
-             --stripe-product (to publish a template, `forklaunch managed template \
-             publish-template --slug {}` is the shorthand)",
+            "nothing to update — pass at least one of --name, --description, --status, \
+             --stripe-product, --cluster-type, or --frontend-domain (to publish a template, \
+             `forklaunch managed template publish-template --slug {}` is the shorthand)",
             slug
         );
     }
@@ -234,6 +255,19 @@ mod tests {
         assert!(update.name.is_none());
         assert!(update.description.is_none());
         assert!(update.stripe_product.is_none());
+        assert!(update.cluster_type.is_none());
+        assert!(update.frontend_domain.is_none());
+    }
+
+    #[test]
+    fn the_cli_cluster_type_list_matches_what_the_control_plane_validates() {
+        // managed-apps validates `clusterType` against ClusterPlacementEnum
+        // (org-shared | platform-shared | dedicated). Keep the local list identical so a
+        // typo fails before the round trip and a valid value is never refused locally.
+        assert_eq!(
+            TEMPLATE_CLUSTER_TYPES,
+            &["org-shared", "platform-shared", "dedicated"]
+        );
     }
 
     #[test]

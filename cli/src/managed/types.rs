@@ -44,7 +44,20 @@ pub(super) struct AppTemplate {
     pub(super) status: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) source_repo: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) cluster_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) frontend_domain: Option<String>,
 }
+
+/// Where a template's instances run. Same vocabulary as `forklaunch app hosting`
+/// and `deploy create --cluster-type`; the control plane validates it too, but a
+/// typo should fail before the round trip.
+///
+///   org-shared       your organization's shared hosts (the managed default)
+///   platform-shared  ForkLaunch's shared hosts (cheapest, cross-tenant compute)
+///   dedicated        a cluster of the instance's own
+pub(super) const TEMPLATE_CLUSTER_TYPES: &[&str] = &["org-shared", "platform-shared", "dedicated"];
 
 /// The template statuses the platform defines. A template is created as `draft`;
 /// `instance create` requires `published`, so a template stays uninstantiable until

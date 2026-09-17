@@ -84,15 +84,25 @@ impl CliCommand for ListCommand {
         }
 
         stdout.set_color(ColorSpec::new().set_bold(true))?;
-        writeln!(stdout, "  {:<24} {:<28} {:<12}", "SLUG", "NAME", "STATUS")?;
+        writeln!(
+            stdout,
+            "  {:<24} {:<28} {:<12} {:<16}",
+            "SLUG", "NAME", "STATUS", "CLUSTER"
+        )?;
         stdout.reset()?;
         for template in &templates {
             writeln!(
                 stdout,
-                "  {:<24} {:<28} {:<12}",
+                "  {:<24} {:<28} {:<12} {:<16}",
                 dash(&template.slug),
                 dash(&template.name),
                 dash(&template.status),
+                // Unset means the managed default; say so rather than printing a dash
+                // that reads as "no placement".
+                template
+                    .cluster_type
+                    .as_deref()
+                    .unwrap_or("org-shared (default)"),
             )?;
         }
         writeln!(stdout)?;
