@@ -37,7 +37,7 @@
     "@sinclair/typebox": "^0.34.52",
     "express": "^5.2.1",
     "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.52.0",
-    "zod": "^4.6.4"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
