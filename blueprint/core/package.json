@@ -27,12 +27,12 @@
     "@forklaunch/express": "^1.2.43",
     "@forklaunch/hyper-express": "^1.2.43",
     "@forklaunch/validator": "^1.2.27",
-    "@mikro-orm/core": "7.1.15",
-    "@mikro-orm/mongodb": "7.1.15",
+    "@mikro-orm/core": "7.2.0",
+    "@mikro-orm/mongodb": "7.2.0",
     "@sinclair/typebox": "^0.34.52",
     "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.52.0",
     "uuid": "^14.0.2",
-    "zod": "^4.5.4"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
