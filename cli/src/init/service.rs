@@ -597,7 +597,8 @@ pub(crate) fn generate_service_package_json(
                     None
                 },
                 dotenv: Some(DOTENV_VERSION.to_string()),
-                jose: if manifest_data.is_iam || manifest_data.is_billing {
+                jose: if manifest_data.is_iam || manifest_data.is_billing || manifest_data.is_cac
+                {
                     Some(JOSE_VERSION.to_string())
                 } else {
                     None

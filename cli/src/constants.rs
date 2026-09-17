@@ -622,6 +622,10 @@ pub(crate) fn get_service_module_cache(service_type: &Module) -> Option<String> 
         // The ecommerce blueprint reads REDIS_URL at startup for both the cart
         // cache and the order-event queue, and exits if it is unset.
         Module::StripeEcommerce => Some(Infrastructure::Redis.to_string()),
+        // cac-base's registrations wire a RedisTtlCache (caches IAM
+        // permission/role lookups) and its config validator throws at
+        // startup without REDIS_URL.
+        Module::BaseCac => Some(Infrastructure::Redis.to_string()),
         _ => None,
     }
 }
@@ -654,6 +658,7 @@ mod tests {
             Module::BaseMessaging,
             Module::TwilioMessaging,
             Module::StripeEcommerce,
+            Module::BaseCac,
         ] {
             assert_eq!(
                 get_service_module_cache(&module),
