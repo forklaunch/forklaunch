@@ -76,7 +76,7 @@
     "@forklaunch/common": "workspace:^",
     "@sinclair/typebox": "^0.34.52",
     "ts-deepmerge": "^8.0.0",
-    "zod": "^4.6.4"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
