@@ -53,8 +53,10 @@ export async function extractBrand(shopUrl: string): Promise<Brand> {
   const base = shopUrl.replace(/\/$/, '');
   let html = '';
   try {
-    const res = await fetch(base, { headers: { 'user-agent': 'forklaunch-migrate/0.1' } });
-    if (res.ok) html = await res.text();
+    const res = await fetch(base, { headers: { 'user-agent': 'forklaunch-migrate/0.1' }, signal: AbortSignal.timeout(15000) });
+    // A homepage is a few hundred KB; anything past this is not one, and the
+    // brand extraction is cosmetic, so it is dropped rather than buffered.
+    if (res.ok && Number(res.headers.get('content-length') || 0) <= 5 * 1024 * 1024) html = (await res.text()).slice(0, 5 * 1024 * 1024);
   } catch {
     // Network failure or non-HTML response — return an empty brand rather
     // than fail the migration over a cosmetic step.

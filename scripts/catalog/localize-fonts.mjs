@@ -130,7 +130,7 @@ let failed = 0;
 
 for (const u of todo) {
   try {
-    const res = await fetch(u, { redirect: 'follow' });
+    const res = await fetch(u, { redirect: 'follow', signal: AbortSignal.timeout(15000) });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const bytes = Buffer.from(await res.arrayBuffer());
     // Content-addressed, matching how the rest of the capture is named: the

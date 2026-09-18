@@ -33,23 +33,15 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { ensureDeps } from './bootstrap.mjs';
-import { checkPrereqs, refuse } from '../check-prereqs.mjs';
+import { checkPrereqs, refuse, resolveBun } from '../check-prereqs.mjs';
 import { existsSync as _exists } from 'node:fs';
 import { execSync } from 'node:child_process';
 
 // The catalog pipeline is TypeScript run by bun. bun is usually installed at
 // ~/.bun/bin/bun, which is NOT on a spawned process's PATH — resolve it
 // explicitly, and install it if the machine doesn't have it yet.
-function resolveBun() {
-  const candidates = [
-    process.env.BUN_INSTALL ? `${process.env.BUN_INSTALL}/bin/bun` : null,
-    `${process.env.HOME}/.bun/bin/bun`,
-    '/opt/homebrew/bin/bun', '/usr/local/bin/bun',
-  ].filter(Boolean);
-  for (const c of candidates) if (_exists(c)) return c;
-  try { return execSync('command -v bun', { encoding: 'utf8' }).trim() || null; } catch (_) {}
-  return null;
-}
+// One resolver, shared with the prerequisite gate in check-prereqs.mjs, so the
+// gate can never pass on a bun the catalog step then fails to find.
 
 function ensureBun() {
   let bun = resolveBun();

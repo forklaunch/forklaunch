@@ -10,8 +10,8 @@ clone; all of it is needed before that clone can sell anything.
 
 ## 0. What you have after the clone
 
-`node scripts/bin/migrate.mjs https://www.the-store.com --clean` leaves, in
-`scripts/output/the-store.com/`:
+`node scripts/bin/migrate.mjs https://www.the-store.com --clean --no-serve`
+leaves, in `scripts/output/the-store.com/`:
 
 | File | What it is |
 |---|---|
@@ -41,8 +41,11 @@ skill docs gets through this step on its own.
 
 ```bash
 cd tools/storefront-migrate/scripts/catalog
-bun cli.ts import data/the-store-com/normalized.json http://localhost:<PORT> <HMAC_SECRET_KEY>
+HMAC_SECRET_KEY=<from .env.local> bun cli.ts import data/the-store-com/normalized.json http://localhost:<PORT>
 ```
+
+The secret is read from the environment so it never sits in a shell history
+or a process listing; passing it as a trailing argument still works.
 
 Every product and variant lands in the module with `initialStock` set, so it is
 sellable. `externalId` on each variant is the source platform's variant id (Shopify's,
@@ -54,7 +57,7 @@ the store's own JSON first, then import the same way:
 
 ```bash
 node pull-squarespace.mjs https://www.the-store.com /shop
-bun cli.ts import data/the-store-com/normalized.json http://localhost:<PORT> <HMAC_SECRET_KEY>
+HMAC_SECRET_KEY=<from .env.local> bun cli.ts import data/the-store-com/normalized.json http://localhost:<PORT>
 ```
 
 Done on graza.co (79 products), gorillamind.com (51) and, for Squarespace,
@@ -64,10 +67,11 @@ swaticouture.com (379 products).
 
 ```bash
 cd tools/storefront-migrate/scripts
-bun catalog/heroserve-fl.ts output/the-store.com/site 4173 http://localhost:<PORT> <HMAC_SECRET_KEY> <STRIPE_PUBLISHABLE_KEY>
+HMAC_SECRET_KEY=<from .env.local> STRIPE_PUBLISHABLE_KEY=<pk_...> bun catalog/heroserve-fl.ts output/the-store.com/site 4173 http://localhost:<PORT>
 ```
 
-Open http://localhost:4173. This is the same server the verification used, now
+Open http://localhost:4173. The server listens on 127.0.0.1 only; set
+`FL_HOST=0.0.0.0` to reach it from another machine, knowingly. This is the same server the verification used, now
 with a backend. What each action on the page does:
 
 | On the clone | Hits the module |
@@ -80,7 +84,7 @@ with a backend. What each action on the page does:
 | A product the crawl never captured | `GET /product/handle/{handle}` renders a page from the catalog |
 
 The HMAC secret never reaches the browser: heroserve signs every module call
-server-side. Pass a PayPal client id as a sixth argument for the PayPal button.
+server-side. Set `PAYPAL_CLIENT_ID` for the PayPal button.
 
 Prove it before anyone looks. Two gates, run from `tools/storefront-migrate/scripts`
 with the module, its worker and `stripe listen` (step 5) all running:
@@ -92,7 +96,7 @@ node check-purchase.mjs --store http://localhost:4173 --db <DB_NAME> --pg postgr
 
 `check-wired` (10 checks) proves the served pages drive the module: shim
 running, add to cart lands server-side, no dead links, checkout collects an
-address. `check-purchase` (12 checks) proves a purchase goes all the way:
+address. `check-purchase` (13 checks) proves a purchase goes all the way:
 pending order, test card to `paid` by webhook, stock down by the quantity
 ordered, a declined card leaving both untouched, and nothing on the page
 phoning a third party. It reads the module's database directly, never the
@@ -101,11 +105,11 @@ module's `.env.local` — as the flags above, or exported, in which case both
 flags can be omitted. Both gates exit non-zero on any failed check, and a
 store is not ready to show until both pass.
 
-Proven with real Stripe test payments: graza.co and gorillamind.com pass all 12
-`check-purchase` checks, including a declined card leaving stock untouched and
-the return URL verified with Stripe rather than trusted; the Squarespace clone
-of swaticouture.com goes through its own theme's Add to Cart button to `paid`
-with stock decremented. PayPal is wired in the module; carrying it through
+Proven with real Stripe test payments: graza.co, gorillamind.com and the
+Squarespace clone of swaticouture.com each pass all 13 `check-purchase` checks
+— including a declined card leaving stock untouched and the return URL
+verified with Stripe rather than trusted — the Squarespace one through its own
+theme's Add to Cart button. PayPal is wired in the module; carrying it through
 this server is next.
 
 ## 4. Register the clone as a ForkLaunch project

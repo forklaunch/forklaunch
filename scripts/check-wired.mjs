@@ -191,7 +191,7 @@ async function main() {
       await page.waitForTimeout(2500);
       const before = await moduleCartCount(page, BASE);
       const clicked = await page.evaluate(() => {
-        const b = document.querySelector('#fl-add, [data-add], button[name="add"], form[action*="/cart/add"] button');
+        const b = document.querySelector('#fl-add, [data-add], button[name="add"], form[action*="/cart/add"] button, .sqs-add-to-cart-button');
         if (!b) return false;
         b.click();
         return true;
@@ -258,13 +258,22 @@ async function moduleCartCount(page, base) {
 }
 
 /** First product link on the homepage, so the gate works on any store. */
+// Shopify links products as /products/<h>; Squarespace as /<collection>/p/<h>
+// (flattened to /<collection>/p-<h>.html in a capture). A Squarespace home
+// page often carries no product link at all, so the shop page is tried next.
+const PRODUCT_LINK = /(^|\/)products\/|\/p\/[^/]+|\/p-[^/]+\.html$/;
 async function firstProductPath(page, base) {
-  const href = await page.evaluate(() => {
+  const find = () => page.evaluate((re) => {
     const a = [...document.querySelectorAll('a[href]')]
       .map((x) => x.getAttribute('href'))
-      .find((h) => h && /(^|\/)products\//.test(h));
+      .find((h) => h && new RegExp(re).test(h) && !/^https?:/.test(h));
     return a || null;
-  });
+  }, PRODUCT_LINK.source);
+  let href = await find();
+  if (!href) {
+    const r = await page.goto(base + '/shop', { waitUntil: 'load', timeout: 45000 }).catch(() => null);
+    if (r && r.status() === 200) { await page.waitForTimeout(1500); href = await find(); }
+  }
   if (!href) return null;
   return new URL(href, base + '/').pathname;
 }

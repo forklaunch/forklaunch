@@ -7,7 +7,16 @@
  * check-complete.test.mjs pins the behavior so it can't drift.
  */
 const SKIP_PATH = /^\/(cart|checkout|account|orders|search|apps|admin|cdn|_a|assets|api|services|tools|challenge|password|a\/|wpm@|\.well-known)(\/|$)/i;
-const safe = (s) => s.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 80);
+const { createHash } = require('node:crypto');
+// A segment the sanitiser had to change (or cut at 80) gets a short hash of
+// the original appended, so two distinct URLs can never land on one file.
+// Segments that need no change map exactly as before.
+const safe = (s) => {
+  const cleaned = s.replace(/[^A-Za-z0-9._-]/g, '_');
+  if (cleaned === s && s.length <= 80) return s;
+  const h = createHash('sha1').update(s).digest('hex').slice(0, 6);
+  return `${cleaned.slice(0, 73)}-${h}`;
+};
 
 // A storefront path -> { file, depth } (depth drives relative-link rewriting),
 // or null for paths we never capture (cart/account/assets/etc.).

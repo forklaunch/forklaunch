@@ -79,22 +79,32 @@ async function payWithCard(page, number) {
 }
 
 /** First product page the storefront links to; capture layouts vary. */
+// Shopify links products as /products/<h>; Squarespace as /<collection>/p/<h>
+// (flattened to /<collection>/p-<h>.html in a capture). A Squarespace home
+// page often carries no product link at all, so the shop page is tried next.
+const PRODUCT_LINK = /(^|\/)products\/|\/p\/[^/]+|\/p-[^/]+\.html$/;
 async function firstProductPath(page) {
-  await page.goto(STORE + '/', { waitUntil: 'load', timeout: 60000 });
-  await page.waitForTimeout(3500);
-  return page.evaluate(() => {
+  const find = () => page.evaluate((re) => {
     const a = [...document.querySelectorAll('a[href]')]
       .map((x) => x.getAttribute('href'))
-      .find((h) => h && /products\//.test(h) && !/^https?:/.test(h));
+      .find((h) => h && new RegExp(re).test(h) && !/^https?:/.test(h));
     return a ? (a.startsWith('/') ? a : '/' + a) : null;
-  });
+  }, PRODUCT_LINK.source);
+  await page.goto(STORE + '/', { waitUntil: 'load', timeout: 60000 });
+  await page.waitForTimeout(3500);
+  let p = await find();
+  if (!p) {
+    const r = await page.goto(STORE + '/shop', { waitUntil: 'load', timeout: 60000 }).catch(() => null);
+    if (r && r.status() === 200) { await page.waitForTimeout(1500); p = await find(); }
+  }
+  return p;
 }
 
 async function addOne(page, path) {
   await page.goto(STORE + path, { waitUntil: 'load', timeout: 60000 });
   await page.waitForTimeout(3000);
   const clicked = await page.evaluate(() => {
-    const b = document.querySelector('#fl-add, [data-add], button[name="add"], form[action*="/cart/add"] button');
+    const b = document.querySelector('#fl-add, [data-add], button[name="add"], form[action*="/cart/add"] button, .sqs-add-to-cart-button');
     if (!b) return false;
     b.click();
     return true;
@@ -156,6 +166,7 @@ async function main() {
     await toPayment(page);
     const orderId = latestPending();
     check('checkout created a pending order', !!orderId, orderId.slice(0, 8));
+    if (!orderId) return; // the report below still prints what was proved; nothing else can be
 
     const totalCents = Number(sql(`select total_cents from "order" where id='${orderId}';`) || 0);
     const qty = Number(sql(`select (it->>'quantity') from "order" o cross join lateral jsonb_array_elements(o.items) it where o.id='${orderId}' limit 1;`) || 1);
@@ -183,6 +194,8 @@ async function main() {
     await addOne(page, productPath);
     await toPayment(page);
     const order2 = latestPending();
+    check('checkout created a second pending order', !!order2, order2.slice(0, 8));
+    if (!order2) return;
     const variant2 = sql(`select (it->>'variantId') from "order" o cross join lateral jsonb_array_elements(o.items) it where o.id='${order2}' limit 1;`);
     const stock2Before = Number(sql(`select stock from inventory where variant_id='${variant2}';`) || 0);
     await payWithCard(page, '4000000000009995');

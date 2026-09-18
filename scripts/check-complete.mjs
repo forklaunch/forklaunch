@@ -87,7 +87,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const missing = [];
   const redirected = [];
   const blocked = [];
-  await Promise.all(absent.map(async (p) => {
+  // A burst of one HEAD per absent URL is exactly what makes a store answer
+  // 429, and a 429 here is scored as unverifiable — so the gate would fail
+  // itself. A small pool keeps the probe polite.
+  const CONC = Math.max(1, Number(process.env.FIDELITY_PROBE_CONCURRENCY ?? 4));
+  const probeOne = async (p) => {
     let status = 0, location = null;
     try {
       const r = await fetch(`${origin}${p}`,
@@ -111,6 +115,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       }
     }
     missing.push(p);
+  };
+  const queue = [...absent];
+  await Promise.all(Array.from({ length: Math.min(CONC, queue.length) }, async () => {
+    while (queue.length) await probeOne(queue.shift());
   }));
 
   // Blocked probes count against coverage, not for it: an unverifiable page is

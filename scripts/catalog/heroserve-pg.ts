@@ -9,14 +9,22 @@
  * Postgres scaffold (a stand-in mirroring the module, NOT its code) for the
  * function: add-to-cart, cart, checkout, order state machine, pay, inventory.
  */
-import { existsSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
 import { PgStore } from './pgstore.ts';
 import { orderView } from './views.ts';
 import type { Brand } from './brand.ts';
 
 const slug = process.argv[2];
 const siteRoot = process.argv[3];
+const SITE_ROOT_ABS = realpathSync(siteRoot);
+// Request-derived paths stay inside the capture, after symlinks.
+function inside(fp: string): string | null {
+  const abs = resolve(fp);
+  if (abs !== SITE_ROOT_ABS && !abs.startsWith(SITE_ROOT_ABS + sep)) return null;
+  try { const real = realpathSync(abs); return real === SITE_ROOT_ABS || real.startsWith(SITE_ROOT_ABS + sep) ? real : null; } catch { return null; }
+}
+const esc = (t: unknown) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
 const port = Number(process.argv[4] ?? 4600);
 const pgUrl = process.argv[5] ?? 'postgres://localhost/forklaunch_migration_scaffold';
 
@@ -92,7 +100,7 @@ async function cartPage(): Promise<string> {
   const chrome = existsSync(join(siteRoot, 'index.html')) ? readFileSync(join(siteRoot, 'index.html'), 'utf8') : '';
   const head = (chrome.match(/<head[\s\S]*?<\/head>/i) || ['<head><meta charset=utf8></head>'])[0];
   const header = (chrome.match(/<header[\s\S]*?<\/header>/i) || [''])[0];
-  const rows = c.items.map((it: any) => `<tr style="border-bottom:1px solid #ddd"><td style="padding:14px 8px">${it.product_title} — ${it.variant_title}</td><td style="text-align:center">${it.quantity}</td><td style="text-align:right;padding-right:8px">$${(it.price_cents*it.quantity/100).toFixed(2)}</td></tr>`).join('') || '<tr><td style="padding:24px">Your cart is empty.</td></tr>';
+  const rows = c.items.map((it: any) => `<tr style="border-bottom:1px solid #ddd"><td style="padding:14px 8px">${esc(it.product_title)} — ${esc(it.variant_title)}</td><td style="text-align:center">${esc(it.quantity)}</td><td style="text-align:right;padding-right:8px">$${(it.price_cents*it.quantity/100).toFixed(2)}</td></tr>`).join('') || '<tr><td style="padding:24px">Your cart is empty.</td></tr>';
   const accent = brand?.primaryColor || '#c0392b';
   return `<!doctype html><html>${head}<body style="margin:0">${header}
   <div style="max-width:820px;margin:40px auto;padding:0 20px;font-family:system-ui">
@@ -124,10 +132,11 @@ Bun.serve({
       }
       if (p.match(/^\/orders\/\d+\/pay$/) && m === 'POST') { await store.pay(Number(p.split('/')[2])); return redirect(`/orders/${p.split('/')[2]}`); }
       if (p.match(/^\/orders\/\d+$/) && m === 'GET') { const o = await store.getOrder(Number(p.split('/')[2])); return o ? html(orderView(slug, o, brand)) : new Response('not found', { status: 404 }); }
-      if (p.startsWith('/_a/')) { const r = serveAsset(join(siteRoot, p)); return r ?? new Response('', { status: 404 }); }
+      if (p.startsWith('/_a/')) { const fp = inside(join(siteRoot, p)); const r = fp ? serveAsset(fp) : null; return r ?? new Response('', { status: 404 }); }
       if (p === '/' || p === '') { const r = servePage(join(siteRoot, 'index.html')); if (r) return r; }
       const clean = p.replace(/\/$/, '');
-      const cap = servePage(join(siteRoot, clean.replace(/^\//, '') + '.html'));
+      const capPath = inside(join(siteRoot, clean.replace(/^\//, '') + '.html'));
+      const cap = capPath ? servePage(capPath) : null;
       if (cap) return cap;
       const home = servePage(join(siteRoot, 'index.html'));
       return home ?? new Response('not found', { status: 404 });

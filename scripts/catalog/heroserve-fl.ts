@@ -20,9 +20,9 @@
  * needs a real STRIPE_API_KEY in the module's env to complete the charge; the
  * order itself is created regardless.
  */
-import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, statSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, realpathSync, statSync } from 'node:fs';
 import { brotliCompressSync, constants as zlibConstants, gzipSync } from 'node:zlib';
-import { basename, dirname, extname, join } from 'node:path';
+import { basename, dirname, extname, join, resolve, sep } from 'node:path';
 import { createHmac, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { shopifyRuntime, getLocalCart } from './shopify-runtime.ts';
@@ -33,13 +33,27 @@ const { pageFileFor } = createRequire(import.meta.url)('../urlmap.js') as
   { pageFileFor: (p: string) => { file: string; depth: number } | null };
 
 const [siteRoot, portArg, moduleUrl, secret] = process.argv.slice(2);
+// Every filesystem path derived from a request is checked against the capture
+// root, after symlinks: `%2e%2e%2f` decodes to `../` and would otherwise walk
+// out of the site directory.
+const SITE_ROOT_ABS = realpathSync(siteRoot);
+function inside(fp: string): string | null {
+  const abs = resolve(fp);
+  if (abs !== SITE_ROOT_ABS && !abs.startsWith(SITE_ROOT_ABS + sep)) return null;
+  try {
+    const real = realpathSync(abs);
+    return real === SITE_ROOT_ABS || real.startsWith(SITE_ROOT_ABS + sep) ? real : null;
+  } catch { return null; }
+}
 const PORT = Number(portArg ?? 4700);
 const MODULE = (moduleUrl ?? 'http://localhost:8001').replace(/\/$/, '');
 // MODULE has a default, so its value never tells you whether anyone actually
 // asked for a backend. This does. /__fl/health reports it so a gate can say
 // "skipped, not configured" instead of "failed".
 const MODULE_CONFIGURED = !!moduleUrl;
-const SECRET = secret ?? process.env.HMAC_SECRET_KEY ?? '';
+// The secret may come from the environment instead of the command line, so it
+// never shows in a process listing or a shell history.
+const SECRET = secret || process.env.HMAC_SECRET_KEY || '';
 // Stripe's publishable key (pk_...). Safe to serve to the browser — it can only
 // create payment methods and confirm an intent whose client secret it was
 // already handed; it cannot read the account or move money. Its presence is
@@ -639,10 +653,13 @@ const SHIM = `<script>(function(){
  * would break the pages that rely on it.
  */
 function absolutiseScriptPaths(html: string): string {
-  return html.replace(/<script\b[^>]*>([\s\S]*?)<\/script\b[^>]*>/gi, (whole, inner) => {
+  // Rebuilt from the matched parts, never `whole.replace(inner, fixed)`: the
+  // string form of replace reads $&, $', $` and $1..$99 inside `fixed`, and a
+  // theme script that happens to contain one would be silently rewritten.
+  return html.replace(/(<script\b[^>]*>)([\s\S]*?)(<\/script\b[^>]*>)/gi, (whole, open, inner, close) => {
     if (!inner.includes('_a/')) return whole;
     const fixed = inner.replace(/(["'`])_a\//g, '$1/_a/');
-    return fixed === inner ? whole : whole.replace(inner, fixed);
+    return fixed === inner ? whole : open + fixed + close;
   });
 }
 
@@ -823,6 +840,7 @@ const CSP = [
 const siblingCache = new Map<string, string | null>();
 
 function resolveHashedSibling(fp: string): string | null {
+  if (!inside(dirname(fp))) return null;
   if (siblingCache.has(fp)) return siblingCache.get(fp)!;
 
   let found: string | null = null;
@@ -866,8 +884,9 @@ function resolveHashedSibling(fp: string): string | null {
   return found;
 }
 
-function serveFile(fp: string, range?: string | null, ifNoneMatch?: string | null, acceptEncoding?: string | null): Response | null {
-  if (!existsSync(fp) || statSync(fp).isDirectory()) return null;
+function serveFile(fpIn: string, range?: string | null, ifNoneMatch?: string | null, acceptEncoding?: string | null): Response | null {
+  const fp = inside(fpIn);
+  if (!fp || !existsSync(fp) || statSync(fp).isDirectory()) return null;
   const ext = extname(fp).toLowerCase();
   let body: Buffer | string = readFileSync(fp);
   if (ext === '.html') {
@@ -890,7 +909,7 @@ function serveFile(fp: string, range?: string | null, ifNoneMatch?: string | nul
     const at = /<html(?=[\s>])[^>]*>/i;
     body = at.test(html)
       ? html.replace(at, (tag) => tag + SQS_STYLE + SHIM)
-      : html.replace(/<\/body>/i, SQS_STYLE + SHIM + '</body>');
+      : html.replace(/<\/body>/i, () => SQS_STYLE + SHIM + '</body>');
   }
   // No-store on HTML. The served markup is rewritten on every request (the
   // bridge shim is injected here, not baked into the capture), so a browser
@@ -1004,6 +1023,11 @@ function esc(v: unknown): string {
 
 Bun.serve({
   port: PORT,
+  // Loopback unless told otherwise: this is a development server that holds
+  // a module secret; exposing it on every interface is a deliberate choice.
+  // (FL_HOST, not HOST: the module's own .env.local sets HOST, and sourcing
+  // that into this process must not silently rebind this server.)
+  hostname: process.env.FL_HOST || '127.0.0.1',
   async fetch(req) {
     const url = new URL(req.url);
     const p = decodeURIComponent(url.pathname);
@@ -1018,6 +1042,24 @@ Bun.serve({
           if (!variantId) return { item_count: 0, error: 'variant not found' };
           const cid = await ensureCart();
           await mod('POST', '/cart/items', '/items', { cartId: cid, variantId, quantity });
+          return shopifyCart();
+        },
+        // The module has remove and add, not "set quantity": a change is a
+        // remove followed by an add of the new quantity. `line` is Shopify's
+        // 1-based position; `id` is the variant id or line key.
+        change: async (idOrLine, quantity) => {
+          if (!cartId) return shopifyCart();
+          const cart = await shopifyCart();
+          const line = typeof idOrLine === 'number'
+            ? cart.items[idOrLine - 1]
+            : cart.items.find((l: any) => String(l.id) === String(idOrLine) || String(l.key) === String(idOrLine));
+          if (!line) return cart;
+          await mod('DELETE', `/cart/${cartId}/items/${line.fl_variant_id}`, `/${cartId}/items/${line.fl_variant_id}`);
+          if (quantity > 0) await mod('POST', '/cart/items', '/items', { cartId, variantId: line.fl_variant_id, quantity });
+          return shopifyCart();
+        },
+        clear: async () => {
+          if (cartId) { await mod('DELETE', `/cart/${cartId}`, `/${cartId}`); cartId = null; }
           return shopifyCart();
         },
       });
@@ -1149,11 +1191,11 @@ Bun.serve({
       const underFile = rel.match(/^(.*)\/[^/]+\.(?:m?js|css)\/([^/]+)$/);
       if (underFile) rel = `${underFile[1]}/${underFile[2]}`;
       if (!extname(rel)) {
-        const cand = join(siteRoot, rel.replace(/\/$/, '') + '.html');
-        if (existsSync(cand)) rel = rel.replace(/\/$/, '') + '.html';
+        const cand = inside(join(siteRoot, rel.replace(/\/$/, '') + '.html'));
+        if (cand && existsSync(cand)) rel = rel.replace(/\/$/, '') + '.html';
         else {
           const m = pageFileFor(rel);
-          if (m && existsSync(join(siteRoot, m.file))) rel = '/' + m.file;
+          if (m && inside(join(siteRoot, m.file)) && existsSync(join(siteRoot, m.file))) rel = '/' + m.file;
         }
       }
       const r = serveFile(join(siteRoot, rel), req.headers.get('range'), req.headers.get('if-none-match'), req.headers.get('accept-encoding'));
@@ -1265,7 +1307,11 @@ async function shopifyCart() {
         title = [product, variant].filter(Boolean).join(' - ') || title;
       }
     } catch {}
-    return { quantity: it.quantity, title, price, line_price: price * it.quantity };
+    // id/key/variant_id are what a theme's cart drawer sends back on
+    // /cart/change.js and /cart/update.js; without them a remove button
+    // has nothing to name.
+    const ext = String(variantCache.get(it.variantId)?.externalId ?? it.variantId);
+    return { id: ext, key: ext, variant_id: ext, fl_variant_id: it.variantId, quantity: it.quantity, title, product_title: title, price, line_price: price * it.quantity };
   }));
   const count = items.reduce((s: number, i: any) => s + i.quantity, 0);
   const total = items.reduce((s: number, i: any) => s + i.price * i.quantity, 0);

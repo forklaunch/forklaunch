@@ -51,7 +51,7 @@ export class Store {
             $opts: JSON.stringify(v.optionValues), $price: v.priceCents,
             $cmp: v.compareAtPriceCents, $ship: v.requiresShipping ? 1 : 0,
           }) as { id: number };
-          insInv.run({ $vid: vrow.id, $stock: DEFAULT_SEED_STOCK });
+          insInv.run({ $vid: vrow.id, $stock: v.inventoryQuantity != null ? v.inventoryQuantity : DEFAULT_SEED_STOCK });
           vCount++;
         }
       }

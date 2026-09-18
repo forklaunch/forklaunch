@@ -38,6 +38,10 @@ function localFor(url) {
 (async () => {
   const domain = process.argv[2];
   const outdir = process.argv[3];
+  if (!domain || !outdir) {
+    console.error('usage: capture.js <domain> <outdir> [--clean]');
+    process.exit(2);
+  }
   const result = { domain, ok: false, reason: null, assets: 0, assetsSaved: 0,
                    bytes: 0, htmlBytes: 0, consoleErrors: 0, startedAt: Date.now() };
 

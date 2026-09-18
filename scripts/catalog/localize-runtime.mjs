@@ -106,7 +106,11 @@ function walk(dir, out = []) {
 /** Representative pages: home, a product, a collection. Enough to exercise
  *  the theme's shared chrome plus the two templates that differ most. */
 async function choosePages(page) {
-  if (pagesArg > 0) return process.argv[pagesArg + 1].split(',');
+  if (pagesArg > 0) {
+    const list = String(process.argv[pagesArg + 1] || '').split(',').map((s) => s.trim()).filter(Boolean);
+    if (!list.length) { console.error('--pages needs a comma-separated list of paths'); process.exit(2); }
+    return list;
+  }
   await page.goto(BASE + '/', { waitUntil: 'load', timeout: 60000 });
   await page.waitForTimeout(3000);
   const found = await page.evaluate(() => {
@@ -179,7 +183,7 @@ for (const [u, type] of external) {
   }
   if (marker.dead[u] && Date.now() - marker.dead[u].at < DEAD_TTL_MS) { knownDead++; continue; }
   try {
-    const res = await fetch(u, { redirect: 'follow' });
+    const res = await fetch(u, { redirect: 'follow', signal: AbortSignal.timeout(15000) });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const bytes = Buffer.from(await res.arrayBuffer());
     const hash = createHash('sha1').update(bytes).digest('hex').slice(0, 10);

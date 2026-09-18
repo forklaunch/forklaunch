@@ -112,6 +112,7 @@ const COMMERCE_HEAD = `<!--fl-commerce--><style>${CSS}</style>
   function load(){try{return JSON.parse(localStorage.getItem(KEY))||{items:[]}}catch(e){return{items:[]}}}
   function save(c){try{localStorage.setItem(KEY,JSON.stringify(c))}catch(e){}}
   function money(c){return '$'+((c||0)/100).toFixed(2)}
+  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
   function priceFromPage(){
     var m=(document.body&&document.body.innerText||'').match(/\\$\\s?([0-9]+(?:\\.[0-9]{2})?)/);
     return m?Math.round(parseFloat(m[1])*100):1500+Math.round(Math.random()*3000);
@@ -131,7 +132,7 @@ const COMMERCE_HEAD = `<!--fl-commerce--><style>${CSS}</style>
     var cn=document.querySelector('#fl-cart-btn .n'); if(cn)cn.textContent=n();
     var c=load(),box=el('fl-items'); if(!box)return;
     if(!c.items.length){box.innerHTML='<div id="fl-empty">Your cart is empty.<br>Add something to get started.</div>';}
-    else{box.innerHTML=c.items.map(function(i,ix){return '<div class="fl-it"><img src="'+(i.image||'')+'"><div class="t"><b>'+i.title+'</b><br>'+money(i.price)+' \\u00d7 '+i.quantity+'</div><button class="rm" onclick="FL.remove('+ix+')">Remove</button></div>'}).join('');}
+    else{box.innerHTML=c.items.map(function(i,ix){return '<div class="fl-it"><img src="'+esc(i.image||'')+'"><div class="t"><b>'+esc(i.title)+'</b><br>'+money(i.price)+' \\u00d7 '+i.quantity+'</div><button class="rm" onclick="FL.remove('+ix+')">Remove</button></div>'}).join('');}
     var s=el('fl-sub'); if(s)s.textContent=money(sub());
   }
   window.FL={
@@ -139,7 +140,7 @@ const COMMERCE_HEAD = `<!--fl-commerce--><style>${CSS}</style>
     remove:function(ix){var c=load();c.items.splice(ix,1);save(c);render();},
     open:function(){var d=el('fl-drawer'),o=el('fl-ov');if(d)d.classList.add('open');if(o)o.classList.add('open');},
     close:function(){var d=el('fl-drawer'),o=el('fl-ov');if(d)d.classList.remove('open');if(o)o.classList.remove('open');},
-    checkout:function(){if(!n())return;var c=load();var ci=el('fl-co-items');if(ci)ci.innerHTML=c.items.map(function(i){return '<div class="li"><span>'+i.title+' \\u00d7 '+i.quantity+'</span><span>'+money(i.price*i.quantity)+'</span></div>'}).join('');var ct=el('fl-co-tot');if(ct)ct.textContent=money(sub());var co=el('fl-co');if(co)co.classList.add('open');},
+    checkout:function(){if(!n())return;var c=load();var ci=el('fl-co-items');if(ci)ci.innerHTML=c.items.map(function(i){return '<div class="li"><span>'+esc(i.title)+' \\u00d7 '+i.quantity+'</span><span>'+money(i.price*i.quantity)+'</span></div>'}).join('');var ct=el('fl-co-tot');if(ct)ct.textContent=money(sub());var co=el('fl-co');if(co)co.classList.add('open');},
     place:function(){var w=document.querySelector('#fl-co .fl-co-wrap');if(w)w.style.display='none';var d=el('fl-done');if(d)d.classList.add('open');var on=el('fl-ordno');if(on)on.textContent='#FL-'+Math.floor(100000+Math.random()*899999);localStorage.removeItem(KEY);},
     reset:function(){var co=el('fl-co');if(co)co.classList.remove('open');var w=document.querySelector('#fl-co .fl-co-wrap');if(w)w.style.display='';var d=el('fl-done');if(d)d.classList.remove('open');render();this.close();}
   };

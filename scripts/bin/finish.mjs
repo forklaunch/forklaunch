@@ -61,7 +61,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, 
          rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkPrereqs, refuse } from '../check-prereqs.mjs';
+import { checkPrereqs, refuse, resolveBun } from '../check-prereqs.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SCRIPTS = resolve(HERE, '..');
@@ -170,10 +170,13 @@ async function waitForServer(timeoutMs = 45000) {
 // does.
 let server = null;
 function startServer() {
-  const bun = process.env.BUN_PATH || `${process.env.HOME}/.bun/bin/bun`;
+  const bun = resolveBun() || `${process.env.HOME}/.bun/bin/bun`;
   const args = [join(SCRIPTS, 'catalog/heroserve-fl.ts'), SITE, PORT];
-  if (MODULE_URL) args.push(MODULE_URL, HMAC, STRIPE_PK, PAYPAL_ID);
-  server = spawn(bun, args, { cwd: SCRIPTS, stdio: ['ignore', 'pipe', 'pipe'], detached: false });
+  // The HMAC secret travels in the child's environment, not its argv, so it
+  // is not visible in a process listing.
+  if (MODULE_URL) args.push(MODULE_URL, '', STRIPE_PK, PAYPAL_ID);
+  server = spawn(bun, args, { cwd: SCRIPTS, stdio: ['ignore', 'pipe', 'pipe'], detached: false,
+                              env: { ...process.env, ...(HMAC ? { HMAC_SECRET_KEY: HMAC } : {}) } });
   let boot = '';
   server.stdout.on('data', (d) => { boot += d; });
   server.stderr.on('data', (d) => { boot += d; });
