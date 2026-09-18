@@ -466,9 +466,11 @@ node ${CLAUDE_SKILL_DIR}/scripts/check-purchase.mjs --store http://localhost:<po
 ```
 
 `check-purchase` reads the module's Postgres directly (a page will happily say
-"thank you" for an order that never left `pending`), so its `--db` and `--pg`
-must be the values from the module's `.env.local`; the defaults are one
-machine's. Relay the two counts (`10/10`, `12/12`) and any FAIL line verbatim.
+"thank you" for an order that never left `pending`), so `--db` and `--pg` are
+the module's own `DB_NAME`, `DB_USER`, `DB_HOST`, `DB_PORT` from its
+`.env.local`; with those exported the flags can be omitted, and without either
+it refuses to run. Relay the two counts (`10/10`, `12/12`) and any FAIL line
+verbatim.
 
 ### Getting the catalog in
 
