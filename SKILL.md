@@ -193,7 +193,7 @@ downloads are normal.
 `migrate.mjs` runs this itself. Use it directly on an existing capture:
 
 ```bash
-node ${CLAUDE_SKILL_DIR}/scripts/bin/finish.mjs <outdir>/site --live https://the-store.com [--module <url> --hmac <secret>]
+node ${CLAUDE_SKILL_DIR}/scripts/bin/finish.mjs <outdir>/site --live https://the-store.com [--module <url>]   # HMAC_SECRET_KEY from the environment
 ```
 
 It discovers this theme's controls, serves the capture through the same bridge
@@ -390,12 +390,12 @@ origin. `heroserve-fl.ts` serves a capture you already have and proxies its
 cart and checkout to the module instead:
 
 ```bash
-HMAC_SECRET_KEY=<secret> STRIPE_PUBLISHABLE_KEY=<pk_...> bun ${CLAUDE_SKILL_DIR}/scripts/catalog/heroserve-fl.ts <capture>/site <port> <module-url>
+STRIPE_PUBLISHABLE_KEY=<pk_...> bun ${CLAUDE_SKILL_DIR}/scripts/catalog/heroserve-fl.ts <capture>/site <port> <module-url>
 ```
 
-The secret goes in the environment, never on the command line where a
-process listing or shell history would keep it; a trailing positional argument
-is still accepted. It binds to 127.0.0.1; `FL_HOST=0.0.0.0` exposes it on purpose.
+`HMAC_SECRET_KEY` comes from the environment (export the module's `.env.local`
+as above) and is refused as an argument. It binds to 127.0.0.1;
+`FL_HOST=0.0.0.0` exposes it on purpose.
 
 It intercepts the captured pages' native Shopify cart calls, maps them onto the
 module's `/cart`, `/cart/items` and `/checkout` endpoints with HMAC auth. A
@@ -494,12 +494,17 @@ bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts pull https://thestore.com
 bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts normalize data/<slug>/raw.json
 
 # 3. import — POSITIONAL args, not flags: <normalized.json> <module-url> <secret>
-HMAC_SECRET_KEY=<secret> bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts import data/<slug>/normalized.json http://localhost:8001
+bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts import data/<slug>/normalized.json http://localhost:8001
 ```
 
-The secret goes in the environment, never on the command line where a
-process listing or shell history would keep it; a trailing positional argument
-is still accepted.
+The module secret is read from `HMAC_SECRET_KEY` in the environment and is
+not accepted on the command line, where a process listing would show it. The
+module's own `.env.local` already defines it (and the `DB_*` values the
+purchase gate needs), so export that file rather than typing the value:
+
+```bash
+set -a; source <app>/src/modules/ecommerce/.env.local; set +a
+```
 
 `normalize` writes to `data/<slug>/` derived from the raw file, and falls back
 to `data/unknown-shop/` when it can't infer the shop — harmless, but check the
@@ -517,7 +522,7 @@ instead, then import exactly as above:
 ```bash
 # commerce collection path is usually /shop; the preflight's nav list shows it
 node ${CLAUDE_SKILL_DIR}/scripts/catalog/pull-squarespace.mjs https://thestore.com /shop
-HMAC_SECRET_KEY=<secret> bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts import data/<slug>/normalized.json http://localhost:8001
+bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts import data/<slug>/normalized.json http://localhost:8001
 ```
 
 The crawl discovers products by Shopify's URL shape, so on a Squarespace store

@@ -129,7 +129,7 @@ JSON and import it:
 
 ```bash
 node scripts/catalog/pull-squarespace.mjs https://www.the-store.com /shop
-HMAC_SECRET_KEY=<from .env.local> bun scripts/catalog/cli.ts import scripts/catalog/data/the-store-com/normalized.json http://localhost:<PORT>
+bun scripts/catalog/cli.ts import scripts/catalog/data/the-store-com/normalized.json http://localhost:<PORT>
 ```
 
 `/shop` is the commerce collection's path; pass a different one if the store
@@ -218,7 +218,7 @@ works, never that a number matches.
 | `--no-serve` | exit with the verdict's code instead of staying up serving; the last line printed is `exit code N — …` |
 | `--port N` | serve on another port (default 4173) |
 | `--rounds N`, `--budget-min N` | verify/repair budget (default 5 rounds, 30 minutes) |
-| `--server URL --secret KEY` | import the catalog into a running ForkLaunch ecommerce module and wire the cart to it; without these the cart is browse-only. `HMAC_SECRET_KEY` in the environment works in place of `--secret` |
+| `--server URL` | import the catalog into a running ForkLaunch ecommerce module and wire the cart to it, signing with `HMAC_SECRET_KEY` from the environment (export the module's `.env.local`); without it the cart is browse-only |
 | `FL_CONCURRENCY=N` | pages captured at once (default 3; use 1 on a small laptop, since one browser is about 450 MB) |
 
 Output goes to `scripts/output/<store-domain>/` (`--out DIR` to change): the
