@@ -1,7 +1,7 @@
 # From clone to a store that takes money
 
 The skill gives you the front half: a faithful, browsable clone of a Shopify
-storefront. This is the whole path from there to a store running on ForkLaunch
+or Squarespace storefront. This is the whole path from there to a store running on ForkLaunch
 with real cart, checkout and payment. Six steps. Each says what you type, what
 you get, and whether it has been run end to end.
 
@@ -46,8 +46,9 @@ bun cli.ts import data/the-store-com/normalized.json http://localhost:<PORT> <HM
 ```
 
 Every product and variant lands in the module with `initialStock` set, so it is
-sellable. `externalId` on each variant is the Shopify variant id; that is how
-the clone's add-to-cart buttons map onto the module's variants in step 3.
+sellable. `externalId` on each variant is the source platform's variant id (Shopify's,
+or Squarespace's); that is how the clone's add-to-cart buttons map onto the
+module's variants in step 3.
 
 For a Squarespace store there is no `/products.json`; pull the catalog from
 the store's own JSON first, then import the same way:
@@ -97,8 +98,9 @@ stock decremented. PayPal: proven on the module, not through this server.
 forklaunch init storefront --from tools/storefront-migrate/scripts/output/the-store.com/manifest.json
 ```
 
-Check `forklaunch init --help` lists `storefront`; older CLIs do not have it.
-`references/manifest-schema.md` says exactly what the command reads.
+This command is not in CLI 1.10.0 (the current release); check
+`forklaunch init --help` on yours. `references/manifest-schema.md` says exactly
+what it reads once it exists.
 
 Tested: the manifest is produced and validated on every run. The command itself
 belongs to the platform team; confirm it on your CLI version.
@@ -106,8 +108,15 @@ belongs to the platform team; confirm it on your CLI version.
 ## 5. Payments and webhooks for real
 
 Stripe: put the account's secret key and the webhook signing secret in the
-module's `.env.local` before it starts (`stripe listen` prints the signing
-secret locally). PayPal: one webhook URL per app, publicly reachable, so
+module's `.env.local` before it starts. Locally, forward Stripe's events to the
+module and use the signing secret it prints:
+
+```bash
+stripe listen --forward-to localhost:<PORT>/webhook/stripe
+```
+
+The module rejects every webhook, and no order ever reaches `paid`, if that
+secret and `STRIPE_WEBHOOK_SECRET` in `.env.local` differ. PayPal: one webhook URL per app, publicly reachable, so
 locally that means a tunnel. Details and the traps are in the ecommerce skill's
 "Critical Rules".
 

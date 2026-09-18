@@ -1,13 +1,13 @@
-# Migration integration guide — for Guild's Builders
+# Catalog import contract — `POST /catalog-import`
 
-This documents the one API surface a migration/clone tool is expected to load
-through: `POST /catalog-import`. Per the ownership split already agreed —
-ForkLaunch builds and owns this module and this endpoint; Guild builds the
-migration tool that calls it. This doc is what that tool needs to know.
+This documents the one API surface a migration tool loads a catalog through.
+The ecommerce module (`blueprint/ecommerce-stripe`) owns the endpoint; this
+tool, and any other migration tool, is a client of it. This doc is what a
+client needs to know.
 
 A working reference implementation of everything below (pull → normalize →
-import, including HMAC signing and batching) exists at `scripts/catalog/cli.ts`
-in this skill package and is safe to read end-to-end alongside this doc.
+import, including HMAC signing and batching) is `scripts/catalog/cli.ts` in
+this folder, safe to read end-to-end alongside this doc.
 
 ## The endpoint
 
