@@ -83,6 +83,25 @@ with a backend. What each action on the page does:
 The HMAC secret never reaches the browser: heroserve signs every module call
 server-side. Pass a PayPal client id as a sixth argument for the PayPal button.
 
+Prove it before anyone looks. Two gates, run from `tools/storefront-migrate/scripts`
+with the module, its worker and `stripe listen` (step 5) all running:
+
+```bash
+node check-wired.mjs http://localhost:4173
+node check-purchase.mjs --store http://localhost:4173 --db <DB_NAME> --pg postgresql://<DB_USER>@localhost:<DB_PORT>
+```
+
+`check-wired` (10 checks) proves the served pages drive the module: shim
+running, add to cart lands server-side, no dead links, checkout collects an
+address. `check-purchase` (12 checks) proves a purchase goes all the way:
+pending order, test card to `paid` by webhook, stock down by the quantity
+ordered, a declined card leaving both untouched, and nothing on the page
+phoning a third party. It reads the module's database directly, never the
+page, so pass the `DB_NAME`, `DB_USER` and `DB_PORT` from the module's
+`.env.local`; its defaults are one development machine's values. Both exit
+non-zero on any failed check, and a store is not ready to show until both
+pass.
+
 Tested: yes, real Stripe test payment, order to `paid`, stock decremented
 (graza.co clone, 2026-09-01). Re-proven 2026-09-06 on two stores, graza.co and
 gorillamind.com, with `scripts/check-purchase.mjs`: 12 of 12 checks each,
