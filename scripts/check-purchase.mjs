@@ -2,8 +2,9 @@
 /**
  * check-purchase — proves a migrated storefront can actually take money.
  *
- *   node check-purchase.mjs [--store http://localhost:4180] [--db <name>]
- *                           [--pg postgresql://user@host:port]
+ *   node check-purchase.mjs [--store http://localhost:4173] --db <DB_NAME>
+ *                           --pg postgresql://<DB_USER>@<DB_HOST>:<DB_PORT>
+ *   (or export the module's DB_NAME, DB_USER, DB_HOST, DB_PORT and omit both)
  *
  * check-wired.mjs proves the page is bridged to the module. This proves the
  * bridge carries a purchase all the way to `paid` and moves inventory. Every
@@ -34,9 +35,18 @@ import { execFileSync } from 'node:child_process';
 import { until, cardFrame, fillCard, pay } from './lib-gate.mjs';
 
 const arg = (n, d) => { const i = process.argv.indexOf(n); return i >= 0 ? process.argv[i + 1] : d; };
-const STORE = arg('--store', 'http://localhost:4180').replace(/\/$/, '');
-const DB = arg('--db', 'audit-dropin-db');
-const PGBASE = arg('--pg', 'postgresql://postgresql@localhost:5434');
+const env = process.env;
+// The store is wherever heroserve-fl.ts is serving (4173 unless --port said
+// otherwise). The database is the module's own: pass --db/--pg, or export the
+// module's DB_* variables (the values in its .env.local), and they are used.
+const STORE = arg('--store', 'http://localhost:4173').replace(/\/$/, '');
+const DB = arg('--db', env.DB_NAME);
+const PGBASE = arg('--pg', env.DB_HOST ? `postgresql://${env.DB_USER || 'postgres'}@${env.DB_HOST}:${env.DB_PORT || 5432}` : undefined);
+if (!DB || !PGBASE) {
+  console.error('usage: node check-purchase.mjs [--store <url>] --db <DB_NAME> --pg postgresql://<DB_USER>@<DB_HOST>:<DB_PORT>');
+  console.error('       (or export DB_NAME, DB_USER, DB_HOST, DB_PORT from the module\'s .env.local)');
+  process.exit(2);
+}
 const PGURL = `${PGBASE}/${DB}`;
 
 const results = [];

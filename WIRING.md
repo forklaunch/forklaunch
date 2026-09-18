@@ -96,10 +96,10 @@ address. `check-purchase` (12 checks) proves a purchase goes all the way:
 pending order, test card to `paid` by webhook, stock down by the quantity
 ordered, a declined card leaving both untouched, and nothing on the page
 phoning a third party. It reads the module's database directly, never the
-page, so pass the `DB_NAME`, `DB_USER` and `DB_PORT` from the module's
-`.env.local`; its defaults are one development machine's values. Both exit
-non-zero on any failed check, and a store is not ready to show until both
-pass.
+page, so give it the `DB_NAME`, `DB_USER`, `DB_HOST` and `DB_PORT` from the
+module's `.env.local` — as the flags above, or exported, in which case both
+flags can be omitted. Both gates exit non-zero on any failed check, and a
+store is not ready to show until both pass.
 
 Proven with real Stripe test payments: graza.co and gorillamind.com pass all 12
 `check-purchase` checks, including a declined card leaving stock untouched and
