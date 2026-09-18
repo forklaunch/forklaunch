@@ -2,8 +2,8 @@
 
 The skill gives you the front half: a faithful, browsable clone of a Shopify
 or Squarespace storefront. This is the whole path from there to a store running on ForkLaunch
-with real cart, checkout and payment. Six steps. Each says what you type, what
-you get, and whether it has been run end to end.
+with real cart, checkout and payment. Six steps. Each says what you type and
+what you get.
 
 Read this after `MANUAL.md`. Nothing here is needed to show a client their
 clone; all of it is needed before that clone can sell anything.
@@ -34,9 +34,8 @@ Then follow the ecommerce skill that ships with the CLI (it is in your skills
 pack after `forklaunch init`): Postgres and Redis up, `.env.local` filled in,
 `pnpm build`, migrations, `pnpm dev` **and** `pnpm dev:worker` in a second
 terminal. Note from `.env.local`: the module's port (`PORT`) and
-`HMAC_SECRET_KEY`. You will need both twice below.
-
-Tested: yes, from a blank agent with only the skill docs (2026-09-01).
+`HMAC_SECRET_KEY`. You will need both twice below. A blank agent with only the
+skill docs gets through this step on its own.
 
 ## 2. Import the catalog into the module
 
@@ -58,8 +57,8 @@ node pull-squarespace.mjs https://www.the-store.com /shop
 bun cli.ts import data/the-store-com/normalized.json http://localhost:<PORT> <HMAC_SECRET_KEY>
 ```
 
-Tested: yes, on graza.co (79 products) and gorillamind.com (51); Squarespace on
-swaticouture.com (379 products, 2026-09-14).
+Done on graza.co (79 products), gorillamind.com (51) and, for Squarespace,
+swaticouture.com (379 products).
 
 ## 3. Serve the clone against the module
 
@@ -102,14 +101,12 @@ page, so pass the `DB_NAME`, `DB_USER` and `DB_PORT` from the module's
 non-zero on any failed check, and a store is not ready to show until both
 pass.
 
-Tested: yes, real Stripe test payment, order to `paid`, stock decremented
-(graza.co clone, 2026-09-01). Re-proven 2026-09-06 on two stores, graza.co and
-gorillamind.com, with `scripts/check-purchase.mjs`: 12 of 12 checks each,
-including declined card leaving stock untouched and the return URL being
-verified with Stripe rather than trusted. Re-run 2026-09-14 from a fresh
-database: graza.co 12 of 12 again, and the Squarespace clone of
-swaticouture.com through its own theme's Add to Cart button to `paid` with
-stock decremented. PayPal: proven on the module, not through this server.
+Proven with real Stripe test payments: graza.co and gorillamind.com pass all 12
+`check-purchase` checks, including a declined card leaving stock untouched and
+the return URL verified with Stripe rather than trusted; the Squarespace clone
+of swaticouture.com goes through its own theme's Add to Cart button to `paid`
+with stock decremented. PayPal is wired in the module; carrying it through
+this server is next.
 
 ## 4. Register the clone as a ForkLaunch project
 
@@ -117,12 +114,10 @@ stock decremented. PayPal: proven on the module, not through this server.
 forklaunch init storefront --from tools/storefront-migrate/scripts/output/the-store.com/manifest.json
 ```
 
-This command is not in CLI 1.10.0 (the current release); check
-`forklaunch init --help` on yours. `references/manifest-schema.md` says exactly
-what it reads once it exists.
-
-Tested: the manifest is produced and validated on every run. The command itself
-belongs to the platform team; confirm it on your CLI version.
+This command is coming to the CLI (not in 1.10.0; check `forklaunch init
+--help` on yours). Until it lands the manifest is the handoff: it is produced
+and validated on every run, and `references/manifest-schema.md` says exactly
+what the command reads.
 
 ## 5. Payments and webhooks for real
 
@@ -141,10 +136,10 @@ locally that means a tunnel. Details and the traps are in the ecommerce skill's
 
 ## 6. Deploy
 
-`forklaunch deploy create` provisions the app; the clone's server (heroserve) is
-a dev server today (secret on the command line, no TLS) and needs a production
-home. This step has not been run end to end. Treat it as the next piece of
-work, not a checkbox.
+`forklaunch deploy create` provisions the app. The clone's server (heroserve)
+is a dev server today (secret on the command line, no TLS); giving it a
+production home — secret from the environment, TLS, a real domain — is the next
+piece of work.
 
 ## What still will not come across
 
