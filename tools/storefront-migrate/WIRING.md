@@ -41,7 +41,7 @@ Tested: yes, from a blank agent with only the skill docs (2026-09-01).
 ## 2. Import the catalog into the module
 
 ```bash
-cd storefront-migrate/scripts/catalog
+cd tools/storefront-migrate/scripts/catalog
 bun cli.ts import data/the-store-com/normalized.json http://localhost:<PORT> <HMAC_SECRET_KEY>
 ```
 
@@ -49,12 +49,21 @@ Every product and variant lands in the module with `initialStock` set, so it is
 sellable. `externalId` on each variant is the Shopify variant id; that is how
 the clone's add-to-cart buttons map onto the module's variants in step 3.
 
-Tested: yes, on graza.co (79 products) and gorillamind.com (51).
+For a Squarespace store there is no `/products.json`; pull the catalog from
+the store's own JSON first, then import the same way:
+
+```bash
+node pull-squarespace.mjs https://www.the-store.com /shop
+bun cli.ts import data/the-store-com/normalized.json http://localhost:<PORT> <HMAC_SECRET_KEY>
+```
+
+Tested: yes, on graza.co (79 products) and gorillamind.com (51); Squarespace on
+swaticouture.com (379 products, 2026-09-14).
 
 ## 3. Serve the clone against the module
 
 ```bash
-cd storefront-migrate/scripts
+cd tools/storefront-migrate/scripts
 bun catalog/heroserve-fl.ts output/the-store.com/site 4173 http://localhost:<PORT> <HMAC_SECRET_KEY> <STRIPE_PUBLISHABLE_KEY>
 ```
 
@@ -77,13 +86,15 @@ Tested: yes, real Stripe test payment, order to `paid`, stock decremented
 (graza.co clone, 2026-09-01). Re-proven 2026-09-06 on two stores, graza.co and
 gorillamind.com, with `scripts/check-purchase.mjs`: 12 of 12 checks each,
 including declined card leaving stock untouched and the return URL being
-verified with Stripe rather than trusted. PayPal: proven on the module, not through this
-server.
+verified with Stripe rather than trusted. Re-run 2026-09-14 from a fresh
+database: graza.co 12 of 12 again, and the Squarespace clone of
+swaticouture.com through its own theme's Add to Cart button to `paid` with
+stock decremented. PayPal: proven on the module, not through this server.
 
 ## 4. Register the clone as a ForkLaunch project
 
 ```bash
-forklaunch init storefront --from storefront-migrate/scripts/output/the-store.com/manifest.json
+forklaunch init storefront --from tools/storefront-migrate/scripts/output/the-store.com/manifest.json
 ```
 
 Check `forklaunch init --help` lists `storefront`; older CLIs do not have it.

@@ -1,6 +1,6 @@
 # Storefront Migrate: how to use it
 
-Point it at a Shopify store. It produces a faithful, browsable, offline clone of
+Point it at a Shopify or Squarespace store. It produces a faithful, browsable, offline clone of
 that store's public pages, verifies the clone against the live site, and repairs
 what it can. One command. It stops when the clone has every feature the live
 site has, or tells you exactly what it could not fix.
@@ -43,7 +43,7 @@ do it by hand if you prefer.
 
 ## Before the first run
 
-Run everything from the unpacked folder (the one containing `scripts/`,
+Run everything from this folder (the one containing `scripts/`,
 `MANUAL.md` and `SKILL.md`). Output lands in `scripts/output/<store-domain>/`.
 
 Three tools have to be on the machine. Check first (`bun --version`,

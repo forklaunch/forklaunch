@@ -4,7 +4,7 @@ This is the short version for someone who has to explain the tool to a colleague
 
 ## What the skill produces
 
-You give it one thing: the URL of a Shopify store. It hands back a folder that is a working, browsable copy of that store, served on localhost. Every page a shopper can reach from the navigation is there. Menus open, carousels slide, variant pickers switch images and prices, search and collection filters respond, and the cart drawer holds items. Nothing in the copy calls the original store or Shopify. It is a self-contained demo the prospect can click through as if it were their own site.
+You give it one thing: the URL of a Shopify store (Squarespace works too; see "Other platforms"). It hands back a folder that is a working, browsable copy of that store, served on localhost. Every page a shopper can reach from the navigation is there. Menus open, carousels slide, variant pickers switch images and prices, search and collection filters respond, and the cart drawer holds items. Nothing in the copy calls the original store or Shopify. It is a self-contained demo the prospect can click through as if it were their own site.
 
 What it does NOT do by default: take money. Cart, checkout and account pages are visual only until a backend is wired in. That is deliberate. The skill is the migration. The commerce module is the product.
 
@@ -12,7 +12,7 @@ What it does NOT do by default: take money. Cart, checkout and account pages are
 
 The pipeline is one command and runs hands off. Under the hood it is six stages.
 
-1. **Assess.** It fetches the storefront, confirms it is Shopify, identifies the theme, estimates page count and time, and prints a GREEN, AMBER or RED verdict before spending any real time. RED means do not bother, and it says why.
+1. **Assess.** It fetches the storefront, identifies the platform and theme, estimates page count and time, and prints a GREEN, AMBER or RED verdict before spending any real time. RED means do not bother, and it says why.
 
 2. **Capture.** A real browser walks the site from the navigation outward: home, every collection, every product linked from those collections, the content pages, and the cart. For each page it saves the rendered HTML plus every asset the page needed (images, fonts, scripts, stylesheets, videos), and rewrites the links so they point at local files. Third-party tags (analytics, chat widgets, consent banners, review widgets) are recorded but not fetched. The copy stays offline.
 

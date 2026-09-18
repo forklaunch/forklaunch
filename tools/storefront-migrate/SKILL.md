@@ -479,8 +479,25 @@ Whether `migrate.mjs` ran the pull or you did, the output lives in
 (`raw.json`, `normalized.json`) regardless of `--out`. Look there, not in the
 capture's output directory.
 
+**Squarespace stores** have no `/products.json`; phase `2/4` prints `catalog
+step failed` and that is expected. Pull the catalog from the store's own JSON
+instead, then import exactly as above:
+
+```bash
+# commerce collection path is usually /shop; the preflight's nav list shows it
+node ${CLAUDE_SKILL_DIR}/scripts/catalog/pull-squarespace.mjs https://thestore.com /shop
+bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts import data/<slug>/normalized.json http://localhost:8001 <hmac-secret>
+```
+
+Served with `heroserve-fl.ts` against the module, the captured pages' own
+`.sqs-add-to-cart-button` drives the module's cart (the shim binds it), and
+`/<collection>/p/<handle>` URLs the crawl never captured render from the
+module's catalog. Stores that switched selling off hide those buttons in their
+own CSS; the served clone shows them again.
+
 Public-catalog pulls carry no real stock counts (Shopify's public feed exposes
-only an in-stock boolean), so imported inventory is a placeholder. Use
+only an in-stock boolean; Squarespace `unlimited` carries no number), so
+imported inventory is a placeholder. Use
 `pull-admin <shop> --token <t>` with the merchant's read-only Admin token when
 the numbers need to be real.
 
