@@ -456,6 +456,20 @@ a visual demo without Stripe credentials wants.
 > consumes the resulting event. Both must be running, or a paid-looking
 > checkout leaves an order stuck at `pending` and inventory untouched.
 
+**Do not report a wired store as working until both gates pass.** With the
+module, its worker and `stripe listen --forward-to localhost:<PORT>/webhook/stripe`
+running:
+
+```bash
+node ${CLAUDE_SKILL_DIR}/scripts/check-wired.mjs http://localhost:<port>
+node ${CLAUDE_SKILL_DIR}/scripts/check-purchase.mjs --store http://localhost:<port> --db <DB_NAME> --pg postgresql://<DB_USER>@localhost:<DB_PORT>
+```
+
+`check-purchase` reads the module's Postgres directly (a page will happily say
+"thank you" for an order that never left `pending`), so its `--db` and `--pg`
+must be the values from the module's `.env.local`; the defaults are one
+machine's. Relay the two counts (`10/10`, `12/12`) and any FAIL line verbatim.
+
 ### Getting the catalog in
 
 The three commands below are the whole pipeline. Their argument shapes are easy
@@ -489,6 +503,17 @@ instead, then import exactly as above:
 # commerce collection path is usually /shop; the preflight's nav list shows it
 node ${CLAUDE_SKILL_DIR}/scripts/catalog/pull-squarespace.mjs https://thestore.com /shop
 bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts import data/<slug>/normalized.json http://localhost:8001 <hmac-secret>
+```
+
+The crawl discovers products by Shopify's URL shape, so on a Squarespace store
+it captures only the product pages the navigation links to directly and the
+rest of the shop grid falls to the module-rendered page. Before reporting the
+clone as ready, recapture the grid's own product pages — exactly the links the
+captured shop page carries, in targeted mode, never a re-crawl:
+
+```bash
+links=$(grep -oE 'href="/shop/p/[^"]+"' <outdir>/site/shop.html | cut -d'"' -f2 | awk '!s[$0]++' | head -30 | paste -sd, -)
+node ${CLAUDE_SKILL_DIR}/scripts/crawl.js <domain> <outdir> --clean --only "$links"
 ```
 
 Served with `heroserve-fl.ts` against the module, the captured pages' own

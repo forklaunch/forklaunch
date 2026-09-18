@@ -133,9 +133,26 @@ bun scripts/catalog/cli.ts import scripts/catalog/data/the-store-com/normalized.
 ```
 
 `/shop` is the commerce collection's path; pass a different one if the store
-uses another. Served with `heroserve-fl.ts` against the module, the theme's
-own Add to Cart buttons drive the module's cart, and products the crawl never
-captured still open on a module-rendered page. Stores that switched selling
+uses another.
+
+The crawl discovers products by Shopify's URL shape, so on a Squarespace store
+it captures only the product pages the navigation links to directly (a
+handful) and the rest of the shop grid opens on a plain module-rendered page:
+still buyable, not the merchant's design. Capture the grid's own product pages
+before showing anyone. This takes the first 30 links from the captured shop
+page and fetches exactly those (about ten seconds each):
+
+```bash
+links=$(grep -oE 'href="/shop/p/[^"]+"' scripts/output/the-store.com/site/shop.html | cut -d'"' -f2 | awk '!s[$0]++' | head -30 | paste -sd, -)
+node scripts/crawl.js the-store.com scripts/output/the-store.com --clean --only "$links"
+```
+
+Raise the 30 to cover more of the grid; every product costs one page fetch on
+the live site.
+
+Served with `heroserve-fl.ts` against the module, the theme's own Add to Cart
+buttons drive the module's cart, and products the crawl never captured still
+open on a module-rendered page. Stores that switched selling
 off (enquiry-only, buttons hidden in their own CSS) get the buttons back on
 the clone. Proven end to end on swaticouture.com (379 products, test card to
 paid, stock decremented).
