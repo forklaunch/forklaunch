@@ -86,7 +86,7 @@ const ONLY = onlyIdx > -1
 // Asset-URL rewrites still run inside scripts on purpose; only this one
 // injects an attribute, and an attribute has no meaning inside JavaScript.
 function replaceOutsideScripts(html, re, fn) {
-  return html.split(/(<script\b[^>]*>[\s\S]*?<\/script\s*>)/i)
+  return html.split(/(<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>)/i)
              .map((seg, i) => (i % 2 ? seg : seg.replace(re, fn)))
              .join('');
 }

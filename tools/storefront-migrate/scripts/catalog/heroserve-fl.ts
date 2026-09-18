@@ -639,7 +639,7 @@ const SHIM = `<script>(function(){
  * would break the pages that rely on it.
  */
 function absolutiseScriptPaths(html: string): string {
-  return html.replace(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi, (whole, inner) => {
+  return html.replace(/<script\b[^>]*>([\s\S]*?)<\/script\b[^>]*>/gi, (whole, inner) => {
     if (!inner.includes('_a/')) return whole;
     const fixed = inner.replace(/(["'`])_a\//g, '$1/_a/');
     return fixed === inner ? whole : whole.replace(inner, fixed);

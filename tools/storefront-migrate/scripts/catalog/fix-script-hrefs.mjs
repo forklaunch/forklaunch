@@ -37,7 +37,7 @@ for (const f of htmlFiles(SITE)) {
   files++;
   const html = readFileSync(f, 'utf8');
   let n = 0;
-  let out = html.split(/(<script\b[^>]*>[\s\S]*?<\/script\s*>)/i)
+  let out = html.split(/(<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>)/i)
     .map((seg, i) => (i % 2 ? seg.replace(BROKEN, (m, p) => { n++; return `href="${p}"`; }) : seg))
     .join('');
   // Older captures rewrote the logo's href="/" to the homepage's own HTML
