@@ -2,7 +2,7 @@
 /**
  * forklaunch storefront migration — single entrypoint.
  *
- *   node bin/migrate.mjs <store-url> [--out DIR] [--pages N] [--single] [--api URL] [--server URL] [--secret KEY] [--no-catalog] [--no-verify] [--no-serve] [--measure] [--clean]
+ *   node bin/migrate.mjs <store-url> [--out DIR] [--pages N] [--single] [--api URL] [--server URL] [--no-catalog] [--no-verify] [--no-serve] [--measure] [--clean]
  *
  * Captures a live storefront's homepage at high visual fidelity and stands it
  * up locally. Everything runs on 127.0.0.1; no data leaves the machine and no
@@ -57,7 +57,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
 
 function parseArgs(argv) {
-  const a = { serve: true, measure: false, out: null, url: null, clean: false, pages: 20, noPreflight: false, noCatalog: false, server: null, secret: null, api: null, noVerify: false, rounds: 5, budgetMin: 30, port: '4173', stripePk: null, paypalId: null, allowRecapture: true };
+  const a = { serve: true, measure: false, out: null, url: null, clean: false, pages: 20, noPreflight: false, noCatalog: false, server: null, api: null, noVerify: false, rounds: 5, budgetMin: 30, port: '4173', stripePk: null, paypalId: null, allowRecapture: true };
   for (let i = 0; i < argv.length; i++) {
     const t = argv[i];
     if (t === '--no-serve') a.serve = false;
@@ -78,7 +78,7 @@ function parseArgs(argv) {
     else if (t === '--no-recapture') a.allowRecapture = false;
     else if (t === '--server') a.server = argv[++i];
     else if (t === '--api') a.api = argv[++i];
-    else if (t === '--secret') a.secret = argv[++i];
+    else if (t === '--secret') { console.error('--secret is not accepted: export HMAC_SECRET_KEY instead, so the secret never appears in a process listing.'); process.exit(2); }
     else if (t === '--pages') a.pages = parseInt(argv[++i], 10) || 20;
     else if (t === '--out') a.out = argv[++i];
     else if (!t.startsWith('--')) a.url = t;
@@ -141,7 +141,8 @@ const args = parseArgs(process.argv.slice(2));
 if (!args.url) {
   console.error('usage: node bin/migrate.mjs <store-url> [--out DIR] [--pages N] [--single] [--clean]\n' +
                 '                              [--port 4173] [--rounds 5] [--budget-min 30] [--no-recapture]\n' +
-                '                              [--api URL] [--server URL] [--secret KEY] [--stripe-pk pk_…] [--paypal-id …]\n' +
+                '                              [--api URL] [--server URL] [--stripe-pk pk_…] [--paypal-id …]\n' +
+                '                              (the module secret is read from HMAC_SECRET_KEY in the environment)\n' +
                 '                              [--no-catalog] [--no-verify] [--no-serve] [--measure]');
   process.exit(2);
 }
@@ -232,9 +233,8 @@ if (!args.noCatalog) {
     catalogReady = true;
     if (args.server) {
       const norm = join(cat, 'data', domain.replace(/\./g, '-'), 'normalized.json');
-      const importArgs = [join(cat, 'cli.ts'), 'import', norm, args.server];
-      if (args.secret) importArgs.push(args.secret);
-      await run(BUN, importArgs, { cwd: cat });
+      // cli.ts reads HMAC_SECRET_KEY from the environment it inherits here.
+      await run(BUN, [join(cat, 'cli.ts'), 'import', norm, args.server], { cwd: cat });
     } else {
       console.log('   (no --server given — catalog normalized but not imported)');
     }
@@ -293,7 +293,6 @@ if (args.noVerify) {
     '--out', outdir, '--rounds', String(args.rounds), '--budget-min', String(args.budgetMin)];
   if (args.allowRecapture) finishArgs.push('--allow-recapture');
   if (args.server) finishArgs.push('--module', args.server);
-  if (args.secret) finishArgs.push('--hmac', args.secret);
   if (args.stripePk) finishArgs.push('--stripe-pk', args.stripePk);
   if (args.paypalId) finishArgs.push('--paypal-id', args.paypalId);
   if (args.serve) finishArgs.push('--serve-after');

@@ -397,21 +397,44 @@ export function normalizeAdminProduct(node: any, shopBaseUrl: string): Normalize
   };
 }
 
+const ADMIN_VARIANT_FIELDS = `legacyResourceId sku title price compareAtPrice inventoryQuantity availableForSale
+        selectedOptions { name value }
+        inventoryItem { requiresShipping measurement { weight { value unit } } }`;
+
 const ADMIN_PRODUCTS_QUERY = `query($cursor: String) {
   products(first: 50, after: $cursor) {
     edges { node {
-      legacyResourceId handle title descriptionHtml vendor productType tags status
+      id legacyResourceId handle title descriptionHtml vendor productType tags status
       options { name values }
-      images(first: 50) { edges { node { url altText } } pageInfo { hasNextPage } }
-      variants(first: 100) { edges { node {
-        legacyResourceId sku title price compareAtPrice inventoryQuantity availableForSale
-        selectedOptions { name value }
-        inventoryItem { requiresShipping measurement { weight { value unit } } }
-      } } pageInfo { hasNextPage } }
+      images(first: 50) { edges { node { url altText } } pageInfo { hasNextPage endCursor } }
+      variants(first: 100) { edges { node { ${ADMIN_VARIANT_FIELDS} } } pageInfo { hasNextPage endCursor } }
     } }
     pageInfo { hasNextPage endCursor }
   }
 }`;
+
+// A product with more than 50 images or 100 variants continues here, one
+// connection at a time, until its nested pageInfo says there is no more.
+const ADMIN_PRODUCT_MORE_QUERY = `query($id: ID!, $icur: String, $vcur: String, $images: Int!, $variants: Int!) {
+  product(id: $id) {
+    images(first: $images, after: $icur) { edges { node { url altText } } pageInfo { hasNextPage endCursor } }
+    variants(first: $variants, after: $vcur) { edges { node { ${ADMIN_VARIANT_FIELDS} } } pageInfo { hasNextPage endCursor } }
+  }
+}`;
+
+async function completeNested(shop: string, token: string, node: any) {
+  let icur = node.images?.pageInfo?.hasNextPage ? node.images.pageInfo.endCursor : null;
+  let vcur = node.variants?.pageInfo?.hasNextPage ? node.variants.pageInfo.endCursor : null;
+  while (icur || vcur) {
+    const data = await adminGraphql(shop, token, ADMIN_PRODUCT_MORE_QUERY,
+      { id: node.id, icur, vcur, images: icur ? 50 : 0, variants: vcur ? 100 : 0 });
+    const p = data.product;
+    if (icur) { node.images.edges.push(...(p.images?.edges ?? [])); icur = p.images?.pageInfo?.hasNextPage ? p.images.pageInfo.endCursor : null; }
+    if (vcur) { node.variants.edges.push(...(p.variants?.edges ?? [])); vcur = p.variants?.pageInfo?.hasNextPage ? p.variants.pageInfo.endCursor : null; }
+    await sleep(250);
+  }
+  return node;
+}
 
 async function adminGraphql(shop: string, token: string, query: string, variables: unknown): Promise<any> {
   // ADMIN_API_ENDPOINT overrides the live Shopify URL — used only to point the
@@ -447,7 +470,7 @@ async function cmdPullAdmin(shopUrl: string, token: string) {
   let cursor: string | null = null;
   do {
     const data = await adminGraphql(shop, token, ADMIN_PRODUCTS_QUERY, { cursor });
-    for (const edge of data.products.edges) products.push(normalizeAdminProduct(edge.node, base));
+    for (const edge of data.products.edges) products.push(normalizeAdminProduct(await completeNested(shop, token, edge.node), base));
     cursor = data.products.pageInfo.hasNextPage ? data.products.pageInfo.endCursor : null;
     console.log(`  pulled ${products.length} products...`);
     if (cursor) await sleep(500);
@@ -582,7 +605,11 @@ if (import.meta.main) {
   }
   else if (cmd === 'import' && arg) {
     const serverUrl = process.argv[4] ?? 'http://localhost:8001';
-    const secretKey = process.argv[5] ?? process.env.HMAC_SECRET_KEY;
+    if (process.argv[5]) {
+      console.error('import: the module secret is read from HMAC_SECRET_KEY in the environment and is not accepted as an argument.');
+      process.exit(2);
+    }
+    const secretKey = process.env.HMAC_SECRET_KEY;
     // No secret key -> mock mode (the local demo server has no auth at all).
     // Secret key given -> real mode (the real module requires HMAC auth).
     if (!secretKey) {

@@ -3,7 +3,8 @@
  * finish — turn a raw capture into a verified storefront, without supervision.
  *
  *   node bin/finish.mjs <site-dir> [--live https://www.store.com] [--port 4180]
- *                       [--module <url>] [--hmac <secret>] [--stripe-pk <key>]
+ *                       [--module <url>] [--stripe-pk <key>]
+ *                       (module secret: HMAC_SECRET_KEY in the environment)
  *                       [--rounds 5] [--budget-min 30] [--offline]
  *                       [--out <dir>] [--serve-after]
  *
@@ -72,7 +73,8 @@ const has = (n) => process.argv.includes(n);
 const SITE = resolve(process.argv[2] || '');
 const PORT = arg('--port', '4180');
 const MODULE_URL = arg('--module', '');
-const HMAC = arg('--hmac', '');
+if (process.argv.includes('--hmac')) { console.error('--hmac is not accepted: export HMAC_SECRET_KEY instead, so the secret never appears in a process listing.'); process.exit(2); }
+const HMAC = process.env.HMAC_SECRET_KEY || '';
 const STRIPE_PK = arg('--stripe-pk', '');
 const PAYPAL_ID = arg('--paypal-id', '');
 const ROUNDS = Number(arg('--rounds', '5'));
@@ -172,11 +174,15 @@ let server = null;
 function startServer() {
   const bun = resolveBun() || `${process.env.HOME}/.bun/bin/bun`;
   const args = [join(SCRIPTS, 'catalog/heroserve-fl.ts'), SITE, PORT];
-  // The HMAC secret travels in the child's environment, not its argv, so it
-  // is not visible in a process listing.
-  if (MODULE_URL) args.push(MODULE_URL, '', STRIPE_PK, PAYPAL_ID);
+  // The server takes everything but the site and port from its environment:
+  // the HMAC secret must never be in an argv, and the two public keys follow
+  // it there for consistency.
+  if (MODULE_URL) args.push(MODULE_URL);
   server = spawn(bun, args, { cwd: SCRIPTS, stdio: ['ignore', 'pipe', 'pipe'], detached: false,
-                              env: { ...process.env, ...(HMAC ? { HMAC_SECRET_KEY: HMAC } : {}) } });
+                              env: { ...process.env,
+                                     ...(HMAC ? { HMAC_SECRET_KEY: HMAC } : {}),
+                                     ...(STRIPE_PK ? { STRIPE_PUBLISHABLE_KEY: STRIPE_PK } : {}),
+                                     ...(PAYPAL_ID ? { PAYPAL_CLIENT_ID: PAYPAL_ID } : {}) } });
   let boot = '';
   server.stdout.on('data', (d) => { boot += d; });
   server.stderr.on('data', (d) => { boot += d; });

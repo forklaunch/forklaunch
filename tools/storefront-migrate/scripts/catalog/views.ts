@@ -88,7 +88,7 @@ export function productGrid(shop: string, products: any[], brand?: Brand | null,
 }
 
 export function productDetail(shop: string, p: any, brand?: Brand | null): string {
-  const opts = p.options.map((o: any) => o.name + (o.isPackQuantity ? ' <span class="badge">pack qty</span>' : '')).join(', ');
+  const opts = p.options.map((o: any) => esc(o.name) + (o.isPackQuantity ? ' <span class="badge">pack qty</span>' : '')).join(', ');
   const rows = p.variants.map((v: any) => {
     const price = v.compare_at_price_cents && v.compare_at_price_cents > v.price_cents
       ? `<span class="sale">${money(v.price_cents)}</span> <span class="was">${money(v.compare_at_price_cents)}</span>`
@@ -101,7 +101,7 @@ export function productDetail(shop: string, p: any, brand?: Brand | null): strin
   return layout(p.title, `
     <p class="muted"><a href="/">← all products</a></p>
     <h1>${esc(p.title)}</h1>
-    <p class="muted">${esc(p.vendor)} · ${esc(p.product_type)} · options: ${esc(opts || 'none')}</p>
+    <p class="muted">${esc(p.vendor)} · ${esc(p.product_type)} · options: ${opts || 'none'}</p>
     <table><tr><th>Variant</th><th>Price</th><th>Stock</th><th></th></tr>${rows}</table>
     <details><summary class="muted">description</summary>${esc(p.description_html || '')}</details>`, shop, brand);
 }

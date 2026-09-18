@@ -32,7 +32,14 @@ import { shopifyRuntime, getLocalCart } from './shopify-runtime.ts';
 const { pageFileFor } = createRequire(import.meta.url)('../urlmap.js') as
   { pageFileFor: (p: string) => { file: string; depth: number } | null };
 
-const [siteRoot, portArg, moduleUrl, secret] = process.argv.slice(2);
+const [siteRoot, portArg, moduleUrl, legacySecretArg] = process.argv.slice(2);
+// The module secret is read from the environment only. An older caller that
+// still passes it positionally is refused rather than silently honoured, so
+// the secret cannot end up in a process listing by habit.
+if (legacySecretArg) {
+  console.error('heroserve-fl: the module secret is read from HMAC_SECRET_KEY in the environment and is not accepted as an argument.');
+  process.exit(2);
+}
 // Every filesystem path derived from a request is checked against the capture
 // root, after symlinks: `%2e%2e%2f` decodes to `../` and would otherwise walk
 // out of the site directory.
@@ -51,9 +58,7 @@ const MODULE = (moduleUrl ?? 'http://localhost:8001').replace(/\/$/, '');
 // asked for a backend. This does. /__fl/health reports it so a gate can say
 // "skipped, not configured" instead of "failed".
 const MODULE_CONFIGURED = !!moduleUrl;
-// The secret may come from the environment instead of the command line, so it
-// never shows in a process listing or a shell history.
-const SECRET = secret || process.env.HMAC_SECRET_KEY || '';
+const SECRET = process.env.HMAC_SECRET_KEY || '';
 // Stripe's publishable key (pk_...). Safe to serve to the browser — it can only
 // create payment methods and confirm an intent whose client secret it was
 // already handed; it cannot read the account or move money. Its presence is
@@ -1054,12 +1059,17 @@ Bun.serve({
             ? cart.items[idOrLine - 1]
             : cart.items.find((l: any) => String(l.id) === String(idOrLine) || String(l.key) === String(idOrLine));
           if (!line) return cart;
-          await mod('DELETE', `/cart/${cartId}/items/${line.fl_variant_id}`, `/${cartId}/items/${line.fl_variant_id}`);
-          if (quantity > 0) await mod('POST', '/cart/items', '/items', { cartId, variantId: line.fl_variant_id, quantity });
+          const removed = await mod('DELETE', `/cart/${cartId}/items/${line.fl_variant_id}`, `/${cartId}/items/${line.fl_variant_id}`);
+          if (removed.code >= 200 && removed.code < 300 && quantity > 0) {
+            await mod('POST', '/cart/items', '/items', { cartId, variantId: line.fl_variant_id, quantity });
+          }
           return shopifyCart();
         },
         clear: async () => {
-          if (cartId) { await mod('DELETE', `/cart/${cartId}`, `/${cartId}`); cartId = null; }
+          if (cartId) {
+            const deleted = await mod('DELETE', `/cart/${cartId}`, `/${cartId}`);
+            if (deleted.code >= 200 && deleted.code < 300) cartId = null;
+          }
           return shopifyCart();
         },
       });

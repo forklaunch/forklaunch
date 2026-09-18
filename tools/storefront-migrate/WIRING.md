@@ -41,11 +41,17 @@ skill docs gets through this step on its own.
 
 ```bash
 cd tools/storefront-migrate/scripts/catalog
-HMAC_SECRET_KEY=<from .env.local> bun cli.ts import data/the-store-com/normalized.json http://localhost:<PORT>
+bun cli.ts import data/the-store-com/normalized.json http://localhost:<PORT>
 ```
 
-The secret is read from the environment so it never sits in a shell history
-or a process listing; passing it as a trailing argument still works.
+The module secret is read from `HMAC_SECRET_KEY` in the environment and is
+refused on the command line, where a process listing would show it. The
+module's `.env.local` already holds it, with the `DB_*` values the purchase
+gate needs, so export that file once in the shell you run these from:
+
+```bash
+set -a; source my-store/src/modules/ecommerce/.env.local; set +a
+```
 
 Every product and variant lands in the module with `initialStock` set, so it is
 sellable. `externalId` on each variant is the source platform's variant id (Shopify's,
@@ -57,7 +63,7 @@ the store's own JSON first, then import the same way:
 
 ```bash
 node pull-squarespace.mjs https://www.the-store.com /shop
-HMAC_SECRET_KEY=<from .env.local> bun cli.ts import data/the-store-com/normalized.json http://localhost:<PORT>
+bun cli.ts import data/the-store-com/normalized.json http://localhost:<PORT>
 ```
 
 Done on graza.co (79 products), gorillamind.com (51) and, for Squarespace,
@@ -67,7 +73,7 @@ swaticouture.com (379 products).
 
 ```bash
 cd tools/storefront-migrate/scripts
-HMAC_SECRET_KEY=<from .env.local> STRIPE_PUBLISHABLE_KEY=<pk_...> bun catalog/heroserve-fl.ts output/the-store.com/site 4173 http://localhost:<PORT>
+STRIPE_PUBLISHABLE_KEY=<pk_...> bun catalog/heroserve-fl.ts output/the-store.com/site 4173 http://localhost:<PORT>
 ```
 
 Open http://localhost:4173. The server listens on 127.0.0.1 only; set

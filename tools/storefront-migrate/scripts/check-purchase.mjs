@@ -166,65 +166,67 @@ async function main() {
     await toPayment(page);
     const orderId = latestPending();
     check('checkout created a pending order', !!orderId, orderId.slice(0, 8));
-    if (!orderId) return; // the report below still prints what was proved; nothing else can be
+    if (orderId) {
 
-    const totalCents = Number(sql(`select total_cents from "order" where id='${orderId}';`) || 0);
-    const qty = Number(sql(`select (it->>'quantity') from "order" o cross join lateral jsonb_array_elements(o.items) it where o.id='${orderId}' limit 1;`) || 1);
-    const variantId = sql(`select (it->>'variantId') from "order" o cross join lateral jsonb_array_elements(o.items) it where o.id='${orderId}' limit 1;`);
-    const stockBefore = Number(sql(`select stock from inventory where variant_id='${variantId}';`) || 0);
-    check('the order is priced', totalCents > 0, money(totalCents));
+      const totalCents = Number(sql(`select total_cents from "order" where id='${orderId}';`) || 0);
+      const qty = Number(sql(`select (it->>'quantity') from "order" o cross join lateral jsonb_array_elements(o.items) it where o.id='${orderId}' limit 1;`) || 1);
+      const variantId = sql(`select (it->>'variantId') from "order" o cross join lateral jsonb_array_elements(o.items) it where o.id='${orderId}' limit 1;`);
+      const stockBefore = Number(sql(`select stock from inventory where variant_id='${variantId}';`) || 0);
+      check('the order is priced', totalCents > 0, money(totalCents));
 
-    // ---- the cart is not consumed until the money arrives ------------------
-    const survived = Number(sql('select coalesce(jsonb_array_length(items),0) from cart order by updated_at desc limit 1;') || 0);
-    check('cart survives an unpaid checkout', survived > 0, `${survived} line(s) still held`);
+      // ---- the cart is not consumed until the money arrives ------------------
+      const survived = Number(sql('select coalesce(jsonb_array_length(items),0) from cart order by updated_at desc limit 1;') || 0);
+      check('cart survives an unpaid checkout', survived > 0, `${survived} line(s) still held`);
 
-    // ---- pay, and watch the whole chain -----------------------------------
-    await payWithCard(page, '4242424242424242');
-    const paid = await eventually(() => sql(`select status from "order" where id='${orderId}';`) === 'paid');
-    check('order pending -> paid via webhook', paid, sql(`select status from "order" where id='${orderId}';`));
+      // ---- pay, and watch the whole chain -----------------------------------
+      await payWithCard(page, '4242424242424242');
+      const paid = await eventually(() => sql(`select status from "order" where id='${orderId}';`) === 'paid');
+      check('order pending -> paid via webhook', paid, sql(`select status from "order" where id='${orderId}';`));
 
-    const landed = await eventually(() => {
-      const s = Number(sql(`select stock from inventory where variant_id='${variantId}';`) || 0);
-      return s === stockBefore - qty ? s : null;
-    });
-    check('worker decremented stock by the quantity ordered', landed === stockBefore - qty,
-      `${stockBefore} -> ${sql(`select stock from inventory where variant_id='${variantId}';`)} (ordered ${qty})`);
+      const landed = await eventually(() => {
+        const s = Number(sql(`select stock from inventory where variant_id='${variantId}';`) || 0);
+        return s === stockBefore - qty ? s : null;
+      });
+      check('worker decremented stock by the quantity ordered', landed === stockBefore - qty,
+        `${stockBefore} -> ${sql(`select stock from inventory where variant_id='${variantId}';`)} (ordered ${qty})`);
 
+    }
     // ---- a declined card must not move inventory ---------------------------
     await addOne(page, productPath);
     await toPayment(page);
     const order2 = latestPending();
     check('checkout created a second pending order', !!order2, order2.slice(0, 8));
-    if (!order2) return;
-    const variant2 = sql(`select (it->>'variantId') from "order" o cross join lateral jsonb_array_elements(o.items) it where o.id='${order2}' limit 1;`);
-    const stock2Before = Number(sql(`select stock from inventory where variant_id='${variant2}';`) || 0);
-    await payWithCard(page, '4000000000009995');
-    await page.waitForTimeout(12000);
-    const status2 = sql(`select status from "order" where id='${order2}';`);
-    const stock2After = Number(sql(`select stock from inventory where variant_id='${variant2}';`) || 0);
-    check('declined card leaves the order pending', status2 === 'pending', status2);
-    check('declined card does not move stock', stock2After === stock2Before, `${stock2Before} -> ${stock2After}`);
+    if (order2) {
+      const variant2 = sql(`select (it->>'variantId') from "order" o cross join lateral jsonb_array_elements(o.items) it where o.id='${order2}' limit 1;`);
+      const stock2Before = Number(sql(`select stock from inventory where variant_id='${variant2}';`) || 0);
+      await payWithCard(page, '4000000000009995');
+      await page.waitForTimeout(12000);
+      const status2 = sql(`select status from "order" where id='${order2}';`);
+      const stock2After = Number(sql(`select stock from inventory where variant_id='${variant2}';`) || 0);
+      check('declined card leaves the order pending', status2 === 'pending', status2);
+      check('declined card does not move stock', stock2After === stock2Before, `${stock2Before} -> ${stock2After}`);
 
-    // ---- the redirect return trip is verified, not believed -----------------
-    // Hand the page a real client secret for an order that was never paid,
-    // with redirect_status=succeeded in the URL. Trusting the query string
-    // would announce a payment that did not happen; asking Stripe does not.
-    const secret = await page.evaluate(() => window.__flLastSecret || null);
-    const pi = sql(`select provider_ref from payment where order_id='${order2}' order by created_at desc limit 1;`);
-    const clientSecret = secret || (pi ? `${pi}_secret_test` : '');
-    if (clientSecret) {
-      await page.goto(`${STORE}/__fl/checkout?fl_order=${order2}&redirect_status=succeeded&payment_intent_client_secret=${encodeURIComponent(clientSecret)}`,
-        { waitUntil: 'load', timeout: 60000 });
-      await page.waitForTimeout(6000);
-      const shown = await page.evaluate(() => document.querySelector('.ok h1')?.textContent.trim() || '');
-      const lied = /payment received/i.test(shown);
-      const stillPending = sql(`select status from "order" where id='${order2}';`) === 'pending';
-      check('redirect return does not trust the URL', !!shown && !lied && stillPending,
-        `page said "${shown}", order is ${sql(`select status from "order" where id='${order2}';`)}`);
-    } else {
-      check('redirect return does not trust the URL', false, 'no client secret available to test with');
+      // ---- the redirect return trip is verified, not believed -----------------
+      // Hand the page a real client secret for an order that was never paid,
+      // with redirect_status=succeeded in the URL. Trusting the query string
+      // would announce a payment that did not happen; asking Stripe does not.
+      const secret = await page.evaluate(() => window.__flLastSecret || null);
+      const pi = sql(`select provider_ref from payment where order_id='${order2}' order by created_at desc limit 1;`);
+      const clientSecret = secret || (pi ? `${pi}_secret_test` : '');
+      if (clientSecret) {
+        await page.goto(`${STORE}/__fl/checkout?fl_order=${order2}&redirect_status=succeeded&payment_intent_client_secret=${encodeURIComponent(clientSecret)}`,
+          { waitUntil: 'load', timeout: 60000 });
+        await page.waitForTimeout(6000);
+        const shown = await page.evaluate(() => document.querySelector('.ok h1')?.textContent.trim() || '');
+        const lied = /payment received/i.test(shown);
+        const stillPending = sql(`select status from "order" where id='${order2}';`) === 'pending';
+        check('redirect return does not trust the URL', !!shown && !lied && stillPending,
+          `page said "${shown}", order is ${sql(`select status from "order" where id='${order2}';`)}`);
+      } else {
+        check('redirect return does not trust the URL', false, 'no client secret available to test with');
+      }
+
     }
-
     // ---- nothing phoned home ----------------------------------------------
     check('the demo stayed offline', escaped.size === 0,
       escaped.size ? `reached ${[...escaped].slice(0, 5).join(', ')}` : 'no external host completed a request');

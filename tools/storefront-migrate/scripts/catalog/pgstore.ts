@@ -110,7 +110,12 @@ export class PgStore {
       await tx`UPDATE orders SET status=${to} WHERE id=${orderId}`;
       if (to === 'paid') {
         const items = await tx`SELECT variant_id, quantity FROM order_items WHERE order_id=${orderId}`;
-        for (const it of items) await tx`UPDATE inventory SET stock = stock - ${it.quantity} WHERE variant_id=${it.variant_id}`;
+        for (const it of items) {
+          // Guarded, so two orders paying for the last unit cannot both take it;
+          // a miss throws and rolls the status change back with it.
+          const updated = await tx`UPDATE inventory SET stock = stock - ${it.quantity} WHERE variant_id=${it.variant_id} AND stock >= ${it.quantity} RETURNING variant_id`;
+          if (!updated.length) throw new Error(`out of stock: variant ${it.variant_id}`);
+        }
       }
     });
   }

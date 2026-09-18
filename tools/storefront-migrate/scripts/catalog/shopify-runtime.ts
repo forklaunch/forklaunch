@@ -147,8 +147,13 @@ async function readBody(req: Request): Promise<Record<string, any>> {
     for (const [k, v] of new URLSearchParams(text)) {
       // items[0][id]=… / items[0][quantity]=… (Dawn's product form)
       const m = k.match(/^items\[(\d+)\]\[(\w+)\]$/);
-      if (m) { (out.items ||= [])[Number(m[1])] ||= {}; out.items[Number(m[1])][m[2]] = v; }
-      else out[k] = v;
+      if (m) { (out.items ||= [])[Number(m[1])] ||= {}; out.items[Number(m[1])][m[2]] = v; continue; }
+      // /cart/update.js form shapes: updates[]=q (by line position) and
+      // updates[<key>]=q (by line key or variant id).
+      if (k === 'updates[]') { (Array.isArray(out.updates) ? out.updates : (out.updates = [])).push(v); continue; }
+      const u = k.match(/^updates\[(.+)\]$/);
+      if (u) { if (Array.isArray(out.updates) || !out.updates) out.updates = {}; out.updates[u[1]] = v; continue; }
+      out[k] = v;
     }
     return out;
   } catch { return {}; }
@@ -250,7 +255,17 @@ export async function shopifyRuntime(req: Request, url: URL, p: string, ctx: Run
       else if (p === '/cart/change.js') {
         if (ctx.change) await ctx.change(body.line ? Number(body.line) : String(body.id ?? ''), Number(body.quantity));
       } else if (body.updates && typeof body.updates === 'object' && ctx.change) {
-        for (const [k, v] of Object.entries(body.updates)) await ctx.change(String(k), Number(v));
+        // An array is positional (line 1..n). Every position is resolved to
+        // its line id BEFORE anything changes: a change is a remove and a
+        // re-add against the module, which moves that line to the end, so
+        // positions read mid-way would point at the wrong lines.
+        if (Array.isArray(body.updates)) {
+          const lines = (await ctx.cart()).items || [];
+          const targets = body.updates.map((q: any, i: number) => [lines[i]?.id, Number(q)] as const).filter(([id]) => id != null);
+          for (const [id, q] of targets) await ctx.change(String(id), q);
+        } else {
+          for (const [k, v] of Object.entries(body.updates)) await ctx.change(String(k), Number(v));
+        }
       }
     } else {
       if (p === '/cart/clear.js') localLines.length = 0;
@@ -259,9 +274,16 @@ export async function shopifyRuntime(req: Request, url: URL, p: string, ctx: Run
         const idx = body.line ? Number(body.line) - 1 : localLines.findIndex((l) => String(l.id) === String(body.id) || `${l.id}:local` === String(body.id));
         if (idx >= 0 && localLines[idx]) { if (q > 0) localLines[idx].quantity = q; else localLines.splice(idx, 1); }
       } else if (body.updates && typeof body.updates === 'object') {
-        for (const [k, v] of Object.entries(body.updates)) {
-          const idx = localLines.findIndex((l) => String(l.id) === String(k) || `${l.id}:local` === String(k));
-          const q = Number(v); if (idx >= 0) { if (q > 0) localLines[idx].quantity = q; else localLines.splice(idx, 1); }
+        if (Array.isArray(body.updates)) {
+          for (let i = body.updates.length - 1; i >= 0; i--) {
+            const q = Number(body.updates[i]); if (!localLines[i]) continue;
+            if (q > 0) localLines[i].quantity = q; else localLines.splice(i, 1);
+          }
+        } else {
+          for (const [k, v] of Object.entries(body.updates)) {
+            const idx = localLines.findIndex((l) => String(l.id) === String(k) || `${l.id}:local` === String(k));
+            const q = Number(v); if (idx >= 0) { if (q > 0) localLines[idx].quantity = q; else localLines.splice(idx, 1); }
+          }
         }
       }
     }
