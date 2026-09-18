@@ -10,6 +10,9 @@
 import type { Brand } from './brand.ts';
 
 const money = (c: number) => `$${(c / 100).toFixed(2)}`;
+// Titles, descriptions, vendors and image URLs are the merchant's own text;
+// every one is escaped before it is placed in markup or an attribute.
+const esc = (t: unknown) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
 
 const DEFAULT_PRIMARY = '#0f5a8a';
 const DEFAULT_HEADER = '#11324d';
@@ -29,14 +32,14 @@ function layout(title: string, body: string, shop: string, brand?: Brand | null)
   const primary = brand?.primaryColor || DEFAULT_PRIMARY;
   const header = headerShade(brand?.primaryColor ?? null);
   const brandLabel = brand?.markSrc
-    ? `<img src="${brand.markSrc}" alt="" style="height:28px;width:28px;border-radius:6px;object-fit:contain"><b>${brand?.name ?? shop}</b>`
-    : `<b>${brand?.name ?? shop}</b>`;
+    ? `<img src="${esc(brand.markSrc)}" alt="" style="height:28px;width:28px;border-radius:6px;object-fit:contain"><b>${esc(brand?.name ?? shop)}</b>`
+    : `<b>${esc(brand?.name ?? shop)}</b>`;
   const favicon = brand?.markSrc ? `<link rel="icon" href="${brand.markSrc}">` : '';
   const fontLink = brand?.fontStylesheetHref ? `<link rel="stylesheet" href="${brand.fontStylesheetHref}">` : '';
   const bodyFont = brand?.fontFamily
     ? `"${brand.fontFamily}", -apple-system, Arial, sans-serif`
     : '-apple-system, Arial, sans-serif';
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   ${favicon}
   ${fontLink}
@@ -74,12 +77,12 @@ export function productGrid(shop: string, products: any[], brand?: Brand | null,
         `<a href="/?type=${encodeURIComponent(t)}" class="${activeType === t ? 'active' : ''}">${t}</a>`).join('')}</div>`
     : '';
   const hero = brand?.heroImageSrc
-    ? `<div class="hero" style="background-image:url('${brand.heroImageSrc}')"><h1>${brand?.name ?? shop}</h1></div>`
+    ? `<div class="hero" style="background-image:url('${esc(brand.heroImageSrc)}')"><h1>${esc(brand?.name ?? shop)}</h1></div>`
     : '';
   const cards = products.map((p) => `
-    <a class="card" href="/products/${p.handle}">
-      <img src="${p.image_src || ''}" alt="">
-      <div class="p"><div class="t">${p.title}</div><div class="v">${p.product_type || p.vendor || ''}</div></div>
+    <a class="card" href="/products/${esc(p.handle)}">
+      <img src="${esc(p.image_src || '')}" alt="">
+      <div class="p"><div class="t">${esc(p.title)}</div><div class="v">${esc(p.product_type || p.vendor || '')}</div></div>
     </a>`).join('');
   return layout(brand?.name ?? shop, `${hero}${nav}<h2>${products.length} products</h2><div class="grid">${cards}</div>`, shop, brand);
 }
@@ -91,21 +94,21 @@ export function productDetail(shop: string, p: any, brand?: Brand | null): strin
       ? `<span class="sale">${money(v.price_cents)}</span> <span class="was">${money(v.compare_at_price_cents)}</span>`
       : money(v.price_cents);
     const oos = v.stock <= 0;
-    return `<tr><td>${v.title}</td><td>${price}</td><td>${oos ? 'out of stock' : v.stock + ' in stock'}</td>
+    return `<tr><td>${esc(v.title)}</td><td>${price}</td><td>${oos ? 'out of stock' : v.stock + ' in stock'}</td>
       <td><form method="POST" action="/cart/add"><input type="hidden" name="variant_id" value="${v.id}">
       <button ${oos ? 'disabled' : ''}>Add to cart</button></form></td></tr>`;
   }).join('');
   return layout(p.title, `
     <p class="muted"><a href="/">← all products</a></p>
-    <h1>${p.title}</h1>
-    <p class="muted">${p.vendor} · ${p.product_type} · options: ${opts || 'none'}</p>
+    <h1>${esc(p.title)}</h1>
+    <p class="muted">${esc(p.vendor)} · ${esc(p.product_type)} · options: ${esc(opts || 'none')}</p>
     <table><tr><th>Variant</th><th>Price</th><th>Stock</th><th></th></tr>${rows}</table>
-    <details><summary class="muted">description</summary>${p.description_html || ''}</details>`, shop, brand);
+    <details><summary class="muted">description</summary>${esc(p.description_html || '')}</details>`, shop, brand);
 }
 
 export function cartView(shop: string, cart: any, brand?: Brand | null): string {
   if (cart.items.length === 0) return layout('Cart', `<h1>Cart</h1><p class="muted">Empty. <a href="/">Shop →</a></p>`, shop, brand);
-  const rows = cart.items.map((it: any) => `<tr><td>${it.product_title}<br><span class="muted">${it.variant_title}</span></td>
+  const rows = cart.items.map((it: any) => `<tr><td>${esc(it.product_title)}<br><span class="muted">${esc(it.variant_title)}</span></td>
     <td>${it.quantity}</td><td>${money(it.price_cents * it.quantity)}</td></tr>`).join('');
   return layout('Cart', `
     <h1>Cart</h1>
@@ -115,7 +118,7 @@ export function cartView(shop: string, cart: any, brand?: Brand | null): string 
 }
 
 export function orderView(shop: string, order: any, brand?: Brand | null): string {
-  const rows = order.items.map((it: any) => `<tr><td>${it.product_title} — ${it.variant_title}</td>
+  const rows = order.items.map((it: any) => `<tr><td>${esc(it.product_title)} — ${esc(it.variant_title)}</td>
     <td>${it.quantity}</td><td>${money(it.unit_price_cents * it.quantity)}</td></tr>`).join('');
   return layout('Order', `
     <h1>Order #${order.id} — <span class="badge">${order.status}</span></h1>

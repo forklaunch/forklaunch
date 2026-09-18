@@ -30,17 +30,25 @@ const host = new URL(base).host.replace(/^www\./, '');
 const outDir = outIdx >= 0 ? args[outIdx + 1] : join('data', host.replace(/\./g, '-'));
 
 const UA = 'Mozilla/5.0 (Macintosh) storefront-migrate/0.1';
+const MAX_JSON_BYTES = 20 * 1024 * 1024; // one page of a commerce collection is well under this
+const MAX_PAGES = 200;                    // 200 pages x 200 items; a real store is far smaller
 async function getJson(url) {
-  const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
+  const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' }, signal: AbortSignal.timeout(20000) });
   if (!r.ok) throw new Error(`${r.status} ${r.statusText} for ${url}`);
-  return r.json();
+  const text = await r.text();
+  if (text.length > MAX_JSON_BYTES) throw new Error(`response too large (${text.length} bytes) for ${url}`);
+  return JSON.parse(text);
 }
 
 // Walk /shop?format=json, /shop?format=json&offset=N ... until nextPage is false.
 const raw = [];
 let url = `${base}${shopPath}?format=json`;
 let page = 1;
+const visited = new Set();
 for (;;) {
+  if (visited.has(url)) throw new Error(`pagination loops back to ${url}; stopping`);
+  if (page > MAX_PAGES) throw new Error(`more than ${MAX_PAGES} pages of products; stopping`);
+  visited.add(url);
   const j = await getJson(url);
   const items = (j.items || []).filter((it) => it.recordType === 11 || Array.isArray(it.variants));
   raw.push(...items);

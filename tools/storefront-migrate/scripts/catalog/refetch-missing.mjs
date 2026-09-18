@@ -113,12 +113,17 @@ if (!missing.size) {
 }
 
 // ---- pass 2: where do those names live on the real site? ------------------
-const liveByName = new Map();       // filename -> live URL
+// filename -> live URL, or null once two different URLs share the name: a
+// basename that is not unique cannot be placed with confidence, and a wrong
+// file under the right name is worse than a 404 (it fails silently).
+const liveByName = new Map();
 const onLiveRequest = (r) => {
   try {
     const u = new URL(r.url());
     const n = basename(u.pathname);
-    if (n && !liveByName.has(n)) liveByName.set(n, r.url());
+    if (!n) return;
+    if (!liveByName.has(n)) liveByName.set(n, r.url());
+    else if (liveByName.get(n) !== r.url()) liveByName.set(n, null);
   } catch (_) {}
 };
 ctx.on('request', onLiveRequest);
@@ -127,6 +132,7 @@ ctx.off('request', onLiveRequest);
 await browser.close();
 
 // ---- fetch and place ------------------------------------------------------
+const MAX_ASSET_BYTES = 50 * 1024 * 1024; // a single storefront asset never legitimately exceeds this
 let got = 0, gone = 0;
 for (const [path, name] of missing) {
   // The crawl appends its own content hash: `foo.<10hex>.js`. A file that
@@ -136,13 +142,19 @@ for (const [path, name] of missing) {
   const src = liveByName.get(name) || liveByName.get(bare);
   if (!src) {
     gone++;
-    marker.unavailable[path] = { at: Date.now(), why: 'the live site never requested a file by this name' };
+    const ambiguous = liveByName.get(name) === null || liveByName.get(bare) === null;
+    marker.unavailable[path] = { at: Date.now(), why: ambiguous
+      ? 'the live site serves more than one file by this name, so none can be placed with confidence'
+      : 'the live site never requested a file by this name' };
     continue;
   }
   try {
-    const res = await fetch(src, { redirect: 'follow' });
+    const res = await fetch(src, { redirect: 'follow', signal: AbortSignal.timeout(20000) });
     if (!res.ok) throw new Error('HTTP ' + res.status);
+    const len = Number(res.headers.get('content-length') || 0);
+    if (len > MAX_ASSET_BYTES) throw new Error(`too large (${len} bytes)`);
     const bytes = Buffer.from(await res.arrayBuffer());
+    if (bytes.length > MAX_ASSET_BYTES) throw new Error(`too large (${bytes.length} bytes)`);
     const dest = join(SITE, path.replace(/^\//, ''));
     try { mkdirSync(join(dest, '..'), { recursive: true }); } catch (e) { if (e && e.code === 'EEXIST') { console.log('  ✗ ' + String(dest || '').slice(-60) + ' — a path nested under a file name; cannot be served as a file'); continue; } throw e; }
     // Written under the EXACT name that 404'd, so the next request hits the

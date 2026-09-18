@@ -33,6 +33,10 @@ export interface RuntimeCtx {
   cart: () => Promise<any>;
   /** Add via the module (bridge mode). Returns the cart. */
   add?: (handle: string, variantExternalId: string, quantity: number) => Promise<any>;
+  /** Set one line's quantity via the module; 0 removes it. `line` is 1-based. */
+  change?: (idOrLine: string | number, quantity: number) => Promise<any>;
+  /** Empty the module cart. */
+  clear?: () => Promise<any>;
 }
 
 type Raw = { products: any[] };
@@ -239,7 +243,16 @@ export async function shopifyRuntime(req: Request, url: URL, p: string, ctx: Run
   }
   if (method === 'POST' && (p === '/cart/change.js' || p === '/cart/update.js' || p === '/cart/clear.js')) {
     const body = await readBody(req);
-    if (!ctx.hasModule) {
+    if (ctx.hasModule) {
+      // Module mode used to answer 200 with the unchanged cart here, so a
+      // drawer's remove button looked like it worked and did nothing.
+      if (p === '/cart/clear.js') { if (ctx.clear) await ctx.clear(); }
+      else if (p === '/cart/change.js') {
+        if (ctx.change) await ctx.change(body.line ? Number(body.line) : String(body.id ?? ''), Number(body.quantity));
+      } else if (body.updates && typeof body.updates === 'object' && ctx.change) {
+        for (const [k, v] of Object.entries(body.updates)) await ctx.change(String(k), Number(v));
+      }
+    } else {
       if (p === '/cart/clear.js') localLines.length = 0;
       else if (p === '/cart/change.js') {
         const q = Number(body.quantity);

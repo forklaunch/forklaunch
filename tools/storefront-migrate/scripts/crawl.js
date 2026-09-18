@@ -58,6 +58,16 @@ const hmacIdx = argv.indexOf('--hmac-secret');
 // calls will 403; add-to-cart (unauthenticated forwarding, pre-existing)
 // is unaffected either way.
 const HMAC_SECRET = hmacIdx > -1 ? argv[hmacIdx + 1] : null;
+// The bridge signs filter/sort/search calls IN THE BROWSER, so the secret it
+// is given ends up in every captured page's source, readable by anyone who
+// loads the clone. That is acceptable only for a private demo against a
+// throwaway module secret, and never by accident: without the opt-in flag a
+// secret is refused, and heroserve-fl.ts (which signs server-side and never
+// hands the key to the browser) is the right way to wire cart and checkout.
+if (HMAC_SECRET && !argv.includes('--embed-hmac-secret')) {
+  console.error('--hmac-secret would be embedded in every captured page. Pass --embed-hmac-secret to accept that for a private demo, or serve the capture with catalog/heroserve-fl.ts, which keeps the secret on the server.');
+  process.exit(2);
+}
 const pagesIdx = argv.indexOf('--pages');
 // --complete: photographic mode — capture EVERY public page the store's
 // sitemap lists (products, collections, pages, blogs), no budget, no cap.
@@ -821,12 +831,14 @@ function injectAtDocStart(html, script) {
                                      signal: AbortSignal.timeout(9000) });
         if (!r.ok) return;
         const buf = Buffer.from(await r.arrayBuffer());
-        if (!buf.length) return;
+        if (!buf.length || totalBytes + buf.length > MAX_BYTES) return;
+        totalBytes += buf.length;
         const dst = path.join(outdir, 'site', rel);
         fs.mkdirSync(path.dirname(dst), { recursive: true });
         fs.writeFileSync(dst, buf);
       } catch (_) {}
     }));
+    result.bytes = totalBytes;
 
     // ---- 3. rewrite each page ---------------------------------------------
     // Drop any asset whose body never made it to disk. Pointing at a local

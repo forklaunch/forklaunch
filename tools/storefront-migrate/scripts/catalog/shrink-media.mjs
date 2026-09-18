@@ -46,9 +46,27 @@ import { join } from 'node:path';
 
 const dir = process.argv[2];
 if (!dir) { console.error('usage: shrink-media.mjs <site-dir> [--height 720] [--dry]'); process.exit(2); }
-const HEIGHT = Number((process.argv.find((a) => a.startsWith('--height=')) || '').split('=')[1]) ||
-  (process.argv.includes('--height') ? Number(process.argv[process.argv.indexOf('--height') + 1]) : 720);
+const heightFlag = (process.argv.find((a) => a.startsWith('--height=')) || '').split('=')[1] ||
+  (process.argv.includes('--height') ? process.argv[process.argv.indexOf('--height') + 1] : undefined);
+const HEIGHT = Number(heightFlag) > 0 ? Number(heightFlag) : 720;
 const DRY = process.argv.includes('--dry');
+
+// The H.264 encoder depends on the ffmpeg build in front of us: videotoolbox
+// is hardware-backed on Apple silicon; libx264 is the portable one; neither
+// is guaranteed. Probed once, on the first file that needs transcoding, and
+// a build with no H.264 encoder fails the run loudly instead of per-file.
+let ENCODER = null;
+function pickEncoder() {
+  if (ENCODER) return ENCODER;
+  let listed;
+  try { listed = execFileSync('ffmpeg', ['-hide_banner', '-encoders'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); }
+  catch { throw new Error('ffmpeg cannot list its encoders'); }
+  const names = [...listed.matchAll(/^\s*V\S*\s+(\S+)/gm)].map((m) => m[1]);
+  const preferred = process.platform === 'darwin' ? ['h264_videotoolbox', 'libx264'] : ['libx264', 'h264_videotoolbox'];
+  ENCODER = preferred.find((n) => names.includes(n)) || names.find((n) => /264/.test(n)) || null;
+  if (!ENCODER) throw new Error('this ffmpeg build has no H.264 encoder (libx264 or h264_videotoolbox)');
+  return ENCODER;
+}
 
 /** The capture writes unclassified assets as .bin, so extension proves nothing. */
 function isMp4(fp) {
@@ -114,14 +132,13 @@ for (const fp of targets) {
   if (DRY) { console.log(`  would shrink  ${mb(size)}MB  ${fp.split('/').pop()}`); after += size; continue; }
 
   const tmp = fp + '.shrunk.mp4';
+  const encoder = pickEncoder();
   try {
     execFileSync('ffmpeg', [
       '-y', '-loglevel', 'error', '-i', fp,
       // Only ever scale down: -2 keeps the width even, which h264 requires.
       '-vf', `scale=-2:'min(${HEIGHT},ih)'`,
-      // videotoolbox is hardware-backed on Apple silicon and keeps this from
-      // pinning every core, which matters when the machine is already loaded.
-      '-c:v', 'h264_videotoolbox', '-b:v', '1400k', '-maxrate', '1800k', '-bufsize', '3000k',
+      '-c:v', encoder, '-b:v', '1400k', '-maxrate', '1800k', '-bufsize', '3000k',
       '-c:a', 'aac', '-b:a', '96k',
       // Metadata at the front so the browser can start playing without
       // fetching the whole file first.

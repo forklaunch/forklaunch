@@ -374,6 +374,11 @@ node ${CLAUDE_SKILL_DIR}/scripts/bin/migrate.mjs <store-url> --clean --api http:
 ```
 
 `--api` switches the runtime bridge from its offline cart to the real module.
+A `--hmac-secret` given here is embedded in every captured page, because the
+bridge signs filter and search calls in the browser; `crawl.js` refuses it
+unless `--embed-hmac-secret` is also passed, and only a throwaway secret for a
+private demo belongs there. `heroserve-fl.ts` signs on the server and is the
+right way to wire cart and checkout.
 Without it, cart actions are handled locally in the browser and filters/search
 do nothing — they are inert by design rather than faked, because a filter that
 silently returns wrong results is worse than one that visibly does nothing.
@@ -385,16 +390,20 @@ origin. `heroserve-fl.ts` serves a capture you already have and proxies its
 cart and checkout to the module instead:
 
 ```bash
-bun ${CLAUDE_SKILL_DIR}/scripts/catalog/heroserve-fl.ts <capture>/site <port> <module-url> <hmac-secret> [stripe-publishable-key]
+HMAC_SECRET_KEY=<secret> STRIPE_PUBLISHABLE_KEY=<pk_...> bun ${CLAUDE_SKILL_DIR}/scripts/catalog/heroserve-fl.ts <capture>/site <port> <module-url>
 ```
+
+The secret goes in the environment, never on the command line where a
+process listing or shell history would keep it; a trailing positional argument
+is still accepted. It binds to 127.0.0.1; `FL_HOST=0.0.0.0` exposes it on purpose.
 
 It intercepts the captured pages' native Shopify cart calls, maps them onto the
 module's `/cart`, `/cart/items` and `/checkout` endpoints with HMAC auth. A
 shopper browses the migrated storefront and every commerce action lands in the
 real module — the same one the catalog was imported into.
 
-Pass the merchant's Stripe **publishable** key (`pk_…`) as the fifth argument
-and `/__fl/checkout` becomes a genuine card page: address form, Stripe Payment
+Set the merchant's Stripe **publishable** key (`pk_…`) as `STRIPE_PUBLISHABLE_KEY`
+(or the fifth argument) and `/__fl/checkout` becomes a genuine card page: address form, Stripe Payment
 Element, and a confirmation screen once the charge clears. The browser gets
 only the publishable key and a per-order client secret, so card details go
 straight from the shopper to Stripe and never touch this server or the module.
@@ -469,7 +478,7 @@ node ${CLAUDE_SKILL_DIR}/scripts/check-purchase.mjs --store http://localhost:<po
 "thank you" for an order that never left `pending`), so `--db` and `--pg` are
 the module's own `DB_NAME`, `DB_USER`, `DB_HOST`, `DB_PORT` from its
 `.env.local`; with those exported the flags can be omitted, and without either
-it refuses to run. Relay the two counts (`10/10`, `12/12`) and any FAIL line
+it refuses to run. Relay the two counts (`10/10`, `13/13`) and any FAIL line
 verbatim.
 
 ### Getting the catalog in
@@ -485,8 +494,12 @@ bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts pull https://thestore.com
 bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts normalize data/<slug>/raw.json
 
 # 3. import — POSITIONAL args, not flags: <normalized.json> <module-url> <secret>
-bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts import data/<slug>/normalized.json http://localhost:8001 <hmac-secret>
+HMAC_SECRET_KEY=<secret> bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts import data/<slug>/normalized.json http://localhost:8001
 ```
+
+The secret goes in the environment, never on the command line where a
+process listing or shell history would keep it; a trailing positional argument
+is still accepted.
 
 `normalize` writes to `data/<slug>/` derived from the raw file, and falls back
 to `data/unknown-shop/` when it can't infer the shop — harmless, but check the
@@ -504,7 +517,7 @@ instead, then import exactly as above:
 ```bash
 # commerce collection path is usually /shop; the preflight's nav list shows it
 node ${CLAUDE_SKILL_DIR}/scripts/catalog/pull-squarespace.mjs https://thestore.com /shop
-bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts import data/<slug>/normalized.json http://localhost:8001 <hmac-secret>
+HMAC_SECRET_KEY=<secret> bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts import data/<slug>/normalized.json http://localhost:8001
 ```
 
 The crawl discovers products by Shopify's URL shape, so on a Squarespace store

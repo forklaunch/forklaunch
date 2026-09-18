@@ -402,12 +402,12 @@ const ADMIN_PRODUCTS_QUERY = `query($cursor: String) {
     edges { node {
       legacyResourceId handle title descriptionHtml vendor productType tags status
       options { name values }
-      images(first: 50) { edges { node { url altText } } }
+      images(first: 50) { edges { node { url altText } } pageInfo { hasNextPage } }
       variants(first: 100) { edges { node {
         legacyResourceId sku title price compareAtPrice inventoryQuantity availableForSale
         selectedOptions { name value }
         inventoryItem { requiresShipping measurement { weight { value unit } } }
-      } } }
+      } } pageInfo { hasNextPage } }
     } }
     pageInfo { hasNextPage endCursor }
   }

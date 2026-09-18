@@ -91,21 +91,28 @@ export class PgStore {
     if (!cart.items.length) throw new Error('cart is empty');
     for (const it of cart.items) if (it.stock < it.quantity) throw new Error(`out of stock: ${it.product_title} / ${it.variant_title}`);
     const subtotal = cart.subtotalCents, tax = Math.round(subtotal * taxRate), total = subtotal + tax;
-    const [order] = await this.sql`INSERT INTO orders (status, subtotal_cents, tax_cents, total_cents) VALUES ('pending', ${subtotal}, ${tax}, ${total}) RETURNING id`;
-    for (const it of cart.items) await this.sql`INSERT INTO order_items (order_id, variant_id, quantity, unit_price_cents) VALUES (${order.id}, ${it.variant_id}, ${it.quantity}, ${it.price_cents})`;
-    await this.sql`UPDATE carts SET status='converted' WHERE id=${cartId}`;
-    return { orderId: order.id };
+    // One transaction: an order with half its lines, or a converted cart with
+    // no order, is worse than no order at all.
+    return this.sql.begin(async (tx: any) => {
+      const [order] = await tx`INSERT INTO orders (status, subtotal_cents, tax_cents, total_cents) VALUES ('pending', ${subtotal}, ${tax}, ${total}) RETURNING id`;
+      for (const it of cart.items) await tx`INSERT INTO order_items (order_id, variant_id, quantity, unit_price_cents) VALUES (${order.id}, ${it.variant_id}, ${it.quantity}, ${it.price_cents})`;
+      await tx`UPDATE carts SET status='converted' WHERE id=${cartId}`;
+      return { orderId: order.id };
+    });
   }
   async pay(orderId: number) { await this.transition(orderId, 'paid'); }
   async transition(orderId: number, to: string) {
-    const [o] = await this.sql`SELECT status FROM orders WHERE id=${orderId}`;
-    if (!o) throw new Error('order not found');
-    if (!(ORDER_TRANSITIONS[o.status] ?? []).includes(to)) throw new Error(`illegal transition ${o.status} -> ${to}`);
-    await this.sql`UPDATE orders SET status=${to} WHERE id=${orderId}`;
-    if (to === 'paid') {
-      const items = await this.sql`SELECT variant_id, quantity FROM order_items WHERE order_id=${orderId}`;
-      for (const it of items) await this.sql`UPDATE inventory SET stock = stock - ${it.quantity} WHERE variant_id=${it.variant_id}`;
-    }
+    // The status change and the inventory it implies land together or not at all.
+    await this.sql.begin(async (tx: any) => {
+      const [o] = await tx`SELECT status FROM orders WHERE id=${orderId} FOR UPDATE`;
+      if (!o) throw new Error('order not found');
+      if (!(ORDER_TRANSITIONS[o.status] ?? []).includes(to)) throw new Error(`illegal transition ${o.status} -> ${to}`);
+      await tx`UPDATE orders SET status=${to} WHERE id=${orderId}`;
+      if (to === 'paid') {
+        const items = await tx`SELECT variant_id, quantity FROM order_items WHERE order_id=${orderId}`;
+        for (const it of items) await tx`UPDATE inventory SET stock = stock - ${it.quantity} WHERE variant_id=${it.variant_id}`;
+      }
+    });
   }
   async getOrder(orderId: number) {
     const [o] = await this.sql`SELECT * FROM orders WHERE id=${orderId}`;
