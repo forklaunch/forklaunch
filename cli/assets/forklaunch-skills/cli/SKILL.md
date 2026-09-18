@@ -15,14 +15,14 @@ Before running any `forklaunch` command, verify the CLI is installed:
 forklaunch version
 
 # If "command not found", install globally
-npm install -g @forklaunch/cli
+npm install -g forklaunch
 ```
 
 **When Claude invokes CLI commands, always check first:**
 
 ```bash
 # Pre-flight check — install if missing
-command -v forklaunch >/dev/null 2>&1 || npm install -g @forklaunch/cli
+command -v forklaunch >/dev/null 2>&1 || npm install -g forklaunch
 ```
 
 **Other prerequisites:**

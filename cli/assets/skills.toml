@@ -21,6 +21,7 @@ include = [
   "compliance",
   "design-system",
   "development-guidelines",
+  "ecommerce",
   "framework",
   "frontend-patterns",
   "imports-and-structure",
