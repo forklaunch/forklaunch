@@ -171,6 +171,13 @@ const MIME: Record<string, string> = {
 
 // Client shim injected into every served HTML page: intercept the native
 // Shopify cart calls and the checkout click, and route them to /__fl/*.
+// Squarespace fades content in from JS (`preFade`/`preSlide`/`preScale`); with
+// that runtime blocked offline, anything captured mid-animation stays hidden,
+// and the add-to-cart wrapper can be captured as display:none. Force them
+// shown. A merchant that switched selling off hides the button in its own CSS
+// with !important (enquiry-only stores do); the html body prefix outranks that.
+// The rules are no-ops on any other platform.
+const SQS_STYLE = `<style>.preFade,.preSlide,.preScale,[data-animation-role]{opacity:1!important;visibility:visible!important;transform:none!important}html body .sqs-add-to-cart-button-wrapper,html body .sqs-add-to-cart-button{display:flex!important;opacity:1!important;visibility:visible!important}html body .sqs-add-to-cart-button{align-items:center;justify-content:center}.cookie-banner-mount-point,.gdpr-cookie-banner{display:none!important}</style>`;
 const SHIM = `<script>(function(){
   // Presentation, for a store being shown to a client. commerce.js is built
   // for a standalone offline demo, so it labels its own controls — a
@@ -185,7 +192,7 @@ const SHIM = `<script>(function(){
   // page feel native, so it is updated from the module's cart instead.
   function flDebrand(){
     document.querySelectorAll('#fl-add small').forEach(function(n){n.remove()});
-    document.querySelectorAll('.fl-brand').forEach(function(n){
+    document.querySelectorAll('.fl-brand, #fl-drawer header small').forEach(function(n){
       if(/forklaunch/i.test(n.textContent||''))n.remove();
     });
   }
@@ -222,6 +229,10 @@ const SHIM = `<script>(function(){
       var r=await of('/__fl/cart');
       var c=await r.json();
       flSyncCount(c && typeof c.item_count==='number' ? c.item_count : 0);
+      // The overlay drawer renders from localStorage, which outlives the
+      // module's cart (a server restart, a paid order). Mirror the module's
+      // cart into it so the drawer never shows a line checkout will not charge.
+      try{localStorage.setItem('_flc_demo',JSON.stringify({items:((c&&c.items)||[]).map(function(i){return{title:i.product_title||i.title,price:i.price,image:i.image||'',quantity:i.quantity}})}))}catch(e){}
     }catch(e){}
   }
   document.addEventListener('DOMContentLoaded',function(){
@@ -438,7 +449,8 @@ const SHIM = `<script>(function(){
     pos.textContent='#fl-cart-btn{top:auto!important;bottom:20px!important;right:20px!important}';
     (document.head||document.documentElement).appendChild(pos);
   })();
-  function handle(){var m=location.pathname.match(/\\/products\\/([^/?#]+?)(?:\\.html)?$/);return m?m[1]:'';}
+  // Shopify /products/<h>; Squarespace /<collection>/p/<h>. Same handle the catalog was imported under.
+  function handle(){var m=location.pathname.match(/\\/products\\/([^/?#]+?)(?:\\.html)?$/)||location.pathname.match(/\\/[^/]+\\/p\\/([^/?#]+?)(?:\\.html)?$/)||location.pathname.match(/\\/[^/]+\\/p-([^/?#]+?)\\.html$/);return m?m[1]:'';}
   var of=window.fetch;
   window.fetch=function(u,o){
     try{
@@ -453,6 +465,29 @@ const SHIM = `<script>(function(){
   };
   function flToast(){var t=document.getElementById('fl-toast');if(!t){t=document.createElement('div');t.id='fl-toast';t.style.cssText='position:fixed;top:16px;right:16px;z-index:2147483000;background:#111;color:#fff;padding:12px 18px;border-radius:10px;font:600 14px system-ui;box-shadow:0 6px 20px rgba(0,0,0,.3)';document.body.appendChild(t)}t.innerHTML='\\u2713 Added to cart &nbsp; <a href="/__fl/checkout" style="color:#8bf">Checkout \\u2192</a>';}
   document.addEventListener('submit',function(e){var f=e.target;if(f&&f.action&&/\\/cart\\/add/.test(f.action)){e.preventDefault();var fd=new FormData(f);window.fetch('/cart/add.js',{method:'POST',body:fd});}},true);
+
+  // ---- Squarespace add-to-cart -------------------------------------------
+  // A captured Squarespace product page keeps its own button but the script
+  // behind it (Squarespace's commerce runtime) is blocked offline. The page's
+  // handle is the last path segment (/shop/p/<handle>), which is also the
+  // handle the catalog was imported under, so one call resolves the variant.
+  // No regex literals here, same reason as the block below.
+  document.addEventListener('click',function(e){
+    var el=e.target;while(el&&el!==document&&!(el.classList&&el.classList.contains('sqs-add-to-cart-button')))el=el.parentNode;
+    if(!el||el===document)return;
+    // With the demo overlay present its bound FL.add already drives this
+    // button; a second add here would double every line. Only step in when
+    // there is no overlay (a capture made without --clean).
+    if(window.FL&&window.FL.__flBound)return;
+    e.preventDefault();e.stopPropagation();
+    var parts=location.pathname.split('/').filter(function(s){return s});var h=parts[parts.length-1]||'';
+    if(h.slice(-5)==='.html')h=h.slice(0,-5);
+    if(h.slice(0,2)==='p-')h=h.slice(2); // the capture flattens /shop/p/<h> to /shop/p-<h>.html
+    var inner=el.querySelector('.sqs-add-to-cart-button-inner')||el;var was=inner.textContent;inner.textContent='Adding...';
+    window.fetch('/__fl/add',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({handle:h,variantExternalId:''})})
+      .then(function(r){return r.json()}).then(function(c){if(c&&c.error)throw new Error(c.error);flToast();flSyncCount(c&&c.item_count||0);inner.textContent='Added - go to checkout';el.onclick=function(ev){ev.preventDefault();location.href='/__fl/checkout'};})
+      .catch(function(){inner.textContent='Unavailable';setTimeout(function(){inner.textContent=was},1600)});
+  },true);
 
   // ---- checkout interception, discovered rather than assumed ----------------
   // Three layers, weakest last. Layer 2 (the accessible name, computed here at
@@ -542,10 +577,22 @@ const SHIM = `<script>(function(){
   function bind(FL){
     if(!FL||FL.__flBound)return FL;
     var origAdd=FL.add;
+    // The overlay's own add scrapes the price off the page, which is wrong on
+    // any theme that hides it (an enquiry-only store) and drifts from the
+    // module on every other. Ask the module first and mirror ITS cart into
+    // the overlay's store, so the drawer shows the same money checkout will.
+    // FL.remove with an out-of-range index is the overlay's only exposed way
+    // to re-render from that store without changing it.
     FL.add=function(o){
-      try{origAdd.call(FL,o)}catch(e){}          // keep the drawer looking right
       of('/__fl/add',{method:'POST',headers:{'content-type':'application/json'},
-        body:JSON.stringify({handle:handle(),variantExternalId:''})}).then(function(){flToast();flRefreshCount();}).catch(function(){});
+        body:JSON.stringify({handle:handle(),variantExternalId:''})})
+        .then(function(r){return r.json()})
+        .then(function(c){
+          if(!c||c.error)throw new Error(c&&c.error||'add failed');
+          try{localStorage.setItem('_flc_demo',JSON.stringify({items:(c.items||[]).map(function(i){return{title:i.product_title||i.title,price:i.price,image:(o&&o.image)||i.image||'',quantity:i.quantity}})}))}catch(e){}
+          FL.remove(1e9);FL.open();flDebrand();flToast();flRefreshCount();
+        })
+        .catch(function(e){console.warn('[fl] module add failed, drawer falling back to page price:',e&&e.message||e);try{origAdd.call(FL,o)}catch(e2){}});
     };
     FL.checkout=function(){location.href='/__fl/checkout'};
     FL.place=function(){location.href='/__fl/checkout'};
@@ -842,8 +889,8 @@ function serveFile(fp: string, range?: string | null, ifNoneMatch?: string | nul
     const html = absolutiseScriptPaths(lightenMedia(body.toString('utf8')));
     const at = /<html(?=[\s>])[^>]*>/i;
     body = at.test(html)
-      ? html.replace(at, (tag) => tag + SHIM)
-      : html.replace(/<\/body>/i, SHIM + '</body>');
+      ? html.replace(at, (tag) => tag + SQS_STYLE + SHIM)
+      : html.replace(/<\/body>/i, SQS_STYLE + SHIM + '</body>');
   }
   // No-store on HTML. The served markup is rewritten on every request (the
   // bridge shim is injected here, not baked into the capture), so a browser
@@ -1241,7 +1288,12 @@ async function shopifyCart() {
  * captured page resolves.
  */
 function productHandleFromPath(pathname: string): string | null {
-  const m = /^(?:\/collections\/[^/]+)?\/products\/([^/]+?)(?:\.html)?\/?$/.exec(pathname);
+  // Shopify: /products/<handle>, /collections/<c>/products/<handle>.
+  // Squarespace: /shop/p/<handle> (any commerce collection: /<collection>/p/<handle>).
+  const m =
+    /^(?:\/collections\/[^/]+)?\/products\/([^/]+?)(?:\.html)?\/?$/.exec(pathname) ||
+    /^\/[^/]+\/p\/([^/]+?)(?:\.html)?\/?$/.exec(pathname) ||
+    /^\/[^/]+\/p-([^/]+?)\.html$/.exec(pathname); // the capture's flattened file name for the same page
   return m ? decodeURIComponent(m[1]) : null;
 }
 
