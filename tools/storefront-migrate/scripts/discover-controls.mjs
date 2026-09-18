@@ -73,7 +73,7 @@ const DURABLE_SELECTOR = function (el) {
   for (const attr of ['name', 'data-testid', 'data-test', 'data-action', 'data-cart-action', 'data-checkout', 'aria-label']) {
     const v = el.getAttribute(attr);
     if (!v) continue;
-    const s = unique(`${el.tagName.toLowerCase()}[${attr}="${v.replace(/"/g, '\\"')}"]`);
+    const s = unique(`${el.tagName.toLowerCase()}[${attr}="${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"]`);
     if (s) return { sel: s, tier: 'attribute' };
   }
   const cls = (el.className && el.className.baseVal !== undefined ? el.className.baseVal : el.className) || '';

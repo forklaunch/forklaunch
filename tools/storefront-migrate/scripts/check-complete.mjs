@@ -25,7 +25,7 @@ const { pageFileFor } = createRequire(import.meta.url)('./urlmap.js');
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
           '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-const deent = (u) => u.replace(/&amp;/g, '&').replace(/&#38;/g, '&').trim();
+const deent = (u) => u.replace(/&(?:amp|#38);/g, '&').trim();
 
 async function fetchXml(u) {
   try {

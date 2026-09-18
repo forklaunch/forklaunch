@@ -38,7 +38,7 @@ const server = http.createServer((req, res) => {
   catch { pagePath = u.searchParams.get('url') || ''; }
   if (!pagePath.startsWith('/')) pagePath = '/' + pagePath;
   const mapped = pageFileFor(pagePath);
-  if (!mapped) { res.writeHead(422); return res.end(`unmapped path ${pagePath}`); }
+  if (!mapped) { console.warn(`[assist] unmapped path ${pagePath}`); res.writeHead(422, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('unmapped path'); }
 
   const chunks = [];
   let bytes = 0;

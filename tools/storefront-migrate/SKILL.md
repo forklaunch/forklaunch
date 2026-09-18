@@ -1,6 +1,6 @@
 ---
 name: storefront-migrate
-description: Migrate a live Shopify (or similar) storefront onto ForkLaunch — capture every public page as a browsable, visually faithful clone, pull and import the product catalog, and wire the clone's cart and checkout to the real ecommerce module so it takes actual orders. Also does capture-only when a visual demo is all that's wanted. Use this whenever a store URL shows up alongside words like migrate, clone, mirror, copy, reproduce, move over, or "what would this look like on our platform" — and also for the individual pieces: capturing a store's pages, pulling or importing a Shopify catalog, checking capture fidelity or dead links, or standing a captured storefront up against a running ForkLaunch backend. Reach for it even when the request names only one of those steps rather than a whole migration.
+description: Migrate a live Shopify or Squarespace storefront onto ForkLaunch — capture every public page as a browsable, visually faithful clone, pull and import the product catalog, and wire the clone's cart and checkout to the real ecommerce module so it takes actual orders. Also does capture-only when a visual demo is all that's wanted. Use this whenever a store URL shows up alongside words like migrate, clone, mirror, copy, reproduce, move over, or "what would this look like on our platform" — and also for the individual pieces: capturing a store's pages, pulling or importing a Shopify or Squarespace catalog, checking capture fidelity or dead links, or standing a captured storefront up against a running ForkLaunch backend. Reach for it even when the request names only one of those steps rather than a whole migration.
 ---
 
 # Storefront capture
@@ -10,8 +10,6 @@ ForkLaunch migration pipeline: reproduce what the shopper sees, then wire the
 commerce backend underneath it.
 
 ## Running it
-
-## Where the scripts are
 
 `${CLAUDE_SKILL_DIR}` is this skill's directory (Claude Code substitutes it).
 Every command below is written against it so it works from any working
@@ -175,7 +173,7 @@ Useful flags:
 
 ### How long it takes, and why it looks stuck
 
-Roughly **20–35 seconds per page** for the crawl, and 100MB+. The preflight
+Roughly **6 to 40 seconds per page** for the crawl (quiet store: 6; ad-heavy: 40), and 100MB+. The preflight
 estimate covers the crawl only; the verify and repair loop adds up to
 `--budget-min` (default 30) minutes on top of it. Expect **15 to 60 minutes
 wall clock** for a typical store, longer for image-heavy ones. A measured
@@ -212,7 +210,7 @@ re-gates until the list is empty. Defects map to repairs like this:
 | a dead internal link | a targeted re-crawl of exactly those paths (`crawl.js --only /a,/b`) — opt-in |
 | a vendor's inline snippet broken by the demo-mode link rewrite (`location.href="#" data-mirror-uncaptured=…` is a syntax error) | `catalog/fix-script-hrefs.mjs`, always run; `crawl.js` no longer rewrites inside `<script>` bodies |
 
-All four repair scripts are **idempotent**, which they had to become before a
+The repair scripts are **idempotent**, which they had to become before a
 loop could run them repeatedly: `shrink-media` refuses a file already at or
 below the target height (h264 is lossy, and four passes shipped visibly mushy
 video), and the two localisers remember what they already fetched and what is
@@ -270,7 +268,8 @@ The verify/repair phase writes two more files beside `site/`:
   Read this before saying anything about fidelity.
 - **`feature-inventory.json`** — the cached live requirement, reused across
   repair rounds so a loop costs the merchant's origin one polite pass rather
-  than six. Delete it (or pass `--refresh-live`) to re-measure the live site.
+  than six. Delete it (or pass `--refresh-live` to `check-features.mjs`) to
+  re-measure the live site.
 
 ## Reporting back
 
@@ -308,8 +307,10 @@ under it.
 
 **Does:** reproduce the visual storefront — layout, styling, webfonts, imagery,
 product photography, prices, swatches, size grids — for any store that renders
-in a browser. Works on classic Liquid themes and on headless React storefronts
-(Hydrogen, Next.js) alike. Page-to-page navigation works.
+in a browser. Classic Liquid themes come through whole. Headless React
+storefronts (Hydrogen, Next.js) capture the homepage and content pages well but
+product and collection pages thin — they render from an API the clone cannot
+reach — and the preflight says AMBER for them. Page-to-page navigation works.
 
 **Does not**, without merchant credentials:
 
@@ -358,10 +359,11 @@ don't send them down this path unnecessarily.
 as a project in an existing ForkLaunch app, reading the `manifest.json` written
 beside `site/`.
 
-**Check that your CLI has it** — `forklaunch init --help` should list
-`storefront`. If it doesn't, your CLI predates the command and you'll need a
-build that includes it. Older notes describing this command as "planned" are
-out of date.
+**It is not in CLI 1.10.0, the current release** — `forklaunch init --help`
+does not list `storefront`. Until it ships, `manifest.json` is the handoff:
+it is produced and validated on every run, and `references/manifest-schema.md`
+is what the command will read. Do not tell a user the registration step is
+available; tell them the manifest is ready for it.
 
 ### Pointing the clone at the backend
 
@@ -503,8 +505,10 @@ the numbers need to be real.
 
 ## When a store won't capture
 
-**Client-rendered / headless stores are fine** — a real browser runs their
-JavaScript. Being "headless" is not an obstacle.
+**Client-rendered stores capture** — a real browser runs their JavaScript.
+Headless storefronts (Hydrogen, Next.js) are the exception: their product and
+collection pages render from an API on every visit and come through thin; the
+preflight says AMBER and the section above says what to expect.
 
 **Shops behind a Shopify app proxy, and filter-app collection grids.** Some
 stores keep their shop behind an app proxy (`/a/...` or `/apps/...` routes,

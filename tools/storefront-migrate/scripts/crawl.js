@@ -86,7 +86,7 @@ const ONLY = onlyIdx > -1
 // Asset-URL rewrites still run inside scripts on purpose; only this one
 // injects an attribute, and an attribute has no meaning inside JavaScript.
 function replaceOutsideScripts(html, re, fn) {
-  return html.split(/(<script\b[^>]*>[\s\S]*?<\/script>)/i)
+  return html.split(/(<script\b[^>]*>[\s\S]*?<\/script\s*>)/i)
              .map((seg, i) => (i % 2 ? seg : seg.replace(re, fn)))
              .join('');
 }
@@ -436,7 +436,7 @@ function injectAtDocStart(html, script) {
     // the true catalog regardless of how the nav is rendered.
     // Sitemap XML escapes ampersands; an undecoded &amp; corrupts the query
     // string and the child sitemap 404s.
-    const deent = (u) => u.replace(/&amp;/g, '&').replace(/&#38;/g, '&').trim();
+    const deent = (u) => u.replace(/&(?:amp|#38);/g, '&').trim();
 
     // all=false: a cheap supplement (first 6 child sitemaps) for the budgeted
     // path. all=true (--complete): every child sitemap, including the paginated
@@ -1457,7 +1457,7 @@ function injectAtDocStart(html, script) {
 
       if (CLEAN) {
         html = html.replace(
-          new RegExp(`href="https://${domain.replace(/\\./g, '\\\\.')}(\\/(?:account|cart|checkout)[^"]*)?"`, 'gi'),
+          new RegExp(`href="https://${domain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\/(?:account|cart|checkout)[^"]*)?"`, 'gi'),
           (m, path) => `href="${path || '/'}" data-mirror-inert="1"`);
       }
 

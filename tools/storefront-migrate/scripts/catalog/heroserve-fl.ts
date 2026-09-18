@@ -639,7 +639,7 @@ const SHIM = `<script>(function(){
  * would break the pages that rely on it.
  */
 function absolutiseScriptPaths(html: string): string {
-  return html.replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gi, (whole, inner) => {
+  return html.replace(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi, (whole, inner) => {
     if (!inner.includes('_a/')) return whole;
     const fixed = inner.replace(/(["'`])_a\//g, '$1/_a/');
     return fixed === inner ? whole : whole.replace(inner, fixed);
@@ -1585,7 +1585,7 @@ function orderPage(r: { code: number; body: any }): string {
 // nothing. Parsing it once at startup turns that into an immediate, obvious
 // failure instead of a silent one discovered by hand later.
 try {
-  const body = SHIM.replace(/^<script>/, '').replace(/<\/script>$/, '');
+  const body = SHIM.replace(/^<script>/i, '').replace(/<\/script\s*>$/i, '');
   new Function(body);
 } catch (err) {
   console.error('FATAL: the injected client shim does not parse — every page would load inert.');

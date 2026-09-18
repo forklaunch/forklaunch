@@ -163,7 +163,7 @@ async function redeclaredByVendor(page, route, ident, origins, hosts, storeHost)
   if (!html) return null;
   const re = new RegExp('\\b(?:const|let|class|function)\\s+' + ident.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b');
   const declarers = [];
-  for (const m of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
+  for (const m of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
     const src = /\bsrc="([^"]+)"/.exec(m[1]);
     if (src) {
       const rel = src[1].replace(/^(\.\.\/)+/, '').replace(/^\//, '');
@@ -249,7 +249,7 @@ async function inlineScriptVendor(page, route, line, hosts) {
 async function syntaxErrorSource(page, route, hosts) {
   const html = await cloneHtml(page, route);
   if (!html) return null;
-  for (const m of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
+  for (const m of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
     const a = m[1];
     if (/\bsrc=/.test(a) || /type="(?!text\/javascript|application\/javascript|module)[^"]*"/i.test(a)) continue;
     const body = m[2];
