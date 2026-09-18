@@ -1,28 +1,24 @@
 # Storefront Migrate: how to use it
 
-Point it at a Shopify store. It produces a faithful, browsable, offline clone of
+Point it at a Shopify or Squarespace store. It produces a faithful, browsable, offline clone of
 that store's public pages, verifies the clone against the live site, and repairs
 what it can. One command. It stops when the clone has every feature the live
 site has, or tells you exactly what it could not fix.
 
 ## Install it
 
-There are two routes. Route 1 works today. Route 2 is the team route and needs
-access to the repo first.
-
-### Route 1: the tarball (works today)
-
-This is a Claude Code skill. Unpack `storefront-migrate.tgz` anywhere and
-install its dependencies (the `package.json` is inside `scripts/`):
+It lives in the ForkLaunch monorepo at `tools/storefront-migrate`. Clone the
+repo, install the tool's dependencies (the `package.json` is inside
+`scripts/`), and either run it from that folder or hand it to Claude Code as a
+skill.
 
 ```bash
-mkdir -p storefront-migrate
-tar -xzf storefront-migrate.tgz -C storefront-migrate
-cd storefront-migrate
+git clone git@github.com:forklaunch/forklaunch.git
+cd forklaunch/tools/storefront-migrate
 (cd scripts && npm install)
 ```
 
-Then either run it from that folder:
+Run it from that folder:
 
 ```bash
 node scripts/bin/migrate.mjs https://www.the-store.com --clean
@@ -36,20 +32,10 @@ mkdir -p ~/.claude/skills
 cp -R . ~/.claude/skills/storefront-migrate
 ```
 
-### Route 2: the plugin (team route, once you have been given access to the repo)
-
-The repo is private today, so the repo owner has to add you as a collaborator
-first. Then install it as a Claude Code plugin:
-
-```
-claude plugin marketplace add SrikarChittemsetty/forklaunch-tools
-claude plugin install storefront-migrate@forklaunch-tools
-```
-
 Then in any Claude Code session say "migrate https://<store> with
 storefront-migrate" and the skill runs.
 
-With either route, in Claude Code, say what you want: "clone
+Either way, in Claude Code, say what you want: "clone
 https://www.the-store.com so I can show the client". The skill reads this
 manual itself, runs the setup below, runs the one command, and reports the exit
 code. Everything after this heading is what the skill does for you, and how to
@@ -57,7 +43,7 @@ do it by hand if you prefer.
 
 ## Before the first run
 
-Run everything from the unpacked folder (the one containing `scripts/`,
+Run everything from this folder (the one containing `scripts/`,
 `MANUAL.md` and `SKILL.md`). Output lands in `scripts/output/<store-domain>/`.
 
 Three tools have to be on the machine. Check first (`bun --version`,
@@ -132,6 +118,27 @@ the verify phase to take 30 to 55 minutes on top of the crawl.
 
 Exit 2 is the one to be careful with. It is not "the clone is bad"; it is "I
 could not check." A clone that got exit 2 has not been verified at all.
+
+## Squarespace stores
+
+The capture is platform-agnostic; the catalog pull and the cart bridge were
+Shopify-shaped until the Squarespace adapter. For a Squarespace store, run the
+migration as usual (the catalog step will say `catalog step failed` because
+there is no `/products.json`), then pull the catalog from Squarespace's own
+JSON and import it:
+
+```bash
+node scripts/catalog/pull-squarespace.mjs https://www.the-store.com /shop
+bun scripts/catalog/cli.ts import scripts/catalog/data/the-store-com/normalized.json http://localhost:<PORT> <HMAC_SECRET_KEY>
+```
+
+`/shop` is the commerce collection's path; pass a different one if the store
+uses another. Served with `heroserve-fl.ts` against the module, the theme's
+own Add to Cart buttons drive the module's cart, and products the crawl never
+captured still open on a module-rendered page. Stores that switched selling
+off (enquiry-only, buttons hidden in their own CSS) get the buttons back on
+the clone. Proven end to end on swaticouture.com (379 products, test card to
+paid, stock decremented).
 
 ## Headless stores (Hydrogen, Next.js, "React storefront")
 

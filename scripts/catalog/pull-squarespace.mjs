@@ -11,10 +11,9 @@
  * (see references/catalog-import-contract.md), so a Squarespace store's
  * catalog lands in the module through the identical import path Shopify uses.
  *
- * Only the catalog: the captured Squarespace pages' own add-to-cart buttons
- * are not bridged (that shim is Shopify-shaped). Products imported here are
- * sellable through heroserve's module-rendered product page
- * (`/product/handle/<handle>`), which is platform-agnostic.
+ * heroserve-fl.ts binds the captured pages' own `.sqs-add-to-cart-button` to
+ * the module and renders products the crawl never captured from this catalog,
+ * so everything imported here is sellable on the clone.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

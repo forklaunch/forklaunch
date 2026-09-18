@@ -4,7 +4,7 @@ This is the short version for someone who has to explain the tool to a colleague
 
 ## What the skill produces
 
-You give it one thing: the URL of a Shopify store. It hands back a folder that is a working, browsable copy of that store, served on localhost. Every page a shopper can reach from the navigation is there. Menus open, carousels slide, variant pickers switch images and prices, search and collection filters respond, and the cart drawer holds items. Nothing in the copy calls the original store or Shopify. It is a self-contained demo the prospect can click through as if it were their own site.
+You give it one thing: the URL of a Shopify store (Squarespace works too; see "Other platforms"). It hands back a folder that is a working, browsable copy of that store, served on localhost. Every page a shopper can reach from the navigation is there. Menus open, carousels slide, variant pickers switch images and prices, search and collection filters respond, and the cart drawer holds items. Nothing in the copy calls the original store or Shopify. It is a self-contained demo the prospect can click through as if it were their own site.
 
 What it does NOT do by default: take money. Cart, checkout and account pages are visual only until a backend is wired in. That is deliberate. The skill is the migration. The commerce module is the product.
 
@@ -12,7 +12,7 @@ What it does NOT do by default: take money. Cart, checkout and account pages are
 
 The pipeline is one command and runs hands off. Under the hood it is six stages.
 
-1. **Assess.** It fetches the storefront, confirms it is Shopify, identifies the theme, estimates page count and time, and prints a GREEN, AMBER or RED verdict before spending any real time. RED means do not bother, and it says why.
+1. **Assess.** It fetches the storefront, identifies the platform and theme, estimates page count and time, and prints a GREEN, AMBER or RED verdict before spending any real time. RED means do not bother, and it says why.
 
 2. **Capture.** A real browser walks the site from the navigation outward: home, every collection, every product linked from those collections, the content pages, and the cart. For each page it saves the rendered HTML plus every asset the page needed (images, fonts, scripts, stylesheets, videos), and rewrites the links so they point at local files. Third-party tags (analytics, chat widgets, consent banners, review widgets) are recorded but not fetched. The copy stays offline.
 
@@ -30,6 +30,16 @@ The exit code is the contract. 0 means every feature the live store has, the clo
 
 Feature fidelity, not pixel fidelity. The claim is: everything a shopper can do on the live store, they can do on the copy, and it reacts the same way. The claim is NOT that a screenshot matches. Themes render differently on different days, so a pixel gate would fail on every store and prove nothing.
 
+## Other platforms
+
+The capture works on any site. The catalog pull and the cart bridge are
+per-platform adapters: Shopify is the production path, and a Squarespace
+adapter (catalog from the store's own JSON, the theme's Add to Cart bound to
+the module) was proven on a live enquiry-only store that could not take
+orders on its own platform. WooCommerce and BigCommerce are the same shape of
+work. Search-driven sites (a map and filters over an API) are out of scope: the
+clone captures pages, not someone else's backend.
+
 ## Getting to real transactions
 
 The clone is a frontend. To sell through it, three things happen, all described step by step in WIRING.md:
@@ -44,4 +54,4 @@ Going from test mode to production is the module's deployment story, not the ski
 
 ## One-line summary
 
-Point it at a Shopify store, get a verified click-through copy in minutes with a report that names anything it could not reproduce; import the catalog it pulled into the commerce module and the same copy starts taking payments.
+Point it at a Shopify store (or a Squarespace one), get a verified click-through copy in minutes with a report that names anything it could not reproduce; import the catalog it pulled into the commerce module and the same copy starts taking payments.
