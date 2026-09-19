@@ -992,25 +992,23 @@ forklaunch config push  ... -i worker.env                                     # 
 ```
 
 This caused a multi-hour production outage on 2026-08-09. The blast radius went well past the
-config store, because a deploy regenerates infrastructure from it:
+config store, because a deploy regenerates the app's live infrastructure from it:
 
 1. Every other service's env vars were dropped from the config store.
-2. **SSM parameters were deleted** for keys no longer present (secret VALUES are unrecoverable
-   unless they exist in SSM parameter *history* or an old `production.env`).
-3. Existing SSM parameters were **overwritten by value** — e.g. `iam-better-auth-secret` was
-   replaced, so better-auth could no longer decrypt its stored JWKS private key and every
-   `get-session` returned 500 (which then looks like auth rate-limiting, because clients retry
-   the device-code flow, which polls).
-4. The next deploy **regenerated the exec-role IAM policies** from the narrowed config, revoking
-   `ssm:GetParameters` on the dropped parameters, so tasks died with `AccessDeniedException`.
-5. The next deploy also **regenerated task definitions**, silently reverting any manual ECS
-   rollback. Recovery does not stick until the config store itself is correct.
+2. Secret values tied to the dropped keys became unrecoverable outside of history/backups.
+3. Secrets still present but changed in value broke any service relying on the old value (e.g. an
+   auth secret rotating out from under a running service breaks session validation for every
+   client, which can look like unrelated rate-limiting).
+4. The next deploy regenerated infrastructure permissions from the narrowed config, so services
+   lost access to secrets they still needed.
+5. The next deploy also regenerated running service definitions, silently reverting any manual
+   fix applied directly against the infrastructure. Recovery does not stick until the config store
+   itself is correct.
 
-The underlying AWS account belongs to ForkLaunch, never the customer, regardless of cluster type —
-an agent working in a customer's project has no AWS credentials for it, full stop. None of the
-`aws ecs`/`aws ssm` commands below are ever runnable from that context; they exist only as an
-internal ForkLaunch-operator runbook (this is the actual playbook used to resolve the outage
-above), not something to suggest to a customer or run on their behalf.
+The customer never has direct access to the underlying cloud infrastructure, regardless of cluster
+type — an agent working in a customer's project has no cloud credentials for it, full stop, and
+must never suggest cloud-provider CLI commands to a customer or claim to run them on the
+customer's behalf.
 
 **Rules**
 
@@ -1019,33 +1017,17 @@ above), not something to suggest to a customer or run on their behalf.
 - Before any push, diff the input against a full `config pull` of the same environment and confirm
   no service loses keys.
 - Treat `push` as a destructive, environment-wide replace. Take a full unfiltered pull first and
-  keep it as the rollback artifact — this is the only recovery path available to a customer-facing
-  agent; everything below this point is ForkLaunch-internal only.
+  keep it as the rollback artifact — this is the only recovery path available to this skill.
 
 **If it has already happened**
 
-- Customer-facing agent: restore from the full unfiltered `config pull` taken before the push (see
-  Rules above) via `config push`, then redeploy. If no such backup exists, this is a ForkLaunch
-  support escalation — don't guess at secret values or fabricate a replacement config, and don't
-  suggest AWS CLI commands to the customer.
-- ForkLaunch operator only, with real AWS access to ForkLaunch's own account: before any push,
-  cross-check the running task definitions —
-  `aws ecs describe-task-definition --task-definition <td> --query 'taskDefinition.containerDefinitions[0].environment[*].name'`
-  — and verify SSM before/after a push:
-  `aws ssm get-parameters-by-path --path /<env-prefix> --query 'length(Parameters)'`. If damage has
-  already happened, task definitions hold the correct secret ARNs and non-secret env values — use
-  them to identify which keys and versions need restoring (`aws ecs describe-task-definition`).
-  For any container env entry that is itself a secret ARN reference, restore by ARN/version, not by
-  reading the plaintext value. Overwritten (not deleted) parameters are recoverable from history:
-  first list versions without decrypting (`aws ssm get-parameter-history --name <param>`, which
-  returns every version but never decrypts any of them) and match the version number by
-  `LastModifiedDate` around the push. `--with-decryption` on `get-parameter-history` decrypts the
-  WHOLE history at once, not just one version — instead fetch only the identified version with
-  `aws ssm get-parameter --name <param>:<version> --with-decryption` (colon-suffixed version
-  label), and never paste the decrypted value into chat, logs, or a
-  committed file — pipe it straight into the restore command.
+- Restore from the full unfiltered `config pull` taken before the push (see Rules above) via
+  `config push`, then redeploy. If no such backup exists, this is a ForkLaunch support escalation —
+  don't guess at secret values or fabricate a replacement config, and don't suggest
+  cloud-provider CLI commands to the customer. Recovery of the underlying infrastructure itself is
+  handled by ForkLaunch operators through an internal runbook, not through this skill.
 - Fix the config store BEFORE deploying again, or the deploy will re-apply the damaged state and
-  undo any ECS/IAM repair.
+  undo any infrastructure-level repair done on ForkLaunch's side.
 
 Behavioral asymmetry to know: `config pull` fails with "Environment not found" if the environment doesn't exist yet, but `config push` **auto-creates** the environment. On a never-deployed app, push first, then pull.
 
