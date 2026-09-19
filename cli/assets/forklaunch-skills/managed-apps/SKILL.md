@@ -293,10 +293,11 @@ a background worker:
 
 Watch it with `forklaunch managed instance list` (or `--state provisioning`).
 The lifecycle states, in order: `provisioning → provisioning_failed?
-→ awaiting_claim (/ awaiting_claim_blocked) → active → suspended? →
+→ awaiting_claim → active → suspended? →
 destroying → destroyed`. A claimed instance can **never** step straight back
 to `awaiting_claim` (that would be an account-takeover primitive); `destroyed`
-is terminal.
+is terminal. (`awaiting_claim_blocked` exists in the transition map but
+nothing writes it today — reserved.)
 
 The one sanctioned way back to the claimable pool is a **reset**:
 `awaiting_claim | active | suspended → resetting → awaiting_claim`
@@ -311,7 +312,7 @@ neither relay- nor gateway-eligible. A failed reset lands in
 `provisioning_failed` with identity intact; the same call retries it.
 
 ```http
-POST /instances/:id/reset   { "confirmHost": "<the instance host, echoed back>" }   → 202 { "state": "resetting" }
+POST /managed-mode/instances/:id/reset   { "confirmHost": "<the instance host, echoed back>" }   → 202 { "state": "resetting" }
 ```
 
 Platform admin only. Allowed from `awaiting_claim | active | suspended`, and
@@ -416,15 +417,15 @@ callback URL to register per template.
 
 Publishing a version does **not** move running instances. A **fleet rollout**
 moves every instance of a product to a published version in waves, and is
-the managed path (managed-apps API, session auth; CLI command pending):
+the managed path (control plane, session auth; CLI command pending):
 
 ```http
-POST /rollouts   { "templateSlug": "clinic-portal", "targetSemver": "1.4.0",
-                   "wavePercents": [10, 100], "failureThresholdPercent": 10 }
-GET  /rollouts                      # every rollout for your organization
-GET  /rollouts/:id                  # waves + per-instance items
-POST /rollouts/:id/advance          # RESUME a running rollout (after a restart) — not "next wave"
-POST /rollouts/:id/instances/:instanceId/result   # record an outcome by hand if the platform callback did not
+POST /managed-mode/rollouts   { "templateSlug": "clinic-portal", "targetSemver": "1.4.0",
+                                "wavePercents": [10, 100], "failureThresholdPercent": 10 }   → 201
+GET  /managed-mode/rollouts                      # every rollout for your organization
+GET  /managed-mode/rollouts/:id                  # waves + per-instance items
+POST /managed-mode/rollouts/:id/advance          # RESUME a running rollout (after a restart) — not "next wave"
+POST /rollouts/:id/instances/:instanceId/result  # (managed-apps direct) record an outcome by hand if the platform callback did not
 ```
 
 - `wavePercents` is **cumulative fleet coverage**, default `[10, 100]`: a 10 %
@@ -463,14 +464,15 @@ config for that path is `forklaunch config set -e production -r <region>
 `template vars set` and `instance vars set` **write the declaration only**;
 `forklaunch config set` (and the dashboard env editor) write the instance's
 application config. None of it reaches the running tasks until the next
-deploy of that instance. Three managed-apps routes (org-scoped; CLI commands
-pending) make that deploy without waiting for a launch, reset or rollout:
+deploy of that instance. Three control-plane routes (org-scoped; CLI commands pending) make that
+deploy without waiting for a launch, reset or rollout:
 
 ```http
-POST  /instances/:id/apply-variables          → 202 { state }   re-resolve variables, redeploy the SAME version
-PATCH /instances/:id  { "instanceSize": "micro" }   → 202 { state }   resize: redeploys the current version
-PATCH /instances/:id  { "updatePolicy": "deferred", "updateDeferredUntil": "…" }   → 200   no redeploy
-GET   /instances/:id/deployments?limit=20     → the platform's deployment list for the instance's application
+POST  /managed-mode/instances/:id/apply-variables          → 202 { state }   re-resolve variables, redeploy the SAME version
+PATCH /managed-mode/instances/:id  { "instanceSize": "micro" }   → 202 { state }   resize: redeploys the current version
+PATCH /managed-mode/instances/:id  { "updatePolicy": "deferred", "updateDeferredUntil": "<ISO>|null" }   → 200   no redeploy
+GET   /managed-mode/instances/:id/deployments?limit=20     → the platform's deployment list for the instance's application
+GET   /managed-mode/instances/:id                          → the full lifecycle row (instanceSize, updatePolicy, pendingUpdate, latestDeploymentId, lastResetAt, resetCount, appClaimedAt, …)
 ```
 
 - An update deploy is the current version only: no DNS, no wipe, no key
@@ -583,9 +585,9 @@ give an instance back to the pool, reset it (never re-claim it).
 
 ## Still manual today
 
-- **Fleet rollouts** exist in the managed-apps API (`POST /rollouts`,
-  advance = resume, per-instance result) but not yet in the CLI or the
-  control-plane front door; roll one instance with the `--force` deploy above.
+- **Fleet rollouts** exist in the API (`POST /managed-mode/rollouts`,
+  advance = resume, per-instance result) but not yet in the CLI; roll one
+  instance with the `--force` deploy above until then.
 - **`instance reset` / `update` / `apply-variables` / `deployments`**,
   **`template relay set`**, and `template update --frontend-domain /
   --cluster-type` are API-only until the CLI grows the commands; the skill
