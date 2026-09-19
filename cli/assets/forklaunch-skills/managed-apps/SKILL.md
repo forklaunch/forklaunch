@@ -303,12 +303,23 @@ The one sanctioned way back to the claimable pool is a **reset**:
 (or `→ provisioning_failed`, where a retry re-runs the reset; or `→
 destroying`). A reset wipes the instance's data with a `wipeData` deployment,
 rotates its key, and only once the wipe succeeded *and* the instance answers
-on its host clears the previous owner (`claimedAt`, `ownerEmail`, backup key,
-token) in the same flush that mints a fresh claim link. While `resetting` the
-instance is neither relay- nor gateway-eligible. API: `POST /instances/:id/reset`
-(platform admin) with `{ "confirmHost": "<the instance host>" }`; 409 on a
-host mismatch, a rollout in progress, or a state that cannot be reset.
-`lastResetAt` / `resetCount` are on the instance. (CLI command: pending.)
+on its host (the deployment-result callback plus a live `/health` probe, 12 ×
+10 s) clears the previous owner (`claimedAt`, `ownerEmail`, backup key, claim
+token, `appClaimed`, any deferral) in the same flush that mints a fresh claim
+link and bumps `resetCount` / `lastResetAt`. While `resetting` the instance is
+neither relay- nor gateway-eligible. A failed reset lands in
+`provisioning_failed` with identity intact; the same call retries it.
+
+```http
+POST /instances/:id/reset   { "confirmHost": "<the instance host, echoed back>" }   → 202 { "state": "resetting" }
+```
+
+Platform admin only. Allowed from `awaiting_claim | active | suspended`, and
+from `provisioning_failed` as the retry. 409 codes: `RESET_HOST_MISMATCH`
+(the echo did not match), `RESET_ROLLOUT_IN_PROGRESS`, `RESET_NOTHING_TO_RESET`
+(a `provisioning_failed` instance that never launched — retry the launch or
+destroy it instead); any other state is an invalid transition. (CLI command:
+pending.)
 
 What the wipe does: on a dedicated substrate it is a run-once task on the
 instance's own RDS that drops and recreates each component database (named
@@ -449,15 +460,31 @@ config for that path is `forklaunch config set -e production -r <region>
 
 ### What reaches an instance that is already running
 
-`template vars set` and `instance vars set` **write the declaration only**.
-Nothing reaches a running instance until its next provision run — a launch,
-a provisioning retry, a reset, or a rollout deploy. `--instance-size` exists
-only on `instance create`; there is no resize after launch today (a
-fleet-wide change is `template update` default size + a rollout). A
-per-instance size change and a "re-resolve variables and redeploy" action
-are being added (`PATCH /instances/:id`, `POST /instances/:id/apply-variables`,
-`GET /instances/:id/deployments`); until they land, the fallback deploy above
-is how a single running instance picks up new values.
+`template vars set` and `instance vars set` **write the declaration only**;
+`forklaunch config set` (and the dashboard env editor) write the instance's
+application config. None of it reaches the running tasks until the next
+deploy of that instance. Three managed-apps routes (org-scoped; CLI commands
+pending) make that deploy without waiting for a launch, reset or rollout:
+
+```http
+POST  /instances/:id/apply-variables          → 202 { state }   re-resolve variables, redeploy the SAME version
+PATCH /instances/:id  { "instanceSize": "micro" }   → 202 { state }   resize: redeploys the current version
+PATCH /instances/:id  { "updatePolicy": "deferred", "updateDeferredUntil": "…" }   → 200   no redeploy
+GET   /instances/:id/deployments?limit=20     → the platform's deployment list for the instance's application
+```
+
+- An update deploy is the current version only: no DNS, no wipe, no key
+  rotation. The instance carries `pendingUpdate = 'size' | 'variables'` until
+  the platform's deployment-result callback clears it; on error `lastError` is
+  set and the marker stays so you can retry the same call.
+- Refused with 409 `UPDATE_ROLLOUT_IN_PROGRESS` while a fleet rollout item is
+  updating this instance, and `UPDATE_NOT_RUNNING` unless the instance is
+  `active` or `suspended`.
+- `--instance-size` on `instance create` sets the launch size; the PATCH
+  above is the resize after launch. A fleet-wide change is `template update`
+  default size + a rollout.
+- Follow any update / reset / rollout deploy to completion with
+  `GET /instances/:id/deployments` (`status`, `errorMessage` per deployment).
 
 ## 4. Failure modes & troubleshooting
 
@@ -559,9 +586,10 @@ give an instance back to the pool, reset it (never re-claim it).
 - **Fleet rollouts** exist in the managed-apps API (`POST /rollouts`,
   advance = resume, per-instance result) but not yet in the CLI or the
   control-plane front door; roll one instance with the `--force` deploy above.
-- **`instance reset`**, **`template relay set`**, and `template update
-  --frontend-domain / --cluster-type` are API-only until the CLI grows the
-  commands; the skill names the routes.
+- **`instance reset` / `update` / `apply-variables` / `deployments`**,
+  **`template relay set`**, and `template update --frontend-domain /
+  --cluster-type` are API-only until the CLI grows the commands; the skill
+  names the routes.
 - A product's own post-claim ceremony (Health Vault's phone claim) mints its
   link with an operator script; minting it from the platform at claim time is
   the intended end state.
