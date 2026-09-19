@@ -274,18 +274,29 @@ application (snapshots first), then `destroyed`.
 
 ## Where each surface stops
 
-| | CLI | managed-apps | `/managed-mode` proxy (dashboard) |
-|---|---|---|---|
-| List / get templates, versions | ✅ | ✅ | ✅ |
-| Create / publish template, version | ✅ | ✅ | ✅ |
-| Template and instance variables | ✅ | ✅ | ✅ |
-| Launch, list, get, destroy | ✅ | ✅ | ✅ |
-| Reveal / reissue / send claim link | ✅ | ✅ | ✅ |
-| Resume a parked launch | ✅ | ✅ | ✅ |
-| Reset (wipe, return to pool) | pending | ✅ | ❌ not proxied yet |
-| PATCH size / policy, apply-variables, deployments | pending | ✅ | ❌ not proxied yet |
-| Fleet rollouts | pending | ✅ | ❌ not proxied yet |
-| Claim (customer) | ✅ | ✅ public | ✅ `/claim/:token` |
+| | CLI | managed-apps | `/managed-mode` proxy | Dashboard |
+|---|---|---|---|---|
+| List / get templates, versions | ✅ | ✅ | ✅ | ✅ templates page |
+| Create / publish template, version | ✅ | ✅ | ✅ | ✅ templates page |
+| Template and instance variables | ✅ | ✅ | ✅ | ✅ templates page / instance page |
+| Launch, list, get, destroy | ✅ | ✅ | ✅ | ✅ fleet page / instance page |
+| Reveal / reissue / send claim link | ✅ | ✅ | ✅ | ✅ (reveal) |
+| Resume a parked launch | ✅ | ✅ | ✅ | ✅ instance page |
+| Reset (wipe, return to pool) | none, by decision | ✅ | ✅ | ✅ instance page, admin, typed host |
+| Resize, update policy, apply-variables, deployment feed | none, by decision | ✅ | ✅ | ✅ instance page |
+| Fleet rollouts (start, list, get, resume) | none, by decision | ✅ | ✅ | ✅ instance page |
+| Record a rollout item's result by hand | none | ✅ | ❌ | ❌ |
+| Claim (customer) | ✅ | ✅ public | ✅ public | ✅ `/claim/:token` |
+
+**The dashboard is the second client of the lifecycle.** The application
+list nests every instance under its template chip; the instance page
+(`/dashboard/managed-apps/instances/:id`) shows the state strip and the
+levers above, and "Open app surface" drops into the ordinary application
+view (services, environment, logs, observability), which carries a banner
+back to the instance. The managed-mode CLI stops at launch/claim/destroy and
+variables: the owner declined lifecycle commands for now ("this is just to
+help them set up the software"), so an agent driving resets, resizes or
+rollouts calls the `/managed-mode` routes directly with the user's bearer.
 
 **managed-apps is never called directly by the dashboard.** The dashboard
 calls platform-management, which proxies under `/managed-mode` and forwards
@@ -293,9 +304,7 @@ the caller's `Authorization` header so managed-apps still applies its own
 tenancy checks. Adding a capability means adding it in three places: the
 managed-apps handler, the managed-apps SDK export, and the `/managed-mode`
 proxy. A handler that is not in the SDK is unreachable; that is exactly how
-template publishing went missing once. The rows marked "not proxied yet" are
-reachable today only by calling managed-apps with a bearer token (the CLI and
-scripts do this); the dashboard work adds the proxies.
+template publishing went missing once.
 
 ## Architecture rules
 
@@ -325,8 +334,12 @@ line that reads it.
 ## What has run live (Sep 2026)
 
 Launch, claim, destroy, all six substrate moves (org pool / platform pool /
-dedicated in both directions) with source cleanup, and the first reset
-(Postgres wipe proven; the Redis sweep grant fixed in #832, the retry edge added
-in the same PR). Propagation (`PATCH`, `apply-variables`) and rollouts have unit
-coverage and have not yet run against production; the numbers above for their
-durations are estimates from the deploy path they share with launch.
+dedicated in both directions) with source cleanup, and the reset end to end
+on the org pool (Sep 19: retry from `provisioning_failed` accepted, databases
+dropped and recreated, Redis prefix swept, fresh migrations, live health 200,
+`awaiting_claim` with a fresh claim link and `resetCount` 1, about 3½ minutes
+from request to claimable). The first attempt failed on the Redis sweep task's
+missing SSM grant and the retry edge did not exist; both fixed in #832.
+Propagation (`PATCH`, `apply-variables`) and rollouts have unit coverage and
+have not yet run against production; their durations above are estimates from
+the deploy path they share with launch.

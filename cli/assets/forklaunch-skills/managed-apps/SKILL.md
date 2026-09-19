@@ -34,7 +34,13 @@ customer, each handed off to its owner. If you only ever run one copy, you do
 not need any of this.
 
 Everything below drives the ForkLaunch control plane through the `forklaunch
-managed` command family. **Run `forklaunch login` first** — the single exception
+managed` command family, or — for the per-instance lifecycle the CLI does not
+cover yet — the `/managed-mode` routes named inline, which the dashboard's
+instance page (`/dashboard/managed-apps/instances/:id`) also drives: reset
+(admin, typed host echo), resize, update policy, apply-variables, template and
+instance variables, the deployment feed, versions, and rollout start/resume.
+The app list nests instances under their template, and an instance's
+application surface carries a banner linking back to it. **Run `forklaunch login` first** — the single exception
 is `instance claim`, which your customer runs and which needs no account.
 
 ## The two nouns and the two "publishes"
@@ -321,6 +327,23 @@ from `provisioning_failed` as the retry. 409 codes: `RESET_HOST_MISMATCH`
 (a `provisioning_failed` instance that never launched — retry the launch or
 destroy it instead); any other state is an invalid transition. (CLI command:
 pending.)
+
+What you will see, as observed on the org pool (3–4 minutes end to end):
+
+1. `POST …/reset` → `202 { "state": "resetting" }`; the row shows
+   `latestDeploymentId` for the wipe deploy and `lastError` cleared.
+2. The wipe deploy runs: each component database dropped and recreated, the
+   instance's Redis key prefix swept, then the services deploy and run their
+   own migrations on the empty databases.
+3. The platform's deployment callback plus a live `/health` probe flip the row
+   to `awaiting_claim`: `claimedAt` / `ownerEmail` null, `resetCount` + 1,
+   `lastResetAt` set.
+4. `POST …/instances/:id/claim-link` → a fresh one-time link (72 h); the
+   pre-reset token is dead.
+
+If the wipe deploy fails, the row lands in `provisioning_failed` with
+`lastError` (`Application deployment failed: …`) and identity intact; the
+same reset call retries it.
 
 What the wipe does: on a dedicated substrate it is a run-once task on the
 instance's own RDS that drops and recreates each component database (named
