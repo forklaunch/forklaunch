@@ -81,6 +81,16 @@ requirement below. The Stripe product is set later with `template update
 --stripe-product <id>`; the base domain is not settable through the API at all
 (instances use the platform-wide default).
 
+`clusterType` (API `PATCH /managed-mode/templates/:slug`; CLI flag pending) is
+where every instance of the template runs, decided once by the publisher — a
+customer launching an instance is never asked. Unset means
+**org-shared** (the publishing org's shared hosts). Setting it on the
+publisher's own application (`forklaunch app hosting`, or the cluster picker in
+`deploy create`) does NOT carry over: instances are new applications derived
+from the template, not from that app. A hosting type a component declares in
+the repo's manifest (`[projects.metadata] hostingType`) still wins over the
+template's value.
+
 ### publish (a VERSION — platform builds the image)
 
 ```bash
@@ -115,6 +125,10 @@ forklaunch managed template update --slug clinic-portal \
   --status published \        # draft | published | retired
   --stripe-product prod_ABC   # stored, but billing does NOT read it yet
 ```
+
+`clusterType`, `baseDomain`, `frontendDomain` and `defaultInstanceSize` are
+settable on the same resource through the API (`PATCH
+/managed-mode/templates/:slug`) but have no CLI flag yet.
 
 Only the fields you pass change. An empty update is refused (it would report
 success while doing nothing). `retired` stops new instances launching. Note:
@@ -209,13 +223,28 @@ adds, per component, without any `vars set`:
 `infraVars` and `environment-variable.util.ts` `resolveKnownPlatformVar`,
 resolved from Pulumi outputs at deploy time.)
 
-> **Accuracy caveat.** The managed-*identity* names some docs list —
-> `PUBLIC_HOST`, `INSTANCE_ID`, `INSTANCE_HMAC_KEY`, `PLATFORM_*` — are **not
-> actually emitted as environment variables** by any code found in the module.
-> The per-instance HMAC key (`smsHmacKey`) is minted and stored on the instance
-> row but used **server-side** (see the SMS gateway below), not injected into the
-> app's environment. Treat those four names as intended contract, not verified
-> behavior; confirm against the live env before depending on one.
+**The managed identity the platform injects per instance** (from
+`instance-provisioner.service.ts`, application scope, at provision time — and
+re-applied on every managed rollout; a hand-run `deploy create --force` on an
+instance's backing app keeps whatever `config set` holds):
+
+| variable | what it is |
+|---|---|
+| `INSTANCE_ID` / `FORKLAUNCH_INSTANCE_ID` | the managed instance id |
+| `INSTANCE_HMAC_KEY` / `FORKLAUNCH_INSTANCE_HMAC_KEY` | the per-instance key the app uses to call the platform gateway (SMS, LLM, app-claimed) and that the relay uses for a `forward` route |
+| `PUBLIC_HOST` | the instance's front-door host, `<prefix>-instance.<zone>`; the app puts it in its OAuth `state` (`r:<host>:<nonce>`) so the relay can route the callback back |
+| `PLATFORM_GATEWAY_URL` | the managed-apps base URL for gateway calls |
+| `PLATFORM_CALLBACK_URL` | the instance-gateway mount the app POSTs lifecycle events to (`/claim/claimed` when its own claim ceremony completes → the platform records `app_claimed_at` and emails the owner) |
+
+Declare a template variable with one of these names only to give it a
+placeholder for local runs; the platform's per-instance value wins on
+provisioning. A `<service>_…_URL` name (e.g. `IAM_URL`) is auto-filled as the
+inter-service URL and must not be declared either.
+
+**Deploy config gate.** Every `getEnvVar('X')` a service reads that is not
+typed `optional(...)` in its config injector is a **required key**; a release
+whose environment lacks one is parked with "missing keys: X" instead of
+deployed. Either declare it on the template or make the read optional.
 
 **Do not ship your own Twilio (or other SMS) credentials in a template.**
 Managed mode uses a **platform SMS gateway** (`SmsService`). An instance calls
@@ -265,9 +294,21 @@ a background worker:
 Watch it with `forklaunch managed instance list` (or `--state provisioning`).
 The lifecycle states, in order: `provisioning → provisioning_failed?
 → awaiting_claim (/ awaiting_claim_blocked) → active → suspended? →
-destroying → destroyed`. A claimed instance can **never** re-enter
-`awaiting_claim` (that would be an account-takeover primitive); `destroyed` is
-terminal.
+destroying → destroyed`. A claimed instance can **never** step straight back
+to `awaiting_claim` (that would be an account-takeover primitive); `destroyed`
+is terminal.
+
+The one sanctioned way back to the claimable pool is a **reset**:
+`awaiting_claim | active | suspended → resetting → awaiting_claim`
+(or `→ provisioning_failed`, where a retry re-runs the reset; or `→
+destroying`). A reset wipes the instance's data with a `wipeData` deployment,
+rotates its key, and only once the wipe succeeded *and* the instance answers
+on its host clears the previous owner (`claimedAt`, `ownerEmail`, backup key,
+token) in the same flush that mints a fresh claim link. While `resetting` the
+instance is neither relay- nor gateway-eligible. API: `POST /instances/:id/reset`
+(platform admin) with `{ "confirmHost": "<the instance host>" }`; 409 on a
+host mismatch, a rollout in progress, or a state that cannot be reset.
+`lastResetAt` / `resetCount` are on the instance. (CLI command: pending.)
 
 ### Instance vars (custom values) — can come BEFORE create
 
@@ -298,6 +339,17 @@ the only remedy is to destroy the instance and launch a new one. Capture the
 output; do not run it "just to check". A claim link only exists while the
 instance is `awaiting_claim` and unexpired (72h TTL); otherwise the command
 reports no link available. `--dryrun` does NOT consume it.
+
+### endpoints — pointing a frontend at an instance
+
+Every instance carries `hostPrefix` (public, e.g. `clinic-portal-a1b2c3`),
+`endpoints` (one https base URL per HTTP component, derived from the release
+manifest) and, once the template has a `frontendDomain`, `frontendUrl`
+(`https://<hostPrefix>.<frontend domain>`). `instance list --json`, the
+instance GET and the claim response all return them; the claim page shows the
+customer their `frontendUrl`. How to build the Vercel side (edge middleware per
+instance, why a subdomain per instance and not a shared origin) and the prompt
+to hand a coding agent: `docs/managed-instance-frontend.md`.
 
 ### claim (customer consumes — no login)
 
@@ -341,6 +393,26 @@ The one place that shows, in one call, which instances are running, whether
 sign-in would actually work for each (relay eligibility), and the exact OAuth
 callback URL to register per template.
 
+### Rolling a new version to existing instances
+
+Publishing a version does **not** move running instances. A fleet rollout
+(canary → promote across a product's instances) is the managed path; until
+the CLI exposes it, an operator rolls one instance by deploying the release to
+that instance's backing application:
+
+```bash
+# from a checkout whose .forklaunch/manifest.toml carries the INSTANCE's
+# platform_application_id (instance list --json → applicationId)
+forklaunch release create -v 1.4.0 -n "…" --local -y
+forklaunch deploy create -r 1.4.0 -e production --region us-west-2 --no-wait --force
+```
+
+`--force` is the CLI's "yes, I mean to deploy a template repo as a single
+app" switch; without it the managed-template guard refuses. Per-instance
+config for that path is `forklaunch config set -e production -r <region>
+--force KEY=value` on the same checkout (instance `vars set` only reaches a
+managed rollout).
+
 ## 4. Failure modes & troubleshooting
 
 **Instance stuck in `provisioning` (never reaches `awaiting_claim`).** The
@@ -360,75 +432,63 @@ provisioner records `lastError` on the instance and moves it to
 `provisioning_failed` instance can re-enter `provisioning` — retry is a
 supported path, not a stuck row.
 
-**KNOWN BUG (being fixed) — declared custom instance vars block provisioning.**
-`InstanceVariableEntity.value` is a compliance-classified, encrypted column
-(`fp.text().compliance('pci')` on a `defineComplianceEntity`). MikroORM's
-encrypted column type **needs a tenant-scoped EntityManager to decrypt** — an
-`em` created with no `{ context: { tenantId } }` reads with an empty tenant id
-and decryption fails ("Failed to decrypt encrypted column value"). Crucially,
-the column is decrypted whenever an `InstanceVariableEntity` row is **hydrated**,
-regardless of which field you actually read.
-
-The failing path is the **provisioning worker**. `provisioning-worker.handlers.ts`
-resolves a **bare** EntityManager (`ci.resolve(tokens.EntityMgr)`, no tenant
-context) and passes it into the provisioner, which calls
-`TemplateVariableResolver.resolve` — that loads the instance's
-`InstanceVariableEntity` rows and reads `value`. With no tenant context on the
-`em`, the decrypt throws, the worker records a failure, and **the job
-dead-letters**. Effect: **any instance whose template declares a `custom`
-variable is blocked; instances with no declarations are unaffected** (the
-resolver short-circuits on an empty declaration list). The same hydration hazard
-exists in `VariableService.listInstanceVariables` when reached without tenant
-context, even though it only reads the `key` — the correct read endpoints pass
-`{ context: { tenantId: req.session.organizationId } }`, but the worker has no
-session. If you see that decrypt error, or a stuck instance that has custom
-vars, this is the cause — check `forklaunch dlq stats` and the managed-apps
-logs.
+**Encrypted columns need the tenant first.** Instance rows (`smsHmacKey`,
+custom variable values) are encrypted under the instance's *organization*;
+template rows under the no-tenant context. Any route or job that reads one
+without a session must resolve the organization from plain columns first
+(`resolveInstanceOrgById` / `resolveInstanceOwnerByHost`) and fork a
+tenant-scoped EM, or the decrypt derives the wrong key and fails. The
+provisioning paths all do this now (`loadInstanceForProvisioning`,
+`withEncryptionContext`); keep the rule when adding a route.
 
 **Version won't build / instance create fails.** The git repo must be buildable
 by the **ForkLaunch GitHub App** — the App has to be installed on the repo with
 build access, and `--git-ref` must exist. A version stuck at `pending`/`building`
 or landing in `build_failed` points here.
 
-**Instance up but sign-in fails / host not reachable.** The instance's host
-needs **DNS/relay set up** (the `relay.<zone>` record and the instance's own
-host record). `forklaunch managed summary` shows relay eligibility per instance;
-an ineligible instance has its OAuth callback refused. `suspended` stays
+**Instance up but sign-in fails.** `forklaunch managed summary` shows relay
+eligibility per instance and the product's routes; an ineligible instance
+(`resetting`, `destroying`, …) has its OAuth callback refused, and a product
+with no route declared runs the legacy Epic path. `suspended` stays
 relay-eligible on purpose, so a mid-flight sign-in fails at the (down) instance
-rather than looking like a relay misconfiguration.
+rather than looking like a relay misconfiguration. The relay's own reasons are
+logged under `[Relay]` — the table is in `/managed-relay`.
 
 **"no published template" on `instance create`.** The template is still a draft
 — you ran `publish` (a version) but not `publish-template`. See section 1.
 
-## 5. The OAuth relay (Epic-style) for hosted instances
+## 5. The OAuth relay for hosted instances
 
-Hosted instances that sign users in through an external OAuth provider (the
-motivating case is **Epic**) share **one** registered redirect URI. An OAuth
-provider registers a single `redirect_uri` per client id, but there are many
-instances on many hosts — so every instance points its callback at the
-**platform relay**, and carries its own host inside the OAuth `state`:
+Hosted instances that sign users in through an external provider (Epic is the
+motivating case) share **one** registered redirect URI per product:
 
 ```
-state format:  r:<host>:<nonce>        (exactly three colon-separated parts)
-callback URL:   https://relay.<zone>/callback   (one per template/product, from `managed summary`)
+callback URL:   https://relay-<templateId>.<platform zone>/callback      (from `managed summary`)
+state format:   r:<instance host>:<nonce>                                (the instance mints it)
 ```
 
-The relay parses the `state`, pulls the per-instance `<host>` out of it, and
-forwards the callback to that instance. Key properties:
+The relay parses the `state`, checks the host is an eligible instance of this
+product, burns the nonce (single-use, 10 min), and hands the callback to the
+instance according to a **relay route** the product declared on its template
+— `{ name, component, path, mode }`:
 
-- **One redirect per product, not per instance.** The URL is derived per product
-  from the zone its instances live under (each product has its own OAuth client
-  id), never a single platform-wide URL.
-- **Single-use state.** The relay claims each state atomically in Redis (`SET NX
-  PX`, 10-minute TTL); a replay is refused, so the relay cannot be used as a
-  redirect oracle.
-- **Host is validated** against a strict pattern, and the three-part split means
-  a nonce can never smuggle a second host.
-- Only instances in a **relay-eligible state** (`awaiting_claim`, `active`,
-  `suspended`) are routed.
+- **`redirect`** (browser OAuth, and what Epic needs): 302 the browser to
+  `https://<prefix>-<component>.<zone><path>` with the provider's query
+  intact; the instance finishes the exchange with its own PKCE verifier. No
+  provider secret on the platform.
+- **`forward`** (webhooks): HMAC-signed POST to the component over the mesh.
 
-Register the callback URL from `forklaunch managed summary` with your OAuth
-provider once per template; all its instances share it.
+```http
+PUT /managed-mode/templates/<slug>/relay-routes        (platform admin; CLI pending)
+{ "routes": [ { "name": "default", "component": "vault", "path": "/epic/callback", "mode": "redirect" } ] }
+```
+
+`default` is served at the bare `/callback`; other names at
+`/callback/<name>`, each with its own URL in `managed summary`
+(`relayConfigs[].routes[].callbackUrl`). Publish rejects a route whose
+component does not serve the path. A template with no routes keeps the legacy
+Epic exchange+forward path. Everything else — the DNS/ALB plumbing, the
+per-mode contract, the debugging table — is in `/managed-relay`.
 
 ## Plain-English summary
 
@@ -441,18 +501,21 @@ DB/Redis/secret vars for free, and the platform runs the SMS gateway, so don't
 ship Twilio creds), then **launch an instance per
 customer** and hand them a **one-time claim link** they consume with no login.
 
-When a launch gets stuck in `provisioning`, the job dead-lettered — check
-`forklaunch dlq stats` and the logs. The live gotcha to know: a template with
-**custom instance variables** can trip a **known decryption bug** (the encrypted
-`value` column is read without tenant context → 500 → DLQ), which is being
-fixed. Also confirm the repo is buildable by the ForkLaunch GitHub App and that
-the instance's DNS/relay is set up.
+When a launch gets stuck in `provisioning`, a required custom variable is
+missing or the job dead-lettered — check `instance vars list`, `forklaunch
+dlq stats` and the logs. Confirm the repo is buildable by the ForkLaunch
+GitHub App. For provider sign-in, register the product's relay URL once and
+declare a relay route pointing at the component that finishes the flow. To
+give an instance back to the pool, reset it (never re-claim it).
 
-## Not fully verified
+## Still manual today
 
-Managed mode is newer than the rest of the platform and parts are still being
-wired. Treat the standard-injected-variable **naming** as the documented
-contract, not a guarantee that every listed name is already emitted verbatim by
-the control plane — confirm against the live `sync-platform-env-vars` payload
-before depending on a specific key. The decrypt bug above is real and
-outstanding at time of writing.
+- **Fleet rollouts** exist in the API (`startFleetRollout` / advance /
+  promote) but not yet in the CLI; roll one instance with the `--force`
+  deploy above.
+- **`instance reset`**, **`template relay set`**, and `template update
+  --frontend-domain / --cluster-type` are API-only until the CLI grows the
+  commands; the skill names the routes.
+- A product's own post-claim ceremony (Health Vault's phone claim) mints its
+  link with an operator script; minting it from the platform at claim time is
+  the intended end state.
