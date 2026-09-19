@@ -3,18 +3,30 @@ use clap::{ArgMatches, Command};
 
 use crate::{CliCommand, core::command::command};
 
+mod apply_variables;
 mod claim;
 mod claim_link;
 mod create;
+mod deployments;
 mod destroy;
+mod get;
 mod list;
+mod reset;
+mod resume;
+mod update;
 mod vars;
 
+use apply_variables::ApplyVariablesCommand;
 use claim::ClaimCommand;
 use claim_link::ClaimLinkCommand;
 use create::CreateCommand;
+use deployments::DeploymentsCommand;
 use destroy::DestroyCommand;
+use get::GetCommand;
 use list::ListCommand;
+use reset::ResetCommand;
+use resume::ResumeCommand;
+use update::UpdateCommand;
 use vars::VarsCommand;
 
 #[derive(Debug)]
@@ -25,6 +37,12 @@ pub(super) struct InstanceCommand {
     claim: ClaimCommand,
     destroy: DestroyCommand,
     vars: VarsCommand,
+    get: GetCommand,
+    update: UpdateCommand,
+    apply_variables: ApplyVariablesCommand,
+    deployments: DeploymentsCommand,
+    reset: ResetCommand,
+    resume: ResumeCommand,
 }
 
 impl InstanceCommand {
@@ -36,6 +54,12 @@ impl InstanceCommand {
             claim: ClaimCommand::new(),
             destroy: DestroyCommand::new(),
             vars: VarsCommand::new(),
+            get: GetCommand::new(),
+            update: UpdateCommand::new(),
+            apply_variables: ApplyVariablesCommand::new(),
+            deployments: DeploymentsCommand::new(),
+            reset: ResetCommand::new(),
+            resume: ResumeCommand::new(),
         }
     }
 }
@@ -61,7 +85,14 @@ impl CliCommand for InstanceCommand {
              the customer, and the customer `claim`s it.\n\n\
              `vars` is the one thing that can come BEFORE `create`. If the template declares\n\
              a REQUIRED custom variable, the instance will not provision until it has a\n\
-             value — run `vars list` to see which are still missing.",
+             value — run `vars list` to see which are still missing.\n\n\
+             LIFECYCLE, after launch. `get` is the row a client polls: every command below\n\
+             answers 202 with the state it moved TO and the outcome lands on the row later.\n\
+             \x20 `update`           resize (redeploys) or set the fleet-update policy\n\
+             \x20 `apply-variables`  redeploy the current version so new values reach the tasks\n\
+             \x20 `deployments`      the instance's deploy feed, to follow any of the above\n\
+             \x20 `resume`           retry a failed launch, or release one parked for approval\n\
+             \x20 `reset`            wipe the data and return the instance to the pool (admin)",
         )
         .subcommand(self.list.command())
         .subcommand(self.create.command())
@@ -69,6 +100,12 @@ impl CliCommand for InstanceCommand {
         .subcommand(self.claim.command())
         .subcommand(self.destroy.command())
         .subcommand(self.vars.command())
+        .subcommand(self.get.command())
+        .subcommand(self.update.command())
+        .subcommand(self.apply_variables.command())
+        .subcommand(self.deployments.command())
+        .subcommand(self.resume.command())
+        .subcommand(self.reset.command())
         .subcommand_required(true)
     }
 
@@ -80,6 +117,12 @@ impl CliCommand for InstanceCommand {
             Some(("claim", sub_matches)) => self.claim.handler(sub_matches),
             Some(("destroy", sub_matches)) => self.destroy.handler(sub_matches),
             Some(("vars", sub_matches)) => self.vars.handler(sub_matches),
+            Some(("get", sub_matches)) => self.get.handler(sub_matches),
+            Some(("update", sub_matches)) => self.update.handler(sub_matches),
+            Some(("apply-variables", sub_matches)) => self.apply_variables.handler(sub_matches),
+            Some(("deployments", sub_matches)) => self.deployments.handler(sub_matches),
+            Some(("resume", sub_matches)) => self.resume.handler(sub_matches),
+            Some(("reset", sub_matches)) => self.reset.handler(sub_matches),
             _ => unreachable!(),
         }
     }
