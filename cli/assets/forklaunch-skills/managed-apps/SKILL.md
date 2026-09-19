@@ -310,6 +310,14 @@ instance is neither relay- nor gateway-eligible. API: `POST /instances/:id/reset
 host mismatch, a rollout in progress, or a state that cannot be reset.
 `lastResetAt` / `resetCount` are on the instance. (CLI command: pending.)
 
+What the wipe does: on a dedicated substrate it is a run-once task on the
+instance's own RDS that drops and recreates each component database (named
+as the services' `DB_NAME`); on a pool it is the partition provisioner
+dropping and recreating the partition's databases and sweeping its Redis
+keys. Either way the redeploy's migrations rebuild empty schemas; backups
+encrypted to the previous owner's key are left untouched and unreadable by
+anyone.
+
 ### Instance vars (custom values) — can come BEFORE create
 
 If the template declares a **required custom** variable, the instance will not
@@ -393,16 +401,43 @@ The one place that shows, in one call, which instances are running, whether
 sign-in would actually work for each (relay eligibility), and the exact OAuth
 callback URL to register per template.
 
-### Rolling a new version to existing instances
+### Rolling a new version to existing instances — fleet rollouts
 
-Publishing a version does **not** move running instances. A fleet rollout
-(canary → promote across a product's instances) is the managed path; until
-the CLI exposes it, an operator rolls one instance by deploying the release to
-that instance's backing application:
+Publishing a version does **not** move running instances. A **fleet rollout**
+moves every instance of a product to a published version in waves, and is
+the managed path (managed-apps API, session auth; CLI command pending):
+
+```http
+POST /rollouts   { "templateSlug": "clinic-portal", "targetSemver": "1.4.0",
+                   "wavePercents": [10, 100], "failureThresholdPercent": 10 }
+GET  /rollouts                      # every rollout for your organization
+GET  /rollouts/:id                  # waves + per-instance items
+POST /rollouts/:id/advance          # RESUME a running rollout (after a restart) — not "next wave"
+POST /rollouts/:id/instances/:instanceId/result   # record an outcome by hand if the platform callback did not
+```
+
+- `wavePercents` is **cumulative fleet coverage**, default `[10, 100]`: a 10 %
+  canary, then everyone. `failureThresholdPercent` (default 10) halts a wave
+  once more than that share of its instances fail.
+- Each instance's deploy outcome arrives from the platform automatically and
+  halts or advances the rollout. **There is no promote step and no approval
+  gate on an update**: the rollout launches the next wave on its own once the
+  current one stays healthy; the canary is the control. `advance` re-launches
+  not-yet-started items of the current wave and re-evaluates — safe to repeat,
+  never skips a wave.
+- Item states: `pending / updating / healthy / failed / rolled_back /
+  deferred`. An instance with `updatePolicy=deferred` is recorded as deferred
+  and skipped.
+- Rollouts and the per-instance deploy below are two paths to the same
+  backing application; never run both on one instance at once (a reset is
+  refused while a rollout item is `updating`).
+
+**Fallback — one instance by hand.** Deploy the release to that instance's
+backing application from a checkout whose `.forklaunch/manifest.toml` carries
+the instance's `platform_application_id` (`instance list --json` →
+`applicationId`):
 
 ```bash
-# from a checkout whose .forklaunch/manifest.toml carries the INSTANCE's
-# platform_application_id (instance list --json → applicationId)
 forklaunch release create -v 1.4.0 -n "…" --local -y
 forklaunch deploy create -r 1.4.0 -e production --region us-west-2 --no-wait --force
 ```
@@ -410,8 +445,19 @@ forklaunch deploy create -r 1.4.0 -e production --region us-west-2 --no-wait --f
 `--force` is the CLI's "yes, I mean to deploy a template repo as a single
 app" switch; without it the managed-template guard refuses. Per-instance
 config for that path is `forklaunch config set -e production -r <region>
---force KEY=value` on the same checkout (instance `vars set` only reaches a
-managed rollout).
+--force KEY=value` on the same checkout.
+
+### What reaches an instance that is already running
+
+`template vars set` and `instance vars set` **write the declaration only**.
+Nothing reaches a running instance until its next provision run — a launch,
+a provisioning retry, a reset, or a rollout deploy. `--instance-size` exists
+only on `instance create`; there is no resize after launch today (a
+fleet-wide change is `template update` default size + a rollout). A
+per-instance size change and a "re-resolve variables and redeploy" action
+are being added (`PATCH /instances/:id`, `POST /instances/:id/apply-variables`,
+`GET /instances/:id/deployments`); until they land, the fallback deploy above
+is how a single running instance picks up new values.
 
 ## 4. Failure modes & troubleshooting
 
@@ -510,9 +556,9 @@ give an instance back to the pool, reset it (never re-claim it).
 
 ## Still manual today
 
-- **Fleet rollouts** exist in the API (`startFleetRollout` / advance /
-  promote) but not yet in the CLI; roll one instance with the `--force`
-  deploy above.
+- **Fleet rollouts** exist in the managed-apps API (`POST /rollouts`,
+  advance = resume, per-instance result) but not yet in the CLI or the
+  control-plane front door; roll one instance with the `--force` deploy above.
 - **`instance reset`**, **`template relay set`**, and `template update
   --frontend-domain / --cluster-type` are API-only until the CLI grows the
   commands; the skill names the routes.

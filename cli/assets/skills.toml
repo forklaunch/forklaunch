@@ -17,7 +17,7 @@
 # upstream, or `sync-skills.bash --check` fails the build.
 
 source_repo = "forklaunch-platform"
-source_commit = "33951ab7a516e1a859b43adf00cb96d032964d44"
+source_commit = "3b09d2e1fc54912d5821af695f031946717fc058"
 
 include = [
   "README.md",
