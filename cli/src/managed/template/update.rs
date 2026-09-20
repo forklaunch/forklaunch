@@ -32,6 +32,9 @@ pub(super) struct TemplateUpdate<'a> {
     pub(super) frontend_domain: Option<Option<&'a String>>,
     /// `Some(None)` returns to the platform default (`--clear-default-instance-size`).
     pub(super) default_instance_size: Option<Option<&'a String>>,
+    /// Whether the platform may rotate this product's generated secrets in place
+    /// (`--supports-key-rotation` / `--no-supports-key-rotation`).
+    pub(super) supports_key_rotation: Option<bool>,
     pub(super) dryrun: bool,
     pub(super) json: bool,
 }
@@ -74,7 +77,10 @@ impl CliCommand for UpdateCommand {
              \x20                          instance's UI becomes <hostPrefix>.<frontend domain>\n\
              \x20                          and the claim page shows customers that link.\n\
              \x20 --default-instance-size  the compute tier new instances launch with\n\
-             \x20                          (pico, nano, micro, small, ...).",
+             \x20                          (pico, nano, micro, small, ...).\n\
+             \x20 --supports-key-rotation  declare that every service re-encrypts its data on\n\
+             \x20                          boot from LEGACY_<KEY>S, so `instance rotate-keys`\n\
+             \x20                          is allowed; --no-supports-key-rotation withdraws it.",
         )
         .arg(
             Arg::new("slug")
@@ -139,6 +145,19 @@ impl CliCommand for UpdateCommand {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            Arg::new("supports_key_rotation")
+                .long("supports-key-rotation")
+                .conflicts_with("no_supports_key_rotation")
+                .help("Allow `instance rotate-keys`: every service re-encrypts on boot from LEGACY_<KEY>S")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("no_supports_key_rotation")
+                .long("no-supports-key-rotation")
+                .help("Refuse `instance rotate-keys` for this product")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new("dryrun")
                 .long("dryrun")
                 .help("Print the request that would be sent without sending it")
@@ -157,6 +176,13 @@ impl CliCommand for UpdateCommand {
             .get_one::<String>("slug")
             .context("--slug is required")?;
 
+        let supports_key_rotation = if matches.get_flag("supports_key_rotation") {
+            Some(true)
+        } else if matches.get_flag("no_supports_key_rotation") {
+            Some(false)
+        } else {
+            None
+        };
         let frontend_domain = if matches.get_flag("clear_frontend_domain") {
             Some(None)
         } else {
@@ -181,6 +207,7 @@ impl CliCommand for UpdateCommand {
                 base_domain: matches.get_one::<String>("base_domain"),
                 frontend_domain,
                 default_instance_size,
+                supports_key_rotation,
                 dryrun: matches.get_flag("dryrun"),
                 json: matches.get_flag("json"),
             },
@@ -221,6 +248,12 @@ pub(super) fn update_template(slug: &str, update: TemplateUpdate<'_>) -> Result<
             json!(default_instance_size),
         );
     }
+    if let Some(supports_key_rotation) = update.supports_key_rotation {
+        body.insert(
+            "supportsKeyRotation".to_string(),
+            json!(supports_key_rotation),
+        );
+    }
 
     // An empty PATCH is accepted by the control plane and changes nothing, so it would
     // report success while having done nothing at all. Refuse instead — someone who
@@ -229,8 +262,8 @@ pub(super) fn update_template(slug: &str, update: TemplateUpdate<'_>) -> Result<
     if body.is_empty() {
         bail!(
             "nothing to update — pass at least one of --name, --description, --status, \
-             --stripe-product, --cluster-type, --base-domain, --frontend-domain, or \
-             --default-instance-size (to publish a template, `forklaunch managed template \
+             --stripe-product, --cluster-type, --base-domain, --frontend-domain, \
+             --default-instance-size, or --supports-key-rotation (to publish a template, `forklaunch managed template \
              publish-template --slug {}` is the shorthand)",
             slug
         );
