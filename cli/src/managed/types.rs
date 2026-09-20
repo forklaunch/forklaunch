@@ -52,6 +52,8 @@ pub(super) struct AppTemplate {
     pub(super) frontend_domain: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) default_instance_size: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) supports_key_rotation: Option<bool>,
 }
 
 /// Where every instance of a template runs. Decided once by the publisher; a
