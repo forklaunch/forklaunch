@@ -162,6 +162,54 @@ pub(super) struct AppTemplate {
     pub(super) status: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) source_repo: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) cluster_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) base_domain: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) frontend_domain: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) default_instance_size: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) supports_key_rotation: Option<bool>,
+}
+
+/// Where every instance of a template runs. Decided once by the publisher; a
+/// component's own manifest `hostingType` still wins over it.
+pub(super) const CLUSTER_TYPES: &[&str] = &["org-shared", "platform-shared", "dedicated"];
+
+/// How the relay hands a provider callback to an instance: `redirect` 302s the browser
+/// to the component with the provider's query intact (browser OAuth — Epic with PKCE);
+/// `forward` HMAC-posts it over the mesh (webhooks).
+pub(super) const RELAY_ROUTE_MODES: &[&str] = &["redirect", "forward"];
+
+/// One declared relay route, as `GET /managed-mode/templates/:slug/relay-config`
+/// reports it (with the URL to register at the provider) and as `PUT
+/// .../relay-routes` accepts it (without).
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct RelayRoute {
+    pub(super) name: String,
+    pub(super) component: String,
+    pub(super) path: String,
+    pub(super) mode: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) callback_url: Option<String>,
+}
+
+/// The product's relay contract: the one callback URL to register with a provider,
+/// the state shape instances must mint, and the declared routes.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct RelayConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) template_slug: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) callback_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) state_format: Option<String>,
+    #[serde(default)]
+    pub(super) routes: Vec<RelayRoute>,
 }
 
 /// The template statuses the platform defines. A template is created as `draft`;

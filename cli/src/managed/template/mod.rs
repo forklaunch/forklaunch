@@ -7,6 +7,7 @@ mod create;
 mod list;
 mod publish;
 mod publish_template;
+mod relay;
 mod update;
 mod vars;
 
@@ -14,6 +15,7 @@ use create::CreateCommand;
 use list::ListCommand;
 use publish::PublishCommand;
 use publish_template::PublishTemplateCommand;
+use relay::RelayCommand;
 use update::UpdateCommand;
 use vars::VarsCommand;
 
@@ -25,6 +27,7 @@ pub(super) struct TemplateCommand {
     publish: PublishCommand,
     publish_template: PublishTemplateCommand,
     vars: VarsCommand,
+    relay: RelayCommand,
 }
 
 impl TemplateCommand {
@@ -36,6 +39,7 @@ impl TemplateCommand {
             publish: PublishCommand::new(),
             publish_template: PublishTemplateCommand::new(),
             vars: VarsCommand::new(),
+            relay: RelayCommand::new(),
         }
     }
 }
@@ -62,7 +66,10 @@ impl CliCommand for TemplateCommand {
              `vars` declares the environment variables every instance of the template gets —\n\
              a literal shared by all of them, a recipe each instance derives its own value\n\
              from, or a placeholder you fill in per customer. See\n\
-             `forklaunch managed template vars --help`.",
+             `forklaunch managed template vars --help`.\n\n\
+             `relay` declares where a provider's callback (Epic, Google, a webhook) is handed\n\
+             on each instance, and prints the one callback URL to register with the\n\
+             provider. See `forklaunch managed template relay --help`.",
         )
         .subcommand(self.list.command())
         .subcommand(self.create.command())
@@ -70,6 +77,7 @@ impl CliCommand for TemplateCommand {
         .subcommand(self.publish.command())
         .subcommand(self.publish_template.command())
         .subcommand(self.vars.command())
+        .subcommand(self.relay.command())
         .subcommand_required(true)
     }
 
@@ -81,6 +89,7 @@ impl CliCommand for TemplateCommand {
             Some(("publish", sub_matches)) => self.publish.handler(sub_matches),
             Some(("publish-template", sub_matches)) => self.publish_template.handler(sub_matches),
             Some(("vars", sub_matches)) => self.vars.handler(sub_matches),
+            Some(("relay", sub_matches)) => self.relay.handler(sub_matches),
             _ => unreachable!(),
         }
     }
