@@ -53,6 +53,10 @@ pub(super) struct ManagedInstance {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) app_claimed_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) key_generation: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) last_key_rotation_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) frontend_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) endpoints: Option<std::collections::BTreeMap<String, String>>,
@@ -84,6 +88,16 @@ pub(super) struct InstanceDeployment {
 pub(super) struct StateAccepted {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) state: Option<String>,
+}
+
+/// `202 { state, keyGeneration }` from a key rotation.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct RotationAccepted {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) key_generation: Option<u64>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

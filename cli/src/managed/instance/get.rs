@@ -153,6 +153,19 @@ impl CliCommand for GetCommand {
         )?;
         row(
             &mut stdout,
+            "Key generation",
+            &format!(
+                "{}{}",
+                instance.key_generation.unwrap_or(0),
+                instance
+                    .last_key_rotation_at
+                    .as_deref()
+                    .map(|at| format!(" (rotated {})", at))
+                    .unwrap_or_default()
+            ),
+        )?;
+        row(
+            &mut stdout,
             "Pending update",
             dash(&instance.pending_update),
         )?;
