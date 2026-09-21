@@ -1,5 +1,21 @@
 # @forklaunch/implementation-iam-base
 
+## 1.0.36
+
+### Patch Changes
+
+- Refresh dependencies to their latest published versions and move to `@forklaunch/core`
+  1.6.4 on mikro-orm 7.2.1.
+
+  The framework, the blueprint and the CLI's scaffold constants now agree on a single
+  mikro-orm version (7.2.1, pinned exactly), so a generated app resolves one copy. The
+  worker implementations (bullmq, database, kafka, redis) now declare `@forklaunch/validator`
+  directly: their schema resolvers name `AnySchemaValidator` in emitted declarations, and
+  TypeScript refuses to reference a package that is not a dependency of the emitting one.
+
+- Updated dependencies
+  - @forklaunch/interfaces-iam@1.0.34
+
 ## 1.0.35
 
 ### Patch Changes
