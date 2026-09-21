@@ -35,6 +35,8 @@ pub(super) struct TemplateUpdate<'a> {
     /// Whether the platform may rotate this product's generated secrets in place
     /// (`--supports-key-rotation` / `--no-supports-key-rotation`).
     pub(super) supports_key_rotation: Option<bool>,
+    /// The repository the platform builds versions from (https URL).
+    pub(super) source_repo: Option<&'a String>,
     pub(super) dryrun: bool,
     pub(super) json: bool,
 }
@@ -80,7 +82,10 @@ impl CliCommand for UpdateCommand {
              \x20                          (pico, nano, micro, small, ...).\n\
              \x20 --supports-key-rotation  declare that every service re-encrypts its data on\n\
              \x20                          boot from LEGACY_<KEY>S, so `instance rotate-keys`\n\
-             \x20                          is allowed; --no-supports-key-rotation withdraws it.",
+             \x20                          is allowed; --no-supports-key-rotation withdraws it.\n\
+             \x20 --source-repo            the repository versions are built from. Re-point it\n\
+             \x20                          when the code moves (e.g. to the customer's account);\n\
+             \x20                          the org's GitHub App installation must read it.",
         )
         .arg(
             Arg::new("slug")
@@ -158,6 +163,11 @@ impl CliCommand for UpdateCommand {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            Arg::new("source_repo")
+                .long("source-repo")
+                .help("https URL of the repository versions are built from, e.g. https://github.com/org/repo"),
+        )
+        .arg(
             Arg::new("dryrun")
                 .long("dryrun")
                 .help("Print the request that would be sent without sending it")
@@ -175,6 +185,15 @@ impl CliCommand for UpdateCommand {
         let slug = matches
             .get_one::<String>("slug")
             .context("--slug is required")?;
+
+        if let Some(repo) = matches.get_one::<String>("source_repo") {
+            if !repo.starts_with("https://") || repo.trim_end_matches('/').matches('/').count() != 4 {
+                bail!(
+                    "--source-repo '{}' must be an https repository URL such as https://github.com/org/repo",
+                    repo
+                );
+            }
+        }
 
         let supports_key_rotation = if matches.get_flag("supports_key_rotation") {
             Some(true)
@@ -208,6 +227,7 @@ impl CliCommand for UpdateCommand {
                 frontend_domain,
                 default_instance_size,
                 supports_key_rotation,
+                source_repo: matches.get_one::<String>("source_repo"),
                 dryrun: matches.get_flag("dryrun"),
                 json: matches.get_flag("json"),
             },
@@ -254,6 +274,9 @@ pub(super) fn update_template(slug: &str, update: TemplateUpdate<'_>) -> Result<
             json!(supports_key_rotation),
         );
     }
+    if let Some(source_repo) = update.source_repo {
+        body.insert("sourceRepo".to_string(), json!(source_repo));
+    }
 
     // An empty PATCH is accepted by the control plane and changes nothing, so it would
     // report success while having done nothing at all. Refuse instead — someone who
@@ -263,7 +286,7 @@ pub(super) fn update_template(slug: &str, update: TemplateUpdate<'_>) -> Result<
         bail!(
             "nothing to update — pass at least one of --name, --description, --status, \
              --stripe-product, --cluster-type, --base-domain, --frontend-domain, \
-             --default-instance-size, or --supports-key-rotation (to publish a template, `forklaunch managed template \
+             --default-instance-size, --supports-key-rotation, or --source-repo (to publish a template, `forklaunch managed template \
              publish-template --slug {}` is the shorthand)",
             slug
         );
