@@ -49,8 +49,12 @@ the platform's deployment-approval gate, only meaningful while `provisioning`.
 `updatePolicy` (`auto` / `deferred`) with `updateDeferredUntil` says whether a
 fleet rollout may touch this instance.
 
-`pendingUpdate` (`null` / `'size'` / `'variables'`) says a propagation deploy
-is in flight; it clears when the platform reports the deploy finished.
+`pendingUpdate` (`null` / `'size'` / `'variables'` / `'keys'`) says a
+propagation deploy is in flight; it clears when the platform reports the
+deploy finished.
+
+`keyGeneration` (0 at launch) and `lastKeyRotationAt` say which generation of
+the instance's generated secrets is current.
 
 ## The edges
 
@@ -149,11 +153,12 @@ published template", this is why.
 | `POST /instances/:id/claim-link` | EDITOR | | reveal the one-time link (purged on reveal), 404 once revealed or claimed |
 | `POST /instances/:id/claim-link/reissue` | EDITOR | | new link, old token dead |
 | `POST /instances/:id/claim-link/send` | EDITOR | | send by email/SMS without the operator seeing it |
-| `PATCH /instances/:id` | EDITOR | stays `active`/`suspended` | body `{instanceSize?, updatePolicy?, updateDeferredUntil?}`; 200 if only policy changed, 202 `{state}` when size changed (`pendingUpdate: 'size'`, an `update` deploy is queued) |
+| `PATCH /instances/:id` | EDITOR | stays `awaiting_claim`/`active`/`suspended` | body `{instanceSize?, updatePolicy?, updateDeferredUntil?}`; 200 if only policy changed, 202 `{state}` when size changed (`pendingUpdate: 'size'`, an `update` deploy is queued) |
 | `POST /instances/:id/apply-variables` | EDITOR | stays | after variables were written, redeploy the same version so the tasks see them (`pendingUpdate: 'variables'`), 202 |
 | `GET /instances/:id/deployments?limit=` | VIEWER | | the platform's deployment list for the backing application; follow an update/reset/rollout deploy here |
 | `GET/PUT/DELETE /instances/:id/variables[/:key]` | VIEWER / EDITOR | | per-instance variable overrides; writing does **not** redeploy, call `apply-variables` |
 | `POST /instances/:id/reset` | **ADMIN** | `awaiting_claim`/`active`/`suspended`/`provisioning_failed` → `resetting` | body `{confirmHost}` must echo the host; 202 `{state}` |
+| `POST /instances/:id/rotate-keys` | **ADMIN** | stays running (`pendingUpdate: 'keys'`) | body `{confirmHost}`; new generation of every `generated` secret + new gateway HMAC key, redeploy; 202 `{state, keyGeneration}` |
 | `DELETE /instances/:id` | EDITOR | any live state → `destroying` | |
 | `GET /instances/relay-config/:templateSlug` | VIEWER | | |
 | `PUT /instances/relay-config/:templateSlug/{credentials,routes}` | ADMIN | | |
@@ -167,7 +172,9 @@ published template", this is why.
 | `RESET_ROLLOUT_IN_PROGRESS` | reset | a fleet rollout item is `updating` this instance |
 | `RESET_NOTHING_TO_RESET` | reset | `provisioning_failed` instance that never launched: retry the launch or destroy |
 | `UPDATE_ROLLOUT_IN_PROGRESS` | PATCH / apply-variables | same rollout guard |
-| `UPDATE_NOT_RUNNING` | PATCH / apply-variables | only `active` / `suspended` can be propagated to |
+| `ROTATE_UNSUPPORTED_BY_TEMPLATE` | rotate-keys | the template has not set `supportsKeyRotation`; its services must re-encrypt on boot first |
+| `ROTATE_HOST_MISMATCH` / `ROTATE_NOT_RUNNING` / `ROTATE_ALREADY_PENDING` / `ROTATE_ROLLOUT_IN_PROGRESS` | rotate-keys | echo, running state, no other update pending, no rollout updating it |
+| `UPDATE_NOT_RUNNING` | PATCH / apply-variables | only a running instance (`awaiting_claim` / `active` / `suspended`) can be propagated to |
 | `InvalidInstanceTransition` | any | the edge is not in the map |
 
 ### Fleet rollouts (`/rollouts`)
@@ -239,8 +246,32 @@ stamps `lastResetAt`, and bumps `resetCount`. On failure the row goes to
 `provisioning_failed` with the identity intact and the same call retries it.
 
 **Propagation (`update`).** Same version, fresh deploy, no DNS, no wipe, no key
-rotation. `pendingUpdate` is the marker; the deployment-result callback clears
-it (or sets `lastError` and keeps it so the operator can retry).
+rotation. `pendingUpdate` is the marker and it stays set for the whole deploy:
+the worker's dispatch only records `latestDeploymentId`; the platform's
+deployment-result callback finishes it by evidence (deploy succeeded AND
+`GET https://<host>/health` is 200), clearing the marker, or sets `lastError`
+and keeps the marker so the operator retries with the same command.
+
+**Key rotation (`rotate-keys`, an `update` with `pendingUpdate: 'keys'`).**
+Every `generated` template variable is derived from the instance id AND the
+key generation (`<KEY>` for generation 0, `<KEY>#g<N>` after), so bumping the
+generation gives the instance a new field-encryption key, step-up secret and
+so on, deterministically. For symmetric generators every earlier generation
+is delivered too, newest first, as `LEGACY_<KEY>S` (comma-separated), and the
+per-instance gateway HMAC key is minted afresh. The current version is then
+redeployed. **The app does the re-encryption**: on startup, when
+`LEGACY_ENCRYPTION_KEYS` is set, it must open every encrypted column with the
+key ring and rewrite it under the current key before serving (Health Vault
+does this in each service's boot; the platform's own modules do the same for
+their key via `reencrypt-legacy-key.util.ts`). An app that ignores the legacy
+list will find all of its encrypted data unreadable after a rotation, so the
+route refuses (`ROTATE_UNSUPPORTED_BY_TEMPLATE`) until the template's
+maintainer sets `supportsKeyRotation` on the template (PATCH
+`/app-templates/:slug`), which they do once the sweep has shipped in a
+published version and every instance runs it. The customer, their
+claim and their data are untouched; the relay and OTP gateway refuse the
+instance's requests for the minutes between the request and the redeploy
+landing (old HMAC key on the instance, new one on the platform).
 
 **Teardown.** `destroying` is enqueued; the worker tears down the backing
 application (snapshots first), then `destroyed`.
@@ -282,21 +313,21 @@ application (snapshots first), then `destroyed`.
 | Launch, list, get, destroy | ✅ | ✅ | ✅ | ✅ fleet page / instance page |
 | Reveal / reissue / send claim link | ✅ | ✅ | ✅ | ✅ (reveal) |
 | Resume a parked launch | ✅ | ✅ | ✅ | ✅ instance page |
-| Reset (wipe, return to pool) | none, by decision | ✅ | ✅ | ✅ instance page, admin, typed host |
-| Resize, update policy, apply-variables, deployment feed | none, by decision | ✅ | ✅ | ✅ instance page |
-| Fleet rollouts (start, list, get, resume) | none, by decision | ✅ | ✅ | ✅ instance page |
+| Reset (wipe, return to pool) | `instance reset` | ✅ | ✅ | ✅ instance page, admin, typed host |
+| Rotate keys (new generation, app re-encrypts) | `instance rotate-keys` | ✅ | ✅ | ✅ instance page, admin, typed host |
+| Resize, update policy, apply-variables, deployment feed | `instance update` / `apply-variables` / `deployments` | ✅ | ✅ | ✅ instance page |
+| Fleet rollouts (start, list, get, resume) | `rollout start` / `list` / `get` / `advance` | ✅ | ✅ | ✅ instance page |
 | Record a rollout item's result by hand | none | ✅ | ❌ | ❌ |
 | Claim (customer) | ✅ | ✅ public | ✅ public | ✅ `/claim/:token` |
 
-**The dashboard is the second client of the lifecycle.** The application
-list nests every instance under its template chip; the instance page
-(`/dashboard/managed-apps/instances/:id`) shows the state strip and the
-levers above, and "Open app surface" drops into the ordinary application
-view (services, environment, logs, observability), which carries a banner
-back to the instance. The managed-mode CLI stops at launch/claim/destroy and
-variables: the owner declined lifecycle commands for now ("this is just to
-help them set up the software"), so an agent driving resets, resizes or
-rollouts calls the `/managed-mode` routes directly with the user's bearer.
+**Three clients, one contract.** The dashboard's instance page
+(`/dashboard/managed-apps/instances/:id`), the CLI (`forklaunch managed
+instance …` / `rollout …`, forklaunch-js #357) and any agent calling the
+`/managed-mode` routes with the user's bearer can make the same changes; the
+owner's requirement is that an agent can do everything the frontend can. The
+application list nests every instance under its template chip, and "Open app
+surface" drops into the ordinary application view, which carries a banner
+back to the instance.
 
 **managed-apps is never called directly by the dashboard.** The dashboard
 calls platform-management, which proxies under `/managed-mode` and forwards

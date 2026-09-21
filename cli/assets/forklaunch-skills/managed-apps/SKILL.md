@@ -83,11 +83,11 @@ forklaunch managed template create \
 
 A new template is a **draft**, and nothing can launch from a draft. `--repo` is
 the git repository the platform builds images from — see the buildable-repo
-requirement below. The Stripe product is set later with `template update
---stripe-product <id>`; the base domain is not settable through the API at all
-(instances use the platform-wide default).
+requirement below. Everything else about a template — Stripe product, base
+domain, cluster type, frontend domain, default instance size, key-rotation
+opt-in — is set afterwards with `template update`.
 
-`clusterType` (API `PATCH /managed-mode/templates/:slug`; CLI flag pending) is
+`--cluster-type` (`template update`) is
 where every instance of the template runs, decided once by the publisher — a
 customer launching an instance is never asked. Unset means
 **org-shared** (the publishing org's shared hosts). Setting it on the
@@ -128,13 +128,14 @@ instance can be launched.
 ```bash
 forklaunch managed template update --slug clinic-portal \
   --name "Clinic Portal" --description "..." \
-  --status published \        # draft | published | retired
-  --stripe-product prod_ABC   # stored, but billing does NOT read it yet
+  --status published \                  # draft | published | retired
+  --stripe-product prod_ABC \           # stored, but billing does NOT read it yet
+  --cluster-type org-shared \           # org-shared | platform-shared | dedicated — where NEW instances run
+  --base-domain buildbespoke.app \      # the zone instances are hosted under
+  --frontend-domain app.example.com \   # instance UIs become <hostPrefix>.<domain>; --clear-frontend-domain removes it
+  --default-instance-size pico \        # tier new instances launch with; --clear-default-instance-size resets
+  --supports-key-rotation               # allow `instance rotate-keys` (services re-encrypt on boot); --no-supports-key-rotation
 ```
-
-`clusterType`, `baseDomain`, `frontendDomain` and `defaultInstanceSize` are
-settable on the same resource through the API (`PATCH
-/managed-mode/templates/:slug`) but have no CLI flag yet.
 
 Only the fields you pass change. An empty update is refused (it would report
 success while doing nothing). `retired` stops new instances launching. Note:
@@ -325,8 +326,13 @@ Platform admin only. Allowed from `awaiting_claim | active | suspended`, and
 from `provisioning_failed` as the retry. 409 codes: `RESET_HOST_MISMATCH`
 (the echo did not match), `RESET_ROLLOUT_IN_PROGRESS`, `RESET_NOTHING_TO_RESET`
 (a `provisioning_failed` instance that never launched — retry the launch or
-destroy it instead); any other state is an invalid transition. (CLI command:
-pending.)
+destroy it instead); any other state is an invalid transition.
+
+```bash
+forklaunch managed instance reset --id <instance-id> --confirm-host <the instance host>   # admin; prompts for the host on a TTY
+forklaunch managed instance get --id <instance-id>                                       # resetting → awaiting_claim
+forklaunch managed instance claim-link --id <instance-id>                                # a fresh one-time link
+```
 
 What you will see, as observed on the org pool (3–4 minutes end to end):
 
@@ -440,15 +446,15 @@ callback URL to register per template.
 
 Publishing a version does **not** move running instances. A **fleet rollout**
 moves every instance of a product to a published version in waves, and is
-the managed path (control plane, session auth; CLI command pending):
+the managed path:
 
-```http
-POST /managed-mode/rollouts   { "templateSlug": "clinic-portal", "targetSemver": "1.4.0",
-                                "wavePercents": [10, 100], "failureThresholdPercent": 10 }   → 201
-GET  /managed-mode/rollouts                      # every rollout for your organization
-GET  /managed-mode/rollouts/:id                  # waves + per-instance items
-POST /managed-mode/rollouts/:id/advance          # RESUME a running rollout (after a restart) — not "next wave"
-POST /rollouts/:id/instances/:instanceId/result  # (managed-apps direct) record an outcome by hand if the platform callback did not
+```bash
+forklaunch managed rollout start --template clinic-portal --semver 1.4.0 --waves 10,100 --halt-above 10   # POST /managed-mode/rollouts → 201
+forklaunch managed rollout list [--template clinic-portal]        # every rollout, newest first
+forklaunch managed rollout get --id <rollout-id>                  # waves + per-instance items
+forklaunch managed rollout advance --id <rollout-id>              # RESUME a halted/restarted rollout — not "next wave"
+# record an outcome by hand if the platform callback did not (managed-apps direct):
+POST /rollouts/:id/instances/:instanceId/result
 ```
 
 - `wavePercents` is **cumulative fleet coverage**, default `[10, 100]`: a 10 %
@@ -487,15 +493,16 @@ config for that path is `forklaunch config set -e production -r <region>
 `template vars set` and `instance vars set` **write the declaration only**;
 `forklaunch config set` (and the dashboard env editor) write the instance's
 application config. None of it reaches the running tasks until the next
-deploy of that instance. Three control-plane routes (org-scoped; CLI commands pending) make that
-deploy without waiting for a launch, reset or rollout:
+deploy of that instance. These make that deploy without waiting for a launch,
+reset or rollout (control plane routes in parentheses):
 
-```http
-POST  /managed-mode/instances/:id/apply-variables          → 202 { state }   re-resolve variables, redeploy the SAME version
-PATCH /managed-mode/instances/:id  { "instanceSize": "micro" }   → 202 { state }   resize: redeploys the current version
-PATCH /managed-mode/instances/:id  { "updatePolicy": "deferred", "updateDeferredUntil": "<ISO>|null" }   → 200   no redeploy
-GET   /managed-mode/instances/:id/deployments?limit=20     → the platform's deployment list for the instance's application
-GET   /managed-mode/instances/:id                          → the full lifecycle row (instanceSize, updatePolicy, pendingUpdate, latestDeploymentId, lastResetAt, resetCount, appClaimedAt, …)
+```bash
+forklaunch managed instance apply-variables --id <id>                 # re-resolve variables, redeploy the SAME version → 202 (POST …/apply-variables)
+forklaunch managed instance update --id <id> --size micro             # resize: redeploys the current version → 202     (PATCH …/instances/:id)
+forklaunch managed instance update --id <id> --update-policy deferred --deferred-until 2026-10-01T00:00:00Z   # no redeploy → 200; --clear-deferral
+forklaunch managed instance deployments --id <id> --limit 20          # the platform's deployment list for the instance (GET …/deployments)
+forklaunch managed instance get --id <id> --json                      # the full lifecycle row: instanceSize, updatePolicy, pendingUpdate, latestDeploymentId, lastResetAt, resetCount, keyGeneration, appClaimedAt …
+forklaunch managed instance resume --id <id>                          # re-queue a failed launch, or release an approval hold (NOT the reset retry)
 ```
 
 - An update deploy is the current version only: no DNS, no wipe, no key
@@ -504,12 +511,29 @@ GET   /managed-mode/instances/:id                          → the full lifecycl
   set and the marker stays so you can retry the same call.
 - Refused with 409 `UPDATE_ROLLOUT_IN_PROGRESS` while a fleet rollout item is
   updating this instance, and `UPDATE_NOT_RUNNING` unless the instance is
-  `active` or `suspended`.
+  `awaiting_claim`, `active` or `suspended` (the propagatable states).
 - `--instance-size` on `instance create` sets the launch size; the PATCH
   above is the resize after launch. A fleet-wide change is `template update`
   default size + a rollout.
 - Follow any update / reset / rollout deploy to completion with
   `GET /instances/:id/deployments` (`status`, `errorMessage` per deployment).
+
+### Rotating an instance's secrets
+
+```bash
+forklaunch managed instance rotate-keys --id <id> --confirm-host <the instance host>   # admin → 202 { state, keyGeneration }
+```
+
+Every `generated` template variable is re-derived for a new generation, the
+earlier generations are delivered to the app as `LEGACY_<KEY>S` (newest
+first, comma-separated), the gateway HMAC key is minted anew, and the current
+version is redeployed; the instance carries `pendingUpdate = 'keys'` until the
+deployment-result callback confirms deploy success and a live `/health`.
+`keyGeneration` (0 at launch) and `lastKeyRotationAt` are on the row. **The
+app must re-encrypt on boot** from `LEGACY_<KEY>S`, and the template must
+declare that it does (`template update --supports-key-rotation`); otherwise
+409 `ROTATE_UNSUPPORTED_BY_TEMPLATE`. Other 409s: `ROTATE_HOST_MISMATCH`,
+`ROTATE_NOT_RUNNING`, `ROTATE_ALREADY_PENDING`, `ROTATE_ROLLOUT_IN_PROGRESS`.
 
 ## 4. Failure modes & troubleshooting
 
@@ -577,8 +601,10 @@ instance according to a **relay route** the product declared on its template
 - **`forward`** (webhooks): HMAC-signed POST to the component over the mesh.
 
 ```http
-PUT /managed-mode/templates/<slug>/relay-routes        (platform admin; CLI pending)
-{ "routes": [ { "name": "default", "component": "vault", "path": "/epic/callback", "mode": "redirect" } ] }
+forklaunch managed template relay list  --slug <slug>            # the callback URL to register + every route with its URL
+forklaunch managed template relay set   --slug <slug> --name default --component vault --path /epic/callback --mode redirect
+forklaunch managed template relay clear --slug <slug> --name <name> | --all
+# (PUT /managed-mode/templates/<slug>/relay-routes — whole-list replace; `set` splices one route in)
 ```
 
 `default` is served at the bare `/callback`; other names at
@@ -608,13 +634,7 @@ give an instance back to the pool, reset it (never re-claim it).
 
 ## Still manual today
 
-- **Fleet rollouts** exist in the API (`POST /managed-mode/rollouts`,
-  advance = resume, per-instance result) but not yet in the CLI; roll one
-  instance with the `--force` deploy above until then.
-- **`instance reset` / `update` / `apply-variables` / `deployments`**,
-  **`template relay set`**, and `template update --frontend-domain /
-  --cluster-type` are API-only until the CLI grows the commands; the skill
-  names the routes.
 - A product's own post-claim ceremony (Health Vault's phone claim) mints its
   link with an operator script; minting it from the platform at claim time is
   the intended end state.
+- Recording a rollout item's result by hand is managed-apps-direct (no CLI).
