@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/implementation-billing-base",
-  "version": "1.0.36",
+  "version": "1.0.37",
   "description": "Billing basic implementation for forklaunch",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -58,7 +58,7 @@
   },
   "dependencies": {
     "@forklaunch/common": "^1.2.27",
-    "@forklaunch/core": "^1.6.4",
+    "@forklaunch/core": "^1.6.5",
     "@forklaunch/interfaces-billing": "workspace:^",
     "@forklaunch/internal": "^1.2.30",
     "@forklaunch/validator": "^1.2.28",

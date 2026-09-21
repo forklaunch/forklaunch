@@ -6,7 +6,7 @@ export const SmsRecord = defineComplianceEntity({
     id: fp.string().primary().compliance('none'),
     to: fp.string().compliance('pii'),
     body: fp.string().compliance('pii'),
-    status: fp.enum().compliance('none'),
+    status: fp.enum<string[]>().compliance('none'),
     providerMessageId: fp.string().nullable().compliance('none'),
     error: fp.string().nullable().compliance('none'),
     metadata: fp.json<unknown>().nullable().compliance('none')

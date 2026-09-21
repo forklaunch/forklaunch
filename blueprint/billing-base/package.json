@@ -41,7 +41,7 @@
     "@forklaunch/blueprint-iam-base": "workspace:^",
     "@forklaunch/blueprint-monitoring": "workspace:^",
     "@forklaunch/common": "^1.2.27",
-    "@forklaunch/core": "^1.6.4",
+    "@forklaunch/core": "^1.6.5",
     "@forklaunch/express": "^1.2.44",
     "@forklaunch/hyper-express": "^1.2.44",
     "@forklaunch/implementation-billing-base": "workspace:^",

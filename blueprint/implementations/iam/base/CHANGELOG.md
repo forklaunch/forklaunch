@@ -1,5 +1,30 @@
 # @forklaunch/implementation-iam-base
 
+## 1.0.37
+
+### Patch Changes
+
+- `@forklaunch/core` 1.6.5, and shape entities that carry no `any`.
+
+  The implementation packages describe the entities they work with through minimal "shape"
+  entities. Their enum columns were declared `fp.enum()` with no members, which infers
+  `any`; `ResolvedEntity` in core 1.6.5 no longer papers over that, so every such column is
+  now `fp.enum<string[]>()`: a string column whose members the application supplies.
+
+  With the shape typed honestly, the `& { status: StatusEnum[keyof StatusEnum] }`
+  intersections on the entity constraint types (`OrganizationEntities`, `BaseSmsEntities`,
+  `BaseCheckoutSessionEntities`, `BasePaymentLinkEntities`, `BasePlanEntities`,
+  `BaseSubscriptionEntities`, and the Stripe equivalents) had to go: a service queries with
+  the shape schema (`entity as typeof Plan`), and that cast is only valid when the shape is
+  comparable to the constraint, which a generic enum member never is. The services never
+  read those columns; the DTO types still carry the enums, and the application's mapper is
+  where entity and DTO meet. The constraint types therefore lose their enum type parameters
+  (`BasePlanEntities<Cadence, Currency, Provider>` is now `BasePlanEntities`); services and
+  mapper types keep theirs for the DTO side.
+
+- Updated dependencies
+  - @forklaunch/interfaces-iam@1.0.35
+
 ## 1.0.36
 
 ### Patch Changes

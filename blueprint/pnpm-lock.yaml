@@ -12,8 +12,8 @@ importers:
         specifier: ^1.2.27
         version: 1.2.27
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/express':
         specifier: ^1.2.44
         version: 1.2.44(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.12)(openapi-types@12.1.3)(zod@4.6.5)
@@ -100,8 +100,8 @@ importers:
         specifier: ^1.2.27
         version: 1.2.27
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/express':
         specifier: ^1.2.44
         version: 1.2.44(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.12)(openapi-types@12.1.3)(zod@4.6.5)
@@ -224,8 +224,8 @@ importers:
         specifier: ^1.2.27
         version: 1.2.27
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/express':
         specifier: ^1.2.44
         version: 1.2.44(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.12)(openapi-types@12.1.3)(zod@4.6.5)
@@ -348,8 +348,8 @@ importers:
         specifier: ^1.2.27
         version: 1.2.27
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/express':
         specifier: ^1.2.44
         version: 1.2.44(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.12)(openapi-types@12.1.3)(zod@4.6.5)
@@ -482,8 +482,8 @@ importers:
         specifier: workspace:^
         version: link:../sample-worker
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
@@ -494,8 +494,8 @@ importers:
         specifier: ^1.2.27
         version: 1.2.27
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/express':
         specifier: ^1.2.44
         version: 1.2.44(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.12)(openapi-types@12.1.3)(zod@4.6.5)
@@ -552,8 +552,8 @@ importers:
         specifier: ^1.2.27
         version: 1.2.27
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/express':
         specifier: ^1.2.44
         version: 1.2.44(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.12)(openapi-types@12.1.3)(zod@4.6.5)
@@ -685,8 +685,8 @@ importers:
         specifier: workspace:^
         version: link:../monitoring
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/hyper-express-fork':
         specifier: ^6.18.1
         version: 6.18.1(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
@@ -797,8 +797,8 @@ importers:
         specifier: workspace:^
         version: link:../monitoring
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/implementation-iam-base':
         specifier: workspace:^
         version: link:../implementations/iam/base
@@ -894,8 +894,8 @@ importers:
         specifier: ^1.2.27
         version: 1.2.27
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/interfaces-billing':
         specifier: workspace:^
         version: link:../../../interfaces/billing
@@ -937,8 +937,8 @@ importers:
         specifier: ^1.2.27
         version: 1.2.27
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/implementation-billing-base':
         specifier: workspace:^
         version: link:../base
@@ -992,8 +992,8 @@ importers:
         specifier: ^1.2.27
         version: 1.2.27
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/interfaces-cac':
         specifier: workspace:^
         version: link:../../../interfaces/cac
@@ -1026,8 +1026,8 @@ importers:
         specifier: ^1.2.27
         version: 1.2.27
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/interfaces-ecommerce':
         specifier: workspace:^
         version: link:../../../interfaces/ecommerce
@@ -1069,8 +1069,8 @@ importers:
         specifier: ^1.2.27
         version: 1.2.27
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/implementation-ecommerce-base':
         specifier: workspace:^
         version: link:../base
@@ -1115,8 +1115,8 @@ importers:
         specifier: ^1.2.27
         version: 1.2.27
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/implementation-ecommerce-base':
         specifier: workspace:^
         version: link:../base
@@ -1164,8 +1164,8 @@ importers:
         specifier: ^1.2.27
         version: 1.2.27
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/interfaces-iam':
         specifier: workspace:^
         version: link:../../../interfaces/iam
@@ -1210,8 +1210,8 @@ importers:
         specifier: ^1.2.27
         version: 1.2.27
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/interfaces-messaging':
         specifier: workspace:^
         version: link:../../../interfaces/messaging
@@ -1253,8 +1253,8 @@ importers:
         specifier: ^1.2.27
         version: 1.2.27
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/implementation-messaging-base':
         specifier: workspace:^
         version: link:../base
@@ -1302,8 +1302,8 @@ importers:
   implementations/worker/bullmq:
     dependencies:
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/interfaces-worker':
         specifier: workspace:^
         version: link:../../../interfaces/worker
@@ -1345,8 +1345,8 @@ importers:
   implementations/worker/database:
     dependencies:
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/interfaces-worker':
         specifier: workspace:^
         version: link:../../../interfaces/worker
@@ -1388,8 +1388,8 @@ importers:
   implementations/worker/kafka:
     dependencies:
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/interfaces-worker':
         specifier: workspace:^
         version: link:../../../interfaces/worker
@@ -1431,8 +1431,8 @@ importers:
   implementations/worker/redis:
     dependencies:
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/interfaces-worker':
         specifier: workspace:^
         version: link:../../../interfaces/worker
@@ -1611,8 +1611,8 @@ importers:
         specifier: ^1.2.27
         version: 1.2.27
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/express':
         specifier: ^1.2.44
         version: 1.2.44(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.12)(openapi-types@12.1.3)(zod@4.6.5)
@@ -1732,8 +1732,8 @@ importers:
         specifier: ^1.2.27
         version: 1.2.27
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/express':
         specifier: ^1.2.44
         version: 1.2.44(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.12)(openapi-types@12.1.3)(zod@4.6.5)
@@ -1844,8 +1844,8 @@ importers:
   monitoring:
     dependencies:
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
     devDependencies:
       typescript:
         specifier: ^7.0.2
@@ -1860,8 +1860,8 @@ importers:
         specifier: workspace:^
         version: link:../monitoring
       '@forklaunch/core':
-        specifier: ^1.6.4
-        version: 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+        specifier: ^1.6.5
+        version: 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/implementation-worker-bullmq':
         specifier: workspace:^
         version: link:../implementations/worker/bullmq
@@ -2913,8 +2913,8 @@ packages:
   '@forklaunch/common@1.2.27':
     resolution: {integrity: sha512-FxImqrnxcp81czQK/0tMbJ+IvyCvJQJsnZq0DK1zr7eI2DeGuTnH+KtwOezz3IqEMR+pnSBfhISAN9PQyiZ7Qw==}
 
-  '@forklaunch/core@1.6.4':
-    resolution: {integrity: sha512-rlXSTXlxncRgivwc2oCqKUU84f+lypJr8TN5DPagAfajf0jf1AyDJWeIdVuw2rtDU27LHQJLZVytcwF3D08kww==}
+  '@forklaunch/core@1.6.5':
+    resolution: {integrity: sha512-deLRshz8asPkk9xZRKNlgS21HP8eIw1i+mdz/uyxkz+MzzPocjQXhEh0xVZ1KRi9zdskLeQ5r5hi1+bzcRRF1Q==}
 
   '@forklaunch/express@1.2.44':
     resolution: {integrity: sha512-eRr8MZOrr8P7tM05x2zU3NJBSCOIh2jJS12ygxfDG4NVGlwcRZmaCCL1qIKfDnzKp8XAWuaJ9fWI+TBlv5m2yg==}
@@ -9597,7 +9597,7 @@ snapshots:
 
   '@forklaunch/common@1.2.27': {}
 
-  '@forklaunch/core@1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)':
+  '@forklaunch/core@1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)':
     dependencies:
       '@asyncapi/parser': 3.6.3
       '@forklaunch/common': 1.2.27
@@ -9654,7 +9654,7 @@ snapshots:
   '@forklaunch/express@1.2.44(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.12)(openapi-types@12.1.3)(zod@4.6.5)':
     dependencies:
       '@forklaunch/common': 1.2.27
-      '@forklaunch/core': 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+      '@forklaunch/core': 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/validator': 1.2.28
       '@modelcontextprotocol/sdk': 1.30.0(zod@4.6.5)
       '@scalar/express-api-reference': 0.10.19
@@ -9707,7 +9707,7 @@ snapshots:
   '@forklaunch/hyper-express@1.2.44(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.2.1)(openapi-types@12.1.3)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)':
     dependencies:
       '@forklaunch/common': 1.2.27
-      '@forklaunch/core': 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+      '@forklaunch/core': 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/hyper-express-fork': 6.18.1(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/validator': 1.2.28
       '@forklaunch/ws': 1.2.42(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
@@ -9746,7 +9746,7 @@ snapshots:
   '@forklaunch/infrastructure-redis@1.4.15(@opentelemetry/api@1.9.1)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)':
     dependencies:
       '@forklaunch/common': 1.2.27
-      '@forklaunch/core': 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+      '@forklaunch/core': 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       redis: 6.2.1(@opentelemetry/api@1.9.1)
     transitivePeerDependencies:
       - '@aws-sdk/credential-providers'
@@ -9774,7 +9774,7 @@ snapshots:
     dependencies:
       '@aws-sdk/client-s3': 3.1136.0
       '@forklaunch/common': 1.2.27
-      '@forklaunch/core': 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+      '@forklaunch/core': 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
     transitivePeerDependencies:
       - '@aws-sdk/credential-providers'
       - '@cfworker/json-schema'
@@ -9844,7 +9844,7 @@ snapshots:
     dependencies:
       '@asyncapi/parser': 3.6.3
       '@forklaunch/common': 1.2.27
-      '@forklaunch/core': 1.6.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
+      '@forklaunch/core': 1.6.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)
       '@forklaunch/validator': 1.2.28
       '@types/ws': 8.18.1
       ws: 8.21.3

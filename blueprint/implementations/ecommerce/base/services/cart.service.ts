@@ -60,8 +60,7 @@ export class BaseCartService<
   SchemaValidator extends AnySchemaValidator,
   MapperEntities extends BaseCartEntities,
   MapperDomains extends BaseCartDtos = BaseCartDtos
-> implements CartService
-{
+> implements CartService {
   private evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;

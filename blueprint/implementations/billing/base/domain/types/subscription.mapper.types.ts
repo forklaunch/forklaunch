@@ -5,10 +5,7 @@ import { BaseSubscriptionEntities } from './baseBillingEntity.types';
 export type SubscriptionMappers<
   PartyType,
   BillingProviderType,
-  MapperEntities extends BaseSubscriptionEntities<
-    PartyType,
-    BillingProviderType
-  >,
+  MapperEntities extends BaseSubscriptionEntities,
   MapperDomains extends BaseSubscriptionDtos<PartyType, BillingProviderType>
 > = {
   SubscriptionMapper: {

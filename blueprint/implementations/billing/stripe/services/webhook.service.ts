@@ -52,15 +52,15 @@ export class StripeWebhookService<
   SchemaValidator extends AnySchemaValidator,
   StatusEnum,
   PartyEnum,
-  BillingPortalEntities extends
-    StripeBillingPortalEntities = StripeBillingPortalEntities,
-  CheckoutSessionEntities extends
-    StripeCheckoutSessionEntities<StatusEnum> = StripeCheckoutSessionEntities<StatusEnum>,
-  PaymentLinkEntities extends
-    StripePaymentLinkEntities<StatusEnum> = StripePaymentLinkEntities<StatusEnum>,
+  BillingPortalEntities extends StripeBillingPortalEntities =
+    StripeBillingPortalEntities,
+  CheckoutSessionEntities extends StripeCheckoutSessionEntities =
+    StripeCheckoutSessionEntities,
+  PaymentLinkEntities extends StripePaymentLinkEntities =
+    StripePaymentLinkEntities,
   PlanEntities extends StripePlanEntities = StripePlanEntities,
-  SubscriptionEntities extends
-    StripeSubscriptionEntities<PartyEnum> = StripeSubscriptionEntities<PartyEnum>,
+  SubscriptionEntities extends StripeSubscriptionEntities =
+    StripeSubscriptionEntities,
   WebhookEventEntity extends StripeWebhookEventShape = StripeWebhookEventShape
 > {
   protected readonly partyEnum: PartyEnum;

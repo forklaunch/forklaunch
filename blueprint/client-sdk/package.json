@@ -28,7 +28,7 @@
     "@forklaunch/blueprint-iam-base": "workspace:^",
     "@forklaunch/blueprint-iam-better-auth": "workspace:^",
     "@forklaunch/blueprint-sample-worker": "workspace:^",
-    "@forklaunch/core": "^1.6.4",
+    "@forklaunch/core": "^1.6.5",
     "typescript": "^7.0.2"
   }
 }

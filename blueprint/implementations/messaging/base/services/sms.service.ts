@@ -18,10 +18,9 @@ import { SmsRecord } from '../persistence/entities';
 export class BaseSmsService<
   SchemaValidator extends AnySchemaValidator,
   StatusEnum,
-  MapperEntities extends BaseSmsEntities<StatusEnum>,
+  MapperEntities extends BaseSmsEntities,
   MapperDomains extends BaseSmsDtos<StatusEnum> = BaseSmsDtos<StatusEnum>
-> implements SmsService<StatusEnum>
-{
+> implements SmsService<StatusEnum> {
   private evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;

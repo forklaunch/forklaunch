@@ -7,21 +7,15 @@ import {
 } from '../../persistence/entities';
 
 // organization entity mapper types
-export type OrganizationEntities<OrganizationStatus> = {
+export type OrganizationEntities = {
   OrganizationMapper: {
-    '~entity': ResolvedEntity<(typeof Organization)['~entity']> & {
-      status: OrganizationStatus[keyof OrganizationStatus];
-    };
+    '~entity': ResolvedEntity<(typeof Organization)['~entity']>;
   };
   CreateOrganizationMapper: {
-    '~entity': ResolvedEntity<(typeof Organization)['~entity']> & {
-      status: OrganizationStatus[keyof OrganizationStatus];
-    };
+    '~entity': ResolvedEntity<(typeof Organization)['~entity']>;
   };
   UpdateOrganizationMapper: {
-    '~entity': ResolvedEntity<(typeof Organization)['~entity']> & {
-      status: OrganizationStatus[keyof OrganizationStatus];
-    };
+    '~entity': ResolvedEntity<(typeof Organization)['~entity']>;
   };
 };
 

@@ -29,8 +29,7 @@ export class PaypalPaymentService<
   SchemaValidator extends AnySchemaValidator,
   Entities extends BasePaymentEntities,
   Dto extends BasePaymentDtos = BasePaymentDtos
-> implements PaymentService
-{
+> implements PaymentService {
   basePaymentService: BasePaymentService<SchemaValidator, Entities, Dto>;
   protected readonly paypalClient: PaypalClient;
   protected readonly em: EntityManager;
