@@ -53,8 +53,7 @@ export class TwilioSmsService<
   SchemaValidator extends AnySchemaValidator,
   Entities extends TwilioSmsEntities = TwilioSmsEntities,
   Dto extends TwilioSmsDtos = TwilioSmsDtos
-> implements SmsService<typeof SmsStatusEnum>
-{
+> implements SmsService<typeof SmsStatusEnum> {
   private evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;

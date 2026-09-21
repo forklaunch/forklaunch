@@ -17,9 +17,9 @@
     "test": "pnpm vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "^1.2.26",
-    "@forklaunch/universal-sdk": "^1.2.27",
-    "better-auth": "^1.7.2"
+    "@forklaunch/common": "^1.2.27",
+    "@forklaunch/universal-sdk": "^1.2.28",
+    "better-auth": "^1.7.5"
   },
   "devDependencies": {
     "@forklaunch/blueprint-billing-base": "workspace:^",
@@ -28,7 +28,7 @@
     "@forklaunch/blueprint-iam-base": "workspace:^",
     "@forklaunch/blueprint-iam-better-auth": "workspace:^",
     "@forklaunch/blueprint-sample-worker": "workspace:^",
-    "@forklaunch/core": "^1.5.19",
+    "@forklaunch/core": "^1.6.5",
     "typescript": "^7.0.2"
   }
 }

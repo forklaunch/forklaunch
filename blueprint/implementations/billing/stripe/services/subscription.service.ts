@@ -23,22 +23,20 @@ import { StripeSubscriptionMappers } from '../domain/types/subscription.mapper.t
 export class StripeSubscriptionService<
   SchemaValidator extends AnySchemaValidator,
   PartyType,
-  Entities extends StripeSubscriptionEntities<PartyType>,
-  Dto extends
-    StripeSubscriptionDtos<PartyType> = StripeSubscriptionDtos<PartyType>
-> implements
-    SubscriptionService<
-      PartyType,
-      typeof BillingProviderEnum,
-      {
-        CreateSubscriptionDto: StripeCreateSubscriptionDto<PartyType>;
-        UpdateSubscriptionDto: StripeUpdateSubscriptionDto<PartyType>;
-        SubscriptionDto: StripeSubscriptionDto<PartyType>;
-        IdDto: IdDto;
-        IdsDto: IdsDto;
-      }
-    >
-{
+  Entities extends StripeSubscriptionEntities,
+  Dto extends StripeSubscriptionDtos<PartyType> =
+    StripeSubscriptionDtos<PartyType>
+> implements SubscriptionService<
+  PartyType,
+  typeof BillingProviderEnum,
+  {
+    CreateSubscriptionDto: StripeCreateSubscriptionDto<PartyType>;
+    UpdateSubscriptionDto: StripeUpdateSubscriptionDto<PartyType>;
+    SubscriptionDto: StripeSubscriptionDto<PartyType>;
+    IdDto: IdDto;
+    IdsDto: IdsDto;
+  }
+> {
   baseSubscriptionService: BaseSubscriptionService<
     SchemaValidator,
     PartyType,

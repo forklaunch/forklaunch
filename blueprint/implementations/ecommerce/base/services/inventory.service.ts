@@ -22,8 +22,7 @@ export class BaseInventoryService<
   SchemaValidator extends AnySchemaValidator,
   MapperEntities extends BaseInventoryEntities,
   MapperDomains extends BaseInventoryDtos = BaseInventoryDtos
-> implements InventoryService
-{
+> implements InventoryService {
   private evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;

@@ -1,5 +1,68 @@
 # @forklaunch/core
 
+## 1.6.5
+
+### Patch Changes
+
+- `ResolvedRelation` no longer special-cases `any`. A conditional type on `any` takes every
+  branch, so an `any` field resolves to a union no concrete value satisfies; the 1.6.4 guard
+  hid that instead of surfacing it. Shape entities that stand in for an app-defined enum
+  should declare the column as `fp.enum<string[]>()` (a string column with unknown members)
+  rather than `fp.enum()`, which infers `any`. The type test now uses that form and fails on
+  the untyped one.
+
+## 1.6.4
+
+### Patch Changes
+
+- `ResolvedRelation` passes `any` through instead of treating it as an entity. A shape
+  entity that declares `fp.enum()` without naming the enum infers the field as `any`, and
+  `keyof any` contains every symbol, so the previous check saw an entity there and produced
+  an index-signature type the app's real enum could not satisfy.
+
+## 1.6.3
+
+### Patch Changes
+
+- **`ResolvedEntity` now resolves relation targets, so module entity constraints keep working on mikro-orm 7.2.**
+
+  mikro-orm 7.2 declares its `defineEntity` property builders invariant (`in out`). The
+  builder record an inferred entity carries in its `IndexHints` slot therefore no longer
+  unifies between two definitions of "the same" entity: a module's minimal `Permission`
+  (`id`, `slug`) and an application's real one (`id` generated `onCreate`, timestamps,
+  `.unique()` on `slug`). `ResolvedEntity` already dropped that slot on the entity being
+  compared, but not on the entities behind its relations, so any constraint that crossed a
+  `Collection<Permission>` or a `manyToOne(Organization)` failed to compile
+  (`Type 'RoleMapperTypes' does not satisfy the constraint 'RoleEntities'` in the IAM
+  module).
+
+  `ResolvedEntity<T>` now maps `Collection<E>` to `Collection<ResolvedEntity<E>>`,
+  `Reference<E>` to `Reference<ResolvedEntity<E>>`, and a bare related entity to
+  `ResolvedEntity<E>`; scalars, dates, enums and `null`/`undefined` pass through. The new
+  `ResolvedRelation<V>` helper is exported for the per-field case. Type tests cover a
+  to-many, a nullable to-one, and the negative case.
+
+## 1.6.2
+
+### Patch Changes
+
+- Refresh dependencies to their latest published versions.
+
+  `@mikro-orm/*` moves from 7.1.15 to 7.2.1 in every package that pins it,
+  as one step: the framework, the blueprint and the CLI's scaffold constants
+  all agree on a single MikroORM version, so a freshly generated app resolves
+  exactly one copy (the duplicate-package type errors from mixed pins are the
+  reason it is pinned exactly). `@aws-sdk/client-s3` 3.1131 → 3.1136 in
+  infrastructure-s3. The rest is devDependency movement; `@types/node` 26.6
+  added `Socket.server`, which the Bun socket shim in express now declares.
+
+  Packages with only devDependency changes release too, so the whole
+  framework carries one MikroORM version on npm.
+
+- Updated dependencies
+  - @forklaunch/validator@1.2.28
+  - @forklaunch/common@1.2.27
+
 ## 1.6.1
 
 ### Patch Changes

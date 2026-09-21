@@ -22,18 +22,13 @@ export class BasePlanService<
   PlanCadenceEnum,
   CurrencyEnum,
   BillingProviderEnum,
-  MapperEntities extends BasePlanEntities<
-    PlanCadenceEnum,
-    CurrencyEnum,
-    BillingProviderEnum
-  >,
+  MapperEntities extends BasePlanEntities,
   MapperDomains extends BasePlanDtos<
     PlanCadenceEnum,
     CurrencyEnum,
     BillingProviderEnum
   > = BasePlanDtos<PlanCadenceEnum, CurrencyEnum, BillingProviderEnum>
-> implements PlanService<PlanCadenceEnum, CurrencyEnum, BillingProviderEnum>
-{
+> implements PlanService<PlanCadenceEnum, CurrencyEnum, BillingProviderEnum> {
   private evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;

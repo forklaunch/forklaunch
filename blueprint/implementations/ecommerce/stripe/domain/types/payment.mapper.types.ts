@@ -1,4 +1,7 @@
-import { BasePaymentDtos, BasePaymentEntities } from '@forklaunch/implementation-ecommerce-base/types';
+import {
+  BasePaymentDtos,
+  BasePaymentEntities
+} from '@forklaunch/implementation-ecommerce-base/types';
 import { EntityManager, InferEntity } from '@mikro-orm/core';
 import Stripe from 'stripe';
 

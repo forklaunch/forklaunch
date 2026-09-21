@@ -6,11 +6,7 @@ export type PaymentLinkMappers<
   PaymentMethodEnum,
   CurrencyEnum,
   StatusEnum,
-  MapperEntities extends BasePaymentLinkEntities<
-    PaymentMethodEnum,
-    CurrencyEnum,
-    StatusEnum
-  >,
+  MapperEntities extends BasePaymentLinkEntities,
   MapperDomains extends BasePaymentLinkDtos<
     PaymentMethodEnum,
     CurrencyEnum,

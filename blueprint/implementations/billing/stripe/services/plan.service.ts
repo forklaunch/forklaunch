@@ -26,20 +26,18 @@ export class StripePlanService<
   SchemaValidator extends AnySchemaValidator,
   Entities extends StripePlanEntities,
   Dto extends StripePlanDtos = StripePlanDtos
-> implements
-    PlanService<
-      typeof PlanCadenceEnum,
-      typeof CurrencyEnum,
-      typeof BillingProviderEnum,
-      {
-        CreatePlanDto: StripeCreatePlanDto;
-        UpdatePlanDto: StripeUpdatePlanDto;
-        PlanDto: StripePlanDto;
-        IdDto: IdDto;
-        IdsDto: IdsDto;
-      }
-    >
-{
+> implements PlanService<
+  typeof PlanCadenceEnum,
+  typeof CurrencyEnum,
+  typeof BillingProviderEnum,
+  {
+    CreatePlanDto: StripeCreatePlanDto;
+    UpdatePlanDto: StripeUpdatePlanDto;
+    PlanDto: StripePlanDto;
+    IdDto: IdDto;
+    IdsDto: IdsDto;
+  }
+> {
   basePlanService: BasePlanService<
     SchemaValidator,
     PlanCadenceEnum,
