@@ -80,8 +80,11 @@ impl CliCommand for StartCommand {
                 .help("Slug of the template whose fleet to update"),
         )
         .arg(
-            Arg::new("version")
-                .long("version")
+            // `--semver`, matching `template publish --semver`; `--version` is
+            // clap's own propagated flag and cannot be reused (debug builds
+            // panic on the duplicate name, release builds shadow it).
+            Arg::new("semver")
+                .long("semver")
                 .required(true)
                 .help("Published semver to roll out (see `template versions`)"),
         )
@@ -116,8 +119,8 @@ impl CliCommand for StartCommand {
             .get_one::<String>("template")
             .context("--template is required")?;
         let version = matches
-            .get_one::<String>("version")
-            .context("--version is required")?;
+            .get_one::<String>("semver")
+            .context("--semver is required")?;
 
         let mut body = serde_json::Map::new();
         body.insert("templateSlug".into(), json!(template));
