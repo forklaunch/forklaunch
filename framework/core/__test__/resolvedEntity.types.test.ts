@@ -38,7 +38,7 @@ const shapeOrganization = defineComplianceEntity({
   name: 'Organization',
   properties: {
     id: fp.string().primary().compliance('none'),
-    status: fp.enum().compliance('none')
+    status: fp.enum<string[]>().compliance('none')
   }
 });
 
@@ -131,7 +131,7 @@ describe('ResolvedEntity', () => {
     >();
   });
 
-  it('passes an untyped enum (`any`) through instead of treating it as an entity', () => {
+  it('lets an app enum satisfy a shape enum declared as string', () => {
     expectTypeOf<AppOrganization>().toExtend<
       ResolvedEntity<ShapeOrganization> & { status: OrganizationStatus }
     >();

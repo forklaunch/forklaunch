@@ -59,14 +59,16 @@ export type ResolvedEntity<T> = {
  * `ResolvedEntity` applied through a relation wrapper: `Collection<E>` becomes
  * `Collection<ResolvedEntity<E>>`, references likewise, and a bare entity
  * object (a `manyToOne` without `.ref()`) resolves in place. Scalars, dates,
- * enums, `null`, `undefined` and `any` pass through untouched: only a value
- * that carries the `IndexHints` slot is an entity. (`any` is checked first
- * because `keyof any` contains every symbol, and a shape entity that declares
- * `fp.enum()` without naming the enum infers its value as `any`.)
+ * enums, `null` and `undefined` pass through untouched: only a value that
+ * carries the `IndexHints` slot is an entity.
+ *
+ * Fields must not be `any`: a conditional type on `any` takes every branch,
+ * so an `any` field would resolve to a union no concrete value satisfies.
+ * `fp.enum()` with no items infers `any`; a shape entity that stands in for
+ * an app-defined enum should say `fp.enum<string[]>()`.
  */
-export type ResolvedRelation<V> = 0 extends 1 & V
-  ? V
-  : V extends Collection<infer E extends object, infer O extends object>
+export type ResolvedRelation<V> =
+  V extends Collection<infer E extends object, infer O extends object>
     ? Collection<ResolvedEntity<E>, O>
     : V extends Reference<infer E extends object>
       ? Reference<ResolvedEntity<E>>

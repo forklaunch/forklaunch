@@ -1,5 +1,16 @@
 # @forklaunch/core
 
+## 1.6.5
+
+### Patch Changes
+
+- `ResolvedRelation` no longer special-cases `any`. A conditional type on `any` takes every
+  branch, so an `any` field resolves to a union no concrete value satisfies; the 1.6.4 guard
+  hid that instead of surfacing it. Shape entities that stand in for an app-defined enum
+  should declare the column as `fp.enum<string[]>()` (a string column with unknown members)
+  rather than `fp.enum()`, which infers `any`. The type test now uses that form and fails on
+  the untyped one.
+
 ## 1.6.4
 
 ### Patch Changes
