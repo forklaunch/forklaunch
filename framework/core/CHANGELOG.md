@@ -1,5 +1,26 @@
 # @forklaunch/core
 
+## 1.6.2
+
+### Patch Changes
+
+- Refresh dependencies to their latest published versions.
+
+  `@mikro-orm/*` moves from 7.1.15 to 7.2.1 in every package that pins it,
+  as one step: the framework, the blueprint and the CLI's scaffold constants
+  all agree on a single MikroORM version, so a freshly generated app resolves
+  exactly one copy (the duplicate-package type errors from mixed pins are the
+  reason it is pinned exactly). `@aws-sdk/client-s3` 3.1131 → 3.1136 in
+  infrastructure-s3. The rest is devDependency movement; `@types/node` 26.6
+  added `Socket.server`, which the Bun socket shim in express now declares.
+
+  Packages with only devDependency changes release too, so the whole
+  framework carries one MikroORM version on npm.
+
+- Updated dependencies
+  - @forklaunch/validator@1.2.28
+  - @forklaunch/common@1.2.27
+
 ## 1.6.1
 
 ### Patch Changes

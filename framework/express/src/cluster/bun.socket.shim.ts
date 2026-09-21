@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
 import type {
+  Server,
   AddressInfo,
   SetKeepAliveOptions,
   Socket,
@@ -176,6 +177,12 @@ export class BunSocketShim extends Duplex implements Socket {
   }
 
   destroyed: boolean = this._destroyed;
+  /**
+   * `net.Socket.server` (@types/node 26.6): the server that accepted the
+   * socket. Bun hands this shim raw connections with no `net.Server`, which
+   * is the documented value for sockets not accepted by a server.
+   */
+  readonly server: Server | null = null;
 
   destroy(error?: Error): this {
     if (this._destroyed) return this;
