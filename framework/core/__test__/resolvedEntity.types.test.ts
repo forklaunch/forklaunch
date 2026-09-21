@@ -37,7 +37,8 @@ const shapeRole = defineComplianceEntity({
 const shapeOrganization = defineComplianceEntity({
   name: 'Organization',
   properties: {
-    id: fp.string().primary().compliance('none')
+    id: fp.string().primary().compliance('none'),
+    status: fp.enum().compliance('none')
   }
 });
 
@@ -78,11 +79,20 @@ const appRole = defineComplianceEntity({
   }
 });
 
+enum OrganizationStatus {
+  ACTIVE = 'active',
+  INACTIVE = 'inactive'
+}
+
 const appOrganization = defineComplianceEntity({
   name: 'Organization',
   properties: {
     ...base,
-    name: fp.string().compliance('none')
+    name: fp.string().compliance('none'),
+    status: fp
+      .enum(() => OrganizationStatus)
+      .default(OrganizationStatus.ACTIVE)
+      .compliance('none')
   }
 });
 
@@ -98,9 +108,11 @@ const appUser = defineComplianceEntity({
 type AppPermission = (typeof appPermission)['~entity'];
 type AppRole = (typeof appRole)['~entity'];
 type AppUser = (typeof appUser)['~entity'];
+type AppOrganization = (typeof appOrganization)['~entity'];
 type ShapePermission = (typeof shapePermission)['~entity'];
 type ShapeRole = (typeof shapeRole)['~entity'];
 type ShapeUser = (typeof shapeUser)['~entity'];
+type ShapeOrganization = (typeof shapeOrganization)['~entity'];
 
 describe('ResolvedEntity', () => {
   it('lets a richer app entity satisfy a module shape without relations', () => {
@@ -116,6 +128,12 @@ describe('ResolvedEntity', () => {
     expectTypeOf<AppUser>().toExtend<ResolvedEntity<ShapeUser>>();
     expectTypeOf<ResolvedEntity<ShapeUser>['organization']>().toExtend<
       { id: string } | null | undefined
+    >();
+  });
+
+  it('passes an untyped enum (`any`) through instead of treating it as an entity', () => {
+    expectTypeOf<AppOrganization>().toExtend<
+      ResolvedEntity<ShapeOrganization> & { status: OrganizationStatus }
     >();
   });
 

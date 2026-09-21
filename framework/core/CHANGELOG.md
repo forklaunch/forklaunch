@@ -1,5 +1,14 @@
 # @forklaunch/core
 
+## 1.6.4
+
+### Patch Changes
+
+- `ResolvedRelation` passes `any` through instead of treating it as an entity. A shape
+  entity that declares `fp.enum()` without naming the enum infers the field as `any`, and
+  `keyof any` contains every symbol, so the previous check saw an entity there and produced
+  an index-signature type the app's real enum could not satisfy.
+
 ## 1.6.3
 
 ### Patch Changes
