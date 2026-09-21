@@ -1,5 +1,27 @@
 # @forklaunch/core
 
+## 1.6.1
+
+### Patch Changes
+
+- **`wrapEmWithTenantContext(em, '')` now binds the empty tenant, and never leaks a tenant into the caller.**
+
+  Global rows (a billing plan, a trial, a template) are encrypted under the
+  empty tenant. Two defects together made reading or writing them depend on
+  what had run earlier on the same worker:
+
+  - `''` was treated like `undefined` ("do not wrap"), so a caller asking for
+    the no-tenant key got an entity manager bound to nothing.
+  - The wrapper called `setEncryptionTenantId`, whose `enterWith` mutates the
+    calling async resource. After one org-scoped EM was created on a request,
+    a later "no-tenant" EM silently read and wrote under that org's key.
+
+  The visible symptom was intermittent `Failed to decrypt encrypted column
+value` on rows that were encrypted correctly. Now `''` returns a Proxy that
+  runs every EM call inside `withEncryptionContext('', …)`, only `undefined`
+  skips wrapping, the tenant filter is set only for a real tenant id, and the
+  wrapper no longer touches the caller's context. Tests cover all four cases.
+
 ## 1.6.0
 
 ### Minor Changes
