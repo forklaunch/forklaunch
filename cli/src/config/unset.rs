@@ -71,7 +71,11 @@ pub(crate) fn scope_id_from_header(header: &str, scope: &str) -> Option<String> 
         return None;
     }
     let id = rest.trim().strip_prefix('(')?.strip_suffix(')')?.trim();
-    if id.is_empty() { None } else { Some(id.to_string()) }
+    if id.is_empty() {
+        None
+    } else {
+        Some(id.to_string())
+    }
 }
 
 /// Find the platform id of a named scope in `config pull` output.
@@ -88,27 +92,17 @@ pub(crate) fn find_scope_id(content: &str, scope: &str) -> Option<String> {
 ///
 /// Pull output cannot answer this: a service section and a worker section are
 /// both rendered as `# name (id)`, with nothing to tell them apart. The local
-/// manifest can, because the platform names a worker component after its
-/// project with a `-worker` suffix.
+/// manifest can, because the platform names components after their project:
+/// a worker project `jobs` deploys as TWO components, `jobs-service` (its
+/// HTTP side, a service) and `jobs-worker` (the consumer). `config set -s
+/// jobs-service` has always accepted that name; this used to be a second,
+/// narrower resolver that refused it, so it now shares `prune`'s.
 pub(crate) fn classify_scope(
     projects: &[ProjectEntry],
     scope: &str,
     scope_id: String,
 ) -> Option<ScopeTarget> {
-    for project in projects {
-        match project.r#type {
-            ProjectType::Service if project.name == scope => {
-                return Some(ScopeTarget::Service(scope_id));
-            }
-            ProjectType::Worker
-                if project.name == scope || scope == format!("{}-worker", project.name) =>
-            {
-                return Some(ScopeTarget::Worker(scope_id));
-            }
-            _ => {}
-        }
-    }
-    None
+    super::prune::scope_target(projects, scope, scope_id)
 }
 
 /// Report what the pulled configuration currently holds for `key` in `scope`.
@@ -172,14 +166,20 @@ pub(crate) fn unset_request(
             }),
         ),
         ScopeTarget::Service(id) => (
-            format!("{}/services/{}/environments/{}/variables", api, id, environment),
+            format!(
+                "{}/services/{}/environments/{}/variables",
+                api, id, environment
+            ),
             serde_json::json!({
                 "region": region,
                 "variables": [{ "key": key, "value": "", "isUnset": true }]
             }),
         ),
         ScopeTarget::Worker(id) => (
-            format!("{}/workers/{}/environments/{}/variables", api, id, environment),
+            format!(
+                "{}/workers/{}/environments/{}/variables",
+                api, id, environment
+            ),
             serde_json::json!({
                 "region": region,
                 "variables": [{ "key": key, "value": "", "isUnset": true }]
@@ -317,7 +317,10 @@ impl CliCommand for UnsetCommand {
                     }
 
                     let confirmed = Confirm::with_theme(&ColorfulTheme::default())
-                        .with_prompt(format!("Destroy the stored value of {} and mark it unset?", key))
+                        .with_prompt(format!(
+                            "Destroy the stored value of {} and mark it unset?",
+                            key
+                        ))
                         .default(false)
                         .interact()?;
 
@@ -392,7 +395,10 @@ mod tests {
 
     #[test]
     fn test_scope_id_from_header_rejects_other_scopes() {
-        assert_eq!(scope_id_from_header("# payments (svc-123)", "billing"), None);
+        assert_eq!(
+            scope_id_from_header("# payments (svc-123)", "billing"),
+            None
+        );
         assert_eq!(scope_id_from_header("# application", "application"), None);
     }
 
@@ -416,7 +422,10 @@ mod tests {
     #[test]
     fn test_key_state_in_application_scope() {
         let content = "# application\nDB_HOST=db\nECS_AGENT_URI=\n";
-        assert_eq!(key_state(content, "application", "DB_HOST"), KeyState::Valued);
+        assert_eq!(
+            key_state(content, "application", "DB_HOST"),
+            KeyState::Valued
+        );
         assert_eq!(
             key_state(content, "application", "ECS_AGENT_URI"),
             KeyState::Valueless
@@ -433,14 +442,20 @@ mod tests {
     #[test]
     fn test_key_state_is_scoped() {
         let content = "# application\nSHARED=\n# payments (svc-1)\nSHARED=real\n";
-        assert_eq!(key_state(content, "application", "SHARED"), KeyState::Valueless);
+        assert_eq!(
+            key_state(content, "application", "SHARED"),
+            KeyState::Valueless
+        );
         assert_eq!(key_state(content, "payments", "SHARED"), KeyState::Valued);
     }
 
     #[test]
     fn test_key_state_treats_whitespace_as_valueless() {
         let content = "# application\nBLANK=   \n";
-        assert_eq!(key_state(content, "application", "BLANK"), KeyState::Valueless);
+        assert_eq!(
+            key_state(content, "application", "BLANK"),
+            KeyState::Valueless
+        );
     }
 
     #[test]
@@ -529,6 +544,17 @@ mod tests {
         assert_eq!(
             classify_scope(&projects, "mailer", "wkr-1".into()),
             Some(ScopeTarget::Worker("wkr-1".into()))
+        );
+    }
+
+    /// A worker project's HTTP side is a SERVICE component named
+    /// `<project>-service`; `unset` refused it while `set` accepted it.
+    #[test]
+    fn test_classify_scope_worker_project_service_component() {
+        let projects = vec![project("managed-apps", ProjectType::Worker)];
+        assert_eq!(
+            classify_scope(&projects, "managed-apps-service", "svc-2".into()),
+            Some(ScopeTarget::Service("svc-2".into()))
         );
     }
 

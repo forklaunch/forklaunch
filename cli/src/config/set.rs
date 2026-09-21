@@ -123,13 +123,38 @@ impl CliCommand for SetCommand {
         if key.is_empty() {
             bail!("Variable name cannot be empty");
         }
+        // An empty value is not "no value": the platform stores it as an unset
+        // tombstone, which destroys whatever the key held. That is `config
+        // unset`'s job, with its confirmation — `set` never destroys quietly.
+        if value.trim().is_empty() {
+            bail!(
+                "'{}=' has no value. To clear {} and mark it unset, run `forklaunch config unset {} -e {} -r {}{}` — it asks before destroying the stored value.",
+                key,
+                key,
+                key,
+                matches
+                    .get_one::<String>("environment")
+                    .map(String::as_str)
+                    .unwrap_or("<env>"),
+                matches
+                    .get_one::<String>("region")
+                    .map(String::as_str)
+                    .unwrap_or("<region>"),
+                matches
+                    .get_one::<String>("service")
+                    .map(|s| format!(" -s {}", s))
+                    .unwrap_or_default()
+            );
+        }
         // The deploy env-editor incident class: a value that itself looks
         // like an assignment is almost always a paste error and produces
         // values like `S3_BUCKET=S3_BUCKET=real-value` server-side.
-        if value
-            .split_once('=')
-            .is_some_and(|(maybe_key, _)| maybe_key.chars().all(|c| c.is_ascii_uppercase() || c == '_') && !maybe_key.is_empty())
-        {
+        if value.split_once('=').is_some_and(|(maybe_key, _)| {
+            maybe_key
+                .chars()
+                .all(|c| c.is_ascii_uppercase() || c == '_')
+                && !maybe_key.is_empty()
+        }) {
             bail!(
                 "Value '{}' looks like another KEY=VALUE assignment — this is usually a paste error. Quote the value if it is intentional.",
                 value
@@ -137,9 +162,7 @@ impl CliCommand for SetCommand {
         }
 
         let region = matches.get_one::<String>("region").expect("required");
-        let environment = matches
-            .get_one::<String>("environment")
-            .expect("required");
+        let environment = matches.get_one::<String>("environment").expect("required");
         let scope = matches
             .get_one::<String>("service")
             .cloned()
