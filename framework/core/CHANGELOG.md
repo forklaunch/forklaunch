@@ -1,5 +1,27 @@
 # @forklaunch/core
 
+## 1.6.3
+
+### Patch Changes
+
+- **`ResolvedEntity` now resolves relation targets, so module entity constraints keep working on mikro-orm 7.2.**
+
+  mikro-orm 7.2 declares its `defineEntity` property builders invariant (`in out`). The
+  builder record an inferred entity carries in its `IndexHints` slot therefore no longer
+  unifies between two definitions of "the same" entity: a module's minimal `Permission`
+  (`id`, `slug`) and an application's real one (`id` generated `onCreate`, timestamps,
+  `.unique()` on `slug`). `ResolvedEntity` already dropped that slot on the entity being
+  compared, but not on the entities behind its relations, so any constraint that crossed a
+  `Collection<Permission>` or a `manyToOne(Organization)` failed to compile
+  (`Type 'RoleMapperTypes' does not satisfy the constraint 'RoleEntities'` in the IAM
+  module).
+
+  `ResolvedEntity<T>` now maps `Collection<E>` to `Collection<ResolvedEntity<E>>`,
+  `Reference<E>` to `Reference<ResolvedEntity<E>>`, and a bare related entity to
+  `ResolvedEntity<E>`; scalars, dates, enums and `null`/`undefined` pass through. The new
+  `ResolvedRelation<V>` helper is exported for the per-field case. Type tests cover a
+  to-many, a nullable to-one, and the negative case.
+
 ## 1.6.2
 
 ### Patch Changes
