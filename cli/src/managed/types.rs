@@ -53,6 +53,10 @@ pub(super) struct ManagedInstance {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) app_claimed_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) environment: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) adopted: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) key_generation: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) last_key_rotation_at: Option<String>,

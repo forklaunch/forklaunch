@@ -5,6 +5,7 @@ use crate::{CliCommand, core::command::command};
 
 mod create;
 mod list;
+mod promote;
 mod publish;
 mod publish_template;
 mod relay;
@@ -13,6 +14,7 @@ mod vars;
 
 use create::CreateCommand;
 use list::ListCommand;
+use promote::PromoteCommand;
 use publish::PublishCommand;
 use publish_template::PublishTemplateCommand;
 use relay::RelayCommand;
@@ -28,6 +30,7 @@ pub(super) struct TemplateCommand {
     publish_template: PublishTemplateCommand,
     vars: VarsCommand,
     relay: RelayCommand,
+    promote: PromoteCommand,
 }
 
 impl TemplateCommand {
@@ -40,6 +43,7 @@ impl TemplateCommand {
             publish_template: PublishTemplateCommand::new(),
             vars: VarsCommand::new(),
             relay: RelayCommand::new(),
+            promote: PromoteCommand::new(),
         }
     }
 }
@@ -77,6 +81,7 @@ impl CliCommand for TemplateCommand {
         .subcommand(self.publish.command())
         .subcommand(self.publish_template.command())
         .subcommand(self.vars.command())
+        .subcommand(self.promote.command())
         .subcommand(self.relay.command())
         .subcommand_required(true)
     }
@@ -89,6 +94,7 @@ impl CliCommand for TemplateCommand {
             Some(("publish", sub_matches)) => self.publish.handler(sub_matches),
             Some(("publish-template", sub_matches)) => self.publish_template.handler(sub_matches),
             Some(("vars", sub_matches)) => self.vars.handler(sub_matches),
+            Some(("promote", sub_matches)) => self.promote.handler(sub_matches),
             Some(("relay", sub_matches)) => self.relay.handler(sub_matches),
             _ => unreachable!(),
         }
