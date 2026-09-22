@@ -1,4 +1,4 @@
-# Medical Literature Search Engine — Planning Document
+# Medical Literature Search Engine (MLSE) — Planning Document
 
 Status: **DRAFT — planning/specification only. No implementation has started.**
 
@@ -153,6 +153,8 @@ This section is built entirely from reading the repository (`forklaunch-js`, bra
 **PROPOSAL** (restating and sharpening the brief). A clinician searches a clinical topic and receives a structured, evidence-graded synthesis — not a list of links, not a chatbot answer from model memory. Example query: `"open heart surgery"`.
 
 **Confirmed product direction:** the retrieval/search foundation underneath that answer is modeled directly on PubMed — concept-level indexing, field-specific search, filters, citation relatedness (§8.1) — not a generic RAG-chunking search bar. The AI-synthesized answer stays the product's core value-add; PubMed-grade search is the foundation it's built on, not a replacement for it.
+
+**Confirmed product direction — the "Google, but for medicine" result page.** The bar is the Google search-results experience: search `liver transplant`, and the answer is comprehensive **on the same screen**, not scattered across links the doctor has to open one by one. Concretely, per the confirmed brief: why the condition happens (causes/pathophysiology, §6.1), what tests should be done (investigations, §6.1/§6.2), and — for a procedure — the full surgical process end to end, from indication through recovery (§6.2). A surgeon should be able to pull up MLSE mid-workup and get the whole picture at a glance, the way a Google results page answers "how do I..." in one view rather than sending the searcher hunting across ten tabs. This is not new scope — §6.1/§6.2's entity schemas already cover exactly this list of fields — but it is the concrete experience bar every result page (§10) has to clear, and it's restated here because it's the product's defining comparison, not an incidental detail.
 
 Structured result sections (per query type — see §5 for the full per-entity-type schema):
 
@@ -455,6 +457,8 @@ flowchart TD
 ---
 
 ## 10. Example User Experience
+
+**The bar, restated concretely (§2):** this is the "Google, but for medicine" screen — a surgeon mid-workup (or, per the confirmed brief, mid-procedure) pulls up MLSE and gets causes, required tests, and the full surgical process end to end in one view, the same way a Google results page answers a "how do I..." query without sending the searcher hunting across ten tabs. The mockup below is that screen.
 
 Search: `"Open heart surgery"`
 

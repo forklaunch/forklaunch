@@ -1,10 +1,10 @@
-# Medical Literature Search Engine — Plan Summary
+# Medical Literature Search Engine (MLSE) — Plan Summary
 
 Planning only. Full detail, risk register, and 13-epic implementation plan live in `MEDICAL_SEARCH_ENGINE_PLAN.md`. This is the short version.
 
 ## The idea
 
-A search engine for clinicians, not patients: a query like "open heart surgery" returns a structured, evidence-graded answer — indications, procedure, complications, medications — every claim traced to a citable source. It answers "what does the literature say," never "what should this patient do."
+Google, but for medicine. A doctor searches "liver transplant" and everything is on one screen — why it happens, what tests to run, the full surgical process end to end — not a list of links to click through one at a time. Every claim traces to a citable source. MLSE answers "what does the literature say," never "what should this patient do," and a surgeon can pull it up mid-workup or mid-procedure for exactly this kind of end-to-end reference.
 
 **Two layers, not one.** The retrieval foundation is modeled directly on PubMed — concept-level indexing (a MeSH-style controlled vocabulary, not just free-text matching), field-specific search, filters, and citation relatedness. On top of that sits the product's actual value-add: an AI-synthesized, fully-cited answer, not just a results list. PubMed-grade search is the foundation this is built on; it is not a replacement for the synthesis layer.
 

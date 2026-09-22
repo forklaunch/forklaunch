@@ -1,6 +1,6 @@
-# Medical Literature Search Engine — Brief
+# Medical Literature Search Engine (MLSE) — Brief
 
-**The pitch.** A search engine for doctors and hospitals: ask it "open heart surgery" and get a structured, fully-cited answer instead of a pile of links. Every fact traces back to a real source. It never tells a patient what to do — it tells a clinician what the evidence says.
+**The pitch.** Google, but for medicine. A doctor searches "liver transplant" and everything is on one screen — why it happens, what tests to run, the full surgical process end to end — not a pile of links to click through. Every fact traces back to a real source. It never tells a patient what to do — it tells a clinician what the evidence says, and a surgeon can pull it up mid-procedure for exactly this.
 
 **Why we can move fast on this.** We already have the backend infrastructure this needs — auth, billing, multi-tenant data isolation, async workers, typed APIs — proven on our existing medical-coding product. This isn't a from-scratch build; it's a new module on infrastructure we already run in production.
 
