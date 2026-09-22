@@ -243,9 +243,9 @@ pub(crate) const HYPER_EXPRESS_VERSION: &str = "~1.2.44";
 // fine, and uWebSockets.js ships only from GitHub.
 pub(crate) const UWEBSOCKETS_VERSION: &str = "github:uNetworking/uWebSockets.js#v20.52.0";
 // @forklaunch/implementation-billing-base
-pub(crate) const BILLING_BASE_VERSION: &str = "~1.0.37";
+pub(crate) const BILLING_BASE_VERSION: &str = "~1.0.38";
 // @forklaunch/implementation-billing-stripe
-pub(crate) const BILLING_STRIPE_VERSION: &str = "~1.2.7";
+pub(crate) const BILLING_STRIPE_VERSION: &str = "~1.2.8";
 // @forklaunch/implementation-ecommerce-base
 pub(crate) const ECOMMERCE_BASE_VERSION: &str = "~1.0.10";
 // @forklaunch/implementation-ecommerce-paypal
