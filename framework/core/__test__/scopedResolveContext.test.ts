@@ -1,7 +1,18 @@
+import { SchemaValidator } from '@forklaunch/validator/typebox';
 import { describe, expect, it } from 'vitest';
 import { createConfigInjector } from '../src/services/configInjector';
 import { Lifetime } from '../src/services/types/configInjector.types';
-import { SchemaValidator } from '@forklaunch/validator/typebox';
+
+class Bound {
+  constructor(readonly tenantId: string | undefined) {}
+}
+
+class Consumer {
+  constructor(
+    readonly first: Bound,
+    readonly second: Bound
+  ) {}
+}
 
 /**
  * A factory that asks the scope for the same Scoped token twice, with two
@@ -19,24 +30,23 @@ describe('scoped resolve with a context', () => {
     const ci = createConfigInjector(SchemaValidator(), {
       Bound: {
         lifetime: Lifetime.Scoped,
-        type: Object,
-        factory: (_args, context?: { tenantId?: string }) => ({
-          tenantId: context?.tenantId
-        })
+        type: Bound,
+        factory: (_args, context) =>
+          new Bound(
+            typeof context.tenantId === 'string' ? context.tenantId : undefined
+          )
       },
       Consumer: {
         lifetime: Lifetime.Scoped,
-        type: Object,
-        factory: (_args, _context, resolve) => ({
-          first: resolve!('Bound', { tenantId: 'org' }) as { tenantId?: string },
-          second: resolve!('Bound', { tenantId: '' }) as { tenantId?: string }
-        })
+        type: Consumer,
+        factory: (_args, _context, resolve) =>
+          new Consumer(
+            resolve!('Bound', { tenantId: 'org' }),
+            resolve!('Bound', { tenantId: '' })
+          )
       }
     });
-    const consumer = ci.scopedResolver('Consumer')() as {
-      first: { tenantId?: string };
-      second: { tenantId?: string };
-    };
+    const consumer = ci.scopedResolver('Consumer')();
     expect(consumer.first.tenantId).toBe('org');
     // The second request asked for '' and did not get it.
     expect(consumer.second).toBe(consumer.first);
