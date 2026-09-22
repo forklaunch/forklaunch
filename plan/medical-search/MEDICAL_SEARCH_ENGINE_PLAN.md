@@ -93,7 +93,7 @@ This section is built entirely from reading the repository (`forklaunch-js`, bra
 
 **FACT.** Row-level security exists as a documented mechanism (`RlsEventSubscriber`, referenced in code comments) alongside the MikroORM filter — i.e., Postgres RLS is part of the intended defense-in-depth, not just an app-level filter.
 
-**Implication for this project (PROPOSAL):** A medical-search module holding hospital-specific data (saved searches, audit logs, any patient-context features added later) should use exactly this same compliance/tenancy machinery — not invent a parallel one. Pure medical-literature content (drug labels, guidelines, papers) is not tenant data and should **not** be organization-scoped or encrypted; only per-hospital usage data would be.
+**Implication for this project (PROPOSAL):** A medical-search module holding hospital-specific usage data (saved searches, audit logs) should use exactly this same compliance/tenancy machinery — not invent a parallel one. Pure medical-literature content (drug labels, guidelines, papers) is not tenant data and should **not** be organization-scoped or encrypted; only per-hospital usage data would be. This product never holds patient data at all (§12.1), so this machinery's PHI-grade encryption is a defensive default for incidental query context, not something the corpus itself needs.
 
 ### 1.6 Auth & RBAC
 
@@ -186,7 +186,7 @@ Overview · Definition · Indications · Contraindications · Patient preparatio
 
 **PROPOSAL — the enforcement mechanism, not just a policy statement:** the system must be **structurally** incapable of producing C/D-shaped output, not merely instructed not to. Concretely:
 
-- The system never accepts or stores patient-identifying context as a search input in the MVP (see §13, "no patient data in phase 1").
+- The system never accepts or stores patient-identifying context as a search input, in any phase — a permanent product boundary, not an MVP-only restriction (§12.1).
 - Medication results (§5.3) present *drug-label-level* information (indication, standard dosing ranges *as published in the label/guideline*, contraindications, interactions) — never "give patient X 500mg of Y." A dosing range from an FDA label ("500–1000mg every 8 hours for adults with normal renal function") is category A/B (it's a citation of a real document). "This patient should take 500mg" is category D and must be refused/redirected (§12).
 - Any query that is detected as asking for D-shaped output (see §12.4 for detection heuristics) gets a structured refusal explaining the boundary, not a best-effort answer.
 
@@ -522,16 +522,18 @@ Additional UI elements per the brief, all **PROPOSAL**: evidence-quality indicat
 | Authentication | Reuse `iam-base`/`iam-better-auth` — JWT verification via `jwksPublicKeyUrl`, consistent with every other module |
 | RBAC | Extend `blueprint/core/auth/rbac.ts` conventions with module-specific permission slugs (e.g. `clinician:search`, `reviewer:approve_source`, `admin:manage_ingestion`) |
 | Tenant isolation | MikroORM tenant filter + per-tenant encryption (§1.5), applied to **hospital usage data** (saved searches, audit logs, org settings) — **not** to the shared literature corpus, which is not tenant data |
-| Encryption | `FieldEncryptor`/`EncryptedType` for any field classified `pii`/`phi`/`pci` — expected to be minimal in this system if patient data is kept out of Phase 1 (§16) |
+| Encryption | `FieldEncryptor`/`EncryptedType` for any field classified `pii`/`phi`/`pci` — expected to stay minimal in this system, since patient data is permanently out of scope (§12.1), not just deferred |
 | Audit logs | Reuse the framework's existing audit-logging conventions (present in `iam-base`'s RBAC/org model) — every search, every AI summary generation, every source-approval action logged |
 | Secrets management | Standard ForkLaunch env-var/config-injector pattern already used across all modules — no new mechanism needed |
 | API design | Typed, schema-validated routes exactly as every other module (`handlers.get/post`, Zod/TypeBox schemas, typed SDK) |
 
-### 12.1 Public literature vs. protected patient information — a deliberate architectural split
+### 12.1 Public literature only — patient data is out of scope, permanently
 
-**PROPOSAL, and the single most important security decision in this document:** the initial system should hold **zero patient-identifiable information**. The literature corpus (guidelines, papers, labels) is not patient data and needs none of the tenant-encryption machinery. A clinician's *query* itself might incidentally contain patient context if they paste it in — this is a real risk (§18) requiring input handling that does not persist raw query text longer than necessary and never sends it to a third-party LLM provider without a data-processing agreement covering PHI, *even if the intent was just to ask a literature question*.
+**Corrected per explicit product direction, superseding the earlier "Phase 1" framing below.** This system holds **zero patient-identifiable information, in any phase, not just at launch.** The product is medical literature end to end — diseases, their treatment, and the full surgical process from indication through recovery (§6.1, §6.2) — never a specific patient's data, history, or treatment. This is not a scoping convenience to revisit later; it is what the product *is*. The literature corpus (guidelines, papers, labels) needs none of the tenant-encryption machinery for this reason — it isn't patient data to begin with.
 
-**PROPOSAL — if patient-specific context is added later** (e.g. "given this patient's renal function, what does the label say about dose adjustment" — still category A/B if it cites the label's own renal-adjustment table, not new category D reasoning): the architecture would need to adopt the full `cac-base`-style compliance/tenancy stack (per-org encryption, tenant-scoped queries, BAA-covered LLM calls) for that specific data path, kept architecturally separate from the shared literature index.
+A clinician's *query* itself might incidentally contain patient context if they paste it in — this is a real risk (§18) requiring input handling that does not persist raw query text longer than necessary and never sends it to a third-party LLM provider without a data-processing agreement covering PHI, *even if the intent was just to ask a literature question*. That handling exists to contain accidental input, not to open a door to patient-data features later.
+
+**Formerly proposed, now explicitly ruled out:** a prior draft of this section floated adding patient-specific context in a later phase (e.g. dose adjustment for a named patient's renal function). Per product direction, that is **out of scope permanently**, not deferred — §21's roadmap (Phase 5) has been corrected to remove it.
 
 ---
 
@@ -541,7 +543,7 @@ Additional UI elements per the brief, all **PROPOSAL**: evidence-quality indicat
 
 | Area | Technical controls this system can provide | What requires an organizational/legal/clinical process, not code |
 |---|---|---|
-| HIPAA | If Phase 1 holds no PHI (§12.1), most HIPAA technical-safeguard obligations don't attach to the literature corpus itself; if patient context is added later, the existing framework's encryption/audit/tenant-isolation stack is the right technical foundation | A signed Business Associate Agreement with any LLM provider before any PHI-adjacent data reaches it; a real HIPAA risk assessment; workforce training — none of this is code |
+| HIPAA | Since this system permanently holds no PHI (§12.1), most HIPAA technical-safeguard obligations don't attach to the literature corpus at all — not a Phase 1 caveat, a standing fact about what this product is | A clinician's own incidental input handling (§12.1, §18) still warrants a data-processing agreement with any LLM provider as a defensive measure; workforce awareness that queries shouldn't include patient identifiers — none of this is code |
 | GDPR (if EU users) | Same technical building blocks (encryption, tenant isolation, audit) plus GDPR-specific rights (erase/export) — the framework already has a generic `ComplianceDataService` for this (§1.5) | Legal basis determination, DPA with sub-processors, data residency decisions |
 | FDA / clinical decision support software | The category A/B vs. C/D structural boundary (§3) is the primary technical control that keeps this out of CDS/medical-device territory | An actual regulatory determination (ideally documented, e.g. via FDA's own CDS decision-support criteria under the 21st Century Cures Act) should be sought before launch, not assumed by engineering |
 | Data provenance / auditability | Every evidence record's full provenance chain (§5.1) plus the generation audit trail (§9.4) | Ongoing content-governance process (§17) to keep provenance data accurate as sources update/retract |
@@ -733,7 +735,7 @@ Full entity-relationship graph (§7), UMLS/SNOMED/RxNorm integration **contingen
 Multi-hop synthesis across entity types, trend/emerging-evidence detection, possibly a dedicated smaller model for the unsupported-claim classifier (§9.4) rather than reusing the main LLM call.
 
 ### Phase 5 — Hospital / Enterprise Capabilities
-Institutional protocol upload (org-scoped, §4 table), patient-context-aware queries **only if** the full compliance/tenancy stack (§12.1's "if added later" path) is built out first, SSO/enterprise IAM integration (via existing `iam-base`/`iam-better-auth`), audit/reporting for compliance teams.
+Institutional protocol upload (org-scoped, §4 table), SSO/enterprise IAM integration (via existing `iam-base`/`iam-better-auth`), audit/reporting for compliance teams. **Corrected:** an earlier draft of this phase floated patient-context-aware queries; per product direction (§12.1), that is out of scope permanently, not a later phase — nothing on this roadmap, at any phase, introduces patient data.
 
 ---
 

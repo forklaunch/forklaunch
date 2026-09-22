@@ -12,7 +12,9 @@
 
 **Competition — the question to answer before we build.** A tool called OpenEvidence already does something close to this. Before committing engineering time, someone should actually use it and UpToDate (the incumbent) for real clinical questions and compare. If they already do this well, our edge isn't the AI — it's selling it bundled into hospitals that are already our customers for billing and identity.
 
-**What we'd build first.** A small, fully-licensed slice — drug labels, clinical trial registry data, a few guidelines we have permission to use. No patient data at all in this phase. API only, no app screens yet — those come once we know the answers are good.
+**What this is.** Pure medical literature — diseases, their treatment, the full surgical process end to end. Not patient data, not a chart, not a record. That's a permanent product boundary, not a launch restriction we'll lift later.
+
+**What we'd build first.** A small, fully-licensed slice — drug labels, clinical trial registry data, a few guidelines we have permission to use. API only, no app screens yet — those come once we know the answers are good.
 
 **The three risks that could actually kill this:**
 - Copying full-text research papers without a license — real legal exposure, not a hypothetical one.
