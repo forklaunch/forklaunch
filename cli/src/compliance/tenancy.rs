@@ -286,9 +286,20 @@ pub(crate) fn em_dependent_tokens(registrations: &str) -> BTreeSet<String> {
 
 /// `const NAME = <anything>.scopedResolver(tokens.TOKEN)` bindings in a file,
 /// keeping only those whose token depends on the entity manager.
-fn em_resolver_names(source: &str, em_tokens: &BTreeSet<String>) -> Vec<String> {
+///
+/// A declaration carrying `// forklaunch-tenancy: allow <reason>` above it
+/// exempts every use of that resolver: whether a token needs a tenant at all
+/// is a property of the rows behind it (a table with no encrypted column
+/// needs none), not of each call site, and repeating the comment on twenty
+/// handlers hides the reason rather than stating it.
+fn em_resolver_names(
+    source: &str,
+    em_tokens: &BTreeSet<String>,
+) -> (Vec<String>, Vec<(String, String)>) {
     let mut names = Vec::new();
-    for line in source.lines() {
+    let mut exempt = Vec::new();
+    let lines: Vec<&str> = source.lines().collect();
+    for (index, line) in lines.iter().enumerate() {
         let trimmed = line.trim();
         let Some(rest) = trimmed.strip_prefix("const ") else {
             continue;
@@ -308,11 +319,23 @@ fn em_resolver_names(source: &str, em_tokens: &BTreeSet<String>) -> Vec<String> 
             .chars()
             .take_while(|c| c.is_alphanumeric() || *c == '_')
             .collect::<String>();
-        if em_tokens.contains(&token) {
-            names.push(name.trim().to_string());
+        if !em_tokens.contains(&token) {
+            continue;
+        }
+        let name = name.trim().to_string();
+        match previous_line_allows(&lines, index) {
+            Some(reason) => exempt.push((
+                name,
+                if reason.is_empty() {
+                    "(no reason given)".to_string()
+                } else {
+                    reason.to_string()
+                },
+            )),
+            None => names.push(name),
         }
     }
-    names
+    (names, exempt)
 }
 
 /// The text of a call starting at `line_index`, joined with following lines
@@ -339,6 +362,26 @@ fn call_window(lines: &[&str], line_index: usize) -> String {
         }
     }
     window
+}
+
+/// The text of the statement `line_index` sits in: back to the nearest line
+/// that starts one, then forward until the parentheses balance. A binding
+/// written across several lines — `wrapEmWithTenantContext(\n
+/// getSuperAdminContext(em),\n  tenantId\n)` — reads as one statement here.
+fn statement_window(lines: &[&str], line_index: usize) -> String {
+    let starts_statement = |line: &str| {
+        let t = line.trim_start();
+        t.starts_with("const ")
+            || t.starts_with("let ")
+            || t.starts_with("return ")
+            || t.starts_with("await ")
+            || t.is_empty()
+    };
+    let mut start = line_index;
+    while start > 0 && !starts_statement(lines[start]) && line_index - start < 6 {
+        start -= 1;
+    }
+    call_window(lines, start)
 }
 
 fn has_call_without_tenant(window: &str, name: &str) -> bool {
@@ -398,8 +441,21 @@ pub(crate) fn scan_source(
 ) -> (Vec<TenancyFinding>, Vec<TenancyExemption>) {
     let mut findings = Vec::new();
     let mut exemptions = Vec::new();
-    let resolver_names = em_resolver_names(source, em_tokens);
+    let (resolver_names, exempt_resolvers) = em_resolver_names(source, em_tokens);
     let lines: Vec<&str> = source.lines().collect();
+    for (name, reason) in exempt_resolvers {
+        let line = lines
+            .iter()
+            .position(|l| l.contains(&format!("const {name} =")))
+            .map(|index| index + 1)
+            .unwrap_or(0);
+        exemptions.push(TenancyExemption {
+            rule: RULE_UNBOUND_RESOLVE,
+            file: display_path.to_string(),
+            line,
+            reason: format!("{name}: {reason}"),
+        });
+    }
 
     let report = |rule: &'static str,
                   severity: TenancySeverity,
@@ -477,7 +533,10 @@ pub(crate) fn scan_source(
             continue;
         }
 
-        if line.contains("getSuperAdminContext(") {
+        // A super-admin read that is re-bound on the same statement is the
+        // sanctioned cross-tenant read, not a finding.
+        let rebound = statement_window(&lines, index).contains("wrapEmWithTenantContext(");
+        if line.contains("getSuperAdminContext(") && !rebound {
             report(
                 RULE_SUPER_ADMIN_READ,
                 TenancySeverity::Warning,
@@ -495,7 +554,7 @@ pub(crate) fn scan_source(
             || trimmed.starts_with('-');
         if line.contains(".fork(")
             && !looks_like_prose
-            && !line.contains("wrapEmWithTenantContext(")
+            && !rebound
             && !line.contains("Orm.em.fork(")
             && !line.contains("orm.em.fork(")
         {
@@ -884,6 +943,28 @@ const locator = emFactory();
     }
 
     #[test]
+    fn an_allow_comment_on_the_resolver_exempts_every_call() {
+        let source = r#"
+// forklaunch-tenancy: allow Plan rows carry no encrypted column
+const serviceFactory = ci.scopedResolver(tokens.PlanService);
+const emFactory = ci.scopedResolver(tokens.EntityMgr);
+
+await serviceFactory().listPlans();
+await serviceFactory().getPlan(id);
+const em = emFactory();
+"#;
+        let (findings, exemptions) = scan_source("billing/x.ts", source, &tokens());
+        // Only the unannotated EntityMgr resolve is reported.
+        assert_eq!(findings.iter().map(|f| f.line).collect::<Vec<_>>(), vec![8]);
+        assert_eq!(exemptions.len(), 1);
+        assert!(
+            exemptions[0]
+                .reason
+                .starts_with("serviceFactory: Plan rows")
+        );
+    }
+
+    #[test]
     fn warns_on_super_admin_reads_and_unwrapped_forks() {
         let source = r#"
 const raw = getSuperAdminContext(em);
@@ -901,6 +982,31 @@ const fromOrm = Orm.em.fork();
             findings
                 .iter()
                 .all(|f| f.severity == TenancySeverity::Warning)
+        );
+    }
+
+    #[test]
+    fn a_super_admin_read_rebound_on_the_same_statement_is_not_a_finding() {
+        let source = r#"
+const queryEm = wrapEmWithTenantContext(
+  getSuperAdminContext(em),
+  PLATFORM_TENANT_ID
+);
+const other = wrapEmWithTenantContext(getSuperAdminContext(em), tenantId);
+const raw = getSuperAdminContext(em);
+"#;
+        let (findings, _) = scan_source("iam/x.ts", source, &tokens());
+        let lines: Vec<(usize, &str, &str)> = findings
+            .iter()
+            .map(|f| (f.line, f.rule, f.snippet.as_str()))
+            .collect();
+        assert_eq!(
+            lines,
+            vec![(
+                7,
+                RULE_SUPER_ADMIN_READ,
+                "const raw = getSuperAdminContext(em);"
+            )]
         );
     }
 
