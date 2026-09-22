@@ -415,7 +415,8 @@ fn inject_claim_mint_into_sdk_ts(iam_dir: &Path) -> Result<Option<RenderedTempla
         return Ok(None);
     }
 
-    let import_anchor = "} from './api/controllers';";
+    let import_anchor = "
+} from './api/controllers';";
     if !content.contains(import_anchor) {
         bail!(
             "Could not find the controller import block in {}; add `claim: {{ mintClaimToken }}` \
@@ -423,9 +424,14 @@ fn inject_claim_mint_into_sdk_ts(iam_dir: &Path) -> Result<Option<RenderedTempla
             sdk_path.display()
         );
     }
+    // The comma matters: `import_anchor` closes the import list, so the new
+    // name must be separated from the entry above it. Emitting the name alone
+    // produced `surfaceRoles\n  mintClaimToken` — which reads fine and is a
+    // TS1005 the moment the scaffolded app is built.
     let mut updated = content.replace(
         import_anchor,
-        "  mintClaimToken
+        ",
+  mintClaimToken
 } from './api/controllers';",
     );
 
@@ -452,7 +458,8 @@ export const",
         1,
     );
 
-    let value_anchor = "} satisfies";
+    let value_anchor = "
+} satisfies";
     if !updated.contains(value_anchor) {
         bail!(
             "Could not find the sdk value block in {}; add the claim group by hand.",
@@ -461,7 +468,7 @@ export const",
     }
     updated = updated.replacen(
         value_anchor,
-        "  ,
+        ",
   claim: {
     mintClaimToken
   }
@@ -651,28 +658,48 @@ mod tests {
         let iam = tmp.join("iam");
         let _ = remove_dir_all(&tmp);
         create_dir_all(&iam).unwrap();
+        // The REAL blueprint sdk.ts, not a hand-written stand-in. A toy
+        // fixture is exactly what let a missing comma through: it had a
+        // one-name import list, where the bug is invisible.
         write(
             iam.join("sdk.ts"),
-            "import {
-  surfaceRoles
-} from './api/controllers';
-
-export type IamSdk = {
-  user: {
-    surfaceRoles: typeof surfaceRoles;
-  };
-};
-
-export const iamSdkClient = {
-  user: {
-    surfaceRoles
-  }
-} satisfies IamSdk;
-",
+            embedded("project/iam-better-auth/sdk.ts"),
         )
         .unwrap();
 
         let rendered = inject_claim_mint_into_sdk_ts(&iam).unwrap().unwrap();
+
+        // The failure this pins is a MISSING COMMA, which earlier assertions
+        // could not see: they checked that the new text was present, and it
+        // was — in `surfaceRoles\n  mintClaimToken`, which parses as far as
+        // a string search is concerned and is a TS1005 to a compiler. So
+        // check separation, not presence, in all three blocks.
+        assert!(
+            rendered.content.contains("surfaceRoles,\n  mintClaimToken"),
+            "import list must separate the new name: {}",
+            rendered.content
+        );
+        // The value block's previous entry needs the same separator.
+        assert!(
+            rendered
+                .content
+                .contains("},\n  claim: {\n    mintClaimToken\n  }"),
+            "sdk value block must separate the claim group: {}",
+            rendered.content
+        );
+        assert!(
+            !rendered.content.contains("}\n  ,"),
+            "a comma on its own line means the anchor matched a closing brace: {}",
+            rendered.content
+        );
+        // Every `{`/`}` still balances — a crude parse, but it catches an
+        // injection that lands inside the wrong block.
+        assert_eq!(
+            rendered.content.matches('{').count(),
+            rendered.content.matches('}').count(),
+            "braces must balance: {}",
+            rendered.content
+        );
         assert!(
             rendered
                 .content
