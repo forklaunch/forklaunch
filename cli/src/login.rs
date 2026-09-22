@@ -17,7 +17,10 @@ use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 use crate::{
     CliCommand,
     constants::get_iam_api_url,
-    core::{command::command, token::get_token_path},
+    core::{
+        command::command,
+        token::{API_KEY_PREFIX, exchange_api_key, get_token_path},
+    },
 };
 
 pub(super) struct LoginCommand;
@@ -55,23 +58,42 @@ struct TokenData {
     expires_at: i64,
 }
 
-/// Login with API token (for automation/CI)
-/// This accepts a long-lived API token that users generate from the platform UI
+/// Login with a credential rather than a browser — the path for CI, a
+/// container, and an agent operating the platform unattended.
+///
+/// Two kinds of value arrive here. An **API key** (`flk_…`, issued by
+/// `POST /iam/service-accounts`) is a long-lived machine credential: it is
+/// exchanged for a JWT now and kept, so the session renews itself when that
+/// JWT runs out. That renewal is what makes unattended operation actually
+/// unattended — a device-flow session eventually needs a person at a
+/// browser, and a bare JWT simply stops working. A **raw JWT** is still
+/// accepted, for the case where something upstream already minted one.
 pub fn login_with_token(api_token: &str) -> Result<()> {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
+    let is_api_key = api_token.starts_with(API_KEY_PREFIX);
 
     log_info!(stdout, "Forklaunch CLI Login (API Token)");
-    log_info!(stdout, "Validating API token...");
 
-    // The API token is already a JWT that can be used directly
-    // We just need to validate it and save it
-    let token_storage = TokenData {
-        access_token: api_token.to_string(),
-        refresh_token: String::new(), // API tokens don't have refresh tokens
-        // Read the real expiry from the token when it has one. Recording
-        // "never" meant the CLI kept presenting an expired token until the
-        // server's 401 wiped the login file.
-        expires_at: crate::core::token::jwt_expiry(api_token).unwrap_or(i64::MAX),
+    let token_storage = if is_api_key {
+        log_info!(stdout, "Exchanging API key for a session...");
+        let (access_token, expires_at) = exchange_api_key(api_token)?;
+        TokenData {
+            access_token,
+            // The key is what renews the session, so it is stored where the
+            // refresh path already looks.
+            refresh_token: api_token.to_string(),
+            expires_at,
+        }
+    } else {
+        log_info!(stdout, "Validating API token...");
+        TokenData {
+            access_token: api_token.to_string(),
+            refresh_token: String::new(),
+            // Read the real expiry from the token when it has one. Recording
+            // "never" meant the CLI kept presenting an expired token until the
+            // server's 401 wiped the login file.
+            expires_at: crate::core::token::jwt_expiry(api_token).unwrap_or(i64::MAX),
+        }
     };
 
     let token_path = get_token_path()?;
@@ -122,10 +144,19 @@ pub fn login_with_token(api_token: &str) -> Result<()> {
         Color::Green,
         "Successfully logged in with API token!"
     );
-    writeln!(
-        stdout,
-        "Note: API tokens are long-lived. Revoke them from the platform UI if compromised."
-    )?;
+    if is_api_key {
+        writeln!(
+            stdout,
+            "This session renews itself from the key, so unattended runs keep working. \
+             Revoke the key from the platform if it leaks."
+        )?;
+    } else {
+        writeln!(
+            stdout,
+            "This is a raw token and cannot be renewed; when it expires, log in again. \
+             An API key (flk_...) from a service account renews itself instead."
+        )?;
+    }
 
     Ok(())
 }
