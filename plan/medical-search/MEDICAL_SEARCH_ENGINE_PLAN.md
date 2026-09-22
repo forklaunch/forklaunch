@@ -152,6 +152,8 @@ This section is built entirely from reading the repository (`forklaunch-js`, bra
 
 **PROPOSAL** (restating and sharpening the brief). A clinician searches a clinical topic and receives a structured, evidence-graded synthesis — not a list of links, not a chatbot answer from model memory. Example query: `"open heart surgery"`.
 
+**Confirmed product direction:** the retrieval/search foundation underneath that answer is modeled directly on PubMed — concept-level indexing, field-specific search, filters, citation relatedness (§8.1) — not a generic RAG-chunking search bar. The AI-synthesized answer stays the product's core value-add; PubMed-grade search is the foundation it's built on, not a replacement for it.
+
 Structured result sections (per query type — see §5 for the full per-entity-type schema):
 
 Overview · Definition · Indications · Contraindications · Patient preparation · Pre-operative evaluation · Procedure/workflow · Equipment · Anesthesia considerations · Medications · Typical duration · ICU/hospital considerations · Post-operative management · Follow-up · Complications · Relevant guidelines · Relevant research papers · Clinical trials · Evidence quality · Sources/citations.
@@ -167,7 +169,7 @@ Overview · Definition · Indications · Contraindications · Patient preparatio
 | UpToDate (Wolters Kluwer) | Editorially-written, expert-authored point-of-care topic summaries — the incumbent most hospitals already pay for | Human-edited on a slow update cycle, not a live literature search engine; its citation trail is to the editors' own review process, not a queryable evidence graph over new papers/trials as they publish. This plan's differentiation is live, source-traceable synthesis over a broader, continuously-updated corpus — not a faster-updating encyclopedia. |
 | OpenEvidence | An AI-native, citation-linked medical Q&A tool already positioned close to this plan's vision | **The closest existing competitor by concept**, as far as general awareness goes. If accurate, the differentiation this plan would need is either a narrower wedge (e.g. the structured procedure/surgery pages in §6.2, which general medical-Q&A tools don't specialize in) or a distribution advantage — bundled into a hospital's existing ForkLaunch-based systems (alongside `cac-base`, `billing-base`, `iam-base`) rather than sold as a standalone subscription tool. |
 | Elicit, Consensus.app | General-purpose AI research-paper search/summarization, not medicine-specific | No clinical safety boundary (§3's category A–D split), no evidence grading for clinical practice, no medical entity/knowledge-graph layer (§7). The gap they leave is a clinician-safe, clinically-structured product — not raw paper search with a nicer UI. |
-| PubMed / Google Scholar directly | The underlying literature index this whole system sits on top of | Zero synthesis, zero evidence grading, zero structured disease/procedure/medication pages. This is the raw material this plan indexes, not a competing product — the entire proposed value-add is the synthesis/safety/structure layer on top of exactly this kind of index. |
+| PubMed / Google Scholar directly | The underlying literature index this whole system sits on top of — and, per product direction, the explicit reference model for the retrieval layer's own capabilities (§8.1: MeSH-style indexing, field-specific search, filters, citation relatedness) | Zero synthesis, zero evidence grading, zero structured disease/procedure/medication pages. We are building our own PubMed-caliber search/indexing engine over a curated corpus (§8.1) — not just querying real PubMed as an external API — with the synthesis/safety/structure layer (§9-§11) on top of it. |
 
 **OPEN QUESTION, and arguably the most consequential one added in this revision:** none of the above was verified against these products' actual current capabilities in this session — this table is market awareness, not a competitive audit. Before this document is used externally (with a founder, an investor, or a clinical partner), someone should actually run a handful of real clinical queries through OpenEvidence and UpToDate and compare outputs directly against §10's example UX. If a tool like OpenEvidence already does most of what §2–§11 describe, the real strategic question stops being "should we build this" and becomes "what does building it on ForkLaunch's existing hospital-infrastructure relationships (IAM, billing, the CAC precedent, §1) let us do that a standalone competitor can't" — i.e., a distribution/bundling advantage, not a novel feature set. That reframing changes the MVP (§21): it would shift toward proving the bundled-distribution thesis with an existing ForkLaunch hospital customer, rather than proving the synthesis technology in the abstract.
 
@@ -354,7 +356,23 @@ graph LR
 
 **PROPOSAL** pipeline: indexing → tokenization → embeddings → vector search / full-text search → hybrid retrieval → reranking → query understanding (medical entity extraction, synonym/abbreviation expansion, terminology normalization).
 
-**OPEN QUESTION / FACT combination:** ForkLaunch has no existing full-text or vector search infrastructure (§1.8). This section is therefore fully net-new. Two realistic shapes:
+### 8.1 PubMed as the concrete reference model for the retrieval layer
+
+**PROPOSAL, confirmed product direction.** The AI-synthesized answer (§9, §10) stays the product's core value-add, but the retrieval layer underneath it should be held to a PubMed-grade bar, not a generic RAG-chunking bar — PubMed is decades of refinement on exactly this problem (searching biomedical literature), and its concrete, proven features are the right design target for this section, not an abstract "hybrid search":
+
+| PubMed capability | What it does | Proposal for this system |
+|---|---|---|
+| MeSH (Medical Subject Headings) indexing | Every MEDLINE record is tagged with a controlled vocabulary of medical concepts, not just free-text keywords | **PROPOSAL:** tag every ingested document with normalized medical entities (§7's knowledge graph) at ingestion time — the same role MeSH plays, and it's what makes "search for the concept, not just the words" possible. Licensing-clean: MeSH itself is public domain via NLM, distinct from the licensed SNOMED/RxNorm/UMLS terminologies below |
+| Field-specific query syntax (`author[au]`, `journal[ta]`, date ranges, `[mesh]` term search) | Lets a searcher construct precise, reproducible queries | **PROPOSAL:** support the same class of structured query alongside natural-language search — author, source type, date range, specialty, evidence tier |
+| Filters sidebar (article type, publication date, text availability, language) | Narrows a broad result set without re-querying | **PROPOSAL:** an equivalent filter panel (§16, if a UI is built) — evidence tier, source type, date, specialty |
+| "Similar articles" / citation relatedness | Surfaces related literature beyond the literal query match | **PROPOSAL:** powered directly by the knowledge graph (§7) and embeddings — a natural fit given both already exist in this plan |
+| Saved searches / alerts | Re-runs a query automatically as new literature is indexed | **PROPOSAL, Phase 5** (§21) — ties into the `saved_searches` entity (§14) and the ingestion pipeline's freshness tracking (§18) |
+| Bulk citation export (RIS, BibTeX, etc.) | Lets a researcher pull citations into reference-management tools | **OPEN QUESTION** — worth having given the research-paper-heavy corpus, not yet scoped; low effort once `citations` (§14) exists |
+| Programmatic API (E-utilities) | Lets other tools query PubMed directly | Already covered — ForkLaunch's typed-SDK generation (§1.4, §15) gives this for free, no extra work beyond the API design already in §15 |
+
+**Implication for §6 and §7:** this reframes the medical-entity tagging described there as load-bearing infrastructure, not a nice-to-have — it's the mechanism that makes concept-level search (the actual PubMed-grade capability) possible, not just full-text/vector matching over prose.
+
+**OPEN QUESTION / FACT combination:** ForkLaunch has no existing full-text or vector search infrastructure (§1.8). The underlying storage/indexing engine is therefore fully net-new, even though the capability target above is well-precedented. Two realistic shapes for that engine:
 
 | Approach | Description | Pros | Cons |
 |---|---|---|---|
@@ -367,6 +385,7 @@ graph LR
 
 | System | Use | Licensing status |
 |---|---|---|
+| MeSH (Medical Subject Headings) | Controlled-vocabulary concept indexing — the PubMed-style tagging layer proposed in §8.1 | **Public domain, free to use via NLM** — no license agreement needed, unlike every other terminology system in this table. The one clean starting point. |
 | ICD-10-CM | diagnosis coding | **FACT:** `cac-base` already has real ICD-10-CM tables and a validation service (`CodeValidationService`) — reusable/adjacent, not duplicated |
 | CPT/HCPCS | procedure coding | **FACT:** same — `cac-base` already established that CPT requires an AMA license held by the adopting org, not ForkLaunch. Same constraint applies here if CPT-coded procedure search is wanted. |
 | SNOMED CT, RxNorm, UMLS Metathesaurus | clinical concept normalization, drug normalization | **Requires a UMLS Metathesaurus license (free for many use cases in the US via NLM, but requires an affiliate agreement and use-tracking; SNOMED CT itself requires national-affiliate membership outside "SNOMED International member" countries)** — **OPEN QUESTION**, not yet obtained, must be resolved before any SNOMED/RxNorm-based entity normalization ships |

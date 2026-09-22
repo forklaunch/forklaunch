@@ -6,7 +6,7 @@
 
 **What's actually hard, and why:**
 
-1. **Search.** We don't have this kind of search infrastructure yet. Cheapest path: build it on the database we already run, not a new search service — at least for v1.
+1. **Search.** We don't have this kind of search infrastructure yet. Model it on PubMed — the gold standard for searching medical literature — not a generic search bar: tag every document by medical concept the way PubMed does, support precise field-specific queries, filters, and related-article links. Cheapest path to build it: on the database we already run, not a new search service — at least for v1.
 2. **Licensing.** Real medical terminology (the standard codes doctors and drug databases use) and non-government research papers require actual license agreements — the same kind of problem we already solved for billing codes on the coding product. This is a legal/business task, not an engineering one, and it gates what we can launch with.
 3. **Trust.** The whole product only works if it never makes something up. We're designing mechanical fact-checking — not just asking the AI to "be careful" — before anything reaches a doctor.
 
