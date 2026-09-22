@@ -196,7 +196,16 @@ fn main() -> Result<()> {
 
     match result {
         Ok(_) => result,
-        // TODO: make sure that the error text returns in red color
-        Err(error) => Err(error),
+        Err(error) => {
+            // An outcome that is not a failure (a deploy parked for approval, a
+            // wait the CLI gave up on) reports its own exit code so a script can
+            // tell it from a real error; everything else stays exit 1.
+            let code = crate::core::exit_code::exit_code_for(&error);
+            if code == 1 {
+                return Err(error);
+            }
+            eprintln!("{}", error);
+            std::process::exit(code);
+        }
     }
 }

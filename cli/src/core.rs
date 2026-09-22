@@ -13,6 +13,7 @@ pub(crate) mod env;
 pub(crate) mod env_defaults;
 pub(crate) mod env_scope;
 pub(crate) mod env_template;
+pub(crate) mod exit_code;
 pub(crate) mod format;
 pub(crate) mod github_configs;
 pub(crate) mod gitignore;
