@@ -108,16 +108,15 @@ describe('wrapEmWithTenantContext and the empty tenant', () => {
     ]);
   });
 
-  it('binds a fork to the same tenant', async () => {
+  it('leaves a fork unbound so an explicit context around it wins', async () => {
+    // getSuperAdminContext(em).fork() inside withEncryptionContext(other, …)
+    // is how a service steps out of the tenant on purpose.
     const em = fakeEm();
     const wrapped = wrapEmWithTenantContext(em as never, org);
     const forked = wrapped.fork();
-    expect(forked).not.toBe(em);
-    await forked.flush();
-    expect(em.calls).toEqual([
-      `filter:${org}`,
-      `filter:${org}`,
-      `flush:"${org}"`
-    ]);
+    await withEncryptionContext('', async () => {
+      await forked.flush();
+    });
+    expect(em.calls).toEqual([`filter:${org}`, 'flush:""']);
   });
 });

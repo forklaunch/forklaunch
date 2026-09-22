@@ -99,7 +99,7 @@ export function wrapEmWithTenantContext(
         const result = withEncryptionContext(tenantId, () =>
           (value as (...a: unknown[]) => unknown).apply(target, args)
         );
-        return rebind(result, target, proxy, tenantId);
+        return rebind(result, target, proxy);
       };
     }
   }) as EntityManager;
@@ -108,42 +108,21 @@ export function wrapEmWithTenantContext(
 
 /**
  * Keep a chained call inside the tenant. `persist()`, `remove()` and the
- * other fluent methods return the entity manager itself, and `fork()`
- * returns a new one; both come back as the *raw* manager, so
- * `em.persist(row).flush()` would run `flush` outside the context and
- * encrypt under whatever tenant the caller happened to be in. The first
- * case comes back as the proxy, the second as a new proxy on the same
- * tenant.
+ * other fluent methods return the entity manager itself, and they return
+ * the *raw* one, so `em.persist(row).flush()` would run `flush` outside the
+ * context and encrypt under whatever tenant the caller happened to be in.
+ * The manager comes back as the proxy instead.
+ *
+ * A `fork()` is deliberately left alone: a fork is a new manager, and the
+ * established idiom for stepping out of the tenant is exactly
+ * `getSuperAdminContext(em).fork()` inside an explicit
+ * `withEncryptionContext(other, …)`. Binding the fork would make that
+ * explicit context lose to the tenant the parent was created with.
  */
 function rebind(
   result: unknown,
   target: EntityManager,
-  proxy: EntityManager,
-  tenantId: string
+  proxy: EntityManager
 ): unknown {
-  if (result === target) {
-    return proxy;
-  }
-  if (isEntityManager(result) && result !== proxy) {
-    return wrapEmWithTenantContext(result, tenantId);
-  }
-  return result;
-}
-
-/**
- * A fresh fork is recognised by shape rather than by `instanceof`: the
- * driver packages subclass `EntityManager` from their own copy of
- * `@mikro-orm/core`, and a test double has no class at all.
- */
-function isEntityManager(value: unknown): value is EntityManager {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'fork' in value &&
-    typeof (value as { fork: unknown }).fork === 'function' &&
-    'flush' in value &&
-    typeof (value as { flush: unknown }).flush === 'function' &&
-    'persist' in value &&
-    typeof (value as { persist: unknown }).persist === 'function'
-  );
+  return result === target ? proxy : result;
 }
