@@ -144,6 +144,85 @@ impl<'a> Visit<'a> for EnvVarVisitor {
     }
 }
 
+/// Env var names whose read supplies its own default: `process.env.X ?? 12`,
+/// `getEnvVar('X') || 'public'`.
+///
+/// A bare read folds to required because the scanner cannot see whether the
+/// reader copes without a value. When the read is immediately defaulted it
+/// CAN see: the fallback is the value the code uses when the variable is
+/// absent, which is the definition of optional. Treating those as required
+/// blocks a deploy on variables the application demonstrably runs without —
+/// forklaunch-platform's staging deploy stalled on nine of them, every one
+/// with a literal default a line away.
+///
+/// Only the left-hand side counts. `someOtherThing ?? process.env.X` is a
+/// read of X as the fallback, and nothing defaults X itself.
+struct DefaultedEnvCollector {
+    names: HashSet<String>,
+}
+
+impl DefaultedEnvCollector {
+    fn record(&mut self, expr: &Expression<'_>) {
+        match expr {
+            Expression::StaticMemberExpression(member) => {
+                if let Expression::StaticMemberExpression(inner) = &member.object {
+                    if inner.property.name == "env" {
+                        if let Expression::Identifier(ident) = &inner.object {
+                            if ident.name == "process" {
+                                self.names.insert(member.property.name.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+            Expression::CallExpression(call) => {
+                if let Expression::Identifier(ident) = &call.callee {
+                    if ident.name == "getEnvVar" {
+                        if let Some(arg) = call.arguments.first() {
+                            if let Some(Expression::StringLiteral(lit)) = arg.as_expression() {
+                                self.names.insert(lit.value.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+            // `(process.env.X) ?? d` and `process.env.X! ?? d` read the same.
+            Expression::ParenthesizedExpression(inner) => self.record(&inner.expression),
+            Expression::TSNonNullExpression(inner) => self.record(&inner.expression),
+            _ => {}
+        }
+    }
+}
+
+impl<'a> Visit<'a> for DefaultedEnvCollector {
+    fn visit_logical_expression(&mut self, expr: &oxc_ast::ast::LogicalExpression<'a>) {
+        if matches!(
+            expr.operator,
+            oxc_ast::ast::LogicalOperator::Coalesce | oxc_ast::ast::LogicalOperator::Or
+        ) {
+            self.record(&expr.left);
+        }
+
+        oxc_ast_visit::walk::walk_logical_expression(self, expr);
+    }
+}
+
+fn defaulted_env_names(source_code: &str) -> HashSet<String> {
+    let allocator = Allocator::default();
+    let ParserReturn { program, .. } = Parser::new(
+        &allocator,
+        source_code,
+        SourceType::default().with_typescript(true),
+    )
+    .parse();
+
+    let mut collector = DefaultedEnvCollector {
+        names: HashSet::new(),
+    };
+    collector.visit_program(&program);
+    collector.names
+}
+
 /// Visitor that extracts `process.env.IDENTIFIER` usage from source code.
 pub struct ProcessEnvVisitor {
     pub env_vars: Vec<EnvVarUsage>,
@@ -209,12 +288,14 @@ pub fn extract_untyped_env_vars_from_source(source_code: &str) -> Result<Vec<Env
     let mut collector = GetEnvVarCollector { found: Vec::new() };
     collector.visit_program(&program);
 
+    let defaulted = defaulted_env_names(source_code);
+
     Ok(collector
         .found
         .into_iter()
         .map(|(var_name, _)| EnvVarUsage {
+            optional: defaulted.contains(&var_name).then_some(true),
             var_name,
-            optional: None,
         })
         .collect())
 }
@@ -241,7 +322,19 @@ pub fn extract_process_env_vars_from_source(source_code: &str) -> Result<Vec<Env
     let mut visitor = ProcessEnvVisitor::new();
     visitor.visit_program(&program);
 
-    Ok(visitor.env_vars)
+    let defaulted = defaulted_env_names(source_code);
+
+    Ok(visitor
+        .env_vars
+        .into_iter()
+        .map(|usage| EnvVarUsage {
+            optional: defaulted
+                .contains(&usage.var_name)
+                .then_some(true)
+                .or(usage.optional),
+            ..usage
+        })
+        .collect())
 }
 
 /// Recursively find all `.ts` source files under a directory,
@@ -283,9 +376,7 @@ fn walk_source_files(dir: &Path, files: &mut Vec<std::path::PathBuf>) -> Result<
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default();
 
-            if file_name.ends_with(".ts")
-                && !file_name.ends_with(".d.ts")
-            {
+            if file_name.ends_with(".ts") && !file_name.ends_with(".d.ts") {
                 files.push(path);
             }
         }
@@ -756,6 +847,80 @@ mod tests {
         // required — the required reader is the one that breaks when unset.
         let folded = fold_optionality(&[Some(true), Some(false)]);
         assert_eq!(folded, Some(false));
+    }
+
+    #[test]
+    fn test_a_read_with_its_own_default_is_optional() {
+        // Every one of these blocked forklaunch-platform's staging deploy as
+        // "missing configuration" while the code ran fine without them.
+        let source = r#"
+const DRAIN_TIMEOUT_MS = Number(process.env.WORKER_DRAIN_TIMEOUT_MS ?? 110_000);
+const minutes = Math.trunc(Number(process.env.WORKER_TASK_PROTECTION_MINUTES) || 12);
+const schema = getEnvVar('DB_SCHEMA') || 'public';
+const sid = getEnvVar('TWILIO_ACCOUNT_SID') || '';
+"#;
+        let process_vars = extract_process_env_vars_from_source(source).unwrap();
+        let drain = process_vars
+            .iter()
+            .find(|v| v.var_name == "WORKER_DRAIN_TIMEOUT_MS")
+            .expect("drain timeout sighted");
+        assert_eq!(drain.optional, Some(true));
+
+        let untyped = extract_untyped_env_vars_from_source(source).unwrap();
+        for name in ["DB_SCHEMA", "TWILIO_ACCOUNT_SID"] {
+            let found = untyped
+                .iter()
+                .find(|v| v.var_name == name)
+                .unwrap_or_else(|| panic!("{name} sighted"));
+            assert_eq!(
+                found.optional,
+                Some(true),
+                "{name} supplies its own default"
+            );
+        }
+    }
+
+    #[test]
+    fn test_a_bare_read_is_still_required() {
+        // Unchanged: nothing here says what happens when the value is absent.
+        let source = r#"
+const region = process.env.AWS_REGION;
+const url = getEnvVar('PLATFORM_URL');
+"#;
+        let process_vars = extract_process_env_vars_from_source(source).unwrap();
+        assert_eq!(
+            process_vars
+                .iter()
+                .find(|v| v.var_name == "AWS_REGION")
+                .unwrap()
+                .optional,
+            None
+        );
+        let untyped = extract_untyped_env_vars_from_source(source).unwrap();
+        assert_eq!(
+            untyped
+                .iter()
+                .find(|v| v.var_name == "PLATFORM_URL")
+                .unwrap()
+                .optional,
+            None
+        );
+    }
+
+    #[test]
+    fn test_a_read_used_as_the_fallback_is_not_defaulted() {
+        // `x ?? process.env.Y` defaults x, not Y: Y is still required.
+        let source = r#"
+const value = configured ?? process.env.FALLBACK_ONLY;
+"#;
+        let vars = extract_process_env_vars_from_source(source).unwrap();
+        assert_eq!(
+            vars.iter()
+                .find(|v| v.var_name == "FALLBACK_ONLY")
+                .unwrap()
+                .optional,
+            None
+        );
     }
 
     #[test]
