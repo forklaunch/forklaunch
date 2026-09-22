@@ -103,7 +103,7 @@ listed is rejected with 409 `InvalidInstanceTransition`.
 | `resetting` | `awaiting_claim` | platform callback + live probe, on a successful wipe deploy |
 | `resetting` | `provisioning_failed` | platform callback, on a failed wipe deploy (identity intact) |
 | `resetting` | `destroying` | operator |
-| `destroying` | `destroyed` | worker |
+| `destroying` | `destroyed` | platform callback, when the teardown deployment lands (not when it is scheduled) |
 
 Three invariants the map encodes on purpose:
 
@@ -180,7 +180,7 @@ platform's deployment callback picks the one whose latest deployment it is.
 | `GET/PUT/DELETE /instances/:id/variables[/:key]` | VIEWER / EDITOR | | per-instance variable overrides; writing does **not** redeploy, call `apply-variables` |
 | `POST /instances/:id/reset` | **ADMIN** | `awaiting_claim`/`active`/`suspended`/`provisioning_failed` → `resetting` | body `{confirmHost}` must echo the host; 202 `{state}` |
 | `POST /instances/:id/rotate-keys` | **ADMIN** | stays running (`pendingUpdate: 'keys'`) | body `{confirmHost}`; new generation of every `generated` secret + new gateway HMAC key, redeploy; 202 `{state, keyGeneration}` |
-| `DELETE /instances/:id` | EDITOR | any live state → `destroying` | |
+| `DELETE /instances/:id` | EDITOR | any live state → `destroying`; on a `destroying` instance it re-queues the teardown (a failed one keeps the state with `lastError`) | |
 | `GET /instances/relay-config/:templateSlug` | VIEWER | | |
 | `PUT /instances/relay-config/:templateSlug/{credentials,routes}` | ADMIN | | |
 | `POST /instances/claim` | **public** | `awaiting_claim` → `active` | body `{token, backupPublicKey}`; every failure is one identical 404 |
@@ -233,7 +233,7 @@ row changes when they land, not when the operator route returns.
 | `GET /internal/instances/:id/provision-spec` | the worker fetches what to do: `phase: 'provision' | 'reset' | 'update'`, version, size, placement, DNS, whether to rotate the key |
 | `POST /internal/instances/:id/provision-progress` | mid-flight checkpoint (so a retry skips finished steps) |
 | `POST /internal/instances/:id/provision-result` | launch outcome: `provisioning` → `awaiting_claim` / `provisioning_failed` |
-| `POST /internal/managed-instances/deployment-result` | the platform's deployment callback: finishes resets by evidence, clears `pendingUpdate`, records rollout item results |
+| `POST /internal/managed-instances/deployment-result` | the platform's deployment callback: finishes launches, resets and destroys by evidence, clears `pendingUpdate`, records rollout item results |
 | `POST /internal/managed-instances/resume-provisioning` | the approval gate releasing a parked launch |
 | `POST /internal/template-versions/:id/build-result` | build-once outcome for a version |
 
@@ -310,8 +310,17 @@ claim and their data are untouched; the relay and OTP gateway refuse the
 instance's requests for the minutes between the request and the redeploy
 landing (old HMAC key on the instance, new one on the platform).
 
-**Teardown.** `destroying` is enqueued; the worker tears down the backing
-application (snapshots first), then `destroyed`.
+**Teardown.** `destroying` is enqueued; the worker deletes the backing
+application, which only *schedules* the teardown deployment (snapshots first),
+and records that deployment's id on the instance. `destroyed` is written by the
+deployment-result callback when the teardown lands — the row once said
+`destroyed` 20 s after the request while the vault host answered 200 for
+minutes (bb0f60, 2026-09-21). A failed teardown keeps the instance `destroying`
+with `lastError`; `DELETE` again re-queues it, and the worker never deletes
+twice while the teardown it scheduled is still running (a second delete cancels
+and reschedules). No application, or no teardown scheduled: `destroyed` at
+once. `instance get` on a destroyed id still returns the row; `list` hides
+it.
 
 ## Hooking a client into the machine
 
