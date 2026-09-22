@@ -264,6 +264,76 @@ fn build_iam_service_manifest_data(
 /// to the iam `server.ts`. The handoff GET is a raw route (it must Set-Cookie +
 /// 302, which a typed handler cannot), mirroring the existing `/api/auth/*` raw
 /// routes.
+/// Adds `entry` as the final member of a block whose closing line is known.
+///
+/// The member above it gains the comma it now needs — the separator bug that
+/// the sdk.ts injection shipped, kept in one place here so it cannot recur
+/// per call site.
+fn insert_as_last_entry(source: &str, closing_line: usize, entry: &str) -> String {
+    let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
+    if closing_line == 0 || closing_line > lines.len() {
+        return source.to_string();
+    }
+    let previous = closing_line - 1;
+    if !lines[previous].trim_end().ends_with(',') && !lines[previous].trim().is_empty() {
+        let trimmed = lines[previous].trim_end().to_string();
+        lines[previous] = format!("{trimmed},");
+    }
+    lines.insert(closing_line, entry.to_string());
+
+    let mut rebuilt = lines.join("\n");
+    if source.ends_with('\n') {
+        rebuilt.push('\n');
+    }
+    rebuilt
+}
+
+/// The line index of the `});` that closes `const <name> = ...{`.
+///
+/// Structural rather than verbatim: the relay needs to add an entry to a
+/// named block, and every previous anchor named the block's LAST EXISTING
+/// ENTRY instead — which is the one thing guaranteed to change in an app
+/// that has edited the file. Scans forward from the declaration, tracking
+/// brace depth, and returns the line that brings it back to zero.
+fn closing_line_of_block(source: &str, declaration: &str) -> Option<usize> {
+    let lines: Vec<&str> = source.lines().collect();
+    let start = lines.iter().position(|line| line.contains(declaration))?;
+
+    let mut depth: i32 = 0;
+    for (offset, line) in lines[start..].iter().enumerate() {
+        for ch in line.chars() {
+            match ch {
+                '{' | '(' => depth += 1,
+                '}' | ')' => depth -= 1,
+                _ => {}
+            }
+        }
+        if depth <= 0 && offset > 0 {
+            return Some(start + offset);
+        }
+    }
+    None
+}
+
+/// Line indices of the `app.use(<name>Router);` block in a server.ts.
+///
+/// Structural rather than verbatim on purpose: an app that has edited its
+/// server.ts — renamed the section comment, mounted different routers — still
+/// has this shape, and it is the shape the relay actually needs.
+fn router_mount_lines(source: &str) -> Vec<usize> {
+    source
+        .lines()
+        .enumerate()
+        .filter(|(_, line)| {
+            let trimmed = line.trim();
+            trimmed.starts_with("app.use(")
+                && trimmed.ends_with("Router);")
+                && !trimmed.contains("relayRouter")
+        })
+        .map(|(index, _)| index)
+        .collect()
+}
+
 fn inject_relay_into_server_ts(iam_dir: &Path) -> Result<Option<RenderedTemplate>> {
     let server_path = iam_dir.join("server.ts");
     let content = read_to_string(&server_path)
@@ -288,14 +358,24 @@ fn inject_relay_into_server_ts(iam_dir: &Path) -> Result<Option<RenderedTemplate
     let mut updated = content.replace(import_anchor, &import_block);
 
     // 2. The browser-facing handoff redirect, placed just before the routes are
-    // mounted so it wins over any catch-all.
-    let mount_anchor = "//! mounts the routes to the app";
-    if !updated.contains(mount_anchor) {
-        bail!(
-            "Could not find the route-mount anchor in {}; wire the relay by hand.",
+    // mounted so it wins over any catch-all, and the typed router mounted
+    // after the last existing one.
+    //
+    // Both positions are found STRUCTURALLY, by locating the block of
+    // `app.use(<name>Router);` lines. The previous anchors were a comment
+    // (`//! mounts the routes to the app`) and one specific router
+    // (`complianceRouter`), neither of which survives an app that has edited
+    // its server.ts — which is every real product, and the case
+    // init_relay_drift.sh exists to cover.
+    let router_mounts = router_mount_lines(&updated);
+    let (first_mount, last_mount) = match (router_mounts.first(), router_mounts.last()) {
+        (Some(first), Some(last)) => (*first, *last),
+        _ => bail!(
+            "Found no `app.use(<name>Router);` lines in {}; the relay needs somewhere to mount. \
+             Wire it by hand following the module docs.",
             server_path.display()
-        );
-    }
+        ),
+    };
     let handoff_route = r#"//! Managed-apps relay handoff: redeems a one-time ticket minted by
 //! /relay/session-ingest, sets the better-auth session cookie, and 302s the
 //! browser to a sanitized root-relative path. A raw route because it must
@@ -327,17 +407,23 @@ app.internal.get('/relay/handoff', async (req, res) => {
 });
 
 "#;
-    updated = updated.replace(mount_anchor, &format!("{handoff_route}{mount_anchor}"));
-
-    // 3. Mount the typed session-ingest router alongside the others.
-    let use_anchor = "app.use(complianceRouter);";
-    if !updated.contains(use_anchor) {
-        bail!(
-            "Could not find the router-mount anchor in {}; wire the relay by hand.",
-            server_path.display()
-        );
+    // Rebuild line by line: inserting by byte offset would shift the second
+    // position out from under the first.
+    let mut rebuilt: Vec<String> = Vec::new();
+    for (index, line) in updated.lines().enumerate() {
+        if index == first_mount {
+            rebuilt.push(handoff_route.trim_end().to_string());
+            rebuilt.push(String::new());
+        }
+        rebuilt.push(line.to_string());
+        if index == last_mount {
+            rebuilt.push("app.use(relayRouter);".to_string());
+        }
     }
-    updated = updated.replace(use_anchor, &format!("{use_anchor}\napp.use(relayRouter);"));
+    updated = rebuilt.join("\n");
+    if content.ends_with('\n') {
+        updated.push('\n');
+    }
 
     Ok(Some(RenderedTemplate {
         path: server_path,
@@ -370,31 +456,36 @@ fn inject_relay_into_registrations_ts(iam_dir: &Path) -> Result<Option<RenderedT
     );
     let mut updated = content.replace(import_anchor, &import_block);
 
-    // 2. Environment config: INSTANCE_ID / INSTANCE_HMAC_KEY, inserted at the
-    // end of the environmentConfig block (after the last known entry).
+    // 2. Environment config: INSTANCE_ID / INSTANCE_HMAC_KEY, added as the
+    // last entries of the environmentConfig block. Located by the block's own
+    // closing brace rather than by naming whatever entry happens to be last
+    // today — that name is exactly what differs in an app that has edited
+    // this file.
     if !updated.contains("INSTANCE_ID") {
-        let env_anchor = "  JWKS_PUBLIC_KEY_URL: {\n    lifetime: Lifetime.Singleton,\n    type: string,\n    value: getEnvVar('JWKS_PUBLIC_KEY_URL')\n  }\n});";
-        if !updated.contains(env_anchor) {
-            bail!(
-                "Could not find the environmentConfig anchor in {}; wire the relay by hand.",
-                registrations_path.display()
-            );
-        }
-        let env_block = "  JWKS_PUBLIC_KEY_URL: {\n    lifetime: Lifetime.Singleton,\n    type: string,\n    value: getEnvVar('JWKS_PUBLIC_KEY_URL')\n  },\n  INSTANCE_ID: {\n    lifetime: Lifetime.Singleton,\n    type: optional(string),\n    value: getEnvVar('INSTANCE_ID') ?? undefined\n  },\n  INSTANCE_HMAC_KEY: {\n    lifetime: Lifetime.Singleton,\n    type: optional(string),\n    value: getEnvVar('INSTANCE_HMAC_KEY') ?? undefined\n  }\n});";
-        updated = updated.replace(env_anchor, env_block);
+        let close =
+            closing_line_of_block(&updated, "const environmentConfig").ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Could not find the environmentConfig block in {}; wire the relay by hand.",
+                    registrations_path.display()
+                )
+            })?;
+        let entries = "  INSTANCE_ID: {\n    lifetime: Lifetime.Singleton,\n    type: optional(string),\n    value: getEnvVar('INSTANCE_ID') ?? undefined\n  },\n  INSTANCE_HMAC_KEY: {\n    lifetime: Lifetime.Singleton,\n    type: optional(string),\n    value: getEnvVar('INSTANCE_HMAC_KEY') ?? undefined\n  }";
+        updated = insert_as_last_entry(&updated, close, entries);
     }
 
-    // 3. The RelaySessionService itself, appended to the last dependency chain
-    // (expressApplicationOptions) so BetterAuth is available to its factory.
-    let service_anchor = "  RetentionService: {\n    lifetime: Lifetime.Singleton,\n    type: RetentionService,\n    factory: ({ Orm, OtelCollector }) =>\n      new RetentionService(Orm, OtelCollector)\n  }\n});";
-    if !updated.contains(service_anchor) {
-        bail!(
-            "Could not find the serviceDependencies anchor in {}; wire the relay by hand.",
-            registrations_path.display()
-        );
-    }
-    let service_block = "  RetentionService: {\n    lifetime: Lifetime.Singleton,\n    type: RetentionService,\n    factory: ({ Orm, OtelCollector }) =>\n      new RetentionService(Orm, OtelCollector)\n  },\n  RelaySessionService: {\n    lifetime: Lifetime.Scoped,\n    type: RelaySessionService,\n    factory: ({ EntityManager, BetterAuth, OtelCollector }) =>\n      new RelaySessionService(\n        EntityManager,\n        async (): Promise<BetterAuthCookieContext> => {\n          const ctx = (await (BetterAuth as BetterAuth).$context) as unknown as {\n            secret: string;\n            authCookies: {\n              sessionToken: {\n                name: string;\n                attributes: BetterAuthCookieContext['sessionTokenAttributes'];\n              };\n            };\n          };\n          return {\n            secret: ctx.secret,\n            sessionTokenName: ctx.authCookies.sessionToken.name,\n            sessionTokenAttributes: ctx.authCookies.sessionToken.attributes\n          };\n        },\n        OtelCollector\n      )\n  }\n});";
-    updated = updated.replace(service_anchor, service_block);
+    // 3. The RelaySessionService, added to the terminal dependency chain so
+    // BetterAuth is available to its factory. Same structural approach.
+    let svc_close = closing_line_of_block(&updated, "const expressApplicationOptions")
+        .or_else(|| closing_line_of_block(&updated, "const serviceDependencies"))
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Could not find a dependency chain to add RelaySessionService to in {}; wire the \
+                 relay by hand.",
+                registrations_path.display()
+            )
+        })?;
+    let service_entry = "  RelaySessionService: {\n    lifetime: Lifetime.Scoped,\n    type: RelaySessionService,\n    factory: ({ EntityManager, BetterAuth, OtelCollector }) =>\n      new RelaySessionService(\n        EntityManager,\n        async (): Promise<BetterAuthCookieContext> => {\n          const ctx = (await (BetterAuth as BetterAuth).$context) as unknown as {\n            secret: string;\n            authCookies: {\n              sessionToken: {\n                name: string;\n                attributes: BetterAuthCookieContext['sessionTokenAttributes'];\n              };\n            };\n          };\n          return {\n            secret: ctx.secret,\n            sessionTokenName: ctx.authCookies.sessionToken.name,\n            sessionTokenAttributes: ctx.authCookies.sessionToken.attributes\n          };\n        },\n        OtelCollector\n      )\n  }";
+    updated = insert_as_last_entry(&updated, svc_close, service_entry);
 
     Ok(Some(RenderedTemplate {
         path: registrations_path,
@@ -659,6 +750,33 @@ mod tests {
     /// the scaffold panics) and must carry the security-critical contract: a
     /// root-basePath session-ingest route with internal HMAC access.
     #[test]
+    #[test]
+    fn wiring_finds_its_place_without_naming_the_last_entry() {
+        // The drifted case: an app that renamed the section comment, mounts
+        // different routers, and ends each chain with entries of its own.
+        // Every previous anchor named a specific neighbour, which is the one
+        // thing such an app changes — so `-m relay` failed on exactly the
+        // apps it exists for (init_relay_drift.sh, red since #327).
+        let server = "import { iamSdkClient } from './sdk';\n\n//! routes\napp.use(discoveryRouter);\napp.use(userRouter);\napp.use(auditRouter);\n";
+        let mounts = router_mount_lines(server);
+        assert_eq!(mounts.len(), 3, "all three mounts: {server}");
+        assert_eq!(mounts.first(), Some(&3));
+        assert_eq!(mounts.last(), Some(&5));
+
+        // A block is located by its own closing brace, not by its contents.
+        let registrations = "const environmentConfig = configInjector.chain({\n  ANYTHING: {\n    value: 1\n  }\n});\n";
+        let close = closing_line_of_block(registrations, "const environmentConfig")
+            .expect("the block closes somewhere");
+        assert_eq!(close, 4);
+
+        // And the entry above the new one gains its separator.
+        let grown = insert_as_last_entry(registrations, close, "  ADDED: {}");
+        assert!(
+            grown.contains("  },\n  ADDED: {}"),
+            "previous entry must gain a comma: {grown}"
+        );
+    }
+
     #[test]
     fn claim_mint_endpoint_template_is_embedded_and_purpose_checked() {
         let controller = embedded("project/relay/api/controllers/claim-mint.controller.ts");
