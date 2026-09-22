@@ -56,6 +56,10 @@ deploy finished.
 `keyGeneration` (0 at launch) and `lastKeyRotationAt` say which generation of
 the instance's generated secrets is current.
 
+`environment` (`production` for launched instances) and `adopted` say whether
+the instance was launched from the template or adopted from an application
+that already ran (see "From a single application to a managed product").
+
 ## The edges
 
 ```
@@ -78,7 +82,7 @@ listed is rejected with 409 `InvalidInstanceTransition`.
 
 | from | to | pulled by |
 |---|---|---|
-| `provisioning` | `awaiting_claim` | worker, on a successful launch (claim link minted in the same flush) |
+| `provisioning` | `awaiting_claim` | the platform's deployment callback, once the launch deploy succeeded AND the instance answers on its host (claim link minted in the same flush) |
 | `provisioning` | `provisioning_failed` | worker, on a failed launch |
 | `provisioning` | `destroying` | operator (`DELETE /instances/:id`), even mid-run or parked for approval |
 | `provisioning_failed` | `provisioning` | worker, when the operator retries a **launch** (`resume-provisioning`) |
@@ -141,6 +145,23 @@ launches and pays, ADMIN defines what the org can deploy and can erase data.
 **Publishing a version does not publish the template.** `createInstance`
 requires the template `status` to be `published`. If launch 404s with "no
 published template", this is why.
+
+### From a single application to a managed product (`/app-templates/from-application`)
+
+| method + path | role | does |
+|---|---|---|
+| `POST /app-templates/from-application` | ADMIN | body `{applicationId, slug, name?, description?, adopt?}`; the app's repo becomes the template's source and its current release version 1. With `adopt: true` the template and version are published at once and every deploy the app has (one per environment × region with a recorded host) becomes an `active`, `adopted` instance of it; without, version 1 goes through the build pipeline and the template stays a draft. 201 `{template, version, adopted[], skipped[]}`; 404 for another org's app; 409 `PROMOTE_NO_REPOSITORY` / `PROMOTE_NO_RELEASE` / `PROMOTE_SLUG_TAKEN` / `PROMOTE_ALREADY_MANAGED` |
+
+An **adopted** instance keeps the application's hosts (`endpoints` come from
+what the deploy recorded, not from the managed naming), its secrets and its
+data; it has `environment` (launched instances are always `production`),
+`adopted: true`, no claim to wait for (it is the organization's own) and no
+DNS registration. Rollouts, resize, apply-variables and key rotation work on
+it as on any instance. The new template starts with no variable
+declarations, so nothing is re-derived; a maintainer who later declares a
+`generated` key must remember the adopted instance already runs with a value
+of its own. One application id can back several adopted instances, so the
+platform's deployment callback picks the one whose latest deployment it is.
 
 ### Instances (`/instances`)
 
@@ -220,9 +241,25 @@ row changes when they land, not when the operator route returns.
 
 **Launch (`provision`).** Idempotent step list: backing application created
 (its id flushed *before* the deploy, so a retry never creates a second one),
-pinned version deployed, DNS, `smsHmacKey` minted, one-time claim link minted,
-`awaiting_claim`. Each step is skipped when its output already exists. This is
-mutation-tested; do not "simplify" the guard away, a retry costs money.
+DNS registered, `smsHmacKey` minted, size pinned, variables synced, pinned
+version deployed. Each step is skipped when its output already exists. This
+is mutation-tested; do not "simplify" the guard away, a retry costs money.
+The row stays `provisioning` while the deploy runs; **it becomes
+`awaiting_claim`, and the one-time claim link is minted, only when the
+platform's deployment callback reports success and `GET https://<host>/health`
+answers 200**. Before Sep 21 the state flipped at dispatch, and a link sent
+then pointed at hosts that did not resolve for minutes. A deploy that
+"completes" but whose hosts never answer fails the instance with the reason.
+
+**The approval gate.** An organization that requires deployment approval for
+production parks every launch deploy: the deployment sits `awaiting_approval`
+with `requestedBy: system`, the instance holds in `provisioning` with
+`launchApprovalState: pending`, and nothing advances until an approver
+releases it (`POST /deployment-approvals/:id/approve` on platform-management,
+the dashboard's Deployments page, or `forklaunch deploy approvals approve`).
+Resets and updates deploy the same way and can park the same way. A client
+that polls for `awaiting_claim` must watch `launchApprovalState` too, or it
+waits forever on a gated org.
 
 **Claim.** The link points at ForkLaunch (`/claim/:token`), not at the
 instance. The passphrase is turned into the backup key **in the browser**
