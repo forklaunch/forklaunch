@@ -89,17 +89,40 @@ export function wrapEmWithTenantContext(
   // caller's async resource and leaks the tenant into everything that runs
   // on it afterwards. The Proxy binds the tenant for every EM call, which is
   // the only place hydration and flush read it.
-  return new Proxy(em, {
+  const proxy: EntityManager = new Proxy(em, {
     get(target, prop, receiver) {
       const value = Reflect.get(target, prop, receiver);
       if (typeof value !== 'function') {
         return value;
       }
       return function tenantBoundMethod(...args: unknown[]) {
-        return withEncryptionContext(tenantId, () =>
+        const result = withEncryptionContext(tenantId, () =>
           (value as (...a: unknown[]) => unknown).apply(target, args)
         );
+        return rebind(result, target, proxy);
       };
     }
   }) as EntityManager;
+  return proxy;
+}
+
+/**
+ * Keep a chained call inside the tenant. `persist()`, `remove()` and the
+ * other fluent methods return the entity manager itself, and they return
+ * the *raw* one, so `em.persist(row).flush()` would run `flush` outside the
+ * context and encrypt under whatever tenant the caller happened to be in.
+ * The manager comes back as the proxy instead.
+ *
+ * A `fork()` is deliberately left alone: a fork is a new manager, and the
+ * established idiom for stepping out of the tenant is exactly
+ * `getSuperAdminContext(em).fork()` inside an explicit
+ * `withEncryptionContext(other, …)`. Binding the fork would make that
+ * explicit context lose to the tenant the parent was created with.
+ */
+function rebind(
+  result: unknown,
+  target: EntityManager,
+  proxy: EntityManager
+): unknown {
+  return result === target ? proxy : result;
 }

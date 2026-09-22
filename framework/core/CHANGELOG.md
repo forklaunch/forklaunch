@@ -1,5 +1,31 @@
 # @forklaunch/core
 
+## 1.6.7
+
+### Patch Changes
+
+- A tenant-bound entity manager leaves `fork()` unbound again. 1.6.6 returned a proxy on
+  the parent's tenant from `fork()`, which made `getSuperAdminContext(em).fork()` inside an
+  explicit `withEncryptionContext(other, …)` lose to the parent's tenant; that idiom is how
+  a service steps out of the tenant on purpose. The fluent-return fix stays: `persist()` and
+  friends return the proxy, so `em.persist(row).flush()` runs inside the tenant.
+
+## 1.6.6
+
+### Patch Changes
+
+- **A tenant-bound entity manager stays bound through chained calls and forks.**
+
+  `wrapEmWithTenantContext` runs each method inside `withEncryptionContext(tenantId, …)`,
+  but a method that returns the entity manager itself (`persist`, `remove`, the other fluent
+  methods) handed back the _raw_ manager, so `em.persist(row).flush()` ran `flush` outside the
+  context and encrypted the row under whatever tenant the caller happened to be in. An
+  operator promote wrote an organization's subscription under the empty key this way; the
+  row then refused to decrypt under the organization's key.
+
+  A method that returns the manager now returns the proxy, and `fork()` returns a new proxy
+  on the same tenant. Tests cover the chained `persist().flush()` and the fork.
+
 ## 1.6.5
 
 ### Patch Changes
