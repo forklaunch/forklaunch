@@ -216,6 +216,30 @@ forklaunch managed template vars list --slug clinic-portal   # KEY KIND SCOPE SE
 forklaunch managed template vars unset --slug clinic-portal --key LOG_LEVEL --scope application
 ```
 
+### Editing an instance's variables in the dashboard
+
+The application's variables editor (the instance page links to it) shows a
+nested tree — template default → application → this environment/region —
+with an input on **every** row, injected ones included, and a one-line
+source label per row ("set here for production/us-west-2", "inherits the
+application's value", "inherits the template default", "injected by the
+platform at deploy", "your override of the injected value", "unset").
+Three actions on every row:
+
+- **edit** — typing into an injected row makes a user override of it.
+- **Unset** — writes the tombstone `config unset` / `config set KEY=` write;
+  on the next deploy the key has no value here, an inherited
+  application/template value is blocked, and an injected value is
+  suppressed. Shown struck-through with "unset · applies on the next
+  deploy" and a Restore action. Keys the platform owns outright (DB/cache
+  connection identity, `HOST`/`PORT`/`PROTOCOL`, observability endpoints,
+  a worker pair's `QUEUE_NAME`) are re-injected regardless.
+- **Delete** — hard delete, immediate (no Save). On an injected key with an
+  override it reads "Delete override" and the injected value applies again.
+
+Nothing reaches a running instance until its next deploy: `instance
+apply-variables` for one instance, a rollout for the fleet.
+
 ### You do NOT declare the standard platform variables
 
 You only declare **app-specific** variables. The standard infrastructure and
