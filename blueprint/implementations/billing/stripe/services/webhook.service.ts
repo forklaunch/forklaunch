@@ -48,19 +48,23 @@ export type StripeWebhookEventShape = {
   eventData: unknown;
 };
 
+/** Stripe statuses under which the subscription still grants access. */
+const isActiveStatus = (status: Stripe.Subscription.Status): boolean =>
+  status === 'active' || status === 'trialing';
+
 export class StripeWebhookService<
   SchemaValidator extends AnySchemaValidator,
   StatusEnum,
   PartyEnum,
-  BillingPortalEntities extends StripeBillingPortalEntities =
-    StripeBillingPortalEntities,
-  CheckoutSessionEntities extends StripeCheckoutSessionEntities =
-    StripeCheckoutSessionEntities,
-  PaymentLinkEntities extends StripePaymentLinkEntities =
-    StripePaymentLinkEntities,
+  BillingPortalEntities extends
+    StripeBillingPortalEntities = StripeBillingPortalEntities,
+  CheckoutSessionEntities extends
+    StripeCheckoutSessionEntities = StripeCheckoutSessionEntities,
+  PaymentLinkEntities extends
+    StripePaymentLinkEntities = StripePaymentLinkEntities,
   PlanEntities extends StripePlanEntities = StripePlanEntities,
-  SubscriptionEntities extends StripeSubscriptionEntities =
-    StripeSubscriptionEntities,
+  SubscriptionEntities extends
+    StripeSubscriptionEntities = StripeSubscriptionEntities,
   WebhookEventEntity extends StripeWebhookEventShape = StripeWebhookEventShape
 > {
   protected readonly partyEnum: PartyEnum;
@@ -190,20 +194,36 @@ export class StripeWebhookService<
       .filter((f) => f.length > 0);
   }
 
+  /**
+   * Our row for a Stripe subscription. Stripe events carry Stripe's
+   * subscription id, which is our `externalId`, never our primary key.
+   */
+  protected findSubscriptionId(
+    stripeSubscriptionId: string
+  ): Promise<{ id: string } | null> {
+    return this.subscriptionService.baseSubscriptionService.findSubscriptionIdByExternalId(
+      { externalId: stripeSubscriptionId }
+    );
+  }
+
   async handleWebhookEvent(event: Stripe.Event): Promise<void> {
     if (this.openTelemetryCollector) {
       this.openTelemetryCollector.info('Handling webhook event', event);
     }
 
     if (
-      // querying through the structural shape with an internal cast, the same
-      // way the mapper services do (`mapper.entity as typeof Plan`)
+      // The Stripe event id is the idempotency key: `request.idempotency_key`
+      // is null for every event Stripe originates itself (renewals, failed
+      // payments, dashboard edits), and a null in the WHERE clause matched
+      // whatever row happened to have none. Only the id is selected, so the
+      // check never decrypts the recorded payload and works under any tenant.
+      // Querying through the structural shape with an internal cast, the same
+      // way the mapper services do (`mapper.entity as typeof Plan`).
       await this.em.findOne(
         this
           .webhookEventEntity as unknown as EntityName<StripeWebhookEventShape>,
-        {
-          idempotencyKey: event.request?.idempotency_key
-        }
+        { stripeId: event.id },
+        { fields: ['stripeId'] }
       )
     ) {
       this.openTelemetryCollector.info(
@@ -468,16 +488,39 @@ export class StripeWebhookService<
             `Invalid subscription: missing items or plan ID for subscription ${event.data.object.id}`
           );
         }
+        const existing = await this.findSubscriptionId(event.data.object.id);
+        if (!existing) {
+          // An update for a subscription we never recorded (the created
+          // event was missed, or predates this integration): record it now.
+          await this.subscriptionService.baseSubscriptionService.createSubscription(
+            {
+              partyId:
+                typeof event.data.object.customer === 'string'
+                  ? event.data.object.customer
+                  : event.data.object.customer.id,
+              partyType: this.resolvePartyType(event),
+              description: event.data.object.description ?? undefined,
+              active: isActiveStatus(event.data.object.status),
+              productId: event.data.object.items.data[0].plan.id,
+              externalId: event.data.object.id,
+              billingProvider: BillingProviderEnum.STRIPE,
+              startDate: new Date(event.data.object.created * 1000),
+              endDate: event.data.object.cancel_at
+                ? new Date(event.data.object.cancel_at * 1000)
+                : undefined,
+              status: event.data.object.status
+            }
+          );
+          break;
+        }
+        // The party is the application's to assign (it maps Stripe customers
+        // onto its own users or organizations after the fact), so an update
+        // never rewrites it.
         await this.subscriptionService.baseSubscriptionService.updateSubscription(
           {
-            id: event.data.object.id,
-            partyId:
-              typeof event.data.object.customer === 'string'
-                ? event.data.object.customer
-                : event.data.object.customer.id,
-            partyType: this.resolvePartyType(event),
+            id: existing.id,
             description: event.data.object.description ?? undefined,
-            active: true,
+            active: isActiveStatus(event.data.object.status),
             externalId: event.data.object.id,
             billingProvider: BillingProviderEnum.STRIPE,
             startDate: new Date(event.data.object.created * 1000),
@@ -492,23 +535,32 @@ export class StripeWebhookService<
       }
 
       case 'customer.subscription.deleted': {
-        await this.subscriptionService.deleteSubscription({
-          id: event.data.object.id
-        });
+        const existing = await this.findSubscriptionId(event.data.object.id);
+        if (existing) {
+          await this.subscriptionService.baseSubscriptionService.deleteSubscription(
+            existing
+          );
+        }
         break;
       }
 
       case 'customer.subscription.paused': {
-        await this.subscriptionService.cancelSubscription({
-          id: event.data.object.id
-        });
+        const existing = await this.findSubscriptionId(event.data.object.id);
+        if (existing) {
+          await this.subscriptionService.baseSubscriptionService.cancelSubscription(
+            existing
+          );
+        }
         break;
       }
 
       case 'customer.subscription.resumed': {
-        await this.subscriptionService.resumeSubscription({
-          id: event.data.object.id
-        });
+        const existing = await this.findSubscriptionId(event.data.object.id);
+        if (existing) {
+          await this.subscriptionService.baseSubscriptionService.resumeSubscription(
+            existing
+          );
+        }
         break;
       }
 
