@@ -125,6 +125,11 @@ pub(crate) fn add_relay_module(
     if let Some(template) = inject_relay_into_entities_index(&iam_dir)? {
         rendered_templates.push(template);
     }
+    // Barrel first, then the sdk that imports through it — the order does not
+    // matter to the writer, but it is the order a reader needs.
+    if let Some(template) = inject_claim_mint_into_controllers_index(&iam_dir)? {
+        rendered_templates.push(template);
+    }
     if let Some(template) = inject_claim_mint_into_sdk_ts(&iam_dir)? {
         rendered_templates.push(template);
     }
@@ -398,6 +403,32 @@ fn inject_relay_into_registrations_ts(iam_dir: &Path) -> Result<Option<RenderedT
     }))
 }
 
+/// Re-exports the claim-mint controller from the controllers barrel.
+///
+/// `sdk.ts` imports from `./api/controllers`, the barrel — not from the
+/// controller file directly — so a handler absent from it is invisible there
+/// however correctly it is written. The relay's own controller never needed
+/// this because nothing imports it through the barrel: its router reaches for
+/// the file by path, and it is not in the sdk at all.
+fn inject_claim_mint_into_controllers_index(iam_dir: &Path) -> Result<Option<RenderedTemplate>> {
+    let index_path = iam_dir.join("api").join("controllers").join("index.ts");
+    let content = read_to_string(&index_path)
+        .map_err(|_| anyhow::anyhow!(error_failed_to_read_file(&index_path)))?;
+
+    if content.contains("claim-mint.controller") {
+        return Ok(None);
+    }
+
+    let mut updated = content.trim_end().to_string();
+    updated.push_str("\nexport * from './claim-mint.controller';\n");
+
+    Ok(Some(RenderedTemplate {
+        path: index_path,
+        content: updated,
+        context: None,
+    }))
+}
+
 /// Registers the claim-mint handler in the service's `sdk.ts`.
 ///
 /// This is the one injection the relay's own endpoint never needed, and it is
@@ -666,6 +697,35 @@ mod tests {
             embedded("project/iam-better-auth/sdk.ts"),
         )
         .unwrap();
+
+        // sdk.ts imports through the barrel, so the handler has to be
+        // exported there too — an omission the compiler only reports from
+        // sdk.ts, pointing at a line that looks correct.
+        create_dir_all(iam.join("api").join("controllers")).unwrap();
+        write(
+            iam.join("api").join("controllers").join("index.ts"),
+            embedded("project/iam-better-auth/api/controllers/index.ts"),
+        )
+        .unwrap();
+        let barrel = inject_claim_mint_into_controllers_index(&iam)
+            .unwrap()
+            .expect("the controllers barrel must re-export the handler");
+        assert!(
+            barrel
+                .content
+                .contains("export * from './claim-mint.controller';")
+        );
+        write(
+            iam.join("api").join("controllers").join("index.ts"),
+            &barrel.content,
+        )
+        .unwrap();
+        assert!(
+            inject_claim_mint_into_controllers_index(&iam)
+                .unwrap()
+                .is_none(),
+            "re-running must not export it twice"
+        );
 
         let rendered = inject_claim_mint_into_sdk_ts(&iam).unwrap().unwrap();
 
