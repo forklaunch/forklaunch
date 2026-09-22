@@ -1,5 +1,177 @@
 # @forklaunch/core
 
+## 1.6.7
+
+### Patch Changes
+
+- A tenant-bound entity manager leaves `fork()` unbound again. 1.6.6 returned a proxy on
+  the parent's tenant from `fork()`, which made `getSuperAdminContext(em).fork()` inside an
+  explicit `withEncryptionContext(other, …)` lose to the parent's tenant; that idiom is how
+  a service steps out of the tenant on purpose. The fluent-return fix stays: `persist()` and
+  friends return the proxy, so `em.persist(row).flush()` runs inside the tenant.
+
+## 1.6.6
+
+### Patch Changes
+
+- **A tenant-bound entity manager stays bound through chained calls and forks.**
+
+  `wrapEmWithTenantContext` runs each method inside `withEncryptionContext(tenantId, …)`,
+  but a method that returns the entity manager itself (`persist`, `remove`, the other fluent
+  methods) handed back the _raw_ manager, so `em.persist(row).flush()` ran `flush` outside the
+  context and encrypted the row under whatever tenant the caller happened to be in. An
+  operator promote wrote an organization's subscription under the empty key this way; the
+  row then refused to decrypt under the organization's key.
+
+  A method that returns the manager now returns the proxy, and `fork()` returns a new proxy
+  on the same tenant. Tests cover the chained `persist().flush()` and the fork.
+
+## 1.6.5
+
+### Patch Changes
+
+- `ResolvedRelation` no longer special-cases `any`. A conditional type on `any` takes every
+  branch, so an `any` field resolves to a union no concrete value satisfies; the 1.6.4 guard
+  hid that instead of surfacing it. Shape entities that stand in for an app-defined enum
+  should declare the column as `fp.enum<string[]>()` (a string column with unknown members)
+  rather than `fp.enum()`, which infers `any`. The type test now uses that form and fails on
+  the untyped one.
+
+## 1.6.4
+
+### Patch Changes
+
+- `ResolvedRelation` passes `any` through instead of treating it as an entity. A shape
+  entity that declares `fp.enum()` without naming the enum infers the field as `any`, and
+  `keyof any` contains every symbol, so the previous check saw an entity there and produced
+  an index-signature type the app's real enum could not satisfy.
+
+## 1.6.3
+
+### Patch Changes
+
+- **`ResolvedEntity` now resolves relation targets, so module entity constraints keep working on mikro-orm 7.2.**
+
+  mikro-orm 7.2 declares its `defineEntity` property builders invariant (`in out`). The
+  builder record an inferred entity carries in its `IndexHints` slot therefore no longer
+  unifies between two definitions of "the same" entity: a module's minimal `Permission`
+  (`id`, `slug`) and an application's real one (`id` generated `onCreate`, timestamps,
+  `.unique()` on `slug`). `ResolvedEntity` already dropped that slot on the entity being
+  compared, but not on the entities behind its relations, so any constraint that crossed a
+  `Collection<Permission>` or a `manyToOne(Organization)` failed to compile
+  (`Type 'RoleMapperTypes' does not satisfy the constraint 'RoleEntities'` in the IAM
+  module).
+
+  `ResolvedEntity<T>` now maps `Collection<E>` to `Collection<ResolvedEntity<E>>`,
+  `Reference<E>` to `Reference<ResolvedEntity<E>>`, and a bare related entity to
+  `ResolvedEntity<E>`; scalars, dates, enums and `null`/`undefined` pass through. The new
+  `ResolvedRelation<V>` helper is exported for the per-field case. Type tests cover a
+  to-many, a nullable to-one, and the negative case.
+
+## 1.6.2
+
+### Patch Changes
+
+- Refresh dependencies to their latest published versions.
+
+  `@mikro-orm/*` moves from 7.1.15 to 7.2.1 in every package that pins it,
+  as one step: the framework, the blueprint and the CLI's scaffold constants
+  all agree on a single MikroORM version, so a freshly generated app resolves
+  exactly one copy (the duplicate-package type errors from mixed pins are the
+  reason it is pinned exactly). `@aws-sdk/client-s3` 3.1131 → 3.1136 in
+  infrastructure-s3. The rest is devDependency movement; `@types/node` 26.6
+  added `Socket.server`, which the Bun socket shim in express now declares.
+
+  Packages with only devDependency changes release too, so the whole
+  framework carries one MikroORM version on npm.
+
+- Updated dependencies
+  - @forklaunch/validator@1.2.28
+  - @forklaunch/common@1.2.27
+
+## 1.6.1
+
+### Patch Changes
+
+- **`wrapEmWithTenantContext(em, '')` now binds the empty tenant, and never leaks a tenant into the caller.**
+
+  Global rows (a billing plan, a trial, a template) are encrypted under the
+  empty tenant. Two defects together made reading or writing them depend on
+  what had run earlier on the same worker:
+
+  - `''` was treated like `undefined` ("do not wrap"), so a caller asking for
+    the no-tenant key got an entity manager bound to nothing.
+  - The wrapper called `setEncryptionTenantId`, whose `enterWith` mutates the
+    calling async resource. After one org-scoped EM was created on a request,
+    a later "no-tenant" EM silently read and wrote under that org's key.
+
+  The visible symptom was intermittent `Failed to decrypt encrypted column
+value` on rows that were encrypted correctly. Now `''` returns a Proxy that
+  runs every EM call inside `withEncryptionContext('', …)`, only `undefined`
+  skips wrapping, the tenant filter is set only for a real tenant id, and the
+  wrapper no longer touches the caller's context. Tests cover all four cases.
+
+## 1.6.0
+
+### Minor Changes
+
+- **Encryption key ring and rotation sweep.**
+
+  `FieldEncryptor` now holds a ring: the current key plus any number of
+  previous keys (`new FieldEncryptor(key, { previousKeys })`, or
+  `FieldEncryptor.fromEnv()` reading `ENCRYPTION_KEY` and
+  `LEGACY_ENCRYPTION_KEYS`). Writes use the current key; reads try the current
+  key and then each previous key, so `ENCRYPTION_KEY` can change without a
+  downtime window. Single-key behaviour and the on-disk `v2:` format are
+  unchanged.
+
+  - `open()` reports which key opened a value (by fingerprint) and whether a
+    rewrite would change it; `needsRotation()`, `rotate()`, `keyIds`,
+    `withPreviousKeys()`, `withFormat()`.
+  - New `v3:{keyId}:{iv}:{tag}:{data}` envelope, opt-in via
+    `ENCRYPTION_FORMAT=v3`: reads resolve the key directly, a missing key fails
+    by name, and `countValuesByKeyId()` answers "can this key be dropped?"
+    without decrypting. Every reader (`EncryptedType`, the redis cache, the S3
+    store) accepts all three envelopes.
+  - `reencryptEncryptedColumns()` is the rotation sweep for migrations: walks
+    every entity with `pii`/`phi`/`pci` fields, rewrites what is still under a
+    previous key with the same tenant it was written with, tries every known
+    organization as a fallback tenant, and reports per table.
+
+  See `docs/compliance/key-rotation.md` for the three-step rotation.
+
+## 1.5.20
+
+### Patch Changes
+
+- **Security:** authorization failures no longer log the credential.
+
+  `parseRequestAuth` wrote the raw `Authorization` header value into the
+  "JWT Verification Failed" and "Authorization Failed" log lines. For bearer
+  auth that is a token that stays valid until it expires; for basic auth it is
+  a password. Affected: every release up to and including 1.5.19. If your
+  application logs are shipped outside your own infrastructure, rotate any
+  token that failed authorization while on an affected version.
+
+  The log line now carries what the credential was for, not the credential:
+
+  - `reason`: `jwt_expired`, `jwt_bad_signature`, `jwt_malformed`,
+    `jwks_no_key`, `jwks_unavailable`, `jwt_claim_<name>`. Previously an
+    expired token and a forged one produced identical lines.
+  - `claimed`: the decoded, **unverified** `sub`, `organizationId`, `iss`,
+    `exp` and `kid`. Labelled `claimed` because on a failed verification they
+    are whatever the caller wrote. `email` is deliberately omitted.
+  - `tokenFingerprint`: the first 8 hex characters of SHA-256 of the header
+    value, to correlate retries and match a token you hold against a line.
+    Not reversible.
+  - `hasToken`.
+
+  Both lines move from `error` to `warn`: an expired token is normal traffic.
+
+  The JWKS verification path now surfaces the last `jose` error instead of
+  swallowing it, so `reason` is populated for `jwksPublicKeyUrl` consumers.
+  Status codes and response bodies are unchanged.
+
 ## 1.5.19
 
 ### Patch Changes

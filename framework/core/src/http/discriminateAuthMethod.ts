@@ -197,17 +197,23 @@ export async function discriminateAuthMethod<
         jwks = [jwt.jwksPublicKey];
       }
       verificationFunction = async (token) => {
+        // Keep the last failure so the middleware can log WHY (expired vs
+        // bad signature) instead of a bare "invalid token". The caller's
+        // catch maps any throw to the same 403 as an undefined return.
+        let lastError: unknown;
         for (const key of jwks) {
           try {
             const { payload } = await jwtVerify(token, key);
             return payload;
-          } catch {
+          } catch (error) {
+            lastError = error;
             cachedJwks.value = null;
             cachedJwks.lastUpdated = null;
             cachedJwks.ttl = DEFAULT_TTL;
             continue;
           }
         }
+        if (lastError !== undefined) throw lastError;
       };
     }
     authMethod = {

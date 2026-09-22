@@ -1,5 +1,58 @@
 # @forklaunch/infrastructure-s3
 
+## 1.4.15
+
+### Patch Changes
+
+- Refresh dependencies to their latest published versions.
+
+  `@mikro-orm/*` moves from 7.1.15 to 7.2.1 in every package that pins it,
+  as one step: the framework, the blueprint and the CLI's scaffold constants
+  all agree on a single MikroORM version, so a freshly generated app resolves
+  exactly one copy (the duplicate-package type errors from mixed pins are the
+  reason it is pinned exactly). `@aws-sdk/client-s3` 3.1131 → 3.1136 in
+  infrastructure-s3. The rest is devDependency movement; `@types/node` 26.6
+  added `Socket.server`, which the Bun socket shim in express now declares.
+
+  Packages with only devDependency changes release too, so the whole
+  framework carries one MikroORM version on npm.
+
+- Updated dependencies
+  - @forklaunch/core@1.6.2
+  - @forklaunch/common@1.2.27
+
+## 1.4.14
+
+### Patch Changes
+
+- **Encryption key ring and rotation sweep.**
+
+  `FieldEncryptor` now holds a ring: the current key plus any number of
+  previous keys (`new FieldEncryptor(key, { previousKeys })`, or
+  `FieldEncryptor.fromEnv()` reading `ENCRYPTION_KEY` and
+  `LEGACY_ENCRYPTION_KEYS`). Writes use the current key; reads try the current
+  key and then each previous key, so `ENCRYPTION_KEY` can change without a
+  downtime window. Single-key behaviour and the on-disk `v2:` format are
+  unchanged.
+
+  - `open()` reports which key opened a value (by fingerprint) and whether a
+    rewrite would change it; `needsRotation()`, `rotate()`, `keyIds`,
+    `withPreviousKeys()`, `withFormat()`.
+  - New `v3:{keyId}:{iv}:{tag}:{data}` envelope, opt-in via
+    `ENCRYPTION_FORMAT=v3`: reads resolve the key directly, a missing key fails
+    by name, and `countValuesByKeyId()` answers "can this key be dropped?"
+    without decrypting. Every reader (`EncryptedType`, the redis cache, the S3
+    store) accepts all three envelopes.
+  - `reencryptEncryptedColumns()` is the rotation sweep for migrations: walks
+    every entity with `pii`/`phi`/`pci` fields, rewrites what is still under a
+    previous key with the same tenant it was written with, tries every known
+    organization as a fallback tenant, and reports per table.
+
+  See `docs/compliance/key-rotation.md` for the three-step rotation.
+
+- Updated dependencies
+  - @forklaunch/core@1.6.0
+
 ## 1.4.13
 
 ### Patch Changes

@@ -27,116 +27,53 @@ export type StripeBillingPortalEntities = {
 };
 
 // Checkout Session Types
-export type StripeCheckoutSessionEntities<StatusEnum> = {
+export type StripeCheckoutSessionEntities = {
   CheckoutSessionMapper: {
-    '~entity': ResolvedEntity<(typeof CheckoutSession)['~entity']> & {
-      paymentMethods: PaymentMethodEnum[keyof PaymentMethodEnum][];
-      currency: CurrencyEnum[keyof CurrencyEnum];
-      status: StatusEnum[keyof StatusEnum];
-    };
+    '~entity': ResolvedEntity<(typeof CheckoutSession)['~entity']>;
   };
   CreateCheckoutSessionMapper: {
-    '~entity': ResolvedEntity<(typeof CheckoutSession)['~entity']> & {
-      paymentMethods: PaymentMethodEnum[keyof PaymentMethodEnum][];
-      currency: CurrencyEnum[keyof CurrencyEnum];
-      status: StatusEnum[keyof StatusEnum];
-    };
+    '~entity': ResolvedEntity<(typeof CheckoutSession)['~entity']>;
   };
   UpdateCheckoutSessionMapper: {
-    '~entity': ResolvedEntity<(typeof CheckoutSession)['~entity']> & {
-      paymentMethods: PaymentMethodEnum[keyof PaymentMethodEnum][];
-      currency: CurrencyEnum[keyof CurrencyEnum];
-      status: StatusEnum[keyof StatusEnum];
-    };
+    '~entity': ResolvedEntity<(typeof CheckoutSession)['~entity']>;
   };
 };
 
 // Payment Link Types
-export type StripePaymentLinkEntities<StatusEnum> = {
+export type StripePaymentLinkEntities = {
   PaymentLinkMapper: {
-    '~entity': ResolvedEntity<(typeof PaymentLink)['~entity']> & {
-      paymentMethods: PaymentMethodEnum[keyof PaymentMethodEnum][];
-      currency: CurrencyEnum[keyof CurrencyEnum];
-      status: StatusEnum[keyof StatusEnum];
-    };
+    '~entity': ResolvedEntity<(typeof PaymentLink)['~entity']>;
   };
   CreatePaymentLinkMapper: {
-    '~entity': ResolvedEntity<(typeof PaymentLink)['~entity']> & {
-      paymentMethods: PaymentMethodEnum[keyof PaymentMethodEnum][];
-      currency: CurrencyEnum[keyof CurrencyEnum];
-      status: StatusEnum[keyof StatusEnum];
-    };
+    '~entity': ResolvedEntity<(typeof PaymentLink)['~entity']>;
   };
   UpdatePaymentLinkMapper: {
-    '~entity': ResolvedEntity<(typeof PaymentLink)['~entity']> & {
-      paymentMethods: PaymentMethodEnum[keyof PaymentMethodEnum][];
-      currency: CurrencyEnum[keyof CurrencyEnum];
-      status: StatusEnum[keyof StatusEnum];
-    };
+    '~entity': ResolvedEntity<(typeof PaymentLink)['~entity']>;
   };
 };
 
 // Plan Types
 export type StripePlanEntities = {
   PlanMapper: {
-    '~entity': ResolvedEntity<(typeof Plan)['~entity']> & {
-      cadence: PlanCadenceEnum[keyof PlanCadenceEnum];
-      currency: CurrencyEnum[keyof CurrencyEnum];
-      billingProvider:
-        | BillingProviderEnum[keyof BillingProviderEnum]
-        | null
-        | undefined;
-    };
+    '~entity': ResolvedEntity<(typeof Plan)['~entity']>;
   };
   CreatePlanMapper: {
-    '~entity': ResolvedEntity<(typeof Plan)['~entity']> & {
-      cadence: PlanCadenceEnum[keyof PlanCadenceEnum];
-      currency: CurrencyEnum[keyof CurrencyEnum];
-      billingProvider:
-        | BillingProviderEnum[keyof BillingProviderEnum]
-        | null
-        | undefined;
-    };
+    '~entity': ResolvedEntity<(typeof Plan)['~entity']>;
   };
   UpdatePlanMapper: {
-    '~entity': ResolvedEntity<(typeof Plan)['~entity']> & {
-      cadence: PlanCadenceEnum[keyof PlanCadenceEnum];
-      currency: CurrencyEnum[keyof CurrencyEnum];
-      billingProvider:
-        | BillingProviderEnum[keyof BillingProviderEnum]
-        | null
-        | undefined;
-    };
+    '~entity': ResolvedEntity<(typeof Plan)['~entity']>;
   };
 };
 
 // Subscription Types
-export type StripeSubscriptionEntities<PartyTypeEnum> = {
+export type StripeSubscriptionEntities = {
   SubscriptionMapper: {
-    '~entity': ResolvedEntity<(typeof Subscription)['~entity']> & {
-      partyType: PartyTypeEnum[keyof PartyTypeEnum];
-      billingProvider:
-        | BillingProviderEnum[keyof BillingProviderEnum]
-        | null
-        | undefined;
-    };
+    '~entity': ResolvedEntity<(typeof Subscription)['~entity']>;
   };
   CreateSubscriptionMapper: {
-    '~entity': ResolvedEntity<(typeof Subscription)['~entity']> & {
-      partyType: PartyTypeEnum[keyof PartyTypeEnum];
-      billingProvider:
-        | BillingProviderEnum[keyof BillingProviderEnum]
-        | null
-        | undefined;
-    };
+    '~entity': ResolvedEntity<(typeof Subscription)['~entity']>;
   };
   UpdateSubscriptionMapper: {
-    '~entity': ResolvedEntity<(typeof Subscription)['~entity']> & {
-      partyType: PartyTypeEnum[keyof PartyTypeEnum];
-      billingProvider:
-        | BillingProviderEnum[keyof BillingProviderEnum]
-        | null
-        | undefined;
-    };
+    '~entity': ResolvedEntity<(typeof Subscription)['~entity']>;
   };
 };

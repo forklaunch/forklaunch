@@ -4,19 +4,21 @@ use reqwest::{
     blocking::{Client, Response},
 };
 use serde_json::Value;
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 
 use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use super::hmac::{AuthMode, generate_hmac_auth_header};
-use super::token::{get_token, get_token_path};
+use super::token::{force_refresh_token, get_token, get_token_path};
 
 /// Makes an authenticated HTTP request with automatic token refresh and retry logic
 ///
-/// If the request returns 401 or 403, this function will:
-/// 1. Force token refresh by calling get_token() again
-/// 2. Retry the request once with the new token
-/// 3. If refresh fails, trigger auto re-login flow
+/// Only a 401 means the credential itself was rejected. On 401 this function
+/// refreshes the token (or, if that fails, runs the login flow) and retries
+/// once. A 403 is a permission answer about a signed-in user ("you may not do
+/// this"), so it is returned to the caller as-is: it used to be treated like
+/// a 401, which deleted a perfectly valid login every time a viewer-role user
+/// hit a write endpoint.
 pub fn make_authenticated_request(
     method: Method,
     url: &str,
@@ -24,9 +26,7 @@ pub fn make_authenticated_request(
 ) -> Result<Response> {
     match try_authenticated_request(method.clone(), url, body.clone(), false) {
         Ok(response) => {
-            let status = response.status();
-
-            if status == 401 || status == 403 {
+            if response.status() == 401 {
                 handle_auth_failure_and_retry(method, url, body)
             } else {
                 Ok(response)
@@ -82,20 +82,25 @@ fn handle_auth_failure_and_retry(
 ) -> Result<Response> {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-    // Try to refresh the token first by deleting the token file
-    // This will trigger a fresh token fetch on next get_token() call
-    let token_path = get_token_path()?;
-    if token_path.exists() {
-        std::fs::remove_file(&token_path)?;
-    }
-
-    match get_token() {
-        Ok(_) => {
-            try_authenticated_request(method, url, body, false)
-        }
+    // The server rejected the access token. Try the silent refresh path
+    // first; only if that still fails do we discard the stored login and
+    // ask the user.
+    match force_refresh_token() {
+        Ok(_) => try_authenticated_request(method, url, body, false),
         Err(_) => {
+            let token_path = get_token_path()?;
+            if token_path.exists() {
+                std::fs::remove_file(&token_path)?;
+            }
             log_warn!(stdout, "\nAuthentication expired. Please log in again.");
 
+            // No terminal means nobody can complete the device flow; a
+            // clear error beats a login prompt that hangs a CI job.
+            if !std::io::stdin().is_terminal() {
+                anyhow::bail!(
+                    "Authentication expired and no terminal is attached. Run `forklaunch login` (or `forklaunch login --token <token>`) and retry"
+                );
+            }
             crate::login::login()?;
             try_authenticated_request(method, url, body, false)
         }

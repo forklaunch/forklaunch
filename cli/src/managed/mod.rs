@@ -6,11 +6,13 @@ use crate::{CliCommand, core::command::command};
 mod client;
 pub(crate) mod detect;
 mod instance;
+mod rollout;
 mod summary;
 mod template;
 mod types;
 
 use instance::InstanceCommand;
+use rollout::RolloutCommand;
 use summary::SummaryCommand;
 use template::TemplateCommand;
 
@@ -25,6 +27,7 @@ pub(crate) struct ManagedCommand {
     summary: SummaryCommand,
     template: TemplateCommand,
     instance: InstanceCommand,
+    rollout: RolloutCommand,
 }
 
 impl ManagedCommand {
@@ -33,6 +36,7 @@ impl ManagedCommand {
             summary: SummaryCommand::new(),
             template: TemplateCommand::new(),
             instance: InstanceCommand::new(),
+            rollout: RolloutCommand::new(),
         }
     }
 }
@@ -55,6 +59,9 @@ impl CliCommand for ManagedCommand {
              \x20 3. template publish-template  flip the template itself to PUBLISHED\n\
              \x20 4. instance create            launch a copy for one customer\n\
              \x20 5. instance claim-link        reveal the one-time link, hand it to them\n\n\
+             Later: `template publish` a new version, then `rollout start` moves the fleet to\n\
+             it in waves (a small canary first). `instance get|update|apply-variables|\n\
+             deployments|resume|reset` drive one instance's lifecycle.\n\n\
              Steps 2 and 3 are both required and are NOT the same thing — see\n\
              `forklaunch managed template --help`.\n\n\
              All of these commands talk to the ForkLaunch control plane (platform-management),\n\
@@ -65,6 +72,7 @@ impl CliCommand for ManagedCommand {
         .subcommand(self.summary.command())
         .subcommand(self.template.command())
         .subcommand(self.instance.command())
+        .subcommand(self.rollout.command())
         .subcommand_required(true)
     }
 
@@ -73,6 +81,7 @@ impl CliCommand for ManagedCommand {
             Some(("summary", sub_matches)) => self.summary.handler(sub_matches),
             Some(("template", sub_matches)) => self.template.handler(sub_matches),
             Some(("instance", sub_matches)) => self.instance.handler(sub_matches),
+            Some(("rollout", sub_matches)) => self.rollout.handler(sub_matches),
             _ => unreachable!(),
         }
     }

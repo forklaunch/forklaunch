@@ -28,8 +28,7 @@ export class BasePaymentService<
   SchemaValidator extends AnySchemaValidator,
   MapperEntities extends BasePaymentEntities,
   MapperDomains extends BasePaymentDtos = BasePaymentDtos
-> implements PaymentService
-{
+> implements PaymentService {
   private evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;

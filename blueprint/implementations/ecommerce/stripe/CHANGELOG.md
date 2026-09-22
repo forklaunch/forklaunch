@@ -1,5 +1,48 @@
 # @forklaunch/implementation-ecommerce-stripe
 
+## 1.0.5
+
+### Patch Changes
+
+- `@forklaunch/core` 1.6.5, and shape entities that carry no `any`.
+
+  The implementation packages describe the entities they work with through minimal "shape"
+  entities. Their enum columns were declared `fp.enum()` with no members, which infers
+  `any`; `ResolvedEntity` in core 1.6.5 no longer papers over that, so every such column is
+  now `fp.enum<string[]>()`: a string column whose members the application supplies.
+
+  With the shape typed honestly, the `& { status: StatusEnum[keyof StatusEnum] }`
+  intersections on the entity constraint types (`OrganizationEntities`, `BaseSmsEntities`,
+  `BaseCheckoutSessionEntities`, `BasePaymentLinkEntities`, `BasePlanEntities`,
+  `BaseSubscriptionEntities`, and the Stripe equivalents) had to go: a service queries with
+  the shape schema (`entity as typeof Plan`), and that cast is only valid when the shape is
+  comparable to the constraint, which a generic enum member never is. The services never
+  read those columns; the DTO types still carry the enums, and the application's mapper is
+  where entity and DTO meet. The constraint types therefore lose their enum type parameters
+  (`BasePlanEntities<Cadence, Currency, Provider>` is now `BasePlanEntities`); services and
+  mapper types keep theirs for the DTO side.
+
+- Updated dependencies
+  - @forklaunch/implementation-ecommerce-base@1.0.10
+  - @forklaunch/interfaces-ecommerce@1.0.10
+
+## 1.0.4
+
+### Patch Changes
+
+- Refresh dependencies to their latest published versions and move to `@forklaunch/core`
+  1.6.4 on mikro-orm 7.2.1.
+
+  The framework, the blueprint and the CLI's scaffold constants now agree on a single
+  mikro-orm version (7.2.1, pinned exactly), so a generated app resolves one copy. The
+  worker implementations (bullmq, database, kafka, redis) now declare `@forklaunch/validator`
+  directly: their schema resolvers name `AnySchemaValidator` in emitted declarations, and
+  TypeScript refuses to reference a package that is not a dependency of the emitting one.
+
+- Updated dependencies
+  - @forklaunch/implementation-ecommerce-base@1.0.9
+  - @forklaunch/interfaces-ecommerce@1.0.9
+
 ## 1.0.3
 
 ### Patch Changes

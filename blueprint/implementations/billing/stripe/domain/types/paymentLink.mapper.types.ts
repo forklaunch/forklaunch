@@ -5,7 +5,7 @@ import { StripePaymentLinkEntities } from './stripe.entity.types';
 
 export type StripePaymentLinkMappers<
   StatusEnum,
-  Entities extends StripePaymentLinkEntities<StatusEnum>,
+  Entities extends StripePaymentLinkEntities,
   Dto extends StripePaymentLinkDtos<StatusEnum>
 > = {
   PaymentLinkMapper: {

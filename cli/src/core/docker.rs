@@ -2600,6 +2600,7 @@ mod tests {
             resources: None,
             routers: None,
             metadata: None,
+            serves: None,
         }];
         let docker_compose = DockerCompose {
             version: None,

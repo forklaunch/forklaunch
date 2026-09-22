@@ -29,7 +29,129 @@ pub(super) struct ManagedInstance {
     pub(super) claimed_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) created_at: Option<String>,
+    // Lifecycle detail the control plane added with the instance page: the tier,
+    // whether fleet rollouts may touch it, where a launch stands with the approval
+    // gate, the deployment handle to follow, and the reset / propagation markers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) application_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) latest_deployment_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) instance_size: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) update_policy: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) update_deferred_until: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) launch_approval_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) last_reset_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) reset_count: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) pending_update: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) app_claimed_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) environment: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) adopted: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) key_generation: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) last_key_rotation_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) frontend_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) endpoints: Option<std::collections::BTreeMap<String, String>>,
 }
+
+/// One deployment of an instance's backing application, as the control plane's
+/// `GET /managed-mode/instances/:id/deployments` reports it.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct InstanceDeployment {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) release_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) deployed_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) created_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) error_message: Option<String>,
+}
+
+/// A `202 { state }` answer: the control plane accepted a lifecycle request and moved
+/// the row; the outcome lands later (poll `instance get`).
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct StateAccepted {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) state: Option<String>,
+}
+
+/// `202 { state, keyGeneration }` from a key rotation.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct RotationAccepted {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) key_generation: Option<u64>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct FleetRolloutItem {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) instance_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) wave: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) current_version_semver: Option<String>,
+}
+
+/// A canary rollout of a published template version across a product's fleet.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct FleetRollout {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) template_slug: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) target_version_semver: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) state: Option<String>,
+    #[serde(default)]
+    pub(super) wave_percents: Vec<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) current_wave: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) failure_threshold_percent: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) started_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) finished_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) created_at: Option<String>,
+    #[serde(default)]
+    pub(super) items: Vec<FleetRolloutItem>,
+}
+
+/// The compute tiers a managed instance may run at. `pico` is the managed default.
+pub(super) const INSTANCE_SIZES: &[&str] = &["pico", "nano", "micro", "small", "medium", "large"];
+
+/// Whether a fleet rollout may touch an instance.
+pub(super) const UPDATE_POLICIES: &[&str] = &["auto", "deferred"];
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -44,6 +166,54 @@ pub(super) struct AppTemplate {
     pub(super) status: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) source_repo: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) cluster_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) base_domain: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) frontend_domain: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) default_instance_size: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) supports_key_rotation: Option<bool>,
+}
+
+/// Where every instance of a template runs. Decided once by the publisher; a
+/// component's own manifest `hostingType` still wins over it.
+pub(super) const CLUSTER_TYPES: &[&str] = &["org-shared", "platform-shared", "dedicated"];
+
+/// How the relay hands a provider callback to an instance: `redirect` 302s the browser
+/// to the component with the provider's query intact (browser OAuth — Epic with PKCE);
+/// `forward` HMAC-posts it over the mesh (webhooks).
+pub(super) const RELAY_ROUTE_MODES: &[&str] = &["redirect", "forward"];
+
+/// One declared relay route, as `GET /managed-mode/templates/:slug/relay-config`
+/// reports it (with the URL to register at the provider) and as `PUT
+/// .../relay-routes` accepts it (without).
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct RelayRoute {
+    pub(super) name: String,
+    pub(super) component: String,
+    pub(super) path: String,
+    pub(super) mode: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) callback_url: Option<String>,
+}
+
+/// The product's relay contract: the one callback URL to register with a provider,
+/// the state shape instances must mint, and the declared routes.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct RelayConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) template_slug: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) callback_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) state_format: Option<String>,
+    #[serde(default)]
+    pub(super) routes: Vec<RelayRoute>,
 }
 
 /// The template statuses the platform defines. A template is created as `draft`;
@@ -88,6 +258,7 @@ pub(super) const INSTANCE_STATES: &[&str] = &[
     "awaiting_claim_blocked",
     "active",
     "suspended",
+    "resetting",
     "destroying",
     "destroyed",
 ];

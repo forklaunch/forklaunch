@@ -21,8 +21,7 @@ export class BaseBillingPortalService<
   SchemaValidator extends AnySchemaValidator,
   MapperEntities extends BaseBillingEntities,
   MapperDomains extends BaseBillingDtos = BaseBillingDtos
-> implements BillingPortalService
-{
+> implements BillingPortalService {
   private evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;

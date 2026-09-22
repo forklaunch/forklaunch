@@ -5,7 +5,7 @@ import { StripeCheckoutSessionEntities } from './stripe.entity.types';
 
 export type StripeCheckoutSessionMappers<
   StatusEnum,
-  Entities extends StripeCheckoutSessionEntities<StatusEnum>,
+  Entities extends StripeCheckoutSessionEntities,
   Dto extends StripeCheckoutSessionDtos<StatusEnum>
 > = {
   CheckoutSessionMapper: {

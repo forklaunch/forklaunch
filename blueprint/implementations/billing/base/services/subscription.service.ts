@@ -21,16 +21,10 @@ export class BaseSubscriptionService<
   SchemaValidator extends AnySchemaValidator,
   PartyType,
   BillingProviderType,
-  MapperEntities extends BaseSubscriptionEntities<
-    PartyType,
-    BillingProviderType
-  >,
-  Dto extends BaseSubscriptionDtos<
-    PartyType,
-    BillingProviderType
-  > = BaseSubscriptionDtos<PartyType, BillingProviderType>
-> implements SubscriptionService<PartyType, BillingProviderType>
-{
+  MapperEntities extends BaseSubscriptionEntities,
+  Dto extends BaseSubscriptionDtos<PartyType, BillingProviderType> =
+    BaseSubscriptionDtos<PartyType, BillingProviderType>
+> implements SubscriptionService<PartyType, BillingProviderType> {
   protected evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;

@@ -20,7 +20,7 @@ import { createClient, RedisClientOptions } from 'redis';
 type RedisCommandRawReply =
   string | number | Buffer | null | undefined | Array<RedisCommandRawReply>;
 
-const ENCRYPTED_PREFIXES = ['v1:', 'v2:'] as const;
+const ENCRYPTED_PREFIXES = ['v1:', 'v2:', 'v3:'] as const;
 
 function isEncrypted(value: string): boolean {
   return ENCRYPTED_PREFIXES.some((p) => value.startsWith(p));

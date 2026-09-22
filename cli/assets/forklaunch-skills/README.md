@@ -1,31 +1,72 @@
 # ForkLaunch Skills for Claude Code
 
-Skills that teach Claude Code (and developers) how to build with ForkLaunch.
+Skills that teach Claude Code (and developers) how to build with, and operate, ForkLaunch.
+
+## Agent Behavior (applies to every skill, not just the one you're reading)
+
+**CLI-first, API-fallback — but never blindly retry a mutation.** For anything that talks to the
+ForkLaunch control plane — deployments, logs, alerts, infrastructure, issues — try the matching
+`fl` command first. If no CLI command covers the action yet, or a **read-only** command fails
+(a `GET`/list/status check), falling back to a direct API call is safe — reads have no side
+effects to duplicate. If a **mutating** command fails (create, deploy, delete, anything that
+changes state), the request may have already been accepted server-side before the CLI itself
+failed (a timeout, a dropped connection) — check whether it actually landed first (the matching
+`fl ... info`/list/status command) before resubmitting through the API or retrying at all. The CLI
+already handles auth (`fl login`) and consistent output for what it covers; a raw API call skips
+that, and skips nothing about the risk of a duplicate write.
+
+**Every operation ends with a plain-language summary — not something the user has to ask for.**
+Whatever technical work happened above it (commands run, files changed, errors seen), close with
+a few short sentences a non-technical person could read and understand: what you were doing, what
+happened, and whether it's fixed or still needs their input. No jargon, no unexplained acronyms,
+no file paths or stack traces in this part — those already exist above it for anyone who wants
+them. If a friend or family member with no coding background read only this last part, they
+should be able to tell what happened. If a result is uncertain or partial, say that plainly too —
+"I couldn't confirm X" is a better summary than skipping X.
+
+**Keep the CLI and skills in sync.** `forklaunch` self-updates its own binary automatically on
+each run (comparing against the version pinned in `manifest.toml`), but the skill pack a project
+already has on disk (`.claude/skills/`, `AGENTS.md`, etc.) is a static copy from whenever
+`forklaunch context` last ran — it does **not** refresh itself. After a CLI version change, or if
+a skill's instructions stop matching what a command actually does (a flag that no longer exists,
+an error message that reads differently), re-run `forklaunch context` to pull the current skill
+pack before continuing. If a command you were told to run turns out to be missing or renamed,
+don't guess at flags — re-sync the skill pack first, since the instructions you have may simply be
+stale.
+
+**Check a foundational choice against the goal before committing to it, not after.** Some
+decisions are cheap to undo (a formatter, a linter, a variable name) and some aren't (a module
+preset, a database engine, an auth provider) — the expensive ones usually mean re-scaffolding and
+redeploying to fix, not just editing a file. Before locking in one of the expensive ones: state in
+one sentence what capability the app actually needs, then check the specific option against that
+sentence rather than against how closely its name matches. Two options can both plausibly "add
+auth" or "add a database" while only one actually does what the task needs — see `/cli` for a
+concrete example with `iam-base` vs `iam-better-auth`. If getting it wrong would be costly to
+undo, say so and confirm with the user before proceeding, the same way you would before an
+irreversible deploy action.
 
 ## How to explain things (applies to every skill)
 
-Whatever a skill does, explain the result to the user **like an intelligent high
-schooler** first: plain language, no jargon, no acronyms the reader has not been
-given. Assume someone smart who does not know this codebase.
+Explain results as if to an **intelligent high schooler**: plain language, no
+jargon, no undefined acronyms. **Use a concrete example** — abstractions are
+where jargon hides, and an example forces you to be specific.
 
-Then, **if it is actually needed**, add the longer technical explanation below
-it — file paths, type names, tradeoffs, the reasoning a maintainer would want.
+Then the technical detail if it is needed. Then **close with a plain-English
+summary**: what changed, what it means, what is still open. Someone who skipped
+the middle should read the first and last parts and be correctly informed.
 
-The order is not optional. Leading with the technical version makes the reader
-work to find out whether they care; leading with the plain version lets them
-stop reading as soon as they have what they need.
+**plain → technical → plain summary.** The order is not optional.
 
-Three rules that keep this honest:
+Say what happened rather than what was run; never fake simplicity by dropping
+caveats; and always say what you did *not* verify.
 
-- **Say what happened, not what was run.** "Your login data is already encrypted;
-  the scanner was wrong" beats "patched audit.rs:126".
-- **Define a term the first time you use it**, or pick a different word. If a
-  sentence only parses for someone who already knows the answer, rewrite it.
-- **Do not fake simplicity by leaving things out.** If a result is uncertain,
-  partial, or has a caveat, that belongs in the plain-language part — it is
-  usually the part that matters most.
+Full version in `AGENTS.md` and `CLAUDE.md`.
 
 ## Available Skills
+
+### Operating a Deployed App
+- `/investigator` — Diagnose a running ForkLaunch app: is it up, why did a deploy fail, why isn't
+  a change showing, where are the errors. Start here for "something's wrong."
 
 ### Building & Scaffolding
 - `/getting-started` — **Start here.** The driver skill: prerequisites, planning by conversation, scaffold, score after every pass, register, deploy. Routes to every other skill.
@@ -36,6 +77,7 @@ Three rules that keep this honest:
 - `/integrations` — GitHub (App install, repo connect, autodeploy) and provider keys via `config set`. **There is no `integrate <service>`.**
 - `/managed-provisioning` — Managed apps: templates, provisioning, the claim handover, and where each surface stops.
 - `/managed-apps` — Managed mode runbook: the `forklaunch managed` CLI end to end (template publish vs publish-template, the three variable kinds, instance create → claim → destroy) plus failure modes (DLQ, the custom-var decrypt bug, the OAuth relay).
+- `/managed-app-repo` — Prepare an application REPO to run as a managed app: the platform/instance trust boundary (a signing secret never reaches a browser), which secret signs which direction, the hosted-gateway variable contract, and the two-half handover ceremony. Read before publishing a template.
 - `/managed-relay` — The relay: a per-product, signed, universal callback acceptor that forwards a verified provider event to the right instance. The ingest contract, the one-command install (`init module -m relay`), and the publish check. Epic OAuth is the first wired event.
 - `/deploy-mode` — The two decisions a first deploy forces: single-app vs managed template, and cluster placement (platform-shared / org-shared / dedicated) with its cost and compliance consequences. Read before any first deploy.
 - `/deployment-approvals` — Approval gating: why it is opt-in, resolution order, four-eyes, the two gates.
@@ -47,6 +89,7 @@ Three rules that keep this honest:
 - `/imports-and-structure` — Import layers, module structure, file naming. **Always import from `@{{app-name}}/core`.**
 - `/websockets-and-mappers` — WebSockets, real-time, log streaming, requestMapper/responseMapper.
 - `/compliance` — fp property builder, defineComplianceEntity, access levels, audit CLI, encryption, tenant isolation.
+- `/encryption-key-rotation` — The key ring (`ENCRYPTION_KEY` + `LEGACY_ENCRYPTION_KEYS`), rotating a key without downtime, the re-encryption sweep migration and its report, recovering when a key was replaced under live data.
 - `/score` — Generate and read an Enterprise-Readiness Report Card, gate CI on a minimum score, and know what the deterministic checks can and cannot judge.
 - `/score-self-heal` — run the ForkLaunch Score during development, fix the lowest-scoring criteria from their `fix`es, re-score until the threshold passes.
 - `/security` — Auth surfaces, device flow, rate limiting, security events, secrets hygiene, HMAC, branch protection.

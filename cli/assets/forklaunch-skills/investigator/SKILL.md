@@ -208,8 +208,8 @@ status snapshot taken seconds after `completed`.
 
 **Critical known gap: `completed` + `running` can both be lying — a deploy can silently roll back
 and nothing here detects it.** This is different from the transient window above and does *not*
-resolve itself. If a new task never becomes healthy, ECS's own deployment circuit breaker rolls
-back to the previous task automatically — but `deploy info` still reports the deployment as
+resolve itself. If a new task never becomes healthy, the platform's own deployment circuit breaker
+rolls back to the previous task automatically — but `deploy info` still reports the deployment as
 `completed` (it's reporting on the infrastructure update succeeding, not on the resulting task
 staying healthy), and `app services` still reports the new version as `running`. The app is
 actually still serving the *old* code. Confirmed by direct reproduction: a release whose container
@@ -226,14 +226,14 @@ you can call together. Say this plainly if the reported status and the actual be
 "the platform reports this deploy as successful, but the running behavior doesn't match — this
 looks like a silent rollback the tooling can't currently detect."
 
-**Known CLI gap: no way to see a deployment's own build/infra log stream.** The dashboard has a
-live "Deployment Logs" panel (the full Pulumi/build output, with info/warn/error counts) for every
-deployment, successful or not. The CLI has nothing equivalent — `deploy info` on a **successful**
-deployment returns only status and timestamps, no logs at all. It only surfaces log content when a
-deployment *failed* (the error field happens to include a tail of stdout/stderr), and even then
-it's a snapshot, not the full stream. If you need to see what actually happened during a successful
-deploy, or need the full unabridged output of a failed one, say so plainly: "the CLI doesn't expose
-deployment logs — check the dashboard's Deployment Logs panel for this."
+**For a deployment's own build/infra log stream, use `deploy logs`.** `forklaunch deploy logs`
+reads what Pulumi and the container build emitted while deploying — the same content the
+dashboard's "Deployment Logs" panel shows for every deployment, successful or not. The bare
+command shows the latest deployment for the env/region; `deploy logs <id> --all` gives the full
+unabridged output of one deployment; and `deploy logs -l error` shows just the error lines — the
+fastest way to see what failed. (`deploy info` on a **successful** deployment returns only status
+and timestamps, so reach for `deploy logs` when you need what the deploy itself emitted, not just
+whether it finished.)
 
 If a deployment failed and the user wants to go back to a known-good version:
 

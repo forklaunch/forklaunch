@@ -43,8 +43,7 @@ export class BaseOrderService<
   SchemaValidator extends AnySchemaValidator,
   MapperEntities extends BaseOrderEntities,
   MapperDomains extends BaseOrderDtos = BaseOrderDtos
-> implements OrderService
-{
+> implements OrderService {
   private evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;

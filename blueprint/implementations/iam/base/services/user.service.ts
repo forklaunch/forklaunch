@@ -21,11 +21,10 @@ import { UserMappers } from '../domain/types/user.mapper.types';
 
 export class BaseUserService<
   SchemaValidator extends AnySchemaValidator,
-  OrganizationStatus = unknown,
+  OrganizationStatus extends Record<string, string> = Record<string, string>,
   MapperEntities extends UserEntities = UserEntities,
   MapperDomains extends UserDtos = UserDtos
-> implements UserService
-{
+> implements UserService {
   private evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;

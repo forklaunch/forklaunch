@@ -62,8 +62,38 @@ export {
   FieldEncryptor,
   MissingEncryptionKeyError,
   DecryptionError,
-  EncryptionRequiredError
+  EncryptionRequiredError,
+  parseEncryptionKeyList,
+  encryptionKeyId,
+  stampedKeyId,
+  stampedPrefix,
+  isEncryptedCiphertext,
+  ENCRYPTED_PREFIXES,
+  ENCRYPTION_FORMAT_ENV,
+  ENCRYPTION_KEY_ENV,
+  LEGACY_ENCRYPTION_KEYS_ENV,
+  LEGACY_ENCRYPTION_KEY_ENV,
+  type FieldEncryptorOptions,
+  type OpenedCiphertext,
+  type CiphertextFormat
 } from './fieldEncryptor';
+
+// Key rotation sweep (rewrite values still under a previous key)
+export {
+  reencryptEncryptedColumns,
+  classifyEncryptedValue,
+  collectFallbackTenantIds,
+  defaultTenantIdsFor,
+  entityMetadataList,
+  rotationTotals,
+  countValuesByKeyId,
+  isEncryptedValue,
+  type ReencryptOptions,
+  type RotationOutcome,
+  type RotationTableReport,
+  type SqlExecute,
+  type EntityMetadataLike
+} from './keyRotation';
 
 // Tenant isolation filter
 export {
@@ -76,7 +106,11 @@ export {
 // PostgreSQL Row-Level Security
 export { setupRls, RlsEventSubscriber, type RlsConfig } from './rls';
 
-export type { AnyMikroORM, ResolvedEntity } from './mikroOrm.types';
+export type {
+  AnyMikroORM,
+  ResolvedEntity,
+  ResolvedRelation
+} from './mikroOrm.types';
 
 // Tenant-scoped EM proxy (wraps every operation in withEncryptionContext to
 // survive AsyncLocalStorage propagation through pg connection pool callbacks)

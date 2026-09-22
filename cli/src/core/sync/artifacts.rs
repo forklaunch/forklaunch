@@ -166,6 +166,7 @@ fn sync_to_manifest(
         resources: metadata.to_resource_inventory(),
         routers,
         metadata: metadata.to_project_metadata(),
+        serves: None,
     });
 
     manifest_data

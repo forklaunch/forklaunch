@@ -79,6 +79,32 @@ fn save_token_data(token_data: &TokenData) -> Result<()> {
     Ok(())
 }
 
+/// Refresh the stored access token now, regardless of the recorded expiry.
+/// Used when the server has just rejected the token with a 401: the stored
+/// `expires_at` can be wrong (API-token logins used to record "never"), so
+/// the server's answer, not the file, is what says the token is stale.
+pub(crate) fn force_refresh_token() -> anyhow::Result<String> {
+    let token_path = get_token_path()?;
+    let toml_content = read_to_string(&token_path)?;
+    let token_data: TokenData = toml::from_str(&toml_content)?;
+    if token_data.refresh_token.is_empty() {
+        bail!("No refresh token stored");
+    }
+    let new_token_data = refresh_token(&token_data.refresh_token)?;
+    save_token_data(&new_token_data)?;
+    Ok(new_token_data.access_token)
+}
+
+/// The `exp` claim of a JWT, without verifying it. Used only to decide when
+/// to refresh a token the user pasted in; the server still verifies it.
+pub(crate) fn jwt_expiry(token: &str) -> Option<i64> {
+    use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+    let payload = token.split('.').nth(1)?;
+    let bytes = URL_SAFE_NO_PAD.decode(payload.trim_end_matches('=')).ok()?;
+    let claims: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    claims.get("exp")?.as_i64()
+}
+
 pub(crate) fn get_token() -> anyhow::Result<String> {
     let token_path = get_token_path()?;
 
@@ -95,6 +121,14 @@ pub(crate) fn get_token() -> anyhow::Result<String> {
     })?;
 
     if is_token_expired(token_data.expires_at) {
+        // API-token logins carry no refresh token; say so instead of
+        // failing a refresh that was never going to work.
+        if token_data.refresh_token.is_empty() {
+            let _ = remove_file(&token_path);
+            bail!(
+                "Your API token expired. Generate a new one in the dashboard and run `forklaunch login --token <token>`"
+            );
+        }
         // Try to refresh the token using the refresh token (session token)
         match refresh_token(&token_data.refresh_token) {
             Ok(new_token_data) => {
@@ -110,4 +144,33 @@ pub(crate) fn get_token() -> anyhow::Result<String> {
     }
 
     Ok(token_data.access_token)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn jwt_with(claims: &str) -> String {
+        use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+        format!(
+            "{}.{}.sig",
+            URL_SAFE_NO_PAD.encode(r#"{"alg":"RS256"}"#),
+            URL_SAFE_NO_PAD.encode(claims)
+        )
+    }
+
+    #[test]
+    fn jwt_expiry_reads_exp_claim() {
+        assert_eq!(
+            jwt_expiry(&jwt_with(r#"{"sub":"u","exp":1789701966}"#)),
+            Some(1789701966)
+        );
+    }
+
+    #[test]
+    fn jwt_expiry_is_none_for_tokens_without_exp_or_not_jwts() {
+        assert_eq!(jwt_expiry(&jwt_with(r#"{"sub":"u"}"#)), None);
+        assert_eq!(jwt_expiry("not-a-jwt"), None);
+        assert_eq!(jwt_expiry("a.%%%.c"), None);
+    }
 }

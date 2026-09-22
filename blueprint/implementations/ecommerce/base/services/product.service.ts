@@ -22,8 +22,7 @@ export class BaseProductService<
   SchemaValidator extends AnySchemaValidator,
   MapperEntities extends BaseProductEntities,
   MapperDomains extends BaseProductDtos = BaseProductDtos
-> implements ProductService
-{
+> implements ProductService {
   private evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;

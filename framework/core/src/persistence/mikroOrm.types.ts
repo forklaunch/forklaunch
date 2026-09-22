@@ -1,4 +1,9 @@
-import type { MikroORM } from '@mikro-orm/core';
+import type {
+  Collection,
+  IndexHints,
+  MikroORM,
+  Reference
+} from '@mikro-orm/core';
 
 /**
  * `MikroORM` with relaxed type parameters.
@@ -37,7 +42,36 @@ export type AnyMikroORM = Awaited<ReturnType<typeof MikroORM.init>>;
  * should compare `ResolvedEntity<(typeof X)['~entity']>` so compatibility is
  * judged on the actual field types, which is what the consuming code reads
  * and writes.
+ *
+ * Relations are resolved the same way. A `Collection<Permission>`, a
+ * `Reference<Organization>` or a bare `Organization` on the entity carries the
+ * related entity's builder record too, and since mikro-orm 7.2 the builders
+ * are declared `in out` (invariant), so a concrete `Role` whose `permissions`
+ * point at the app's `Permission` would never satisfy a constraint written
+ * against a module's minimal `Permission` unless the relation target is
+ * stripped of its metadata slots as well.
  */
 export type ResolvedEntity<T> = {
-  [K in keyof T as K extends string ? K : never]: T[K];
+  [K in keyof T as K extends string ? K : never]: ResolvedRelation<T[K]>;
 };
+
+/**
+ * `ResolvedEntity` applied through a relation wrapper: `Collection<E>` becomes
+ * `Collection<ResolvedEntity<E>>`, references likewise, and a bare entity
+ * object (a `manyToOne` without `.ref()`) resolves in place. Scalars, dates,
+ * enums, `null` and `undefined` pass through untouched: only a value that
+ * carries the `IndexHints` slot is an entity.
+ *
+ * Fields must not be `any`: a conditional type on `any` takes every branch,
+ * so an `any` field would resolve to a union no concrete value satisfies.
+ * `fp.enum()` with no items infers `any`; a shape entity that stands in for
+ * an app-defined enum should say `fp.enum<string[]>()`.
+ */
+export type ResolvedRelation<V> =
+  V extends Collection<infer E extends object, infer O extends object>
+    ? Collection<ResolvedEntity<E>, O>
+    : V extends Reference<infer E extends object>
+      ? Reference<ResolvedEntity<E>>
+      : typeof IndexHints extends keyof V
+        ? ResolvedEntity<V>
+        : V;

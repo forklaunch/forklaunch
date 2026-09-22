@@ -20,7 +20,10 @@ use crate::{
         http_client,
         validate::{require_active_account, require_integration, require_manifest, resolve_auth},
     },
-    deploy::utils::stream_deployment_status,
+    deploy::{
+        target::{confirm_target, resolve_target},
+        utils::{DEFAULT_WAIT, stream_deployment_status_for},
+    },
     managed::detect::{ManagedDetection, detect_managed_template},
 };
 
@@ -632,7 +635,20 @@ impl CliCommand for CreateCommand {
                 Arg::new("no-wait")
                     .long("no-wait")
                     .action(clap::ArgAction::SetTrue)
-                    .help("Don't wait for deployment to complete"),
+                    .help("Return as soon as the deployment is accepted. The exit code then says nothing about its outcome; follow it with `deploy info`"),
+            )
+            .arg(
+                Arg::new("timeout")
+                    .long("timeout")
+                    .value_name("MINUTES")
+                    .value_parser(clap::value_parser!(u64).range(1..))
+                    .help("Stop waiting after this many minutes and exit 3 (default 45). The deployment continues on the platform"),
+            )
+            .arg(
+                Arg::new("create-environment")
+                    .long("create-environment")
+                    .action(clap::ArgAction::SetTrue)
+                    .help("Allow this deploy to create the environment if the application does not have one by that name"),
             )
             .arg(
                 Arg::new("dry-run")
@@ -662,7 +678,7 @@ impl CliCommand for CreateCommand {
                 Arg::new("force")
                     .long("force")
                     .action(clap::ArgAction::SetTrue)
-                    .help("Deploy even if this app is a managed template (bypasses the managed-template guard)"),
+                    .help("Deploy even if this app is a managed template, the checkout's origin is not the application's repository, or the environment does not exist yet"),
             )
     }
 
@@ -690,6 +706,31 @@ impl CliCommand for CreateCommand {
         let wait = !matches.get_flag("no-wait");
         let dry_run = matches.get_flag("dry-run");
         let force = matches.get_flag("force");
+        let create_environment = matches.get_flag("create-environment");
+        let max_wait = matches
+            .get_one::<u64>("timeout")
+            .map(|m| std::time::Duration::from_secs(m * 60))
+            .unwrap_or(DEFAULT_WAIT);
+
+        // Say which application this is about, and refuse the two ways a
+        // deploy lands on the wrong one: a checkout whose origin is another
+        // repository, and an environment that would be created as a side
+        // effect. See deploy/target.rs.
+        let target = resolve_target(
+            &auth_mode,
+            &application_id,
+            &environment,
+            manifest.git_repository.as_deref(),
+        );
+        confirm_target(
+            &target,
+            release_version,
+            &environment,
+            region,
+            create_environment,
+            force,
+            &mut stdout,
+        )?;
 
         // Managed-template guard. Whether an app is "managed" is a control-plane fact
         // (a template keyed by its source repository), not a manifest flag, so ask the
@@ -1080,19 +1121,26 @@ impl CliCommand for CreateCommand {
 
                 if wait {
                     writeln!(stdout)?;
-                    stream_deployment_status(
+                    stream_deployment_status_for(
                         &auth_mode,
                         &deployment.id,
                         Some(&environment),
                         Some(region.as_str()),
+                        max_wait,
                         &mut stdout,
                     )?;
                     writeln!(stdout)?;
                     log_info!(stdout, "Dashboard: {}", dashboard_url);
                 } else {
                     writeln!(stdout)?;
-                    writeln!(stdout, "Deployment started. Check status at:")?;
-                    writeln!(stdout, "  {}", dashboard_url)?;
+                    writeln!(stdout, "Deployment started; not waiting for it to finish.")?;
+                    writeln!(stdout, "This exit code says nothing about the deployment's outcome.")?;
+                    writeln!(
+                        stdout,
+                        "  Follow it:  forklaunch deploy info --deployment {}",
+                        deployment.id
+                    )?;
+                    writeln!(stdout, "  Dashboard:  {}", dashboard_url)?;
                 }
                 break;
             } else if status.as_u16() == 428 {

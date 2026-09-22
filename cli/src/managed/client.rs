@@ -8,7 +8,9 @@ use crate::{
     constants::{ERROR_FAILED_TO_SEND_REQUEST, get_platform_management_api_url},
     core::{
         hmac::AuthMode,
-        http_client::{delete, get_with_auth, patch, post_unauthenticated, post_with_auth, put},
+        http_client::{
+            delete, get_with_auth, patch, post, post_unauthenticated, post_with_auth, put,
+        },
         validate::resolve_auth,
     },
 };
@@ -373,6 +375,17 @@ pub(super) fn post_json_public<T: serde::de::DeserializeOwned>(
     response
         .json()
         .with_context(|| format!("Failed to parse the response from {}", url))
+}
+
+/// POST where the control plane answers with a bare status string rather than JSON
+/// (`resume-provisioning` says `Provisioning re-queued`), so the body is returned as
+/// text instead of being parsed. Takes no `&AuthMode` for the same reason as
+/// `patch_json` — see its note.
+pub(super) fn post_text(path: &str, body: Value, missing: Missing) -> Result<String> {
+    let url = managed_url(path);
+    let response = post(&url, body).with_context(|| ERROR_FAILED_TO_SEND_REQUEST)?;
+    let response = ensure_success(response, missing)?;
+    Ok(body_snippet(response))
 }
 
 /// DELETE where the control plane answers `202` with a bare status string rather than
