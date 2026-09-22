@@ -1,15 +1,13 @@
+#[cfg(not(unix))]
+use std::fs::create_dir_all;
+#[cfg(unix)]
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::{
     fs::OpenOptions,
-    io::Write,
+    io::{IsTerminal, Write},
     thread::sleep,
     time::Duration,
 };
-
-#[cfg(unix)]
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
-
-#[cfg(not(unix))]
-use std::fs::create_dir_all;
 
 use anyhow::{Result, bail};
 use clap::{Arg, ArgMatches, Command};
@@ -119,7 +117,11 @@ pub fn login_with_token(api_token: &str) -> Result<()> {
     }
 
     writeln!(stdout)?;
-    log_header!(stdout, Color::Green, "Successfully logged in with API token!");
+    log_header!(
+        stdout,
+        Color::Green,
+        "Successfully logged in with API token!"
+    );
     writeln!(
         stdout,
         "Note: API tokens are long-lived. Revoke them from the platform UI if compromised."
@@ -128,10 +130,40 @@ pub fn login_with_token(api_token: &str) -> Result<()> {
     Ok(())
 }
 
+/// Is there a human at this terminal to read a code and open a browser?
+///
+/// The device flow asks the user to visit a URL and type a code, then polls
+/// until they do or the code expires ten minutes later. With nobody there —
+/// CI, an agent, a container — that ten minutes is pure waiting, and the run
+/// ends with "The device code has expired" instead of saying what was
+/// actually wrong. `FORKLAUNCH_FORCE_DEVICE_LOGIN=1` overrides, for the rare
+/// case of a browser but no tty.
+fn device_login_decision(forced: bool, stdin_tty: bool, stdout_tty: bool) -> bool {
+    forced || (stdin_tty && stdout_tty)
+}
+
+fn device_login_is_usable() -> bool {
+    device_login_decision(
+        std::env::var("FORKLAUNCH_FORCE_DEVICE_LOGIN").is_ok_and(|v| !v.is_empty()),
+        std::io::stdin().is_terminal(),
+        std::io::stdout().is_terminal(),
+    )
+}
+
 /// Interactive device flow login (default)
 pub fn login() -> Result<()> {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
     let api_url = get_iam_api_url();
+
+    if !device_login_is_usable() {
+        bail!(
+            "`forklaunch login` needs a terminal: it prints a code for you to enter in a browser, \
+             and with nobody there it polls for ten minutes and then fails. For CI, an agent or a \
+             container, authenticate headlessly instead:\n  \
+             forklaunch login --token <api-token>   (or set FORKLAUNCH_API_TOKEN)\n\
+             Set FORKLAUNCH_FORCE_DEVICE_LOGIN=1 to run the device flow anyway."
+        );
+    }
 
     // Step 1: Request device code
     log_info!(stdout, "Forklaunch CLI Login");
@@ -157,8 +189,18 @@ pub fn login() -> Result<()> {
 
     // Step 2: Display user code and open browser
     writeln!(stdout)?;
-    log_header!(stdout, Color::Yellow, "Please visit: {}", device_data.verification_uri);
-    log_header!(stdout, Color::Yellow, "Enter code: {}", device_data.user_code);
+    log_header!(
+        stdout,
+        Color::Yellow,
+        "Please visit: {}",
+        device_data.verification_uri
+    );
+    log_header!(
+        stdout,
+        Color::Yellow,
+        "Enter code: {}",
+        device_data.user_code
+    );
     writeln!(stdout)?;
 
     // Try to open browser
@@ -284,27 +326,29 @@ pub fn login() -> Result<()> {
             let error_data: Result<TokenErrorResponse, _> = token_response.json();
 
             match error_data {
-                Ok(error) => {
-                    match error.error.as_str() {
-                        "authorization_pending" => {
-                            continue;
-                        }
-                        "slow_down" => {
-                            polling_interval += Duration::from_secs(5);
-                            log_warn!(stdout, "Slowing down polling to {}s", polling_interval.as_secs());
-                            continue;
-                        }
-                        "access_denied" => {
-                            bail!("Access was denied by the user");
-                        }
-                        "expired_token" => {
-                            bail!("The device code has expired. Please try again.");
-                        }
-                        _ => {
-                            bail!("Error: {}", error.error_description.unwrap_or(error.error));
-                        }
+                Ok(error) => match error.error.as_str() {
+                    "authorization_pending" => {
+                        continue;
                     }
-                }
+                    "slow_down" => {
+                        polling_interval += Duration::from_secs(5);
+                        log_warn!(
+                            stdout,
+                            "Slowing down polling to {}s",
+                            polling_interval.as_secs()
+                        );
+                        continue;
+                    }
+                    "access_denied" => {
+                        bail!("Access was denied by the user");
+                    }
+                    "expired_token" => {
+                        bail!("The device code has expired. Please try again.");
+                    }
+                    _ => {
+                        bail!("Error: {}", error.error_description.unwrap_or(error.error));
+                    }
+                },
                 Err(_) => {
                     bail!("Failed to authenticate: unexpected response");
                 }
@@ -335,5 +379,33 @@ impl CliCommand for LoginCommand {
         }
 
         login()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The decision itself, without touching process-wide state: a terminal
+    /// on both ends, or the explicit override.
+    #[test]
+    fn the_device_flow_needs_a_terminal_or_the_override() {
+        assert!(device_login_decision(false, true, true));
+        assert!(!device_login_decision(false, false, true));
+        assert!(!device_login_decision(false, true, false));
+        assert!(device_login_decision(true, false, false));
+    }
+
+    /// Under `cargo test` stdin is not a terminal — the CI shape — so `login`
+    /// refuses immediately and names the headless route instead of polling
+    /// for ten minutes.
+    #[test]
+    fn login_without_a_terminal_fails_fast_and_says_what_to_do() {
+        if device_login_is_usable() {
+            return; // a developer running the suite from a real terminal
+        }
+        let err = login().unwrap_err().to_string();
+        assert!(err.contains("--token"), "{err}");
+        assert!(err.contains("FORKLAUNCH_API_TOKEN"), "{err}");
     }
 }
