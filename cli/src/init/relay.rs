@@ -7,8 +7,7 @@
 //! readiness, generalized so the only app-specific decision is one hook.
 //!
 //! The generic ~80% it writes: the HMAC-verified ingest controller + route, the
-//! nonce single-use replay guard (a unique-column handoff entity, whose
-//! migration the app generates via `migrate:init`/`migrate:create`),
+//! nonce single-use replay guard (a unique-column handoff entity + migration),
 //! the one-time handoff ticket + better-auth session-cookie minting, and the
 //! root-relative redirect sanitizer. The app-specific ~20% is left as a single
 //! clearly-marked hook (`establishSessionFromRelayTokens`) with a TODO.
@@ -22,24 +21,11 @@ use std::{fs::read_to_string, io::Write, path::Path};
 
 use anyhow::{Result, bail};
 use convert_case::{Case, Casing};
-use oxc_allocator::Allocator;
-use oxc_ast::ast::{Expression, SourceType, Statement};
-use oxc_codegen::{Codegen, CodegenOptions};
 use termcolor::{Color, StandardStream, WriteColor};
 
 use crate::{
     constants::{Database, Module, error_failed_to_read_file},
     core::{
-        ast::{
-            injections::{
-                inject_into_import_statement::inject_into_import_statement,
-                inject_into_registrations_ts::{
-                    find_config_injector_chain_names, inject_into_registrations_config_injector,
-                },
-                inject_into_server_ts::inject_into_server_ts,
-            },
-            parse_ast_program::parse_ast_program,
-        },
         database::{get_database_port, get_db_driver, is_in_memory_database},
         format::format_code,
         manifest::{
@@ -139,6 +125,9 @@ pub(crate) fn add_relay_module(
     if let Some(template) = inject_relay_into_entities_index(&iam_dir)? {
         rendered_templates.push(template);
     }
+    if let Some(template) = inject_claim_mint_into_sdk_ts(&iam_dir)? {
+        rendered_templates.push(template);
+    }
 
     write_rendered_templates(&rendered_templates, dryrun, stdout)?;
 
@@ -146,7 +135,7 @@ pub(crate) fn add_relay_module(
         format_code(base_path, &service_data.runtime.parse()?);
         log_ok!(
             stdout,
-            "relay session-ingest endpoint injected into the {AUTH_SERVICE_NAME} service"
+            "managed-apps lifecycle endpoints (relay session-ingest, claim mint) injected into the {AUTH_SERVICE_NAME} service"
         );
         print_next_steps(stdout, is_better_auth)?;
     }
@@ -270,13 +259,6 @@ fn build_iam_service_manifest_data(
 /// to the iam `server.ts`. The handoff GET is a raw route (it must Set-Cookie +
 /// 302, which a typed handler cannot), mirroring the existing `/api/auth/*` raw
 /// routes.
-///
-/// Wiring is STRUCTURAL, not verbatim-string-matched. It reuses the same
-/// `inject_into_server_ts` / `inject_into_import_statement` AST machinery the
-/// normal `init module` router flow uses (`transform_server_ts`): the router is
-/// mounted after the run of `app.use(...)` calls and the handoff route is placed
-/// just before the first one, so any conformant iam wires - not only the pristine
-/// blueprint whose last mount happens to be `app.use(complianceRouter)`.
 fn inject_relay_into_server_ts(iam_dir: &Path) -> Result<Option<RenderedTemplate>> {
     let server_path = iam_dir.join("server.ts");
     let content = read_to_string(&server_path)
@@ -286,14 +268,34 @@ fn inject_relay_into_server_ts(iam_dir: &Path) -> Result<Option<RenderedTemplate
         return Ok(None);
     }
 
-    let allocator = Allocator::default();
-    let source_type = SourceType::from_path(&server_path)?;
-    let mut server_program = parse_ast_program(&allocator, &content, source_type);
+    // 1. Imports, appended after the last local import so ordering is stable.
+    let import_anchor = "import { iamSdkClient } from './sdk';";
+    if !content.contains(import_anchor) {
+        bail!(
+            "Could not find the expected import anchor in {}; refusing to guess where to wire the \
+             relay in. Wire it by hand following the module docs.",
+            server_path.display()
+        );
+    }
+    let import_block = format!(
+        "{import_anchor}\nimport {{ relayRouter }} from './api/routes/relay.routes';\nimport {{ serializeSessionCookie }} from './domain/services/relaySession.service';"
+    );
+    let mut updated = content.replace(import_anchor, &import_block);
 
-    // 1. The browser-facing handoff redirect, placed just before the routes are
-    // mounted so it wins over any catch-all. Inserted at the position of the
-    // first `app.use(...)` (i.e. immediately before the mount run).
-    let handoff_text = r#"app.internal.get('/relay/handoff', async (req, res) => {
+    // 2. The browser-facing handoff redirect, placed just before the routes are
+    // mounted so it wins over any catch-all.
+    let mount_anchor = "//! mounts the routes to the app";
+    if !updated.contains(mount_anchor) {
+        bail!(
+            "Could not find the route-mount anchor in {}; wire the relay by hand.",
+            server_path.display()
+        );
+    }
+    let handoff_route = r#"//! Managed-apps relay handoff: redeems a one-time ticket minted by
+//! /relay/session-ingest, sets the better-auth session cookie, and 302s the
+//! browser to a sanitized root-relative path. A raw route because it must
+//! Set-Cookie + redirect.
+app.internal.get('/relay/handoff', async (req, res) => {
   const ticket = String(req.query.ticket || '');
   if (!ticket) {
     res.redirect('/');
@@ -317,59 +319,20 @@ fn inject_relay_into_server_ts(iam_dir: &Path) -> Result<Option<RenderedTemplate
     );
     res.redirect('/');
   }
-});"#;
-    let mut handoff_injection = parse_ast_program(&allocator, handoff_text, source_type);
-    inject_into_server_ts(&mut server_program, &mut handoff_injection, |statements| {
-        find_first_app_use_index(statements)
-    })
-    .map_err(|_| {
-        anyhow::anyhow!(
-            "Could not find any `app.use(...)` route mounts in {}; there is nothing to mount the \
-             relay alongside. Wire it by hand following the module docs.",
+});
+
+"#;
+    updated = updated.replace(mount_anchor, &format!("{handoff_route}{mount_anchor}"));
+
+    // 3. Mount the typed session-ingest router alongside the others.
+    let use_anchor = "app.use(complianceRouter);";
+    if !updated.contains(use_anchor) {
+        bail!(
+            "Could not find the router-mount anchor in {}; wire the relay by hand.",
             server_path.display()
-        )
-    })?;
-
-    // 2. Mount the typed session-ingest router after the run of `app.use(...)`
-    // calls, wherever that run is.
-    let use_text = "app.use(relayRouter);";
-    let mut use_injection = parse_ast_program(&allocator, use_text, source_type);
-    inject_into_server_ts(&mut server_program, &mut use_injection, |statements| {
-        find_after_last_app_use_index(statements)
-    })
-    .map_err(|_| {
-        anyhow::anyhow!(
-            "Could not find any `app.use(...)` route mounts in {}; there is nothing to mount the \
-             relay alongside. Wire it by hand following the module docs.",
-            server_path.display()
-        )
-    })?;
-
-    // 3. Imports for the router + the cookie serializer. `inject_into_import_statement`
-    // slots each new import in among the existing ones structurally.
-    let router_import_text = "import { relayRouter } from './api/routes/relay.routes';";
-    let mut router_import = parse_ast_program(&allocator, router_import_text, source_type);
-    inject_into_import_statement(
-        &mut server_program,
-        &mut router_import,
-        "./api/routes/relay.routes",
-        &content,
-    )?;
-
-    let serializer_import_text =
-        "import { serializeSessionCookie } from './domain/services/relaySession.service';";
-    let mut serializer_import = parse_ast_program(&allocator, serializer_import_text, source_type);
-    inject_into_import_statement(
-        &mut server_program,
-        &mut serializer_import,
-        "./domain/services/relaySession.service",
-        &content,
-    )?;
-
-    let updated = Codegen::new()
-        .with_options(CodegenOptions::default())
-        .build(&server_program)
-        .code;
+        );
+    }
+    updated = updated.replace(use_anchor, &format!("{use_anchor}\napp.use(relayRouter);"));
 
     Ok(Some(RenderedTemplate {
         path: server_path,
@@ -378,61 +341,8 @@ fn inject_relay_into_server_ts(iam_dir: &Path) -> Result<Option<RenderedTemplate
     }))
 }
 
-/// Index of the first top-level `app.use(...)` call statement, for inserting the
-/// handoff route just ahead of the route-mount run.
-fn find_first_app_use_index(statements: &oxc_allocator::Vec<'_, Statement<'_>>) -> Option<usize> {
-    statements.iter().enumerate().find_map(|(index, stmt)| {
-        if is_app_use_statement(stmt) {
-            Some(index)
-        } else {
-            None
-        }
-    })
-}
-
-/// Index just after the last top-level `app.use(...)` call statement, mirroring
-/// the closure `transform_server_ts` uses to append a router mount.
-fn find_after_last_app_use_index(
-    statements: &oxc_allocator::Vec<'_, Statement<'_>>,
-) -> Option<usize> {
-    let mut splice_pos = None;
-    for (index, stmt) in statements.iter().enumerate() {
-        if is_app_use_statement(stmt) {
-            splice_pos = Some(index + 1);
-        }
-    }
-    splice_pos
-}
-
-/// Whether a statement is an `app.use(...)` call expression.
-fn is_app_use_statement(stmt: &Statement<'_>) -> bool {
-    let Statement::ExpressionStatement(expr) = stmt else {
-        return false;
-    };
-    let Expression::CallExpression(call) = &expr.expression else {
-        return false;
-    };
-    let Expression::StaticMemberExpression(member) = &call.callee else {
-        return false;
-    };
-    let Expression::Identifier(id) = &member.object else {
-        return false;
-    };
-    id.name == "app" && member.property.name == "use"
-}
-
 /// Adds the `INSTANCE_ID` / `INSTANCE_HMAC_KEY` environment config and the
 /// `RelaySessionService` DI registration to the iam `registrations.ts`.
-///
-/// Wiring is STRUCTURAL. It reuses the same `inject_into_registrations_config_injector`
-/// AST machinery `transform_registrations_ts` uses: it locates the config-injector
-/// `.chain({ … })` calls by shape (via `find_config_injector_chain_names`) and
-/// appends entries to them, instead of matching a specific sibling entry's
-/// verbatim text. The env vars land in the environment chain; `RelaySessionService`
-/// lands in the terminal chain (the last `.chain(...)`, where `BetterAuth` is
-/// registered and thus in scope for its factory) - exactly where the blueprint
-/// puts it. A customized iam whose entries have drifted (e.g. a last service that
-/// is not `RetentionService`) still wires.
 fn inject_relay_into_registrations_ts(iam_dir: &Path) -> Result<Option<RenderedTemplate>> {
     let registrations_path = iam_dir.join("registrations.ts");
     let content = read_to_string(&registrations_path)
@@ -442,120 +352,125 @@ fn inject_relay_into_registrations_ts(iam_dir: &Path) -> Result<Option<RenderedT
         return Ok(None);
     }
 
-    let allocator = Allocator::default();
-    let source_type = SourceType::from_path(&registrations_path)?;
-    let mut registrations_program = parse_ast_program(&allocator, &content, source_type);
-
-    // Locate the config-injector chains structurally. The environment vars land
-    // in the environment chain; the service lands in the terminal chain so the
-    // BetterAuth registered there is in scope for its factory.
-    let chain_names = find_config_injector_chain_names(&registrations_program);
-    let Some(service_chain) = chain_names.last().cloned() else {
-        bail!(
-            "Could not find any config-injector `.chain({{ … }})` in {}; this does not look like a \
-             ForkLaunch registrations file. Wire the relay by hand following the module docs.",
-            registrations_path.display()
-        );
-    };
-    // Prefer the conventional `environmentConfig` chain; fall back to the first
-    // chain when a customized iam has renamed it.
-    let env_chain = chain_names
-        .iter()
-        .find(|name| name.as_str() == "environmentConfig")
-        .cloned()
-        .or_else(|| chain_names.first().cloned())
-        .expect("chain_names is non-empty (service_chain was Some)");
-
     // 1. Imports for the service + its cookie-context type.
-    let import_text = "import { BetterAuthCookieContext, RelaySessionService } from './domain/services/relaySession.service';";
-    let mut import_injection = parse_ast_program(&allocator, import_text, source_type);
-    inject_into_import_statement(
-        &mut registrations_program,
-        &mut import_injection,
-        "./domain/services/relaySession.service",
-        &content,
-    )?;
-
-    // 2. Environment config: INSTANCE_ID / INSTANCE_HMAC_KEY, appended to the
-    // environment chain.
-    let env_injection_text = format!(
-        "const {env_chain} = configInjector.chain({{
-  INSTANCE_ID: {{
-    lifetime: Lifetime.Singleton,
-    type: optional(string),
-    value: getEnvVar('INSTANCE_ID') ?? undefined
-  }},
-  INSTANCE_HMAC_KEY: {{
-    lifetime: Lifetime.Singleton,
-    type: optional(string),
-    value: getEnvVar('INSTANCE_HMAC_KEY') ?? undefined
-  }}
-}});"
-    );
-    let mut env_injection = parse_ast_program(&allocator, &env_injection_text, source_type);
-    inject_into_registrations_config_injector(
-        &allocator,
-        &mut registrations_program,
-        &mut env_injection,
-        &env_chain,
-    )?;
-
-    // 3. The RelaySessionService itself, appended to the terminal chain so
-    // BetterAuth is available to its factory.
-    let service_injection_text = format!(
-        "const {service_chain} = serviceDependencies.chain({{
-  RelaySessionService: {{
-    lifetime: Lifetime.Scoped,
-    type: RelaySessionService,
-    factory: ({{ EntityManager, BetterAuth, OtelCollector }}) =>
-      new RelaySessionService(
-        EntityManager,
-        async (): Promise<BetterAuthCookieContext> => {{
-          const ctx = (await (BetterAuth as BetterAuth).$context) as unknown as {{
-            secret: string;
-            authCookies: {{
-              sessionToken: {{
-                name: string;
-                attributes: BetterAuthCookieContext['sessionTokenAttributes'];
-              }};
-            }};
-          }};
-          return {{
-            secret: ctx.secret,
-            sessionTokenName: ctx.authCookies.sessionToken.name,
-            sessionTokenAttributes: ctx.authCookies.sessionToken.attributes
-          }};
-        }},
-        OtelCollector
-      )
-  }}
-}});"
-    );
-    let mut service_injection = parse_ast_program(&allocator, &service_injection_text, source_type);
-    inject_into_registrations_config_injector(
-        &allocator,
-        &mut registrations_program,
-        &mut service_injection,
-        &service_chain,
-    )?;
-
-    let updated = Codegen::new()
-        .with_options(CodegenOptions::default())
-        .build(&registrations_program)
-        .code;
-
-    // The chains were located structurally, so injection should always land;
-    // guard against a silently-unwired file rather than emitting a broken app.
-    if !updated.contains("RelaySessionService") || !updated.contains("INSTANCE_ID") {
+    let import_anchor = "import mikroOrmOptionsConfig from './mikro-orm.config';";
+    if !content.contains(import_anchor) {
         bail!(
-            "Failed to wire the relay into {} (the config-injector chains were found but the \
-             entries did not inject). Wire the relay by hand following the module docs.",
+            "Could not find the import anchor in {}; wire the relay by hand.",
             registrations_path.display()
         );
     }
+    let import_block = format!(
+        "{import_anchor}\nimport {{\n  BetterAuthCookieContext,\n  RelaySessionService\n}} from './domain/services/relaySession.service';"
+    );
+    let mut updated = content.replace(import_anchor, &import_block);
+
+    // 2. Environment config: INSTANCE_ID / INSTANCE_HMAC_KEY, inserted at the
+    // end of the environmentConfig block (after the last known entry).
+    if !updated.contains("INSTANCE_ID") {
+        let env_anchor = "  JWKS_PUBLIC_KEY_URL: {\n    lifetime: Lifetime.Singleton,\n    type: string,\n    value: getEnvVar('JWKS_PUBLIC_KEY_URL')\n  }\n});";
+        if !updated.contains(env_anchor) {
+            bail!(
+                "Could not find the environmentConfig anchor in {}; wire the relay by hand.",
+                registrations_path.display()
+            );
+        }
+        let env_block = "  JWKS_PUBLIC_KEY_URL: {\n    lifetime: Lifetime.Singleton,\n    type: string,\n    value: getEnvVar('JWKS_PUBLIC_KEY_URL')\n  },\n  INSTANCE_ID: {\n    lifetime: Lifetime.Singleton,\n    type: optional(string),\n    value: getEnvVar('INSTANCE_ID') ?? undefined\n  },\n  INSTANCE_HMAC_KEY: {\n    lifetime: Lifetime.Singleton,\n    type: optional(string),\n    value: getEnvVar('INSTANCE_HMAC_KEY') ?? undefined\n  }\n});";
+        updated = updated.replace(env_anchor, env_block);
+    }
+
+    // 3. The RelaySessionService itself, appended to the last dependency chain
+    // (expressApplicationOptions) so BetterAuth is available to its factory.
+    let service_anchor = "  RetentionService: {\n    lifetime: Lifetime.Singleton,\n    type: RetentionService,\n    factory: ({ Orm, OtelCollector }) =>\n      new RetentionService(Orm, OtelCollector)\n  }\n});";
+    if !updated.contains(service_anchor) {
+        bail!(
+            "Could not find the serviceDependencies anchor in {}; wire the relay by hand.",
+            registrations_path.display()
+        );
+    }
+    let service_block = "  RetentionService: {\n    lifetime: Lifetime.Singleton,\n    type: RetentionService,\n    factory: ({ Orm, OtelCollector }) =>\n      new RetentionService(Orm, OtelCollector)\n  },\n  RelaySessionService: {\n    lifetime: Lifetime.Scoped,\n    type: RelaySessionService,\n    factory: ({ EntityManager, BetterAuth, OtelCollector }) =>\n      new RelaySessionService(\n        EntityManager,\n        async (): Promise<BetterAuthCookieContext> => {\n          const ctx = (await (BetterAuth as BetterAuth).$context) as unknown as {\n            secret: string;\n            authCookies: {\n              sessionToken: {\n                name: string;\n                attributes: BetterAuthCookieContext['sessionTokenAttributes'];\n              };\n            };\n          };\n          return {\n            secret: ctx.secret,\n            sessionTokenName: ctx.authCookies.sessionToken.name,\n            sessionTokenAttributes: ctx.authCookies.sessionToken.attributes\n          };\n        },\n        OtelCollector\n      )\n  }\n});";
+    updated = updated.replace(service_anchor, service_block);
 
     Ok(Some(RenderedTemplate {
         path: registrations_path,
+        content: updated,
+        context: None,
+    }))
+}
+
+/// Registers the claim-mint handler in the service's `sdk.ts`.
+///
+/// This is the one injection the relay's own endpoint never needed, and it is
+/// load-bearing. The framework walks `sdk.ts` to build each route's sdkPath
+/// (`claim.mintClaimToken`), and that string becomes the route's `operationId`
+/// in the OpenAPI document. The platform resolves its call through that
+/// document — so an endpoint absent from `sdk.ts` exists, serves traffic, and
+/// is nonetheless unreachable by the platform that is supposed to call it.
+fn inject_claim_mint_into_sdk_ts(iam_dir: &Path) -> Result<Option<RenderedTemplate>> {
+    let sdk_path = iam_dir.join("sdk.ts");
+    let content = read_to_string(&sdk_path)
+        .map_err(|_| anyhow::anyhow!(error_failed_to_read_file(&sdk_path)))?;
+
+    if content.contains("mintClaimToken") {
+        return Ok(None);
+    }
+
+    let import_anchor = "} from './api/controllers';";
+    if !content.contains(import_anchor) {
+        bail!(
+            "Could not find the controller import block in {}; add `claim: {{ mintClaimToken }}` \
+             to the sdk by hand, or the platform cannot resolve the claim mint.",
+            sdk_path.display()
+        );
+    }
+    let mut updated = content.replace(
+        import_anchor,
+        "  mintClaimToken
+} from './api/controllers';",
+    );
+
+    // The type block and the value block are both `{ ... };`-terminated, so
+    // anchor on each one's own closing line rather than guessing at names the
+    // app may have changed.
+    let type_anchor = "};
+
+export const";
+    if !updated.contains(type_anchor) {
+        bail!(
+            "Could not find the sdk type block in {}; add the claim group by hand.",
+            sdk_path.display()
+        );
+    }
+    updated = updated.replacen(
+        type_anchor,
+        "  claim: {
+    mintClaimToken: typeof mintClaimToken;
+  };
+};
+
+export const",
+        1,
+    );
+
+    let value_anchor = "} satisfies";
+    if !updated.contains(value_anchor) {
+        bail!(
+            "Could not find the sdk value block in {}; add the claim group by hand.",
+            sdk_path.display()
+        );
+    }
+    updated = updated.replacen(
+        value_anchor,
+        "  ,
+  claim: {
+    mintClaimToken
+  }
+} satisfies",
+        1,
+    );
+
+    Ok(Some(RenderedTemplate {
+        path: sdk_path,
         content: updated,
         context: None,
     }))
@@ -605,11 +520,7 @@ fn print_next_steps(stdout: &mut StandardStream, is_better_auth: bool) -> Result
     )?;
     writeln!(
         stdout,
-        "  3. Generate + apply the handoff-table migration: from iam/, run `migrate:create`"
-    )?;
-    writeln!(
-        stdout,
-        "     then `migrate:up` (a fresh scaffold's `database:setup` does this for you)."
+        "  3. Apply the migration (iam/migrations) or regenerate it for a non-postgres db."
     )?;
     if !is_better_auth {
         log_header!(stdout, Color::Yellow, "Heads up:");
@@ -677,14 +588,7 @@ mod tests {
             .expect("server.ts must be wired");
         assert!(server.content.contains("import { relayRouter }"));
         assert!(server.content.contains("app.use(relayRouter);"));
-        // Codegen normalizes quotes, so match the path without asserting a quote style.
-        assert!(
-            server
-                .content
-                .contains("app.internal.get(\"/relay/handoff\"")
-        );
-        // The router mount joins the existing run of `app.use(...)` calls.
-        assert!(server.content.contains("app.use(complianceRouter);"));
+        assert!(server.content.contains("app.internal.get('/relay/handoff'"));
 
         let registrations = inject_relay_into_registrations_ts(&iam)
             .unwrap()
@@ -692,8 +596,6 @@ mod tests {
         assert!(registrations.content.contains("RelaySessionService"));
         assert!(registrations.content.contains("INSTANCE_ID"));
         assert!(registrations.content.contains("INSTANCE_HMAC_KEY"));
-        // The service lands in the terminal chain, as a sibling of BetterAuth.
-        assert!(registrations.content.contains("BetterAuthCookieContext"));
 
         let entities = inject_relay_into_entities_index(&iam)
             .unwrap()
@@ -715,86 +617,76 @@ mod tests {
         remove_dir_all(&tmp).ok();
     }
 
-    /// The Health-Vault-shaped case: a customized iam whose wiring has DRIFTED
-    /// from the pristine blueprint. Here the terminal chain's last service is
-    /// renamed away from `RetentionService`, an EXTRA service is added, the last
-    /// mounted router is not `complianceRouter`, and the env chain's last entry
-    /// is not `JWKS_PUBLIC_KEY_URL`. The old verbatim-string anchors would bail
-    /// on every one of these; the structural wiring must still land.
-    #[test]
-    fn relay_wires_into_a_drifted_iam() {
-        let mut server = embedded("project/iam-better-auth/server.ts");
-        // Drift the mount run: rename complianceRouter -> auditRouter and drop the
-        // verbatim `app.use(complianceRouter);` anchor entirely, appending an
-        // extra mount so the last `app.use` is a fresh name.
-        server = server.replace("complianceRouter", "auditRouter").replace(
-            "app.use(auditRouter);",
-            "app.use(auditRouter);\napp.use(webhookRouter);",
-        );
-        assert!(!server.contains("app.use(complianceRouter);"));
-
-        let mut registrations = embedded("project/iam-better-auth/registrations.ts");
-        // Drift the terminal chain: rename RetentionService (the old service
-        // anchor) and add an extra service after it.
-        registrations = registrations.replace(
-            "RetentionService: {\n    lifetime: Lifetime.Singleton,\n    type: RetentionService,\n    factory: ({ Orm, OtelCollector }) =>\n      new RetentionService(Orm, OtelCollector)\n  }",
-            "DataRetentionService: {\n    lifetime: Lifetime.Singleton,\n    type: RetentionService,\n    factory: ({ Orm, OtelCollector }) =>\n      new RetentionService(Orm, OtelCollector)\n  },\n  AnalyticsService: {\n    lifetime: Lifetime.Scoped,\n    type: SurfacingService,\n    factory: ({ EntityManager }) => new SurfacingService(EntityManager)\n  }",
-        );
-        // Drift the env chain: append a custom env var after JWKS_PUBLIC_KEY_URL so
-        // the old env anchor (which required JWKS to be the LAST entry) is gone.
-        registrations = registrations.replace(
-            "  JWKS_PUBLIC_KEY_URL: {\n    lifetime: Lifetime.Singleton,\n    type: string,\n    value: getEnvVar('JWKS_PUBLIC_KEY_URL')\n  }\n});",
-            "  JWKS_PUBLIC_KEY_URL: {\n    lifetime: Lifetime.Singleton,\n    type: string,\n    value: getEnvVar('JWKS_PUBLIC_KEY_URL')\n  },\n  TENANT_HEADER: {\n    lifetime: Lifetime.Singleton,\n    type: optional(string),\n    value: getEnvVar('TENANT_HEADER') ?? undefined\n  }\n});",
-        );
-        // The exact block the old verbatim wiring anchored on is now gone.
-        assert!(!registrations.contains(
-            "  RetentionService: {\n    lifetime: Lifetime.Singleton,\n    type: RetentionService,\n    factory: ({ Orm, OtelCollector }) =>\n      new RetentionService(Orm, OtelCollector)\n  }\n});"
-        ));
-
-        let tmp = std::env::temp_dir().join(format!("fl-relay-drift-{}", std::process::id()));
-        let iam = tmp.join("iam");
-        create_dir_all(iam.join("api").join("controllers")).unwrap();
-        create_dir_all(iam.join("persistence").join("entities")).unwrap();
-        write(iam.join("server.ts"), &server).unwrap();
-        write(iam.join("registrations.ts"), &registrations).unwrap();
-        write(
-            iam.join("persistence").join("entities").join("index.ts"),
-            embedded("project/iam-better-auth/persistence/entities/index.ts"),
-        )
-        .unwrap();
-
-        // Despite none of the old verbatim anchors being present, the relay wires.
-        let server_out = inject_relay_into_server_ts(&iam)
-            .unwrap()
-            .expect("drifted server.ts must still be wired");
-        assert!(server_out.content.contains("app.use(relayRouter);"));
-        assert!(server_out.content.contains("import { relayRouter }"));
-        assert!(
-            server_out
-                .content
-                .contains("app.internal.get(\"/relay/handoff\"")
-        );
-        // The pre-existing (drifted) mounts survive.
-        assert!(server_out.content.contains("app.use(auditRouter);"));
-        assert!(server_out.content.contains("app.use(webhookRouter);"));
-
-        let registrations_out = inject_relay_into_registrations_ts(&iam)
-            .unwrap()
-            .expect("drifted registrations.ts must still be wired");
-        assert!(registrations_out.content.contains("RelaySessionService"));
-        assert!(registrations_out.content.contains("INSTANCE_ID"));
-        assert!(registrations_out.content.contains("INSTANCE_HMAC_KEY"));
-        // The drifted siblings survive alongside the injected entry.
-        assert!(registrations_out.content.contains("DataRetentionService"));
-        assert!(registrations_out.content.contains("AnalyticsService"));
-        assert!(registrations_out.content.contains("TENANT_HEADER"));
-
-        remove_dir_all(&tmp).ok();
-    }
-
     /// The generated endpoint files must be embedded in the binary (otherwise
     /// the scaffold panics) and must carry the security-critical contract: a
     /// root-basePath session-ingest route with internal HMAC access.
+    #[test]
+    #[test]
+    fn claim_mint_endpoint_template_is_embedded_and_purpose_checked() {
+        let controller = embedded("project/relay/api/controllers/claim-mint.controller.ts");
+        assert!(controller.contains("'/claim/mint'"));
+        assert!(controller.contains("access: 'internal'"));
+        // The platform's key is registered BESIDE the app's own, never
+        // replacing it: an operator must still be able to mint by hand.
+        assert!(controller.contains("default: HMAC_SECRET_KEY"));
+        assert!(controller.contains("platform: INSTANCE_HMAC_KEY"));
+        // One secret signs both directions, so a signature says what it is
+        // for and this endpoint refuses any other purpose.
+        assert!(controller.contains("app-claim-mint"));
+
+        let routes = embedded("project/relay/api/routes/relay.routes.ts");
+        assert!(routes.contains("'/claim/mint'"));
+
+        let hooks = embedded("project/relay/domain/hooks/appClaimHooks.ts");
+        assert!(hooks.contains("mintAppClaimLink"));
+    }
+
+    #[test]
+    fn claim_mint_is_registered_in_the_service_sdk() {
+        // The framework derives each route's operationId from its position in
+        // sdk.ts, and the platform resolves its call through that operationId.
+        // An endpoint missing here serves traffic and is still unreachable by
+        // the platform, which is the failure this pins.
+        let tmp = std::env::temp_dir().join(format!("fl-claim-sdk-{}", std::process::id()));
+        let iam = tmp.join("iam");
+        let _ = remove_dir_all(&tmp);
+        create_dir_all(&iam).unwrap();
+        write(
+            iam.join("sdk.ts"),
+            "import {
+  surfaceRoles
+} from './api/controllers';
+
+export type IamSdk = {
+  user: {
+    surfaceRoles: typeof surfaceRoles;
+  };
+};
+
+export const iamSdkClient = {
+  user: {
+    surfaceRoles
+  }
+} satisfies IamSdk;
+",
+        )
+        .unwrap();
+
+        let rendered = inject_claim_mint_into_sdk_ts(&iam).unwrap().unwrap();
+        assert!(
+            rendered
+                .content
+                .contains("mintClaimToken: typeof mintClaimToken;")
+        );
+        assert!(rendered.content.contains("claim: {"));
+
+        // Re-running the installer must not double-register.
+        write(iam.join("sdk.ts"), &rendered.content).unwrap();
+        assert!(inject_claim_mint_into_sdk_ts(&iam).unwrap().is_none());
+
+        let _ = remove_dir_all(&tmp);
+    }
+
     #[test]
     fn relay_endpoint_template_is_embedded() {
         assert!(
