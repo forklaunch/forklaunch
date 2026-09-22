@@ -18,17 +18,24 @@ import {
 const org = '302fbb63-1710-4738-aa60-d1fcabd2988f';
 
 /** A stand-in EntityManager: every method reports the tenant it ran under. */
-function fakeEm() {
-  const calls: string[] = [];
+function fakeEm(calls: string[] = []) {
   return {
     calls,
-    setFilterParams: (_name: string, params: { tenantId: string }) => calls.push(`filter:${params.tenantId}`),
+    setFilterParams: (_name: string, params: { tenantId: string }) =>
+      calls.push(`filter:${params.tenantId}`),
     findOne: async () => {
       calls.push(`findOne:${JSON.stringify(getCurrentTenantId())}`);
       return null;
     },
     flush: async () => {
       calls.push(`flush:${JSON.stringify(getCurrentTenantId())}`);
+    },
+    persist(this: unknown) {
+      calls.push(`persist:${JSON.stringify(getCurrentTenantId())}`);
+      return this;
+    },
+    fork() {
+      return fakeEm(calls);
     }
   };
 }
@@ -77,7 +84,40 @@ describe('wrapEmWithTenantContext and the empty tenant', () => {
     const em = fakeEm();
     const wrapped = wrapEmWithTenantContext(em as never, org);
     await wrapped.findOne('X' as never, {});
-    expect(em.calls).toEqual([`filter:${org}`, `findOne:${JSON.stringify(org)}`]);
+    expect(em.calls).toEqual([
+      `filter:${org}`,
+      `findOne:${JSON.stringify(org)}`
+    ]);
     expect(getCurrentTenantId()).toBe('');
+  });
+
+  it('keeps a chained persist().flush() inside the tenant', async () => {
+    // `persist` returns the entity manager. Handed back raw, the chained
+    // `flush` would run outside the context and encrypt the row under the
+    // ambient tenant; that is how an organization's subscription ended up
+    // written under the empty key by an operator promote.
+    const em = fakeEm();
+    const wrapped = wrapEmWithTenantContext(em as never, org);
+    const chained = wrapped.persist({} as never);
+    expect(chained).toBe(wrapped);
+    await chained.flush();
+    expect(em.calls).toEqual([
+      `filter:${org}`,
+      `persist:"${org}"`,
+      `flush:"${org}"`
+    ]);
+  });
+
+  it('binds a fork to the same tenant', async () => {
+    const em = fakeEm();
+    const wrapped = wrapEmWithTenantContext(em as never, org);
+    const forked = wrapped.fork();
+    expect(forked).not.toBe(em);
+    await forked.flush();
+    expect(em.calls).toEqual([
+      `filter:${org}`,
+      `filter:${org}`,
+      `flush:"${org}"`
+    ]);
   });
 });
