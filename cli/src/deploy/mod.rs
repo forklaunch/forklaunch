@@ -15,6 +15,7 @@ mod destroy;
 mod info;
 mod logs;
 mod rollback;
+mod target;
 pub(crate) mod utils;
 
 #[derive(Debug)]
