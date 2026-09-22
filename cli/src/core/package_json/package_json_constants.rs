@@ -180,9 +180,9 @@ pub(crate) fn application_seed_script<'a>(
 
 pub(crate) fn application_setup_script(runtime: &Runtime) -> String {
     match runtime {
-        Runtime::Bun => {
-            String::from("bun run build && bun run migrate:init && bun run migrate:up && bun run seed")
-        }
+        Runtime::Bun => String::from(
+            "bun run build && bun run migrate:init && bun run migrate:up && bun run seed",
+        ),
         Runtime::Node => {
             String::from("pnpm build && pnpm migrate:init && pnpm migrate:up && pnpm seed")
         }
@@ -351,7 +351,7 @@ pub(crate) const PROJECT_DOCS_SCRIPT: &str = "typedoc --out docs *";
 // Guarded for the same reason as migrate:init and migrate:up: the seeder boots
 // the ORM, which rejects an empty entity set outright rather than treating it
 // as nothing to seed.
-pub(crate) const PROJECT_SEED_SCRIPT: &str = "if ls persistence/entities/*.entity.ts >/dev/null 2>&1; then [ -z $DOTENV_FILE_PATH ] && export DOTENV_FILE_PATH=.env.local; NODE_OPTIONS='--import=tsx' mikro-orm seeder:run; fi";
+pub(crate) const PROJECT_SEED_SCRIPT: &str = "if ls persistence/entities/*.entity.ts >/dev/null 2>&1; then [ -z \"$DOTENV_FILE_PATH\" ] && [ -f .env.local ] && export DOTENV_FILE_PATH=.env.local; NODE_OPTIONS='--import=tsx' mikro-orm seeder:run; fi";
 
 pub(crate) fn project_retention_enforce_script(runtime: &Runtime) -> String {
     String::from(match runtime {
@@ -449,7 +449,12 @@ pub(crate) fn project_test_script(
 }
 
 pub(crate) fn project_migrate_script(command: &str) -> String {
-    let env = "[ -z $DOTENV_FILE_PATH ] && export DOTENV_FILE_PATH=.env.local;";
+    // Default to the developer's .env.local only when one exists. In a
+    // container there is none: the values come from the process environment,
+    // and pointing DOTENV_FILE_PATH at a missing file made every startup log
+    // and validation error talk about ".env.local" in production.
+    let env =
+        "[ -z \"$DOTENV_FILE_PATH\" ] && [ -f .env.local ] && export DOTENV_FILE_PATH=.env.local;";
     let orm = "NODE_OPTIONS='--import=tsx' mikro-orm";
     let base = format!("{} {} migration:", env, orm);
     match command {
@@ -482,46 +487,36 @@ pub(crate) fn project_migrate_script(command: &str) -> String {
     }
 }
 
+/// The container entrypoint. `.env.prod` is honoured when the image ships
+/// one; otherwise the process environment is the configuration. The
+/// migration and the server are joined with `&&` throughout: the previous
+/// shape ended the migration clause with `;`, so a failed migration still
+/// started the server against a schema it had not migrated.
 pub(crate) fn project_start_server_script(runtime: &Runtime, database: Option<Database>) -> String {
-    format!(
-        "{}[ -f .env.prod ] && export DOTENV_FILE_PATH=.env.prod; {} dist/server.js",
-        if database.is_some_and(|db| db != Database::MongoDB) {
-            format!(
-                "[ -f .env.prod ] && export DOTENV_FILE_PATH=.env.prod; {} migrate:up && ",
-                if runtime == &Runtime::Node {
-                    "pnpm"
-                } else {
-                    "bun"
-                }
-            )
-        } else {
-            "".to_string()
-        },
-        match runtime {
-            Runtime::Bun => "bun",
-            Runtime::Node => "node --import=tsx",
-        }
-    )
+    project_start_script(runtime, database, "dist/server.js")
 }
 pub(crate) fn project_start_worker_script(runtime: &Runtime, database: Option<Database>) -> String {
+    project_start_script(runtime, database, "dist/worker.js")
+}
+
+/// Shared by the service and worker entrypoints; see `project_start_server_script`.
+fn project_start_script(runtime: &Runtime, database: Option<Database>, entry: &str) -> String {
+    let package_manager = match runtime {
+        Runtime::Bun => "bun",
+        Runtime::Node => "pnpm",
+    };
+    let migrate = if database.is_some_and(|db| db != Database::MongoDB) {
+        format!("{} migrate:up && ", package_manager)
+    } else {
+        String::new()
+    };
+    let run = match runtime {
+        Runtime::Bun => "bun",
+        Runtime::Node => "node --import=tsx",
+    };
     format!(
-        "{}[ -f .env.prod ] && export DOTENV_FILE_PATH=.env.prod; {} dist/worker.js",
-        if database.is_some_and(|db| db != Database::MongoDB) {
-            format!(
-                "[ -f .env.prod ] && export DOTENV_FILE_PATH=.env.prod; {} migrate:up && ",
-                if runtime == &Runtime::Node {
-                    "pnpm"
-                } else {
-                    "bun"
-                }
-            )
-        } else {
-            "".to_string()
-        },
-        match runtime {
-            Runtime::Bun => "bun",
-            Runtime::Node => "node --import=tsx",
-        }
+        "if [ -f .env.prod ]; then export DOTENV_FILE_PATH=.env.prod; fi && {}{} {}",
+        migrate, run, entry
     )
 }
 
@@ -560,3 +555,40 @@ pub(crate) const SQLITE_POSTINSTALL_SCRIPT: &str =
     "cd node_modules/sqlite3 && node-gyp configure && node-gyp build";
 pub(crate) const BETTER_SQLITE_POSTINSTALL_SCRIPT: &str =
     "cd node_modules/better-sqlite3 && node-gyp configure && node-gyp build";
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The container has no `.env.local`; the defaults must not point at one,
+    /// and a failed migration must stop the server from starting.
+    #[test]
+    fn start_scripts_chain_migration_and_only_use_env_files_that_exist() {
+        let server = project_start_server_script(&Runtime::Node, Some(Database::PostgreSQL));
+        assert_eq!(
+            server,
+            "if [ -f .env.prod ]; then export DOTENV_FILE_PATH=.env.prod; fi && pnpm migrate:up && node --import=tsx dist/server.js"
+        );
+        assert!(
+            !server.contains("; node"),
+            "a `;` before the server would ignore a failed migration"
+        );
+
+        let worker = project_start_worker_script(&Runtime::Bun, Some(Database::PostgreSQL));
+        assert_eq!(
+            worker,
+            "if [ -f .env.prod ]; then export DOTENV_FILE_PATH=.env.prod; fi && bun migrate:up && bun dist/worker.js"
+        );
+
+        let no_db = project_start_server_script(&Runtime::Node, None);
+        assert_eq!(
+            no_db,
+            "if [ -f .env.prod ]; then export DOTENV_FILE_PATH=.env.prod; fi && node --import=tsx dist/server.js"
+        );
+
+        let migrate = project_migrate_script("up");
+        assert!(migrate.contains("[ -f .env.local ] && export DOTENV_FILE_PATH=.env.local"));
+        assert!(
+            PROJECT_SEED_SCRIPT.contains("[ -f .env.local ] && export DOTENV_FILE_PATH=.env.local")
+        );
+    }
+}
