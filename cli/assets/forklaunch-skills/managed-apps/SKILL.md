@@ -16,16 +16,21 @@ You built one app. You want to sell it so that **each customer runs their own
 private copy** — their own database, their own deployment, their own web
 address — instead of everyone sharing one system.
 
-Say you built a patient-records app for dental practices. Dr. Chen's practice
-and Dr. Osei's practice should never share a database. In managed mode:
+Throughout this skill the running example is a fictional product,
+**`acme-books`** — a bookkeeping app sold to small firms. Two of its
+customers, Meridian Tools and Okafor Contracting, should never share a
+database. In managed mode:
 
 - The **template** is your app, published once: a git repo plus a list of
   released versions. You own it.
-- An **instance** is one running copy — Dr. Chen's — with its own deployment
+- An **instance** is one running copy — Meridian's — with its own deployment
   and its own web host.
-- The **claim link** is the handover: a one-time URL you hand to Dr. Chen. She
-  opens it, sets a passphrase, and the instance becomes hers. She never gets a
-  ForkLaunch login.
+- The **claim link** is the handover: a one-time URL you hand to Meridian.
+  They open it, set a passphrase, and the instance becomes theirs. They never
+  get a ForkLaunch login.
+
+Every `acme-books`, slug, hostname and variable name below is invented for
+the example; substitute your own.
 
 **When to use managed mode vs a plain deploy.** A plain `forklaunch deploy`
 gives you *one* running app that *you* operate. Managed mode is for when you are
@@ -75,10 +80,10 @@ publish-template**. Doing only `publish` leaves the template a draft, and
 
 ```bash
 forklaunch managed template create \
-  --slug clinic-portal \
+  --slug acme-books \
   --name "Clinic Portal" \
-  --repo https://github.com/your-org/clinic-portal \
-  --description "Patient records for dental practices"
+  --repo https://github.com/your-org/acme-books \
+  --description "Bookkeeping for small firms"
 ```
 
 A new template is a **draft**, and nothing can launch from a draft. `--repo` is
@@ -101,7 +106,7 @@ template's value.
 
 ```bash
 forklaunch managed template publish \
-  --slug clinic-portal \
+  --slug acme-books \
   --semver 1.4.0 \
   --git-ref v1.4.0        # tag, branch, or commit sha
 ```
@@ -125,7 +130,7 @@ ref and nothing else. Three rules, each the cause of a real `build_failed`:
 ### publish-template (the TEMPLATE itself)
 
 ```bash
-forklaunch managed template publish-template --slug clinic-portal
+forklaunch managed template publish-template --slug acme-books
 ```
 
 This is exactly `template update --status published`, under a name that says
@@ -135,7 +140,7 @@ instance can be launched.
 ### update (the general form)
 
 ```bash
-forklaunch managed template update --slug clinic-portal \
+forklaunch managed template update --slug acme-books \
   --name "Clinic Portal" --description "..." \
   --status published \                  # draft | published | retired
   --stripe-product prod_ABC \           # stored, but billing does NOT read it yet
@@ -172,15 +177,15 @@ and choosing the right kind is the whole point:
 
 ```bash
 # static — one literal shared by all instances
-forklaunch managed template vars set --slug clinic-portal \
+forklaunch managed template vars set --slug acme-books \
   --key LOG_LEVEL --kind static --value info
 
 # generated — each instance derives its own secret
-forklaunch managed template vars set --slug clinic-portal \
+forklaunch managed template vars set --slug acme-books \
   --key SESSION_SECRET --kind generated --generator 32-bytes-base64
 
 # custom, required, service-scoped
-forklaunch managed template vars set --slug clinic-portal \
+forklaunch managed template vars set --slug acme-books \
   --key STRIPE_KEY --kind custom --required \
   --scope service --service billing
 ```
@@ -212,8 +217,8 @@ Static values are **not readable back** — `vars list` reports that a value *is
 set*, not what it is. To change one, set it again.
 
 ```bash
-forklaunch managed template vars list --slug clinic-portal   # KEY KIND SCOPE SERVICE REQUIRED SOURCE
-forklaunch managed template vars unset --slug clinic-portal --key LOG_LEVEL --scope application
+forklaunch managed template vars list --slug acme-books   # KEY KIND SCOPE SERVICE REQUIRED SOURCE
+forklaunch managed template vars unset --slug acme-books --key LOG_LEVEL --scope application
 ```
 
 ### Editing an instance's variables in the dashboard
@@ -305,9 +310,9 @@ the code in dev when no Twilio creds are configured.)
 ### create → provisioning
 
 ```bash
-forklaunch managed instance create --template clinic-portal --region us-west-2
+forklaunch managed instance create --template acme-books --region us-west-2
 # override the compute tier (default is pico):
-forklaunch managed instance create --template clinic-portal --region us-west-2 --instance-size micro
+forklaunch managed instance create --template acme-books --region us-west-2 --instance-size micro
 ```
 
 **Compute size.** Managed instances are usually tiny single-tenant apps, so they
@@ -444,7 +449,7 @@ reports no link available. `--dryrun` does NOT consume it.
 
 ### endpoints — pointing a frontend at an instance
 
-Every instance carries `hostPrefix` (public, e.g. `clinic-portal-a1b2c3`),
+Every instance carries `hostPrefix` (public, e.g. `acme-books-a1b2c3`),
 `endpoints` (one https base URL per HTTP component, derived from the release
 manifest) and, once the template has a `frontendDomain`, `frontendUrl`
 (`https://<hostPrefix>.<frontend domain>`). `instance list --json`, the
@@ -490,8 +495,8 @@ instead of hanging CI.
 ### The whole lifecycle, as run unattended
 
 Provision → platform claim → the product's own claim → sign-in → reset →
-destroy was run end to end on a fresh Health Vault instance on 2026-09-21
-(45 minutes including two fleet rollouts). The only human steps are the
+destroy has been run end to end on a fresh instance (45 minutes including
+two fleet rollouts). The only human steps are the
 two the customer does in a browser; everything else is the CLI above. What
 the run taught, in the order an operator meets it: the approval park on a
 gated org; wait for the vault, not the state; `--json` on `claim-link`
@@ -501,8 +506,8 @@ in `=`); a template is buildable only by the org whose GitHub App
 installation reads the repo, from a full SHA/branch/tag, on a fresh
 semver; a two-instance rollout is two waves of ~4 min; a reset on a
 claimed instance is 3 min to `awaiting_claim` with both claims cleared.
-The product-side recipe with exact commands is the Health Vault
-`operations.md` §1b.
+A product's own operations skill should carry the same sequence with its
+own claim-link and sign-in steps filled in.
 
 ### summary
 
@@ -522,8 +527,8 @@ moves every instance of a product to a published version in waves, and is
 the managed path:
 
 ```bash
-forklaunch managed rollout start --template clinic-portal --semver 1.4.0 --waves 10,100 --halt-above 10   # POST /managed-mode/rollouts → 201
-forklaunch managed rollout list [--template clinic-portal]        # every rollout, newest first
+forklaunch managed rollout start --template acme-books --semver 1.4.0 --waves 10,100 --halt-above 10   # POST /managed-mode/rollouts → 201
+forklaunch managed rollout list [--template acme-books]        # every rollout, newest first
 forklaunch managed rollout get --id <rollout-id>                  # waves + per-instance items
 forklaunch managed rollout advance --id <rollout-id>              # RESUME a halted/restarted rollout — not "next wave"
 # record an outcome by hand if the platform callback did not (managed-apps direct):
@@ -646,7 +651,7 @@ must be new. The worker's dead-letter entry carries git's own message
 **Instance up but sign-in fails.** `forklaunch managed summary` shows relay
 eligibility per instance and the product's routes; an ineligible instance
 (`resetting`, `destroying`, …) has its OAuth callback refused, and a product
-with no route declared runs the legacy Epic path. `suspended` stays
+with no route declared runs the legacy platform-side exchange. `suspended` stays
 relay-eligible on purpose, so a mid-flight sign-in fails at the (down) instance
 rather than looking like a relay misconfiguration. The relay's own reasons are
 logged under `[Relay]` — the table is in `/managed-relay`.
@@ -656,8 +661,9 @@ logged under `[Relay]` — the table is in `/managed-relay`.
 
 ## 5. The OAuth relay for hosted instances
 
-Hosted instances that sign users in through an external provider (Epic is the
-motivating case) share **one** registered redirect URI per product:
+Hosted instances that sign users in through an external provider — any
+provider that registers a single redirect URI per app — share **one**
+registered redirect URI per product:
 
 ```
 callback URL:   https://relay-<templateId>.<platform zone>/callback      (from `managed summary`)
@@ -669,25 +675,74 @@ product, burns the nonce (single-use, 10 min), and hands the callback to the
 instance according to a **relay route** the product declared on its template
 — `{ name, component, path, mode }`:
 
-- **`redirect`** (browser OAuth, and what Epic needs): 302 the browser to
+- **`redirect`** (browser OAuth): 302 the browser to
   `https://<prefix>-<component>.<zone><path>` with the provider's query
   intact; the instance finishes the exchange with its own PKCE verifier. No
-  provider secret on the platform.
+  provider secret on the platform. This is the only mode that works with a
+  provider that issues no client secret.
 - **`forward`** (webhooks): HMAC-signed POST to the component over the mesh.
 
 ```http
 forklaunch managed template relay list  --slug <slug>            # the callback URL to register + every route with its URL
-forklaunch managed template relay set   --slug <slug> --name default --component vault --path /epic/callback --mode redirect
+forklaunch managed template relay set   --slug <slug> --name default --component app --path /oauth/callback --mode redirect
 forklaunch managed template relay clear --slug <slug> --name <name> | --all
 # (PUT /managed-mode/templates/<slug>/relay-routes — whole-list replace; `set` splices one route in)
 ```
 
+The dashboard has the same thing under Managed apps → Templates → **Relay**,
+including a copy button for the URL to register with the provider.
+
 `default` is served at the bare `/callback`; other names at
 `/callback/<name>`, each with its own URL in `managed summary`
 (`relayConfigs[].routes[].callbackUrl`). Publish rejects a route whose
-component does not serve the path. A template with no routes keeps the legacy
-Epic exchange+forward path. Everything else — the DNS/ALB plumbing, the
+component does not serve the path. A template with no routes keeps the
+legacy platform-side exchange+forward path. Everything else — the DNS/ALB plumbing, the
 per-mode contract, the debugging table — is in `/managed-relay`.
+
+## 6. Letting a customer's AI read their instance (MCP)
+
+A managed instance holds one customer's data, so "connect your AI to it" is a
+per-instance question, and the product — not the platform — answers it. The
+shape that works:
+
+**Two gates, both inside the product, neither of them the framework's.**
+
+- **A grant** for anyone who is not the owner (a clinician, the owner's own
+  assistant): a named, expiring, revocable invitation the owner creates in the
+  product's UI, carrying a **purpose**. Every tool call presents its invitation
+  code; the product resolves it to the grant and refuses an unknown, expired or
+  revoked one with 401.
+- **An owner token** for tools that WRITE (publishing a report, recording a
+  fact, pushing a rule). Constant-time compared, never a grant — a reviewer's
+  grant must never be able to write, and the owner token must never read as a
+  reviewer.
+
+**One egress point, not one per tool.** Minimization belongs in a single
+function every outward-facing read passes through: identifiers always
+withheld, only the record types and free text the purpose needs, owner-hidden
+items dropped silently. A per-tool filter is how a leak happens — one
+unguarded route is enough.
+
+**Refusals are 401; everything else is a 200 carrying `{ ok: false, error }`.**
+A missing grant is an auth failure; "no such report" is an answer.
+
+**What the platform gives you and what it does not.** Instances get their
+public hosts and certificates, so an MCP endpoint on a component
+(`https://<prefix>-<component>.<zone>/api/mcp/...`) is reachable with no extra
+infrastructure, and the relay can route a provider callback back to the right
+instance. The platform does **not** run an OAuth authorization server for you:
+a hosted AI client that expects OAuth 2.1 dynamic client registration needs
+that server somewhere — today that means the product ships it as its own
+component (and declares a relay route for its callback), or the customer's
+client uses a token the product issues. Plan for it before promising "connect
+your AI"; tools reachable over HTTP are not the same as a connector a consumer
+app will accept.
+
+**Consequential actions need a step-up the owner can actually pass.** If the
+product's owners are created by a claim ceremony (phone + one-time code), they
+have **no password** — a step-up that only accepts one locks them out of
+creating the very grant an AI needs. Offer the credential they have: a code to
+the verified phone, verified without creating a session.
 
 ## Plain-English summary
 
@@ -709,7 +764,7 @@ give an instance back to the pool, reset it (never re-claim it).
 
 ## Still manual today
 
-- A product's own post-claim ceremony (Health Vault's phone claim) mints its
-  link with an operator script; minting it from the platform at claim time is
-  the intended end state.
+- A product's own post-claim ceremony (a phone or email verification inside
+  the app) mints its link with an operator script; minting it from the
+  platform at claim time is the intended end state.
 - Recording a rollout item's result by hand is managed-apps-direct (no CLI).
