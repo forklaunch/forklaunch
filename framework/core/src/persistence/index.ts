@@ -54,7 +54,11 @@ export {
   registerEncryptor,
   setEncryptionTenantId,
   withEncryptionContext,
-  getCurrentTenantId
+  getCurrentTenantId,
+  getBoundTenantId,
+  assertBindableTenantId,
+  EmptyTenantError,
+  UnboundTenantError
 } from './encryptedType';
 
 // Field encryption

@@ -29,6 +29,71 @@ export function registerEncryptor(encryptor: FieldEncryptor): void {
 }
 
 /**
+ * The empty string was offered as a tenant id.
+ *
+ * `''` used to mean "the global tenant", which made it impossible to tell a
+ * deliberate global row from a tenant that was never resolved — the two are
+ * the same key. Rows written by mistake under `''` read back fine from any
+ * other unbound path and fail only when a correctly-bound caller finally
+ * touches them, arbitrarily far from the code that caused it.
+ *
+ * Global rows need a tenant id you can name and search for — a constant like
+ * `'_internal'` that no organization can collide with. Pick one and pass it.
+ */
+export class EmptyTenantError extends Error {
+  constructor(api: string) {
+    super(
+      `${api}: '' is not a tenant id. It used to mean "global", which made a ` +
+        `deliberate global row indistinguishable from a tenant nobody resolved. ` +
+        `Bind an explicit constant (for example '_internal') for rows that ` +
+        `genuinely belong to no organization.`
+    );
+    this.name = 'EmptyTenantError';
+  }
+}
+
+/**
+ * An encrypted column was read or written with no tenant bound.
+ *
+ * This is the failure the empty tenant used to hide. An unbound write
+ * encrypted under `''` and looked like it worked; the row then failed to
+ * decrypt for the tenant that owned it, and the stack trace pointed at the
+ * innocent reader. Failing here names the actual culprit: the write path
+ * that never bound a tenant.
+ *
+ * Bind one with `wrapEmWithTenantContext(em, tenantId)` in the DI
+ * `EntityManager` factory, or `withEncryptionContext(tenantId, fn)` around
+ * the work. A raw manager — `orm.em.fork()`, or the `__em` off a wrapped
+ * entity — escapes the proxy and arrives here unbound.
+ */
+export class UnboundTenantError extends Error {
+  constructor(operation: string) {
+    super(
+      `Cannot ${operation} an encrypted column with no tenant bound. Wrap the ` +
+        `work in withEncryptionContext(tenantId, fn), or take the entity ` +
+        `manager from a factory that calls wrapEmWithTenantContext. A raw ` +
+        `em.fork() (or wrap(entity).__em) escapes the tenant proxy.`
+    );
+    this.name = 'UnboundTenantError';
+  }
+}
+
+/**
+ * Reject `''` at every door that binds a tenant.
+ *
+ * Exported so the binding helpers in this package share one rule, and so an
+ * application's own factory can apply the same one at its own boundary.
+ */
+export function assertBindableTenantId(
+  tenantId: string,
+  api: string
+): asserts tenantId is string {
+  if (tenantId === '') {
+    throw new EmptyTenantError(api);
+  }
+}
+
+/**
  * Set the encryption tenant ID for the current async context.
  *
  * IMPORTANT: this uses `AsyncLocalStorage.enterWith`, which mutates the
@@ -46,6 +111,7 @@ export function registerEncryptor(encryptor: FieldEncryptor): void {
  * for purely synchronous code paths.
  */
 export function setEncryptionTenantId(tenantId: string): void {
+  assertBindableTenantId(tenantId, 'setEncryptionTenantId');
   _tenantContext.enterWith({ tenantId });
 }
 
@@ -64,15 +130,42 @@ export function setEncryptionTenantId(tenantId: string): void {
  * automatically.
  */
 export function withEncryptionContext<T>(tenantId: string, fn: () => T): T {
+  assertBindableTenantId(tenantId, 'withEncryptionContext');
   return _tenantContext.run({ tenantId }, fn);
 }
 
 /**
- * Get the current tenant ID. Returns empty string when no context is set
- * (startup, seeders, better-auth, background jobs).
+ * Get the current tenant ID, or the empty string when none is bound.
+ *
+ * @deprecated The empty string it returns when nothing is bound is the whole
+ * problem: "no tenant" and "the global tenant" became the same value, so an
+ * unbound write encrypted under `''` and surfaced as somebody else's decrypt
+ * failure. Encryption no longer reads through this — it uses the bound tenant
+ * and throws {@link UnboundTenantError} when there is none. Use
+ * {@link getBoundTenantId} and handle `undefined` explicitly.
  */
 export function getCurrentTenantId(): string {
   return _tenantContext.getStore()?.tenantId ?? '';
+}
+
+/**
+ * The tenant bound to the current async context, or `undefined` if none is.
+ *
+ * The distinction {@link getCurrentTenantId} cannot make: `undefined` is
+ * "nobody bound a tenant", which is a bug on any path that touches an
+ * encrypted column, and never a key.
+ */
+export function getBoundTenantId(): string | undefined {
+  return _tenantContext.getStore()?.tenantId;
+}
+
+/** The bound tenant, or {@link UnboundTenantError} naming what was attempted. */
+function requireBoundTenantId(operation: string): string {
+  const tenantId = _tenantContext.getStore()?.tenantId;
+  if (tenantId === undefined || tenantId === '') {
+    throw new UnboundTenantError(operation);
+  }
+  return tenantId;
 }
 
 // ---------------------------------------------------------------------------
@@ -206,7 +299,14 @@ export class EncryptedType extends Type<unknown, string | null> {
     }
 
     const serialized = this.serialize(value);
-    return _encryptor.encrypt(serialized, getCurrentTenantId()) ?? serialized;
+    // Also the WHERE-clause path: a query value is encrypted under the bound
+    // tenant before it is compared. Unbound, that used to produce ciphertext
+    // under `''` which simply matched nothing — a silent empty result set,
+    // not an error.
+    return (
+      _encryptor.encrypt(serialized, requireBoundTenantId('write')) ??
+      serialized
+    );
   }
 
   override convertToJSValue(
@@ -228,7 +328,7 @@ export class EncryptedType extends Type<unknown, string | null> {
     }
 
     let decrypted: string | null;
-    const tenantId = getCurrentTenantId();
+    const tenantId = requireBoundTenantId('read');
     try {
       decrypted = _encryptor.decrypt(value, tenantId);
     } catch (err) {

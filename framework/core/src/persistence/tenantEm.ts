@@ -1,5 +1,5 @@
 import type { EntityManager } from '@mikro-orm/core';
-import { withEncryptionContext } from './encryptedType';
+import { assertBindableTenantId, withEncryptionContext } from './encryptedType';
 
 /**
  * Wrap a tenant-scoped MikroORM `EntityManager` so that every operation on
@@ -50,26 +50,29 @@ import { withEncryptionContext } from './encryptedType';
  * }
  * ```
  *
- * # The empty tenant is a tenant
+ * # The empty tenant is not a tenant
  *
- * Global rows (a billing plan, a trial, a template) are encrypted under the
- * empty tenant `''`. A caller that passes `''` means "bind the no-tenant
- * key", and gets a Proxy that runs every EM call inside
- * `withEncryptionContext('', …)`. Only `undefined` means "do not wrap": the
- * EM is returned as is and inherits whatever context is already bound,
- * which is right for a super-admin lookup that has not resolved a tenant
- * yet, and wrong for anything that writes.
+ * `''` is rejected: it throws `EmptyTenantError`. It used to mean "bind the
+ * no-tenant key", which is how global rows (a billing plan, a trial, a
+ * template) were encrypted — and it made a deliberate global row and a tenant
+ * nobody resolved the same key. A path that forgot to bind wrote perfectly
+ * readable rows under `''`, and the mistake surfaced later, somewhere else, as
+ * the owning tenant's "Failed to decrypt encrypted column value".
  *
- * Earlier versions treated `''` like `undefined` and also seeded the ALS
- * with `enterWith`, which mutates the *calling* async resource. Together
- * those meant: after one org-scoped EM was created on a request, a later
- * "no-tenant" EM on the same resource silently read and wrote under that
- * org's key. Global rows then came out unreadable ("Failed to decrypt
- * encrypted column value") depending on what had run before on the worker.
+ * Global rows need an id you can name and search for. Pick a constant no
+ * organization can collide with — the platform uses `'_internal'` — and bind
+ * it like any other tenant.
+ *
+ * `undefined` still means "do not wrap": the EM is returned as is and inherits
+ * whatever context is already bound. That is right only for a lookup that has
+ * not resolved a tenant yet and reads no encrypted column; anything that
+ * touches one now fails with `UnboundTenantError` rather than quietly using
+ * the empty key.
  *
  * @param em        a freshly forked `EntityManager` from `orm.em.fork(...)`
- * @param tenantId  the org/tenant id to bind; `''` binds the no-tenant key;
+ * @param tenantId  the org/tenant id to bind; `''` throws;
  *                  `undefined` skips wrapping entirely
+ * @throws EmptyTenantError when `tenantId` is `''`
  */
 export function wrapEmWithTenantContext(
   em: EntityManager,
@@ -79,11 +82,9 @@ export function wrapEmWithTenantContext(
     return em;
   }
 
-  // The MikroORM tenant filter scopes rows to an organization; the empty
-  // tenant has no rows of its own to scope, so only a real id sets it.
-  if (tenantId) {
-    em.setFilterParams('tenant', { tenantId });
-  }
+  assertBindableTenantId(tenantId, 'wrapEmWithTenantContext');
+
+  em.setFilterParams('tenant', { tenantId });
 
   // No `setEncryptionTenantId` here on purpose: `enterWith` mutates the
   // caller's async resource and leaks the tenant into everything that runs
