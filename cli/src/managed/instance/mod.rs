@@ -3,6 +3,7 @@ use clap::{ArgMatches, Command};
 
 use crate::{CliCommand, core::command::command};
 
+mod app_claim_link;
 mod apply_variables;
 mod claim;
 mod claim_link;
@@ -17,6 +18,7 @@ mod rotate_keys;
 mod update;
 mod vars;
 
+use app_claim_link::AppClaimLinkCommand;
 use apply_variables::ApplyVariablesCommand;
 use claim::ClaimCommand;
 use claim_link::ClaimLinkCommand;
@@ -36,6 +38,7 @@ pub(super) struct InstanceCommand {
     list: ListCommand,
     create: CreateCommand,
     claim_link: ClaimLinkCommand,
+    app_claim_link: AppClaimLinkCommand,
     claim: ClaimCommand,
     destroy: DestroyCommand,
     vars: VarsCommand,
@@ -54,6 +57,7 @@ impl InstanceCommand {
             list: ListCommand::new(),
             create: CreateCommand::new(),
             claim_link: ClaimLinkCommand::new(),
+            app_claim_link: AppClaimLinkCommand::new(),
             claim: ClaimCommand::new(),
             destroy: DestroyCommand::new(),
             vars: VarsCommand::new(),
@@ -102,6 +106,7 @@ impl CliCommand for InstanceCommand {
         .subcommand(self.list.command())
         .subcommand(self.create.command())
         .subcommand(self.claim_link.command())
+        .subcommand(self.app_claim_link.command())
         .subcommand(self.claim.command())
         .subcommand(self.destroy.command())
         .subcommand(self.vars.command())
@@ -120,6 +125,7 @@ impl CliCommand for InstanceCommand {
             Some(("list", sub_matches)) => self.list.handler(sub_matches),
             Some(("create", sub_matches)) => self.create.handler(sub_matches),
             Some(("claim-link", sub_matches)) => self.claim_link.handler(sub_matches),
+            Some(("app-claim-link", sub_matches)) => self.app_claim_link.handler(sub_matches),
             Some(("claim", sub_matches)) => self.claim.handler(sub_matches),
             Some(("destroy", sub_matches)) => self.destroy.handler(sub_matches),
             Some(("vars", sub_matches)) => self.vars.handler(sub_matches),
