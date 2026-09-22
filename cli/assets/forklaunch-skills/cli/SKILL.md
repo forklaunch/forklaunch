@@ -230,12 +230,14 @@ forklaunch init module <name> --path <app-path> --module <module-type> --databas
 # billing-stripe  — Stripe billing implementation
 # iam-base        — IAM authorization only (no auth provider)
 # iam-better-auth — Better Auth implementation for IAM
-# relay           — Managed-mode relay callback listener. Scaffolds a signed,
-#                   universal callback-acceptor endpoint into the app's iam
-#                   service: the platform relay forwards a verified provider
-#                   callback (Epic OAuth today; any per-instance event) to it,
-#                   and it replay-guards, dispatches, and hands back a session.
-#                   Injects into iam, so no -d/--database. See the /managed-relay skill.
+# relay           — Managed-mode relay callback listener. Scaffolds the signed
+#                   forward-mode endpoint into the app's iam service: the
+#                   platform relay HMAC-POSTs a verified provider callback to
+#                   it, and it replay-guards, dispatches, and hands back a
+#                   session. Only needed for `forward` routes and the legacy
+#                   confidential-client path — a `redirect` route is served by
+#                   the app's own component. Injects into iam, so no
+#                   -d/--database. See the /managed-relay skill.
 
 # Example:
 forklaunch init module billing --path ./src/modules --module billing-stripe --database postgresql

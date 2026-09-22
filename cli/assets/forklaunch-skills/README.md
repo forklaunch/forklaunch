@@ -78,7 +78,7 @@ Full version in `AGENTS.md` and `CLAUDE.md`.
 - `/managed-provisioning` — Managed apps: templates, provisioning, the claim handover, and where each surface stops.
 - `/managed-apps` — Managed mode runbook: the `forklaunch managed` CLI end to end (template publish vs publish-template, the three variable kinds, instance create → claim → destroy) plus failure modes (DLQ, the custom-var decrypt bug, the OAuth relay).
 - `/managed-app-repo` — Prepare an application REPO to run as a managed app: the platform/instance trust boundary (a signing secret never reaches a browser), which secret signs which direction, the hosted-gateway variable contract, and the two-half handover ceremony. Read before publishing a template.
-- `/managed-relay` — The relay: a per-product, signed, universal callback acceptor that forwards a verified provider event to the right instance. The ingest contract, the one-command install (`init module -m relay`), and the publish check. Epic OAuth is the first wired event.
+- `/managed-relay` — The relay: one callback address per product that the platform routes to the right customer's instance. Relay routes (`redirect` for browser OAuth, including providers that issue no client secret; `forward` for webhooks), what a product declares, what its app must serve, and how to read a bounced callback.
 - `/deploy-mode` — The two decisions a first deploy forces: single-app vs managed template, and cluster placement (platform-shared / org-shared / dedicated) with its cost and compliance consequences. Read before any first deploy.
 - `/deployment-approvals` — Approval gating: why it is opt-in, resolution order, four-eyes, the two gates.
 

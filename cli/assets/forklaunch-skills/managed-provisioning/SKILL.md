@@ -9,19 +9,20 @@ user-invokable: true
 ## What this is, plainly
 
 You built an app. You want to sell it so **each customer gets their own private
-copy**: one dental practice's patient records never share a database with
+copy**: one customer's data never shares a database with
 another's.
 
 A **template** is the blueprint (your git repo, built once per version into an
 image). An **instance** is one customer's copy. **Claiming** is the handover:
 the customer sets a passphrase and the instance becomes theirs.
 
-Say you sell a booking system to dental practices. You publish version 1.4.0 of
-the template. An operator on your team launches an instance for Dr. Chen's
+Say you sell a booking system to small firms (the example product here is
+`acme-books`; substitute your own). You publish version 1.4.0 of
+the template. An operator on your team launches an instance for Meridian
 practice; twenty minutes later it is running at its own address, empty, waiting
-to be claimed. The operator sends Dr. Chen a one-time link. Dr. Chen opens it,
+to be claimed. The operator sends Meridian a one-time link. They open it,
 sets a passphrase, and the instance is hers. Later you ship 1.5.0 and roll it
-out to ten percent of practices, then all of them. When Dr. Chen's practice
+out to ten percent of customers, then all of them. When Meridian
 closes, you wipe her instance and hand it to the next practice, or destroy it.
 
 Every one of those moments is a **state** on the instance, and every arrow
@@ -220,7 +221,7 @@ refuses reset and propagation until its item leaves `updating`.
 | `POST /instances/claim` | claim: token + browser-derived backup public key |
 | `POST /instance-gateway/sms/otp` | template-locked OTP on behalf of an instance |
 | `POST /instance-gateway/claim/claimed` | the instance tells the platform its app-side claim finished (`appClaimedAt`) |
-| `GET /callback[/:route]` | the OAuth relay (Epic etc.) for eligible states only |
+| `GET /callback[/:route]` | the OAuth relay (any provider) for eligible states only |
 
 ### Worker-facing (HMAC, `/internal`)
 
@@ -298,9 +299,7 @@ is delivered too, newest first, as `LEGACY_<KEY>S` (comma-separated), and the
 per-instance gateway HMAC key is minted afresh. The current version is then
 redeployed. **The app does the re-encryption**: on startup, when
 `LEGACY_ENCRYPTION_KEYS` is set, it must open every encrypted column with the
-key ring and rewrite it under the current key before serving (Health Vault
-does this in each service's boot; the platform's own modules do the same for
-their key via `reencrypt-legacy-key.util.ts`). An app that ignores the legacy
+key ring and rewrite it under the current key before serving. An app that ignores the legacy
 list will find all of its encrypted data unreadable after a rotation, so the
 route refuses (`ROTATE_UNSUPPORTED_BY_TEMPLATE`) until the template's
 maintainer sets `supportsKeyRotation` on the template (PATCH
@@ -311,16 +310,28 @@ instance's requests for the minutes between the request and the redeploy
 landing (old HMAC key on the instance, new one on the platform).
 
 **Teardown.** `destroying` is enqueued; the worker deletes the backing
-application, which only *schedules* the teardown deployment (snapshots first),
-and records that deployment's id on the instance. `destroyed` is written by the
-deployment-result callback when the teardown lands — the row once said
-`destroyed` 20 s after the request while the vault host answered 200 for
-minutes (bb0f60, 2026-09-21). A failed teardown keeps the instance `destroying`
-with `lastError`; `DELETE` again re-queues it, and the worker never deletes
-twice while the teardown it scheduled is still running (a second delete cancels
-and reschedules). No application, or no teardown scheduled: `destroyed` at
-once. `instance get` on a destroyed id still returns the row; `list` hides
-it.
+application, which only *schedules* the teardown deployment (snapshots first)
+and answers with its id; the instance holds it in `teardownDeploymentId`.
+`destroyed` is written by the deployment-result callback when THAT deployment
+lands. Two separate incidents shaped this rule:
+
+- the row said `destroyed` 20 s after the request while the vault host answered
+  200 for minutes (bb0f60, 2026-09-21) — the worker reported success as soon as
+  the delete returned;
+- the row said `destroyed` ~15 s after the request and the stack was never torn
+  down at all (bce13e, 2026-09-22) — the callback was matched against
+  `latestDeploymentId`, which still held the reset's wipe deploy from four
+  minutes earlier. A destroy therefore ignores every callback until
+  `teardownDeploymentId` is set, and then only the deployment it names.
+
+`destroyed` is terminal, so a premature one is unrecoverable through the
+instance API — the backing application is then the only handle left (deleting
+it schedules the teardown normally). A failed teardown keeps the instance
+`destroying` with `lastError`; `DELETE` again re-queues it, and the worker
+never deletes twice while the teardown it scheduled is still running (a second
+delete cancels and reschedules). No application, or no teardown scheduled:
+`destroyed` at once. `instance get` on a destroyed id still returns the row;
+`list` hides it.
 
 ## Hooking a client into the machine
 
