@@ -8,6 +8,7 @@ import { Metrics, metrics } from '@forklaunch/blueprint-monitoring';
 import { OpenTelemetryCollector } from '@forklaunch/core/http';
 import {
   FieldEncryptor,
+  getCurrentTenantId,
   wrapEmWithTenantContext
 } from '@forklaunch/core/persistence';
 import {
@@ -223,13 +224,46 @@ const serviceDependencies = runtimeDependencies.chain({
     // compliance service doesn't cascade through (single-hop by design) —
     // out of scope for this phase, tracked in plan/cac/ §12 if it needs
     // solving later.
+    //
+    // `ComplianceDataService.erase`/`export` fork their own EntityManager
+    // internally (`this.orm.em.fork()`) with no way to pass tenant context
+    // in — the published service has no such hook, and adding one would
+    // mean cutting a new @forklaunch/core release before this module could
+    // even use it (same trap `@forklaunch/interfaces-cac` hit earlier in
+    // this PR). So instead of the bare `Orm`, this passes an adapter whose
+    // `em.fork()` wraps the real fork with `wrapEmWithTenantContext`,
+    // reading whatever tenant is ambient (via `getCurrentTenantId()`) at
+    // the moment `erase`/`export` calls it. compliance.controller.ts binds
+    // that ambient tenant with `withEncryptionContext(tenantId, ...)`
+    // before calling in. Without this, PHI fields (Patient.firstName/
+    // lastName/dateOfBirth/ssn, Insurance.memberId) decrypt under the
+    // bare/no-tenant key instead of the organization's real one — see
+    // claim.controller.ts's tenant-context comment and
+    // framework/core/src/persistence/tenantEm.ts's doc comment for why
+    // this has to be the wrapped-EM mechanism, not just an outer
+    // `withEncryptionContext` around the whole call: pg's connection pool
+    // callbacks don't reliably carry a single ambient AsyncLocalStorage
+    // scope across the several separate queries erase/export run.
     factory: ({ Orm, OtelCollector }) =>
-      new ComplianceDataService(Orm, OtelCollector, {
-        Patient: 'id',
-        Insurance: 'patient',
-        Encounter: 'patient',
-        Claim: 'patient'
-      })
+      new ComplianceDataService(
+        {
+          em: {
+            fork: (options?: ForkOptions) =>
+              wrapEmWithTenantContext(
+                Orm.em.fork(options),
+                getCurrentTenantId() || undefined
+              )
+          },
+          getMetadata: () => Orm.getMetadata()
+        },
+        OtelCollector,
+        {
+          Patient: 'id',
+          Insurance: 'patient',
+          Encounter: 'patient',
+          Claim: 'patient'
+        }
+      )
   },
   RetentionService: {
     lifetime: Lifetime.Singleton,
