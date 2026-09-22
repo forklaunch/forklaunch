@@ -108,10 +108,19 @@ forklaunch managed template publish \
 
 A newly added version starts **`pending`**: the platform builds the image from
 `--git-ref` before any instance can launch from it (statuses: `pending →
-building → published`, or `build_failed`). There is no way to supply a prebuilt
-image — the version API takes a semver and a git ref and nothing else. The git
-ref must live in a repo the **ForkLaunch GitHub App can build** (see failure
-modes).
+building → published`, or `build_failed`; about 30 s when it works). There is
+no way to supply a prebuilt image — the version API takes a semver and a git
+ref and nothing else. Three rules, each the cause of a real `build_failed`:
+
+- **`--git-ref` is a full SHA, a branch, or a tag** — the builder clones by
+  ref name, so a short SHA fails with "Could not find remote branch". Use
+  `git rev-parse HEAD`.
+- **Publish as the org whose GitHub App installation can read the repo.** The
+  clone uses the *publishing* org's installation token
+  (`forklaunch github status` shows which account it is on). A template can
+  be visible from another org that cannot build it.
+- **A failed semver is burned** — republishing the same semver is a 409;
+  bump it.
 
 ### publish-template (the TEMPLATE itself)
 
@@ -298,8 +307,22 @@ a background worker:
 4. a per-instance SMS/LLM gateway key (`smsHmacKey`) is minted
 5. a **one-time claim link** is minted; state moves to `awaiting_claim`
 
-Watch it with `forklaunch managed instance list` (or `--state provisioning`).
-The lifecycle states, in order: `provisioning → provisioning_failed?
+Watch it with `forklaunch managed instance get --id <id>` (or `instance list
+--state provisioning`). Two things that look like a slow launch and are not:
+
+- **`launchApprovalState: pending`** — the org gates production deploys, so
+  the launch deployment is parked `awaiting_approval` (`requestedBy: system`,
+  so any admin can approve). `forklaunch deploy approvals list --status
+  pending` → `deploy approvals approve --id <id>`; the launch resumes at once.
+  Or turn the gate off for production (`/deployment-approvals`).
+- **`awaiting_claim` before the app answers** — until #861 is everywhere,
+  the state can flip when the claim link is minted, with the deployment still
+  `deploying`. Confirm `instance deployments --id <id> --limit 1` says
+  `completed` and the instance's `/health` answers before sending a link.
+  (A local `curl` that cannot resolve a host `dig` resolves is your own
+  resolver's negative cache from an earlier probe.)
+
+A launch on the shared pool takes 6–8 minutes. The lifecycle states, in order: `provisioning → provisioning_failed?
 → awaiting_claim → active → suspended? →
 destroying → destroyed`. A claimed instance can **never** step straight back
 to `awaiting_claim` (that would be an account-takeover primitive); `destroyed`
@@ -379,8 +402,14 @@ scoping; an instance supplies the value, not the scoping.
 ### claim-link (operator reveals — ONCE)
 
 ```bash
-forklaunch managed instance claim-link --id <instance-id>
+forklaunch managed instance claim-link --id <instance-id> --json > claim.json
 ```
+
+(`--json` still prints the `[WARN] … purged` line first; parse from the
+first `{`.) The link is `https://forklaunch.com/claim/<token>`: the customer
+chooses a 12+ character passphrase, optionally an email for the claim
+notice, acknowledges that nobody can recover it, and the page ends by
+showing their instance's hosts (and UI link, given a `frontendDomain`).
 
 **This can only be done once.** Revealing the link **purges it** from the
 platform — the value is erased the moment it is returned to you. If you lose it,
@@ -428,8 +457,28 @@ forklaunch managed instance destroy --id <instance-id> --confirm  # CI / scripts
 ```
 
 Irreversible; no backup is taken first. Teardown runs in the background
-(`destroying → destroyed`). The prompt is never shown when stdin is not a
-terminal, so a forgotten `--confirm` fails fast instead of hanging CI.
+(`destroying → destroyed`); the row says `destroyed` within seconds, while
+the services and DNS take some minutes to actually go — `instance list`
+hides destroyed rows, `instance get` still answers. The prompt is never
+shown when stdin is not a terminal, so a forgotten `--confirm` fails fast
+instead of hanging CI.
+
+### The whole lifecycle, as run unattended
+
+Provision → platform claim → the product's own claim → sign-in → reset →
+destroy was run end to end on a fresh Health Vault instance on 2026-09-21
+(45 minutes including two fleet rollouts). The only human steps are the
+two the customer does in a browser; everything else is the CLI above. What
+the run taught, in the order an operator meets it: the approval park on a
+gated org; wait for the vault, not the state; `--json` on `claim-link`
+prints a WARN line before the JSON; the product's own claim link is minted
+with the instance's `HMAC_SECRET_KEY` (copy the whole value — base64 ends
+in `=`); a template is buildable only by the org whose GitHub App
+installation reads the repo, from a full SHA/branch/tag, on a fresh
+semver; a two-instance rollout is two waves of ~4 min; a reset on a
+claimed instance is 3 min to `awaiting_claim` with both claims cleared.
+The product-side recipe with exact commands is the Health Vault
+`operations.md` §1b.
 
 ### summary
 
@@ -564,9 +613,11 @@ provisioning paths all do this now (`loadInstanceForProvisioning`,
 `withEncryptionContext`); keep the rule when adding a route.
 
 **Version won't build / instance create fails.** The git repo must be buildable
-by the **ForkLaunch GitHub App** — the App has to be installed on the repo with
-build access, and `--git-ref` must exist. A version stuck at `pending`/`building`
-or landing in `build_failed` points here.
+by the **publishing org's** ForkLaunch GitHub App installation (`forklaunch
+github status`), `--git-ref` must be a full SHA/branch/tag, and the semver
+must be new. The worker's dead-letter entry carries git's own message
+(`forklaunch dlq stats`; "Repository not found" = wrong installation,
+"Could not find remote branch" = short SHA).
 
 **Instance up but sign-in fails.** `forklaunch managed summary` shows relay
 eligibility per instance and the product's routes; an ineligible instance
