@@ -50,11 +50,13 @@ pub(crate) fn is_dev_build() -> bool {
         .unwrap_or(false)
 }
 
-// Manifest schema 1.1.0 adds `optional` to each environment variable
-// requirement. The platform's ingestion rejects a schema version it does not
-// know rather than degrading, so this must not move ahead of the platform —
-// forklaunch-platform#389 landed 1.1.0 support before this bump.
-pub(crate) const RELEASE_MANIFEST_SCHEMA_VERSION: &str = "1.1.0";
+// Manifest schema 1.1.0 added `optional` to each environment variable
+// requirement; 1.2.0 adds `usedBy` (the projects that read it). The platform's
+// ingestion rejects a schema version it does not know rather than degrading,
+// so this must not move ahead of the platform — forklaunch-platform#389 landed
+// 1.1.0 support, and forklaunch-platform#TBD (the platform PR that accepts
+// 1.2.0) must land before this bump ships.
+pub(crate) const RELEASE_MANIFEST_SCHEMA_VERSION: &str = "1.2.0";
 
 pub(crate) fn get_platform_management_api_url() -> String {
     std::env::var("FORKLAUNCH_PLATFORM_MANAGEMENT_API_URL").unwrap_or_else(|_| {
