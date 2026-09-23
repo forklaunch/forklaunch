@@ -43,9 +43,9 @@ const paymentProperties = {
 
 describe('EncryptedKeysOf', () => {
   it('names exactly the properties that are encrypted at rest', () => {
-    expectTypeOf<
-      EncryptedKeysOf<typeof membershipProperties>
-    >().toEqualTypeOf<'memberEmail' | 'memberName'>();
+    expectTypeOf<EncryptedKeysOf<typeof membershipProperties>>().toEqualTypeOf<
+      'memberEmail' | 'memberName'
+    >();
   });
 
   it('treats compliance("none") as unencrypted, not merely unclassified', () => {
