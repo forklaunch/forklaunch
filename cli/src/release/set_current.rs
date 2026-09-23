@@ -35,6 +35,13 @@ struct ReleaseRow {
     version: String,
 }
 
+/// `GET /releases` answers `{ releases: [...] }`, not a bare array.
+#[derive(Debug, Deserialize)]
+struct ReleaseListResponse {
+    #[serde(default)]
+    releases: Vec<ReleaseRow>,
+}
+
 impl CliCommand for SetCurrentCommand {
     fn command(&self) -> Command {
         command(
@@ -83,9 +90,10 @@ impl CliCommand for SetCurrentCommand {
                 response.text().unwrap_or_default()
             );
         }
-        let releases: Vec<ReleaseRow> = response
-            .json()
-            .with_context(|| "Failed to parse releases response")?;
+        let releases = response
+            .json::<ReleaseListResponse>()
+            .with_context(|| "Failed to parse releases response")?
+            .releases;
         let release = releases
             .iter()
             .find(|r| r.version == *version)
