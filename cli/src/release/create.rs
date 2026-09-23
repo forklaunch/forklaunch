@@ -1023,6 +1023,12 @@ impl CliCommand for CreateCommand {
                 },
                 scope_id: v.scope_id.clone(),
                 optional: v.optional,
+                used_by: {
+                    let mut used_by = v.used_by.clone();
+                    used_by.sort();
+                    used_by.dedup();
+                    used_by
+                },
                 component: env_var_components.get(&v.name).map(
                     |(component_type, property, target, path, passthrough)| {
                         EnvironmentVariableComponent {

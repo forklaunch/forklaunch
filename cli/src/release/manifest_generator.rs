@@ -145,6 +145,18 @@ pub(crate) struct EnvironmentVariableRequirement {
     /// silently. See `RELEASE_MANIFEST_SCHEMA_VERSION`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub optional: Option<bool>,
+    /// The projects (services and workers) that read this variable, sorted.
+    /// For an inter-service URL var this names the callers of
+    /// `interServiceUrl.targetService`: `IAM_URL` read by billing and insights
+    /// means billing → iam and insights → iam. The platform builds per-service
+    /// network access from these edges when TLS in transit is on. Omitted when
+    /// empty.
+    ///
+    /// NOTE: this field is only carried through platform ingestion from
+    /// manifest schema version 1.2.0 onward. See
+    /// `RELEASE_MANIFEST_SCHEMA_VERSION`.
+    #[serde(rename = "usedBy", skip_serializing_if = "Vec::is_empty", default)]
+    pub used_by: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1044,6 +1056,7 @@ mod tests {
             origin: None,
             inter_service_url: None,
             optional: Some(true),
+            used_by: Vec::new(),
         };
 
         let json = serde_json::to_value(&requirement).unwrap();
@@ -1074,12 +1087,46 @@ mod tests {
             origin: Some("platform".to_string()),
             inter_service_url: None,
             optional: None,
+            used_by: Vec::new(),
         };
 
         let json = serde_json::to_value(&requirement).unwrap();
         assert!(
             json.get("optional").is_none(),
             "unknown optionality must not serialize, got: {json}"
+        );
+    }
+
+    #[test]
+    fn test_required_env_var_serializes_used_by() {
+        // The callers of an inter-service URL are what the platform turns into
+        // per-service network access, so they must reach the manifest.
+        let requirement = EnvironmentVariableRequirement {
+            name: "IAM_URL".to_string(),
+            scope: EnvironmentVariableScope::Application,
+            scope_id: None,
+            component: None,
+            origin: Some("platform".to_string()),
+            inter_service_url: Some(InterServiceUrlInfo {
+                target_service: "iam".to_string(),
+                transport: "http".to_string(),
+                port_env_var: "PORT".to_string(),
+            }),
+            optional: None,
+            used_by: vec!["billing".to_string(), "insights".to_string()],
+        };
+
+        let json = serde_json::to_value(&requirement).unwrap();
+        assert_eq!(json["usedBy"], serde_json::json!(["billing", "insights"]));
+
+        let unused = EnvironmentVariableRequirement {
+            used_by: Vec::new(),
+            ..requirement
+        };
+        let json = serde_json::to_value(&unused).unwrap();
+        assert!(
+            json.get("usedBy").is_none(),
+            "an empty caller list must not serialize, got: {json}"
         );
     }
 
