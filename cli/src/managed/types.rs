@@ -319,6 +319,13 @@ pub(super) struct ClaimLink {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct SmsDispatch {
+    /// `sms` or `email`. Absent from a control plane deployed before one-time
+    /// codes could go by email, which is why it renders as a dash rather than
+    /// defaulting to "sms" — every historical row WAS a text message, but
+    /// saying so on the strength of a missing field is a guess that stops
+    /// being right the moment the field arrives.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) channel: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) purpose: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

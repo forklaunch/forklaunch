@@ -36,21 +36,24 @@ impl CliCommand for SmsCommand {
     fn command(&self) -> Command {
         command(
             "sms",
-            "Show what happened to the text messages the platform sent for an instance",
+            "Show what happened to the one-time codes the platform sent for an instance",
         )
         .long_about(
-            "Show what happened to the text messages the platform sent for an instance.\n\n\
+            "Show what happened to the one-time codes the platform sent for an instance.\n\n\
              When a customer says they never got their code, the answer is almost always\n\
              here, and until this command existed it was only in the platform's logs. Each\n\
-             row is one attempt: which message it was, whether the provider accepted it, the\n\
-             provider's message id for chasing it up on their side, and — when the provider\n\
-             refused — its own reason, verbatim.\n\n\
-             A refusal is usually about the sending number rather than the customer: an\n\
+             row is one attempt: which channel carried it, which message it was, whether the\n\
+             provider accepted it, the provider's message id for chasing it up on their\n\
+             side, and — when the provider refused — its own reason, verbatim.\n\n\
+             Both channels appear here. A product can ask the platform to send a code by\n\
+             email as well as by text, and when a toll-free number is held up in carrier\n\
+             verification that is the only one that arrives.\n\n\
+             A text refusal is usually about the sending number rather than the customer: an\n\
              unverified toll-free number, a destination the carrier blocks, or a number the\n\
              provider will not format. Those are fixed with the provider, not by resending.\n\n\
              THE MESSAGE BODY IS NEVER SHOWN, and the control plane does not send it. A\n\
-             claim message contains the claim link, so printing bodies here would be a\n\
-             second way to reveal a one-time link — one with no record that it happened.",
+             claim message contains the code itself, so printing bodies here would be a\n\
+             second way to read a credential — one with no record that it happened.",
         )
         .arg(
             Arg::new("id")
@@ -90,7 +93,7 @@ impl CliCommand for SmsCommand {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
         writeln!(stdout)?;
         stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)).set_bold(true))?;
-        writeln!(stdout, "SMS attempts for instance {}", id)?;
+        writeln!(stdout, "One-time codes sent for instance {}", id)?;
         stdout.reset()?;
         writeln!(stdout)?;
 
@@ -100,13 +103,12 @@ impl CliCommand for SmsCommand {
             // empty table and leaving the reader to guess.
             writeln!(
                 stdout,
-                "  No SMS has been attempted for this instance. Nothing was sent — so nothing was"
+                "  Nothing has been sent for this instance — so nothing was blocked or rejected."
             )?;
             writeln!(
                 stdout,
-                "  blocked or rejected. If a customer is waiting on a code, the send was never"
+                "  If a customer is waiting on a code, the send was never triggered."
             )?;
-            writeln!(stdout, "  triggered.")?;
             writeln!(stdout)?;
             return Ok(());
         }
@@ -114,8 +116,8 @@ impl CliCommand for SmsCommand {
         stdout.set_color(ColorSpec::new().set_bold(true))?;
         writeln!(
             stdout,
-            "  {:<24} {:<18} {:<10} {:<36} REASON",
-            "SENT", "PURPOSE", "STATUS", "PROVIDER MESSAGE ID"
+            "  {:<24} {:<7} {:<10} {:<10} {:<36} REASON",
+            "SENT", "CHANNEL", "PURPOSE", "STATUS", "PROVIDER MESSAGE ID"
         )?;
         stdout.reset()?;
 
@@ -129,8 +131,9 @@ impl CliCommand for SmsCommand {
             }
             writeln!(
                 stdout,
-                "  {:<24} {:<18} {:<10} {:<36} {}",
+                "  {:<24} {:<7} {:<10} {:<10} {:<36} {}",
                 dash(&dispatch.created_at),
+                dash(&dispatch.channel),
                 dash(&dispatch.purpose),
                 status,
                 dash(&dispatch.provider_message_id),
@@ -172,5 +175,26 @@ mod tests {
             short("Invalid 'To' phone number", 60),
             "Invalid 'To' phone number"
         );
+    }
+
+    #[test]
+    fn a_row_from_a_control_plane_without_channels_renders_a_dash_not_a_guess() {
+        // Every row written before email existed WAS a text message, but saying
+        // so on the strength of a missing field is a guess that stops being
+        // right the moment the field arrives.
+        let dispatch: SmsDispatch = serde_json::from_str(
+            r#"{"purpose":"claim","status":"failed","createdAt":"2026-09-22T00:00:00Z"}"#,
+        )
+        .unwrap();
+        assert_eq!(dash(&dispatch.channel), "-");
+    }
+
+    #[test]
+    fn a_channel_the_control_plane_reports_is_shown_as_sent() {
+        let dispatch: SmsDispatch = serde_json::from_str(
+            r#"{"channel":"email","purpose":"claim","status":"sent","createdAt":"2026-09-23T00:00:00Z"}"#,
+        )
+        .unwrap();
+        assert_eq!(dash(&dispatch.channel), "email");
     }
 }
