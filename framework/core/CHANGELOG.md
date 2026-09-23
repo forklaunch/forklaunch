@@ -1,5 +1,39 @@
 # @forklaunch/core
 
+## 2.1.0
+
+### Minor Changes
+
+- **Compliance walks can be tenant-scoped, and failures are reported rather
+  than swallowed.**
+
+  `ComplianceDataService.erase/export` and `RetentionService.enforce` walked
+  every PII-bearing entity through `orm.em.fork()` — unbound. Every one of
+  those columns is encrypted under its row's tenant, and a WHERE value on an
+  encrypted column is encrypted under the CURRENT tenant before it is
+  compared, so an unbound walk searched with a key nothing was written with.
+  It matched nothing, everywhere.
+
+  For this service that is the worst possible failure: an erase that finds
+  nothing is indistinguishable from an erase with nothing to do, and it
+  reported success. A subject could be told their data was deleted while all
+  of it remained.
+
+  - `erase(userId, { tenantIds })` and `export(userId, { tenantIds })` run the
+    walk once per tenant and merge the results. An export appends per tenant
+    rather than overwriting, so a subject with rows under two organizations
+    gets both.
+  - `EnforcementOptions.tenantIds` does the same for retention.
+  - `EraseResult.failures` and `ExportResult.failures` are new. An entity the
+    walk could not read used to be logged and forgotten, leaving a clean
+    result; it is now reported. **A non-empty `failures` means the request is
+    incomplete** — the rows that could be processed still were, but the caller
+    must not treat it as done.
+
+  Omitting `tenantIds` keeps the previous single unbound pass, which is
+  correct only for a schema whose PII-bearing entities carry no encrypted
+  column. Since 2.0.0 that pass fails loudly instead of silently.
+
 ## 2.0.0
 
 ### Major Changes
