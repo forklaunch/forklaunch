@@ -7,12 +7,12 @@ use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 
 use crate::{
     CliCommand,
-    constants::get_platform_management_api_url,
     core::{
         command::command,
         http_client,
         validate::{require_auth, require_manifest},
     },
+    github::application_github_url,
 };
 
 #[derive(Debug)]
@@ -129,11 +129,7 @@ impl CliCommand for ConnectCommand {
         }
 
         log_info!(stdout, "Connecting {} to {}...", app_id, repo);
-        let url = format!(
-            "{}/applications/{}/github/connect",
-            get_platform_management_api_url(),
-            app_id
-        );
+        let url = application_github_url(app_id, "connect");
         let response = http_client::post(&url, body)?;
         let status = response.status();
         if !status.is_success() {
