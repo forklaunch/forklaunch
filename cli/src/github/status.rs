@@ -7,12 +7,12 @@ use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 
 use crate::{
     CliCommand,
-    constants::get_platform_management_api_url,
     core::{
         command::command,
         http_client,
         validate::{require_auth, require_manifest},
     },
+    github::{application_github_url, github_app_url},
 };
 
 #[derive(Debug, Deserialize)]
@@ -51,7 +51,7 @@ impl CliCommand for StatusCommand {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
         require_auth()?;
 
-        let url = format!("{}/github-app/status", get_platform_management_api_url());
+        let url = github_app_url("status");
         let response = http_client::get(&url)?;
         if !response.status().is_success() {
             bail!(
@@ -87,15 +87,27 @@ impl CliCommand for StatusCommand {
         let Some(app_id) = &manifest.platform_application_id else {
             return Ok(());
         };
-        let settings_url = format!(
-            "{}/applications/{}/github/settings",
-            get_platform_management_api_url(),
-            app_id
-        );
-        let Ok(resp) = http_client::get(&settings_url) else {
-            return Ok(());
+        let settings_url = application_github_url(app_id, "settings");
+        // Silence here used to be indistinguishable from "no repository
+        // connected": the request 404'd on a wrong URL and both arms below
+        // returned Ok(()) without a word. Say what happened instead.
+        let resp = match http_client::get(&settings_url) {
+            Ok(resp) => resp,
+            Err(error) => {
+                log_warn!(
+                    stdout,
+                    "Could not read this application's repository settings: {}",
+                    error
+                );
+                return Ok(());
+            }
         };
         if !resp.status().is_success() {
+            log_warn!(
+                stdout,
+                "Could not read this application's repository settings (status {}).",
+                resp.status()
+            );
             return Ok(());
         }
         let body: serde_json::Value = resp

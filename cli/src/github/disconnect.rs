@@ -7,12 +7,12 @@ use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 
 use crate::{
     CliCommand,
-    constants::get_platform_management_api_url,
     core::{
         command::command,
         http_client::make_authenticated_request,
         validate::{require_auth, require_manifest},
     },
+    github::application_github_url,
 };
 
 #[derive(Debug)]
@@ -47,11 +47,7 @@ impl CliCommand for DisconnectCommand {
             bail!("This application is not integrated with the platform.");
         };
 
-        let url = format!(
-            "{}/applications/{}/github/disconnect",
-            get_platform_management_api_url(),
-            app_id
-        );
+        let url = application_github_url(app_id, "disconnect");
         let response = make_authenticated_request(Method::DELETE, &url, None)?;
         if !response.status().is_success() {
             bail!(

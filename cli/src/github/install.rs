@@ -7,8 +7,8 @@ use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 
 use crate::{
     CliCommand,
-    constants::get_platform_management_api_url,
     core::{command::command, http_client, validate::require_auth},
+    github::github_app_url,
 };
 
 #[derive(Debug, Deserialize)]
@@ -38,10 +38,7 @@ impl CliCommand for InstallCommand {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
         require_auth()?;
 
-        let url = format!(
-            "{}/github-app/install-url",
-            get_platform_management_api_url()
-        );
+        let url = github_app_url("install-url");
         let response = http_client::get(&url)?;
         if !response.status().is_success() {
             bail!(
