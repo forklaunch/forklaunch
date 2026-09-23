@@ -176,6 +176,68 @@ pub(super) struct AppTemplate {
     pub(super) default_instance_size: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) supports_key_rotation: Option<bool>,
+    /// Where this product mints its own claim link once the platform claim commits.
+    ///
+    /// Read back so that setting it can be CONFIRMED. The control plane used to accept
+    /// the PATCH and answer 200 without echoing the field, which left "did it take?"
+    /// unanswerable from here — a correct change was assumed to have failed, and the
+    /// wrong thing was investigated on the strength of that assumption.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) app_claim_hook: Option<AppClaimHook>,
+}
+
+/// The component that serves a product's claim-mint endpoint, and its path within that
+/// component.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct AppClaimHook {
+    pub(super) component: String,
+    pub(super) path: String,
+}
+
+/// Parses the `<component>:<path>` form `--app-claim-hook` takes.
+///
+/// One argument rather than two because the pair is meaningless split: a component with
+/// no path and a path with no component are both rejected by the control plane, and two
+/// optional flags make "I set only one of them" a state the CLI would have to explain.
+///
+/// The path must start with `/`. The platform signs the full path and the app verifies
+/// what it was handed, so `internal/claim/mint` and `/internal/claim/mint` are not the
+/// same string to the signature — and a mismatch surfaces as a 403 from the app long
+/// after this command reported success.
+pub(super) fn parse_app_claim_hook(raw: &str) -> Result<AppClaimHook, String> {
+    let (component, path) = raw.split_once(':').ok_or_else(|| {
+        format!(
+            "expected <component>:<path>, for example iam:/internal/claim/mint — got '{}'",
+            raw
+        )
+    })?;
+    let component = component.trim();
+    let path = path.trim();
+
+    if component.is_empty() {
+        return Err(format!(
+            "no component before the ':' in '{}' — name the service that serves the mint endpoint, for example iam:/internal/claim/mint",
+            raw
+        ));
+    }
+    if path.is_empty() {
+        return Err(format!(
+            "no path after the ':' in '{}' — for example iam:/internal/claim/mint",
+            raw
+        ));
+    }
+    if !path.starts_with('/') {
+        return Err(format!(
+            "the path must start with '/' — got '{}'. The platform signs the full path, so the leading slash is part of what the app verifies.",
+            path
+        ));
+    }
+
+    Ok(AppClaimHook {
+        component: component.to_string(),
+        path: path.to_string(),
+    })
 }
 
 /// Where every instance of a template runs. Decided once by the publisher; a
@@ -244,6 +306,37 @@ pub(super) struct ClaimLink {
     pub(super) claim_url: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) expires_at: Option<String>,
+}
+
+/// One SMS the platform tried to send for an instance.
+///
+/// There is deliberately no message-body field, and the control plane does not send
+/// one. The body of a claim message contains the claim link itself; a command that
+/// printed it back would be a second way to reveal a one-time link — one with no record
+/// that it happened. What an operator actually needs when a customer says "I never got
+/// the code" is in the other four fields: which message it was, whether the provider
+/// accepted it, its id for chasing up on the provider's side, and the refusal.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct SmsDispatch {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) purpose: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) provider_message_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) created_at: Option<String>,
+}
+
+/// The answer to a claim-hook retry: the work was queued, not done.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct HookEnqueued {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) enqueued: Option<bool>,
 }
 
 /// The instance lifecycle states the platform defines, in rough lifecycle order.
@@ -431,6 +524,38 @@ pub(super) fn required_cell(kind: &Option<String>, required: &Option<bool>) -> &
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_app_claim_hook_parses_into_its_two_halves() {
+        let hook = parse_app_claim_hook("iam:/internal/claim/mint").unwrap();
+        assert_eq!(hook.component, "iam");
+        assert_eq!(hook.path, "/internal/claim/mint");
+    }
+
+    #[test]
+    fn a_path_containing_a_colon_keeps_everything_after_the_first_one() {
+        // split_once, not split — a path may contain a colon, and splitting on every one
+        // would silently truncate it.
+        let hook = parse_app_claim_hook("iam:/internal/claim:mint").unwrap();
+        assert_eq!(hook.path, "/internal/claim:mint");
+    }
+
+    #[test]
+    fn a_path_without_a_leading_slash_is_refused_here_rather_than_by_a_403_later() {
+        let error = parse_app_claim_hook("iam:internal/claim/mint").unwrap_err();
+        assert!(error.contains("must start with '/'"), "{}", error);
+    }
+
+    #[test]
+    fn each_missing_half_says_which_half_is_missing() {
+        assert!(
+            parse_app_claim_hook("/internal/claim/mint")
+                .unwrap_err()
+                .contains("<component>:<path>")
+        );
+        assert!(parse_app_claim_hook(":/mint").unwrap_err().contains("no component"));
+        assert!(parse_app_claim_hook("iam:").unwrap_err().contains("no path"));
+    }
 
     #[test]
     fn required_reads_as_a_dash_for_the_kinds_it_cannot_apply_to() {

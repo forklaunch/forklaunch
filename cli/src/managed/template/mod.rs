@@ -3,6 +3,7 @@ use clap::{ArgMatches, Command};
 
 use crate::{CliCommand, core::command::command};
 
+mod clear_app_claim_hook;
 mod create;
 mod list;
 mod promote;
@@ -12,6 +13,7 @@ mod relay;
 mod update;
 mod vars;
 
+use clear_app_claim_hook::ClearAppClaimHookCommand;
 use create::CreateCommand;
 use list::ListCommand;
 use promote::PromoteCommand;
@@ -28,6 +30,7 @@ pub(super) struct TemplateCommand {
     update: UpdateCommand,
     publish: PublishCommand,
     publish_template: PublishTemplateCommand,
+    clear_app_claim_hook: ClearAppClaimHookCommand,
     vars: VarsCommand,
     relay: RelayCommand,
     promote: PromoteCommand,
@@ -41,6 +44,7 @@ impl TemplateCommand {
             update: UpdateCommand::new(),
             publish: PublishCommand::new(),
             publish_template: PublishTemplateCommand::new(),
+            clear_app_claim_hook: ClearAppClaimHookCommand::new(),
             vars: VarsCommand::new(),
             relay: RelayCommand::new(),
             promote: PromoteCommand::new(),
@@ -80,6 +84,7 @@ impl CliCommand for TemplateCommand {
         .subcommand(self.update.command())
         .subcommand(self.publish.command())
         .subcommand(self.publish_template.command())
+        .subcommand(self.clear_app_claim_hook.command())
         .subcommand(self.vars.command())
         .subcommand(self.promote.command())
         .subcommand(self.relay.command())
@@ -93,6 +98,9 @@ impl CliCommand for TemplateCommand {
             Some(("update", sub_matches)) => self.update.handler(sub_matches),
             Some(("publish", sub_matches)) => self.publish.handler(sub_matches),
             Some(("publish-template", sub_matches)) => self.publish_template.handler(sub_matches),
+            Some(("clear-app-claim-hook", sub_matches)) => {
+                self.clear_app_claim_hook.handler(sub_matches)
+            }
             Some(("vars", sub_matches)) => self.vars.handler(sub_matches),
             Some(("promote", sub_matches)) => self.promote.handler(sub_matches),
             Some(("relay", sub_matches)) => self.relay.handler(sub_matches),
