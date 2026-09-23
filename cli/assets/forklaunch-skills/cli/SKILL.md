@@ -1,6 +1,6 @@
 ---
 name: cli
-description: "CLI: init, change, delete, deploy, environment, release, sync, sdk, openapi."
+description: "CLI: init, change, delete, deploy, environment, release, org, sync, sdk, openapi; what is dashboard-only; deploy exit codes."
 user-invokable: true
 ---
 
@@ -305,7 +305,8 @@ The Forklaunch CLI provides these commands:
 | `change`      | Modify existing projects                                        |
 | `delete`      | Remove projects                                                 |
 | `deploy`      | Deploy applications to cloud                                    |
-| `environment` | Manage environments                                             |
+| `environment` | Create, delete and configure environments; branch matrix, approvals |
+| `org`         | Organization members, invitations, domain verification          |
 | `release`     | Create and manage releases                                      |
 | `integrate`   | Integrate with external services                                |
 | `openapi`     | Generate OpenAPI specifications                                 |
@@ -318,6 +319,39 @@ The Forklaunch CLI provides these commands:
 | `logout`      | Log out from platform                                           |
 | `whoami`      | Show current user                                               |
 | `version`     | Show CLI version                                                |
+
+## What the CLI can do, and what only the dashboard can
+
+The CLI and the dashboard are not at parity, and hunting for a command that does
+not exist wastes a session. This is the map as of CLI 1.18.
+
+**CLI can do, dashboard cannot** — the release pipeline and operator primitives:
+cut a release and upload its artifacts (`release create`), push a whole config
+file (`config push`), preview a deploy (`deploy create --dry-run`), roll back
+(`deploy rollback`), pause/resume/restart a worker (`worker pause|resume|restart`),
+set an application's placement (`app hosting`), and the managed-instance
+lifecycle (`managed ...`).
+
+**Both can do** — environments and their branch matrix and approval gate, custom
+domains, readiness reports, deploy cancel, notifier configs, organization
+members and invitations, GitHub connection, resources (`infra`), alerts.
+
+**Dashboard only — do not look for a CLI command:**
+
+| Area | Why |
+| ---- | --- |
+| Chat threads, code upload | Interactive; the CLI is not the surface |
+| Data explorer (Redis keys, Kafka topics, SQL) | Browsing, not scripting. `forklaunch data db\|redis\|kafka` opens a session but does not manage objects |
+| Billing: checkout, billing portal, plan changes, cancelling a subscription | Stripe redirect flows |
+| Your own profile, password, notification preferences | Account settings, not platform state |
+| Compliance templates (create/apply/set-default) | Dashboard-only today |
+| Component infrastructure detail: cpu/memory, autoscaling bounds, bridge networking | `app resize` covers instance size; the rest is dashboard-only |
+| Platform admin (`/admin`): substrate force-unlock/teardown, migration retry, org plan changes | Staff console |
+
+**Neither surface reaches these** (the API has the route; nothing calls it):
+worker `config` and `template-config`, app-level observability environment
+config, `createService`/`updateService`. If you need one, it is an API call, not
+a command.
 
 ## Core Commands
 
@@ -653,7 +687,31 @@ forklaunch deploy logs                   # logs of the latest deployment for thi
 forklaunch deploy logs <id> --all        # the whole log for one deployment
 forklaunch deploy logs -l error          # only the error lines — start here on a failed deploy
 forklaunch deploy destroy ...            # tear down application infrastructure
+forklaunch deploy cancel <id>            # stop a running deployment
+forklaunch deploy approvals list         # deployments parked behind the approval gate
+forklaunch deploy approvals approve <approval-id>
 ```
+
+**Exit codes from `deploy create` — read these before retrying.** A wrapper that
+treats every non-zero exit as "the deploy failed" will retry or roll back a
+deploy that is merely waiting:
+
+| Exit | Meaning | What to do |
+| ---- | ------- | ---------- |
+| 0 | Completed | Nothing |
+| 1 | Failed, cancelled, or rolled back | Read the reason on stdout; `deploy logs -l error` |
+| 2 | Parked awaiting approval — **not a failure** | `deploy approvals list`, then an admin approves |
+| 3 | Still running when the CLI stopped waiting (`--timeout`, default 45 min) | `deploy info --deployment <id>`; the deploy continues |
+
+`--no-wait` always exits 0 and says nothing about the outcome; follow it with
+`deploy info --deployment <id>`.
+
+**`deploy create` refuses the wrong checkout.** It prints
+`Deploying <app> (<repo>) release <v> -> <env>/<region>` before any write, and
+stops if the checkout's git origin is not the application's repository (pass
+`--force` to override). An environment the application does not have needs
+`--create-environment`, or an explicit yes at the prompt — it will not be created
+as a side effect of deploying.
 
 **The first deploy asks where the app should run.** The first deployment of an
 application to a given environment × region is gated: the platform answers `428`
@@ -702,37 +760,58 @@ covers both.
 
 ### 5. Environment Commands (`environment`)
 
-Manage application environments.
+An environment is the control-plane record a deploy targets: a name, the regions
+it runs in, the git branch it autodeploys from, and whether its deploys need an
+approval. Every subcommand below reads the application id from
+`.forklaunch/manifest.toml` in the current directory, so run them from the
+application's checkout (or pass `-p <path>`).
 
 ```bash
-# Create environment
-forklaunch environment create <name>
+# Create / remove
+forklaunch environment create -e staging --region us-west-1
+forklaunch environment delete -e staging            # prompts; --yes for scripts
 
-# Options:
---region <region>      # AWS region
---description "Environment description"
+# The branch deployment matrix — which branch autodeploys to which environment
+forklaunch environment branch list                  # what each environment tracks
+forklaunch environment branch set -e production -b main
+forklaunch environment branch clear -e production   # back to the suggested default
 
-# List environments
-forklaunch environment list
+# The deployment-approval gate
+forklaunch environment approval require -e production
+forklaunch environment approval waive   -e staging
+forklaunch environment approval reset   -e production   # back to the default
 
-# Delete environment
-forklaunch environment delete <name>
-
-# Show environment details
-forklaunch environment show <name>
-
-# Examples:
-forklaunch environment create staging --region us-west-2
-forklaunch environment list
-forklaunch environment show production
+# Variables (local workspace, not the control plane)
+forklaunch environment status                       # which vars still need a person
+forklaunch environment validate
+forklaunch environment sync
 ```
+
+**Branch precedence for autodeploy**, highest first:
+
+1. the environment's tracked branch (`environment branch set`)
+2. the repository-level `branchMapping` (set when connecting the repo)
+3. the suggested default — `main` for a `production`/`prod` environment, otherwise a branch named after the environment
+
+So a push to `main` does **not** deploy `staging` unless `staging` tracks `main`.
+This is the single most common "autodeploy isn't firing" cause: check
+`environment branch list` first.
+
+**`environment delete` does not tear down infrastructure.** It removes the
+environment record and its stored configuration. Run `forklaunch deploy destroy`
+first if the environment still has running services, or you strand them.
+
+**Approval is tri-state.** `require`/`waive` set an explicit override; `reset`
+returns to the default, which is "required for production-named environments".
+A deploy that parks behind the gate exits **2** (not a failure) — see
+`deploy approvals`.
 
 ### 6. Release Commands (`release`)
 
 Create and manage application releases.
 
-`release` has four subcommands: `create`, `info`, `list`, `eject`. There is no
-`release show` or `release rollback` — rollback lives on
+`release` has five subcommands: `create`, `info`, `list`, `eject`, `set-current`.
+There is no `release show`, and no `release rollback` — rollback lives on
 `forklaunch deploy rollback`. (`release list` is recent; older CLIs have only
 the first two and `eject`. Check `forklaunch release --help` if unsure.)
 
@@ -752,6 +831,10 @@ forklaunch release create --version <version> --local --yes
 forklaunch release info                  # details for a release
 forklaunch release list                  # releases for this application
 forklaunch release eject                 # emit the Pulumi IaC a release would deploy
+
+# Mark which release the dashboard, variable defaults and readiness read from.
+# This does NOT deploy — use `deploy create -r <version>` for that.
+forklaunch release set-current 1.2.3
 ```
 
 **Non-interactive callers must pass a mode and `--yes`.** With neither `--local`
@@ -824,6 +907,21 @@ access. Print the link, wait, then confirm with `status`.
 `--auto-deploy` spends money on every push with no further confirmation. Get
 explicit agreement before enabling it on a production branch.
 
+**Connecting a repo is not enough to make a push deploy.** `--auto-deploy` sets
+the mode; which branch reaches which environment is the branch matrix. After
+connecting, set it explicitly:
+
+```bash
+forklaunch github connect --repo https://github.com/acme/portal --auto-deploy
+forklaunch environment branch set -e production -b main
+forklaunch environment branch list          # confirm
+```
+
+Leaving the matrix unset means each environment tracks a branch named after
+itself (except `production`/`prod`, which default to `main`) — which is why a
+repo can be connected, auto-deploy on, and a push to `main` still deploy
+nothing.
+
 ### 7b. Application Commands (`app`)
 
 Create and inspect the **platform** application record — the control-plane object
@@ -832,7 +930,11 @@ your local checkout links to.
 ```bash
 forklaunch app create [options]     # create + integrate in one step
 forklaunch app services             # list services and workers
-forklaunch app domain               # inspect the custom domain
+forklaunch app domain status        # inspect the custom domain
+forklaunch app domain set app.example.com        # attach one
+forklaunch app domain subdomain add shop -s <service-id>
+forklaunch app readiness show       # readiness schedule + latest run
+forklaunch app readiness run        # start a report now
 forklaunch app resize ...           # resize components (cuts a release + deploys)
 forklaunch app route <id>           # route details
 forklaunch app controller <id>      # controller details
@@ -871,6 +973,45 @@ apply": an undeclared app is unconstrained. Ask the user rather than leaving it
 blank by default.
 
 There is no `app delete`. Removing an application record is a dashboard action.
+
+### 7c. Organization Commands (`org`)
+
+Administer the organization the signed-in session belongs to. There is no
+`--organization` flag: these routes act on your own organization and nothing
+else. Everything except `show` and the `list`s needs the **admin** role, and a
+403 says so rather than "request failed".
+
+```bash
+forklaunch org show                         # name, id, domain, region, team size
+forklaunch org show --json
+forklaunch org show --name "Main Street"    # rename
+
+forklaunch org members list                 # email, role, user id
+forklaunch org members invite dev@acme.com --role member   # admin | member | viewer
+forklaunch org members role <user-id> admin
+forklaunch org members remove <user-id>     # prompts; --yes for scripts
+
+forklaunch org invitations list             # pending invitations
+forklaunch org invitations resend <invitation-id>
+forklaunch org invitations cancel <invitation-id>
+
+forklaunch org domain verify                # prints the TXT record to publish
+forklaunch org domain check                 # has it propagated?
+forklaunch org domain auto-join on          # anyone with a verified-domain email joins
+```
+
+**Onboarding a teammate, end to end:**
+
+```bash
+forklaunch org members invite dev@acme.com --role member
+forklaunch org invitations list             # confirm it is pending
+# ...they accept...
+forklaunch org members list                 # confirm they landed, with the right role
+```
+
+`members role` and `members remove` take a **user id**, not an email — read it
+from `org members list`. Role values are validated before the request, so a typo
+fails locally instead of round-tripping to IAM.
 
 ### 8. OpenAPI Commands (`openapi`)
 

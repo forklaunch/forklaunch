@@ -71,7 +71,7 @@ Full version in `AGENTS.md` and `CLAUDE.md`.
 ### Building & Scaffolding
 - `/getting-started` — **Start here.** The driver skill: prerequisites, planning by conversation, scaffold, score after every pass, register, deploy. Routes to every other skill.
 - `/studio` — Fast app generation: greenfield, existing Next.js, backend migration.
-- `/cli` — All CLI commands: init, change, delete, deploy, release, sync, sdk, openapi. **Supply ALL flags or CLI hangs.**
+- `/cli` — All CLI commands: init, change, delete, deploy, environment, release, org, sync, sdk, openapi. Also what only the dashboard can do, and the `deploy create` exit codes. **Supply ALL flags or CLI hangs.**
 - `/quick-reference` — Cheat sheet: imports, patterns, templates, commands at a glance.
 - `/prereqs` — Bare machine to buildable: Node, pnpm, git, OrbStack, the CLI, login. Agent-executed, confirms before installing.
 - `/integrations` — GitHub (App install, repo connect, autodeploy) and provider keys via `config set`. **There is no `integrate <service>`.**
