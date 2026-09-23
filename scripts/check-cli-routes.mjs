@@ -12,6 +12,30 @@
  * HAS a caller, only that every caller has a route. That is the half that
  * catches a 404 before a customer does.
  *
+ * WHAT A GREEN RUN DOES NOT MEAN. This compares URL strings to mounted paths
+ * and nothing else. Three failures in this same family are invisible to it,
+ * and all three have bitten this codebase:
+ *
+ *   1. HMAC SIGNED PATH. The framework verifies an HMAC signature against
+ *      Express `req.path`, which has the router's basePath STRIPPED. A caller
+ *      that signs `/internal/claim/mint` against a receiver verifying `/mint`
+ *      fails authentication while the URL matches a mounted route perfectly.
+ *      Root-basePath routers avoid it (verified path == URL); see
+ *      `post_with_auth_and_sign_path` for the escape hatch when they cannot.
+ *   2. operationId RESOLUTION. Service-to-service calls through `universalSdk`
+ *      resolve by operationId, which the framework derives from a symbol's
+ *      POSITION in `sdk.ts` — so reordering that file renames operations
+ *      without touching a single URL. Consumers cache the producer's OpenAPI
+ *      spec at startup, which makes a rename an outage window on a rolling
+ *      deploy.
+ *   3. RESPONSE STATUS CODES. Adding a status code to an existing operation
+ *      breaks a consumer holding the older cached spec — an added 409 has come
+ *      back to a consumer as a 500.
+ *
+ * Catching 2 and 3 needs a different check: diff the generated OpenAPI between
+ * two commits and flag added/removed status codes and operationIds on existing
+ * operations. A rename shows up there as one operation removed and one added.
+ *
  *   node scripts/check-cli-routes.mjs --platform ../forklaunch-platform
  *
  * Exits 1 when a CLI path matches no mounted route.

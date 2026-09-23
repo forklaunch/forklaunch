@@ -9,6 +9,7 @@ use crate::{
     constants::{ERROR_FAILED_TO_SEND_REQUEST, get_platform_management_api_url},
     core::{
         command::command,
+        hmac::AuthMode,
         http_client,
         validate::{require_auth, resolve_auth},
     },
@@ -42,6 +43,15 @@ impl CliCommand for CancelCommand {
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
+        // `/deployments/:id/cancel` is session-protected and has no `/internal`
+        // twin, so HMAC credentials cannot reach it. Say that here rather than
+        // signing a request the platform will refuse and reporting it as an
+        // auth failure.
+        if matches!(AuthMode::detect(), AuthMode::Hmac { .. }) {
+            bail!(
+                "`deploy cancel` needs a signed-in session; HMAC credentials cannot cancel a deployment.\n                 Run `forklaunch login`, or cancel it from the dashboard."
+            );
+        }
         let _token = require_auth()?;
         let auth_mode = resolve_auth()?;
         let deployment_id = matches

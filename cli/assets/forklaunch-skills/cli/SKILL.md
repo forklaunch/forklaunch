@@ -353,6 +353,24 @@ worker `config` and `template-config`, app-level observability environment
 config, `createService`/`updateService`. If you need one, it is an API call, not
 a command.
 
+**A command that 404s is not always your mistake.** Two shipped commands
+called routes the platform does not mount (`github connect|disconnect|status`,
+and `release create`'s duplicate-version pre-check), and in both cases the
+error surfaced as something else — a generic failure, or a guard that silently
+never fired. If a command fails in a way that does not match its arguments,
+check the URL against the platform's routes before assuming the arguments are
+wrong:
+
+```bash
+node scripts/check-cli-routes.mjs --platform ../forklaunch-platform
+```
+
+That check compares URLs to mounted routes and nothing else. It cannot see an
+HMAC signature computed over the wrong path (the framework verifies against
+`req.path`, with the router basePath stripped), an operationId that moved
+because `sdk.ts` was reordered, or a response status code added to an existing
+operation — all three fail with the URL perfectly correct.
+
 ## Core Commands
 
 ### 1. Project Initialization (`init`)
