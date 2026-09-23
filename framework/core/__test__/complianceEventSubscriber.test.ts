@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it as baseIt, beforeEach } from 'vitest';
 import { Platform } from '@mikro-orm/core';
 import { FieldEncryptor } from '../src/persistence/fieldEncryptor';
 import { wrapEmWithNativeQueryBlocking } from '../src/persistence/complianceEventSubscriber';
@@ -6,10 +6,38 @@ import { fp } from '../src/persistence/compliancePropertyBuilder';
 import { defineComplianceEntity } from '../src/persistence/defineComplianceEntity';
 import {
   EncryptedType,
-  registerEncryptor
+  registerEncryptor,
+  withEncryptionContext
 } from '../src/persistence/encryptedType';
 
 const MASTER_KEY = 'test-master-key-for-unit-tests-32ch';
+const TEST_TENANT = 'c2f1a0f7-6e0c-4a2e-9a3e-6f0f4a1d0b11';
+
+/**
+ * Every case below runs bound to a tenant.
+ *
+ * An encrypted column touched with none bound now raises `UnboundTenantError`
+ * instead of falling back to the empty key, and these cases are about the
+ * CONVERSION, not the binding — `unboundEncryptedColumn.test.ts` covers the
+ * unbound contract itself.
+ *
+ * It has to wrap the test body. `setEncryptionTenantId` would be the obvious
+ * move in a `beforeEach`, but its `enterWith` mutates the calling async
+ * resource, and a hook (or module scope) does not share one with the test
+ * body — the very propagation problem `withEncryptionContext` exists to solve.
+ */
+const it: typeof baseIt = ((
+  name: string,
+  fn: () => unknown,
+  timeout?: number
+) =>
+  baseIt(
+    name,
+    typeof fn === 'function'
+      ? () => withEncryptionContext(TEST_TENANT, fn)
+      : fn,
+    timeout
+  )) as typeof baseIt;
 
 // Register test entities
 defineComplianceEntity({
