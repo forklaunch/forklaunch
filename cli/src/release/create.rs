@@ -164,6 +164,18 @@ use crate::{
     sync::all::sync_all_projects,
 };
 
+/// Shape of `GET /releases?applicationId=` — `{ releases: [...] }`.
+#[derive(Debug, Deserialize)]
+struct ExistingReleaseList {
+    #[serde(default)]
+    releases: Vec<ExistingRelease>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ExistingRelease {
+    version: String,
+}
+
 #[derive(Debug, Serialize)]
 struct CreateReleaseRequest {
     #[serde(rename = "applicationId")]
@@ -269,28 +281,29 @@ impl CliCommand for CreateCommand {
 
         // Early version conflict check (skip for dry runs)
         if !dry_run {
-            let check_url = if auth_mode.is_hmac() {
-                format!(
-                    "{}/releases/internal/{}/{}",
+            // `/releases/{app}/{version}` was never a route — the platform mounts
+            // `/releases/:id` and `/releases?applicationId=`. The 404 landed in the
+            // `is_success()` check below, so this guard silently never fired and a
+            // duplicate version was only caught by the create itself, several
+            // minutes of syncing and uploading later. There is no internal list
+            // route, so under HMAC the create remains the only check.
+            if !auth_mode.is_hmac() {
+                let check_url = format!(
+                    "{}/releases?applicationId={}",
                     get_platform_management_api_url(),
-                    application_id,
-                    version
-                )
-            } else {
-                format!(
-                    "{}/releases/{}/{}",
-                    get_platform_management_api_url(),
-                    application_id,
-                    version
-                )
-            };
-
-            if let Ok(response) = http_client::get_with_auth(&auth_mode, &check_url) {
-                if response.status().is_success() {
-                    bail!(
-                        "Release version '{}' already exists. Bump the version in your manifest and try again.",
-                        version
-                    );
+                    urlencoding::encode(&application_id)
+                );
+                if let Ok(response) = http_client::get_with_auth(&auth_mode, &check_url) {
+                    if response.status().is_success() {
+                        if let Ok(list) = response.json::<ExistingReleaseList>() {
+                            if list.releases.iter().any(|r| r.version == *version) {
+                                bail!(
+                                    "Release version '{}' already exists. Bump the version in your manifest and try again.",
+                                    version
+                                );
+                            }
+                        }
+                    }
                 }
             }
         }

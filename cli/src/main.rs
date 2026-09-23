@@ -27,6 +27,7 @@ use managed::ManagedCommand;
 use notifiers::NotifiersCommand;
 use observe::ObserveCommand;
 use openapi::OpenApiCommand;
+use org::OrgCommand;
 use release::ReleaseCommand;
 use sync::SyncCommand;
 use version::VersionCommand;
@@ -65,6 +66,7 @@ mod managed;
 mod notifiers;
 mod observe;
 mod openapi;
+mod org;
 mod prompt;
 mod release;
 mod sdk;
@@ -107,6 +109,7 @@ fn main() -> Result<()> {
     let notifiers = NotifiersCommand::new();
     let observe = ObserveCommand::new();
     let openapi = OpenApiCommand::new();
+    let org = OrgCommand::new();
     let release = ReleaseCommand::new();
     let sdk = SdkCommand::new();
     let whoami = WhoAmICommand::new();
@@ -140,6 +143,7 @@ fn main() -> Result<()> {
         .subcommand(github.command())
         .subcommand(integrate.command())
         .subcommand(openapi.command())
+        .subcommand(org.command())
         .subcommand(release.command())
         .subcommand(login.command())
         .subcommand(logout.command())
@@ -180,6 +184,7 @@ fn main() -> Result<()> {
         Some(("github", sub_matches)) => github.handler(sub_matches),
         Some(("integrate", sub_matches)) => integrate.handler(sub_matches),
         Some(("openapi", sub_matches)) => openapi.handler(sub_matches),
+        Some(("org", sub_matches)) => org.handler(sub_matches),
         Some(("release", sub_matches)) => release.handler(sub_matches),
         Some(("login", sub_matches)) => login.handler(sub_matches),
         Some(("logout", sub_matches)) => logout.handler(sub_matches),

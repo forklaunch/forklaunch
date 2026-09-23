@@ -88,7 +88,7 @@ impl CliCommand for StatusCommand {
             return Ok(());
         };
         let settings_url = format!(
-            "{}/applications/{}/github/settings",
+            "{}/github-app/applications/{}/github/settings",
             get_platform_management_api_url(),
             app_id
         );
