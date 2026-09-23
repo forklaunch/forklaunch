@@ -184,6 +184,39 @@ impl CliCommand for AuditCommand {
                 Vec::new()
             });
 
+        // The same deterministic scan `compliance audit-tenancy` runs. Best
+        // effort: a report that cannot scan is still worth sending, it just
+        // carries no tenancy signal rather than a falsely clean one.
+        let tenancy = match super::tenancy::audit_tenancy(&modules_path_buf) {
+            Ok(report) => {
+                let findings: Vec<TenancySummaryFinding> = report
+                    .findings
+                    .iter()
+                    .map(|f| TenancySummaryFinding {
+                        severity: match f.severity {
+                            super::tenancy::TenancySeverity::Error => "error".to_string(),
+                            super::tenancy::TenancySeverity::Warning => "warning".to_string(),
+                        },
+                        rule: f.rule.to_string(),
+                        file: f.file.clone(),
+                        line: f.line,
+                        message: f.message.to_string(),
+                    })
+                    .collect();
+                Some(TenancySummary {
+                    files_scanned: report.files_scanned,
+                    errors: findings.iter().filter(|f| f.severity == "error").count(),
+                    warnings: findings.iter().filter(|f| f.severity == "warning").count(),
+                    exemptions: report.exemptions.len(),
+                    findings,
+                })
+            }
+            Err(e) => {
+                let _ = writeln!(stdout, "[WARN] Tenancy scan failed: {}", e);
+                None
+            }
+        };
+
         // Build the local report
         let report = ComplianceReport {
             generated_at: chrono::Utc::now().to_rfc3339(),
@@ -191,6 +224,7 @@ impl CliCommand for AuditCommand {
             modules: module_ctx.module_reports(),
             entities,
             local_findings,
+            tenancy,
             secrets: SecretsReport {
                 declared: compliance.secrets.clone(),
                 count: compliance.secrets.len(),
@@ -856,8 +890,42 @@ struct ComplianceReport {
     modules: Vec<ModuleReport>,
     entities: Vec<EntityReport>,
     local_findings: Vec<super::checks::LocalFinding>,
+    /// Tenant-binding discipline, from the same deterministic scan as
+    /// `compliance audit-tenancy`.
+    ///
+    /// The server's report card already had a `tenant-isolation` category,
+    /// but the only thing feeding it was a SCHEMA check — "this entity has PII
+    /// columns and no organizationId". That says nothing about whether the
+    /// code ever binds the tenant it has, so every bug in the 2026-09 tenant
+    /// remediation passed it: the entities all had their tenant columns, and
+    /// the failures were unbound managers, `''` bindings and forks that lost
+    /// the encryption context at run time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tenancy: Option<TenancySummary>,
     secrets: SecretsReport,
     data_residency: DataResidencyReport,
+}
+
+/// What the tenancy scan found, flattened for the report card. Exemptions are
+/// counted but not listed: an allow is a reviewed decision, not a finding.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TenancySummary {
+    files_scanned: usize,
+    errors: usize,
+    warnings: usize,
+    exemptions: usize,
+    findings: Vec<TenancySummaryFinding>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TenancySummaryFinding {
+    severity: String,
+    rule: String,
+    file: String,
+    line: usize,
+    message: String,
 }
 
 #[derive(Serialize)]
