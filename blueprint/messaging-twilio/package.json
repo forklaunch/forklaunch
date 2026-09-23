@@ -39,7 +39,7 @@
     "@forklaunch/blueprint-core": "workspace:^",
     "@forklaunch/blueprint-monitoring": "workspace:^",
     "@forklaunch/common": "^1.2.27",
-    "@forklaunch/core": "^2.0.0",
+    "@forklaunch/core": "^2.1.0",
     "@forklaunch/express": "^1.2.45",
     "@forklaunch/hyper-express": "^1.2.45",
     "@forklaunch/implementation-messaging-twilio": "workspace:^",

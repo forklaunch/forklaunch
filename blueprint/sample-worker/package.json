@@ -41,7 +41,7 @@
   "dependencies": {
     "@forklaunch/blueprint-core": "workspace:^",
     "@forklaunch/blueprint-monitoring": "workspace:^",
-    "@forklaunch/core": "^2.0.0",
+    "@forklaunch/core": "^2.1.0",
     "@forklaunch/implementation-worker-bullmq": "workspace:^",
     "@forklaunch/implementation-worker-database": "workspace:^",
     "@forklaunch/implementation-worker-kafka": "workspace:^",
