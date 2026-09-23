@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/blueprint-iam-base",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "private": true,
   "description": "Forklaunch IAM Implementation",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
@@ -39,7 +39,7 @@
   "dependencies": {
     "@forklaunch/blueprint-core": "workspace:^",
     "@forklaunch/blueprint-monitoring": "workspace:^",
-    "@forklaunch/core": "^1.6.5",
+    "@forklaunch/core": "^2.0.0",
     "@forklaunch/hyper-express-fork": "^6.18.1",
     "@forklaunch/implementation-iam-base": "workspace:^",
     "@forklaunch/interfaces-iam": "workspace:^",
@@ -53,7 +53,7 @@
     "@mikro-orm/sqlite": "7.2.1",
     "@sinclair/typebox": "^0.34.52",
     "@types/uuid": "^11.0.0",
-    "dotenv": "^18.0.1",
+    "dotenv": "^18.0.2",
     "jose": "^6.2.12",
     "pino": "^10.3.1",
     "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.52.0",

@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/implementation-cac-base",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Computer-assisted coding basic implementation for forklaunch",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -40,7 +40,7 @@
   },
   "dependencies": {
     "@forklaunch/common": "^1.2.27",
-    "@forklaunch/core": "^1.6.5",
+    "@forklaunch/core": "^2.0.0",
     "@forklaunch/interfaces-cac": "workspace:^",
     "@forklaunch/internal": "^1.2.30",
     "@forklaunch/validator": "^1.2.28",

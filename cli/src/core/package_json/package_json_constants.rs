@@ -25,7 +25,7 @@ pub(crate) const TS_JEST_VERSION: &str = "^29.4.12";
 // ts-nodef
 pub(crate) const TS_NODE_VERSION: &str = "^10.9.2";
 // typescript-eslint
-pub(crate) const TYPESCRIPT_ESLINT_VERSION: &str = "^8.70.0";
+pub(crate) const TYPESCRIPT_ESLINT_VERSION: &str = "^8.70.1";
 // vitest
 pub(crate) const VITEST_VERSION: &str = "^5.0.1";
 
@@ -232,46 +232,46 @@ pub(crate) const BUNRUN_VERSION: &str = "~1.2.25";
 // @forklaunch/common
 pub(crate) const COMMON_VERSION: &str = "~1.2.27";
 // @forklaunch/core
-pub(crate) const CORE_VERSION: &str = "~1.6.5";
+pub(crate) const CORE_VERSION: &str = "~2.0.0";
 // @forklaunch/express
-pub(crate) const EXPRESS_VERSION: &str = "~1.2.44";
+pub(crate) const EXPRESS_VERSION: &str = "~1.2.45";
 // @forklaunch/hyper-express
-pub(crate) const HYPER_EXPRESS_VERSION: &str = "~1.2.44";
+pub(crate) const HYPER_EXPRESS_VERSION: &str = "~1.2.45";
 // uWebSockets.js — a peer of @forklaunch/hyper-express rather than one of its
 // dependencies, so generated projects must declare it themselves. pnpm 11
 // blocks git-resolved SUBdependencies (ERR_PNPM_EXOTIC_SUBDEP); a direct one is
 // fine, and uWebSockets.js ships only from GitHub.
 pub(crate) const UWEBSOCKETS_VERSION: &str = "github:uNetworking/uWebSockets.js#v20.52.0";
 // @forklaunch/implementation-billing-base
-pub(crate) const BILLING_BASE_VERSION: &str = "~1.0.37";
+pub(crate) const BILLING_BASE_VERSION: &str = "~1.0.39";
 // @forklaunch/implementation-billing-stripe
-pub(crate) const BILLING_STRIPE_VERSION: &str = "~1.2.7";
+pub(crate) const BILLING_STRIPE_VERSION: &str = "~1.2.9";
 // @forklaunch/implementation-ecommerce-base
-pub(crate) const ECOMMERCE_BASE_VERSION: &str = "~1.0.10";
+pub(crate) const ECOMMERCE_BASE_VERSION: &str = "~1.0.11";
 // @forklaunch/implementation-ecommerce-paypal
-pub(crate) const ECOMMERCE_PAYPAL_VERSION: &str = "~1.0.5";
+pub(crate) const ECOMMERCE_PAYPAL_VERSION: &str = "~1.0.6";
 // @forklaunch/implementation-ecommerce-stripe
-pub(crate) const ECOMMERCE_STRIPE_VERSION: &str = "~1.0.5";
+pub(crate) const ECOMMERCE_STRIPE_VERSION: &str = "~1.0.6";
 // @forklaunch/implementation-iam-base
-pub(crate) const IAM_BASE_VERSION: &str = "~1.0.37";
+pub(crate) const IAM_BASE_VERSION: &str = "~1.0.38";
 // @forklaunch/implementation-messaging-base
-pub(crate) const MESSAGING_BASE_VERSION: &str = "~1.1.4";
+pub(crate) const MESSAGING_BASE_VERSION: &str = "~1.1.5";
 // @forklaunch/implementation-messaging-twilio
-pub(crate) const MESSAGING_TWILIO_VERSION: &str = "~1.1.4";
+pub(crate) const MESSAGING_TWILIO_VERSION: &str = "~1.1.5";
 // @forklaunch/implementation-cac-base
-pub(crate) const CAC_BASE_VERSION: &str = "~0.2.4";
+pub(crate) const CAC_BASE_VERSION: &str = "~0.2.5";
 // @forklaunch/implementation-worker-bullmq
-pub(crate) const WORKER_BULLMQ_VERSION: &str = "~1.0.35";
+pub(crate) const WORKER_BULLMQ_VERSION: &str = "~1.0.36";
 // @forklaunch/implementation-worker-redis
-pub(crate) const WORKER_REDIS_VERSION: &str = "~1.0.35";
+pub(crate) const WORKER_REDIS_VERSION: &str = "~1.0.36";
 // @forklaunch/implementation-worker-database
-pub(crate) const WORKER_DATABASE_VERSION: &str = "~1.0.37";
+pub(crate) const WORKER_DATABASE_VERSION: &str = "~1.0.38";
 // @forklaunch/implementation-worker-kafka
-pub(crate) const WORKER_KAFKA_VERSION: &str = "~1.0.35";
+pub(crate) const WORKER_KAFKA_VERSION: &str = "~1.0.36";
 // @forklaunch/infrastructure-redis
-pub(crate) const INFRASTRUCTURE_REDIS_VERSION: &str = "~1.4.15";
+pub(crate) const INFRASTRUCTURE_REDIS_VERSION: &str = "~1.4.16";
 // @forklaunch/infrastructure-s3
-pub(crate) const INFRASTRUCTURE_S3_VERSION: &str = "~1.4.15";
+pub(crate) const INFRASTRUCTURE_S3_VERSION: &str = "~1.4.16";
 // @forklaunch/interfaces-billing
 pub(crate) const BILLING_INTERFACES_VERSION: &str = "~1.0.36";
 // @forklaunch/interfaces-ecommerce
@@ -313,7 +313,7 @@ pub(crate) const BULLMQ_VERSION: &str = "^6.3.8";
 // better-sqlite3
 pub(crate) const BETTER_SQLITE3_VERSION: &str = "^13.0.3";
 // dotenv
-pub(crate) const DOTENV_VERSION: &str = "^18.0.1";
+pub(crate) const DOTENV_VERSION: &str = "^18.0.2";
 // jose
 pub(crate) const JOSE_VERSION: &str = "^6.2.12";
 // sqlite3

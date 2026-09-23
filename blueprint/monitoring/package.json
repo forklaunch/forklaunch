@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/blueprint-monitoring",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Forklaunch Monitoring Framework",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
@@ -26,7 +26,7 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/core": "^1.6.5"
+    "@forklaunch/core": "^2.0.0"
   },
   "devDependencies": {
     "typescript": "^7.0.2"

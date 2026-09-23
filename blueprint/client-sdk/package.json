@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/blueprint-client-sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "The forklaunch client SDK to be used anywhere",
   "keywords": [],
@@ -28,7 +28,7 @@
     "@forklaunch/blueprint-iam-base": "workspace:^",
     "@forklaunch/blueprint-iam-better-auth": "workspace:^",
     "@forklaunch/blueprint-sample-worker": "workspace:^",
-    "@forklaunch/core": "^1.6.5",
+    "@forklaunch/core": "^2.0.0",
     "typescript": "^7.0.2"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/blueprint-sample-worker",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Sample worker implementation for forklaunch",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
@@ -41,13 +41,13 @@
   "dependencies": {
     "@forklaunch/blueprint-core": "workspace:^",
     "@forklaunch/blueprint-monitoring": "workspace:^",
-    "@forklaunch/core": "^1.6.5",
+    "@forklaunch/core": "^2.0.0",
     "@forklaunch/implementation-worker-bullmq": "workspace:^",
     "@forklaunch/implementation-worker-database": "workspace:^",
     "@forklaunch/implementation-worker-kafka": "workspace:^",
     "@forklaunch/implementation-worker-redis": "workspace:^",
-    "@forklaunch/infrastructure-redis": "^1.4.15",
-    "@forklaunch/infrastructure-s3": "^1.4.15",
+    "@forklaunch/infrastructure-redis": "^1.4.16",
+    "@forklaunch/infrastructure-s3": "^1.4.16",
     "@forklaunch/interfaces-worker": "workspace:^",
     "@forklaunch/universal-sdk": "^1.2.28",
     "@mikro-orm/core": "7.2.1",
@@ -64,7 +64,7 @@
     "ajv": "^8.20.0",
     "better-sqlite3": "^13.0.3",
     "bullmq": "^6.3.8",
-    "dotenv": "^18.0.1",
+    "dotenv": "^18.0.2",
     "kafkajs": "^2.2.4",
     "node-gyp": "^13.0.2",
     "pino": "^10.3.1",
@@ -86,7 +86,7 @@
     "tsx": "^4.23.15",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2",
-    "typescript-eslint": "^8.70.0"
+    "typescript-eslint": "^8.70.1"
   },
   "mikro-orm": {
     "config_paths": [

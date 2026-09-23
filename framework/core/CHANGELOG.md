@@ -1,5 +1,39 @@
 # @forklaunch/core
 
+## 2.0.0
+
+### Major Changes
+
+- **The empty tenant is not a tenant.** `''` is rejected wherever a tenant is
+  bound, and an encrypted column touched with no tenant bound throws instead of
+  falling back to the empty key.
+
+  `''` used to mean "the global tenant", so a deliberate global row and a tenant
+  nobody resolved shared ONE KEY. A path that simply forgot to bind wrote rows
+  that looked fine; the mistake surfaced later and elsewhere, as the owning
+  tenant's "Failed to decrypt encrypted column value", blaming the reader for the
+  writer's bug. The query path was quieter still: a WHERE value on an encrypted
+  column is encrypted before it is compared, so an unbound lookup produced
+  ciphertext under `''` that matched nothing — an empty result set, no error.
+
+  - `wrapEmWithTenantContext(em, '')`, `withEncryptionContext('')` and
+    `setEncryptionTenantId('')` throw `EmptyTenantError`, which names an explicit
+    constant as the replacement.
+  - Reading or writing an encrypted column with nothing bound throws
+    `UnboundTenantError`, naming the operation and how to bind one.
+  - `getBoundTenantId()` returns `string | undefined` — the distinction
+    `getCurrentTenantId()` cannot make. The latter is deprecated: the `''` it
+    answers when nothing is bound IS the bug.
+
+  `undefined` still means "do not wrap", so a lookup that has not resolved a
+  tenant and reads no encrypted column is unaffected.
+
+  **Upgrading.** An application holding rows encrypted under `''` must re-tenant
+  them before taking this, or those rows stop being readable. Pick a constant no
+  organization can collide with (`'_internal'` is what forklaunch-platform uses)
+  and migrate: snapshot each encrypted column's raw bytes first, decrypt under
+  `''`, rewrite under the row's canonical tenant.
+
 ## 1.6.7
 
 ### Patch Changes
