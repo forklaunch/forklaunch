@@ -6,7 +6,11 @@ import {
 } from '@forklaunch/blueprint-core';
 import { Metrics, metrics } from '@forklaunch/blueprint-monitoring';
 import { OpenTelemetryCollector } from '@forklaunch/core/http';
-import { wrapEmWithTenantContext } from '@forklaunch/core/persistence';
+import {
+  FieldEncryptor,
+  getCurrentTenantId,
+  wrapEmWithTenantContext
+} from '@forklaunch/core/persistence';
 import {
   ComplianceDataService,
   createConfigInjector,
@@ -14,10 +18,16 @@ import {
   Lifetime,
   RetentionService
 } from '@forklaunch/core/services';
-import { MockProcedureCodeProvider } from '@forklaunch/implementation-cac-base/services';
+import { ScrubbingService } from '@forklaunch/implementation-cac-base/services';
+import { RedisTtlCache } from '@forklaunch/infrastructure-redis';
 import { ForkOptions } from '@mikro-orm/core';
 import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
 import mikroOrmOptionsConfig from './mikro-orm.config';
+import { AnalyticsService } from './services/analytics.service';
+import { ClaimService } from './services/claim.service';
+import { CodeSetProviderResolver } from './services/codeSetProviderResolver.service';
+import { CodeValidationService } from './services/codeValidation.service';
+import { DenialWorklistService } from './services/denialWorklist.service';
 
 //! defines the configuration schema for the application
 const configInjector = createConfigInjector(schemaValidator, {
@@ -36,6 +46,11 @@ const configInjector = createConfigInjector(schemaValidator, {
 
 //! defines the environment configuration for the application
 const environmentConfig = configInjector.chain({
+  REDIS_URL: {
+    lifetime: Lifetime.Singleton,
+    type: string,
+    value: getEnvVar('REDIS_URL')
+  },
   HOST: {
     lifetime: Lifetime.Singleton,
     type: string,
@@ -110,6 +125,29 @@ const runtimeDependencies = environmentConfig.chain({
         metrics
       )
   },
+  // Backs AuthCacheService (§12 item 8, closed) — caches IAM permission/role
+  // lookups so protected routes don't re-call IAM on every request. 1hr TTL
+  // here is a ceiling; createAuthCacheService (server.ts) applies its own
+  // shorter 5min TTL on top per-record, matching billing-base's pattern.
+  TtlCache: {
+    lifetime: Lifetime.Singleton,
+    type: RedisTtlCache,
+    factory: ({ REDIS_URL, OtelCollector, OTEL_LEVEL, ENCRYPTION_KEY }) =>
+      new RedisTtlCache(
+        60 * 60 * 1000,
+        OtelCollector,
+        {
+          url: REDIS_URL
+        },
+        {
+          enabled: true,
+          level: OTEL_LEVEL || 'info'
+        },
+        {
+          encryptor: new FieldEncryptor(ENCRYPTION_KEY)
+        }
+      )
+  },
   EntityManager: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
@@ -126,21 +164,106 @@ const runtimeDependencies = environmentConfig.chain({
 
 //! defines the service dependencies for the application
 const serviceDependencies = runtimeDependencies.chain({
-  CodeSetProvider: {
+  // Replaces the old always-mock CodeSetProvider Singleton — the per-org
+  // runtime feature gate (§5, plan §12 item 11) resolves Mock vs. real CPT
+  // fresh per request, based on that organization's own CodeSetLicense.
+  CodeSetProviderResolver: {
+    lifetime: Lifetime.Scoped,
+    type: CodeSetProviderResolver,
+    factory: ({ EntityManager, OtelCollector }) =>
+      new CodeSetProviderResolver(EntityManager, OtelCollector)
+  },
+  CodeValidationService: {
+    lifetime: Lifetime.Scoped,
+    type: CodeValidationService,
+    factory: ({ EntityManager, OtelCollector }) =>
+      new CodeValidationService(EntityManager, OtelCollector)
+  },
+  ScrubbingService: {
     lifetime: Lifetime.Singleton,
-    type: MockProcedureCodeProvider,
-    // Skeleton-phase default — every org resolves to the free mock provider
-    // until CodeSetLicense (phase 1) and the license feature-gate (phase 2)
-    // exist to swap in CptCodeProvider. See plan/cac/ §5.
-    factory: ({ OtelCollector }) => new MockProcedureCodeProvider(OtelCollector)
+    type: ScrubbingService,
+    factory: () => new ScrubbingService()
+  },
+  ClaimService: {
+    lifetime: Lifetime.Scoped,
+    type: ClaimService,
+    factory: ({
+      EntityManager,
+      ScrubbingService,
+      CodeSetProviderResolver,
+      CodeValidationService,
+      OtelCollector
+    }) =>
+      new ClaimService(
+        EntityManager,
+        ScrubbingService,
+        CodeSetProviderResolver,
+        CodeValidationService,
+        OtelCollector
+      )
+  },
+  DenialWorklistService: {
+    lifetime: Lifetime.Scoped,
+    type: DenialWorklistService,
+    factory: ({ EntityManager, OtelCollector }) =>
+      new DenialWorklistService(EntityManager, OtelCollector)
+  },
+  AnalyticsService: {
+    lifetime: Lifetime.Scoped,
+    type: AnalyticsService,
+    factory: ({ EntityManager, OtelCollector }) =>
+      new AnalyticsService(EntityManager, OtelCollector)
   },
   ComplianceDataService: {
     lifetime: Lifetime.Singleton,
     type: ComplianceDataService,
-    // No entities registered yet (phase 1 adds Patient/Claim/etc — see
-    // plan/cac/ §4), so there is nothing to erase/export against yet.
+    // Erase/export requests are keyed by the Patient record itself — the
+    // three entities below are the only ones with a *direct* field back to
+    // a patient id. Diagnosis/Charge/Remittance/Denial only reach a patient
+    // by walking through Encounter/Claim, which the framework's generic
+    // compliance service doesn't cascade through (single-hop by design) —
+    // out of scope for this phase, tracked in plan/cac/ §12 if it needs
+    // solving later.
+    //
+    // `ComplianceDataService.erase`/`export` fork their own EntityManager
+    // internally (`this.orm.em.fork()`) with no way to pass tenant context
+    // in — the published service has no such hook, and adding one would
+    // mean cutting a new @forklaunch/core release before this module could
+    // even use it (same trap `@forklaunch/interfaces-cac` hit earlier in
+    // this PR). So instead of the bare `Orm`, this passes an adapter whose
+    // `em.fork()` wraps the real fork with `wrapEmWithTenantContext`,
+    // reading whatever tenant is ambient (via `getCurrentTenantId()`) at
+    // the moment `erase`/`export` calls it. compliance.controller.ts binds
+    // that ambient tenant with `withEncryptionContext(tenantId, ...)`
+    // before calling in. Without this, PHI fields (Patient.firstName/
+    // lastName/dateOfBirth/ssn, Insurance.memberId) decrypt under the
+    // bare/no-tenant key instead of the organization's real one — see
+    // claim.controller.ts's tenant-context comment and
+    // framework/core/src/persistence/tenantEm.ts's doc comment for why
+    // this has to be the wrapped-EM mechanism, not just an outer
+    // `withEncryptionContext` around the whole call: pg's connection pool
+    // callbacks don't reliably carry a single ambient AsyncLocalStorage
+    // scope across the several separate queries erase/export run.
     factory: ({ Orm, OtelCollector }) =>
-      new ComplianceDataService(Orm, OtelCollector, {})
+      new ComplianceDataService(
+        {
+          em: {
+            fork: (options?: ForkOptions) =>
+              wrapEmWithTenantContext(
+                Orm.em.fork(options),
+                getCurrentTenantId() || undefined
+              )
+          },
+          getMetadata: () => Orm.getMetadata()
+        },
+        OtelCollector,
+        {
+          Patient: 'id',
+          Insurance: 'patient',
+          Encounter: 'patient',
+          Claim: 'patient'
+        }
+      )
   },
   RetentionService: {
     lifetime: Lifetime.Singleton,

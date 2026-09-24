@@ -4,10 +4,30 @@ import {
   schemaValidator,
   string
 } from '@forklaunch/blueprint-core';
+import { withEncryptionContext } from '@forklaunch/core/persistence';
 import { ci, tokens } from '../../bootstrapper';
+import { Patient } from '../../persistence/entities/patient.entity';
 
 const complianceDataService = ci.resolve(tokens.ComplianceDataService);
+const entityManagerFactory = ci.scopedResolver(tokens.EntityManager);
 const JWKS_PUBLIC_KEY_URL = ci.resolve(tokens.JWKS_PUBLIC_KEY_URL);
+
+// `userId` on both routes below is a Patient id (see registrations.ts's
+// ComplianceDataService userIdFieldOverrides — Patient: 'id'). Resolve its
+// organizationId with a bare, unscoped EntityManager first (plaintext —
+// compliance('none') — so this one lookup needs no tenant context, and the
+// MikroORM tenant filter fails open with no filter param set), then run the
+// actual erase/export inside that org's encryption context. See
+// registrations.ts's ComplianceDataService comment for why this has to be
+// `withEncryptionContext` around the call, not a query filter.
+async function withPatientTenantContext<T>(
+  patientId: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  const em = entityManagerFactory();
+  const patient = await em.findOne(Patient, { id: patientId });
+  return withEncryptionContext(patient?.organizationId ?? '', fn);
+}
 
 /**
  * GDPR Right to Erasure — deletes all PII/PHI/PCI data for a user
@@ -40,7 +60,9 @@ export const eraseUserData = handlers.delete(
   },
   async (req, res) => {
     const { userId } = req.params;
-    const result = await complianceDataService.erase(userId);
+    const result = await withPatientTenantContext(userId, () =>
+      complianceDataService.erase(userId)
+    );
 
     if (result.recordsDeleted === 0) {
       res.status(404).send('User not found or no PII data to erase');
@@ -82,7 +104,9 @@ export const exportUserData = handlers.get(
   },
   async (req, res) => {
     const { userId } = req.params;
-    const result = await complianceDataService.export(userId);
+    const result = await withPatientTenantContext(userId, () =>
+      complianceDataService.export(userId)
+    );
 
     if (Object.keys(result.entities).length === 0) {
       res.status(404).send('User not found or no PII data to export');

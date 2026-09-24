@@ -44,6 +44,7 @@
     "@forklaunch/express": "^1.2.45",
     "@forklaunch/hyper-express": "^1.2.45",
     "@forklaunch/implementation-cac-base": "workspace:^",
+    "@forklaunch/infrastructure-redis": "^1.4.11",
     "@forklaunch/interfaces-cac": "workspace:^",
     "@forklaunch/validator": "^1.2.28",
     "@mikro-orm/core": "7.2.1",
