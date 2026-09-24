@@ -399,6 +399,11 @@ choice! {
             description: Some("computer-assisted coding hooks only"),
             exclusive_files: Some(&["cac-base"]),
         },
+        BaseMlse = Choice {
+            id: "mlse-base",
+            description: Some("medical literature search (evidence search, cited answers, procedure walkthroughs)"),
+            exclusive_files: Some(&["mlse-base"]),
+        },
         Relay = Choice {
             id: "relay",
             description: Some("managed-apps OAuth relay session-ingest endpoint (adds to an existing iam service)"),
@@ -591,6 +596,7 @@ pub(crate) fn get_service_module_name(service_type: &Module) -> String {
         Module::StripeEcommerce => "ecommerce".to_string(),
         Module::BaseMessaging | Module::TwilioMessaging => "messaging".to_string(),
         Module::BaseCac => "cac".to_string(),
+        Module::BaseMlse => "mlse".to_string(),
         // Relay does not scaffold its own service - it injects the
         // session-ingest endpoint into the existing iam service (see
         // init/relay.rs). This name is only used for conflict detection, so it
@@ -610,6 +616,7 @@ pub(crate) fn get_service_module_description(name: &str, service_type: &Module) 
             Module::StripeEcommerce => "ecommerce service APIs",
             Module::BaseMessaging | Module::TwilioMessaging => "messaging service APIs",
             Module::BaseCac => "computer-assisted coding service APIs",
+            Module::BaseMlse => "medical literature search service APIs",
             Module::Relay => "the managed-apps OAuth relay session-ingest endpoint",
         }
     )
@@ -624,6 +631,9 @@ pub(crate) fn get_service_module_cache(service_type: &Module) -> Option<String> 
         // The ecommerce blueprint reads REDIS_URL at startup for both the cart
         // cache and the order-event queue, and exits if it is unset.
         Module::StripeEcommerce => Some(Infrastructure::Redis.to_string()),
+        // The mlse blueprint caches live source responses in Redis and runs
+        // corpus ingestion on a Redis-backed worker queue.
+        Module::BaseMlse => Some(Infrastructure::Redis.to_string()),
         _ => None,
     }
 }
@@ -656,6 +666,7 @@ mod tests {
             Module::BaseMessaging,
             Module::TwilioMessaging,
             Module::StripeEcommerce,
+            Module::BaseMlse,
         ] {
             assert_eq!(
                 get_service_module_cache(&module),

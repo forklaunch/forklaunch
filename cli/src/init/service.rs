@@ -57,6 +57,7 @@ use crate::{
                 DOTENV_VERSION, ESLINT_VERSION, EXPRESS_VERSION, HYPER_EXPRESS_VERSION,
                 IAM_BASE_VERSION, IAM_INTERFACES_VERSION, INFRASTRUCTURE_REDIS_VERSION,
                 MESSAGING_BASE_VERSION, MESSAGING_INTERFACES_VERSION, MESSAGING_TWILIO_VERSION,
+                MLSE_BASE_VERSION, MLSE_INTERFACES_VERSION,
                 INFRASTRUCTURE_S3_VERSION, INTERNAL_VERSION, IOREDIS_VERSION, JOSE_VERSION,
                 MIKRO_ORM_CLI_VERSION, MIKRO_ORM_CORE_VERSION, MIKRO_ORM_DATABASE_VERSION,
                 MIKRO_ORM_MIGRATIONS_VERSION,
@@ -332,12 +333,12 @@ pub(crate) fn generate_service_package_json(
         keywords: Some(vec![]),
         license: Some(manifest_data.license.to_string()),
         author: Some(manifest_data.author.to_string()),
-        main: main_override.or_else(|| if manifest_data.is_iam || manifest_data.is_billing || manifest_data.is_messaging || manifest_data.is_cac {
+        main: main_override.or_else(|| if manifest_data.is_iam || manifest_data.is_billing || manifest_data.is_messaging || manifest_data.is_cac || manifest_data.is_mlse {
             Some("./dist/index.js".to_string())
         } else {
             None
         }),
-        types: types_override.unwrap_or(if manifest_data.is_iam || manifest_data.is_billing || manifest_data.is_messaging || manifest_data.is_cac {
+        types: types_override.unwrap_or(if manifest_data.is_iam || manifest_data.is_billing || manifest_data.is_messaging || manifest_data.is_cac || manifest_data.is_mlse {
             Some("./dist/index.d.ts".to_string())
         } else {
             None
@@ -542,18 +543,29 @@ pub(crate) fn generate_service_package_json(
                 } else {
                     None
                 },
+                forklaunch_implementation_mlse_base: if manifest_data.is_mlse {
+                    Some(MLSE_BASE_VERSION.to_string())
+                } else {
+                    None
+                },
+                forklaunch_interfaces_mlse: if manifest_data.is_mlse {
+                    Some(MLSE_INTERFACES_VERSION.to_string())
+                } else {
+                    None
+                },
                 forklaunch_implementation_worker_bullmq: None,
                 forklaunch_implementation_worker_database: None,
                 forklaunch_implementation_worker_kafka: None,
-                // The ecommerce module ships an order-event worker (worker.ts)
-                // that consumes a Redis-backed queue, so it needs the worker
-                // packages even though it is a service, not a worker project.
-                forklaunch_implementation_worker_redis: if manifest_data.is_ecommerce {
+                // Modules that ship a worker (ecommerce's order-event worker,
+                // mlse's corpus-ingestion worker) consume a Redis-backed queue,
+                // so they need the worker packages even though they are
+                // services, not worker projects.
+                forklaunch_implementation_worker_redis: if manifest_data.ships_worker {
                     Some(WORKER_REDIS_VERSION.to_string())
                 } else {
                     None
                 },
-                forklaunch_interfaces_worker: if manifest_data.is_ecommerce {
+                forklaunch_interfaces_worker: if manifest_data.ships_worker {
                     Some(WORKER_INTERFACES_VERSION.to_string())
                 } else {
                     None
@@ -889,6 +901,7 @@ impl CliCommand for ServiceCommand {
             is_billing: false,
             is_messaging: false,
             is_cac: false,
+            is_mlse: false,
             is_cache_enabled: infrastructure.contains(&Infrastructure::Redis),
             platform_application_id: manifest_data.platform_application_id.clone(),
             platform_organization_id: manifest_data.platform_organization_id.clone(),

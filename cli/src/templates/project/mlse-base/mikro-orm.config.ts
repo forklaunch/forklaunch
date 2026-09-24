@@ -1,0 +1,1 @@
+../service/mikro-orm.config.ts
