@@ -161,7 +161,19 @@ pub(super) fn ensure_success(response: Response, missing: Missing) -> Result<Res
             }
             match missing {
                 Missing::Endpoint => bail!("{}", UNSUPPORTED_CONTROL_PLANE),
-                Missing::Resource(what) => bail!("{} not found — {}", what, snippet),
+                // A handler that wrote its own sentence has already said which of several
+                // states this is, and in more detail than this CLI can. Prefixing it
+                // produced a message that stated a vague negative and then contradicted
+                // it with the real reason: "an app claim link for instance 'x' not found
+                // — the product has not minted its link yet; the hook has not run."
+                // Supply the generic phrasing only when the body carries nothing, which
+                // is the case it was written for.
+                Missing::Resource(what) => {
+                    if is_bare_not_found(&snippet) {
+                        bail!("{} not found", what)
+                    }
+                    bail!("{}", snippet)
+                }
                 Missing::Custom(message) => bail!("{}", message),
             }
         }
@@ -185,6 +197,17 @@ pub(super) fn ensure_success(response: Response, missing: Missing) -> Result<Res
             body_snippet(response)
         ),
     }
+}
+
+/// Recognizes a 404 body that tells the reader nothing — the framework's bare status
+/// text, or no body at all. Everything else came from a handler that chose its words,
+/// and those words are what the reader should see.
+fn is_bare_not_found(snippet: &str) -> bool {
+    let normalized = snippet.trim().trim_end_matches('.').to_ascii_lowercase();
+    matches!(
+        normalized.as_str(),
+        "" | "not found" | "notfound" | "404" | "404 not found" | "unknown error"
+    )
 }
 
 /// Recognizes the "no route matched" 404 that Express-style servers generate, as
@@ -532,6 +555,27 @@ mod tests {
             snippet_from_text("  Cannot POST /managed-mode/templates  "),
             "Cannot POST /managed-mode/templates"
         );
+    }
+
+    #[test]
+    fn a_bare_404_body_falls_back_to_the_clis_own_phrasing() {
+        for body in ["", "  ", "Not Found", "not found.", "404", "unknown error"] {
+            assert!(is_bare_not_found(body), "{:?}", body);
+        }
+    }
+
+    #[test]
+    fn a_handler_authored_404_body_is_not_treated_as_bare() {
+        // These are sentences `revealAppClaimLink` answers with. Each names one state,
+        // and each was printed after "… not found — ", which read as two contradictory
+        // answers to the same question.
+        for body in [
+            "The product has not minted its claim link yet — its hook has not run.",
+            "The claim link was already revealed; it is purged on reveal.",
+            "This template declares no app claim hook.",
+        ] {
+            assert!(!is_bare_not_found(body), "{:?}", body);
+        }
     }
 
     #[test]

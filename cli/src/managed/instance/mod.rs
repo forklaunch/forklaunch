@@ -3,6 +3,7 @@ use clap::{ArgMatches, Command};
 
 use crate::{CliCommand, core::command::command};
 
+mod app_claim_hook;
 mod app_claim_link;
 mod apply_variables;
 mod claim;
@@ -15,9 +16,11 @@ mod list;
 mod reset;
 mod resume;
 mod rotate_keys;
+mod sms;
 mod update;
 mod vars;
 
+use app_claim_hook::AppClaimHookCommand;
 use app_claim_link::AppClaimLinkCommand;
 use apply_variables::ApplyVariablesCommand;
 use claim::ClaimCommand;
@@ -30,6 +33,7 @@ use list::ListCommand;
 use reset::ResetCommand;
 use resume::ResumeCommand;
 use rotate_keys::RotateKeysCommand;
+use sms::SmsCommand;
 use update::UpdateCommand;
 use vars::VarsCommand;
 
@@ -39,6 +43,8 @@ pub(super) struct InstanceCommand {
     create: CreateCommand,
     claim_link: ClaimLinkCommand,
     app_claim_link: AppClaimLinkCommand,
+    app_claim_hook: AppClaimHookCommand,
+    sms: SmsCommand,
     claim: ClaimCommand,
     destroy: DestroyCommand,
     vars: VarsCommand,
@@ -58,6 +64,8 @@ impl InstanceCommand {
             create: CreateCommand::new(),
             claim_link: ClaimLinkCommand::new(),
             app_claim_link: AppClaimLinkCommand::new(),
+            app_claim_hook: AppClaimHookCommand::new(),
+            sms: SmsCommand::new(),
             claim: ClaimCommand::new(),
             destroy: DestroyCommand::new(),
             vars: VarsCommand::new(),
@@ -107,6 +115,8 @@ impl CliCommand for InstanceCommand {
         .subcommand(self.create.command())
         .subcommand(self.claim_link.command())
         .subcommand(self.app_claim_link.command())
+        .subcommand(self.app_claim_hook.command())
+        .subcommand(self.sms.command())
         .subcommand(self.claim.command())
         .subcommand(self.destroy.command())
         .subcommand(self.vars.command())
@@ -126,6 +136,8 @@ impl CliCommand for InstanceCommand {
             Some(("create", sub_matches)) => self.create.handler(sub_matches),
             Some(("claim-link", sub_matches)) => self.claim_link.handler(sub_matches),
             Some(("app-claim-link", sub_matches)) => self.app_claim_link.handler(sub_matches),
+            Some(("app-claim-hook", sub_matches)) => self.app_claim_hook.handler(sub_matches),
+            Some(("sms", sub_matches)) => self.sms.handler(sub_matches),
             Some(("claim", sub_matches)) => self.claim.handler(sub_matches),
             Some(("destroy", sub_matches)) => self.destroy.handler(sub_matches),
             Some(("vars", sub_matches)) => self.vars.handler(sub_matches),
