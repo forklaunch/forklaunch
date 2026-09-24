@@ -66,7 +66,7 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/core": "^2.0.0",
+    "@forklaunch/core": "^2.1.0",
     "@forklaunch/interfaces-worker": "workspace:^",
     "@forklaunch/internal": "^1.2.30",
     "@forklaunch/validator": "^1.2.28",
