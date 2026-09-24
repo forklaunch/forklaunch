@@ -112,7 +112,7 @@
     "@opentelemetry/semantic-conventions": "^1.43.0",
     "cors": "^2.8.6",
     "dotenv": "^18.0.1",
-    "fastmcp": "^4.20.14",
+    "fastmcp": "^4.20.16",
     "jose": "6.2.12",
     "openapi3-ts": "^4.6.1",
     "pino": "^10.3.1",
