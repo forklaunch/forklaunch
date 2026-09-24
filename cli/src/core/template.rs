@@ -221,6 +221,9 @@ pub(crate) fn get_routers_from_standard_package(package: Module) -> Option<Vec<S
         // Skeleton only so far — patient/encounter/claim/eligibility/remittance/
         // codeSet routers land in later phases (see plan/cac/), not this PR.
         Module::BaseCac => None,
+        // mlse routers are registered here once the search, answer and entity
+        // controllers land.
+        Module::BaseMlse => None,
         // Relay injects its router directly into an existing iam service
         // (init/relay.rs); it never goes through the standard-package manifest
         // path, so it declares no routers here.

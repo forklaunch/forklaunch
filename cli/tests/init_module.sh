@@ -15,6 +15,7 @@ RUST_BACKTRACE=1 $FL init module -m iam-base -d postgresql -p service-test-node-
 RUST_BACKTRACE=1 $FL init module -m billing-base -d postgresql -p service-test-node-application
 RUST_BACKTRACE=1 $FL init module -m messaging-base -d postgresql -p service-test-node-application
 RUST_BACKTRACE=1 $FL init module -m cac-base -d postgresql -p service-test-node-application
+RUST_BACKTRACE=1 $FL init module -m mlse-base -d postgresql -p service-test-node-application
 
 cd service-test-node-application/src/modules
 
@@ -28,6 +29,7 @@ RUST_BACKTRACE=1 $FL init module -m iam-base -d postgresql -p service-test-bun-a
 RUST_BACKTRACE=1 $FL init module -m billing-base -d postgresql -p service-test-bun-application
 RUST_BACKTRACE=1 $FL init module -m messaging-base -d postgresql -p service-test-bun-application
 RUST_BACKTRACE=1 $FL init module -m cac-base -d postgresql -p service-test-bun-application
+RUST_BACKTRACE=1 $FL init module -m mlse-base -d postgresql -p service-test-bun-application
 
 cd service-test-bun-application/src/modules
 

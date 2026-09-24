@@ -193,6 +193,8 @@ pub(crate) struct ProjectDependencies {
     pub(crate) forklaunch_interfaces_messaging: Option<String>,
     pub(crate) forklaunch_implementation_cac_base: Option<String>,
     pub(crate) forklaunch_interfaces_cac: Option<String>,
+    pub(crate) forklaunch_implementation_mlse_base: Option<String>,
+    pub(crate) forklaunch_interfaces_mlse: Option<String>,
     pub(crate) forklaunch_implementation_worker_bullmq: Option<String>,
     pub(crate) forklaunch_implementation_worker_redis: Option<String>,
     pub(crate) forklaunch_implementation_worker_database: Option<String>,
@@ -313,6 +315,12 @@ impl Serialize for ProjectDependencies {
         }
         if let Some(ref v) = self.forklaunch_interfaces_cac {
             map.serialize_entry("@forklaunch/interfaces-cac", v)?;
+        }
+        if let Some(ref v) = self.forklaunch_implementation_mlse_base {
+            map.serialize_entry("@forklaunch/implementation-mlse-base", v)?;
+        }
+        if let Some(ref v) = self.forklaunch_interfaces_mlse {
+            map.serialize_entry("@forklaunch/interfaces-mlse", v)?;
         }
         if let Some(ref v) = self.forklaunch_implementation_worker_bullmq {
             map.serialize_entry("@forklaunch/implementation-worker-bullmq", v)?;
@@ -601,6 +609,12 @@ impl<'de> Deserialize<'de> for ProjectDependencies {
                         }
                         "@forklaunch/interfaces-cac" => {
                             deps.forklaunch_interfaces_cac = Some(value)
+                        }
+                        "@forklaunch/implementation-mlse-base" => {
+                            deps.forklaunch_implementation_mlse_base = Some(value)
+                        }
+                        "@forklaunch/interfaces-mlse" => {
+                            deps.forklaunch_interfaces_mlse = Some(value)
                         }
                         "@forklaunch/implementation-worker-bullmq" => {
                             deps.forklaunch_implementation_worker_bullmq = Some(value)
