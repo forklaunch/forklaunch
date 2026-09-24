@@ -137,7 +137,19 @@ Every endpoint is added to `sdk.ts` in the same commit as its route.
 
 ---
 
-## 3. Build phases (commits within the one PR)
+## 3. Progress
+
+| Phase | Status | Verified |
+|---|---|---|
+| A. Plan documents | Done | — |
+| B. CLI registration | Done | 764 cargo tests pass (Linux container with real symlinks and LF endings) |
+| C. pgvector | Done | Unit tests; scaffold of a new app uses `pg18-trixie`; adding MLSE to an existing app upgrades `postgres:latest`; adding another module afterwards keeps pgvector; MySQL with MLSE is rejected |
+| D. Package skeletons | Done | Node 24 / pnpm 11.1.0 build; 32 unit tests; migration e2e test on pgvector (extension, distance query, `source` table); `forklaunch depcheck` and `check_blueprint_deps` pass |
+| E–J | Not started | — |
+
+**Before merge:** `@forklaunch/interfaces-mlse` and `@forklaunch/implementation-mlse-base` must be published to npm (0.1.x), because the CLI scaffold tests (`init_mlse.sh`, `init_module.sh`) run `pnpm install` against the registry.
+
+## 4. Build phases (commits within the one PR)
 
 | Phase | Scope | Done when |
 |---|---|---|
@@ -154,7 +166,7 @@ Every endpoint is added to `sdk.ts` in the same commit as its route.
 
 ---
 
-## 4. Test plan
+## 5. Test plan
 
 | Level | Scope | Tooling |
 |---|---|---|
@@ -168,7 +180,7 @@ No test calls a live AI provider or a live medical API.
 
 ---
 
-## 5. Decisions needed during the build
+## 6. Decisions needed during the build
 
 | # | Decision | Needed by |
 |---|---|---|
@@ -180,7 +192,7 @@ No test calls a live AI provider or a live medical API.
 
 ---
 
-## 6. Definition of done
+## 7. Definition of done
 
 - One pull request from `feat/mlse-module` to `main`, all phases as separate commits.
 - CI green: Rust tests, CLI e2e group 6 including `init_mlse.sh`, blueprint depcheck, blueprint unit and e2e tests.
