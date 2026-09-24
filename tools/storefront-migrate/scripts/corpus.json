@@ -1,0 +1,60 @@
+{
+  "_why": "Ten Shopify storefronts spanning the theme families most stores run on. A tarball ships only when every one exits 0 or its residue is named policy. Chosen from a live probe on 2026-09-04 (HTTP 200, no bot challenge, no 429).",
+  "stores": [
+    {
+      "domain": "graza.co",
+      "theme": "Graza (custom)",
+      "note": "ad-heavy, never network-idle; the original test store"
+    },
+    {
+      "domain": "drinkolipop.com",
+      "theme": "Olipop (custom)",
+      "note": "pack-size variants, subscribe-and-save"
+    },
+    {
+      "domain": "brooklinen.com",
+      "theme": "Dawn",
+      "note": "Shopify's reference theme, large catalog"
+    },
+    {
+      "domain": "deathwishcoffee.com",
+      "theme": "Dawn",
+      "note": "second Dawn store, different apps"
+    },
+    {
+      "domain": "hiyahealth.com",
+      "theme": "Ride",
+      "note": "paid theme family"
+    },
+    {
+      "domain": "jonesroadbeauty.com",
+      "theme": "Base",
+      "note": "known runtime-href rewrite case (see crawl.js)"
+    },
+    {
+      "domain": "liquiddeath.com",
+      "theme": "Liquid Death (custom)",
+      "note": "heavy media"
+    },
+    {
+      "domain": "fromourplace.com",
+      "theme": "Our Place (custom)",
+      "note": "bundles"
+    },
+    {
+      "domain": "blueland.com",
+      "theme": "Hydrogen (React)",
+      "note": "headless \u2014 the non-Liquid case; expect preflight to say so"
+    },
+    {
+      "domain": "gorillamind.com",
+      "theme": "Unified Theme",
+      "note": "62 nav links, Saved By app, consent widget, subscriptions"
+    }
+  ],
+  "rejected": {
+    "bombas.com": "429 to a plain fetch",
+    "meundies.com": "429 to a plain fetch",
+    "caraway.com": "no response"
+  }
+}
