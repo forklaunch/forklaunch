@@ -16,9 +16,23 @@ describe('normalizeLicense', () => {
     ['CC BY-NC-SA 3.0 IGO', 'cc-by-nc-sa'],
     ['Public Domain', 'public-domain'],
     ['', 'unknown'],
-    [undefined, 'unknown']
+    [undefined, 'unknown'],
+    ['creative commons by-nc 4.0', 'cc-by-nc'],
+    ['CC BY - SA  4.0', 'cc-by-sa'],
+    ['US Government Work', 'us-government-work'],
+    ['---', 'unknown']
   ])('normalizes %s to %s', (input, expected) => {
     expect(normalizeLicense(input)).toBe(expected);
+  });
+
+  // License strings come from external documents; long runs of '-' made the
+  // earlier regular-expression version backtrack polynomially (CodeQL).
+  it('handles hostile input quickly', () => {
+    const start = performance.now();
+    expect(normalizeLicense('-'.repeat(100_000) + 'x')).toBe('unknown');
+    expect(normalizeLicense('cc' + '-'.repeat(190) + 'by')).toBe('cc-by');
+    expect(normalizeLicense(`cc-by-${'1.'.repeat(90)}0`)).toBe('cc-by');
+    expect(performance.now() - start).toBeLessThan(100);
   });
 });
 
