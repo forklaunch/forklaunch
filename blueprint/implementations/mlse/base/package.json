@@ -39,6 +39,7 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
     "@forklaunch/common": "^1.2.27",
     "@forklaunch/core": "^2.1.0",
     "@forklaunch/interfaces-mlse": "workspace:^",

@@ -1,3 +1,4 @@
+export * from './answer.controller';
 export * from './compliance.controller';
 export * from './document.controller';
 export * from './search.controller';

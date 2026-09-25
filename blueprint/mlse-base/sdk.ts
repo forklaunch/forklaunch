@@ -1,6 +1,8 @@
 import { SchemaValidator } from '@forklaunch/blueprint-core';
 import { MapToSdk } from '@forklaunch/core/http';
 import {
+  answer,
+  answerComplete,
   eraseUserData,
   exportUserData,
   getDocument,
@@ -14,6 +16,10 @@ import {
 } from './api/controllers';
 
 export type MlseSdk = {
+  answer: {
+    answer: typeof answer;
+    answerComplete: typeof answerComplete;
+  };
   compliance: {
     eraseUserData: typeof eraseUserData;
     exportUserData: typeof exportUserData;
@@ -37,6 +43,10 @@ export type MlseSdk = {
 };
 
 export const mlseSdkClient = {
+  answer: {
+    answer,
+    answerComplete
+  },
   compliance: {
     eraseUserData,
     exportUserData
