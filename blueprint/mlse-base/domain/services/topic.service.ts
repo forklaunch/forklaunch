@@ -21,7 +21,11 @@ import { MedicalConcept } from '../../persistence/entities/medicalConcept.entity
 import { QuantitativeFact } from '../../persistence/entities/quantitativeFact.entity';
 import { Topic } from '../../persistence/entities/topic.entity';
 import { TopicEvidence } from '../../persistence/entities/topicEvidence.entity';
-import { SearchService } from './search.service';
+import {
+  LICENSED_SOURCE_ACCESS_SQL,
+  OPEN_FLAG_EXCLUSION_SQL,
+  SearchService
+} from './search.service';
 
 export class TopicNotFoundError extends Error {
   constructor(readonly slug: string) {
@@ -197,10 +201,13 @@ export class TopicService {
          from document d
          left join document_chunk c on c.document_id = d.id
         where d.status = 'current' and d.is_case_report
+          -- topic pages are shared by every organization, so licensed
+          -- content and flagged documents never become case studies
+          and ${LICENSED_SOURCE_ACCESS_SQL} and ${OPEN_FLAG_EXCLUSION_SQL}
           and (? = any(d.mesh_descriptor_uis)
                or c.search_vector @@ (${topic.searchTerms.map(() => `plainto_tsquery('english', ?)`).join(' || ')})
                or to_tsvector('english', d.title) @@ (${topic.searchTerms.map(() => `plainto_tsquery('english', ?)`).join(' || ')}))`,
-      [topic.meshDescriptorUi ?? '', ...topic.searchTerms, ...topic.searchTerms]
+      ['', topic.meshDescriptorUi ?? '', ...topic.searchTerms, ...topic.searchTerms]
     );
 
     const relevant: {
@@ -292,6 +299,12 @@ export class TopicService {
         order by e.item_key, e.rank`,
       [topic.id]
     );
+    // documents with an open reviewer flag stay hidden in every part of the
+    // page: evidence (filtered in the query above), numbers and case studies
+    const flaggedRows: { document_id: string }[] = await this.em
+      .getConnection()
+      .execute(`select distinct document_id from content_flag where status = 'open'`);
+    const flagged = new Set(flaggedRows.map((row) => row.document_id));
     const facts = await this.em.find(
       QuantitativeFact,
       { topic: topic.id, document: { status: 'current' } },
@@ -326,6 +339,7 @@ export class TopicService {
         evidence,
         facts: facts
           .filter((fact) => fact.itemKey === item.key)
+          .filter((fact) => !flagged.has((fact.document as unknown as { id: string }).id))
           .map((fact) => ({
             raw: fact.raw,
             // double precision columns are typed number | string by the ORM
@@ -358,7 +372,7 @@ export class TopicService {
       outcome?: string;
     };
     const groups = new Map<string, CaseView[]>();
-    for (const cs of caseStudies) {
+    for (const cs of caseStudies.filter((c) => !flagged.has((c.document as unknown as Document).id))) {
       const doc = cs.document as unknown as Document;
       const list = groups.get(cs.diagnosis) ?? [];
       list.push({

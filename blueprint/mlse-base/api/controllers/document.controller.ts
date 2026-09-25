@@ -8,6 +8,10 @@ import {
   string
 } from '@forklaunch/blueprint-core';
 import { ci, tokens } from '../../bootstrapper';
+import {
+  LICENSED_SOURCE_ACCESS_SQL,
+  OPEN_FLAG_EXCLUSION_SQL
+} from '../../domain/services/search.service';
 import { Document } from '../../persistence/entities/document.entity';
 import { DocumentChunk } from '../../persistence/entities/documentChunk.entity';
 
@@ -22,7 +26,7 @@ export const getDocument = handlers.get(
     name: 'Get Document',
     access: 'internal',
     summary:
-      'Returns one stored document version with its license scope, status and passages',
+      'Returns one stored document version with its license scope, status and passages. A licensed document is returned only for an organization with an active license, and a flagged one not at all',
     auth: {
       hmac: {
         secretKeys: {
@@ -31,6 +35,7 @@ export const getDocument = handlers.get(
       }
     },
     params: IdSchema,
+    query: { organizationId: optional(string) },
     responses: {
       200: {
         id: string,
@@ -56,7 +61,14 @@ export const getDocument = handlers.get(
   },
   async (req, res) => {
     const em = entityManagerFactory();
-    const document = await em.findOne(Document, { id: req.params.id });
+    // same license and flag rules as search; a document the caller may not
+    // see is reported as not found
+    const visible: { id: string }[] = await em.getConnection().execute(
+      `select d.id from document d
+        where d.id = ? and ${LICENSED_SOURCE_ACCESS_SQL} and ${OPEN_FLAG_EXCLUSION_SQL}`,
+      [req.params.id, req.query.organizationId ?? '']
+    );
+    const document = visible.length > 0 ? await em.findOne(Document, { id: req.params.id }) : null;
     if (!document) {
       res.status(404).send(`Document '${req.params.id}' not found`);
       return;

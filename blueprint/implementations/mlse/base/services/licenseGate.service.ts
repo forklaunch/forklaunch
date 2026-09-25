@@ -8,17 +8,20 @@ const FULL_TEXT_LICENSES = new Set([
   'cc-by',
   'cc-by-sa',
   'public-domain',
-  'us-government-work',
-  // used under a contract that allows full text (LicensedContentAdapter)
-  'licensed-full-text'
+  'us-government-work'
 ]);
 
 // Copyrighted by default, but may be indexed and quoted briefly with a link
 // to the original (PubMed abstracts).
-const EXCERPT_ONLY_LICENSES = new Set([
-  'publisher-copyright-abstract',
-  'licensed-excerpt'
-]);
+const EXCERPT_ONLY_LICENSES = new Set(['publisher-copyright-abstract']);
+
+// Contract terms set by LicensedContentAdapter. Honoured only when the caller
+// says the document came through the adapter: a public feed carrying the
+// same string gets nothing.
+const CONTRACT_LICENSES: Record<string, LicenseScope> = {
+  'licensed-full-text': 'full_text',
+  'licensed-excerpt': 'excerpt_only'
+};
 
 // Real license strings are short. Anything longer is not a license we
 // recognize, and capping it keeps normalization cheap on hostile input.
@@ -86,9 +89,14 @@ export function normalizeLicense(license: string | undefined | null): string {
 // Decides what MLSE may keep from a document, before anything is written.
 // Unknown or missing licenses are treated as the most restrictive case.
 export function licenseScopeFor(
-  license: string | undefined | null
+  license: string | undefined | null,
+  options: { viaLicensedAdapter?: boolean } = {}
 ): LicenseScope {
   const normalized = normalizeLicense(license);
+  const contract = CONTRACT_LICENSES[normalized];
+  if (contract) {
+    return options.viaLicensedAdapter ? contract : 'metadata_only';
+  }
   if (FULL_TEXT_LICENSES.has(normalized)) {
     return 'full_text';
   }

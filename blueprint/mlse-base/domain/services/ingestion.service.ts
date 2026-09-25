@@ -156,7 +156,7 @@ export class IngestionService {
 
     for (const fetched of documents) {
       await this.em.transactional(async (em) => {
-        await this.ingestDocument(em, fetched, result);
+        await this.ingestDocument(em, fetched, result, fetcher instanceof LicensedContentAdapter);
       });
     }
 
@@ -173,9 +173,10 @@ export class IngestionService {
   private async ingestDocument(
     em: EntityManager,
     fetched: FetchedDocumentDto,
-    result: IngestionResult
+    result: IngestionResult,
+    viaLicensedAdapter: boolean
   ): Promise<void> {
-    const licenseScope = licenseScopeFor(fetched.license);
+    const licenseScope = licenseScopeFor(fetched.license, { viaLicensedAdapter });
     const sections = applyLicense(fetched.sections, licenseScope, this.excerptChars);
     const hash = contentHash(fetched.title, sections);
     const status = fetched.retracted ? DocumentStatus.RETRACTED : DocumentStatus.CURRENT;

@@ -5,6 +5,7 @@ import {
   schemaValidator,
   string
 } from '@forklaunch/blueprint-core';
+import { classifyQuery } from '@forklaunch/implementation-mlse-base/services';
 import { ci, tokens } from '../../bootstrapper';
 import { SavedSearchNotFoundError } from '../../domain/services/savedSearch.service';
 
@@ -58,6 +59,13 @@ export const saveSearch = handlers.post(
     const { organizationId, userId, name, query, topicSlug } = req.body;
     if (!name.trim() || name.length > 200 || !query.trim() || query.length > 2000) {
       res.status(400).send('name must be 1 to 200 characters and query 1 to 2000');
+      return;
+    }
+    // a saved search is kept indefinitely, so it may not hold text about one
+    // patient, a prescription or an emergency
+    const { queryClass } = classifyQuery(`${name} ${query}`);
+    if (queryClass !== 'literature_lookup' && queryClass !== 'exact_dosage_no_context') {
+      res.status(400).send('Only literature searches can be saved; remove details about a specific patient');
       return;
     }
     res.status(200).json(await savedSearchServiceFactory().save(organizationId, userId, name, query, topicSlug));

@@ -147,8 +147,8 @@ export class SearchService {
       .sort((a, b) => b.score - a.score)
       .slice(0, limit);
 
+    // the query text is not logged
     this.openTelemetryCollector.debug('Search completed', {
-      query,
       expandedTerms: expandedTerms.length,
       keyword: keyword.length,
       vector: vector.length,

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   CitablePassageDto,
   FetchedDocumentDto,
@@ -69,8 +70,11 @@ export class LiveRetrievalService {
     };
   }
 
+  // The term is hashed so search text never appears in Redis keys or in the
+  // cache's key logs.
   static cacheKey(sourceKey: string, term: string): string {
-    return `mlse:live:${sourceKey}:${term.trim().toLowerCase().replace(/\s+/g, ' ')}`;
+    const normalized = term.trim().toLowerCase().split(/\s/).filter((w) => w.length > 0).join(' ');
+    return `mlse:live:${sourceKey}:${createHash('sha256').update(normalized).digest('hex')}`;
   }
 
   private async fromSource(
