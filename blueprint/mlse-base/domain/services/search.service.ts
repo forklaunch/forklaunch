@@ -18,6 +18,20 @@ import {
 } from '@forklaunch/interfaces-mlse/types';
 import { EntityManager } from '@mikro-orm/core';
 
+// Shared with ContentSourceResolver so search and the admin view apply the
+// same rule. `?` is the organization id.
+export const LICENSED_SOURCE_ACCESS_SQL = `d.source_key not in (
+  select s.source_key from source s
+   where s.requires_license
+     and not exists (
+       select 1 from content_license l
+        where l.source_key = s.source_key and l.organization_id = ?
+          and l.status = 'active' and l.valid_from <= now()
+          and (l.valid_until is null or l.valid_until > now())))`;
+
+export const OPEN_FLAG_EXCLUSION_SQL = `not exists (
+  select 1 from content_flag f where f.document_id = d.id and f.status = 'open')`;
+
 type ChunkRow = {
   id: string;
   section_path: string;
@@ -237,8 +251,12 @@ export class SearchService {
   }
 
   private filterSql(request: SearchRequestDto): { sql: string; params: unknown[] } {
-    const clauses: string[] = [];
-    const params: unknown[] = [];
+    // Fail closed: a licensed source is excluded unless this organization
+    // holds an active, in-date license (no organization means none), and a
+    // document with an open content flag is excluded until a reviewer
+    // resolves it.
+    const clauses: string[] = [LICENSED_SOURCE_ACCESS_SQL, OPEN_FLAG_EXCLUSION_SQL];
+    const params: unknown[] = [request.organizationId ?? ''];
     if (request.sourceKeys?.length) {
       clauses.push(`d.source_key in (${request.sourceKeys.map(() => '?').join(', ')})`);
       params.push(...request.sourceKeys);
@@ -275,8 +293,12 @@ export class SearchService {
     const rows: { source_key: string; external_id: string }[] = await this.em
       .getConnection()
       .execute(
-        `select source_key, external_id from document
-          where status = 'current' and (${docs.map(() => '(source_key = ? and external_id = ?)').join(' or ')})`,
+        // a stored current version replaces the live copy; any version with
+        // an open content flag keeps the live copy out as well
+        `select source_key, external_id from document d
+          where (d.status = 'current' or exists (
+                  select 1 from content_flag f where f.document_id = d.id and f.status = 'open'))
+            and (${docs.map(() => '(source_key = ? and external_id = ?)').join(' or ')})`,
         params
       );
     const stored = new Set(rows.map((r) => `${r.source_key}:${r.external_id}`));

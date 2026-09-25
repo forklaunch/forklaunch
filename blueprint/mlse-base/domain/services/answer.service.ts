@@ -29,6 +29,9 @@ import {
   QueryClassificationDto
 } from '@forklaunch/interfaces-mlse/types';
 import { EntityManager } from '@mikro-orm/core';
+import { countMetric } from '../metrics';
+import { tenantEm } from '../tenantEm';
+import { SearchHistory } from '../../persistence/entities/searchHistory.entity';
 import { AnswerCitation } from '../../persistence/entities/answerCitation.entity';
 import {
   GeneratedAnswer,
@@ -129,7 +132,8 @@ export class AnswerService {
         notice: QUOTED_NOTICE,
         results: fixed.sections.map((section) => ({ section, cited: fixed.cited, removed: [], models: [] })),
         started,
-        usedAi: false
+        usedAi: false,
+        request
       });
       yield { type: 'done', answer };
       return;
@@ -157,6 +161,7 @@ export class AnswerService {
       results,
       started,
       usedAi: true,
+      request,
       ...(request.topicSlug ? { topicSlug: request.topicSlug } : {})
     });
     yield { type: 'done', answer };
@@ -211,7 +216,8 @@ export class AnswerService {
       query: `${drugTerms.join(' ')} dosage and administration`,
       sourceKeys: LABEL_SOURCES,
       limit: 10,
-      live: request.live ?? true
+      live: request.live ?? true,
+      ...(request.organizationId ? { organizationId: request.organizationId } : {})
     });
     const cited = results
       .filter((r) => r.licenseScope !== 'metadata_only' && /dosage/i.test(r.sectionPath))
@@ -269,7 +275,8 @@ export class AnswerService {
     const { results } = await this.searchService.search({
       query,
       limit: this.passagesPerAnswer,
-      live: request.live ?? true
+      live: request.live ?? true,
+      ...(request.organizationId ? { organizationId: request.organizationId } : {})
     });
     const usable = results.filter((r) => r.licenseScope !== 'metadata_only' && r.text.trim().length > 0);
     return {
@@ -373,6 +380,7 @@ export class AnswerService {
     results: SectionResult[];
     started: number;
     usedAi: boolean;
+    request: AnswerRequestDto;
     topicSlug?: string;
   }): Promise<AnswerResponseDto> {
     const sections = input.results.map((r) => r.section);
@@ -417,6 +425,30 @@ export class AnswerService {
       });
     }
     await this.em.flush();
+
+    const { organizationId, userId } = input.request;
+    if (organizationId && userId) {
+      const em = tenantEm(this.em, organizationId);
+      em.create(SearchHistory, {
+        organizationId,
+        userId,
+        query: storesQuery ? input.query : null,
+        queryClass: input.classification.queryClass,
+        channel: input.request.channel ?? 'answer',
+        answerId: answer.id
+      });
+      await em.flush();
+    }
+
+    countMetric(this.openTelemetryCollector, 'mlse_answers_total', 1, {
+      kind: input.kind,
+      query_class: input.classification.queryClass
+    });
+    if (removed.length > 0) {
+      countMetric(this.openTelemetryCollector, 'mlse_sentences_removed_total', removed.length, {
+        query_class: input.classification.queryClass
+      });
+    }
 
     // the query itself is not logged
     this.openTelemetryCollector.info('Answer produced', {

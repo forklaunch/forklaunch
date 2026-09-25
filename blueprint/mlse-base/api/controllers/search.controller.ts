@@ -6,11 +6,13 @@ import {
   schemaValidator,
   string
 } from '@forklaunch/blueprint-core';
+import { classifyQuery } from '@forklaunch/implementation-mlse-base/services';
 import { v4 } from 'uuid';
 import { ci, tokens } from '../../bootstrapper';
 
 const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 const searchServiceFactory = ci.scopedResolver(tokens.SearchService);
+const savedSearchServiceFactory = ci.scopedResolver(tokens.SavedSearchService);
 const ingestionJobProducerFactory = ci.scopedResolver(tokens.IngestionJobProducer);
 const ttlCache = ci.resolve(tokens.TtlCache);
 const HMAC_SECRET_KEY = ci.resolve(tokens.HMAC_SECRET_KEY);
@@ -59,7 +61,11 @@ export const search = handlers.get(
       sources: optional(string),
       caseReportsOnly: optional(string),
       publishedAfter: optional(string),
-      live: optional(string)
+      live: optional(string),
+      // enables the organization's licensed sources; with userId, records
+      // the search in the user's history
+      organizationId: optional(string),
+      userId: optional(string)
     },
     responses: {
       200: {
@@ -105,10 +111,26 @@ export const search = handlers.get(
         .filter(Boolean),
       caseReportsOnly: parseBoolean(req.query.caseReportsOnly, false),
       publishedAfter: req.query.publishedAfter,
-      live: parseBoolean(req.query.live, true)
+      live: parseBoolean(req.query.live, true),
+      ...(req.query.organizationId ? { organizationId: req.query.organizationId } : {})
     });
 
-    await enqueueWriteThrough(query, response.liveSources);
+    // Only literature questions are queued for ingestion or kept in history
+    // as text: a query about one patient must not travel to the worker queue
+    // or be stored.
+    const { queryClass } = classifyQuery(query);
+    const isLiterature = queryClass === 'literature_lookup';
+    if (isLiterature) {
+      await enqueueWriteThrough(query, response.liveSources);
+    }
+    if (req.query.organizationId && req.query.userId) {
+      await savedSearchServiceFactory().recordSearch(
+        req.query.organizationId,
+        req.query.userId,
+        isLiterature ? query : null,
+        queryClass
+      );
+    }
     res.status(200).json(response);
   }
 );

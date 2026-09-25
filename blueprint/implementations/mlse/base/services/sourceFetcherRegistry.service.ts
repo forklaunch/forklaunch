@@ -1,4 +1,5 @@
 import { SourceFetcher } from '@forklaunch/interfaces-mlse/interfaces';
+import { LicensedContentAdapter } from './licensedContentAdapter.service';
 
 /**
  * The fetchers MLSE can refresh from, looked up by source key. A class rather
@@ -24,6 +25,11 @@ export class SourceFetcherRegistry {
 
   has(sourceKey: string): boolean {
     return this.fetchers.has(sourceKey);
+  }
+
+  // true for licensed publishers wrapped in LicensedContentAdapter
+  isLicensed(sourceKey: string): boolean {
+    return this.fetchers.get(sourceKey) instanceof LicensedContentAdapter;
   }
 
   keys(): string[] {

@@ -6,7 +6,9 @@ import {
 } from '@forklaunch/blueprint-core';
 import { ci, tokens } from '../../bootstrapper';
 
-const complianceDataService = ci.resolve(tokens.ComplianceDataService);
+// MLSE's user data (saved searches, search history) is exported and erased
+// by SavedSearchService; see its exportUser for why not ComplianceDataService.
+const savedSearchServiceFactory = ci.scopedResolver(tokens.SavedSearchService);
 const JWKS_PUBLIC_KEY_URL = ci.resolve(tokens.JWKS_PUBLIC_KEY_URL);
 
 /**
@@ -40,7 +42,7 @@ export const eraseUserData = handlers.delete(
   },
   async (req, res) => {
     const { userId } = req.params;
-    const result = await complianceDataService.erase(userId);
+    const result = await savedSearchServiceFactory().eraseUser(userId);
 
     if (result.recordsDeleted === 0) {
       res.status(404).send('User not found or no PII data to erase');
@@ -82,9 +84,10 @@ export const exportUserData = handlers.get(
   },
   async (req, res) => {
     const { userId } = req.params;
-    const result = await complianceDataService.export(userId);
+    const entities = await savedSearchServiceFactory().exportUser(userId);
+    const result = { userId, entities };
 
-    if (Object.keys(result.entities).length === 0) {
+    if (entities.SavedSearch.length === 0 && entities.SearchHistory.length === 0) {
       res.status(404).send('User not found or no PII data to export');
       return;
     }

@@ -6,6 +6,9 @@ import {
 } from '@forklaunch/blueprint-core';
 import { setupRls, setupTenantFilter } from '@forklaunch/core/persistence';
 import { answerRouter } from './api/routes/answer.routes';
+import { governanceRouter } from './api/routes/governance.routes';
+import { savedSearchRouter } from './api/routes/savedSearch.routes';
+import { voiceRouter } from './api/routes/voice.routes';
 import { complianceRouter } from './api/routes/compliance.routes';
 import { documentRouter } from './api/routes/document.routes';
 import { searchRouter } from './api/routes/search.routes';
@@ -49,6 +52,9 @@ app.use(documentRouter);
 app.use(searchRouter);
 app.use(topicRouter);
 app.use(answerRouter);
+app.use(voiceRouter);
+app.use(savedSearchRouter);
+app.use(governanceRouter);
 app.use(complianceRouter);
 
 //! registers the sdk client

@@ -13,6 +13,7 @@ const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 const contentSourceProvider = ci.resolve(tokens.ContentSourceProvider);
 const sourceFetchers = ci.resolve(tokens.SourceFetchers);
 const ingestionJobProducerFactory = ci.scopedResolver(tokens.IngestionJobProducer);
+const governanceServiceFactory = ci.scopedResolver(tokens.GovernanceService);
 const HMAC_SECRET_KEY = ci.resolve(tokens.HMAC_SECRET_KEY);
 
 // Keeps a single refresh bounded; larger backfills run as several jobs.
@@ -85,6 +86,7 @@ export const refreshSource = handlers.post(
         limit: number
       },
       400: string,
+      403: string,
       404: string
     }
   },
@@ -107,6 +109,13 @@ export const refreshSource = handlers.post(
     }
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_REFRESH_LIMIT) {
       res.status(400).send(`limit must be an integer from 1 to ${MAX_REFRESH_LIMIT}`);
+      return;
+    }
+
+    // the worker checks again before storing anything; this only saves a
+    // queued job that would be refused
+    if (sourceFetchers.isLicensed(sourceKey) && !(await governanceServiceFactory().canIngest(sourceKey))) {
+      res.status(403).send(`'${sourceKey}' is a licensed source with no active content license`);
       return;
     }
 

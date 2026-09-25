@@ -8,6 +8,12 @@ export type AnswerRequestDto = {
   topicSlug?: string;
   // also query live sources (default true; topic answers use the corpus)
   live?: boolean;
+  // enables licensed sources the organization holds and, with userId,
+  // records the search in the user's history
+  organizationId?: string;
+  userId?: string;
+  // where the request came from, for history (default 'answer')
+  channel?: 'answer' | 'voice';
 };
 
 export type AnswerSentenceDto = {
