@@ -44,6 +44,9 @@ export type SearchRequestDto = {
   publishedAfter?: string;
   // also query live sources at search time (default true)
   live?: boolean;
+  // licensed sources are searched only for an organization holding an
+  // active license; without one they are left out
+  organizationId?: string;
 };
 
 export type SearchResultDto = CitablePassageDto & {

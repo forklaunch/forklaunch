@@ -21,6 +21,9 @@ export const Source = defineComplianceEntity({
     licenseTerms: fp.string().compliance('none'),
     commercialUse: fp.boolean().compliance('none'),
     liveQuery: fp.boolean().compliance('none'),
+    // licensed (contract) content: searchable only for organizations with an
+    // active ContentLicense, and not ingested while none is active
+    requiresLicense: fp.boolean().default(false).compliance('none'),
     lastRefreshedAt: fp.datetime().nullable().compliance('none')
   }
 });

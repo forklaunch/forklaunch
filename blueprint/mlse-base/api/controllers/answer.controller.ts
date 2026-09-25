@@ -23,7 +23,11 @@ const hmacAuth = {
 const AnswerBodySchema = {
   query: string,
   topicSlug: optional(string),
-  live: optional(schemaValidator.boolean)
+  live: optional(schemaValidator.boolean),
+  // enables the organization's licensed sources; with userId, records the
+  // search in the user's history
+  organizationId: optional(string),
+  userId: optional(string)
 };
 
 const SectionSchema = {

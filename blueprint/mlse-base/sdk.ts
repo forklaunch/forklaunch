@@ -3,6 +3,22 @@ import { MapToSdk } from '@forklaunch/core/http';
 import {
   answer,
   answerComplete,
+  approveTopic,
+  createContentLicense,
+  deleteSavedSearch,
+  flagContent,
+  listContentFlags,
+  listContentLicenses,
+  listSavedSearches,
+  listSourceAccess,
+  listVoiceSettings,
+  registerLicensedSource,
+  resolveContentFlag,
+  revokeContentLicense,
+  saveSearch,
+  searchHistory,
+  setVoiceSetting,
+  voiceQuery,
   eraseUserData,
   exportUserData,
   getDocument,
@@ -16,6 +32,28 @@ import {
 } from './api/controllers';
 
 export type MlseSdk = {
+  admin: {
+    listSourceAccess: typeof listSourceAccess;
+    registerLicensedSource: typeof registerLicensedSource;
+    listContentLicenses: typeof listContentLicenses;
+    createContentLicense: typeof createContentLicense;
+    revokeContentLicense: typeof revokeContentLicense;
+    flagContent: typeof flagContent;
+    listContentFlags: typeof listContentFlags;
+    resolveContentFlag: typeof resolveContentFlag;
+    approveTopic: typeof approveTopic;
+  };
+  savedSearch: {
+    listSavedSearches: typeof listSavedSearches;
+    saveSearch: typeof saveSearch;
+    deleteSavedSearch: typeof deleteSavedSearch;
+    searchHistory: typeof searchHistory;
+  };
+  voice: {
+    voiceQuery: typeof voiceQuery;
+    listVoiceSettings: typeof listVoiceSettings;
+    setVoiceSetting: typeof setVoiceSetting;
+  };
   answer: {
     answer: typeof answer;
     answerComplete: typeof answerComplete;
@@ -43,6 +81,28 @@ export type MlseSdk = {
 };
 
 export const mlseSdkClient = {
+  admin: {
+    listSourceAccess,
+    registerLicensedSource,
+    listContentLicenses,
+    createContentLicense,
+    revokeContentLicense,
+    flagContent,
+    listContentFlags,
+    resolveContentFlag,
+    approveTopic
+  },
+  savedSearch: {
+    listSavedSearches,
+    saveSearch,
+    deleteSavedSearch,
+    searchHistory
+  },
+  voice: {
+    voiceQuery,
+    listVoiceSettings,
+    setVoiceSetting
+  },
   answer: {
     answer,
     answerComplete

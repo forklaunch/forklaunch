@@ -31,6 +31,9 @@ export type SourceDescriptorDto = {
   commercialUse: boolean;
   // whether the source is also queried live at search time, not only ingested
   liveQuery: boolean;
+  // content used under a contract: searchable only for organizations with an
+  // active content license (default false)
+  requiresLicense?: boolean;
 };
 
 export type ContentSourceProviderParameters = {

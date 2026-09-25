@@ -6,6 +6,7 @@ import {
   applyLicense,
   chunkSections,
   contentHash,
+  LicensedContentAdapter,
   licenseScopeFor,
   LlmProvider,
   SourceFetcherRegistry
@@ -65,6 +66,13 @@ export type IngestionOptions = {
  *    passages, so it leaves search at once.
  * 4. Section-aware chunking and embedding.
  */
+export class LicenseRequiredError extends Error {
+  constructor(readonly sourceKey: string) {
+    super(`'${sourceKey}' is a licensed source and no organization holds an active license for it`);
+    this.name = 'LicenseRequiredError';
+  }
+}
+
 export class IngestionService {
   private readonly excerptChars: number;
   private readonly maxPassageChars: number;
@@ -91,7 +99,8 @@ export class IngestionService {
         tier: descriptor.tier,
         licenseTerms: descriptor.licenseTerms,
         commercialUse: descriptor.commercialUse,
-        liveQuery: descriptor.liveQuery
+        liveQuery: descriptor.liveQuery,
+        requiresLicense: descriptor.requiresLicense ?? false
       };
       if (existing) {
         this.em.assign(existing, values);
@@ -102,10 +111,35 @@ export class IngestionService {
     await this.em.flush();
   }
 
+  // A source is licensed if its registry row says so or its fetcher is a
+  // LicensedContentAdapter, so forgetting to register a licensed source
+  // cannot make it public.
+  private async mayIngest(sourceKey: string, licensedFetcher: boolean): Promise<boolean> {
+    const rows: { requires_license: boolean | null; active: number }[] = await this.em.getConnection().execute(
+      `select s.requires_license,
+              (select count(*)::int from content_license l
+                where l.source_key = s.source_key and l.status = 'active' and l.valid_from <= now()
+                  and (l.valid_until is null or l.valid_until > now())) as active
+         from source s where s.source_key = ?`,
+      [sourceKey]
+    );
+    const row = rows[0];
+    if (licensedFetcher) {
+      // must be registered as licensed and licensed to someone
+      return row?.requires_license === true && row.active > 0;
+    }
+    return !row?.requires_license || row.active > 0;
+  }
+
   async ingest({ sourceKey, term, limit }: IngestionRequest): Promise<IngestionResult> {
     const fetcher = this.fetchers.get(sourceKey);
     if (!fetcher) {
       throw new UnknownSourceError(sourceKey);
+    }
+    // Licensed content is stored only while someone may use it. Checked
+    // before fetching, and fails closed when the source row is missing.
+    if (!(await this.mayIngest(sourceKey, fetcher instanceof LicensedContentAdapter))) {
+      throw new LicenseRequiredError(sourceKey);
     }
 
     const documents = await fetcher.fetchDocuments({ term, limit });

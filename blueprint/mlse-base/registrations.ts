@@ -4,7 +4,6 @@ import {
   schemaValidator,
   string
 } from '@forklaunch/blueprint-core';
-import { Metrics, metrics } from '@forklaunch/blueprint-monitoring';
 import { OpenTelemetryCollector } from '@forklaunch/core/http';
 import {
   FieldEncryptor,
@@ -44,7 +43,11 @@ import {
 } from '@forklaunch/interfaces-worker/types';
 import { ForkOptions } from '@mikro-orm/core';
 import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
+import { mlseMetrics, MlseMetrics } from './domain/metrics';
 import { AnswerService } from './domain/services/answer.service';
+import { GovernanceService } from './domain/services/governance.service';
+import { SavedSearchService } from './domain/services/savedSearch.service';
+import { VoiceService } from './domain/services/voice.service';
 import { IngestionService } from './domain/services/ingestion.service';
 import { SearchService } from './domain/services/search.service';
 import { TopicService } from './domain/services/topic.service';
@@ -219,12 +222,12 @@ const runtimeDependencies = environmentConfig.chain({
   },
   OtelCollector: {
     lifetime: Lifetime.Singleton,
-    type: OpenTelemetryCollector<Metrics>,
+    type: OpenTelemetryCollector<MlseMetrics>,
     factory: ({ OTEL_SERVICE_NAME, OTEL_LEVEL }) =>
       new OpenTelemetryCollector(
         OTEL_SERVICE_NAME,
         OTEL_LEVEL || 'info',
-        metrics
+        mlseMetrics
       )
   },
   /**
@@ -307,9 +310,9 @@ const serviceDependencies = runtimeDependencies.chain({
   ComplianceDataService: {
     lifetime: Lifetime.Singleton,
     type: ComplianceDataService,
-    // The corpus holds published literature only, and no user-linked entities
-    // exist yet (saved searches and history come later), so there is nothing
-    // to erase or export against.
+    // User-linked data is saved searches and search history; both declare
+    // userIdField 'userId', which the service reads from the entity
+    // registry. The corpus itself is published literature, not user data.
     factory: ({ Orm, OtelCollector }) =>
       new ComplianceDataService(Orm, OtelCollector, {})
   },
@@ -418,6 +421,23 @@ const serviceDependencies = runtimeDependencies.chain({
         LlmProvider,
         OtelCollector
       )
+  },
+  VoiceService: {
+    lifetime: Lifetime.Scoped,
+    type: VoiceService,
+    factory: ({ EntityManager, AnswerService, OtelCollector }) =>
+      new VoiceService(EntityManager, AnswerService, OtelCollector)
+  },
+  GovernanceService: {
+    lifetime: Lifetime.Scoped,
+    type: GovernanceService,
+    factory: ({ EntityManager, OtelCollector }) =>
+      new GovernanceService(EntityManager, OtelCollector)
+  },
+  SavedSearchService: {
+    lifetime: Lifetime.Scoped,
+    type: SavedSearchService,
+    factory: ({ EntityManager }) => new SavedSearchService(EntityManager)
   },
   RedisWorkerOptions: {
     lifetime: Lifetime.Singleton,

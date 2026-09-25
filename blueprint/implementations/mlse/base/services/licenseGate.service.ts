@@ -8,12 +8,17 @@ const FULL_TEXT_LICENSES = new Set([
   'cc-by',
   'cc-by-sa',
   'public-domain',
-  'us-government-work'
+  'us-government-work',
+  // used under a contract that allows full text (LicensedContentAdapter)
+  'licensed-full-text'
 ]);
 
 // Copyrighted by default, but may be indexed and quoted briefly with a link
 // to the original (PubMed abstracts).
-const EXCERPT_ONLY_LICENSES = new Set(['publisher-copyright-abstract']);
+const EXCERPT_ONLY_LICENSES = new Set([
+  'publisher-copyright-abstract',
+  'licensed-excerpt'
+]);
 
 // Real license strings are short. Anything longer is not a license we
 // recognize, and capping it keeps normalization cheap on hostile input.

@@ -21,7 +21,8 @@ const initOrm = async () => {
     ...config,
     discovery: { ...config.discovery },
     debug: false,
-    migrations: { path: path.join(__dirname, '../migrations'), glob: '!(*.d).{js,ts}' }
+    // no snapshot file: test files run in parallel and would race on it
+    migrations: { path: path.join(__dirname, '../migrations'), glob: '!(*.d).{js,ts}', snapshot: false }
   });
 };
 

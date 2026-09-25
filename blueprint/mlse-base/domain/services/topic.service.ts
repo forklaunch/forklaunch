@@ -288,6 +288,7 @@ export class TopicService {
          join document_chunk c on c.id = e.chunk_id
          join document d on d.id = e.document_id
         where e.topic_id = ? and d.status = 'current'
+          and not exists (select 1 from content_flag f where f.document_id = d.id and f.status = 'open')
         order by e.item_key, e.rank`,
       [topic.id]
     );
