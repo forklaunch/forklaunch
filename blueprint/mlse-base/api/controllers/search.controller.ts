@@ -7,6 +7,7 @@ import {
   string
 } from '@forklaunch/blueprint-core';
 import { classifyQuery } from '@forklaunch/implementation-mlse-base/services';
+import { createHash } from 'node:crypto';
 import { v4 } from 'uuid';
 import { ci, tokens } from '../../bootstrapper';
 
@@ -102,24 +103,31 @@ export const search = handlers.get(
       return;
     }
 
+    // Classified before anything leaves the service: only literature
+    // questions go to live sources, the ingestion queue or history text. A
+    // query about one patient is searched in the stored corpus only.
+    const { queryClass } = classifyQuery(query);
+    const isLiterature = queryClass === 'literature_lookup';
+
+    const sourceKeys = req.query.sources
+      ?.split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (sourceKeys && sourceKeys.length > 20) {
+      res.status(400).send('sources may name at most 20 sources');
+      return;
+    }
+
     const response = await searchServiceFactory().search({
       query,
       limit,
-      sourceKeys: req.query.sources
-        ?.split(',')
-        .map((s) => s.trim())
-        .filter(Boolean),
+      sourceKeys,
       caseReportsOnly: parseBoolean(req.query.caseReportsOnly, false),
       publishedAfter: req.query.publishedAfter,
-      live: parseBoolean(req.query.live, true),
+      live: isLiterature && parseBoolean(req.query.live, true),
       ...(req.query.organizationId ? { organizationId: req.query.organizationId } : {})
     });
 
-    // Only literature questions are queued for ingestion or kept in history
-    // as text: a query about one patient must not travel to the worker queue
-    // or be stored.
-    const { queryClass } = classifyQuery(query);
-    const isLiterature = queryClass === 'literature_lookup';
     if (isLiterature) {
       await enqueueWriteThrough(query, response.liveSources);
     }
@@ -141,7 +149,7 @@ async function enqueueWriteThrough(
 ): Promise<void> {
   const answered = liveSources.filter((s) => s.status === 'ok' && s.documents > 0);
   for (const source of answered) {
-    const key = `mlse:live-enqueued:${source.sourceKey}:${term.toLowerCase()}`;
+    const key = `mlse:live-enqueued:${source.sourceKey}:${createHash('sha256').update(term.toLowerCase()).digest('hex')}`;
     try {
       if (await ttlCache.peekRecord(key)) {
         continue;

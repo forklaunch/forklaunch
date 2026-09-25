@@ -38,13 +38,17 @@ export class LlmRefusalError extends Error {
   }
 }
 
-// Passage text comes from the internet; a closing tag inside it must not end
-// the passage early.
+// Passage text comes from the internet. No tag inside it, in any case or
+// with any name, may close the passage or the evidence block, so angle
+// brackets are escaped in everything placed inside the markup.
+function escapeMarkup(text: string): string {
+  return text.replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
 function formatEvidence(evidence: EvidencePassageDto[]): string {
   const passages = evidence.map((passage) => {
-    const label = passage.label ? ` source="${passage.label.replaceAll('"', "'")}"` : '';
-    const text = passage.text.replaceAll('</passage', '<\\/passage');
-    return `<passage id="${passage.id}"${label}>\n${text}\n</passage>`;
+    const label = passage.label ? ` source="${escapeMarkup(passage.label).replaceAll('"', "'")}"` : '';
+    return `<passage id="${escapeMarkup(passage.id)}"${label}>\n${escapeMarkup(passage.text)}\n</passage>`;
   });
   return `<evidence>\n${passages.join('\n')}\n</evidence>`;
 }
@@ -96,7 +100,9 @@ export class ClaudeLlmProvider extends LlmProviderBase {
   }: GenerateRequestDto): Promise<GenerateResponseDto> {
     const stream = this.client.beta.messages.stream({
       model: this.model,
-      max_tokens: maxTokens ?? 64_000,
+      // one answer section is short; the cap leaves room for thinking while
+      // bounding what a single call can cost
+      max_tokens: maxTokens ?? 16_000,
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
       thinking: { type: 'adaptive' },
@@ -105,7 +111,10 @@ export class ClaudeLlmProvider extends LlmProviderBase {
         { type: 'text', text: instructions, cache_control: { type: 'ephemeral' } }
       ],
       messages: [
-        { role: 'user', content: `${formatEvidence(evidence)}\n\n${prompt}` }
+        {
+          role: 'user',
+          content: `${formatEvidence(evidence)}\n\n<task>\n${escapeMarkup(prompt)}\n</task>`
+        }
       ]
     });
     const message = await stream.finalMessage();

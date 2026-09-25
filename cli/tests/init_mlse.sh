@@ -12,6 +12,14 @@ cd output/init-mlse
 
 RUST_BACKTRACE=1 $FL init application mlse-node -p mlse-node -o src/modules -d postgresql -f prettier -l eslint -v zod -F express -r node -t vitest -m mlse-base -D "Test library" -A "Rohin Bhargava" -L 'AGPL-3.0'
 
+# corpus maintenance scripts and the evaluation set ship with the module
+for f in scripts/refresh-corpus.ts scripts/load-mesh.ts scripts/run-eval.ts scripts/enforce-retention.ts eval/gold-set.example.json; do
+    test -f "mlse-node/src/modules/mlse/$f" || { echo "missing mlse/$f"; exit 1; }
+done
+for s in corpus:refresh mesh:load eval:run retention:enforce; do
+    grep -q "\"$s\"" mlse-node/src/modules/mlse/package.json || { echo "missing script $s"; exit 1; }
+done
+
 cd mlse-node/src/modules
 
 pnpm install

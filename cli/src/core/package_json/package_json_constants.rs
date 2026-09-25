@@ -364,6 +364,28 @@ pub(crate) fn project_retention_enforce_script(runtime: &Runtime) -> String {
     })
 }
 
+// MLSE corpus maintenance, run from the service directory. The worker drains
+// what corpus:refresh queues; mesh:load reads NLM's annual descriptor file.
+pub(crate) fn project_mlse_scripts(runtime: &Runtime) -> Vec<(String, String)> {
+    let run = match runtime {
+        Runtime::Bun => "bun run",
+        Runtime::Node => "pnpm tsx",
+    };
+    [
+        ("corpus:refresh", "scripts/refresh-corpus.ts"),
+        ("mesh:load", "scripts/load-mesh.ts"),
+        ("eval:run", "scripts/run-eval.ts"),
+    ]
+    .into_iter()
+    .map(|(name, file)| {
+        (
+            name.to_string(),
+            format!("DOTENV_FILE_PATH=.env.local {run} {file}"),
+        )
+    })
+    .collect()
+}
+
 pub(crate) fn project_format_script(formatter: &Formatter) -> String {
     String::from(match formatter {
         Formatter::Prettier => {

@@ -1,6 +1,7 @@
 import { SourceFetcher } from '@forklaunch/interfaces-mlse/interfaces';
 import { AnswerResponseDto } from '@forklaunch/interfaces-mlse/types';
 import { LicensedContentAdapter } from '../services/licensedContentAdapter.service';
+import { LiveRetrievalService } from '../services/liveRetrieval.service';
 import { licenseScopeFor } from '../services/licenseGate.service';
 import { SourceFetcherRegistry } from '../services/sourceFetcherRegistry.service';
 import { isValidCareArea, removeIdentifiers, spokenSummary } from '../services/voice.service';
@@ -86,10 +87,15 @@ describe('licensed content', () => {
   it('stores documents under the contract terms, not the feed string', async () => {
     const full = await new LicensedContentAdapter(inner, { scope: 'full_text' }).fetchDocuments({ term: 'x', limit: 1 });
     const excerpt = await new LicensedContentAdapter(inner, { scope: 'excerpt_only' }).fetchDocuments({ term: 'x', limit: 1 });
-    expect(licenseScopeFor(full[0].license)).toBe('full_text');
-    expect(licenseScopeFor(excerpt[0].license)).toBe('excerpt_only');
+    expect(licenseScopeFor(full[0].license, { viaLicensedAdapter: true })).toBe('full_text');
+    expect(licenseScopeFor(excerpt[0].license, { viaLicensedAdapter: true })).toBe('excerpt_only');
     // the feed's own string would have allowed nothing
     expect(licenseScopeFor('All rights reserved')).toBe('metadata_only');
+  });
+
+  it('ignores contract license strings that did not come through the adapter', () => {
+    expect(licenseScopeFor('licensed-full-text')).toBe('metadata_only');
+    expect(licenseScopeFor('Licensed Full Text')).toBe('metadata_only');
   });
 
   it('marks licensed fetchers in the registry', () => {
@@ -99,5 +105,13 @@ describe('licensed content', () => {
     ]);
     expect(registry.isLicensed('guideline_feed')).toBe(true);
     expect(registry.isLicensed('pubmed')).toBe(false);
+  });
+});
+
+describe('live cache keys', () => {
+  it('never contain the search text', () => {
+    const key = LiveRetrievalService.cacheKey('pubmed', 'Anne Jones 80 kg propofol');
+    expect(key).toMatch(/^mlse:live:pubmed:[0-9a-f]{64}$/);
+    expect(LiveRetrievalService.cacheKey('pubmed', '  anne   JONES 80 kg propofol ')).toBe(key);
   });
 });

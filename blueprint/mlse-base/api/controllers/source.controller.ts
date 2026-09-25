@@ -103,8 +103,8 @@ export const refreshSource = handlers.post(
         );
       return;
     }
-    if (!term) {
-      res.status(400).send('term must not be empty');
+    if (!term || term.length > 500) {
+      res.status(400).send('term must be 1 to 500 characters');
       return;
     }
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_REFRESH_LIMIT) {
