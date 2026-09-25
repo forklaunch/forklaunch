@@ -44,7 +44,7 @@ A surgeon can also ask by voice ("What's the expected blood loss?", "Next phase"
 - No patient data, ever. Only published, de-identified literature is used.
 - No treatment or dose is calculated for a specific patient, whether typed or spoken; the published label range is shown instead.
 - Emergency-type questions skip the AI and return a fixed safety message.
-- Voice mode listens only after a wake word or button, processes speech on the device and stores no audio.
+- Voice mode is off by default; each hospital enables it per area (for example on in operating rooms, off in emergency wards). It listens only after a wake word or button, processes speech on the device and stores no audio. Typed search always works.
 
 ## 6. How it is built
 

@@ -97,7 +97,7 @@ Conflicting sources are shown side by side. Case-study information is labelled, 
 ## 8. Safety, Compliance and Regulation
 
 - No patient identifiers are accepted; no individual dose or treatment is calculated, typed or spoken.
-- Voice mode listens only after a wake word or button, converts speech on the device, stores no audio and removes identifiers from transcripts.
+- Voice mode is off by default and enabled per hospital and per area (for example on in operating rooms, off in emergency wards, where patients and families are present). It listens only after a wake word or button, converts speech on the device, stores no audio and removes identifiers from transcripts.
 - Organization data uses ForkLaunch's existing encryption, erasure, audit and retention controls. MLSE presents reviewable literature rather than patient-specific recommendations. This is intended to fall outside regulated clinical decision support, but **regulatory advice is required before launch**.
 
 ## 9. Quality and Success Metrics

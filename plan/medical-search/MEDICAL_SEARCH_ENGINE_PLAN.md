@@ -448,6 +448,8 @@ What that means in practice:
 - Strip anything that looks like a patient identifier (names, MRNs, dates of birth) from the transcript before it becomes a query, and don't log raw transcripts.
 - Hospitals enable voice mode by policy, with OR staff informed.
 
+**Voice is off by default and switched on per hospital and per care area (decided 2026-09-25).** Whether microphones are acceptable differs by area: an operating room has scrubbed, informed staff, while an emergency ward has patients and families present who may be unable to consent, so their names and details would be heard. MLSE therefore stores a voice setting per organization and area (for example `operating_room: on`, `emergency: off`); voice requests from an area where it is off are refused, and typed search is always available everywhere. Whether an area may use voice is the hospital's policy and legal decision, not MLSE's.
+
 **Hardware (hospital-supplied):** headset mic or ceiling mic array; OR wall display or a mounted tablet; optional foot pedal.
 
 **Phasing:** the MVP stays API-only (§21), but every API answer includes a short `spoken_summary` field, so it's voice-ready from day one. The voice app itself is a **Phase 2** item alongside the first UI (§16).
