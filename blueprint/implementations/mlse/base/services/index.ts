@@ -1,5 +1,7 @@
+export * from './caseStudy.service';
 export * from './chunker.service';
 export * from './evaluation.service';
+export * from './evidenceSelection.service';
 export * from './fakeLlmProvider.service';
 export * from './fetchers/clinicalTrialsFetcher.service';
 export * from './fetchers/dailyMedFetcher.service';
@@ -11,8 +13,10 @@ export * from './licenseText.service';
 export * from './liveRetrieval.service';
 export * from './meshDescriptorParser.service';
 export * from './publicCorpusProvider.service';
+export * from './quantityExtractor.service';
 export * from './ranking.service';
 export * from './sourceFetcherRegistry.service';
+export * from '../domain/questionFrameworks';
 export type { FetchLike } from '../domain/http';
 export { SourceRequestError } from '../domain/http';
 

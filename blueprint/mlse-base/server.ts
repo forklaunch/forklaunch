@@ -9,6 +9,7 @@ import { complianceRouter } from './api/routes/compliance.routes';
 import { documentRouter } from './api/routes/document.routes';
 import { searchRouter } from './api/routes/search.routes';
 import { sourceRouter } from './api/routes/source.routes';
+import { topicRouter } from './api/routes/topic.routes';
 import { ci, tokens } from './bootstrapper';
 import { mlseSdkClient } from './sdk';
 
@@ -45,6 +46,7 @@ const docsPath = ci.resolve(tokens.DOCS_PATH);
 app.use(sourceRouter);
 app.use(documentRouter);
 app.use(searchRouter);
+app.use(topicRouter);
 app.use(complianceRouter);
 
 //! registers the sdk client
