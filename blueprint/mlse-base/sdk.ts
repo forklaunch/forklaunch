@@ -5,6 +5,7 @@ import {
   exportUserData,
   getDocument,
   listSources,
+  search,
   refreshSource
 } from './api/controllers';
 
@@ -15,6 +16,9 @@ export type MlseSdk = {
   };
   document: {
     getDocument: typeof getDocument;
+  };
+  search: {
+    search: typeof search;
   };
   source: {
     listSources: typeof listSources;
@@ -29,6 +33,9 @@ export const mlseSdkClient = {
   },
   document: {
     getDocument
+  },
+  search: {
+    search
   },
   source: {
     listSources,

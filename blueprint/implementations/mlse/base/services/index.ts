@@ -1,4 +1,5 @@
 export * from './chunker.service';
+export * from './evaluation.service';
 export * from './fakeLlmProvider.service';
 export * from './fetchers/clinicalTrialsFetcher.service';
 export * from './fetchers/dailyMedFetcher.service';
@@ -6,8 +7,11 @@ export * from './fetchers/openFdaFetcher.service';
 export * from './fetchers/pmcOaFetcher.service';
 export * from './fetchers/pubmedFetcher.service';
 export * from './licenseGate.service';
+export * from './licenseText.service';
+export * from './liveRetrieval.service';
 export * from './meshDescriptorParser.service';
 export * from './publicCorpusProvider.service';
+export * from './ranking.service';
 export * from './sourceFetcherRegistry.service';
 export type { FetchLike } from '../domain/http';
 export { SourceRequestError } from '../domain/http';

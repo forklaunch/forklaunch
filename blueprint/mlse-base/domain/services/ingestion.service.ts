@@ -3,6 +3,7 @@ import {
   OpenTelemetryCollector
 } from '@forklaunch/core/http';
 import {
+  applyLicense,
   chunkSections,
   contentHash,
   licenseScopeFor,
@@ -10,9 +11,7 @@ import {
   SourceFetcherRegistry
 } from '@forklaunch/implementation-mlse-base/services';
 import {
-  DocumentSectionDto,
   FetchedDocumentDto,
-  LicenseScope,
   MeshConceptDto,
   SourceDescriptorDto
 } from '@forklaunch/interfaces-mlse/types';
@@ -143,7 +142,7 @@ export class IngestionService {
     result: IngestionResult
   ): Promise<void> {
     const licenseScope = licenseScopeFor(fetched.license);
-    const sections = this.storableSections(fetched.sections, licenseScope);
+    const sections = applyLicense(fetched.sections, licenseScope, this.excerptChars);
     const hash = contentHash(fetched.title, sections);
     const status = fetched.retracted ? DocumentStatus.RETRACTED : DocumentStatus.CURRENT;
 
@@ -222,41 +221,6 @@ export class IngestionService {
       });
     }
     result.passages += passages.length;
-  }
-
-  // What the license allows MLSE to keep from a document's text.
-  private storableSections(
-    sections: DocumentSectionDto[],
-    licenseScope: LicenseScope
-  ): DocumentSectionDto[] {
-    if (licenseScope === 'metadata_only') {
-      return [];
-    }
-    if (licenseScope === 'full_text') {
-      return sections;
-    }
-
-    // excerpt_only: the opening of the text, cut at a word boundary
-    const excerpt: DocumentSectionDto[] = [];
-    let remaining = this.excerptChars;
-    for (const section of sections) {
-      if (remaining <= 0) {
-        break;
-      }
-      if (section.text.length <= remaining) {
-        excerpt.push(section);
-        remaining -= section.text.length;
-        continue;
-      }
-      const cut = section.text.slice(0, remaining);
-      const boundary = cut.lastIndexOf(' ');
-      excerpt.push({
-        path: section.path,
-        text: `${(boundary > 0 ? cut.slice(0, boundary) : cut).trimEnd()}…`
-      });
-      remaining = 0;
-    }
-    return excerpt;
   }
 
   // Inserts or updates MeSH descriptors; returns how many were written.
