@@ -6,7 +6,11 @@ import {
   getDocument,
   listSources,
   search,
-  refreshSource
+  refreshSource,
+  assembleTopic,
+  getTopic,
+  getTopicPhase,
+  listTopics
 } from './api/controllers';
 
 export type MlseSdk = {
@@ -24,6 +28,12 @@ export type MlseSdk = {
     listSources: typeof listSources;
     refreshSource: typeof refreshSource;
   };
+  topic: {
+    listTopics: typeof listTopics;
+    getTopic: typeof getTopic;
+    getTopicPhase: typeof getTopicPhase;
+    assembleTopic: typeof assembleTopic;
+  };
 };
 
 export const mlseSdkClient = {
@@ -40,6 +50,12 @@ export const mlseSdkClient = {
   source: {
     listSources,
     refreshSource
+  },
+  topic: {
+    listTopics,
+    getTopic,
+    getTopicPhase,
+    assembleTopic
   }
 } satisfies MlseSdk;
 

@@ -43,6 +43,7 @@ import { ForkOptions } from '@mikro-orm/core';
 import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
 import { IngestionService } from './domain/services/ingestion.service';
 import { SearchService } from './domain/services/search.service';
+import { TopicService } from './domain/services/topic.service';
 import { IngestionJob } from './domain/types/ingestionJob.types';
 import mikroOrmOptionsConfig from './mikro-orm.config';
 
@@ -344,6 +345,12 @@ const serviceDependencies = runtimeDependencies.chain({
         LiveRetrievalService,
         OtelCollector
       )
+  },
+  TopicService: {
+    lifetime: Lifetime.Scoped,
+    type: TopicService,
+    factory: ({ EntityManager, SearchService, OtelCollector }) =>
+      new TopicService(EntityManager, SearchService, OtelCollector)
   },
   RedisWorkerOptions: {
     lifetime: Lifetime.Singleton,
