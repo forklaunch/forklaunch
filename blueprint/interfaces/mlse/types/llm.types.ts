@@ -2,6 +2,9 @@ export type EvidencePassageDto = {
   // stable id the drafted text must cite
   id: string;
   text: string;
+  // what the passage is, e.g. "PubMed case report: <title> - Management";
+  // shown to the model so it can say "in a published case report"
+  label?: string;
 };
 
 export type GenerateRequestDto = {

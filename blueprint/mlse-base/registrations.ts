@@ -18,11 +18,14 @@ import {
   RetentionService
 } from '@forklaunch/core/services';
 import {
+  ClaudeEffort,
+  ClaudeLlmProvider,
   ClinicalTrialsFetcher,
   DailyMedFetcher,
   FakeLlmProvider,
   FetchLike,
   LexicalReranker,
+  LlmProviderBase,
   LiveRetrievalService,
   OpenFdaFetcher,
   PmcOaFetcher,
@@ -41,6 +44,7 @@ import {
 } from '@forklaunch/interfaces-worker/types';
 import { ForkOptions } from '@mikro-orm/core';
 import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
+import { AnswerService } from './domain/services/answer.service';
 import { IngestionService } from './domain/services/ingestion.service';
 import { SearchService } from './domain/services/search.service';
 import { TopicService } from './domain/services/topic.service';
@@ -55,6 +59,8 @@ const RedisWorkerOptionsSchema = RedisWorkerSchemas({
 // fixes its own dimension, which also fixes the vector column size, so it is
 // configured explicitly rather than guessed.
 const DEFAULT_EMBEDDING_DIMENSIONS = 8;
+
+const LLM_EFFORTS: ClaudeEffort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 
 //! defines the configuration schema for the application
 const configInjector = createConfigInjector(schemaValidator, {
@@ -163,10 +169,28 @@ const environmentConfig = configInjector.chain({
     type: optional(string),
     value: getEnvVar('OPENFDA_API_KEY') ?? ''
   },
+  // 'fake' (deterministic, no API key; development and tests) or 'claude'
   LLM_PROVIDER: {
     lifetime: Lifetime.Singleton,
     type: optional(string),
     value: getEnvVar('LLM_PROVIDER') || 'fake'
+  },
+  // each client supplies its own Anthropic API key
+  LLM_API_KEY: {
+    lifetime: Lifetime.Singleton,
+    type: optional(string),
+    value: getEnvVar('LLM_API_KEY') ?? ''
+  },
+  LLM_MODEL: {
+    lifetime: Lifetime.Singleton,
+    type: optional(string),
+    value: getEnvVar('LLM_MODEL') || 'claude-opus-5'
+  },
+  // low | medium | high | xhigh | max
+  LLM_EFFORT: {
+    lifetime: Lifetime.Singleton,
+    type: optional(string),
+    value: getEnvVar('LLM_EFFORT') || 'high'
   },
   // Budget for querying live sources during one search, kept well inside
   // the 10-second first-answer target.
@@ -242,17 +266,42 @@ const serviceDependencies = runtimeDependencies.chain({
   },
   LlmProvider: {
     lifetime: Lifetime.Singleton,
-    type: FakeLlmProvider,
-    factory: ({ LLM_PROVIDER, EMBEDDING_DIMENSIONS }) => {
-      // Only the deterministic development provider exists so far. Failing
-      // at startup is deliberate: silently falling back would let a
-      // deployment believe it is using a real model when it is not.
-      if (LLM_PROVIDER !== 'fake') {
-        throw new Error(
-          `LLM_PROVIDER '${LLM_PROVIDER}' is not available yet; set LLM_PROVIDER=fake`
-        );
+    type: LlmProviderBase,
+    factory: ({
+      LLM_PROVIDER,
+      LLM_API_KEY,
+      LLM_MODEL,
+      LLM_EFFORT,
+      EMBEDDING_DIMENSIONS
+    }): LlmProviderBase => {
+      // Claude has no embeddings API. Until an embedding model is chosen,
+      // embeddings stay on the deterministic development provider with
+      // either setting, so switching drafting to Claude does not change the
+      // stored vectors.
+      const embeddings = new FakeLlmProvider(EMBEDDING_DIMENSIONS);
+      switch (LLM_PROVIDER) {
+        case 'fake':
+          return embeddings;
+        case 'claude':
+          if (!LLM_EFFORTS.includes(LLM_EFFORT as ClaudeEffort)) {
+            throw new Error(
+              `LLM_EFFORT must be one of ${LLM_EFFORTS.join(', ')}; got '${LLM_EFFORT}'`
+            );
+          }
+          // fails at startup without a key, rather than on the first answer
+          return new ClaudeLlmProvider({
+            apiKey: LLM_API_KEY ?? '',
+            model: LLM_MODEL || 'claude-opus-5',
+            effort: LLM_EFFORT as ClaudeEffort,
+            embeddings
+          });
+        default:
+          // never fall back silently: a deployment must not believe it uses
+          // a real model when it does not
+          throw new Error(
+            `LLM_PROVIDER '${LLM_PROVIDER}' is not supported; use 'claude' or 'fake'`
+          );
       }
-      return new FakeLlmProvider(EMBEDDING_DIMENSIONS);
     }
   },
   ComplianceDataService: {
@@ -351,6 +400,24 @@ const serviceDependencies = runtimeDependencies.chain({
     type: TopicService,
     factory: ({ EntityManager, SearchService, OtelCollector }) =>
       new TopicService(EntityManager, SearchService, OtelCollector)
+  },
+  AnswerService: {
+    lifetime: Lifetime.Scoped,
+    type: AnswerService,
+    factory: ({
+      EntityManager,
+      SearchService,
+      TopicService,
+      LlmProvider,
+      OtelCollector
+    }) =>
+      new AnswerService(
+        EntityManager,
+        SearchService,
+        TopicService,
+        LlmProvider,
+        OtelCollector
+      )
   },
   RedisWorkerOptions: {
     lifetime: Lifetime.Singleton,

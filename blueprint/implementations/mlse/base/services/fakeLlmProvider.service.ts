@@ -1,4 +1,3 @@
-import { LlmProvider } from '@forklaunch/interfaces-mlse/interfaces';
 import {
   EmbedRequestDto,
   EmbedResponseDto,
@@ -6,22 +5,24 @@ import {
   GenerateResponseDto,
   LlmProviderDescriptorDto
 } from '@forklaunch/interfaces-mlse/types';
+import { LlmProviderBase } from './llmProviderBase.service';
 
 // Deterministic stand-in for a real AI provider, for tests and for local
 // development without an API key. It never invents content: generate() only
 // restates the evidence it was given, each passage cited by id, and embed()
 // derives a stable unit vector from the text.
-export class FakeLlmProvider implements LlmProvider {
+export class FakeLlmProvider extends LlmProviderBase {
   private readonly embeddingDimensions: number;
 
   constructor(embeddingDimensions: number = 8) {
+    super();
     if (!Number.isInteger(embeddingDimensions) || embeddingDimensions < 1) {
       throw new Error('embeddingDimensions must be a positive integer');
     }
     this.embeddingDimensions = embeddingDimensions;
   }
 
-  async generate({
+  override async generate({
     evidence
   }: GenerateRequestDto): Promise<GenerateResponseDto> {
     const text = evidence
@@ -30,7 +31,7 @@ export class FakeLlmProvider implements LlmProvider {
     return { text, model: 'fake' };
   }
 
-  async embed({ texts }: EmbedRequestDto): Promise<EmbedResponseDto> {
+  override async embed({ texts }: EmbedRequestDto): Promise<EmbedResponseDto> {
     return {
       embeddings: texts.map((text) => this.vectorFor(text)),
       model: 'fake-embedding',
@@ -38,7 +39,7 @@ export class FakeLlmProvider implements LlmProvider {
     };
   }
 
-  describe(): LlmProviderDescriptorDto {
+  override describe(): LlmProviderDescriptorDto {
     return {
       provider: 'fake',
       model: 'fake',

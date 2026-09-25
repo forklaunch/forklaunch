@@ -5,6 +5,7 @@ import {
   schemaValidator
 } from '@forklaunch/blueprint-core';
 import { setupRls, setupTenantFilter } from '@forklaunch/core/persistence';
+import { answerRouter } from './api/routes/answer.routes';
 import { complianceRouter } from './api/routes/compliance.routes';
 import { documentRouter } from './api/routes/document.routes';
 import { searchRouter } from './api/routes/search.routes';
@@ -47,6 +48,7 @@ app.use(sourceRouter);
 app.use(documentRouter);
 app.use(searchRouter);
 app.use(topicRouter);
+app.use(answerRouter);
 app.use(complianceRouter);
 
 //! registers the sdk client

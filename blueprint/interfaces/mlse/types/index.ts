@@ -1,3 +1,4 @@
+export * from './answer.types';
 export * from './contentSource.types';
 export * from './document.types';
 export * from './llm.types';

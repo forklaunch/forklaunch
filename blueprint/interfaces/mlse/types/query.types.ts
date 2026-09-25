@@ -9,3 +9,15 @@ export type QueryClass =
   | 'exact_dosage_no_context'
   | 'emergency_pattern'
   | 'unverifiable_source_requested';
+
+export type QueryClassificationDto = {
+  queryClass: QueryClass;
+  // the rule that decided it, recorded for audit
+  reason: string;
+  // PMIDs, PMC ids, NCT ids and DOIs named in the query; the answer service
+  // checks they exist before answering from them
+  sourceReferences: string[];
+  // query words left after removing dosing words (the drug, for dosing
+  // queries)
+  subjectTerms: string[];
+};
