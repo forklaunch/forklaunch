@@ -1,6 +1,16 @@
+export * from './chunker.service';
 export * from './fakeLlmProvider.service';
+export * from './fetchers/clinicalTrialsFetcher.service';
+export * from './fetchers/dailyMedFetcher.service';
+export * from './fetchers/openFdaFetcher.service';
+export * from './fetchers/pmcOaFetcher.service';
+export * from './fetchers/pubmedFetcher.service';
 export * from './licenseGate.service';
+export * from './meshDescriptorParser.service';
 export * from './publicCorpusProvider.service';
+export * from './sourceFetcherRegistry.service';
+export type { FetchLike } from '../domain/http';
+export { SourceRequestError } from '../domain/http';
 
 export * from '@forklaunch/interfaces-mlse/interfaces';
 export * from '@forklaunch/interfaces-mlse/types';

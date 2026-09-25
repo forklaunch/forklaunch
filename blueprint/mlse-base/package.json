@@ -19,6 +19,7 @@
   "scripts": {
     "build": "tsc -b",
     "clean": "rm -rf dist tsconfig.tsbuildinfo pnpm.lock.yaml node_modules",
+    "corpus:refresh": "DOTENV_FILE_PATH=.env.local pnpm tsx scripts/refresh-corpus.ts",
     "dev": "DOTENV_FILE_PATH=.env.local pnpm run migrate:up && DOTENV_FILE_PATH=.env.local pnpm tsx watch server.ts",
     "dev:bun": "bun run migrate:up && bun --watch server.ts",
     "dev:worker": "DOTENV_FILE_PATH=.env.local pnpm tsx watch worker.ts",
@@ -26,6 +27,7 @@
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
     "lint": "eslint . -c eslint.config.mjs",
     "lint:fix": "eslint . -c eslint.config.mjs --fix",
+    "mesh:load": "DOTENV_FILE_PATH=.env.local pnpm tsx scripts/load-mesh.ts",
     "migrate:create": "NODE_OPTIONS='--import=tsx' mikro-orm migration:create",
     "migrate:down": "NODE_OPTIONS='--import=tsx' mikro-orm migration:down",
     "migrate:init": "NODE_OPTIONS='--import=tsx' mikro-orm migration:create --initial",
