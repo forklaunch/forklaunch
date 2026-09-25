@@ -6,6 +6,7 @@ import {
 } from '@forklaunch/blueprint-core';
 import { setupRls, setupTenantFilter } from '@forklaunch/core/persistence';
 import { complianceRouter } from './api/routes/compliance.routes';
+import { documentRouter } from './api/routes/document.routes';
 import { sourceRouter } from './api/routes/source.routes';
 import { ci, tokens } from './bootstrapper';
 import { mlseSdkClient } from './sdk';
@@ -41,6 +42,7 @@ const docsPath = ci.resolve(tokens.DOCS_PATH);
 
 //! mounts the routes to the app
 app.use(sourceRouter);
+app.use(documentRouter);
 app.use(complianceRouter);
 
 //! registers the sdk client

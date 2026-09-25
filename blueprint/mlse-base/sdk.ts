@@ -3,7 +3,9 @@ import { MapToSdk } from '@forklaunch/core/http';
 import {
   eraseUserData,
   exportUserData,
-  listSources
+  getDocument,
+  listSources,
+  refreshSource
 } from './api/controllers';
 
 export type MlseSdk = {
@@ -11,8 +13,12 @@ export type MlseSdk = {
     eraseUserData: typeof eraseUserData;
     exportUserData: typeof exportUserData;
   };
+  document: {
+    getDocument: typeof getDocument;
+  };
   source: {
     listSources: typeof listSources;
+    refreshSource: typeof refreshSource;
   };
 };
 
@@ -21,8 +27,12 @@ export const mlseSdkClient = {
     eraseUserData,
     exportUserData
   },
+  document: {
+    getDocument
+  },
   source: {
-    listSources
+    listSources,
+    refreshSource
   }
 } satisfies MlseSdk;
 

@@ -145,7 +145,10 @@ Every endpoint is added to `sdk.ts` in the same commit as its route.
 | B. CLI registration | Done | 764 cargo tests pass (Linux container with real symlinks and LF endings) |
 | C. pgvector | Done | Unit tests; scaffold of a new app uses `pg18-trixie`; adding MLSE to an existing app upgrades `postgres:latest`; adding another module afterwards keeps pgvector; MySQL with MLSE is rejected |
 | D. Package skeletons | Done | Node 24 / pnpm 11.1.0 build; 32 unit tests; migration e2e test on pgvector (extension, distance query, `source` table); `forklaunch depcheck` and `check_blueprint_deps` pass |
-| E–J | Not started | — |
+| E. Corpus and ingestion | Done | Fetchers for openFDA, DailyMed, ClinicalTrials.gov, PubMed, PMC OA and a streaming MeSH parser; document / passage / concept tables with generated full-text search and an unconstrained vector column; ingestion with license gate, excerpts, versioning and retractions; worker, refresh endpoint, `corpus:refresh` and `mesh:load` scripts. 58 unit tests on recorded API responses; 8 ingestion e2e tests on pgvector; live run against all five APIs: 11 documents, 114 passages, non-commercial PMC article kept metadata-only, keyword search returns cited sections |
+| F–J | Not started | — |
+
+**Open items from phase E:** HNSW vector index once the embedding model and dimension are chosen (T2); `corpus:refresh` / `mesh:load` scripts are not yet in scaffolded apps' `package.json` (CLI wiring, phase J); source relevance filtering (PubMed can return off-topic records) belongs to search and case studies (phases F, G).
 
 **Before merge:** `@forklaunch/interfaces-mlse` and `@forklaunch/implementation-mlse-base` must be published to npm (0.1.x), because the CLI scaffold tests (`init_mlse.sh`, `init_module.sh`) run `pnpm install` against the registry.
 

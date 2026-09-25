@@ -18,8 +18,15 @@ import {
   RetentionService
 } from '@forklaunch/core/services';
 import {
+  ClinicalTrialsFetcher,
+  DailyMedFetcher,
   FakeLlmProvider,
-  PublicCorpusProvider
+  FetchLike,
+  OpenFdaFetcher,
+  PmcOaFetcher,
+  PublicCorpusProvider,
+  PubMedFetcher,
+  SourceFetcherRegistry
 } from '@forklaunch/implementation-mlse-base/services';
 import { RedisWorkerConsumer } from '@forklaunch/implementation-worker-redis/consumers';
 import { RedisWorkerProducer } from '@forklaunch/implementation-worker-redis/producers';
@@ -32,6 +39,7 @@ import {
 } from '@forklaunch/interfaces-worker/types';
 import { ForkOptions } from '@mikro-orm/core';
 import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
+import { IngestionService } from './domain/services/ingestion.service';
 import { IngestionJob } from './domain/types/ingestionJob.types';
 import mikroOrmOptionsConfig from './mikro-orm.config';
 
@@ -248,6 +256,41 @@ const serviceDependencies = runtimeDependencies.chain({
     type: RetentionService,
     factory: ({ Orm, OtelCollector }) =>
       new RetentionService(Orm, OtelCollector)
+  },
+  /**
+   * One fetcher per source that is fetched over the network. MeSH is loaded
+   * from NLM's descriptor file (scripts/load-mesh.ts) instead, because it is
+   * published as a single annual file rather than a search API.
+   */
+  SourceFetchers: {
+    lifetime: Lifetime.Singleton,
+    type: SourceFetcherRegistry,
+    factory: ({ NCBI_TOOL, NCBI_EMAIL, NCBI_API_KEY, OPENFDA_API_KEY }) => {
+      const fetchImpl: FetchLike = (url, init) => fetch(url, init);
+      const ncbi = {
+        tool: NCBI_TOOL,
+        email: NCBI_EMAIL,
+        apiKey: NCBI_API_KEY || undefined
+      };
+      return new SourceFetcherRegistry([
+        new OpenFdaFetcher(fetchImpl, { apiKey: OPENFDA_API_KEY || undefined }),
+        new DailyMedFetcher(fetchImpl),
+        new ClinicalTrialsFetcher(fetchImpl),
+        new PubMedFetcher(fetchImpl, ncbi),
+        new PmcOaFetcher(fetchImpl, ncbi)
+      ]);
+    }
+  },
+  IngestionService: {
+    lifetime: Lifetime.Scoped,
+    type: IngestionService,
+    factory: ({ EntityManager, SourceFetchers, LlmProvider, OtelCollector }) =>
+      new IngestionService(
+        EntityManager,
+        SourceFetchers,
+        LlmProvider,
+        OtelCollector
+      )
   },
   RedisWorkerOptions: {
     lifetime: Lifetime.Singleton,

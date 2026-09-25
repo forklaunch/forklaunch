@@ -7,35 +7,46 @@ import { IngestionJob } from './domain/types/ingestionJob.types';
 
 const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 const contentSourceProvider = ci.resolve(tokens.ContentSourceProvider);
+const ingestionServiceFactory = ci.scopedResolver(tokens.IngestionService);
 
-const knownSources = new Set(
-  contentSourceProvider.describe().map((source) => source.id)
-);
+// Documents fetched per job when the request does not say.
+const DEFAULT_JOB_LIMIT = 20;
+
+// Keep the source registry in step with the provider before any job runs,
+// so lastRefreshedAt has a row to land on.
+const ready = ingestionServiceFactory()
+  .syncSources(contentSourceProvider.describe())
+  .catch((error) => {
+    openTelemetryCollector.error('Could not sync the source registry', error);
+  });
 
 /**
- * Consumes corpus-refresh requests. Source fetchers (openFDA, DailyMed,
- * ClinicalTrials.gov, MeSH, PubMed, PMC OA) plug in here with corpus
- * ingestion; until then a job for a known source is acknowledged and one for
- * an unknown source is reported as a failure rather than silently dropped.
+ * Consumes corpus-refresh requests: fetch documents for the job's term from
+ * its source, then license-check, deduplicate, chunk, embed and store them.
+ * A failing job is returned to the queue for retry, never dropped silently.
  */
 const processIngestionJobs: WorkerProcessFunction<IngestionJob> = async (
   jobs
 ) => {
+  await ready;
   const failedJobs: { value: IngestionJob; error: Error }[] = [];
 
   for (const job of jobs) {
-    if (!knownSources.has(job.sourceKey)) {
+    try {
+      // a fresh scoped service (and EntityManager) per job
+      const result = await ingestionServiceFactory().ingest({
+        sourceKey: job.sourceKey,
+        term: job.term,
+        limit: job.limit ?? DEFAULT_JOB_LIMIT
+      });
+      openTelemetryCollector.info('Corpus refresh completed', result);
+      job.processed = true;
+    } catch (error) {
       failedJobs.push({
         value: job,
-        error: new Error(`Unknown content source '${job.sourceKey}'`)
+        error: error instanceof Error ? error : new Error(String(error))
       });
-      continue;
     }
-
-    openTelemetryCollector.info('Received corpus refresh request', {
-      sourceKey: job.sourceKey
-    });
-    job.processed = true;
   }
 
   return failedJobs;
