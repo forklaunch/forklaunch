@@ -55,6 +55,16 @@ describe('OpenFdaFetcher', () => {
     expect(doc.sections.every((s) => s.text.length > 0)).toBe(true);
   });
 
+  it('looks up each longer word of a phrase as a possible drug name', async () => {
+    const { fetchImpl, requests } = recordedFetch([['api.fda.gov', fixture('openfda-labels.json')]]);
+    await new OpenFdaFetcher(fetchImpl).fetchDocuments({ term: 'cefazolin dose surgical prophylaxis', limit: 3 });
+    const url = decodeURIComponent(requests[0]);
+    expect(url).toContain('openfda.generic_name:"cefazolin dose surgical prophylaxis"');
+    expect(url).toContain('openfda.generic_name:"cefazolin"+openfda.brand_name:"cefazolin"');
+    expect(url).toContain('openfda.brand_name:"prophylaxis"');
+    expect(url).not.toContain('"dos"');
+  });
+
   it('treats openFDA "no matches" (HTTP 404) as an empty result', async () => {
     const { fetchImpl } = recordedFetch([]);
     await expect(

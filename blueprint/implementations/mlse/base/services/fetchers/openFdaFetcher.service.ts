@@ -70,8 +70,20 @@ export class OpenFdaFetcher implements SourceFetcher {
     term,
     limit
   }: SourceQueryDto): Promise<FetchedDocumentDto[]> {
-    const quoted = `"${term.replace(/"/g, '')}"`;
-    const search = `openfda.generic_name:${quoted}+openfda.brand_name:${quoted}`;
+    // Doctors search in phrases ("cefazolin dose surgical prophylaxis"), but
+    // openFDA matches drug-name fields, so look up the whole phrase and each
+    // longer word as a possible generic or brand name. Words that are not
+    // drug names simply match nothing.
+    const cleaned = term.replace(/"/g, '').trim();
+    const candidates = [
+      ...new Set([
+        cleaned,
+        ...cleaned.split(/\s+/).filter((word) => /^[a-zA-Z-]{4,}$/.test(word))
+      ])
+    ].slice(0, 6);
+    const search = candidates
+      .map((name) => `openfda.generic_name:"${name}"+openfda.brand_name:"${name}"`)
+      .join('+');
     const params = [
       `search=${encodeURIComponent(search).replace(/%2B/g, '+')}`,
       `limit=${Math.min(Math.max(limit, 1), 100)}`

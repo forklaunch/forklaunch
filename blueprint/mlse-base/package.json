@@ -24,6 +24,7 @@
     "dev:bun": "bun run migrate:up && bun --watch server.ts",
     "dev:worker": "DOTENV_FILE_PATH=.env.local pnpm tsx watch worker.ts",
     "docs": "typedoc --out docs *",
+    "eval:run": "DOTENV_FILE_PATH=.env.local pnpm tsx scripts/run-eval.ts",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
     "lint": "eslint . -c eslint.config.mjs",
     "lint:fix": "eslint . -c eslint.config.mjs --fix",

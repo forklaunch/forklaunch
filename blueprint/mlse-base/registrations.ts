@@ -22,6 +22,8 @@ import {
   DailyMedFetcher,
   FakeLlmProvider,
   FetchLike,
+  LexicalReranker,
+  LiveRetrievalService,
   OpenFdaFetcher,
   PmcOaFetcher,
   PublicCorpusProvider,
@@ -40,6 +42,7 @@ import {
 import { ForkOptions } from '@mikro-orm/core';
 import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
 import { IngestionService } from './domain/services/ingestion.service';
+import { SearchService } from './domain/services/search.service';
 import { IngestionJob } from './domain/types/ingestionJob.types';
 import mikroOrmOptionsConfig from './mikro-orm.config';
 
@@ -163,6 +166,15 @@ const environmentConfig = configInjector.chain({
     lifetime: Lifetime.Singleton,
     type: optional(string),
     value: getEnvVar('LLM_PROVIDER') || 'fake'
+  },
+  // Budget for querying live sources during one search, kept well inside
+  // the 10-second first-answer target.
+  LIVE_RETRIEVAL_TIMEOUT_MS: {
+    lifetime: Lifetime.Singleton,
+    type: number,
+    value: getEnvVar('LIVE_RETRIEVAL_TIMEOUT_MS')
+      ? Number(getEnvVar('LIVE_RETRIEVAL_TIMEOUT_MS'))
+      : 4000
   },
   EMBEDDING_DIMENSIONS: {
     lifetime: Lifetime.Singleton,
@@ -289,6 +301,47 @@ const serviceDependencies = runtimeDependencies.chain({
         EntityManager,
         SourceFetchers,
         LlmProvider,
+        OtelCollector
+      )
+  },
+  LiveRetrievalService: {
+    lifetime: Lifetime.Singleton,
+    type: LiveRetrievalService,
+    factory: ({
+      SourceFetchers,
+      ContentSourceProvider,
+      TtlCache,
+      LIVE_RETRIEVAL_TIMEOUT_MS
+    }) =>
+      new LiveRetrievalService(
+        SourceFetchers,
+        ContentSourceProvider.describe()
+          .filter((source) => source.liveQuery)
+          .map((source) => source.id),
+        TtlCache,
+        { timeoutMs: LIVE_RETRIEVAL_TIMEOUT_MS }
+      )
+  },
+  Reranker: {
+    lifetime: Lifetime.Singleton,
+    type: LexicalReranker,
+    factory: () => new LexicalReranker()
+  },
+  SearchService: {
+    lifetime: Lifetime.Scoped,
+    type: SearchService,
+    factory: ({
+      EntityManager,
+      LlmProvider,
+      Reranker,
+      LiveRetrievalService,
+      OtelCollector
+    }) =>
+      new SearchService(
+        EntityManager,
+        LlmProvider,
+        Reranker,
+        LiveRetrievalService,
         OtelCollector
       )
   },
