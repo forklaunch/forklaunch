@@ -1,0 +1,19 @@
+{
+  "_comment": "Format example only. A real gold set is written and approved by clinicians for each launch topic (100-200 questions); the expected sources below are real documents but were chosen by engineering to exercise the format, not clinically reviewed.",
+  "questions": [
+    {
+      "id": "abx-prophylaxis-cefazolin",
+      "query": "cefazolin perioperative prophylaxis",
+      "expectedSources": [
+        { "sourceKey": "openfda", "externalId": "00dd6da7-50a8-44c9-b2dc-7948973df392" }
+      ]
+    },
+    {
+      "id": "lapchole-cbd-stones",
+      "query": "laparoscopic cholecystectomy with common bile duct stones",
+      "expectedSources": [
+        { "sourceKey": "pmc_oa", "externalId": "PMC13602641" }
+      ]
+    }
+  ]
+}

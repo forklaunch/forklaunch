@@ -628,6 +628,7 @@ impl CliCommand for ApplicationCommand {
             ecommerce: None,
             messaging: None,
             cac: None,
+            mlse: None,
             relay: None,
             };
         let mut modules: Vec<Module> = if matches.get_many::<String>("modules").is_none()
@@ -641,6 +642,7 @@ impl CliCommand for ApplicationCommand {
                     ecommerce: None,
                     messaging: None,
                     cac: None,
+                    mlse: None,
                     relay: None,
                     };
                 modules_to_test = prompt_comma_separated_list(
@@ -687,6 +689,10 @@ impl CliCommand for ApplicationCommand {
             );
         }
 
+        for module in &modules {
+            crate::core::modules::ensure_module_database_supported(module, &database)?;
+        }
+
         modules.sort_by_key(|module| {
             match module {
                 Module::BaseIam | Module::BetterAuthIam => 0,
@@ -694,7 +700,8 @@ impl CliCommand for ApplicationCommand {
                 Module::StripeEcommerce => 2,
                 Module::BaseMessaging | Module::TwilioMessaging => 3,
                 Module::BaseCac => 4,
-                Module::Relay => 5,
+                Module::BaseMlse => 5,
+                Module::Relay => 6,
             }
         });
 
@@ -1035,8 +1042,11 @@ impl CliCommand for ApplicationCommand {
                     || template_dir.module_id == Some(Module::TwilioMessaging),
                 is_twilio: template_dir.module_id == Some(Module::TwilioMessaging),
                 is_cac: template_dir.module_id == Some(Module::BaseCac),
+                is_mlse: template_dir.module_id == Some(Module::BaseMlse),
                 is_ecommerce: template_dir.module_id == Some(Module::StripeEcommerce),
-                ships_worker: template_dir.module_id == Some(Module::StripeEcommerce),
+                // mlse ships worker.ts for corpus ingestion.
+                ships_worker: template_dir.module_id == Some(Module::StripeEcommerce)
+                    || template_dir.module_id == Some(Module::BaseMlse),
 
                 is_iam_configured: data.projects.iter().any(|project_entry| {
                     if project_entry.name == "iam" {
@@ -1076,6 +1086,7 @@ impl CliCommand for ApplicationCommand {
                 service_data.is_billing = global_module_config.billing.is_some();
                 service_data.is_messaging = global_module_config.messaging.is_some();
                 service_data.is_cac = global_module_config.cac.is_some();
+                service_data.is_mlse = global_module_config.mlse.is_some();
                 service_data.is_better_auth = global_module_config
                     .iam
                     .as_ref()
@@ -1209,6 +1220,7 @@ impl CliCommand for ApplicationCommand {
                             global_module_config.iam.is_some(),
                             global_module_config.messaging.is_some(),
                             global_module_config.cac.is_some(),
+                            global_module_config.mlse.is_some(),
                         ),
                         ..Default::default()
                     }),

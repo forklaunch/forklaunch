@@ -1,0 +1,68 @@
+import {
+  forklaunchExpress,
+  PERMISSIONS,
+  ROLES,
+  schemaValidator
+} from '@forklaunch/blueprint-core';
+import { setupRls, setupTenantFilter } from '@forklaunch/core/persistence';
+import { answerRouter } from './api/routes/answer.routes';
+import { governanceRouter } from './api/routes/governance.routes';
+import { savedSearchRouter } from './api/routes/savedSearch.routes';
+import { voiceRouter } from './api/routes/voice.routes';
+import { complianceRouter } from './api/routes/compliance.routes';
+import { documentRouter } from './api/routes/document.routes';
+import { searchRouter } from './api/routes/search.routes';
+import { sourceRouter } from './api/routes/source.routes';
+import { topicRouter } from './api/routes/topic.routes';
+import { ci, tokens } from './bootstrapper';
+import { mlseSdkClient } from './sdk';
+
+//! resolves the openTelemetryCollector from the configuration
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
+const orm = ci.resolve(tokens.Orm);
+setupTenantFilter(orm, { logger: openTelemetryCollector });
+setupRls(orm, { logger: openTelemetryCollector });
+
+//! creates an instance of forklaunchExpress
+const app = forklaunchExpress(schemaValidator, openTelemetryCollector, {
+  auth: {
+    // Every route so far is internal (HMAC). Clinician-facing routes arrive
+    // with search and answers, and replace these placeholders with real
+    // permission and role surfacing from IAM.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    surfacePermissions: async (_payload, _req) => {
+      return new Set([PERMISSIONS.PLATFORM_READ]);
+    },
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    surfaceRoles: async (_payload, _req) => {
+      return new Set([ROLES.ADMIN]);
+    }
+  }
+});
+
+//! resolves the host, port, and version from the configuration
+const host = ci.resolve(tokens.HOST);
+const port = ci.resolve(tokens.PORT);
+const version = ci.resolve(tokens.VERSION);
+const docsPath = ci.resolve(tokens.DOCS_PATH);
+
+//! mounts the routes to the app
+app.use(sourceRouter);
+app.use(documentRouter);
+app.use(searchRouter);
+app.use(topicRouter);
+app.use(answerRouter);
+app.use(voiceRouter);
+app.use(savedSearchRouter);
+app.use(governanceRouter);
+app.use(complianceRouter);
+
+//! registers the sdk client
+app.registerSdks(mlseSdkClient);
+
+//! starts the server
+app.listen(port, host, () => {
+  openTelemetryCollector.info(
+    `🎉 MLSE Server is running at http://${host}:${port} 🎉.\nAn API reference can be accessed at http://${host}:${port}/api/${version}${docsPath}`
+  );
+});

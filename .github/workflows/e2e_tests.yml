@@ -75,7 +75,7 @@ jobs:
             scripts: "change_application.sh init_application_custom_path.sh init_module.sh init_service.sh init_worker_mappers.sh init_worker_workspace_and_typecheck.sh sync_application_add.sh"
           - group: 6
             name: "Other Tests"
-            scripts: "delete_router.sh environment_sync.sh init_billing_stripe.sh init_cac.sh init_iam_better_auth.sh init_library.sh init_relay.sh init_relay_drift.sh init_router.sh sync_library_subcommand.sh"
+            scripts: "delete_router.sh environment_sync.sh init_billing_stripe.sh init_cac.sh init_iam_better_auth.sh init_mlse.sh init_library.sh init_relay.sh init_relay_drift.sh init_router.sh sync_library_subcommand.sh"
 
     name: ${{ matrix.name }}
 
