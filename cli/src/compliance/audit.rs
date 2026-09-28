@@ -452,32 +452,70 @@ struct DimensionCoverage {
     unscored: Vec<String>,
 }
 
-/// Client-side fallback for platforms that predate server-computed
-/// dimension scores: derive the scorecard from finding categories using
-/// the same mapping the platform uses.
-fn derive_dimension_scores(findings: &[PlatformFinding]) -> DimensionScores {
-    fn dims_for(category: &str) -> &'static [&'static str] {
-        match category {
-            "encryption" => &["security", "compliance"],
-            "access-control" => &["security", "governance"],
-            "tenant-isolation" => &["security", "compliance"],
-            "data-retention" => &["compliance", "governance"],
-            "multi-az" | "capacity" => &["scale"],
-            "alerting" => &["observability"],
-            "logging" => &["observability", "governance"],
-            "audit" => &["governance", "compliance"],
-            _ => &["compliance"],
-        }
+/// Category -> dimensions mapping. Mirrors the platform's
+/// `CATEGORY_DIMENSIONS` (the source of truth); unknown categories count
+/// against compliance.
+fn dims_for_category(category: &str) -> &'static [&'static str] {
+    match category {
+        "encryption" => &["security", "compliance"],
+        "access-control" => &["security", "governance"],
+        "tenant-isolation" => &["security", "compliance"],
+        "data-retention" => &["compliance", "governance"],
+        "multi-az" | "capacity" => &["scale"],
+        "alerting" => &["observability"],
+        "logging" => &["observability", "governance"],
+        "audit" => &["governance", "compliance"],
+        "construction" => &["governance"],
+        _ => &["compliance"],
     }
-    let mut totals: std::collections::HashMap<&str, f64> = Default::default();
+}
+
+/// Lowest score a rail can reach from findings alone. A construction
+/// failure is an ordinary (critical) governance finding, not a zero.
+const MIN_RAIL_SCORE: f64 = 5.0;
+
+/// JavaScript `Math.round`: halves round toward +infinity.
+fn js_round(x: f64) -> f64 {
+    (x + 0.5).floor()
+}
+
+/// `retained` fraction -> 0..100 score with one decimal, floored at
+/// `MIN_RAIL_SCORE`. Matches the platform's `clamp`.
+fn clamp_rail(retained: f64) -> f64 {
+    MIN_RAIL_SCORE.max(js_round(retained * 100.0 * 10.0) / 10.0)
+}
+
+/// Client-side port of the platform's `computeDimensionScores` (the shared
+/// formula), used when the platform response carries no server-computed
+/// dimension scores and by `score --offline`. Findings compound
+/// multiplicatively: each finding retains `1 - points/100` of the rail.
+fn derive_dimension_scores(findings: &[PlatformFinding]) -> DimensionScores {
+    compute_dimension_scores(findings.iter().map(|f| (f.category.as_str(), f.points)))
+}
+
+fn compute_dimension_scores<'a>(
+    findings: impl IntoIterator<Item = (&'a str, f64)>,
+) -> DimensionScores {
+    let mut retained: std::collections::HashMap<&str, f64> = [
+        ("compliance", 1.0),
+        ("security", 1.0),
+        ("scale", 1.0),
+        ("observability", 1.0),
+        ("governance", 1.0),
+    ]
+    .into_iter()
+    .collect();
     let mut touched: std::collections::HashSet<&str> = Default::default();
-    for finding in findings {
-        for dim in dims_for(&finding.category) {
-            *totals.entry(dim).or_insert(0.0) += finding.points;
+    for (category, points) in findings {
+        let severity = points.clamp(0.0, 100.0) / 100.0;
+        for dim in dims_for_category(category) {
+            if let Some(r) = retained.get_mut(dim) {
+                *r *= 1.0 - severity;
+            }
             touched.insert(dim);
         }
     }
-    let score = |dim: &str| ((100.0 - totals.get(dim).copied().unwrap_or(0.0)).max(0.0) * 10.0).round() / 10.0;
+    let score = |dim: &str| clamp_rail(retained[dim]);
     DimensionScores {
         compliance: score("compliance"),
         security: score("security"),
@@ -485,7 +523,7 @@ fn derive_dimension_scores(findings: &[PlatformFinding]) -> DimensionScores {
         observability: score("observability"),
         governance: score("governance"),
         coverage: Some(DimensionCoverage {
-            unscored: ["scale", "observability", "compliance", "security", "governance"]
+            unscored: ["scale", "observability"]
                 .iter()
                 .filter(|d| !touched.contains(**d))
                 .map(|d| d.to_string())
@@ -1198,4 +1236,78 @@ fn parse_openapi_routes(path: &Path) -> Result<Vec<RouteReport>> {
     }
 
     Ok(routes)
+}
+
+#[cfg(test)]
+mod dimension_score_tests {
+    use super::*;
+
+    #[derive(Deserialize)]
+    struct Vectors {
+        cases: Vec<Case>,
+    }
+    #[derive(Deserialize)]
+    struct Case {
+        name: String,
+        findings: Vec<VectorFinding>,
+        expect: Expect,
+    }
+    #[derive(Deserialize)]
+    struct VectorFinding {
+        category: String,
+        points: f64,
+    }
+    #[derive(Deserialize)]
+    struct Expect {
+        compliance: f64,
+        security: f64,
+        scale: f64,
+        observability: f64,
+        governance: f64,
+        unscored: Vec<String>,
+    }
+
+    #[test]
+    fn dimension_scores_match_platform_golden_vectors() {
+        let vectors: Vectors =
+            serde_json::from_str(include_str!("dimension-scores.vectors.json")).unwrap();
+        assert!(!vectors.cases.is_empty());
+        for case in vectors.cases {
+            let findings: Vec<PlatformFinding> = case
+                .findings
+                .iter()
+                .map(|f| PlatformFinding {
+                    severity: "medium".into(),
+                    category: f.category.clone(),
+                    description: String::new(),
+                    points: f.points,
+                })
+                .collect();
+            let got = derive_dimension_scores(&findings);
+            let e = &case.expect;
+            for (dim, g, want) in [
+                ("compliance", got.compliance, e.compliance),
+                ("security", got.security, e.security),
+                ("scale", got.scale, e.scale),
+                ("observability", got.observability, e.observability),
+                ("governance", got.governance, e.governance),
+            ] {
+                assert_eq!(g, want, "case {:?}: {}", case.name, dim);
+            }
+            assert_eq!(
+                got.coverage.map(|c| c.unscored).unwrap_or_default(),
+                e.unscored,
+                "case {:?}: unscored",
+                case.name
+            );
+        }
+    }
+
+    #[test]
+    fn js_round_rounds_halves_up() {
+        assert_eq!(js_round(0.5), 1.0);
+        assert_eq!(js_round(-0.5), 0.0);
+        assert_eq!(js_round(2.5), 3.0);
+        assert_eq!(js_round(-2.5), -2.0);
+    }
 }

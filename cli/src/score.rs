@@ -18,7 +18,8 @@
 //! job to poll rather than an answer. So this is a milestone action, not
 //! something to run after every edit. `--offline` keeps the old behaviour for
 //! the tight loop: deterministic checks only, no network, no auth, no cost, and
-//! only the two rails static analysis can actually decide.
+//! only the checklist items static analysis can actually decide (labelled with
+//! the platform's criterion ids and labels, so they match the website).
 
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -74,7 +75,8 @@ impl CliCommand for ScoreCommand {
                 .long("offline")
                 .help(
                     "Score from deterministic checks only — no upload, no auth, no cost. Covers \
-                     compliance and security; the other three rails need an agent and come back \
+                     the compliance, security and governance checklist items those checks \
+                     decide; scalability and observability need an agent and come back \
                      unassessed.",
                 )
                 .action(clap::ArgAction::SetTrue),
@@ -371,12 +373,17 @@ fn render_summary(card: &Value) -> String {
             // therefore reads as "nothing left to do" on an app that has work
             // left — and it is the number a non-technical reader takes away.
             // So the outstanding count travels with the score, always.
+            // `pending` counts too: an item a check flagged for review is not
+            // done, whatever the score says.
             let outstanding = items
                 .map(|items| {
                     items
                         .iter()
                         .filter(|item| {
-                            item.get("status").and_then(Value::as_str) == Some("unmet")
+                            matches!(
+                                item.get("status").and_then(Value::as_str),
+                                Some("unmet" | "pending")
+                            )
                         })
                         .count()
                 })
@@ -399,9 +406,13 @@ fn render_summary(card: &Value) -> String {
 
             if let Some(items) = items {
                 for item in items.iter().take(8) {
-                    let met = item.get("status").and_then(Value::as_str) == Some("met");
+                    let marker = match item.get("status").and_then(Value::as_str) {
+                        Some("met") => "+",
+                        Some("pending") => "?",
+                        _ => "-",
+                    };
                     let text = item.get("label").and_then(Value::as_str).unwrap_or("");
-                    let _ = writeln!(out, "      {} {}", if met { "+" } else { "-" }, text);
+                    let _ = writeln!(out, "      {} {}", marker, text);
                 }
             }
             if let Some(findings) = rail.get("findings").and_then(Value::as_array)
@@ -518,8 +529,8 @@ mod tests {
                 "compliance": {
                     "score": 100,
                     "items": [
-                        { "status": "met", "label": "Field encryptor is registered" },
-                        { "status": "unmet", "label": "Sensitive fields are classified" }
+                        { "status": "met", "label": "Sensitive fields are encrypted at rest" },
+                        { "status": "pending", "label": "Sensitive data is identified and handled according to its sensitivity" }
                     ],
                     "findings": []
                 }
@@ -527,6 +538,10 @@ mod tests {
         }));
         assert!(rendered.contains("100/100"), "{rendered}");
         assert!(rendered.contains("1 item outstanding"), "{rendered}");
+        assert!(
+            rendered.contains("? Sensitive data is identified"),
+            "a review item must not render as met or failed: {rendered}"
+        );
     }
 
     #[test]
@@ -536,7 +551,7 @@ mod tests {
             "dimensions": {
                 "security": {
                     "score": 100,
-                    "items": [{ "status": "met", "label": "Tenant isolation filter is installed" }],
+                    "items": [{ "status": "met", "label": "One customer cannot see or change another customer\u{2019}s data" }],
                     "findings": []
                 }
             }

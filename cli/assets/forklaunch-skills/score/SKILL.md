@@ -60,20 +60,24 @@ Exit code 1 with `report card overall score N is below the required minimum of 7
 
 ## The five rails
 
-| rail | weight | scored by the CLI? |
+| rail | weight | scored by `--offline`? |
 |---|---|---|
-| Compliance | 0.25 | **yes** |
-| Security | 0.25 | **yes** |
-| Governance | 0.15 | no — needs judgement |
+| Compliance | 0.25 | **yes** — encryption at rest, data classification |
+| Security | 0.25 | **yes** — tenant isolation |
+| Governance | 0.15 | **yes** on newer CLIs — data retention, GDPR erasure (CLI 1.10.0 and earlier: no) |
 | Scalability | 0.15 | no — needs judgement |
 | Observability | 0.20 | no — needs judgement |
 
-### Why three rails say "not assessed"
+Offline checklist items use the platform's criterion ids and exact labels
+(`cmp-encryption-at-rest`, `sec-tenant-isolation`, `gov-data-retention`, …),
+so they are the same lines the website shows in its "Checked" half. Each item
+carries its `criterion` id and the `checks` that bear on it.
 
-Because a source read genuinely cannot decide them. Whether ownership and
-change-control are healthy, whether the system survives its actual load,
-whether the instrumentation covers what matters — none of that is visible in
-the code.
+### Why the other rails say "not assessed"
+
+Because a source read genuinely cannot decide them. Whether the system
+survives its actual load, whether the instrumentation covers what matters —
+none of that is visible in the code.
 
 Those rails come back with `pending: true` and are **excluded from the average**
 rather than scored zero. That distinction matters: zeroes would cap every card
@@ -107,18 +111,26 @@ read it before quoting a number at anyone.
   "dimensions": {
     "compliance": {
       "score": 40,
-      "items": [ { "label": "Field encryptor is registered", "status": "unmet", "detail": "…" } ],
-      "findings": [ { "severity": "high", "title": "…", "fix": "…", "source": "cli" } ]
+      "items": [ {
+        "label": "Sensitive fields are encrypted at rest",
+        "criterion": "cmp-encryption-at-rest",
+        "status": "unmet",
+        "detail": "…",
+        "checks": [ { "id": "encryptor-registration", "status": "fail", "detail": "…" } ]
+      } ],
+      "findings": [ { "severity": "high", "title": "…", "fix": "…", "source": "cli", "criterion": "cmp-encryption-at-rest" } ]
     },
-    "governance": { "score": 0, "pending": true, "summary": "Not assessed. …" }
+    "observability": { "score": 0, "pending": true, "summary": "Not assessed. …" }
   }
 }
 ```
 
 Three fields carry the weight:
 
-- **`items`** — the checklist. `met` / `unmet` / `pending`, one line per check.
-  This is what to show a human; it reads as work done, not just work missing.
+- **`items`** — the checklist. `met` / `unmet` / `pending`, one line per platform
+  criterion (`pending` = a check asks for review, e.g. possible
+  misclassification). This is what to show a human; it reads as work done, not
+  just work missing.
 - **`findings`** — the detail behind a score. Every finding carries a `fix`.
 - **`source`** — `cli` means deterministic and reproducible; `ai` means a model
   judged it. Never present the two as equally certain.
@@ -170,9 +182,9 @@ unmet item and its headline reports findings:
 Enterprise Readiness  100/100
 linkjar: 7 deterministic finding(s) across 7 module(s)
 
-Compliance  100/100
-    + Field encryptor is registered
-    - Sensitive fields are classified     <- unmet, still 100
+Compliance  100/100  (1 item outstanding)
+    + Sensitive fields are encrypted at rest
+    ? Sensitive data is identified and handled according to its sensitivity   <- review, still 100
 ```
 
 The arithmetic is right — `info` findings cost 0 points — but the number on its
@@ -180,7 +192,7 @@ own is misleading, and it is the number a non-technical reader will take away.
 
 **Never report the score alone.** Report it with the unmet items:
 
-> "It scores 100 on the two areas the fast check can judge. One item is still
+> "It scores 100 on the areas the fast check can judge. One item is still
 > open — no fields have been marked as sensitive yet, which matters as soon as
 > we add anything personal."
 
@@ -189,13 +201,14 @@ app with no data model, so a later drop is expected rather than alarming.
 
 ## Honest limits
 
-- **Absence of findings is not proof of readiness.** Eight checks, over two
-  rails. A clean card means those eight passed.
-- **A perfect rail can still have unmet items.** See above — check `items` for
-  `unmet`, not just `score`.
+- **Absence of findings is not proof of readiness.** Eight checks, over five
+  checklist items on three rails. A clean card means those eight passed; the
+  platform treats these passes as partial evidence, not proof.
+- **A perfect rail can still have open items.** See above — check `items` for
+  `unmet` and `pending`, not just `score`.
 - **`frameworks` is empty from the CLI.** Deciding whether HIPAA or SOC 2
   applies to a domain is judgement; guessing would be worse than saying nothing.
-- **The overall score is renormalised.** A 100 from the CLI is "100 on the two
+- **The overall score is renormalised.** A 100 from `--offline` is "100 on the
   rails it can judge", not "100 across five".
 
 Always quote the caveat alongside the number. A deterministic 100 presented as
