@@ -470,8 +470,8 @@ fn dims_for_category(category: &str) -> &'static [&'static str] {
     }
 }
 
-/// Lowest score a rail can reach from findings alone (construction failure
-/// is the only way to zero a rail).
+/// Lowest score a rail can reach from findings alone. A construction
+/// failure is an ordinary (critical) governance finding, not a zero.
 const MIN_RAIL_SCORE: f64 = 5.0;
 
 /// JavaScript `Math.round`: halves round toward +infinity.
@@ -506,11 +506,7 @@ fn compute_dimension_scores<'a>(
     .into_iter()
     .collect();
     let mut touched: std::collections::HashSet<&str> = Default::default();
-    let mut construction_failed = false;
     for (category, points) in findings {
-        if category == "construction" {
-            construction_failed = true;
-        }
         let severity = points.clamp(0.0, 100.0) / 100.0;
         for dim in dims_for_category(category) {
             if let Some(r) = retained.get_mut(dim) {
@@ -525,11 +521,7 @@ fn compute_dimension_scores<'a>(
         security: score("security"),
         scale: score("scale"),
         observability: score("observability"),
-        governance: if construction_failed {
-            0.0
-        } else {
-            score("governance")
-        },
+        governance: score("governance"),
         coverage: Some(DimensionCoverage {
             unscored: ["scale", "observability"]
                 .iter()
