@@ -10,6 +10,10 @@ Every report card checks the same 283 requirements on every analysis, the same w
 
 A requirement that is not met becomes a finding on the app's running findings list, which is re-checked on every analysis: a finding resolves when the code is fixed and is flagged if it comes back. The reviewing committee is told what this list covers and proposes only specific problems outside it; each proposal is confirmed or rejected by the same judge before it reaches the list.
 
+Each app also has criteria of its own. When reviewers find a rule specific to one app (for example, an application may only be approved after the provider's license is verified), the committee can commit it to that app's criteria: it is committed when two reviewers raise it, or when the judge confirms the problem it came with, and never when it repeats a requirement on this page. From then on it is asked on every analysis beside this list. People with access to the application can see, edit, switch off, delete or add these under **Your criteria** on the report card.
+
+For a ForkLaunch app, areas the platform itself provides (such as infrastructure, since ForkLaunch is the deployment platform) are marked not applicable instead of asked.
+
 27 of the requirements apply only when a compliance framework (HIPAA, PCI DSS, SOC 2, GDPR, CCPA) applies to the app, either because you chose it or because it was detected from the app's description.
 
 | Category | Requirements | Always on |
@@ -326,6 +330,8 @@ List version `2026.10-criteria.1`. This page is generated from the scorer's cata
 | `gov-config-07` | Debug and development-only behaviour is off in production | Development-only behaviour can run in production | high |  |
 
 ### Infrastructure as code
+
+*Not asked for ForkLaunch apps. ForkLaunch is the deployment platform: it provisions and manages the infrastructure, so there is no infrastructure code for the app to own.*
 
 | ID | Requirement | Finding when not met | Severity | References |
 |---|---|---|---|---|
