@@ -1,8 +1,10 @@
 import {
-  ExpressApplicationOptions,
   forklaunchExpress,
   forklaunchRouter,
-  handlers,
+  handlers
+} from '@forklaunch/express';
+import type {
+  ExpressApplicationOptions,
   NextFunction,
   Request,
   Response
@@ -50,7 +52,6 @@ export {
   date,
   email,
   enum_,
-  ExpressApplicationOptions,
   file,
   forklaunchExpress,
   forklaunchRouter,
@@ -58,15 +59,12 @@ export {
   handlers,
   literal,
   never,
-  NextFunction,
   null_,
   nullish,
   number,
   optional,
   promise,
   record,
-  Request,
-  Response,
   SchemaValidator,
   string,
   symbol,
@@ -77,6 +75,13 @@ export {
   uri,
   uuid,
   void_
+};
+
+export type {
+  ExpressApplicationOptions,
+  NextFunction,
+  Request,
+  Response
 };
 
 export const IdSchema = {

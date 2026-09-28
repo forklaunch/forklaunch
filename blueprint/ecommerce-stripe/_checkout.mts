@@ -1,0 +1,13 @@
+import { createHmacToken } from '@forklaunch/core/http';
+import { randomUUID } from 'node:crypto';
+const S='dev-hmac-secret-key-for-catalog-import-000', B='http://localhost:8001';
+const A=(m:string,p:string,b?:unknown)=>{const t=new Date(),n=randomUUID();return `HMAC keyId=default ts=${t.toISOString()} nonce=${n} signature=${createHmacToken({method:m,path:p,body:b,timestamp:t,nonce:n,secretKey:S})}`;};
+const call=async(m:string,u:string,sp:string,b?:unknown)=>{const r=await fetch(B+u,{method:m,headers:{'content-type':'application/json',authorization:A(m,sp,b)},body:b?JSON.stringify(b):undefined});const t=await r.text();let j:any;try{j=JSON.parse(t)}catch{j=t}return{code:r.status,body:j};};
+let r=await call('GET','/product/handle/hot-sauce','/handle/hot-sauce'); const pid=r.body.id;
+r=await call('GET',`/variant/product/${pid}`,`/product/${pid}`); const vid=r.body[0].id;
+r=await call('POST','/cart','/',{customerId:'c1'}); const cid=r.body.id;
+await call('POST','/cart/items','/items',{cartId:cid,variantId:vid,quantity:1});
+console.log('cart ready:',cid);
+r=await call('POST','/checkout','/',{cartId:cid,provider:'stripe'});
+console.log('CHECKOUT:',r.code);
+console.log(JSON.stringify(r.body).slice(0,400));
