@@ -81,7 +81,9 @@ const LABEL_SOURCES = ['openfda', 'dailymed'];
 // passages search returns for a free-text question, before the relevance check
 const SEARCH_WIDTH = 20;
 const OVERVIEW_SEARCH_WIDTH = 40;
-const PASSAGES_PER_SECTION = 4;
+const PASSAGES_PER_SECTION = 5;
+// passages each overview section's own search returns
+const FOCUSED_SEARCH_WIDTH = 15;
 const PASSAGES_PER_DOCUMENT = 2;
 const LABEL_PASSAGES = 2;
 
@@ -323,7 +325,7 @@ export class AnswerService {
     );
 
     if (overview) {
-      return this.overviewSections(query, clinical, expandedTerms, results.length, about, concepts);
+      return this.overviewSections(query, clinical, expandedTerms, results, about, concepts, request);
     }
     const perDocument = new Map<string, number>();
     const usable = about.filter((r) => {
@@ -352,22 +354,51 @@ export class AnswerService {
 
   // Sections for a topic query. Each section gets up to four passages that
   // address it (they contain one of its hint words), one per document.
-  private overviewSections(
+  private async overviewSections(
     query: string,
     clinical: string[],
     expandedTerms: string[],
-    found: number,
+    results: SearchResultDto[],
     about: SearchResultDto[],
-    concepts: QueryConcepts
+    concepts: QueryConcepts,
+    request: AnswerRequestDto
   ) {
     const topicType = detectTopicType(query, about);
-    const candidates = about.map((r) => ({ ...r, documentKey: `${r.sourceKey}:${r.externalId}` }));
     const topicTerms = [query, ...expandedTerms];
     const sections = OVERVIEW_SECTIONS[topicType];
+    const isUsable = (r: SearchResultDto) =>
+      r.licenseScope !== 'metadata_only' && r.text.trim().length > 0 && passageIsAbout(r, concepts);
+
+    // Each section also searches for literature on its own question, one
+    // after another because NCBI limits requests per second.
+    const found = new Map(results.map((r) => [r.passageId, r]));
+    const focused = new Map<string, SearchResultDto[]>();
+    for (const section of sections) {
+      if (!section.focus || topicType === 'medication') continue;
+      const { results: sectionResults } = await this.searchService.search({
+        query: `${clinical[0] ?? query} ${section.focus}`,
+        limit: FOCUSED_SEARCH_WIDTH,
+        live: request.live ?? true,
+        preferReviews: true,
+        sourceKeys: ['medlineplus', 'pubmed', 'pmc_oa'],
+        ...(request.organizationId ? { organizationId: request.organizationId } : {})
+      });
+      for (const r of sectionResults) found.set(r.passageId, r);
+      focused.set(section.key, sectionResults.filter(isUsable));
+    }
+    const aboutAll = [...found.values()].filter(isUsable);
+
+    const candidatesFor = (key: string) =>
+      [...new Map([...(focused.get(key) ?? []), ...about].map((r) => [r.passageId, r])).values()].map((r) => ({
+        ...r,
+        documentKey: `${r.sourceKey}:${r.externalId}`
+      }));
     const evidence = new Map(
       sections.map((section) => [
         section.key,
-        selectEvidence(candidates, { hints: section.searchHints, topicTerms, limit: PASSAGES_PER_SECTION }).map(
+        // two per document: one reference page can answer both halves of
+        // "Symptoms and diagnosis"
+        selectEvidence(candidatesFor(section.key), { hints: section.searchHints, topicTerms, limit: PASSAGES_PER_SECTION, perDocument: 2 }).map(
           (selected): CitablePassageDto => ({
             passageId: selected.passageId,
             origin: selected.origin,
@@ -387,8 +418,8 @@ export class AnswerService {
     const used = new Map([...evidence.values()].flat().map((p) => [p.passageId, p]));
     const research: AnswerResearchDto = {
       searchedFor: expandedTerms,
-      found,
-      aboutQuestion: about.length,
+      found: found.size,
+      aboutQuestion: aboutAll.length,
       used: used.size,
       documents: new Set([...used.values()].map((p) => `${p.sourceKey}:${p.externalId}`)).size,
       topicType

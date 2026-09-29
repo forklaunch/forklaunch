@@ -27,7 +27,8 @@ export type SelectedEvidence<T extends EvidenceCandidate> = T & {
  */
 export function selectEvidence<T extends EvidenceCandidate>(
   candidates: T[],
-  options: { hints: string[]; topicTerms: string[]; limit: number }
+  // perDocument: passages one document may contribute (default 1)
+  options: { hints: string[]; topicTerms: string[]; limit: number; perDocument?: number }
 ): SelectedEvidence<T>[] {
   const hints = new Set(options.hints.flatMap((hint) => queryTerms(hint)));
   const topicWords = new Set(options.topicTerms.flatMap((term) => queryTerms(term)));
@@ -43,13 +44,14 @@ export function selectEvidence<T extends EvidenceCandidate>(
     .filter((s) => s.aboutTopic && s.hintHits > 0)
     .sort((a, b) => b.rank - a.rank || a.candidate.passageId.localeCompare(b.candidate.passageId));
 
-  const usedDocuments = new Set<string>();
+  const usedDocuments = new Map<string, number>();
   const selected: SelectedEvidence<T>[] = [];
   for (const { candidate, hintHits } of scored) {
-    if (usedDocuments.has(candidate.documentKey)) {
+    const used = usedDocuments.get(candidate.documentKey) ?? 0;
+    if (used >= (options.perDocument ?? 1)) {
       continue;
     }
-    usedDocuments.add(candidate.documentKey);
+    usedDocuments.set(candidate.documentKey, used + 1);
     selected.push({ ...candidate, hintHits });
     if (selected.length >= options.limit) {
       break;

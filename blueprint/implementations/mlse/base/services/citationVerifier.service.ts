@@ -81,6 +81,8 @@ function normalizeMarkers(text: string): string {
 // paragraph.
 function draftSentences(draft: string): { raw: string; citations: string[] }[] {
   const result: { raw: string; citations: string[] }[] = [];
+  // a model stuck in a loop repeats a sentence; it is checked once
+  const seen = new Set<string>();
   for (const line of draft.split('\n')) {
     const paragraph = normalizeMarkers(line.replace(/^\s*(?:[-*•]|\d{1,3}[.)])\s+/, '').trim());
     if (paragraph.length === 0) continue;
@@ -93,7 +95,12 @@ function draftSentences(draft: string): { raw: string; citations: string[] }[] {
       if (sentences[k].citations.length > 0) inherited = sentences[k].citations;
       else sentences[k].citations = inherited;
     }
-    result.push(...sentences);
+    for (const sentence of sentences) {
+      const key = sentence.raw.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(sentence);
+    }
   }
   return result;
 }

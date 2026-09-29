@@ -26,6 +26,7 @@ import {
   FetchLike,
   LexicalReranker,
   LlmProviderBase,
+  MedlinePlusFetcher,
   OllamaLlmProvider,
   LiveRetrievalService,
   OpenFdaFetcher,
@@ -382,6 +383,7 @@ const serviceDependencies = runtimeDependencies.chain({
       return new SourceFetcherRegistry([
         new OpenFdaFetcher(fetchImpl, { apiKey: OPENFDA_API_KEY || undefined }),
         new DailyMedFetcher(fetchImpl),
+        new MedlinePlusFetcher(fetchImpl),
         new ClinicalTrialsFetcher(fetchImpl),
         new PubMedFetcher(fetchImpl, ncbi),
         new PmcOaFetcher(fetchImpl, ncbi)

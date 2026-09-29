@@ -77,7 +77,8 @@ export class OllamaLlmProvider extends LlmProviderBase {
     this.embeddingModel = options.embeddingModel || DEFAULT_OLLAMA_EMBEDDING_MODEL;
     this.embeddingDimensions = options.embeddingDimensions ?? DEFAULT_OLLAMA_EMBEDDING_DIMENSIONS;
     this.timeoutMs = options.timeoutMs ?? 180_000;
-    this.maxTokens = options.maxTokens ?? 2_000;
+    // one section is a few sentences; the cap also stops a runaway loop
+    this.maxTokens = options.maxTokens ?? 800;
     this.contextTokens = options.contextTokens ?? 8_192;
     this.post = options.post ?? ((url, init) => fetch(url, init));
     if (!Number.isInteger(this.embeddingDimensions) || this.embeddingDimensions < 1) {
@@ -107,6 +108,8 @@ export class OllamaLlmProvider extends LlmProviderBase {
         options: {
           temperature: 0,
           num_predict: maxTokens ?? this.maxTokens,
+          // small models can repeat one sentence many times
+          repeat_penalty: 1.15,
           num_ctx: this.contextTokens
         }
       }

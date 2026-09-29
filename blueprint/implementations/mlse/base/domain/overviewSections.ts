@@ -15,15 +15,19 @@ export type OverviewSection = {
   searchHints: string[];
   // sentences must also name the topic itself ("myocardial infarction is ...")
   namesTopic?: boolean;
+  // words added to the topic for this section's own search ("myocardial
+  // infarction symptoms clinical presentation"), so each section looks for
+  // literature on its question instead of relying on the topic search alone
+  focus?: string;
 };
 
 export const OVERVIEW_SECTIONS: Record<OverviewTopicType, OverviewSection[]> = {
   condition: [
-    { key: 'what', label: 'What is it?', searchHints: ['defined', 'definition', 'characterized', 'refers', 'occurs', 'consists', 'described'], namesTopic: true },
-    { key: 'causes', label: 'Causes and risk factors', searchHints: ['caused', 'risk', 'etiology', 'aetiology', 'pathophysiology', 'mechanism', 'mechanisms', 'triggered'] },
-    { key: 'presentation', label: 'Symptoms and diagnosis', searchHints: ['symptom', 'symptoms', 'sign', 'signs', 'presentation', 'presented', 'diagnosis', 'diagnosed', 'diagnostic', 'test', 'imaging', 'biomarker'] },
-    { key: 'treatment', label: 'Treatment', searchHints: ['treatment', 'treated', 'therapy', 'management', 'intervention', 'medication', 'drug', 'surgery', 'procedure'] },
-    { key: 'outlook', label: 'Outlook and complications', searchHints: ['mortality', 'survival', 'prognosis', 'outcome', 'outcomes', 'complication', 'complications', 'recurrence'] }
+    { key: 'what', label: 'What is it?', searchHints: ['defined', 'definition', 'characterized', 'refers', 'occurs', 'consists', 'described', 'called', 'happens', 'means'], namesTopic: true, focus: 'definition' },
+    { key: 'causes', label: 'Causes and risk factors', searchHints: ['caused', 'risk', 'etiology', 'aetiology', 'pathophysiology', 'mechanism', 'mechanisms', 'triggered'], focus: 'risk factors causes' },
+    { key: 'presentation', label: 'Symptoms and diagnosis', searchHints: ['symptom', 'symptoms', 'sign', 'signs', 'presentation', 'presented', 'presenting', 'pain', 'complaint', 'complaints', 'dyspnea', 'diagnosis', 'diagnosed', 'diagnostic', 'test', 'imaging', 'biomarker'], focus: 'symptoms clinical presentation diagnosis' },
+    { key: 'treatment', label: 'Treatment', searchHints: ['treatment', 'treated', 'therapy', 'management', 'intervention', 'medication', 'drug', 'surgery', 'procedure'], focus: 'treatment management' },
+    { key: 'outlook', label: 'Outlook and complications', searchHints: ['mortality', 'survival', 'prognosis', 'outcome', 'outcomes', 'complication', 'complications', 'recurrence'], focus: 'prognosis complications' }
   ],
   medication: [
     { key: 'uses', label: 'What is it used for?', searchHints: ['indicated', 'indication', 'indications', 'treatment', 'prophylaxis', 'prevention'] },
@@ -32,10 +36,10 @@ export const OVERVIEW_SECTIONS: Record<OverviewTopicType, OverviewSection[]> = {
     { key: 'interactions', label: 'Interactions', searchHints: ['interaction', 'interactions', 'concomitant', 'coadministration', 'coadministered'] }
   ],
   procedure: [
-    { key: 'what', label: 'What is it and why is it done?', searchHints: ['indication', 'indicated', 'performed', 'removal', 'procedure', 'treatment', 'standard'], namesTopic: true },
-    { key: 'how', label: 'How is it done?', searchHints: ['technique', 'performed', 'approach', 'dissection', 'incision', 'port', 'step', 'steps'] },
-    { key: 'risks', label: 'Risks and complications', searchHints: ['complication', 'complications', 'injury', 'risk', 'bleeding', 'leak', 'conversion', 'adverse'] },
-    { key: 'recovery', label: 'Recovery and outcomes', searchHints: ['recovery', 'discharge', 'stay', 'postoperative', 'outcome', 'outcomes', 'return'] }
+    { key: 'what', label: 'What is it and why is it done?', searchHints: ['indication', 'indicated', 'performed', 'removal', 'procedure', 'treatment', 'standard'], namesTopic: true, focus: 'indications' },
+    { key: 'how', label: 'How is it done?', searchHints: ['technique', 'performed', 'approach', 'dissection', 'incision', 'port', 'step', 'steps'], focus: 'surgical technique' },
+    { key: 'risks', label: 'Risks and complications', searchHints: ['complication', 'complications', 'injury', 'risk', 'bleeding', 'leak', 'conversion', 'adverse'], focus: 'complications' },
+    { key: 'recovery', label: 'Recovery and outcomes', searchHints: ['recovery', 'discharge', 'stay', 'postoperative', 'outcome', 'outcomes', 'return'], focus: 'postoperative recovery outcomes' }
   ]
 };
 

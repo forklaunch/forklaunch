@@ -47,6 +47,15 @@ export const PUBLIC_SOURCES: readonly SourceDescriptorDto[] = [
     liveQuery: true
   },
   {
+    id: 'medlineplus',
+    name: 'MedlinePlus health topics (National Library of Medicine)',
+    tier: 'reference',
+    licenseTerms:
+      'Health topic summaries are US government works in the public domain; credit "Source: MedlinePlus, National Library of Medicine". The copyrighted A.D.A.M. encyclopedia and drug monographs are not used.',
+    commercialUse: true,
+    liveQuery: true
+  },
+  {
     id: 'pmc_oa',
     name: 'PubMed Central Open Access Subset',
     tier: 'literature_full_text',
