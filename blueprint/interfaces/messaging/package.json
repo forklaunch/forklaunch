@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/interfaces-messaging",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "description": "Messaging interfaces for forklaunch",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -49,12 +49,12 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "^1.2.27",
+    "@forklaunch/common": "^1.2.28",
     "@mikro-orm/core": "7.2.1"
   },
   "devDependencies": {
     "depcheck": "^1.4.7",
-    "prettier": "^3.9.8",
+    "prettier": "^3.9.9",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2"
   },

@@ -1,5 +1,22 @@
 # @forklaunch/implementation-worker-redis
 
+## 1.0.37
+
+### Patch Changes
+
+- Refresh every dependency and move the blueprint onto the framework wave released alongside it.
+
+  The whole set is versioned together on purpose. These packages reference each other as `workspace:^`, which is rewritten to the sibling's _current_ version at publish time — so releasing one ahead of the others pins their **previous** versions and a scaffolded app installs two copies of the same package. That is what produced the duplicate-`@forklaunch/core` type errors behind #311 and #331, and the fix is procedural rather than technical: release the whole set in one wave.
+
+  Framework references now point at `@forklaunch/core@^2.1.1` and its siblings (`common@^1.2.28`, `validator@^1.2.29`, `express`/`hyper-express@^1.2.46`, `internal@^1.2.31`, `testing@^1.2.33`, `universal-sdk@^1.2.29`, `infrastructure-redis`/`infrastructure-s3@^1.4.17`).
+
+  `@mikro-orm/*` is **deliberately held at 7.2.1** rather than moved to the 7.2.2 that shipped during this wave. The framework packages were published pinned to 7.2.1, and MikroORM's decorators and `EntityManager` identity do not survive two copies in one dependency graph — a blueprint on 7.2.2 against a framework on 7.2.1 is the same duplicate-package failure in a different package. `pnpm update --latest` moved six of the eleven `@mikro-orm/*` entries and left five, which is the split this normalizes; the pair moves together in the next wave.
+
+  Also adds the three `__test__/test-utils.ts` files the shared `vitest.config.ts` names in `setupFiles` but that were never created — `implementations/iam/base`, `implementations/ecommerce/stripe`, and `implementations/worker/redis`. Without the file vitest cannot load the suite and reports "no tests" rather than an error, so those 16 tests had never run in CI. They pass.
+
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.34
+
 ## 1.0.35
 
 ### Patch Changes
