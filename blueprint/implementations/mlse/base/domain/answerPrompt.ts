@@ -11,7 +11,11 @@ export const ANSWER_INSTRUCTIONS = `You write one section of a medical reference
 
 Format:
 - Write one sentence per line, with no headings, bullet points, preamble or closing summary.
-- End every sentence with the ids of the passages it comes from, for example [P1] or [P2][P4].
+- End every sentence with the ids of the passages it comes from, for example [P1] or [P2][P4]. A sentence without an id is deleted.
+
+Example. For the passage <passage id="P1">Median blood loss was 20 mL. Conversion to open surgery occurred in 3% of cases.</passage> a correct answer is:
+Median blood loss was 20 mL. [P1]
+Conversion to open surgery occurred in 3% of cases. [P1]
 
 Grounding:
 - Every sentence must state only what the passages it cites directly say. Stay close to the passages' own wording.
