@@ -59,6 +59,11 @@ export class LiveRetrievalService {
     this.maxPassageChars = options.maxPassageChars ?? 1200;
   }
 
+  // the sources queried live, in order
+  keys(): string[] {
+    return this.liveSourceKeys.filter((key) => this.fetchers.has(key));
+  }
+
   async retrieve(term: string, sourceKeys?: string[]): Promise<LiveRetrievalResult> {
     const keys = this.liveSourceKeys.filter(
       (key) => this.fetchers.has(key) && (!sourceKeys || sourceKeys.includes(key))

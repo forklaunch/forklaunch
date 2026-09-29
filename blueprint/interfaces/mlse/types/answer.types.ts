@@ -14,6 +14,9 @@ export type AnswerRequestDto = {
   userId?: string;
   // where the request came from, for history (default 'answer')
   channel?: 'answer' | 'voice';
+  // overview: sections for a topic ("heart attack"); direct: one answer to
+  // a specific question. Default: overview for short topic queries.
+  mode?: 'overview' | 'direct';
 };
 
 export type AnswerSentenceDto = {
@@ -65,6 +68,8 @@ export type AnswerResearchDto = {
   used: number;
   // different documents they come from
   documents: number;
+  // overview answers: what the topic was recognized as
+  topicType?: 'condition' | 'medication' | 'procedure';
 };
 
 export type AnswerResponseDto = {

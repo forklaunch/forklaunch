@@ -97,9 +97,7 @@ export class SearchService {
       this.vectorSearch([query, ...clinicalTermsFor(query)].join(' '), request),
       request.live === false
         ? Promise.resolve({ passages: [] as CitablePassageDto[], sources: [] as LiveSourceResultDto[] })
-        // live sources are asked with the clinical term when the query used
-        // an everyday one ("heart attack" -> myocardial infarction)
-        : this.liveRetrieval.retrieve(clinicalTermsFor(query)[0] ?? query, request.sourceKeys)
+        : this.liveSearch(query, request)
     ]);
 
     // live passages for documents already in the corpus add nothing new
@@ -165,6 +163,37 @@ export class SearchService {
 
   // The query plus the preferred terms and synonyms of MeSH descriptors it
   // names, either exactly or as a phrase inside a longer query.
+  // Live sources are asked with the clinical term when the query used an
+  // everyday one ("heart attack" -> myocardial infarction). For overviews,
+  // PubMed is also asked for reviews and guidelines, which summarize a topic
+  // better than the newest individual studies.
+  private async liveSearch(query: string, request: SearchRequestDto) {
+    const term = clinicalTermsFor(query)[0] ?? query;
+    const wantsReviews =
+      request.preferReviews === true && (!request.sourceKeys?.length || request.sourceKeys.includes('pubmed'));
+    if (!wantsReviews) {
+      return this.liveRetrieval.retrieve(term, request.sourceKeys);
+    }
+    // NCBI allows 3 requests a second without an API key (10 with one), so
+    // PubMed gets a single query, for reviews and guidelines, while the
+    // other sources get the plain term. If the review query finds nothing,
+    // the plain PubMed query runs after it rather than alongside.
+    const others = this.liveRetrieval
+      .keys()
+      .filter((key) => key !== 'pubmed' && (!request.sourceKeys?.length || request.sourceKeys.includes(key)));
+    const [main, reviews] = await Promise.all([
+      others.length > 0
+        ? this.liveRetrieval.retrieve(term, others)
+        : Promise.resolve({ passages: [] as CitablePassageDto[], sources: [] as LiveSourceResultDto[] }),
+      this.liveRetrieval.retrieve(`(${term}) AND (review[pt] OR guideline[pt] OR practice guideline[pt])`, ['pubmed'])
+    ]);
+    const pubmed = reviews.passages.length > 0 ? reviews : await this.liveRetrieval.retrieve(term, ['pubmed']);
+    return {
+      passages: [...pubmed.passages, ...main.passages],
+      sources: [...main.sources, ...pubmed.sources]
+    };
+  }
+
   async expandQuery(query: string): Promise<string[]> {
     const rows = await this.em.getConnection().execute<
       { preferred_term: string; synonyms: string[] }[]

@@ -57,8 +57,14 @@ function sentencesOf(text: string): string[] {
 export function keySentences(
   passages: { passageId: string; text: string; sectionPath?: string }[],
   concepts: QueryConcepts,
-  limit = 4
+  limit = 4,
+  // for an overview section: the sentence must address the section (contain
+  // one of its hint words); its passage is already about the topic
+  sectionHints?: string[],
+  // the sentence must also name the topic (definitions)
+  requireTopic = false
 ): KeySentence[] {
+  const hints = sectionHints ? new Set(sectionHints.flatMap((h) => queryTerms(h))) : undefined;
   const conceptWords = new Set(concepts.phrases.flat());
   const queryWords = new Set(concepts.layMapped ? [] : concepts.queryWords);
   const scored: (KeySentence & { score: number })[] = [];
@@ -72,8 +78,10 @@ export function keySentences(
       const conceptHits = [...conceptWords].filter((w) => words.has(w)).length;
       const queryHits = [...queryWords].filter((w) => words.has(w)).length;
       const coversQuery = queryWords.size > 0 && queryHits / queryWords.size >= MIN_QUERY_COVERAGE;
-      if (!namesConcept && !coversQuery) continue;
-      const score = (namesConcept ? 10 : 0) + conceptHits + queryHits;
+      const hintHits = hints ? [...hints].filter((w) => words.has(w)).length : 0;
+      if (hints ? hintHits === 0 : !namesConcept && !coversQuery) continue;
+      if (requireTopic && !namesConcept && !coversQuery) continue;
+      const score = (namesConcept ? 10 : 0) + conceptHits + queryHits + hintHits * 3;
       if (!best || score > best.score) best = { text: sentence, passageId: passage.passageId, score };
     }
     if (best) scored.push(best);

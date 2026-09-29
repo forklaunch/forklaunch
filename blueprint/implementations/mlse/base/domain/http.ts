@@ -32,21 +32,24 @@ function redact(url: string): string {
  * fetches stays inside the source's published rate limit (for example NCBI
  * E-utilities: 3 requests/second without a key, 10 with one).
  */
-export class RateLimitedClient {
-  private nextSlot = 0;
+export type RequestSchedule = { nextSlot: number };
 
+export class RateLimitedClient {
   constructor(
     private readonly sourceKey: string,
     private readonly fetchImpl: FetchLike,
     private readonly minIntervalMs: number,
     private readonly sleep: (ms: number) => Promise<void> = (ms) =>
-      new Promise((resolve) => setTimeout(resolve, ms))
+      new Promise((resolve) => setTimeout(resolve, ms)),
+    // clients of one provider share a schedule when its limit covers all of
+    // them (NCBI's limit covers PubMed and PubMed Central together)
+    private readonly schedule: RequestSchedule = { nextSlot: 0 }
   ) {}
 
   async getText(url: string): Promise<string> {
     const now = Date.now();
-    const wait = Math.max(0, this.nextSlot - now);
-    this.nextSlot = Math.max(now, this.nextSlot) + this.minIntervalMs;
+    const wait = Math.max(0, this.schedule.nextSlot - now);
+    this.schedule.nextSlot = Math.max(now, this.schedule.nextSlot) + this.minIntervalMs;
     if (wait > 0) {
       await this.sleep(wait);
     }

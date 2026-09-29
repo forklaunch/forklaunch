@@ -29,6 +29,7 @@ export * from './sourceFetcherRegistry.service';
 export * from './voice.service';
 export * from '../domain/answerPrompt';
 export * from '../domain/boundaryMessages';
+export * from '../domain/overviewSections';
 export * from '../domain/questionFrameworks';
 export type { FetchLike } from '../domain/http';
 export { SourceRequestError } from '../domain/http';

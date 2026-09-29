@@ -5,6 +5,11 @@ import {
 import {
   ANSWER_INSTRUCTIONS,
   classifyQuery,
+  clinicalTermsFor,
+  detectTopicType,
+  isOverviewQuery,
+  OVERVIEW_SECTIONS,
+  selectEvidence,
   DOSAGE_NO_CONTEXT_MESSAGE,
   DRAFT_ANSWER_NOTICE,
   EMERGENCY_MESSAGE,
@@ -31,6 +36,7 @@ import {
   AnswerSectionDto,
   AnswerStreamEventDto,
   CitablePassageDto,
+  SearchResultDto,
   QueryClassificationDto
 } from '@forklaunch/interfaces-mlse/types';
 import { EntityManager } from '@mikro-orm/core';
@@ -54,7 +60,7 @@ export type AnswerServiceOptions = {
   minSupport?: number;
 };
 
-type SectionItem = { key: string; label: string; number?: number };
+type SectionItem = { key: string; label: string; number?: number; hints?: string[]; namesTopic?: boolean };
 
 type SectionResult = {
   section: AnswerSectionDto;
@@ -74,6 +80,8 @@ const PATIENT_WORDS = new Set(
 const LABEL_SOURCES = ['openfda', 'dailymed'];
 // passages search returns for a free-text question, before the relevance check
 const SEARCH_WIDTH = 20;
+const OVERVIEW_SEARCH_WIDTH = 40;
+const PASSAGES_PER_SECTION = 4;
 const PASSAGES_PER_DOCUMENT = 2;
 const LABEL_PASSAGES = 2;
 
@@ -149,16 +157,28 @@ export class AnswerService {
 
     yield { type: 'start', queryClass: classification.queryClass, kind: 'answer' };
 
-    const { items, evidenceFor, topic, notice, research, concepts } = await this.sectionsToAnswer(request, query);
+    const { items, evidenceFor, topic, notice, research, concepts, labelDosing } = await this.sectionsToAnswer(request, query);
     const pending = startLimited(
       items.map((item) => () => this.draftSection(item, evidenceFor(item), { query, topic, concepts })),
       this.concurrency
     );
     const results: SectionResult[] = [];
+    // a sentence already shown in an earlier section is not repeated
+    const shown = new Set<string>();
     for (const next of pending) {
-      const result = await next;
+      const result = withoutRepeats(await next, shown);
       results.push(result);
       yield { type: 'section', section: result.section };
+    }
+    // a medicine overview ends with the label's dosing section, quoted as
+    // written; dosing is never AI-written
+    if (labelDosing) {
+      const label = await this.labelDosing(classification, request);
+      for (const section of label.sections) {
+        const result = { section: { ...section, label: 'Dosing (label, quoted as written)' }, cited: label.cited, removed: [], models: [] };
+        results.push(result);
+        yield { type: 'section', section: result.section };
+      }
     }
 
     const answer = await this.record({
@@ -279,22 +299,32 @@ export class AnswerService {
         topic: page.title,
         notice: page.notice,
         research: undefined,
-        concepts: undefined
+        concepts: undefined,
+        labelDosing: false
       };
     }
+
+    const clinical = clinicalTermsFor(query);
+    const overview =
+      request.mode === 'overview' || (request.mode !== 'direct' && isOverviewQuery(query, clinical.length > 0));
 
     // search wide, then keep only passages about the question, at most two
     // per document so one paper cannot fill the answer
     const { results, expandedTerms } = await this.searchService.search({
       query,
-      limit: SEARCH_WIDTH,
+      limit: overview ? OVERVIEW_SEARCH_WIDTH : SEARCH_WIDTH,
       live: request.live ?? true,
+      preferReviews: overview,
       ...(request.organizationId ? { organizationId: request.organizationId } : {})
     });
     const concepts = queryConcepts(query, expandedTerms);
     const about = results.filter(
       (r) => r.licenseScope !== 'metadata_only' && r.text.trim().length > 0 && passageIsAbout(r, concepts)
     );
+
+    if (overview) {
+      return this.overviewSections(query, clinical, expandedTerms, results.length, about, concepts);
+    }
     const perDocument = new Map<string, number>();
     const usable = about.filter((r) => {
       const key = `${r.sourceKey}:${r.externalId}`;
@@ -315,7 +345,62 @@ export class AnswerService {
       topic: undefined,
       notice: undefined,
       research,
-      concepts
+      concepts,
+      labelDosing: false
+    };
+  }
+
+  // Sections for a topic query. Each section gets up to four passages that
+  // address it (they contain one of its hint words), one per document.
+  private overviewSections(
+    query: string,
+    clinical: string[],
+    expandedTerms: string[],
+    found: number,
+    about: SearchResultDto[],
+    concepts: QueryConcepts
+  ) {
+    const topicType = detectTopicType(query, about);
+    const candidates = about.map((r) => ({ ...r, documentKey: `${r.sourceKey}:${r.externalId}` }));
+    const topicTerms = [query, ...expandedTerms];
+    const sections = OVERVIEW_SECTIONS[topicType];
+    const evidence = new Map(
+      sections.map((section) => [
+        section.key,
+        selectEvidence(candidates, { hints: section.searchHints, topicTerms, limit: PASSAGES_PER_SECTION }).map(
+          (selected): CitablePassageDto => ({
+            passageId: selected.passageId,
+            origin: selected.origin,
+            sourceKey: selected.sourceKey,
+            externalId: selected.externalId,
+            title: selected.title,
+            url: selected.url,
+            ...(selected.publishedAt ? { publishedAt: selected.publishedAt } : {}),
+            isCaseReport: selected.isCaseReport,
+            licenseScope: selected.licenseScope,
+            sectionPath: selected.sectionPath,
+            text: selected.text
+          })
+        )
+      ])
+    );
+    const used = new Map([...evidence.values()].flat().map((p) => [p.passageId, p]));
+    const research: AnswerResearchDto = {
+      searchedFor: expandedTerms,
+      found,
+      aboutQuestion: about.length,
+      used: used.size,
+      documents: new Set([...used.values()].map((p) => `${p.sourceKey}:${p.externalId}`)).size,
+      topicType
+    };
+    return {
+      items: sections.map((s) => ({ key: s.key, label: s.label, hints: s.searchHints, ...(s.namesTopic ? { namesTopic: true } : {}) })) as SectionItem[],
+      evidenceFor: (item: SectionItem): CitablePassageDto[] => evidence.get(item.key) ?? [],
+      topic: clinical.length > 0 ? `${query} (${clinical.join(', ')})` : query,
+      notice: undefined,
+      research,
+      concepts,
+      labelDosing: topicType === 'medication'
     };
   }
 
@@ -374,6 +459,27 @@ export class AnswerService {
         }
       }
 
+      // In an overview section, a verified sentence must also be about the
+      // section: "Treatment" keeps sentences that name a treatment word.
+      if (item.hints) {
+        const hintWords = new Set(item.hints.flatMap((h) => queryTerms(h)));
+        const concepts = context.concepts;
+        const namesTopic = (text: string) => {
+          if (!concepts) return true;
+          const words = new Set(queryTerms(text));
+          if (concepts.phrases.some((phrase) => phrase.every((w) => words.has(w)))) return true;
+          return !concepts.layMapped && concepts.queryWords.length > 0 && concepts.queryWords.every((w) => words.has(w));
+        };
+        const onTopic = best.kept.filter((s) => {
+          const words = queryTerms(s.text);
+          return words.some((w) => hintWords.has(w)) && (!item.namesTopic || namesTopic(s.text));
+        });
+        for (const off of best.kept.filter((s) => !onTopic.includes(s))) {
+          removed.push({ sectionKey: item.key, text: off.text, reason: `not about "${item.label}"` });
+        }
+        best = { kept: onTopic, removed: [...best.removed, ...best.kept.filter((s) => !onTopic.includes(s)).map((s) => ({ text: s.text, reason: 'off section' }))] };
+      }
+
       const cited = new Map<string, CitablePassageDto>();
       const sentences = best.kept.map((sentence) => ({
         text: sentence.text,
@@ -384,7 +490,7 @@ export class AnswerService {
         })
       }));
       if (sentences.length === 0) {
-        const quoted = this.quotedEvidence(base, passages, context.concepts, best.removed.length);
+        const quoted = this.quotedEvidence(base, passages, context.concepts, best.removed.length, item);
         if (quoted) return { ...quoted, removed, models };
       }
       return {
@@ -403,7 +509,7 @@ export class AnswerService {
         section: item.key,
         error: error instanceof Error ? error.message : String(error)
       });
-      const quoted = this.quotedEvidence(base, passages, context.concepts, 0);
+      const quoted = this.quotedEvidence(base, passages, context.concepts, 0, item);
       if (quoted) return { ...quoted, removed, models };
       return { section: { ...base, status: 'generation_failed' }, cited: [], removed, models };
     }
@@ -416,10 +522,11 @@ export class AnswerService {
     base: AnswerSectionDto,
     passages: CitablePassageDto[],
     concepts: QueryConcepts | undefined,
-    removedCount: number
+    removedCount: number,
+    item: SectionItem
   ): Pick<SectionResult, 'section' | 'cited'> | undefined {
     if (!concepts) return undefined;
-    const quotes = keySentences(passages, concepts);
+    const quotes = keySentences(passages, concepts, item.hints ? 3 : 4, item.hints, item.namesTopic === true);
     if (quotes.length === 0) return undefined;
     const byId = new Map(passages.map((p) => [p.passageId, p]));
     return {
@@ -542,6 +649,23 @@ export class AnswerService {
 function passageLabel(passage: CitablePassageDto): string {
   const kind = passage.isCaseReport ? 'case report' : passage.sourceKey === 'openfda' || passage.sourceKey === 'dailymed' ? 'drug label' : 'article';
   return `${passage.sourceKey} ${kind}: ${passage.title} - ${passage.sectionPath}`;
+}
+
+function withoutRepeats(result: SectionResult, shown: Set<string>): SectionResult {
+  const key = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const sentences = result.section.sentences.filter((s) => !shown.has(key(s.text)));
+  for (const s of sentences) shown.add(key(s.text));
+  if (sentences.length === result.section.sentences.length) return result;
+  const citedIds = new Set(sentences.flatMap((s) => s.citations));
+  return {
+    ...result,
+    section: {
+      ...result.section,
+      sentences,
+      status: sentences.length > 0 ? result.section.status : 'insufficient_evidence'
+    },
+    cited: result.cited.filter((p) => citedIds.has(p.passageId))
+  };
 }
 
 // Starts at most `limit` tasks at once; the promises come back in task order

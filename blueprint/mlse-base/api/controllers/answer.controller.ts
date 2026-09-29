@@ -6,6 +6,7 @@ import {
   schemaValidator,
   string
 } from '@forklaunch/blueprint-core';
+import { AnswerRequestDto } from '@forklaunch/interfaces-mlse/types';
 import { ci, tokens } from '../../bootstrapper';
 import { TopicNotFoundError } from '../../domain/services/topic.service';
 
@@ -27,7 +28,9 @@ const AnswerBodySchema = {
   // enables the organization's licensed sources; with userId, records the
   // search in the user's history
   organizationId: optional(string),
-  userId: optional(string)
+  userId: optional(string),
+  // 'overview' | 'direct'; default: overview for short topic queries
+  mode: optional(string)
 };
 
 const SectionSchema = {
@@ -70,11 +73,19 @@ const AnswerSchema = {
     found: number,
     aboutQuestion: number,
     used: number,
-    documents: number
+    documents: number,
+    topicType: optional(string)
   })
 };
 
 const bodyValid = (query: string) => query.trim().length > 0 && query.length <= 2000;
+
+// the request as the service takes it; an unknown mode falls back to the
+// default choice
+function answerRequest(body: { query: string; topicSlug?: string; live?: boolean; organizationId?: string; userId?: string; mode?: string }) {
+  const { mode, ...rest } = body;
+  return { ...rest, ...(mode === 'overview' || mode === 'direct' ? { mode } : {}) } as AnswerRequestDto;
+}
 
 export const answer = handlers.post(
   schemaValidator,
@@ -112,7 +123,7 @@ export const answer = handlers.post(
     const service = answerServiceFactory();
     res.status(200).sseEmitter(async function* () {
       let id = 0;
-      for await (const event of service.stream(req.body)) {
+      for await (const event of service.stream(answerRequest(req.body))) {
         yield { id: String(id++), data: event };
       }
     });
@@ -141,7 +152,7 @@ export const answerComplete = handlers.post(
       return;
     }
     try {
-      res.status(200).json(await answerServiceFactory().answer(req.body));
+      res.status(200).json(await answerServiceFactory().answer(answerRequest(req.body)));
     } catch (error) {
       if (error instanceof TopicNotFoundError) {
         res.status(404).send(error.message);
