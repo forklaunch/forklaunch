@@ -55,6 +55,7 @@ class ScriptedLlmProvider extends FakeLlmProvider {
 const idOf = (request: GenerateRequestDto, needle: string) =>
   request.evidence.find((e) => e.text.includes(needle))?.id ?? 'P1';
 
+const NEWLINE = String.fromCharCode(10);
 const otel = new OpenTelemetryCollector('test', 'error', {});
 const embeddings = new FakeLlmProvider(8);
 const fetchers = { pmc_oa: new StubFetcher('pmc_oa'), openfda: new StubFetcher('openfda') };
@@ -274,6 +275,32 @@ describe('answers on pgvector', () => {
     const { answers } = await answerService(llm);
     expect((await answers.answer({ query: 'what did PMID: 99999999 find', live: false })).kind).toBe('source_not_found');
     expect((await answers.answer({ query: 'what did PMC1234567 report on blood loss', live: false })).kind).toBe('answer');
+  });
+
+  it('gives a procedure an overview, section by section', async () => {
+    const llm = new ScriptedLlmProvider([(r) => r.evidence.map((e) => `${e.text} [${e.id}]`).join(NEWLINE)]);
+    const { answers } = await answerService(llm);
+    const answer = await answers.answer({ query: 'laparoscopic cholecystectomy', live: false });
+
+    expect(answer.research).toMatchObject({ topicType: 'procedure' });
+    expect(answer.sections.map((s) => s.key)).toEqual(['what', 'how', 'risks', 'recovery']);
+    const risks = answer.sections.find((s) => s.key === 'risks')!;
+    expect(risks.status).toBe('answered');
+    expect(risks.sentences[0].text).toContain('Bile leak');
+    // sections with no passage addressing them never reach the AI
+    expect(llm.requests.length).toBe(answer.sections.filter((s) => s.status !== 'insufficient_evidence').length);
+  });
+
+  it('ends a medicine overview with the label dosing quoted, never AI-written', async () => {
+    const llm = new ScriptedLlmProvider([(r) => r.evidence.map((e) => `${e.text} [${e.id}]`).join(NEWLINE)]);
+    const { answers } = await answerService(llm);
+    const answer = await answers.answer({ query: 'propofol', live: false });
+
+    expect(answer.research).toMatchObject({ topicType: 'medication' });
+    const dosing = answer.sections.at(-1)!;
+    expect(dosing).toMatchObject({ key: 'label_dosing', status: 'answered' });
+    expect(dosing.sentences.every((s) => s.quoted)).toBe(true);
+    expect(llm.requests.every((r) => !r.prompt.toLowerCase().includes('dosing'))).toBe(true);
   });
 
   it('answers each question and phase of a topic page, skipping items without evidence', async () => {

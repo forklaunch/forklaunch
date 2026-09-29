@@ -1,4 +1,8 @@
-import { FetchLike, RateLimitedClient } from '../../domain/http';
+import { FetchLike, RateLimitedClient, RequestSchedule } from '../../domain/http';
+
+// NCBI's limit is per application (API key, or address without one), across
+// every E-utilities database, so PubMed and PubMed Central share one schedule.
+const NCBI_SCHEDULES = new Map<string, RequestSchedule>();
 
 export type EutilsOptions = {
   // NCBI asks every application to identify itself with a tool name and a
@@ -27,13 +31,18 @@ export class EutilsClient {
     fetchImpl: FetchLike,
     private readonly options: EutilsOptions
   ) {
+    this.baseUrl =
+      options.baseUrl ?? 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils';
+    const scheduleKey = `${this.baseUrl}|${options.apiKey ?? ''}`;
+    const schedule = NCBI_SCHEDULES.get(scheduleKey) ?? { nextSlot: 0 };
+    NCBI_SCHEDULES.set(scheduleKey, schedule);
     this.client = new RateLimitedClient(
       sourceKey,
       fetchImpl,
-      options.apiKey ? 110 : 350
+      options.apiKey ? 110 : 350,
+      undefined,
+      schedule
     );
-    this.baseUrl =
-      options.baseUrl ?? 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils';
   }
 
   private identity(): string {
@@ -48,7 +57,10 @@ export class EutilsClient {
   }
 
   async search(db: 'pubmed' | 'pmc', term: string, limit: number): Promise<string[]> {
-    const url = `${this.baseUrl}/esearch.fcgi?db=${db}&term=${encodeURIComponent(term)}&retmax=${Math.min(Math.max(limit, 1), 200)}&retmode=json&${this.identity()}`;
+    // PubMed ranks by Best Match only when asked; otherwise the newest
+    // papers come first, which answers a general question with niche work
+    const sort = db === 'pubmed' ? '&sort=relevance' : '';
+    const url = `${this.baseUrl}/esearch.fcgi?db=${db}&term=${encodeURIComponent(term)}&retmax=${Math.min(Math.max(limit, 1), 200)}${sort}&retmode=json&${this.identity()}`;
     const response = await this.client.getJson<EsearchResponse>(url);
     return response.esearchresult?.idlist ?? [];
   }

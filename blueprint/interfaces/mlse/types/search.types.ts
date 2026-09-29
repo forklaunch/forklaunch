@@ -47,6 +47,9 @@ export type SearchRequestDto = {
   // licensed sources are searched only for an organization holding an
   // active license; without one they are left out
   organizationId?: string;
+  // also ask PubMed for review articles and guidelines on the topic, for
+  // overview answers
+  preferReviews?: boolean;
 };
 
 export type SearchResultDto = CitablePassageDto & {

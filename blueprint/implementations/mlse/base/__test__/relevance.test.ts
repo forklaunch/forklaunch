@@ -1,3 +1,4 @@
+import { detectTopicType, isOverviewQuery, OVERVIEW_SECTIONS } from '../domain/overviewSections';
 import { clinicalTermsFor } from '../services/layTerms.service';
 import { keySentences, passageIsAbout, queryConcepts } from '../services/relevance.service';
 
@@ -87,5 +88,29 @@ describe('keySentences', () => {
     expect(quotes).toEqual([
       { text: 'Among patients with acute myocardial infarction, mortality at 30 days was 4.1%.', passageId: 'a' }
     ]);
+  });
+});
+
+describe('overview answers', () => {
+  it('recognizes procedures, medicines and conditions', () => {
+    expect(detectTopicType('laparoscopic cholecystectomy', [])).toBe('procedure');
+    expect(detectTopicType('kidney dialysis', [])).toBe('procedure');
+    expect(detectTopicType('cefazolin', [{ sourceKey: 'openfda', title: 'Cefazolin — WG Critical Care, LLC' }])).toBe('medication');
+    // a label that only mentions the condition does not make it a drug
+    expect(detectTopicType('heart attack', [{ sourceKey: 'openfda', title: 'Aspirin 81 mg' }])).toBe('condition');
+  });
+
+  it('gives short topic queries an overview and specific questions a direct answer', () => {
+    expect(isOverviewQuery('heart attack', true)).toBe(true);
+    expect(isOverviewQuery('high blood pressure', true)).toBe(true);
+    expect(isOverviewQuery('cefazolin', false)).toBe(true);
+    expect(isOverviewQuery('bile duct injury rate in laparoscopic cholecystectomy', false)).toBe(false);
+  });
+
+  it('defines sections with hints for every topic type', () => {
+    for (const sections of Object.values(OVERVIEW_SECTIONS)) {
+      expect(sections.length).toBeGreaterThanOrEqual(4);
+      expect(sections.every((s) => s.searchHints.length > 0)).toBe(true);
+    }
   });
 });
