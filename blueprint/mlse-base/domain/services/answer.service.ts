@@ -10,6 +10,10 @@ import {
   EMERGENCY_MESSAGE,
   INSUFFICIENT_EVIDENCE_MARKER,
   LlmProvider,
+  keySentences,
+  passageIsAbout,
+  QueryConcepts,
+  queryConcepts,
   PATIENT_SPECIFIC_MESSAGE,
   PRESCRIPTION_MESSAGE,
   QUOTED_NOTICE,
@@ -21,6 +25,7 @@ import {
 } from '@forklaunch/implementation-mlse-base/services';
 import {
   AnswerKind,
+  AnswerResearchDto,
   AnswerRequestDto,
   AnswerResponseDto,
   AnswerSectionDto,
@@ -67,6 +72,9 @@ const PATIENT_WORDS = new Set(
 );
 
 const LABEL_SOURCES = ['openfda', 'dailymed'];
+// passages search returns for a free-text question, before the relevance check
+const SEARCH_WIDTH = 20;
+const PASSAGES_PER_DOCUMENT = 2;
 const LABEL_PASSAGES = 2;
 
 /**
@@ -141,9 +149,9 @@ export class AnswerService {
 
     yield { type: 'start', queryClass: classification.queryClass, kind: 'answer' };
 
-    const { items, evidenceFor, topic, notice } = await this.sectionsToAnswer(request, query);
+    const { items, evidenceFor, topic, notice, research, concepts } = await this.sectionsToAnswer(request, query);
     const pending = startLimited(
-      items.map((item) => () => this.draftSection(item, evidenceFor(item), { query, topic })),
+      items.map((item) => () => this.draftSection(item, evidenceFor(item), { query, topic, concepts })),
       this.concurrency
     );
     const results: SectionResult[] = [];
@@ -162,6 +170,7 @@ export class AnswerService {
       started,
       usedAi: true,
       request,
+      ...(research ? { research } : {}),
       ...(request.topicSlug ? { topicSlug: request.topicSlug } : {})
     });
     yield { type: 'done', answer };
@@ -268,29 +277,52 @@ export class AnswerService {
         evidenceFor: (item: SectionItem): CitablePassageDto[] =>
           (byKey.get(item.key) ?? []).map((e) => ({ ...e, origin: 'corpus' as const, licenseScope: e.licenseScope as CitablePassageDto['licenseScope'] })),
         topic: page.title,
-        notice: page.notice
+        notice: page.notice,
+        research: undefined,
+        concepts: undefined
       };
     }
 
-    const { results } = await this.searchService.search({
+    // search wide, then keep only passages about the question, at most two
+    // per document so one paper cannot fill the answer
+    const { results, expandedTerms } = await this.searchService.search({
       query,
-      limit: this.passagesPerAnswer,
+      limit: SEARCH_WIDTH,
       live: request.live ?? true,
       ...(request.organizationId ? { organizationId: request.organizationId } : {})
     });
-    const usable = results.filter((r) => r.licenseScope !== 'metadata_only' && r.text.trim().length > 0);
+    const concepts = queryConcepts(query, expandedTerms);
+    const about = results.filter(
+      (r) => r.licenseScope !== 'metadata_only' && r.text.trim().length > 0 && passageIsAbout(r, concepts)
+    );
+    const perDocument = new Map<string, number>();
+    const usable = about.filter((r) => {
+      const key = `${r.sourceKey}:${r.externalId}`;
+      const count = perDocument.get(key) ?? 0;
+      perDocument.set(key, count + 1);
+      return count < PASSAGES_PER_DOCUMENT;
+    }).slice(0, this.passagesPerAnswer);
+    const research: AnswerResearchDto = {
+      searchedFor: expandedTerms,
+      found: results.length,
+      aboutQuestion: about.length,
+      used: usable.length,
+      documents: new Set(usable.map((r) => `${r.sourceKey}:${r.externalId}`)).size
+    };
     return {
       items: [{ key: 'answer', label: query }] as SectionItem[],
       evidenceFor: (): CitablePassageDto[] => usable,
       topic: undefined,
-      notice: undefined
+      notice: undefined,
+      research,
+      concepts
     };
   }
 
   private async draftSection(
     item: SectionItem,
     passages: CitablePassageDto[],
-    context: { query: string; topic: string | undefined }
+    context: { query: string; topic: string | undefined; concepts: QueryConcepts | undefined }
   ): Promise<SectionResult> {
     const base: AnswerSectionDto = {
       key: item.key,
@@ -351,6 +383,10 @@ export class AnswerService {
           return passage.passageId;
         })
       }));
+      if (sentences.length === 0) {
+        const quoted = this.quotedEvidence(base, passages, context.concepts, best.removed.length);
+        if (quoted) return { ...quoted, removed, models };
+      }
       return {
         section: {
           ...base,
@@ -367,8 +403,34 @@ export class AnswerService {
         section: item.key,
         error: error instanceof Error ? error.message : String(error)
       });
+      const quoted = this.quotedEvidence(base, passages, context.concepts, 0);
+      if (quoted) return { ...quoted, removed, models };
       return { section: { ...base, status: 'generation_failed' }, cited: [], removed, models };
     }
+  }
+
+  // When no AI sentence survives verification, the most relevant sentences
+  // of the sources themselves, quoted as written. Nothing is generated, so
+  // nothing needs checking beyond the relevance rules that chose them.
+  private quotedEvidence(
+    base: AnswerSectionDto,
+    passages: CitablePassageDto[],
+    concepts: QueryConcepts | undefined,
+    removedCount: number
+  ): Pick<SectionResult, 'section' | 'cited'> | undefined {
+    if (!concepts) return undefined;
+    const quotes = keySentences(passages, concepts);
+    if (quotes.length === 0) return undefined;
+    const byId = new Map(passages.map((p) => [p.passageId, p]));
+    return {
+      section: {
+        ...base,
+        status: 'quoted_evidence',
+        sentences: quotes.map((q) => ({ text: q.text, citations: [q.passageId], quoted: true })),
+        removed: removedCount
+      },
+      cited: [...new Set(quotes.map((q) => q.passageId))].map((id) => byId.get(id) as CitablePassageDto)
+    };
   }
 
   private async record(input: {
@@ -381,6 +443,7 @@ export class AnswerService {
     started: number;
     usedAi: boolean;
     request: AnswerRequestDto;
+    research?: AnswerResearchDto;
     topicSlug?: string;
   }): Promise<AnswerResponseDto> {
     const sections = input.results.map((r) => r.section);
@@ -470,7 +533,8 @@ export class AnswerService {
       notice: input.notice,
       sections,
       sources: [...sources.values()],
-      ...(models.length > 0 ? { model: models.join(', ') } : {})
+      ...(models.length > 0 ? { model: models.join(', ') } : {}),
+      ...(input.research ? { research: input.research } : {})
     };
   }
 }

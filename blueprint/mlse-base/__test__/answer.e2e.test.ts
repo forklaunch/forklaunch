@@ -198,14 +198,31 @@ describe('answers on pgvector', () => {
     ]);
   });
 
-  it('says insufficient evidence rather than showing unverified text', async () => {
+  it('quotes the sources instead of showing unverified AI text', async () => {
     const llm = new ScriptedLlmProvider([() => 'Robotic surgery is always better. [P1]']);
     const { answers } = await answerService(llm);
     const answer = await answers.answer({ query: 'laparoscopic cholecystectomy blood loss', live: false });
-    expect(answer.sections[0]).toMatchObject({ status: 'insufficient_evidence', sentences: [] });
+    const [section] = answer.sections;
+    expect(section.status).toBe('quoted_evidence');
+    expect(section.sentences.map((s) => s.text)).not.toContain('Robotic surgery is always better.');
+    // every quote is verbatim from the passage it cites
+    for (const sentence of section.sentences) {
+      expect(sentence.quoted).toBe(true);
+      const source = answer.sources.find((p) => p.passageId === sentence.citations[0])!;
+      expect(source.text).toContain(sentence.text);
+    }
   });
 
-  it('marks a section unavailable when drafting fails', async () => {
+  it('says insufficient evidence when no source is about the question', async () => {
+    const llm = new ScriptedLlmProvider([() => 'Anything. [P1]']);
+    const { answers } = await answerService(llm);
+    const answer = await answers.answer({ query: 'heart attack', live: false });
+    expect(llm.requests).toHaveLength(0);
+    expect(answer.sections[0]).toMatchObject({ status: 'insufficient_evidence', sentences: [] });
+    expect(answer.research).toMatchObject({ searchedFor: ['heart attack', 'myocardial infarction'], aboutQuestion: 0, used: 0 });
+  });
+
+  it('quotes the sources when drafting fails', async () => {
     const llm = new ScriptedLlmProvider([
       () => {
         throw new Error('provider down');
@@ -213,7 +230,8 @@ describe('answers on pgvector', () => {
     ]);
     const { answers } = await answerService(llm);
     const answer = await answers.answer({ query: 'laparoscopic cholecystectomy blood loss', live: false });
-    expect(answer.sections[0].status).toBe('generation_failed');
+    // the sources are still quoted when the AI is down
+    expect(answer.sections[0].status).toBe('quoted_evidence');
   });
 
   it('never sends an emergency to the AI and does not store the query', async () => {
