@@ -19,12 +19,14 @@ import {
 import {
   ClaudeEffort,
   ClaudeLlmProvider,
+  ComposedLlmProvider,
   ClinicalTrialsFetcher,
   DailyMedFetcher,
   FakeLlmProvider,
   FetchLike,
   LexicalReranker,
   LlmProviderBase,
+  OllamaLlmProvider,
   LiveRetrievalService,
   OpenFdaFetcher,
   PmcOaFetcher,
@@ -172,11 +174,18 @@ const environmentConfig = configInjector.chain({
     type: optional(string),
     value: getEnvVar('OPENFDA_API_KEY') ?? ''
   },
-  // 'fake' (deterministic, no API key; development and tests) or 'claude'
+  // Answer drafting: 'ollama' (free, open-source models run locally),
+  // 'claude' (paid, needs LLM_API_KEY) or 'fake' (deterministic, tests)
   LLM_PROVIDER: {
     lifetime: Lifetime.Singleton,
     type: optional(string),
     value: getEnvVar('LLM_PROVIDER') || 'fake'
+  },
+  // Search embeddings: 'ollama' (free, local) or 'fake' (development)
+  EMBEDDING_PROVIDER: {
+    lifetime: Lifetime.Singleton,
+    type: optional(string),
+    value: getEnvVar('EMBEDDING_PROVIDER') || 'fake'
   },
   // each client supplies its own Anthropic API key
   LLM_API_KEY: {
@@ -184,16 +193,27 @@ const environmentConfig = configInjector.chain({
     type: optional(string),
     value: getEnvVar('LLM_API_KEY') ?? ''
   },
+  // empty: the provider's default (claude-opus-5, or qwen2.5:3b on Ollama)
   LLM_MODEL: {
     lifetime: Lifetime.Singleton,
     type: optional(string),
-    value: getEnvVar('LLM_MODEL') || 'claude-opus-5'
+    value: getEnvVar('LLM_MODEL') ?? ''
   },
-  // low | medium | high | xhigh | max
+  // Claude only: low | medium | high | xhigh | max
   LLM_EFFORT: {
     lifetime: Lifetime.Singleton,
     type: optional(string),
     value: getEnvVar('LLM_EFFORT') || 'high'
+  },
+  OLLAMA_URL: {
+    lifetime: Lifetime.Singleton,
+    type: optional(string),
+    value: getEnvVar('OLLAMA_URL') ?? ''
+  },
+  OLLAMA_EMBEDDING_MODEL: {
+    lifetime: Lifetime.Singleton,
+    type: optional(string),
+    value: getEnvVar('OLLAMA_EMBEDDING_MODEL') ?? ''
   },
   // Budget for querying live sources during one search, kept well inside
   // the 10-second first-answer target.
@@ -272,19 +292,43 @@ const serviceDependencies = runtimeDependencies.chain({
     type: LlmProviderBase,
     factory: ({
       LLM_PROVIDER,
+      EMBEDDING_PROVIDER,
       LLM_API_KEY,
       LLM_MODEL,
       LLM_EFFORT,
+      OLLAMA_URL,
+      OLLAMA_EMBEDDING_MODEL,
       EMBEDDING_DIMENSIONS
     }): LlmProviderBase => {
-      // Claude has no embeddings API. Until an embedding model is chosen,
-      // embeddings stay on the deterministic development provider with
-      // either setting, so switching drafting to Claude does not change the
-      // stored vectors.
-      const embeddings = new FakeLlmProvider(EMBEDDING_DIMENSIONS);
+      // Unknown settings stop the service at startup: a deployment must never
+      // believe it uses a real model when it does not.
+      const ollama = (model?: string) =>
+        new OllamaLlmProvider({
+          ...(OLLAMA_URL ? { baseUrl: OLLAMA_URL } : {}),
+          ...(model ? { model } : {}),
+          ...(OLLAMA_EMBEDDING_MODEL ? { embeddingModel: OLLAMA_EMBEDDING_MODEL } : {}),
+          embeddingDimensions: EMBEDDING_DIMENSIONS
+        });
+
+      let embeddings: LlmProviderBase;
+      switch (EMBEDDING_PROVIDER) {
+        case 'fake':
+          embeddings = new FakeLlmProvider(EMBEDDING_DIMENSIONS);
+          break;
+        case 'ollama':
+          embeddings = ollama();
+          break;
+        default:
+          throw new Error(
+            `EMBEDDING_PROVIDER '${EMBEDDING_PROVIDER}' is not supported; use 'ollama' or 'fake'`
+          );
+      }
+
       switch (LLM_PROVIDER) {
         case 'fake':
-          return embeddings;
+          return new ComposedLlmProvider(new FakeLlmProvider(EMBEDDING_DIMENSIONS), embeddings);
+        case 'ollama':
+          return new ComposedLlmProvider(ollama(LLM_MODEL), embeddings);
         case 'claude':
           if (!LLM_EFFORTS.includes(LLM_EFFORT as ClaudeEffort)) {
             throw new Error(
@@ -294,15 +338,13 @@ const serviceDependencies = runtimeDependencies.chain({
           // fails at startup without a key, rather than on the first answer
           return new ClaudeLlmProvider({
             apiKey: LLM_API_KEY ?? '',
-            model: LLM_MODEL || 'claude-opus-5',
+            ...(LLM_MODEL ? { model: LLM_MODEL } : {}),
             effort: LLM_EFFORT as ClaudeEffort,
             embeddings
           });
         default:
-          // never fall back silently: a deployment must not believe it uses
-          // a real model when it does not
           throw new Error(
-            `LLM_PROVIDER '${LLM_PROVIDER}' is not supported; use 'claude' or 'fake'`
+            `LLM_PROVIDER '${LLM_PROVIDER}' is not supported; use 'ollama', 'claude' or 'fake'`
           );
       }
     }

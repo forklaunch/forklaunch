@@ -54,6 +54,13 @@ export type IngestionOptions = {
   embedBatchSize?: number;
 };
 
+export class LicenseRequiredError extends Error {
+  constructor(readonly sourceKey: string) {
+    super(`'${sourceKey}' is a licensed source and no organization holds an active license for it`);
+    this.name = 'LicenseRequiredError';
+  }
+}
+
 /**
  * Turns fetched documents into stored, searchable passages, identically for
  * every source:
@@ -66,13 +73,6 @@ export type IngestionOptions = {
  *    passages, so it leaves search at once.
  * 4. Section-aware chunking and embedding.
  */
-export class LicenseRequiredError extends Error {
-  constructor(readonly sourceKey: string) {
-    super(`'${sourceKey}' is a licensed source and no organization holds an active license for it`);
-    this.name = 'LicenseRequiredError';
-  }
-}
-
 export class IngestionService {
   private readonly excerptChars: number;
   private readonly maxPassageChars: number;
@@ -241,9 +241,20 @@ export class IngestionService {
     const passages = chunkSections(sections, { maxChars: this.maxPassageChars });
     for (let i = 0; i < passages.length; i += this.embedBatchSize) {
       const batch = passages.slice(i, i + this.embedBatchSize);
-      const { embeddings, model } = await this.llmProvider.embed({
-        texts: batch.map((p) => `${p.sectionPath}: ${p.text}`)
-      });
+      // Without embeddings (for example a local model server that is not
+      // running) passages are still stored and keyword search finds them;
+      // vector search skips them.
+      let embeddings: number[][] = [];
+      let model: string | null = null;
+      try {
+        ({ embeddings, model } = await this.llmProvider.embed({
+          texts: batch.map((p) => `${p.sectionPath}: ${p.text}`)
+        }));
+      } catch (error) {
+        this.openTelemetryCollector.error('Passage embedding failed; stored without vectors', {
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
       batch.forEach((passage, j) => {
         em.create(DocumentChunk, {
           document,
@@ -251,7 +262,7 @@ export class IngestionService {
           ordinal: passage.ordinal,
           text: passage.text,
           embedding: embeddings[j] ?? null,
-          embeddingModel: model
+          embeddingModel: embeddings[j] ? model : null
         });
       });
     }

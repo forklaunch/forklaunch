@@ -3,11 +3,11 @@ import { LlmProvider } from '@forklaunch/interfaces-mlse/interfaces';
 import {
   EmbedRequestDto,
   EmbedResponseDto,
-  EvidencePassageDto,
   GenerateRequestDto,
   GenerateResponseDto,
   LlmProviderDescriptorDto
 } from '@forklaunch/interfaces-mlse/types';
+import { userMessage } from '../domain/evidenceFormat';
 import { LlmProviderBase } from './llmProviderBase.service';
 
 export const DEFAULT_CLAUDE_MODEL = 'claude-opus-5';
@@ -36,21 +36,6 @@ export class LlmRefusalError extends Error {
     super(`The AI provider declined the request${category ? ` (${category})` : ''}`);
     this.name = 'LlmRefusalError';
   }
-}
-
-// Passage text comes from the internet. No tag inside it, in any case or
-// with any name, may close the passage or the evidence block, so angle
-// brackets are escaped in everything placed inside the markup.
-function escapeMarkup(text: string): string {
-  return text.replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-}
-
-function formatEvidence(evidence: EvidencePassageDto[]): string {
-  const passages = evidence.map((passage) => {
-    const label = passage.label ? ` source="${escapeMarkup(passage.label).replaceAll('"', "'")}"` : '';
-    return `<passage id="${escapeMarkup(passage.id)}"${label}>\n${escapeMarkup(passage.text)}\n</passage>`;
-  });
-  return `<evidence>\n${passages.join('\n')}\n</evidence>`;
 }
 
 /**
@@ -113,7 +98,7 @@ export class ClaudeLlmProvider extends LlmProviderBase {
       messages: [
         {
           role: 'user',
-          content: `${formatEvidence(evidence)}\n\n<task>\n${escapeMarkup(prompt)}\n</task>`
+          content: userMessage(evidence, prompt)
         }
       ]
     });

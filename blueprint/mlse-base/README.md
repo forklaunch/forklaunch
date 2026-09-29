@@ -77,11 +77,14 @@ Environment (`.env.local`):
 | `NCBI_TOOL`, `NCBI_EMAIL` | yes | NCBI asks every app calling E-utilities to identify itself |
 | `NCBI_API_KEY` | no | Your own NCBI key; raises PubMed/PMC from 3 to 10 requests/s |
 | `OPENFDA_API_KEY` | no | Higher openFDA rate limit |
-| `LLM_PROVIDER` | yes | `claude`, or `fake` for development (no key, deterministic) |
+| `LLM_PROVIDER` | yes | `ollama` (free, local open-source models), `claude` (paid), or `fake` (tests) |
+| `EMBEDDING_PROVIDER` | yes | `ollama` (free, local) or `fake` (development) |
+| `OLLAMA_URL` | with `ollama` | Default `http://localhost:11434`; from Docker use `http://host.docker.internal:11434` |
+| `OLLAMA_EMBEDDING_MODEL` | no | Default `nomic-embed-text` |
 | `LLM_API_KEY` | with `claude` | Your own Anthropic API key; the service will not start without it |
-| `LLM_MODEL` | no | Default `claude-opus-5` |
-| `LLM_EFFORT` | no | `low` \| `medium` \| `high` (default) \| `xhigh` \| `max` |
-| `EMBEDDING_DIMENSIONS` | no | Must match the embedding model (default 8, development only) |
+| `LLM_MODEL` | no | Empty for the provider default: `qwen2.5:3b` on Ollama, `claude-opus-5` on Claude |
+| `LLM_EFFORT` | no | Claude only: `low` \| `medium` \| `high` (default) \| `xhigh` \| `max` |
+| `EMBEDDING_DIMENSIONS` | no | Must match the embedding model (768 for `nomic-embed-text`) |
 | `LIVE_RETRIEVAL_TIMEOUT_MS` | no | Budget for live source queries per search (default 4000) |
 | `CORPUS_TOPICS`, `CORPUS_SOURCES`, `CORPUS_LIMIT` | no | What `corpus:refresh` queues: terms, sources (default all) and documents per term (default 20) |
 
@@ -223,28 +226,39 @@ Speech-to-text and text-to-speech are left to your client application.
 
 ## AI provider and cost
 
-With `LLM_PROVIDER=claude`, MLSE uses the Anthropic SDK with `claude-opus-5`
-by default, adaptive thinking, streaming, a cached system prompt, and
-Anthropic's server-side fallback if a request is declined. Usage is billed to
-your Anthropic account. As a rough guide (check Anthropic's current pricing):
-a search answer is a few cents, and assembling a full topic page is around a
-dollar. Emergency, prescription and patient-specific queries cost nothing,
-since they never reach the AI. `LLM_MODEL=claude-sonnet-5` is cheaper;
-measure answer quality with `eval:run` before switching.
+**Free by default.** New MLSE apps use open-source models run locally with
+[Ollama](https://ollama.com): no API key and no per-request cost.
 
-Claude has no embeddings API, so embeddings currently come from the
-development provider, which is deterministic but not semantic. Choosing a
-real embedding model is an open decision. Its dimension fixes the vector
-column size.
+```bash
+ollama pull qwen2.5:3b        # answer drafting (about 2 GB)
+ollama pull nomic-embed-text  # search embeddings (about 270 MB, 768 dimensions)
+```
+
+Small models write weaker answers than Claude. Every sentence still goes
+through the same citation and number checks, so a weaker model gives shorter
+answers or "insufficient evidence", not wrong ones. On a laptop an answer
+takes about 15 to 35 seconds; a server with a GPU is much faster.
+`LLM_MODEL` selects a larger model if the hardware allows.
+
+**Claude (optional, paid).** With `LLM_PROVIDER=claude` and your own
+`LLM_API_KEY`, MLSE uses the Anthropic SDK with `claude-opus-5` by default,
+adaptive thinking, streaming, a cached system prompt, and Anthropic's
+server-side fallback if a request is declined. Usage is billed to your
+Anthropic account. Search embeddings can stay on Ollama.
+
+Emergency, prescription and patient-specific queries never reach any AI. If
+the local model server is down, answer sections show as unavailable, and
+ingestion still stores passages (findable by keyword search, without
+vectors).
 
 ## Known limitations
 
 - Question frameworks, drafting rules and fixed messages need clinician (and
   legal) review before clinical use.
-- Development embeddings limit search relevance until an embedding model is
-  chosen.
-- Answer quality and latency with Claude have not yet been measured against
-  the 10-second first-answer target.
+- The `fake` embedding provider (tests and development) is not semantic;
+  use `EMBEDDING_PROVIDER=ollama` for real search relevance.
+- Measured on a laptop with free models (`qwen2.5:1.5b`): 15–35 s per answer,
+  above the 10-second target; Claude has not been measured yet.
 - The generated `server.ts` still surfaces placeholder roles for every
   caller. Replace them with real IAM role surfacing before using the JWT
   compliance routes, which require platform system roles.
