@@ -108,6 +108,8 @@ export const answer = handlers.post(
             kind: optional(string),
             message: optional(string),
             section: optional(SectionSchema),
+            sections: optional(array({ key: string, label: string })),
+            topicType: optional(string),
             answer: optional(AnswerSchema)
           }
         }

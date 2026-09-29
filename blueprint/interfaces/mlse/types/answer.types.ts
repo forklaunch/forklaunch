@@ -87,5 +87,7 @@ export type AnswerResponseDto = {
 
 export type AnswerStreamEventDto =
   | { type: 'start'; queryClass: QueryClass; kind: AnswerKind; message?: string }
+  // the sections that will follow, sent before drafting starts
+  | { type: 'plan'; sections: { key: string; label: string }[]; topicType?: 'condition' | 'medication' | 'procedure' }
   | { type: 'section'; section: AnswerSectionDto }
   | { type: 'done'; answer: AnswerResponseDto };

@@ -160,6 +160,14 @@ export class AnswerService {
     yield { type: 'start', queryClass: classification.queryClass, kind: 'answer' };
 
     const { items, evidenceFor, topic, notice, research, concepts, labelDosing } = await this.sectionsToAnswer(request, query);
+    yield {
+      type: 'plan',
+      sections: [
+        ...items.map((item) => ({ key: item.key, label: item.label })),
+        ...(labelDosing ? [{ key: 'label_dosing', label: 'Dosing (label, quoted as written)' }] : [])
+      ],
+      ...(research?.topicType ? { topicType: research.topicType } : {})
+    };
     const pending = startLimited(
       items.map((item) => () => this.draftSection(item, evidenceFor(item), { query, topic, concepts })),
       this.concurrency
@@ -474,7 +482,9 @@ export class AnswerService {
       let best = verify(first.text);
       removed.push(...best.removed.map((r) => ({ sectionKey: item.key, text: r.text, reason: r.reason })));
 
-      if (best.removed.length > 0) {
+      // Overview sections fall back to quoting their sources, so they skip
+      // the second attempt, which doubled their time on small models.
+      if (best.removed.length > 0 && !item.hints) {
         const second = await this.llmProvider.generate({
           instructions: ANSWER_INSTRUCTIONS,
           prompt: selfCheckPrompt(prompt, best.removed),
