@@ -3,6 +3,7 @@ import {
   OpenTelemetryCollector
 } from '@forklaunch/core/http';
 import {
+  clinicalTermsFor,
   LiveRetrievalService,
   LlmProvider,
   reciprocalRankFusion,
@@ -92,10 +93,13 @@ export class SearchService {
 
     const [keyword, vector, live] = await Promise.all([
       this.keywordSearch(expandedTerms, request),
-      this.vectorSearch(query, request),
+      // the vector for an everyday term includes its clinical term
+      this.vectorSearch([query, ...clinicalTermsFor(query)].join(' '), request),
       request.live === false
         ? Promise.resolve({ passages: [] as CitablePassageDto[], sources: [] as LiveSourceResultDto[] })
-        : this.liveRetrieval.retrieve(query, request.sourceKeys)
+        // live sources are asked with the clinical term when the query used
+        // an everyday one ("heart attack" -> myocardial infarction)
+        : this.liveRetrieval.retrieve(clinicalTermsFor(query)[0] ?? query, request.sourceKeys)
     ]);
 
     // live passages for documents already in the corpus add nothing new
@@ -176,6 +180,9 @@ export class SearchService {
     );
 
     const terms = new Map<string, string>([[query.toLowerCase(), query]]);
+    for (const clinical of clinicalTermsFor(query)) {
+      terms.set(clinical.toLowerCase(), clinical);
+    }
     for (const row of rows) {
       for (const term of [row.preferred_term, ...(row.synonyms ?? [])]) {
         if (!terms.has(term.toLowerCase())) {

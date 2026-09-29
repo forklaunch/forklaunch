@@ -64,7 +64,14 @@ const AnswerSchema = {
     sectionPath: string,
     text: string
   }),
-  model: optional(string)
+  model: optional(string),
+  research: optional({
+    searchedFor: array(string),
+    found: number,
+    aboutQuestion: number,
+    used: number,
+    documents: number
+  })
 };
 
 const bodyValid = (query: string) => query.trim().length > 0 && query.length <= 2000;

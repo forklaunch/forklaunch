@@ -69,7 +69,7 @@ export function spokenSummary(answer: AnswerResponseDto): string {
     sentences.push('The label dosing section is on screen, quoted as written.');
   } else {
     for (const section of answer.sections) {
-      if (section.status === 'answered' && section.sentences.length > 0) {
+      if ((section.status === 'answered' || section.status === 'quoted_evidence') && section.sentences.length > 0) {
         sentences.push(section.sentences[0].text);
       }
       if (sentences.length >= MAX_SPOKEN_SENTENCES) break;
