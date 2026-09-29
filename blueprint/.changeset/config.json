@@ -18,6 +18,7 @@
     "@forklaunch/blueprint-iam-better-auth",
     "@forklaunch/blueprint-messaging-base",
     "@forklaunch/blueprint-messaging-twilio",
+    "@forklaunch/blueprint-mlse-base",
     "@forklaunch/blueprint-monitoring",
     "@forklaunch/blueprint-sample-worker"
   ]

@@ -1,0 +1,62 @@
+{
+  "meta": {
+    "results": {
+      "skip": 0,
+      "limit": 1,
+      "total": 1
+    }
+  },
+  "results": [
+    {
+      "set_id": "00dd6da7-50a8-44c9-b2dc-7948973df392",
+      "id": "48aafe01-7d9c-42a7-bed6-6bff79c63a42",
+      "effective_time": "20260107",
+      "version": "6",
+      "indications_and_usage": [
+        "INDICATIONS AND USAGE Cefazolin for Injection, USP is indicated for the treatment of the following serious infections when due to susceptible organisms. Respiratory Tract Infections: Due to S. pneumoniae, Klebsiella species , H. influenzae, S. aureus (penicillin-sensitive and penicillin-resistant), and group A beta-hemolytic streptococci. Injectable benzathine penicillin is considered the drug of choice in treatment and prevention of streptococcal infections, including the prophylaxis of rheumatic fever. Cefazolin for Injection, USP is effective in the eradication of streptococci from the naso"
+      ],
+      "dosage_and_administration": [
+        "DOSAGE AND ADMINISTRATION Usual Adult Dosage: Type of Infection Dose Frequency Moderate to severe infections 500 mg to 1 gram every 6 to 8 hours Mild infections caused by susceptible gram-positive cocci 250 mg to 500 mg every 8 hours Acute, uncomplicated urinary tract infections 1 gram every 12 hours Pneumococcal pneumonia 500 mg every 12 hours Severe, life-threatening infections (e.g., endocarditis, septicemia)* 1 gram to 1.5 grams every 6 hours * In rare instances, doses of up to 12 grams of Cefazolin for Injection per day have been used. Perioperative Prophylactic Use : To prevent postopera"
+      ],
+      "contraindications": [
+        "CONTRAINDICATIONS CEFAZOLIN FOR INJECTION IS CONTRAINDICATED IN PATIENTS WITH KNOWN ALLERGY TO THE CEPHALOSPORIN GROUP OF ANTIBIOTICS."
+      ],
+      "warnings": [
+        "WARNINGS BEFORE THERAPY WITH CEFAZOLIN FOR INJECTION IS INSTITUTED, CAREFUL INQUIRY SHOULD BE MADE TO DETERMINE WHETHER THE PATIENT HAS HAD PREVIOUS HYPERSENSITIVITY REACTIONS TO CEFAZOLIN, CEPHALOSPORINS, PENICILLINS, OR OTHER DRUGS. IF THIS PRODUCT IS GIVEN TO PENICILLIN‑SENSITIVE PATIENTS, CAUTION SHOULD BE EXERCISED BECAUSE CROSS‑HYPERSENSITIVITY AMONG BETA‑LACTAM ANTIBIOTICS HAS BEEN CLEARLY DOCUMENTED AND MAY OCCUR IN UP TO 10% OF PATIENTS WITH A HISTORY OF PENICILLIN ALLERGY. IF AN ALLERGIC REACTION TO CEFAZOLIN FOR INJECTION OCCURS, DISCONTINUE TREATMENT WITH THE DRUG. SERIOUS ACUTE HY"
+      ],
+      "precautions": [
+        "PRECAUTIONS General Prolonged use of Cefazolin for Injection may result in the overgrowth of nonsusceptible organisms. Careful clinical observation of the patient is essential. When Cefazolin for Injection is administered to patients with low urinary output because of impaired renal function, lower daily dosage is required (see DOSAGE AND ADMINISTRATION). As with other β-lactam antibiotics, seizures may occur if inappropriately high doses are administered to patients with impaired renal function (see DOSAGE AND ADMINISTRATION). Cefazolin for Injection, as with all cephalosporins, should be pre"
+      ],
+      "adverse_reactions": [
+        "ADVERSE REACTIONS The following reactions have been reported: Gastrointestinal: Diarrhea, oral candidiasis (oral thrush), vomiting, nausea, stomach cramps, anorexia, and pseudomembranous colitis. Onset of pseudomembranous colitis symptoms may occur during or after antibiotic treatment (see WARNINGS). Nausea and vomiting have been reported rarely. Allergic: Anaphylaxis, eosinophilia, itching, drug fever, skin rash, Stevens‑Johnson syndrome. Hematologic: Neutropenia, leukopenia, thrombocytopenia, thrombocythemia. Hepatic: Transient rise in SGOT, SGPT, and alkaline phosphatase levels has been obs"
+      ],
+      "drug_interactions": [
+        "Drug Interactions Probenecid may decrease renal tubular secretion of cephalosporins when used concurrently, resulting in increased and more prolonged cephalosporin blood levels. Drug/Laboratory Test Interactions A false positive reaction for glucose in the urine may occur with Benedict’s solution, Fehling’s solution or with CLINITEST ® tablets, but not with enzyme-based tests such as CLINISTIX ® . Positive direct and indirect antiglobulin (Coombs) tests have occurred; these may also occur in neonates whose mothers received cephalosporins before delivery."
+      ],
+      "pediatric_use": [
+        "Pediatric Use Safety and effectiveness for use in premature infants and neonates have not been established. See DOSAGE AND ADMINISTRATION for recommended dosage in pediatric patients older than 1 month."
+      ],
+      "geriatric_use": [
+        "Geriatric Use Of the 920 subjects who received Cefazolin for Injection in clinical studies, 313 (34%) were 65 years and over, while 138 (15%) were 75 years and over. No overall differences in safety or effectiveness were observed between these subjects and younger subjects. Other reported clinical experience has not identified differences in responses between the elderly and younger patients, but greater sensitivity of some older individuals cannot be ruled out. This drug is known to be substantially excreted by the kidney, and the risk of toxic reactions to this drug may be greater in patient"
+      ],
+      "pregnancy": [
+        "Pregnancy Teratogenic Effects: Pregnancy Category B. Reproduction studies have been performed in rats, mice, and rabbits at doses up to 25 times the human dose and have revealed no evidence of impaired fertility or harm to the fetus due to Cefazolin for Injection. There are, however, no adequate and well-controlled studies in pregnant women. Because animal reproduction studies are not always predictive of human response, this drug should be used during pregnancy only if clearly needed."
+      ],
+      "openfda": {
+        "brand_name": [
+          "Cefazolin"
+        ],
+        "generic_name": [
+          "CEFAZOLIN"
+        ],
+        "manufacturer_name": [
+          "WG Critical Care, LLC"
+        ],
+        "route": [
+          "INTRAMUSCULAR",
+          "INTRAVENOUS"
+        ]
+      }
+    }
+  ]
+}

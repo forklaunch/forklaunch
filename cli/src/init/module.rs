@@ -178,6 +178,8 @@ impl CliCommand for ModuleCommand {
         )?
         .parse()?;
 
+        crate::core::modules::ensure_module_database_supported(&module, &database)?;
+
         let dryrun = matches.get_flag("dryrun");
 
         let name = manifest_data.app_name.clone();
@@ -257,7 +259,10 @@ impl CliCommand for ModuleCommand {
             // publishes to a Redis queue, so REDIS_URL must be scaffolded.
             is_cache_enabled: module.clone() == Module::BaseBilling
                 || module.clone() == Module::StripeBilling
-                || module.clone() == Module::StripeEcommerce,
+                || module.clone() == Module::StripeEcommerce
+                // mlse caches live source responses and queues ingestion jobs
+                // in Redis.
+                || module.clone() == Module::BaseMlse,
             is_s3_enabled: false,
             is_database_enabled: true,
             platform_application_id: manifest_data.platform_application_id.clone(),
@@ -270,8 +275,10 @@ impl CliCommand for ModuleCommand {
                 || module.clone() == Module::TwilioMessaging,
             is_twilio: module.clone() == Module::TwilioMessaging,
             is_cac: module.clone() == Module::BaseCac,
+            is_mlse: module.clone() == Module::BaseMlse,
             is_ecommerce: module.clone() == Module::StripeEcommerce,
-            ships_worker: module.clone() == Module::StripeEcommerce,
+            ships_worker: module.clone() == Module::StripeEcommerce
+                || module.clone() == Module::BaseMlse,
 
             is_iam_configured: manifest_data.projects.iter().any(|project_entry| {
                 if project_entry.name == "iam" {

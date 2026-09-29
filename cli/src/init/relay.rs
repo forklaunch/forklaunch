@@ -237,6 +237,7 @@ fn build_iam_service_manifest_data(
         is_messaging: false,
         is_twilio: false,
         is_cac: false,
+        is_mlse: false,
         is_ecommerce: false,
         ships_worker: false,
 
