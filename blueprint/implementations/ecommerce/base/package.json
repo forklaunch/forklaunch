@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/implementation-ecommerce-base",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "description": "Ecommerce basic implementation for forklaunch",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -57,11 +57,11 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "^1.2.27",
-    "@forklaunch/core": "^2.1.0",
+    "@forklaunch/common": "^1.2.28",
+    "@forklaunch/core": "^2.1.1",
     "@forklaunch/interfaces-ecommerce": "workspace:^",
-    "@forklaunch/internal": "^1.2.30",
-    "@forklaunch/validator": "^1.2.28",
+    "@forklaunch/internal": "^1.2.31",
+    "@forklaunch/validator": "^1.2.29",
     "@mikro-orm/core": "7.2.1",
     "@sinclair/typebox": "^0.34.52",
     "ajv": "^8.20.0",
@@ -69,7 +69,7 @@
   },
   "devDependencies": {
     "depcheck": "^1.4.7",
-    "prettier": "^3.9.8",
+    "prettier": "^3.9.9",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2"
   },
