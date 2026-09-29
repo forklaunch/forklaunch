@@ -16,6 +16,8 @@ export type SourceTier =
   | 'vocabulary'
   | 'literature_index'
   | 'literature_full_text'
+  // plain-language reference summaries (MedlinePlus)
+  | 'reference'
   | 'licensed';
 
 // What MLSE may store and show from a document, decided per document from its

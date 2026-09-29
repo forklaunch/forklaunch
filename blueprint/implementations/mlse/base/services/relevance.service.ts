@@ -112,6 +112,9 @@ export function passageIsAbout(
     return false;
   }
   const titleWords = new Set(queryTerms(passage.title));
+  // A title naming the query itself ("Heart Attack") counts, even for an
+  // everyday term; only body text needs the clinical term.
+  if (concepts.queryWords.length > 0 && concepts.queryWords.every((w) => titleWords.has(w))) return true;
   const sentenceWords = sentencesOf(passage.text).map((s) => new Set(queryTerms(s)));
   for (const phrase of concepts.phrases) {
     if (phrase.every((w) => titleWords.has(w))) return true;
