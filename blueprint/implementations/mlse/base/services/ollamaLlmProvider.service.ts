@@ -36,6 +36,8 @@ export type OllamaLlmProviderOptions = {
   timeoutMs?: number;
   // most tokens one answer section may use
   maxTokens?: number;
+  // prompt window; must hold the rules plus the evidence (default 8192)
+  contextTokens?: number;
   post?: PostLike;
 };
 
@@ -63,6 +65,7 @@ export class OllamaLlmProvider extends LlmProviderBase {
   private readonly embeddingDimensions: number;
   private readonly timeoutMs: number;
   private readonly maxTokens: number;
+  private readonly contextTokens: number;
   private readonly post: PostLike;
 
   constructor(options: OllamaLlmProviderOptions = {}) {
@@ -75,6 +78,7 @@ export class OllamaLlmProvider extends LlmProviderBase {
     this.embeddingDimensions = options.embeddingDimensions ?? DEFAULT_OLLAMA_EMBEDDING_DIMENSIONS;
     this.timeoutMs = options.timeoutMs ?? 180_000;
     this.maxTokens = options.maxTokens ?? 2_000;
+    this.contextTokens = options.contextTokens ?? 8_192;
     this.post = options.post ?? ((url, init) => fetch(url, init));
     if (!Number.isInteger(this.embeddingDimensions) || this.embeddingDimensions < 1) {
       throw new Error('embeddingDimensions must be a positive integer');
@@ -96,8 +100,15 @@ export class OllamaLlmProvider extends LlmProviderBase {
           { role: 'system', content: instructions },
           { role: 'user', content: userMessage(evidence, prompt) }
         ],
-        // deterministic and short: the task is extraction, not creativity
-        options: { temperature: 0, num_predict: maxTokens ?? this.maxTokens }
+        // Deterministic and short: the task is extraction, not creativity.
+        // Ollama reads only 2048 tokens by default and silently drops the
+        // start of a longer prompt (the drafting rules), so the window is
+        // set to fit the rules plus the evidence.
+        options: {
+          temperature: 0,
+          num_predict: maxTokens ?? this.maxTokens,
+          num_ctx: this.contextTokens
+        }
       }
     );
     return { text: response.message?.content ?? '', model: response.model ?? this.model };

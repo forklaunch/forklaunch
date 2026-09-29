@@ -112,6 +112,53 @@ describe('verifyDraft', () => {
     ]);
   });
 
+  it('checks each sentence of a paragraph against the passages the paragraph cites', () => {
+    const result = verifyDraft(
+      'After laparoscopic cholecystectomy the median blood loss was 2.5 mL. Robotic surgery halves mortality in all patients. No transfusion was needed after laparoscopic cholecystectomy. [P1]',
+      new Map([['P1', 'After laparoscopic cholecystectomy the median blood loss was 2.5 mL and no transfusion was needed.']])
+    );
+    // the decimal does not split a sentence; the unsupported middle sentence
+    // is removed even though the paragraph cites P1
+    expect(result.kept.map((s) => [s.text, s.citations])).toEqual([
+      ['After laparoscopic cholecystectomy the median blood loss was 2.5 mL.', ['P1']],
+      ['No transfusion was needed after laparoscopic cholecystectomy.', ['P1']]
+    ]);
+    expect(result.removed.map((r) => r.text)).toEqual(['Robotic surgery halves mortality in all patients.']);
+  });
+
+  it('accepts <P1>, (P1) and [P1, P2] as citations and still verifies them', () => {
+    const passages = new Map([
+      ['P1', 'After laparoscopic cholecystectomy the median blood loss was 20 mL.'],
+      ['P2', 'Bile leak after laparoscopic cholecystectomy occurred in 2% of patients.']
+    ]);
+    const result = verifyDraft(
+      [
+        'After laparoscopic cholecystectomy the median blood loss was 20 mL <P1>.',
+        'Bile leak after laparoscopic cholecystectomy occurred in 2% of patients (P2).',
+        'After laparoscopic cholecystectomy bile leak occurred in 2% of patients [P1, P2].',
+        'Robotic surgery halves mortality <P1>.'
+      ].join('\n'),
+      passages
+    );
+    expect(result.kept.map((s) => s.citations)).toEqual([['P1'], ['P2'], ['P1', 'P2']]);
+    expect(result.removed.map((r) => r.text)).toEqual(['Robotic surgery halves mortality.']);
+  });
+
+  it('keeps a sentence readable when the citation was used as a word', () => {
+    const result = verifyDraft(
+      'After laparoscopic cholecystectomy the median blood loss was 20 mL, as reported in the <P1>.',
+      new Map([['P1', 'After laparoscopic cholecystectomy the median blood loss was 20 mL, as reported.']])
+    );
+    expect(result.kept[0].text).toBe('After laparoscopic cholecystectomy the median blood loss was 20 mL, as reported in the source.');
+  });
+
+  it('splits long paragraphs in linear time', () => {
+    const start = performance.now();
+    verifyDraft('A. '.repeat(20_000) + '[P1]', new Map([['P1', 'a']]));
+    verifyDraft('.'.repeat(50_000), new Map());
+    expect(performance.now() - start).toBeLessThan(1000);
+  });
+
   it('removes uncited sentences and invented citations', () => {
     const result = verifyDraft(
       ['Laparoscopic cholecystectomy is safe.', 'Bile leak occurred in 2% of patients. [P2][P9]'].join('\n'),
