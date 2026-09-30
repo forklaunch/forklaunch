@@ -138,6 +138,11 @@ pub(crate) const LOCAL_CHECK_IDS: &[&str] = &[
     "erasure-wiring",
     "ai-provider-direct",
     "managed-provider-credentials",
+    "object-store-wiring",
+    "object-store-static-credentials",
+    "object-store-public-access",
+    "object-store-bucket-managed-in-app",
+    "presigned-upload-unbounded",
 ];
 
 /// AI model provider SDKs a service might call directly.
@@ -239,6 +244,116 @@ pub(crate) fn is_managed_instance(project_path: &Path, sources: &str) -> bool {
         || project_path
             .join("api/controllers/relay.controller.ts")
             .exists()
+}
+
+/// Object-store capability as the manifest declares it, per project name.
+/// None when no manifest is found above the modules directory.
+fn declared_object_stores(modules_path: &Path) -> Option<std::collections::HashMap<String, bool>> {
+    let mut dir = modules_path.canonicalize().ok()?;
+    loop {
+        let manifest = dir.join(".forklaunch").join("manifest.toml");
+        if manifest.exists() {
+            let text = fs::read_to_string(manifest).ok()?;
+            let value: toml::Value = toml::from_str(&text).ok()?;
+            let projects = value.get("projects")?.as_array()?;
+            return Some(
+                projects
+                    .iter()
+                    .filter_map(|p| {
+                        let name = p.get("name")?.as_str()?.to_string();
+                        let declared = p
+                            .get("resources")
+                            .and_then(|r| r.get("object_store"))
+                            .and_then(|o| o.as_str())
+                            .is_some();
+                        Some((name, declared))
+                    })
+                    .collect(),
+            );
+        }
+        if !dir.pop() {
+            return None;
+        }
+    }
+}
+
+/// Whether the sources use S3 at all (the framework store or the AWS SDK).
+fn uses_object_store(sources: &str) -> bool {
+    sources.contains("@forklaunch/infrastructure-s3") || sources.contains("@aws-sdk/client-s3")
+}
+
+/// Long-lived storage credentials the sources read instead of the task role.
+///
+/// `S3_ACCESS_KEY_ID` is fine when it only reaches `s3ClientConfig`, which
+/// passes keys only when both are set (local MinIO) and otherwise leaves the
+/// default credential chain to the task role. Raw AWS keys are never fine.
+pub(crate) fn static_storage_credentials(sources: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    if sources.contains("S3_ACCESS_KEY_ID") && !sources.contains("s3ClientConfig(") {
+        found.push("S3_ACCESS_KEY_ID".to_string());
+    }
+    for key in ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"] {
+        if sources.contains(key) {
+            found.push(key.to_string());
+        }
+    }
+    found
+}
+
+/// Code that makes stored files public: public ACLs, a removed public access
+/// block, or CORS open to every site.
+pub(crate) fn public_storage_access(sources: &str) -> Vec<String> {
+    static CORS_ANY: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let cors_any = CORS_ANY.get_or_init(|| {
+        regex::Regex::new(r#"AllowedOrigins\s*:\s*\[\s*['"]\*['"]"#).expect("cors pattern")
+    });
+    let mut found: Vec<String> = [
+        "public-read",
+        "PutPublicAccessBlockCommand",
+        "DeletePublicAccessBlockCommand",
+    ]
+    .iter()
+    .filter(|p| sources.contains(**p))
+    .map(|p| p.to_string())
+    .collect();
+    if cors_any.is_match(sources) {
+        found.push("AllowedOrigins: ['*']".to_string());
+    }
+    found
+}
+
+/// Bucket administration done from app code. On ForkLaunch the platform owns
+/// the bucket, its policy and CORS, and the task role cannot change them.
+pub(crate) fn bucket_administration(sources: &str) -> Vec<String> {
+    [
+        "CreateBucketCommand",
+        "PutBucketPolicyCommand",
+        "DeleteBucketPolicyCommand",
+        "PutBucketCorsCommand",
+        "PutBucketAclCommand",
+    ]
+    .iter()
+    .filter(|p| sources.contains(**p))
+    .map(|p| p.to_string())
+    .collect()
+}
+
+/// Browser upload grants with no size limit: a presigned PUT (S3 cannot bound
+/// its size) or a presigned POST without a `content-length-range` condition.
+pub(crate) fn unbounded_presigned_uploads(sources: &str) -> Vec<String> {
+    static PRESIGNED_PUT: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let presigned_put = PRESIGNED_PUT.get_or_init(|| {
+        regex::Regex::new(r"(?s)getSignedUrl\s*\([^;]{0,300}?PutObjectCommand")
+            .expect("presigned put pattern")
+    });
+    let mut found = Vec::new();
+    if presigned_put.is_match(sources) {
+        found.push("getSignedUrl(PutObjectCommand)".to_string());
+    }
+    if sources.contains("createPresignedPost(") && !sources.contains("content-length-range") {
+        found.push("createPresignedPost without content-length-range".to_string());
+    }
+    found
 }
 
 /// Any of these means the service can bind an encryption tenant. There is more
@@ -598,6 +713,99 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
                     ),
                 });
             }
+        }
+    }
+
+    // 8. Object storage: provisioned by the platform, reached with the task
+    //    role, private, and bounded when a browser uploads to it.
+    let declared = declared_object_stores(modules_path);
+    for entry in fs::read_dir(modules_path)? {
+        let project_path = entry?.path();
+        if !project_path.is_dir() {
+            continue;
+        }
+        let project = project_path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let sources = read_production_sources(&project_path);
+        let registrations =
+            fs::read_to_string(project_path.join("registrations.ts")).unwrap_or_default();
+        let wired = registrations.contains("S3ObjectStore");
+        if let Some(declared_in) = declared.as_ref().and_then(|d| d.get(&project)) {
+            let message = match (*declared_in, wired) {
+                (true, false) => Some(
+                    "the manifest declares an object store but registrations.ts registers no S3ObjectStore — the service has nothing to call it with",
+                ),
+                (false, true) => Some(
+                    "registrations.ts registers an S3ObjectStore but the manifest declares no object store — the platform will not provision a bucket or grant access to one",
+                ),
+                _ => None,
+            };
+            if let Some(message) = message {
+                findings.push(LocalFinding {
+                    severity: Severity::Warning,
+                    project: project.clone(),
+                    check: "object-store-wiring".to_string(),
+                    subject: "registrations.ts".to_string(),
+                    message: message.to_string(),
+                });
+            }
+        }
+        if !uses_object_store(&sources) {
+            continue;
+        }
+        let credentials = static_storage_credentials(&sources);
+        if !credentials.is_empty() {
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.clone(),
+                check: "object-store-static-credentials".to_string(),
+                subject: credentials.join(", "),
+                message: format!(
+                    "the S3 client is built from long-lived keys ({}) — deployed on ForkLaunch the service's task role grants access to its own bucket; build the client with s3ClientConfig so keys are used only for local MinIO",
+                    credentials.join(", ")
+                ),
+            });
+        }
+        let public = public_storage_access(&sources);
+        if !public.is_empty() {
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.clone(),
+                check: "object-store-public-access".to_string(),
+                subject: public.join(", "),
+                message: format!(
+                    "code makes stored files reachable by anyone ({}) — keep the bucket private and hand out presignDownload links instead",
+                    public.join(", ")
+                ),
+            });
+        }
+        let administration = bucket_administration(&sources);
+        if !administration.is_empty() {
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.clone(),
+                check: "object-store-bucket-managed-in-app".to_string(),
+                subject: administration.join(", "),
+                message: format!(
+                    "app code administers the bucket ({}) — the platform creates the bucket and sets its policy and CORS, and the task role is not allowed to change them",
+                    administration.join(", ")
+                ),
+            });
+        }
+        let unbounded = unbounded_presigned_uploads(&sources);
+        if !unbounded.is_empty() {
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.clone(),
+                check: "presigned-upload-unbounded".to_string(),
+                subject: unbounded.join(", "),
+                message: format!(
+                    "a browser upload grant has no size limit ({}) — use ObjectStore.presignUpload, a presigned POST that enforces maxBytes and the content type",
+                    unbounded.join(", ")
+                ),
+            });
         }
     }
 
@@ -1173,5 +1381,114 @@ mod wiring_tests {
         let findings = run_local_checks(&dir).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
         assert!(!findings.iter().any(|f| f.check == "managed-provider-credentials"));
+    }
+}
+
+#[cfg(test)]
+mod object_store_tests {
+    use super::*;
+
+    fn app(name: &str, manifest_object_store: bool, registrations: &str, extra: &str) -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!("fl-object-store-{name}"));
+        let _ = std::fs::remove_dir_all(&root);
+        let modules = root.join("src/modules");
+        let service = modules.join("files");
+        std::fs::create_dir_all(root.join(".forklaunch")).unwrap();
+        std::fs::create_dir_all(&service).unwrap();
+        let resources = if manifest_object_store {
+            "[projects.resources]\nobject_store = \"s3\"\n"
+        } else {
+            "[projects.resources]\ndatabase = \"postgresql\"\n"
+        };
+        std::fs::write(
+            root.join(".forklaunch/manifest.toml"),
+            format!("app_name = \"demo\"\n\n[[projects]]\nname = \"files\"\n{resources}"),
+        )
+        .unwrap();
+        std::fs::write(service.join("registrations.ts"), registrations).unwrap();
+        std::fs::write(service.join("uploads.ts"), extra).unwrap();
+        modules
+    }
+
+    const KEYLESS: &str = "import { S3ObjectStore, s3ClientConfig } from '@forklaunch/infrastructure-s3';\n\
+        new S3ObjectStore(otel, { bucket: S3_BUCKET, clientConfig: s3ClientConfig({ url: S3_URL, region: S3_REGION, accessKeyId: S3_ACCESS_KEY_ID, secretAccessKey: S3_SECRET_ACCESS_KEY }) });";
+
+    fn checks(modules: &std::path::Path) -> Vec<String> {
+        run_local_checks(modules)
+            .unwrap()
+            .into_iter()
+            .filter(|f| f.check.starts_with("object-store") || f.check == "presigned-upload-unbounded")
+            .map(|f| f.check)
+            .collect()
+    }
+
+    #[test]
+    fn keyless_declared_and_wired_store_is_clean() {
+        let modules = app("clean", true, KEYLESS, "await store.presignUpload(key, { contentType, maxBytes: 1000 });");
+        assert!(checks(&modules).is_empty(), "{:?}", checks(&modules));
+    }
+
+    #[test]
+    fn declared_and_wired_must_agree() {
+        let modules = app("undeclared", false, KEYLESS, "");
+        assert_eq!(checks(&modules), vec!["object-store-wiring"]);
+        let modules = app("unwired", true, "export {}", "");
+        assert_eq!(checks(&modules), vec!["object-store-wiring"]);
+    }
+
+    #[test]
+    fn static_keys_are_flagged_unless_behind_s3_client_config() {
+        let old = "import { S3ObjectStore } from '@forklaunch/infrastructure-s3';\n\
+            new S3ObjectStore(otel, { bucket: S3_BUCKET, clientConfig: { credentials: { accessKeyId: S3_ACCESS_KEY_ID, secretAccessKey: S3_SECRET_ACCESS_KEY } } });";
+        let modules = app("static", true, old, "");
+        assert_eq!(checks(&modules), vec!["object-store-static-credentials"]);
+        assert_eq!(
+            static_storage_credentials("import '@aws-sdk/client-s3'; process.env.AWS_SECRET_ACCESS_KEY"),
+            vec!["AWS_SECRET_ACCESS_KEY"]
+        );
+    }
+
+    #[test]
+    fn public_access_bucket_admin_and_unbounded_uploads() {
+        let code = "import { PutBucketCorsCommand, PutObjectCommand } from '@aws-sdk/client-s3';\n\
+            await s3.send(new PutObjectCommand({ Bucket, Key, ACL: 'public-read' }));\n\
+            await s3.send(new PutBucketCorsCommand({ CORSConfiguration: { CORSRules: [{ AllowedOrigins: ['*'] }] } }));\n\
+            const url = await getSignedUrl(s3, new PutObjectCommand({ Bucket, Key }), { expiresIn: 3600 });";
+        let modules = app("risky", true, KEYLESS, code);
+        let mut found = checks(&modules);
+        found.sort();
+        assert_eq!(
+            found,
+            vec![
+                "object-store-bucket-managed-in-app",
+                "object-store-public-access",
+                "presigned-upload-unbounded"
+            ]
+        );
+        assert_eq!(
+            public_storage_access(code),
+            vec!["public-read", "AllowedOrigins: ['*']"]
+        );
+        assert_eq!(
+            unbounded_presigned_uploads("createPresignedPost(s3, { Bucket, Key })"),
+            vec!["createPresignedPost without content-length-range"]
+        );
+        assert!(unbounded_presigned_uploads(
+            "createPresignedPost(s3, { Conditions: [['content-length-range', 1, 10]] })"
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn object_store_checks_score_through_the_report_card() {
+        for id in [
+            "object-store-wiring",
+            "object-store-static-credentials",
+            "object-store-public-access",
+            "object-store-bucket-managed-in-app",
+            "presigned-upload-unbounded",
+        ] {
+            assert!(LOCAL_CHECK_IDS.contains(&id), "{id} missing from LOCAL_CHECK_IDS");
+        }
     }
 }

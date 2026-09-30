@@ -1,6 +1,6 @@
 ---
 name: infra
-description: "fl infra: list, status, resize, config-set, stop, delete provisioned database/cache/queue/object-store resources."
+description: "fl infra: add/remove a capability in a service's code (object store, cache); list, status, resize, config-set, stop, delete provisioned database/cache/queue/object-store resources."
 user-invokable: true
 ---
 
@@ -18,9 +18,17 @@ forklaunch login                        # JWT/session only — see "HMAC not sup
 forklaunch integrate --app <app-id>     # required; writes platform_application_id into manifest.toml
 ```
 
-Every `fl infra` command fails fast with `"Application not integrated with platform"` if `integrate` hasn't run.
+Every `fl infra` command except `add`/`remove` fails fast with `"Application not integrated with platform"` if `integrate` hasn't run.
 
-**`fl infra` never provisions anything.** It only inspects and manages resources that already exist on the platform for the target environment (created through the normal platform provisioning flow). Running any command against an environment with no provisioned resources yet will correctly report zero results, not an error.
+**`fl infra add|remove` edits code; everything else manages what the platform provisioned.**
+`forklaunch infra add <service> object-store|cache` writes the capability into
+the service (registration, docker-compose, env, dependency, manifest resource,
+test utilities) and `infra remove` undoes it. No login or `integrate` is needed.
+The platform provisions the real resource on the next deploy: for an object
+store, a private encrypted bucket, CORS for the app's own domains, and a task
+role scoped to that bucket, with no keys. See `/cli` for flags.
+
+**The remaining `fl infra` commands never provision anything.** It only inspects and manages resources that already exist on the platform for the target environment (created through the normal platform provisioning flow). Running any command against an environment with no provisioned resources yet will correctly report zero results, not an error.
 
 ## When to Use This Skill
 

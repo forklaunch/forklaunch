@@ -131,6 +131,17 @@ fn criterion_for_check(check: &str) -> Option<(&'static str, OnFinding)> {
         // A managed template that needs credentials hosted instances never get
         // does not run as declared.
         "managed-provider-credentials" => ("gov-construction", OnFinding::Fail),
+        // Storage the platform cannot provision, or reaches with the wrong
+        // credentials, does not run as declared.
+        "object-store-wiring" | "object-store-static-credentials" => {
+            ("gov-construction", OnFinding::Fail)
+        }
+        // Public files and bucket settings changed in code bypass the
+        // platform's private, encrypted bucket.
+        "object-store-public-access" | "object-store-bucket-managed-in-app" => {
+            ("cmp-encryption-at-rest", OnFinding::Fail)
+        }
+        "presigned-upload-unbounded" => ("gov-construction", OnFinding::Fail),
         _ => return None,
     })
 }
@@ -160,6 +171,8 @@ fn severity_for(finding: &LocalFinding) -> &'static str {
         (Severity::Warning, "tenant-context-half-wired") => "critical",
         // Health data leaving for a vendor that may not have signed a BAA.
         (Severity::Warning, "ai-provider-direct") => "critical",
+        // Anyone on the internet can read the files.
+        (Severity::Warning, "object-store-public-access") => "critical",
         (Severity::Warning, _) => "high",
         (Severity::Info, _) => "info",
     }
@@ -264,6 +277,11 @@ fn item_label(check: &str) -> &'static str {
         "tenant-context-half-wired" => "Tenant filter and encryption context agree",
         "ai-provider-direct" => "Health data reaches AI models only through BAA-covered paths",
         "managed-provider-credentials" => "Managed templates use the platform gateways, not their own credentials",
+        "object-store-wiring" => "Object storage is declared and wired",
+        "object-store-static-credentials" => "Object storage uses the service's role, not stored keys",
+        "object-store-public-access" => "Stored files are private",
+        "object-store-bucket-managed-in-app" => "The platform, not app code, configures the bucket",
+        "presigned-upload-unbounded" => "Browser uploads are limited in size and type",
         _ => "Deterministic check",
     }
 }
@@ -294,6 +312,24 @@ fn remedy(check: &str) -> Option<String> {
         "managed-provider-credentials" => {
             "Send one-time codes through the platform's instance gateway and call models with \
              createModelGatewayClient(); drop the provider credentials from the template."
+        }
+        "object-store-wiring" => {
+            "Run `forklaunch infra add <service> object-store` (or `infra remove`) so the manifest \
+             and registrations.ts agree."
+        }
+        "object-store-static-credentials" => {
+            "Build the S3 client with s3ClientConfig({ url, region, accessKeyId, secretAccessKey }) \
+             and declare the keys optional; deployed, the task role supplies credentials."
+        }
+        "object-store-public-access" => {
+            "Remove public ACLs and wildcard CORS; serve files with ObjectStore.presignDownload."
+        }
+        "object-store-bucket-managed-in-app" => {
+            "Drop bucket creation, policy and CORS calls; set browser uploads and link lifetimes \
+             in the platform's object-store settings."
+        }
+        "presigned-upload-unbounded" => {
+            "Use ObjectStore.presignUpload(key, { contentType, maxBytes }) instead of a presigned PUT."
         }
         _ => return None,
     };

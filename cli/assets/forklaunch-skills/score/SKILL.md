@@ -141,7 +141,7 @@ Three fields carry the weight:
 `critical` costs 30 points, `high` 15, `medium` 8, `low` 4, `info` nothing. A
 rail floors at 0.
 
-Two checks are `critical`:
+Three checks are `critical`:
 
 - **`tenant-context-half-wired`**, promoted on evidence because its failure is
   silent: rows filter correctly, tests pass, and encrypted columns quietly use
@@ -151,12 +151,24 @@ Two checks are `critical`:
   or reads a provider key. Health data may be reaching a vendor with no BAA.
   Fix: call models through `createModelGatewayClient()` (the platform offers
   HIPAA products only BAA-covered models), or confirm the provider's BAA.
+- **`object-store-public-access`**: code makes stored files public (`public-read`,
+  a removed public access block, or CORS `AllowedOrigins: ['*']`). Fix: keep the
+  bucket private and share files with `presignDownload` links.
 
 `managed-provider-credentials` (high) fires when a service written to run as a
 managed instance (it reads `INSTANCE_HMAC_KEY` / `PLATFORM_GATEWAY_URL`, or has
 the relay) reads Twilio, SendGrid or AI provider credentials. Hosted instances
 never get them: use the platform's instance gateway for one-time codes and
 `createModelGatewayClient()` for models.
+
+Object storage has four more checks, all `high`:
+- **`object-store-wiring`:** the manifest and `registrations.ts` disagree about an object store.
+- **`object-store-static-credentials`:** the S3 client is built from stored keys instead of `s3ClientConfig` and the task role.
+- **`object-store-bucket-managed-in-app`:** app code creates the bucket or sets its policy, CORS or ACLs.
+- **`presigned-upload-unbounded`:** a presigned PUT, or a presigned POST with no size limit.
+
+`/infrastructure-and-utilities` has the fixes. The fix for wiring is always
+`forklaunch infra add <service> object-store`.
 
 On the website a failed wiring check also marks its report-card requirements
 not met, overriding a "Guaranteed by ForkLaunch" pass: an unregistered
