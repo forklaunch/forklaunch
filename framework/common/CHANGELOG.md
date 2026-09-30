@@ -1,5 +1,11 @@
 # @forklaunch/common
 
+## 1.2.30
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions, including @mikro-orm 7.2.3, so apps resolve a single copy of MikroORM with core.
+
 ## 1.2.29
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/express",
-  "version": "1.2.47",
+  "version": "1.2.48",
   "description": "Forklaunch framework for express.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -43,7 +43,7 @@
     "@forklaunch/core": "workspace:^",
     "@forklaunch/validator": "workspace:^",
     "@modelcontextprotocol/sdk": "^1.31.0",
-    "@scalar/express-api-reference": "^0.10.24",
+    "@scalar/express-api-reference": "^0.10.25",
     "@types/multer": "^2.3.0",
     "body-parser": "^2.3.0",
     "busboy": "^1.6.0",

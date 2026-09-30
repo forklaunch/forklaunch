@@ -1,5 +1,14 @@
 # @forklaunch/core
 
+## 3.0.1
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions, including @mikro-orm 7.2.3, so apps resolve a single copy of MikroORM with core.
+- Updated dependencies
+  - @forklaunch/common@1.2.30
+  - @forklaunch/validator@1.2.31
+
 ## 3.0.0
 
 ### Major Changes
