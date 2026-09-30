@@ -94,6 +94,11 @@ const CRITERIA: &[Criterion] = &[
         rail: "governance",
         label: "Users can request data export and erasure",
     },
+    Criterion {
+        id: "gov-construction",
+        rail: "governance",
+        label: "The app builds cleanly to its declared parameters (construction check passes)",
+    },
 ];
 
 /// What a check's finding means for its criterion. Mirrors `onFinding` in the
@@ -119,6 +124,13 @@ fn criterion_for_check(check: &str) -> Option<(&'static str, OnFinding)> {
         "retention-wiring" => ("gov-data-retention", OnFinding::Fail),
         "erasure-wiring" => ("gdpr-erasure", OnFinding::Fail),
         "possible-misclassification" => ("cmp-data-classification", OnFinding::Review),
+        // PHI sent to a provider with no BAA is sensitive data not handled
+        // according to its sensitivity. (The platform also scores it against
+        // `hipaa-baa` when the HIPAA pack applies.)
+        "ai-provider-direct" => ("cmp-data-classification", OnFinding::Fail),
+        // A managed template that needs credentials hosted instances never get
+        // does not run as declared.
+        "managed-provider-credentials" => ("gov-construction", OnFinding::Fail),
         _ => return None,
     })
 }
@@ -146,6 +158,8 @@ fn rail_for_check(check: &str) -> &'static str {
 fn severity_for(finding: &LocalFinding) -> &'static str {
     match (&finding.severity, finding.check.as_str()) {
         (Severity::Warning, "tenant-context-half-wired") => "critical",
+        // Health data leaving for a vendor that may not have signed a BAA.
+        (Severity::Warning, "ai-provider-direct") => "critical",
         (Severity::Warning, _) => "high",
         (Severity::Info, _) => "info",
     }
@@ -248,6 +262,8 @@ fn item_label(check: &str) -> &'static str {
         "tenant-isolation-wiring" => "Tenant isolation filter is installed",
         "tenant-em-wiring" => "An encryption tenant is bound",
         "tenant-context-half-wired" => "Tenant filter and encryption context agree",
+        "ai-provider-direct" => "Health data reaches AI models only through BAA-covered paths",
+        "managed-provider-credentials" => "Managed templates use the platform gateways, not their own credentials",
         _ => "Deterministic check",
     }
 }
@@ -270,6 +286,14 @@ fn remedy(check: &str) -> Option<String> {
         }
         "better-auth-encryption-context" => {
             "Wrap Better Auth's EntityManager so its reads carry the tenant."
+        }
+        "ai-provider-direct" => {
+            "Call models through createModelGatewayClient() (the platform offers HIPAA products \
+             only BAA-covered models), or confirm the provider has signed a BAA for this use."
+        }
+        "managed-provider-credentials" => {
+            "Send one-time codes through the platform's instance gateway and call models with \
+             createModelGatewayClient(); drop the provider credentials from the template."
         }
         _ => return None,
     };
@@ -455,16 +479,7 @@ pub(crate) fn build_local_report_card(
 }
 
 /// Every local check, so the checklist shows passes as well as failures.
-const ALL_CHECKS: &[&str] = &[
-    "encryptor-registration",
-    "tenant-em-wiring",
-    "better-auth-encryption-context",
-    "possible-misclassification",
-    "tenant-isolation-wiring",
-    "tenant-context-half-wired",
-    "retention-wiring",
-    "erasure-wiring",
-];
+const ALL_CHECKS: &[&str] = crate::compliance::checks::LOCAL_CHECK_IDS;
 
 /// The local checks that bear on a criterion.
 fn checks_for_criterion(id: &str) -> Vec<&'static str> {
@@ -533,6 +548,11 @@ mod tests {
                 "governance",
                 "gdpr-erasure",
                 "Users can request data export and erasure",
+            ),
+            (
+                "governance",
+                "gov-construction",
+                "The app builds cleanly to its declared parameters (construction check passes)",
             ),
         ];
         let total: usize = card.dimensions.values().map(|d| d.items.len()).sum();
@@ -797,4 +817,58 @@ pub(crate) fn iso8601_now() -> String {
         (rem % 3_600) / 60,
         rem % 60
     )
+}
+
+#[cfg(test)]
+mod wiring_score_tests {
+    use super::*;
+    use crate::compliance::checks::{LocalFinding, Severity};
+
+    fn finding(check: &str) -> LocalFinding {
+        LocalFinding {
+            severity: Severity::Warning,
+            project: "svc".to_string(),
+            check: check.to_string(),
+            subject: "x".to_string(),
+            message: "m".to_string(),
+        }
+    }
+
+    #[test]
+    fn a_direct_ai_provider_on_phi_costs_critical_points_on_compliance() {
+        let clean = build_local_report_card("app", 1, &[], "t".to_string());
+        let card = build_local_report_card(
+            "app",
+            1,
+            &[finding("ai-provider-direct")],
+            "t".to_string(),
+        );
+        let before = clean.dimensions["compliance"].score;
+        let after = card.dimensions["compliance"].score;
+        assert_eq!(before - after, 30, "critical = 30 points");
+        let item = card.dimensions["compliance"]
+            .items
+            .iter()
+            .find(|i| i.criterion.as_deref() == Some("cmp-data-classification"))
+            .unwrap();
+        assert_eq!(item.status, "unmet");
+        assert!(card.overall < clean.overall);
+    }
+
+    #[test]
+    fn managed_provider_credentials_fail_construction_on_governance() {
+        let card = build_local_report_card(
+            "app",
+            1,
+            &[finding("managed-provider-credentials")],
+            "t".to_string(),
+        );
+        let item = card.dimensions["governance"]
+            .items
+            .iter()
+            .find(|i| i.criterion.as_deref() == Some("gov-construction"))
+            .unwrap();
+        assert_eq!(item.status, "unmet");
+        assert_eq!(card.dimensions["governance"].score, 85, "high = 15 points");
+    }
 }

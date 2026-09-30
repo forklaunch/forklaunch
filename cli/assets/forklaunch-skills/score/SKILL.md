@@ -140,10 +140,27 @@ Three fields carry the weight:
 `critical` costs 30 points, `high` 15, `medium` 8, `low` 4, `info` nothing. A
 rail floors at 0.
 
-Only one check is `critical`: **`tenant-context-half-wired`**. It is promoted
-above the other warnings on evidence — it is the one whose failure mode is
-silent. Rows filter correctly, tests pass, and encrypted columns quietly use
-the wrong key until a real tenant exists in production. See `/compliance`.
+Two checks are `critical`:
+
+- **`tenant-context-half-wired`**, promoted on evidence because its failure is
+  silent: rows filter correctly, tests pass, and encrypted columns quietly use
+  the wrong key until a real tenant exists in production. See `/compliance`.
+- **`ai-provider-direct`**: a service whose entities hold `phi` imports an AI
+  provider SDK (`openai`, `@anthropic-ai/sdk`, `@ai-sdk/*`, Bedrock, Gemini, …)
+  or reads a provider key. Health data may be reaching a vendor with no BAA.
+  Fix: call models through `createModelGatewayClient()` (the platform offers
+  HIPAA products only BAA-covered models), or confirm the provider's BAA.
+
+`managed-provider-credentials` (high) fires when a service written to run as a
+managed instance (it reads `INSTANCE_HMAC_KEY` / `PLATFORM_GATEWAY_URL`, or has
+the relay) reads Twilio, SendGrid or AI provider credentials. Hosted instances
+never get them: use the platform's instance gateway for one-time codes and
+`createModelGatewayClient()` for models.
+
+On the website a failed wiring check also marks its report-card requirements
+not met, overriding a "Guaranteed by ForkLaunch" pass: an unregistered
+encryptor fails "sensitive fields are encrypted at rest" even though the
+framework guarantees it for apps that wire it.
 
 ## Fixing what it finds
 

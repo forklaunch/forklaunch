@@ -124,6 +124,123 @@ fn read_production_sources(project_path: &Path) -> String {
     out
 }
 
+/// Every check `run_local_checks` performs. Reported in the audit JSON as
+/// `localChecks`, so a consumer can tell a check that ran and found nothing
+/// (a pass) from one this CLI version does not have.
+pub(crate) const LOCAL_CHECK_IDS: &[&str] = &[
+    "encryptor-registration",
+    "tenant-em-wiring",
+    "better-auth-encryption-context",
+    "possible-misclassification",
+    "tenant-isolation-wiring",
+    "tenant-context-half-wired",
+    "retention-wiring",
+    "erasure-wiring",
+    "ai-provider-direct",
+    "managed-provider-credentials",
+];
+
+/// AI model provider SDKs a service might call directly.
+const AI_PROVIDER_PACKAGES: &[&str] = &[
+    "openai",
+    "@anthropic-ai/sdk",
+    "@azure/openai",
+    "@aws-sdk/client-bedrock-runtime",
+    "@google/generative-ai",
+    "@google/genai",
+    "cohere-ai",
+    "@mistralai/mistralai",
+    "groq-sdk",
+    "together-ai",
+];
+
+/// Vercel AI SDK provider packages are `@ai-sdk/<provider>`.
+const AI_SDK_PROVIDER_PREFIX: &str = "@ai-sdk/";
+
+/// Credentials for AI model providers.
+const AI_PROVIDER_KEYS: &[&str] = &[
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "AZURE_OPENAI_API_KEY",
+    "AWS_BEARER_TOKEN_BEDROCK",
+    "GEMINI_API_KEY",
+    "GOOGLE_GENERATIVE_AI_API_KEY",
+    "COHERE_API_KEY",
+    "MISTRAL_API_KEY",
+    "GROQ_API_KEY",
+];
+
+/// Credentials for messaging providers a managed platform supplies itself.
+const MESSAGING_PROVIDER_KEYS: &[&str] = &[
+    "TWILIO_ACCOUNT_SID",
+    "TWILIO_AUTH_TOKEN",
+    "SENDGRID_API_KEY",
+    "MAILGUN_API_KEY",
+    "POSTMARK_SERVER_TOKEN",
+];
+
+/// Signals that a service is written to run as a managed instance: it reads
+/// the instance-gateway contract the platform injects.
+const MANAGED_INSTANCE_MARKERS: &[&str] = &["INSTANCE_HMAC_KEY", "PLATFORM_GATEWAY_URL"];
+
+/// The module specifiers a source imports or requires, in order of appearance.
+fn imported_modules(sources: &str) -> Vec<String> {
+    static IMPORTS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = IMPORTS.get_or_init(|| {
+        regex::Regex::new(
+            r#"(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|^\s*import\s+)['"]([^'"]+)['"]"#,
+        )
+        .expect("import pattern")
+    });
+    re.captures_iter(sources)
+        .map(|c| c[1].to_string())
+        .collect()
+}
+
+/// AI providers the sources call directly: provider SDK imports and provider
+/// key reads. Sorted and de-duplicated.
+pub(crate) fn direct_ai_providers(sources: &str) -> Vec<String> {
+    let mut found: Vec<String> = imported_modules(sources)
+        .into_iter()
+        .filter(|module| {
+            AI_PROVIDER_PACKAGES.contains(&module.as_str())
+                || module.starts_with(AI_SDK_PROVIDER_PREFIX)
+        })
+        .collect();
+    found.extend(
+        AI_PROVIDER_KEYS
+            .iter()
+            .filter(|key| sources.contains(**key))
+            .map(|key| key.to_string()),
+    );
+    found.sort();
+    found.dedup();
+    found
+}
+
+/// Provider credentials the sources read, for a managed template.
+pub(crate) fn provider_credentials_read(sources: &str) -> Vec<String> {
+    let mut found: Vec<String> = MESSAGING_PROVIDER_KEYS
+        .iter()
+        .chain(AI_PROVIDER_KEYS.iter())
+        .filter(|key| sources.contains(**key))
+        .map(|key| key.to_string())
+        .collect();
+    found.sort();
+    found
+}
+
+/// Whether a project is written to run as a managed instance: it reads the
+/// instance-gateway contract, or carries the relay the managed installer adds.
+pub(crate) fn is_managed_instance(project_path: &Path, sources: &str) -> bool {
+    MANAGED_INSTANCE_MARKERS
+        .iter()
+        .any(|marker| sources.contains(marker))
+        || project_path
+            .join("api/controllers/relay.controller.ts")
+            .exists()
+}
+
 /// Any of these means the service can bind an encryption tenant. There is more
 /// than one legitimate way: the blueprints wrap the EntityManager, while
 /// forklaunch-platform's IAM enters the context directly around its reads.
@@ -427,6 +544,59 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
                         });
                     }
                 }
+            }
+
+            // 6. AI features on health data must not call a provider directly.
+            //
+            // Microsoft's, Amazon's and Google's BAAs cover only specific
+            // services, and a raw provider key sends PHI to whatever the key
+            // reaches. The model gateway only offers BAA-covered models to a
+            // HIPAA product; anything else needs its own BAA, which this check
+            // cannot see, so it asks rather than assumes.
+            let has_phi = entities.iter().any(|e| {
+                e.field_classifications
+                    .values()
+                    .any(|classification| classification == "phi")
+            });
+            if has_phi {
+                let sources = read_production_sources(&project_path);
+                let providers = direct_ai_providers(&sources);
+                if !providers.is_empty() {
+                    findings.push(LocalFinding {
+                        severity: Severity::Warning,
+                        project: project.clone(),
+                        check: "ai-provider-direct".to_string(),
+                        subject: providers.join(", "),
+                        message: format!(
+                            "entities hold health data (phi) and this service calls an AI provider directly ({}) — route model calls through the ForkLaunch model gateway (createModelGatewayClient, BAA-covered models only) or confirm the provider has signed a BAA covering this use",
+                            providers.join(", ")
+                        ),
+                    });
+                }
+            }
+        }
+
+        // 7. A managed template must not ship its own provider credentials.
+        //
+        // Hosted instances never receive them: SMS/email one-time codes go
+        // through the platform's instance gateway and model calls through the
+        // model gateway, both signed with the instance's own key. A template
+        // that reads TWILIO_AUTH_TOKEN or OPENAI_API_KEY either fails on every
+        // hosted instance or carries a credential shared by every customer.
+        let project_sources = read_production_sources(&project_path);
+        if is_managed_instance(&project_path, &project_sources) {
+            let credentials = provider_credentials_read(&project_sources);
+            if !credentials.is_empty() {
+                findings.push(LocalFinding {
+                    severity: Severity::Warning,
+                    project: project.clone(),
+                    check: "managed-provider-credentials".to_string(),
+                    subject: credentials.join(", "),
+                    message: format!(
+                        "this service runs as a managed instance but reads provider credentials ({}) — hosted instances do not get them; use the platform's instance gateway for one-time codes and createModelGatewayClient for models",
+                        credentials.join(", ")
+                    ),
+                });
             }
         }
     }
@@ -844,5 +1014,164 @@ mod fs_tests {
             "wrapped ORM should not be flagged, got: {:?}",
             findings
         );
+    }
+}
+
+#[cfg(test)]
+mod wiring_tests {
+    use super::*;
+
+    #[test]
+    fn direct_ai_providers_finds_sdk_imports_and_keys_only() {
+        let sources = r#"
+            import OpenAI from 'openai';
+            import { createAnthropic } from "@ai-sdk/anthropic";
+            const bedrock = require('@aws-sdk/client-bedrock-runtime');
+            const key = process.env.ANTHROPIC_API_KEY;
+            import { openai_helpers } from './openai';
+            import { createModelGatewayClient } from '@forklaunch/core/http';
+        "#;
+        assert_eq!(
+            direct_ai_providers(sources),
+            vec![
+                "@ai-sdk/anthropic",
+                "@aws-sdk/client-bedrock-runtime",
+                "ANTHROPIC_API_KEY",
+                "openai"
+            ]
+        );
+        assert!(
+            direct_ai_providers("import { createModelGatewayClient } from '@forklaunch/core/http';")
+                .is_empty(),
+            "the gateway is not a direct provider"
+        );
+    }
+
+    #[test]
+    fn managed_signals_and_credentials() {
+        let dir = std::env::temp_dir().join("fl-wiring-managed-signal");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(is_managed_instance(&dir, "getEnvVar('INSTANCE_HMAC_KEY')"));
+        assert!(!is_managed_instance(&dir, "getEnvVar('DB_HOST')"));
+        std::fs::create_dir_all(dir.join("api/controllers")).unwrap();
+        std::fs::write(dir.join("api/controllers/relay.controller.ts"), "").unwrap();
+        assert!(is_managed_instance(&dir, ""));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert_eq!(
+            provider_credentials_read("TWILIO_AUTH_TOKEN OPENAI_API_KEY DB_HOST"),
+            vec!["OPENAI_API_KEY", "TWILIO_AUTH_TOKEN"]
+        );
+    }
+
+    fn write_phi_project(proj: &std::path::Path, service_source: &str) {
+        std::fs::create_dir_all(proj.join("persistence/entities")).unwrap();
+        std::fs::create_dir_all(proj.join("domain/services")).unwrap();
+        std::fs::write(
+            proj.join("persistence/entities/visit.entity.ts"),
+            r#"
+            export const VisitEntity = defineComplianceEntity({
+              name: 'Visit',
+              properties: {
+                id: fp.uuid().primary().compliance('none'),
+                notes: fp.text().compliance('phi')
+              }
+            });
+            "#,
+        )
+        .unwrap();
+        std::fs::write(
+            proj.join("registrations.ts"),
+            "registerEncryptor(x); ComplianceDataService; wrapEmWithTenantContext(em)",
+        )
+        .unwrap();
+        std::fs::write(proj.join("mikro-orm.config.ts"), "export default {};").unwrap();
+        std::fs::write(proj.join("domain/services/summary.service.ts"), service_source).unwrap();
+    }
+
+    #[test]
+    fn a_phi_service_calling_a_provider_directly_is_flagged() {
+        let dir = std::env::temp_dir().join("fl-wiring-ai-direct");
+        let _ = std::fs::remove_dir_all(&dir);
+        write_phi_project(
+            &dir.join("clinic"),
+            "import OpenAI from 'openai'; const c = new OpenAI({ apiKey: getEnvVar('OPENAI_API_KEY') });",
+        );
+        let findings = run_local_checks(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let f = findings
+            .iter()
+            .find(|f| f.check == "ai-provider-direct")
+            .unwrap_or_else(|| panic!("expected ai-provider-direct, got {:?}", findings));
+        assert!(matches!(f.severity, Severity::Warning));
+        assert_eq!(f.subject, "OPENAI_API_KEY, openai");
+        assert!(f.message.contains("createModelGatewayClient"));
+    }
+
+    #[test]
+    fn a_phi_service_using_the_gateway_is_not_flagged() {
+        let dir = std::env::temp_dir().join("fl-wiring-ai-gateway");
+        let _ = std::fs::remove_dir_all(&dir);
+        write_phi_project(
+            &dir.join("clinic"),
+            "import { createModelGatewayClient } from '@forklaunch/core/http';",
+        );
+        let findings = run_local_checks(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            !findings.iter().any(|f| f.check == "ai-provider-direct"),
+            "{:?}",
+            findings
+        );
+    }
+
+    #[test]
+    fn a_non_phi_service_may_call_a_provider() {
+        let dir = std::env::temp_dir().join("fl-wiring-ai-no-phi");
+        let proj = dir.join("svc");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(proj.join("persistence/entities")).unwrap();
+        std::fs::write(
+            proj.join("persistence/entities/note.entity.ts"),
+            "export const N = defineComplianceEntity({ name: 'N', properties: { body: fp.text().compliance('pii') } });",
+        )
+        .unwrap();
+        std::fs::write(proj.join("registrations.ts"), "import OpenAI from 'openai';").unwrap();
+        let findings = run_local_checks(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(!findings.iter().any(|f| f.check == "ai-provider-direct"));
+    }
+
+    #[test]
+    fn a_managed_template_reading_provider_credentials_is_flagged() {
+        let dir = std::env::temp_dir().join("fl-wiring-managed-creds");
+        let proj = dir.join("iam");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&proj).unwrap();
+        std::fs::write(
+            proj.join("registrations.ts"),
+            "const gateway = getEnvVar('PLATFORM_GATEWAY_URL'); const t = getEnvVar('TWILIO_AUTH_TOKEN');",
+        )
+        .unwrap();
+        let findings = run_local_checks(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let f = findings
+            .iter()
+            .find(|f| f.check == "managed-provider-credentials")
+            .unwrap_or_else(|| panic!("expected the finding, got {:?}", findings));
+        assert_eq!(f.subject, "TWILIO_AUTH_TOKEN");
+    }
+
+    #[test]
+    fn an_ordinary_app_reading_twilio_is_not_a_managed_finding() {
+        let dir = std::env::temp_dir().join("fl-wiring-unmanaged-creds");
+        let proj = dir.join("messaging");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&proj).unwrap();
+        std::fs::write(proj.join("registrations.ts"), "getEnvVar('TWILIO_AUTH_TOKEN')").unwrap();
+        let findings = run_local_checks(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(!findings.iter().any(|f| f.check == "managed-provider-credentials"));
     }
 }
