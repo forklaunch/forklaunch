@@ -1,5 +1,11 @@
 # @forklaunch/common
 
+## 1.2.29
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions (`pnpm up:packages`).
+
 ## 1.2.28
 
 ### Patch Changes

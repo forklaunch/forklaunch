@@ -1,5 +1,11 @@
 # @forklaunch/testing
 
+## 1.2.34
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions (`pnpm up:packages`).
+
 ## 1.2.33
 
 ### Patch Changes

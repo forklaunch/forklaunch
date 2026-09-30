@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/validator",
-  "version": "1.2.29",
+  "version": "1.2.30",
   "description": "Schema validator for ForkLaunch components.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -93,6 +93,6 @@
     "tsup": "^8.5.1",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2",
-    "typescript-eslint": "^8.70.1"
+    "typescript-eslint": "^8.71.0"
   }
 }

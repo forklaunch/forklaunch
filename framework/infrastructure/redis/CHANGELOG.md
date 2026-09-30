@@ -1,5 +1,17 @@
 # @forklaunch/infrastructure-redis
 
+## 1.4.18
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions (`pnpm up:packages`).
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies [f2b6357]
+  - @forklaunch/core@3.0.0
+  - @forklaunch/common@1.2.29
+
 ## 1.4.17
 
 ### Patch Changes

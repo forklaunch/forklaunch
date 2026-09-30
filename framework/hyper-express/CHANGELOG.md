@@ -1,5 +1,19 @@
 # @forklaunch/hyper-express
 
+## 1.2.47
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions (`pnpm up:packages`).
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies [f2b6357]
+  - @forklaunch/core@3.0.0
+  - @forklaunch/common@1.2.29
+  - @forklaunch/validator@1.2.30
+  - @forklaunch/ws@1.2.45
+
 ## 1.2.46
 
 ### Patch Changes

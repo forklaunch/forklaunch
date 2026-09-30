@@ -1,5 +1,43 @@
 # @forklaunch/core
 
+## 3.0.0
+
+### Major Changes
+
+- **Breaking:** pii, phi and pci entity properties load as `CompliantField`. Read the value with `.deanon` (plaintext, audited through `onComplianceAccess`) or `.anon` (de-identified); there is no `toString`/`toJSON`/inspect overload, so a raw field cannot leak into a log, a response or a vendor call by accident.
+
+  - Plain values still work in `em.create`/`em.assign` and, for `queryable` fields, in `where` (blind index in `<column>_idx`).
+  - New `v4:` random-IV envelope; `reencryptEncryptedColumns` upgrades existing rows.
+  - `deanon(entity)` for spreads.
+  - Migrate with `npx -p @forklaunch/core forklaunch-migrate-compliant-fields [tsconfig.json]`, which now runs on TypeScript 7's API (`typescript/unstable/sync`); TypeScript 5 is no longer needed.
+
+### Minor Changes
+
+- Managed-instance integrations through the ForkLaunch instance gateway. No vendor key lives in the app: calls are signed with the instance's HMAC key and vendor events come back signed.
+
+  - `createInstanceGatewayTransport`, `verifyPlatformEvent` / `signPlatformEvent`, `isManagedInstance`.
+  - Clients: `createModelGatewayClient`, `createEmailClient`, `createSmsClient`, `createWhatsAppClient`, `createVoiceClient`, `createPaymentsClient`, and `createStripeClient` (the real Stripe SDK routed through the gateway; `stripe` is an optional peer dependency).
+  - `forklaunch-gateway-mock`: a local gateway and vendor mock with one route file per feature, signed event delivery and test control endpoints. `forklaunch-model-gateway-mock` remains as an alias.
+
+- f2b6357: Object store: real files, browser uploads and download links, keyless on ForkLaunch.
+
+  - `ObjectStore` gains `putFile(key, body, { contentType, filename?, metadata? })`,
+    `presignUpload(key, { contentType, maxBytes, expiresIn? })` (a presigned POST that
+    enforces size and content type) and `presignDownload(key, { expiresIn?, filename? })`.
+    Custom `ObjectStore` implementations must add them.
+  - `S3ObjectStore` takes `prefix` (confines every key), `presignLimits` (lifetime caps,
+    from `S3_PRESIGN_MAX_UPLOAD_SECONDS` / `S3_PRESIGN_MAX_DOWNLOAD_SECONDS`) and
+    `createBucketIfMissing`, which now defaults to true only when a custom endpoint
+    (MinIO) is configured: deployed buckets are provisioned by the platform.
+  - `s3ClientConfig({ url, region, accessKeyId, secretAccessKey })` passes keys only when
+    both are set, so deployed services use their task role.
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/common@1.2.29
+  - @forklaunch/validator@1.2.30
+
 ## 2.1.1
 
 ### Patch Changes

@@ -1,5 +1,13 @@
 # @forklaunch/validator
 
+## 1.2.30
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions (`pnpm up:packages`).
+- Updated dependencies
+  - @forklaunch/common@1.2.29
+
 ## 1.2.29
 
 ### Patch Changes

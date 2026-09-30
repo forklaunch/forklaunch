@@ -21,8 +21,6 @@ describe('migrate-compliant-fields', () => {
     [
       path.join(__dirname, '..', 'bin', 'migrate-compliant-fields.mjs'),
       path.join(workdir, 'tsconfig.json'),
-      '--typescript',
-      path.dirname(require.resolve('typescript-5/package.json')),
       '--import-from',
       '../../../src/persistence'
     ],
