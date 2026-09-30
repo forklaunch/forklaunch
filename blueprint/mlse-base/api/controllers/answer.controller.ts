@@ -32,7 +32,9 @@ const AnswerBodySchema = {
   // 'overview' | 'direct'; default: overview for short topic queries
   mode: optional(string),
   // the topic of the conversation, for a follow-up question
-  followUpOf: optional(string)
+  followUpOf: optional(string),
+  // questions already asked in the conversation
+  asked: optional(array(string))
 };
 
 const SectionSchema = {
@@ -77,19 +79,21 @@ const AnswerSchema = {
     used: number,
     documents: number,
     topicType: optional(string)
-  })
+  }),
+  suggestions: optional(array(string))
 };
 
 const bodyValid = (query: string) => query.trim().length > 0 && query.length <= 2000;
 
 // the request as the service takes it; an unknown mode falls back to the
 // default choice
-function answerRequest(body: { query: string; topicSlug?: string; live?: boolean; organizationId?: string; userId?: string; mode?: string; followUpOf?: string }) {
-  const { mode, followUpOf, ...rest } = body;
+function answerRequest(body: { query: string; topicSlug?: string; live?: boolean; organizationId?: string; userId?: string; mode?: string; followUpOf?: string; asked?: string[] }) {
+  const { mode, followUpOf, asked, ...rest } = body;
   return {
     ...rest,
     ...(mode === 'overview' || mode === 'direct' ? { mode } : {}),
-    ...(followUpOf && followUpOf.trim() ? { followUpOf: followUpOf.slice(0, 200) } : {})
+    ...(followUpOf && followUpOf.trim() ? { followUpOf: followUpOf.slice(0, 200) } : {}),
+    ...(asked ? { asked: asked.slice(-20).map((q) => q.slice(0, 500)) } : {})
   } as AnswerRequestDto;
 }
 
