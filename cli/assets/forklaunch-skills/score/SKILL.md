@@ -35,11 +35,11 @@ report-card contract.
 
 | flag | what it does |
 |---|---|
-| *(none)* | a readable terminal summary — the default |
+| *(none)* | a readable terminal summary, followed by the remediation prompt — the default |
 | `--offline` | deterministic checks only: no upload, no auth, no cost (newer CLIs) |
 | `--no-share` | score online but skip minting the share link (newer CLIs) |
 | `--json` | the raw report card, for tooling (includes `remediationPrompt`) |
-| `--prompt` | print the remediation prompt for an agent instead of the summary |
+| `--prompt` | print only the remediation prompt (no summary) |
 | `--pretty` | pretty-print the JSON |
 | `--min-score N` | exit non-zero if `overall` is below N — for CI |
 | `-p, --path <dir>` | app root (defaults to the manifest in the current directory) |
@@ -165,7 +165,7 @@ framework guarantees it for apps that wire it.
 
 ## Fixing what it finds
 
-The fastest way to hand the card to an agent is the prompt:
+Every run ends with the remediation prompt, after the summary. To get the prompt alone:
 
 ```bash
 forklaunch score --prompt --no-share   # full, agent-scored card

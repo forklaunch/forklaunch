@@ -103,7 +103,7 @@ impl CliCommand for ScoreCommand {
             Arg::new("prompt")
                 .long("prompt")
                 .help(
-                    "Print the remediation prompt for an agent instead of the summary: the \
+                    "Print only the remediation prompt (the default output shows it after the summary): the \
                      same prompt the website's \"Generate prompt\" builds (every finding \
                      with its evidence and fix, the scored checklist, and the rescoring \
                      loop). With --offline, a prompt built from the deterministic checks.",
@@ -162,14 +162,16 @@ impl CliCommand for ScoreCommand {
                 println!("  {}", bold(&format!("Report card: {url}")));
                 println!();
             }
+            // The findings are the point of scoring: a person reads the summary
+            // above, an agent works from the prompt below (every finding with its
+            // evidence and fix, and the rescoring loop). `--prompt` prints it alone.
+            println!("  {}", bold("Remediation prompt"));
             println!(
                 "  {}",
-                dim(
-                    "Next: `forklaunch score --prompt` prints the remediation prompt for an agent \
-                     (every finding with its evidence and fix, and the rescoring loop)."
-                )
+                dim("(`forklaunch score --prompt` prints only this; `--json` carries it as remediationPrompt)")
             );
             println!();
+            println!("{prompt}");
         }
 
         if let Some(min) = matches.get_one::<u32>("min_score") {
