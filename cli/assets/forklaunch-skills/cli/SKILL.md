@@ -520,6 +520,7 @@ forklaunch infra add <service> email          # platform-held email (SES); see /
 forklaunch infra add <service> sms            # texts via the platform; see /integrations
 forklaunch infra add <service> whatsapp       # WhatsApp through the platform (see /integrations)
 forklaunch infra add <service> voice          # managed apps: outbound calls via the platform (Amazon Connect)
+forklaunch infra add <service> payments       # Stripe Connect through the platform (managed instances)
 forklaunch infra remove <service> object-store
 forklaunch infra add <service> object-store --dryrun
 forklaunch score --offline                    # afterwards: the wiring checks should pass

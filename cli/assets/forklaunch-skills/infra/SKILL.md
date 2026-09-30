@@ -26,7 +26,9 @@ the service (registration, docker-compose, env, dependency, manifest resource,
 test utilities) and `infra remove` undoes it. No login or `integrate` is needed.
 The platform provisions the real resource on the next deploy: for an object
 store, a private encrypted bucket, CORS for the app's own domains, and a task
-role scoped to that bucket, with no keys. See `/cli` for flags.
+role scoped to that bucket, with no keys. `infra add <service> payments` wires
+Stripe Connect through the platform instead of a Stripe key (see `/integrations`).
+See `/cli` for flags.
 
 `forklaunch infra add <service> email` registers the platform-held
 `EmailClient` (SES through the instance gateway, no mail key) and an email

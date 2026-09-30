@@ -454,6 +454,108 @@ Platform side (for operators): `CONNECT_INSTANCE_ID` enables voice (unset:
 Connect contact events reach `POST /vendor-webhooks/voice` through an
 EventBridge rule to the SNS topic `VOICE_SNS_TOPIC_ARN`.
 
+## Payments in a managed instance (Stripe Connect)
+
+The section above is for an app with its **own** Stripe account. A product sold
+as managed instances works differently: say you sell a booking app to dental
+practices. Each practice (each instance) takes its own patients' payments into
+its own bank account, and none of them should ever hold a Stripe key. The
+product's publisher runs a **Stripe Connect platform** linked to ForkLaunch;
+every instance gets its **own connected account** under it and is the merchant
+of record (direct charges). The instance calls Stripe through the platform,
+signed with its own instance key.
+
+### What the CLI writes
+
+```bash
+forklaunch infra add <service> payments
+forklaunch score --offline      # payments checks should pass
+forklaunch infra remove <service> payments
+```
+
+- `registrations.ts`: `StripeClient` built by `createStripeClient`
+  (`@forklaunch/core/http`). A service with no Stripe gets
+  `factory: () => createStripeClient({ Stripe })` and the `stripe` dependency.
+  A service that already registers one (billing-stripe, ecommerce-stripe) has
+  its factory **switched**, never duplicated:
+  `createStripeClient({ Stripe, apiKey: STRIPE_API_KEY })`, with
+  `STRIPE_API_KEY` / `STRIPE_WEBHOOK_SECRET` made `optional(...)` (used only
+  outside managed mode). A factory it does not recognise is refused, not guessed.
+- The gateway contract (`PLATFORM_GATEWAY_URL`, `INSTANCE_ID`,
+  `INSTANCE_HMAC_KEY`, all optional), the local gateway mock in docker-compose,
+  and the manifest capability (release resource type `payment`).
+- `/platform-events/:feature` plus `api/platformEvents/payments.ts` exporting
+  `handle(event)`: dedupes on `event.id`, with a TODO where the app records the
+  payment. In billing-stripe it hands the event to the existing
+  `StripeWebhookService`.
+
+### Using it
+
+```ts
+import Stripe from 'stripe';
+import { createPaymentsClient, createStripeClient } from '@forklaunch/core/http';
+
+// Onboarding: a Stripe-hosted page for the practice owner.
+const payments = createPaymentsClient();
+const { url } = await payments.onboardingLink({
+  returnUrl: 'https://dental.example.com/settings/payments?done=1',
+  refreshUrl: 'https://dental.example.com/settings/payments'
+});
+const { chargesEnabled, payoutsEnabled, requirementsDue } = await payments.status();
+
+// The real Stripe SDK; requests go to the platform, pinned to this instance's account.
+const stripe = createStripeClient({ Stripe });
+const session = await stripe.checkout.sessions.create({
+  mode: 'payment',
+  line_items: [{ price: priceId, quantity: 1 }],
+  success_url: 'https://dental.example.com/paid',
+  metadata: { appointmentId: appointment.id } // an opaque id, never patient data
+});
+```
+
+Pass your own `Stripe` class: the registration's `type: Stripe` check uses
+`instanceof`, and an ESM service could otherwise get a different build of the SDK.
+
+What the platform does to every call: refuses it before onboarding (409);
+forwards only an allowlist (customers, products, prices, plans, checkout and
+billing-portal sessions, payment links, subscriptions, payment intents, payment
+methods, tax calculations, refunds, invoice reads). Payouts, transfers, bank
+accounts and account changes get a 403. It refuses metadata keys named like
+protected data (`ssn`, `dob`, `diagnosis`, …) and SSN-shaped text (400),
+rate-limits per instance (429), sets `Stripe-Account` to the instance's own
+account whatever the app sent, and adds the product's application fee. The SDK
+raises its usual typed errors (`StripePermissionError`, …).
+
+### Events
+
+Stripe's webhooks go to the platform, which checks Stripe's signature and relays
+each event once to `/platform-events/payments`: `type` = the Stripe event type
+(`checkout.session.completed`, `invoice.paid`, `account.updated`, …), `id` = the
+Stripe event id, `data` = the event's object. The app verifies them with
+`verifyPlatformEvent` and never needs `STRIPE_WEBHOOK_SECRET`.
+
+### Local mock
+
+`infra add` wires the gateway mock (`npx -p @forklaunch/core forklaunch-gateway-mock`)
+into docker-compose. It answers Stripe-shaped objects in memory and enforces
+the same allowlist and metadata policy. Onboarding completes at once
+(`MOCK_PAYMENTS_AUTO_ENABLE=0` to wait for `POST /__mock/payments/enable`).
+`POST /__mock/payments/complete/<checkout session id>` pays a session and sends
+`checkout.session.completed`. `MOCK_STRIPE_UPSTREAM=http://localhost:12111`
+forwards to the official `stripe/stripe-mock` docker image instead.
+
+### Checks and fixes
+
+| check | means | fix |
+|---|---|---|
+| `payments-stripe-keys-in-managed` (high) | a managed service declares a Stripe key as required, reads it from `process.env`, or builds `new Stripe(` with no `createStripeClient` | `forklaunch infra add <service> payments`; keep any key `optional(...)` |
+| `stripe-webhook-unverified` (high) | a service's endpoints act on Stripe events with neither `constructEvent` nor `verifyPlatformEvent` | verify with `stripe.webhooks.constructEvent(rawBody, signature, secret)`, or receive platform events |
+| `payments-protected-data` (critical with phi, else high) | a `.deanon` value is written into `metadata` / `description` / `statement_descriptor` of a Stripe call | send the record id; look the record up when the event comes back |
+
+The platform's metadata policy checks key names only, because it cannot see
+where a value came from. The CLI check reads the code, so it is the real guard.
+Stripe signs no BAA, so health data must never reach it.
+
 ## Everything else
 
 Any other provider follows one shape: **the code reads an environment variable,
