@@ -80,7 +80,9 @@
     "bin/**"
   ],
   "bin": {
-    "forklaunch-migrate-compliant-fields": "./bin/migrate-compliant-fields.mjs"
+    "forklaunch-migrate-compliant-fields": "./bin/migrate-compliant-fields.mjs",
+    "forklaunch-gateway-mock": "./bin/gateway-mock/server.mjs",
+    "forklaunch-model-gateway-mock": "./bin/model-gateway-mock.mjs"
   },
   "scripts": {
     "build": "tsc --noEmit && tsup ./src/cache/index.ts ./src/controllers/index.ts ./src/mappers/index.ts ./src/objectstore/index.ts ./src/persistence/index.ts ./src/http/index.ts ./src/services/index.ts ./src/environment/index.ts ./src/ws/index.ts --format cjs,esm --no-splitting --tsconfig tsconfig.json --out-dir lib --clean --sourcemap && tsc -p tsconfig.build.json --emitDeclarationOnly",
@@ -138,6 +140,7 @@
     "jest": "^30.5.2",
     "jose": "6.1.3",
     "prettier": "^3.9.9",
+    "stripe": "^22.6.2",
     "testcontainers": "^12.1.0",
     "ts-jest": "^29.4.14",
     "ts-node": "^10.9.2",
@@ -146,5 +149,13 @@
     "typescript": "^7.0.2",
     "typescript-5": "npm:typescript@^5.9.3",
     "typescript-eslint": "^8.71.0"
+  },
+  "peerDependencies": {
+    "stripe": "^22.0.0"
+  },
+  "peerDependenciesMeta": {
+    "stripe": {
+      "optional": true
+    }
   }
 }

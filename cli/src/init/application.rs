@@ -789,6 +789,7 @@ impl CliCommand for ApplicationCommand {
                 queue: None,
                 object_store: None,
                 redis_partition: None,
+                capabilities: None,
             }),
             routers: get_routers_from_standard_package(package),
             metadata: None,

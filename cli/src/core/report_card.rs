@@ -85,6 +85,11 @@ const CRITERIA: &[Criterion] = &[
         label: "One customer cannot see or change another customer\u{2019}s data",
     },
     Criterion {
+        id: "sec-input-validation",
+        rail: "security",
+        label: "Incoming data is validated before it is trusted",
+    },
+    Criterion {
         id: "gov-data-retention",
         rail: "governance",
         label: "How long data is kept, and how it is deleted, is defined",
@@ -93,6 +98,11 @@ const CRITERIA: &[Criterion] = &[
         id: "gdpr-erasure",
         rail: "governance",
         label: "Users can request data export and erasure",
+    },
+    Criterion {
+        id: "gov-construction",
+        rail: "governance",
+        label: "The app builds cleanly to its declared parameters (construction check passes)",
     },
 ];
 
@@ -119,6 +129,55 @@ fn criterion_for_check(check: &str) -> Option<(&'static str, OnFinding)> {
         "retention-wiring" => ("gov-data-retention", OnFinding::Fail),
         "erasure-wiring" => ("gdpr-erasure", OnFinding::Fail),
         "possible-misclassification" => ("cmp-data-classification", OnFinding::Review),
+        // PHI sent to a provider with no BAA is sensitive data not handled
+        // according to its sensitivity. (The platform also scores it against
+        // `hipaa-baa` when the HIPAA pack applies.)
+        "ai-provider-direct" => ("cmp-data-classification", OnFinding::Fail),
+        // A managed template that needs credentials hosted instances never get
+        // does not run as declared.
+        "managed-provider-credentials" => ("gov-construction", OnFinding::Fail),
+        // Storage the platform cannot provision, or reaches with the wrong
+        // credentials, does not run as declared.
+        "object-store-wiring" | "object-store-static-credentials" => {
+            ("gov-construction", OnFinding::Fail)
+        }
+        // Public files and bucket settings changed in code bypass the
+        // platform's private, encrypted bucket.
+        "object-store-public-access" | "object-store-bucket-managed-in-app" => {
+            ("cmp-encryption-at-rest", OnFinding::Fail)
+        }
+        "presigned-upload-unbounded" => ("gov-construction", OnFinding::Fail),
+        // A capability the manifest and the code disagree about is either not
+        // provisioned or not callable.
+        "capability-wiring" => ("gov-construction", OnFinding::Fail),
+        // A managed instance never gets a mail credential; its own provider
+        // does not run as declared.
+        "email-provider-direct-in-managed" => ("gov-construction", OnFinding::Fail),
+        // Protected data shown where it should not be (previews, mail logs).
+        "email-protected-data" => ("cmp-data-classification", OnFinding::Fail),
+        // A managed service that needs an SMS vendor credential it never gets
+        // does not run as declared.
+        "sms-provider-direct-in-managed" => ("gov-construction", OnFinding::Fail),
+        // Protected plaintext sent over a channel carriers and lock screens
+        // read is sensitive data not handled according to its sensitivity.
+        "sms-protected-data" => ("cmp-data-classification", OnFinding::Fail),
+        // A managed service holding its own WhatsApp credentials does not run
+        // as declared; protected data sent over WhatsApp is sensitive data not
+        // handled according to its sensitivity.
+        "whatsapp-provider-direct-in-managed" => ("gov-construction", OnFinding::Fail),
+        "whatsapp-protected-data" => ("cmp-data-classification", OnFinding::Fail),
+        // A managed service dialing through its own voice vendor needs
+        // credentials hosted instances never get.
+        "voice-provider-direct-in-managed" => ("gov-construction", OnFinding::Fail),
+        // Protected values in call attributes land in Connect's contact records.
+        "voice-protected-data" => ("cmp-data-classification", OnFinding::Fail),
+        // A managed payments service that needs a Stripe key a hosted instance
+        // never gets does not run as declared.
+        "payments-stripe-keys-in-managed" => ("gov-construction", OnFinding::Fail),
+        // An unverified webhook is untrusted input acted on.
+        "stripe-webhook-unverified" => ("sec-input-validation", OnFinding::Fail),
+        // Protected data sent to a vendor with no BAA.
+        "payments-protected-data" => ("cmp-data-classification", OnFinding::Fail),
         _ => return None,
     })
 }
@@ -146,6 +205,36 @@ fn rail_for_check(check: &str) -> &'static str {
 fn severity_for(finding: &LocalFinding) -> &'static str {
     match (&finding.severity, finding.check.as_str()) {
         (Severity::Warning, "tenant-context-half-wired") => "critical",
+        // Health data leaving for a vendor that may not have signed a BAA.
+        (Severity::Warning, "ai-provider-direct") => "critical",
+        // Anyone on the internet can read the files.
+        (Severity::Warning, "object-store-public-access") => "critical",
+        // Health data in an email subject: on lock screens and in mail logs.
+        (Severity::Warning, "email-protected-data")
+            if finding.message.starts_with("health data (phi)") =>
+        {
+            "critical"
+        }
+        // Health data texted in the clear; other protected data is high.
+        (Severity::Warning, "sms-protected-data") if finding.message.starts_with("health data") => {
+            "critical"
+        }
+        // Health data sent over WhatsApp, which no BAA covers.
+        (Severity::Warning, "whatsapp-protected-data")
+            if finding
+                .message
+                .starts_with(crate::compliance::checks::WHATSAPP_PHI_MARKER) =>
+        {
+            "critical"
+        }
+        // Health data in call attributes, which Connect keeps in contact records.
+        (Severity::Warning, "voice-protected-data") if finding.message.contains("(phi)") => {
+            "critical"
+        }
+        // Health data sent to Stripe, which signs no BAA.
+        (Severity::Warning, "payments-protected-data") if finding.subject.starts_with("phi") => {
+            "critical"
+        }
         (Severity::Warning, _) => "high",
         (Severity::Info, _) => "info",
     }
@@ -248,6 +337,25 @@ fn item_label(check: &str) -> &'static str {
         "tenant-isolation-wiring" => "Tenant isolation filter is installed",
         "tenant-em-wiring" => "An encryption tenant is bound",
         "tenant-context-half-wired" => "Tenant filter and encryption context agree",
+        "ai-provider-direct" => "Health data reaches AI models only through BAA-covered paths",
+        "managed-provider-credentials" => "Managed templates use the platform gateways, not their own credentials",
+        "object-store-wiring" => "Object storage is declared and wired",
+        "object-store-static-credentials" => "Object storage uses the service's role, not stored keys",
+        "object-store-public-access" => "Stored files are private",
+        "object-store-bucket-managed-in-app" => "The platform, not app code, configures the bucket",
+        "presigned-upload-unbounded" => "Browser uploads are limited in size and type",
+        "capability-wiring" => "Platform capabilities are declared and wired",
+        "email-provider-direct-in-managed" => "Managed services send email through the platform",
+        "email-protected-data" => "Email subjects carry no protected data",
+        "sms-provider-direct-in-managed" => "Managed services text through the platform, not an SMS vendor SDK",
+        "sms-protected-data" => "Protected data is never sent in a text message",
+        "whatsapp-provider-direct-in-managed" => "Managed services send WhatsApp through the platform",
+        "whatsapp-protected-data" => "Protected data is never sent over WhatsApp",
+        "voice-provider-direct-in-managed" => "Managed services place calls through the platform",
+        "voice-protected-data" => "Call attributes carry no protected data",
+        "payments-stripe-keys-in-managed" => "Managed payments go through the platform, with no Stripe key in the app",
+        "stripe-webhook-unverified" => "Stripe webhooks are verified by signature",
+        "payments-protected-data" => "Protected data is not sent to Stripe",
         _ => "Deterministic check",
     }
 }
@@ -270,6 +378,83 @@ fn remedy(check: &str) -> Option<String> {
         }
         "better-auth-encryption-context" => {
             "Wrap Better Auth's EntityManager so its reads carry the tenant."
+        }
+        "ai-provider-direct" => {
+            "Call models through createModelGatewayClient() (the platform offers HIPAA products \
+             only BAA-covered models), or confirm the provider has signed a BAA for this use."
+        }
+        "managed-provider-credentials" => {
+            "Send one-time codes through the platform's instance gateway and call models with \
+             createModelGatewayClient(); drop the provider credentials from the template."
+        }
+        "object-store-wiring" => {
+            "Run `forklaunch infra add <service> object-store` (or `infra remove`) so the manifest \
+             and registrations.ts agree."
+        }
+        "object-store-static-credentials" => {
+            "Build the S3 client with s3ClientConfig({ url, region, accessKeyId, secretAccessKey }) \
+             and declare the keys optional; deployed, the task role supplies credentials."
+        }
+        "object-store-public-access" => {
+            "Remove public ACLs and wildcard CORS; serve files with ObjectStore.presignDownload."
+        }
+        "object-store-bucket-managed-in-app" => {
+            "Drop bucket creation, policy and CORS calls; set browser uploads and link lifetimes \
+             in the platform's object-store settings."
+        }
+        "presigned-upload-unbounded" => {
+            "Use ObjectStore.presignUpload(key, { contentType, maxBytes }) instead of a presigned PUT."
+        }
+        "capability-wiring" => {
+            "Run `forklaunch infra add <service> <capability>` (or `infra remove`) so the manifest \
+             and registrations.ts agree."
+        }
+        "email-provider-direct-in-managed" => {
+            "Run `forklaunch infra add <service> email` and send with the injected EmailClient \
+             (createEmailClient()); drop the mail SDK and its SMTP/API credentials."
+        }
+        "email-protected-data" => {
+            "Use a generic subject (\"Your results are ready\") and put the protected detail in the \
+             body or behind a signed-in link."
+        }
+        "sms-provider-direct-in-managed" => {
+            "Run `forklaunch infra add <service> sms` and send with the registered SmsClient \
+             (createSmsClient); drop the vendor SDK and its keys."
+        }
+        "sms-protected-data" => {
+            "Text a neutral notice or a sign-in link; show the protected value only after sign-in. \
+             Never pass a .deanon value in an SMS body."
+        }
+        "whatsapp-provider-direct-in-managed" => {
+            "Run `forklaunch infra add <service> whatsapp` and send with createWhatsAppClient(); \
+             drop the Meta token, graph.facebook.com calls and WhatsApp SDKs from the service."
+        }
+        "whatsapp-protected-data" => {
+            "Do not put a .deanon value in a WhatsApp message: WhatsApp is not covered by the AWS \
+             BAA and Meta signs none. Send a template that says only that something is waiting \
+             in the app."
+        }
+        "voice-provider-direct-in-managed" => {
+            "Run `forklaunch infra add <service> voice` and place calls with createVoiceClient(); \
+             drop the Connect/Twilio/Vonage SDK and its credentials from the service."
+        }
+        "voice-protected-data" => {
+            "Pass an identifier (an appointment id) in startOutboundCall attributes and let the \
+             contact flow look up what it reads out; never a .deanon value."
+        }
+        "payments-stripe-keys-in-managed" => {
+            "Run `forklaunch infra add <service> payments`: the StripeClient becomes \
+             createStripeClient({ Stripe, apiKey }) and the Stripe keys optional, used only outside \
+             managed mode."
+        }
+        "stripe-webhook-unverified" => {
+            "Verify each delivery with stripe.webhooks.constructEvent(rawBody, signature, secret) \
+             before acting on it; in managed mode receive Stripe events as platform events \
+             (verifyPlatformEvent)."
+        }
+        "payments-protected-data" => {
+            "Send Stripe an opaque reference (the record id) in metadata and descriptions, never a \
+             .deanon value; look the record up in the app when the event comes back."
         }
         _ => return None,
     };
@@ -455,16 +640,7 @@ pub(crate) fn build_local_report_card(
 }
 
 /// Every local check, so the checklist shows passes as well as failures.
-const ALL_CHECKS: &[&str] = &[
-    "encryptor-registration",
-    "tenant-em-wiring",
-    "better-auth-encryption-context",
-    "possible-misclassification",
-    "tenant-isolation-wiring",
-    "tenant-context-half-wired",
-    "retention-wiring",
-    "erasure-wiring",
-];
+const ALL_CHECKS: &[&str] = crate::compliance::checks::LOCAL_CHECK_IDS;
 
 /// The local checks that bear on a criterion.
 fn checks_for_criterion(id: &str) -> Vec<&'static str> {
@@ -525,6 +701,11 @@ mod tests {
                 "One customer cannot see or change another customer\u{2019}s data",
             ),
             (
+                "security",
+                "sec-input-validation",
+                "Incoming data is validated before it is trusted",
+            ),
+            (
                 "governance",
                 "gov-data-retention",
                 "How long data is kept, and how it is deleted, is defined",
@@ -533,6 +714,11 @@ mod tests {
                 "governance",
                 "gdpr-erasure",
                 "Users can request data export and erasure",
+            ),
+            (
+                "governance",
+                "gov-construction",
+                "The app builds cleanly to its declared parameters (construction check passes)",
             ),
         ];
         let total: usize = card.dimensions.values().map(|d| d.items.len()).sum();
@@ -570,6 +756,9 @@ mod tests {
             ("retention-wiring", "gov-data-retention"),
             ("erasure-wiring", "gdpr-erasure"),
             ("possible-misclassification", "cmp-data-classification"),
+            ("payments-stripe-keys-in-managed", "gov-construction"),
+            ("stripe-webhook-unverified", "sec-input-validation"),
+            ("payments-protected-data", "cmp-data-classification"),
         ] {
             assert_eq!(
                 criterion_for_check(check).map(|(c, _)| c),
@@ -797,4 +986,157 @@ pub(crate) fn iso8601_now() -> String {
         (rem % 3_600) / 60,
         rem % 60
     )
+}
+
+#[cfg(test)]
+mod wiring_score_tests {
+    use super::*;
+    use crate::compliance::checks::{LocalFinding, Severity};
+
+    fn finding(check: &str) -> LocalFinding {
+        LocalFinding {
+            severity: Severity::Warning,
+            project: "svc".to_string(),
+            check: check.to_string(),
+            subject: "x".to_string(),
+            message: "m".to_string(),
+        }
+    }
+
+    #[test]
+    fn protected_data_to_stripe_is_critical_only_with_phi() {
+        let mut phi = finding("payments-protected-data");
+        phi.subject = "phi: customers.create".to_string();
+        assert_eq!(severity_for(&phi), "critical");
+        let mut pii = finding("payments-protected-data");
+        pii.subject = "customers.create".to_string();
+        assert_eq!(severity_for(&pii), "high");
+        assert_eq!(severity_for(&finding("stripe-webhook-unverified")), "high");
+        assert!(remedy("payments-stripe-keys-in-managed").unwrap().contains("infra add"));
+    }
+
+    #[test]
+    fn a_direct_ai_provider_on_phi_costs_critical_points_on_compliance() {
+        let clean = build_local_report_card("app", 1, &[], "t".to_string());
+        let card = build_local_report_card(
+            "app",
+            1,
+            &[finding("ai-provider-direct")],
+            "t".to_string(),
+        );
+        let before = clean.dimensions["compliance"].score;
+        let after = card.dimensions["compliance"].score;
+        assert_eq!(before - after, 30, "critical = 30 points");
+        let item = card.dimensions["compliance"]
+            .items
+            .iter()
+            .find(|i| i.criterion.as_deref() == Some("cmp-data-classification"))
+            .unwrap();
+        assert_eq!(item.status, "unmet");
+        assert!(card.overall < clean.overall);
+    }
+
+    #[test]
+    fn email_checks_map_to_their_criteria_and_phi_subjects_are_critical() {
+        let mut phi = finding("email-protected-data");
+        phi.message = "health data (phi): an email subject carries …".to_string();
+        assert_eq!(severity_for(&phi), "critical");
+        assert_eq!(severity_for(&finding("email-protected-data")), "high");
+        assert_eq!(severity_for(&finding("email-provider-direct-in-managed")), "high");
+        let card = build_local_report_card(
+            "app",
+            1,
+            &[finding("email-provider-direct-in-managed")],
+            "t".to_string(),
+        );
+        assert_eq!(card.dimensions["governance"].score, 85);
+        let card = build_local_report_card("app", 1, &[phi], "t".to_string());
+        let item = card.dimensions["compliance"]
+            .items
+            .iter()
+            .find(|i| i.criterion.as_deref() == Some("cmp-data-classification"))
+            .unwrap();
+        assert_eq!(item.status, "unmet");
+        assert!(remedy("email-protected-data").is_some());
+        assert_ne!(item_label("email-provider-direct-in-managed"), "Deterministic check");
+    }
+
+    #[test]
+    fn whatsapp_protected_data_is_critical_only_on_phi() {
+        let mut phi = finding("whatsapp-protected-data");
+        phi.message = format!(
+            "{} and a compliant field's plaintext (.deanon) is sent over WhatsApp",
+            crate::compliance::checks::WHATSAPP_PHI_MARKER
+        );
+        assert_eq!(severity_for(&phi), "critical");
+        assert_eq!(severity_for(&finding("whatsapp-protected-data")), "high");
+        assert_eq!(severity_for(&finding("whatsapp-provider-direct-in-managed")), "high");
+        let card = build_local_report_card("app", 1, &[phi], "t".to_string());
+        let item = card.dimensions["compliance"]
+            .items
+            .iter()
+            .find(|i| i.criterion.as_deref() == Some("cmp-data-classification"))
+            .unwrap();
+        assert_eq!(item.status, "unmet");
+        assert_eq!(card.dimensions["compliance"].score, 70, "critical = 30 points");
+        let card = build_local_report_card(
+            "app",
+            1,
+            &[finding("whatsapp-provider-direct-in-managed")],
+            "t".to_string(),
+        );
+        assert_eq!(card.dimensions["governance"].score, 85, "high = 15 points");
+        assert!(remedy("whatsapp-protected-data").is_some());
+    }
+
+    #[test]
+    fn managed_provider_credentials_fail_construction_on_governance() {
+        let card = build_local_report_card(
+            "app",
+            1,
+            &[finding("managed-provider-credentials")],
+            "t".to_string(),
+        );
+        let item = card.dimensions["governance"]
+            .items
+            .iter()
+            .find(|i| i.criterion.as_deref() == Some("gov-construction"))
+            .unwrap();
+        assert_eq!(item.status, "unmet");
+        assert_eq!(card.dimensions["governance"].score, 85, "high = 15 points");
+    }
+}
+
+#[cfg(test)]
+mod voice_tests {
+    use super::*;
+
+    fn finding(check: &str, message: &str) -> LocalFinding {
+        LocalFinding {
+            severity: Severity::Warning,
+            project: "clinic".to_string(),
+            check: check.to_string(),
+            subject: ".deanon".to_string(),
+            message: message.to_string(),
+        }
+    }
+
+    #[test]
+    fn voice_checks_score_high_and_critical_with_phi() {
+        assert_eq!(severity_for(&finding("voice-protected-data", "attributes")), "high");
+        assert_eq!(
+            severity_for(&finding(
+                "voice-protected-data",
+                "attributes and this service holds health data (phi)"
+            )),
+            "critical"
+        );
+        assert_eq!(severity_for(&finding("voice-provider-direct-in-managed", "x")), "high");
+        for check in ["voice-protected-data", "voice-provider-direct-in-managed"] {
+            let (criterion_id, _) = criterion_for_check(check).expect("mapped");
+            assert!(criterion(criterion_id).is_some(), "{check} -> {criterion_id}");
+            assert_ne!(item_label(check), "Deterministic check");
+            assert!(remedy(check).is_some());
+        }
+    }
 }

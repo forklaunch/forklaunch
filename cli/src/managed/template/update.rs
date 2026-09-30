@@ -37,6 +37,8 @@ pub(super) struct TemplateUpdate<'a> {
     pub(super) supports_key_rotation: Option<bool>,
     /// The repository the platform builds versions from (https URL).
     pub(super) source_repo: Option<&'a String>,
+    /// The model gateway setting, replaced as a whole (see `model_gateway_body`).
+    pub(super) model_gateway: Option<Value>,
     pub(super) dryrun: bool,
     pub(super) json: bool,
 }
@@ -168,6 +170,30 @@ impl CliCommand for UpdateCommand {
                 .help("https URL of the repository versions are built from, e.g. https://github.com/org/repo"),
         )
         .arg(
+            Arg::new("gateway_models")
+                .long("gateway-models")
+                .help("Model gateway: comma-separated catalog aliases instances may call (e.g. terra,luna)"),
+        )
+        .arg(
+            Arg::new("gateway_monthly_tokens")
+                .long("gateway-monthly-tokens")
+                .value_parser(clap::value_parser!(u64).range(1..))
+                .help("Model gateway: monthly token budget per instance"),
+        )
+        .arg(
+            Arg::new("gateway_rpm")
+                .long("gateway-rpm")
+                .value_parser(clap::value_parser!(u64).range(1..))
+                .help("Model gateway: requests per minute per instance"),
+        )
+        .arg(
+            Arg::new("disable_model_gateway")
+                .long("disable-model-gateway")
+                .help("Turn the model gateway off for this product")
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all(["gateway_models", "gateway_monthly_tokens", "gateway_rpm"]),
+        )
+        .arg(
             Arg::new("dryrun")
                 .long("dryrun")
                 .help("Print the request that would be sent without sending it")
@@ -213,6 +239,13 @@ impl CliCommand for UpdateCommand {
             matches.get_one::<String>("default_instance_size").map(Some)
         };
 
+        let model_gateway = model_gateway_body(
+            matches.get_one::<String>("gateway_models"),
+            matches.get_one::<u64>("gateway_monthly_tokens").copied(),
+            matches.get_one::<u64>("gateway_rpm").copied(),
+            matches.get_flag("disable_model_gateway"),
+        )?;
+
         update_template(
             slug,
             TemplateUpdate {
@@ -228,11 +261,55 @@ impl CliCommand for UpdateCommand {
                 default_instance_size,
                 supports_key_rotation,
                 source_repo: matches.get_one::<String>("source_repo"),
+                model_gateway,
                 dryrun: matches.get_flag("dryrun"),
                 json: matches.get_flag("json"),
             },
         )
     }
+}
+
+/// The `modelGateway` value for a template update, or None when no gateway
+/// flag was passed.
+///
+/// The control plane replaces the setting as a whole, so a budget or rate
+/// without the model list is refused: sending it alone would silently drop the
+/// models and turn the gateway off.
+pub(super) fn model_gateway_body(
+    models: Option<&String>,
+    monthly_tokens: Option<u64>,
+    rpm: Option<u64>,
+    disable: bool,
+) -> Result<Option<Value>> {
+    if disable {
+        return Ok(Some(json!({ "models": [] })));
+    }
+    let Some(models) = models else {
+        if monthly_tokens.is_some() || rpm.is_some() {
+            bail!(
+                "--gateway-monthly-tokens / --gateway-rpm replace the whole gateway setting, \
+                 so they need --gateway-models too (the models the product may call)"
+            );
+        }
+        return Ok(None);
+    };
+    let aliases: Vec<&str> = models
+        .split(',')
+        .map(str::trim)
+        .filter(|alias| !alias.is_empty())
+        .collect();
+    if aliases.is_empty() {
+        bail!("--gateway-models is empty — to turn the gateway off, use --disable-model-gateway");
+    }
+    let mut setting = Map::new();
+    setting.insert("models".to_string(), json!(aliases));
+    if let Some(tokens) = monthly_tokens {
+        setting.insert("monthlyTokenBudget".to_string(), json!(tokens));
+    }
+    if let Some(rpm) = rpm {
+        setting.insert("requestsPerMinute".to_string(), json!(rpm));
+    }
+    Ok(Some(Value::Object(setting)))
 }
 
 /// Issues the PATCH. Shared by `template update` and `template publish-template`.
@@ -277,6 +354,9 @@ pub(super) fn update_template(slug: &str, update: TemplateUpdate<'_>) -> Result<
     if let Some(source_repo) = update.source_repo {
         body.insert("sourceRepo".to_string(), json!(source_repo));
     }
+    if let Some(model_gateway) = update.model_gateway.clone() {
+        body.insert("modelGateway".to_string(), model_gateway);
+    }
 
     // An empty PATCH is accepted by the control plane and changes nothing, so it would
     // report success while having done nothing at all. Refuse instead — someone who
@@ -286,7 +366,8 @@ pub(super) fn update_template(slug: &str, update: TemplateUpdate<'_>) -> Result<
         bail!(
             "nothing to update — pass at least one of --name, --description, --status, \
              --stripe-product, --cluster-type, --base-domain, --frontend-domain, \
-             --default-instance-size, --supports-key-rotation, or --source-repo (to publish a template, `forklaunch managed template \
+             --default-instance-size, --supports-key-rotation, --source-repo, or the \
+             --gateway-* flags (to publish a template, `forklaunch managed template \
              publish-template --slug {}` is the shorthand)",
             slug
         );
@@ -395,6 +476,37 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(json!(update.frontend_domain.unwrap()), Value::Null);
+    }
+
+    #[test]
+    fn gateway_flags_build_the_whole_setting() {
+        let models = "terra, luna,".to_string();
+        assert_eq!(
+            model_gateway_body(Some(&models), Some(500_000), Some(30), false).unwrap(),
+            Some(json!({
+                "models": ["terra", "luna"],
+                "monthlyTokenBudget": 500_000,
+                "requestsPerMinute": 30
+            }))
+        );
+        assert_eq!(
+            model_gateway_body(None, None, None, true).unwrap(),
+            Some(json!({ "models": [] }))
+        );
+        assert_eq!(model_gateway_body(None, None, None, false).unwrap(), None);
+    }
+
+    #[test]
+    fn a_gateway_budget_without_models_is_refused_rather_than_turning_it_off() {
+        let error = model_gateway_body(None, Some(10), None, false).unwrap_err();
+        assert!(error.to_string().contains("--gateway-models"), "{}", error);
+        let empty = " , ".to_string();
+        let error = model_gateway_body(Some(&empty), None, None, false).unwrap_err();
+        assert!(
+            error.to_string().contains("--disable-model-gateway"),
+            "{}",
+            error
+        );
     }
 
     #[test]
