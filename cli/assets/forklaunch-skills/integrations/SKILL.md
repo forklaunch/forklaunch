@@ -182,13 +182,6 @@ Amazon SES from the instance's own sending identity
 (`no-reply@<instance>.<platform sending domain>`), under a per-instance SES
 configuration set, inside the product's daily quota and rate, and refuses
 addresses on the instance's suppression list (hard bounces and complaints).
-## SMS (platform-held): `forklaunch infra add <service> sms`
-
-Texts go through the platform's AWS End User Messaging SMS gateway. The
-service holds **no AWS credential, no Twilio key and no phone number**: it
-signs each send with its instance key, and the platform sends from the
-product's origination pool under a configuration set named for the instance
-(`fl-<instanceId>`), so every receipt and reply is attributed to that instance.
 
 ### 1. What the CLI writes
 
@@ -251,6 +244,18 @@ gives a 429 past it.
 |---|---|---|
 | `email-provider-direct-in-managed` | high | a managed service imports nodemailer, `@aws-sdk/client-ses(v2)`, `@sendgrid/mail`, postmark or mailgun, or reads `SMTP_*`/`SENDGRID_API_KEY`/`POSTMARK_*`/`MAILGUN_*`: run `infra add <service> email`, send with `EmailClient`, drop the SDK and keys |
 | `email-protected-data` | high; critical with phi entities | a `.deanon` value in the `subject` of an email send: subjects show in notification previews and mail logs — use a generic subject and keep the detail in the body or behind a link |
+
+## SMS (platform-held): `forklaunch infra add <service> sms`
+
+Texts go through the platform's AWS End User Messaging SMS gateway. The
+service holds **no AWS credential, no Twilio key and no phone number**: it
+signs each send with its instance key, and the platform sends from the
+product's origination pool under a configuration set named for the instance
+(`fl-<instanceId>`), so every receipt and reply is attributed to that instance.
+
+### 1. What the CLI writes
+
+```bash
 forklaunch infra add <service> sms        # infra remove <service> sms undoes it
 ```
 
