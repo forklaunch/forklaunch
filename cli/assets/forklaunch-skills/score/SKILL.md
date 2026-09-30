@@ -38,7 +38,8 @@ report-card contract.
 | *(none)* | a readable terminal summary — the default |
 | `--offline` | deterministic checks only: no upload, no auth, no cost (newer CLIs) |
 | `--no-share` | score online but skip minting the share link (newer CLIs) |
-| `--json` | the raw report card, for tooling |
+| `--json` | the raw report card, for tooling (includes `remediationPrompt`) |
+| `--prompt` | print the remediation prompt for an agent instead of the summary |
 | `--pretty` | pretty-print the JSON |
 | `--min-score N` | exit non-zero if `overall` is below N — for CI |
 | `-p, --path <dir>` | app root (defaults to the manifest in the current directory) |
@@ -164,11 +165,34 @@ framework guarantees it for apps that wire it.
 
 ## Fixing what it finds
 
-Work the `findings` in severity order and apply each `fix` verbatim — they are
-specific instructions, not categories. Then re-run:
+The fastest way to hand the card to an agent is the prompt:
 
 ```bash
-forklaunch score
+forklaunch score --prompt --no-share   # full, agent-scored card
+forklaunch score --offline --prompt    # deterministic checks only, free
+```
+
+Online, this is **the same prompt the website's "Copy prompt" button gives**
+(the platform builds it once and returns it with the job): every failing
+criterion and finding with its evidence and fix, deterministic check failures
+marked "verified by analyzer", plus the rescoring loop. Offline, the CLI builds
+an equivalent prompt from the deterministic card. `--json` carries the same text
+as `remediationPrompt`.
+
+The loop it tells the agent to run:
+
+1. Fix findings in severity order, with a test for each.
+2. After each batch, `forklaunch score --offline --json` — free and instant;
+   confirm the finding is gone.
+3. When the offline checks are clean, `forklaunch score --prompt --no-share`
+   for the full assessment, and continue from the new prompt.
+4. Never weaken a control or suppress a finding to raise the score.
+
+By hand: work the `findings` in severity order and apply each `fix` verbatim —
+they are specific instructions, not categories. Then re-run:
+
+```bash
+forklaunch score --offline
 ```
 
 The score moves immediately, because these checks are deterministic. If a score
@@ -184,7 +208,7 @@ Run the fast, deterministic pass after **every** codegen pass — it is cheap an
 catches drift immediately:
 
 ```bash
-forklaunch score
+forklaunch score --offline
 ```
 
 Run the full agent-scored analyze at milestones, not every pass. See
