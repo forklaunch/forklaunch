@@ -305,6 +305,67 @@ Messages are rate-limited per phone (5/hr) and per instance (20/hr, 100/day),
 and every send is audited via `SmsDispatchEntity`. (A `log-sms` provider prints
 the code in dev when no Twilio creds are configured.)
 
+**Do not ship your own model provider keys in a template either.** Managed mode
+has a **platform model gateway**: an instance calls platform-hosted AI models
+(Azure AI Foundry) with no provider key, signing each request with the same
+per-instance HMAC key.
+
+```typescript
+import { createModelGatewayClient } from '@forklaunch/core/http';
+
+// Reads PLATFORM_GATEWAY_URL, INSTANCE_ID and INSTANCE_HMAC_KEY, which the
+// platform injects into every hosted instance. Throws outside managed mode.
+const models = createModelGatewayClient();
+
+const reply = await models.chat.completions.create({
+  model: 'terra', // a catalog alias, not a deployment name
+  messages: [{ role: 'user', content: 'Summarize this intake form: …' }]
+});
+
+for await (const chunk of models.chat.completions.stream({ model: 'luna', messages })) {
+  process.stdout.write(chunk.choices[0]?.delta?.content ?? '');
+}
+```
+
+- **The product decides what is allowed**: `forklaunch managed template update
+  --slug <slug> --gateway-models terra,luna --gateway-monthly-tokens 2000000
+  --gateway-rpm 60`. `--disable-model-gateway` turns it off. One instance can
+  differ: `forklaunch managed instance model-gateway --id <id> --monthly-tokens
+  5000000` (`--clear` removes the override).
+- **Budgets and limits are per instance**: a spent monthly budget answers 429
+  with `retry-after` until the month turns (UTC), and the completion is capped to
+  what is left. `models.models()` reports the allowed models and tokens used.
+- **HIPAA**: a product whose compliance controls include `hipaa` is only offered
+  models the platform marks BAA-covered, whatever `--gateway-models` lists; send
+  PHI only through the gateway. `withheldForHipaa` names the models held back.
+- **Usage**: `forklaunch managed instance model-usage --id <id> [--month
+  YYYY-MM]` shows calls, tokens and cost per model. Prompts and completions are
+  never stored.
+- **Local development**: there is no platform locally, so run the mock that
+  ships with `@forklaunch/core` (`forklaunch-model-gateway-mock`). It speaks the
+  same contract, verifies your signatures exactly as the platform does, and
+  answers deterministically (`[mock <model>] <your last message>`). Add to the
+  app's `docker-compose.yaml`:
+
+  ```yaml
+  model-gateway-mock:
+    image: node:24-alpine
+    command: ['node', '/app/node_modules/@forklaunch/core/bin/model-gateway-mock.mjs']
+    working_dir: /app
+    environment:
+      MOCK_INSTANCE_HMAC_KEY: local-dev-key   # must match INSTANCE_HMAC_KEY
+      MOCK_MODELS: terra,luna                 # what the product will enable
+    volumes:
+      - ./:/app:ro
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:8080/health']
+  ```
+
+  and give the service that calls models `PLATFORM_GATEWAY_URL:
+  http://model-gateway-mock:8080`, `INSTANCE_ID: local-instance`,
+  `INSTANCE_HMAC_KEY: local-dev-key`. `MOCK_MONTHLY_TOKENS` and
+  `MOCK_FAIL_EVERY=N` let you exercise the budget (429) and outage (503) paths.
+
 ## 3. Instance lifecycle
 
 ### create → provisioning
