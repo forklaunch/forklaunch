@@ -508,10 +508,14 @@ forklaunch change application --runtime bun --formatter biome
 
 #### Add or remove a capability: `forklaunch infra add|remove`
 
-The way to give a service object storage or a cache. It makes the same edits as
-`change service --infrastructure`: the registration in `registrations.ts`, the
-local stand-in in docker-compose, `.env.local`, `package.json`, the manifest
-resource and the test utilities. It takes one change instead of the full set:
+The way to give a service object storage or a cache. It writes the
+registration in `registrations.ts`, the local stand-in in docker-compose,
+`.env.local`, `package.json`, the manifest resource and the test utilities, and
+it edits those files in place: only the lines the resource needs are added, in
+the file's own indentation and quote style, and comments, key order and the
+rest of the file are left alone. `infra remove` takes exactly those lines out.
+(`change service --infrastructure` regenerates the files instead, which
+reformats a customized service; prefer `infra add|remove`.) It takes one change:
 
 ```bash
 forklaunch infra add <service> object-store   # or: s3
