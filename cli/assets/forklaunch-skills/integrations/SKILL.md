@@ -182,6 +182,13 @@ Amazon SES from the instance's own sending identity
 (`no-reply@<instance>.<platform sending domain>`), under a per-instance SES
 configuration set, inside the product's daily quota and rate, and refuses
 addresses on the instance's suppression list (hard bounces and complaints).
+## SMS (platform-held): `forklaunch infra add <service> sms`
+
+Texts go through the platform's AWS End User Messaging SMS gateway. The
+service holds **no AWS credential, no Twilio key and no phone number**: it
+signs each send with its instance key, and the platform sends from the
+product's origination pool under a configuration set named for the instance
+(`fl-<instanceId>`), so every receipt and reply is attributed to that instance.
 
 ### 1. What the CLI writes
 
@@ -244,6 +251,69 @@ gives a 429 past it.
 |---|---|---|
 | `email-provider-direct-in-managed` | high | a managed service imports nodemailer, `@aws-sdk/client-ses(v2)`, `@sendgrid/mail`, postmark or mailgun, or reads `SMTP_*`/`SENDGRID_API_KEY`/`POSTMARK_*`/`MAILGUN_*`: run `infra add <service> email`, send with `EmailClient`, drop the SDK and keys |
 | `email-protected-data` | high; critical with phi entities | a `.deanon` value in the `subject` of an email send: subjects show in notification previews and mail logs — use a generic subject and keep the detail in the body or behind a link |
+forklaunch infra add <service> sms        # infra remove <service> sms undoes it
+```
+
+- `registrations.ts`: an `SmsClient` built with `createSmsClient()` from the
+  gateway settings (`PLATFORM_GATEWAY_URL`, `INSTANCE_ID`, `INSTANCE_HMAC_KEY`,
+  all optional; outside managed mode the client refuses on the first send, so
+  the service still boots).
+- `api/platformEvents/sms.ts`: the handler stub for SMS events, plus the
+  `/platform-events/:feature` route that verifies them (`verifyPlatformEvent`).
+- docker-compose: the `gateway-mock` service, with the service's gateway env.
+- the manifest: `resources.capabilities = ["sms"]` (the release manifest turns
+  it into an `sms` resource bound to the service).
+
+### 2. Sending
+
+```ts
+const sms = ci.resolve(tokens.SmsClient);
+const { messageId, segments } = await sms.send({
+  to: '+14155550123',                  // E.164 only
+  body: 'Your appointment is confirmed. Sign in for details: https://…',
+  purpose: 'transactional'             // or 'promotional' (needs marketing consent)
+});
+```
+
+Refusals arrive as `SmsRequestError` with `status`: 400 (not E.164, empty or
+over 10 segments), 422 (the number opted out), 429 (monthly segment cap or
+per-minute limit; `retryAfterSeconds` says when), 503 (the platform has no SMS
+configured). Bad input throws `SmsValidationError` before any call.
+
+**Never text protected data.** Carriers store texts and lock screens show them.
+Send a neutral notice or a sign-in link; show the value after sign-in.
+
+### 3. Events (`api/platformEvents/sms.ts`)
+
+| type | data |
+|---|---|
+| `sms.delivered` | `{ messageId, to, deliveredAt }` |
+| `sms.failed` | `{ messageId, to, reason }` |
+| `sms.received` | `{ from, body, receivedAt, keyword? }` (a reply) |
+| `sms.opted_out` | `{ phone, optedOutAt }` (they texted STOP) |
+
+Deliveries can repeat; dedupe on `event.id`. STOP/HELP are answered by the
+carrier and AWS; after STOP the platform refuses sends to that number (422)
+until the person texts START.
+
+### 4. Local
+
+The `gateway-mock` compose service (or `npx -p @forklaunch/core
+forklaunch-gateway-mock`) plays the platform and the handset:
+`GET /__mock/sms/messages` lists sends; `POST /__mock/sms/inbound
+{ "from": "+1…", "body": "STOP" }` simulates a reply; numbers ending in `0000`
+fail; `MOCK_SMS_MONTHLY_CAP` (segments, default 100) and `MOCK_SMS_PER_MINUTE`
+(default 60) set the limits.
+
+### 5. Checks (`forklaunch score`)
+
+- `sms-provider-direct-in-managed` (high): a managed service imports `twilio`,
+  `@aws-sdk/client-pinpoint*`, `@aws-sdk/client-sns` (publishing to a phone),
+  `vonage` or `messagebird`. Fix: `infra add <service> sms` and drop the SDK.
+  Their keys (`TWILIO_*`, `VONAGE_*`, `MESSAGEBIRD_*`) are reported by
+  `managed-provider-credentials`.
+- `sms-protected-data` (critical when the app holds phi, else high): a
+  `.deanon` value reaches an SMS body. Fix: text a link, not the value.
 
 ## Everything else
 

@@ -150,6 +150,12 @@ fn criterion_for_check(check: &str) -> Option<(&'static str, OnFinding)> {
         "email-provider-direct-in-managed" => ("gov-construction", OnFinding::Fail),
         // Protected data shown where it should not be (previews, mail logs).
         "email-protected-data" => ("cmp-data-classification", OnFinding::Fail),
+        // A managed service that needs an SMS vendor credential it never gets
+        // does not run as declared.
+        "sms-provider-direct-in-managed" => ("gov-construction", OnFinding::Fail),
+        // Protected plaintext sent over a channel carriers and lock screens
+        // read is sensitive data not handled according to its sensitivity.
+        "sms-protected-data" => ("cmp-data-classification", OnFinding::Fail),
         _ => return None,
     })
 }
@@ -185,6 +191,10 @@ fn severity_for(finding: &LocalFinding) -> &'static str {
         (Severity::Warning, "email-protected-data")
             if finding.message.starts_with("health data (phi)") =>
         {
+            "critical"
+        }
+        // Health data texted in the clear; other protected data is high.
+        (Severity::Warning, "sms-protected-data") if finding.message.starts_with("health data") => {
             "critical"
         }
         (Severity::Warning, _) => "high",
@@ -299,6 +309,8 @@ fn item_label(check: &str) -> &'static str {
         "capability-wiring" => "Platform capabilities are declared and wired",
         "email-provider-direct-in-managed" => "Managed services send email through the platform",
         "email-protected-data" => "Email subjects carry no protected data",
+        "sms-provider-direct-in-managed" => "Managed services text through the platform, not an SMS vendor SDK",
+        "sms-protected-data" => "Protected data is never sent in a text message",
         _ => "Deterministic check",
     }
 }
@@ -359,6 +371,14 @@ fn remedy(check: &str) -> Option<String> {
         "email-protected-data" => {
             "Use a generic subject (\"Your results are ready\") and put the protected detail in the \
              body or behind a signed-in link."
+        }
+        "sms-provider-direct-in-managed" => {
+            "Run `forklaunch infra add <service> sms` and send with the registered SmsClient \
+             (createSmsClient); drop the vendor SDK and its keys."
+        }
+        "sms-protected-data" => {
+            "Text a neutral notice or a sign-in link; show the protected value only after sign-in. \
+             Never pass a .deanon value in an SMS body."
         }
         _ => return None,
     };

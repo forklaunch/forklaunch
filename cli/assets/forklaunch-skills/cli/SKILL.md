@@ -517,6 +517,7 @@ resource and the test utilities. It takes one change instead of the full set:
 forklaunch infra add <service> object-store   # or: s3
 forklaunch infra add <service> cache          # or: redis
 forklaunch infra add <service> email          # platform-held email (SES); see /integrations
+forklaunch infra add <service> sms            # texts via the platform; see /integrations
 forklaunch infra remove <service> object-store
 forklaunch infra add <service> object-store --dryrun
 forklaunch score --offline                    # afterwards: the wiring checks should pass

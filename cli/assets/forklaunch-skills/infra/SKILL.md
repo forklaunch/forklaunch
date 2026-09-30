@@ -30,6 +30,10 @@ role scoped to that bucket, with no keys. See `/cli` for flags.
 `forklaunch infra add <service> email` registers the platform-held
 `EmailClient` (SES through the instance gateway, no mail key) and an email
 events handler; see `/integrations`.
+`forklaunch infra add <service> sms` wires platform-held text messages the
+same way: an `SmsClient` registration, an SMS event handler and the local
+gateway mock; the platform sends them (End User Messaging SMS), so the service
+holds no vendor key. See `/integrations`.
 
 **The remaining `fl infra` commands never provision anything.** It only inspects and manages resources that already exist on the platform for the target environment (created through the normal platform provisioning flow). Running any command against an environment with no provisioned resources yet will correctly report zero results, not an error.
 

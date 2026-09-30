@@ -146,6 +146,8 @@ pub(crate) const LOCAL_CHECK_IDS: &[&str] = &[
     "capability-wiring",
     "email-provider-direct-in-managed",
     "email-protected-data",
+    "sms-provider-direct-in-managed",
+    "sms-protected-data",
 ];
 
 /// AI model provider SDKs a service might call directly.
@@ -185,7 +187,199 @@ const MESSAGING_PROVIDER_KEYS: &[&str] = &[
     "SENDGRID_API_KEY",
     "MAILGUN_API_KEY",
     "POSTMARK_SERVER_TOKEN",
+    "VONAGE_API_KEY",
+    "VONAGE_API_SECRET",
+    "NEXMO_API_KEY",
+    "NEXMO_API_SECRET",
+    "MESSAGEBIRD_ACCESS_KEY",
+    "MESSAGEBIRD_API_KEY",
 ];
+
+/// SMS vendor SDKs a managed service must not call: the platform sends texts
+/// through its End User Messaging gateway (createSmsClient). Their keys are
+/// reported by `managed-provider-credentials`, so this only names SDKs.
+const SMS_PROVIDER_PACKAGES: &[&str] = &["twilio", "vonage", "messagebird"];
+const SMS_PROVIDER_PREFIXES: &[&str] = &["@aws-sdk/client-pinpoint", "@vonage/"];
+/// SNS is a general pub/sub SDK; it sends SMS only when publishing to a
+/// phone number.
+const SNS_PACKAGE: &str = "@aws-sdk/client-sns";
+
+/// SMS vendor SDKs the sources import. Sorted and de-duplicated.
+pub(crate) fn direct_sms_providers(sources: &str) -> Vec<String> {
+    let sns_texts = sources.contains("PhoneNumber") || sources.contains("SetSMSAttributes");
+    let mut found: Vec<String> = imported_modules(sources)
+        .into_iter()
+        .filter(|module| {
+            SMS_PROVIDER_PACKAGES.contains(&module.as_str())
+                || SMS_PROVIDER_PREFIXES.iter().any(|p| module.starts_with(p))
+                || (module == SNS_PACKAGE && sns_texts)
+        })
+        .collect();
+    found.sort();
+    found.dedup();
+    found
+}
+
+/// The text between the parenthesis at `open` and its match.
+fn balanced_args(text: &str, open: usize) -> &str {
+    let mut depth = 0usize;
+    for (i, ch) in text[open..].char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return &text[open + 1..open + i];
+                }
+            }
+            _ => {}
+        }
+    }
+    &text[open + 1..]
+}
+
+/// Calls in one file that hand a `.deanon` value (plaintext of a compliant
+/// field) to an SMS send: the framework client (`sms.send`,
+/// `this.smsClient.send`), Twilio's `messages.create`, End User Messaging's
+/// `SendTextMessageCommand` and an SNS `PublishCommand` to a phone number.
+/// A variable assigned from `.deanon` (directly or through other variables)
+/// counts too. Returns a short description per call.
+pub(crate) fn sms_sends_with_protected_data(source: &str) -> Vec<String> {
+    static SENDS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static ASSIGN: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let sends = SENDS.get_or_init(|| {
+        regex::Regex::new(
+            r"(?:\b[\w$]*[sS][mM][sS][\w$]*\s*\??\.\s*send|\.messages\s*\.\s*create|\bnew\s+SendTextMessageCommand|\bnew\s+PublishCommand)\s*\(",
+        )
+        .expect("sms send pattern")
+    });
+    let assign = ASSIGN.get_or_init(|| {
+        regex::Regex::new(r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]+)?=\s*([^;]*)")
+            .expect("assignment pattern")
+    });
+    if !source.contains(".deanon") {
+        return Vec::new();
+    }
+    // Variables that hold plaintext, propagated through a few assignments.
+    let assignments: Vec<(String, String)> = assign
+        .captures_iter(source)
+        .map(|c| (c[1].to_string(), c[2].to_string()))
+        .collect();
+    let mut tainted: Vec<String> = Vec::new();
+    for _ in 0..3 {
+        for (name, value) in &assignments {
+            if tainted.contains(name) {
+                continue;
+            }
+            let from_tainted = tainted.iter().any(|t| mentions(value, t));
+            if value.contains(".deanon") || from_tainted {
+                tainted.push(name.clone());
+            }
+        }
+    }
+    let twilio = source.contains("'twilio'") || source.contains("\"twilio\"");
+    let mut found = Vec::new();
+    for m in sends.find_iter(source) {
+        let call = m.as_str();
+        if call.contains("messages") && !twilio {
+            continue;
+        }
+        let args = balanced_args(source, m.end() - 1);
+        if call.contains("PublishCommand") && !args.contains("PhoneNumber") {
+            continue;
+        }
+        // Only the text of the message counts: the destination number is
+        // rightly a `.deanon` value.
+        let leaks = message_bodies(args)
+            .iter()
+            .any(|body| body.contains(".deanon") || tainted.iter().any(|t| mentions(body, t)));
+        if leaks {
+            let line = source[..m.start()].matches('\n').count() + 1;
+            let callee: String = call.trim_end_matches('(').split_whitespace().collect();
+            found.push(format!("{callee} (line {line})"));
+        }
+    }
+    found
+}
+
+/// The expressions given as a message's text in a send's arguments:
+/// `body:`/`Body:` (framework, Twilio), `MessageBody:` (End User Messaging),
+/// `Message:` (SNS), or the shorthand `{ body }`.
+fn message_bodies(args: &str) -> Vec<String> {
+    static KEY: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let key = KEY.get_or_init(|| {
+        regex::Regex::new(r"(?:^|[{,\s])(?:body|Body|MessageBody|Message)\s*(:|[,}])")
+            .expect("body key pattern")
+    });
+    let mut out = Vec::new();
+    for c in key.captures_iter(args) {
+        let marker = c.get(1).unwrap();
+        if marker.as_str() != ":" {
+            out.push("body".to_string());
+            continue;
+        }
+        // The value runs to the next top-level comma or the object's end.
+        let rest = &args[marker.end()..];
+        let mut depth = 0i32;
+        let mut end = rest.len();
+        let mut in_template = false;
+        for (i, ch) in rest.char_indices() {
+            match ch {
+                '`' => in_template = !in_template,
+                '(' | '[' | '{' => depth += 1,
+                ')' | ']' | '}' if depth > 0 => depth -= 1,
+                '}' | ')' if depth == 0 && !in_template => {
+                    end = i;
+                    break;
+                }
+                ',' if depth == 0 && !in_template => {
+                    end = i;
+                    break;
+                }
+                _ => {}
+            }
+        }
+        out.push(rest[..end].trim().to_string());
+    }
+    out
+}
+
+/// Whether `text` uses the identifier `name` (not as part of a longer one).
+fn mentions(text: &str, name: &str) -> bool {
+    let is_ident = |c: char| c.is_alphanumeric() || c == '_' || c == '$';
+    text.match_indices(name).any(|(i, _)| {
+        let before = text[..i].chars().next_back();
+        let after = text[i + name.len()..].chars().next();
+        !before.is_some_and(|c| is_ident(c) || c == '.') && !after.is_some_and(is_ident)
+    })
+}
+
+/// Production TypeScript files, relative path and text, for per-file checks.
+fn production_files(project_path: &Path) -> Vec<(String, String)> {
+    fn walk(root: &Path, dir: &Path, out: &mut Vec<(String, String)>) {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().to_string();
+            if path.is_dir() {
+                if !NON_PRODUCTION_DIRS.contains(&name.as_str()) {
+                    walk(root, &path, out);
+                }
+            } else if name.ends_with(".ts") && !name.ends_with(".test.ts") {
+                if let Ok(text) = fs::read_to_string(&path) {
+                    let rel = path.strip_prefix(root).unwrap_or(&path);
+                    out.push((rel.to_string_lossy().to_string(), text));
+                }
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(project_path, project_path, &mut out);
+    out.sort();
+    out
+}
 
 /// Signals that a service is written to run as a managed instance: it reads
 /// the instance-gateway contract the platform injects.
@@ -708,6 +902,16 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
         return Ok(findings);
     }
 
+    // Whether any service holds health data: a `.deanon` value texted from
+    // anywhere in the app may be it.
+    let app_has_phi = fs::read_dir(modules_path)?.flatten().any(|entry| {
+        entry.path().is_dir()
+            && scan_entity_compliance(&entry.path())
+                .unwrap_or_default()
+                .iter()
+                .any(|e| e.field_classifications.values().any(|c| c == "phi"))
+    });
+
     for entry in fs::read_dir(modules_path)? {
         let entry = entry?;
         let project_path = entry.path();
@@ -924,6 +1128,42 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
                     ),
                 });
             }
+            // SMS vendor SDKs (their keys are the finding above).
+            let sms_sdks = direct_sms_providers(&project_sources);
+            if !sms_sdks.is_empty() {
+                findings.push(LocalFinding {
+                    severity: Severity::Warning,
+                    project: project.clone(),
+                    check: "sms-provider-direct-in-managed".to_string(),
+                    subject: sms_sdks.join(", "),
+                    message: format!(
+                        "this service runs as a managed instance but calls an SMS vendor SDK directly ({}) — hosted instances hold no vendor credential or number; send with createSmsClient() (`forklaunch infra add <service> sms`), which the platform limits, attributes and opts out per instance",
+                        sms_sdks.join(", ")
+                    ),
+                });
+            }
+        }
+
+        // 7b. Protected data must not be texted: SMS is not a secure channel.
+        for (file, text) in production_files(&project_path) {
+            let calls = sms_sends_with_protected_data(&text);
+            if calls.is_empty() {
+                continue;
+            }
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.clone(),
+                check: "sms-protected-data".to_string(),
+                subject: format!("{file}: {}", calls.join(", ")),
+                message: format!(
+                    "{}a `.deanon` value (the plaintext of a compliant field) reaches an SMS body in {file} — texts are not a secure channel: carriers store them and lock screens show them. Send a sign-in link or a neutral notice instead",
+                    if app_has_phi {
+                        "health data (phi): "
+                    } else {
+                        ""
+                    }
+                ),
+            });
         }
 
         // 7c. Protected data in an email subject (previews, mail logs).
@@ -1895,6 +2135,145 @@ mod email_tests {
     fn email_checks_score_through_the_report_card() {
         for id in ["email-provider-direct-in-managed", "email-protected-data"] {
             assert!(LOCAL_CHECK_IDS.contains(&id), "{id} missing from LOCAL_CHECK_IDS");
+        }
+    }
+}
+
+#[cfg(test)]
+mod sms_tests {
+    use super::*;
+
+    fn run(name: &str, files: &[(&str, &str)], phi: bool) -> Vec<LocalFinding> {
+        let dir = std::env::temp_dir().join(format!("fl-sms-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        let proj = dir.join("notify");
+        for (rel, text) in files {
+            let path = proj.join(rel);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
+        if phi {
+            let entities = proj.join("persistence/entities");
+            std::fs::create_dir_all(&entities).unwrap();
+            std::fs::write(
+                entities.join("patient.entity.ts"),
+                "export const P = defineComplianceEntity({ name: 'P', properties: { id: fp.uuid().primary().compliance('none'), diagnosis: fp.text().compliance('phi') } });",
+            )
+            .unwrap();
+        }
+        let findings = run_local_checks(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        findings
+    }
+
+    #[test]
+    fn a_managed_service_importing_an_sms_sdk_is_flagged_once_per_subject() {
+        let findings = run(
+            "sdk",
+            &[(
+                "registrations.ts",
+                "import twilio from 'twilio';\nimport { PinpointSMSVoiceV2Client } from '@aws-sdk/client-pinpoint-sms-voice-v2';\nconst k = getEnvVar('INSTANCE_HMAC_KEY'); const t = getEnvVar('TWILIO_AUTH_TOKEN');",
+            )],
+            false,
+        );
+        let sdk = findings
+            .iter()
+            .find(|f| f.check == "sms-provider-direct-in-managed")
+            .unwrap_or_else(|| panic!("{findings:?}"));
+        assert_eq!(sdk.subject, "@aws-sdk/client-pinpoint-sms-voice-v2, twilio");
+        // The key is the credentials check's, not repeated here.
+        let keys = findings
+            .iter()
+            .find(|f| f.check == "managed-provider-credentials")
+            .unwrap();
+        assert_eq!(keys.subject, "TWILIO_AUTH_TOKEN");
+        assert!(!sdk.subject.contains("TWILIO_AUTH_TOKEN"));
+    }
+
+    #[test]
+    fn sdk_imports_outside_managed_mode_and_sns_without_phones_are_fine() {
+        let unmanaged = run("unmanaged", &[("registrations.ts", "import twilio from 'twilio';")], false);
+        assert!(!unmanaged.iter().any(|f| f.check == "sms-provider-direct-in-managed"));
+        assert!(direct_sms_providers(
+            "import { SNSClient } from '@aws-sdk/client-sns'; publish({ TopicArn })"
+        )
+        .is_empty());
+        assert_eq!(
+            direct_sms_providers("import { SNSClient } from '@aws-sdk/client-sns'; ({ PhoneNumber })"),
+            vec!["@aws-sdk/client-sns"]
+        );
+        assert_eq!(
+            provider_credentials_read("VONAGE_API_SECRET MESSAGEBIRD_ACCESS_KEY"),
+            vec!["MESSAGEBIRD_ACCESS_KEY", "VONAGE_API_SECRET"]
+        );
+    }
+
+    #[test]
+    fn deanon_in_an_sms_body_is_flagged_critical_with_phi() {
+        let source = "export async function remind(p: Patient) {\n  const note = `Your result: ${p.diagnosis.deanon}`;\n  await this.smsClient.send({ to: p.phone.deanon, body: note });\n}\n";
+        let findings = run("phi", &[("domain/services/remind.service.ts", source)], true);
+        let f = findings
+            .iter()
+            .find(|f| f.check == "sms-protected-data")
+            .unwrap_or_else(|| panic!("{findings:?}"));
+        assert_eq!(f.subject, "domain/services/remind.service.ts: smsClient.send (line 3)");
+        assert!(f.message.starts_with("health data"));
+        let card = crate::core::report_card::build_local_report_card("app", 1, &findings, "t".into());
+        let json = serde_json::to_string(&card).unwrap();
+        assert!(json.contains("\"severity\":\"critical\""), "{json}");
+
+        let no_phi = run("nophi", &[("domain/services/remind.service.ts", source)], false);
+        let f = no_phi.iter().find(|f| f.check == "sms-protected-data").unwrap();
+        assert!(!f.message.starts_with("health data"));
+    }
+
+    #[test]
+    fn protected_data_detection_follows_the_body_only() {
+        // The number is rightly plaintext; the text is neutral.
+        assert!(sms_sends_with_protected_data(
+            "await sms.send({ to: user.phone.deanon, body: 'Your visit is confirmed' });"
+        )
+        .is_empty());
+        // Direct, shorthand and vendor forms.
+        assert_eq!(
+            sms_sends_with_protected_data("sms.send({ to, body: `Hi ${user.name.deanon}` });").len(),
+            1
+        );
+        assert_eq!(
+            sms_sends_with_protected_data(
+                "const body = user.ssn.deanon;\nawait smsClient.send({ to: x, body });"
+            ),
+            vec!["smsClient.send (line 2)"]
+        );
+        assert_eq!(
+            sms_sends_with_protected_data(
+                "import twilio from 'twilio';\nconst m = r.notes.deanon; const text = m + '!';\nclient.messages.create({ to, from, body: text });"
+            )
+            .len(),
+            1
+        );
+        assert_eq!(
+            sms_sends_with_protected_data(
+                "new SendTextMessageCommand({ DestinationPhoneNumber: to, MessageBody: r.notes.deanon })"
+            )
+            .len(),
+            1
+        );
+        // Not an SMS: email, or messages.create without twilio.
+        assert!(sms_sends_with_protected_data("mailer.send({ to, body: r.notes.deanon });").is_empty());
+        assert!(sms_sends_with_protected_data("openai.messages.create({ body: r.notes.deanon });").is_empty());
+        assert!(sms_sends_with_protected_data("new PublishCommand({ TopicArn, Message: r.notes.deanon })").is_empty());
+        // A variable named like a tainted one is not it.
+        assert!(sms_sends_with_protected_data(
+            "const secret = r.notes.deanon; sms.send({ to, body: secretary });"
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn sms_checks_are_listed_and_scored() {
+        for id in ["sms-provider-direct-in-managed", "sms-protected-data"] {
+            assert!(LOCAL_CHECK_IDS.contains(&id));
         }
     }
 }
