@@ -140,6 +140,7 @@ await em.find(User, { email: { $in: emails } });
 Rules:
 
 - **Read with `.deanon` / `.anon`**, never the bare property. A bare property in a string, comparison or DTO is a type error.
+- **Spreading an entity drops compliant fields** (they live on the prototype). In a `toDto` mapper write `({ ...deanon(entity), ... })` — `deanon` from `@forklaunch/core/persistence` copies the entity with every compliant field revealed (and reported).
 - **Write with plain values through `em.create` / `em.assign`.** Direct assignment (`user.name = 'x'`) works at runtime but is a type error; use `em.assign`.
 - **`where` needs `{ queryable: true }`** on the property. It adds a `<column>_idx` column (keyed HMAC, per tenant); only `$eq`, `$ne`, `$in`, `$nin` work. `$like`, ranges and sorting on protected fields are refused: they would need the plaintext. `.unique()` on a queryable field applies to the index.
 - **`anon` strategies**: `token` (default for strings; random, stored with the value), `year` (default for dates), `zip3`, `last4`, `redact` (default for numbers, json, enums, arrays).
@@ -149,7 +150,7 @@ Rules:
 
 ### Upgrading an existing app
 
-1. `npx -y -p typescript@5 -p @forklaunch/core forklaunch-migrate-compliant-fields` rewrites bare reads to `.deanon` and lists `where` clauses on fields that need `{ queryable: true }`.
+1. `npx -y -p typescript@5 -p @forklaunch/core forklaunch-migrate-compliant-fields` rewrites bare reads to `.deanon`, entity spreads to `...deanon(entity)`, and lists `where` clauses on fields that need `{ queryable: true }`. Hand-written types that restate an entity's field types (shape entities, DTO interfaces) must use the same classification as the real entity.
 2. Add `{ queryable: true }` where listed, then generate a migration (it adds `<column>_idx` columns and moves unique constraints onto them).
 3. Deploy, then run `reencryptEncryptedColumns()` once: it seals existing values into the `v4` envelope (random IV, anon token) and writes the blind indexes. Until then legacy rows still read with `.deanon`, but token `.anon` throws `LegacyCiphertextError` and `where` lookups miss them.
 
