@@ -19,6 +19,30 @@ use crate::{
     core::{command::command, manifest::ProjectType, validate::require_manifest},
 };
 
+/// What `infra add` can add: local infrastructure the service runs itself,
+/// or a platform-held capability reached through the instance gateway.
+enum Addable {
+    Infrastructure(Infrastructure),
+    Capability(&'static super::capabilities::Capability),
+}
+
+fn parse_addable(name: &str) -> Result<Addable> {
+    if let Some(capability) = super::capabilities::find(name) {
+        return Ok(Addable::Capability(capability));
+    }
+    parse_type(name).map(Addable::Infrastructure).map_err(|_| {
+        let capabilities: Vec<&str> = super::capabilities::CAPABILITIES
+            .iter()
+            .map(|c| c.id)
+            .collect();
+        anyhow::anyhow!(
+            "unknown type '{name}'; supported: object-store (s3), cache (redis){}{}",
+            if capabilities.is_empty() { "" } else { ", " },
+            capabilities.join(", ")
+        )
+    })
+}
+
 /// Accepted type names: the infrastructure ids plus readable aliases.
 fn parse_type(name: &str) -> Result<Infrastructure> {
     let id = match name {
@@ -124,6 +148,126 @@ fn delegate(matches: &ArgMatches, service: &str, infrastructure: &[String]) -> R
     command.handler(&service_matches)
 }
 
+/// Add or remove a platform-held capability: the manifest's
+/// `resources.capabilities`, the shared gateway wiring, and the capability's
+/// own edits.
+fn change_capability(
+    matches: &ArgMatches,
+    capability: &'static super::capabilities::Capability,
+    adding: bool,
+) -> Result<()> {
+    use super::capabilities::CapabilityEdit;
+
+    let service = matches.get_one::<String>("service").unwrap().clone();
+    let (app_root, manifest) = require_manifest(matches)?;
+    let project = manifest
+        .projects
+        .iter()
+        .find(|p| p.name == service)
+        .with_context(|| format!("no project named '{service}' in the manifest"))?;
+    if project.r#type != ProjectType::Service {
+        bail!("'{service}' is not a service; capabilities are added to services");
+    }
+    let mut service_capabilities: Vec<String> = project
+        .resources
+        .as_ref()
+        .and_then(|r| r.capabilities.clone())
+        .unwrap_or_default();
+    let present = service_capabilities.iter().any(|c| c == capability.id);
+    match (adding, present) {
+        (true, true) => bail!("'{service}' already has {}", capability.id),
+        (false, false) => bail!("'{service}' does not have {}", capability.id),
+        (true, false) => service_capabilities.push(capability.id.to_string()),
+        (false, true) => service_capabilities.retain(|c| c != capability.id),
+    }
+    let app_capabilities: Vec<String> = manifest
+        .projects
+        .iter()
+        .flat_map(|p| {
+            if p.name == service {
+                service_capabilities.clone()
+            } else {
+                p.resources
+                    .as_ref()
+                    .and_then(|r| r.capabilities.clone())
+                    .unwrap_or_default()
+            }
+        })
+        .collect();
+
+    let service_path = app_root.join(&manifest.modules_path).join(&service);
+    let mut edit = CapabilityEdit::new(
+        &app_root,
+        &manifest.app_name,
+        &service,
+        &service_path,
+        service_capabilities.clone(),
+        app_capabilities,
+    );
+    if adding {
+        (capability.add)(&mut edit)?;
+        edit.ensure_gateway_wiring(capability.id)?;
+    } else {
+        (capability.remove)(&mut edit)?;
+        if capability.receives_events {
+            edit.remove_platform_events(capability.id)?;
+        }
+        edit.release_gateway_wiring(capability.id)?;
+    }
+
+    // The manifest, edited as TOML so everything else in it is kept.
+    let manifest_path = app_root.join(".forklaunch").join("manifest.toml");
+    let mut value: toml::Value = toml::from_str(&std::fs::read_to_string(&manifest_path)?)?;
+    let projects = value
+        .get_mut("projects")
+        .and_then(|p| p.as_array_mut())
+        .context("manifest has no projects")?;
+    for p in projects.iter_mut() {
+        if p.get("name").and_then(|n| n.as_str()) != Some(service.as_str()) {
+            continue;
+        }
+        let table = p.as_table_mut().context("project is not a table")?;
+        let resources = table
+            .entry("resources")
+            .or_insert_with(|| toml::Value::Table(Default::default()))
+            .as_table_mut()
+            .context("resources is not a table")?;
+        if service_capabilities.is_empty() {
+            resources.remove("capabilities");
+        } else {
+            resources.insert(
+                "capabilities".to_string(),
+                toml::Value::Array(
+                    service_capabilities
+                        .iter()
+                        .map(|c| toml::Value::String(c.clone()))
+                        .collect(),
+                ),
+            );
+        }
+    }
+    edit.write(manifest_path, toml::to_string_pretty(&value)?);
+
+    if matches.get_flag("dryrun") {
+        for (path, writes) in edit.changed_paths() {
+            println!(
+                "{} {}",
+                if writes { "write " } else { "delete" },
+                path.strip_prefix(&app_root).unwrap_or(&path).display()
+            );
+        }
+        return Ok(());
+    }
+    edit.commit()?;
+    println!(
+        "{} {} {service}: {}",
+        if adding { "Added" } else { "Removed" },
+        capability.id,
+        capability.summary
+    );
+    Ok(())
+}
+
 #[derive(Debug)]
 pub(super) struct AddCommand;
 
@@ -136,6 +280,11 @@ impl CliCommand for AddCommand {
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
+        if let Addable::Capability(capability) =
+            parse_addable(matches.get_one::<String>("type").unwrap())?
+        {
+            return change_capability(matches, capability, true);
+        }
         let (service, infrastructure) = desired_infrastructure(matches, true)?;
         delegate(matches, &service, &infrastructure)
     }
@@ -153,6 +302,11 @@ impl CliCommand for RemoveCommand {
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
+        if let Addable::Capability(capability) =
+            parse_addable(matches.get_one::<String>("type").unwrap())?
+        {
+            return change_capability(matches, capability, false);
+        }
         let (service, infrastructure) = desired_infrastructure(matches, false)?;
         delegate(matches, &service, &infrastructure)
     }

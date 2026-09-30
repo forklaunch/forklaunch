@@ -43,6 +43,7 @@
  *   MOCK_INSTANCE_HMAC_KEY  verify instance signatures and sign events
  *                           (unset: accept any signature; events unsigned)
  *   MOCK_EVENTS_URL         the app's base URL for event delivery
+ *   MOCK_EVENTS_URL_<FEATURE>  per-feature override (the service that declared it)
  *   (plus each feature's own MOCK_* settings; see its route file)
  *
  * Usage: npx -p @forklaunch/core forklaunch-gateway-mock
@@ -134,7 +135,11 @@ export async function startGatewayMock(env = process.env) {
     };
     const record = { event, status: null, error: null };
     events.push(record);
-    if (!eventsUrl) {
+    // A feature's events can go to its own service (MOCK_EVENTS_URL_<FEATURE>).
+    const target =
+      env[`MOCK_EVENTS_URL_${feature.toUpperCase().replace(/-/g, '_')}`] ||
+      eventsUrl;
+    if (!target) {
       record.error = 'MOCK_EVENTS_URL is not set; event recorded, not delivered';
       return record;
     }
@@ -147,7 +152,7 @@ export async function startGatewayMock(env = process.env) {
       headers.authorization = `HMAC keyId=platform ts=${ts} nonce=${nonce} signature=${sign(hmacKey, 'POST', path, `${body}\n`, ts, nonce)}`;
     }
     try {
-      const response = await fetch(`${eventsUrl.replace(/\/$/, '')}${path}`, {
+      const response = await fetch(`${target.replace(/\/$/, '')}${path}`, {
         method: 'POST',
         headers,
         body

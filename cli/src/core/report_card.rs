@@ -142,6 +142,9 @@ fn criterion_for_check(check: &str) -> Option<(&'static str, OnFinding)> {
             ("cmp-encryption-at-rest", OnFinding::Fail)
         }
         "presigned-upload-unbounded" => ("gov-construction", OnFinding::Fail),
+        // A capability the manifest and the code disagree about is either not
+        // provisioned or not callable.
+        "capability-wiring" => ("gov-construction", OnFinding::Fail),
         _ => return None,
     })
 }
@@ -282,6 +285,7 @@ fn item_label(check: &str) -> &'static str {
         "object-store-public-access" => "Stored files are private",
         "object-store-bucket-managed-in-app" => "The platform, not app code, configures the bucket",
         "presigned-upload-unbounded" => "Browser uploads are limited in size and type",
+        "capability-wiring" => "Platform capabilities are declared and wired",
         _ => "Deterministic check",
     }
 }
@@ -330,6 +334,10 @@ fn remedy(check: &str) -> Option<String> {
         }
         "presigned-upload-unbounded" => {
             "Use ObjectStore.presignUpload(key, { contentType, maxBytes }) instead of a presigned PUT."
+        }
+        "capability-wiring" => {
+            "Run `forklaunch infra add <service> <capability>` (or `infra remove`) so the manifest \
+             and registrations.ts agree."
         }
         _ => return None,
     };

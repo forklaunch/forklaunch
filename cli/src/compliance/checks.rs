@@ -143,6 +143,7 @@ pub(crate) const LOCAL_CHECK_IDS: &[&str] = &[
     "object-store-public-access",
     "object-store-bucket-managed-in-app",
     "presigned-upload-unbounded",
+    "capability-wiring",
 ];
 
 /// AI model provider SDKs a service might call directly.
@@ -267,6 +268,42 @@ fn declared_object_stores(modules_path: &Path) -> Option<std::collections::HashM
                             .and_then(|o| o.as_str())
                             .is_some();
                         Some((name, declared))
+                    })
+                    .collect(),
+            );
+        }
+        if !dir.pop() {
+            return None;
+        }
+    }
+}
+
+/// Platform-held capabilities (payments, email, …) the manifest declares, per
+/// project name. None when no manifest is found above the modules directory.
+fn declared_capabilities(modules_path: &Path) -> Option<std::collections::HashMap<String, Vec<String>>> {
+    let mut dir = modules_path.canonicalize().ok()?;
+    loop {
+        let manifest = dir.join(".forklaunch").join("manifest.toml");
+        if manifest.exists() {
+            let value: toml::Value = toml::from_str(&fs::read_to_string(manifest).ok()?).ok()?;
+            return Some(
+                value
+                    .get("projects")?
+                    .as_array()?
+                    .iter()
+                    .filter_map(|p| {
+                        let name = p.get("name")?.as_str()?.to_string();
+                        let capabilities = p
+                            .get("resources")
+                            .and_then(|r| r.get("capabilities"))
+                            .and_then(|c| c.as_array())
+                            .map(|a| {
+                                a.iter()
+                                    .filter_map(|v| v.as_str().map(str::to_string))
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        Some((name, capabilities))
                     })
                     .collect(),
             );
@@ -752,6 +789,38 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
                 });
             }
         }
+        // 9. Platform-held capabilities: the manifest and registrations.ts agree.
+        if let Some(declared) = declared_capabilities(modules_path)
+            .as_ref()
+            .and_then(|d| d.get(&project))
+        {
+            for capability in crate::infra::capabilities::CAPABILITIES {
+                let is_declared = declared.iter().any(|c| c == capability.id);
+                let is_wired =
+                    registrations.contains(&format!("{}:", capability.registration_key));
+                let message = match (is_declared, is_wired) {
+                    (true, false) => Some(format!(
+                        "the manifest declares {} but registrations.ts registers no {} — the service has nothing to call it with",
+                        capability.id, capability.registration_key
+                    )),
+                    (false, true) => Some(format!(
+                        "registrations.ts registers {} but the manifest does not declare {} — the platform will not provision it for this service",
+                        capability.registration_key, capability.id
+                    )),
+                    _ => None,
+                };
+                if let Some(message) = message {
+                    findings.push(LocalFinding {
+                        severity: Severity::Warning,
+                        project: project.clone(),
+                        check: "capability-wiring".to_string(),
+                        subject: capability.id.to_string(),
+                        message,
+                    });
+                }
+            }
+        }
+
         if !uses_object_store(&sources) {
             continue;
         }
