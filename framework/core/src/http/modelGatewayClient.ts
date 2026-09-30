@@ -1,4 +1,7 @@
-import { generateHmacAuthHeaders } from './generateHmacAuthHeaders';
+import {
+  createInstanceGatewayTransport,
+  InstanceGatewayRequestError
+} from './instanceGateway';
 
 /**
  * Client for the ForkLaunch model gateway, used from inside a managed
@@ -26,9 +29,6 @@ import { generateHmacAuthHeaders } from './generateHmacAuthHeaders';
  *   process.stdout.write(chunk.choices[0]?.delta?.content ?? '');
  * }
  */
-
-/** Where the gateway router is mounted on the platform service. */
-const GATEWAY_MOUNT = '/instance-gateway';
 
 export interface ModelGatewayClientOptions {
   /** Platform base URL. Default: `PLATFORM_GATEWAY_URL`. */
@@ -107,16 +107,8 @@ export interface GatewayModels {
 }
 
 /** A refusal or failure from the gateway, with the status it answered. */
-export class ModelGatewayRequestError extends Error {
-  readonly name = 'ModelGatewayRequestError' as const;
-  constructor(
-    readonly status: number,
-    message: string,
-    /** Seconds to wait before retrying, on a 429. */
-    readonly retryAfterSeconds?: number
-  ) {
-    super(message);
-  }
+export class ModelGatewayRequestError extends InstanceGatewayRequestError {
+  override readonly name = 'ModelGatewayRequestError' as const;
 }
 
 export interface ModelGatewayClient {
@@ -136,20 +128,7 @@ export interface ModelGatewayClient {
 export function createModelGatewayClient(
   options: ModelGatewayClientOptions = {}
 ): ModelGatewayClient {
-  const gatewayUrl = options.gatewayUrl ?? process.env.PLATFORM_GATEWAY_URL;
-  const instanceId = options.instanceId ?? process.env.INSTANCE_ID;
-  const hmacKey = options.hmacKey ?? process.env.INSTANCE_HMAC_KEY;
-  if (!gatewayUrl || !instanceId || !hmacKey) {
-    throw new Error(
-      'The model gateway is only available to instances hosted in managed mode: ' +
-        'PLATFORM_GATEWAY_URL, INSTANCE_ID and INSTANCE_HMAC_KEY must be set'
-    );
-  }
-  const fetchImpl = options.fetch ?? fetch;
-  // Trim trailing slashes without a regex (a `/\/+$/` backtracks on long runs).
-  let end = gatewayUrl.length;
-  while (end > 0 && gatewayUrl[end - 1] === '/') end -= 1;
-  const base = gatewayUrl.slice(0, end);
+  const transport = createInstanceGatewayTransport(options, 'The model gateway');
 
   async function send(
     method: 'GET' | 'POST',
@@ -157,33 +136,18 @@ export function createModelGatewayClient(
     body?: Record<string, unknown>,
     signal?: AbortSignal
   ): Promise<Response> {
-    // The gateway verifies the router-relative path, and the body as parsed.
-    const { authorization } = generateHmacAuthHeaders({
-      secretKey: hmacKey!,
-      method,
-      path: route,
-      body,
-      keyId: instanceId
-    });
-    const response = await fetchImpl(`${base}${GATEWAY_MOUNT}${route}`, {
-      method,
-      headers: {
-        authorization,
-        ...(body ? { 'content-type': 'application/json' } : {})
-      },
-      body: body ? JSON.stringify(body) : undefined,
-      signal
-    });
-    if (!response.ok) {
-      const message = (await response.text().catch(() => '')).trim();
-      const retryAfter = Number(response.headers.get('retry-after'));
-      throw new ModelGatewayRequestError(
-        response.status,
-        message || `Model gateway answered ${response.status}`,
-        Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined
-      );
+    try {
+      return await transport.request(method, route, body, { signal });
+    } catch (error) {
+      if (error instanceof InstanceGatewayRequestError) {
+        throw new ModelGatewayRequestError(
+          error.status,
+          error.message,
+          error.retryAfterSeconds
+        );
+      }
+      throw error;
     }
-    return response;
   }
 
   return {

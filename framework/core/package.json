@@ -80,6 +80,7 @@
     "bin/**"
   ],
   "bin": {
+    "forklaunch-gateway-mock": "./bin/gateway-mock/server.mjs",
     "forklaunch-model-gateway-mock": "./bin/model-gateway-mock.mjs"
   },
   "scripts": {
