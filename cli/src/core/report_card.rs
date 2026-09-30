@@ -85,6 +85,11 @@ const CRITERIA: &[Criterion] = &[
         label: "One customer cannot see or change another customer\u{2019}s data",
     },
     Criterion {
+        id: "sec-input-validation",
+        rail: "security",
+        label: "Incoming data is validated before it is trusted",
+    },
+    Criterion {
         id: "gov-data-retention",
         rail: "governance",
         label: "How long data is kept, and how it is deleted, is defined",
@@ -166,6 +171,13 @@ fn criterion_for_check(check: &str) -> Option<(&'static str, OnFinding)> {
         "voice-provider-direct-in-managed" => ("gov-construction", OnFinding::Fail),
         // Protected values in call attributes land in Connect's contact records.
         "voice-protected-data" => ("cmp-data-classification", OnFinding::Fail),
+        // A managed payments service that needs a Stripe key a hosted instance
+        // never gets does not run as declared.
+        "payments-stripe-keys-in-managed" => ("gov-construction", OnFinding::Fail),
+        // An unverified webhook is untrusted input acted on.
+        "stripe-webhook-unverified" => ("sec-input-validation", OnFinding::Fail),
+        // Protected data sent to a vendor with no BAA.
+        "payments-protected-data" => ("cmp-data-classification", OnFinding::Fail),
         _ => return None,
     })
 }
@@ -217,6 +229,10 @@ fn severity_for(finding: &LocalFinding) -> &'static str {
         }
         // Health data in call attributes, which Connect keeps in contact records.
         (Severity::Warning, "voice-protected-data") if finding.message.contains("(phi)") => {
+            "critical"
+        }
+        // Health data sent to Stripe, which signs no BAA.
+        (Severity::Warning, "payments-protected-data") if finding.subject.starts_with("phi") => {
             "critical"
         }
         (Severity::Warning, _) => "high",
@@ -337,6 +353,9 @@ fn item_label(check: &str) -> &'static str {
         "whatsapp-protected-data" => "Protected data is never sent over WhatsApp",
         "voice-provider-direct-in-managed" => "Managed services place calls through the platform",
         "voice-protected-data" => "Call attributes carry no protected data",
+        "payments-stripe-keys-in-managed" => "Managed payments go through the platform, with no Stripe key in the app",
+        "stripe-webhook-unverified" => "Stripe webhooks are verified by signature",
+        "payments-protected-data" => "Protected data is not sent to Stripe",
         _ => "Deterministic check",
     }
 }
@@ -422,6 +441,20 @@ fn remedy(check: &str) -> Option<String> {
         "voice-protected-data" => {
             "Pass an identifier (an appointment id) in startOutboundCall attributes and let the \
              contact flow look up what it reads out; never a .deanon value."
+        }
+        "payments-stripe-keys-in-managed" => {
+            "Run `forklaunch infra add <service> payments`: the StripeClient becomes \
+             createStripeClient({ Stripe, apiKey }) and the Stripe keys optional, used only outside \
+             managed mode."
+        }
+        "stripe-webhook-unverified" => {
+            "Verify each delivery with stripe.webhooks.constructEvent(rawBody, signature, secret) \
+             before acting on it; in managed mode receive Stripe events as platform events \
+             (verifyPlatformEvent)."
+        }
+        "payments-protected-data" => {
+            "Send Stripe an opaque reference (the record id) in metadata and descriptions, never a \
+             .deanon value; look the record up in the app when the event comes back."
         }
         _ => return None,
     };
@@ -668,6 +701,11 @@ mod tests {
                 "One customer cannot see or change another customer\u{2019}s data",
             ),
             (
+                "security",
+                "sec-input-validation",
+                "Incoming data is validated before it is trusted",
+            ),
+            (
                 "governance",
                 "gov-data-retention",
                 "How long data is kept, and how it is deleted, is defined",
@@ -718,6 +756,9 @@ mod tests {
             ("retention-wiring", "gov-data-retention"),
             ("erasure-wiring", "gdpr-erasure"),
             ("possible-misclassification", "cmp-data-classification"),
+            ("payments-stripe-keys-in-managed", "gov-construction"),
+            ("stripe-webhook-unverified", "sec-input-validation"),
+            ("payments-protected-data", "cmp-data-classification"),
         ] {
             assert_eq!(
                 criterion_for_check(check).map(|(c, _)| c),
@@ -960,6 +1001,18 @@ mod wiring_score_tests {
             subject: "x".to_string(),
             message: "m".to_string(),
         }
+    }
+
+    #[test]
+    fn protected_data_to_stripe_is_critical_only_with_phi() {
+        let mut phi = finding("payments-protected-data");
+        phi.subject = "phi: customers.create".to_string();
+        assert_eq!(severity_for(&phi), "critical");
+        let mut pii = finding("payments-protected-data");
+        pii.subject = "customers.create".to_string();
+        assert_eq!(severity_for(&pii), "high");
+        assert_eq!(severity_for(&finding("stripe-webhook-unverified")), "high");
+        assert!(remedy("payments-stripe-keys-in-managed").unwrap().contains("infra add"));
     }
 
     #[test]

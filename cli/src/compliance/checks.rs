@@ -152,6 +152,9 @@ pub(crate) const LOCAL_CHECK_IDS: &[&str] = &[
     "whatsapp-protected-data",
     "voice-provider-direct-in-managed",
     "voice-protected-data",
+    "payments-stripe-keys-in-managed",
+    "stripe-webhook-unverified",
+    "payments-protected-data",
 ];
 
 /// AI model provider SDKs a service might call directly.
@@ -601,6 +604,150 @@ pub(crate) fn is_managed_instance(project_path: &Path, sources: &str) -> bool {
         || project_path
             .join("api/controllers/relay.controller.ts")
             .exists()
+}
+
+/// Stripe credentials a service might read.
+const STRIPE_KEYS: &[&str] = &["STRIPE_API_KEY", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"];
+
+/// Stripe credentials a service depends on: a key declared as a REQUIRED
+/// config value or read straight from `process.env`, and a Stripe client built
+/// with `new Stripe(` where `createStripeClient` is never used.
+///
+/// A key declared `optional(...)` and only used outside managed mode
+/// (`createStripeClient({ Stripe, apiKey })`, or an `isManagedInstance()`
+/// branch) is fine: a hosted instance runs without it.
+pub(crate) fn managed_stripe_credentials(sources: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    for key in STRIPE_KEYS {
+        let entry = regex::Regex::new(&format!(
+            r"\b{key}\s*:\s*\{{[^{{}}]*?\btype\s*:\s*([^,\n}}]+)"
+        ))
+        .expect("stripe key entry pattern");
+        let required = entry
+            .captures_iter(sources)
+            .any(|c| !c[1].trim().starts_with("optional("));
+        let direct = regex::Regex::new(&format!(
+            r#"process\.env(?:\.{key}\b|\[\s*['"]{key}['"]\s*\])"#
+        ))
+        .expect("process.env pattern")
+        .is_match(sources);
+        if required || direct {
+            found.push(key.to_string());
+        }
+    }
+    if sources.contains("new Stripe(") && !sources.contains("createStripeClient") {
+        found.push("new Stripe(".to_string());
+    }
+    found
+}
+
+/// Signs that a service acts on Stripe webhook events.
+const STRIPE_WEBHOOK_MARKERS: &[&str] = &[
+    "stripe-signature",
+    "Stripe.Event",
+    "checkout.session.completed",
+    "invoice.payment_succeeded",
+    "customer.subscription.",
+];
+
+/// Whether the sources act on Stripe webhook events without verifying them:
+/// neither Stripe's signature (`constructEvent`) nor the platform's
+/// (`verifyPlatformEvent`, for events the platform relays) is checked.
+pub(crate) fn stripe_webhook_unverified(sources: &str) -> bool {
+    STRIPE_WEBHOOK_MARKERS.iter().any(|m| sources.contains(m))
+        && !["constructEvent(", "constructEventAsync(", "verifyPlatformEvent("]
+            .iter()
+            .any(|v| sources.contains(v))
+}
+
+/// Index of the bracket that closes a group opened just before `from`.
+fn closing_bracket(text: &str, from: usize) -> usize {
+    let mut depth = 1i32;
+    let mut quote: Option<char> = None;
+    let mut prev = ' ';
+    for (i, c) in text[from..].char_indices() {
+        if let Some(q) = quote {
+            if c == q && prev != '\\' {
+                quote = None;
+            }
+        } else {
+            match c {
+                '\'' | '"' | '`' => quote = Some(c),
+                '(' | '{' | '[' => depth += 1,
+                ')' | '}' | ']' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return from + i;
+                    }
+                }
+                _ => {}
+            }
+        }
+        prev = c;
+    }
+    text.len()
+}
+
+/// The text of a property value starting at the beginning of `rest`: a
+/// bracketed group, or everything up to the next comma or newline at its depth.
+fn stripe_property_value(rest: &str) -> &str {
+    if rest.starts_with(['{', '[', '(']) {
+        let end = closing_bracket(rest, 1);
+        return &rest[..(end + 1).min(rest.len())];
+    }
+    let mut depth = 0i32;
+    let end = rest
+        .char_indices()
+        .find(|(_, ch)| match ch {
+            '(' | '{' | '[' => {
+                depth += 1;
+                false
+            }
+            ')' | '}' | ']' => {
+                depth -= 1;
+                depth < 0
+            }
+            ',' | '\n' => depth == 0,
+            _ => false,
+        })
+        .map(|(i, _)| i)
+        .unwrap_or(rest.len());
+    &rest[..end]
+}
+
+/// Stripe calls that send a `.deanon` value (compliant fields expose plaintext
+/// only through `.deanon`) as `metadata`, `description` or
+/// `statement_descriptor`: protected data leaving for Stripe, which signs no
+/// BAA. Heuristic: the value must be written inside the call expression, so a
+/// plaintext assigned to a variable first is not seen.
+pub(crate) fn stripe_calls_with_protected_data(sources: &str) -> Vec<String> {
+    static CALL: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static FIELD: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let call = CALL.get_or_init(|| {
+        regex::Regex::new(
+            r"\b[sS]tripe\w*\s*\.\s*([A-Za-z]+(?:\s*\.\s*[A-Za-z]+)?)\s*\.\s*(create|update)\s*\(",
+        )
+        .expect("stripe call pattern")
+    });
+    let field = FIELD.get_or_init(|| {
+        regex::Regex::new(r"\b(metadata|description|statement_descriptor(?:_suffix)?)\s*:\s*")
+            .expect("stripe field pattern")
+    });
+    let mut found = Vec::new();
+    for c in call.captures_iter(sources) {
+        let open = c.get(0).unwrap().end();
+        let args = &sources[open..closing_bracket(sources, open)];
+        let leaks = field.captures_iter(args).any(|f| {
+            stripe_property_value(&args[f.get(0).unwrap().end()..]).contains(".deanon")
+        });
+        if leaks {
+            let name = format!("{}.{}", c[1].split_whitespace().collect::<String>(), &c[2]);
+            if !found.contains(&name) {
+                found.push(name);
+            }
+        }
+    }
+    found
 }
 
 /// Object-store capability as the manifest declares it, per project name.
@@ -1224,6 +1371,22 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
                 });
             }
 
+            // Payments in a managed instance go through the platform's Stripe
+            // Connect gateway: no Stripe key in the app.
+            let stripe = managed_stripe_credentials(&project_sources);
+            if !stripe.is_empty() {
+                findings.push(LocalFinding {
+                    severity: Severity::Warning,
+                    project: project.clone(),
+                    check: "payments-stripe-keys-in-managed".to_string(),
+                    subject: stripe.join(", "),
+                    message: format!(
+                        "this service runs as a managed instance but depends on Stripe credentials ({}) — a hosted instance has none; build the client with createStripeClient() (forklaunch infra add <service> payments) and declare any key optional for use outside managed mode",
+                        stripe.join(", ")
+                    ),
+                });
+            }
+
             // 7b. Email goes through the platform, not a provider SDK or key.
             let providers = direct_email_providers(&project_sources);
             if !providers.is_empty() {
@@ -1346,6 +1509,40 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
             has_phi_entities,
             &project_sources,
         ));
+
+        // 10. Stripe webhooks are acted on only after a signature check. Only
+        //     a service's own endpoints (api/) receive them: a library that
+        //     processes events its caller verified is not the receiver.
+        let receives_stripe_events = STRIPE_WEBHOOK_MARKERS
+            .iter()
+            .any(|m| read_production_sources(&project_path.join("api")).contains(m));
+        if receives_stripe_events && stripe_webhook_unverified(&project_sources) {
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.clone(),
+                check: "stripe-webhook-unverified".to_string(),
+                subject: "webhook".to_string(),
+                message: "this service handles Stripe webhook events but never verifies a signature — check Stripe's with stripe.webhooks.constructEvent(rawBody, signature, secret), or, in managed mode, receive them as platform events verified with verifyPlatformEvent".to_string(),
+            });
+        }
+
+        // 11. Protected data sent to Stripe (no BAA) as metadata or text.
+        let leaks = stripe_calls_with_protected_data(&project_sources);
+        if !leaks.is_empty() {
+            let phi = entities
+                .iter()
+                .any(|e| e.field_classifications.values().any(|c| c == "phi"));
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.clone(),
+                check: "payments-protected-data".to_string(),
+                subject: format!("{}{}", if phi { "phi: " } else { "" }, leaks.join(", ")),
+                message: format!(
+                    "a decrypted (.deanon) value is sent to Stripe as metadata or a description ({}) — Stripe signs no BAA, and these fields are shown to anyone with dashboard access; send an opaque reference (the record id) instead",
+                    leaks.join(", ")
+                ),
+            });
+        }
     }
 
     // 8. Object storage: provisioned by the platform, reached with the task
@@ -1391,8 +1588,12 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
         {
             for capability in crate::infra::capabilities::CAPABILITIES {
                 let is_declared = declared.iter().any(|c| c == capability.id);
-                let is_wired =
-                    registrations.contains(&format!("{}:", capability.registration_key));
+                // A registration only counts as the capability in a service that
+                // reads the gateway contract: billing-stripe's own keyed
+                // `StripeClient` is ordinary Stripe, not undeclared payments.
+                let is_wired = registrations
+                    .contains(&format!("{}:", capability.registration_key))
+                    && (is_declared || is_managed_instance(&project_path, &sources));
                 let message = match (is_declared, is_wired) {
                     (true, false) => Some(format!(
                         "the manifest declares {} but registrations.ts registers no {} — the service has nothing to call it with",
@@ -2356,6 +2557,178 @@ mod wiring_tests {
         let findings = run_local_checks(&dir).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
         assert!(!findings.iter().any(|f| f.check == "managed-provider-credentials"));
+    }
+}
+
+#[cfg(test)]
+mod payments_tests {
+    use super::*;
+
+    #[test]
+    fn required_or_direct_stripe_keys_are_found_optional_ones_are_not() {
+        let required = "STRIPE_API_KEY: {\n lifetime: Lifetime.Singleton,\n type: string,\n value: getEnvVar('STRIPE_API_KEY') }";
+        assert_eq!(managed_stripe_credentials(required), vec!["STRIPE_API_KEY"]);
+        let optional = "STRIPE_API_KEY: {\n\t\tlifetime: Lifetime.Singleton,\n\t\ttype: optional(string),\n\t\tvalue: getEnvVar(\"STRIPE_API_KEY\") }\n factory: ({ STRIPE_API_KEY }) => createStripeClient({ Stripe, apiKey: STRIPE_API_KEY })";
+        assert!(managed_stripe_credentials(optional).is_empty());
+        assert_eq!(
+            managed_stripe_credentials("const s = new Stripe(process.env['STRIPE_SECRET_KEY']);"),
+            vec!["STRIPE_SECRET_KEY", "new Stripe("]
+        );
+        // The blueprint's managed branch.
+        assert!(managed_stripe_credentials(
+            "isManagedInstance() ? createStripeClient({ Stripe }) : new Stripe(STRIPE_API_KEY!)"
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn webhooks_need_a_signature_check() {
+        assert!(stripe_webhook_unverified(
+            "const event = req.body as Stripe.Event; await handle(event);"
+        ));
+        assert!(!stripe_webhook_unverified(
+            "stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], secret)"
+        ));
+        assert!(!stripe_webhook_unverified(
+            "case 'checkout.session.completed': …; verifyPlatformEvent({ method, path, headers, body })"
+        ));
+        assert!(!stripe_webhook_unverified("await stripe.customers.create({ email })"));
+    }
+
+    #[test]
+    fn deanon_values_inside_stripe_calls_are_found() {
+        let leak = "await this.stripeClient.checkout.sessions.create({\n  mode: 'payment',\n  metadata: { patient: patient.fullName.deanon, visit: visit.id },\n  line_items\n});";
+        assert_eq!(stripe_calls_with_protected_data(leak), vec!["checkout.sessions.create"]);
+        let description = "stripe.paymentIntents.create({ amount, description: `Visit for ${p.diagnosis.deanon}`, currency })";
+        assert_eq!(stripe_calls_with_protected_data(description), vec!["paymentIntents.create"]);
+        // An opaque id is fine, and .deanon elsewhere in the call is not metadata.
+        let fine = "stripe.customers.create({ email: user.email.deanon, metadata: { userId: user.id } })";
+        assert!(stripe_calls_with_protected_data(fine).is_empty());
+        let outside = "const n = p.name.deanon;\nstripe.customers.create({ metadata: { ref: p.id } });";
+        assert!(stripe_calls_with_protected_data(outside).is_empty());
+    }
+
+    fn project(name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("fl-payments-checks-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        for (path, text) in files {
+            let p = dir.join("clinic").join(path);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, text).unwrap();
+        }
+        dir
+    }
+
+    fn found(dir: &std::path::Path) -> Vec<(String, String)> {
+        let out = run_local_checks(dir)
+            .unwrap()
+            .into_iter()
+            .filter(|f| f.check.starts_with("payments") || f.check.starts_with("stripe"))
+            .map(|f| (f.check, f.subject))
+            .collect();
+        let _ = std::fs::remove_dir_all(dir);
+        out
+    }
+
+    #[test]
+    fn a_managed_service_with_a_required_stripe_key_is_flagged() {
+        let dir = project(
+            "library-events",
+            &[("services/webhook.service.ts", "handle(event: Stripe.Event) { switch (event.type) { case 'checkout.session.completed': } }")],
+        );
+        assert!(found(&dir).is_empty(), "a library is not the webhook receiver");
+        let dir = project(
+            "unverified-route",
+            &[("api/controllers/webhook.controller.ts", "const event = req.body as Stripe.Event; await service.handle(event);")],
+        );
+        assert_eq!(found(&dir), vec![("stripe-webhook-unverified".to_string(), "webhook".to_string())]);
+        let dir = project(
+            "managed-key",
+            &[(
+                "registrations.ts",
+                "getEnvVar('INSTANCE_HMAC_KEY'); STRIPE_API_KEY: { lifetime: Lifetime.Singleton, type: string, value: getEnvVar('STRIPE_API_KEY') }",
+            )],
+        );
+        assert_eq!(
+            found(&dir),
+            vec![("payments-stripe-keys-in-managed".to_string(), "STRIPE_API_KEY".to_string())]
+        );
+        // Not managed: a key is how Stripe is reached.
+        let dir = project(
+            "unmanaged-key",
+            &[(
+                "registrations.ts",
+                "STRIPE_API_KEY: { lifetime: Lifetime.Singleton, type: string, value: getEnvVar('STRIPE_API_KEY') }",
+            )],
+        );
+        assert!(found(&dir).is_empty());
+    }
+
+    #[test]
+    fn protected_data_is_critical_only_when_the_service_holds_phi() {
+        let service = "await stripe.customers.create({ metadata: { dob: patient.dob.deanon } });";
+        let phi = project(
+            "phi",
+            &[
+                ("domain/services/pay.service.ts", service),
+                (
+                    "persistence/entities/patient.entity.ts",
+                    "export const P = defineComplianceEntity({ name: 'P', properties: { dob: fp.string().compliance('phi') } });",
+                ),
+            ],
+        );
+        assert_eq!(
+            found(&phi),
+            vec![("payments-protected-data".to_string(), "phi: customers.create".to_string())]
+        );
+        let pii = project("pii", &[("domain/services/pay.service.ts", service)]);
+        assert_eq!(
+            found(&pii),
+            vec![("payments-protected-data".to_string(), "customers.create".to_string())]
+        );
+    }
+
+    #[test]
+    fn a_keyed_stripe_client_outside_managed_mode_is_not_undeclared_payments() {
+        let write = |name: &str, registrations: &str| {
+            let root = std::env::temp_dir().join(format!("fl-payments-wiring-{name}"));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(root.join(".forklaunch")).unwrap();
+            std::fs::create_dir_all(root.join("src/modules/billing")).unwrap();
+            std::fs::write(
+                root.join(".forklaunch/manifest.toml"),
+                "app_name = \"demo\"\n\n[[projects]]\nname = \"billing\"\n[projects.resources]\ncache = \"redis\"\n",
+            )
+            .unwrap();
+            std::fs::write(root.join("src/modules/billing/registrations.ts"), registrations).unwrap();
+            let checks: Vec<String> = run_local_checks(&root.join("src/modules"))
+                .unwrap()
+                .into_iter()
+                .filter(|f| f.check == "capability-wiring")
+                .map(|f| f.subject)
+                .collect();
+            let _ = std::fs::remove_dir_all(&root);
+            checks
+        };
+        assert!(write("plain", "StripeClient: { factory: ({ STRIPE_API_KEY }) => new Stripe(STRIPE_API_KEY) }").is_empty());
+        assert_eq!(
+            write(
+                "managed",
+                "getEnvVar('INSTANCE_HMAC_KEY'); StripeClient: { factory: () => createStripeClient({ Stripe }) }"
+            ),
+            vec!["payments"]
+        );
+    }
+
+    #[test]
+    fn payments_checks_are_listed() {
+        for id in [
+            "payments-stripe-keys-in-managed",
+            "stripe-webhook-unverified",
+            "payments-protected-data",
+        ] {
+            assert!(LOCAL_CHECK_IDS.contains(&id), "{id} missing from LOCAL_CHECK_IDS");
+        }
     }
 }
 
