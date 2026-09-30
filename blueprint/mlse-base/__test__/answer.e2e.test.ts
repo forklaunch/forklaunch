@@ -220,7 +220,7 @@ describe('answers on pgvector', () => {
     const answer = await answers.answer({ query: 'heart attack', live: false });
     expect(llm.requests).toHaveLength(0);
     expect(answer.sections[0]).toMatchObject({ status: 'insufficient_evidence', sentences: [] });
-    expect(answer.research).toMatchObject({ searchedFor: ['heart attack', 'myocardial infarction'], aboutQuestion: 0, used: 0 });
+    expect(answer.research).toMatchObject({ searchedFor: ['heart attack', 'myocardial infarction', 'acute coronary syndrome'], aboutQuestion: 0, used: 0 });
   });
 
   it('quotes the sources when drafting fails', async () => {

@@ -7,6 +7,8 @@
 // question frameworks.
 const LAY_TERMS: [lay: string[], clinical: string][] = [
   [['heart attack', 'heart attacks'], 'myocardial infarction'],
+  // guidelines cover heart attack under the wider acute coronary syndrome
+  [['heart attack', 'heart attacks'], 'acute coronary syndrome'],
   [['brain attack'], 'stroke'],
   [['mini stroke', 'ministroke'], 'transient ischemic attack'],
   [['high blood pressure'], 'hypertension'],
