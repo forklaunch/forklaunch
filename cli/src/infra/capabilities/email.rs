@@ -7,9 +7,8 @@
 //! `email.complained` events at `api/platformEvents/email.ts`.
 
 use anyhow::Result;
-use regex::Regex;
 
-use super::{Capability, CapabilityEdit};
+use super::{Capability, CapabilityEdit, add_named_imports};
 
 pub(crate) static EMAIL: Capability = Capability {
     id: "email",
@@ -79,133 +78,26 @@ export async function handle(event: PlatformEvent): Promise<void> {
 ";
 
 fn add(edit: &mut CapabilityEdit) -> Result<()> {
-    // The registration first (an empty import line skips the helper's import
-    // splice, which would replace the service's existing imports from these
-    // sources), then the named imports merged into what is there.
+    // The registration, then its names merged into the file's imports from
+    // these sources (in the file's style; see `in_place`).
     edit.inject_registration("", HTTP_SOURCE, None, Some(RUNTIME_BLOCK))?;
     let path = edit.registrations_path();
-    if let Some(text) = edit.read(&path)? {
+    if let Some(before) = edit.read(&path)? {
         let core_source = format!("@{}/core", edit.app_name);
-        let text = add_named_imports(&text, HTTP_SOURCE, HTTP_IMPORTS);
+        let text = add_named_imports(&before, HTTP_SOURCE, HTTP_IMPORTS);
         let text = add_named_imports(&text, &core_source, &["type"]);
-        edit.write(path, text);
+        if text != before {
+            edit.write(path, text);
+        }
     }
     edit.ensure_platform_events("email", EVENTS_HANDLER)?;
     Ok(())
 }
 
 fn remove(edit: &mut CapabilityEdit) -> Result<()> {
-    edit.remove_registration(None, &[], &["EmailClient"])?;
-    let path = edit.registrations_path();
-    if let Some(text) = edit.read(&path)? {
-        let mut text = remove_named_imports(&text, HTTP_SOURCE, HTTP_IMPORTS);
-        // `type` stays when something else still uses it.
-        if !text.contains("type<") {
-            text = remove_named_imports(&text, &format!("@{}/core", edit.app_name), &["type"]);
-        }
-        edit.write(path, text);
-    }
-    Ok(())
-}
-
-/// The named imports of a one-line `import { a, type B } from '…';`.
-pub(crate) fn import_names(import_line: &str) -> Vec<String> {
-    let Some(open) = import_line.find('{') else {
-        return Vec::new();
-    };
-    let Some(close) = import_line[open..].find('}') else {
-        return Vec::new();
-    };
-    specifiers(&import_line[open + 1..open + close])
-}
-
-/// Whether the file has a named import from `source`.
-pub(crate) fn imports_from(text: &str, source: &str) -> bool {
-    import_pattern(source).is_match(text)
-}
-
-fn import_pattern(source: &str) -> Regex {
-    Regex::new(&format!(
-        r#"import\s*\{{([^}}]*)\}}\s*from\s*['"]{}['"]\s*;?"#,
-        regex::escape(source)
-    ))
-    .expect("import pattern")
-}
-
-fn specifiers(list: &str) -> Vec<String> {
-    list.split(',')
-        .map(|s| s.split_whitespace().collect::<Vec<_>>().join(" "))
-        .filter(|s| !s.is_empty())
-        .collect()
-}
-
-fn render_import(names: &[String], source: &str) -> String {
-    format!("import {{ {} }} from \"{}\";", names.join(", "), source)
-}
-
-/// Merge named imports into the file's import from `source` (adding one after
-/// the last import when there is none).
-pub(crate) fn add_named_imports(text: &str, source: &str, names: &[&str]) -> String {
-    let pattern = import_pattern(source);
-    if let Some(found) = pattern.captures(text) {
-        let mut existing = specifiers(&found[1]);
-        for name in names {
-            let bare = name.trim_start_matches("type ");
-            let present = existing
-                .iter()
-                .any(|e| e == name || e.trim_start_matches("type ") == bare);
-            if !present {
-                existing.push(name.to_string());
-            }
-        }
-        let range = found.get(0).unwrap().range();
-        return format!(
-            "{}{}{}",
-            &text[..range.start],
-            render_import(&existing, source),
-            &text[range.end..]
-        );
-    }
-    let line = render_import(&names.iter().map(|n| n.to_string()).collect::<Vec<_>>(), source);
-    // After the last top-level import statement (single or multi-line).
-    let import_end = Regex::new(r#"(?m)^import[^;]*;[^\n]*\n"#).expect("import end");
-    match import_end.find_iter(text).last() {
-        Some(m) => format!("{}{}\n{}", &text[..m.end()], line, &text[m.end()..]),
-        None => format!("{line}\n{text}"),
-    }
-}
-
-/// Drop named imports from the file's import from `source`, and the import
-/// itself when nothing is left.
-pub(crate) fn remove_named_imports(text: &str, source: &str, names: &[&str]) -> String {
-    let pattern = import_pattern(source);
-    let Some(found) = pattern.captures(text) else {
-        return text.to_string();
-    };
-    let kept: Vec<String> = specifiers(&found[1])
-        .into_iter()
-        .filter(|e| {
-            !names
-                .iter()
-                .any(|n| e == n || e.trim_start_matches("type ") == n.trim_start_matches("type "))
-        })
-        .collect();
-    let range = found.get(0).unwrap().range();
-    if kept.is_empty() {
-        let end = if text[range.end..].starts_with('\n') {
-            range.end + 1
-        } else {
-            range.end
-        };
-        format!("{}{}", &text[..range.start], &text[end..])
-    } else {
-        format!(
-            "{}{}{}",
-            &text[..range.start],
-            render_import(&kept, source),
-            &text[range.end..]
-        )
-    }
+    // Its imports (createEmailClient, EmailClient, and `type` unless
+    // something else still uses it) go with the registration.
+    edit.remove_registration(None, &[], &["EmailClient"])
 }
 
 #[cfg(test)]
@@ -268,7 +160,8 @@ const serviceDependencies = runtimeDependencies.chain({});
         assert!(registrations.contains("EmailClient:"), "{registrations}");
         assert!(registrations.contains("createEmailClient({"), "{registrations}");
         assert!(registrations.contains("Lifetime.Scoped"));
-        assert!(registrations.contains("OpenTelemetryCollector, createEmailClient, type EmailClient"), "{registrations}");
+        // Merged into the file's imports at their sorted place, in its quotes.
+        assert!(registrations.contains("import { type EmailClient, OpenTelemetryCollector, createEmailClient } from \"@forklaunch/core/http\";"), "{registrations}");
         assert!(registrations.contains("SchemaValidator, number, string, type } from \"@demo/core\""), "{registrations}");
         assert!(!registrations.contains("SES"), "no vendor SDK or key");
         assert!(!registrations.contains("API_KEY"));
@@ -295,6 +188,8 @@ const serviceDependencies = runtimeDependencies.chain({});
 
         let registrations = fs::read_to_string(service.join("registrations.ts")).unwrap();
         assert!(!registrations.contains("EmailClient"), "{registrations}");
+        // Byte for byte what it was.
+        assert_eq!(registrations, REGISTRATIONS);
         assert!(!registrations.contains("createEmailClient"));
         assert!(registrations.contains("import { OpenTelemetryCollector } from \"@forklaunch/core/http\";"));
         // `type` goes with the last `type<…>()` that used it.
@@ -307,18 +202,18 @@ const serviceDependencies = runtimeDependencies.chain({});
     }
 
     #[test]
-    fn named_imports_merge_and_unmerge() {
+    fn named_imports_merge_and_unmerge_in_the_files_style() {
+        use super::super::remove_named_imports;
         let text = "import { a } from '@x/y';\nimport {\n  b,\n  c\n} from \"@forklaunch/core/http\";\nconst z = 1;\n";
         let added = add_named_imports(text, HTTP_SOURCE, HTTP_IMPORTS);
-        assert!(added.contains("import { b, c, createEmailClient, type EmailClient } from \"@forklaunch/core/http\";"));
+        assert!(added.contains("import {\n  type EmailClient,\n  b,\n  c,\n  createEmailClient\n} from \"@forklaunch/core/http\";"), "{added}");
         assert_eq!(add_named_imports(&added, HTTP_SOURCE, HTTP_IMPORTS), added, "idempotent");
-        let removed = remove_named_imports(&added, HTTP_SOURCE, HTTP_IMPORTS);
-        assert!(removed.contains("import { b, c } from \"@forklaunch/core/http\";"));
+        assert_eq!(remove_named_imports(&added, HTTP_SOURCE, HTTP_IMPORTS), text);
 
         let fresh = add_named_imports("import { a } from 'x';\nconst z = 1;\n", HTTP_SOURCE, &["createEmailClient"]);
         assert_eq!(
             fresh,
-            "import { a } from 'x';\nimport { createEmailClient } from \"@forklaunch/core/http\";\nconst z = 1;\n"
+            "import { createEmailClient } from '@forklaunch/core/http';\nimport { a } from 'x';\nconst z = 1;\n"
         );
         assert_eq!(
             remove_named_imports(&fresh, HTTP_SOURCE, &["createEmailClient"]),
@@ -339,12 +234,12 @@ const serviceDependencies = runtimeDependencies.chain({});
         e.ensure_gateway_wiring("email").unwrap();
         e.commit().unwrap();
         let registrations = fs::read_to_string(service.join("registrations.ts")).unwrap();
+        // Left exactly as the file wrote it.
         assert!(
-            registrations.contains("import { createConfigInjector, getEnvVar, Lifetime } from \"@forklaunch/core/services\";"),
+            registrations.contains("import {\n  createConfigInjector,\n  getEnvVar,\n  Lifetime\n} from '@forklaunch/core/services';"),
             "{registrations}"
         );
         assert!(registrations.contains("INSTANCE_HMAC_KEY:"));
-        assert_eq!(import_names("import { getEnvVar, type X } from 'y';"), vec!["getEnvVar", "type X"]);
         let _ = fs::remove_dir_all(&root);
     }
 

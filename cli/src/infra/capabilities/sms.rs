@@ -94,59 +94,9 @@ fn add(edit: &mut CapabilityEdit) -> Result<()> {
 }
 
 fn remove(edit: &mut CapabilityEdit) -> Result<()> {
-    edit.remove_registration(None, &[], &["SmsClient"])?;
-    remove_import_specifiers(edit, &["createSmsClient", "SmsClient"])?;
-    Ok(())
-}
-
-/// Drop our specifiers from the `@forklaunch/core/http` import, keeping the
-/// others the file imports from it (OpenTelemetryCollector, …).
-fn remove_import_specifiers(edit: &mut CapabilityEdit, names: &[&str]) -> Result<()> {
-    let path = edit.registrations_path();
-    let Some(text) = edit.read(&path)? else {
-        return Ok(());
-    };
-    let Some(updated) = strip_specifiers(&text, IMPORT_SOURCE, names) else {
-        return Ok(());
-    };
-    edit.write(path, updated);
-    Ok(())
-}
-
-/// The text with `names` removed from the import of `source` (the whole
-/// import when nothing is left), or None when nothing changed.
-pub(crate) fn strip_specifiers(text: &str, source: &str, names: &[&str]) -> Option<String> {
-    let pattern = regex::Regex::new(&format!(
-        r#"import\s*\{{([^}}]*)\}}\s*from\s*['"]{}['"];?[ \t]*\n?"#,
-        regex::escape(source)
-    ))
-    .ok()?;
-    let found = pattern.captures(text)?;
-    let whole = found.get(0)?;
-    let kept: Vec<&str> = found[1]
-        .split(',')
-        .map(str::trim)
-        .filter(|s| !s.is_empty() && !names.contains(s))
-        .collect();
-    let original: Vec<&str> = found[1]
-        .split(',')
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .collect();
-    if kept.len() == original.len() {
-        return None;
-    }
-    let replacement = if kept.is_empty() {
-        String::new()
-    } else {
-        format!("import {{ {} }} from \"{}\";\n", kept.join(", "), source)
-    };
-    Some(format!(
-        "{}{}{}",
-        &text[..whole.start()],
-        replacement,
-        &text[whole.end()..]
-    ))
+    // createSmsClient and SmsClient go with the registration, keeping the
+    // other names the file imports from `@forklaunch/core/http`.
+    edit.remove_registration(None, &[], &["SmsClient"])
 }
 
 #[cfg(test)]
@@ -241,11 +191,13 @@ app.use(billingRouter);
         assert!(registrations.contains("deferRefusal: true"));
         assert!(registrations.contains("INSTANCE_HMAC_KEY:"));
         // The existing imports survive the new ones (merged, not replaced).
+        // The existing imports survive the new ones (merged, in the file's
+        // quotes, at their sorted place).
         assert!(registrations.contains(
-            "import { OpenTelemetryCollector, createSmsClient, SmsClient } from \"@forklaunch/core/http\";"
-        ));
+            "import { OpenTelemetryCollector, SmsClient, createSmsClient } from '@forklaunch/core/http';"
+        ), "{registrations}");
         assert!(registrations.contains(
-            "import { createConfigInjector, getEnvVar, Lifetime } from \"@forklaunch/core/services\";"
+            "import { createConfigInjector, getEnvVar, Lifetime } from '@forklaunch/core/services';"
         ));
         for key in ["AWS_ACCESS_KEY_ID", "TWILIO", "PINPOINT"] {
             assert!(!registrations.contains(key), "{key} in registrations");
@@ -267,23 +219,8 @@ app.use(billingRouter);
         assert!(!registrations.contains("SmsClient"), "{registrations}");
         assert!(!registrations.contains("createSmsClient"));
         assert!(registrations.contains(
-            "import { OpenTelemetryCollector } from \"@forklaunch/core/http\";"
+            "import { OpenTelemetryCollector } from '@forklaunch/core/http';"
         ));
-    }
-
-    #[test]
-    fn strip_specifiers_keeps_the_rest_of_the_import() {
-        let text = "import { OpenTelemetryCollector, createSmsClient, SmsClient } from \"@forklaunch/core/http\";\nconst x = 1;\n";
-        let out = strip_specifiers(text, IMPORT_SOURCE, &["createSmsClient", "SmsClient"]).unwrap();
-        assert_eq!(
-            out,
-            "import { OpenTelemetryCollector } from \"@forklaunch/core/http\";\nconst x = 1;\n"
-        );
-        let only = "import { createSmsClient, SmsClient } from '@forklaunch/core/http';\nconst x = 1;\n";
-        assert_eq!(
-            strip_specifiers(only, IMPORT_SOURCE, &["createSmsClient", "SmsClient"]).unwrap(),
-            "const x = 1;\n"
-        );
-        assert!(strip_specifiers(text, IMPORT_SOURCE, &["Nope"]).is_none());
+        assert_eq!(registrations, REGISTRATIONS);
     }
 }

@@ -7,7 +7,7 @@
 
 use anyhow::Result;
 
-use super::{Capability, CapabilityEdit, remove_named_imports};
+use super::{Capability, CapabilityEdit};
 
 pub(crate) static VOICE: Capability = Capability {
     id: "voice",
@@ -20,6 +20,7 @@ pub(crate) static VOICE: Capability = Capability {
 };
 
 const IMPORT_SOURCE: &str = "@forklaunch/core/http";
+#[cfg(test)]
 const IMPORT_NAMES: &[&str] = &["createVoiceClient", "VoiceClient"];
 const IMPORT_LINE: &str = "import { createVoiceClient, VoiceClient } from \"@forklaunch/core/http\";";
 
@@ -89,12 +90,8 @@ fn add(edit: &mut CapabilityEdit) -> Result<()> {
 }
 
 fn remove(edit: &mut CapabilityEdit) -> Result<()> {
-    edit.remove_registration(None, &[], &["VoiceClient"])?;
-    let path = edit.registrations_path();
-    if let Some(text) = edit.read(&path)? {
-        edit.write(path, remove_named_imports(&text, IMPORT_SOURCE, IMPORT_NAMES));
-    }
-    Ok(())
+    // createVoiceClient and VoiceClient go with the registration.
+    edit.remove_registration(None, &[], &["VoiceClient"])
 }
 
 #[cfg(test)]
@@ -153,11 +150,11 @@ const runtimeDependencies = environmentConfig.chain({
 
     #[test]
     fn imports_merge_into_the_existing_source_and_come_back_out() {
-        use super::super::add_named_imports;
+        use super::super::{add_named_imports, remove_named_imports};
         let text = "import { OpenTelemetryCollector } from \"@forklaunch/core/http\";\nconst a = 1;\n";
         let added = add_named_imports(text, IMPORT_SOURCE, IMPORT_NAMES);
         assert!(added.contains(
-            "import { OpenTelemetryCollector, createVoiceClient, VoiceClient } from \"@forklaunch/core/http\";"
+            "import { OpenTelemetryCollector, VoiceClient, createVoiceClient } from \"@forklaunch/core/http\";"
         ));
         assert_eq!(add_named_imports(&added, IMPORT_SOURCE, IMPORT_NAMES), added);
         assert_eq!(remove_named_imports(&added, IMPORT_SOURCE, IMPORT_NAMES), text);
@@ -173,7 +170,7 @@ const runtimeDependencies = environmentConfig.chain({
         let registrations = edit.read(&edit.registrations_path()).unwrap().unwrap();
         assert!(registrations.contains("VoiceClient:"));
         assert!(registrations.contains("createVoiceClient("));
-        assert!(registrations.contains("OpenTelemetryCollector, createVoiceClient, VoiceClient"));
+        assert!(registrations.contains("import { OpenTelemetryCollector, VoiceClient, createVoiceClient } from \"@forklaunch/core/http\";"));
         assert!(registrations.contains("hmacKey: INSTANCE_HMAC_KEY"));
         for forbidden in ["AWS_ACCESS_KEY_ID", "CONNECT_INSTANCE_ID", "client-connect", "TWILIO"] {
             assert!(!registrations.contains(forbidden), "{forbidden} in registrations");
@@ -220,6 +217,7 @@ const runtimeDependencies = environmentConfig.chain({
         assert!(!registrations.contains("VoiceClient"));
         assert!(!registrations.contains("createVoiceClient"));
         assert!(registrations.contains("OpenTelemetryCollector"));
+        assert_eq!(registrations, REGISTRATIONS, "registrations.ts back to what it was");
     }
 
     #[test]
