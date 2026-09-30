@@ -150,6 +150,8 @@ pub(crate) const LOCAL_CHECK_IDS: &[&str] = &[
     "sms-protected-data",
     "whatsapp-provider-direct-in-managed",
     "whatsapp-protected-data",
+    "voice-provider-direct-in-managed",
+    "voice-protected-data",
 ];
 
 /// AI model provider SDKs a service might call directly.
@@ -1328,6 +1330,22 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
                 });
             }
         }
+
+        // 7b. Voice: a managed service calls through the platform's Connect
+        //     instance (createVoiceClient), never a voice vendor of its own;
+        //     and no protected value rides along in call attributes, which
+        //     Connect keeps in its contact records.
+        let has_phi_entities = entities.iter().any(|e| {
+            e.field_classifications
+                .values()
+                .any(|classification| classification == "phi")
+        });
+        findings.extend(voice_findings(
+            &project,
+            is_managed_instance(&project_path, &project_sources),
+            has_phi_entities,
+            &project_sources,
+        ));
     }
 
     // 8. Object storage: provisioned by the platform, reached with the task
@@ -1461,6 +1479,317 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
             .cmp(&(&b.project, &b.check, &b.subject, &b.message))
     });
     Ok(findings)
+}
+
+// ------------------------------------------------------------------ voice
+
+/// Voice vendor SDKs a managed service must not call itself. `twilio` counts
+/// only where the code uses its voice API: the same SDK sends SMS, and its
+/// credentials are `managed-provider-credentials`' to report.
+const VOICE_PROVIDER_PACKAGES: &[&str] = &[
+    "@aws-sdk/client-connect",
+    "@aws-sdk/client-connectcontactlens",
+    "@vonage/voice",
+    "@vonage/server-sdk",
+    "@vonage/vcr-sdk",
+];
+
+/// Signs that code uses Twilio's voice API rather than its messaging API.
+const TWILIO_VOICE_MARKERS: &[&str] = &[".calls.create(", "VoiceResponse", "twiml.voice"];
+
+/// Voice credentials and ids the platform holds (Twilio's are reported by
+/// `managed-provider-credentials`, so they are not repeated here).
+const VOICE_PROVIDER_KEYS: &[&str] = &[
+    "CONNECT_INSTANCE_ID",
+    "AMAZON_CONNECT_INSTANCE_ID",
+    "CONNECT_CONTACT_FLOW_ID",
+    "VONAGE_API_KEY",
+    "VONAGE_API_SECRET",
+    "VONAGE_APPLICATION_ID",
+    "VONAGE_PRIVATE_KEY",
+];
+
+/// Voice vendors the sources reach directly: SDK imports and credential reads.
+pub(crate) fn direct_voice_providers(sources: &str) -> Vec<String> {
+    let modules = imported_modules(sources);
+    let mut found: Vec<String> = modules
+        .iter()
+        .filter(|m| VOICE_PROVIDER_PACKAGES.contains(&m.as_str()))
+        .cloned()
+        .collect();
+    if modules.iter().any(|m| m == "twilio")
+        && TWILIO_VOICE_MARKERS.iter().any(|marker| sources.contains(marker))
+    {
+        found.push("twilio (voice)".to_string());
+    }
+    found.extend(
+        VOICE_PROVIDER_KEYS
+            .iter()
+            .filter(|key| contains_word(sources, key))
+            .map(|key| key.to_string()),
+    );
+    found.sort();
+    found.dedup();
+    found
+}
+
+fn contains_word(text: &str, word: &str) -> bool {
+    text.match_indices(word).any(|(i, _)| {
+        let before = text[..i].chars().next_back();
+        let after = text[i + word.len()..].chars().next();
+        !before.is_some_and(|c| c.is_alphanumeric() || c == '_')
+            && !after.is_some_and(|c| c.is_alphanumeric() || c == '_')
+    })
+}
+
+/// The text between the bracket at `open` and its match, skipping strings
+/// and comments well enough for call arguments.
+fn balanced(text: &str, open: usize) -> Option<&str> {
+    let bytes = text.as_bytes();
+    let mut depth = 0usize;
+    let mut i = open;
+    let mut quote: Option<u8> = None;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if let Some(q) = quote {
+            if c == b'\\' {
+                i += 2;
+                continue;
+            }
+            if c == q {
+                quote = None;
+            }
+        } else {
+            match c {
+                b'\'' | b'"' | b'`' => quote = Some(c),
+                b'/' if bytes.get(i + 1) == Some(&b'/') => {
+                    while i < bytes.len() && bytes[i] != b'\n' {
+                        i += 1;
+                    }
+                    continue;
+                }
+                b'(' | b'{' | b'[' => depth += 1,
+                b')' | b'}' | b']' => {
+                    depth = depth.checked_sub(1)?;
+                    if depth == 0 {
+                        return text.get(open + 1..i);
+                    }
+                }
+                _ => {}
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
+fn is_ident_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_' || c == '$'
+}
+
+/// Whether `expr` exposes a compliant field's plaintext (`x.deanon`).
+fn reads_deanon(expr: &str) -> bool {
+    expr.match_indices(".deanon")
+        .any(|(i, _)| !expr[i + 7..].chars().next().is_some_and(is_ident_char))
+}
+
+/// Identifiers declared from an expression that reads `.deanon`
+/// (`const diagnosis = record.diagnosis.deanon;`), one level deep.
+fn deanon_identifiers(sources: &str) -> Vec<String> {
+    static DECL: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = DECL.get_or_init(|| {
+        regex::Regex::new(r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]+)?=([^;\n]*)")
+            .expect("declaration pattern")
+    });
+    re.captures_iter(sources)
+        .filter(|c| reads_deanon(&c[2]))
+        .map(|c| c[1].to_string())
+        .collect()
+}
+
+/// The object expression an identifier is declared with, if it is one.
+fn declared_object<'a>(sources: &'a str, ident: &str) -> Option<&'a str> {
+    let re = regex::Regex::new(&format!(
+        r"\b(?:const|let|var)\s+{}\s*(?::[^=;]+)?=\s*\{{",
+        regex::escape(ident)
+    ))
+    .ok()?;
+    let m = re.find(sources)?;
+    balanced(sources, m.end() - 1)
+}
+
+/// The `attributes` expression of a `startOutboundCall({ … })` argument.
+fn attributes_of<'a>(sources: &'a str, argument: &'a str) -> Option<&'a str> {
+    static KEY: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = KEY.get_or_init(|| {
+        regex::Regex::new(r"\battributes\b\s*(:)?\s*").expect("attributes pattern")
+    });
+    let m = re.captures(argument)?;
+    let rest = &argument[m.get(0)?.end()..];
+    if m.get(1).is_none() {
+        // Shorthand `{ to, flow, attributes }`: the variable of that name.
+        return declared_object(sources, "attributes");
+    }
+    if rest.starts_with('{') {
+        let open = argument.len() - rest.len();
+        return balanced(argument, open);
+    }
+    let ident: String = rest.chars().take_while(|c| is_ident_char(*c)).collect();
+    if ident.is_empty() {
+        // Some other expression: judge it as written.
+        return Some(rest.split([',', '}']).next().unwrap_or(rest));
+    }
+    declared_object(sources, &ident).or(Some(&rest[..ident.len()]))
+}
+
+/// Protected values passed in voice call attributes: `.deanon` reads, or
+/// identifiers declared from one, inside `startOutboundCall`'s attributes.
+pub(crate) fn voice_attribute_leaks(sources: &str) -> Vec<String> {
+    let tainted = deanon_identifiers(sources);
+    let mut found = Vec::new();
+    for (index, _) in sources.match_indices("startOutboundCall(") {
+        let open = index + "startOutboundCall".len();
+        let Some(argument) = balanced(sources, open) else {
+            continue;
+        };
+        let argument = argument.trim();
+        let argument_object = if argument.starts_with('{') {
+            balanced(argument, 0).unwrap_or(argument)
+        } else {
+            // A request built elsewhere: `startOutboundCall(request)`.
+            let ident: String = argument.chars().take_while(|c| is_ident_char(*c)).collect();
+            match declared_object(sources, &ident) {
+                Some(object) => object,
+                None => continue,
+            }
+        };
+        let Some(attributes) = attributes_of(sources, argument_object) else {
+            continue;
+        };
+        if reads_deanon(attributes) {
+            found.push(".deanon".to_string());
+        }
+        for ident in &tainted {
+            if contains_word(attributes, ident) {
+                found.push(ident.clone());
+            }
+        }
+    }
+    found.sort();
+    found.dedup();
+    found
+}
+
+/// The voice checks for one project.
+fn voice_findings(
+    project: &str,
+    managed: bool,
+    has_phi_entities: bool,
+    sources: &str,
+) -> Vec<LocalFinding> {
+    let mut findings = Vec::new();
+    if managed {
+        let providers = direct_voice_providers(sources);
+        if !providers.is_empty() {
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.to_string(),
+                check: "voice-provider-direct-in-managed".to_string(),
+                subject: providers.join(", "),
+                message: format!(
+                    "this service runs as a managed instance but calls a voice provider itself ({}) — hosted instances get no vendor credentials; place calls with createVoiceClient(), which dials through the platform's Amazon Connect under the instance's own limits",
+                    providers.join(", ")
+                ),
+            });
+        }
+    }
+    let leaks = voice_attribute_leaks(sources);
+    if !leaks.is_empty() {
+        findings.push(LocalFinding {
+            severity: Severity::Warning,
+            project: project.to_string(),
+            check: "voice-protected-data".to_string(),
+            subject: leaks.join(", "),
+            message: format!(
+                "a protected value ({}) is passed in startOutboundCall attributes{} — Amazon Connect stores contact attributes in its contact records; pass an id the contact flow looks up instead",
+                leaks.join(", "),
+                if has_phi_entities {
+                    " and this service holds health data (phi)"
+                } else {
+                    ""
+                }
+            ),
+        });
+    }
+    findings
+}
+
+#[cfg(test)]
+mod voice_tests {
+    use super::*;
+
+    #[test]
+    fn a_managed_service_calling_connect_or_twilio_voice_is_flagged() {
+        let sources = "getEnvVar('INSTANCE_HMAC_KEY');\nimport { ConnectClient } from '@aws-sdk/client-connect';\nimport twilio from 'twilio';\nclient.calls.create({ to, from, url });\nconst id = getEnvVar('CONNECT_INSTANCE_ID');";
+        let found = voice_findings("clinic", true, false, sources);
+        let f = found
+            .iter()
+            .find(|f| f.check == "voice-provider-direct-in-managed")
+            .expect("finding");
+        assert_eq!(
+            f.subject,
+            "@aws-sdk/client-connect, CONNECT_INSTANCE_ID, twilio (voice)"
+        );
+        // Not managed: an ordinary app may hold its own Connect account.
+        assert!(voice_findings("clinic", false, false, sources).is_empty());
+    }
+
+    #[test]
+    fn twilio_for_sms_and_twilio_keys_are_left_to_managed_provider_credentials() {
+        let sources = "import twilio from 'twilio';\nclient.messages.create({ to, body });\ngetEnvVar('TWILIO_AUTH_TOKEN');";
+        assert!(direct_voice_providers(sources).is_empty());
+        // Similar names are not the key.
+        assert!(direct_voice_providers("MY_CONNECT_INSTANCE_ID_OLD").is_empty());
+    }
+
+    #[test]
+    fn deanon_in_call_attributes_is_flagged_in_every_shape() {
+        let inline = "await voice.startOutboundCall({ to: p.phone.deanon, flow: 'appointment_reminder', attributes: { diagnosis: record.diagnosis.deanon } });";
+        assert_eq!(voice_attribute_leaks(inline), vec![".deanon"]);
+
+        let via_variable = "const dx = record.diagnosis.deanon;\nconst attrs = { dx, appointmentId: a.id };\nawait voice.startOutboundCall({ to, flow: 'x', attributes: attrs });";
+        assert_eq!(voice_attribute_leaks(via_variable), vec!["dx"]);
+
+        let shorthand = "const attributes = { name: patient.name.deanon };\nvoice.startOutboundCall({ to, flow, attributes });";
+        assert_eq!(voice_attribute_leaks(shorthand), vec![".deanon"]);
+
+        let request = "const request = { to, flow: 'x', attributes: { n: p.name.deanon() } };\nvoice.startOutboundCall(request);";
+        assert_eq!(voice_attribute_leaks(request), vec![".deanon"]);
+    }
+
+    #[test]
+    fn a_deanon_phone_number_in_to_is_not_a_leak() {
+        let sources = "const phone = patient.phone.deanon;\nawait voice.startOutboundCall({ to: phone, flow: 'appointment_reminder', attributes: { appointmentId: appt.id } });\nconst deanonymized = 1;";
+        assert!(voice_attribute_leaks(sources).is_empty());
+        assert!(voice_attribute_leaks("voice.startOutboundCall({ to, flow });").is_empty());
+    }
+
+    #[test]
+    fn phi_entities_make_the_leak_critical_in_the_message() {
+        let sources = "voice.startOutboundCall({ to, flow, attributes: { d: r.d.deanon } });";
+        let f = voice_findings("clinic", false, true, sources);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].check, "voice-protected-data");
+        assert!(f[0].message.contains("(phi)"));
+        assert!(!voice_findings("clinic", false, false, sources)[0].message.contains("(phi)"));
+    }
+
+    #[test]
+    fn voice_checks_are_listed() {
+        for id in ["voice-provider-direct-in-managed", "voice-protected-data"] {
+            assert!(LOCAL_CHECK_IDS.contains(&id));
+        }
+    }
 }
 
 #[cfg(test)]

@@ -161,6 +161,11 @@ fn criterion_for_check(check: &str) -> Option<(&'static str, OnFinding)> {
         // handled according to its sensitivity.
         "whatsapp-provider-direct-in-managed" => ("gov-construction", OnFinding::Fail),
         "whatsapp-protected-data" => ("cmp-data-classification", OnFinding::Fail),
+        // A managed service dialing through its own voice vendor needs
+        // credentials hosted instances never get.
+        "voice-provider-direct-in-managed" => ("gov-construction", OnFinding::Fail),
+        // Protected values in call attributes land in Connect's contact records.
+        "voice-protected-data" => ("cmp-data-classification", OnFinding::Fail),
         _ => return None,
     })
 }
@@ -208,6 +213,10 @@ fn severity_for(finding: &LocalFinding) -> &'static str {
                 .message
                 .starts_with(crate::compliance::checks::WHATSAPP_PHI_MARKER) =>
         {
+            "critical"
+        }
+        // Health data in call attributes, which Connect keeps in contact records.
+        (Severity::Warning, "voice-protected-data") if finding.message.contains("(phi)") => {
             "critical"
         }
         (Severity::Warning, _) => "high",
@@ -326,6 +335,8 @@ fn item_label(check: &str) -> &'static str {
         "sms-protected-data" => "Protected data is never sent in a text message",
         "whatsapp-provider-direct-in-managed" => "Managed services send WhatsApp through the platform",
         "whatsapp-protected-data" => "Protected data is never sent over WhatsApp",
+        "voice-provider-direct-in-managed" => "Managed services place calls through the platform",
+        "voice-protected-data" => "Call attributes carry no protected data",
         _ => "Deterministic check",
     }
 }
@@ -403,6 +414,14 @@ fn remedy(check: &str) -> Option<String> {
             "Do not put a .deanon value in a WhatsApp message: WhatsApp is not covered by the AWS \
              BAA and Meta signs none. Send a template that says only that something is waiting \
              in the app."
+        }
+        "voice-provider-direct-in-managed" => {
+            "Run `forklaunch infra add <service> voice` and place calls with createVoiceClient(); \
+             drop the Connect/Twilio/Vonage SDK and its credentials from the service."
+        }
+        "voice-protected-data" => {
+            "Pass an identifier (an appointment id) in startOutboundCall attributes and let the \
+             contact flow look up what it reads out; never a .deanon value."
         }
         _ => return None,
     };
@@ -1032,5 +1051,39 @@ mod wiring_score_tests {
             .unwrap();
         assert_eq!(item.status, "unmet");
         assert_eq!(card.dimensions["governance"].score, 85, "high = 15 points");
+    }
+}
+
+#[cfg(test)]
+mod voice_tests {
+    use super::*;
+
+    fn finding(check: &str, message: &str) -> LocalFinding {
+        LocalFinding {
+            severity: Severity::Warning,
+            project: "clinic".to_string(),
+            check: check.to_string(),
+            subject: ".deanon".to_string(),
+            message: message.to_string(),
+        }
+    }
+
+    #[test]
+    fn voice_checks_score_high_and_critical_with_phi() {
+        assert_eq!(severity_for(&finding("voice-protected-data", "attributes")), "high");
+        assert_eq!(
+            severity_for(&finding(
+                "voice-protected-data",
+                "attributes and this service holds health data (phi)"
+            )),
+            "critical"
+        );
+        assert_eq!(severity_for(&finding("voice-provider-direct-in-managed", "x")), "high");
+        for check in ["voice-protected-data", "voice-provider-direct-in-managed"] {
+            let (criterion_id, _) = criterion_for_check(check).expect("mapped");
+            assert!(criterion(criterion_id).is_some(), "{check} -> {criterion_id}");
+            assert_ne!(item_label(check), "Deterministic check");
+            assert!(remedy(check).is_some());
+        }
     }
 }
