@@ -161,6 +161,10 @@ the relay) reads Twilio, SendGrid or AI provider credentials. Hosted instances
 never get them: use the platform's instance gateway for one-time codes and
 `createModelGatewayClient()` for models.
 
+WhatsApp has two checks (see `/integrations`):
+- **`whatsapp-provider-direct-in-managed` (high):** a managed service calls `graph.facebook.com`, imports a WhatsApp SDK, or reads a `WHATSAPP_*`/`META_*` token. Use `createWhatsAppClient()`.
+- **`whatsapp-protected-data` (critical when the service's entities hold `phi`, else high):** a `.deanon` value reaches a WhatsApp send. No BAA covers WhatsApp.
+
 Object storage has four more checks, all `high`:
 - **`object-store-wiring`:** the manifest and `registrations.ts` disagree about an object store.
 - **`object-store-static-credentials`:** the S3 client is built from stored keys instead of `s3ClientConfig` and the task role.

@@ -148,6 +148,8 @@ pub(crate) const LOCAL_CHECK_IDS: &[&str] = &[
     "email-protected-data",
     "sms-provider-direct-in-managed",
     "sms-protected-data",
+    "whatsapp-provider-direct-in-managed",
+    "whatsapp-protected-data",
 ];
 
 /// AI model provider SDKs a service might call directly.
@@ -894,6 +896,112 @@ pub(crate) fn missing_tenant_gates(source: &str) -> Vec<&'static (&'static str, 
         .collect()
 }
 
+/// Ways a service reaches WhatsApp without the platform: Meta's Cloud API
+/// host, WhatsApp/Meta token variables, and WhatsApp SDKs (Meta's, community
+/// Cloud API wrappers, and AWS End User Messaging Social itself). Sorted.
+pub(crate) fn direct_whatsapp_access(sources: &str) -> Vec<String> {
+    static TOKENS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let tokens = TOKENS.get_or_init(|| {
+        regex::Regex::new(
+            r"\b(?:WHATSAPP_[A-Z0-9_]*(?:TOKEN|SECRET|API_KEY)|META_[A-Z0-9_]*(?:TOKEN|SECRET|APP_KEY|API_KEY))\b",
+        )
+        .expect("whatsapp token pattern")
+    });
+    let mut found: Vec<String> = tokens
+        .find_iter(sources)
+        .map(|m| m.as_str().to_string())
+        .collect();
+    if sources.contains("graph.facebook.com") {
+        found.push("graph.facebook.com".to_string());
+    }
+    found.extend(imported_modules(sources).into_iter().filter(|m| {
+        matches!(
+            m.as_str(),
+            "whatsapp" | "whatsapp-cloud-api" | "whatsapp-api-js" | "@aws-sdk/client-socialmessaging"
+        )
+    }));
+    found.sort();
+    found.dedup();
+    found
+}
+
+/// WhatsApp sends in one source file whose arguments carry a compliant
+/// field's plaintext (`.deanon`), directly or through a variable assigned
+/// from it. Returns `line: call` for each.
+///
+/// Only files that mention WhatsApp are read, and only calls on a
+/// WhatsApp-named receiver (`whatsapp.sendText(`, `tokens.WhatsAppClient).sendTemplate(`)
+/// or `SendWhatsAppMessageCommand(` count, so SMS or email sends with the
+/// same method names are not flagged here.
+pub(crate) fn whatsapp_protected_sends(source: &str) -> Vec<String> {
+    static SEND: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static ASSIGN: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let send = SEND.get_or_init(|| {
+        regex::Regex::new(
+            r"(?i)(?:whats_?app\w*\)?\s*\.\s*(?:sendTemplate|sendText)|SendWhatsAppMessageCommand)\s*\(",
+        )
+        .expect("whatsapp send pattern")
+    });
+    let assign = ASSIGN.get_or_init(|| {
+        regex::Regex::new(r"(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]+)?=([^;]*)")
+            .expect("assignment pattern")
+    });
+    if !source.to_ascii_lowercase().contains("whatsapp") {
+        return Vec::new();
+    }
+    // Variables holding plaintext, followed through a few assignments.
+    let mut tainted: Vec<String> = Vec::new();
+    for _ in 0..3 {
+        for caps in assign.captures_iter(source) {
+            let name = caps[1].to_string();
+            if tainted.contains(&name) {
+                continue;
+            }
+            let rhs = &caps[2];
+            if rhs.contains(".deanon") || tainted.iter().any(|t| mentions(rhs, t)) {
+                tainted.push(name);
+            }
+        }
+    }
+    let mut found = Vec::new();
+    for m in send.find_iter(source) {
+        let args = call_args(&source[m.end()..]);
+        let leaks = args.contains(".deanon") || tainted.iter().any(|t| mentions(args, t));
+        if leaks {
+            let line = source[..m.start()].matches('\n').count() + 1;
+            let call: String = m.as_str().split_whitespace().collect();
+            found.push(format!("{line}: {}", call.trim_end_matches('(')));
+        }
+    }
+    found
+}
+
+/// The argument text of a call, from just after `(` to its matching `)`
+/// (bounded, so a broken file cannot make this scan everything).
+fn call_args(rest: &str) -> &str {
+    let mut depth = 1usize;
+    for (i, c) in rest.char_indices() {
+        if i > 4000 {
+            return &rest[..i];
+        }
+        match c {
+            '(' | '{' | '[' => depth += 1,
+            ')' | '}' | ']' => {
+                depth -= 1;
+                if depth == 0 {
+                    return &rest[..i];
+                }
+            }
+            _ => {}
+        }
+    }
+    rest
+}
+
+/// Marks a `whatsapp-protected-data` finding on a service whose entities hold
+/// phi; the report card scores those critical.
+pub(crate) const WHATSAPP_PHI_MARKER: &str = "entities hold health data (phi)";
+
 /// Run all local checks for every project under `modules_path`.
 pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>> {
     let mut findings: Vec<LocalFinding> = Vec::new();
@@ -1184,6 +1292,41 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
                     subjects.join(", ")
                 ),
             });
+        }
+
+        // 7b. WhatsApp goes through the platform, and never carries protected
+        //     data: WhatsApp is not covered by the AWS BAA and Meta signs none.
+        if is_managed_instance(&project_path, &project_sources) {
+            let direct = direct_whatsapp_access(&project_sources);
+            if !direct.is_empty() {
+                findings.push(LocalFinding {
+                    severity: Severity::Warning,
+                    project: project.clone(),
+                    check: "whatsapp-provider-direct-in-managed".to_string(),
+                    subject: direct.join(", "),
+                    message: format!(
+                        "this service runs as a managed instance but reaches WhatsApp directly ({}) — hosted instances hold no Meta token or AWS credential; send with createWhatsAppClient() (forklaunch infra add <service> whatsapp)",
+                        direct.join(", ")
+                    ),
+                });
+            }
+        }
+        let holds_phi = entities
+            .iter()
+            .any(|e| e.field_classifications.values().any(|c| c == "phi"));
+        for (file, text) in production_files(&project_path) {
+            for send in whatsapp_protected_sends(&text) {
+                findings.push(LocalFinding {
+                    severity: Severity::Warning,
+                    project: project.clone(),
+                    check: "whatsapp-protected-data".to_string(),
+                    subject: format!("{file}:{send}"),
+                    message: format!(
+                        "{}a compliant field's plaintext (.deanon) is sent over WhatsApp ({file}:{send}) — WhatsApp is not covered by the AWS BAA and Meta signs no BAA; send a template that carries no protected data (a reminder to open the app) instead",
+                        if holds_phi { format!("{WHATSAPP_PHI_MARKER} and ") } else { String::new() }
+                    ),
+                });
+            }
         }
     }
 
@@ -2274,6 +2417,133 @@ mod sms_tests {
     fn sms_checks_are_listed_and_scored() {
         for id in ["sms-provider-direct-in-managed", "sms-protected-data"] {
             assert!(LOCAL_CHECK_IDS.contains(&id));
+        }
+    }
+}
+
+#[cfg(test)]
+mod whatsapp_tests {
+    use super::*;
+
+    fn service(name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("fl-whatsapp-checks-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        for (path, text) in files {
+            let full = dir.join("svc").join(path);
+            std::fs::create_dir_all(full.parent().unwrap()).unwrap();
+            std::fs::write(full, text).unwrap();
+        }
+        dir
+    }
+
+    const MANAGED: &str = "const g = getEnvVar('PLATFORM_GATEWAY_URL'); const k = getEnvVar('INSTANCE_HMAC_KEY');";
+
+    #[test]
+    fn direct_meta_access_is_flagged_in_a_managed_service() {
+        assert_eq!(
+            direct_whatsapp_access(
+                "fetch(`https://graph.facebook.com/v20.0/${id}/messages`, { headers: { authorization: `Bearer ${process.env.WHATSAPP_TOKEN}` } })"
+            ),
+            vec!["WHATSAPP_TOKEN", "graph.facebook.com"]
+        );
+        assert_eq!(
+            direct_whatsapp_access("import { SocialMessagingClient } from '@aws-sdk/client-socialmessaging'; const s = getEnvVar('META_ACCESS_TOKEN');"),
+            vec!["@aws-sdk/client-socialmessaging", "META_ACCESS_TOKEN"]
+        );
+        // The gateway client, and unrelated META_ names, are fine.
+        assert!(direct_whatsapp_access("createWhatsAppClient(); const m = META_TITLE; const d = SERVICE_METADATA;").is_empty());
+
+        let dir = service(
+            "direct",
+            &[("registrations.ts", &format!("{MANAGED} const t = getEnvVar('WHATSAPP_ACCESS_TOKEN');"))],
+        );
+        let findings = run_local_checks(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let f = findings
+            .iter()
+            .find(|f| f.check == "whatsapp-provider-direct-in-managed")
+            .unwrap_or_else(|| panic!("expected the finding, got {findings:?}"));
+        assert_eq!(f.subject, "WHATSAPP_ACCESS_TOKEN");
+    }
+
+    #[test]
+    fn an_unmanaged_service_calling_meta_is_not_a_managed_finding() {
+        let dir = service("unmanaged", &[("registrations.ts", "getEnvVar('WHATSAPP_TOKEN')")]);
+        let findings = run_local_checks(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(!findings.iter().any(|f| f.check == "whatsapp-provider-direct-in-managed"));
+    }
+
+    #[test]
+    fn deanon_values_reaching_a_whatsapp_send_are_found() {
+        let direct = "const whatsapp = ci.resolve(tokens.WhatsAppClient);\nawait whatsapp.sendText({ to: patient.phone.deanon, body: 'hi' });";
+        assert_eq!(whatsapp_protected_sends(direct), vec!["2: whatsapp.sendText"]);
+
+        let through_variables = "import { createWhatsAppClient } from '@forklaunch/core/http';
+const diagnosis = record.diagnosis.deanon;
+const note = `Your result: ${diagnosis}`;
+await this.whatsappClient.sendTemplate({
+  to,
+  template: 'result_ready',
+  language: 'en_US',
+  components: [{ type: 'body', parameters: [{ type: 'text', text: note }] }]
+});";
+        assert_eq!(whatsapp_protected_sends(through_variables), vec!["4: whatsappClient.sendTemplate"]);
+
+        let sdk = "await client.send(new SendWhatsAppMessageCommand({ originationPhoneNumberId, message: encode(p.name.deanon), metaApiVersion: 'v20.0' }));";
+        assert_eq!(whatsapp_protected_sends(sdk), vec!["1: SendWhatsAppMessageCommand"]);
+    }
+
+    #[test]
+    fn sends_without_plaintext_and_other_channels_are_not_flagged() {
+        // A reminder that carries nothing protected.
+        let clean = "const name = patient.name.deanon;\nlog(name);\nawait whatsapp.sendTemplate({ to: phone, template: 'appointment_reminder', language: 'en_US' });";
+        assert!(whatsapp_protected_sends(clean).is_empty());
+        // Same method name on an SMS client: another feature's check.
+        let sms = "// whatsapp later\nawait sms.sendText({ to: p.phone.deanon, body: 'x' });";
+        assert!(whatsapp_protected_sends(sms).is_empty());
+        // `.name` on another object is not the tainted `name` variable.
+        let property = "const name = p.name.deanon;\nawait whatsapp.sendText({ to, body: user.name });";
+        assert!(whatsapp_protected_sends(property).is_empty());
+    }
+
+    #[test]
+    fn protected_data_is_marked_phi_when_entities_hold_health_data() {
+        let entity = "import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
+export const PatientEntity = defineComplianceEntity({
+  name: 'Patient',
+  properties: {
+    diagnosis: fp.string().compliance('phi')
+  }
+});";
+        let controller = "await whatsapp.sendText({ to: p.phone, body: p.diagnosis.deanon });";
+        let dir = service(
+            "phi",
+            &[
+                ("persistence/entities/patient.entity.ts", entity),
+                ("api/controllers/notify.controller.ts", controller),
+            ],
+        );
+        let findings = run_local_checks(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let f = findings
+            .iter()
+            .find(|f| f.check == "whatsapp-protected-data")
+            .unwrap_or_else(|| panic!("expected the finding, got {findings:?}"));
+        assert_eq!(f.subject, "api/controllers/notify.controller.ts:1: whatsapp.sendText");
+        assert!(f.message.starts_with(WHATSAPP_PHI_MARKER), "{}", f.message);
+
+        let dir = service("nophi", &[("api/controllers/notify.controller.ts", controller)]);
+        let findings = run_local_checks(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let f = findings.iter().find(|f| f.check == "whatsapp-protected-data").unwrap();
+        assert!(!f.message.contains(WHATSAPP_PHI_MARKER));
+    }
+
+    #[test]
+    fn whatsapp_checks_are_listed() {
+        for id in ["whatsapp-provider-direct-in-managed", "whatsapp-protected-data"] {
+            assert!(LOCAL_CHECK_IDS.contains(&id), "{id} missing from LOCAL_CHECK_IDS");
         }
     }
 }

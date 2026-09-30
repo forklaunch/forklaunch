@@ -34,6 +34,9 @@ events handler; see `/integrations`.
 same way: an `SmsClient` registration, an SMS event handler and the local
 gateway mock; the platform sends them (End User Messaging SMS), so the service
 holds no vendor key. See `/integrations`.
+`forklaunch infra add <service> whatsapp` adds a platform-held capability instead:
+a keyless `WhatsAppClient`, a WhatsApp event handler and the local gateway mock
+(see `/integrations`).
 
 **The remaining `fl infra` commands never provision anything.** It only inspects and manages resources that already exist on the platform for the target environment (created through the normal platform provisioning flow). Running any command against an environment with no provisioned resources yet will correctly report zero results, not an error.
 

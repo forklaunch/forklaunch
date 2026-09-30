@@ -156,6 +156,11 @@ fn criterion_for_check(check: &str) -> Option<(&'static str, OnFinding)> {
         // Protected plaintext sent over a channel carriers and lock screens
         // read is sensitive data not handled according to its sensitivity.
         "sms-protected-data" => ("cmp-data-classification", OnFinding::Fail),
+        // A managed service holding its own WhatsApp credentials does not run
+        // as declared; protected data sent over WhatsApp is sensitive data not
+        // handled according to its sensitivity.
+        "whatsapp-provider-direct-in-managed" => ("gov-construction", OnFinding::Fail),
+        "whatsapp-protected-data" => ("cmp-data-classification", OnFinding::Fail),
         _ => return None,
     })
 }
@@ -195,6 +200,14 @@ fn severity_for(finding: &LocalFinding) -> &'static str {
         }
         // Health data texted in the clear; other protected data is high.
         (Severity::Warning, "sms-protected-data") if finding.message.starts_with("health data") => {
+            "critical"
+        }
+        // Health data sent over WhatsApp, which no BAA covers.
+        (Severity::Warning, "whatsapp-protected-data")
+            if finding
+                .message
+                .starts_with(crate::compliance::checks::WHATSAPP_PHI_MARKER) =>
+        {
             "critical"
         }
         (Severity::Warning, _) => "high",
@@ -311,6 +324,8 @@ fn item_label(check: &str) -> &'static str {
         "email-protected-data" => "Email subjects carry no protected data",
         "sms-provider-direct-in-managed" => "Managed services text through the platform, not an SMS vendor SDK",
         "sms-protected-data" => "Protected data is never sent in a text message",
+        "whatsapp-provider-direct-in-managed" => "Managed services send WhatsApp through the platform",
+        "whatsapp-protected-data" => "Protected data is never sent over WhatsApp",
         _ => "Deterministic check",
     }
 }
@@ -379,6 +394,15 @@ fn remedy(check: &str) -> Option<String> {
         "sms-protected-data" => {
             "Text a neutral notice or a sign-in link; show the protected value only after sign-in. \
              Never pass a .deanon value in an SMS body."
+        }
+        "whatsapp-provider-direct-in-managed" => {
+            "Run `forklaunch infra add <service> whatsapp` and send with createWhatsAppClient(); \
+             drop the Meta token, graph.facebook.com calls and WhatsApp SDKs from the service."
+        }
+        "whatsapp-protected-data" => {
+            "Do not put a .deanon value in a WhatsApp message: WhatsApp is not covered by the AWS \
+             BAA and Meta signs none. Send a template that says only that something is waiting \
+             in the app."
         }
         _ => return None,
     };
@@ -963,6 +987,34 @@ mod wiring_score_tests {
         assert_eq!(item.status, "unmet");
         assert!(remedy("email-protected-data").is_some());
         assert_ne!(item_label("email-provider-direct-in-managed"), "Deterministic check");
+    }
+
+    #[test]
+    fn whatsapp_protected_data_is_critical_only_on_phi() {
+        let mut phi = finding("whatsapp-protected-data");
+        phi.message = format!(
+            "{} and a compliant field's plaintext (.deanon) is sent over WhatsApp",
+            crate::compliance::checks::WHATSAPP_PHI_MARKER
+        );
+        assert_eq!(severity_for(&phi), "critical");
+        assert_eq!(severity_for(&finding("whatsapp-protected-data")), "high");
+        assert_eq!(severity_for(&finding("whatsapp-provider-direct-in-managed")), "high");
+        let card = build_local_report_card("app", 1, &[phi], "t".to_string());
+        let item = card.dimensions["compliance"]
+            .items
+            .iter()
+            .find(|i| i.criterion.as_deref() == Some("cmp-data-classification"))
+            .unwrap();
+        assert_eq!(item.status, "unmet");
+        assert_eq!(card.dimensions["compliance"].score, 70, "critical = 30 points");
+        let card = build_local_report_card(
+            "app",
+            1,
+            &[finding("whatsapp-provider-direct-in-managed")],
+            "t".to_string(),
+        );
+        assert_eq!(card.dimensions["governance"].score, 85, "high = 15 points");
+        assert!(remedy("whatsapp-protected-data").is_some());
     }
 
     #[test]

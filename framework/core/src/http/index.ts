@@ -8,6 +8,7 @@ export * from './instanceGateway';
 export * from './modelGatewayClient';
 export * from './emailClient';
 export * from './smsClient';
+export * from './whatsappClient';
 export * from './discriminateAuthMethod';
 export * from './guards/isForklaunchRequest';
 export * from './guards/isForklaunchRouter';

@@ -320,6 +320,52 @@ fail; `MOCK_SMS_MONTHLY_CAP` (segments, default 100) and `MOCK_SMS_PER_MINUTE`
 - `sms-protected-data` (critical when the app holds phi, else high): a
   `.deanon` value reaches an SMS body. Fix: text a link, not the value.
 
+## WhatsApp (managed instances)
+
+A managed instance sends WhatsApp through the platform (AWS End User Messaging
+Social). It never holds a Meta token or an AWS credential.
+
+**Add it:** `forklaunch infra add <service> whatsapp`. It writes:
+- a `WhatsAppClient` registration built with `createWhatsAppClient()` from the gateway settings (`PLATFORM_GATEWAY_URL`, `INSTANCE_ID`, `INSTANCE_HMAC_KEY`, all optional, absent outside managed mode);
+- a `/platform-events/:feature` route and the handler stub `api/platformEvents/whatsapp.ts`;
+- the local gateway mock in docker-compose, and the manifest capability `whatsapp` (release resource type `whatsapp`).
+
+`infra remove <service> whatsapp` undoes it.
+
+**Use it:**
+
+```ts
+const whatsapp = ci.resolve(tokens.WhatsAppClient);
+await whatsapp.templates(); // [{ name, language, status: 'APPROVED' | 'PENDING' | …, category }]
+await whatsapp.sendTemplate({ to: '+14155550123', template: 'appointment_reminder', language: 'en_US',
+  components: [{ type: 'body', parameters: [{ type: 'text', text: 'Tuesday 3pm' }] }] }); // → { messageId }
+await whatsapp.sendText({ to: '+14155550123', body: 'Which day works?' }); // only inside the 24-hour window
+```
+
+**WhatsApp's rules, enforced by the gateway.** A refusal is a `WhatsAppRequestError` with a `status`:
+- **Business-initiated messages must use a Meta-approved template.** An unknown, untranslated or unapproved template is 400.
+- **Free text is allowed only within 24 hours of the person's last message** to the business number. Outside that window it is 422; send a template instead.
+- **Per-instance rate limit:** 429, with `retryAfterSeconds`.
+- **No phone number linked** for the product or instance: 409. Linking a WhatsApp Business Account is a manual Meta embedded signup in the AWS console; the operator then records the phone number id in the product's WhatsApp settings.
+- **HIPAA products cannot send WhatsApp at all:** 403. WhatsApp is not covered by the AWS BAA, and Meta signs none.
+
+**Events** arrive at `api/platformEvents/whatsapp.ts`, already verified. Dedupe on `event.id`.
+- `whatsapp.received` `{ from, text?, type, receivedAt, messageId }`: an inbound message. It opens the 24-hour window for `from`.
+- `whatsapp.status` `{ messageId, status }`: `sent`, `delivered`, `read` or `failed`, for a `messageId` a send returned.
+
+**Local development:** the gateway mock (`routes/whatsapp.mjs` in `forklaunch-gateway-mock`) serves `MOCK_WHATSAPP_TEMPLATES` (default `appointment_reminder:en_US:APPROVED`). It emits `whatsapp.status` after each send.
+- `POST http://localhost:18088/__mock/whatsapp/inbound` with `{ "from": "+14155550123", "text": "hi" }` emits `whatsapp.received` and opens the window.
+- `MOCK_WHATSAPP_HIPAA=1` makes every send 403; `MOCK_WHATSAPP_UNCONFIGURED=1` makes every call 409; `MOCK_WHATSAPP_RPM` sets the limit.
+
+**Checks** (`forklaunch score`):
+
+| Check | Severity | Fix |
+|---|---|---|
+| `whatsapp-provider-direct-in-managed` | high | A managed service calls `graph.facebook.com`, imports a WhatsApp SDK (including `@aws-sdk/client-socialmessaging`), or reads `WHATSAPP_*TOKEN`/`META_*TOKEN`. Use `createWhatsAppClient()` and drop the credential. |
+| `whatsapp-protected-data` | critical when the service's entities hold `phi`, else high | A `.deanon` value, or a variable assigned from one, is passed to a WhatsApp send. Send a template that says only that something is waiting in the app. |
+
+**Other conversational channels.** The client is channel-neutral (`ConversationChannelClient`: `sendTemplate`, `sendText`, `templates`). Apple Messages for Business is not offered: it has no server API without Apple's approval and a messaging service provider.
+
 ## Everything else
 
 Any other provider follows one shape: **the code reads an environment variable,
@@ -344,7 +390,8 @@ Two things to check before you set anything:
 ## Compliance boundary — say this when it applies
 
 ForkLaunch-hosted Bedrock model calls are covered by ForkLaunch's BAA. **Nothing
-else is.** A direct Anthropic or OpenAI key, Stripe, Twilio, SendGrid, a direct
+else is.** WhatsApp in particular is covered by no BAA, which is why the platform
+refuses every WhatsApp send from a HIPAA product. A direct Anthropic or OpenAI key, Stripe, Twilio, SendGrid, a direct
 AWS service — each is a separate processor, and if the app handles health or
 other regulated data, the user needs their own agreement with each one. Raise
 this the moment a regulated app reaches for a third-party key; it is much

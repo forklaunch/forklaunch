@@ -26,6 +26,7 @@ use oxc_codegen::{Codegen, CodegenOptions};
 
 pub(crate) mod email;
 pub(crate) mod sms;
+pub(crate) mod whatsapp;
 
 use crate::core::{
     ast::{
@@ -60,7 +61,7 @@ pub(crate) struct Capability {
 }
 
 /// Every capability `infra add` knows. Each feature adds its entry.
-pub(crate) static CAPABILITIES: &[&Capability] = &[&email::EMAIL, &sms::SMS];
+pub(crate) static CAPABILITIES: &[&Capability] = &[&email::EMAIL, &sms::SMS, &whatsapp::WHATSAPP];
 
 pub(crate) fn find(id: &str) -> Option<&'static Capability> {
     CAPABILITIES.iter().copied().find(|c| c.id == id)
