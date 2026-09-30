@@ -183,8 +183,19 @@ impl CapabilityEdit {
             .with_context(|| format!("{path:?} not found"))?;
         let allocator = Allocator::default();
         let text: &str = Box::leak(text.into_boxed_str());
+        // An import from the same source is merged into, never replaced:
+        // replace_import_statment swaps the whole statement, which drops
+        // createConfigInjector/Lifetime (core/services) or
+        // OpenTelemetryCollector (core/http) from a generated service.
+        let names = named_imports(import_line);
+        let text: &str = if !names.is_empty() && find_import(text, import_source).is_some() {
+            let names: Vec<&str> = names.iter().map(String::as_str).collect();
+            Box::leak(add_named_imports(text, import_source, &names).into_boxed_str())
+        } else {
+            text
+        };
         let mut program = parse_ast_program(&allocator, text, SourceType::ts());
-        if !text.contains(import_line) {
+        if !text.contains(import_line) && find_import(text, import_source).is_none() {
             let import: &str = Box::leak(import_line.to_string().into_boxed_str());
             let mut import_program = parse_ast_program(&allocator, import, SourceType::ts());
             let _ = replace_import_statment(&mut program, &mut import_program, import_source);
@@ -384,9 +395,14 @@ impl CapabilityEdit {
             }
             let server = self.service_path.join("server.ts");
             if let Some(text) = self.read(&server)? {
-                let text = text
+                // The mount is written at the indent of the first `app.use(`,
+                // so match it by content rather than by PLATFORM_EVENTS_USE.
+                let use_line = PLATFORM_EVENTS_USE.trim();
+                let text: String = text
                     .replace(PLATFORM_EVENTS_IMPORT, "")
-                    .replace(PLATFORM_EVENTS_USE, "");
+                    .split_inclusive('\n')
+                    .filter(|line| line.trim() != use_line)
+                    .collect();
                 self.write(server, text);
             }
         } else {
@@ -458,6 +474,72 @@ impl CapabilityEdit {
         self.write(server, out);
         Ok(())
     }
+}
+
+/// The names a one-line `import { a, b } from "x";` brings in.
+fn named_imports(import_line: &str) -> Vec<String> {
+    let Some(open) = import_line.find('{') else {
+        return Vec::new();
+    };
+    let Some(close) = import_line[open..].find('}') else {
+        return Vec::new();
+    };
+    import_line[open + 1..open + close]
+        .split(',')
+        .map(|n| n.trim().to_string())
+        .filter(|n| !n.is_empty())
+        .collect()
+}
+
+/// The value import from `source` (not `import type`), as (start, end, names).
+pub(crate) fn find_import(text: &str, source: &str) -> Option<(usize, usize, Vec<String>)> {
+    let pattern = format!(
+        r#"import\s*\{{([^}}]*)\}}\s*from\s*["']{}["'];?"#,
+        regex::escape(source)
+    );
+    let re = regex::Regex::new(&pattern).ok()?;
+    let m = re.captures(text)?;
+    let whole = m.get(0)?;
+    let names = m[1]
+        .split(',')
+        .map(|n| n.trim().to_string())
+        .filter(|n| !n.is_empty())
+        .collect();
+    Some((whole.start(), whole.end(), names))
+}
+
+fn render_import(names: &[String], source: &str) -> String {
+    format!("import {{ {} }} from \"{}\";", names.join(", "), source)
+}
+
+/// Add `names` to the file's import from `source`, or add that import.
+pub(crate) fn add_named_imports(text: &str, source: &str, names: &[&str]) -> String {
+    if let Some((start, end, mut existing)) = find_import(text, source) {
+        for name in names {
+            if !existing.iter().any(|e| e == name) {
+                existing.push((*name).to_string());
+            }
+        }
+        return format!("{}{}{}", &text[..start], render_import(&existing, source), &text[end..]);
+    }
+    let names: Vec<String> = names.iter().map(|n| n.to_string()).collect();
+    format!("{}\n{}", render_import(&names, source), text)
+}
+
+/// Drop `names` from the file's import from `source`, and the import if empty.
+pub(crate) fn remove_named_imports(text: &str, source: &str, names: &[&str]) -> String {
+    let Some((start, end, existing)) = find_import(text, source) else {
+        return text.to_string();
+    };
+    let kept: Vec<String> = existing
+        .into_iter()
+        .filter(|e| !names.contains(&e.as_str()))
+        .collect();
+    if kept.is_empty() {
+        let end = if text[end..].starts_with('\n') { end + 1 } else { end };
+        return format!("{}{}", &text[..start], &text[end..]);
+    }
+    format!("{}{}{}", &text[..start], render_import(&kept, source), &text[end..])
 }
 
 fn camel(feature: &str) -> String {
