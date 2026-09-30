@@ -222,6 +222,9 @@ subject, `text` or `html`, 512 KB, up to 10 tags) and throws
 `EmailRequestError` with the gateway's status: 400 bad input, 401 wrong key,
 422 a suppressed recipient, 429 quota/rate (with `retryAfterSeconds`), 503
 email not configured on the platform or the sending identity still verifying.
+For a product whose manifest declares email, the platform creates the
+instance's sending identity while the instance launches, so DKIM usually
+verifies before the first send; the 503 remains possible right after launch.
 
 ### 3. Events
 
@@ -427,7 +430,7 @@ can repeat, so dedupe on `event.id`:
 |---|---|
 | `voice.call.started` | `{ callId, flow }` |
 | `voice.call.ended` | `{ callId, durationSeconds, disconnectReason }` (`customer`, `api`, `busy`, …) |
-| `voice.recording.ready` | `{ callId, recordingKey }`, a key in the instance's object store |
+| `voice.recording.ready` | `{ callId, recordingKey }`, a key in the instance's object store (`voice/recordings/<callId>.wav`); sent only when the product declares an `object_store` resource, since the recording is copied into that bucket |
 
 ### 4. Local development
 
@@ -453,9 +456,18 @@ Platform side (for operators): `CONNECT_INSTANCE_ID` enables voice (unset:
 --voice-flow name=<contact-flow-id> --voice-max-concurrent N
 --voice-monthly-minutes N`; one instance's limits with `managed instance voice`);
 the number per instance in `voice_instance_line`
-(claimed by `claimNumberForInstance`, which provisioning does not call yet);
+(claimed when an instance of a product with voice flows is provisioned,
+reset or updated, released when it is destroyed; a failed claim does not fail
+the launch, it is recorded in the instance's `capability_status` and retried
+on the next run, and calls answer 409 until then); recordings are copied from
+the Connect bucket into the instance's first `object_store` bucket (an
+instance without one, or an adopted one, gets no `voice.recording.ready`);
 Connect contact events reach `POST /vendor-webhooks/voice` through an
-EventBridge rule to the SNS topic `VOICE_SNS_TOPIC_ARN`.
+EventBridge rule to the SNS topic `VOICE_SNS_TOPIC_ARN`. That topic, the rule,
+and every other managed feature's topics and IAM grants are created by
+`src/modules/managed-apps/scripts/managed-integrations/setup.ts` (dry run by
+default, `--apply` to write, never deletes); the order of operations and the
+manual vendor steps are in `docs/managed-integrations-setup.md`.
 
 ## Payments in a managed instance (Stripe Connect)
 
