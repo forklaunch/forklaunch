@@ -73,6 +73,24 @@ export function detectTopicType(
 }
 
 /**
+ * The overview section a follow-up question asks about ("how is it
+ * treated?" -> Treatment), by the section hint words it uses, or undefined
+ * when it matches none.
+ */
+export function sectionForQuestion(
+  sections: OverviewSection[],
+  question: string
+): OverviewSection | undefined {
+  const words = new Set(queryTerms(question));
+  let best: { section: OverviewSection; hits: number } | undefined;
+  for (const section of sections) {
+    const hits = new Set(section.searchHints.flatMap((h) => queryTerms(h)).filter((w) => words.has(w))).size;
+    if (hits > 0 && (!best || hits > best.hits)) best = { section, hits };
+  }
+  return best?.section;
+}
+
+/**
  * A short query naming a topic ("heart attack", "cefazolin") gets an
  * overview; a specific question ("bile duct injury rate after laparoscopic
  * cholecystectomy") gets one direct answer.

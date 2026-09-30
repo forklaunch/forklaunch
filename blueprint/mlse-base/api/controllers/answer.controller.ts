@@ -30,7 +30,9 @@ const AnswerBodySchema = {
   organizationId: optional(string),
   userId: optional(string),
   // 'overview' | 'direct'; default: overview for short topic queries
-  mode: optional(string)
+  mode: optional(string),
+  // the topic of the conversation, for a follow-up question
+  followUpOf: optional(string)
 };
 
 const SectionSchema = {
@@ -82,9 +84,13 @@ const bodyValid = (query: string) => query.trim().length > 0 && query.length <= 
 
 // the request as the service takes it; an unknown mode falls back to the
 // default choice
-function answerRequest(body: { query: string; topicSlug?: string; live?: boolean; organizationId?: string; userId?: string; mode?: string }) {
-  const { mode, ...rest } = body;
-  return { ...rest, ...(mode === 'overview' || mode === 'direct' ? { mode } : {}) } as AnswerRequestDto;
+function answerRequest(body: { query: string; topicSlug?: string; live?: boolean; organizationId?: string; userId?: string; mode?: string; followUpOf?: string }) {
+  const { mode, followUpOf, ...rest } = body;
+  return {
+    ...rest,
+    ...(mode === 'overview' || mode === 'direct' ? { mode } : {}),
+    ...(followUpOf && followUpOf.trim() ? { followUpOf: followUpOf.slice(0, 200) } : {})
+  } as AnswerRequestDto;
 }
 
 export const answer = handlers.post(

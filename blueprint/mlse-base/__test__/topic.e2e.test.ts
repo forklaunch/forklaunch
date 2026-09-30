@@ -147,10 +147,11 @@ beforeAll(async () => {
   ]);
 }, 180_000);
 
+// stopping the database container can take a while on a busy machine
 afterAll(async () => {
   await orm?.close(true);
   await container?.stop();
-});
+}, 60_000);
 
 describe('topic pages on pgvector', () => {
   it('seeds laparoscopic cholecystectomy as a draft topic', async () => {

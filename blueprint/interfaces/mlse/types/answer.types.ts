@@ -17,6 +17,9 @@ export type AnswerRequestDto = {
   // overview: sections for a topic ("heart attack"); direct: one answer to
   // a specific question. Default: overview for short topic queries.
   mode?: 'overview' | 'direct';
+  // a follow-up in a conversation: the topic it refers to ("heart attack"
+  // for "how is it treated?"); follow-ups get one direct answer
+  followUpOf?: string;
 };
 
 export type AnswerSentenceDto = {

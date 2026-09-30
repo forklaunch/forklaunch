@@ -8,7 +8,9 @@ describe('mlse package exports resolve at runtime', () => {
     expect(typeof services.PublicCorpusProvider).toBe('function');
     expect(typeof services.FakeLlmProvider).toBe('function');
     expect(services.licenseScopeFor('CC BY 4.0')).toBe('full_text');
-  });
+    // the first import loads the whole bundle, SDKs included; slow on a busy
+    // machine
+  }, 30_000);
 
   it('loads @forklaunch/interfaces-mlse', async () => {
     await expect(
