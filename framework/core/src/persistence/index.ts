@@ -49,13 +49,16 @@ export {
   CompliantQueryError,
   CompliantType,
   LegacyCiphertextError,
+  deanon,
   isAnon,
   isCompliantField,
   onComplianceAccess,
   type AnonStrategy,
   type ComplianceAccessEvent,
   type ComplianceAccessListener,
-  type ComplianceOptions
+  type ComplianceOptions,
+  type Deanon,
+  type Deanonymized
 } from './compliantField';
 
 // Compliance-aware property builder (drop-in replacement for MikroORM's p)

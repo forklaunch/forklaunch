@@ -14,6 +14,7 @@
  *   `Hi ${user.name}`                     ->  `Hi ${user.name.deanon}`
  *   user.email.toLowerCase()              ->  user.email.deanon.toLowerCase()
  *   user.email === input                  ->  user.email.deanon === input
+ *   ({ ...entity })                       ->  ({ ...deanon(entity) })
  *
  * Nullable fields get `?.deanon`. Entity data (em.create, em.assign) and
  * `where` clauses are left alone: they accept plain values already.
@@ -24,6 +25,7 @@
  *
  * Usage: npx -y -p typescript@5 -p @forklaunch/core forklaunch-migrate-compliant-fields
  *          [path/to/tsconfig.json] [--dry-run] [--typescript <path to a typescript 5 package>]
+ *          [--import-from <module exporting deanon>]
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -32,9 +34,16 @@ import path from 'node:path';
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
 const positional = args.filter(
-  (a, i) => !a.startsWith('--') && args[i - 1] !== '--typescript'
+  (a, i) =>
+    !a.startsWith('--') &&
+    args[i - 1] !== '--typescript' &&
+    args[i - 1] !== '--import-from'
 );
 const tsconfigPath = path.resolve(positional[0] ?? 'tsconfig.json');
+const importFrom =
+  args.includes('--import-from')
+    ? args[args.indexOf('--import-from') + 1]
+    : '@forklaunch/core/persistence';
 
 // The codemod needs TypeScript's JavaScript compiler API, which TypeScript 7
 // (the native compiler) does not ship. Use, in order: an explicit
@@ -159,8 +168,29 @@ function collectEdits(program) {
     if (sourceFile.isDeclarationFile) continue;
     if (sourceFile.fileName.includes('/node_modules/')) continue;
     const fileEdits = [];
+    let needsImport = false;
 
     const visit = (node) => {
+      // { ...entity }: compliant properties live on the prototype, so a
+      // spread drops them; deanon(entity) copies them as values.
+      if (ts.isSpreadAssignment(node)) {
+        const spreadType = checker.getTypeAtLocation(node.expression);
+        const carriesField = checker
+          .getPropertiesOfType(spreadType)
+          .some((property) =>
+            isCompliantType(
+              checker,
+              checker.getTypeOfSymbolAtLocation(property, node.expression)
+            )
+          );
+        if (carriesField) {
+          fileEdits.push({ pos: node.expression.getStart(), text: 'deanon(' });
+          fileEdits.push({ pos: node.expression.getEnd(), text: ')' });
+          needsImport = true;
+          count += 1;
+          return;
+        }
+      }
       const isCandidate =
         ts.isPropertyAccessExpression(node) ||
         ts.isElementAccessExpression(node) ||
@@ -182,6 +212,14 @@ function collectEdits(program) {
     };
     visit(sourceFile);
 
+    if (needsImport && !/\bdeanon\b[^;]*from/.test(sourceFile.text)) {
+      const imports = sourceFile.statements.filter(ts.isImportDeclaration);
+      const pos = imports.length ? imports[imports.length - 1].getEnd() : 0;
+      fileEdits.push({
+        pos,
+        text: `${pos ? '\n' : ''}import { deanon } from '${importFrom}';${pos ? '' : '\n'}`
+      });
+    }
     if (fileEdits.length) edits.set(sourceFile.fileName, fileEdits);
   }
   return { edits, count };
@@ -190,7 +228,12 @@ function collectEdits(program) {
 function applyEdits(edits) {
   for (const [fileName, fileEdits] of edits) {
     let text = readFileSync(fileName, 'utf8');
-    for (const edit of [...fileEdits].sort((a, b) => b.pos - a.pos)) {
+    // Apply back to front; at one position, later-pushed edits go first so
+    // pushes read left to right in the result.
+    const ordered = fileEdits
+      .map((edit, index) => ({ ...edit, index }))
+      .sort((a, b) => b.pos - a.pos || b.index - a.index);
+    for (const edit of ordered) {
       text = text.slice(0, edit.pos) + edit.text + text.slice(edit.pos);
     }
     if (!dryRun) writeFileSync(fileName, text);

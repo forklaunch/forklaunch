@@ -777,3 +777,35 @@ function installInspect(
     }
   });
 }
+
+// ---------------------------------------------------------------------------
+// Whole-entity reveal
+// ---------------------------------------------------------------------------
+
+/** The value type behind a compliant field (null and undefined pass through). */
+export type Deanon<X> =
+  X extends CompliantField<infer V, EncryptedComplianceLevel, boolean> ? V : X;
+
+/** An entity's fields with every compliant field replaced by its value. */
+export type Deanonymized<T> = { [K in keyof T]: Deanon<T[K]> };
+
+/**
+ * A plain copy of an entity with every compliant field replaced by its
+ * `.deanon` value: what `{ ...entity }` produced before compliant fields,
+ * for first-party responses built by spreading an entity.
+ *
+ * A spread alone does not work: compliant properties live on the entity's
+ * prototype, so `{ ...entity }` would silently leave them out. Every value
+ * revealed here is reported to access listeners, like any `.deanon`.
+ *
+ * @example
+ * toDto: async (entity) => ({ ...deanon(entity), customerId: entity.customerId ?? undefined })
+ */
+export function deanon<T extends object>(entity: T): Deanonymized<T> {
+  const copy: Record<string, unknown> = {};
+  for (const key in entity) {
+    const value = (entity as Record<string, unknown>)[key];
+    copy[key] = isCompliantField(value) ? value.deanon : value;
+  }
+  return copy as Deanonymized<T>;
+}

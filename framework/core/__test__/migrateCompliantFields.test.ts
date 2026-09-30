@@ -22,7 +22,9 @@ describe('migrate-compliant-fields', () => {
       path.join(__dirname, '..', 'bin', 'migrate-compliant-fields.mjs'),
       path.join(workdir, 'tsconfig.json'),
       '--typescript',
-      path.dirname(require.resolve('typescript-5/package.json'))
+      path.dirname(require.resolve('typescript-5/package.json')),
+      '--import-from',
+      '../../../src/persistence'
     ],
     { encoding: 'utf8', cwd: workdir }
   );
@@ -36,6 +38,11 @@ describe('migrate-compliant-fields', () => {
     expect(output).toContain('const note: string | undefined = r.note?.deanon;');
   });
 
+  it('turns entity spreads into deanon(entity) and imports it once', () => {
+    expect(output).toContain('return { ...deanon(r), status: r.status.toUpperCase() };');
+    expect(output.match(/import \{ deanon \} from '..\/..\/..\/src\/persistence';/g)).toHaveLength(1);
+  });
+
   it('leaves .anon, entity data and where values alone', () => {
     expect(output).toContain('return r.to.anon;');
     expect(output).toContain("to: '+15550100',");
@@ -44,7 +51,7 @@ describe('migrate-compliant-fields', () => {
   });
 
   it('reports a where on a field that is not queryable, and exits non-zero', () => {
-    expect(run.stdout).toMatch(/7 read\(s\) +rewritten/);
+    expect(run.stdout).toMatch(/8 read\(s\) +rewritten/);
     expect(run.stdout).toMatch(/sms\.ts:\d+:\d+/);
     expect(run.stdout).toContain('queryable: true');
     expect(run.status).toBe(2);

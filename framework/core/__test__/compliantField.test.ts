@@ -7,6 +7,7 @@ import {
   FieldEncryptor,
   LegacyCiphertextError,
   reencryptEncryptedColumns,
+  deanon,
   defineComplianceEntity,
   fp,
   isAnon,
@@ -272,6 +273,31 @@ describe('compliant fields', () => {
       const patient = await em.findOneOrFail(Patient, id);
       expect(() => patient.name.deanon).toThrow();
     });
+  });
+
+  it('deanon(entity) copies an entity with its compliant values revealed', async () => {
+    const id = await seed();
+    accessLog.length = 0;
+    await inTenant(TENANT, async () => {
+      const patient = await orm.em.fork().findOneOrFail(Patient, id);
+      // A plain spread drops compliant properties: they live on the prototype.
+      expect({ ...patient }).not.toHaveProperty('name');
+      const dto = { ...deanon(patient), extra: true };
+      expect(dto).toMatchObject({
+        id,
+        name: 'Jane Doe',
+        email: 'Jane@Example.com',
+        mrn: 'MRN-001',
+        zip: '94110',
+        visits: 3,
+        note: 'first visit',
+        extra: true
+      });
+      expect(dto).not.toHaveProperty('emailSealed');
+    });
+    expect(accessLog.map((e) => e.field)).toEqual(
+      expect.arrayContaining(['Patient.name', 'Patient.email', 'Patient.mrn'])
+    );
   });
 
   it('reports every .deanon to access listeners', async () => {

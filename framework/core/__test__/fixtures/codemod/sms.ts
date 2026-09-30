@@ -36,6 +36,10 @@ export function noteLength(r: SmsRecord): number | undefined {
   return note?.length;
 }
 
+export function spreadDto(r: SmsRecord) {
+  return { ...r, status: r.status.toUpperCase() };
+}
+
 export function anonymised(r: SmsRecord) {
   return r.to.anon;
 }
