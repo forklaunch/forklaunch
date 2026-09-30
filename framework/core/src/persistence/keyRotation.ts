@@ -1,6 +1,14 @@
 import type { EntityManager } from '@mikro-orm/core';
 import { getEntityComplianceFields } from './complianceTypes';
 import {
+  CompliantIndexType,
+  computeAnon,
+  isCompliantType,
+  normalizeSerializedForIndex,
+  type CompliantFieldSpec
+} from './compliantField';
+import { deserializeFromEncryption } from './encryptedType';
+import {
   isEncryptedCiphertext,
   stampedKeyId,
   type FieldEncryptor
@@ -106,6 +114,10 @@ export interface RotationTableReport {
   byKeyId: Record<string, number>;
   /** Stamped key ids seen on unreadable values: keys that must be added to the ring. */
   missingKeyIds: Record<string, number>;
+  /** Compliant-field values moved into (or rotated within) the `v4` envelope. */
+  sealed?: number;
+  /** Compliant-field blind indexes written or recomputed. */
+  reindexed?: number;
 }
 
 export type SqlExecute = (sql: string, params?: unknown[]) => Promise<unknown>;
@@ -194,7 +206,8 @@ export interface EntityMetadataLike {
   primaryKeys: readonly string[];
   properties: Record<
     string,
-    { fieldNames: string[]; columnTypes?: string[] } | undefined
+    | { fieldNames: string[]; columnTypes?: string[]; customType?: unknown }
+    | undefined
   >;
 }
 
@@ -244,19 +257,29 @@ export async function reencryptEncryptedColumns(
     const fields = getEntityComplianceFields(meta.className);
     if (!fields) continue;
     const props = meta.properties;
+    const compliant = compliantColumnsOf(props);
+    const compliantNames = new Set(compliant.map((c) => c.property));
     const encryptedProps = [...fields.entries()]
-      .filter(([, level]) => ENCRYPTED_LEVELS.has(level))
+      .filter(
+        ([prop, level]) =>
+          ENCRYPTED_LEVELS.has(level) && !compliantNames.has(prop)
+      )
       .map(([prop]) => props[prop])
       .filter(
         (p): p is { fieldNames: string[]; columnTypes?: string[] } =>
           !!p && Array.isArray(p.fieldNames) && p.fieldNames.length === 1
       );
-    if (encryptedProps.length === 0) continue;
+    if (encryptedProps.length === 0 && compliant.length === 0) continue;
 
     const pkProp = props[meta.primaryKeys[0] as string];
     if (!pkProp) continue;
     const pkColumn = pkProp.fieldNames[0];
-    const columns = encryptedProps.map((p) => p.fieldNames[0]);
+    const columns = [
+      ...encryptedProps.map((p) => p.fieldNames[0]),
+      ...compliant.flatMap((c) =>
+        c.indexColumn ? [c.envelopeColumn, c.indexColumn] : [c.envelopeColumn]
+      )
+    ];
     const report: RotationTableReport = {
       table: meta.tableName,
       columns,
@@ -267,7 +290,9 @@ export async function reencryptEncryptedColumns(
       unreadable: 0,
       unreadableIds: [],
       byKeyId: {},
-      missingKeyIds: {}
+      missingKeyIds: {},
+      sealed: 0,
+      reindexed: 0
     };
 
     // An entity can be registered before its table exists (some auth
@@ -289,7 +314,8 @@ export async function reencryptEncryptedColumns(
     for (const row of rows) {
       report.scanned += 1;
       const tenantIds = tenantIdsFor(meta.className, row);
-      const updates: { column: string; next: string; jsonb: boolean }[] = [];
+      const updates: { column: string; next: string | null; jsonb: boolean }[] =
+        [];
       let rowUnreadable = false;
       for (const prop of encryptedProps) {
         const column = prop.fieldNames[0];
@@ -321,6 +347,36 @@ export async function reencryptEncryptedColumns(
               (report.missingKeyIds[missing] ?? 0) + 1;
         }
       }
+      for (const column of compliant) {
+        const outcome = planCompliantColumn(
+          column,
+          row,
+          encryptor,
+          tenantIds,
+          fallbackTenantIds
+        );
+        if (outcome.kind === 'unreadable') {
+          report.unreadable += 1;
+          rowUnreadable = true;
+          const missing = stampedKeyId(String(row[column.envelopeColumn]));
+          if (missing)
+            report.missingKeyIds[missing] =
+              (report.missingKeyIds[missing] ?? 0) + 1;
+          continue;
+        }
+        if (outcome.kind === 'empty') continue;
+        if (outcome.sealed) {
+          report.sealed = (report.sealed ?? 0) + 1;
+          report.rewritten += 1;
+          if (outcome.fromKeyId)
+            report.byKeyId[outcome.fromKeyId] =
+              (report.byKeyId[outcome.fromKeyId] ?? 0) + 1;
+        } else {
+          report.current += 1;
+        }
+        if (outcome.reindexed) report.reindexed = (report.reindexed ?? 0) + 1;
+        updates.push(...outcome.updates.map((u) => ({ ...u, jsonb: false })));
+      }
       if (rowUnreadable) report.unreadableIds.push(String(row[pkColumn]));
       if (updates.length && !dryRun) {
         const sets = updates.map(
@@ -343,6 +399,7 @@ export async function reencryptEncryptedColumns(
       `[key-rotation] ${meta.tableName}: scanned ${report.scanned} rows, ` +
         `${report.rewritten} values ${dryRun ? 'would be ' : ''}rewritten${byKey ? ` (from ${byKey})` : ''}, ` +
         `${report.current} already current, ${report.plaintext} plaintext, ` +
+        `${report.sealed ?? 0} compliant values sealed, ${report.reindexed ?? 0} blind indexes written, ` +
         `${report.unreadable} unreadable${missing ? ` (stamped with keys not in the ring: ${missing})` : ''}${report.unreadableIds.length ? ` (rows ${report.unreadableIds.slice(0, 10).join(', ')}${report.unreadableIds.length > 10 ? ', ...' : ''})` : ''}`
     );
     reports.push(report);
@@ -390,4 +447,134 @@ export function rotationTotals(reports: readonly RotationTableReport[]) {
     plaintext: sum((r) => r.plaintext),
     unreadable: sum((r) => r.unreadable)
   };
+}
+
+// ---------------------------------------------------------------------------
+// Compliant fields
+// ---------------------------------------------------------------------------
+
+interface CompliantColumn {
+  property: string;
+  spec: CompliantFieldSpec;
+  /** Column holding the envelope. */
+  envelopeColumn: string;
+  /** Column holding the blind index (queryable fields only). */
+  indexColumn?: string;
+}
+
+function compliantColumnsOf(
+  props: EntityMetadataLike['properties']
+): CompliantColumn[] {
+  const columns: CompliantColumn[] = [];
+  for (const [property, prop] of Object.entries(props)) {
+    const type = prop?.customType;
+    if (!prop || !isCompliantType(type)) continue;
+    if (type instanceof CompliantIndexType) {
+      const sibling = props[`${property}Sealed`];
+      if (!sibling?.fieldNames?.[0]) continue;
+      columns.push({
+        property,
+        spec: type.spec,
+        envelopeColumn: sibling.fieldNames[0],
+        indexColumn: prop.fieldNames[0]
+      });
+    } else {
+      columns.push({
+        property,
+        spec: type.spec,
+        envelopeColumn: prop.fieldNames[0]
+      });
+    }
+  }
+  return columns;
+}
+
+type CompliantOutcome =
+  | { kind: 'empty' }
+  | { kind: 'unreadable' }
+  | {
+      kind: 'ok';
+      sealed: boolean;
+      reindexed: boolean;
+      fromKeyId?: string;
+      updates: { column: string; next: string | null }[];
+    };
+
+/**
+ * What a compliant column of one row needs: its envelope moved into (or
+ * rotated within) `v4`, keeping an existing anon token, and its blind index
+ * written under the current key.
+ */
+function planCompliantColumn(
+  column: CompliantColumn,
+  row: Record<string, unknown>,
+  encryptor: FieldEncryptor,
+  tenantIds: readonly string[],
+  fallbackTenantIds: readonly string[]
+): CompliantOutcome {
+  const stored = row[column.envelopeColumn];
+  if (stored === null || stored === undefined) {
+    if (column.indexColumn && row[column.indexColumn] != null) {
+      return {
+        kind: 'ok',
+        sealed: false,
+        reindexed: true,
+        updates: [{ column: column.indexColumn, next: null }]
+      };
+    }
+    return { kind: 'empty' };
+  }
+  const primary = tenantIds.length ? tenantIds : [''];
+  const candidates = [
+    ...primary,
+    ...fallbackTenantIds.filter((t) => !primary.includes(t))
+  ];
+
+  for (const tenantId of candidates) {
+    let serialized: string;
+    let anon: string | undefined;
+    let current = false;
+    let fromKeyId: string | undefined;
+    if (!isEncryptedValue(stored)) {
+      // Plaintext written before encryption was on: attributable only to
+      // the row's own tenant.
+      serialized = String(stored);
+    } else {
+      const opened = tryOpen(encryptor, String(stored), tenantId);
+      if (!opened) continue;
+      serialized = opened.plaintext;
+      anon = opened.anon;
+      current = opened.version === 'v4' && !opened.stale;
+      fromKeyId = opened.keyId;
+    }
+
+    const updates: { column: string; next: string | null }[] = [];
+    if (!current) {
+      anon ??= computeAnon(
+        column.spec.anon,
+        deserializeFromEncryption(
+          serialized,
+          column.spec.elementRuntimeType,
+          column.spec.isArray
+        )
+      );
+      updates.push({
+        column: column.envelopeColumn,
+        next: encryptor.seal(serialized, tenantId, anon)
+      });
+    }
+    let reindexed = false;
+    if (column.indexColumn) {
+      const index = encryptor.blindIndex(
+        normalizeSerializedForIndex(serialized, column.spec),
+        tenantId
+      );
+      if (row[column.indexColumn] !== index) {
+        updates.push({ column: column.indexColumn, next: index });
+        reindexed = true;
+      }
+    }
+    return { kind: 'ok', sealed: !current, reindexed, fromKeyId, updates };
+  }
+  return { kind: 'unreadable' };
 }

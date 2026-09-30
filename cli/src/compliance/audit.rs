@@ -224,6 +224,7 @@ impl CliCommand for AuditCommand {
             modules: module_ctx.module_reports(),
             entities,
             local_findings,
+            local_checks: super::checks::LOCAL_CHECK_IDS.to_vec(),
             tenancy,
             secrets: SecretsReport {
                 declared: compliance.secrets.clone(),
@@ -928,6 +929,8 @@ struct ComplianceReport {
     modules: Vec<ModuleReport>,
     entities: Vec<EntityReport>,
     local_findings: Vec<super::checks::LocalFinding>,
+    /// Every local check this CLI ran; a listed check with no finding passed.
+    local_checks: Vec<&'static str>,
     /// Tenant-binding discipline, from the same deterministic scan as
     /// `compliance audit-tenancy`.
     ///

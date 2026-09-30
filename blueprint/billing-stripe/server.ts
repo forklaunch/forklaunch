@@ -12,6 +12,7 @@ import { planRouter } from './api/routes/plan.routes';
 import { subscriptionRouter } from './api/routes/subscription.routes';
 import { webhookRouter } from './api/routes/webhook.routes';
 import { complianceRouter } from './api/routes/compliance.routes';
+import { platformEventsRouter } from './api/routes/platformEvents.routes';
 import { ci, tokens } from './bootstrapper';
 import { billingSdkClient } from './sdk';
 
@@ -51,6 +52,7 @@ app.use(planRouter);
 app.use(subscriptionRouter);
 app.use(webhookRouter);
 app.use(complianceRouter);
+app.use(platformEventsRouter);
 
 // //! registers the sdk client
 app.registerSdks(billingSdkClient);

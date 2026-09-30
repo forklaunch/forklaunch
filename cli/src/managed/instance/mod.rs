@@ -12,6 +12,8 @@ mod deployments;
 mod destroy;
 mod get;
 mod list;
+mod model_gateway;
+mod model_usage;
 mod reset;
 mod resume;
 mod rotate_keys;
@@ -27,6 +29,8 @@ use deployments::DeploymentsCommand;
 use destroy::DestroyCommand;
 use get::GetCommand;
 use list::ListCommand;
+use model_gateway::ModelGatewayCommand;
+use model_usage::ModelUsageCommand;
 use reset::ResetCommand;
 use resume::ResumeCommand;
 use rotate_keys::RotateKeysCommand;
@@ -49,6 +53,8 @@ pub(super) struct InstanceCommand {
     reset: ResetCommand,
     resume: ResumeCommand,
     rotate_keys: RotateKeysCommand,
+    model_usage: ModelUsageCommand,
+    model_gateway: ModelGatewayCommand,
 }
 
 impl InstanceCommand {
@@ -68,6 +74,8 @@ impl InstanceCommand {
             reset: ResetCommand::new(),
             resume: ResumeCommand::new(),
             rotate_keys: RotateKeysCommand::new(),
+            model_usage: ModelUsageCommand::new(),
+            model_gateway: ModelGatewayCommand::new(),
         }
     }
 }
@@ -101,7 +109,10 @@ impl CliCommand for InstanceCommand {
              \x20 `deployments`      the instance's deploy feed, to follow any of the above\n\
              \x20 `resume`           retry a failed launch, or release one parked for approval\n\
              \x20 `reset`            wipe the data and return the instance to the pool (admin)\n\
-             \x20 `rotate-keys`      new generation of the instance's secrets; the app re-encrypts (admin)",
+             \x20 `rotate-keys`      new generation of the instance's secrets; the app re-encrypts (admin)\n\n\
+             MODEL GATEWAY (platform-hosted AI models, no provider key in the instance):\n\
+             \x20 `model-usage`      a month of calls, tokens and cost per model\n\
+             \x20 `model-gateway`    override the product's models / budget / rate for one instance",
         )
         .subcommand(self.list.command())
         .subcommand(self.create.command())
@@ -117,6 +128,8 @@ impl CliCommand for InstanceCommand {
         .subcommand(self.resume.command())
         .subcommand(self.reset.command())
         .subcommand(self.rotate_keys.command())
+        .subcommand(self.model_usage.command())
+        .subcommand(self.model_gateway.command())
         .subcommand_required(true)
     }
 
@@ -136,6 +149,8 @@ impl CliCommand for InstanceCommand {
             Some(("resume", sub_matches)) => self.resume.handler(sub_matches),
             Some(("reset", sub_matches)) => self.reset.handler(sub_matches),
             Some(("rotate-keys", sub_matches)) => self.rotate_keys.handler(sub_matches),
+            Some(("model-usage", sub_matches)) => self.model_usage.handler(sub_matches),
+            Some(("model-gateway", sub_matches)) => self.model_gateway.handler(sub_matches),
             _ => unreachable!(),
         }
     }

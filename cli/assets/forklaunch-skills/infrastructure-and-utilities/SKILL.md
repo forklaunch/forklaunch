@@ -188,166 +188,95 @@ await cache.deleteRecordBatch([
 ]);
 ```
 
-## Object Store Pattern (S3 for Large Files)
+## Object Store (S3): files, uploads from the browser, download links
 
-### Overview
+### Add it with the CLI, never by hand
 
-ForkLaunch provides `@forklaunch/core/objectstore` with an `ObjectStore` interface and `S3ObjectStore` implementation for large file storage.
+```bash
+forklaunch infra add <service> object-store     # alias of: change service -p <service> --infrastructure s3
+forklaunch infra remove <service> object-store  # undoes everything add wrote
+forklaunch score --offline                      # then confirm the wiring checks pass
+```
 
-### Basic Object Store Usage
+`infra add` writes the `ObjectStore` registration into `registrations.ts`, MinIO
+into docker-compose, local settings into `.env.local`, the
+`@forklaunch/infrastructure-s3` dependency, the manifest resource
+(`object_store = "s3"`) and the test utilities. Hand-written wiring drifts from
+what the platform provisions, and the report card flags it
+(`object-store-wiring`).
+
+### How it is configured
+
+The generated registration is keyless by default:
 
 ```typescript
-import {
-  createObjectStoreKey,
-  ObjectStore,
-} from "@forklaunch/core/objectstore";
-import { S3ObjectStore } from "@forklaunch/infrastructure-s3";
+new S3ObjectStore(OtelCollector, {
+  bucket: S3_BUCKET,
+  prefix: S3_PREFIX,                                  // optional; confines every key
+  clientConfig: s3ClientConfig({ url: S3_URL, region: S3_REGION,
+    accessKeyId: S3_ACCESS_KEY_ID, secretAccessKey: S3_SECRET_ACCESS_KEY }),
+  presignLimits: { maxUploadSeconds: S3_PRESIGN_MAX_UPLOAD_SECONDS,
+    maxDownloadSeconds: S3_PRESIGN_MAX_DOWNLOAD_SECONDS }
+}, telemetry, { encryptor })
+```
 
-// Create object store
-const objectStore = new S3ObjectStore({
-  region: "us-east-1",
-  bucketName: "my-app-uploads",
-  openTelemetryCollector,
+- **Locally:** `S3_URL` and the `minioadmin` keys point at MinIO.
+- **Deployed on ForkLaunch:** the platform sets `S3_BUCKET`, `S3_REGION` and the link caps. It sets no keys; the service's task role reaches its own bucket. `s3ClientConfig` passes keys only when both are set, so keys never have to exist in production.
+- **Bucket creation:** the store creates the bucket on first write only when a custom endpoint (MinIO) is set. Deployed buckets are created by the platform.
+- **What the platform provisions on AWS:** one private bucket per application, environment and region, so each managed instance gets its own. It has Block Public Access, ACLs disabled, SSE-KMS with its own rotating key, versioning, TLS-only access and a 7-day cleanup of unfinished uploads. Only the services that declare the store get read, write and delete access, through their task role. A reset empties the bucket, and a full destroy deletes it.
+- **Settings** live in the object-store resource's `config`: `browserUploads` (default on; off removes CORS), `presignUploadSeconds` (900), `presignDownloadSeconds` (300) and `extraCorsOrigins` (comma-separated, https only). CORS always allows the app's own domains, never `*`. `fl infra config-set` does not accept these for an object store yet.
+
+### Store and read files
+
+```typescript
+// A real file: bytes, text or a stream (streams upload in parts).
+await objectStore.putFile(`intake/${formId}.pdf`, pdfBuffer, {
+  contentType: 'application/pdf',
+  filename: 'intake.pdf'          // optional Content-Disposition name
 });
+const stream = await objectStore.streamDownloadObject(`intake/${formId}.pdf`);
 
-// Create typed key functions
-const createUserFileKey = createObjectStoreKey("user-files");
-const createDocumentKey = createObjectStoreKey("documents");
+// JSON records (encrypted per tenant when a compliance context is passed).
+await objectStore.putObject({ key: `settings/${orgId}`, theme: 'dark' }, { tenantId: orgId });
+const settings = await objectStore.readObject<Settings>(`settings/${orgId}`, { tenantId: orgId });
+```
 
-// Upload object
-await objectStore.putObject({
-  key: createUserFileKey("user-123", "avatar.png"),
-  value: imageBuffer,
-  metadata: {
-    contentType: "image/png",
-    userId: "user-123",
-  },
+`putObject` JSON-encodes its argument; use `putFile` for anything that is a file.
+
+### Browser uploads and download links
+
+Files a user uploads should go straight from the browser to storage, not
+through the service. Hand the browser a short-lived grant:
+
+```typescript
+// Server: a presigned POST. S3 enforces the size limit and the content type.
+const grant = await objectStore.presignUpload(`intake/${formId}.pdf`, {
+  contentType: 'application/pdf',
+  maxBytes: 20_000_000
 });
+return grant; // { url, fields, key, expiresAt }
 
-// Download object
-const file = await objectStore.readObject(
-  createUserFileKey("user-123", "avatar.png"),
-);
-// Returns: { value: Buffer, metadata: { contentType, userId } }
+// Browser: post the fields, then the file last.
+const form = new FormData();
+Object.entries(grant.fields).forEach(([k, v]) => form.append(k, v));
+form.append('file', file);
+await fetch(grant.url, { method: 'POST', body: form });
 
-// Delete object
-await objectStore.deleteObject(createUserFileKey("user-123", "avatar.png"));
+// Server: a link to one file, valid for minutes.
+const url = await objectStore.presignDownload(`intake/${formId}.pdf`, { filename: 'intake.pdf' });
 ```
 
-### Object Store Patterns
+Rules:
+- **Link lifetimes are capped by the platform** (defaults: 900 seconds for uploads, 300 for downloads). Asking for longer throws.
+- **Never use `getSignedUrl(PutObjectCommand)` for uploads.** A presigned PUT can't limit size (`presigned-upload-unbounded`).
+- **CORS belongs to the platform.** It allows only the app's own domains. Don't call `PutBucketCorsCommand`, bucket policies or ACLs from app code (`object-store-bucket-managed-in-app`).
+- **Keep files private.** Never set `public-read` (`object-store-public-access`, critical); share files through `presignDownload` links.
+- **Encryption:** uploaded files are encrypted by the bucket's KMS key, not by the app. For health data, store the file and keep what it contains classified in the entity that references it.
 
-#### 1. User File Uploads
+### Keys
 
-```typescript
-const createUserFileKey = createObjectStoreKey("user-files");
-
-async function uploadUserFile(userId: string, file: Express.Multer.File) {
-  const key = createUserFileKey(userId, file.originalname);
-
-  await objectStore.putObject({
-    key,
-    value: file.buffer,
-    metadata: {
-      contentType: file.mimetype,
-      size: file.size,
-      uploadedAt: new Date().toISOString(),
-    },
-  });
-
-  return { fileKey: key, url: `/files/${userId}/${file.originalname}` };
-}
-```
-
-#### 2. Document Versioning
-
-```typescript
-const createDocVersionKey = createObjectStoreKey("documents");
-
-async function saveDocumentVersion(
-  docId: string,
-  content: Buffer,
-  version: number,
-) {
-  await objectStore.putObject({
-    key: createDocVersionKey(docId, `v${version}`),
-    value: content,
-    metadata: {
-      docId,
-      version: version.toString(),
-      createdAt: new Date().toISOString(),
-    },
-  });
-}
-
-async function getLatestVersion(docId: string): Promise<number> {
-  // List objects with prefix and find highest version
-  const versions = await listDocumentVersions(docId);
-  return Math.max(...versions.map((v) => v.version));
-}
-```
-
-#### 3. Streaming Large Files
-
-```typescript
-// Stream download (memory efficient for large files)
-app.get("/files/:userId/:filename", async (req, res) => {
-  const key = createUserFileKey(req.params.userId, req.params.filename);
-
-  const stream = await objectStore.streamDownloadObject(key);
-
-  res.setHeader("Content-Type", "application/octet-stream");
-  res.setHeader(
-    "Content-Disposition",
-    `attachment; filename="${req.params.filename}"`,
-  );
-
-  stream.pipe(res);
-});
-
-// Stream upload
-app.post("/files/upload", async (req, res) => {
-  const uploadStream = objectStore.streamUploadObject({
-    key: createUserFileKey("user-123", "large-file.zip"),
-    metadata: { contentType: "application/zip" },
-  });
-
-  req.pipe(uploadStream);
-
-  uploadStream.on("finish", () => {
-    res.json({ message: "Upload complete" });
-  });
-});
-```
-
-#### 4. Batch Operations
-
-```typescript
-// Upload multiple files
-await objectStore.putObjectBatch([
-  {
-    key: createUserFileKey("user-123", "photo1.jpg"),
-    value: photo1Buffer,
-    metadata: { contentType: "image/jpeg" },
-  },
-  {
-    key: createUserFileKey("user-123", "photo2.jpg"),
-    value: photo2Buffer,
-    metadata: { contentType: "image/jpeg" },
-  },
-]);
-
-// Download multiple files
-const files = await objectStore.readObjectBatch([
-  createUserFileKey("user-123", "photo1.jpg"),
-  createUserFileKey("user-123", "photo2.jpg"),
-]);
-
-// Delete multiple files
-await objectStore.deleteObjectBatch([
-  createUserFileKey("user-123", "photo1.jpg"),
-  createUserFileKey("user-123", "photo2.jpg"),
-]);
-```
+Use `createObjectStoreKey('documents')(id)` for consistent key names. The
+store's `prefix` is added for you: keys you pass are relative to it.
 
 ## Testing with TestContainers
 

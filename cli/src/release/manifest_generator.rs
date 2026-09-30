@@ -915,6 +915,27 @@ pub(crate) fn generate_release_manifest(
     })
 }
 
+/// Platform-held capabilities as resources, one per capability, bound to the
+/// service. The type is the platform's IntegrationType literal.
+fn add_capability_resources(
+    service_name: &str,
+    inventory: &ResourceInventory,
+    resources: &mut Vec<ResourceDefinition>,
+) {
+    for capability in inventory.capabilities.iter().flatten() {
+        let resource_type = crate::infra::capabilities::resource_type(capability);
+        resources.push(ResourceDefinition {
+            id: format!("{service_name}-{capability}"),
+            resource_type: resource_type.to_string(),
+            name: format!("{service_name}-{capability}"),
+            technology: "platform-gateway".to_string(),
+            region: None,
+            config: None,
+            service_name: Some(service_name.to_string()),
+        });
+    }
+}
+
 fn add_resources_from_inventory(
     service_name: &str,
     inventory: &ResourceInventory,
@@ -976,6 +997,8 @@ fn add_resources_from_inventory(
         });
     }
 
+    add_capability_resources(service_name, inventory, resources);
+
     if let Some(object_store) = &inventory.object_store {
         resources.push(ResourceDefinition {
             id: format!("{}-storage", service_name),
@@ -1026,6 +1049,8 @@ fn add_non_db_resources(
             service_name: Some(service_name.to_string()),
         });
     }
+
+    add_capability_resources(service_name, inventory, resources);
 
     if let Some(object_store) = &inventory.object_store {
         resources.push(ResourceDefinition {

@@ -1,5 +1,23 @@
 # @forklaunch/internal
 
+## 1.2.33
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions, including @mikro-orm 7.2.3, so apps resolve a single copy of MikroORM with core.
+- Updated dependencies
+  - @forklaunch/common@1.2.30
+  - @forklaunch/validator@1.2.31
+
+## 1.2.32
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions (`pnpm up:packages`).
+- Updated dependencies
+  - @forklaunch/common@1.2.29
+  - @forklaunch/validator@1.2.30
+
 ## 1.2.31
 
 ### Patch Changes
