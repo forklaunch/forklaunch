@@ -1,5 +1,14 @@
 # @forklaunch/implementation-billing-stripe
 
+## 1.2.11
+
+### Patch Changes
+
+- Depend on @forklaunch/core 3 (pii/phi/pci properties load as CompliantField; read them with .deanon or .anon) and refresh dependencies to their latest versions, including @mikro-orm 7.2.3.
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.41
+  - @forklaunch/interfaces-billing@1.0.38
+
 ## 1.2.10
 
 ### Patch Changes

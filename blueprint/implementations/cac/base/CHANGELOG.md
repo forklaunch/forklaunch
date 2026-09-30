@@ -1,5 +1,13 @@
 # @forklaunch/implementation-cac-base
 
+## 0.2.7
+
+### Patch Changes
+
+- Depend on @forklaunch/core 3 (pii/phi/pci properties load as CompliantField; read them with .deanon or .anon) and refresh dependencies to their latest versions, including @mikro-orm 7.2.3.
+- Updated dependencies
+  - @forklaunch/interfaces-cac@0.2.6
+
 ## 0.2.6
 
 ### Patch Changes

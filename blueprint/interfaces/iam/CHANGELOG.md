@@ -1,5 +1,11 @@
 # @forklaunch/interfaces-iam
 
+## 1.0.37
+
+### Patch Changes
+
+- Depend on @forklaunch/core 3 (pii/phi/pci properties load as CompliantField; read them with .deanon or .anon) and refresh dependencies to their latest versions, including @mikro-orm 7.2.3.
+
 ## 1.0.36
 
 ### Patch Changes

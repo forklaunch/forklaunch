@@ -2,6 +2,7 @@ import {
   array,
   function_,
   number,
+  optional,
   schemaValidator,
   string,
   type
@@ -34,7 +35,7 @@ import { RedisWorkerProducer } from '@forklaunch/implementation-worker-redis/pro
 import { RedisWorkerSchemas } from '@forklaunch/implementation-worker-redis/schemas';
 import { RedisWorkerOptions } from '@forklaunch/implementation-worker-redis/types';
 import { RedisTtlCache } from '@forklaunch/infrastructure-redis';
-import { S3ObjectStore } from '@forklaunch/infrastructure-s3';
+import { S3ObjectStore, s3ClientConfig } from '@forklaunch/infrastructure-s3';
 import {
   WorkerFailureHandler,
   WorkerProcessFunction
@@ -145,17 +146,17 @@ const environmentConfig = configInjector.chain({
   },
   S3_REGION: {
     lifetime: Lifetime.Singleton,
-    type: string,
+    type: optional(string),
     value: getEnvVar('S3_REGION')
   },
   S3_ACCESS_KEY_ID: {
     lifetime: Lifetime.Singleton,
-    type: string,
+    type: optional(string),
     value: getEnvVar('S3_ACCESS_KEY_ID')
   },
   S3_SECRET_ACCESS_KEY: {
     lifetime: Lifetime.Singleton,
-    type: string,
+    type: optional(string),
     value: getEnvVar('S3_SECRET_ACCESS_KEY')
   },
   S3_BUCKET: {
@@ -165,7 +166,7 @@ const environmentConfig = configInjector.chain({
   },
   S3_URL: {
     lifetime: Lifetime.Singleton,
-    type: string,
+    type: optional(string),
     value: getEnvVar('S3_URL')
   },
   HMAC_SECRET_KEY: {
@@ -276,15 +277,14 @@ const runtimeDependencies = environmentConfig.chain({
         OtelCollector,
         {
           bucket: S3_BUCKET,
-          clientConfig: {
-            endpoint: S3_URL,
+          // Deployed on ForkLaunch only the region is set: credentials come
+          // from the worker's task role. Keys and S3_URL are for local MinIO.
+          clientConfig: s3ClientConfig({
+            url: S3_URL,
             region: S3_REGION,
-            credentials: {
-              accessKeyId: S3_ACCESS_KEY_ID,
-              secretAccessKey: S3_SECRET_ACCESS_KEY
-            },
-            forcePathStyle: true // Required for MinIO and path-style S3
-          }
+            accessKeyId: S3_ACCESS_KEY_ID,
+            secretAccessKey: S3_SECRET_ACCESS_KEY
+          })
         },
         {
           enabled: true,

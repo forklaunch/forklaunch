@@ -1,5 +1,13 @@
 # @forklaunch/implementation-worker-database
 
+## 1.0.40
+
+### Patch Changes
+
+- Depend on @forklaunch/core 3 (pii/phi/pci properties load as CompliantField; read them with .deanon or .anon) and refresh dependencies to their latest versions, including @mikro-orm 7.2.3.
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.35
+
 ## 1.0.39
 
 ### Patch Changes

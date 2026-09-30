@@ -1,5 +1,14 @@
 # @forklaunch/implementation-ecommerce-stripe
 
+## 1.0.8
+
+### Patch Changes
+
+- Depend on @forklaunch/core 3 (pii/phi/pci properties load as CompliantField; read them with .deanon or .anon) and refresh dependencies to their latest versions, including @mikro-orm 7.2.3.
+- Updated dependencies
+  - @forklaunch/implementation-ecommerce-base@1.0.13
+  - @forklaunch/interfaces-ecommerce@1.0.12
+
 ## 1.0.7
 
 ### Patch Changes
