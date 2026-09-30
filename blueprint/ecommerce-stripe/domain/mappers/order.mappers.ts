@@ -4,7 +4,6 @@ import { OrderStatus } from '@forklaunch/interfaces-ecommerce/types';
 import { EntityManager } from '@mikro-orm/core';
 import { Order } from '../../persistence/entities/order.entity';
 import { OrderSchemas } from '../schemas';
-import { deanon } from '@forklaunch/core/persistence';
 
 export const CreateOrderMapper = requestMapper({
   schemaValidator,
@@ -68,7 +67,7 @@ export const OrderMapper = responseMapper({
   entity: Order,
   mapperDefinition: {
     toDto: async (entity) => ({
-      ...deanon(entity),
+      ...entity,
       customerId: entity.customerId ?? undefined
     })
   }

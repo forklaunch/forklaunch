@@ -1,9 +1,4 @@
 import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
-
-// Shape entities: the constraints the billing-stripe module's real entities
-// must satisfy. Their classifications have to match the module's, because a
-// pii/phi/pci property is a CompliantField rather than its value; the module
-// stores Stripe payloads unclassified (`none`), so the shapes say the same.
 import Stripe from 'stripe';
 
 export const BillingPortal = defineComplianceEntity({
@@ -11,7 +6,7 @@ export const BillingPortal = defineComplianceEntity({
   properties: {
     id: fp.string().primary().compliance('none'),
     customerId: fp.string().compliance('none'),
-    providerFields: fp.json<Stripe.BillingPortal.Session>().compliance('none')
+    providerFields: fp.json<Stripe.BillingPortal.Session>().compliance('pci')
   }
 });
 
@@ -23,7 +18,7 @@ export const CheckoutSession = defineComplianceEntity({
     paymentMethods: fp.enum<string[]>().array().compliance('none'),
     currency: fp.enum<string[]>().compliance('none'),
     status: fp.enum<string[]>().compliance('none'),
-    providerFields: fp.json<Stripe.Checkout.Session>().compliance('none')
+    providerFields: fp.json<Stripe.Checkout.Session>().compliance('pci')
   }
 });
 
@@ -35,7 +30,7 @@ export const PaymentLink = defineComplianceEntity({
     paymentMethods: fp.enum<string[]>().array().compliance('none'),
     currency: fp.enum<string[]>().compliance('none'),
     status: fp.enum<string[]>().compliance('none'),
-    providerFields: fp.json<Stripe.PaymentLink>().compliance('none')
+    providerFields: fp.json<Stripe.PaymentLink>().compliance('pci')
   }
 });
 
@@ -49,7 +44,7 @@ export const Plan = defineComplianceEntity({
     cadence: fp.enum<string[]>().compliance('none'),
     currency: fp.enum<string[]>().compliance('none'),
     billingProvider: fp.enum<string[]>().nullable().compliance('none'),
-    providerFields: fp.json<Stripe.Product>().compliance('none')
+    providerFields: fp.json<Stripe.Product>().compliance('pci')
   }
 });
 
@@ -62,7 +57,7 @@ export const Subscription = defineComplianceEntity({
     partyType: fp.enum<string[]>().compliance('none'),
     billingProvider: fp.enum<string[]>().nullable().compliance('none'),
     active: fp.boolean().compliance('none'),
-    providerFields: fp.json<Stripe.Subscription>().compliance('none')
+    providerFields: fp.json<Stripe.Subscription>().compliance('pci')
   }
 });
 
@@ -82,6 +77,6 @@ export const StripeWebhookEvent = defineComplianceEntity({
     stripeId: fp.string().compliance('none'),
     idempotencyKey: fp.string().nullable().compliance('none'),
     eventType: fp.string().compliance('none'),
-    eventData: fp.json<unknown>().compliance('none')
+    eventData: fp.json<unknown>().compliance('pci')
   }
 });
