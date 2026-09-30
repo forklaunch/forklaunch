@@ -145,6 +145,11 @@ fn criterion_for_check(check: &str) -> Option<(&'static str, OnFinding)> {
         // A capability the manifest and the code disagree about is either not
         // provisioned or not callable.
         "capability-wiring" => ("gov-construction", OnFinding::Fail),
+        // A managed instance never gets a mail credential; its own provider
+        // does not run as declared.
+        "email-provider-direct-in-managed" => ("gov-construction", OnFinding::Fail),
+        // Protected data shown where it should not be (previews, mail logs).
+        "email-protected-data" => ("cmp-data-classification", OnFinding::Fail),
         _ => return None,
     })
 }
@@ -176,6 +181,12 @@ fn severity_for(finding: &LocalFinding) -> &'static str {
         (Severity::Warning, "ai-provider-direct") => "critical",
         // Anyone on the internet can read the files.
         (Severity::Warning, "object-store-public-access") => "critical",
+        // Health data in an email subject: on lock screens and in mail logs.
+        (Severity::Warning, "email-protected-data")
+            if finding.message.starts_with("health data (phi)") =>
+        {
+            "critical"
+        }
         (Severity::Warning, _) => "high",
         (Severity::Info, _) => "info",
     }
@@ -286,6 +297,8 @@ fn item_label(check: &str) -> &'static str {
         "object-store-bucket-managed-in-app" => "The platform, not app code, configures the bucket",
         "presigned-upload-unbounded" => "Browser uploads are limited in size and type",
         "capability-wiring" => "Platform capabilities are declared and wired",
+        "email-provider-direct-in-managed" => "Managed services send email through the platform",
+        "email-protected-data" => "Email subjects carry no protected data",
         _ => "Deterministic check",
     }
 }
@@ -338,6 +351,14 @@ fn remedy(check: &str) -> Option<String> {
         "capability-wiring" => {
             "Run `forklaunch infra add <service> <capability>` (or `infra remove`) so the manifest \
              and registrations.ts agree."
+        }
+        "email-provider-direct-in-managed" => {
+            "Run `forklaunch infra add <service> email` and send with the injected EmailClient \
+             (createEmailClient()); drop the mail SDK and its SMTP/API credentials."
+        }
+        "email-protected-data" => {
+            "Use a generic subject (\"Your results are ready\") and put the protected detail in the \
+             body or behind a signed-in link."
         }
         _ => return None,
     };
@@ -897,6 +918,31 @@ mod wiring_score_tests {
             .unwrap();
         assert_eq!(item.status, "unmet");
         assert!(card.overall < clean.overall);
+    }
+
+    #[test]
+    fn email_checks_map_to_their_criteria_and_phi_subjects_are_critical() {
+        let mut phi = finding("email-protected-data");
+        phi.message = "health data (phi): an email subject carries …".to_string();
+        assert_eq!(severity_for(&phi), "critical");
+        assert_eq!(severity_for(&finding("email-protected-data")), "high");
+        assert_eq!(severity_for(&finding("email-provider-direct-in-managed")), "high");
+        let card = build_local_report_card(
+            "app",
+            1,
+            &[finding("email-provider-direct-in-managed")],
+            "t".to_string(),
+        );
+        assert_eq!(card.dimensions["governance"].score, 85);
+        let card = build_local_report_card("app", 1, &[phi], "t".to_string());
+        let item = card.dimensions["compliance"]
+            .items
+            .iter()
+            .find(|i| i.criterion.as_deref() == Some("cmp-data-classification"))
+            .unwrap();
+        assert_eq!(item.status, "unmet");
+        assert!(remedy("email-protected-data").is_some());
+        assert_ne!(item_label("email-provider-direct-in-managed"), "Deterministic check");
     }
 
     #[test]

@@ -6,6 +6,7 @@ export * from './createHmacToken';
 export * from './generateHmacAuthHeaders';
 export * from './instanceGateway';
 export * from './modelGatewayClient';
+export * from './emailClient';
 export * from './discriminateAuthMethod';
 export * from './guards/isForklaunchRequest';
 export * from './guards/isForklaunchRouter';

@@ -12,6 +12,8 @@ user-invokable: true
 - "Add Stripe" / "it needs to take payments"
 - Any provider whose setup ends in *"here is your API key"* — Sentry, Datadog,
   Twilio, an LLM provider, an SMTP service
+- "Send email" from a managed instance — `forklaunch infra add <service> email`
+  (below); no SMTP or SendGrid key
 - A deploy is blocked complaining about a missing environment variable
 
 ## Read this first: there is no `integrate <service>` command
@@ -172,6 +174,76 @@ a URL that 404s.
 a placeholder key fails **locally too**, with `Invalid API Key provided`. There
 is no offline mode. Use a real test key in local `.env` files, or expect that
 code path to fail on a developer machine.
+
+## Email (managed instances)
+
+A managed instance never holds a mail credential. The platform sends through
+Amazon SES from the instance's own sending identity
+(`no-reply@<instance>.<platform sending domain>`), under a per-instance SES
+configuration set, inside the product's daily quota and rate, and refuses
+addresses on the instance's suppression list (hard bounces and complaints).
+
+### 1. What the CLI writes
+
+```bash
+forklaunch infra add <service> email
+forklaunch infra remove <service> email     # undoes it
+```
+
+- `registrations.ts`: an `EmailClient` built with `createEmailClient()` from
+  `@forklaunch/core/http`, fed by the managed env contract
+  (`PLATFORM_GATEWAY_URL`, `INSTANCE_ID`, `INSTANCE_HMAC_KEY`, all optional and
+  injected by the platform). It is `Lifetime.Scoped`, so a service started
+  without the contract boots and fails only where email is used.
+- `api/platformEvents/email.ts`: the handler for email events (dedupes on
+  `event.id`; a TODO to mark bounced/complained addresses undeliverable), plus
+  the verified `/platform-events/:feature` route if the service had none.
+- docker-compose: the local gateway mock; `.env.local`: the local contract.
+- The manifest: `resources.capabilities = ["email"]`; the release manifest
+  carries an `email` resource bound to the service.
+
+### 2. Using it
+
+```ts
+const email = ci.resolve(tokens.EmailClient);
+const { messageId } = await email.send({
+  to: user.email.deanon,               // the recipient may be protected data
+  subject: 'Your results are ready',   // NEVER protected data (see checks)
+  text: `Hi ${user.firstName.deanon}, your results are in the portal.`,
+  tags: { kind: 'results' }            // echoed on the events
+});
+if (await email.suppressed(address)) { /* ask for another address */ }
+```
+
+`send` validates before it calls (addresses, up to 50 recipients, a one-line
+subject, `text` or `html`, 512 KB, up to 10 tags) and throws
+`EmailRequestError` with the gateway's status: 400 bad input, 401 wrong key,
+422 a suppressed recipient, 429 quota/rate (with `retryAfterSeconds`), 503
+email not configured on the platform or the sending identity still verifying.
+
+### 3. Events
+
+Delivered signed to `/platform-events/email`, each with the SES `messageId`:
+`email.delivered`, `email.bounced` (`bounceType`, `permanent`) and
+`email.complained` (`feedbackType`). Deliveries can repeat; dedupe on
+`event.id`. Permanent bounces and complaints are already suppressed by the
+platform; mark the address undeliverable in the app too.
+
+### 4. Local development
+
+`docker compose up` runs the gateway mock (`forklaunch-gateway-mock`). It records
+messages (`GET http://localhost:18088/__mock/email/messages`) and emits the
+events: `bounce@…` or any address at `bounce.test` bounces (and is then
+suppressed: a later send answers 422), `complaint@…` is delivered then
+complained, anything else is delivered. `MOCK_EMAIL_DAILY_QUOTA` (default 200)
+gives a 429 past it.
+
+### 5. Checks and fixes (`forklaunch score`)
+
+| check | severity | fix |
+|---|---|---|
+| `email-provider-direct-in-managed` | high | a managed service imports nodemailer, `@aws-sdk/client-ses(v2)`, `@sendgrid/mail`, postmark or mailgun, or reads `SMTP_*`/`SENDGRID_API_KEY`/`POSTMARK_*`/`MAILGUN_*`: run `infra add <service> email`, send with `EmailClient`, drop the SDK and keys |
+| `email-protected-data` | high; critical with phi entities | a `.deanon` value in the `subject` of an email send: subjects show in notification previews and mail logs — use a generic subject and keep the detail in the body or behind a link |
 
 ## Everything else
 

@@ -144,6 +144,8 @@ pub(crate) const LOCAL_CHECK_IDS: &[&str] = &[
     "object-store-bucket-managed-in-app",
     "presigned-upload-unbounded",
     "capability-wiring",
+    "email-provider-direct-in-managed",
+    "email-protected-data",
 ];
 
 /// AI model provider SDKs a service might call directly.
@@ -233,6 +235,162 @@ pub(crate) fn provider_credentials_read(sources: &str) -> Vec<String> {
         .map(|key| key.to_string())
         .collect();
     found.sort();
+    found
+}
+
+/// Email provider SDKs. A managed instance sends email through the platform
+/// (`createEmailClient`), which holds the SES identity and the suppression
+/// list; a provider SDK in the instance needs a credential it never gets.
+const EMAIL_PROVIDER_PACKAGES: &[&str] = &[
+    "nodemailer",
+    "@aws-sdk/client-ses",
+    "@aws-sdk/client-sesv2",
+    "@sendgrid/mail",
+    "postmark",
+    "mailgun.js",
+    "mailgun-js",
+];
+
+/// Whether a credential name belongs to an email provider (SMTP, SendGrid,
+/// Postmark, Mailgun). `email-provider-direct-in-managed` reports these, so
+/// `managed-provider-credentials` leaves them out rather than report twice.
+pub(crate) fn is_email_credential(key: &str) -> bool {
+    key.starts_with("SMTP_")
+        || key == "SENDGRID_API_KEY"
+        || key.starts_with("POSTMARK_")
+        || key.starts_with("MAILGUN_")
+}
+
+/// Email providers the sources use directly: provider SDK imports (including
+/// subpaths) and provider credential reads. Sorted and de-duplicated.
+pub(crate) fn direct_email_providers(sources: &str) -> Vec<String> {
+    static KEYS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let keys = KEYS.get_or_init(|| {
+        regex::Regex::new(r"\b(?:SMTP_[A-Z0-9_]+|SENDGRID_API_KEY|POSTMARK_[A-Z0-9_]+|MAILGUN_[A-Z0-9_]+)\b")
+            .expect("email credential pattern")
+    });
+    let mut found: Vec<String> = imported_modules(sources)
+        .into_iter()
+        .filter(|module| {
+            EMAIL_PROVIDER_PACKAGES.iter().any(|p| {
+                module == p || module.starts_with(&format!("{p}/"))
+            })
+        })
+        .collect();
+    found.extend(keys.find_iter(sources).map(|m| m.as_str().to_string()));
+    found.sort();
+    found.dedup();
+    found
+}
+
+/// The text of the balanced `{ … }` starting at `open` (a `{`), or to the end.
+fn balanced_object(text: &str, open: usize) -> &str {
+    let bytes = text.as_bytes();
+    let mut depth = 0usize;
+    let mut quote: Option<u8> = None;
+    let mut i = open;
+    while i < bytes.len() {
+        let c = bytes[i];
+        match quote {
+            Some(q) => {
+                if c == b'\\' {
+                    i += 1;
+                } else if c == q {
+                    quote = None;
+                }
+            }
+            None => match c {
+                b'\'' | b'"' | b'`' => quote = Some(c),
+                b'{' | b'(' | b'[' => depth += 1,
+                b'}' | b')' | b']' => {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 {
+                        return &text[open..=i];
+                    }
+                }
+                _ => {}
+            },
+        }
+        i += 1;
+    }
+    &text[open..]
+}
+
+/// The value expression after a `key:` at `start`: up to the next top-level
+/// comma or closing bracket (template literals and nested calls kept whole).
+fn property_value(text: &str, start: usize) -> &str {
+    let bytes = text.as_bytes();
+    let mut depth = 0usize;
+    let mut quote: Option<u8> = None;
+    let mut i = start;
+    while i < bytes.len() {
+        let c = bytes[i];
+        match quote {
+            Some(q) => {
+                if c == b'\\' {
+                    i += 1;
+                } else if c == q {
+                    quote = None;
+                }
+            }
+            None => match c {
+                b'\'' | b'"' | b'`' => quote = Some(c),
+                b'{' | b'(' | b'[' => depth += 1,
+                b'}' | b')' | b']' if depth == 0 => return &text[start..i],
+                b'}' | b')' | b']' => depth -= 1,
+                b',' | b';' if depth == 0 => return &text[start..i],
+                _ => {}
+            },
+        }
+        i += 1;
+    }
+    &text[start..]
+}
+
+/// Email sends whose subject carries a `.deanon` value, as the subject
+/// expressions found.
+///
+/// Conservative on purpose: only an object literal passed straight to an
+/// email send is read — `sendMail(…)`/`sendEmail(…)`, `.send(…)` on a
+/// receiver whose name mentions mail (`EmailClient.send`, `mailer.send`,
+/// `sgMail.send`), or `new SendEmailCommand(…)` — and only its own `subject`
+/// (SES's `Subject: { Data }` included). A body may carry what the recipient
+/// is entitled to read; a subject is shown in notification previews and mail
+/// logs, so plaintext protected data there is the finding.
+pub(crate) fn protected_data_in_email_subjects(sources: &str) -> Vec<String> {
+    static CALLS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static SUBJECT: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let calls = CALLS.get_or_init(|| {
+        regex::Regex::new(
+            r"(?:\b([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*)\s*\.\s*(send|sendMail|sendEmail)|\bnew\s+(SendEmailCommand))\s*\(\s*\{",
+        )
+        .expect("email send pattern")
+    });
+    let subject = SUBJECT.get_or_init(|| {
+        regex::Regex::new(r#"(?:^|[{,\s])['"]?(?i:subject)['"]?\s*:"#).expect("subject pattern")
+    });
+    let mut found = Vec::new();
+    for call in calls.captures_iter(sources) {
+        let receiver = call.get(1).map(|m| m.as_str()).unwrap_or("");
+        let method = call.get(2).map(|m| m.as_str()).unwrap_or("");
+        let is_email = call.get(3).is_some()
+            || method == "sendMail"
+            || method == "sendEmail"
+            || receiver.to_ascii_lowercase().contains("mail");
+        if !is_email {
+            continue;
+        }
+        let whole = call.get(0).unwrap();
+        let object = balanced_object(sources, whole.end() - 1);
+        for m in subject.find_iter(object) {
+            let value = property_value(object, m.end()).trim();
+            if value.contains(".deanon") {
+                found.push(value.split_whitespace().collect::<Vec<_>>().join(" "));
+            }
+        }
+    }
+    found.sort();
+    found.dedup();
     found
 }
 
@@ -737,7 +895,8 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
         // hosted instance or carries a credential shared by every customer.
         let project_sources = read_production_sources(&project_path);
         if is_managed_instance(&project_path, &project_sources) {
-            let credentials = provider_credentials_read(&project_sources);
+            let mut credentials = provider_credentials_read(&project_sources);
+            credentials.retain(|key| !is_email_credential(key));
             if !credentials.is_empty() {
                 findings.push(LocalFinding {
                     severity: Severity::Warning,
@@ -750,6 +909,41 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
                     ),
                 });
             }
+
+            // 7b. Email goes through the platform, not a provider SDK or key.
+            let providers = direct_email_providers(&project_sources);
+            if !providers.is_empty() {
+                findings.push(LocalFinding {
+                    severity: Severity::Warning,
+                    project: project.clone(),
+                    check: "email-provider-direct-in-managed".to_string(),
+                    subject: providers.join(", "),
+                    message: format!(
+                        "this service runs as a managed instance but sends email with its own provider ({}) — hosted instances get no mail credential; send with createEmailClient() (`forklaunch infra add <service> email`), which uses the instance's platform sending identity and suppression list",
+                        providers.join(", ")
+                    ),
+                });
+            }
+        }
+
+        // 7c. Protected data in an email subject (previews, mail logs).
+        let subjects = protected_data_in_email_subjects(&project_sources);
+        if !subjects.is_empty() {
+            let has_phi = scan_entity_compliance(&project_path)
+                .unwrap_or_default()
+                .iter()
+                .any(|e| e.field_classifications.values().any(|c| c == "phi"));
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.clone(),
+                check: "email-protected-data".to_string(),
+                subject: subjects.join(", "),
+                message: format!(
+                    "{}an email subject carries a decrypted protected value ({}) — subjects show in lock-screen and notification previews and in mail logs; keep the protected detail in the body (or behind a link) and use a generic subject",
+                    if has_phi { "health data (phi): " } else { "" },
+                    subjects.join(", ")
+                ),
+            });
         }
     }
 
@@ -1557,6 +1751,149 @@ mod object_store_tests {
             "object-store-bucket-managed-in-app",
             "presigned-upload-unbounded",
         ] {
+            assert!(LOCAL_CHECK_IDS.contains(&id), "{id} missing from LOCAL_CHECK_IDS");
+        }
+    }
+}
+
+#[cfg(test)]
+mod email_tests {
+    use super::*;
+
+    fn project(name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("fl-email-checks-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        for (path, text) in files {
+            let path = dir.join("svc").join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
+        dir
+    }
+
+    fn found(dir: &std::path::Path) -> Vec<(String, String)> {
+        let findings = run_local_checks(dir).unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+        findings
+            .into_iter()
+            .filter(|f| {
+                f.check.starts_with("email-") || f.check == "managed-provider-credentials"
+            })
+            .map(|f| (f.check, f.subject))
+            .collect()
+    }
+
+    const MANAGED: &str = "getEnvVar('INSTANCE_HMAC_KEY');\n";
+
+    #[test]
+    fn a_managed_service_with_its_own_mail_provider_is_flagged_once() {
+        let dir = project(
+            "direct",
+            &[(
+                "registrations.ts",
+                &format!(
+                    "{MANAGED}import nodemailer from 'nodemailer';\nimport {{ SESv2Client }} from '@aws-sdk/client-sesv2';\nconst key = getEnvVar('SENDGRID_API_KEY'); const host = getEnvVar('SMTP_HOST');"
+                ),
+            )],
+        );
+        assert_eq!(
+            found(&dir),
+            vec![(
+                "email-provider-direct-in-managed".to_string(),
+                "@aws-sdk/client-sesv2, SENDGRID_API_KEY, SMTP_HOST, nodemailer".to_string()
+            )],
+            "SENDGRID_API_KEY is reported by the email check, not twice"
+        );
+    }
+
+    #[test]
+    fn email_credentials_leave_other_provider_credentials_to_the_generic_check() {
+        let dir = project(
+            "mixed",
+            &[(
+                "registrations.ts",
+                &format!("{MANAGED}getEnvVar('TWILIO_AUTH_TOKEN'); getEnvVar('POSTMARK_SERVER_TOKEN');"),
+            )],
+        );
+        let mut f = found(&dir);
+        f.sort();
+        assert_eq!(
+            f,
+            vec![
+                ("email-provider-direct-in-managed".to_string(), "POSTMARK_SERVER_TOKEN".to_string()),
+                ("managed-provider-credentials".to_string(), "TWILIO_AUTH_TOKEN".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn an_unmanaged_app_or_the_platform_client_is_not_flagged() {
+        let dir = project(
+            "unmanaged",
+            &[("registrations.ts", "import nodemailer from 'nodemailer'; getEnvVar('SMTP_HOST');")],
+        );
+        assert!(found(&dir).is_empty());
+        let dir = project(
+            "gateway",
+            &[(
+                "registrations.ts",
+                &format!("{MANAGED}import {{ createEmailClient }} from '@forklaunch/core/http'; const smtpish = 'SMTP';"),
+            )],
+        );
+        assert!(found(&dir).is_empty());
+    }
+
+    #[test]
+    fn deanon_in_an_email_subject_is_flagged_and_critical_with_phi() {
+        let code = "await this.email.send({\n  to: patient.email.deanon,\n  subject: `Results for ${patient.name.deanon}, ready`,\n  text: `Hi ${patient.name.deanon}`\n});";
+        let dir = project(
+            "subject-phi",
+            &[
+                ("services/notify.ts", code),
+                (
+                    "persistence/entities/patient.entity.ts",
+                    "export const P = defineComplianceEntity({ name: 'P', properties: { diagnosis: fp.text().compliance('phi') } });",
+                ),
+            ],
+        );
+        let findings = run_local_checks(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let f = findings
+            .iter()
+            .find(|f| f.check == "email-protected-data")
+            .unwrap_or_else(|| panic!("{findings:?}"));
+        assert_eq!(f.subject, "`Results for ${patient.name.deanon}, ready`");
+        assert!(f.message.starts_with("health data (phi)"));
+    }
+
+    #[test]
+    fn subject_detection_is_conservative() {
+        // Recipient and body may hold the recipient's own data.
+        assert!(protected_data_in_email_subjects(
+            "EmailClient.send({ to: user.email.deanon, subject: 'Welcome', html: body.deanon })"
+        )
+        .is_empty());
+        // Not an email send.
+        assert!(protected_data_in_email_subjects(
+            "res.status(200).send({ subject: row.subject.deanon }); queue.send({ subject: x.deanon })"
+        )
+        .is_empty());
+        // nodemailer and SES shapes.
+        assert_eq!(
+            protected_data_in_email_subjects("transporter.sendMail({ from, to, subject: p.ssn.deanon })"),
+            vec!["p.ssn.deanon"]
+        );
+        assert_eq!(
+            protected_data_in_email_subjects(
+                "new SendEmailCommand({ Content: { Simple: { Subject: { Data: p.name.deanon }, Body } } })"
+            ),
+            vec!["{ Data: p.name.deanon }"]
+        );
+    }
+
+    #[test]
+    fn email_checks_score_through_the_report_card() {
+        for id in ["email-provider-direct-in-managed", "email-protected-data"] {
             assert!(LOCAL_CHECK_IDS.contains(&id), "{id} missing from LOCAL_CHECK_IDS");
         }
     }

@@ -27,6 +27,9 @@ test utilities) and `infra remove` undoes it. No login or `integrate` is needed.
 The platform provisions the real resource on the next deploy: for an object
 store, a private encrypted bucket, CORS for the app's own domains, and a task
 role scoped to that bucket, with no keys. See `/cli` for flags.
+`forklaunch infra add <service> email` registers the platform-held
+`EmailClient` (SES through the instance gateway, no mail key) and an email
+events handler; see `/integrations`.
 
 **The remaining `fl infra` commands never provision anything.** It only inspects and manages resources that already exist on the platform for the target environment (created through the normal platform provisioning flow). Running any command against an environment with no provisioned resources yet will correctly report zero results, not an error.
 

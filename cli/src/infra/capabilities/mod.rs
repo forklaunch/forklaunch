@@ -24,6 +24,8 @@ use oxc_allocator::Allocator;
 use oxc_ast::ast::SourceType;
 use oxc_codegen::{Codegen, CodegenOptions};
 
+pub(crate) mod email;
+
 use crate::core::{
     ast::{
         deletions::{
@@ -57,7 +59,7 @@ pub(crate) struct Capability {
 }
 
 /// Every capability `infra add` knows. Each feature adds its entry.
-pub(crate) static CAPABILITIES: &[&Capability] = &[];
+pub(crate) static CAPABILITIES: &[&Capability] = &[&email::EMAIL];
 
 pub(crate) fn find(id: &str) -> Option<&'static Capability> {
     CAPABILITIES.iter().copied().find(|c| c.id == id)
