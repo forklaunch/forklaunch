@@ -202,7 +202,13 @@ fn add(edit: &mut CapabilityEdit) -> Result<()> {
     };
 
     let existing = text.contains("StripeClient:");
-    if existing {
+    // The billing-stripe blueprint's own registration already picks
+    // createStripeClient in managed mode; it needs no switching (and `infra
+    // remove` leaves it as it is).
+    let native = existing && text.contains("isManagedInstance()") && text.contains("createStripeClient(");
+    if native {
+        // Already managed-ready.
+    } else if existing {
         // billing-stripe / ecommerce-stripe: switch the factory, keep the key
         // for running outside managed mode, and make it optional.
         if switched_factory().is_match(&text) {
@@ -535,6 +541,28 @@ mod tests {
                 .unwrap()
                 .ends_with("tokens.STRIPE_WEBHOOK_SECRET);\n")
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_blueprints_managed_ready_registration_is_left_alone() {
+        let dir = std::env::temp_dir().join("fl-payments-cap-native");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("billing")).unwrap();
+        let native = BILLING.replace(
+            "factory: ({ STRIPE_API_KEY }) => new Stripe(STRIPE_API_KEY)",
+            "factory: ({ STRIPE_API_KEY }) => { if (isManagedInstance()) return createStripeClient({ Stripe }); return new Stripe(STRIPE_API_KEY!); }",
+        );
+        std::fs::write(dir.join("billing/registrations.ts"), &native).unwrap();
+        std::fs::write(dir.join("billing/server.ts"), "const app = f();\napp.use(a);\n").unwrap();
+        let mut edit = edit_for(&dir);
+        add(&mut edit).unwrap();
+        edit.commit().unwrap();
+        assert_eq!(std::fs::read_to_string(dir.join("billing/registrations.ts")).unwrap(), native);
+        let mut edit = edit_for(&dir);
+        remove(&mut edit).unwrap();
+        edit.commit().unwrap();
+        assert_eq!(std::fs::read_to_string(dir.join("billing/registrations.ts")).unwrap(), native);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
