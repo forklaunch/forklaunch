@@ -4,8 +4,8 @@ import { keySentences, passageIsAbout, queryConcepts } from '../services/relevan
 
 describe('clinicalTermsFor', () => {
   it('maps everyday terms, including run-together spellings', () => {
-    expect(clinicalTermsFor('heart attack')).toEqual(['myocardial infarction']);
-    expect(clinicalTermsFor('HEARTATTACK')).toEqual(['myocardial infarction']);
+    expect(clinicalTermsFor('heart attack')).toEqual(['myocardial infarction', 'acute coronary syndrome']);
+    expect(clinicalTermsFor('HEARTATTACK')).toEqual(['myocardial infarction', 'acute coronary syndrome']);
     expect(clinicalTermsFor('treatment of high blood pressure in pregnancy')).toEqual(['hypertension']);
     expect(clinicalTermsFor('bone marrow transplant')).toEqual(['hematopoietic stem cell transplantation']);
   });
