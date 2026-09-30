@@ -348,7 +348,7 @@ await whatsapp.sendText({ to: '+14155550123', body: 'Which day works?' }); // on
 - **Business-initiated messages must use a Meta-approved template.** An unknown, untranslated or unapproved template is 400.
 - **Free text is allowed only within 24 hours of the person's last message** to the business number. Outside that window it is 422; send a template instead.
 - **Per-instance rate limit:** 429, with `retryAfterSeconds`.
-- **No phone number linked** for the product or instance: 409. Linking a WhatsApp Business Account is a manual Meta embedded signup in the AWS console; the operator then records the phone number id in the product's WhatsApp settings.
+- **No phone number linked** for the product or instance: 409. Linking a WhatsApp Business Account is a manual Meta embedded signup in the AWS console; the operator then records the phone number id with `forklaunch managed template update --slug <slug> --whatsapp-number-id <phone-number-id-…>` (or `managed instance whatsapp --id <id> --number-id …` for one instance's own number).
 - **HIPAA products cannot send WhatsApp at all:** 403. WhatsApp is not covered by the AWS BAA, and Meta signs none.
 
 **Events** arrive at `api/platformEvents/whatsapp.ts`, already verified. Dedupe on `event.id`.
@@ -449,7 +449,10 @@ are on `localhost:18088` (`/__mock/requests?feature=voice`,
 
 Platform side (for operators): `CONNECT_INSTANCE_ID` enables voice (unset:
 503); each product's flow catalog and limits live in
-`voice_template_settings`; the number per instance in `voice_instance_line`
+`voice_template_settings` (set them with `forklaunch managed template update
+--voice-flow name=<contact-flow-id> --voice-max-concurrent N
+--voice-monthly-minutes N`; one instance's limits with `managed instance voice`);
+the number per instance in `voice_instance_line`
 (claimed by `claimNumberForInstance`, which provisioning does not call yet);
 Connect contact events reach `POST /vendor-webhooks/voice` through an
 EventBridge rule to the SNS topic `VOICE_SNS_TOPIC_ARN`.
@@ -525,6 +528,12 @@ protected data (`ssn`, `dob`, `diagnosis`, …) and SSN-shaped text (400),
 rate-limits per instance (429), sets `Stripe-Account` to the instance's own
 account whatever the app sent, and adds the product's application fee. The SDK
 raises its usual typed errors (`StripePermissionError`, …).
+
+The fee and the rate are settings: `forklaunch managed template update --slug
+<slug> --payments-fee-percent 2 --payments-fee-amount 30 --payments-rpm 120` for
+the product, `forklaunch managed instance payments-gateway --id <id>
+--fee-percent 1` for one instance. Unset, the platform's `PAYMENTS_APPLICATION_FEES`
+and `PAYMENTS_RPM` apply.
 
 ### Events
 
