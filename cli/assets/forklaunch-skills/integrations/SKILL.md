@@ -1,6 +1,6 @@
 ---
 name: integrations
-description: "Wire third-party services into a ForkLaunch app: GitHub (repo + autodeploy), Stripe (billing/ecommerce keys), and any other provider whose credentials are environment variables. There is no `forklaunch integrate <service>` — this skill is the real path."
+description: "Wire third-party services into a ForkLaunch app: GitHub (repo + autodeploy), Stripe (billing/ecommerce keys), voice calls for managed apps (forklaunch infra add <service> voice), and any other provider whose credentials are environment variables. There is no `forklaunch integrate <service>` — this skill is the real path."
 user-invokable: true
 ---
 
@@ -15,6 +15,8 @@ user-invokable: true
 - "Send email" from a managed instance — `forklaunch infra add <service> email`
   (below); no SMTP or SendGrid key
 - A deploy is blocked complaining about a missing environment variable
+- "Call patients to remind them" / outbound phone calls in a managed app
+  (see *Voice calls*)
 
 ## Read this first: there is no `integrate <service>` command
 
@@ -365,6 +367,92 @@ await whatsapp.sendText({ to: '+14155550123', body: 'Which day works?' }); // on
 | `whatsapp-protected-data` | critical when the service's entities hold `phi`, else high | A `.deanon` value, or a variable assigned from one, is passed to a WhatsApp send. Send a template that says only that something is waiting in the app. |
 
 **Other conversational channels.** The client is channel-neutral (`ConversationChannelClient`: `sendTemplate`, `sendText`, `templates`). Apple Messages for Business is not offered: it has no server API without Apple's approval and a messaging service provider.
+
+## Voice calls (managed instances)
+
+Outbound phone calls for a **managed** app (one the platform hosts per
+customer) go through the platform's Amazon Connect instance. The app holds no
+AWS key, no Connect instance id and no contact-flow ARN: it asks the platform
+to place a call with a **flow name** from its product's catalog, and the
+platform dials from the phone number claimed for that instance, inside the
+instance's limits. Amazon Connect is on AWS's list of HIPAA-eligible
+services, so it can be covered by the AWS BAA on the platform's account
+(confirm that agreement is in place before promising it to a health
+customer). Either way, **call attributes must never carry health
+information**: Connect stores them in its contact records.
+
+### 1. The code: one command
+
+```bash
+forklaunch infra add <service> voice      # --dryrun to preview
+forklaunch infra remove <service> voice
+```
+
+It writes:
+
+- `registrations.ts`: a `VoiceClient` built by `createVoiceClient()` from the
+  managed contract (`PLATFORM_GATEWAY_URL`, `INSTANCE_ID`,
+  `INSTANCE_HMAC_KEY`, all optional), no vendor keys;
+- `api/platformEvents/voice.ts`: a handler stub for call events, plus the
+  shared `/platform-events/:feature` route (signed deliveries, verified);
+- docker-compose: the `gateway-mock` service, which answers the voice routes
+  and delivers events back to this service; `.env.local` gateway settings;
+- the manifest: `resources.capabilities = ["voice"]`.
+
+### 2. Using it
+
+```ts
+const voice = ci.resolve(tokens.VoiceClient);
+const { callId } = await voice.startOutboundCall({
+  to: '+15551230000',              // E.164
+  flow: 'appointment_reminder',    // a catalog name, never an ARN
+  attributes: { appointmentId: appt.id }  // ids only: no .deanon values
+});
+await voice.call(callId);    // { status: initiated|in_progress|ended, startedAt, endedAt?, durationSeconds?, disconnectReason? }
+await voice.endCall(callId); // hang up (reason `api`)
+```
+
+Refusals arrive as `VoiceRequestError` with `status`: 400 (bad number, unknown
+flow, an ARN, bad or `fl_`-prefixed attributes), 403 (the product has no voice
+flows), 404 (not this instance's call), 409 (no number claimed yet, or the call
+already ended), 429 (too many calls at once or the month's minutes spent;
+`retryAfterSeconds`), 502/503 (Connect unavailable / not configured).
+
+### 3. Events
+
+Handled in `api/platformEvents/voice.ts`, in this order per call; deliveries
+can repeat, so dedupe on `event.id`:
+
+| type | data |
+|---|---|
+| `voice.call.started` | `{ callId, flow }` |
+| `voice.call.ended` | `{ callId, durationSeconds, disconnectReason }` (`customer`, `api`, `busy`, …) |
+| `voice.recording.ready` | `{ callId, recordingKey }`, a key in the instance's object store |
+
+### 4. Local development
+
+The gateway mock in docker-compose plays the platform: flows from
+`MOCK_VOICE_FLOWS` (default `appointment_reminder`), calls end by themselves
+after `MOCK_VOICE_CALL_MS` (200), `MOCK_VOICE_RECORD=1` adds a recording
+event, `MOCK_VOICE_MAX_CONCURRENT` (2) gives 429s, a number ending in `9999`
+is busy, and `MOCK_VOICE_NO_NUMBER=1` gives the 409. Its control endpoints
+are on `localhost:18088` (`/__mock/requests?feature=voice`,
+`/__mock/events?feature=voice`).
+
+### 5. Checks and fixes
+
+| check | severity | fix |
+|---|---|---|
+| `voice-provider-direct-in-managed` | high | a managed service imports `@aws-sdk/client-connect`, Vonage, or Twilio's voice API, or reads their ids/keys: run `infra add <service> voice` and use `createVoiceClient()`; drop the SDK and keys (Twilio keys are reported by `managed-provider-credentials`) |
+| `voice-protected-data` | high, critical when the service holds `phi` | a `.deanon` value reaches `startOutboundCall` attributes: pass an id and let the contact flow look up what it reads out |
+| `capability-wiring` | high | manifest and `registrations.ts` disagree about `VoiceClient`: rerun `infra add` / `infra remove` |
+
+Platform side (for operators): `CONNECT_INSTANCE_ID` enables voice (unset:
+503); each product's flow catalog and limits live in
+`voice_template_settings`; the number per instance in `voice_instance_line`
+(claimed by `claimNumberForInstance`, which provisioning does not call yet);
+Connect contact events reach `POST /vendor-webhooks/voice` through an
+EventBridge rule to the SNS topic `VOICE_SNS_TOPIC_ARN`.
 
 ## Everything else
 

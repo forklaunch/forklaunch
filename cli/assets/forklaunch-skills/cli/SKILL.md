@@ -519,6 +519,7 @@ forklaunch infra add <service> cache          # or: redis
 forklaunch infra add <service> email          # platform-held email (SES); see /integrations
 forklaunch infra add <service> sms            # texts via the platform; see /integrations
 forklaunch infra add <service> whatsapp       # WhatsApp through the platform (see /integrations)
+forklaunch infra add <service> voice          # managed apps: outbound calls via the platform (Amazon Connect)
 forklaunch infra remove <service> object-store
 forklaunch infra add <service> object-store --dryrun
 forklaunch score --offline                    # afterwards: the wiring checks should pass
@@ -526,6 +527,11 @@ forklaunch score --offline                    # afterwards: the wiring checks sh
 
 Run it from the app root (or pass `-p <app-root>`). It refuses a type the
 service already has, a type it lacks on remove, and projects that aren't services.
+
+`voice` is a platform-held capability: it registers `VoiceClient`
+(`createVoiceClient()`, keyless), writes `api/platformEvents/voice.ts` for call
+events, and adds the local `gateway-mock` to docker-compose. See
+`/integrations` (*Voice calls*).
 
 #### Change Service
 
