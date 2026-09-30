@@ -1,4 +1,6 @@
+import { FOLLOW_UP_QUESTIONS, suggestFollowUps } from '../domain/followUpQuestions';
 import { detectTopicType, isOverviewQuery, OVERVIEW_SECTIONS, sectionForQuestion } from '../domain/overviewSections';
+import { classifyQuery } from '../services/queryClassifier.service';
 import { followUpQuery } from '../services/followUp.service';
 import { clinicalTermsFor } from '../services/layTerms.service';
 import { keySentences, passageIsAbout, queryConcepts } from '../services/relevance.service';
@@ -132,5 +134,44 @@ describe('sectionForQuestion', () => {
     expect(sectionForQuestion(OVERVIEW_SECTIONS.condition, 'What are the warning signs?')?.key).toBe('presentation');
     expect(sectionForQuestion(OVERVIEW_SECTIONS.medication, 'What are the side effects?')?.key).toBe('adverse');
     expect(sectionForQuestion(OVERVIEW_SECTIONS.condition, 'Is it more common in women?')).toBeUndefined();
+  });
+});
+
+describe('suggestFollowUps', () => {
+  const passages = [
+    { title: 'Heart Attack', sectionPath: 'What are the symptoms of a heart attack?', text: 'The most common symptoms include chest discomfort and shortness of breath.' },
+    { title: 'Heart Attack', sectionPath: 'What is the treatment for a heart attack?', text: 'Treatments may include medicines and coronary angioplasty.' },
+    { title: 'Prevention', sectionPath: 'Summary', text: 'Lifestyle changes help prevent a heart attack.' }
+  ];
+
+  it('suggests two answerable questions, uncovered parts first', () => {
+    expect(
+      suggestFollowUps({ topicType: 'condition', topic: 'heart attack', passages, asked: ['heart attack'], coveredSections: ['treatment'] })
+    ).toEqual(['What are the warning signs of heart attack?', 'How can heart attack be prevented?']);
+  });
+
+  it('never suggests something the sources do not address', () => {
+    const suggestions = suggestFollowUps({ topicType: 'condition', topic: 'heart attack', passages, asked: [], coveredSections: [] });
+    expect(suggestions).not.toContain('How does heart attack differ in women?');
+    expect(suggestions).not.toContain('What are the complications of heart attack?');
+  });
+
+  it('does not repeat questions already asked', () => {
+    const suggestions = suggestFollowUps({
+      topicType: 'condition',
+      topic: 'heart attack',
+      passages,
+      asked: ['heart attack', 'What are the warning signs of heart attack?', 'How is it treated?'],
+      coveredSections: []
+    });
+    expect(suggestions).toEqual(['How can heart attack be prevented?']);
+  });
+
+  it('only suggests literature questions', () => {
+    for (const templates of Object.values(FOLLOW_UP_QUESTIONS)) {
+      for (const t of templates) {
+        expect(classifyQuery(t.template.replace('{topic}', 'propofol')).queryClass).toBe('literature_lookup');
+      }
+    }
   });
 });

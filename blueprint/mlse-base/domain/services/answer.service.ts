@@ -12,6 +12,7 @@ import {
   OVERVIEW_SECTIONS,
   sectionForQuestion,
   selectEvidence,
+  suggestFollowUps,
   DOSAGE_NO_CONTEXT_MESSAGE,
   DRAFT_ANSWER_NOTICE,
   EMERGENCY_MESSAGE,
@@ -172,7 +173,7 @@ export class AnswerService {
 
     yield { type: 'start', queryClass: classification.queryClass, kind: 'answer' };
 
-    const { items, evidenceFor, topic, notice, research, concepts, labelDosing } = await this.sectionsToAnswer(request, query);
+    const { items, evidenceFor, topic, notice, research, concepts, labelDosing, suggest } = await this.sectionsToAnswer(request, query);
     yield {
       type: 'plan',
       sections: [
@@ -204,6 +205,16 @@ export class AnswerService {
       }
     }
 
+    const suggestions = suggest
+      ? suggestFollowUps({
+          topicType: suggest.topicType,
+          topic: request.followUpOf ?? request.query,
+          passages: suggest.passages,
+          asked: [...(request.asked ?? []), request.query],
+          coveredSections: results.filter((r) => r.section.sentences.length >= 2).map((r) => r.section.key)
+        })
+      : [];
+
     const answer = await this.record({
       query,
       classification,
@@ -213,6 +224,7 @@ export class AnswerService {
       started,
       usedAi: true,
       request,
+      suggestions,
       ...(research ? { research } : {}),
       ...(request.topicSlug ? { topicSlug: request.topicSlug } : {})
     });
@@ -323,7 +335,8 @@ export class AnswerService {
         notice: page.notice,
         research: undefined,
         concepts: undefined,
-        labelDosing: false
+        labelDosing: false,
+        suggest: undefined
       };
     }
 
@@ -381,7 +394,10 @@ export class AnswerService {
       notice: undefined,
       research,
       concepts,
-      labelDosing: false
+      labelDosing: false,
+      suggest: request.followUpOf
+        ? { topicType: detectTopicType(request.followUpOf, about), passages: about }
+        : undefined
     };
   }
 
@@ -472,7 +488,8 @@ export class AnswerService {
       notice: undefined,
       research,
       concepts,
-      labelDosing: topicType === 'medication' && !onlySection
+      labelDosing: topicType === 'medication' && !onlySection,
+      suggest: { topicType, passages: aboutAll }
     };
   }
 
@@ -625,6 +642,7 @@ export class AnswerService {
     usedAi: boolean;
     request: AnswerRequestDto;
     research?: AnswerResearchDto;
+    suggestions?: string[];
     topicSlug?: string;
   }): Promise<AnswerResponseDto> {
     const sections = input.results.map((r) => r.section);
@@ -715,7 +733,8 @@ export class AnswerService {
       sections,
       sources: [...sources.values()],
       ...(models.length > 0 ? { model: models.join(', ') } : {}),
-      ...(input.research ? { research: input.research } : {})
+      ...(input.research ? { research: input.research } : {}),
+      ...(input.suggestions && input.suggestions.length > 0 ? { suggestions: input.suggestions } : {})
     };
   }
 }

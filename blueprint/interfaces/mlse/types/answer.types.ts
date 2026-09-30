@@ -20,6 +20,9 @@ export type AnswerRequestDto = {
   // a follow-up in a conversation: the topic it refers to ("heart attack"
   // for "how is it treated?"); follow-ups get one direct answer
   followUpOf?: string;
+  // questions already asked in the conversation, so suggestions do not
+  // repeat them
+  asked?: string[];
 };
 
 export type AnswerSentenceDto = {
@@ -86,6 +89,8 @@ export type AnswerResponseDto = {
   sources: CitablePassageDto[];
   model?: string;
   research?: AnswerResearchDto;
+  // up to two next questions the sources found can answer
+  suggestions?: string[];
 };
 
 export type AnswerStreamEventDto =
