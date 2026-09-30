@@ -136,10 +136,11 @@ beforeAll(async () => {
   await new IngestionService(orm.em.fork(), registry, embeddings, otel).ingest({ sourceKey: 'openfda', term: 'x', limit: 10 });
 }, 180_000);
 
+// stopping the database container can take a while on a busy machine
 afterAll(async () => {
   await orm?.close(true);
   await container?.stop();
-});
+}, 60_000);
 
 describe('answers on pgvector', () => {
   it('answers a literature question from cited passages and records it', async () => {
@@ -301,6 +302,25 @@ describe('answers on pgvector', () => {
     expect(dosing).toMatchObject({ key: 'label_dosing', status: 'answered' });
     expect(dosing.sentences.every((s) => s.quoted)).toBe(true);
     expect(llm.requests.every((r) => !r.prompt.toLowerCase().includes('dosing'))).toBe(true);
+  });
+
+  it('answers a follow-up directly, in the context of its topic', async () => {
+    const llm = new ScriptedLlmProvider([(r) => r.evidence.map((e) => `${e.text} [${e.id}]`).join(NEWLINE)]);
+    const { answers } = await answerService(llm);
+    const answer = await answers.answer({ query: 'what about bile leak?', followUpOf: 'laparoscopic cholecystectomy', live: false });
+
+    expect(answer.query).toBe('laparoscopic cholecystectomy: what about bile leak?');
+    expect(answer.sections).toHaveLength(1);
+    expect(answer.sections[0].sentences.map((s) => s.text).join(' ')).toContain('Bile leak');
+  });
+
+  it('keeps the safety rules for a follow-up about one patient', async () => {
+    const llm = new ScriptedLlmProvider([() => 'unused']);
+    const { answers } = await answerService(llm);
+    const answer = await answers.answer({ query: 'how much should I give my patient, he weighs 80 kg?', followUpOf: 'propofol', live: false });
+
+    expect(llm.requests).toHaveLength(0);
+    expect(answer).toMatchObject({ kind: 'boundary', queryClass: 'patient_specific_treatment' });
   });
 
   it('answers each question and phase of a topic page, skipping items without evidence', async () => {

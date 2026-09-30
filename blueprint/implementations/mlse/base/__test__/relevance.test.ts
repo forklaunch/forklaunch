@@ -1,4 +1,5 @@
-import { detectTopicType, isOverviewQuery, OVERVIEW_SECTIONS } from '../domain/overviewSections';
+import { detectTopicType, isOverviewQuery, OVERVIEW_SECTIONS, sectionForQuestion } from '../domain/overviewSections';
+import { followUpQuery } from '../services/followUp.service';
 import { clinicalTermsFor } from '../services/layTerms.service';
 import { keySentences, passageIsAbout, queryConcepts } from '../services/relevance.service';
 
@@ -112,5 +113,24 @@ describe('overview answers', () => {
       expect(sections.length).toBeGreaterThanOrEqual(4);
       expect(sections.every((s) => s.searchHints.length > 0)).toBe(true);
     }
+  });
+});
+
+describe('followUpQuery', () => {
+  it('adds the topic to a follow-up that does not name it', () => {
+    expect(followUpQuery('how is it treated?', 'heart attack')).toBe('heart attack: how is it treated?');
+  });
+
+  it('keeps a follow-up that already names the topic', () => {
+    expect(followUpQuery('Is heart attack more common in women?', 'heart attack')).toBe('Is heart attack more common in women?');
+  });
+});
+
+describe('sectionForQuestion', () => {
+  it('matches a follow-up to the overview section it asks about', () => {
+    expect(sectionForQuestion(OVERVIEW_SECTIONS.condition, 'How is it treated?')?.key).toBe('treatment');
+    expect(sectionForQuestion(OVERVIEW_SECTIONS.condition, 'What are the warning signs?')?.key).toBe('presentation');
+    expect(sectionForQuestion(OVERVIEW_SECTIONS.medication, 'What are the side effects?')?.key).toBe('adverse');
+    expect(sectionForQuestion(OVERVIEW_SECTIONS.condition, 'Is it more common in women?')).toBeUndefined();
   });
 });

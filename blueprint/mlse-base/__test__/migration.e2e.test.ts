@@ -42,10 +42,11 @@ beforeAll(async () => {
   await orm.migrator.up();
 }, 180_000);
 
+// stopping the database container can take a while on a busy machine
 afterAll(async () => {
   await orm?.close(true);
   await container?.stop();
-});
+}, 60_000);
 
 describe(`mlse migrations on ${PGVECTOR_IMAGE}`, () => {
   it('enables the pgvector extension', async () => {

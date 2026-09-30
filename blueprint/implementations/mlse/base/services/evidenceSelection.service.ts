@@ -20,8 +20,9 @@ export type SelectedEvidence<T extends EvidenceCandidate> = T & {
  *   matching section title alone ("Eligibility") is not enough.
  * - Its document must concern the topic (the topic's words appear in the
  *   title or the passage).
- * - Passages covering more hint words rank first; a hint in the section
- *   title and the search score break ties.
+ * - A passage whose own heading names the item ("What is the treatment
+ *   for a heart attack?" for Treatment) ranks first; then passages covering
+ *   more hint words; the search score breaks ties.
  * - At most one passage per document, so an item cites several sources
  *   instead of one source filling every slot.
  */
@@ -39,7 +40,7 @@ export function selectEvidence<T extends EvidenceCandidate>(
       const hintHits = [...hints].filter((h) => textWords.has(h)).length;
       const pathHit = queryTerms(candidate.sectionPath).some((w) => hints.has(w)) ? 1 : 0;
       const aboutTopic = queryTerms(`${candidate.title} ${candidate.text}`).some((w) => topicWords.has(w));
-      return { candidate, hintHits, rank: hintHits * 2 + pathHit + candidate.score, aboutTopic };
+      return { candidate, hintHits, rank: hintHits * 2 + pathHit * 4 + candidate.score, aboutTopic };
     })
     .filter((s) => s.aboutTopic && s.hintHits > 0)
     .sort((a, b) => b.rank - a.rank || a.candidate.passageId.localeCompare(b.candidate.passageId));

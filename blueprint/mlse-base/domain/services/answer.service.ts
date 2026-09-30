@@ -7,8 +7,10 @@ import {
   classifyQuery,
   clinicalTermsFor,
   detectTopicType,
+  followUpQuery,
   isOverviewQuery,
   OVERVIEW_SECTIONS,
+  sectionForQuestion,
   selectEvidence,
   DOSAGE_NO_CONTEXT_MESSAGE,
   DRAFT_ANSWER_NOTICE,
@@ -60,7 +62,9 @@ export type AnswerServiceOptions = {
   minSupport?: number;
 };
 
-type SectionItem = { key: string; label: string; number?: number; hints?: string[]; namesTopic?: boolean };
+// question: what the AI is asked, when it differs from the label (a
+// follow-up's own wording)
+type SectionItem = { key: string; label: string; number?: number; hints?: string[]; namesTopic?: boolean; question?: string };
 
 type SectionResult = {
   section: AnswerSectionDto;
@@ -133,8 +137,17 @@ export class AnswerService {
 
   async *stream(request: AnswerRequestDto): AsyncGenerator<AnswerStreamEventDto> {
     const started = Date.now();
-    const query = request.query.trim();
-    const classification = classifyQuery(query);
+    // A follow-up is answered in the context of its topic, and directly.
+    // The safety rules apply to the follow-up's own words as well: "how
+    // much should I give my patient?" after "cefazolin" is still about one
+    // patient.
+    const query = request.followUpOf ? followUpQuery(request.query, request.followUpOf) : request.query.trim();
+    if (request.followUpOf) {
+      request = { ...request, mode: 'direct' };
+    }
+    const own = request.followUpOf ? classifyQuery(request.query.trim()) : undefined;
+    const combined = classifyQuery(query);
+    const classification = own && own.queryClass !== 'literature_lookup' ? { ...own, subjectTerms: combined.subjectTerms } : combined;
 
     const fixed = await this.fixedResponse(classification, request);
     if (fixed) {
@@ -327,13 +340,25 @@ export class AnswerService {
       preferReviews: overview,
       ...(request.organizationId ? { organizationId: request.organizationId } : {})
     });
-    const concepts = queryConcepts(query, expandedTerms);
+    // relevance is judged against the topic, not the follow-up wording: the
+    // "Heart Attack" page answers "heart attack: how is it treated?"
+    const concepts = queryConcepts(request.followUpOf ?? query, expandedTerms);
     const about = results.filter(
       (r) => r.licenseScope !== 'metadata_only' && r.text.trim().length > 0 && passageIsAbout(r, concepts)
     );
 
     if (overview) {
       return this.overviewSections(query, clinical, expandedTerms, results, about, concepts, request);
+    }
+    // A follow-up that asks about one part of the topic ("how is it
+    // treated?") is answered like that overview section, with its own
+    // targeted search.
+    if (request.followUpOf) {
+      const topicType = detectTopicType(request.followUpOf, about);
+      const section = sectionForQuestion(OVERVIEW_SECTIONS[topicType], request.query);
+      if (section) {
+        return this.overviewSections(query, clinical, expandedTerms, results, about, concepts, request, section.key);
+      }
     }
     const perDocument = new Map<string, number>();
     const usable = about.filter((r) => {
@@ -369,11 +394,13 @@ export class AnswerService {
     results: SearchResultDto[],
     about: SearchResultDto[],
     concepts: QueryConcepts,
-    request: AnswerRequestDto
+    request: AnswerRequestDto,
+    // answer only this section (a follow-up question)
+    onlySection?: string
   ) {
-    const topicType = detectTopicType(query, about);
+    const topicType = detectTopicType(request.followUpOf ?? query, about);
     const topicTerms = [query, ...expandedTerms];
-    const sections = OVERVIEW_SECTIONS[topicType];
+    const sections = OVERVIEW_SECTIONS[topicType].filter((s) => !onlySection || s.key === onlySection);
     const isUsable = (r: SearchResultDto) =>
       r.licenseScope !== 'metadata_only' && r.text.trim().length > 0 && passageIsAbout(r, concepts);
 
@@ -384,7 +411,7 @@ export class AnswerService {
     for (const section of sections) {
       if (!section.focus || topicType === 'medication') continue;
       const { results: sectionResults } = await this.searchService.search({
-        query: `${clinical[0] ?? query} ${section.focus}`,
+        query: `${clinical[0] ?? request.followUpOf ?? query} ${section.focus}`,
         limit: FOCUSED_SEARCH_WIDTH,
         live: request.live ?? true,
         preferReviews: true,
@@ -433,13 +460,19 @@ export class AnswerService {
       topicType
     };
     return {
-      items: sections.map((s) => ({ key: s.key, label: s.label, hints: s.searchHints, ...(s.namesTopic ? { namesTopic: true } : {}) })) as SectionItem[],
+      items: sections.map((s) => ({
+        key: s.key,
+        label: s.label,
+        hints: s.searchHints,
+        ...(s.namesTopic ? { namesTopic: true } : {}),
+        ...(onlySection ? { question: request.query.trim() } : {})
+      })) as SectionItem[],
       evidenceFor: (item: SectionItem): CitablePassageDto[] => evidence.get(item.key) ?? [],
       topic: clinical.length > 0 ? `${query} (${clinical.join(', ')})` : query,
       notice: undefined,
       research,
       concepts,
-      labelDosing: topicType === 'medication'
+      labelDosing: topicType === 'medication' && !onlySection
     };
   }
 
@@ -465,7 +498,7 @@ export class AnswerService {
     const texts = new Map([...byShortId].map(([id, p]) => [id, p.text]));
     const evidence = [...byShortId].map(([id, p]) => ({ id, text: p.text, label: passageLabel(p) }));
     const prompt = sectionPrompt({
-      question: item.label,
+      question: item.question ?? item.label,
       ...(context.topic ? { topic: context.topic } : {}),
       query: context.query
     });
