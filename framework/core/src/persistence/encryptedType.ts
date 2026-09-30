@@ -28,6 +28,11 @@ export function registerEncryptor(encryptor: FieldEncryptor): void {
   _encryptor = encryptor;
 }
 
+/** The encryptor registered with {@link registerEncryptor}, if any. */
+export function getRegisteredEncryptor(): FieldEncryptor | undefined {
+  return _encryptor;
+}
+
 /**
  * The empty string was offered as a tenant id.
  *
@@ -160,7 +165,7 @@ export function getBoundTenantId(): string | undefined {
 }
 
 /** The bound tenant, or {@link UnboundTenantError} naming what was attempted. */
-function requireBoundTenantId(operation: string): string {
+export function requireBoundTenantId(operation: string): string {
   const tenantId = _tenantContext.getStore()?.tenantId;
   if (tenantId === undefined || tenantId === '') {
     throw new UnboundTenantError(operation);
@@ -359,52 +364,68 @@ export class EncryptedType extends Type<unknown, string | null> {
   // ---------------------------------------------------------------------------
 
   private serialize(value: unknown): string {
-    if (typeof value === 'string') return value;
-    if (value instanceof Date) return value.toISOString();
-    if (typeof value === 'bigint') return value.toString();
-    if (Buffer.isBuffer(value) || value instanceof Uint8Array)
-      return Buffer.from(value as Uint8Array).toString('base64');
-    return JSON.stringify(value);
+    return serializeForEncryption(value);
   }
 
   private deserialize(value: string): unknown {
-    if (this._isArray) {
-      try {
-        const arr = JSON.parse(value);
-        if (!Array.isArray(arr)) return arr;
-        return arr.map((el: unknown) =>
-          hydrateValue(el, this._elementRuntimeType)
-        );
-      } catch {
-        return value;
-      }
-    }
-
-    switch (this._elementRuntimeType) {
-      case 'string':
-        return value;
-      case 'any':
-        try {
-          return JSON.parse(value);
-        } catch {
-          return value;
-        }
-      // Types serialized via toString/toISOString/base64 — hydrate from string directly
-      case 'bigint':
-      case 'Date':
-      case 'Buffer':
-        return hydrateValue(value, this._elementRuntimeType);
-      // Types where JSON.parse recovers the native JS value (number, boolean)
-      default:
-        return hydrateValue(this.tryJsonParse(value), this._elementRuntimeType);
-    }
+    return deserializeFromEncryption(
+      value,
+      this._elementRuntimeType,
+      this._isArray
+    );
   }
+}
 
-  private tryJsonParse(value: string): unknown {
+// ---------------------------------------------------------------------------
+// Serialization shared with compliant fields
+// ---------------------------------------------------------------------------
+
+/** Turn any supported JS value into the string that gets encrypted. */
+export function serializeForEncryption(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === 'bigint') return value.toString();
+  if (Buffer.isBuffer(value) || value instanceof Uint8Array)
+    return Buffer.from(value as Uint8Array).toString('base64');
+  return JSON.stringify(value);
+}
+
+function tryJsonParse(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+/** Inverse of {@link serializeForEncryption}, given the property's runtime type. */
+export function deserializeFromEncryption(
+  value: string,
+  elementRuntimeType: string,
+  isArray: boolean
+): unknown {
+  if (isArray) {
     try {
-      return JSON.parse(value);
+      const arr = JSON.parse(value);
+      if (!Array.isArray(arr)) return arr;
+      return arr.map((el: unknown) => hydrateValue(el, elementRuntimeType));
     } catch {
       return value;
     }
+  }
+
+  switch (elementRuntimeType) {
+    case 'string':
+      return value;
+    case 'any':
+      return tryJsonParse(value);
+    // Types serialized via toString/toISOString/base64 — hydrate from string directly
+    case 'bigint':
+    case 'Date':
+    case 'Buffer':
+      return hydrateValue(value, elementRuntimeType);
+    // Types where JSON.parse recovers the native JS value (number, boolean)
+    default:
+      return hydrateValue(tryJsonParse(value), elementRuntimeType);
   }
 }

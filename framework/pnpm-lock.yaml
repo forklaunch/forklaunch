@@ -202,6 +202,9 @@ importers:
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.11.0)
+      '@mikro-orm/sqlite':
+        specifier: 7.2.1
+        version: 7.2.1(@mikro-orm/core@7.2.1)
       '@scalar/express-api-reference':
         specifier: ^0.10.23
         version: 0.10.23
@@ -231,7 +234,7 @@ importers:
         version: 12.1.0
       ts-jest:
         specifier: ^29.4.14
-        version: 29.4.14(@babel/core@7.29.7)(@jest/transform@30.5.2)(@jest/types@30.5.1)(babel-jest@30.5.2(@babel/core@7.29.7))(esbuild@0.28.2)(jest-util@30.5.1)(jest@30.5.2(@types/node@26.6.3)(ts-node@10.9.2(@types/node@26.6.3)(typescript@7.0.2)))(typescript@7.0.2)
+        version: 29.4.14(@babel/core@7.29.7)(@jest/transform@30.5.2)(@jest/types@30.5.1)(babel-jest@30.5.2(@babel/core@7.29.7))(esbuild@0.27.7)(jest-util@30.5.1)(jest@30.5.2(@types/node@26.6.3)(ts-node@10.9.2(@types/node@26.6.3)(typescript@7.0.2)))(typescript@7.0.2)
       ts-node:
         specifier: ^10.9.2
         version: 10.9.2(@types/node@26.6.3)(typescript@7.0.2)
@@ -244,6 +247,9 @@ importers:
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
+      typescript-5:
+        specifier: npm:typescript@^5.9.3
+        version: typescript@5.9.3
       typescript-eslint:
         specifier: ^8.71.0
         version: 8.71.0(eslint@10.11.0)(typescript@7.0.2)
@@ -1783,6 +1789,18 @@ packages:
 
   '@mikro-orm/mongodb@7.2.1':
     resolution: {integrity: sha512-xtLIlRDq8eCnlnihUW6LCuWEED7FIXHY81vRiBbgwqiGGElx0RVBAQVFFOrf+acxamtn2Bdm/5/O2DWKPi/ftQ==}
+    engines: {node: '>= 22.17.0'}
+    peerDependencies:
+      '@mikro-orm/core': 7.2.1
+
+  '@mikro-orm/sql@7.2.1':
+    resolution: {integrity: sha512-3M9dQeUDLlvAT5VJr/KBGAk9C7xez+psVCnvNkAO4hRhwx2Wm7N1HkuyP4Bwj0MjkHVB6LYvhTw/V6pYsVM8lA==}
+    engines: {node: '>= 22.17.0'}
+    peerDependencies:
+      '@mikro-orm/core': 7.2.1
+
+  '@mikro-orm/sqlite@7.2.1':
+    resolution: {integrity: sha512-+iAPGORAqLl+TcBF+JSLOfRq+PwTQG1NLts+AvN9D8C2czlbDpyjyeaAFSR+5wJlMEZ4wv2rdzt4jSS5T7x3XQ==}
     engines: {node: '>= 22.17.0'}
     peerDependencies:
       '@mikro-orm/core': 7.2.1
@@ -3440,6 +3458,10 @@ packages:
   bcrypt-pbkdf@1.0.2:
     resolution: {integrity: sha512-qeFIXtP4MSoi6NLqO12WfqARWWuCKi2Rn/9hJLEmtB5yTNr9DqFWkJRCf2qShWzPeAMRnOgCrq0sg/KLv5ES9w==}
 
+  better-sqlite3@13.0.3:
+    resolution: {integrity: sha512-RbOBxmLBG8uvFUc15X9+9SFemKcQ0WBuISBVkpuiaUB2qblC8UWlHEjdWVoZ8AdhSwmoEgsiXKfopX0CQxaACQ==}
+    engines: {node: '>=22'}
+
   binary-extensions@2.3.0:
     resolution: {integrity: sha512-Ceh+7ox5qe7LJuLHoY0feh3pHuUDHAcRUeyL2VYghZwfpkNIy/+8Ocg0a3UuSoYzavmylwuLWQOf3hl0jjMMIw==}
     engines: {node: '>=8'}
@@ -4891,6 +4913,10 @@ packages:
     resolution: {integrity: sha512-e7IpWJrnanNUroVK2taAgMxoEZvHLXdQiNjeExSu/DEIWm83jaKGBgb7tLmu2rMYpA027qFB3iLR/k3AVpFRnA==}
     engines: {node: '>= 18'}
 
+  kysely@0.29.6:
+    resolution: {integrity: sha512-hHaB8C/rfzDDtr/t8YZwxAuPJTT0zHyaPoVzcXwDYhYNAgH/4sIfVhi/XLLIY+bL/FqaIJnjATDbi8ObSELmxg==}
+    engines: {node: '>=22.0.0'}
+
   launch-editor@2.14.1:
     resolution: {integrity: sha512-QWBrQsMpH7gPr965dsKD/3cKWiNoTjpATQf++Xq63N6sKRGMwlVXz41O1IZTMfZQgBctD/K5Zt06+/I6pP6+HA==}
 
@@ -5234,6 +5260,10 @@ packages:
 
   node-addon-api@7.1.1:
     resolution: {integrity: sha512-5m3bsyrjFWE1xf7nz7YXdN4udnVtXK6/Yfgn5qnahL6bCkf2yKt4k3nuTKAtT4r3IG8JNR2ncsIMdZuAzJjHQQ==}
+
+  node-addon-api@8.9.2:
+    resolution: {integrity: sha512-VijLXbi3UACN69I0JVXJsX4tjACjNoQDgv2gTF6sx2wWEi8tkSg2eX8p5gSIFi8z2+DL3oHmY6OyKce38SDolg==}
+    engines: {node: ^18 || ^20 || >= 21}
 
   node-fetch@2.6.7:
     resolution: {integrity: sha512-ZjMPFEfVx5j+y2yF35Kzx5sF7kDzxuDj6ziH4FFbOp87zKDZNx8yExJIb05OGF4Nlt9IHFIMBkRl41VdvcNdbQ==}
@@ -6224,6 +6254,11 @@ packages:
     peerDependencies:
       eslint: ^8.57.0 || ^9.0.0 || ^10.0.0
       typescript: '>=4.8.4 <6.1.0'
+
+  typescript@5.9.3:
+    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
 
   typescript@7.0.2:
     resolution: {integrity: sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA==}
@@ -7664,6 +7699,18 @@ snapshots:
       - mongodb-client-encryption
       - snappy
       - socks
+
+  '@mikro-orm/sql@7.2.1(@mikro-orm/core@7.2.1)':
+    dependencies:
+      '@mikro-orm/core': 7.2.1
+      kysely: 0.29.6
+
+  '@mikro-orm/sqlite@7.2.1(@mikro-orm/core@7.2.1)':
+    dependencies:
+      '@mikro-orm/core': 7.2.1
+      '@mikro-orm/sql': 7.2.1(@mikro-orm/core@7.2.1)
+      better-sqlite3: 13.0.3
+      kysely: 0.29.6
 
   '@modelcontextprotocol/client@2.1.0':
     dependencies:
@@ -9320,6 +9367,10 @@ snapshots:
   bcrypt-pbkdf@1.0.2:
     dependencies:
       tweetnacl: 0.14.5
+
+  better-sqlite3@13.0.3:
+    dependencies:
+      node-addon-api: 8.9.2
 
   binary-extensions@2.3.0: {}
 
@@ -11137,6 +11188,8 @@ snapshots:
       type-is: 2.1.0
       vary: 1.1.2
 
+  kysely@0.29.6: {}
+
   launch-editor@2.14.1:
     dependencies:
       picocolors: 1.1.1
@@ -11422,6 +11475,8 @@ snapshots:
       lodash.topath: 4.5.2
 
   node-addon-api@7.1.1: {}
+
+  node-addon-api@8.9.2: {}
 
   node-fetch@2.6.7:
     dependencies:
@@ -12407,6 +12462,27 @@ snapshots:
 
   ts-interface-checker@0.1.13: {}
 
+  ts-jest@29.4.14(@babel/core@7.29.7)(@jest/transform@30.5.2)(@jest/types@30.5.1)(babel-jest@30.5.2(@babel/core@7.29.7))(esbuild@0.27.7)(jest-util@30.5.1)(jest@30.5.2(@types/node@26.6.3)(ts-node@10.9.2(@types/node@26.6.3)(typescript@7.0.2)))(typescript@7.0.2):
+    dependencies:
+      bs-logger: 0.2.6
+      fast-json-stable-stringify: 2.1.0
+      handlebars: 4.7.9
+      jest: 30.5.2(@types/node@26.6.3)(ts-node@10.9.2(@types/node@26.6.3)(typescript@7.0.2))
+      json5: 2.2.3
+      lodash.memoize: 4.1.2
+      make-error: 1.3.6
+      semver: 7.8.5
+      type-fest: 4.41.0
+      typescript: 7.0.2
+      yargs-parser: 21.1.1
+    optionalDependencies:
+      '@babel/core': 7.29.7
+      '@jest/transform': 30.5.2
+      '@jest/types': 30.5.1
+      babel-jest: 30.5.2(@babel/core@7.29.7)
+      esbuild: 0.27.7
+      jest-util: 30.5.1
+
   ts-jest@29.4.14(@babel/core@7.29.7)(@jest/transform@30.5.2)(@jest/types@30.5.1)(babel-jest@30.5.2(@babel/core@7.29.7))(esbuild@0.28.2)(jest-util@30.5.1)(jest@30.5.2(@types/node@26.6.3)(ts-node@10.9.2(@types/node@26.6.3)(typescript@7.0.2)))(typescript@7.0.2):
     dependencies:
       bs-logger: 0.2.6
@@ -12579,6 +12655,8 @@ snapshots:
       typescript: 7.0.2
     transitivePeerDependencies:
       - supports-color
+
+  typescript@5.9.3: {}
 
   typescript@7.0.2:
     optionalDependencies:

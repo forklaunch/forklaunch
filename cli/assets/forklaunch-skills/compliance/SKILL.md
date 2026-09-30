@@ -98,7 +98,60 @@ Do not write `fp.number()` unless the generated persistence package actually exp
 - `defineEntity` — No compliance validation. Only for framework internals or third-party entities. Do not import `defineEntity` from `@forklaunch/core/persistence` in Studio-generated services; recent generated persistence packages do not export it there.
 - For catalog/reference data with no sensitive fields, still use `defineComplianceEntity` and classify scalar fields as `"none"`.
 
-The return type of `defineComplianceEntity` is identical to `defineEntity` — the `ClassifiedProperty` wrapper is stripped at the type level. MikroORM sees the same entity structure.
+The return type of `defineComplianceEntity` matches `defineEntity`, except that every `pii`, `phi` and `pci` property is typed `CompliantField<T, level>` (see below).
+
+## Compliant Fields (pii / phi / pci)
+
+A `pii`, `phi` or `pci` property is **not its value**. It loads as a `CompliantField`, and the only ways to the value are:
+
+| Read | Returns | Use it for |
+| --- | --- | --- |
+| `user.email.deanon` | the plaintext (`string`, `Date`, …) | business logic, your own API responses, BAA-covered providers. Every read is reported to `onComplianceAccess` listeners |
+| `user.email.anon` | an `Anon` (`.value` is a de-identified string) | logs, analytics, non-BAA providers, anything that must not carry protected data |
+
+There are no `toString` / `toJSON` / inspect overloads: `` `${user.email}` `` prints `[object Object]` and `JSON.stringify(user)` prints `"email":{}`. Always write `.deanon` or `.anon` explicitly.
+
+```typescript
+const User = defineComplianceEntity({
+  name: 'User',
+  properties: {
+    id: fp.uuid().primary().compliance('none'),
+    // queryable: allows where / $in / $ne / $nin via a blind index (email_idx)
+    email: fp.string().unique().compliance('pii', { queryable: true, normalize: 'lowercase' }),
+    name: fp.string().compliance('pii'),                  // anon: random token
+    dob: fp.datetime().compliance('phi'),                 // anon: year
+    zip: fp.string().compliance('pii', { anon: 'zip3' }), // anon: 3-digit ZIP (000 if sparse)
+  },
+});
+
+// Writing takes plain values: em.create and em.assign wrap them.
+const user = em.create(User, { id, email: 'Ada@Example.com', name: 'Ada', dob, zip: '94110' });
+em.assign(user, { name: 'Ada Lovelace' });
+
+// Reading is explicit.
+const dto = { email: user.email.deanon, name: user.name.deanon };
+logger.info('signed up', { user: user.name.anon.value }); // tok_...
+
+// Querying takes plain values, for queryable fields only (equality only).
+await em.findOne(User, { email: 'ada@example.com' });
+await em.find(User, { email: { $in: emails } });
+```
+
+Rules:
+
+- **Read with `.deanon` / `.anon`**, never the bare property. A bare property in a string, comparison or DTO is a type error.
+- **Write with plain values through `em.create` / `em.assign`.** Direct assignment (`user.name = 'x'`) works at runtime but is a type error; use `em.assign`.
+- **`where` needs `{ queryable: true }`** on the property. It adds a `<column>_idx` column (keyed HMAC, per tenant); only `$eq`, `$ne`, `$in`, `$nin` work. `$like`, ranges and sorting on protected fields are refused: they would need the plaintext. `.unique()` on a queryable field applies to the index.
+- **`anon` strategies**: `token` (default for strings; random, stored with the value), `year` (default for dates), `zip3`, `last4`, `redact` (default for numbers, json, enums, arrays).
+- **Decryption is lazy**: loading an entity never decrypts. `.deanon` decrypts on first read, under the bound tenant (`withEncryptionContext` / `wrapEmWithTenantContext`).
+- **No encryptor, no write**: writing a compliant field without `registerEncryptor()` throws; values are never stored in plaintext.
+- **Better Auth**: `@forklaunch/better-auth-mikro-orm-fork` >= 0.5.10 hands Better Auth `.deanon` values; older adapters return `{}` for `pci` account columns and break sign-in.
+
+### Upgrading an existing app
+
+1. `npx -y -p typescript@5 -p @forklaunch/core forklaunch-migrate-compliant-fields` rewrites bare reads to `.deanon` and lists `where` clauses on fields that need `{ queryable: true }`.
+2. Add `{ queryable: true }` where listed, then generate a migration (it adds `<column>_idx` columns and moves unique constraints onto them).
+3. Deploy, then run `reencryptEncryptedColumns()` once: it seals existing values into the `v4` envelope (random IV, anon token) and writes the blind indexes. Until then legacy rows still read with `.deanon`, but token `.anon` throws `LegacyCiphertextError` and `where` lookups miss them.
 
 ## Route Access Levels
 
@@ -140,13 +193,14 @@ The `access` field is type-narrowed: setting `access: 'public'` makes `auth` opt
 
 ## Field Encryption
 
-PII/PHI/PCI fields may be automatically encrypted/decrypted by
-`ComplianceEventSubscriber` or `EncryptedType` depending on the entity/module:
+PII/PHI/PCI fields are compliant fields (above); encryption happens in their
+column type on flush:
 
-- **Algorithm**: AES-256-GCM
-- **Key derivation**: HKDF-SHA256 with per-tenant salt
-- **Format**: `v1:base64(iv):base64(authTag):base64(ciphertext)`
-- **Triggered automatically** on persist/load — no manual encryption needed
+- **Algorithm**: AES-256-GCM, a fresh random IV per write
+- **Key derivation**: HKDF-SHA256, per tenant, from `ENCRYPTION_KEY`
+- **Format**: `v4:{keyId}:{anon}:{iv}:{tag}:{ciphertext}` (legacy `v1`–`v3` still read)
+- **Lookups**: a separate blind index, `bi1:{keyId}:{hmac}`, in `<column>_idx` for queryable fields
+- **Triggered automatically** on flush — no manual encryption needed; decryption happens on `.deanon`
 - **Blocks `nativeInsert`** to prevent bypassing encryption
 
 Configuration:
