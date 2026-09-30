@@ -10,6 +10,7 @@ export * from './emailClient';
 export * from './smsClient';
 export * from './whatsappClient';
 export * from './voiceClient';
+export * from './paymentsClient';
 export * from './discriminateAuthMethod';
 export * from './guards/isForklaunchRequest';
 export * from './guards/isForklaunchRouter';

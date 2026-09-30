@@ -21,9 +21,15 @@
  *
  * A handler gets `ctx` = { req, res, body, raw, path, params, instanceId, env,
  * send(status, body, headers), stream(chunks, headers), emit(type, data),
- * state } and answers through `send`/`stream`. `state` is a per-feature object
+ * state, record } and answers through `send`/`stream`. `record` is this
+ * call's entry in /__mock/requests; a handler may annotate it (e.g. with what
+ * it forwarded upstream). `state` is a per-feature object
  * that survives between requests until a reset. `path` may be a string or a
  * RegExp; a RegExp's named groups arrive in `params`.
+ *
+ * Signatures cover the router-relative path plus its query string, and the
+ * body: JSON as parsed, a form-encoded body (the Stripe SDK's) verbatim — in
+ * which case `body` is {} and the handler reads `raw`.
  *
  * Events: `ctx.emit(type, data)` — or POST /__mock/events/<feature> with
  * { type, data } — delivers a signed platform event to the app at
@@ -93,7 +99,7 @@ export async function startGatewayMock(env = process.env) {
   let requests = [];
   let events = [];
 
-  function verifyHmac(req, raw, routerPath) {
+  function verifyHmac(req, raw, routerPath, verbatim = false) {
     if (!hmacKey) return { ok: true, instanceId: 'local-instance' };
     const header = req.headers.authorization ?? '';
     const m = /^HMAC keyId=(\S+) ts=(\S+) nonce=(\S+) signature=(\S+)$/.exec(
@@ -110,7 +116,9 @@ export async function startGatewayMock(env = process.env) {
     }
     // createHmacToken: an absent body contributes the string "undefined",
     // a present one its JSON text plus a newline.
-    const bodyPart = raw ? `${JSON.stringify(JSON.parse(raw))}\n` : 'undefined';
+    const bodyPart = raw
+      ? `${verbatim ? raw : JSON.stringify(JSON.parse(raw))}\n`
+      : 'undefined';
     const expected = Buffer.from(
       sign(hmacKey, req.method, routerPath, bodyPart, timestamp.toISOString(), nonce)
     );
@@ -246,26 +254,30 @@ export async function startGatewayMock(env = process.env) {
         });
 
         if (path.startsWith(`${GATEWAY_MOUNT}/`)) {
-          if (!parsed) return reply(400, 'Body is not JSON');
+          const form = /x-www-form-urlencoded/.test(req.headers['content-type'] ?? '');
+          if (!parsed && !form) return reply(400, 'Body is not JSON');
+          if (form) body = {};
           const routerPath = path.slice(GATEWAY_MOUNT.length);
-          const verified = verifyHmac(req, raw, routerPath);
+          const verified = verifyHmac(req, raw, routerPath + url.search, form);
           if (!verified.ok) return reply(401, verified.message);
           for (const feature of features) {
             for (const route of feature.routes ?? []) {
               if (route.method !== req.method) continue;
               const params = matchPath(route.path, routerPath);
               if (!params) continue;
-              requests.push({
+              const record = {
                 feature: feature.feature,
                 method: req.method,
                 path: routerPath,
                 instanceId: verified.instanceId,
-                body: raw ? body : undefined,
+                body: raw ? (form ? raw : body) : undefined,
                 at: new Date().toISOString()
+              };
+              requests.push(record);
+              return await route.handler({
+                ...ctxBase(feature.feature, params, verified.instanceId),
+                record
               });
-              return await route.handler(
-                ctxBase(feature.feature, params, verified.instanceId)
-              );
             }
           }
           return reply(404, 'No such gateway route');
