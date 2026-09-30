@@ -1,4 +1,4 @@
-import { MikroORM, wrap } from '@mikro-orm/sqlite';
+import { MikroORM, wrap } from '@mikro-orm/libsql';
 import { inspect } from 'node:util';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {

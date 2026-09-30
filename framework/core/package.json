@@ -128,7 +128,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@mikro-orm/sqlite": "7.2.1",
+    "@mikro-orm/libsql": "7.2.1",
     "@scalar/express-api-reference": "^0.10.23",
     "@types/cors": "^2.8.19",
     "@types/jest": "^30.0.0",
