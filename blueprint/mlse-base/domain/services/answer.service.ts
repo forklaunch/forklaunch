@@ -424,14 +424,32 @@ export class AnswerService {
     // after another because NCBI limits requests per second.
     const found = new Map(results.map((r) => [r.passageId, r]));
     const focused = new Map<string, SearchResultDto[]>();
+    const searchesSections = topicType !== 'medication' && sections.some((s) => s.focus);
+    // MedlinePlus is a topic index: "myocardial infarction treatment
+    // management" finds Cholesterol, "heart attack" finds Heart Attack. Its
+    // pages are asked for once, by the topic alone, and offered to every
+    // section; a page section headed with the question ("What is the
+    // treatment for a heart attack?") then ranks first.
+    let reference: SearchResultDto[] = [];
+    if (searchesSections) {
+      const { results: referenceResults } = await this.searchService.search({
+        query: request.followUpOf ?? query,
+        limit: FOCUSED_SEARCH_WIDTH,
+        live: request.live ?? true,
+        sourceKeys: ['medlineplus'],
+        ...(request.organizationId ? { organizationId: request.organizationId } : {})
+      });
+      for (const r of referenceResults) found.set(r.passageId, r);
+      reference = referenceResults.filter(isUsable);
+    }
     for (const section of sections) {
-      if (!section.focus || topicType === 'medication') continue;
+      if (!section.focus || !searchesSections) continue;
       const { results: sectionResults } = await this.searchService.search({
         query: `${clinical[0] ?? request.followUpOf ?? query} ${section.focus}`,
         limit: FOCUSED_SEARCH_WIDTH,
         live: request.live ?? true,
         preferReviews: true,
-        sourceKeys: ['medlineplus', 'pubmed', 'pmc_oa'],
+        sourceKeys: ['pubmed', 'pmc_oa'],
         ...(request.organizationId ? { organizationId: request.organizationId } : {})
       });
       for (const r of sectionResults) found.set(r.passageId, r);
@@ -440,7 +458,7 @@ export class AnswerService {
     const aboutAll = [...found.values()].filter(isUsable);
 
     const candidatesFor = (key: string) =>
-      [...new Map([...(focused.get(key) ?? []), ...about].map((r) => [r.passageId, r])).values()].map((r) => ({
+      [...new Map([...reference, ...(focused.get(key) ?? []), ...about].map((r) => [r.passageId, r])).values()].map((r) => ({
         ...r,
         documentKey: `${r.sourceKey}:${r.externalId}`
       }));
