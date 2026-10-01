@@ -5,6 +5,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use serde_json::{Map, Value, json};
 use termcolor::{ColorChoice, StandardStream, WriteColor};
 
+use super::feature_settings;
 use crate::{
     CliCommand,
     core::command::command,
@@ -39,6 +40,9 @@ pub(super) struct TemplateUpdate<'a> {
     pub(super) source_repo: Option<&'a String>,
     /// The model gateway setting, replaced as a whole (see `model_gateway_body`).
     pub(super) model_gateway: Option<Value>,
+    /// The SMS / WhatsApp / voice / email / payments settings the flags produced,
+    /// each replaced as a whole (see `feature_settings::bodies`).
+    pub(super) feature_settings: Vec<(&'static str, Value)>,
     pub(super) dryrun: bool,
     pub(super) json: bool,
 }
@@ -54,7 +58,7 @@ impl UpdateCommand {
 
 impl CliCommand for UpdateCommand {
     fn command(&self) -> Command {
-        command(
+        let base = command(
             "update",
             "Change a template's name, description, status, Stripe product, placement, or domains",
         )
@@ -87,7 +91,20 @@ impl CliCommand for UpdateCommand {
              \x20                          is allowed; --no-supports-key-rotation withdraws it.\n\
              \x20 --source-repo            the repository versions are built from. Re-point it\n\
              \x20                          when the code moves (e.g. to the customer's account);\n\
-             \x20                          the org's GitHub App installation must read it.",
+             \x20                          the org's GitHub App installation must read it.\n\n\
+             Platform-held features, for every instance of the product (read on each call,\n\
+             so a change applies at once). Each feature's setting is REPLACED AS A WHOLE:\n\
+             pass every field you want it to keep. One instance can differ (`managed\n\
+             instance model-gateway | sms-gateway | whatsapp | voice | email-gateway |\n\
+             payments-gateway`); `managed template gateway-settings` shows what is set.\n\
+             \x20 --gateway-*    model gateway: models, monthly tokens, requests/minute\n\
+             \x20 --sms-*        pool, monthly segments, texts/minute, promotional, off\n\
+             \x20 --whatsapp-*   linked phone number id, sends/minute, off\n\
+             \x20 --voice-*      flow catalog (name=contact-flow-id), concurrent calls, minutes\n\
+             \x20 --email-*      recipients/day, messages/minute\n\
+             \x20 --payments-*   application fee (percent and/or amount), Stripe calls/minute\n\
+             --clear-sms, --unlink-whatsapp, --disable-voice, --clear-email and\n\
+             --clear-payments return a feature to the platform defaults.",
         )
         .arg(
             Arg::new("slug")
@@ -192,19 +209,20 @@ impl CliCommand for UpdateCommand {
                 .help("Turn the model gateway off for this product")
                 .action(ArgAction::SetTrue)
                 .conflicts_with_all(["gateway_models", "gateway_monthly_tokens", "gateway_rpm"]),
-        )
-        .arg(
-            Arg::new("dryrun")
-                .long("dryrun")
-                .help("Print the request that would be sent without sending it")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("json")
-                .long("json")
-                .help("Output raw JSON instead of formatted terminal output")
-                .action(ArgAction::SetTrue),
-        )
+        );
+        feature_settings::add_args(base)
+            .arg(
+                Arg::new("dryrun")
+                    .long("dryrun")
+                    .help("Print the request that would be sent without sending it")
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new("json")
+                    .long("json")
+                    .help("Output raw JSON instead of formatted terminal output")
+                    .action(ArgAction::SetTrue),
+            )
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
@@ -213,7 +231,8 @@ impl CliCommand for UpdateCommand {
             .context("--slug is required")?;
 
         if let Some(repo) = matches.get_one::<String>("source_repo") {
-            if !repo.starts_with("https://") || repo.trim_end_matches('/').matches('/').count() != 4 {
+            if !repo.starts_with("https://") || repo.trim_end_matches('/').matches('/').count() != 4
+            {
                 bail!(
                     "--source-repo '{}' must be an https repository URL such as https://github.com/org/repo",
                     repo
@@ -246,6 +265,8 @@ impl CliCommand for UpdateCommand {
             matches.get_flag("disable_model_gateway"),
         )?;
 
+        let feature_settings = feature_settings::bodies(matches)?;
+
         update_template(
             slug,
             TemplateUpdate {
@@ -262,6 +283,7 @@ impl CliCommand for UpdateCommand {
                 supports_key_rotation,
                 source_repo: matches.get_one::<String>("source_repo"),
                 model_gateway,
+                feature_settings,
                 dryrun: matches.get_flag("dryrun"),
                 json: matches.get_flag("json"),
             },
@@ -357,6 +379,9 @@ pub(super) fn update_template(slug: &str, update: TemplateUpdate<'_>) -> Result<
     if let Some(model_gateway) = update.model_gateway.clone() {
         body.insert("modelGateway".to_string(), model_gateway);
     }
+    for (key, value) in &update.feature_settings {
+        body.insert((*key).to_string(), value.clone());
+    }
 
     // An empty PATCH is accepted by the control plane and changes nothing, so it would
     // report success while having done nothing at all. Refuse instead — someone who
@@ -367,7 +392,8 @@ pub(super) fn update_template(slug: &str, update: TemplateUpdate<'_>) -> Result<
             "nothing to update — pass at least one of --name, --description, --status, \
              --stripe-product, --cluster-type, --base-domain, --frontend-domain, \
              --default-instance-size, --supports-key-rotation, --source-repo, or the \
-             --gateway-* flags (to publish a template, `forklaunch managed template \
+             --gateway-* / --sms-* / --whatsapp-* / --voice-* / --email-* / --payments-* \
+             flags (to publish a template, `forklaunch managed template \
              publish-template --slug {}` is the shorthand)",
             slug
         );

@@ -10,6 +10,7 @@ mod claim_link;
 mod create;
 mod deployments;
 mod destroy;
+mod feature_override;
 mod get;
 mod list;
 mod model_gateway;
@@ -27,6 +28,7 @@ use claim_link::ClaimLinkCommand;
 use create::CreateCommand;
 use deployments::DeploymentsCommand;
 use destroy::DestroyCommand;
+use feature_override::{Feature, FeatureOverrideCommand, GatewaySettingsCommand};
 use get::GetCommand;
 use list::ListCommand;
 use model_gateway::ModelGatewayCommand;
@@ -55,6 +57,12 @@ pub(super) struct InstanceCommand {
     rotate_keys: RotateKeysCommand,
     model_usage: ModelUsageCommand,
     model_gateway: ModelGatewayCommand,
+    sms_gateway: FeatureOverrideCommand,
+    email_gateway: FeatureOverrideCommand,
+    payments_gateway: FeatureOverrideCommand,
+    voice: FeatureOverrideCommand,
+    whatsapp: FeatureOverrideCommand,
+    gateway_settings: GatewaySettingsCommand,
 }
 
 impl InstanceCommand {
@@ -76,6 +84,12 @@ impl InstanceCommand {
             rotate_keys: RotateKeysCommand::new(),
             model_usage: ModelUsageCommand::new(),
             model_gateway: ModelGatewayCommand::new(),
+            sms_gateway: FeatureOverrideCommand::new(Feature::Sms),
+            email_gateway: FeatureOverrideCommand::new(Feature::Email),
+            payments_gateway: FeatureOverrideCommand::new(Feature::Payments),
+            voice: FeatureOverrideCommand::new(Feature::Voice),
+            whatsapp: FeatureOverrideCommand::new(Feature::WhatsApp),
+            gateway_settings: GatewaySettingsCommand::new(),
         }
     }
 }
@@ -112,7 +126,16 @@ impl CliCommand for InstanceCommand {
              \x20 `rotate-keys`      new generation of the instance's secrets; the app re-encrypts (admin)\n\n\
              MODEL GATEWAY (platform-hosted AI models, no provider key in the instance):\n\
              \x20 `model-usage`      a month of calls, tokens and cost per model\n\
-             \x20 `model-gateway`    override the product's models / budget / rate for one instance",
+             \x20 `model-gateway`    override the product's models / budget / rate for one instance\n\n\
+             OTHER PLATFORM-HELD FEATURES (the product's settings are `template update`\n\
+             --sms-* / --whatsapp-* / --voice-* / --email-* / --payments-*; these override\n\
+             them for ONE instance, and --clear removes the override):\n\
+             \x20 `sms-gateway`       monthly segment cap, texts per minute, a dedicated number\n\
+             \x20 `whatsapp`          this instance's own WhatsApp number, its rate, or off\n\
+             \x20 `voice`             concurrent calls, monthly minutes\n\
+             \x20 `email-gateway`     recipients per day, messages per minute\n\
+             \x20 `payments-gateway`  application fee, Stripe calls per minute\n\
+             \x20 `gateway-settings`  what is in force for each, and which is overridden",
         )
         .subcommand(self.list.command())
         .subcommand(self.create.command())
@@ -130,6 +153,12 @@ impl CliCommand for InstanceCommand {
         .subcommand(self.rotate_keys.command())
         .subcommand(self.model_usage.command())
         .subcommand(self.model_gateway.command())
+        .subcommand(self.sms_gateway.command())
+        .subcommand(self.email_gateway.command())
+        .subcommand(self.payments_gateway.command())
+        .subcommand(self.voice.command())
+        .subcommand(self.whatsapp.command())
+        .subcommand(self.gateway_settings.command())
         .subcommand_required(true)
     }
 
@@ -151,6 +180,12 @@ impl CliCommand for InstanceCommand {
             Some(("rotate-keys", sub_matches)) => self.rotate_keys.handler(sub_matches),
             Some(("model-usage", sub_matches)) => self.model_usage.handler(sub_matches),
             Some(("model-gateway", sub_matches)) => self.model_gateway.handler(sub_matches),
+            Some(("sms-gateway", sub_matches)) => self.sms_gateway.handler(sub_matches),
+            Some(("email-gateway", sub_matches)) => self.email_gateway.handler(sub_matches),
+            Some(("payments-gateway", sub_matches)) => self.payments_gateway.handler(sub_matches),
+            Some(("voice", sub_matches)) => self.voice.handler(sub_matches),
+            Some(("whatsapp", sub_matches)) => self.whatsapp.handler(sub_matches),
+            Some(("gateway-settings", sub_matches)) => self.gateway_settings.handler(sub_matches),
             _ => unreachable!(),
         }
     }

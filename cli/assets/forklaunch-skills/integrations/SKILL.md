@@ -222,6 +222,9 @@ subject, `text` or `html`, 512 KB, up to 10 tags) and throws
 `EmailRequestError` with the gateway's status: 400 bad input, 401 wrong key,
 422 a suppressed recipient, 429 quota/rate (with `retryAfterSeconds`), 503
 email not configured on the platform or the sending identity still verifying.
+For a product whose manifest declares email, the platform creates the
+instance's sending identity while the instance launches, so DKIM usually
+verifies before the first send; the 503 remains possible right after launch.
 
 ### 3. Events
 
@@ -348,7 +351,7 @@ await whatsapp.sendText({ to: '+14155550123', body: 'Which day works?' }); // on
 - **Business-initiated messages must use a Meta-approved template.** An unknown, untranslated or unapproved template is 400.
 - **Free text is allowed only within 24 hours of the person's last message** to the business number. Outside that window it is 422; send a template instead.
 - **Per-instance rate limit:** 429, with `retryAfterSeconds`.
-- **No phone number linked** for the product or instance: 409. Linking a WhatsApp Business Account is a manual Meta embedded signup in the AWS console; the operator then records the phone number id in the product's WhatsApp settings.
+- **No phone number linked** for the product or instance: 409. Linking a WhatsApp Business Account is a manual Meta embedded signup in the AWS console; the operator then records the phone number id with `forklaunch managed template update --slug <slug> --whatsapp-number-id <phone-number-id-…>` (or `managed instance whatsapp --id <id> --number-id …` for one instance's own number).
 - **HIPAA products cannot send WhatsApp at all:** 403. WhatsApp is not covered by the AWS BAA, and Meta signs none.
 
 **Events** arrive at `api/platformEvents/whatsapp.ts`, already verified. Dedupe on `event.id`.
@@ -427,7 +430,7 @@ can repeat, so dedupe on `event.id`:
 |---|---|
 | `voice.call.started` | `{ callId, flow }` |
 | `voice.call.ended` | `{ callId, durationSeconds, disconnectReason }` (`customer`, `api`, `busy`, …) |
-| `voice.recording.ready` | `{ callId, recordingKey }`, a key in the instance's object store |
+| `voice.recording.ready` | `{ callId, recordingKey }`, a key in the instance's object store (`voice/recordings/<callId>.wav`); sent only when the product declares an `object_store` resource, since the recording is copied into that bucket |
 
 ### 4. Local development
 
@@ -449,10 +452,22 @@ are on `localhost:18088` (`/__mock/requests?feature=voice`,
 
 Platform side (for operators): `CONNECT_INSTANCE_ID` enables voice (unset:
 503); each product's flow catalog and limits live in
-`voice_template_settings`; the number per instance in `voice_instance_line`
-(claimed by `claimNumberForInstance`, which provisioning does not call yet);
+`voice_template_settings` (set them with `forklaunch managed template update
+--voice-flow name=<contact-flow-id> --voice-max-concurrent N
+--voice-monthly-minutes N`; one instance's limits with `managed instance voice`);
+the number per instance in `voice_instance_line`
+(claimed when an instance of a product with voice flows is provisioned,
+reset or updated, released when it is destroyed; a failed claim does not fail
+the launch, it is recorded in the instance's `capability_status` and retried
+on the next run, and calls answer 409 until then); recordings are copied from
+the Connect bucket into the instance's first `object_store` bucket (an
+instance without one, or an adopted one, gets no `voice.recording.ready`);
 Connect contact events reach `POST /vendor-webhooks/voice` through an
-EventBridge rule to the SNS topic `VOICE_SNS_TOPIC_ARN`.
+EventBridge rule to the SNS topic `VOICE_SNS_TOPIC_ARN`. That topic, the rule,
+and every other managed feature's topics and IAM grants are created by
+`src/modules/managed-apps/scripts/managed-integrations/setup.ts` (dry run by
+default, `--apply` to write, never deletes); the order of operations and the
+manual vendor steps are in `docs/managed-integrations-setup.md`.
 
 ## Payments in a managed instance (Stripe Connect)
 
@@ -525,6 +540,12 @@ protected data (`ssn`, `dob`, `diagnosis`, …) and SSN-shaped text (400),
 rate-limits per instance (429), sets `Stripe-Account` to the instance's own
 account whatever the app sent, and adds the product's application fee. The SDK
 raises its usual typed errors (`StripePermissionError`, …).
+
+The fee and the rate are settings: `forklaunch managed template update --slug
+<slug> --payments-fee-percent 2 --payments-fee-amount 30 --payments-rpm 120` for
+the product, `forklaunch managed instance payments-gateway --id <id>
+--fee-percent 1` for one instance. Unset, the platform's `PAYMENTS_APPLICATION_FEES`
+and `PAYMENTS_RPM` apply.
 
 ### Events
 

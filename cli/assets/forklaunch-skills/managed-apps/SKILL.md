@@ -366,6 +366,56 @@ for await (const chunk of models.chat.completions.stream({ model: 'luna', messag
   `INSTANCE_HMAC_KEY: local-dev-key`. `MOCK_MONTHLY_TOKENS` and
   `MOCK_FAIL_EVERY=N` let you exercise the budget (429) and outage (503) paths.
 
+### Settings for the platform-held features (SMS, WhatsApp, voice, email, payments)
+
+Say you sell a clinic app. Most clinics are fine with 500 texts a month, but one
+large practice needs 5,000, and the product as a whole should take a 2% fee on
+every payment. Those are **settings**, and they work exactly like the model
+gateway's: the **product** (template) sets them for every instance, **one
+instance** can override them, and anything neither sets falls back to the
+platform's defaults (env). The gateways read them on every call, so a change
+applies at once, with no redeploy.
+
+```bash
+# The product's settings. Each feature's setting is REPLACED AS A WHOLE:
+# pass every field you want the product to keep.
+forklaunch managed template update --slug clinic \
+  --sms-pool-id pool-abc --sms-monthly-segments 500 --sms-per-minute 10 \
+  --whatsapp-number-id phone-number-id-0123 --whatsapp-rpm 20 \
+  --voice-flow appointment_reminder=<contact-flow-id> --voice-monthly-minutes 900 \
+  --email-daily-quota 1000 --email-per-minute 30 \
+  --payments-fee-percent 2 --payments-fee-amount 30 --payments-rpm 120
+forklaunch managed template gateway-settings --slug clinic   # what is set + defaults
+
+# One instance differs. Fields left out come from the template; --clear removes it.
+forklaunch managed instance sms-gateway --id <id> --monthly-segments 5000
+forklaunch managed instance email-gateway --id <id> --daily-quota 5000
+forklaunch managed instance payments-gateway --id <id> --fee-percent 1
+forklaunch managed instance voice --id <id> --max-concurrent 6
+forklaunch managed instance whatsapp --id <id> --number-id phone-number-id-4567
+forklaunch managed instance gateway-settings --id <id>       # what is in force
+```
+
+| feature | product (`template update`) | one instance | notes |
+|---|---|---|---|
+| SMS | `--sms-pool-id`, `--sms-monthly-segments`, `--sms-per-minute`, `--sms-allow-promotional`, `--sms-disabled`; `--clear-sms` | `instance sms-gateway`: `--monthly-segments`, `--per-minute`, a dedicated number (`--number-id` + E.164 `--number`) | defaults: `SMS_POOL_ID`, `SMS_GATEWAY_DEFAULT_*` |
+| WhatsApp | `--whatsapp-number-id`, `--whatsapp-rpm`, `--whatsapp-disabled`; `--unlink-whatsapp` | `instance whatsapp`: its own `--number-id`, `--rpm`, `--disabled`; `--clear` unlinks | the instance's number wins; its unset rate falls through to the product's, then `WHATSAPP_DEFAULT_RPM`. Linking the WhatsApp Business Account itself is still the manual Meta signup in the AWS console |
+| Voice | `--voice-flow name=contact-flow-id` (repeat), `--voice-max-concurrent`, `--voice-monthly-minutes`; `--disable-voice` | `instance voice`: `--max-concurrent`, `--monthly-minutes` | the flow catalog is the product's only; no flows = voice off |
+| Email | `--email-daily-quota`, `--email-per-minute`; `--clear-email` | `instance email-gateway`: `--daily-quota`, `--per-minute` | defaults: `EMAIL_GATEWAY_DEFAULT_*` |
+| Payments | `--payments-fee-percent`, `--payments-fee-amount` (cents), `--payments-rpm`; `--clear-payments` | `instance payments-gateway`: `--fee-percent`, `--fee-amount`, `--rpm` | an instance's fee replaces the product's whole. `PAYMENTS_APPLICATION_FEES` / `PAYMENTS_RPM` remain the fallback |
+
+- **Validated:** a bad value (a zero cap, a 100% fee, a flow name the gateway
+  would refuse, a rate without a WhatsApp number) is a 400 naming the field, and
+  one bad field refuses the whole template update.
+- **Who may change them:** the same roles as the model gateway. Product settings
+  ride on the admin-only template update; an instance override needs an editor;
+  `gateway-settings` needs a viewer.
+- **HTTP** (under `/managed-mode`): `PATCH /templates/:slug` with `smsGateway`,
+  `whatsapp`, `voice`, `emailGateway`, `paymentsGateway`;
+  `PUT /instances/:id/{sms-gateway,whatsapp,voice,email-gateway,payments-gateway}`
+  (`clear: true` removes); `GET /templates/:slug/gateway-settings` and
+  `GET /instances/:id/gateway-settings`.
+
 ## 3. Instance lifecycle
 
 ### create → provisioning
