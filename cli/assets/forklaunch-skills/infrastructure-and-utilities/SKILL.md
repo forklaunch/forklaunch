@@ -193,7 +193,7 @@ await cache.deleteRecordBatch([
 ### Add it with the CLI, never by hand
 
 ```bash
-forklaunch infra add <service> object-store     # alias of: change service -p <service> --infrastructure s3
+forklaunch infra add <service> object-store     # edits in place: only the lines S3 needs
 forklaunch infra remove <service> object-store  # undoes everything add wrote
 forklaunch score --offline                      # then confirm the wiring checks pass
 ```

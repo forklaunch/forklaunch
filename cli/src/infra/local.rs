@@ -4,17 +4,18 @@
 //! This is the documented way in for agents and people alike: it writes the
 //! setup code (registrations.ts), the local stand-in (docker-compose), the
 //! env files, the package dependency, the manifest resource and the test
-//! utilities — the same edits `forklaunch change service --infrastructure`
-//! makes, which it delegates to. The difference is the verb: `change service`
-//! takes the full set of infrastructure a service should have, `infra add`
-//! and `infra remove` take one change.
+//! utilities. It edits those files in place (see `in_place`): only the lines
+//! the resource needs are added, in the file's own style, and `infra remove`
+//! takes exactly those lines out again. (`change service --infrastructure`
+//! regenerates the files instead, which reformats a customized service.)
+
+use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
 use crate::{
     CliCommand,
-    change::service::ServiceCommand,
     constants::Infrastructure,
     core::{command::command, manifest::ProjectType, validate::require_manifest},
 };
@@ -22,7 +23,7 @@ use crate::{
 /// What `infra add` can add: local infrastructure the service runs itself,
 /// or a platform-held capability reached through the instance gateway.
 enum Addable {
-    Infrastructure(Infrastructure),
+    Infrastructure,
     Capability(&'static super::capabilities::Capability),
 }
 
@@ -30,17 +31,19 @@ fn parse_addable(name: &str) -> Result<Addable> {
     if let Some(capability) = super::capabilities::find(name) {
         return Ok(Addable::Capability(capability));
     }
-    parse_type(name).map(Addable::Infrastructure).map_err(|_| {
-        let capabilities: Vec<&str> = super::capabilities::CAPABILITIES
-            .iter()
-            .map(|c| c.id)
-            .collect();
-        anyhow::anyhow!(
-            "unknown type '{name}'; supported: object-store (s3), cache (redis){}{}",
-            if capabilities.is_empty() { "" } else { ", " },
-            capabilities.join(", ")
-        )
-    })
+    parse_type(name)
+        .map(|_| Addable::Infrastructure)
+        .map_err(|_| {
+            let capabilities: Vec<&str> = super::capabilities::CAPABILITIES
+                .iter()
+                .map(|c| c.id)
+                .collect();
+            anyhow::anyhow!(
+                "unknown type '{name}'; supported: object-store (s3), cache (redis){}{}",
+                if capabilities.is_empty() { "" } else { ", " },
+                capabilities.join(", ")
+            )
+        })
 }
 
 /// Accepted type names: the infrastructure ids plus readable aliases.
@@ -51,9 +54,7 @@ fn parse_type(name: &str) -> Result<Infrastructure> {
         other => other,
     };
     id.parse::<Infrastructure>().map_err(|_| {
-        anyhow::anyhow!(
-            "unknown type '{name}'; supported: object-store (s3), cache (redis)"
-        )
+        anyhow::anyhow!("unknown type '{name}'; supported: object-store (s3), cache (redis)")
     })
 }
 
@@ -83,14 +84,22 @@ fn args(cmd: Command) -> Command {
     )
 }
 
-/// The service's infrastructure after this change, as `change service` takes it.
-fn desired_infrastructure(
-    matches: &ArgMatches,
-    adding: bool,
-) -> Result<(String, Vec<String>)> {
+/// Add or remove an object store or cache with minimal, in-place edits.
+fn change_infrastructure(matches: &ArgMatches, adding: bool) -> Result<()> {
+    use super::{capabilities::CapabilityEdit, in_place};
+    use crate::core::{
+        docker::{
+            DockerCompose, add_redis_to_docker_compose, add_s3_to_docker_compose,
+            clean_up_unused_infrastructure_services, remove_s3_from_docker_compose,
+        },
+        package_json::package_json_constants::{
+            INFRASTRUCTURE_REDIS_VERSION, INFRASTRUCTURE_S3_VERSION, IOREDIS_VERSION,
+        },
+    };
+
     let service = matches.get_one::<String>("service").unwrap().clone();
     let wanted = parse_type(matches.get_one::<String>("type").unwrap())?;
-    let (_, manifest) = require_manifest(matches)?;
+    let (app_root, manifest) = require_manifest(matches)?;
     let project = manifest
         .projects
         .iter()
@@ -101,51 +110,202 @@ fn desired_infrastructure(
             "'{service}' is not a service; `infra add` changes services (use `forklaunch change worker` for workers)"
         );
     }
-    let resources = project.resources.as_ref();
-    let mut active: Vec<String> = [
-        resources.and_then(|r| r.cache.clone()),
-        resources.and_then(|r| r.queue.clone()),
-        resources.and_then(|r| r.object_store.clone()),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
     let id = wanted.to_string();
-    let present = active.contains(&id);
+    let resources = project.resources.as_ref();
+    let (resource_key, present) = match wanted {
+        Infrastructure::S3 => (
+            "object_store",
+            resources.and_then(|r| r.object_store.as_deref()) == Some(id.as_str()),
+        ),
+        Infrastructure::Redis => (
+            "cache",
+            resources.and_then(|r| r.cache.as_deref()) == Some(id.as_str()),
+        ),
+    };
     match (adding, present) {
         (true, true) => bail!("'{service}' already has {id}"),
         (false, false) => bail!("'{service}' does not have {id}"),
-        (true, false) => active.push(id),
-        (false, true) => active.retain(|a| a != &id),
+        _ => {}
     }
-    Ok((service, active))
-}
 
-fn delegate(matches: &ArgMatches, service: &str, infrastructure: &[String]) -> Result<()> {
-    let mut argv = vec!["service".to_string(), "-p".to_string(), service.to_string()];
-    if let Some(root) = matches.get_one::<String>("base_path") {
-        // `change service` resolves -p against the current directory.
-        let root = std::path::Path::new(root);
-        argv[2] = root.join(service).to_string_lossy().to_string();
+    let app_name = manifest.app_name.clone();
+    let service_path = app_root.join(&manifest.modules_path).join(&service);
+    let mut edit = CapabilityEdit::new(
+        &app_root,
+        &app_name,
+        &service,
+        &service_path,
+        Vec::new(),
+        Vec::new(),
+    );
+    // Only files whose content actually changes are written.
+    let stage = |edit: &mut CapabilityEdit, path: PathBuf, before: &str, after: String| {
+        if after != before {
+            edit.write(path, after);
+        }
+    };
+
+    // registrations.ts: the env entries, the registration and its imports.
+    let registrations = edit.registrations_path();
+    let text = edit
+        .read(&registrations)?
+        .with_context(|| format!("{registrations:?} not found"))?;
+    let changed = if adding {
+        in_place::add_to_registrations(&text, &wanted, &app_name)?
+    } else {
+        in_place::remove_from_registrations(&text, &wanted, &app_name)?
+    };
+    if !adding
+        && wanted == Infrastructure::Redis
+        && in_place::still_referenced(&changed, "TtlCache")
+    {
+        eprintln!(
+            "warning: registrations.ts still reads TtlCache (an auth or billing cache service, say); remove or replace those registrations"
+        );
     }
-    if infrastructure.is_empty() {
-        // An empty set is spelled as the flag with no values.
-        argv.push("--infrastructure".to_string());
+    stage(&mut edit, registrations, &text, changed);
+
+    // package.json: the dependency lines only.
+    let dependencies: &[(&str, &str)] = match wanted {
+        Infrastructure::S3 => &[("@forklaunch/infrastructure-s3", INFRASTRUCTURE_S3_VERSION)],
+        Infrastructure::Redis => &[
+            (
+                "@forklaunch/infrastructure-redis",
+                INFRASTRUCTURE_REDIS_VERSION,
+            ),
+            ("ioredis", IOREDIS_VERSION),
+        ],
+    };
+    let package_json = service_path.join("package.json");
+    if let Some(text) = edit.read(&package_json)? {
+        let mut changed = text.clone();
+        for (name, version) in dependencies {
+            changed = if adding {
+                in_place::add_dependency(&changed, name, version)?
+            } else {
+                in_place::remove_dependency(&changed, name)?
+            };
+        }
+        stage(&mut edit, package_json, &text, changed);
     }
-    for item in infrastructure {
-        argv.push("--infrastructure".to_string());
-        argv.push(item.clone());
+
+    // .env.local: the local settings.
+    let bucket = format!("{app_name}-{service}-dev");
+    let env: Vec<(&str, &str)> = match wanted {
+        Infrastructure::S3 => vec![
+            ("S3_URL", "http://localhost:9000"),
+            ("S3_BUCKET", bucket.as_str()),
+            ("S3_REGION", "us-east-1"),
+            ("S3_ACCESS_KEY_ID", "minioadmin"),
+            ("S3_SECRET_ACCESS_KEY", "minioadmin"),
+        ],
+        Infrastructure::Redis => vec![("REDIS_URL", "redis://localhost:6379")],
+    };
+    if adding {
+        edit.ensure_env_local(&env)?;
+    } else {
+        let env_local = service_path.join(".env.local");
+        if let Some(text) = edit.read(&env_local)? {
+            let keys: Vec<&str> = env.iter().map(|(k, _)| *k).collect();
+            let changed = in_place::remove_env_lines(&text, &keys);
+            if changed.trim().is_empty() {
+                edit.delete(env_local);
+            } else {
+                stage(&mut edit, env_local, &text, changed);
+            }
+        }
     }
-    argv.push("--confirm".to_string());
+
+    // __test__/test-utils.ts: the test harness flag.
+    let test_utils = service_path.join("__test__").join("test-utils.ts");
+    if let Some(text) = edit.read(&test_utils)? {
+        let flag = match wanted {
+            Infrastructure::S3 => "needsS3",
+            Infrastructure::Redis => "needsRedis",
+        };
+        let changed = in_place::set_test_harness_flag(&text, flag, adding)?;
+        stage(&mut edit, test_utils, &text, changed);
+    }
+
+    // The manifest: the project's resource key only.
+    let manifest_path = app_root.join(".forklaunch").join("manifest.toml");
+    let text = std::fs::read_to_string(&manifest_path)?;
+    let changed = in_place::set_manifest_resource(
+        &text,
+        &service,
+        resource_key,
+        adding.then_some(id.as_str()),
+    )?;
+    stage(&mut edit, manifest_path, &text, changed);
+
+    // docker-compose: the service's settings, and MinIO / Redis when missing
+    // (an existing one is reused; on remove it goes once nothing uses it).
+    let compose_path = app_root.join("docker-compose.yaml");
+    if let Some(text) = edit.read(&compose_path)? {
+        let mut compose: DockerCompose = serde_yml::from_str(&text)?;
+        let before = serde_yml::to_string(&compose)?;
+        // Serializing drops comments; keep the file's leading comment block.
+        let header: String = text
+            .split_inclusive('\n')
+            .take_while(|l| l.starts_with('#') || l.trim().is_empty())
+            .collect();
+        if let Some(target) = compose.services.get(&service) {
+            let mut environment = target.environment.clone().unwrap_or_default();
+            match (&wanted, adding) {
+                (Infrastructure::S3, true) => {
+                    add_s3_to_docker_compose(&app_name, &service, &mut compose, &mut environment)?;
+                }
+                (Infrastructure::S3, false) => {
+                    remove_s3_from_docker_compose(&mut compose, &mut environment)?;
+                }
+                (Infrastructure::Redis, true) => {
+                    add_redis_to_docker_compose(&app_name, &mut compose, &mut environment, 0)?;
+                }
+                (Infrastructure::Redis, false) => {
+                    environment.shift_remove("REDIS_URL");
+                }
+            }
+            compose.services.get_mut(&service).unwrap().environment = Some(environment);
+        } else {
+            eprintln!(
+                "warning: no '{service}' service in docker-compose.yaml; add its settings by hand"
+            );
+        }
+        if !adding {
+            let mut projects = manifest.projects.clone();
+            for p in projects.iter_mut().filter(|p| p.name == service) {
+                if let Some(r) = p.resources.as_mut() {
+                    match wanted {
+                        Infrastructure::S3 => r.object_store = None,
+                        Infrastructure::Redis => r.cache = None,
+                    }
+                }
+            }
+            clean_up_unused_infrastructure_services(&mut compose, projects)?;
+        }
+        let after = serde_yml::to_string(&compose)?;
+        if after != before {
+            edit.write(compose_path, format!("{header}{after}"));
+        }
+    }
+
     if matches.get_flag("dryrun") {
-        argv.push("--dryrun".to_string());
+        for (path, writes) in edit.changed_paths() {
+            println!(
+                "{} {}",
+                if writes { "write " } else { "delete" },
+                path.strip_prefix(&app_root).unwrap_or(&path).display()
+            );
+        }
+        return Ok(());
     }
-    let command = ServiceCommand::new();
-    let service_matches = command
-        .command()
-        .version(env!("CARGO_PKG_VERSION"))
-        .try_get_matches_from(argv)?;
-    command.handler(&service_matches)
+    edit.commit()?;
+    println!(
+        "{} {id} {} {service}",
+        if adding { "Added" } else { "Removed" },
+        if adding { "to" } else { "from" },
+    );
+    Ok(())
 }
 
 /// Add or remove a platform-held capability: the manifest's
@@ -285,8 +445,7 @@ impl CliCommand for AddCommand {
         {
             return change_capability(matches, capability, true);
         }
-        let (service, infrastructure) = desired_infrastructure(matches, true)?;
-        delegate(matches, &service, &infrastructure)
+        change_infrastructure(matches, true)
     }
 }
 
@@ -307,8 +466,7 @@ impl CliCommand for RemoveCommand {
         {
             return change_capability(matches, capability, false);
         }
-        let (service, infrastructure) = desired_infrastructure(matches, false)?;
-        delegate(matches, &service, &infrastructure)
+        change_infrastructure(matches, false)
     }
 }
 
@@ -322,6 +480,11 @@ mod tests {
         assert_eq!(parse_type("object-store").unwrap(), Infrastructure::S3);
         assert_eq!(parse_type("s3").unwrap(), Infrastructure::S3);
         assert_eq!(parse_type("cache").unwrap(), Infrastructure::Redis);
-        assert!(parse_type("email").unwrap_err().to_string().contains("supported"));
+        assert!(
+            parse_type("email")
+                .unwrap_err()
+                .to_string()
+                .contains("supported")
+        );
     }
 }

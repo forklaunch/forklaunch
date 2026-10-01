@@ -6,6 +6,7 @@ use crate::{CliCommand, core::command::command};
 pub(crate) mod capabilities;
 mod config_set;
 mod delete;
+mod in_place;
 mod lifecycle;
 mod list;
 mod local;
