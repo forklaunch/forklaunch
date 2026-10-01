@@ -1,4 +1,6 @@
-//! In-place edits for `forklaunch infra add|remove <service> object-store|cache`.
+//! In-place edits for `forklaunch infra add|remove <service> <type>`: the
+//! object store and cache, and the platform-held capabilities (email, sms,
+//! whatsapp, voice, payments; see `capabilities`).
 //!
 //! These commands used to delegate to `change service --infrastructure`, which
 //! reparses and reprints `registrations.ts` (dropping comments and the app's
@@ -473,6 +475,8 @@ struct ImportStmt {
     end: usize,
     source: String,
     is_type: bool,
+    /// What is imported: `Stripe`, `{ a, b }`, …
+    clause: String,
     /// The `{` of a named import list.
     brace: Option<usize>,
 }
@@ -489,6 +493,7 @@ fn imports(text: &str) -> Vec<ImportStmt> {
                 end: whole.end(),
                 source: c[3].to_string(),
                 is_type: c.get(1).is_some(),
+                clause: clause.as_str().trim().to_string(),
                 brace: clause.as_str().find('{').map(|i| clause.start() + i),
             }
         })
@@ -531,11 +536,13 @@ fn imported_anywhere(text: &str, name: &str) -> bool {
 /// its sorted position when it is sorted), else as a new import statement
 /// among the package imports.
 fn ensure_imports(text: &str, source: &str, names: &[&str], style: &Style) -> String {
+    let wraps = wraps_imports(text, source);
     let mut text = text.to_string();
+    // A name may be a `type X` specifier; X is what it binds.
     let missing: Vec<&str> = names
         .iter()
         .copied()
-        .filter(|n| !imported_anywhere(&text, n))
+        .filter(|n| !imported_anywhere(&text, &local_name(n)))
         .collect();
     if missing.is_empty() {
         return text;
@@ -554,7 +561,7 @@ fn ensure_imports(text: &str, source: &str, names: &[&str], style: &Style) -> St
                 continue;
             }
             let sep = separator(&text, stmt.brace.unwrap(), &items);
-            text = match sorted_position(&keys, name) {
+            text = match sorted_position(&keys, &local_name(name)) {
                 Some(Some(i)) => insert_before(&text, &items[i], name, &sep),
                 _ => append_item(&text, &items, name, &sep),
             };
@@ -562,7 +569,94 @@ fn ensure_imports(text: &str, source: &str, names: &[&str], style: &Style) -> St
         return text;
     }
     let q = style.quote;
-    let line = format!("import {{ {} }} from {q}{source}{q};", missing.join(", "));
+    let mut line = format!("import {{ {} }} from {q}{source}{q};", missing.join(", "));
+    if wraps && missing.len() > 1 && line.len() > LINE_WIDTH {
+        line = format!(
+            "import {{\n{}{}\n}} from {q}{source}{q};",
+            missing
+                .iter()
+                .map(|n| format!("{}{n}", style.indent_unit))
+                .collect::<Vec<_>>()
+                .join(",\n"),
+            if style.trailing_commas { "," } else { "" }
+        );
+    }
+    insert_import_statement(&text, source, &line)
+}
+
+/// The line width formatters (biome, prettier) wrap imports at.
+const LINE_WIDTH: usize = 80;
+
+/// A named import's `{ … }` and its specifiers, unless the list holds a
+/// comment (then it is left exactly as written).
+fn import_list(text: &str, stmt: &ImportStmt) -> Option<(usize, usize, Vec<String>)> {
+    let open = stmt.brace?;
+    let class = classify(text);
+    let close = matching_close(text, &class, open)?;
+    if class[open..close].contains(&Class::Comment) {
+        return None;
+    }
+    let names = list_items(text, &class, open, close)
+        .iter()
+        .map(|i| text[i.start..i.end].to_string())
+        .collect();
+    Some((open, close, names))
+}
+
+/// The statement on one line, and its length.
+fn import_on_one_line(text: &str, stmt: &ImportStmt) -> Option<String> {
+    let (open, close, names) = import_list(text, stmt)?;
+    Some(format!(
+        "{}{{ {} }}{}",
+        &text[stmt.start..open],
+        names.join(", "),
+        &text[close + 1..stmt.end]
+    ))
+}
+
+/// Whether the file's imports are laid out the way biome and prettier write
+/// them: a named import with several specifiers on one line when it fits in
+/// 80 columns and one specifier per line when it does not (with at least
+/// one of those), a single specifier on one line. A new import statement is
+/// then wrapped the same way; `remove` takes the statement out whole.
+///
+/// An import names are merged into keeps its layout, even when the merge
+/// takes it past 80 columns: `remove` could not tell a line that add wrapped
+/// from one that was wrapped already, so it could not undo add exactly.
+/// The formatter re-wraps it.
+fn wraps_imports(text: &str, editing: &str) -> bool {
+    let mut any_wrapped = false;
+    for stmt in imports(text) {
+        if stmt.source == editing {
+            continue;
+        }
+        let Some(one) = import_on_one_line(text, &stmt) else {
+            continue;
+        };
+        let wrapped = text[stmt.start..stmt.end].contains('\n');
+        if import_list(text, &stmt).is_some_and(|(_, _, n)| n.len() < 2) {
+            if wrapped {
+                return false;
+            }
+            continue;
+        }
+        let fits = if wrapped {
+            one.len() <= LINE_WIDTH
+        } else {
+            stmt.end - stmt.start <= LINE_WIDTH
+        };
+        if wrapped == fits {
+            return false;
+        }
+        any_wrapped |= wrapped;
+    }
+    any_wrapped
+}
+
+/// Add an import statement among the package imports, at its sorted place by
+/// source (or after the last import).
+fn insert_import_statement(text: &str, source: &str, line: &str) -> String {
+    let text = text.to_string();
     let packages: Vec<ImportStmt> = imports(&text)
         .into_iter()
         .filter(|s| !s.source.starts_with('.'))
@@ -819,6 +913,280 @@ pub(crate) fn set_manifest_resource(
     Ok(doc.to_string())
 }
 
+// ----------------------------------------------------------- capabilities
+//
+// `infra add|remove <service> <capability>` (email, sms, payments, …) writes
+// its registration from a `createConfigInjector(…, { … })` snippet. The
+// helpers below insert the snippet's entries and imports in the file's style
+// and take exactly those bytes out again.
+
+/// The entries of a `createConfigInjector(…, { … })` snippet as (key, text),
+/// re-indented from the snippets' four spaces a level to the two-space form
+/// `adapt_entry` takes.
+fn snippet_entries(block: &str) -> Result<Vec<(String, String)>> {
+    let class = classify(block);
+    let start = block
+        .find("createConfigInjector(")
+        .context("registration snippet has no createConfigInjector")?;
+    let open = (start..block.len())
+        .find(|&i| class[i] == Class::Code && block.as_bytes()[i] == b'{')
+        .context("registration snippet has no object")?;
+    let close = matching_close(block, &class, open).context("unbalanced registration snippet")?;
+    Ok(list_items(block, &class, open, close)
+        .iter()
+        .map(|item| {
+            let text: Vec<String> = block[item.start..item.end]
+                .lines()
+                .enumerate()
+                .map(|(i, line)| {
+                    if i == 0 {
+                        return line.to_string();
+                    }
+                    let spaces = line.len() - line.trim_start_matches(' ').len();
+                    format!("{}{}", " ".repeat(spaces / 2), &line[spaces..])
+                })
+                .collect();
+            (item_key(block, item), text.join("\n"))
+        })
+        .collect())
+}
+
+/// The keys a registration snippet defines.
+pub(crate) fn snippet_keys(block: &str) -> Result<Vec<String>> {
+    Ok(snippet_entries(block)?
+        .into_iter()
+        .map(|(k, _)| k)
+        .collect())
+}
+
+/// Append the snippet's entries to `const <declaration> = …({ … })`, in the
+/// file's style. Keys the object already has are left alone.
+pub(crate) fn add_config_entries(text: &str, declaration: &str, block: &str) -> Result<String> {
+    let style = detect_style(text);
+    add_entries(text, declaration, &snippet_entries(block)?, &style)
+}
+
+/// Remove the entries named `keys` from `const <declaration> = …({ … })`.
+pub(crate) fn remove_config_entries(
+    text: &str,
+    declaration: &str,
+    keys: &[&str],
+) -> Result<String> {
+    let keys: Vec<String> = keys.iter().map(|k| k.to_string()).collect();
+    remove_entries(text, declaration, &keys)
+}
+
+/// Whether the file's `key` entry in `declaration` is the one the snippet
+/// writes (whitespace, quote style and trailing commas aside), so a
+/// hand-written entry of the same name is told apart from ours.
+pub(crate) fn entry_matches_snippet(text: &str, declaration: &str, key: &str, block: &str) -> bool {
+    fn normalize(s: &str) -> String {
+        let s: String = s
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .map(|c| if c == '"' { '\'' } else { c })
+            .collect();
+        Regex::new(r",([}\])])")
+            .unwrap()
+            .replace_all(&s, "$1")
+            .into_owned()
+    }
+    let Ok(entries) = snippet_entries(block) else {
+        return false;
+    };
+    let Some((_, wanted)) = entries.iter().find(|(k, _)| k == key) else {
+        return false;
+    };
+    let class = classify(text);
+    let Ok((open, close)) = config_object(text, &class, declaration) else {
+        return false;
+    };
+    list_items(text, &class, open, close)
+        .iter()
+        .find(|i| item_key(text, i) == key)
+        .is_some_and(|i| normalize(&text[i.start..i.end]) == normalize(wanted))
+}
+
+/// Merge named imports (`a`, `type B`) into the file's import from `source`
+/// (at their sorted place when its list is sorted), or add that import among
+/// the package imports. Names imported already are skipped.
+pub(crate) fn add_named_imports(text: &str, source: &str, names: &[&str]) -> String {
+    ensure_imports(text, source, names, &detect_style(text))
+}
+
+/// Drop named imports (by the name they bind; `type B` means B) from the
+/// file's import from `source`, and the statement when it empties.
+pub(crate) fn remove_named_imports(text: &str, source: &str, names: &[&str]) -> String {
+    let locals: Vec<String> = names.iter().map(|n| local_name(n)).collect();
+    let locals: Vec<&str> = locals.iter().map(String::as_str).collect();
+    drop_imports(text, source, &locals)
+}
+
+/// `import <name> from '<source>';`, unless the file has it.
+pub(crate) fn add_default_import(text: &str, name: &str, source: &str) -> String {
+    if imports(text)
+        .iter()
+        .any(|s| s.source == source && s.brace.is_none() && s.clause == name)
+    {
+        return text.to_string();
+    }
+    let q = detect_style(text).quote;
+    insert_import_statement(text, source, &format!("import {name} from {q}{source}{q};"))
+}
+
+fn remove_statement(text: &str, stmt: &ImportStmt) -> String {
+    let end = if text[stmt.end..].starts_with('\n') {
+        stmt.end + 1
+    } else {
+        stmt.end
+    };
+    format!("{}{}", &text[..stmt.start], &text[end..])
+}
+
+/// Whether `name` is read outside the import statements: in code, not as an
+/// object key (`name:`) or a property (`.name`). `type` counts only as the
+/// `type<…>()` helper, not as the `type:` of every registration.
+pub(crate) fn binding_used(text: &str, name: &str) -> bool {
+    let class = classify(text);
+    let spans: Vec<(usize, usize)> = imports(text).iter().map(|s| (s.start, s.end)).collect();
+    let b = text.as_bytes();
+    Regex::new(&format!(r"\b{}\b", regex::escape(name)))
+        .unwrap()
+        .find_iter(text)
+        .any(|m| {
+            if class[m.start()] != Class::Code
+                || spans.iter().any(|(s, e)| m.start() >= *s && m.start() < *e)
+                || (m.start() > 0 && b[m.start() - 1] == b'.')
+            {
+                return false;
+            }
+            let after = text[m.end()..].trim_start();
+            !after.starts_with(':') || after.starts_with("::")
+        })
+}
+
+/// Drop the imports among `candidates` (the names an add brings in) that
+/// `before` read and `after` no longer does: the names only the removed
+/// registration used. An import that was unused already is not this
+/// command's to drop.
+pub(crate) fn drop_orphaned_imports(before: &str, after: &str, candidates: &[&str]) -> String {
+    let mut text = after.to_string();
+    let orphaned = |text: &str, name: &str| {
+        candidates.contains(&name) && binding_used(before, name) && !binding_used(text, name)
+    };
+    'scan: loop {
+        for stmt in imports(&text) {
+            if stmt.brace.is_none() {
+                let default = &stmt.clause;
+                let plain = !default.is_empty()
+                    && default
+                        .chars()
+                        .all(|c| c.is_alphanumeric() || c == '_' || c == '$');
+                if plain && orphaned(&text, default) {
+                    text = remove_statement(&text, &stmt);
+                    continue 'scan;
+                }
+                continue;
+            }
+            // `import D, { … }`: only the named part is ours to trim.
+            let (items, names) = import_names(&text, &stmt);
+            if let Some(idx) = names.iter().position(|n| orphaned(&text, n)) {
+                let whole_list = stmt.clause.starts_with('{');
+                text = if items.len() == 1 && whole_list {
+                    remove_statement(&text, &stmt)
+                } else if items.len() == 1 {
+                    continue;
+                } else {
+                    remove_item(&text, &items, idx)
+                };
+                continue 'scan;
+            }
+        }
+        return text;
+    }
+}
+
+/// The quote the file's imports use.
+pub(crate) fn quote_of(text: &str) -> char {
+    detect_style(text).quote
+}
+
+/// Add (or remove) `id` in the service's `resources.capabilities`, leaving
+/// the rest of the manifest as it is. The key goes when its list empties,
+/// and a `[projects.resources]` table with it when nothing else is left.
+pub(crate) fn set_manifest_capability(
+    text: &str,
+    service: &str,
+    id: &str,
+    adding: bool,
+) -> Result<String> {
+    let mut doc: toml_edit::DocumentMut = text.parse().context("parsing manifest.toml")?;
+    let projects = doc
+        .get_mut("projects")
+        .and_then(|p| p.as_array_of_tables_mut())
+        .context("manifest has no [[projects]]")?;
+    let project = projects
+        .iter_mut()
+        .find(|t| t.get("name").and_then(|n| n.as_str()) == Some(service))
+        .with_context(|| format!("no project named '{service}' in the manifest"))?;
+    if !project.contains_key("resources") {
+        if !adding {
+            return Ok(text.to_string());
+        }
+        let mut resources = toml_edit::Table::new();
+        resources.set_position(project.position().map(|p| p + 1));
+        project.insert("resources", toml_edit::Item::Table(resources));
+    }
+    let resources = project
+        .get_mut("resources")
+        .and_then(|r| r.as_table_like_mut())
+        .context("resources is not a table")?;
+    let emptied = match resources
+        .get_mut("capabilities")
+        .and_then(|c| c.as_array_mut())
+    {
+        Some(list) => {
+            let at = list.iter().position(|v| v.as_str() == Some(id));
+            match (adding, at) {
+                (true, None) => {
+                    // A multi-line list gets the new element on its own line.
+                    let prefix = list
+                        .iter()
+                        .last()
+                        .and_then(|v| v.decor().prefix())
+                        .and_then(|p| p.as_str())
+                        .filter(|p| p.contains('\n'))
+                        .map(str::to_string);
+                    list.push(id);
+                    if let Some(prefix) = prefix {
+                        if let Some(v) = list.get_mut(list.len() - 1) {
+                            v.decor_mut().set_prefix(prefix);
+                        }
+                    }
+                }
+                (false, Some(i)) => {
+                    list.remove(i);
+                }
+                _ => {}
+            }
+            list.is_empty()
+        }
+        None if adding => {
+            let list: toml_edit::Array = [id].into_iter().collect();
+            resources.insert("capabilities", toml_edit::value(list));
+            false
+        }
+        None => false,
+    };
+    if emptied {
+        resources.remove("capabilities");
+        if resources.is_empty() {
+            project.remove("resources");
+        }
+    }
+    Ok(doc.to_string())
+}
+
 // -------------------------------------------------------------- .env.local
 
 pub(crate) fn remove_env_lines(text: &str, keys: &[&str]) -> String {
@@ -826,6 +1194,17 @@ pub(crate) fn remove_env_lines(text: &str, keys: &[&str]) -> String {
         .filter(|line| {
             let line = line.trim_start();
             !keys.iter().any(|k| line.starts_with(&format!("{k}=")))
+        })
+        .collect()
+}
+
+/// Remove `KEY=value` lines that still hold the value `infra add` wrote (a
+/// key set to anything else was the developer's).
+pub(crate) fn remove_env_pairs(text: &str, pairs: &[(&str, &str)]) -> String {
+    text.split_inclusive('\n')
+        .filter(|line| {
+            let line = line.trim();
+            !pairs.iter().any(|(k, v)| line == format!("{k}={v}"))
         })
         .collect()
 }
@@ -1200,6 +1579,111 @@ demo = ["vault", "iam"]
         assert_eq!(iam["resources"]["cache"].as_str(), Some("redis"));
         assert!(added.starts_with(MANIFEST.split("[project_peer_topology]").next().unwrap()));
         assert!(added.contains("[project_peer_topology]\ndemo = [\"vault\", \"iam\"]\n"));
+    }
+
+    #[test]
+    fn manifest_gets_only_the_capability_and_round_trips() {
+        let email = set_manifest_capability(MANIFEST, "vault", "email", true).unwrap();
+        assert_eq!(
+            email,
+            MANIFEST.replace(
+                "cache = \"redis\"\n",
+                "cache = \"redis\"\ncapabilities = [\"email\"]\n"
+            )
+        );
+        // Comments and layout kept; no header, no other keys.
+        assert!(email.contains("# The projects.\n[[projects]]"));
+        assert!(email.starts_with("id = \"f0400ba0\""));
+        assert!(!email.contains("Generated by ForkLaunch"));
+        let both = set_manifest_capability(&email, "vault", "sms", true).unwrap();
+        assert!(both.contains("capabilities = [\"email\", \"sms\"]\n"));
+        assert_eq!(
+            set_manifest_capability(&both, "vault", "sms", false).unwrap(),
+            email
+        );
+        assert_eq!(
+            set_manifest_capability(&email, "vault", "email", false).unwrap(),
+            MANIFEST
+        );
+
+        // A project without resources gets the table, and loses it again.
+        let iam = set_manifest_capability(MANIFEST, "iam", "payments", true).unwrap();
+        let parsed: toml::Value = toml::from_str(&iam).unwrap();
+        assert_eq!(
+            parsed["projects"].as_array().unwrap()[1]["resources"]["capabilities"][0].as_str(),
+            Some("payments")
+        );
+        assert_eq!(
+            set_manifest_capability(&iam, "iam", "payments", false).unwrap(),
+            MANIFEST
+        );
+
+        // A multi-line list gets the element on its own line.
+        let multi = MANIFEST.replace(
+            "cache = \"redis\"\n",
+            "cache = \"redis\"\ncapabilities = [\n    \"email\",\n]\n",
+        );
+        let added = set_manifest_capability(&multi, "vault", "voice", true).unwrap();
+        assert!(
+            added.contains("capabilities = [\n    \"email\",\n    \"voice\",\n]\n"),
+            "{added}"
+        );
+        assert_eq!(
+            set_manifest_capability(&added, "vault", "voice", false).unwrap(),
+            multi
+        );
+    }
+
+    #[test]
+    fn merged_imports_keep_their_layout_and_new_ones_wrap_like_the_file() {
+        // A one-line import gains the names on its line (the formatter wraps
+        // it if it is now too long); remove takes exactly them out.
+        let added = add_named_imports(
+            REGISTRATIONS,
+            "@forklaunch/core/http",
+            &["createEmailClient", "type EmailClient"],
+        );
+        assert!(added.contains("import { type EmailClient, OpenTelemetryCollector, createEmailClient } from '@forklaunch/core/http';\n"), "{added}");
+        assert_eq!(
+            remove_named_imports(
+                &added,
+                "@forklaunch/core/http",
+                &["createEmailClient", "type EmailClient"]
+            ),
+            REGISTRATIONS
+        );
+        // A new statement too long for one line is wrapped in a file that
+        // wraps its imports at 80 columns ...
+        let names = ["createWhatsAppClient", "type WhatsAppStatusEvent"];
+        let added = add_named_imports(REGISTRATIONS, "@forklaunch/core/platform", &names);
+        assert!(added.contains("import {\n  createWhatsAppClient,\n  type WhatsAppStatusEvent\n} from '@forklaunch/core/platform';\n"), "{added}");
+        assert_eq!(
+            remove_named_imports(&added, "@forklaunch/core/platform", &names),
+            REGISTRATIONS
+        );
+        // ... and kept on one line in a file that does not.
+        let long = "import { createConfigInjector, getEnvVar, Lifetime } from \"@forklaunch/core/services\";\n";
+        let added = add_named_imports(long, "@forklaunch/core/platform", &names);
+        assert!(added.contains("import { createWhatsAppClient, type WhatsAppStatusEvent } from \"@forklaunch/core/platform\";"), "{added}");
+        assert_eq!(
+            remove_named_imports(&added, "@forklaunch/core/platform", &names),
+            long
+        );
+    }
+
+    #[test]
+    fn a_binding_is_read_only_outside_imports_keys_and_properties() {
+        let text = "import { type, EmailClient, x } from 'y';\nconst a = {\n  type: string,\n  EmailClient: { type: type<EmailClient>() },\n  b: o.x\n};\n";
+        assert!(binding_used(text, "type"));
+        assert!(binding_used(text, "EmailClient"));
+        assert!(!binding_used(text, "x"));
+        let without = text.replace("type<EmailClient>()", "string");
+        assert!(!binding_used(&without, "type"));
+        assert!(!binding_used(&without, "EmailClient"));
+        assert_eq!(
+            drop_orphaned_imports(text, &without, &["type", "EmailClient", "x"]),
+            without.replace("import { type, EmailClient, x }", "import { x }")
+        );
     }
 
     #[test]

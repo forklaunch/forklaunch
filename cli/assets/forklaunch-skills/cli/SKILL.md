@@ -508,12 +508,17 @@ forklaunch change application --runtime bun --formatter biome
 
 #### Add or remove a capability: `forklaunch infra add|remove`
 
-The way to give a service object storage or a cache. It writes the
-registration in `registrations.ts`, the local stand-in in docker-compose,
-`.env.local`, `package.json`, the manifest resource and the test utilities, and
-it edits those files in place: only the lines the resource needs are added, in
-the file's own indentation and quote style, and comments, key order and the
-rest of the file are left alone. `infra remove` takes exactly those lines out.
+The way to give a service object storage, a cache or a platform-held
+capability (email, sms, whatsapp, voice, payments). It writes the registration
+in `registrations.ts`, the local stand-in in docker-compose, `.env.local`,
+`package.json`, the manifest resource and the test utilities (for a
+capability: its `/platform-events` handler and the router mount in
+`server.ts`), and it edits those files in place: only the lines the resource
+needs are added, in the file's own indentation and quote style, and comments,
+key order and the rest of the file are left alone. `infra remove` takes exactly
+those lines out. Settings the service already had (its own gateway entries in
+`registrations.ts`, an env value in docker-compose) are kept and left on
+remove.
 (`change service --infrastructure` regenerates the files instead, which
 reformats a customized service; prefer `infra add|remove`.) It takes one change:
 

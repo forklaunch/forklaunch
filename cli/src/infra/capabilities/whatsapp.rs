@@ -5,17 +5,8 @@
 //! token or AWS credential reaches the service.
 
 use anyhow::{Context, Result};
-use oxc_allocator::{Allocator, Vec as OxcVec};
-use oxc_ast::ast::{ImportDeclarationSpecifier, SourceType, Statement};
-use oxc_codegen::{Codegen, CodegenOptions};
 
-use super::{Capability, CapabilityEdit};
-use crate::core::ast::{
-    injections::inject_into_import_statement::{
-        inject_into_import_statement, inject_specifier_into_import_statement,
-    },
-    parse_ast_program::parse_ast_program,
-};
+use super::{Capability, CapabilityEdit, add_named_imports};
 
 pub(crate) static WHATSAPP: Capability = Capability {
     id: "whatsapp",
@@ -90,15 +81,21 @@ fn core_package(edit: &CapabilityEdit) -> String {
 
 fn add(edit: &mut CapabilityEdit) -> Result<()> {
     let core = core_package(edit);
-    ensure_named_imports(edit, FRAMEWORK_HTTP, &[CLIENT_FACTORY])?;
-    ensure_named_imports(edit, &core, &["type"])?;
-    ensure_named_imports(edit, SERVICES, &["getEnvVar"])?;
-    // The imports are in place, so `inject_registration` only merges entries.
-    // The gateway settings go in here too: `ensure_gateway_wiring` then finds
-    // them and skips its own import of getEnvVar, which would replace the
-    // whole `@forklaunch/core/services` import (createConfigInjector, Lifetime).
+    let path = edit.registrations_path();
+    let before = edit
+        .read(&path)?
+        .with_context(|| format!("{path:?} not found"))?;
+    // Merged into the file's imports from these sources, in its style.
+    let mut text = add_named_imports(&before, FRAMEWORK_HTTP, &[CLIENT_FACTORY]);
+    text = add_named_imports(&text, &core, &["type"]);
+    text = add_named_imports(&text, SERVICES, &["getEnvVar"]);
+    if text != before {
+        edit.write(path, text);
+    }
+    // The gateway settings the factory reads go in with it
+    // (`ensure_gateway_wiring` then finds them there).
     edit.inject_registration(
-        CLIENT_FACTORY,
+        "",
         FRAMEWORK_HTTP,
         Some(super::GATEWAY_ENV_BLOCK),
         Some(RUNTIME_BLOCK),
@@ -108,144 +105,9 @@ fn add(edit: &mut CapabilityEdit) -> Result<()> {
 }
 
 fn remove(edit: &mut CapabilityEdit) -> Result<()> {
-    edit.remove_registration(None, &[], &["WhatsAppClient"])?;
-    remove_named_imports(edit, FRAMEWORK_HTTP, &[CLIENT_FACTORY], false)?;
-    // `type` stays when anything else still uses it.
-    let core = core_package(edit);
-    remove_named_imports(edit, &core, &["type"], true)?;
-    // With no event feature left, `remove_platform_events` drops the route's
-    // import from server.ts but matches the `app.use` line only at a two-space
-    // indent; the generated server.ts mounts routers at none. Drop it here so
-    // the service still compiles.
-    if edit.event_features().is_empty() {
-        let server = edit.service_path.join("server.ts");
-        if let Some(text) = edit.read(&server)? {
-            if text.contains("platformEventsRouter") {
-                let kept: Vec<&str> = text
-                    .split_inclusive('\n')
-                    .filter(|l| l.trim() != "app.use(platformEventsRouter);")
-                    .collect();
-                edit.write(server, kept.concat());
-            }
-        }
-    }
-    Ok(())
-}
-
-/// Add named imports from `source` to registrations.ts, into the existing
-/// import from it when there is one (never replacing its other names).
-fn ensure_named_imports(edit: &mut CapabilityEdit, source: &str, names: &[&str]) -> Result<()> {
-    let path = edit.registrations_path();
-    let text = edit
-        .read(&path)?
-        .with_context(|| format!("{path:?} not found"))?;
-    let allocator = Allocator::default();
-    let text: &str = Box::leak(text.into_boxed_str());
-    let mut program = parse_ast_program(&allocator, text, SourceType::ts());
-    let has_source = program.body.iter().any(|s| {
-        matches!(s, Statement::ImportDeclaration(i) if i.source.value.as_str() == source && i.specifiers.is_some())
-    });
-    if has_source {
-        for name in names {
-            inject_specifier_into_import_statement(&allocator, &mut program, name, source)?;
-        }
-    } else {
-        let line: &str =
-            Box::leak(format!("import {{ {} }} from '{}';", names.join(", "), source).into_boxed_str());
-        let mut import_program = parse_ast_program(&allocator, line, SourceType::ts());
-        inject_into_import_statement(&mut program, &mut import_program, source, text)?;
-    }
-    let code = Codegen::new()
-        .with_options(CodegenOptions::default())
-        .build(&program)
-        .code;
-    edit.write(path, code);
-    Ok(())
-}
-
-/// Drop named imports from `source`, and the import itself when it is left
-/// empty. With `keep_if_used`, a name still referenced elsewhere in the file
-/// (as `name<` or `name(`) is kept.
-fn remove_named_imports(
-    edit: &mut CapabilityEdit,
-    source: &str,
-    names: &[&str],
-    keep_if_used: bool,
-) -> Result<()> {
-    let path = edit.registrations_path();
-    let Some(text) = edit.read(&path)? else {
-        return Ok(());
-    };
-    let removable: Vec<&str> = names
-        .iter()
-        .copied()
-        .filter(|name| !keep_if_used || !name_used_outside_imports(&text, name))
-        .collect();
-    if removable.is_empty() {
-        return Ok(());
-    }
-    let allocator = Allocator::default();
-    let text: &str = Box::leak(text.into_boxed_str());
-    let mut program = parse_ast_program(&allocator, text, SourceType::ts());
-    let mut body = OxcVec::new_in(&allocator);
-    for stmt in program.body.drain(..) {
-        if let Statement::ImportDeclaration(mut import) = stmt {
-            if import.source.value.as_str() == source {
-                if let Some(specifiers) = import.specifiers.as_mut() {
-                    specifiers.retain(|s| {
-                        let local = match s {
-                            ImportDeclarationSpecifier::ImportSpecifier(s) => s.local.name.as_str(),
-                            ImportDeclarationSpecifier::ImportDefaultSpecifier(s) => {
-                                s.local.name.as_str()
-                            }
-                            ImportDeclarationSpecifier::ImportNamespaceSpecifier(s) => {
-                                s.local.name.as_str()
-                            }
-                        };
-                        !removable.contains(&local)
-                    });
-                    if specifiers.is_empty() {
-                        continue;
-                    }
-                }
-            }
-            body.push(Statement::ImportDeclaration(import));
-        } else {
-            body.push(stmt);
-        }
-    }
-    program.body = body;
-    let code = Codegen::new()
-        .with_options(CodegenOptions::default())
-        .build(&program)
-        .code;
-    edit.write(path, code);
-    Ok(())
-}
-
-/// Whether `name` is used as a call or a generic (`type<…>()`) outside
-/// import statements.
-fn name_used_outside_imports(text: &str, name: &str) -> bool {
-    let pattern = regex::Regex::new(&format!(r"\b{}\s*[<(]", regex::escape(name)))
-        .expect("usage pattern");
-    let mut in_import = false;
-    for line in text.lines() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with("import ") {
-            in_import = !trimmed.contains(" from ");
-            continue;
-        }
-        if in_import {
-            if trimmed.contains(" from ") || trimmed.starts_with("} from") {
-                in_import = false;
-            }
-            continue;
-        }
-        if pattern.is_match(line) {
-            return true;
-        }
-    }
-    false
+    // createWhatsAppClient, and `type` unless something else still uses it,
+    // go with the registration.
+    edit.remove_registration(None, &[], &["WhatsAppClient"])
 }
 
 #[cfg(test)]
@@ -323,19 +185,19 @@ app.use(billingRouter);
         // Both framework imports kept; the factory merged into the http one.
         assert!(registrations.contains("OpenTelemetryCollector"));
         assert!(
-            regex::Regex::new(r#"import \{[^}]*createConfigInjector[^}]*\} from "@forklaunch/core/services""#)
+            regex::Regex::new(r#"import \{[^}]*createConfigInjector[^}]*\} from '@forklaunch/core/services'"#)
                 .unwrap()
                 .is_match(&registrations),
             "{registrations}"
         );
         assert!(registrations.contains("PLATFORM_GATEWAY_URL:"));
         assert!(
-            regex::Regex::new(r#"import \{[^}]*OpenTelemetryCollector[^}]*createWhatsAppClient[^}]*\} from "@forklaunch/core/http""#)
+            regex::Regex::new(r#"import \{[^}]*OpenTelemetryCollector[^}]*createWhatsAppClient[^}]*\} from '@forklaunch/core/http'"#)
                 .unwrap()
                 .is_match(&registrations),
             "{registrations}"
         );
-        assert!(regex::Regex::new(r#"\btype\b[^}]*\} from "@demo/core""#).unwrap().is_match(&registrations));
+        assert!(regex::Regex::new(r#"\btype\b[^}]*\} from '@demo/core'"#).unwrap().is_match(&registrations));
         // No vendor credential anywhere.
         assert!(!registrations.contains("WHATSAPP_TOKEN"));
         assert!(!registrations.contains("META_"));
@@ -376,6 +238,12 @@ app.use(billingRouter);
         edit.release_gateway_wiring("whatsapp").unwrap();
         edit.commit().unwrap();
         assert_eq!(fs::read_to_string(service.join("server.ts")).unwrap(), SERVER);
+        // The registration, its imports and the gateway settings add wrote
+        // are gone: byte for byte the file it was.
+        assert_eq!(
+            fs::read_to_string(service.join("registrations.ts")).unwrap(),
+            REGISTRATIONS
+        );
         assert!(!service.join("api/platformEvents/whatsapp.ts").exists());
         assert!(!service.join("api/routes/platformEvents.routes.ts").exists());
     }
@@ -383,6 +251,7 @@ app.use(billingRouter);
     #[test]
     fn type_import_is_kept_while_something_else_uses_it() {
         let text = "import { type, string } from '@demo/core';\nconst x = { t: type<unknown>() };\n";
+        use crate::infra::in_place::binding_used as name_used_outside_imports;
         assert!(name_used_outside_imports(text, "type"));
         let text = "import {\n  type,\n  string\n} from '@demo/core';\nconst x = { t: string };\n";
         assert!(!name_used_outside_imports(text, "type"));

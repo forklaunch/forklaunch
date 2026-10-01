@@ -364,49 +364,16 @@ fn change_capability(
         service_capabilities.clone(),
         app_capabilities,
     );
-    if adding {
-        (capability.add)(&mut edit)?;
-        edit.ensure_gateway_wiring(capability.id)?;
-    } else {
-        (capability.remove)(&mut edit)?;
-        if capability.receives_events {
-            edit.remove_platform_events(capability.id)?;
-        }
-        edit.release_gateway_wiring(capability.id)?;
-    }
+    super::capabilities::apply(&mut edit, capability, adding)?;
 
-    // The manifest, edited as TOML so everything else in it is kept.
+    // The manifest: only the capability's entry in the service's
+    // `resources.capabilities` changes (see `in_place`).
     let manifest_path = app_root.join(".forklaunch").join("manifest.toml");
-    let mut value: toml::Value = toml::from_str(&std::fs::read_to_string(&manifest_path)?)?;
-    let projects = value
-        .get_mut("projects")
-        .and_then(|p| p.as_array_mut())
-        .context("manifest has no projects")?;
-    for p in projects.iter_mut() {
-        if p.get("name").and_then(|n| n.as_str()) != Some(service.as_str()) {
-            continue;
-        }
-        let table = p.as_table_mut().context("project is not a table")?;
-        let resources = table
-            .entry("resources")
-            .or_insert_with(|| toml::Value::Table(Default::default()))
-            .as_table_mut()
-            .context("resources is not a table")?;
-        if service_capabilities.is_empty() {
-            resources.remove("capabilities");
-        } else {
-            resources.insert(
-                "capabilities".to_string(),
-                toml::Value::Array(
-                    service_capabilities
-                        .iter()
-                        .map(|c| toml::Value::String(c.clone()))
-                        .collect(),
-                ),
-            );
-        }
+    let text = std::fs::read_to_string(&manifest_path)?;
+    let changed = super::in_place::set_manifest_capability(&text, &service, capability.id, adding)?;
+    if changed != text {
+        edit.write(manifest_path, changed);
     }
-    edit.write(manifest_path, toml::to_string_pretty(&value)?);
 
     if matches.get_flag("dryrun") {
         for (path, writes) in edit.changed_paths() {

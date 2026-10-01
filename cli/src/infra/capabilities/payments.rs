@@ -16,6 +16,7 @@ use anyhow::{Result, bail};
 use regex::Regex;
 
 use super::{Capability, CapabilityEdit};
+use crate::infra::in_place;
 
 pub(crate) static PAYMENTS: Capability = Capability {
     id: "payments",
@@ -78,107 +79,10 @@ fn retype_keys(text: &str, from: &str, to: &str) -> String {
     out
 }
 
-/// Add `name` to the named imports from `source`, or a new import line after
-/// the last import. Text-level, so the other names in that import survive.
+/// Add `name` to the named imports from `source` (or add that import), in
+/// the file's style.
 pub(crate) fn ensure_named_import(text: &str, name: &str, source: &str) -> String {
-    let re = Regex::new(&format!(
-        r#"(?s)import\s*\{{([^}}]*)\}}\s*from\s*['"]{}['"];?"#,
-        regex::escape(source)
-    ))
-    .unwrap();
-    if let Some(m) = re.captures(text) {
-        let names: Vec<String> = m[1]
-            .split(',')
-            .map(|n| n.trim().to_string())
-            .filter(|n| !n.is_empty())
-            .collect();
-        if names.iter().any(|n| n == name) {
-            return text.to_string();
-        }
-        let mut names = names;
-        names.push(name.to_string());
-        let whole = m.get(0).unwrap();
-        return format!(
-            "{}import {{ {} }} from '{}';{}",
-            &text[..whole.start()],
-            names.join(", "),
-            source,
-            &text[whole.end()..]
-        );
-    }
-    insert_import(text, &format!("import {{ {name} }} from '{source}';"))
-}
-
-/// Drop `name` from the named imports from `source` (the whole import when it
-/// was the only one).
-pub(crate) fn remove_named_import(text: &str, name: &str, source: &str) -> String {
-    let re = Regex::new(&format!(
-        r#"(?s)import\s*\{{([^}}]*)\}}\s*from\s*['"]{}['"];?\n?"#,
-        regex::escape(source)
-    ))
-    .unwrap();
-    let Some(m) = re.captures(text) else {
-        return text.to_string();
-    };
-    let names: Vec<&str> = m[1]
-        .split(',')
-        .map(str::trim)
-        .filter(|n| !n.is_empty() && *n != name)
-        .collect();
-    let whole = m.get(0).unwrap();
-    let replacement = if names.is_empty() {
-        String::new()
-    } else {
-        format!("import {{ {} }} from '{}';\n", names.join(", "), source)
-    };
-    format!("{}{}{}", &text[..whole.start()], replacement, &text[whole.end()..])
-}
-
-/// Merge an import line into `text`: named imports join an existing import
-/// from the same source (keeping its other names); a default import is added
-/// unless one of that name from that source is already there.
-pub(crate) fn merge_import_line(text: &str, import_line: &str, source: &str) -> String {
-    let named = Regex::new(r"^\s*import\s*\{([^}]*)\}\s*from").unwrap();
-    if let Some(c) = named.captures(import_line) {
-        let mut out = text.to_string();
-        for name in c[1].split(',').map(str::trim).filter(|n| !n.is_empty()) {
-            out = ensure_named_import(&out, name, source);
-        }
-        return out;
-    }
-    let default = Regex::new(r"^\s*import\s+(\w+)\s+from").unwrap();
-    if let Some(c) = default.captures(import_line) {
-        let present = Regex::new(&format!(
-            r#"import\s+{}\s+from\s+['"]{}['"]"#,
-            regex::escape(&c[1]),
-            regex::escape(source)
-        ))
-        .unwrap();
-        if present.is_match(text) {
-            return text.to_string();
-        }
-    }
-    insert_import(text, import_line)
-}
-
-fn insert_import(text: &str, line: &str) -> String {
-    let lines: Vec<&str> = text.lines().collect();
-    // After the last line that ends an import statement.
-    let last = lines
-        .iter()
-        .rposition(|l| {
-            let t = l.trim_start();
-            (t.starts_with("import ") || t.starts_with("} from ")) && t.contains(" from ")
-        })
-        .map(|i| i + 1)
-        .unwrap_or(0);
-    let mut out: Vec<String> = lines.iter().map(|l| l.to_string()).collect();
-    out.insert(last, line.to_string());
-    let mut joined = out.join("\n");
-    if text.ends_with('\n') {
-        joined.push('\n');
-    }
-    joined
+    in_place::add_named_imports(text, source, &[name])
 }
 
 fn has_default_stripe_import(text: &str) -> bool {
@@ -245,17 +149,12 @@ fn add(edit: &mut CapabilityEdit) -> Result<()> {
         }
     } else {
         if !has_default_stripe_import(&text) {
-            text = insert_import(&text, "import Stripe from 'stripe';");
+            text = in_place::add_default_import(&text, "Stripe", "stripe");
         }
         text = ensure_named_import(&text, "createStripeClient", CORE_HTTP);
         edit.write(path, text);
-        // The import line is present now, so only the block is merged.
-        edit.inject_registration(
-            "import Stripe from 'stripe';",
-            "stripe",
-            None,
-            Some(RUNTIME_BLOCK),
-        )?;
+        // The imports are in place, so only the block is merged.
+        edit.inject_registration("", "stripe", None, Some(RUNTIME_BLOCK))?;
         ensure_stripe_dependency(edit)?;
     }
 
@@ -274,41 +173,31 @@ fn text_has_webhook_service(edit: &CapabilityEdit) -> Result<bool> {
         .is_some_and(|t| t.contains("WebhookService:") && t.contains("StripeWebhookService")))
 }
 
+/// The `stripe` dependency line, added in place (see `in_place`).
 fn ensure_stripe_dependency(edit: &mut CapabilityEdit) -> Result<()> {
     let path = edit.service_path.join("package.json");
     let Some(text) = edit.read(&path)? else {
         return Ok(());
     };
-    let mut json: serde_json::Value = serde_json::from_str(&text)?;
-    let deps = json
-        .as_object_mut()
-        .map(|o| {
-            o.entry("dependencies")
-                .or_insert_with(|| serde_json::json!({}))
-        })
-        .and_then(|d| d.as_object_mut());
-    if let Some(deps) = deps {
-        if deps.contains_key("stripe") {
-            return Ok(());
-        }
-        // Appended, not re-sorted, so `infra remove` leaves the file as it was.
-        deps.insert("stripe".to_string(), serde_json::json!(STRIPE_VERSION));
-        edit.write(path, format!("{}\n", serde_json::to_string_pretty(&json)?));
+    let changed = in_place::add_dependency(&text, "stripe", STRIPE_VERSION)?;
+    if changed != text {
+        edit.write(path, changed);
     }
     Ok(())
 }
 
 fn remove(edit: &mut CapabilityEdit) -> Result<()> {
     let path = edit.registrations_path();
-    let Some(text) = edit.read(&path)? else {
+    let Some(before) = edit.read(&path)? else {
         return Ok(());
     };
-    if switched_factory().is_match(&text) {
+    if switched_factory().is_match(&before) {
         let mut text = switched_factory()
-            .replace(&text, "factory: ({ STRIPE_API_KEY }) => new Stripe(STRIPE_API_KEY)")
+            .replace(&before, "factory: ({ STRIPE_API_KEY }) => new Stripe(STRIPE_API_KEY)")
             .into_owned();
         text = retype_keys(&text, "optional(string)", "string");
-        text = remove_named_import(&text, "createStripeClient", CORE_HTTP);
+        // createStripeClient goes with the switched factory.
+        text = in_place::drop_orphaned_imports(&before, &text, &["createStripeClient"]);
         edit.write(path, text);
         let controller = edit.service_path.join("api/controllers/webhook.controller.ts");
         if let Some(source) = edit.read(&controller)? {
@@ -320,19 +209,10 @@ fn remove(edit: &mut CapabilityEdit) -> Result<()> {
                 );
             }
         }
-    } else if injected_factory().is_match(&text) {
+    } else if injected_factory().is_match(&before) {
+        // createStripeClient, and `import Stripe` when nothing else in the
+        // file uses it, go with the registration.
         edit.remove_registration(None, &[], &["StripeClient"])?;
-        let mut text = edit.read(&path)?.unwrap_or_default();
-        text = remove_named_import(&text, "createStripeClient", CORE_HTTP);
-        // Our `import Stripe` goes when nothing else in the file uses it.
-        let uses = Regex::new(r"\bStripe\b").unwrap().find_iter(&text).count();
-        if uses <= 1 {
-            text = Regex::new(r#"import\s+Stripe\s+from\s+['"]stripe['"];?\n?"#)
-                .unwrap()
-                .replace(&text, "")
-                .into_owned();
-        }
-        edit.write(path, text);
         drop_stripe_dependency_if_unused(edit)?;
     }
     Ok(())
@@ -366,11 +246,9 @@ fn drop_stripe_dependency_if_unused(edit: &mut CapabilityEdit) -> Result<()> {
     let Some(text) = edit.read(&path)? else {
         return Ok(());
     };
-    let mut json: serde_json::Value = serde_json::from_str(&text)?;
-    if let Some(deps) = json.get_mut("dependencies").and_then(|d| d.as_object_mut()) {
-        if deps.shift_remove("stripe").is_some() {
-            edit.write(path, format!("{}\n", serde_json::to_string_pretty(&json)?));
-        }
+    let changed = in_place::remove_dependency(&text, "stripe")?;
+    if changed != text {
+        edit.write(path, changed);
     }
     Ok(())
 }
@@ -469,26 +347,28 @@ mod tests {
         let added = ensure_named_import(text, "createStripeClient", CORE_HTTP);
         assert!(added.contains("import { OpenTelemetryCollector, createStripeClient } from '@forklaunch/core/http';"));
         assert_eq!(ensure_named_import(&added, "createStripeClient", CORE_HTTP), added);
-        let removed = remove_named_import(&added, "createStripeClient", CORE_HTTP);
-        assert!(removed.contains("import { OpenTelemetryCollector } from '@forklaunch/core/http';"));
+        let removed = in_place::remove_named_imports(&added, CORE_HTTP, &["createStripeClient"]);
+        assert_eq!(removed, text);
         let fresh = ensure_named_import("import x from 'y';\nconst a = 1;\n", "createStripeClient", CORE_HTTP);
         assert_eq!(
             fresh,
-            "import x from 'y';\nimport { createStripeClient } from '@forklaunch/core/http';\nconst a = 1;\n"
+            "import { createStripeClient } from '@forklaunch/core/http';\nimport x from 'y';\nconst a = 1;\n"
         );
-        assert_eq!(remove_named_import(&fresh, "createStripeClient", CORE_HTTP), "import x from 'y';\nconst a = 1;\n");
+        assert_eq!(
+            in_place::remove_named_imports(&fresh, CORE_HTTP, &["createStripeClient"]),
+            "import x from 'y';\nconst a = 1;\n"
+        );
     }
 
     #[test]
-    fn merging_an_import_keeps_the_other_names() {
-        let text = "import {\n  ComplianceDataService,\n  createConfigInjector,\n  getEnvVar,\n  Lifetime\n} from '@forklaunch/core/services';\nconst a = 1;\n";
-        let merged = merge_import_line(text, "import { getEnvVar } from \"@forklaunch/core/services\";", "@forklaunch/core/services");
-        assert_eq!(merged, text);
-        let merged = merge_import_line(text, "import { optional, getEnvVar } from '@forklaunch/core/services';", "@forklaunch/core/services");
-        assert!(merged.contains("createConfigInjector") && merged.contains("optional"));
-        let with_default = merge_import_line(text, "import Stripe from 'stripe';", "stripe");
-        assert!(with_default.contains("import Stripe from 'stripe';"));
-        assert_eq!(merge_import_line(&with_default.replace('\'', "\""), "import Stripe from 'stripe';", "stripe").matches("import Stripe").count(), 1);
+    fn the_default_stripe_import_is_added_once_in_the_files_quotes() {
+        let text = "import {\n  createConfigInjector,\n  getEnvVar\n} from \"@forklaunch/core/services\";\nimport { a } from \"./a\";\n";
+        let added = in_place::add_default_import(text, "Stripe", "stripe");
+        assert_eq!(
+            added,
+            "import {\n  createConfigInjector,\n  getEnvVar\n} from \"@forklaunch/core/services\";\nimport Stripe from \"stripe\";\nimport { a } from \"./a\";\n"
+        );
+        assert_eq!(in_place::add_default_import(&added, "Stripe", "stripe"), added);
     }
 
     #[test]
