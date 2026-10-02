@@ -1,4 +1,4 @@
-import { clinicalTermsFor } from './layTerms.service';
+import { clinicalTermsFor, literatureSearchTerm } from './layTerms.service';
 import { queryTerms } from './ranking.service';
 
 export type QueryConcepts = {
@@ -10,6 +10,10 @@ export type QueryConcepts = {
   // true when the query used an everyday term: its own words ("heartattack")
   // then do not count, only the clinical term does
   layMapped: boolean;
+  // the query's words with everyday terms replaced by clinical ones ("aspirin
+  // prevent first myocardial infarction"), for questions that name more than
+  // the term itself
+  searchWords: string[];
 };
 
 const MIN_QUERY_COVERAGE = 0.6;
@@ -27,7 +31,12 @@ export function queryConcepts(query: string, expandedTerms: string[]): QueryConc
   const phrases = [...lay, ...expandedTerms.filter((t) => t.trim().toLowerCase() !== normalizedQuery)]
     .map((term) => queryTerms(term))
     .filter((words) => words.length > 0);
-  return { phrases, queryWords: queryTerms(query), layMapped: lay.length > 0 };
+  return {
+    phrases,
+    queryWords: queryTerms(query),
+    layMapped: lay.length > 0,
+    searchWords: lay.length > 0 ? queryTerms(literatureSearchTerm(query)) : queryTerms(query)
+  };
 }
 
 export type KeySentence = { text: string; passageId: string };
@@ -120,10 +129,20 @@ export function passageIsAbout(
     if (phrase.every((w) => titleWords.has(w))) return true;
     if (sentenceWords.filter((words) => phrase.every((w) => words.has(w))).length >= 2) return true;
   }
-  if (concepts.layMapped || concepts.queryWords.length === 0) {
+  if (concepts.queryWords.length === 0) {
     return false;
   }
   const words = new Set(queryTerms(`${passage.title} ${passage.sectionPath} ${passage.text}`));
+  if (concepts.layMapped) {
+    // An everyday term alone ("heartattack") is judged by its clinical term
+    // only. A question about more than the term ("does aspirin prevent a
+    // heart attack") also counts a passage that names the clinical term and
+    // most of the question's other words.
+    const searchWords = concepts.searchWords ?? [];
+    const namesTerm = concepts.phrases.some((phrase) => phrase.every((w) => words.has(w)));
+    if (!namesTerm || searchWords.length < 3) return false;
+    return searchWords.filter((w) => words.has(w)).length / searchWords.length >= MIN_QUERY_COVERAGE;
+  }
   const covered = concepts.queryWords.filter((w) => words.has(w)).length;
   return covered / concepts.queryWords.length >= MIN_QUERY_COVERAGE;
 }

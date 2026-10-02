@@ -285,9 +285,11 @@ export class AnswerService {
     });
     const cited = results
       .filter((r) => r.licenseScope !== 'metadata_only' && /dosage/i.test(r.sectionPath))
+      // the drug must be the label's own: "what dose of insulin should I
+      // take for a blood sugar of 300" shares "blood" with a cefazolin label
       .filter((r) => {
-        const words = new Set(queryTerms(`${r.title} ${r.text}`));
-        return drugTerms.some((term) => words.has(term));
+        const titleWords = new Set(queryTerms(r.title));
+        return drugTerms.some((term) => titleWords.has(term));
       })
       .slice(0, LABEL_PASSAGES);
     if (cited.length === 0) {

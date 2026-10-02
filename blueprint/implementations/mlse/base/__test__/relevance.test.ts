@@ -62,6 +62,27 @@ describe('passageIsAbout', () => {
     expect(passageIsAbout(infarctionTrial, concepts)).toBe(true);
   });
 
+  it('accepts a passage on the subject of a question that uses an everyday term', () => {
+    const concepts = queryConcepts('Does aspirin help prevent a first heart attack in people over 60?', [
+      'Does aspirin help prevent a first heart attack in people over 60?',
+      'myocardial infarction'
+    ]);
+    expect(
+      passageIsAbout(
+        {
+          title: 'Aspirin in the primary and secondary prevention of vascular disease',
+          sectionPath: 'Abstract',
+          text: 'In primary prevention trials, aspirin reduced first non-fatal myocardial infarction by about a fifth.'
+        },
+        concepts
+      )
+    ).toBe(true);
+    // the clinical term alone is not enough for a question about aspirin
+    expect(
+      passageIsAbout({ title: 'Imaging', sectionPath: 'Results', text: 'After myocardial infarction, scar size grew.' }, concepts)
+    ).toBe(false);
+  });
+
   it('needs most of the question words when no clinical term is named', () => {
     const concepts = queryConcepts('bile leak after laparoscopic cholecystectomy', ['bile leak after laparoscopic cholecystectomy']);
     expect(
