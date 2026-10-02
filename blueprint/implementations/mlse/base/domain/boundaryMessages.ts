@@ -9,7 +9,7 @@ export const EMERGENCY_MESSAGE =
   'This looks like an emergency happening now. MLSE is a literature reference and does not give emergency guidance. Follow your hospital\'s emergency protocol or call your local emergency number; for a poisoning or overdose, contact your poison control centre.';
 
 export const PATIENT_SPECIFIC_MESSAGE =
-  'MLSE does not make treatment or dosing decisions for an individual patient. That needs clinical judgement and the full prescribing information. Where a drug label applies, its published dosing section is quoted below as written, without any calculation.';
+  'MLSE does not make treatment or dosing decisions for an individual patient, and cannot tell anyone to start, stop or change a medicine. Ask the prescribing clinician or a pharmacist, who know the full history. Where a drug label applies, its published dosing section is quoted below as written, without any calculation.';
 
 export const PRESCRIPTION_MESSAGE =
   'MLSE cannot prescribe or issue prescriptions. It summarizes published literature and drug labels for clinicians.';

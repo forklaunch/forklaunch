@@ -4,6 +4,7 @@ import {
 } from '@forklaunch/core/http';
 import {
   clinicalTermsFor,
+  literatureSearchTerm,
   LiveRetrievalService,
   LlmProvider,
   reciprocalRankFusion,
@@ -168,7 +169,7 @@ export class SearchService {
   // PubMed is also asked for reviews and guidelines, which summarize a topic
   // better than the newest individual studies.
   private async liveSearch(query: string, request: SearchRequestDto) {
-    const term = clinicalTermsFor(query)[0] ?? query;
+    const term = literatureSearchTerm(query);
     const wantsReviews =
       request.preferReviews === true && (!request.sourceKeys?.length || request.sourceKeys.includes('pubmed'));
     if (!wantsReviews) {

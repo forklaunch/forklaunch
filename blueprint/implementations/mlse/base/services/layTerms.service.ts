@@ -37,6 +37,9 @@ const LAY_TERMS: [lay: string[], clinical: string][] = [
   [['broken bone', 'broken bones'], 'fracture'],
   [['womb removal'], 'hysterectomy'],
   [['c section', 'c-section', 'caesarean', 'cesarean'], 'cesarean section'],
+  // US papers say "cesarean delivery", British ones "caesarean section"
+  [['c section', 'c-section', 'caesarean', 'cesarean'], 'cesarean delivery'],
+  [['c section', 'c-section', 'caesarean', 'cesarean'], 'caesarean section'],
   [['bone marrow transplant', 'bone marrow transplantation'], 'hematopoietic stem cell transplantation'],
   [['water on the brain'], 'hydrocephalus'],
   [['slipped disc', 'slipped disk'], 'intervertebral disc displacement'],
@@ -57,6 +60,37 @@ const ENTRIES = LAY_TERMS.flatMap(([lays, clinical]) =>
     return [{ form: spaced, clinical }, { form: joined, clinical }];
   })
 );
+
+// Question words that make a literature search find nothing: PubMed finds
+// no papers for "Does aspirin help prevent a first heart attack in people
+// over 60?" and thousands for "aspirin prevent myocardial infarction".
+const QUESTION_WORDS = new Set([
+  'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'do', 'does', 'did', 'can', 'could', 'should', 'would',
+  'will', 'what', 'which', 'who', 'when', 'how', 'why', 'there', 'any', 'help', 'helps', 'really', 'me', 'i',
+  'my', 'you', 'your', 'people', 'person', 'over', 'under', 'in', 'of', 'for', 'to', 'with', 'on', 'at', 'it'
+]);
+
+/**
+ * The query as a literature search: everyday terms replaced by their
+ * clinical term ("heart attack" -> myocardial infarction) and question
+ * words and bare numbers left out. A query that is only an everyday term
+ * becomes its clinical term.
+ */
+export function literatureSearchTerm(query: string): string {
+  let text = normalize(query.slice(0, 2000));
+  const found = ENTRIES.filter((entry) => text.includes(entry.form)).sort((a, b) => b.form.length - a.form.length);
+  // each everyday term once, by its first clinical term
+  const replaced = new Set<string>();
+  for (const entry of found) {
+    if (!text.includes(entry.form) || replaced.has(entry.form)) continue;
+    replaced.add(entry.form);
+    // "cesarean section" already names its clinical term
+    if (text.includes(` ${entry.clinical} `)) continue;
+    text = text.replace(entry.form, ` ${entry.clinical} `);
+  }
+  const words = text.trim().split(/\s+/).filter((w) => w && !QUESTION_WORDS.has(w) && !/^\d+$/.test(w));
+  return [...new Set(words)].join(' ') || query.trim();
+}
 
 /**
  * Every everyday and clinical term in the list, for spelling suggestions and
