@@ -59,6 +59,14 @@ const ENTRIES = LAY_TERMS.flatMap(([lays, clinical]) =>
 );
 
 /**
+ * Every everyday and clinical term in the list, for spelling suggestions and
+ * completion as a query is typed.
+ */
+export function knownTerms(): string[] {
+  return [...new Set(LAY_TERMS.flatMap(([lays, clinical]) => [...lays, clinical]))];
+}
+
+/**
  * The clinical terms for the everyday terms a query contains, most specific
  * (longest match) first. Empty when the query already uses clinical terms.
  */

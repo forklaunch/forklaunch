@@ -4,14 +4,42 @@ import {
   FetchedDocumentDto,
   SourceQueryDto
 } from '@forklaunch/interfaces-mlse/types';
-import { FetchLike, RateLimitedClient } from '../../domain/http';
+import { FetchLike, RateLimitedClient, RequestSchedule } from '../../domain/http';
 import { asArray, createXmlParser, textOf } from '../../domain/xml';
 
 type MedlinePlusContent = { '@_name'?: string; '#text'?: string } | string;
 type MedlinePlusDocument = { '@_url'?: string; content?: MedlinePlusContent | MedlinePlusContent[] };
 type MedlinePlusResponse = {
-  nlmSearchResult?: { list?: { document?: MedlinePlusDocument | MedlinePlusDocument[] } };
+  nlmSearchResult?: {
+    list?: { document?: MedlinePlusDocument | MedlinePlusDocument[] };
+    spellingCorrection?: string;
+  };
 };
+
+export const MEDLINEPLUS_SEARCH_URL = 'https://wsearch.nlm.nih.gov/ws/query';
+// the web service allows 85 requests a minute per address, across every
+// caller, so the fetcher and spelling suggestions share one schedule
+export const MEDLINEPLUS_INTERVAL_MS = 750;
+const MEDLINEPLUS_SCHEDULE: RequestSchedule = { nextSlot: 0 };
+
+export function medlinePlusClient(fetchImpl: FetchLike): RateLimitedClient {
+  return new RateLimitedClient('medlineplus', fetchImpl, MEDLINEPLUS_INTERVAL_MS, undefined, MEDLINEPLUS_SCHEDULE);
+}
+
+/**
+ * MedlinePlus's spelling suggestion for a health topic search ("heart
+ * atack" -> "heart attack"); undefined when it suggests nothing.
+ */
+export async function medlinePlusSpelling(
+  client: RateLimitedClient,
+  term: string,
+  baseUrl = MEDLINEPLUS_SEARCH_URL
+): Promise<string | undefined> {
+  const url = `${baseUrl}?db=healthTopics&term=${encodeURIComponent(term)}&retmax=1`;
+  const parsed = createXmlParser().parse(await client.getText(url)) as MedlinePlusResponse;
+  const correction = textOf(String(parsed.nlmSearchResult?.spellingCorrection ?? '')).trim();
+  return correction || undefined;
+}
 
 // NLM asks for this credit on reused public-domain MedlinePlus content.
 export const MEDLINEPLUS_CREDIT = 'MedlinePlus, National Library of Medicine';
@@ -75,10 +103,9 @@ export class MedlinePlusFetcher implements SourceFetcher {
 
   constructor(
     fetchImpl: FetchLike,
-    private readonly baseUrl = 'https://wsearch.nlm.nih.gov/ws/query'
+    private readonly baseUrl = MEDLINEPLUS_SEARCH_URL
   ) {
-    // the web service allows 85 requests a minute per address
-    this.client = new RateLimitedClient(this.sourceKey, fetchImpl, 750);
+    this.client = medlinePlusClient(fetchImpl);
   }
 
   async fetchDocuments({ term, limit }: SourceQueryDto): Promise<FetchedDocumentDto[]> {

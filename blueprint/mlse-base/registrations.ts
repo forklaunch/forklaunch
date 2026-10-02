@@ -33,6 +33,7 @@ import {
   PmcOaFetcher,
   PublicCorpusProvider,
   PubMedFetcher,
+  QuerySuggestionService,
   SourceFetcherRegistry
 } from '@forklaunch/implementation-mlse-base/services';
 import { RedisWorkerConsumer } from '@forklaunch/implementation-worker-redis/consumers';
@@ -400,6 +401,18 @@ const serviceDependencies = runtimeDependencies.chain({
         LlmProvider,
         OtelCollector
       )
+  },
+  // "Did you mean" and suggestions as a query is typed, from NLM's free
+  // services; shares NCBI's request schedule with live search
+  QuerySuggestionService: {
+    lifetime: Lifetime.Singleton,
+    type: QuerySuggestionService,
+    factory: ({ NCBI_TOOL, NCBI_EMAIL, NCBI_API_KEY }) =>
+      new QuerySuggestionService((url, init) => fetch(url, init), {
+        tool: NCBI_TOOL,
+        email: NCBI_EMAIL,
+        apiKey: NCBI_API_KEY || undefined
+      })
   },
   LiveRetrievalService: {
     lifetime: Lifetime.Singleton,

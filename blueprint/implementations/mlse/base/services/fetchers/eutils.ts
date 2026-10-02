@@ -65,6 +65,18 @@ export class EutilsClient {
     return response.esearchresult?.idlist ?? [];
   }
 
+  // NCBI's spelling suggestion for a PubMed query ("myocardail infraction"
+  // -> "myocardial infarction"); undefined when it suggests nothing
+  async spell(term: string): Promise<string | undefined> {
+    const url = `${this.baseUrl}/espell.fcgi?db=pubmed&term=${encodeURIComponent(term)}&${this.identity()}`;
+    const xml = await this.client.getText(url);
+    const start = xml.indexOf('<CorrectedQuery>');
+    const end = xml.indexOf('</CorrectedQuery>');
+    if (start < 0 || end < start) return undefined;
+    const corrected = xml.slice(start + '<CorrectedQuery>'.length, end).trim();
+    return corrected || undefined;
+  }
+
   async fetchXml(db: 'pubmed' | 'pmc', ids: string[]): Promise<string> {
     const url = `${this.baseUrl}/efetch.fcgi?db=${db}&id=${ids.map(encodeURIComponent).join(',')}&retmode=xml&${this.identity()}`;
     return this.client.getText(url);

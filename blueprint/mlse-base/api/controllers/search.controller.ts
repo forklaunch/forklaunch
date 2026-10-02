@@ -14,6 +14,7 @@ import { ci, tokens } from '../../bootstrapper';
 const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 const searchServiceFactory = ci.scopedResolver(tokens.SearchService);
 const savedSearchServiceFactory = ci.scopedResolver(tokens.SavedSearchService);
+const querySuggestionService = ci.resolve(tokens.QuerySuggestionService);
 const ingestionJobProducerFactory = ci.scopedResolver(tokens.IngestionJobProducer);
 const ttlCache = ci.resolve(tokens.TtlCache);
 const HMAC_SECRET_KEY = ci.resolve(tokens.HMAC_SECRET_KEY);
@@ -140,6 +141,84 @@ export const search = handlers.get(
       );
     }
     res.status(200).json(response);
+  }
+);
+
+const textQuery = (value: string) => {
+  const text = value.trim();
+  if (!text) return { error: 'q must not be empty' };
+  if (text.length > 200) return { error: 'q must be at most 200 characters' };
+  return { text };
+};
+
+export const suggestions = handlers.get(
+  schemaValidator,
+  '/suggestions',
+  {
+    name: 'Search Suggestions',
+    access: 'internal',
+    summary:
+      'Condition, procedure and medicine names that complete a query as it is typed, from NLM and the built-in term list',
+    auth: {
+      hmac: {
+        secretKeys: {
+          default: HMAC_SECRET_KEY
+        }
+      }
+    },
+    query: {
+      q: string
+    },
+    responses: {
+      200: {
+        suggestions: array(string)
+      },
+      400: string
+    }
+  },
+  async (req, res) => {
+    const query = textQuery(req.query.q);
+    if (query.error !== undefined) {
+      res.status(400).send(query.error);
+      return;
+    }
+    res.status(200).json({ suggestions: await querySuggestionService.complete(query.text) });
+  }
+);
+
+export const spelling = handlers.get(
+  schemaValidator,
+  '/spelling',
+  {
+    name: 'Search Spelling',
+    access: 'internal',
+    summary:
+      'A corrected query ("heart atack" -> "heart attack") for "Did you mean", or no correction when the query looks right',
+    auth: {
+      hmac: {
+        secretKeys: {
+          default: HMAC_SECRET_KEY
+        }
+      }
+    },
+    query: {
+      q: string
+    },
+    responses: {
+      200: {
+        correction: optional(string)
+      },
+      400: string
+    }
+  },
+  async (req, res) => {
+    const query = textQuery(req.query.q);
+    if (query.error !== undefined) {
+      res.status(400).send(query.error);
+      return;
+    }
+    const correction = await querySuggestionService.correct(query.text);
+    res.status(200).json(correction ? { correction } : {});
   }
 );
 
