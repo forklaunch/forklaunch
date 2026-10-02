@@ -112,6 +112,8 @@ Every route is also in the generated SDK (`sdk.ts`).
 | Route | What it does |
 |---|---|
 | `GET /search?q=` | Hybrid search; returns citable passages and per-source live status |
+| `GET /search/suggestions?q=` | Condition, procedure and medicine names that complete a query as it is typed (NLM Clinical Tables and the built-in term list) |
+| `GET /search/spelling?q=` | "Did you mean": a corrected query (built-in term list, then MedlinePlus, then NCBI ESpell), or none |
 | `POST /answer` | Answer, streamed as server-sent events: `start`, one `section` per verified section, `done` |
 | `POST /answer/complete` | The same answer as one JSON response |
 | `GET /topic`, `GET /topic/:slug`, `GET /topic/:slug/phase/:n` | Topic pages and single procedure phases |

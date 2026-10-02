@@ -25,6 +25,7 @@ export * from './ollamaLlmProvider.service';
 export * from './publicCorpusProvider.service';
 export * from './quantityExtractor.service';
 export * from './queryClassifier.service';
+export * from './querySuggestions.service';
 export * from './ranking.service';
 export * from './relevance.service';
 export * from './sourceFetcherRegistry.service';
