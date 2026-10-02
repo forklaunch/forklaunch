@@ -54,6 +54,45 @@ const HAPPENING_NOW = [
   'asap'
 ];
 
+// Events that are an emergency as soon as they are told about a person,
+// even in the past tense: "my 3-year-old swallowed my pills". Chronic
+// conditions (stroke, seizure, chest pain) are not here: "my patient had a
+// stroke last year" is a literature question.
+const ACUTE_FOR_A_PERSON = [
+  'swallowed',
+  'ingested',
+  'overdose',
+  'overdosed',
+  'poisoned',
+  'took too many',
+  'not breathing',
+  'stopped breathing',
+  'unresponsive',
+  'collapsed',
+  'choking',
+  'suicidal'
+];
+// Someone the asker is with; "my patient" and ages are in INDIVIDUAL_PATIENT
+// and describesIndividual.
+const SOMEONE = [
+  'my son',
+  'my daughter',
+  'my child',
+  'my kid',
+  'my baby',
+  'my toddler',
+  'my husband',
+  'my wife',
+  'my partner',
+  'my mother',
+  'my father',
+  'my mom',
+  'my dad',
+  'my friend',
+  'someone',
+  'somebody'
+];
+
 const PRESCRIPTION_REQUESTS = [
   'prescribe me',
   'write a prescription',
@@ -81,7 +120,31 @@ const INDIVIDUAL_PATIENT = [
   'how much should i give',
   'how much do i give',
   'dose for him',
-  'dose for her'
+  'dose for her',
+  // the asker's own treatment: "should I stop my warfarin?"
+  'should i stop',
+  'should i take',
+  'should i continue',
+  'should i skip',
+  'should i double',
+  'should i increase',
+  'should i reduce',
+  'should i lower',
+  'should i switch',
+  'can i stop',
+  'can i take',
+  'can i skip',
+  'how much should i take',
+  'is it safe for me',
+  'my dose',
+  'my medication',
+  'my medications',
+  'my medicine',
+  'my medicines',
+  'my pills',
+  'my tablets',
+  'my blood sugar',
+  'my blood pressure is'
 ];
 const BODY_WEIGHT_UNITS = new Set(['kg', 'kgs', 'kilo', 'kilos', 'kilogram', 'kilograms', 'lb', 'lbs', 'pound', 'pounds']);
 const AGE_UNITS = new Set(['year', 'years', 'yr', 'yrs', 'month', 'months', 'week', 'weeks']);
@@ -184,6 +247,12 @@ export function classifyQuery(query: string): QueryClassificationDto {
   const now = containsPhrase(words, HAPPENING_NOW);
   if (acute && now) {
     return result('emergency_pattern', `acute event "${acute}" happening "${now}"`);
+  }
+  const acuteForPerson = containsPhrase(words, ACUTE_FOR_A_PERSON);
+  const person =
+    containsPhrase(words, SOMEONE) ?? containsPhrase(words, INDIVIDUAL_PATIENT) ?? describesIndividual(words);
+  if (acuteForPerson && person) {
+    return result('emergency_pattern', `acute event "${acuteForPerson}" told about one person (${person})`);
   }
 
   const prescription = containsPhrase(words, PRESCRIPTION_REQUESTS);

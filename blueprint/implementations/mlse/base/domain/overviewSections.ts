@@ -61,7 +61,9 @@ export function detectTopicType(
   if (raw.some((w) => PROCEDURE_WORDS.has(w) || PROCEDURE_SUFFIXES.some((s) => w.endsWith(s)))) {
     return 'procedure';
   }
-  const words = queryTerms(query);
+  // "warfarin interactions" asks about warfarin: the aspect words are not
+  // in the label's title
+  const words = queryTerms(query).filter((w) => !MEDICINE_ASPECTS.has(w));
   const isLabelFor = (title: string) => {
     const titleWords = new Set(queryTerms(title));
     return words.length > 0 && words.every((w) => titleWords.has(w));
@@ -71,6 +73,12 @@ export function detectTopicType(
   }
   return 'condition';
 }
+
+const MEDICINE_ASPECTS = new Set(
+  queryTerms(
+    'interactions interaction side effects adverse reactions uses use dose dosing dosage warnings contraindications pregnancy breastfeeding safety'
+  )
+);
 
 /**
  * The overview section a follow-up question asks about ("how is it

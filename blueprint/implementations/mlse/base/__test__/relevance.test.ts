@@ -2,7 +2,7 @@ import { FOLLOW_UP_QUESTIONS, suggestFollowUps } from '../domain/followUpQuestio
 import { detectTopicType, isOverviewQuery, OVERVIEW_SECTIONS, sectionForQuestion } from '../domain/overviewSections';
 import { classifyQuery } from '../services/queryClassifier.service';
 import { followUpQuery } from '../services/followUp.service';
-import { clinicalTermsFor } from '../services/layTerms.service';
+import { clinicalTermsFor, literatureSearchTerm } from '../services/layTerms.service';
 import { keySentences, passageIsAbout, queryConcepts } from '../services/relevance.service';
 
 describe('clinicalTermsFor', () => {
@@ -16,6 +16,24 @@ describe('clinicalTermsFor', () => {
   it('leaves clinical queries alone', () => {
     expect(clinicalTermsFor('myocardial infarction troponin')).toEqual([]);
     expect(clinicalTermsFor('laparoscopic cholecystectomy complications')).toEqual([]);
+  });
+});
+
+describe('literatureSearchTerm', () => {
+  it('turns a question into terms a literature search finds', () => {
+    expect(literatureSearchTerm('Does aspirin help prevent a first heart attack in people over 60?')).toBe(
+      'aspirin prevent first myocardial infarction'
+    );
+    expect(literatureSearchTerm('What is the bile duct injury rate in laparoscopic cholecystectomy?')).toBe(
+      'bile duct injury rate laparoscopic cholecystectomy'
+    );
+  });
+
+  it('keeps a topic as its clinical term', () => {
+    expect(literatureSearchTerm('heart attack')).toBe('myocardial infarction');
+    expect(literatureSearchTerm('HEARTATTACK')).toBe('myocardial infarction');
+    expect(literatureSearchTerm('risks of cesarean section')).toBe('risks cesarean section');
+    expect(literatureSearchTerm('cefazolin')).toBe('cefazolin');
   });
 });
 
@@ -101,6 +119,8 @@ describe('overview answers', () => {
     expect(detectTopicType('cefazolin', [{ sourceKey: 'openfda', title: 'Cefazolin — WG Critical Care, LLC' }])).toBe('medication');
     // a label that only mentions the condition does not make it a drug
     expect(detectTopicType('heart attack', [{ sourceKey: 'openfda', title: 'Aspirin 81 mg' }])).toBe('condition');
+    // the aspect asked about is not in the label's title
+    expect(detectTopicType('warfarin interactions', [{ sourceKey: 'openfda', title: 'Warfarin Sodium — Teva' }])).toBe('medication');
   });
 
   it('gives short topic queries an overview and specific questions a direct answer', () => {

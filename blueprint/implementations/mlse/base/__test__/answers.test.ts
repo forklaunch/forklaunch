@@ -30,10 +30,19 @@ describe('classifyQuery', () => {
     for (const query of [
       'my patient is not breathing right now',
       'child just swallowed 20 tablets what do i do',
-      'someone collapsed, chest pain, please help'
+      'someone collapsed, chest pain, please help',
+      // told about one person, even without "now"
+      'My 3-year-old swallowed my blood pressure pills',
+      'my son took too many paracetamol tablets',
+      'my patient overdosed on insulin'
     ]) {
       expect([query, classOf(query)]).toEqual([query, 'emergency_pattern']);
     }
+  });
+
+  it('keeps past conditions of one person out of the emergency path', () => {
+    expect(classOf('my patient had a stroke last year, which statin?')).toBe('patient_specific_treatment');
+    expect(classOf('risk factors for stroke after overdose')).toBe('literature_lookup');
   });
 
   it('refuses prescriptions', () => {
@@ -45,7 +54,11 @@ describe('classifyQuery', () => {
       'the patient weighs 80 kg, how much propofol',
       'how much propofol for 80kg',
       'what should i give my patient for pain',
-      'a 54-year-old with gallstones, cholecystectomy now or later?'
+      'a 54-year-old with gallstones, cholecystectomy now or later?',
+      // the asker's own treatment
+      'Should I stop my warfarin before dental work next week?',
+      'What dose of insulin should I take for a blood sugar of 300?',
+      'can I take ibuprofen with my medication'
     ]) {
       expect([query, classOf(query)]).toEqual([query, 'patient_specific_treatment']);
     }
