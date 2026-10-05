@@ -46,8 +46,9 @@ describe('ScrubbingService', () => {
     );
 
     expect(result.clean).toBe(false);
+    // CARC 151, the real code for unit counts the payer won't support
     expect(result.findings).toContainEqual(
-      expect.objectContaining({ category: 'ncci_mue' })
+      expect.objectContaining({ category: 'ncci_mue', carcCode: 'CO-151' })
     );
   });
 

@@ -26,6 +26,10 @@ export interface ScrubbingResult {
   findings: ScrubbingFinding[];
 }
 
+// TODO: the rule tables are mock data imported statically, so an adopter
+// can't supply real NCCI/MUE/LCD data yet; make them a constructor
+// dependency (see README, "Not production scrubbing yet").
+//
 // Three distinct rule layers, kept separate because they check unrelated
 // things against unrelated data — see plan/cac/MEDICAL-CODING-IMPLEMENTATION-PLAN.md
 // §6. Pure logic, no DB/entity dependency: the caller (cac-base's
@@ -92,7 +96,9 @@ export class ScrubbingService {
       if (cap != null && line.units > cap) {
         findings.push({
           category: 'ncci_mue',
-          carcCode: 'UNIT-CAP-EXCEEDED',
+          // CARC 151: the information submitted does not support this many
+          // or this frequency of services, the code payers use for MUE
+          carcCode: 'CO-151',
           message: `${line.procedureCode} billed at ${line.units} units, exceeds the mock unit cap of ${cap}`
         });
       }

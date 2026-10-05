@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/implementation-cac-base",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "Computer-assisted coding basic implementation for forklaunch",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
