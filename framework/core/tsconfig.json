@@ -4,5 +4,10 @@
     "outDir": "lib",
     "experimentalDecorators": true
   },
-  "exclude": ["node_modules", "lib", "eslint.config.mjs"]
+  "exclude": [
+    "node_modules",
+    "lib",
+    "eslint.config.mjs",
+    "__test__/fixtures/codemod"
+  ]
 }

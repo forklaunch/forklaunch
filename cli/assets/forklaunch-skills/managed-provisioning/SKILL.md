@@ -9,19 +9,20 @@ user-invokable: true
 ## What this is, plainly
 
 You built an app. You want to sell it so **each customer gets their own private
-copy**: one dental practice's patient records never share a database with
+copy**: one customer's data never shares a database with
 another's.
 
 A **template** is the blueprint (your git repo, built once per version into an
 image). An **instance** is one customer's copy. **Claiming** is the handover:
 the customer sets a passphrase and the instance becomes theirs.
 
-Say you sell a booking system to dental practices. You publish version 1.4.0 of
-the template. An operator on your team launches an instance for Dr. Chen's
+Say you sell a booking system to small firms (the example product here is
+`acme-books`; substitute your own). You publish version 1.4.0 of
+the template. An operator on your team launches an instance for Meridian
 practice; twenty minutes later it is running at its own address, empty, waiting
-to be claimed. The operator sends Dr. Chen a one-time link. Dr. Chen opens it,
+to be claimed. The operator sends Meridian a one-time link. They open it,
 sets a passphrase, and the instance is hers. Later you ship 1.5.0 and roll it
-out to ten percent of practices, then all of them. When Dr. Chen's practice
+out to ten percent of customers, then all of them. When Meridian
 closes, you wipe her instance and hand it to the next practice, or destroy it.
 
 Every one of those moments is a **state** on the instance, and every arrow
@@ -36,12 +37,19 @@ your own admin tool) can drive it without reading the source.
 | `provisioning` | the backing application is being created and the pinned version deployed; a launch that needs deployment approval parks here (`launchApprovalState: pending`) | operator |
 | `provisioning_failed` | a launch or a reset ran and failed; `lastError` says why; nothing was torn down | operator |
 | `awaiting_claim` | running, empty, one-time claim link exists (or can be minted); nobody owns it yet | operator |
-| `awaiting_claim_blocked` | declared in the map (a hold on an unclaimed instance) but **nothing writes it today**; treat as reserved | operator |
+| `awaiting_claim_blocked` | declared in the map (a hold on an unclaimed instance) but **nothing writes it today**; treat as reserved. A claim-next reservation deliberately does NOT use it (see below) | operator |
 | `active` | claimed; the customer's passphrase-derived backup key is on file; serving | operator + customer |
 | `suspended` | claimed but taken down (billing, abuse); comes back to `active` | operator |
 | `resetting` | being wiped and returned to the pool: data erased, key rotated, identity cleared, redeployed empty | operator |
 | `destroying` | the backing application is being torn down | operator |
 | `destroyed` | terminal; the row stays for audit | operator |
+
+A **claim-next reservation** is not a state: the instance stays
+`awaiting_claim` with `reservedAt` set and its claim link out (stored URL
+purged, link unexpired). It lapses with the link. A separate state would
+have taken a reserved instance out of the claim lookup, the relay and
+gateway allowlists, rollouts and the reset edge, all of which must keep
+treating it as an ordinary unclaimed instance.
 
 `launchApprovalState` (`not_required` / `pending` / `approved`) is a mirror of
 the platform's deployment-approval gate, only meaningful while `provisioning`.
@@ -174,6 +182,7 @@ platform's deployment callback picks the one whose latest deployment it is.
 | `POST /instances/:id/claim-link` | EDITOR | | reveal the one-time link (purged on reveal), 404 once revealed or claimed |
 | `POST /instances/:id/claim-link/reissue` | EDITOR | | new link, old token dead |
 | `POST /instances/:id/claim-link/send` | EDITOR | | send by email/SMS without the operator seeing it |
+| `POST /instances/claim-next` | EDITOR | stays `awaiting_claim` (reserved) | body `{templateSlug, email?, reference?}`; the oldest unreserved instance of the template in the org, picked with `FOR UPDATE SKIP LOCKED`, token rotated; 200 `{instanceId, host, claimUrl, expiresAt, reference?, emailed?}`, 409 `{code: 'POOL_EMPTY', poolSize, reserved, provisioning}`. Proxied as `POST /managed-mode/templates/:slug/claim-next` |
 | `PATCH /instances/:id` | EDITOR | stays `awaiting_claim`/`active`/`suspended` | body `{instanceSize?, updatePolicy?, updateDeferredUntil?}`; 200 if only policy changed, 202 `{state}` when size changed (`pendingUpdate: 'size'`, an `update` deploy is queued) |
 | `POST /instances/:id/apply-variables` | EDITOR | stays | after variables were written, redeploy the same version so the tasks see them (`pendingUpdate: 'variables'`), 202 |
 | `GET /instances/:id/deployments?limit=` | VIEWER | | the platform's deployment list for the backing application; follow an update/reset/rollout deploy here |
@@ -220,7 +229,7 @@ refuses reset and propagation until its item leaves `updating`.
 | `POST /instances/claim` | claim: token + browser-derived backup public key |
 | `POST /instance-gateway/sms/otp` | template-locked OTP on behalf of an instance |
 | `POST /instance-gateway/claim/claimed` | the instance tells the platform its app-side claim finished (`appClaimedAt`) |
-| `GET /callback[/:route]` | the OAuth relay (Epic etc.) for eligible states only |
+| `GET /callback[/:route]` | the OAuth relay (any provider) for eligible states only |
 
 ### Worker-facing (HMAC, `/internal`)
 
@@ -235,6 +244,7 @@ row changes when they land, not when the operator route returns.
 | `POST /internal/instances/:id/provision-result` | launch outcome: `provisioning` → `awaiting_claim` / `provisioning_failed` |
 | `POST /internal/managed-instances/deployment-result` | the platform's deployment callback: finishes launches, resets and destroys by evidence, clears `pendingUpdate`, records rollout item results |
 | `POST /internal/managed-instances/resume-provisioning` | the approval gate releasing a parked launch |
+| `POST /internal/managed-instances/launch-policy` | the approval gate asking whether an application's template has `autoApproveLaunches` (and who set it) |
 | `POST /internal/template-versions/:id/build-result` | build-once outcome for a version |
 
 ## How each edge actually completes
@@ -257,6 +267,11 @@ with `requestedBy: system`, the instance holds in `provisioning` with
 `launchApprovalState: pending`, and nothing advances until an approver
 releases it (`POST /deployment-approvals/:id/approve` on platform-management,
 the dashboard's Deployments page, or `forklaunch deploy approvals approve`).
+A template's `autoApproveLaunches` (admin-only PATCH, who set it is
+recorded) skips the platform's managed first-deploy gate for its launches
+and nothing else: an environment that explicitly requires approval still
+parks them. The decision asks managed-apps
+(`/internal/managed-instances/launch-policy`) and fails closed.
 Resets and updates deploy the same way and can park the same way. A client
 that polls for `awaiting_claim` must watch `launchApprovalState` too, or it
 waits forever on a gated org.
@@ -298,9 +313,7 @@ is delivered too, newest first, as `LEGACY_<KEY>S` (comma-separated), and the
 per-instance gateway HMAC key is minted afresh. The current version is then
 redeployed. **The app does the re-encryption**: on startup, when
 `LEGACY_ENCRYPTION_KEYS` is set, it must open every encrypted column with the
-key ring and rewrite it under the current key before serving (Health Vault
-does this in each service's boot; the platform's own modules do the same for
-their key via `reencrypt-legacy-key.util.ts`). An app that ignores the legacy
+key ring and rewrite it under the current key before serving. An app that ignores the legacy
 list will find all of its encrypted data unreadable after a rotation, so the
 route refuses (`ROTATE_UNSUPPORTED_BY_TEMPLATE`) until the template's
 maintainer sets `supportsKeyRotation` on the template (PATCH
@@ -311,16 +324,28 @@ instance's requests for the minutes between the request and the redeploy
 landing (old HMAC key on the instance, new one on the platform).
 
 **Teardown.** `destroying` is enqueued; the worker deletes the backing
-application, which only *schedules* the teardown deployment (snapshots first),
-and records that deployment's id on the instance. `destroyed` is written by the
-deployment-result callback when the teardown lands — the row once said
-`destroyed` 20 s after the request while the vault host answered 200 for
-minutes (bb0f60, 2026-09-21). A failed teardown keeps the instance `destroying`
-with `lastError`; `DELETE` again re-queues it, and the worker never deletes
-twice while the teardown it scheduled is still running (a second delete cancels
-and reschedules). No application, or no teardown scheduled: `destroyed` at
-once. `instance get` on a destroyed id still returns the row; `list` hides
-it.
+application, which only *schedules* the teardown deployment (snapshots first)
+and answers with its id; the instance holds it in `teardownDeploymentId`.
+`destroyed` is written by the deployment-result callback when THAT deployment
+lands. Two separate incidents shaped this rule:
+
+- the row said `destroyed` 20 s after the request while the vault host answered
+  200 for minutes (bb0f60, 2026-09-21) — the worker reported success as soon as
+  the delete returned;
+- the row said `destroyed` ~15 s after the request and the stack was never torn
+  down at all (bce13e, 2026-09-22) — the callback was matched against
+  `latestDeploymentId`, which still held the reset's wipe deploy from four
+  minutes earlier. A destroy therefore ignores every callback until
+  `teardownDeploymentId` is set, and then only the deployment it names.
+
+`destroyed` is terminal, so a premature one is unrecoverable through the
+instance API — the backing application is then the only handle left (deleting
+it schedules the teardown normally). A failed teardown keeps the instance
+`destroying` with `lastError`; `DELETE` again re-queues it, and the worker
+never deletes twice while the teardown it scheduled is still running (a second
+delete cancels and reschedules). No application, or no teardown scheduled:
+`destroyed` at once. `instance get` on a destroyed id still returns the row;
+`list` hides it.
 
 ## Hooking a client into the machine
 
@@ -358,6 +383,8 @@ it.
 | Template and instance variables | ✅ | ✅ | ✅ | ✅ templates page / instance page |
 | Launch, list, get, destroy | ✅ | ✅ | ✅ | ✅ fleet page / instance page |
 | Reveal / reissue / send claim link | ✅ | ✅ | ✅ | ✅ (reveal) |
+| Take the next instance from the pool (`claim-next`) | `instance claim-next` | ✅ | ✅ | ❌ (a backend call) |
+| Auto-approve a template's launches | `template update --auto-approve-launches` | ✅ | ✅ | ✅ templates page, admin, with a confirm |
 | Resume a parked launch | ✅ | ✅ | ✅ | ✅ instance page |
 | Reset (wipe, return to pool) | `instance reset` | ✅ | ✅ | ✅ instance page, admin, typed host |
 | Rotate keys (new generation, app re-encrypts) | `instance rotate-keys` | ✅ | ✅ | ✅ instance page, admin, typed host |

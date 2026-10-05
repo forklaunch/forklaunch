@@ -22,9 +22,12 @@ export class BaseSubscriptionService<
   PartyType,
   BillingProviderType,
   MapperEntities extends BaseSubscriptionEntities,
-  Dto extends BaseSubscriptionDtos<PartyType, BillingProviderType> =
-    BaseSubscriptionDtos<PartyType, BillingProviderType>
-> implements SubscriptionService<PartyType, BillingProviderType> {
+  Dto extends BaseSubscriptionDtos<
+    PartyType,
+    BillingProviderType
+  > = BaseSubscriptionDtos<PartyType, BillingProviderType>
+> implements SubscriptionService<PartyType, BillingProviderType>
+{
   protected evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;
@@ -105,6 +108,24 @@ export class BaseSubscriptionService<
     return this.mappers.SubscriptionMapper.toDto(
       subscription as InferEntity<MapperEntities['SubscriptionMapper']>
     );
+  }
+
+  /**
+   * The row id of the subscription a billing provider knows by
+   * `externalId`, or null. Reads only the id, so it works before the row's
+   * tenant is known and never touches an encrypted column: it is how a
+   * webhook maps the provider's subscription id onto our own row.
+   */
+  async findSubscriptionIdByExternalId(
+    { externalId }: { externalId: string },
+    em?: EntityManager
+  ): Promise<IdDto | null> {
+    const subscription = await (em ?? this.em).findOne(
+      this.mappers.SubscriptionMapper.entity as typeof Subscription,
+      { externalId },
+      { fields: ['id'] }
+    );
+    return subscription ? { id: subscription.id } : null;
   }
 
   async getUserSubscription(

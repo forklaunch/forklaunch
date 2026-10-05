@@ -55,6 +55,61 @@ struct CreateDeploymentRequest {
 #[derive(Debug, Deserialize)]
 struct CreateDeploymentResponse {
     id: String,
+    /// First deploy only: variables the deploy went ahead without that a
+    /// container may still need at start-up.
+    #[serde(default)]
+    remediation: Option<DeployRemediation>,
+}
+
+/// What it takes to get a deploy's containers booting, as the platform lists
+/// it: every variable still without a value, the command that sets each one,
+/// and the redeploy to run afterwards. Never carries a value.
+#[derive(Debug, Deserialize)]
+struct DeployRemediation {
+    #[serde(rename = "unsetVariables", default)]
+    unset_variables: Vec<UnsetVariable>,
+    #[serde(rename = "redeployCommand")]
+    redeploy_command: String,
+    #[serde(rename = "agentPrompt", default)]
+    agent_prompt: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UnsetVariable {
+    key: String,
+    scope: String,
+    #[serde(default)]
+    component: Option<String>,
+    #[serde(rename = "setOnOtherComponent", default)]
+    set_on_other_component: Option<String>,
+    #[serde(rename = "setCommand")]
+    set_command: String,
+}
+
+/// Print the platform's list of unset variables, one command per line, so an
+/// agent (or a person) can set each one and redeploy without guessing scope.
+fn print_remediation<W: Write>(stdout: &mut W, remediation: &DeployRemediation) -> Result<()> {
+    for var in &remediation.unset_variables {
+        let owner = match &var.component {
+            Some(component) => format!("{} '{}'", var.scope, component),
+            None => var.scope.clone(),
+        };
+        let elsewhere = var
+            .set_on_other_component
+            .as_ref()
+            .map(|o| format!(" (a value exists on {})", o))
+            .unwrap_or_default();
+        writeln!(stdout, "  {} [{}]{}", var.key, owner, elsewhere)?;
+        writeln!(stdout, "    {}", var.set_command)?;
+    }
+    writeln!(stdout, "  Then redeploy:")?;
+    writeln!(stdout, "    {}", remediation.redeploy_command)?;
+    if let Some(prompt) = &remediation.agent_prompt {
+        writeln!(stdout)?;
+        writeln!(stdout, "  Prompt for a coding agent:")?;
+        writeln!(stdout, "    {}", prompt)?;
+    }
+    Ok(())
 }
 
 /// What a placement means for isolation, as the control plane computes it.
@@ -143,6 +198,8 @@ struct ClusterSelectionRequired {
 struct DeploymentBlockedError {
     message: String,
     details: Vec<DeploymentErrorDetail>,
+    #[serde(default)]
+    remediation: Option<DeployRemediation>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -163,7 +220,9 @@ struct MissingKey {
     #[serde(rename = "defaultValue")]
     default_value: Option<String>,
     /// When true, the key already has a valid production value (included for review only).
-    #[serde(default)]
+    /// The platform names this `hasValue`; reading only `resolved` counted every
+    /// already-set key as missing.
+    #[serde(default, alias = "hasValue")]
     resolved: bool,
 }
 
@@ -1119,6 +1178,20 @@ impl CliCommand for CreateCommand {
                 log_ok!(stdout, "Triggered deployment: {}", dashboard_url);
                 log_info!(stdout, "Ctrl+C will not cancel the deployment");
 
+                if let Some(remediation) = deployment
+                    .remediation
+                    .as_ref()
+                    .filter(|r| !r.unset_variables.is_empty())
+                {
+                    writeln!(stdout)?;
+                    log_warn!(
+                        stdout,
+                        "First deploy: {} variable(s) the app marks optional have no value. A container that reads one at start-up will not boot:",
+                        remediation.unset_variables.len()
+                    );
+                    print_remediation(&mut stdout, remediation)?;
+                }
+
                 if wait {
                     writeln!(stdout)?;
                     stream_deployment_status_for(
@@ -1275,6 +1348,19 @@ impl CliCommand for CreateCommand {
                             blocked_error.message
                         );
 
+                        if let Some(remediation) = blocked_error
+                            .remediation
+                            .as_ref()
+                            .filter(|r| !r.unset_variables.is_empty())
+                        {
+                            writeln!(stdout, "Set each variable, then redeploy:")?;
+                            print_remediation(&mut stdout, remediation)?;
+                            bail!(
+                                "Deployment blocked: {} environment variable(s) have no value.",
+                                remediation.unset_variables.len()
+                            );
+                        }
+
                         for detail in &blocked_error.details {
                             writeln!(
                                 stdout,
@@ -1284,6 +1370,7 @@ impl CliCommand for CreateCommand {
                                 detail
                                     .missing_keys
                                     .iter()
+                                    .filter(|k| !k.resolved)
                                     .map(|k| k.name.as_str())
                                     .collect::<Vec<_>>()
                                     .join(", ")
@@ -1597,5 +1684,60 @@ mod cluster_option_tests {
             "cluster_selection_required: this is the first deployment of this application";
         assert!(rejected.starts_with("cluster_unavailable"));
         assert!(!first_deploy.starts_with("cluster_unavailable"));
+    }
+}
+
+#[cfg(test)]
+mod remediation_tests {
+    use super::*;
+
+    const BLOCKED: &str = r#"{
+        "message": "Deployment blocked due to missing configuration: worker 'billing-worker' missing keys: STRIPE_API_KEY",
+        "details": [{
+            "type": "worker",
+            "id": "w-1",
+            "name": "billing-worker",
+            "missingKeys": [
+                { "key": "STRIPE_API_KEY" },
+                { "key": "QUEUE_NAME", "defaultValue": "billing", "hasValue": true }
+            ]
+        }],
+        "remediation": {
+            "unsetVariables": [{
+                "key": "STRIPE_API_KEY",
+                "scope": "worker",
+                "component": "billing-worker",
+                "reason": "missing",
+                "setCommand": "forklaunch config set STRIPE_API_KEY=<value> -e production -r us-west-2 -s billing-worker"
+            }],
+            "redeployCommand": "forklaunch deploy create --release 1.2.0 -e production --region us-west-2",
+            "agentPrompt": "My ForkLaunch deploy ..."
+        }
+    }"#;
+
+    #[test]
+    fn reads_has_value_as_resolved() {
+        let blocked: DeploymentBlockedError = serde_json::from_str(BLOCKED).unwrap();
+        let keys = &blocked.details[0].missing_keys;
+        assert!(!keys[0].resolved);
+        assert!(keys[1].resolved, "hasValue must mark a key as already set");
+    }
+
+    #[test]
+    fn prints_each_command_and_the_redeploy() {
+        let blocked: DeploymentBlockedError = serde_json::from_str(BLOCKED).unwrap();
+        let mut out = Vec::new();
+        print_remediation(&mut out, blocked.remediation.as_ref().unwrap()).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert!(out.contains("STRIPE_API_KEY [worker 'billing-worker']"));
+        assert!(out.contains("-s billing-worker"));
+        assert!(out.contains("forklaunch deploy create --release 1.2.0"));
+        assert!(!out.contains("QUEUE_NAME"));
+    }
+
+    #[test]
+    fn older_platforms_without_remediation_still_parse() {
+        let success: CreateDeploymentResponse = serde_json::from_str(r#"{"id":"d-1"}"#).unwrap();
+        assert!(success.remediation.is_none());
     }
 }

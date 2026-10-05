@@ -1,5 +1,140 @@
 # @forklaunch/core
 
+## 3.0.1
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions, including @mikro-orm 7.2.3, so apps resolve a single copy of MikroORM with core.
+- Updated dependencies
+  - @forklaunch/common@1.2.30
+  - @forklaunch/validator@1.2.31
+
+## 3.0.0
+
+### Major Changes
+
+- **Breaking:** pii, phi and pci entity properties load as `CompliantField`. Read the value with `.deanon` (plaintext, audited through `onComplianceAccess`) or `.anon` (de-identified); there is no `toString`/`toJSON`/inspect overload, so a raw field cannot leak into a log, a response or a vendor call by accident.
+
+  - Plain values still work in `em.create`/`em.assign` and, for `queryable` fields, in `where` (blind index in `<column>_idx`).
+  - New `v4:` random-IV envelope; `reencryptEncryptedColumns` upgrades existing rows.
+  - `deanon(entity)` for spreads.
+  - Migrate with `npx -p @forklaunch/core forklaunch-migrate-compliant-fields [tsconfig.json]`, which now runs on TypeScript 7's API (`typescript/unstable/sync`); TypeScript 5 is no longer needed.
+
+### Minor Changes
+
+- Managed-instance integrations through the ForkLaunch instance gateway. No vendor key lives in the app: calls are signed with the instance's HMAC key and vendor events come back signed.
+
+  - `createInstanceGatewayTransport`, `verifyPlatformEvent` / `signPlatformEvent`, `isManagedInstance`.
+  - Clients: `createModelGatewayClient`, `createEmailClient`, `createSmsClient`, `createWhatsAppClient`, `createVoiceClient`, `createPaymentsClient`, and `createStripeClient` (the real Stripe SDK routed through the gateway; `stripe` is an optional peer dependency).
+  - `forklaunch-gateway-mock`: a local gateway and vendor mock with one route file per feature, signed event delivery and test control endpoints. `forklaunch-model-gateway-mock` remains as an alias.
+
+- f2b6357: Object store: real files, browser uploads and download links, keyless on ForkLaunch.
+
+  - `ObjectStore` gains `putFile(key, body, { contentType, filename?, metadata? })`,
+    `presignUpload(key, { contentType, maxBytes, expiresIn? })` (a presigned POST that
+    enforces size and content type) and `presignDownload(key, { expiresIn?, filename? })`.
+    Custom `ObjectStore` implementations must add them.
+  - `S3ObjectStore` takes `prefix` (confines every key), `presignLimits` (lifetime caps,
+    from `S3_PRESIGN_MAX_UPLOAD_SECONDS` / `S3_PRESIGN_MAX_DOWNLOAD_SECONDS`) and
+    `createBucketIfMissing`, which now defaults to true only when a custom endpoint
+    (MinIO) is configured: deployed buckets are provisioned by the platform.
+  - `s3ClientConfig({ url, region, accessKeyId, secretAccessKey })` passes keys only when
+    both are set, so deployed services use their task role.
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/common@1.2.29
+  - @forklaunch/validator@1.2.30
+
+## 2.1.1
+
+### Patch Changes
+
+- Refresh every framework dependency to its current release.
+
+  A routine sweep (`pnpm run up:packages`), taken as one wave rather than a
+  package at a time. `workspace:^` is frozen into a concrete range at publish,
+  so a package published ahead of its siblings pins the PREVIOUS version of
+  them and consumers resolve two copies — which is the whole class of bug
+  #311 and #331 existed to clear. Releasing the set together is what keeps
+  that from coming back.
+
+  `@mikro-orm/*` is deliberately NOT moved: framework and blueprint are both
+  on 7.2.1 exactly, and they only stay that way if they move together.
+
+- Updated dependencies
+  - @forklaunch/common@1.2.28
+  - @forklaunch/validator@1.2.29
+
+## 2.1.0
+
+### Minor Changes
+
+- **Compliance walks can be tenant-scoped, and failures are reported rather
+  than swallowed.**
+
+  `ComplianceDataService.erase/export` and `RetentionService.enforce` walked
+  every PII-bearing entity through `orm.em.fork()` — unbound. Every one of
+  those columns is encrypted under its row's tenant, and a WHERE value on an
+  encrypted column is encrypted under the CURRENT tenant before it is
+  compared, so an unbound walk searched with a key nothing was written with.
+  It matched nothing, everywhere.
+
+  For this service that is the worst possible failure: an erase that finds
+  nothing is indistinguishable from an erase with nothing to do, and it
+  reported success. A subject could be told their data was deleted while all
+  of it remained.
+
+  - `erase(userId, { tenantIds })` and `export(userId, { tenantIds })` run the
+    walk once per tenant and merge the results. An export appends per tenant
+    rather than overwriting, so a subject with rows under two organizations
+    gets both.
+  - `EnforcementOptions.tenantIds` does the same for retention.
+  - `EraseResult.failures` and `ExportResult.failures` are new. An entity the
+    walk could not read used to be logged and forgotten, leaving a clean
+    result; it is now reported. **A non-empty `failures` means the request is
+    incomplete** — the rows that could be processed still were, but the caller
+    must not treat it as done.
+
+  Omitting `tenantIds` keeps the previous single unbound pass, which is
+  correct only for a schema whose PII-bearing entities carry no encrypted
+  column. Since 2.0.0 that pass fails loudly instead of silently.
+
+## 2.0.0
+
+### Major Changes
+
+- **The empty tenant is not a tenant.** `''` is rejected wherever a tenant is
+  bound, and an encrypted column touched with no tenant bound throws instead of
+  falling back to the empty key.
+
+  `''` used to mean "the global tenant", so a deliberate global row and a tenant
+  nobody resolved shared ONE KEY. A path that simply forgot to bind wrote rows
+  that looked fine; the mistake surfaced later and elsewhere, as the owning
+  tenant's "Failed to decrypt encrypted column value", blaming the reader for the
+  writer's bug. The query path was quieter still: a WHERE value on an encrypted
+  column is encrypted before it is compared, so an unbound lookup produced
+  ciphertext under `''` that matched nothing — an empty result set, no error.
+
+  - `wrapEmWithTenantContext(em, '')`, `withEncryptionContext('')` and
+    `setEncryptionTenantId('')` throw `EmptyTenantError`, which names an explicit
+    constant as the replacement.
+  - Reading or writing an encrypted column with nothing bound throws
+    `UnboundTenantError`, naming the operation and how to bind one.
+  - `getBoundTenantId()` returns `string | undefined` — the distinction
+    `getCurrentTenantId()` cannot make. The latter is deprecated: the `''` it
+    answers when nothing is bound IS the bug.
+
+  `undefined` still means "do not wrap", so a lookup that has not resolved a
+  tenant and reads no encrypted column is unaffected.
+
+  **Upgrading.** An application holding rows encrypted under `''` must re-tenant
+  them before taking this, or those rows stop being readable. Pick a constant no
+  organization can collide with (`'_internal'` is what forklaunch-platform uses)
+  and migrate: snapshot each encrypted column's raw bytes first, decrypt under
+  `''`, rewrite under the row's canonical tenant.
+
 ## 1.6.7
 
 ### Patch Changes

@@ -4,6 +4,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use create::CreateCommand;
 use delete::DeleteCommand;
+use update::UpdateCommand;
 use serde::{Deserialize, Serialize};
 use termcolor::{ColorChoice, ColorSpec, StandardStream, WriteColor};
 
@@ -15,6 +16,7 @@ use crate::{
 
 mod create;
 mod delete;
+mod update;
 
 // ── Top-level command ─────────────────────────────────────────────────────────
 
@@ -22,6 +24,7 @@ mod delete;
 pub(crate) struct NotifiersCommand {
     create: CreateCommand,
     delete: DeleteCommand,
+    update: UpdateCommand,
 }
 
 impl NotifiersCommand {
@@ -29,13 +32,17 @@ impl NotifiersCommand {
         Self {
             create: CreateCommand::new(),
             delete: DeleteCommand::new(),
+            update: UpdateCommand::new(),
         }
     }
 }
 
 impl CliCommand for NotifiersCommand {
     fn command(&self) -> Command {
-        command("notifiers", "List, create, or delete notifier configs")
+        command(
+            "notifiers",
+            "List, create, update, or delete notifier configs",
+        )
             .arg(
                 Arg::new("service")
                     .long("service")
@@ -50,12 +57,14 @@ impl CliCommand for NotifiersCommand {
                     .global(true),
             )
             .subcommand(self.create.command())
+            .subcommand(self.update.command())
             .subcommand(self.delete.command())
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         match matches.subcommand() {
             Some(("create", sub_matches)) => self.create.handler(sub_matches),
+            Some(("update", sub_matches)) => self.update.handler(sub_matches),
             Some(("delete", sub_matches)) => self.delete.handler(sub_matches),
             _ => list_notifiers(matches),
         }

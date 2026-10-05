@@ -183,9 +183,10 @@ not rely on that — leave them undeclared and read them.
 
 ## Rule 7: a provider callback comes through the relay, and you finish it
 
-A provider (Epic, Google, Stripe) is registered once per product with one
-callback address, the platform's relay. You declare a **relay route** on the
-template — "hand Epic's callback to my `vault` component at `/epic/callback`" —
+A provider (an identity provider, a payment processor, a records system) is
+registered once per product with one callback address, the platform's relay.
+You declare a **relay route** on the template — "hand this provider's
+callback to my `app` component at `/oauth/callback`" —
 and your app owes two things:
 
 - when starting the flow, mint `state = r:${PUBLIC_HOST}:<nonce>` and use the

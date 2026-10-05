@@ -18,7 +18,8 @@
 //! job to poll rather than an answer. So this is a milestone action, not
 //! something to run after every edit. `--offline` keeps the old behaviour for
 //! the tight loop: deterministic checks only, no network, no auth, no cost, and
-//! only the two rails static analysis can actually decide.
+//! only the checklist items static analysis can actually decide (labelled with
+//! the platform's criterion ids and labels, so they match the website).
 
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -74,7 +75,8 @@ impl CliCommand for ScoreCommand {
                 .long("offline")
                 .help(
                     "Score from deterministic checks only — no upload, no auth, no cost. Covers \
-                     compliance and security; the other three rails need an agent and come back \
+                     the compliance, security and governance checklist items those checks \
+                     decide; scalability and observability need an agent and come back \
                      unassessed.",
                 )
                 .action(clap::ArgAction::SetTrue),
@@ -98,6 +100,17 @@ impl CliCommand for ScoreCommand {
                 .action(clap::ArgAction::SetTrue),
         )
         .arg(
+            Arg::new("prompt")
+                .long("prompt")
+                .help(
+                    "Print only the remediation prompt (the default output shows it after the summary): the \
+                     same prompt the website's \"Generate prompt\" builds (every finding \
+                     with its evidence and fix, the scored checklist, and the rescoring \
+                     loop). With --offline, a prompt built from the deterministic checks.",
+                )
+                .action(clap::ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new("min_score")
                 .long("min-score")
                 .help("Exit non-zero if the overall score is below this (0-100). For CI gating.")
@@ -110,30 +123,55 @@ impl CliCommand for ScoreCommand {
         let json_out = matches.get_flag("json");
         let pretty = matches.get_flag("pretty");
 
-        let (card_json, share_url) = if matches.get_flag("offline") {
-            (offline_card(&app_root, &manifest.app_name, &manifest.modules_path)?, None)
+        let prompt_out = matches.get_flag("prompt");
+        let offline = matches.get_flag("offline");
+        let (card_json, share_url, remote_prompt) = if offline {
+            (
+                offline_card(&app_root, &manifest.app_name, &manifest.modules_path)?,
+                None,
+                None,
+            )
         } else {
             score_via_api(
                 &app_root,
                 &manifest.app_name,
                 !matches.get_flag("no_share"),
-                json_out,
+                json_out || prompt_out,
             )?
         };
+        // The platform builds the prompt (the website's own builder); offline, or
+        // from a platform that predates it, build one from the card.
+        let prompt = remote_prompt.unwrap_or_else(|| offline_prompt(&card_json, offline));
 
         if json_out {
+            let mut out = card_json.clone();
+            if let Some(object) = out.as_object_mut() {
+                object.insert("remediationPrompt".to_string(), Value::String(prompt.clone()));
+            }
             let serialized = if pretty {
-                serde_json::to_string_pretty(&card_json)?
+                serde_json::to_string_pretty(&out)?
             } else {
-                serde_json::to_string(&card_json)?
+                serde_json::to_string(&out)?
             };
             println!("{}", serialized);
+        } else if prompt_out {
+            println!("{prompt}");
         } else {
             print_summary(&card_json);
             if let Some(url) = &share_url {
                 println!("  {}", bold(&format!("Report card: {url}")));
                 println!();
             }
+            // The findings are the point of scoring: a person reads the summary
+            // above, an agent works from the prompt below (every finding with its
+            // evidence and fix, and the rescoring loop). `--prompt` prints it alone.
+            println!("  {}", bold("Remediation prompt"));
+            println!(
+                "  {}",
+                dim("(`forklaunch score --prompt` prints only this; `--json` carries it as remediationPrompt)")
+            );
+            println!();
+            println!("{prompt}");
         }
 
         if let Some(min) = matches.get_one::<u32>("min_score") {
@@ -186,7 +224,7 @@ fn score_via_api(
     app_name: &str,
     want_share: bool,
     quiet: bool,
-) -> Result<(Value, Option<String>)> {
+) -> Result<(Value, Option<String>, Option<String>)> {
     let auth = AuthMode::detect();
 
     if !quiet {
@@ -234,6 +272,10 @@ fn score_via_api(
         .get("reportCard")
         .cloned()
         .context("the analysis finished without producing a report card")?;
+    let prompt = job
+        .get("remediationPrompt")
+        .and_then(Value::as_str)
+        .map(str::to_string);
 
     let share_url = if want_share {
         mint_share(&auth, &job_id).unwrap_or(None)
@@ -241,7 +283,111 @@ fn score_via_api(
         None
     };
 
-    Ok((card, share_url))
+    Ok((card, share_url, prompt))
+}
+
+/// A remediation prompt built from a card, for `--offline` (or a platform that
+/// does not return one). Lists every finding with its evidence and fix and
+/// every outstanding checklist item, then the loop an agent runs.
+fn offline_prompt(card: &Value, offline: bool) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::new();
+    let overall = card.get("overall").and_then(Value::as_u64).unwrap_or(0);
+    let _ = writeln!(
+        out,
+        "Harden this repository against its ForkLaunch report card{}.",
+        if offline { " (offline: deterministic wiring checks only)" } else { "" }
+    );
+    let _ = writeln!(
+        out,
+        "Baseline: {overall}/100. {}",
+        card.get("headline").and_then(Value::as_str).unwrap_or("")
+    );
+    if let Some(caveat) = card.get("caveat").and_then(Value::as_str) {
+        let _ = writeln!(out, "Caveat: {caveat}");
+    }
+    let _ = writeln!(
+        out,
+        "\nLOOP\n\
+         1. Fix the findings below in severity order. Inspect the code before accepting a finding, \
+         fix every place a shared cause appears, and add a test for each fix.\n\
+         2. After each batch run `forklaunch score --offline --json` (fast, free, deterministic) and \
+         confirm the finding is gone. A score that does not move means the fix did not take effect.\n\
+         3. When the offline checks are clean, run `forklaunch score --prompt --no-share` for the full \
+         assessment (every category, judged criteria) and continue from the prompt it prints. The \
+         offline score covers only the deterministic checks; do not stop at it.\n\
+         4. Never weaken a control, suppress a finding or remove functionality to raise the score."
+    );
+
+    let severity_rank = |s: &str| match s {
+        "critical" => 0,
+        "high" => 1,
+        "medium" => 2,
+        "low" => 3,
+        _ => 4,
+    };
+    let mut findings: Vec<(String, &Value)> = Vec::new();
+    let mut outstanding: Vec<(String, &Value)> = Vec::new();
+    if let Some(dimensions) = card.get("dimensions").and_then(Value::as_object) {
+        for (rail, dim) in dimensions {
+            for f in dim.get("findings").and_then(Value::as_array).into_iter().flatten() {
+                findings.push((rail.clone(), f));
+            }
+            for item in dim.get("items").and_then(Value::as_array).into_iter().flatten() {
+                if matches!(
+                    item.get("status").and_then(Value::as_str),
+                    Some("unmet" | "pending")
+                ) {
+                    outstanding.push((rail.clone(), item));
+                }
+            }
+        }
+    }
+    findings.sort_by_key(|(_, f)| severity_rank(f.get("severity").and_then(Value::as_str).unwrap_or("")));
+
+    let _ = writeln!(out, "\nFINDINGS");
+    if findings.is_empty() {
+        let _ = writeln!(out, "- None from these checks.");
+    }
+    let text = |v: &Value, key: &str| v.get(key).and_then(Value::as_str).unwrap_or("").to_string();
+    // Identical findings (same rail, title, evidence) collapse into one line
+    // with a count, so repeated per-field hits do not bury the rest.
+    let mut grouped: Vec<(&String, &Value, usize)> = Vec::new();
+    for (rail, f) in &findings {
+        match grouped.iter_mut().find(|(r, g, _)| {
+            *r == rail && text(g, "title") == text(f, "title") && text(g, "detail") == text(f, "detail")
+        }) {
+            Some(entry) => entry.2 += 1,
+            None => grouped.push((rail, f, 1)),
+        }
+    }
+    for (rail, f, count) in &grouped {
+        let times = if *count > 1 { format!(" (x{count})") } else { String::new() };
+        let _ = writeln!(out, "- [{rail}; {}] {}{times}", text(f, "severity"), text(f, "title"));
+        let detail = text(f, "detail");
+        if !detail.is_empty() {
+            let _ = writeln!(out, "  Evidence: {detail}");
+        }
+        let fix = text(f, "fix");
+        let _ = writeln!(
+            out,
+            "  Remediation: {}",
+            if fix.is_empty() { "Inspect the cited code, find the root cause and repair it with a regression test." } else { &fix }
+        );
+    }
+
+    let _ = writeln!(out, "\nOUTSTANDING CHECKLIST ITEMS");
+    if outstanding.is_empty() {
+        let _ = writeln!(out, "- None.");
+    }
+    for (rail, item) in &outstanding {
+        let _ = writeln!(out, "- [{rail}] {}: {}", text(item, "label"), text(item, "status"));
+        let detail = text(item, "detail");
+        if !detail.is_empty() {
+            let _ = writeln!(out, "  Evidence: {detail}");
+        }
+    }
+    out
 }
 
 /// Poll until the job reaches a terminal state.
@@ -371,12 +517,17 @@ fn render_summary(card: &Value) -> String {
             // therefore reads as "nothing left to do" on an app that has work
             // left — and it is the number a non-technical reader takes away.
             // So the outstanding count travels with the score, always.
+            // `pending` counts too: an item a check flagged for review is not
+            // done, whatever the score says.
             let outstanding = items
                 .map(|items| {
                     items
                         .iter()
                         .filter(|item| {
-                            item.get("status").and_then(Value::as_str) == Some("unmet")
+                            matches!(
+                                item.get("status").and_then(Value::as_str),
+                                Some("unmet" | "pending")
+                            )
                         })
                         .count()
                 })
@@ -399,9 +550,13 @@ fn render_summary(card: &Value) -> String {
 
             if let Some(items) = items {
                 for item in items.iter().take(8) {
-                    let met = item.get("status").and_then(Value::as_str) == Some("met");
+                    let marker = match item.get("status").and_then(Value::as_str) {
+                        Some("met") => "+",
+                        Some("pending") => "?",
+                        _ => "-",
+                    };
                     let text = item.get("label").and_then(Value::as_str).unwrap_or("");
-                    let _ = writeln!(out, "      {} {}", if met { "+" } else { "-" }, text);
+                    let _ = writeln!(out, "      {} {}", marker, text);
                 }
             }
             if let Some(findings) = rail.get("findings").and_then(Value::as_array)
@@ -518,8 +673,8 @@ mod tests {
                 "compliance": {
                     "score": 100,
                     "items": [
-                        { "status": "met", "label": "Field encryptor is registered" },
-                        { "status": "unmet", "label": "Sensitive fields are classified" }
+                        { "status": "met", "label": "Sensitive fields are encrypted at rest" },
+                        { "status": "pending", "label": "Sensitive data is identified and handled according to its sensitivity" }
                     ],
                     "findings": []
                 }
@@ -527,6 +682,10 @@ mod tests {
         }));
         assert!(rendered.contains("100/100"), "{rendered}");
         assert!(rendered.contains("1 item outstanding"), "{rendered}");
+        assert!(
+            rendered.contains("? Sensitive data is identified"),
+            "a review item must not render as met or failed: {rendered}"
+        );
     }
 
     #[test]
@@ -536,7 +695,7 @@ mod tests {
             "dimensions": {
                 "security": {
                     "score": 100,
-                    "items": [{ "status": "met", "label": "Tenant isolation filter is installed" }],
+                    "items": [{ "status": "met", "label": "One customer cannot see or change another customer\u{2019}s data" }],
                     "findings": []
                 }
             }
@@ -598,5 +757,55 @@ mod tests {
             .expect("governance rail should render");
         assert!(!governance_line.contains("/100"), "{governance_line}");
         assert!(!governance_line.contains("outstanding"), "{governance_line}");
+    }
+}
+
+#[cfg(test)]
+mod prompt_tests {
+    use super::offline_prompt;
+    use serde_json::json;
+
+    fn card() -> serde_json::Value {
+        json!({
+            "overall": 72,
+            "headline": "demo",
+            "dimensions": {
+                "security": {
+                    "findings": [
+                        {"severity": "high", "title": "Tenant filter", "detail": "worker.ts lacks setupTenantFilter", "fix": "Call setupTenantFilter."},
+                        {"severity": "critical", "title": "Direct AI provider", "detail": "src/ai.ts imports openai", "fix": "Use createModelGatewayClient."}
+                    ],
+                    "items": [{"label": "Encryption at rest", "status": "unmet", "detail": "no key"}]
+                },
+                "compliance": {
+                    "findings": [
+                        {"severity": "info", "title": "Classify fields", "detail": "same"},
+                        {"severity": "info", "title": "Classify fields", "detail": "same"}
+                    ],
+                    "items": [{"label": "Audit log", "status": "met"}]
+                }
+            }
+        })
+    }
+
+    #[test]
+    fn prompt_carries_loop_evidence_and_fixes_in_severity_order() {
+        let p = offline_prompt(&card(), true);
+        assert!(p.contains("Baseline: 72/100"));
+        assert!(p.contains("forklaunch score --offline --json"));
+        assert!(p.contains("forklaunch score --prompt --no-share"));
+        assert!(p.contains("Remediation: Use createModelGatewayClient."));
+        assert!(p.contains("Evidence: worker.ts lacks setupTenantFilter"));
+        assert!(p.find("Direct AI provider").unwrap() < p.find("Tenant filter").unwrap());
+        assert!(p.contains("Encryption at rest: unmet"));
+        assert!(!p.contains("Audit log"));
+    }
+
+    #[test]
+    fn identical_findings_collapse_with_a_count() {
+        let p = offline_prompt(&card(), true);
+        assert_eq!(p.matches("Classify fields").count(), 1);
+        assert!(p.contains("Classify fields (x2)"));
+        assert!(p.contains("Remediation: Inspect the cited code"));
     }
 }

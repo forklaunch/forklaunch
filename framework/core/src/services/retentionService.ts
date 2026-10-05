@@ -1,3 +1,4 @@
+import { withEncryptionContext } from '../persistence/encryptedType';
 import type { MetricsDefinition } from '../http/types/openTelemetryCollector.types';
 import type { OpenTelemetryCollector } from '../http/telemetry/openTelemetryCollector';
 import type { ComplianceOrm } from './complianceDataService';
@@ -16,6 +17,19 @@ export interface EnforcementOptions {
   batchSize?: number;
   /** Log what would happen without mutating */
   dryRun?: boolean;
+  /**
+   * Tenants to enforce under, one pass each.
+   *
+   * Retention reads and rewrites PII columns, and every one of those is
+   * encrypted under its row's tenant. An unbound pass anonymises with a key
+   * nothing was written with: the `$lt` cutoff on `createdAt` still matches
+   * (that column is plaintext), but hydrating the row's encrypted fields
+   * fails, the entity is counted as an error and skipped — so retention
+   * quietly stops enforcing on exactly the data it exists to age out.
+   *
+   * Omit only for a schema whose retained entities carry no encrypted column.
+   */
+  tenantIds?: readonly string[];
 }
 
 export interface EnforcementResult {
@@ -48,6 +62,50 @@ export class RetentionService<
   ) {}
 
   async enforce(options?: EnforcementOptions): Promise<EnforcementResult> {
+    const tenantIds = options?.tenantIds ?? [];
+    if (tenantIds.length > 1) {
+      // One pass per tenant, merged. Written this way rather than threading a
+      // tenant through every helper: the encryption context is ambient, so
+      // wrapping the whole pass is both simpler and harder to get wrong.
+      const merged: EnforcementResult = {
+        processed: 0,
+        deleted: 0,
+        anonymized: 0,
+        errors: 0,
+        byEntity: {},
+        durationMs: 0
+      };
+      const start = Date.now();
+      for (const tenantId of tenantIds) {
+        const one = await withEncryptionContext(tenantId, () =>
+          this.enforce({ ...options, tenantIds: [tenantId] })
+        );
+        merged.processed += one.processed;
+        merged.deleted += one.deleted;
+        merged.anonymized += one.anonymized;
+        merged.errors += one.errors;
+        for (const [entityName, counts] of Object.entries(one.byEntity)) {
+          const into = (merged.byEntity[entityName] ??= {
+            deleted: 0,
+            anonymized: 0,
+            errors: 0
+          });
+          into.deleted += counts.deleted;
+          into.anonymized += counts.anonymized;
+          into.errors += counts.errors;
+        }
+      }
+      merged.durationMs = Date.now() - start;
+      return merged;
+    }
+    if (tenantIds.length === 1) {
+      const only = tenantIds[0];
+      // Re-entering with no tenantIds is what stops this recursing.
+      return withEncryptionContext(only, () =>
+        this.enforce({ ...options, tenantIds: undefined })
+      );
+    }
+
     const start = Date.now();
     const batchSize = options?.batchSize ?? this.DEFAULT_BATCH_SIZE;
     const dryRun = options?.dryRun ?? false;

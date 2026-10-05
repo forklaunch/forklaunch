@@ -94,6 +94,13 @@ it constructs a `FieldEncryptor` (cache, object store, `registerEncryptor`).
    previous key. It runs inside the service, so keys arrive the same way
    they do at runtime and never leave the deployment.
 
+   The same sweep covers compliant fields (`pii`/`phi`/`pci` properties):
+   `v4` values are re-sealed under the new key with their anon token kept,
+   legacy `v1`–`v3` values are upgraded to `v4`, and blind indexes
+   (`<column>_idx`) are recomputed. Until it finishes, `where` lookups on
+   queryable fields miss rows still indexed under the old key, so run it
+   right after the deploy.
+
    ```ts
    import { Migration } from '@mikro-orm/migrations';
    import {

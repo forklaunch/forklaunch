@@ -3,10 +3,13 @@ use clap::{ArgMatches, Command};
 
 use crate::{CliCommand, core::command::command};
 
+pub(crate) mod capabilities;
 mod config_set;
 mod delete;
+mod in_place;
 mod lifecycle;
 mod list;
+mod local;
 mod mutation;
 mod resize;
 mod resource_resolver;
@@ -17,12 +20,15 @@ mod types;
 use config_set::ConfigSetCommand;
 use delete::DeleteCommand;
 use list::ListCommand;
+use local::{AddCommand, RemoveCommand};
 use resize::ResizeCommand;
 use status::StatusCommand;
 use stop::StopCommand;
 
 #[derive(Debug)]
 pub(crate) struct InfraCommand {
+    add: AddCommand,
+    remove: RemoveCommand,
     list: ListCommand,
     status: StatusCommand,
     resize: ResizeCommand,
@@ -34,6 +40,8 @@ pub(crate) struct InfraCommand {
 impl InfraCommand {
     pub(crate) fn new() -> Self {
         Self {
+            add: AddCommand,
+            remove: RemoveCommand,
             list: ListCommand::new(),
             status: StatusCommand::new(),
             resize: ResizeCommand::new(),
@@ -50,6 +58,8 @@ impl CliCommand for InfraCommand {
             "infra",
             "Inspect and manage provisioned database, cache, and queue infrastructure",
         )
+        .subcommand(self.add.command())
+        .subcommand(self.remove.command())
         .subcommand(self.list.command())
         .subcommand(self.status.command())
         .subcommand(self.resize.command())
@@ -61,6 +71,8 @@ impl CliCommand for InfraCommand {
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         match matches.subcommand() {
+            Some(("add", sub_matches)) => self.add.handler(sub_matches),
+            Some(("remove", sub_matches)) => self.remove.handler(sub_matches),
             Some(("list", sub_matches)) => self.list.handler(sub_matches),
             Some(("status", sub_matches)) => self.status.handler(sub_matches),
             Some(("resize", sub_matches)) => self.resize.handler(sub_matches),

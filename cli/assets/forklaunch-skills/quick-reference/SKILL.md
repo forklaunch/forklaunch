@@ -244,6 +244,37 @@ forklaunch deploy create --environment staging --region us-east-1
 forklaunch release create --version 1.2.3
 ```
 
+### Operating a deployed application
+
+```bash
+# Environments
+forklaunch environment create -e staging --region us-west-1
+forklaunch environment branch set -e production -b main   # which branch autodeploys here
+forklaunch environment branch list                        # why autodeploy isn't firing
+forklaunch environment approval require -e production
+forklaunch environment delete -e staging --yes            # record only; destroy infra first
+
+# Deploys
+forklaunch deploy create -r 1.2.3 -e production --region us-west-1
+forklaunch deploy info --deployment <id>
+forklaunch deploy cancel <id>
+forklaunch deploy approvals list           # exit 2 from `deploy create` means parked here
+forklaunch release set-current 1.2.3       # changes what reads as current; does NOT deploy
+
+# Domains, readiness, workers
+forklaunch app domain set app.example.com
+forklaunch app readiness run
+forklaunch worker pause <id>
+
+# Organization
+forklaunch org members invite dev@acme.com --role member
+forklaunch org members list
+```
+
+`deploy create` exit codes: **0** done · **1** failed/cancelled/rolled back ·
+**2** awaiting approval (not a failure) · **3** still running when the CLI
+stopped waiting. `--no-wait` always exits 0 and means nothing.
+
 ## File Naming
 
 | Type       | Pattern                    |

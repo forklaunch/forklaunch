@@ -184,6 +184,39 @@ impl CliCommand for AuditCommand {
                 Vec::new()
             });
 
+        // The same deterministic scan `compliance audit-tenancy` runs. Best
+        // effort: a report that cannot scan is still worth sending, it just
+        // carries no tenancy signal rather than a falsely clean one.
+        let tenancy = match super::tenancy::audit_tenancy(&modules_path_buf) {
+            Ok(report) => {
+                let findings: Vec<TenancySummaryFinding> = report
+                    .findings
+                    .iter()
+                    .map(|f| TenancySummaryFinding {
+                        severity: match f.severity {
+                            super::tenancy::TenancySeverity::Error => "error".to_string(),
+                            super::tenancy::TenancySeverity::Warning => "warning".to_string(),
+                        },
+                        rule: f.rule.to_string(),
+                        file: f.file.clone(),
+                        line: f.line,
+                        message: f.message.to_string(),
+                    })
+                    .collect();
+                Some(TenancySummary {
+                    files_scanned: report.files_scanned,
+                    errors: findings.iter().filter(|f| f.severity == "error").count(),
+                    warnings: findings.iter().filter(|f| f.severity == "warning").count(),
+                    exemptions: report.exemptions.len(),
+                    findings,
+                })
+            }
+            Err(e) => {
+                let _ = writeln!(stdout, "[WARN] Tenancy scan failed: {}", e);
+                None
+            }
+        };
+
         // Build the local report
         let report = ComplianceReport {
             generated_at: chrono::Utc::now().to_rfc3339(),
@@ -191,6 +224,8 @@ impl CliCommand for AuditCommand {
             modules: module_ctx.module_reports(),
             entities,
             local_findings,
+            local_checks: super::checks::LOCAL_CHECK_IDS.to_vec(),
+            tenancy,
             secrets: SecretsReport {
                 declared: compliance.secrets.clone(),
                 count: compliance.secrets.len(),
@@ -418,32 +453,70 @@ struct DimensionCoverage {
     unscored: Vec<String>,
 }
 
-/// Client-side fallback for platforms that predate server-computed
-/// dimension scores: derive the scorecard from finding categories using
-/// the same mapping the platform uses.
-fn derive_dimension_scores(findings: &[PlatformFinding]) -> DimensionScores {
-    fn dims_for(category: &str) -> &'static [&'static str] {
-        match category {
-            "encryption" => &["security", "compliance"],
-            "access-control" => &["security", "governance"],
-            "tenant-isolation" => &["security", "compliance"],
-            "data-retention" => &["compliance", "governance"],
-            "multi-az" | "capacity" => &["scale"],
-            "alerting" => &["observability"],
-            "logging" => &["observability", "governance"],
-            "audit" => &["governance", "compliance"],
-            _ => &["compliance"],
-        }
+/// Category -> dimensions mapping. Mirrors the platform's
+/// `CATEGORY_DIMENSIONS` (the source of truth); unknown categories count
+/// against compliance.
+fn dims_for_category(category: &str) -> &'static [&'static str] {
+    match category {
+        "encryption" => &["security", "compliance"],
+        "access-control" => &["security", "governance"],
+        "tenant-isolation" => &["security", "compliance"],
+        "data-retention" => &["compliance", "governance"],
+        "multi-az" | "capacity" => &["scale"],
+        "alerting" => &["observability"],
+        "logging" => &["observability", "governance"],
+        "audit" => &["governance", "compliance"],
+        "construction" => &["governance"],
+        _ => &["compliance"],
     }
-    let mut totals: std::collections::HashMap<&str, f64> = Default::default();
+}
+
+/// Lowest score a rail can reach from findings alone. A construction
+/// failure is an ordinary (critical) governance finding, not a zero.
+const MIN_RAIL_SCORE: f64 = 5.0;
+
+/// JavaScript `Math.round`: halves round toward +infinity.
+fn js_round(x: f64) -> f64 {
+    (x + 0.5).floor()
+}
+
+/// `retained` fraction -> 0..100 score with one decimal, floored at
+/// `MIN_RAIL_SCORE`. Matches the platform's `clamp`.
+fn clamp_rail(retained: f64) -> f64 {
+    MIN_RAIL_SCORE.max(js_round(retained * 100.0 * 10.0) / 10.0)
+}
+
+/// Client-side port of the platform's `computeDimensionScores` (the shared
+/// formula), used when the platform response carries no server-computed
+/// dimension scores and by `score --offline`. Findings compound
+/// multiplicatively: each finding retains `1 - points/100` of the rail.
+fn derive_dimension_scores(findings: &[PlatformFinding]) -> DimensionScores {
+    compute_dimension_scores(findings.iter().map(|f| (f.category.as_str(), f.points)))
+}
+
+fn compute_dimension_scores<'a>(
+    findings: impl IntoIterator<Item = (&'a str, f64)>,
+) -> DimensionScores {
+    let mut retained: std::collections::HashMap<&str, f64> = [
+        ("compliance", 1.0),
+        ("security", 1.0),
+        ("scale", 1.0),
+        ("observability", 1.0),
+        ("governance", 1.0),
+    ]
+    .into_iter()
+    .collect();
     let mut touched: std::collections::HashSet<&str> = Default::default();
-    for finding in findings {
-        for dim in dims_for(&finding.category) {
-            *totals.entry(dim).or_insert(0.0) += finding.points;
+    for (category, points) in findings {
+        let severity = points.clamp(0.0, 100.0) / 100.0;
+        for dim in dims_for_category(category) {
+            if let Some(r) = retained.get_mut(dim) {
+                *r *= 1.0 - severity;
+            }
             touched.insert(dim);
         }
     }
-    let score = |dim: &str| ((100.0 - totals.get(dim).copied().unwrap_or(0.0)).max(0.0) * 10.0).round() / 10.0;
+    let score = |dim: &str| clamp_rail(retained[dim]);
     DimensionScores {
         compliance: score("compliance"),
         security: score("security"),
@@ -451,7 +524,7 @@ fn derive_dimension_scores(findings: &[PlatformFinding]) -> DimensionScores {
         observability: score("observability"),
         governance: score("governance"),
         coverage: Some(DimensionCoverage {
-            unscored: ["scale", "observability", "compliance", "security", "governance"]
+            unscored: ["scale", "observability"]
                 .iter()
                 .filter(|d| !touched.contains(**d))
                 .map(|d| d.to_string())
@@ -856,8 +929,44 @@ struct ComplianceReport {
     modules: Vec<ModuleReport>,
     entities: Vec<EntityReport>,
     local_findings: Vec<super::checks::LocalFinding>,
+    /// Every local check this CLI ran; a listed check with no finding passed.
+    local_checks: Vec<&'static str>,
+    /// Tenant-binding discipline, from the same deterministic scan as
+    /// `compliance audit-tenancy`.
+    ///
+    /// The server's report card already had a `tenant-isolation` category,
+    /// but the only thing feeding it was a SCHEMA check — "this entity has PII
+    /// columns and no organizationId". That says nothing about whether the
+    /// code ever binds the tenant it has, so every bug in the 2026-09 tenant
+    /// remediation passed it: the entities all had their tenant columns, and
+    /// the failures were unbound managers, `''` bindings and forks that lost
+    /// the encryption context at run time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tenancy: Option<TenancySummary>,
     secrets: SecretsReport,
     data_residency: DataResidencyReport,
+}
+
+/// What the tenancy scan found, flattened for the report card. Exemptions are
+/// counted but not listed: an allow is a reviewed decision, not a finding.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TenancySummary {
+    files_scanned: usize,
+    errors: usize,
+    warnings: usize,
+    exemptions: usize,
+    findings: Vec<TenancySummaryFinding>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TenancySummaryFinding {
+    severity: String,
+    rule: String,
+    file: String,
+    line: usize,
+    message: String,
 }
 
 #[derive(Serialize)]
@@ -1130,4 +1239,78 @@ fn parse_openapi_routes(path: &Path) -> Result<Vec<RouteReport>> {
     }
 
     Ok(routes)
+}
+
+#[cfg(test)]
+mod dimension_score_tests {
+    use super::*;
+
+    #[derive(Deserialize)]
+    struct Vectors {
+        cases: Vec<Case>,
+    }
+    #[derive(Deserialize)]
+    struct Case {
+        name: String,
+        findings: Vec<VectorFinding>,
+        expect: Expect,
+    }
+    #[derive(Deserialize)]
+    struct VectorFinding {
+        category: String,
+        points: f64,
+    }
+    #[derive(Deserialize)]
+    struct Expect {
+        compliance: f64,
+        security: f64,
+        scale: f64,
+        observability: f64,
+        governance: f64,
+        unscored: Vec<String>,
+    }
+
+    #[test]
+    fn dimension_scores_match_platform_golden_vectors() {
+        let vectors: Vectors =
+            serde_json::from_str(include_str!("dimension-scores.vectors.json")).unwrap();
+        assert!(!vectors.cases.is_empty());
+        for case in vectors.cases {
+            let findings: Vec<PlatformFinding> = case
+                .findings
+                .iter()
+                .map(|f| PlatformFinding {
+                    severity: "medium".into(),
+                    category: f.category.clone(),
+                    description: String::new(),
+                    points: f.points,
+                })
+                .collect();
+            let got = derive_dimension_scores(&findings);
+            let e = &case.expect;
+            for (dim, g, want) in [
+                ("compliance", got.compliance, e.compliance),
+                ("security", got.security, e.security),
+                ("scale", got.scale, e.scale),
+                ("observability", got.observability, e.observability),
+                ("governance", got.governance, e.governance),
+            ] {
+                assert_eq!(g, want, "case {:?}: {}", case.name, dim);
+            }
+            assert_eq!(
+                got.coverage.map(|c| c.unscored).unwrap_or_default(),
+                e.unscored,
+                "case {:?}: unscored",
+                case.name
+            );
+        }
+    }
+
+    #[test]
+    fn js_round_rounds_halves_up() {
+        assert_eq!(js_round(0.5), 1.0);
+        assert_eq!(js_round(-0.5), 0.0);
+        assert_eq!(js_round(2.5), 3.0);
+        assert_eq!(js_round(-2.5), -2.0);
+    }
 }

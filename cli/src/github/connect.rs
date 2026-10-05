@@ -130,7 +130,7 @@ impl CliCommand for ConnectCommand {
 
         log_info!(stdout, "Connecting {} to {}...", app_id, repo);
         let url = format!(
-            "{}/applications/{}/github/connect",
+            "{}/github-app/applications/{}/github/connect",
             get_platform_management_api_url(),
             app_id
         );

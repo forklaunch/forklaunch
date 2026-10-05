@@ -1,6 +1,6 @@
 ---
 name: cli
-description: "CLI: init, change, delete, deploy, environment, release, sync, sdk, openapi."
+description: "CLI: init, change, delete, deploy, environment, release, org, sync, sdk, openapi; what is dashboard-only; deploy exit codes."
 user-invokable: true
 ---
 
@@ -230,12 +230,14 @@ forklaunch init module <name> --path <app-path> --module <module-type> --databas
 # billing-stripe  — Stripe billing implementation
 # iam-base        — IAM authorization only (no auth provider)
 # iam-better-auth — Better Auth implementation for IAM
-# relay           — Managed-mode relay callback listener. Scaffolds a signed,
-#                   universal callback-acceptor endpoint into the app's iam
-#                   service: the platform relay forwards a verified provider
-#                   callback (Epic OAuth today; any per-instance event) to it,
-#                   and it replay-guards, dispatches, and hands back a session.
-#                   Injects into iam, so no -d/--database. See the /managed-relay skill.
+# relay           — Managed-mode relay callback listener. Scaffolds the signed
+#                   forward-mode endpoint into the app's iam service: the
+#                   platform relay HMAC-POSTs a verified provider callback to
+#                   it, and it replay-guards, dispatches, and hands back a
+#                   session. Only needed for `forward` routes and the legacy
+#                   confidential-client path — a `redirect` route is served by
+#                   the app's own component. Injects into iam, so no
+#                   -d/--database. See the /managed-relay skill.
 
 # Example:
 forklaunch init module billing --path ./src/modules --module billing-stripe --database postgresql
@@ -303,7 +305,8 @@ The Forklaunch CLI provides these commands:
 | `change`      | Modify existing projects                                        |
 | `delete`      | Remove projects                                                 |
 | `deploy`      | Deploy applications to cloud                                    |
-| `environment` | Manage environments                                             |
+| `environment` | Create, delete and configure environments; branch matrix, approvals |
+| `org`         | Organization members, invitations, domain verification          |
 | `release`     | Create and manage releases                                      |
 | `integrate`   | Integrate with external services                                |
 | `openapi`     | Generate OpenAPI specifications                                 |
@@ -316,6 +319,57 @@ The Forklaunch CLI provides these commands:
 | `logout`      | Log out from platform                                           |
 | `whoami`      | Show current user                                               |
 | `version`     | Show CLI version                                                |
+
+## What the CLI can do, and what only the dashboard can
+
+The CLI and the dashboard are not at parity, and hunting for a command that does
+not exist wastes a session. This is the map as of CLI 1.18.
+
+**CLI can do, dashboard cannot** — the release pipeline and operator primitives:
+cut a release and upload its artifacts (`release create`), push a whole config
+file (`config push`), preview a deploy (`deploy create --dry-run`), roll back
+(`deploy rollback`), pause/resume/restart a worker (`worker pause|resume|restart`),
+set an application's placement (`app hosting`), and the managed-instance
+lifecycle (`managed ...`).
+
+**Both can do** — environments and their branch matrix and approval gate, custom
+domains, readiness reports, deploy cancel, notifier configs, organization
+members and invitations, GitHub connection, resources (`infra`), alerts.
+
+**Dashboard only — do not look for a CLI command:**
+
+| Area | Why |
+| ---- | --- |
+| Chat threads, code upload | Interactive; the CLI is not the surface |
+| Data explorer (Redis keys, Kafka topics, SQL) | Browsing, not scripting. `forklaunch data db\|redis\|kafka` opens a session but does not manage objects |
+| Billing: checkout, billing portal, plan changes, cancelling a subscription | Stripe redirect flows |
+| Your own profile, password, notification preferences | Account settings, not platform state |
+| Compliance templates (create/apply/set-default) | Dashboard-only today |
+| Component infrastructure detail: cpu/memory, autoscaling bounds, bridge networking | `app resize` covers instance size; the rest is dashboard-only |
+| Platform admin (`/admin`): substrate force-unlock/teardown, migration retry, org plan changes | Staff console |
+
+**Neither surface reaches these** (the API has the route; nothing calls it):
+worker `config` and `template-config`, app-level observability environment
+config, `createService`/`updateService`. If you need one, it is an API call, not
+a command.
+
+**A command that 404s is not always your mistake.** Two shipped commands
+called routes the platform does not mount (`github connect|disconnect|status`,
+and `release create`'s duplicate-version pre-check), and in both cases the
+error surfaced as something else — a generic failure, or a guard that silently
+never fired. If a command fails in a way that does not match its arguments,
+check the URL against the platform's routes before assuming the arguments are
+wrong:
+
+```bash
+node scripts/check-cli-routes.mjs --platform ../forklaunch-platform
+```
+
+That check compares URLs to mounted routes and nothing else. It cannot see an
+HMAC signature computed over the wrong path (the framework verifies against
+`req.path`, with the router basePath stripped), an operationId that moved
+because `sdk.ts` was reordered, or a response status code added to an existing
+operation — all three fail with the URL perfectly correct.
 
 ## Core Commands
 
@@ -451,6 +505,43 @@ forklaunch change application [--path <app_root>]
 forklaunch change application --runtime bun --formatter biome --dryrun
 forklaunch change application --runtime bun --formatter biome
 ```
+
+#### Add or remove a capability: `forklaunch infra add|remove`
+
+The way to give a service object storage, a cache or a platform-held
+capability (email, sms, whatsapp, voice, payments). It writes the registration
+in `registrations.ts`, the local stand-in in docker-compose, `.env.local`,
+`package.json`, the manifest resource and the test utilities (for a
+capability: its `/platform-events` handler and the router mount in
+`server.ts`), and it edits those files in place: only the lines the resource
+needs are added, in the file's own indentation and quote style, and comments,
+key order and the rest of the file are left alone. `infra remove` takes exactly
+those lines out. Settings the service already had (its own gateway entries in
+`registrations.ts`, an env value in docker-compose) are kept and left on
+remove.
+(`change service --infrastructure` regenerates the files instead, which
+reformats a customized service; prefer `infra add|remove`.) It takes one change:
+
+```bash
+forklaunch infra add <service> object-store   # or: s3
+forklaunch infra add <service> cache          # or: redis
+forklaunch infra add <service> email          # platform-held email (SES); see /integrations
+forklaunch infra add <service> sms            # texts via the platform; see /integrations
+forklaunch infra add <service> whatsapp       # WhatsApp through the platform (see /integrations)
+forklaunch infra add <service> voice          # managed apps: outbound calls via the platform (Amazon Connect)
+forklaunch infra add <service> payments       # Stripe Connect through the platform (managed instances)
+forklaunch infra remove <service> object-store
+forklaunch infra add <service> object-store --dryrun
+forklaunch score --offline                    # afterwards: the wiring checks should pass
+```
+
+Run it from the app root (or pass `-p <app-root>`). It refuses a type the
+service already has, a type it lacks on remove, and projects that aren't services.
+
+`voice` is a platform-held capability: it registers `VoiceClient`
+(`createVoiceClient()`, keyless), writes `api/platformEvents/voice.ts` for call
+events, and adds the local `gateway-mock` to docker-compose. See
+`/integrations` (*Voice calls*).
 
 #### Change Service
 
@@ -651,7 +742,31 @@ forklaunch deploy logs                   # logs of the latest deployment for thi
 forklaunch deploy logs <id> --all        # the whole log for one deployment
 forklaunch deploy logs -l error          # only the error lines — start here on a failed deploy
 forklaunch deploy destroy ...            # tear down application infrastructure
+forklaunch deploy cancel <id>            # stop a running deployment
+forklaunch deploy approvals list         # deployments parked behind the approval gate
+forklaunch deploy approvals approve <approval-id>
 ```
+
+**Exit codes from `deploy create` — read these before retrying.** A wrapper that
+treats every non-zero exit as "the deploy failed" will retry or roll back a
+deploy that is merely waiting:
+
+| Exit | Meaning | What to do |
+| ---- | ------- | ---------- |
+| 0 | Completed | Nothing |
+| 1 | Failed, cancelled, or rolled back | Read the reason on stdout; `deploy logs -l error` |
+| 2 | Parked awaiting approval — **not a failure** | `deploy approvals list`, then an admin approves |
+| 3 | Still running when the CLI stopped waiting (`--timeout`, default 45 min) | `deploy info --deployment <id>`; the deploy continues |
+
+`--no-wait` always exits 0 and says nothing about the outcome; follow it with
+`deploy info --deployment <id>`.
+
+**`deploy create` refuses the wrong checkout.** It prints
+`Deploying <app> (<repo>) release <v> -> <env>/<region>` before any write, and
+stops if the checkout's git origin is not the application's repository (pass
+`--force` to override). An environment the application does not have needs
+`--create-environment`, or an explicit yes at the prompt — it will not be created
+as a side effect of deploying.
 
 **The first deploy asks where the app should run.** The first deployment of an
 application to a given environment × region is gated: the platform answers `428`
@@ -700,37 +815,58 @@ covers both.
 
 ### 5. Environment Commands (`environment`)
 
-Manage application environments.
+An environment is the control-plane record a deploy targets: a name, the regions
+it runs in, the git branch it autodeploys from, and whether its deploys need an
+approval. Every subcommand below reads the application id from
+`.forklaunch/manifest.toml` in the current directory, so run them from the
+application's checkout (or pass `-p <path>`).
 
 ```bash
-# Create environment
-forklaunch environment create <name>
+# Create / remove
+forklaunch environment create -e staging --region us-west-1
+forklaunch environment delete -e staging            # prompts; --yes for scripts
 
-# Options:
---region <region>      # AWS region
---description "Environment description"
+# The branch deployment matrix — which branch autodeploys to which environment
+forklaunch environment branch list                  # what each environment tracks
+forklaunch environment branch set -e production -b main
+forklaunch environment branch clear -e production   # back to the suggested default
 
-# List environments
-forklaunch environment list
+# The deployment-approval gate
+forklaunch environment approval require -e production
+forklaunch environment approval waive   -e staging
+forklaunch environment approval reset   -e production   # back to the default
 
-# Delete environment
-forklaunch environment delete <name>
-
-# Show environment details
-forklaunch environment show <name>
-
-# Examples:
-forklaunch environment create staging --region us-west-2
-forklaunch environment list
-forklaunch environment show production
+# Variables (local workspace, not the control plane)
+forklaunch environment status                       # which vars still need a person
+forklaunch environment validate
+forklaunch environment sync
 ```
+
+**Branch precedence for autodeploy**, highest first:
+
+1. the environment's tracked branch (`environment branch set`)
+2. the repository-level `branchMapping` (set when connecting the repo)
+3. the suggested default — `main` for a `production`/`prod` environment, otherwise a branch named after the environment
+
+So a push to `main` does **not** deploy `staging` unless `staging` tracks `main`.
+This is the single most common "autodeploy isn't firing" cause: check
+`environment branch list` first.
+
+**`environment delete` does not tear down infrastructure.** It removes the
+environment record and its stored configuration. Run `forklaunch deploy destroy`
+first if the environment still has running services, or you strand them.
+
+**Approval is tri-state.** `require`/`waive` set an explicit override; `reset`
+returns to the default, which is "required for production-named environments".
+A deploy that parks behind the gate exits **2** (not a failure) — see
+`deploy approvals`.
 
 ### 6. Release Commands (`release`)
 
 Create and manage application releases.
 
-`release` has four subcommands: `create`, `info`, `list`, `eject`. There is no
-`release show` or `release rollback` — rollback lives on
+`release` has five subcommands: `create`, `info`, `list`, `eject`, `set-current`.
+There is no `release show`, and no `release rollback` — rollback lives on
 `forklaunch deploy rollback`. (`release list` is recent; older CLIs have only
 the first two and `eject`. Check `forklaunch release --help` if unsure.)
 
@@ -750,6 +886,10 @@ forklaunch release create --version <version> --local --yes
 forklaunch release info                  # details for a release
 forklaunch release list                  # releases for this application
 forklaunch release eject                 # emit the Pulumi IaC a release would deploy
+
+# Mark which release the dashboard, variable defaults and readiness read from.
+# This does NOT deploy — use `deploy create -r <version>` for that.
+forklaunch release set-current 1.2.3
 ```
 
 **Non-interactive callers must pass a mode and `--yes`.** With neither `--local`
@@ -822,6 +962,21 @@ access. Print the link, wait, then confirm with `status`.
 `--auto-deploy` spends money on every push with no further confirmation. Get
 explicit agreement before enabling it on a production branch.
 
+**Connecting a repo is not enough to make a push deploy.** `--auto-deploy` sets
+the mode; which branch reaches which environment is the branch matrix. After
+connecting, set it explicitly:
+
+```bash
+forklaunch github connect --repo https://github.com/acme/portal --auto-deploy
+forklaunch environment branch set -e production -b main
+forklaunch environment branch list          # confirm
+```
+
+Leaving the matrix unset means each environment tracks a branch named after
+itself (except `production`/`prod`, which default to `main`) — which is why a
+repo can be connected, auto-deploy on, and a push to `main` still deploy
+nothing.
+
 ### 7b. Application Commands (`app`)
 
 Create and inspect the **platform** application record — the control-plane object
@@ -830,7 +985,11 @@ your local checkout links to.
 ```bash
 forklaunch app create [options]     # create + integrate in one step
 forklaunch app services             # list services and workers
-forklaunch app domain               # inspect the custom domain
+forklaunch app domain status        # inspect the custom domain
+forklaunch app domain set app.example.com        # attach one
+forklaunch app domain subdomain add shop -s <service-id>
+forklaunch app readiness show       # readiness schedule + latest run
+forklaunch app readiness run        # start a report now
 forklaunch app resize ...           # resize components (cuts a release + deploys)
 forklaunch app route <id>           # route details
 forklaunch app controller <id>      # controller details
@@ -869,6 +1028,45 @@ apply": an undeclared app is unconstrained. Ask the user rather than leaving it
 blank by default.
 
 There is no `app delete`. Removing an application record is a dashboard action.
+
+### 7c. Organization Commands (`org`)
+
+Administer the organization the signed-in session belongs to. There is no
+`--organization` flag: these routes act on your own organization and nothing
+else. Everything except `show` and the `list`s needs the **admin** role, and a
+403 says so rather than "request failed".
+
+```bash
+forklaunch org show                         # name, id, domain, region, team size
+forklaunch org show --json
+forklaunch org show --name "Main Street"    # rename
+
+forklaunch org members list                 # email, role, user id
+forklaunch org members invite dev@acme.com --role member   # admin | member | viewer
+forklaunch org members role <user-id> admin
+forklaunch org members remove <user-id>     # prompts; --yes for scripts
+
+forklaunch org invitations list             # pending invitations
+forklaunch org invitations resend <invitation-id>
+forklaunch org invitations cancel <invitation-id>
+
+forklaunch org domain verify                # prints the TXT record to publish
+forklaunch org domain check                 # has it propagated?
+forklaunch org domain auto-join on          # anyone with a verified-domain email joins
+```
+
+**Onboarding a teammate, end to end:**
+
+```bash
+forklaunch org members invite dev@acme.com --role member
+forklaunch org invitations list             # confirm it is pending
+# ...they accept...
+forklaunch org members list                 # confirm they landed, with the right role
+```
+
+`members role` and `members remove` take a **user id**, not an email — read it
+from `org members list`. Role values are validated before the request, so a typo
+fails locally instead of round-tripping to IAM.
 
 ### 8. OpenAPI Commands (`openapi`)
 
@@ -1959,7 +2157,7 @@ Still present in v1.3.3 — apply these workarounds:
 - **`migrate:down` never works on the initial migration**: generated migrations ship without a `down()` implementation ("This migration cannot be reverted").
 - **Dockerfile pnpm drift**: `RUN npm install -g pnpm` (unpinned) pulls pnpm 11, whose default `minimumReleaseAge` policy rejects lockfile entries published recently. This breaks BOTH local `docker compose build` AND real platform deploys — the same error (`ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`) shows up in AWS CodeBuild logs and fails `forklaunch deploy create` after all the infrastructure has already been provisioned. Fix: pin the Dockerfile to the host's version, e.g. `RUN npm install -g pnpm@10.12.1`, before releasing/deploying.
 - **`change worker --type` is destructive — avoid it**: it rewrites code but does NOT update the manifest (variant/resources keep the old type), and it silently DELETES the `minio:` service from docker-compose while `minio-init`/`tempo` still depend on it, leaving an invalid compose project that `sync all` cannot heal. Prefer deleting and re-creating the worker with the new type; if you must convert, restore the minio block and fix the manifest by hand afterwards.
-- **`change service --infrastructure redis` also drops the `minio:` compose service** — same failure mode as `change worker --type` above, just triggered by a different command. After running it, check `docker compose config --quiet` before `docker compose up`; if it errors with `service "minio-init" depends on undefined service "minio"`, the `minio:` block needs to be restored by hand (copy it from another scaffolded app's `docker-compose.yaml`, or reconstruct: `image: minio/minio:RELEASE.2025-04-22T22-12-26Z`, ports `9000:9000`/`9001:9001`, env `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD` both `minioadmin`, healthcheck `mc ready local`).
+- **`change service --infrastructure` no longer drops `minio:` or `redis:` while something still uses them** (fixed alongside `infra add`). Compose cleanup now keeps any service another service depends on or addresses by host, so the telemetry stack's `minio-init` keeps MinIO. On an older CLI, check `docker compose config --quiet` after the command; if it reports `service "minio-init" depends on undefined service "minio"`, restore the `minio:` block by hand.
 - **`change service --infrastructure redis` wires a `TtlCache` factory that doesn't compile** — it adds a `TtlCache` registration to `registrations.ts` whose factory destructures `{ REDIS_URL, OtelCollector, ENCRYPTION_KEY }` and calls `new FieldEncryptor(ENCRYPTION_KEY)`, but neither `ENCRYPTION_KEY` (in the `environmentConfig` chain) nor the `FieldEncryptor` import (`from '@forklaunch/core/persistence'`) get added. Fails with "Unable to resolve dependency ENCRYPTION_KEY" at runtime. Add both manually after running the command.
 - **Service/worker conversions (`--to worker` / `--to service`) strand compose entries** of the old type; grep docker-compose for the module name after converting (and after deleting a converted module).
 - **`eject` is unusable** (panics or misparses every path form; error path exits 0). Eject manually if needed.

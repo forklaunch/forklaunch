@@ -13,19 +13,54 @@ export interface ComplianceOrm {
   getMetadata(): MetadataStorage;
 }
 import { MetricsDefinition } from '../http/types/openTelemetryCollector.types';
+import { withEncryptionContext } from '../persistence/encryptedType';
 import {
   getEntityComplianceFields,
   getEntityUserIdField
 } from '../persistence/complianceTypes';
 
+/**
+ * Which tenants a subject's rows live under.
+ *
+ * A compliance walk cannot be tenant-blind. Every PII column is encrypted
+ * under its row's tenant, and a WHERE value on one is encrypted under the
+ * CURRENT tenant before it is compared — so an unbound walk searches with a
+ * key nothing was written with. It matches nothing, everywhere, and an erase
+ * that finds nothing looks exactly like an erase with nothing to do.
+ *
+ * Pass every tenant the subject may have rows under — their organizations,
+ * plus whatever constant holds rows belonging to no organization. The walk
+ * runs once per tenant and the results are merged.
+ */
+export interface ComplianceTenantScope {
+  tenantIds?: readonly string[];
+}
+
+/** An entity the walk could not read, and why. */
+export interface ComplianceEntityFailure {
+  entityName: string;
+  tenantId?: string;
+  reason: string;
+}
+
 export interface EraseResult {
   entitiesAffected: string[];
   recordsDeleted: number;
+  /**
+   * Entities the walk could not read. NON-EMPTY MEANS THE ERASE IS
+   * INCOMPLETE: the caller asked for a subject's data to be deleted and some
+   * of it may remain. It is reported rather than thrown so the rows that
+   * could be erased still are, but it must not be ignored — treat a non-empty
+   * list as a failed erasure request.
+   */
+  failures: ComplianceEntityFailure[];
 }
 
 export interface ExportResult {
   userId: string;
   entities: Record<string, unknown[]>;
+  /** As `EraseResult.failures`: non-empty means the export is incomplete. */
+  failures: ComplianceEntityFailure[];
 }
 
 /**
@@ -105,9 +140,62 @@ export class ComplianceDataService {
     return undefined;
   }
 
-  async erase(userId: string): Promise<EraseResult> {
+  /**
+   * Run `fn` once per tenant in scope, each inside its own encryption
+   * context. With no tenants named it runs once unbound — which is correct
+   * only for entities with no encrypted column, and fails loudly otherwise.
+   */
+  private async perTenant<T>(
+    scope: ComplianceTenantScope | undefined,
+    fn: (tenantId?: string) => Promise<T>
+  ): Promise<T[]> {
+    const tenantIds = scope?.tenantIds ?? [];
+    if (tenantIds.length === 0) return [await fn(undefined)];
+    const results: T[] = [];
+    for (const tenantId of tenantIds) {
+      results.push(await withEncryptionContext(tenantId, () => fn(tenantId)));
+    }
+    return results;
+  }
+
+  async erase(
+    userId: string,
+    scope?: ComplianceTenantScope
+  ): Promise<EraseResult> {
+    const entitiesAffected = new Set<string>();
+    const failures: ComplianceEntityFailure[] = [];
+    let recordsDeleted = 0;
+
+    await this.perTenant(scope, async (tenantId) => {
+      recordsDeleted += await this.eraseUnderCurrentTenant(
+        userId,
+        tenantId,
+        entitiesAffected,
+        failures
+      );
+    });
+
+    this.otel.info('[ComplianceDataService] Erase complete', {
+      userId,
+      entitiesAffected: [...entitiesAffected].join(','),
+      recordsDeleted,
+      failures: failures.length
+    });
+
+    return {
+      entitiesAffected: [...entitiesAffected],
+      recordsDeleted,
+      failures
+    };
+  }
+
+  private async eraseUnderCurrentTenant(
+    userId: string,
+    tenantId: string | undefined,
+    entitiesAffected: Set<string>,
+    failures: ComplianceEntityFailure[]
+  ): Promise<number> {
     const em = this.orm.em.fork();
-    const entitiesAffected: string[] = [];
     let recordsDeleted = 0;
 
     const allMetadata = [...this.orm.getMetadata().getAll().values()];
@@ -142,14 +230,19 @@ export class ComplianceDataService {
         });
 
         if (records.length > 0) {
-          entitiesAffected.push(entityName);
+          entitiesAffected.add(entityName);
           recordsDeleted += records.length;
           records.forEach((r) => em.remove(r));
         }
       } catch (err) {
+        // RECORDED, NOT SWALLOWED. This used to log and continue, so an erase
+        // that could not read a single entity still returned a clean result
+        // and the caller reported the subject's data deleted.
+        failures.push({ entityName, tenantId, reason: String(err) });
         this.otel.error('[ComplianceDataService] Failed to erase entity', {
           entityName,
           userIdField,
+          tenantId,
           error: String(err)
         });
       }
@@ -159,18 +252,36 @@ export class ComplianceDataService {
       await em.flush();
     }
 
-    this.otel.info('[ComplianceDataService] Erase complete', {
-      userId,
-      entitiesAffected: entitiesAffected.join(','),
-      recordsDeleted
-    });
-
-    return { entitiesAffected, recordsDeleted };
+    return recordsDeleted;
   }
 
-  async export(userId: string): Promise<ExportResult> {
-    const em = this.orm.em.fork();
+  async export(
+    userId: string,
+    scope?: ComplianceTenantScope
+  ): Promise<ExportResult> {
     const entities: Record<string, unknown[]> = {};
+    const failures: ComplianceEntityFailure[] = [];
+
+    await this.perTenant(scope, (tenantId) =>
+      this.exportUnderCurrentTenant(userId, tenantId, entities, failures)
+    );
+
+    this.otel.info('[ComplianceDataService] Export complete', {
+      userId,
+      entityCount: Object.keys(entities).length,
+      failures: failures.length
+    });
+
+    return { userId, entities, failures };
+  }
+
+  private async exportUnderCurrentTenant(
+    userId: string,
+    tenantId: string | undefined,
+    entities: Record<string, unknown[]>,
+    failures: ComplianceEntityFailure[]
+  ): Promise<void> {
+    const em = this.orm.em.fork();
 
     const allMetadata = [...this.orm.getMetadata().getAll().values()];
 
@@ -204,7 +315,7 @@ export class ComplianceDataService {
             .filter(([, level]) => level !== 'none')
             .map(([name]) => name);
 
-          entities[entityName] = records.map((record) => {
+          const rows = records.map((record) => {
             const filtered: Record<string, unknown> = {};
             filtered['id'] = (record as Record<string, unknown>)['id'];
             for (const fieldName of piiFieldNames) {
@@ -214,21 +325,22 @@ export class ComplianceDataService {
             }
             return filtered;
           });
+          // Appended, not assigned: the same entity can hold the subject's
+          // rows under more than one tenant, and the second pass must not
+          // erase the first one's findings.
+          entities[entityName] = [...(entities[entityName] ?? []), ...rows];
         }
       } catch (err) {
+        // Recorded, not swallowed — an export missing an entity is an
+        // INCOMPLETE subject access request, not a smaller one.
+        failures.push({ entityName, tenantId, reason: String(err) });
         this.otel.error('[ComplianceDataService] Failed to export entity', {
           entityName,
           userIdField,
+          tenantId,
           error: String(err)
         });
       }
     }
-
-    this.otel.info('[ComplianceDataService] Export complete', {
-      userId,
-      entityCount: Object.keys(entities).length
-    });
-
-    return { userId, entities };
   }
 }

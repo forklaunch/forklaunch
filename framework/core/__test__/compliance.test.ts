@@ -8,7 +8,16 @@ import {
   entityHasEncryptedFields,
   COMPLIANCE_KEY
 } from '../src/persistence/complianceTypes';
-import { EncryptedType } from '../src/persistence/encryptedType';
+import {
+  CompliantField,
+  CompliantType,
+  type CompliantIndexType
+} from '../src/persistence/compliantField';
+import {
+  registerEncryptor,
+  withEncryptionContext
+} from '../src/persistence/encryptedType';
+import { FieldEncryptor } from '../src/persistence/fieldEncryptor';
 
 /** Read a property from an object by key, avoiding type casts. */
 function readKey(obj: unknown, key: string): unknown {
@@ -157,17 +166,43 @@ describe('defineComplianceEntity', () => {
 });
 
 describe('fp encrypted type resolution', () => {
-  function getEncryptedType(builder: unknown): EncryptedType | undefined {
+  registerEncryptor(new FieldEncryptor('compliance-test-master-key'));
+
+  /**
+   * The compliant column type a classified builder carries, seen through the
+   * surface these tests were written against: the runtime type it hydrates,
+   * and a write/read round trip (sealed, then read back through `.deanon`).
+   */
+  function getEncryptedType(builder: unknown):
+    | {
+        runtimeType: string;
+        convertToDatabaseValue(value: unknown, platform: Platform): unknown;
+        convertToJSValue(value: unknown, platform: Platform): unknown;
+      }
+    | undefined {
     const opts = (builder as Record<string | symbol, unknown>)['~options'] as
       Record<string, unknown> | undefined;
-    const type = opts?.type;
-    return type instanceof EncryptedType ? type : undefined;
+    const type = opts?.type as CompliantType | CompliantIndexType | undefined;
+    if (!(type instanceof CompliantType)) return undefined;
+    return {
+      runtimeType: type.spec.isArray ? 'object' : type.spec.elementRuntimeType,
+      convertToDatabaseValue: (value, platform) =>
+        withEncryptionContext('compliance-test', () =>
+          type.convertToDatabaseValue(value, platform)
+        ),
+      convertToJSValue: (value, platform) =>
+        withEncryptionContext(
+          'compliance-test',
+          () =>
+            (type.convertToJSValue(value as string) as CompliantField).deanon
+        )
+    };
   }
 
   it('resolves datetime to Date runtimeType', () => {
     const builder = fp.datetime().compliance('pii');
     const et = getEncryptedType(builder);
-    expect(et).toBeInstanceOf(EncryptedType);
+    expect(et).toBeDefined();
     expect(et!.runtimeType).toBe('Date');
   });
 
@@ -259,7 +294,7 @@ describe('fp encrypted type resolution', () => {
   it('resolves p.array() as array container', () => {
     const builder = fp.array().compliance('pii');
     const et = getEncryptedType(builder);
-    expect(et).toBeInstanceOf(EncryptedType);
+    expect(et).toBeDefined();
     // array container — runtimeType is 'object'
     expect(et!.runtimeType).toBe('object');
   });
@@ -299,7 +334,7 @@ describe('fp encrypted type resolution', () => {
     expect(decrypted).toEqual(['a', 'b']);
   });
 
-  it('does not apply EncryptedType for none compliance', () => {
+  it('does not make a compliant field for none compliance', () => {
     const builder = fp.string().compliance('none');
     const et = getEncryptedType(builder);
     expect(et).toBeUndefined();
@@ -312,7 +347,7 @@ describe('fp encrypted type resolution', () => {
       .nullable()
       .compliance('pii');
     const et = getEncryptedType(builder);
-    expect(et).toBeInstanceOf(EncryptedType);
+    expect(et).toBeDefined();
 
     // Validate that allowed values were extracted from the lazy factory
     const platform = {} as Platform;
@@ -366,7 +401,7 @@ describe('fp encrypted type resolution', () => {
   it('resolves bare enum() with encrypted compliance (no items)', () => {
     const builder = fp.enum().compliance('pii');
     const et = getEncryptedType(builder);
-    expect(et).toBeInstanceOf(EncryptedType);
+    expect(et).toBeDefined();
     // No items → no enum validation, but encryption still works
     const platform = {} as Platform;
     const encrypted = et!.convertToDatabaseValue('anything', platform);

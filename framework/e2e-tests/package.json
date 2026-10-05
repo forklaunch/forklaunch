@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/e2e-tests",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": true,
   "description": "Internal E2E tests for Forklaunch framework.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
