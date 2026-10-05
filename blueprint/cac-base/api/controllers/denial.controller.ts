@@ -2,7 +2,8 @@ import {
   handlers,
   optional,
   schemaValidator,
-  string
+  string,
+  uuid
 } from '@forklaunch/blueprint-core';
 import { ci, tokens } from '../../bootstrapper';
 import type { WorklistStatus } from '../../domain/enum/worklistStatus.enum';
@@ -51,7 +52,7 @@ export const listDenials = handlers.get(
       allowedPermissions: VIEW_DENIALS_PERMISSIONS
     },
     query: {
-      claimId: optional(string),
+      claimId: optional(uuid),
       worklistStatus: optional(string)
     },
     responses: {
@@ -99,7 +100,7 @@ export const getDenial = handlers.get(
       allowedPermissions: VIEW_DENIALS_PERMISSIONS
     },
     params: {
-      id: string
+      id: uuid
     },
     responses: {
       200: denialResponseSchema,
@@ -144,7 +145,7 @@ export const resolveDenial = handlers.post(
       allowedPermissions: MANAGE_DENIALS_PERMISSIONS
     },
     params: {
-      id: string
+      id: uuid
     },
     responses: {
       200: denialResponseSchema,

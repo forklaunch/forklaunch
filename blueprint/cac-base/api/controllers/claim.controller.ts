@@ -1,7 +1,8 @@
 import {
   handlers,
   schemaValidator,
-  string
+  string,
+  uuid
 } from '@forklaunch/blueprint-core';
 import { UniqueConstraintViolationException } from '@mikro-orm/core';
 import { ci, tokens } from '../../bootstrapper';
@@ -53,7 +54,7 @@ export const buildClaim = handlers.post(
       allowedPermissions: MANAGE_CLAIMS_PERMISSIONS
     },
     body: {
-      encounterId: string
+      encounterId: uuid
     },
     responses: {
       200: {
@@ -112,7 +113,7 @@ export const scrubClaim = handlers.post(
       allowedPermissions: MANAGE_CLAIMS_PERMISSIONS
     },
     params: {
-      id: string
+      id: uuid
     },
     responses: {
       200: {

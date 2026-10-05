@@ -80,7 +80,11 @@ export class ClaimService {
       codeSetType
     });
 
-    await this.em.persist(claim).flush();
+    // Two statements: persist() returns the unproxied EntityManager, so a
+    // chained .flush() would run outside the tenant wrapper and encrypt
+    // under the wrong key (see __test__/e2e/test-utils.ts).
+    this.em.persist(claim);
+    await this.em.flush();
 
     this.otel.info('Built claim from encounter', {
       claimId: claim.id,
@@ -124,18 +128,23 @@ export class ClaimService {
     // digit) previously scrubbed clean regardless. Closing that gap needs
     // the organization's actual CodeSetProvider — an async, DB-backed
     // lookup — so it lives here rather than in the pure scrubbing engine.
-    // Re-resolves rather than trusting claim.codeSetType: unlike which
-    // provider *built* this claim (§5's "never retroactively recoded"
-    // rule, which only governs that historical record), whether a code
-    // exists is a fact about the present code set, checked fresh every
-    // scrub.
-    const codeSetProvider =
-      await this.codeSetProviderResolver.resolve(organizationId);
+    // Checked against the code set the claim was built under
+    // (claim.codeSetType), not the organization's current one: a claim
+    // built on mock codes must not turn denied because a CPT license was
+    // activated afterwards (§5: historical claims are never retroactively
+    // recoded). A HCPCS Level II code from the reference table counts as
+    // known too; the code-set provider only knows CPT (or mock) codes.
+    const codeSetProvider = this.codeSetProviderResolver.forCodeSet(
+      organizationId,
+      claim.codeSetType
+    );
     const unknownProcedureFindings: ScrubbingFinding[] = [];
     for (let i = 0; i < lines.length; i++) {
-      const known = await codeSetProvider.lookupProcedureCode({
-        code: lines[i].procedureCode
-      });
+      const known =
+        (await codeSetProvider.lookupProcedureCode({
+          code: lines[i].procedureCode
+        })) != null ||
+        (await this.codeValidationService.validateHcpcs(lines[i].procedureCode)).valid;
       if (!known) {
         unknownProcedureFindings.push({
           category: 'required_fields',
@@ -207,7 +216,11 @@ export class ClaimService {
     if (denials.length > 0) {
       this.em.persist(denials);
     }
-    await this.em.persist(claim).flush();
+    // Two statements: persist() returns the unproxied EntityManager, so a
+    // chained .flush() would run outside the tenant wrapper and encrypt
+    // under the wrong key (see __test__/e2e/test-utils.ts).
+    this.em.persist(claim);
+    await this.em.flush();
 
     this.otel.info('Scrubbed claim', {
       claimId,

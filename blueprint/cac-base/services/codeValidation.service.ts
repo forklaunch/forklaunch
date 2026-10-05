@@ -3,6 +3,7 @@ import {
   OpenTelemetryCollector
 } from '@forklaunch/core/http';
 import { EntityManager } from '@mikro-orm/postgresql';
+import { normalizeCode } from '../domain/codeNormalization';
 import { HcpcsCode } from '../persistence/entities/hcpcsCode.entity';
 import { Icd10Code } from '../persistence/entities/icd10Code.entity';
 
@@ -13,7 +14,8 @@ export type CodeValidationResult =
 // Backs the free-code-set validation endpoints (§10's forklaunch-platform
 // UI is the eventual caller) — looks codes up against the reference tables
 // populated by scripts/refresh-code-sets.ts (§7). No license, no real CPT
-// content involved — ICD-10-CM and HCPCS only.
+// content involved — ICD-10-CM and HCPCS only. Codes are compared
+// normalized (see normalizeCode): E11.9, e119 and " E119" all find E119.
 export class CodeValidationService {
   constructor(
     private readonly em: EntityManager,
@@ -21,7 +23,7 @@ export class CodeValidationService {
   ) {}
 
   async validateIcd10(code: string): Promise<CodeValidationResult> {
-    const found = await this.em.findOne(Icd10Code, { code });
+    const found = await this.em.findOne(Icd10Code, { code: normalizeCode(code) });
     this.otel.debug('Validated ICD-10-CM code', { code, found: !!found });
     return found
       ? { valid: true, code, description: found.description }
@@ -29,7 +31,7 @@ export class CodeValidationService {
   }
 
   async validateHcpcs(code: string): Promise<CodeValidationResult> {
-    const found = await this.em.findOne(HcpcsCode, { code });
+    const found = await this.em.findOne(HcpcsCode, { code: normalizeCode(code) });
     this.otel.debug('Validated HCPCS code', { code, found: !!found });
     return found
       ? { valid: true, code, description: found.description }

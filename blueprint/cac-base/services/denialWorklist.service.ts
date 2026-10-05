@@ -54,7 +54,9 @@ export class DenialWorklistService {
 
     denial.worklistStatus = WorklistStatus.RESOLVED;
     denial.resolvedAt = new Date();
-    await this.em.persist(denial).flush();
+    // two statements so the flush stays inside the tenant wrapper
+    this.em.persist(denial);
+    await this.em.flush();
 
     this.otel.info('Resolved denial', { id });
     return denial;

@@ -14,10 +14,8 @@ export const Patient = defineComplianceEntity({
     organizationId: fp.uuid().compliance('none'),
     // Internal surrogate identifier — used as the reference everywhere in
     // the domain model instead of SSN, per HIPAA "minimum necessary" (§4).
-    // Uniqueness is (organizationId, mrn) — see the composite unique
-    // constraint in migrations/, same reasoning as cptCode.entity.ts — not
-    // a single-column constraint here, since an MRN is only unique within
-    // the hospital/clinic that issued it.
+    // Unique per organization (see `uniques` below), not globally: an MRN
+    // is only unique within the hospital/clinic that issued it.
     //
     // compliance('none'), deliberately, though an MRN is HIPAA Safe Harbor
     // identifier #8: it's the join key every query in this module (and the
@@ -44,6 +42,9 @@ export const Patient = defineComplianceEntity({
     insurances: () => fp.oneToMany(Insurance).mappedBy('patient'),
     claims: () => fp.oneToMany(Claim).mappedBy('patient')
   },
+  // On the entity, not only in migrations/: a scaffolded app generates its
+  // schema from the entities, so this is the source of truth.
+  uniques: [{ properties: ['organizationId', 'mrn'] }],
   // Compliance data service resolves erase/export requests by treating the
   // Patient record itself as the "user" — see registrations.ts.
   userIdField: 'id'

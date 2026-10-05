@@ -4,19 +4,29 @@ import {
   CodeSetLoaderService,
   CodeSetLoadResult
 } from './codeSetLoader.service';
-import { CsvColumnMap, parseCsvRows } from './csvRowSource';
+import {
+  CsvColumnMap,
+  newParseStats,
+  parseCodeThenDescriptionLines,
+  parseCsvRows
+} from './csvRowSource';
 
-// CDC/NCHS publishes ICD-10-CM annually, effective October 1 — §7.
-const DEFAULT_COLUMN_MAP: CsvColumnMap = {
-  code: 0,
-  description: 1,
-  hasHeader: true
-};
-
+// CDC/NCHS publishes ICD-10-CM annually, effective October 1 — §7. With no
+// column map the source is read as the CDC codes file itself
+// (icd10cm_codes_YYYY.txt: code, spaces, description, no header); pass a
+// column map for a delimited export instead.
 export async function loadIcd10Codes(
   loader: CodeSetLoaderService,
   source: Readable,
-  columnMap: CsvColumnMap = DEFAULT_COLUMN_MAP
+  options: { columnMap?: CsvColumnMap; replaceRelease?: boolean } = {}
 ): Promise<CodeSetLoadResult> {
-  return loader.load(Icd10Code, parseCsvRows(source, columnMap));
+  const stats = newParseStats();
+  const rows = options.columnMap
+    ? parseCsvRows(source, options.columnMap, stats)
+    : parseCodeThenDescriptionLines(source, stats);
+  return loader.load(Icd10Code, rows, {
+    tableName: 'icd10_code',
+    replaceRelease: options.replaceRelease,
+    skipped: () => stats.skipped
+  });
 }

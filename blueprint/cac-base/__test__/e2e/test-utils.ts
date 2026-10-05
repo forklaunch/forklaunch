@@ -239,33 +239,53 @@ export const setupTestDatabase = async (): Promise<TestSetupResult> => {
   return setup;
 };
 
-// ClaimService.scrubClaim now validates every diagnosis code against the
-// real Icd10Code reference table (CodeValidationService) — a genuinely
-// empty table (the default for a fresh migration) would make every claim
-// in this suite fail with an "unrecognized diagnosis" finding, including
-// the ones testing completely unrelated layers. Uses the real
-// CodeSetLoaderService/ETL path (an in-memory row source instead of a CSV
-// file — the loader itself doesn't care which), not a raw insert, so this
-// stays a genuine exercise of the same pipeline scripts/refresh-code-sets.ts
-// runs in production. Only the codes this suite's own tests actually use.
+// ClaimService.scrubClaim validates every diagnosis code against the
+// Icd10Code reference table and accepts any HCPCS code from HcpcsCode, so
+// an empty table would deny every claim in this suite. Seeded through the
+// real pipeline scripts/refresh-code-sets.ts runs: file text in the CDC
+// codes-file layout (no dots, as CDC publishes them) and a HCPCS CSV,
+// parsed and loaded by the same loaders. Only the codes this suite uses.
+export const ICD10_CDC_SAMPLE = [
+  'J069    Acute upper respiratory infection, unspecified',
+  'Z0000   Encounter for general adult medical exam without abnormal findings',
+  'R7309   Other abnormal glucose',
+  'E119    Type 2 diabetes mellitus without complications'
+].join('
+');
+export const HCPCS_CSV_SAMPLE = [
+  'code,description',
+  'J3490,"Unclassified drugs"',
+  'G0438,"Annual wellness visit, initial"'
+].join('
+');
+
 async function seedIcd10ReferenceCodes(setup: TestSetupResult): Promise<void> {
   if (!setup.orm) return;
+  const { Readable } = await import('node:stream');
   const { CodeSetLoaderService } = await import(
     '../../persistence/etl/codeSetLoader.service'
   );
-  const { Icd10Code } = await import(
-    '../../persistence/entities/icd10Code.entity'
-  );
-  const em = forkPostgresEm(setup);
+  const { loadIcd10Codes } = await import('../../persistence/etl/icd10.loader');
+  const { loadHcpcsCodes } = await import('../../persistence/etl/hcpcs.loader');
   const loader = new CodeSetLoaderService(
-    em,
+    forkPostgresEm(setup),
     new OpenTelemetryCollector('test', 'info', {})
   );
-  await loader.load(Icd10Code, [
-    { code: 'J06.9', description: 'Acute upper respiratory infection, unspecified' },
-    { code: 'Z00.00', description: 'Encounter for general adult medical exam w/o abnormal findings' },
-    { code: 'R73.09', description: 'Other abnormal glucose' }
-  ]);
+  await loadIcd10Codes(loader, Readable.from([ICD10_CDC_SAMPLE]));
+  await loadHcpcsCodes(loader, Readable.from([HCPCS_CSV_SAMPLE]));
+}
+
+// An HMAC Authorization header for an internal route. The server verifies
+// the router-relative path (req.path), e.g. '/icd10/E11.9' for
+// '/codeValidation/icd10/E11.9'.
+export async function signHmac(method: string, routerPath: string): Promise<string> {
+  const { generateHmacAuthHeaders } = await import('@forklaunch/core/http');
+  const { ci, tokens } = await import('../../bootstrapper');
+  return generateHmacAuthHeaders({
+    secretKey: ci.resolve(tokens.HMAC_SECRET_KEY),
+    method,
+    path: routerPath
+  }).authorization;
 }
 
 export const cleanupTestDatabase = async (): Promise<void> => {
@@ -315,6 +335,12 @@ export async function startTestServer(): Promise<string> {
   const { analyticsRouter } = await import('../../api/routes/analytics.routes');
   const { claimRouter } = await import('../../api/routes/claim.routes');
   const { codeSetRouter } = await import('../../api/routes/codeSet.routes');
+  const { codeValidationRouter } = await import(
+    '../../api/routes/codeValidation.routes'
+  );
+  const { complianceRouter } = await import(
+    '../../api/routes/compliance.routes'
+  );
   const { denialRouter } = await import('../../api/routes/denial.routes');
 
   const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
@@ -340,6 +366,8 @@ export async function startTestServer(): Promise<string> {
   app.use(analyticsRouter);
   app.use(claimRouter);
   app.use(codeSetRouter);
+  app.use(codeValidationRouter);
+  app.use(complianceRouter);
   app.use(denialRouter);
 
   await new Promise<void>((resolve) => {
@@ -502,13 +530,18 @@ export async function activateCptLicense(
   const { CodeSetType } = await import('../../domain/enum/codeSetType.enum');
   const { LicenseStatus } = await import('../../domain/enum/licenseStatus.enum');
 
-  const license = em.create(CodeSetLicense, {
+  // A fresh, tenant-scoped EntityManager: the caller's em may still hold a
+  // Patient from seeding, which flushing on a raw em would re-encrypt under
+  // the wrong key (UnboundTenantError on core 3).
+  const scoped = wrapEmWithTenantContext(em.fork(), organizationId) as EntityManager;
+  const license = scoped.create(CodeSetLicense, {
     organizationId,
     codeSetType: CodeSetType.CPT,
     status: LicenseStatus.ACTIVE,
     signedAt: new Date()
   });
-  await em.persist(license).flush();
+  scoped.persist(license);
+  await scoped.flush();
 }
 
 // Reads a claim's codeSetType directly off the DB — buildClaim's response

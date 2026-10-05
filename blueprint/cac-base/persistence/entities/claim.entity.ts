@@ -17,9 +17,7 @@ export const Claim = defineComplianceEntity({
     ...sqlBaseProperties,
     organizationId: fp.uuid().compliance('none'),
     patient: () => fp.manyToOne(Patient),
-    // One claim per encounter — see the claim_encounter_id_unique
-    // constraint in migrations/ (same reasoning as Patient.mrn's composite
-    // unique: expressed in the migration, not chained here).
+    // One claim per encounter (see `uniques` below).
     encounter: () => fp.manyToOne(Encounter),
     // The payer being billed — nullable for self-pay claims.
     payer: () => fp.manyToOne(Insurance).nullable(),
@@ -39,6 +37,8 @@ export const Claim = defineComplianceEntity({
     remittances: () => fp.oneToMany(Remittance).mappedBy('claim'),
     denials: () => fp.oneToMany(Denial).mappedBy('claim')
   },
+  // a double-submitted build answers 409 instead of creating a second claim
+  uniques: [{ properties: ['encounter'] }],
   userIdField: 'patient'
 });
 

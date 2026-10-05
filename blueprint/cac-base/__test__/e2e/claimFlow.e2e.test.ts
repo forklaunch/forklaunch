@@ -32,7 +32,9 @@ import {
   seedEncounter,
   seedEncounterWithCharges,
   setTestPermissions,
+  setTestRoles,
   setupTestDatabase,
+  signHmac,
   signTestJwt,
   startTestServer,
   TEST_ORGANIZATION_ID,
@@ -42,13 +44,14 @@ import {
 async function call(
   baseUrl: string,
   path: string,
-  opts: { method?: string; body?: unknown; token?: string } = {}
+  opts: { method?: string; body?: unknown; token?: string; authorization?: string } = {}
 ) {
   const res = await fetch(`${baseUrl}${path}`, {
     method: opts.method ?? 'GET',
     headers: {
       'Content-Type': 'application/json',
-      ...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {})
+      ...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}),
+      ...(opts.authorization ? { Authorization: opts.authorization } : {})
     },
     body: opts.body != null ? JSON.stringify(opts.body) : undefined
   });
@@ -710,6 +713,251 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
       });
 
       expect((built.body as { codeSetType: string }).codeSetType).toBe('mock');
+    });
+  });
+
+  describe('compliance erase/export', () => {
+    const patientOf = async (encounterId: string): Promise<string> => {
+      const rows = await forkPostgresEm(setup)
+        .getConnection()
+        .execute<{ patient_id: string }[]>(
+          'select patient_id from encounter where id = ?',
+          [encounterId]
+        );
+      return rows[0].patient_id;
+    };
+
+    afterEach(() => setTestRoles([]));
+
+    it('exports a patient's records, then erases them', async () => {
+      const encounterId = await seedEncounter(forkPostgresEm(setup), {
+        mrn: 'E2E-COMPLIANCE-001',
+        icd10Code: 'J06.9',
+        procedureCode: 'PROC-001'
+      });
+      const patientId = await patientOf(encounterId);
+      setTestRoles(['system']);
+
+      const exported = await call(baseUrl, `/compliance/export/${patientId}`, {
+        token: jwt
+      });
+      expect(exported.status).toBe(200);
+      const entities = (exported.body as { entities: Record<string, unknown[]> })
+        .entities;
+      expect(entities.Patient).toHaveLength(1);
+      // PHI comes back decrypted under the patient's organization
+      expect(entities.Patient[0]).toMatchObject({ firstName: 'Test', lastName: 'Patient' });
+
+      const erased = await call(baseUrl, `/compliance/erase/${patientId}`, {
+        method: 'DELETE',
+        token: jwt
+      });
+      expect(erased.status).toBe(200);
+      expect((erased.body as { recordsDeleted: number }).recordsDeleted).toBeGreaterThan(0);
+
+      const rows = await forkPostgresEm(setup)
+        .getConnection()
+        .execute<{ n: string }[]>('select count(*) as n from patient where id = ?', [patientId]);
+      expect(Number(rows[0].n)).toBe(0);
+    });
+
+    it('answers 404 for an unknown patient and 400 for a malformed id', async () => {
+      setTestRoles(['system']);
+      const unknown = await call(
+        baseUrl,
+        '/compliance/export/99999999-9999-9999-9999-999999999999',
+        { token: jwt }
+      );
+      expect(unknown.status).toBe(404);
+
+      const malformed = await call(baseUrl, '/compliance/export/not-a-uuid', {
+        token: jwt
+      });
+      expect(malformed.status).toBe(400);
+    });
+
+    it('refuses callers without the system role', async () => {
+      const encounterId = await seedEncounter(forkPostgresEm(setup), {
+        mrn: 'E2E-COMPLIANCE-002',
+        icd10Code: 'J06.9',
+        procedureCode: 'PROC-001'
+      });
+      const patientId = await patientOf(encounterId);
+      const res = await call(baseUrl, `/compliance/erase/${patientId}`, {
+        method: 'DELETE',
+        token: jwt
+      });
+      expect(res.status).not.toBe(200);
+      const rows = await forkPostgresEm(setup)
+        .getConnection()
+        .execute<{ n: string }[]>('select count(*) as n from patient where id = ?', [patientId]);
+      expect(Number(rows[0].n)).toBe(1);
+    });
+  });
+
+  describe('code validation', () => {
+    const validate = async (codeSet: 'icd10' | 'hcpcs', rawCode: string) => {
+      const routerPath = `/${codeSet}/${encodeURIComponent(rawCode)}`;
+      return call(baseUrl, `/codeValidation${routerPath}`, {
+        authorization: await signHmac('GET', routerPath)
+      });
+    };
+
+    it('finds a code however it is written: with or without the dot, any case, padded', async () => {
+      // seeded from the CDC file layout, which has no dot: E119
+      for (const written of ['E11.9', 'E119', 'e11.9', ' E119']) {
+        const res = await validate('icd10', written);
+        expect([written, res.status]).toEqual([written, 200]);
+        expect([written, (res.body as { valid: boolean }).valid]).toEqual([written, true]);
+      }
+      const hcpcs = await validate('hcpcs', 'j3490');
+      expect((hcpcs.body as { valid: boolean }).valid).toBe(true);
+    });
+
+    it('rejects a code that is not in the release', async () => {
+      const res = await validate('icd10', 'Z99.999');
+      expect(res.status).toBe(200);
+      expect((res.body as { valid: boolean }).valid).toBe(false);
+    });
+  });
+
+  describe('scrubbing against the reference tables', () => {
+    it('accepts a valid HCPCS code that the mock code set does not know', async () => {
+      const encounterId = await seedEncounter(forkPostgresEm(setup), {
+        mrn: 'E2E-HCPCS-001',
+        icd10Code: 'J06.9',
+        procedureCode: 'J3490'
+      });
+      const built = await call(baseUrl, '/claim/build', {
+        method: 'POST',
+        body: { encounterId },
+        token: jwt
+      });
+      const scrubbed = await call(baseUrl, `/claim/${(built.body as { id: string }).id}/scrub`, {
+        method: 'POST',
+        token: jwt
+      });
+      expect(scrubbed.status).toBe(200);
+      expect(scrubbed.body).toEqual({ status: 'ready', denials: [] });
+    });
+
+    it('a claim scrubbed ready on mock codes stays ready after a CPT license is activated', async () => {
+      const em = forkPostgresEm(setup);
+      const encounterId = await seedEncounter(em, {
+        mrn: 'E2E-NO-RECODE-001',
+        icd10Code: 'J06.9',
+        procedureCode: 'PROC-001'
+      });
+      const built = await call(baseUrl, '/claim/build', {
+        method: 'POST',
+        body: { encounterId },
+        token: jwt
+      });
+      const claimId = (built.body as { id: string }).id;
+      const first = await call(baseUrl, `/claim/${claimId}/scrub`, { method: 'POST', token: jwt });
+      expect(first.body).toEqual({ status: 'ready', denials: [] });
+
+      await activateCptLicense(em);
+
+      const again = await call(baseUrl, `/claim/${claimId}/scrub`, { method: 'POST', token: jwt });
+      expect(again.body).toEqual({ status: 'ready', denials: [] });
+    });
+
+    it('re-scrubbing after the coder fixes the diagnosis clears the denial', async () => {
+      const encounterId = await seedEncounter(forkPostgresEm(setup), {
+        mrn: 'E2E-FIX-RESCRUB-001',
+        icd10Code: 'J06.99', // not a real code
+        procedureCode: 'PROC-001'
+      });
+      const built = await call(baseUrl, '/claim/build', {
+        method: 'POST',
+        body: { encounterId },
+        token: jwt
+      });
+      const claimId = (built.body as { id: string }).id;
+      const denied = await call(baseUrl, `/claim/${claimId}/scrub`, { method: 'POST', token: jwt });
+      expect((denied.body as { status: string }).status).toBe('denied');
+
+      await forkPostgresEm(setup)
+        .getConnection()
+        .execute('update diagnosis set icd10_code = ? where encounter_id = ?', ['J06.9', encounterId]);
+
+      const fixed = await call(baseUrl, `/claim/${claimId}/scrub`, { method: 'POST', token: jwt });
+      expect(fixed.body).toEqual({ status: 'ready', denials: [] });
+      const open = await call(baseUrl, `/denial?claimId=${claimId}&worklistStatus=open`, { token: jwt });
+      expect(open.body).toEqual([]);
+    });
+  });
+
+  describe('malformed ids', () => {
+    it('answers 400, not a 500 page', async () => {
+      const responses = await Promise.all([
+        call(baseUrl, '/denial/not-a-uuid', { token: jwt }),
+        call(baseUrl, '/claim/not-a-uuid/scrub', { method: 'POST', token: jwt }),
+        call(baseUrl, '/claim/build', { method: 'POST', body: { encounterId: 'abc' }, token: jwt }),
+        call(baseUrl, '/denial?claimId=xyz', { token: jwt })
+      ]);
+      expect(responses.map((r) => r.status)).toEqual([400, 400, 400, 400]);
+    });
+  });
+
+  describe('schema', () => {
+    it('the migrations match the entities, so a scaffolded app gets the same constraints', async () => {
+      const diff = await setup.orm!.schema.getUpdateSchemaSQL({ wrap: false });
+      expect(diff.trim()).toBe('');
+    });
+  });
+
+  describe('code-set loading', () => {
+    const ORG = '77777777-7777-7777-7777-777777777777';
+    const loadCpt = async (lines: string[], replaceRelease = false) => {
+      const { Readable } = await import('node:stream');
+      const { OpenTelemetryCollector } = await import('@forklaunch/core/http');
+      const { CodeSetLoaderService } = await import(
+        '../../persistence/etl/codeSetLoader.service'
+      );
+      const { loadCptCodes } = await import('../../persistence/etl/cpt.loader');
+      const loader = new CodeSetLoaderService(
+        forkPostgresEm(setup),
+        new OpenTelemetryCollector('test', 'info', {})
+      );
+      return loadCptCodes(
+        loader,
+        Readable.from([lines.join('\n')]),
+        { code: 0, description: 1, hasHeader: false },
+        ORG,
+        { replaceRelease }
+      );
+    };
+    const cptCodes = async () =>
+      (
+        await forkPostgresEm(setup)
+          .getConnection()
+          .execute<{ code: string; description: string }[]>(
+            'select code, description from cpt_code where organization_id = ? order by code',
+            [ORG]
+          )
+      ).map((r) => `${r.code}=${r.description}`);
+
+    it('loads a code repeated within one batch once, the later row winning', async () => {
+      const result = await loadCpt(['99213,Office visit', '99214,Longer visit', '99213,"Office visit, established"']);
+      expect(result.rowsUpserted).toBe(2);
+      expect(await cptCodes()).toEqual(['99213=Office visit, established', '99214=Longer visit']);
+    });
+
+    it('counts lines it cannot use instead of skipping them silently', async () => {
+      const result = await loadCpt(['99213,Office visit', 'no description here']);
+      expect(result.rowsSkipped).toBe(1);
+    });
+
+    it('removes codes a full release no longer contains, and refuses a truncated release', async () => {
+      await loadCpt(['99213,a', '99214,b', '99215,c', '99216,d']);
+      const result = await loadCpt(['99213,a', '99214,b', '99215,c'], true);
+      expect(result.rowsRetired).toBe(1);
+      expect(await cptCodes()).toEqual(['99213=a', '99214=b', '99215=c']);
+
+      await expect(loadCpt(['99213,a'], true)).rejects.toThrow(/truncated/);
+      expect(await cptCodes()).toHaveLength(3);
     });
   });
 });

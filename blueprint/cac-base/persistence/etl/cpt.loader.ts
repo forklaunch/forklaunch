@@ -4,7 +4,7 @@ import {
   CodeSetLoaderService,
   CodeSetLoadResult
 } from './codeSetLoader.service';
-import { CsvColumnMap, parseCsvRows } from './csvRowSource';
+import { CsvColumnMap, newParseStats, parseCsvRows } from './csvRowSource';
 
 // Points at an organization's own real, licensed CPT feed (§5) — never a
 // ForkLaunch-supplied source. The column layout is left to the caller to
@@ -16,10 +16,15 @@ export async function loadCptCodes(
   loader: CodeSetLoaderService,
   source: Readable,
   columnMap: CsvColumnMap,
-  organizationId: string
+  organizationId: string,
+  options: { replaceRelease?: boolean } = {}
 ): Promise<CodeSetLoadResult> {
-  return loader.load(CptCode, parseCsvRows(source, columnMap), {
+  const stats = newParseStats();
+  return loader.load(CptCode, parseCsvRows(source, columnMap, stats), {
+    tableName: 'cpt_code',
     onConflictFields: ['organizationId', 'code'],
-    organizationId
+    organizationId,
+    replaceRelease: options.replaceRelease,
+    skipped: () => stats.skipped
   });
 }

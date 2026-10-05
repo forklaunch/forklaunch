@@ -7,9 +7,8 @@ import { LicenseStatus } from '../../domain/enum/licenseStatus.enum';
 // connector wired up — drives the per-organization feature gate in §5
 // (CodeSetProviderResolver looks this up directly). This entity never
 // holds any real AMA CPT content; it only tracks status. Unique on
-// (organizationId, codeSetType) — see the composite constraint in
-// migrations/ — so the resolver's findOne() can't land on an arbitrary
-// row if duplicates were ever inserted.
+// (organizationId, codeSetType), so the resolver's findOne() can't land on
+// an arbitrary row.
 export const CodeSetLicense = defineComplianceEntity({
   name: 'CodeSetLicense',
   properties: {
@@ -21,5 +20,6 @@ export const CodeSetLicense = defineComplianceEntity({
       .default(LicenseStatus.NONE)
       .compliance('none'),
     signedAt: fp.datetime().nullable().compliance('none')
-  }
+  },
+  uniques: [{ properties: ['organizationId', 'codeSetType'] }]
 });

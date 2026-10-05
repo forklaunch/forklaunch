@@ -15,6 +15,23 @@ export interface CsvColumnMap {
   hasHeader?: boolean;
 }
 
+/** Lines a row source could not use, so a bad file is not loaded silently. */
+export interface ParseStats {
+  skipped: number;
+  // the first few skipped line numbers, for the error message
+  skippedLines: number[];
+}
+
+export function newParseStats(): ParseStats {
+  return { skipped: 0, skippedLines: [] };
+}
+
+function recordSkip(stats: ParseStats | undefined, lineNumber: number): void {
+  if (!stats) return;
+  stats.skipped += 1;
+  if (stats.skippedLines.length < 5) stats.skippedLines.push(lineNumber);
+}
+
 function splitLine(line: string, delimiter: string): string[] {
   // Minimal CSV split — handles a quoted field containing the delimiter,
   // which is the one real-world wrinkle in CMS/CDC's published code-set
@@ -50,8 +67,18 @@ function splitLine(line: string, delimiter: string): string[] {
  */
 export async function* parseCsvRows(
   source: Readable,
-  columnMap: CsvColumnMap
+  columnMap: CsvColumnMap,
+  stats?: ParseStats
 ): AsyncIterable<CodeSetRow> {
+  for (const [name, value] of Object.entries({
+    code: columnMap.code,
+    description: columnMap.description,
+    effectiveDate: columnMap.effectiveDate
+  })) {
+    if (value !== undefined && (!Number.isInteger(value) || value < 0)) {
+      throw new Error(`Column map: ${name} must be a column index (0 or more), got ${value}`);
+    }
+  }
   const delimiter = columnMap.delimiter ?? ',';
   const hasHeader = columnMap.hasHeader ?? true;
   const rl = createInterface({ input: source, crlfDelay: Infinity });
@@ -65,7 +92,10 @@ export async function* parseCsvRows(
     const fields = splitLine(line, delimiter);
     const code = fields[columnMap.code]?.trim();
     const description = fields[columnMap.description]?.trim();
-    if (!code || !description) continue;
+    if (!code || !description) {
+      recordSkip(stats, lineNumber);
+      continue;
+    }
 
     const row: CodeSetRow = { code, description };
     if (columnMap.effectiveDate != null) {
@@ -79,5 +109,35 @@ export async function* parseCsvRows(
     }
 
     yield row;
+  }
+}
+
+/**
+ * Parses the CDC/NCHS ICD-10-CM codes file (icd10cm_codes_YYYY.txt): one
+ * code per line, the code without its dot, then spaces, then the
+ * description, and no header row:
+ *
+ *   A000    Cholera due to Vibrio cholerae 01, biovar cholerae
+ *
+ * A comma-delimited parse of this file reads the whole line as the code.
+ */
+export async function* parseCodeThenDescriptionLines(
+  source: Readable,
+  stats?: ParseStats
+): AsyncIterable<CodeSetRow> {
+  const rl = createInterface({ input: source, crlfDelay: Infinity });
+  let lineNumber = 0;
+  for await (const raw of rl) {
+    lineNumber += 1;
+    const line = raw.trim();
+    if (line.length === 0) continue;
+    const gap = line.search(/\s/);
+    const code = gap > 0 ? line.slice(0, gap) : '';
+    const description = gap > 0 ? line.slice(gap).trim() : '';
+    if (!code || !description) {
+      recordSkip(stats, lineNumber);
+      continue;
+    }
+    yield { code, description };
   }
 }

@@ -8,6 +8,7 @@ import {
   MockProcedureCodeProvider
 } from '@forklaunch/implementation-cac-base/services';
 import { EntityManager } from '@mikro-orm/postgresql';
+import { CodeSetProviderType } from '../domain/enum/codeSetProviderType.enum';
 import { CodeSetType } from '../domain/enum/codeSetType.enum';
 import { LicenseStatus } from '../domain/enum/licenseStatus.enum';
 import { CodeSetLicense } from '../persistence/entities/codeSetLicense.entity';
@@ -58,5 +59,20 @@ export class CodeSetProviderResolver {
       new EntityManagerCptCodeSource(this.em, organizationId),
       this.otel
     );
+  }
+
+  /**
+   * The provider of the code set a claim was built under, whatever the
+   * organization's license says now: §5's "historical claims are never
+   * retroactively recoded" rule.
+   */
+  forCodeSet(organizationId: string, codeSetType: CodeSetProviderType): CodeSetProvider {
+    if (codeSetType === CodeSetProviderType.CPT) {
+      return new CptCodeProvider(
+        new EntityManagerCptCodeSource(this.em, organizationId),
+        this.otel
+      );
+    }
+    return new MockProcedureCodeProvider(this.otel);
   }
 }

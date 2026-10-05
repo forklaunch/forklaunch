@@ -8,9 +8,9 @@ import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
 // CPT edition a customer's real feed uses is entirely their decision").
 // ForkLaunch never populates this table with real content itself — it stays
 // empty until an organization points scripts/refresh-code-sets.ts at their
-// own licensed feed. Uniqueness is (organizationId, code) — see the
-// composite unique constraint in migrations/ — not a single-column
-// constraint on `code` alone, since code repeats across organizations.
+// own licensed feed. Unique on (organizationId, code), not on `code` alone,
+// since a code repeats across organizations; loadCptCodes' ON CONFLICT
+// targets this constraint.
 export const CptCode = defineComplianceEntity({
   name: 'CptCode',
   properties: {
@@ -19,5 +19,6 @@ export const CptCode = defineComplianceEntity({
     code: fp.string().compliance('none'),
     description: fp.string().compliance('none'),
     effectiveDate: fp.datetime().nullable().compliance('none')
-  }
+  },
+  uniques: [{ properties: ['organizationId', 'code'] }]
 });
