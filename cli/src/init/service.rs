@@ -69,7 +69,8 @@ use crate::{
                 VALIDATOR_VERSION,
                 ZOD_VERSION, project_clean_script, project_dev_local_script,
                 project_dev_server_script, project_format_script, project_lint_fix_script,
-                project_lint_script, project_migrate_script, project_retention_enforce_script,
+                project_cac_refresh_code_sets_script, project_lint_script,
+                project_migrate_script, project_retention_enforce_script,
                 project_dev_local_worker_script, project_dev_worker_client_script,
                 project_start_server_script, project_start_worker_script, project_test_script,
                 project_up_latest_script,
@@ -411,6 +412,14 @@ pub(crate) fn generate_service_package_json(
                     ))
                 } else {
                     None
+                },
+                additional_scripts: if manifest_data.is_cac {
+                    HashMap::from([(
+                        "code-sets:refresh".to_string(),
+                        project_cac_refresh_code_sets_script(&manifest_data.runtime.parse()?),
+                    )])
+                } else {
+                    HashMap::new()
                 },
                 ..Default::default()
             }
