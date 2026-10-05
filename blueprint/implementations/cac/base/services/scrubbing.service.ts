@@ -26,6 +26,10 @@ export interface ScrubbingResult {
   findings: ScrubbingFinding[];
 }
 
+// TODO: the rule tables are mock data imported statically, so an adopter
+// can't supply real NCCI/MUE/LCD data yet; make them a constructor
+// dependency (see README, "Not production scrubbing yet").
+//
 // Three distinct rule layers, kept separate because they check unrelated
 // things against unrelated data — see plan/cac/MEDICAL-CODING-IMPLEMENTATION-PLAN.md
 // §6. Pure logic, no DB/entity dependency: the caller (cac-base's

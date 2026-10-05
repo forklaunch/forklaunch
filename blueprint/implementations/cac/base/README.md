@@ -120,3 +120,26 @@ encounters use the real provider. Claims already built and submitted under
 `MockProcedureCodeProvider` are never rewritten — a submitted claim is a
 financial/legal record. Pass this along to your own end customers if you
 build a pilot/demo flow on top of this module.
+
+## Not production scrubbing yet: the rule data is mock
+
+`ScrubbingService` runs real logic (NCCI PTP, NCCI MUE, LCD/NCD, required
+fields) against **mock rule tables** that are imported statically
+(`domain/mockNcciRules.ts`, `domain/mockLcdCrosswalk.ts`). Until the TODOs
+below are done:
+
+- **You can't supply real NCCI/MUE/LCD data.** A licensed organization's
+  claim with real CPT codes is only checked against these mock tables, so a
+  line with 500 units, or a diagnosis that doesn't support the procedure,
+  can scrub `ready` with no findings.
+- **The CPT-shaped test fixture is part of those tables**
+  (`domain/cptShapedFixture.ts` is spread into the mock PTP, MUE and LCD
+  tables). It exists to exercise the engine with CPT-shaped codes, not as
+  rule data.
+
+TODO:
+1. Make the rule tables a constructor dependency of `ScrubbingService` (a
+   `ScrubbingRuleSource`, defaulting to the mock tables), so an adopter can
+   load CMS NCCI PTP/MUE files and their MAC's LCD crosswalks.
+2. Move the CPT-shaped fixture out of the default tables, into the tests
+   that use it.
