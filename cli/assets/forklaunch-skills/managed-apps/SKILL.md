@@ -148,7 +148,8 @@ forklaunch managed template update --slug acme-books \
   --base-domain buildbespoke.app \      # the zone instances are hosted under
   --frontend-domain app.example.com \   # instance UIs become <hostPrefix>.<domain>; --clear-frontend-domain removes it
   --default-instance-size pico \        # tier new instances launch with; --clear-default-instance-size resets
-  --supports-key-rotation               # allow `instance rotate-keys` (services re-encrypt on boot); --no-supports-key-rotation
+  --supports-key-rotation \             # allow `instance rotate-keys` (services re-encrypt on boot); --no-supports-key-rotation
+  --auto-approve-launches true          # launches skip the managed first-deploy approval gate (admin only); false restores it
 ```
 
 Only the fields you pass change. An empty update is refused (it would report
@@ -454,7 +455,11 @@ Watch it with `forklaunch managed instance get --id <id>` (or `instance list
   the launch deployment is parked `awaiting_approval` (`requestedBy: system`,
   so any admin can approve). `forklaunch deploy approvals list --status
   pending` → `deploy approvals approve --id <id>`; the launch resumes at once.
-  Or turn the gate off for production (`/deployment-approvals`).
+  Or turn the gate off for production (`/deployment-approvals`). On a
+  platform where every managed launch is gated, the template's
+  `--auto-approve-launches true` (admin only, recorded) skips that
+  managed-launch gate and nothing else: an environment that explicitly
+  requires approval still parks the launch.
 - **`awaiting_claim` before the app answers** — until #861 is everywhere,
   the state can flip when the claim link is minted, with the deployment still
   `deploying`. Confirm `instance deployments --id <id> --limit 1` says
@@ -568,6 +573,36 @@ instance GET and the claim response all return them; the claim page shows the
 customer their `frontendUrl`. How to build the Vercel side (edge middleware per
 instance, why a subdomain per instance and not a shared origin) and the prompt
 to hand a coding agent: `docs/managed-instance-frontend.md`.
+
+### claim-next (a signup backend takes one from the pool, unattended)
+
+```bash
+forklaunch managed instance claim-next --template acme-books --reference cust_42 [--email owner@example.com] [--json]
+# POST /managed-mode/templates/acme-books/claim-next  { reference?, email? }   (EDITOR)
+# 200 { instanceId, host, claimUrl, expiresAt, reference?, emailed? }
+# 409 { code: "POOL_EMPTY", message, poolSize, reserved, provisioning }
+```
+
+Say Meridian signs up on your website at 2 a.m. Your signup backend (signed
+in with an API key) calls this: it gets the **oldest** `awaiting_claim`
+instance of the template in your org that has no live link out, and a
+fresh one-time claim link for it. The pick is one transaction with
+`FOR UPDATE SKIP LOCKED`, so two sign-ups in the same second never get the
+same instance. `--email` also mails the link (the link is still returned;
+`emailed: false` means the mail failed). `--reference` is your own customer
+id, stored on the instance (`reference` on the row; it survives the claim,
+a reset clears it).
+
+The **reservation is the link**: the instance stays `awaiting_claim` (so
+claim, relay, gateways, rollouts, reset and destroy treat it like any
+other), with `reservedAt` set and its stored URL purged. It lapses with the
+link (72 h): an abandoned signup's instance returns to the pool on its own,
+and the next claim-next rotates its token. An instance whose link an
+operator revealed or emailed by hand also counts as "out" until that link
+expires, so claim-next never kills a link someone holds. On `POOL_EMPTY`,
+launch more (`instance create`) and retry; `provisioning` says how many are
+already on the way. To keep launches unattended too, set the template's
+`--auto-approve-launches true`.
 
 ### claim (customer consumes — no login)
 
