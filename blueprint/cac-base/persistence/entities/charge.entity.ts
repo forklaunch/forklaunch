@@ -7,7 +7,7 @@ export const Charge = defineComplianceEntity({
   properties: {
     ...sqlBaseProperties,
     organizationId: fp.uuid().compliance('none'),
-    encounter: () => fp.manyToOne(Encounter),
+    encounter: () => fp.manyToOne(Encounter).deleteRule('cascade').updateRule('cascade'),
     // Either a MockProcedureCodeProvider code or, once an org's own real
     // connector is active (§5), a real CPT code supplied by that org — the
     // column shape is identical either way, 'none' since it's just a code.

@@ -7,7 +7,7 @@ export const Insurance = defineComplianceEntity({
   properties: {
     ...sqlBaseProperties,
     organizationId: fp.uuid().compliance('none'),
-    patient: () => fp.manyToOne(Patient),
+    patient: () => fp.manyToOne(Patient).deleteRule('cascade').updateRule('cascade'),
     payerName: fp.string().compliance('none'),
     memberId: fp.string().compliance('phi'),
     groupNumber: fp.string().nullable().compliance('none')

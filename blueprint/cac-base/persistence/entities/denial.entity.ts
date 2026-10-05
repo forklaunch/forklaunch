@@ -18,7 +18,7 @@ export const Denial = defineComplianceEntity({
   properties: {
     ...sqlBaseProperties,
     organizationId: fp.uuid().compliance('none'),
-    claim: () => fp.manyToOne(Claim),
+    claim: () => fp.manyToOne(Claim).deleteRule('cascade').updateRule('cascade'),
     carcCode: fp.string().compliance('none'),
     category: fp.enum(() => DenialReasonCategory).compliance('none'),
     worklistStatus: fp

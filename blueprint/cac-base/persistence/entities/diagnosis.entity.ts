@@ -7,7 +7,7 @@ export const Diagnosis = defineComplianceEntity({
   properties: {
     ...sqlBaseProperties,
     organizationId: fp.uuid().compliance('none'),
-    encounter: () => fp.manyToOne(Encounter),
+    encounter: () => fp.manyToOne(Encounter).deleteRule('cascade').updateRule('cascade'),
     // The code itself is public data (ICD-10-CM) — 'none', not 'phi'. See §4.
     //
     // .fieldName() is explicit, not decorative: MikroORM's default naming

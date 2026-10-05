@@ -16,11 +16,12 @@ export const Claim = defineComplianceEntity({
   properties: {
     ...sqlBaseProperties,
     organizationId: fp.uuid().compliance('none'),
-    patient: () => fp.manyToOne(Patient),
+    patient: () => fp.manyToOne(Patient).deleteRule('cascade').updateRule('cascade'),
     // One claim per encounter (see `uniques` below).
-    encounter: () => fp.manyToOne(Encounter),
+    encounter: () => fp.manyToOne(Encounter).deleteRule('cascade').updateRule('cascade'),
     // The payer being billed — nullable for self-pay claims.
-    payer: () => fp.manyToOne(Insurance).nullable(),
+    payer: () =>
+      fp.manyToOne(Insurance).nullable().deleteRule('set null').updateRule('cascade'),
     status: fp
       .enum(() => ClaimStatus)
       .default(ClaimStatus.DRAFT)

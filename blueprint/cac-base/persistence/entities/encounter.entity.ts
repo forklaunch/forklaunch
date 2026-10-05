@@ -9,7 +9,7 @@ export const Encounter = defineComplianceEntity({
   properties: {
     ...sqlBaseProperties,
     organizationId: fp.uuid().compliance('none'),
-    patient: () => fp.manyToOne(Patient),
+    patient: () => fp.manyToOne(Patient).deleteRule('cascade').updateRule('cascade'),
     // Provider is an IAM User (coder/biller-facing staff record lives in a
     // separate service) — stored as an id pointer, not a local relation.
     providerId: fp.uuid().compliance('none'),

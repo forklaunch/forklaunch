@@ -229,7 +229,7 @@ export const setupTestDatabase = async (): Promise<TestSetupResult> => {
     needsRedis: true,
     customEnvVars: {
       JWKS_PUBLIC_KEY_URL: jwks,
-      IAM_URL: `http://localhost:${port}`,
+      IAM_URL: `http://127.0.0.1:${port}`,
       ENCRYPTION_KEY: '0'.repeat(64)
     }
   });
@@ -318,7 +318,9 @@ export const cleanupTestDatabase = async (): Promise<void> => {
 // approach here instead.
 let testServer: { close: (cb: () => void) => void } | undefined;
 const TEST_PORT = 18453;
-export const TEST_BASE_URL = `http://localhost:${TEST_PORT}`;
+// 127.0.0.1, not localhost: where localhost resolves to IPv6 first and
+// IPv6 is off (many CI and Docker hosts), the server cannot bind ::1.
+export const TEST_BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
 
 export async function startTestServer(): Promise<string> {
   const { createAuthCacheService, forklaunchExpress, schemaValidator } =
@@ -369,7 +371,7 @@ export async function startTestServer(): Promise<string> {
   app.use(denialRouter);
 
   await new Promise<void>((resolve) => {
-    const server = app.listen(TEST_PORT, 'localhost', () => resolve());
+    const server = app.listen(TEST_PORT, '127.0.0.1', () => resolve());
     testServer = server;
   });
 

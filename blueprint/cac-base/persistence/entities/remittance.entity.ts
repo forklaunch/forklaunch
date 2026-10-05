@@ -8,7 +8,7 @@ export const Remittance = defineComplianceEntity({
   properties: {
     ...sqlBaseProperties,
     organizationId: fp.uuid().compliance('none'),
-    claim: () => fp.manyToOne(Claim),
+    claim: () => fp.manyToOne(Claim).deleteRule('cascade').updateRule('cascade'),
     paidAmount: fp.double().compliance('none'),
     // CARC/RARC codes present on this remittance line, if any — see §6's
     // CARC reference table.

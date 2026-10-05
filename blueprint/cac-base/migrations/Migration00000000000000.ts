@@ -123,6 +123,28 @@ export class Migration00000000000000 extends Migration {
     this.addSql(
       `alter table "denial" add constraint "denial_claim_id_foreign" foreign key ("claim_id") references "claim" ("id") on update cascade on delete cascade;`
     );
+    // Enum columns are checked in the database too, as the entities declare
+    // (MikroORM emits these from fp.enum); getUpdateSchemaSQL() against the
+    // migrated database is empty (see the schema e2e test).
+    this.addSql(
+      `alter table "code_set_license" add constraint "code_set_license_code_set_type_check" check ("code_set_type" in ('icd10', 'hcpcs', 'cpt'));`
+    );
+    this.addSql(
+      `alter table "code_set_license" add constraint "code_set_license_status_check" check ("status" in ('none', 'pending', 'active'));`
+    );
+    this.addSql(
+      `alter table "claim" add constraint "claim_status_check" check ("status" in ('draft', 'scrubbing', 'ready', 'submitted', 'accepted', 'denied', 'paid', 'void'));`
+    );
+    this.addSql(
+      `alter table "claim" add constraint "claim_code_set_type_check" check ("code_set_type" in ('mock', 'cpt'));`
+    );
+    this.addSql(`alter table "denial" alter column "worklist_status" set default 'open';`);
+    this.addSql(
+      `alter table "denial" add constraint "denial_category_check" check ("category" in ('ncci_ptp', 'ncci_mue', 'lcd_ncd', 'required_fields', 'eligibility'));`
+    );
+    this.addSql(
+      `alter table "denial" add constraint "denial_worklist_status_check" check ("worklist_status" in ('open', 'resolved'));`
+    );
   }
 
   override async down(): Promise<void> {
