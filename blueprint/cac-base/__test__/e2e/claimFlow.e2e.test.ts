@@ -729,7 +729,7 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
 
     afterEach(() => setTestRoles([]));
 
-    it('exports a patient's records, then erases them', async () => {
+    it("exports a patient's records, then erases them", async () => {
       const encounterId = await seedEncounter(forkPostgresEm(setup), {
         mrn: 'E2E-COMPLIANCE-001',
         icd10Code: 'J06.9',

@@ -250,14 +250,12 @@ export const ICD10_CDC_SAMPLE = [
   'Z0000   Encounter for general adult medical exam without abnormal findings',
   'R7309   Other abnormal glucose',
   'E119    Type 2 diabetes mellitus without complications'
-].join('
-');
+].join('\n');
 export const HCPCS_CSV_SAMPLE = [
   'code,description',
   'J3490,"Unclassified drugs"',
   'G0438,"Annual wellness visit, initial"'
-].join('
-');
+].join('\n');
 
 async function seedIcd10ReferenceCodes(setup: TestSetupResult): Promise<void> {
   if (!setup.orm) return;
