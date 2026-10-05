@@ -36,6 +36,9 @@ pub(super) struct TemplateUpdate<'a> {
     /// Whether the platform may rotate this product's generated secrets in place
     /// (`--supports-key-rotation` / `--no-supports-key-rotation`).
     pub(super) supports_key_rotation: Option<bool>,
+    /// Whether launches of this template's instances skip the managed first-deploy
+    /// approval gate (`--auto-approve-launches true|false`). Admin only on the server.
+    pub(super) auto_approve_launches: Option<bool>,
     /// The repository the platform builds versions from (https URL).
     pub(super) source_repo: Option<&'a String>,
     /// The model gateway setting, replaced as a whole (see `model_gateway_body`).
@@ -89,6 +92,13 @@ impl CliCommand for UpdateCommand {
              \x20 --supports-key-rotation  declare that every service re-encrypts its data on\n\
              \x20                          boot from LEGACY_<KEY>S, so `instance rotate-keys`\n\
              \x20                          is allowed; --no-supports-key-rotation withdraws it.\n\
+             \x20 --auto-approve-launches  true: launches of this template's instances no longer\n\
+             \x20                          wait for an admin to approve their first deploy, so a\n\
+             \x20                          signup backend can hand instances out unattended. It\n\
+             \x20                          skips ONLY that managed-launch gate: an environment\n\
+             \x20                          that requires deployment approval still parks the\n\
+             \x20                          deploy. Admin only; who set it is recorded. false\n\
+             \x20                          restores the gate.\n\
              \x20 --source-repo            the repository versions are built from. Re-point it\n\
              \x20                          when the code moves (e.g. to the customer's account);\n\
              \x20                          the org's GitHub App installation must read it.\n\n\
@@ -180,6 +190,13 @@ impl CliCommand for UpdateCommand {
                 .long("no-supports-key-rotation")
                 .help("Refuse `instance rotate-keys` for this product")
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("auto_approve_launches")
+                .long("auto-approve-launches")
+                .value_name("true|false")
+                .value_parser(clap::value_parser!(bool))
+                .help("true: launches skip the managed first-deploy approval gate (admin only); false restores it"),
         )
         .arg(
             Arg::new("source_repo")
@@ -281,6 +298,7 @@ impl CliCommand for UpdateCommand {
                 frontend_domain,
                 default_instance_size,
                 supports_key_rotation,
+                auto_approve_launches: matches.get_one::<bool>("auto_approve_launches").copied(),
                 source_repo: matches.get_one::<String>("source_repo"),
                 model_gateway,
                 feature_settings,
@@ -373,6 +391,12 @@ pub(super) fn update_template(slug: &str, update: TemplateUpdate<'_>) -> Result<
             json!(supports_key_rotation),
         );
     }
+    if let Some(auto_approve_launches) = update.auto_approve_launches {
+        body.insert(
+            "autoApproveLaunches".to_string(),
+            json!(auto_approve_launches),
+        );
+    }
     if let Some(source_repo) = update.source_repo {
         body.insert("sourceRepo".to_string(), json!(source_repo));
     }
@@ -391,7 +415,8 @@ pub(super) fn update_template(slug: &str, update: TemplateUpdate<'_>) -> Result<
         bail!(
             "nothing to update — pass at least one of --name, --description, --status, \
              --stripe-product, --cluster-type, --base-domain, --frontend-domain, \
-             --default-instance-size, --supports-key-rotation, --source-repo, or the \
+             --default-instance-size, --supports-key-rotation, --auto-approve-launches, \
+             --source-repo, or the \
              --gateway-* / --sms-* / --whatsapp-* / --voice-* / --email-* / --payments-* \
              flags (to publish a template, `forklaunch managed template \
              publish-template --slug {}` is the shorthand)",
@@ -444,6 +469,20 @@ pub(super) fn update_template(slug: &str, update: TemplateUpdate<'_>) -> Result<
             "Each instance's UI is now https://<hostPrefix>.{} — point that wildcard at your frontend deployment (see the vercel-frontend skill).",
             domain
         );
+    }
+
+    match update.auto_approve_launches {
+        Some(true) => log_warn!(
+            stdout,
+            "Launches of '{}' no longer wait for approval. An environment that requires deployment approval still parks them.",
+            slug
+        ),
+        Some(false) => log_info!(
+            stdout,
+            "Every launch of '{}' waits for an admin to approve its first deploy again.",
+            slug
+        ),
+        None => {}
     }
 
     if new_status == "published" {
@@ -533,6 +572,45 @@ mod tests {
             "{}",
             error
         );
+    }
+
+    #[test]
+    fn auto_approve_launches_is_sent_as_a_boolean_and_counts_as_a_change() {
+        // Dry run reaches the body without a server: the flag alone is a real update
+        // (not refused as empty), and false is sent rather than dropped.
+        for value in [true, false] {
+            let update = TemplateUpdate {
+                auto_approve_launches: Some(value),
+                dryrun: true,
+                ..Default::default()
+            };
+            update_template("clinic", update).unwrap();
+        }
+        let command = UpdateCommand::new().command().version("0.0.0-test");
+        let matches = command
+            .try_get_matches_from([
+                "update",
+                "--slug",
+                "clinic",
+                "--auto-approve-launches",
+                "true",
+            ])
+            .unwrap();
+        assert_eq!(
+            matches.get_one::<bool>("auto_approve_launches").copied(),
+            Some(true)
+        );
+        let refused = UpdateCommand::new()
+            .command()
+            .version("0.0.0-test")
+            .try_get_matches_from([
+                "update",
+                "--slug",
+                "clinic",
+                "--auto-approve-launches",
+                "maybe",
+            ]);
+        assert!(refused.is_err());
     }
 
     #[test]
