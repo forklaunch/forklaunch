@@ -316,6 +316,7 @@ The Forklaunch CLI provides these commands:
 | `depcheck`    | Check dependency alignment                                      |
 | `eject`       | Eject from Forklaunch management                                |
 | `login`       | Authenticate with platform                                      |
+| `account`     | Keep several logins and choose which one a command uses         |
 | `logout`      | Log out from platform                                           |
 | `whoami`      | Show current user                                               |
 | `version`     | Show CLI version                                                |
@@ -1314,6 +1315,41 @@ forklaunch whoami
 # Example:
 forklaunch whoami
 ```
+
+#### Multiple accounts (the keyring)
+
+A machine can hold one login per organization. **Before any `release`, `deploy`, `config`, `environment`, `infra` or `managed` command, confirm the login is the one that owns the application** — the wrong one answers "Application not found", or acts on a different organization.
+
+```bash
+forklaunch account current --json   # which login a command run HERE would use, and why
+forklaunch account list --json      # every login on this machine, with email and organization id
+```
+
+A command uses, in order: `--account <name>`, `FORKLAUNCH_ACCOUNT`, the account bound to the application it runs in, then the default login.
+
+```bash
+# Per command: safe when several agents work at once (nothing global changes)
+forklaunch release create --version 1.4.0 --account acme
+FORKLAUNCH_ACCOUNT=acme forklaunch deploy create --release 1.4.0 --environment staging --region us-east-1
+
+# Once per application: every clone and worktree then resolves to it on its own
+forklaunch account bind acme
+
+# Add a login (leaves the others alone); headless with an API key
+forklaunch login --account acme
+forklaunch login --account acme --token flk_...
+
+# Keep an existing single login under a name
+forklaunch account save personal
+```
+
+Rules for agents:
+
+- **Never run `forklaunch login` without `--account`** on a machine that has a keyring: it replaces the default login.
+- **Prefer `--account` or `FORKLAUNCH_ACCOUNT` over `forklaunch account use`.** `use` changes the machine-wide default and can pull the login out from under another session.
+- If `account current --json` reports `"loggedIn": false`, stop and ask for `forklaunch login --account <name>`; a browser login needs a person.
+- **A project pinned (`cli_version`) to a CLI from before accounts still runs as the resolved account.** The CLI hands the older version the right login for the duration. Commands for *different* accounts in such projects run one at a time; if you see "Waiting: a project-pinned older forklaunch CLI is running as account …", another session is mid-command, so wait, do not kill it.
+- A pinned version is cached at `~/.forklaunch/bin/forklaunch-<version>`; the first use of a version asks to install it (answer `y`), later uses do not ask.
 
 ### 15. Version Command
 

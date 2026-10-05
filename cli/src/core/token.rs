@@ -1,7 +1,6 @@
 use std::{
-    env::var,
     fs::{read_to_string, remove_file, write},
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 use anyhow::{Result, bail};
@@ -81,8 +80,10 @@ struct TokenData {
     expires_at: i64,
 }
 
+/// Where this invocation's login lives: the selected keyring account, or
+/// `~/.forklaunch/token` for the default (see `core::accounts`).
 pub(crate) fn get_token_path() -> Result<PathBuf> {
-    Ok(Path::new(&var("HOME")?).join(".forklaunch").join("token"))
+    Ok(super::accounts::selection()?.token_path)
 }
 
 fn is_token_expired(expires_at: i64) -> bool {
@@ -187,7 +188,10 @@ pub(crate) fn get_token() -> anyhow::Result<String> {
     let token_path = get_token_path()?;
 
     if !token_path.exists() {
-        bail!("No token found. Please run `forklaunch login` to authenticate");
+        bail!(
+            "{}",
+            super::accounts::missing_login_message(&super::accounts::selection()?)
+        );
     }
 
     let toml_content = read_to_string(&token_path)?;
