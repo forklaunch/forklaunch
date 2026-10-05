@@ -399,18 +399,28 @@ impl CliCommand for LoginCommand {
                     .value_name("API_TOKEN")
                     .help("API token for headless authentication (for CI/CD). Can also be set via FORKLAUNCH_API_TOKEN environment variable"),
             )
+            .after_help(
+                "With --account <name>, the login is stored in the keyring under that name \
+                 and leaves every other login on this machine alone. See `forklaunch account`.",
+            )
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         if let Some(token) = matches.get_one::<String>("token") {
-            return login_with_token(token);
+            login_with_token(token)?;
+        } else if let Ok(token) = std::env::var("FORKLAUNCH_API_TOKEN") {
+            login_with_token(&token)?;
+        } else {
+            login()?;
         }
 
-        if let Ok(token) = std::env::var("FORKLAUNCH_API_TOKEN") {
-            return login_with_token(&token);
+        // `--account <name>` (or FORKLAUNCH_ACCOUNT, or the application's
+        // binding) sent the login to that account's slot in the keyring.
+        if let Some(saved) = crate::core::accounts::after_login()? {
+            let mut stdout = StandardStream::stdout(ColorChoice::Always);
+            log_info!(stdout, "{}", saved);
         }
-
-        login()
+        Ok(())
     }
 }
 
