@@ -49,11 +49,29 @@ pub(crate) fn exchange_api_key(api_key: &str) -> Result<(String, i64)> {
     struct JwtTokenResponse {
         token: String,
         #[serde(rename = "expiresIn")]
-        expires_in: i64,
+        expires_in: Option<i64>,
     }
 
     let jwt: JwtTokenResponse = response.json()?;
-    Ok((jwt.token, chrono::Utc::now().timestamp() + jwt.expires_in))
+    let expires_at = token_expires_at(&jwt.token, jwt.expires_in);
+    Ok((jwt.token, expires_at))
+}
+
+/// Lifetime the platform gives its JWTs (`expirationTime: '7d'`), used only
+/// when neither the response nor the token itself says when it expires.
+const DEFAULT_JWT_LIFETIME_SECS: i64 = 7 * 24 * 60 * 60;
+
+/// When a freshly minted JWT expires. The platform's `GET /api/auth/token`
+/// (better-auth's jwt plugin) answers `{ "token": "..." }` with no
+/// `expiresIn`, so requiring that field made every API-key login fail to
+/// parse. Prefer an explicit `expiresIn`, then the token's own `exp`, then
+/// the platform's 7-day default.
+fn token_expires_at(token: &str, expires_in: Option<i64>) -> i64 {
+    match expires_in {
+        Some(secs) => chrono::Utc::now().timestamp() + secs,
+        None => jwt_expiry(token)
+            .unwrap_or_else(|| chrono::Utc::now().timestamp() + DEFAULT_JWT_LIFETIME_SECS),
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -111,11 +129,11 @@ fn refresh_token(current_token: &str) -> Result<TokenData> {
         #[serde(rename = "refreshToken")]
         refresh_token: Option<String>,
         #[serde(rename = "expiresIn")]
-        expires_in: i64,
+        expires_in: Option<i64>,
     }
 
     let jwt_data: JwtTokenResponse = response.json()?;
-    let expires_at = chrono::Utc::now().timestamp() + jwt_data.expires_in;
+    let expires_at = token_expires_at(&jwt_data.token, jwt_data.expires_in);
 
     // Preserve the original session token if the server doesn't return a new refresh token.
     // Without this, the refresh token becomes empty and subsequent refreshes fail silently,
@@ -235,6 +253,41 @@ mod tests {
             jwt_expiry(&jwt_with(r#"{"sub":"u","exp":1789701966}"#)),
             Some(1789701966)
         );
+    }
+
+    #[test]
+    fn token_expiry_uses_exp_claim_when_response_has_no_expires_in() {
+        let token = jwt_with(r#"{"sub":"u","exp":1789701966}"#);
+        assert_eq!(token_expires_at(&token, None), 1789701966);
+    }
+
+    #[test]
+    fn token_expiry_prefers_explicit_expires_in() {
+        let token = jwt_with(r#"{"sub":"u","exp":1}"#);
+        let now = chrono::Utc::now().timestamp();
+        let at = token_expires_at(&token, Some(60));
+        assert!(at >= now + 60 && at <= now + 61);
+    }
+
+    #[test]
+    fn token_expiry_falls_back_to_seven_days() {
+        let now = chrono::Utc::now().timestamp();
+        let at = token_expires_at("not-a-jwt", None);
+        assert!(at >= now + DEFAULT_JWT_LIFETIME_SECS && at <= now + DEFAULT_JWT_LIFETIME_SECS + 1);
+    }
+
+    /// The platform's token endpoint returns only `{ "token": ... }`.
+    #[test]
+    fn token_response_without_expires_in_parses() {
+        #[derive(Deserialize)]
+        struct JwtTokenResponse {
+            #[allow(dead_code)]
+            token: String,
+            #[serde(rename = "expiresIn")]
+            expires_in: Option<i64>,
+        }
+        let parsed: JwtTokenResponse = serde_json::from_str(r#"{"token":"eyJ.x.y"}"#).unwrap();
+        assert_eq!(parsed.expires_in, None);
     }
 
     #[test]
