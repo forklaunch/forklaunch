@@ -62,12 +62,13 @@ struct TokenData {
 /// container, and an agent operating the platform unattended.
 ///
 /// Two kinds of value arrive here. An **API key** (`flk_…`, issued by
-/// `POST /iam/service-accounts`) is a long-lived machine credential: it is
-/// exchanged for a JWT now and kept, so the session renews itself when that
-/// JWT runs out. That renewal is what makes unattended operation actually
-/// unattended — a device-flow session eventually needs a person at a
-/// browser, and a bare JWT simply stops working. A **raw JWT** is still
-/// accepted, for the case where something upstream already minted one.
+/// `POST /service-account` on the IAM host, e.g.
+/// `https://iam.forklaunch.com/service-account`) is a long-lived machine
+/// credential: it is exchanged for a JWT now and kept, so the session renews
+/// itself when that JWT runs out. That renewal is what makes unattended
+/// operation actually unattended — a device-flow session eventually needs a
+/// person at a browser, and a bare JWT simply stops working. A **raw JWT** is
+/// still accepted, for the case where something upstream already minted one.
 pub fn login_with_token(api_token: &str) -> Result<()> {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
     let is_api_key = api_token.starts_with(API_KEY_PREFIX);
