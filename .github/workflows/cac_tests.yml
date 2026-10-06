@@ -20,6 +20,10 @@ on:
       - 'blueprint/interfaces/cac/**'
       - '.github/workflows/cac_tests.yml'
 
+# the tests only read the repository
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
