@@ -1,3 +1,4 @@
+import { deanon } from '@forklaunch/core/persistence';
 import { EntityManager } from '@mikro-orm/core';
 import { SavedSearch } from '../../persistence/entities/savedSearch.entity';
 import { SearchHistory } from '../../persistence/entities/searchHistory.entity';
@@ -55,22 +56,13 @@ export class SavedSearchService {
       { organizationId, userId },
       { orderBy: { createdAt: 'desc' }, limit: HISTORY_PAGE }
     );
-    return entries.map((entry) => ({
-      id: entry.id,
-      // null for queries not stored (patient-specific, prescription,
-      // emergency) and once the retention job has anonymized the entry
-      ...(entry.query ? { query: entry.query } : {}),
-      queryClass: entry.queryClass,
-      channel: entry.channel,
-      ...(entry.answerId ? { answerId: entry.answerId } : {}),
-      createdAt: new Date(entry.createdAt).toISOString()
-    }));
+    return entries.map(historyView);
   }
 
   // GDPR export and erasure for the user's data in MLSE. Implemented here
-  // because ComplianceDataService in @forklaunch/core 2.1.0 cannot see the
-  // entities' compliance registrations (its bundle has its own registry
-  // copy), so it finds nothing to export or erase.
+  // because ComplianceDataService in @forklaunch/core (2.1.0, still on
+  // 3.0.1) cannot see the entities' compliance registrations, so it finds
+  // nothing to export or erase.
   async exportUser(userId: string) {
     const savedSearches: ReturnType<typeof view>[] = [];
     const history: Awaited<ReturnType<SavedSearchService['history']>> = [];
@@ -78,16 +70,7 @@ export class SavedSearchService {
       savedSearches.push(...(await this.list(organizationId, userId)));
       const em = tenantEm(this.em, organizationId);
       const entries = await em.find(SearchHistory, { organizationId, userId }, { orderBy: { createdAt: 'desc' } });
-      history.push(
-        ...entries.map((entry) => ({
-          id: entry.id,
-          ...(entry.query ? { query: entry.query } : {}),
-          queryClass: entry.queryClass,
-          channel: entry.channel,
-          ...(entry.answerId ? { answerId: entry.answerId } : {}),
-          createdAt: new Date(entry.createdAt).toISOString()
-        }))
-      );
+      history.push(...entries.map(historyView));
     }
     return { SavedSearch: savedSearches, SearchHistory: history };
   }
@@ -110,12 +93,29 @@ export class SavedSearchService {
   }
 }
 
-function view(saved: SavedSearch) {
+// name and query are encrypted (pii): core 3 loads them as CompliantField,
+// and deanon() reads their plaintext, reporting each read to the access log.
+function view(entity: SavedSearch) {
+  const saved = deanon(entity);
   return {
     id: saved.id,
     name: saved.name,
     query: saved.query,
     ...(saved.topicSlug ? { topicSlug: saved.topicSlug } : {}),
     createdAt: new Date(saved.createdAt).toISOString()
+  };
+}
+
+function historyView(entity: SearchHistory) {
+  const entry = deanon(entity);
+  return {
+    id: entry.id,
+    // null for queries not stored (patient-specific, prescription,
+    // emergency) and once the retention job has anonymized the entry
+    ...(entry.query ? { query: entry.query } : {}),
+    queryClass: entry.queryClass,
+    channel: entry.channel,
+    ...(entry.answerId ? { answerId: entry.answerId } : {}),
+    createdAt: new Date(entry.createdAt).toISOString()
   };
 }
