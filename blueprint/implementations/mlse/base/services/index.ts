@@ -30,6 +30,7 @@ export * from './querySuggestions.service';
 export * from './ranking.service';
 export * from './relevance.service';
 export * from './sourceFetcherRegistry.service';
+export * from './supportCheck.service';
 export * from './voice.service';
 export * from '../domain/answerPrompt';
 export * from '../domain/boundaryMessages';

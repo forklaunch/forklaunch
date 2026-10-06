@@ -30,6 +30,13 @@ const UNITS: [pattern: string, normalized: string][] = [
   ['hour', 'h'],
   ['days', 'days'],
   ['day', 'days'],
+  // durations: "2 weeks" is not "2 months"
+  ['weeks', 'weeks'],
+  ['week', 'weeks'],
+  ['months', 'months'],
+  ['month', 'months'],
+  ['years', 'years'],
+  ['year', 'years'],
   ['%', '%']
 ];
 

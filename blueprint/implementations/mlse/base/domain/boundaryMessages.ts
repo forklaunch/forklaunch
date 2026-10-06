@@ -24,7 +24,7 @@ export const SOURCE_NOT_FOUND_MESSAGE =
   'MLSE does not hold the source named in this search, so it cannot say what that source reports. It answers only from sources it has retrieved and can cite.';
 
 export const DRAFT_ANSWER_NOTICE =
-  'AI-written from the cited sources and checked automatically: every sentence cites a source passage and every number appears in it. Not yet clinician-reviewed; not for clinical use.';
+  'AI-written from the cited sources. Each sentence must cite a passage, use its words and numbers, and keep its negations, comparisons and dose schedules; these automatic checks catch common errors, not every misreading. Not yet clinician-reviewed; not for clinical use.';
 
 export const QUOTED_NOTICE =
   'Quoted from the cited sources without AI. Not for clinical use.';
