@@ -7,6 +7,9 @@ export type QueryClass =
   | 'patient_specific_treatment'
   | 'prescription_request'
   | 'exact_dosage_no_context'
+  // a dose with an indication or population: answered from the quoted
+  // label dosing section, never AI-written
+  | 'dosage_question'
   | 'emergency_pattern'
   | 'unverifiable_source_requested';
 

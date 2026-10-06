@@ -1,0 +1,65 @@
+{
+  "_comment": "Synthetic openFDA drug label response (shape of api.fda.gov/drug/label.json) for the label-matching tests: the labels that live openFDA returned as distractors in the #394 review, with made-up text.",
+  "results": [
+    {
+      "set_id": "synthetic-cetirizine-sugar-free",
+      "effective_time": "20250101",
+      "dosage_and_administration": ["Children 6 years and over: 5 mL once daily."],
+      "openfda": {
+        "brand_name": ["Childrens Cetirizine Sugar Free"],
+        "generic_name": ["CETIRIZINE HYDROCHLORIDE"],
+        "manufacturer_name": ["Example Pharma"]
+      }
+    },
+    {
+      "set_id": "synthetic-tussin-sugar-free",
+      "effective_time": "20250101",
+      "dosage_and_administration": ["Adults: 10 mL every 4 hours."],
+      "openfda": {
+        "brand_name": ["Sugar Free Adult Tussin DM"],
+        "generic_name": ["DEXTROMETHORPHAN HBR, GUAIFENESIN"],
+        "manufacturer_name": ["Example Pharma"]
+      }
+    },
+    {
+      "set_id": "synthetic-pain-reliever",
+      "effective_time": "20250101",
+      "dosage_and_administration": ["Adults: 2 caplets every 6 hours."],
+      "openfda": {
+        "brand_name": ["Pain Reliever Extra Strength"],
+        "generic_name": ["ACETAMINOPHEN"],
+        "manufacturer_name": ["Example Pharma"]
+      }
+    },
+    {
+      "set_id": "synthetic-morphine",
+      "effective_time": "20250101",
+      "dosage_and_administration": ["Initial dose: 0.1 mg/kg every 4 hours as needed."],
+      "overdosage": ["Overdosage dosage in excess of the recommended dose causes respiratory depression."],
+      "openfda": {
+        "brand_name": ["Morphine Sulfate"],
+        "generic_name": ["MORPHINE SULFATE"],
+        "manufacturer_name": ["Example Pharma"]
+      }
+    },
+    {
+      "set_id": "synthetic-insulin-glargine",
+      "effective_time": "20250101",
+      "dosage_and_administration": ["Individualize the dose based on metabolic needs."],
+      "openfda": {
+        "brand_name": ["Lantus"],
+        "generic_name": ["INSULIN GLARGINE"],
+        "manufacturer_name": ["Example Pharma"]
+      }
+    },
+    {
+      "set_id": "synthetic-cefazolin",
+      "effective_time": "20250101",
+      "dosage_and_administration": ["Perioperative prophylaxis: 1 gram IV 30 to 60 minutes before surgery."],
+      "openfda": {
+        "generic_name": ["CEFAZOLIN SODIUM"],
+        "manufacturer_name": ["Example Pharma"]
+      }
+    }
+  ]
+}

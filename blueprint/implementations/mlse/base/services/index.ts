@@ -13,6 +13,7 @@ export * from './fetchers/medlinePlusFetcher.service';
 export * from './fetchers/openFdaFetcher.service';
 export * from './fetchers/pmcOaFetcher.service';
 export * from './fetchers/pubmedFetcher.service';
+export * from './labelMatch.service';
 export * from './layTerms.service';
 export * from './licensedContentAdapter.service';
 export * from './licenseGate.service';

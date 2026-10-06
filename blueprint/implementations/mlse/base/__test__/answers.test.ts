@@ -18,8 +18,6 @@ describe('classifyQuery', () => {
       'laparoscopic cholecystectomy complications',
       'management of acetaminophen overdose',
       'does aspirin help prevent stroke',
-      'cefazolin dose surgical prophylaxis',
-      'propofol dosing in patients over 65 years',
       'urgent cholecystectomy outcomes'
     ]) {
       expect([query, classOf(query)]).toEqual([query, 'literature_lookup']);
@@ -61,6 +59,16 @@ describe('classifyQuery', () => {
       'can I take ibuprofen with my medication'
     ]) {
       expect([query, classOf(query)]).toEqual([query, 'patient_specific_treatment']);
+    }
+  });
+
+  it('never sends a dose question to the AI, even with an indication', () => {
+    for (const query of [
+      'cefazolin dose surgical prophylaxis',
+      'propofol dosing in patients over 65 years',
+      'amoxicillin dose for a child with otitis media'
+    ]) {
+      expect([query, classOf(query)]).toEqual([query, 'dosage_question']);
     }
   });
 

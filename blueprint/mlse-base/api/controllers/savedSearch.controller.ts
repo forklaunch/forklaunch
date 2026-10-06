@@ -64,7 +64,11 @@ export const saveSearch = handlers.post(
     // a saved search is kept indefinitely, so it may not hold text about one
     // patient, a prescription or an emergency
     const { queryClass } = classifyQuery(`${name} ${query}`);
-    if (queryClass !== 'literature_lookup' && queryClass !== 'exact_dosage_no_context') {
+    if (
+      queryClass !== 'literature_lookup' &&
+      queryClass !== 'exact_dosage_no_context' &&
+      queryClass !== 'dosage_question'
+    ) {
       res.status(400).send('Only literature searches can be saved; remove details about a specific patient');
       return;
     }
