@@ -177,11 +177,13 @@ const environmentConfig = configInjector.chain({
     value: getEnvVar('OPENFDA_API_KEY') ?? ''
   },
   // Answer drafting: 'ollama' (free, open-source models run locally),
-  // 'claude' (paid, needs LLM_API_KEY) or 'fake' (deterministic, tests)
+  // 'claude' (paid, needs LLM_API_KEY) or 'fake' (deterministic, tests).
+  // No default: unset stops the service at startup, so a deployment never
+  // answers with the fake model believing it is real.
   LLM_PROVIDER: {
     lifetime: Lifetime.Singleton,
     type: optional(string),
-    value: getEnvVar('LLM_PROVIDER') || 'fake'
+    value: getEnvVar('LLM_PROVIDER') ?? ''
   },
   // Search embeddings: 'ollama' (free, local) or 'fake' (development)
   EMBEDDING_PROVIDER: {
@@ -346,7 +348,9 @@ const serviceDependencies = runtimeDependencies.chain({
           });
         default:
           throw new Error(
-            `LLM_PROVIDER '${LLM_PROVIDER}' is not supported; use 'ollama', 'claude' or 'fake'`
+            LLM_PROVIDER
+              ? `LLM_PROVIDER '${LLM_PROVIDER}' is not supported; use 'ollama', 'claude' or 'fake'`
+              : `LLM_PROVIDER is not set; use 'ollama', 'claude' or 'fake'`
           );
       }
     }
