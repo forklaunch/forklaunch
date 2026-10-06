@@ -1,4 +1,4 @@
-import { deanon } from '@forklaunch/core/persistence';
+import { deanon, withEncryptionContext } from '@forklaunch/core/persistence';
 import { EntityManager } from '@mikro-orm/core';
 import { SavedSearch } from '../../persistence/entities/savedSearch.entity';
 import { SearchHistory } from '../../persistence/entities/searchHistory.entity';
@@ -95,8 +95,10 @@ export class SavedSearchService {
 
 // name and query are encrypted (pii): core 3 loads them as CompliantField,
 // and deanon() reads their plaintext, reporting each read to the access log.
+// Decryption needs the row's organization bound at the moment of the read,
+// not only during the query, so each row is read under its own.
 function view(entity: SavedSearch) {
-  const saved = deanon(entity);
+  const saved = withEncryptionContext(entity.organizationId, () => deanon(entity));
   return {
     id: saved.id,
     name: saved.name,
@@ -107,7 +109,7 @@ function view(entity: SavedSearch) {
 }
 
 function historyView(entity: SearchHistory) {
-  const entry = deanon(entity);
+  const entry = withEncryptionContext(entity.organizationId, () => deanon(entity));
   return {
     id: entry.id,
     // null for queries not stored (patient-specific, prescription,
