@@ -15,6 +15,7 @@ const ACUTE_EVENTS = [
   'cardiac arrest',
   'not breathing',
   'stopped breathing',
+  'not responding',
   'unresponsive',
   'collapsed',
   'seizing',
@@ -41,7 +42,11 @@ const HAPPENING_NOW = [
   'just ingested',
   'just collapsed',
   'is having',
-  'is not',
+  // "is not" alone is too broad: "bleeding risk when aspirin is not stopped"
+  // is a literature question
+  'is not breathing',
+  'is not responding',
+  'is not responsive',
   'is bleeding',
   'is unresponsive',
   'is seizing',
@@ -67,6 +72,7 @@ const ACUTE_FOR_A_PERSON = [
   'took too many',
   'not breathing',
   'stopped breathing',
+  'not responding',
   'unresponsive',
   'collapsed',
   'choking',
