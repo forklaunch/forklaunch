@@ -1,4 +1,5 @@
 import { verifyNumbers } from './numberVerifier.service';
+import { checkSupport } from './supportCheck.service';
 import { queryTerms } from './ranking.service';
 
 export type VerifiedSentence = { text: string; citations: string[] };
@@ -117,7 +118,9 @@ function draftSentences(draft: string): { raw: string; citations: string[] }[] {
  *   supplied (an invented citation removes the whole sentence);
  * - enough of its content words appear in the cited passages that the claim
  *   plausibly comes from them;
- * - every number in it appears in the cited passages (verifyNumbers).
+ * - every number in it appears in the cited passages (verifyNumbers);
+ * - it does not negate, reverse a comparison, swap a number between groups
+ *   or change a dose schedule relative to those passages (checkSupport).
  *
  * Removed sentences are returned with the reason, for the self-check retry
  * and the audit log; they are never shown to the doctor.
@@ -174,6 +177,14 @@ export function verifyDraft(
     const numbers = verifyNumbers(text, citedTexts);
     if (!numbers.ok) {
       removed.push({ text, reason: numbers.reason });
+      continue;
+    }
+
+    // sharing the source's words is not enough: the sentence must not
+    // negate, reverse or re-pair what the source says
+    const support = checkSupport(text, citedTexts);
+    if (!support.ok) {
+      removed.push({ text, reason: support.reason });
       continue;
     }
 
