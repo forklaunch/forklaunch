@@ -108,7 +108,9 @@ export const search = handlers.get(
     // questions go to live sources, the ingestion queue or history text. A
     // query about one patient is searched in the stored corpus only.
     const { queryClass } = classifyQuery(query);
-    const isLiterature = queryClass === 'literature_lookup';
+    // a dose question names a drug, not a patient: searched like literature
+    // (only the answer path quotes the label instead of the AI)
+    const isLiterature = queryClass === 'literature_lookup' || queryClass === 'dosage_question';
 
     const sourceKeys = req.query.sources
       ?.split(',')

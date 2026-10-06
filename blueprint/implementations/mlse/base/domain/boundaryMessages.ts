@@ -15,7 +15,10 @@ export const PRESCRIPTION_MESSAGE =
   'MLSE cannot prescribe or issue prescriptions. It summarizes published literature and drug labels for clinicians.';
 
 export const DOSAGE_NO_CONTEXT_MESSAGE =
-  'The dose depends on the indication and the patient. Below is the published label dosing section, quoted as written. For a specific indication, search for the drug together with it (for example "cefazolin dose surgical prophylaxis").';
+  'The dose depends on the indication and the patient. Below is the published label dosing section, quoted as written; it gives the doses for each indication.';
+
+export const DOSAGE_QUESTION_MESSAGE =
+  'MLSE does not write dosing. Below is the published label dosing section for the drug you named, quoted as written; find the dose for your indication and patient there and in the full prescribing information.';
 
 export const SOURCE_NOT_FOUND_MESSAGE =
   'MLSE does not hold the source named in this search, so it cannot say what that source reports. It answers only from sources it has retrieved and can cite.';

@@ -14,9 +14,12 @@ import {
   selectEvidence,
   suggestFollowUps,
   DOSAGE_NO_CONTEXT_MESSAGE,
+  DOSAGE_QUESTION_MESSAGE,
   DRAFT_ANSWER_NOTICE,
   EMERGENCY_MESSAGE,
   INSUFFICIENT_EVIDENCE_MARKER,
+  isDosingSection,
+  labelIsForQueryDrug,
   LlmProvider,
   keySentences,
   passageIsAbout,
@@ -91,6 +94,8 @@ const PASSAGES_PER_SECTION = 5;
 const FOCUSED_SEARCH_WIDTH = 15;
 const PASSAGES_PER_DOCUMENT = 2;
 const LABEL_PASSAGES = 2;
+// candidate drug words looked up, one label search each
+const LABEL_LOOKUPS = 4;
 
 /**
  * Answers a doctor's query.
@@ -250,6 +255,14 @@ export class AnswerService {
         const label = await this.labelDosing(classification, request);
         return { kind: 'label_range', message: DOSAGE_NO_CONTEXT_MESSAGE, ...label };
       }
+      // A dose with an indication ("cefazolin dose surgical prophylaxis")
+      // is not AI-written either: the citation check cannot yet tell a
+      // changed number or unit from a supported one, so the label's dosing
+      // section is quoted instead.
+      case 'dosage_question': {
+        const label = await this.labelDosing(classification, request);
+        return { kind: 'label_range', message: DOSAGE_QUESTION_MESSAGE, ...label };
+      }
       default:
         break;
     }
@@ -260,7 +273,10 @@ export class AnswerService {
   }
 
   // The label's dosing section for the drug named in the query, quoted as
-  // written. No AI and no arithmetic.
+  // written. No AI and no arithmetic. A label is used only when the query
+  // names its drug exactly (labelIsForQueryDrug), and only its "Dosage and
+  // Administration" section, never "Overdosage". A query about one patient
+  // never leaves the service: only stored labels are searched for it.
   private async labelDosing(
     classification: QueryClassificationDto,
     request: AnswerRequestDto
@@ -276,21 +292,25 @@ export class AnswerService {
     if (drugTerms.length === 0) {
       return { sections: [section], cited: [] };
     }
-    const { results } = await this.searchService.search({
-      query: `${drugTerms.join(' ')} dosage and administration`,
-      sourceKeys: LABEL_SOURCES,
-      limit: 10,
-      live: request.live ?? true,
-      ...(request.organizationId ? { organizationId: request.organizationId } : {})
-    });
-    const cited = results
-      .filter((r) => r.licenseScope !== 'metadata_only' && /dosage/i.test(r.sectionPath))
-      // the drug must be the label's own: "what dose of insulin should I
-      // take for a blood sugar of 300" shares "blood" with a cefazolin label
-      .filter((r) => {
-        const titleWords = new Set(queryTerms(r.title));
-        return drugTerms.some((term) => titleWords.has(term));
-      })
+    // One lookup per candidate word, not all of them ORed together: words
+    // that are not drug names ("sugar", "blood") would otherwise bring back
+    // labels that crowd out the drug the query named.
+    const live = classification.queryClass === 'patient_specific_treatment' ? false : (request.live ?? true);
+    const found = new Map<string, CitablePassageDto>();
+    for (const term of drugTerms.slice(0, LABEL_LOOKUPS)) {
+      const { results } = await this.searchService.search({
+        query: term,
+        sourceKeys: LABEL_SOURCES,
+        // a label has about fourteen sections; the dosing one must be among them
+        limit: 40,
+        live,
+        ...(request.organizationId ? { organizationId: request.organizationId } : {})
+      });
+      for (const r of results) found.set(r.passageId, r);
+    }
+    const cited = [...found.values()]
+      .filter((r) => r.licenseScope !== 'metadata_only' && isDosingSection(r.sectionPath))
+      .filter((r) => labelIsForQueryDrug(r.title, request.query))
       .slice(0, LABEL_PASSAGES);
     if (cited.length === 0) {
       return { sections: [section], cited: [] };
@@ -677,7 +697,8 @@ export class AnswerService {
     const kept = sections.reduce((sum, s) => sum + s.sentences.length, 0);
     const storesQuery =
       input.classification.queryClass === 'literature_lookup' ||
-      input.classification.queryClass === 'exact_dosage_no_context';
+      input.classification.queryClass === 'exact_dosage_no_context' ||
+      input.classification.queryClass === 'dosage_question';
 
     const answer = this.em.create(GeneratedAnswer, {
       query: storesQuery ? input.query : null,

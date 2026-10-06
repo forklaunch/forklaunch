@@ -31,8 +31,11 @@ let orm: Awaited<ReturnType<typeof initOrm>>;
 
 class StubFetcher implements SourceFetcher {
   documents: FetchedDocumentDto[] = [];
+  // how often the source was asked: a query about one patient must not reach it
+  calls = 0;
   constructor(readonly sourceKey: string) {}
   async fetchDocuments() {
+    this.calls += 1;
     return this.documents;
   }
 }
@@ -129,8 +132,18 @@ beforeAll(async () => {
       license: 'CC0',
       sections: [
         { path: 'Dosage and Administration', text: 'Propofol induction of general anesthesia in healthy adults less than 55 years: 2 to 2.5 mg/kg.' },
-        { path: 'Warnings', text: 'Propofol should be administered only by persons trained in general anesthesia.' }
+        { path: 'Warnings', text: 'Propofol should be administered only by persons trained in general anesthesia.' },
+        { path: 'Overdosage', text: 'Overdosage of propofol dosage causes cardiorespiratory depression.' }
       ]
+    },
+    // a distractor: shares "sugar" with a question about blood sugar
+    {
+      sourceKey: 'openfda',
+      externalId: 'set-cetirizine-sugar-free',
+      title: 'Childrens Cetirizine Sugar Free (cetirizine hydrochloride) — Example Pharma',
+      url: 'https://api.fda.gov/drug/label.json?search=set_id:set-cetirizine-sugar-free',
+      license: 'CC0',
+      sections: [{ path: 'Dosage and Administration', text: 'Children 6 years and over: 5 mL once daily.' }]
     }
   ];
   await new IngestionService(orm.em.fork(), registry, embeddings, otel).ingest({ sourceKey: 'openfda', term: 'x', limit: 10 });
@@ -262,6 +275,34 @@ describe('answers on pgvector', () => {
       quoted: true
     });
     expect((await auditRow(answer.answerId)).row.query).toBeNull();
+  });
+
+  it("never quotes another drug's label: blood sugar is not a sugar-free syrup", async () => {
+    const llm = new ScriptedLlmProvider([() => 'unused']);
+    const { answers } = await answerService(llm);
+    fetchers.openfda.calls = 0;
+    const answer = await answers.answer({
+      query: 'What dose of insulin should I take for a blood sugar of 300?',
+      live: true
+    });
+
+    expect(llm.requests).toHaveLength(0);
+    expect(answer.queryClass).toBe('patient_specific_treatment');
+    expect(answer.sections[0]).toMatchObject({ key: 'label_dosing', status: 'insufficient_evidence', sentences: [] });
+    // a question about one patient never leaves the service
+    expect(fetchers.openfda.calls).toBe(0);
+  });
+
+  it('answers a dose with an indication from the quoted label, never the AI or Overdosage', async () => {
+    const llm = new ScriptedLlmProvider([() => 'unused']);
+    const { answers } = await answerService(llm);
+    const answer = await answers.answer({ query: 'propofol dose for sedation in the ICU', live: false });
+
+    expect(llm.requests).toHaveLength(0);
+    expect(answer).toMatchObject({ kind: 'label_range', queryClass: 'dosage_question' });
+    expect(answer.sections[0].sentences.map((s) => s.text)).toEqual([
+      'Propofol induction of general anesthesia in healthy adults less than 55 years: 2 to 2.5 mg/kg.'
+    ]);
   });
 
   it('refuses prescriptions', async () => {

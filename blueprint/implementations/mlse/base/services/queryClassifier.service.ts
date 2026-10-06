@@ -269,9 +269,13 @@ export function classifyQuery(query: string): QueryClassificationDto {
     words.some((w) => w === 'dose' || w === 'doses' || w === 'dosage' || w === 'dosing') ||
     containsPhrase(words, ['how much', 'how many mg']) !== undefined;
   // "propofol dose" names only the drug; "cefazolin dose surgical
-  // prophylaxis" gives an indication and is answered from the literature
+  // prophylaxis" gives an indication. Neither is AI-written: both are
+  // answered with the label's dosing section, quoted.
   if (asksDose && subjectTerms.length <= 1) {
     return result('exact_dosage_no_context', 'dose asked without indication or population');
+  }
+  if (asksDose) {
+    return result('dosage_question', 'dose asked: answered from the quoted label, not the AI');
   }
 
   return result('literature_lookup', 'no boundary rule matched');

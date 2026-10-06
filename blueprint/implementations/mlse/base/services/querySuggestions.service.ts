@@ -208,7 +208,12 @@ export class QuerySuggestionService {
   }
 
   private mayLeave(text: string): boolean {
-    return text.length <= 100 && !/\d/.test(text) && classifyQuery(text).queryClass === 'literature_lookup';
+    const { queryClass } = classifyQuery(text);
+    return (
+      text.length <= 100 &&
+      !/\d/.test(text) &&
+      (queryClass === 'literature_lookup' || queryClass === 'dosage_question')
+    );
   }
 
   private async cached<T>(key: string, compute: () => Promise<T>): Promise<T> {
