@@ -18,7 +18,9 @@ describe('classifyQuery', () => {
       'laparoscopic cholecystectomy complications',
       'management of acetaminophen overdose',
       'does aspirin help prevent stroke',
-      'urgent cholecystectomy outcomes'
+      'urgent cholecystectomy outcomes',
+      // "is not" is not a sign of an emergency on its own
+      'bleeding risk when aspirin is not stopped before surgery'
     ]) {
       expect([query, classOf(query)]).toEqual([query, 'literature_lookup']);
     }
@@ -27,6 +29,8 @@ describe('classifyQuery', () => {
   it('sends events happening now to the emergency path', () => {
     for (const query of [
       'my patient is not breathing right now',
+      'the patient is not breathing',
+      'patient is not responding',
       'child just swallowed 20 tablets what do i do',
       'someone collapsed, chest pain, please help',
       // told about one person, even without "now"
