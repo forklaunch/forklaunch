@@ -1091,9 +1091,8 @@ pub(crate) fn remove_s3_from_docker_compose<'a>(
     environment.shift_remove("S3_ACCESS_KEY_ID");
     environment.shift_remove("S3_SECRET_ACCESS_KEY");
     environment.shift_remove("S3_BUCKET");
-    if docker_compose.services.contains_key("minio") {
-        docker_compose.services.shift_remove("minio");
-    }
+    // MinIO itself stays: the telemetry stack uses it too.
+    // `clean_up_unused_infrastructure_services` drops it once nothing does.
     Ok(docker_compose)
 }
 
@@ -1698,12 +1697,42 @@ pub(crate) fn clean_up_unused_infrastructure_services(
         });
 
     for infrastructure in unused_infrastructure {
+        // No project declares it, but something else in the stack may still
+        // run on it: MinIO backs the telemetry bucket (`minio-init`), and a
+        // module can reach Redis without declaring a cache. Removing it would
+        // break that service, so only drop what nothing else references.
+        if service_still_referenced(docker_compose, &infrastructure) {
+            continue;
+        }
         docker_compose
             .services
             .shift_remove(&infrastructure.to_string());
     }
 
     Ok(())
+}
+
+/// True when another compose service depends on `name` or addresses it by
+/// host (`redis://redis:6379`, `http://minio:9000`).
+fn service_still_referenced(docker_compose: &DockerCompose, name: &str) -> bool {
+    if !docker_compose.services.contains_key(name) {
+        return false;
+    }
+    let host = format!("//{name}:");
+    docker_compose
+        .services
+        .iter()
+        .filter(|(key, _)| key.as_str() != name)
+        .any(|(_, service)| {
+            service
+                .depends_on
+                .as_ref()
+                .is_some_and(|deps| deps.contains_key(name))
+                || service
+                    .environment
+                    .as_ref()
+                    .is_some_and(|env| env.values().any(|value| value.contains(&host)))
+        })
 }
 
 fn add_base_definition_to_docker_compose(

@@ -316,6 +316,7 @@ The Forklaunch CLI provides these commands:
 | `depcheck`    | Check dependency alignment                                      |
 | `eject`       | Eject from Forklaunch management                                |
 | `login`       | Authenticate with platform                                      |
+| `account`     | Keep several logins and choose which one a command uses         |
 | `logout`      | Log out from platform                                           |
 | `whoami`      | Show current user                                               |
 | `version`     | Show CLI version                                                |
@@ -505,6 +506,43 @@ forklaunch change application [--path <app_root>]
 forklaunch change application --runtime bun --formatter biome --dryrun
 forklaunch change application --runtime bun --formatter biome
 ```
+
+#### Add or remove a capability: `forklaunch infra add|remove`
+
+The way to give a service object storage, a cache or a platform-held
+capability (email, sms, whatsapp, voice, payments). It writes the registration
+in `registrations.ts`, the local stand-in in docker-compose, `.env.local`,
+`package.json`, the manifest resource and the test utilities (for a
+capability: its `/platform-events` handler and the router mount in
+`server.ts`), and it edits those files in place: only the lines the resource
+needs are added, in the file's own indentation and quote style, and comments,
+key order and the rest of the file are left alone. `infra remove` takes exactly
+those lines out. Settings the service already had (its own gateway entries in
+`registrations.ts`, an env value in docker-compose) are kept and left on
+remove.
+(`change service --infrastructure` regenerates the files instead, which
+reformats a customized service; prefer `infra add|remove`.) It takes one change:
+
+```bash
+forklaunch infra add <service> object-store   # or: s3
+forklaunch infra add <service> cache          # or: redis
+forklaunch infra add <service> email          # platform-held email (SES); see /integrations
+forklaunch infra add <service> sms            # texts via the platform; see /integrations
+forklaunch infra add <service> whatsapp       # WhatsApp through the platform (see /integrations)
+forklaunch infra add <service> voice          # managed apps: outbound calls via the platform (Amazon Connect)
+forklaunch infra add <service> payments       # Stripe Connect through the platform (managed instances)
+forklaunch infra remove <service> object-store
+forklaunch infra add <service> object-store --dryrun
+forklaunch score --offline                    # afterwards: the wiring checks should pass
+```
+
+Run it from the app root (or pass `-p <app-root>`). It refuses a type the
+service already has, a type it lacks on remove, and projects that aren't services.
+
+`voice` is a platform-held capability: it registers `VoiceClient`
+(`createVoiceClient()`, keyless), writes `api/platformEvents/voice.ts` for call
+events, and adds the local `gateway-mock` to docker-compose. See
+`/integrations` (*Voice calls*).
 
 #### Change Service
 
@@ -1277,6 +1315,41 @@ forklaunch whoami
 # Example:
 forklaunch whoami
 ```
+
+#### Multiple accounts (the keyring)
+
+A machine can hold one login per organization. **Before any `release`, `deploy`, `config`, `environment`, `infra` or `managed` command, confirm the login is the one that owns the application** — the wrong one answers "Application not found", or acts on a different organization.
+
+```bash
+forklaunch account current --json   # which login a command run HERE would use, and why
+forklaunch account list --json      # every login on this machine, with email and organization id
+```
+
+A command uses, in order: `--account <name>`, `FORKLAUNCH_ACCOUNT`, the account bound to the application it runs in, then the default login.
+
+```bash
+# Per command: safe when several agents work at once (nothing global changes)
+forklaunch release create --version 1.4.0 --account acme
+FORKLAUNCH_ACCOUNT=acme forklaunch deploy create --release 1.4.0 --environment staging --region us-east-1
+
+# Once per application: every clone and worktree then resolves to it on its own
+forklaunch account bind acme
+
+# Add a login (leaves the others alone); headless with an API key
+forklaunch login --account acme
+forklaunch login --account acme --token flk_...
+
+# Keep an existing single login under a name
+forklaunch account save personal
+```
+
+Rules for agents:
+
+- **Never run `forklaunch login` without `--account`** on a machine that has a keyring: it replaces the default login.
+- **Prefer `--account` or `FORKLAUNCH_ACCOUNT` over `forklaunch account use`.** `use` changes the machine-wide default and can pull the login out from under another session.
+- If `account current --json` reports `"loggedIn": false`, stop and ask for `forklaunch login --account <name>`; a browser login needs a person.
+- **A project pinned (`cli_version`) to a CLI from before accounts still runs as the resolved account.** The CLI hands the older version the right login for the duration. Commands for *different* accounts in such projects run one at a time; if you see "Waiting: a project-pinned older forklaunch CLI is running as account …", another session is mid-command, so wait, do not kill it.
+- A pinned version is cached at `~/.forklaunch/bin/forklaunch-<version>`; the first use of a version asks to install it (answer `y`), later uses do not ask.
 
 ### 15. Version Command
 
@@ -2120,7 +2193,7 @@ Still present in v1.3.3 — apply these workarounds:
 - **`migrate:down` never works on the initial migration**: generated migrations ship without a `down()` implementation ("This migration cannot be reverted").
 - **Dockerfile pnpm drift**: `RUN npm install -g pnpm` (unpinned) pulls pnpm 11, whose default `minimumReleaseAge` policy rejects lockfile entries published recently. This breaks BOTH local `docker compose build` AND real platform deploys — the same error (`ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`) shows up in AWS CodeBuild logs and fails `forklaunch deploy create` after all the infrastructure has already been provisioned. Fix: pin the Dockerfile to the host's version, e.g. `RUN npm install -g pnpm@10.12.1`, before releasing/deploying.
 - **`change worker --type` is destructive — avoid it**: it rewrites code but does NOT update the manifest (variant/resources keep the old type), and it silently DELETES the `minio:` service from docker-compose while `minio-init`/`tempo` still depend on it, leaving an invalid compose project that `sync all` cannot heal. Prefer deleting and re-creating the worker with the new type; if you must convert, restore the minio block and fix the manifest by hand afterwards.
-- **`change service --infrastructure redis` also drops the `minio:` compose service** — same failure mode as `change worker --type` above, just triggered by a different command. After running it, check `docker compose config --quiet` before `docker compose up`; if it errors with `service "minio-init" depends on undefined service "minio"`, the `minio:` block needs to be restored by hand (copy it from another scaffolded app's `docker-compose.yaml`, or reconstruct: `image: minio/minio:RELEASE.2025-04-22T22-12-26Z`, ports `9000:9000`/`9001:9001`, env `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD` both `minioadmin`, healthcheck `mc ready local`).
+- **`change service --infrastructure` no longer drops `minio:` or `redis:` while something still uses them** (fixed alongside `infra add`). Compose cleanup now keeps any service another service depends on or addresses by host, so the telemetry stack's `minio-init` keeps MinIO. On an older CLI, check `docker compose config --quiet` after the command; if it reports `service "minio-init" depends on undefined service "minio"`, restore the `minio:` block by hand.
 - **`change service --infrastructure redis` wires a `TtlCache` factory that doesn't compile** — it adds a `TtlCache` registration to `registrations.ts` whose factory destructures `{ REDIS_URL, OtelCollector, ENCRYPTION_KEY }` and calls `new FieldEncryptor(ENCRYPTION_KEY)`, but neither `ENCRYPTION_KEY` (in the `environmentConfig` chain) nor the `FieldEncryptor` import (`from '@forklaunch/core/persistence'`) get added. Fails with "Unable to resolve dependency ENCRYPTION_KEY" at runtime. Add both manually after running the command.
 - **Service/worker conversions (`--to worker` / `--to service`) strand compose entries** of the old type; grep docker-compose for the module name after converting (and after deleting a converted module).
 - **`eject` is unusable** (panics or misparses every path form; error path exits 0). Eject manually if needed.

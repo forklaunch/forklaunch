@@ -241,6 +241,7 @@ fn add_service_to_artifacts(
             queue: None,
             object_store: None,
             redis_partition: None,
+            capabilities: None,
         }),
         Some(vec![manifest_data.service_name.clone()]),
         None,
