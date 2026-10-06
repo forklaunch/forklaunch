@@ -23,3 +23,20 @@ export async function anonymizeExpiredHistory(em: EntityManager, now: Date = new
   );
   return rows.length;
 }
+
+/**
+ * The same 90 days for the query text kept on answer audit rows; the rest
+ * of the row (classification, sections, removed sentences) stays for
+ * safety review.
+ */
+export async function anonymizeExpiredAnswers(em: EntityManager, now: Date = new Date()): Promise<number> {
+  const cutoff = new Date(now.getTime() - HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const rows: { id: string }[] = await em.getConnection().execute(
+    `update generated_answer
+        set query = null, retention_anonymized_at = now(), updated_at = now()
+      where retention_anonymized_at is null and query is not null and created_at < ?
+      returning id`,
+    [cutoff]
+  );
+  return rows.length;
+}

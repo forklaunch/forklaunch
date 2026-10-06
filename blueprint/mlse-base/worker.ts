@@ -54,11 +54,13 @@ const processIngestionJobs: WorkerProcessFunction<IngestionJob> = async (
 
 const processFailures: WorkerFailureHandler<IngestionJob> = async (jobs) => {
   jobs.forEach((job) => {
-    openTelemetryCollector.error(
-      'Corpus ingestion job failed',
-      job.error,
-      job.value
-    );
+    // the job's search term is a user's query, so only its identity and
+    // source are logged, never job.value
+    openTelemetryCollector.error('Corpus ingestion job failed', job.error, {
+      jobId: job.value.id,
+      sourceKey: job.value.sourceKey,
+      retryCount: job.value.retryCount
+    });
   });
 };
 

@@ -87,7 +87,11 @@ export const exportUserData = handlers.get(
     const entities = await savedSearchServiceFactory().exportUser(userId);
     const result = { userId, entities };
 
-    if (entities.SavedSearch.length === 0 && entities.SearchHistory.length === 0) {
+    if (
+      entities.SavedSearch.length === 0 &&
+      entities.SearchHistory.length === 0 &&
+      entities.GeneratedAnswer.length === 0
+    ) {
       res.status(404).send('User not found or no PII data to export');
       return;
     }

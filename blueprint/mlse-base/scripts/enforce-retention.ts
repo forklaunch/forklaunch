@@ -1,14 +1,16 @@
 import { ci, tokens } from '../bootstrapper';
-import { anonymizeExpiredHistory } from '../domain/historyRetention';
+import { anonymizeExpiredAnswers, anonymizeExpiredHistory } from '../domain/historyRetention';
 import { organizationsWithUserData } from '../domain/tenants';
 
-// Run daily. Search history loses its query text after 90 days.
+// Run daily. Search history and answer audit rows lose their query text
+// after 90 days.
 async function main() {
   const otel = ci.resolve(tokens.OtelCollector);
   const orm = ci.resolve(tokens.Orm);
   const dryRun = process.argv.includes('--dry-run');
 
   const anonymizedHistory = dryRun ? 0 : await anonymizeExpiredHistory(orm.em.fork());
+  const anonymizedAnswers = dryRun ? 0 : await anonymizeExpiredAnswers(orm.em.fork());
 
   // Framework retention for any other policies. It runs once per
   // organization because encrypted rows must be read with their own key.
@@ -18,6 +20,7 @@ async function main() {
   otel.info('[RetentionEnforcement] Complete', {
     dryRun,
     anonymizedHistory,
+    anonymizedAnswers,
     processed: result.processed,
     errors: result.errors,
     durationMs: result.durationMs
