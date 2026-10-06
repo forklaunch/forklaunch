@@ -69,6 +69,14 @@ const MAX_LIMIT = 50;
  * Only current documents are searched: superseded versions and retracted
  * documents never appear.
  */
+// A term as space-padded lower-case words, in SQL and in TypeScript alike.
+const PADDED_TERM = (column: string) =>
+  `' ' || trim(regexp_replace(lower(${column}), '[^a-z0-9]+', ' ', 'g')) || ' '`;
+
+function paddedWords(text: string): string {
+  return ` ${text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `;
+}
+
 export class SearchService {
   private readonly candidatesPerRetriever: number;
   private readonly rerankDepth: number;
@@ -199,14 +207,19 @@ export class SearchService {
     const rows = await this.em.getConnection().execute<
       { preferred_term: string; synonyms: string[] }[]
     >(
+      // Whole words only: a term matches when the query contains it as a run
+      // of words ("glaucoma" must not match the descriptor "Coma", nor
+      // "female" match "Male" or "managed" match "Aged"). Both sides are
+      // lower-cased with punctuation turned into single spaces, then padded,
+      // so ' coma ' is looked for in ' glaucoma management '.
       `select preferred_term, synonyms from medical_concept
         where lower(preferred_term) = lower(?)
            or exists (select 1 from unnest(synonyms) s where lower(s) = lower(?))
-           or (length(preferred_term) >= 4 and position(lower(preferred_term) in lower(?)) > 0)
-           or exists (select 1 from unnest(synonyms) s where length(s) >= 4 and position(lower(s) in lower(?)) > 0)
+           or (length(preferred_term) >= 4 and position(${PADDED_TERM('preferred_term')} in ?) > 0)
+           or exists (select 1 from unnest(synonyms) s where length(s) >= 4 and position(${PADDED_TERM('s')} in ?) > 0)
         order by length(preferred_term) desc
         limit 5`,
-      [query, query, query, query]
+      [query, query, paddedWords(query), paddedWords(query)]
     );
 
     const terms = new Map<string, string>([[query.toLowerCase(), query]]);

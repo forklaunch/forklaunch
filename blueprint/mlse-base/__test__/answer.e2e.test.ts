@@ -180,8 +180,10 @@ describe('answers on pgvector', () => {
     expect(llm.requests[0].evidence[0].label).toMatch(/pmc_oa article: Outcomes of laparoscopic cholecystectomy/);
 
     const { row, citations } = await auditRow(answer.answerId);
+    // the question is stored, encrypted (never as plain text)
+    expect(row.query).not.toBeNull();
+    expect(row.query).not.toBe('laparoscopic cholecystectomy bile leak blood loss');
     expect(row).toMatchObject({
-      query: 'laparoscopic cholecystectomy bile leak blood loss',
       query_class: 'literature_lookup',
       provider: 'fake',
       sentences_kept: 2,
@@ -235,6 +237,47 @@ describe('answers on pgvector', () => {
     expect(llm.requests).toHaveLength(0);
     expect(answer.sections[0]).toMatchObject({ status: 'insufficient_evidence', sentences: [] });
     expect(answer.research).toMatchObject({ searchedFor: ['heart attack', 'myocardial infarction', 'acute coronary syndrome'], aboutQuestion: 0, used: 0 });
+  });
+
+  it('keeps the question encrypted, exportable, erasable and only for 90 days', async () => {
+    const question = 'laparoscopic cholecystectomy blood loss';
+    const llm = new ScriptedLlmProvider([
+      () => {
+        throw new Error('provider down');
+      }
+    ]);
+    const { answers } = await answerService(llm);
+    const answer = await answers.answer({ query: question, live: false, organizationId: 'org-privacy', userId: 'user-privacy' });
+
+    // stored, but as ciphertext, and not repeated in the stored sections
+    const [stored] = await orm.em.getConnection().execute(
+      `select query, sections::text as sections, organization_id, user_id from generated_answer where id = ?`,
+      [answer.answerId]
+    );
+    expect(stored.query).not.toBeNull();
+    expect(stored.query).not.toContain('cholecystectomy');
+    expect(stored.sections).not.toContain(question);
+    expect(stored).toMatchObject({ organization_id: 'org-privacy', user_id: 'user-privacy' });
+
+    const { SavedSearchService } = await import('../domain/services/savedSearch.service');
+    const saved = new SavedSearchService(orm.em.fork());
+    const exported = await saved.exportUser('user-privacy');
+    expect(exported.GeneratedAnswer.map((a) => a.query)).toContain(question);
+
+    const erased = await saved.eraseUser('user-privacy');
+    expect(erased.entitiesAffected).toContain('GeneratedAnswer');
+    const [afterErase] = await orm.em.getConnection().execute(
+      `select query, user_id from generated_answer where id = ?`,
+      [answer.answerId]
+    );
+    expect(afterErase).toEqual({ query: null, user_id: null });
+
+    // a second answer, then the 90-day retention run as if it were later
+    const later = await answers.answer({ query: question, live: false, organizationId: 'org-privacy' });
+    const { anonymizeExpiredAnswers } = await import('../domain/historyRetention');
+    const inAYear = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+    expect(await anonymizeExpiredAnswers(orm.em.fork(), inAYear)).toBeGreaterThanOrEqual(1);
+    expect((await auditRow(later.answerId)).row.query).toBeNull();
   });
 
   it('quotes the sources when drafting fails', async () => {

@@ -17,13 +17,18 @@ export type RemovedSentenceRecord = {
  * The query text is stored only for literature questions. For queries
  * classified as patient-specific, prescription or emergency it is not
  * stored, so details of a patient typed into the search never reach the
- * database.
+ * database. When stored it is treated like search history: encrypted under
+ * the organization (or NO_ORGANIZATION_TENANT for a request without one),
+ * anonymized after 90 days (historyRetention.ts), and exported and erased
+ * with the user's data (SavedSearchService).
  */
 export const GeneratedAnswer = defineComplianceEntity({
   name: 'GeneratedAnswer',
   properties: {
     ...sqlBaseProperties,
-    query: fp.string().nullable().compliance('none'),
+    organizationId: fp.string().nullable().compliance('none'),
+    userId: fp.string().nullable().compliance('none'),
+    query: fp.string().nullable().compliance('pii'),
     queryClass: fp.string().compliance('none'),
     classificationReason: fp.string().compliance('none'),
     // 'answer' | 'label_range' | 'boundary' | 'emergency' | 'source_not_found'

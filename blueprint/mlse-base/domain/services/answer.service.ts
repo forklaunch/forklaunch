@@ -47,7 +47,7 @@ import {
 } from '@forklaunch/interfaces-mlse/types';
 import { EntityManager } from '@mikro-orm/core';
 import { countMetric } from '../metrics';
-import { tenantEm } from '../tenantEm';
+import { NO_ORGANIZATION_TENANT, tenantEm } from '../tenantEm';
 import { SearchHistory } from '../../persistence/entities/searchHistory.entity';
 import { AnswerCitation } from '../../persistence/entities/answerCitation.entity';
 import {
@@ -700,7 +700,13 @@ export class AnswerService {
       input.classification.queryClass === 'exact_dosage_no_context' ||
       input.classification.queryClass === 'dosage_question';
 
-    const answer = this.em.create(GeneratedAnswer, {
+    const { organizationId, userId } = input.request;
+    // the query is encrypted under the organization (pii), so the audit row
+    // is written through an entity manager bound to it
+    const auditEm = tenantEm(this.em, organizationId ?? NO_ORGANIZATION_TENANT);
+    const answer = auditEm.create(GeneratedAnswer, {
+      organizationId: organizationId ?? null,
+      userId: userId ?? null,
       query: storesQuery ? input.query : null,
       queryClass: input.classification.queryClass,
       classificationReason: input.classification.reason,
@@ -708,14 +714,16 @@ export class AnswerService {
       topicSlug: input.topicSlug ?? null,
       provider: input.usedAi ? this.llmProvider.describe().provider : null,
       model: models.length > 0 ? models.join(', ') : null,
-      sections,
+      // the audit copy leaves out the question, which a direct answer's
+      // section label repeats: the query column is the one place it is kept
+      sections: sections.map((s) => (s.key === 'answer' ? { ...s, label: '' } : s)),
       sentencesKept: kept,
       sentencesRemoved: removed.length,
       removedSentences: removed,
       durationMs: Date.now() - input.started
     });
     for (const passage of sources.values()) {
-      this.em.create(AnswerCitation, {
+      auditEm.create(AnswerCitation, {
         answer,
         passageId: passage.passageId,
         origin: passage.origin,
@@ -727,9 +735,8 @@ export class AnswerService {
         licenseScope: passage.licenseScope
       });
     }
-    await this.em.flush();
+    await auditEm.flush();
 
-    const { organizationId, userId } = input.request;
     if (organizationId && userId) {
       const em = tenantEm(this.em, organizationId);
       em.create(SearchHistory, {

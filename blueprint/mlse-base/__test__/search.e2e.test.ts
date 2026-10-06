@@ -160,7 +160,12 @@ beforeAll(async () => {
       preferredTerm: 'Cholecystectomy, Laparoscopic',
       synonyms: ['Laparoscopic Cholecystectomy', 'Celioscopic Cholecystectomy'],
       treeNumbers: ['E04.210.240.130.500']
-    }
+    },
+    // short descriptors that are substrings of everyday words
+    { descriptorUi: 'D003128', preferredTerm: 'Coma', synonyms: [], treeNumbers: [] },
+    { descriptorUi: 'D008297', preferredTerm: 'Male', synonyms: [], treeNumbers: [] },
+    { descriptorUi: 'D000368', preferredTerm: 'Aged', synonyms: ['Elderly'], treeNumbers: [] },
+    { descriptorUi: 'D005901', preferredTerm: 'Glaucoma', synonyms: [], treeNumbers: [] }
   ]);
 }, 180_000);
 
@@ -203,6 +208,17 @@ describe('hybrid search on pgvector', () => {
     );
     // no stored text says "celioscopic"; the synonym finds it anyway
     expect(response.results.map((r) => r.externalId)).toContain('PMC1');
+  });
+
+  it('expands MeSH terms only as whole words', async () => {
+    const service = await searchService();
+    const expanded = await service.expandQuery('glaucoma managed in females');
+    expect(expanded).toContain('Glaucoma');
+    // "glaucoma" contains "coma", "females" contains "male", "managed" contains "aged"
+    expect(expanded).not.toEqual(expect.arrayContaining(['Coma']));
+    expect(expanded).not.toEqual(expect.arrayContaining(['Male']));
+    expect(expanded).not.toEqual(expect.arrayContaining(['Aged']));
+    expect(await service.expandQuery('coma in aged patients')).toEqual(expect.arrayContaining(['Coma', 'Aged', 'Elderly']));
   });
 
   it('matches by meaning through the vector index', async () => {
