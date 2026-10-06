@@ -140,6 +140,13 @@ permission, and calls MLSE with the doctor's `organizationId` and `userId`.
 Keep `HMAC_SECRET_KEY` server-side only: anyone holding it can act as any
 organization.
 
+**The caller is fully trusted.** MLSE does not check who the caller is
+beyond the shared HMAC key: `organizationId`, `userId`, and the
+`approvedBy`, `flaggedBy` and `resolvedBy` fields of the governance routes
+are taken as given. Your backend must set them from the signed-in user, never
+from what a browser sends, and enforce the permissions below before calling.
+Per-user JWT auth with these permission slugs inside MLSE is planned.
+
 Permissions to create in IAM and check before calling MLSE:
 
 | Permission | Give to | Routes |
