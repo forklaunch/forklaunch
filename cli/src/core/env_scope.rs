@@ -359,6 +359,7 @@ mod tests {
                         queue: None,
                         object_store: None,
                         redis_partition: None,
+                        capabilities: None,
                     }),
                     routers: None,
                     metadata: None,

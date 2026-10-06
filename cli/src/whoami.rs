@@ -79,6 +79,15 @@ impl CliCommand for WhoAmICommand {
 
         writeln!(stdout)?;
 
+        // Account (which login on this machine answered, and why)
+        let selection = crate::core::accounts::selection()?;
+        if let Some(account) = &selection.name {
+            stdout.set_color(ColorSpec::new().set_bold(true))?;
+            write!(stdout, "  Account:      ")?;
+            stdout.reset()?;
+            writeln!(stdout, "{} ({})", account, selection.source.describe())?;
+        }
+
         // Name
         if let Some(name) = &me.name {
             stdout.set_color(ColorSpec::new().set_bold(true))?;

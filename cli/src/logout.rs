@@ -1,4 +1,4 @@
-use std::{fs::remove_file, io::Write};
+use std::io::Write;
 
 use anyhow::Result;
 use clap::{ArgMatches, Command};
@@ -6,7 +6,7 @@ use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use crate::{
     CliCommand,
-    core::{command::command, token::get_token_path},
+    core::{accounts, command::command},
 };
 
 pub(super) struct LogoutCommand;
@@ -25,10 +25,13 @@ impl CliCommand for LogoutCommand {
     fn handler(&self, _matches: &ArgMatches) -> Result<()> {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
         // TODO: call logout API and serialize to ~/.forklaunch/token
-        let token_path = get_token_path()?;
-        remove_file(token_path)?;
+        let selection = accounts::selection()?;
+        accounts::logout(&accounts::forklaunch_dir()?, &selection)?;
 
-        log_ok!(stdout, "Successfully logged out!");
+        match &selection.name {
+            Some(name) => log_ok!(stdout, "Logged out of account '{}'.", name),
+            None => log_ok!(stdout, "Successfully logged out!"),
+        }
         Ok(())
     }
 }

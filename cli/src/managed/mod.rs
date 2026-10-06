@@ -5,6 +5,7 @@ use crate::{CliCommand, core::command::command};
 
 mod client;
 pub(crate) mod detect;
+mod feature_settings;
 mod instance;
 mod rollout;
 mod summary;

@@ -77,6 +77,7 @@ routers = ["sample-worker"]
 
 [projects.resources]
 database = "postgresql"
+object_store = "s3"
 
 [[projects]]
 type = "Library"

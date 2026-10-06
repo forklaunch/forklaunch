@@ -116,6 +116,7 @@ pub(crate) fn sync_service_with_cache(
                         queue: None,
                         object_store: None,
                         redis_partition: None,
+                        capabilities: None,
                     }
                 });
                 resources.database = Some(db.to_string());
@@ -135,6 +136,7 @@ pub(crate) fn sync_service_with_cache(
                                 queue: None,
                                 object_store: None,
                                 redis_partition: None,
+                                capabilities: None,
                             }
                         });
                         resources.cache = Some(infra.metadata().id.to_string());
@@ -150,6 +152,7 @@ pub(crate) fn sync_service_with_cache(
                                 queue: None,
                                 object_store: None,
                                 redis_partition: None,
+                                capabilities: None,
                             }
                         });
                         resources.object_store = Some(infra.metadata().id.to_string());

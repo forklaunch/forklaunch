@@ -5,6 +5,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use serde_json::{Map, Value, json};
 use termcolor::{ColorChoice, StandardStream, WriteColor};
 
+use super::feature_settings;
 use crate::{
     CliCommand,
     core::command::command,
@@ -35,8 +36,16 @@ pub(super) struct TemplateUpdate<'a> {
     /// Whether the platform may rotate this product's generated secrets in place
     /// (`--supports-key-rotation` / `--no-supports-key-rotation`).
     pub(super) supports_key_rotation: Option<bool>,
+    /// Whether launches of this template's instances skip the managed first-deploy
+    /// approval gate (`--auto-approve-launches true|false`). Admin only on the server.
+    pub(super) auto_approve_launches: Option<bool>,
     /// The repository the platform builds versions from (https URL).
     pub(super) source_repo: Option<&'a String>,
+    /// The model gateway setting, replaced as a whole (see `model_gateway_body`).
+    pub(super) model_gateway: Option<Value>,
+    /// The SMS / WhatsApp / voice / email / payments settings the flags produced,
+    /// each replaced as a whole (see `feature_settings::bodies`).
+    pub(super) feature_settings: Vec<(&'static str, Value)>,
     pub(super) dryrun: bool,
     pub(super) json: bool,
 }
@@ -52,7 +61,7 @@ impl UpdateCommand {
 
 impl CliCommand for UpdateCommand {
     fn command(&self) -> Command {
-        command(
+        let base = command(
             "update",
             "Change a template's name, description, status, Stripe product, placement, or domains",
         )
@@ -83,9 +92,29 @@ impl CliCommand for UpdateCommand {
              \x20 --supports-key-rotation  declare that every service re-encrypts its data on\n\
              \x20                          boot from LEGACY_<KEY>S, so `instance rotate-keys`\n\
              \x20                          is allowed; --no-supports-key-rotation withdraws it.\n\
+             \x20 --auto-approve-launches  true: launches of this template's instances no longer\n\
+             \x20                          wait for an admin to approve their first deploy, so a\n\
+             \x20                          signup backend can hand instances out unattended. It\n\
+             \x20                          skips ONLY that managed-launch gate: an environment\n\
+             \x20                          that requires deployment approval still parks the\n\
+             \x20                          deploy. Admin only; who set it is recorded. false\n\
+             \x20                          restores the gate.\n\
              \x20 --source-repo            the repository versions are built from. Re-point it\n\
              \x20                          when the code moves (e.g. to the customer's account);\n\
-             \x20                          the org's GitHub App installation must read it.",
+             \x20                          the org's GitHub App installation must read it.\n\n\
+             Platform-held features, for every instance of the product (read on each call,\n\
+             so a change applies at once). Each feature's setting is REPLACED AS A WHOLE:\n\
+             pass every field you want it to keep. One instance can differ (`managed\n\
+             instance model-gateway | sms-gateway | whatsapp | voice | email-gateway |\n\
+             payments-gateway`); `managed template gateway-settings` shows what is set.\n\
+             \x20 --gateway-*    model gateway: models, monthly tokens, requests/minute\n\
+             \x20 --sms-*        pool, monthly segments, texts/minute, promotional, off\n\
+             \x20 --whatsapp-*   linked phone number id, sends/minute, off\n\
+             \x20 --voice-*      flow catalog (name=contact-flow-id), concurrent calls, minutes\n\
+             \x20 --email-*      recipients/day, messages/minute\n\
+             \x20 --payments-*   application fee (percent and/or amount), Stripe calls/minute\n\
+             --clear-sms, --unlink-whatsapp, --disable-voice, --clear-email and\n\
+             --clear-payments return a feature to the platform defaults.",
         )
         .arg(
             Arg::new("slug")
@@ -163,22 +192,54 @@ impl CliCommand for UpdateCommand {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            Arg::new("auto_approve_launches")
+                .long("auto-approve-launches")
+                .value_name("true|false")
+                .value_parser(clap::value_parser!(bool))
+                .help("true: launches skip the managed first-deploy approval gate (admin only); false restores it"),
+        )
+        .arg(
             Arg::new("source_repo")
                 .long("source-repo")
                 .help("https URL of the repository versions are built from, e.g. https://github.com/org/repo"),
         )
         .arg(
-            Arg::new("dryrun")
-                .long("dryrun")
-                .help("Print the request that would be sent without sending it")
-                .action(ArgAction::SetTrue),
+            Arg::new("gateway_models")
+                .long("gateway-models")
+                .help("Model gateway: comma-separated catalog aliases instances may call (e.g. terra,luna)"),
         )
         .arg(
-            Arg::new("json")
-                .long("json")
-                .help("Output raw JSON instead of formatted terminal output")
-                .action(ArgAction::SetTrue),
+            Arg::new("gateway_monthly_tokens")
+                .long("gateway-monthly-tokens")
+                .value_parser(clap::value_parser!(u64).range(1..))
+                .help("Model gateway: monthly token budget per instance"),
         )
+        .arg(
+            Arg::new("gateway_rpm")
+                .long("gateway-rpm")
+                .value_parser(clap::value_parser!(u64).range(1..))
+                .help("Model gateway: requests per minute per instance"),
+        )
+        .arg(
+            Arg::new("disable_model_gateway")
+                .long("disable-model-gateway")
+                .help("Turn the model gateway off for this product")
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all(["gateway_models", "gateway_monthly_tokens", "gateway_rpm"]),
+        );
+        feature_settings::add_args(base)
+            .arg(
+                Arg::new("dryrun")
+                    .long("dryrun")
+                    .help("Print the request that would be sent without sending it")
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new("json")
+                    .long("json")
+                    .help("Output raw JSON instead of formatted terminal output")
+                    .action(ArgAction::SetTrue),
+            )
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
@@ -187,7 +248,8 @@ impl CliCommand for UpdateCommand {
             .context("--slug is required")?;
 
         if let Some(repo) = matches.get_one::<String>("source_repo") {
-            if !repo.starts_with("https://") || repo.trim_end_matches('/').matches('/').count() != 4 {
+            if !repo.starts_with("https://") || repo.trim_end_matches('/').matches('/').count() != 4
+            {
                 bail!(
                     "--source-repo '{}' must be an https repository URL such as https://github.com/org/repo",
                     repo
@@ -213,6 +275,15 @@ impl CliCommand for UpdateCommand {
             matches.get_one::<String>("default_instance_size").map(Some)
         };
 
+        let model_gateway = model_gateway_body(
+            matches.get_one::<String>("gateway_models"),
+            matches.get_one::<u64>("gateway_monthly_tokens").copied(),
+            matches.get_one::<u64>("gateway_rpm").copied(),
+            matches.get_flag("disable_model_gateway"),
+        )?;
+
+        let feature_settings = feature_settings::bodies(matches)?;
+
         update_template(
             slug,
             TemplateUpdate {
@@ -227,12 +298,58 @@ impl CliCommand for UpdateCommand {
                 frontend_domain,
                 default_instance_size,
                 supports_key_rotation,
+                auto_approve_launches: matches.get_one::<bool>("auto_approve_launches").copied(),
                 source_repo: matches.get_one::<String>("source_repo"),
+                model_gateway,
+                feature_settings,
                 dryrun: matches.get_flag("dryrun"),
                 json: matches.get_flag("json"),
             },
         )
     }
+}
+
+/// The `modelGateway` value for a template update, or None when no gateway
+/// flag was passed.
+///
+/// The control plane replaces the setting as a whole, so a budget or rate
+/// without the model list is refused: sending it alone would silently drop the
+/// models and turn the gateway off.
+pub(super) fn model_gateway_body(
+    models: Option<&String>,
+    monthly_tokens: Option<u64>,
+    rpm: Option<u64>,
+    disable: bool,
+) -> Result<Option<Value>> {
+    if disable {
+        return Ok(Some(json!({ "models": [] })));
+    }
+    let Some(models) = models else {
+        if monthly_tokens.is_some() || rpm.is_some() {
+            bail!(
+                "--gateway-monthly-tokens / --gateway-rpm replace the whole gateway setting, \
+                 so they need --gateway-models too (the models the product may call)"
+            );
+        }
+        return Ok(None);
+    };
+    let aliases: Vec<&str> = models
+        .split(',')
+        .map(str::trim)
+        .filter(|alias| !alias.is_empty())
+        .collect();
+    if aliases.is_empty() {
+        bail!("--gateway-models is empty — to turn the gateway off, use --disable-model-gateway");
+    }
+    let mut setting = Map::new();
+    setting.insert("models".to_string(), json!(aliases));
+    if let Some(tokens) = monthly_tokens {
+        setting.insert("monthlyTokenBudget".to_string(), json!(tokens));
+    }
+    if let Some(rpm) = rpm {
+        setting.insert("requestsPerMinute".to_string(), json!(rpm));
+    }
+    Ok(Some(Value::Object(setting)))
 }
 
 /// Issues the PATCH. Shared by `template update` and `template publish-template`.
@@ -274,8 +391,20 @@ pub(super) fn update_template(slug: &str, update: TemplateUpdate<'_>) -> Result<
             json!(supports_key_rotation),
         );
     }
+    if let Some(auto_approve_launches) = update.auto_approve_launches {
+        body.insert(
+            "autoApproveLaunches".to_string(),
+            json!(auto_approve_launches),
+        );
+    }
     if let Some(source_repo) = update.source_repo {
         body.insert("sourceRepo".to_string(), json!(source_repo));
+    }
+    if let Some(model_gateway) = update.model_gateway.clone() {
+        body.insert("modelGateway".to_string(), model_gateway);
+    }
+    for (key, value) in &update.feature_settings {
+        body.insert((*key).to_string(), value.clone());
     }
 
     // An empty PATCH is accepted by the control plane and changes nothing, so it would
@@ -286,7 +415,10 @@ pub(super) fn update_template(slug: &str, update: TemplateUpdate<'_>) -> Result<
         bail!(
             "nothing to update — pass at least one of --name, --description, --status, \
              --stripe-product, --cluster-type, --base-domain, --frontend-domain, \
-             --default-instance-size, --supports-key-rotation, or --source-repo (to publish a template, `forklaunch managed template \
+             --default-instance-size, --supports-key-rotation, --auto-approve-launches, \
+             --source-repo, or the \
+             --gateway-* / --sms-* / --whatsapp-* / --voice-* / --email-* / --payments-* \
+             flags (to publish a template, `forklaunch managed template \
              publish-template --slug {}` is the shorthand)",
             slug
         );
@@ -337,6 +469,20 @@ pub(super) fn update_template(slug: &str, update: TemplateUpdate<'_>) -> Result<
             "Each instance's UI is now https://<hostPrefix>.{} — point that wildcard at your frontend deployment (see the vercel-frontend skill).",
             domain
         );
+    }
+
+    match update.auto_approve_launches {
+        Some(true) => log_warn!(
+            stdout,
+            "Launches of '{}' no longer wait for approval. An environment that requires deployment approval still parks them.",
+            slug
+        ),
+        Some(false) => log_info!(
+            stdout,
+            "Every launch of '{}' waits for an admin to approve its first deploy again.",
+            slug
+        ),
+        None => {}
     }
 
     if new_status == "published" {
@@ -395,6 +541,76 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(json!(update.frontend_domain.unwrap()), Value::Null);
+    }
+
+    #[test]
+    fn gateway_flags_build_the_whole_setting() {
+        let models = "terra, luna,".to_string();
+        assert_eq!(
+            model_gateway_body(Some(&models), Some(500_000), Some(30), false).unwrap(),
+            Some(json!({
+                "models": ["terra", "luna"],
+                "monthlyTokenBudget": 500_000,
+                "requestsPerMinute": 30
+            }))
+        );
+        assert_eq!(
+            model_gateway_body(None, None, None, true).unwrap(),
+            Some(json!({ "models": [] }))
+        );
+        assert_eq!(model_gateway_body(None, None, None, false).unwrap(), None);
+    }
+
+    #[test]
+    fn a_gateway_budget_without_models_is_refused_rather_than_turning_it_off() {
+        let error = model_gateway_body(None, Some(10), None, false).unwrap_err();
+        assert!(error.to_string().contains("--gateway-models"), "{}", error);
+        let empty = " , ".to_string();
+        let error = model_gateway_body(Some(&empty), None, None, false).unwrap_err();
+        assert!(
+            error.to_string().contains("--disable-model-gateway"),
+            "{}",
+            error
+        );
+    }
+
+    #[test]
+    fn auto_approve_launches_is_sent_as_a_boolean_and_counts_as_a_change() {
+        // Dry run reaches the body without a server: the flag alone is a real update
+        // (not refused as empty), and false is sent rather than dropped.
+        for value in [true, false] {
+            let update = TemplateUpdate {
+                auto_approve_launches: Some(value),
+                dryrun: true,
+                ..Default::default()
+            };
+            update_template("clinic", update).unwrap();
+        }
+        let command = UpdateCommand::new().command().version("0.0.0-test");
+        let matches = command
+            .try_get_matches_from([
+                "update",
+                "--slug",
+                "clinic",
+                "--auto-approve-launches",
+                "true",
+            ])
+            .unwrap();
+        assert_eq!(
+            matches.get_one::<bool>("auto_approve_launches").copied(),
+            Some(true)
+        );
+        let refused = UpdateCommand::new()
+            .command()
+            .version("0.0.0-test")
+            .try_get_matches_from([
+                "update",
+                "--slug",
+                "clinic",
+                "--auto-approve-launches",
+                "maybe",
+            ]);
+        assert!(refused.is_err());
     }
 
     #[test]

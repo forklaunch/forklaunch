@@ -14,12 +14,16 @@ is a work queue, not just a grade.
 
 ## Run a score
 
-Preferred — the CLI (renders the card; `--json` for machine reading):
+Preferred — the CLI. Start from the prompt: it is the website's remediation prompt
+(every failing criterion and finding, with evidence and fix, and the loop below in brief):
 
 ```bash
-forklaunch score --offline --path . --json > /tmp/score.json
-forklaunch score --offline --path . --min-score 70   # exit 1 = does not pass
+forklaunch score --path . --prompt --no-share          # full score, prompt to work from
+forklaunch score --offline --path . --json > /tmp/score.json   # free per-batch recheck
+forklaunch score --offline --path . --min-score 70     # exit 1 = does not pass
 ```
+
+`--json` output also carries the prompt as `remediationPrompt`.
 
 Fallback — the analyzer endpoint directly (studio/dev harness where the orchestrator can read
 the workspace; requires a signed-in platform token):
@@ -49,8 +53,10 @@ Scoring takes ~1–2 minutes. The result's `reportCard.dimensions.<rail>.items[]
    check `/quick-reference` and `/compliance`: most fixes are a compliance tag
    (`.compliance('pii')`), an `fp` property, a framework primitive, or a config line — not
    hand-rolled infrastructure. The item's `detail` cites where the gap is.
-5. **Fix in batches, then re-score once.** Scoring is expensive — remediate 3–8 items per
-   iteration, run typecheck/tests, then re-score. Never re-score after every single edit.
+5. **Fix in batches, then re-score once.** Full scoring is expensive — remediate 3–8 items per
+   iteration, run typecheck/tests, then `forklaunch score --offline --json` (free, deterministic)
+   to confirm the check findings are gone. Run the full `forklaunch score --prompt --no-share`
+   only once the offline checks are clean, and continue from the prompt it prints.
 6. **Verify movement.** Each targeted item's score should rise and nothing else should regress
    by more than noise (±5). A regression means a fix broke something — inspect that rail's
    `detail`s before continuing.

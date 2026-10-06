@@ -522,6 +522,7 @@ mod tests {
                         queue: None,
                         object_store: None,
                         redis_partition: None,
+                        capabilities: None,
                     })),
                     routers: None,
                     metadata: None,
@@ -569,6 +570,7 @@ mod tests {
                     queue: None,
                     object_store: None,
                     redis_partition: Some(0),
+                    capabilities: None,
                 }), None),
                 ("notifications", ProjectType::Worker, Some(ResourceInventory {
                     database: None,
@@ -576,6 +578,7 @@ mod tests {
                     queue: None,
                     object_store: None,
                     redis_partition: Some(1),
+                    capabilities: None,
                 }), None),
             ],
         )

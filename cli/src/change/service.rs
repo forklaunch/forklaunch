@@ -77,10 +77,10 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub(super) struct ServiceCommand;
+pub(crate) struct ServiceCommand;
 
 impl ServiceCommand {
-    pub(super) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {}
     }
 }
@@ -583,32 +583,21 @@ fn change_infrastructure(
                 });
             }
             Infrastructure::S3 => {
-                if !manifest_data.projects.iter_mut().any(|project| {
-                    if let Some(resources) = &mut project.resources {
-                        if let Some(object_store) = &mut resources.object_store {
-                            object_store == &Infrastructure::S3.to_string()
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    }
-                }) {
-                    let mut environment = docker_compose
-                        .services
-                        .get_mut(&manifest_data.service_name)
-                        .unwrap()
-                        .environment
-                        .as_ref()
-                        .unwrap()
-                        .clone();
-                    remove_s3_from_docker_compose(docker_compose, &mut environment)?;
-                    docker_compose
-                        .services
-                        .get_mut(&manifest_data.service_name)
-                        .unwrap()
-                        .environment = Some(environment);
-                }
+                // This service's S3 settings go whatever other services use.
+                let mut environment = docker_compose
+                    .services
+                    .get_mut(&manifest_data.service_name)
+                    .unwrap()
+                    .environment
+                    .as_ref()
+                    .unwrap()
+                    .clone();
+                remove_s3_from_docker_compose(docker_compose, &mut environment)?;
+                docker_compose
+                    .services
+                    .get_mut(&manifest_data.service_name)
+                    .unwrap()
+                    .environment = Some(environment);
 
                 let env_local_path = base_path.join(".env.local");
                 let mut env_local_content =

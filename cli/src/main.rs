@@ -4,6 +4,7 @@ use score::ScoreCommand;
 use anyhow::Result;
 use change::ChangeCommand;
 use clap::{ArgMatches, Command, command};
+use account::AccountCommand;
 use cloud_account::CloudAccountCommand;
 use compliance::ComplianceCommand;
 use data::DataCommand;
@@ -44,6 +45,7 @@ mod constants;
 mod core;
 mod app;
 mod change;
+mod account;
 mod cloud_account;
 mod compliance;
 mod config;
@@ -87,6 +89,7 @@ fn main() -> Result<()> {
     let analyze = AnalyzeCommand::new();
     let score = ScoreCommand::new();
     let change = ChangeCommand::new();
+    let account = AccountCommand::new();
     let cloud_account = CloudAccountCommand::new();
     let compliance = ComplianceCommand::new();
     let data = DataCommand::new();
@@ -121,6 +124,17 @@ fn main() -> Result<()> {
         .propagate_version(true)
         .arg_required_else_help(true)
         .subcommand_required(true)
+        .arg(
+            clap::Arg::new(crate::core::accounts::ACCOUNT_FLAG)
+                .long("account")
+                .global(true)
+                .value_name("NAME")
+                .help(
+                    "Run as this account from the keyring (see `forklaunch account`). \
+                     Also settable with FORKLAUNCH_ACCOUNT",
+                ),
+        )
+        .subcommand(account.command())
         .subcommand(alerts.command())
         .subcommand(app.command())
         .subcommand(init.command())
@@ -158,10 +172,14 @@ fn main() -> Result<()> {
         .get_matches();
 
     if let Some((cmd, sub_matches)) = matches.subcommand() {
+        // Before anything reads a token, and before a pinned binary is
+        // re-executed with the account this invocation resolved.
+        crate::core::accounts::init_selection(&matches, sub_matches)?;
         crate::core::version_check::precheck_version(sub_matches, cmd)?;
     }
 
     let result = match matches.subcommand() {
+        Some(("account", sub_matches)) => account.handler(sub_matches),
         Some(("alerts", sub_matches)) => alerts.handler(sub_matches),
         Some(("app", sub_matches)) => app.handler(sub_matches),
         Some(("init", sub_matches)) => init.handler(sub_matches),

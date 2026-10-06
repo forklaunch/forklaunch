@@ -18,9 +18,10 @@ pub(crate) fn s3_import<'a>(
     registrations_program: &mut Program<'a>,
 ) -> Result<()> {
     if !registrations_text
-        .contains("import { S3ObjectStore } from \"@forklaunch/infrastructure-s3\";")
+        .contains("import { S3ObjectStore, s3ClientConfig } from \"@forklaunch/infrastructure-s3\";")
     {
-        let import_text = "import { S3ObjectStore } from \"@forklaunch/infrastructure-s3\";";
+        let import_text =
+            "import { S3ObjectStore, s3ClientConfig } from \"@forklaunch/infrastructure-s3\";";
 
         let mut import_program = parse_ast_program(&allocator, import_text, SourceType::ts());
 
@@ -39,32 +40,47 @@ pub(crate) fn s3_url_environment_variable<'a>(
     registrations_program: &mut Program<'a>,
 ) -> Result<()> {
     let s3_env_var_text = "const configInjector = createConfigInjector(SchemaValidator(), {
-        S3_REGION: {
-            lifetime: Lifetime.Singleton,
-            type: string,
-            value: getEnvVar('S3_REGION')
-        },
-        S3_ACCESS_KEY_ID: {
-            lifetime: Lifetime.Singleton,
-            type: string,
-            value: getEnvVar('S3_ACCESS_KEY_ID')
-        },
-        S3_SECRET_ACCESS_KEY: {
-            lifetime: Lifetime.Singleton,
-            type: string,
-            value: getEnvVar('S3_SECRET_ACCESS_KEY')
-        },
-        S3_URL: {
-            lifetime: Lifetime.Singleton,
-            type: string,
-            value: getEnvVar('S3_URL')
-        },
-        S3_BUCKET: {
-            lifetime: Lifetime.Singleton,
-            type: string,
-            value: getEnvVar('S3_BUCKET')
-        }
-    });";
+  S3_REGION: {
+    lifetime: Lifetime.Singleton,
+    type: optional(string),
+    value: getEnvVar('S3_REGION')
+  },
+  S3_ACCESS_KEY_ID: {
+    lifetime: Lifetime.Singleton,
+    type: optional(string),
+    value: getEnvVar('S3_ACCESS_KEY_ID')
+  },
+  S3_SECRET_ACCESS_KEY: {
+    lifetime: Lifetime.Singleton,
+    type: optional(string),
+    value: getEnvVar('S3_SECRET_ACCESS_KEY')
+  },
+  S3_URL: {
+    lifetime: Lifetime.Singleton,
+    type: optional(string),
+    value: getEnvVar('S3_URL')
+  },
+  S3_BUCKET: {
+    lifetime: Lifetime.Singleton,
+    type: string,
+    value: getEnvVar('S3_BUCKET')
+  },
+  S3_PREFIX: {
+    lifetime: Lifetime.Singleton,
+    type: optional(string),
+    value: getEnvVar('S3_PREFIX')
+  },
+  S3_PRESIGN_MAX_UPLOAD_SECONDS: {
+    lifetime: Lifetime.Singleton,
+    type: optional(number),
+    value: Number(getEnvVar('S3_PRESIGN_MAX_UPLOAD_SECONDS')) || undefined
+  },
+  S3_PRESIGN_MAX_DOWNLOAD_SECONDS: {
+    lifetime: Lifetime.Singleton,
+    type: optional(number),
+    value: Number(getEnvVar('S3_PRESIGN_MAX_DOWNLOAD_SECONDS')) || undefined
+  },
+    });";;
 
     let mut s3_env_var_program = parse_ast_program(&allocator, &s3_env_var_text, SourceType::ts());
 
@@ -85,40 +101,49 @@ pub(crate) fn s3_object_store_runtime_dependency<'a>(
 ) -> Result<()> {
     let s3_registration_text: &'static str = Box::leak(
         format!("const configInjector = createConfigInjector(SchemaValidator(), {{
-        ObjectStore: {{
-            lifetime: Lifetime.Singleton,
-            type: S3ObjectStore,
-            factory: ({{
-                {otel_token},
-                OTEL_LEVEL,
-                S3_REGION,
-                S3_ACCESS_KEY_ID,
-                S3_SECRET_ACCESS_KEY,
-                S3_URL,
-                S3_BUCKET,
-                ENCRYPTION_KEY
-            }}) =>
-                new S3ObjectStore(
-                {otel_token},
-                {{
-                    bucket: S3_BUCKET,
-                    clientConfig: {{
-                    endpoint: S3_URL,
-                    region: S3_REGION,
-                    credentials: {{
-                        accessKeyId: S3_ACCESS_KEY_ID,
-                        secretAccessKey: S3_SECRET_ACCESS_KEY
-                    }}
-                    }}
-                }},
-                {{
-                    enabled: true,
-                    level: OTEL_LEVEL || 'info'
-                }},
-                {{
-                    encryptor: new FieldEncryptor(ENCRYPTION_KEY)
-                }})
+  ObjectStore: {{
+    lifetime: Lifetime.Singleton,
+    type: S3ObjectStore,
+    factory: ({{
+      {otel_token},
+      OTEL_LEVEL,
+      S3_REGION,
+      S3_ACCESS_KEY_ID,
+      S3_SECRET_ACCESS_KEY,
+      S3_URL,
+      S3_BUCKET,
+      S3_PREFIX,
+      S3_PRESIGN_MAX_UPLOAD_SECONDS,
+      S3_PRESIGN_MAX_DOWNLOAD_SECONDS,
+      ENCRYPTION_KEY
+    }}) =>
+      new S3ObjectStore(
+        {otel_token},
+        {{
+          bucket: S3_BUCKET,
+          prefix: S3_PREFIX,
+          // Deployed on ForkLaunch only the region is set: credentials come
+          // from the service's task role. Keys and S3_URL are for local MinIO.
+          clientConfig: s3ClientConfig({{
+            url: S3_URL,
+            region: S3_REGION,
+            accessKeyId: S3_ACCESS_KEY_ID,
+            secretAccessKey: S3_SECRET_ACCESS_KEY
+          }}),
+          presignLimits: {{
+            maxUploadSeconds: S3_PRESIGN_MAX_UPLOAD_SECONDS,
+            maxDownloadSeconds: S3_PRESIGN_MAX_DOWNLOAD_SECONDS
+          }}
+        }},
+        {{
+          enabled: true,
+          level: OTEL_LEVEL || 'info'
+        }},
+        {{
+          encryptor: new FieldEncryptor(ENCRYPTION_KEY)
         }}
+      )
+  }},
     }});")
         .into_boxed_str(),
     );
@@ -181,6 +206,18 @@ pub(crate) fn delete_s3_url_environment_variable<'a>(
         "S3_URL",
         "environmentConfig",
     );
+    for key in [
+        "S3_PREFIX",
+        "S3_PRESIGN_MAX_UPLOAD_SECONDS",
+        "S3_PRESIGN_MAX_DOWNLOAD_SECONDS",
+    ] {
+        let _ = delete_from_registrations_ts_config_injector(
+            &allocator,
+            registrations_program,
+            key,
+            "environmentConfig",
+        );
+    }
 }
 
 pub(crate) fn delete_s3_object_store_runtime_dependency<'a>(

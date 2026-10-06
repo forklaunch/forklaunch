@@ -194,12 +194,39 @@ impl DefaultedEnvCollector {
     }
 }
 
+/// Whether a fallback actually hands the reader a value.
+///
+/// `?? undefined` and `|| undefined` are not defaults. They are the shape you
+/// write to normalise an absent-or-empty variable into an explicit `undefined`
+/// for a caller that treats it as unset — `process.env.S3_URL || undefined`
+/// exists so an empty env var is not passed to the S3 client as an endpoint.
+/// `?? null` is the same. Counting those as defaults reported a variable the
+/// code genuinely needs as optional, which is the worse direction to be wrong
+/// in: the platform's config gate passes and the service fails at runtime.
+///
+/// Anything that does yield a value still counts, `?? DEFAULT_PATH` included.
+/// Only the two spellings of "no value" are excluded.
+fn supplies_a_value(expr: &Expression<'_>) -> bool {
+    match expr {
+        Expression::NullLiteral(_) => false,
+        // `undefined` is a global identifier in oxc, not a literal.
+        Expression::Identifier(ident) => ident.name != "undefined",
+        Expression::ParenthesizedExpression(inner) => supplies_a_value(&inner.expression),
+        // `void 0` is `undefined` written the long way.
+        Expression::UnaryExpression(unary) => {
+            unary.operator != oxc_ast::ast::UnaryOperator::Void
+        }
+        _ => true,
+    }
+}
+
 impl<'a> Visit<'a> for DefaultedEnvCollector {
     fn visit_logical_expression(&mut self, expr: &oxc_ast::ast::LogicalExpression<'a>) {
         if matches!(
             expr.operator,
             oxc_ast::ast::LogicalOperator::Coalesce | oxc_ast::ast::LogicalOperator::Or
-        ) {
+        ) && supplies_a_value(&expr.right)
+        {
             self.record(&expr.left);
         }
 
@@ -959,5 +986,40 @@ const value = configured ?? process.env.FALLBACK_ONLY;
         assert_eq!(optionality(&forwards, "A"), Some(false));
         assert_eq!(optionality(&backwards, "A"), Some(false));
         assert_eq!(optionality(&forwards, "B"), Some(false));
+    }
+
+    #[test]
+    fn test_a_fallback_that_supplies_no_value_is_not_a_default() {
+        // `?? undefined` and `|| undefined` are not defaults. They are the shape
+        // you write to turn an absent variable into an explicit `undefined` for
+        // a caller that treats it as "unset" — `process.env.S3_URL || undefined`
+        // maps '' to undefined so an empty env var is not passed as an endpoint.
+        //
+        // Reading the left side and ignoring the right marked those optional, so
+        // a variable the code genuinely needs sailed through the platform's
+        // config gate and failed at runtime instead. Only a fallback that
+        // supplies a value makes a read optional.
+        let defaulted = defaulted_env_names(
+            r#"
+            const a = process.env.NO_VALUE_COALESCE ?? undefined;
+            const b = process.env.NO_VALUE_OR || undefined;
+            const c = process.env.NULL_FALLBACK ?? null;
+            const d = process.env.STRING_FALLBACK || 'ffmpeg';
+            const e = process.env.NUMBER_FALLBACK ?? 8;
+            const f = process.env.BOOL_FALLBACK ?? false;
+            const g = process.env.CONST_FALLBACK ?? DEFAULT_PATH;
+            "#,
+        );
+
+        assert!(!defaulted.contains("NO_VALUE_COALESCE"));
+        assert!(!defaulted.contains("NO_VALUE_OR"));
+        assert!(!defaulted.contains("NULL_FALLBACK"));
+
+        // Everything that does supply a value keeps counting, including a
+        // non-literal fallback — `?? DEFAULT_PATH` is a real default.
+        assert!(defaulted.contains("STRING_FALLBACK"));
+        assert!(defaulted.contains("NUMBER_FALLBACK"));
+        assert!(defaulted.contains("BOOL_FALLBACK"));
+        assert!(defaulted.contains("CONST_FALLBACK"));
     }
 }
