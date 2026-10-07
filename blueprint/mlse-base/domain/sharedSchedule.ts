@@ -2,7 +2,7 @@ import {
   InProcessSchedule,
   type RequestSchedule
 } from '@forklaunch/implementation-mlse-base/services';
-import { createHash } from 'node:crypto';
+import { scryptSync } from 'node:crypto';
 
 /** The one Redis call the schedule needs (node-redis's `eval`). */
 export type RedisEval = {
@@ -65,11 +65,12 @@ export class RedisRequestSchedule implements RequestSchedule {
   }
 }
 
-/** The Redis key for NCBI's limit: one per API key, never the key itself. */
+/**
+ * The Redis key for NCBI's limit: one per API key, never the key itself.
+ * scrypt, not a fast hash, because the input is a secret; it runs once per
+ * client at startup.
+ */
 export function ncbiScheduleKey(apiKey: string | undefined): string {
-  const id = createHash('sha256')
-    .update(apiKey || 'no-api-key')
-    .digest('hex')
-    .slice(0, 16);
+  const id = scryptSync(apiKey || 'no-api-key', 'mlse-ncbi-rate-limit', 8).toString('hex');
   return `mlse:rate-limit:ncbi:${id}`;
 }
