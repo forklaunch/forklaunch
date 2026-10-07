@@ -42,6 +42,13 @@ describe('checkSupport: rejects sentences that contradict their source', () => {
     expect(verdict('Give 500 mg twice daily.', source)).toBe(true);
     expect(verdict('In severe infection, give 1 g every 8 hours for 7 days.', source)).toBe(true);
   });
+
+  it('a long run of digits with no unit is handled in linear time', () => {
+    const digits = '0'.repeat(50_000);
+    const started = Date.now();
+    expect(verdict(`Give ${digits} every 8 hours.`, `Give ${digits} twice daily.`)).toBe(true);
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
 });
 
 describe('verifyDraft with the support check', () => {
