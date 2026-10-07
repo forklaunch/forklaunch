@@ -8,5 +8,9 @@ import {
 // and storage happen afterwards, the same way for every source.
 export interface SourceFetcher {
   readonly sourceKey: string;
-  fetchDocuments: (query: SourceQueryDto) => Promise<FetchedDocumentDto[]>;
+  // `signal` cancels the fetch, its requests included
+  fetchDocuments: (
+    query: SourceQueryDto,
+    options?: { signal?: AbortSignal }
+  ) => Promise<FetchedDocumentDto[]>;
 }

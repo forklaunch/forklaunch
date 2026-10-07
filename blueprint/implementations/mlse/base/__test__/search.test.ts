@@ -106,6 +106,24 @@ describe('LiveRetrievalService', () => {
     });
   });
 
+  it('cancels a source that runs past the budget, rather than leaving it running', async () => {
+    let signal: AbortSignal | undefined;
+    const slow: SourceFetcher = {
+      sourceKey: 'openfda',
+      fetchDocuments: (_query, options) => {
+        signal = options?.signal;
+        return new Promise(() => undefined);
+      }
+    };
+    const service = new LiveRetrievalService(new SourceFetcherRegistry([slow]), ['openfda'], undefined, {
+      timeoutMs: 30
+    });
+
+    const result = await service.retrieve('blood loss');
+    expect(result.sources[0].status).toBe('timeout');
+    expect(signal?.aborted).toBe(true);
+  });
+
   it('applies the same license rules as ingestion and drops retractions', async () => {
     const fetcher = new StubFetcher('pubmed', async () => [
       doc({ externalId: 'nc', license: 'CC BY-NC 4.0' }),

@@ -25,15 +25,17 @@ export class PubMedFetcher implements SourceFetcher {
     this.eutils = new EutilsClient(this.sourceKey, fetchImpl, options);
   }
 
-  async fetchDocuments({
-    term,
-    limit
-  }: SourceQueryDto): Promise<FetchedDocumentDto[]> {
-    const ids = await this.eutils.search('pubmed', term, limit);
+  async fetchDocuments(
+    { term, limit }: SourceQueryDto,
+    { signal }: { signal?: AbortSignal } = {}
+  ): Promise<FetchedDocumentDto[]> {
+    const ids = await this.eutils.search('pubmed', term, limit, { signal });
     if (ids.length === 0) {
       return [];
     }
-    return this.parseArticles(await this.eutils.fetchXml('pubmed', ids));
+    return this.parseArticles(
+      await this.eutils.fetchXml('pubmed', ids, { signal })
+    );
   }
 
   parseArticles(xml: string): FetchedDocumentDto[] {

@@ -46,12 +46,14 @@ export class DailyMedFetcher implements SourceFetcher {
       options.baseUrl ?? 'https://dailymed.nlm.nih.gov/dailymed/services/v2/spls.json';
   }
 
-  async fetchDocuments({
-    term,
-    limit
-  }: SourceQueryDto): Promise<FetchedDocumentDto[]> {
+  async fetchDocuments(
+    { term, limit }: SourceQueryDto,
+    { signal }: { signal?: AbortSignal } = {}
+  ): Promise<FetchedDocumentDto[]> {
     const url = `${this.baseUrl}?drug_name=${encodeURIComponent(term)}&pagesize=${Math.min(Math.max(limit, 1), 100)}`;
-    const response = await this.client.getJson<DailyMedResponse>(url);
+    const response = await this.client.getJson<DailyMedResponse>(url, {
+      signal
+    });
     return (response.data ?? [])
       .filter((spl) => spl.setid)
       .map((spl) => ({
