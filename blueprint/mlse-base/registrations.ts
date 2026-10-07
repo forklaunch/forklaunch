@@ -48,6 +48,7 @@ import {
 import { ForkOptions } from '@mikro-orm/core';
 import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
 import { mlseMetrics, MlseMetrics } from './domain/metrics';
+import { applySafetyRulesFile } from './domain/safetyRulesConfig';
 import { AnswerService } from './domain/services/answer.service';
 import { GovernanceService } from './domain/services/governance.service';
 import { SavedSearchService } from './domain/services/savedSearch.service';
@@ -544,7 +545,9 @@ const serviceDependencies = runtimeDependencies.chain({
 });
 
 //! validates the configuration and returns the dependencies for the application
-export const createDependencyContainer = (envFilePath: string) => ({
-  ci: serviceDependencies.validateConfigSingletons(envFilePath),
-  tokens: serviceDependencies.tokens()
-});
+export const createDependencyContainer = (envFilePath: string) => {
+  const ci = serviceDependencies.validateConfigSingletons(envFilePath);
+  // after the env file is loaded; a bad file stops startup here
+  applySafetyRulesFile(getEnvVar('MLSE_SAFETY_RULES_FILE') || undefined);
+  return { ci, tokens: serviceDependencies.tokens() };
+};

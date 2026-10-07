@@ -8,6 +8,7 @@ describe('mlse package exports resolve at runtime', () => {
     expect(typeof services.PublicCorpusProvider).toBe('function');
     expect(typeof services.FakeLlmProvider).toBe('function');
     expect(services.licenseScopeFor('CC BY 4.0')).toBe('full_text');
+    expect(services.DEFAULT_SAFETY_RULES.acuteEvents.length).toBeGreaterThan(0);
     // the first import loads the whole bundle, SDKs included; slow on a busy
     // machine
   }, 30_000);

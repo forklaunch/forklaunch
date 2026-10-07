@@ -87,6 +87,7 @@ Environment (`.env.local`):
 | `EMBEDDING_DIMENSIONS` | no | Must match the embedding model (768 for `nomic-embed-text`) |
 | `LIVE_RETRIEVAL_TIMEOUT_MS` | no | Budget for live source queries per search (default 4000) |
 | `CORPUS_TOPICS`, `CORPUS_SOURCES`, `CORPUS_LIMIT` | no | What `corpus:refresh` queues: terms, sources (default all) and documents per term (default 20) |
+| `MLSE_SAFETY_RULES_FILE` | no | A JSON file of extra safety phrases, by list name (`acuteEvents`, `poisons`, `individualPatient`, …). They add to the built-in rules and can never remove one; a bad file stops startup |
 
 Each deployment uses its own API keys. Never share one key between clients.
 
@@ -171,6 +172,11 @@ module.
   the quoted label section. None of these reach the AI. Literature questions
   about emergencies ("management of acetaminophen overdose") are answered
   normally.
+- **The rules are a reviewable list.** The phrases live in one versioned
+  file (`DEFAULT_SAFETY_RULES` in `implementation-mlse-base`), marked draft
+  until a clinician signs it off, and checked against an evaluation set of
+  phrasings, including literature questions that must not trip them. A
+  deployment can add its own (`MLSE_SAFETY_RULES_FILE`), never remove any.
 - **Answers only from retrieved passages.** The drafting rules forbid
   outside knowledge, calculation and rounding. Passages are treated as
   untrusted data, not instructions.
