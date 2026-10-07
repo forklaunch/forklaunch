@@ -75,7 +75,7 @@ Environment (`.env.local`):
 |---|---|---|
 | `MLSE_INGESTION_QUEUE` | yes | Redis queue the worker drains |
 | `NCBI_TOOL`, `NCBI_EMAIL` | yes | NCBI asks every app calling E-utilities to identify itself |
-| `NCBI_API_KEY` | no | Your own NCBI key; raises PubMed/PMC from 3 to 10 requests/s |
+| `NCBI_API_KEY` | no | Your own NCBI key; raises PubMed/PMC from 3 to 10 requests/s. The limit is shared through Redis by the server and the worker |
 | `OPENFDA_API_KEY` | no | Higher openFDA rate limit |
 | `LLM_PROVIDER` | yes | `ollama` (free, local open-source models), `claude` (paid), or `fake` (tests) |
 | `EMBEDDING_PROVIDER` | yes | `ollama` (free, local) or `fake` (development) |
@@ -85,7 +85,7 @@ Environment (`.env.local`):
 | `LLM_MODEL` | no | Empty for the provider default: `qwen2.5:3b` on Ollama, `claude-opus-5` on Claude |
 | `LLM_EFFORT` | no | Claude only: `low` \| `medium` \| `high` (default) \| `xhigh` \| `max` |
 | `EMBEDDING_DIMENSIONS` | no | Must match the embedding model (768 for `nomic-embed-text`) |
-| `LIVE_RETRIEVAL_TIMEOUT_MS` | no | Budget for live source queries per search (default 4000) |
+| `LIVE_RETRIEVAL_TIMEOUT_MS` | no | Budget for live source queries per search (default 4000); a source still running when it ends is cancelled. Every source request is also cancelled after 15 s, and an ingestion job's fetch after 2 minutes |
 | `CORPUS_TOPICS`, `CORPUS_SOURCES`, `CORPUS_LIMIT` | no | What `corpus:refresh` queues: terms, sources (default all) and documents per term (default 20) |
 | `MLSE_SAFETY_RULES_FILE` | no | A JSON file of extra safety phrases, by list name (`acuteEvents`, `poisons`, `individualPatient`, …). They add to the built-in rules and can never remove one; a bad file stops startup |
 

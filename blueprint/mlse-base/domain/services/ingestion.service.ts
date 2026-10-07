@@ -61,6 +61,9 @@ export class LicenseRequiredError extends Error {
   }
 }
 
+// The most one ingestion job may spend fetching from its source.
+const INGESTION_FETCH_DEADLINE_MS = 120_000;
+
 /**
  * Turns fetched documents into stored, searchable passages, identically for
  * every source:
@@ -142,7 +145,12 @@ export class IngestionService {
       throw new LicenseRequiredError(sourceKey);
     }
 
-    const documents = await fetcher.fetchDocuments({ term, limit });
+    // Each request is cancelled after its own timeout; this bounds the whole
+    // fetch, so one slow source cannot hold a worker indefinitely.
+    const documents = await fetcher.fetchDocuments(
+      { term, limit },
+      { signal: AbortSignal.timeout(INGESTION_FETCH_DEADLINE_MS) }
+    );
     const result: IngestionResult = {
       sourceKey,
       fetched: documents.length,
