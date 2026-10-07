@@ -33,19 +33,22 @@ export class PmcOaFetcher implements SourceFetcher {
     this.eutils = new EutilsClient(this.sourceKey, fetchImpl, options);
   }
 
-  async fetchDocuments({
-    term,
-    limit
-  }: SourceQueryDto): Promise<FetchedDocumentDto[]> {
+  async fetchDocuments(
+    { term, limit }: SourceQueryDto,
+    { signal }: { signal?: AbortSignal } = {}
+  ): Promise<FetchedDocumentDto[]> {
     const ids = await this.eutils.search(
       'pmc',
       `(${term}) AND open access[filter]`,
-      limit
+      limit,
+      { signal }
     );
     if (ids.length === 0) {
       return [];
     }
-    return this.parseArticles(await this.eutils.fetchXml('pmc', ids));
+    return this.parseArticles(
+      await this.eutils.fetchXml('pmc', ids, { signal })
+    );
   }
 
   parseArticles(xml: string): FetchedDocumentDto[] {

@@ -1,4 +1,10 @@
-import { FetchLike, RateLimitedClient, RequestSchedule } from '../../domain/http';
+import {
+  FetchLike,
+  InProcessSchedule,
+  RateLimitedClient,
+  RequestOptions,
+  RequestSchedule
+} from '../../domain/http';
 
 // NCBI's limit is per application (API key, or address without one), across
 // every E-utilities database, so PubMed and PubMed Central share one schedule.
@@ -11,6 +17,9 @@ export type EutilsOptions = {
   email: string;
   apiKey?: string;
   baseUrl?: string;
+  // NCBI's limit covers every process using the same key; a deployment
+  // running more than one passes a schedule they share (see mlse-base)
+  schedule?: RequestSchedule;
 };
 
 type EsearchResponse = {
@@ -34,8 +43,11 @@ export class EutilsClient {
     this.baseUrl =
       options.baseUrl ?? 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils';
     const scheduleKey = `${this.baseUrl}|${options.apiKey ?? ''}`;
-    const schedule = NCBI_SCHEDULES.get(scheduleKey) ?? { nextSlot: 0 };
-    NCBI_SCHEDULES.set(scheduleKey, schedule);
+    const schedule =
+      options.schedule ??
+      NCBI_SCHEDULES.get(scheduleKey) ??
+      new InProcessSchedule();
+    if (!options.schedule) NCBI_SCHEDULES.set(scheduleKey, schedule);
     this.client = new RateLimitedClient(
       sourceKey,
       fetchImpl,
@@ -56,20 +68,28 @@ export class EutilsClient {
     return params.join('&');
   }
 
-  async search(db: 'pubmed' | 'pmc', term: string, limit: number): Promise<string[]> {
+  async search(
+    db: 'pubmed' | 'pmc',
+    term: string,
+    limit: number,
+    options: RequestOptions = {}
+  ): Promise<string[]> {
     // PubMed ranks by Best Match only when asked; otherwise the newest
     // papers come first, which answers a general question with niche work
     const sort = db === 'pubmed' ? '&sort=relevance' : '';
     const url = `${this.baseUrl}/esearch.fcgi?db=${db}&term=${encodeURIComponent(term)}&retmax=${Math.min(Math.max(limit, 1), 200)}${sort}&retmode=json&${this.identity()}`;
-    const response = await this.client.getJson<EsearchResponse>(url);
+    const response = await this.client.getJson<EsearchResponse>(url, options);
     return response.esearchresult?.idlist ?? [];
   }
 
   // NCBI's spelling suggestion for a PubMed query ("myocardail infraction"
   // -> "myocardial infarction"); undefined when it suggests nothing
-  async spell(term: string): Promise<string | undefined> {
+  async spell(
+    term: string,
+    options: RequestOptions = {}
+  ): Promise<string | undefined> {
     const url = `${this.baseUrl}/espell.fcgi?db=pubmed&term=${encodeURIComponent(term)}&${this.identity()}`;
-    const xml = await this.client.getText(url);
+    const xml = await this.client.getText(url, options);
     const start = xml.indexOf('<CorrectedQuery>');
     const end = xml.indexOf('</CorrectedQuery>');
     if (start < 0 || end < start) return undefined;
@@ -77,8 +97,12 @@ export class EutilsClient {
     return corrected || undefined;
   }
 
-  async fetchXml(db: 'pubmed' | 'pmc', ids: string[]): Promise<string> {
+  async fetchXml(
+    db: 'pubmed' | 'pmc',
+    ids: string[],
+    options: RequestOptions = {}
+  ): Promise<string> {
     const url = `${this.baseUrl}/efetch.fcgi?db=${db}&id=${ids.map(encodeURIComponent).join(',')}&retmode=xml&${this.identity()}`;
-    return this.client.getText(url);
+    return this.client.getText(url, options);
   }
 }

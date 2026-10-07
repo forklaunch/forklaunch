@@ -146,9 +146,16 @@ function baseName(name: string): string {
   return wordsOf(name.split(' (')[0]).join(' ');
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+// Gives up after `ms` with the fallback, and cancels the request (and any
+// wait for its rate-limit slot) so it does not keep running unseen.
+function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>, ms: number, fallback: T): Promise<T> {
+  const controller = new AbortController();
+  const promise = run(controller.signal);
   return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(fallback), ms);
+    const timer = setTimeout(() => {
+      controller.abort();
+      resolve(fallback);
+    }, ms);
     promise.then(
       (value) => {
         clearTimeout(timer);
@@ -241,12 +248,12 @@ export class QuerySuggestionService {
     // nothing else found a correction
     const remote = await this.cached(`correct:${local ? 'local' : 'raw'}:${candidate.toLowerCase()}`, async () => {
       const medlinePlus = await withTimeout(
-        medlinePlusSpelling(this.medlinePlus, candidate, this.medlinePlusUrl),
+        (signal) => medlinePlusSpelling(this.medlinePlus, candidate, this.medlinePlusUrl, { signal }),
         this.timeoutMs,
         undefined
       );
       if (medlinePlus || local) return medlinePlus;
-      return withTimeout(this.eutils.spell(candidate), this.timeoutMs, undefined);
+      return withTimeout((signal) => this.eutils.spell(candidate, { signal }), this.timeoutMs, undefined);
     });
     const corrected = remote && !onlyWordForms(candidate, remote) ? remote : local;
     return corrected && wordsOf(corrected).join(' ') !== typed ? corrected : undefined;
@@ -288,7 +295,7 @@ export class QuerySuggestionService {
   private async lookUp(table: (typeof CLINICAL_TABLES)[number], text: string, limit: number): Promise<string[]> {
     const url = `${this.clinicalTablesUrl}/${table.path}?terms=${encodeURIComponent(text)}&maxList=${limit}`;
     const response = await withTimeout(
-      this.clinicalTables.getJson<ClinicalTablesResponse>(url),
+      (signal) => this.clinicalTables.getJson<ClinicalTablesResponse>(url, { signal }),
       this.timeoutMs,
       undefined
     );

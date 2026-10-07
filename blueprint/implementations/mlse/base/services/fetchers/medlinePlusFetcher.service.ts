@@ -4,7 +4,13 @@ import {
   FetchedDocumentDto,
   SourceQueryDto
 } from '@forklaunch/interfaces-mlse/types';
-import { FetchLike, RateLimitedClient, RequestSchedule } from '../../domain/http';
+import {
+  FetchLike,
+  InProcessSchedule,
+  RateLimitedClient,
+  RequestOptions,
+  RequestSchedule
+} from '../../domain/http';
 import { asArray, createXmlParser, textOf } from '../../domain/xml';
 
 type MedlinePlusContent = { '@_name'?: string; '#text'?: string } | string;
@@ -20,7 +26,7 @@ export const MEDLINEPLUS_SEARCH_URL = 'https://wsearch.nlm.nih.gov/ws/query';
 // the web service allows 85 requests a minute per address, across every
 // caller, so the fetcher and spelling suggestions share one schedule
 export const MEDLINEPLUS_INTERVAL_MS = 750;
-const MEDLINEPLUS_SCHEDULE: RequestSchedule = { nextSlot: 0 };
+const MEDLINEPLUS_SCHEDULE: RequestSchedule = new InProcessSchedule();
 
 export function medlinePlusClient(fetchImpl: FetchLike): RateLimitedClient {
   return new RateLimitedClient('medlineplus', fetchImpl, MEDLINEPLUS_INTERVAL_MS, undefined, MEDLINEPLUS_SCHEDULE);
@@ -33,10 +39,11 @@ export function medlinePlusClient(fetchImpl: FetchLike): RateLimitedClient {
 export async function medlinePlusSpelling(
   client: RateLimitedClient,
   term: string,
-  baseUrl = MEDLINEPLUS_SEARCH_URL
+  baseUrl = MEDLINEPLUS_SEARCH_URL,
+  options: RequestOptions = {}
 ): Promise<string | undefined> {
   const url = `${baseUrl}?db=healthTopics&term=${encodeURIComponent(term)}&retmax=1`;
-  const parsed = createXmlParser().parse(await client.getText(url)) as MedlinePlusResponse;
+  const parsed = createXmlParser().parse(await client.getText(url, options)) as MedlinePlusResponse;
   const correction = textOf(String(parsed.nlmSearchResult?.spellingCorrection ?? '')).trim();
   return correction || undefined;
 }
@@ -108,9 +115,14 @@ export class MedlinePlusFetcher implements SourceFetcher {
     this.client = medlinePlusClient(fetchImpl);
   }
 
-  async fetchDocuments({ term, limit }: SourceQueryDto): Promise<FetchedDocumentDto[]> {
+  async fetchDocuments(
+    { term, limit }: SourceQueryDto,
+    { signal }: { signal?: AbortSignal } = {}
+  ): Promise<FetchedDocumentDto[]> {
     const url = `${this.baseUrl}?db=healthTopics&term=${encodeURIComponent(term)}&retmax=${Math.min(Math.max(limit, 1), 20)}`;
-    const parsed = createXmlParser().parse(await this.client.getText(url)) as MedlinePlusResponse;
+    const parsed = createXmlParser().parse(
+      await this.client.getText(url, { signal })
+    ) as MedlinePlusResponse;
     return asArray(parsed.nlmSearchResult?.list?.document)
       .map((doc) => this.toDocument(doc))
       .filter((doc): doc is FetchedDocumentDto => doc !== undefined);
