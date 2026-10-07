@@ -38,8 +38,18 @@ export * from '../domain/followUpQuestions';
 export * from '../domain/overviewSections';
 export * from '../domain/questionFrameworks';
 export * from '../domain/safetyRules';
-export type { FetchLike } from '../domain/http';
-export { SourceRequestError } from '../domain/http';
+export type {
+  FetchLike,
+  RateLimitedClientOptions,
+  RequestOptions,
+  RequestSchedule
+} from '../domain/http';
+export {
+  InProcessSchedule,
+  SourceBusyError,
+  SourceRequestError,
+  SourceTimeoutError
+} from '../domain/http';
 
 export * from '@forklaunch/interfaces-mlse/interfaces';
 export * from '@forklaunch/interfaces-mlse/types';
