@@ -66,10 +66,10 @@ export class OpenFdaFetcher implements SourceFetcher {
     this.baseUrl = options.baseUrl ?? 'https://api.fda.gov/drug/label.json';
   }
 
-  async fetchDocuments({
-    term,
-    limit
-  }: SourceQueryDto): Promise<FetchedDocumentDto[]> {
+  async fetchDocuments(
+    { term, limit }: SourceQueryDto,
+    { signal }: { signal?: AbortSignal } = {}
+  ): Promise<FetchedDocumentDto[]> {
     // Doctors search in phrases ("cefazolin dose surgical prophylaxis"), but
     // openFDA matches drug-name fields, so look up the whole phrase and each
     // longer word as a possible generic or brand name. Words that are not
@@ -95,7 +95,8 @@ export class OpenFdaFetcher implements SourceFetcher {
     let response: OpenFdaResponse;
     try {
       response = await this.client.getJson<OpenFdaResponse>(
-        `${this.baseUrl}?${params.join('&')}`
+        `${this.baseUrl}?${params.join('&')}`,
+        { signal }
       );
     } catch (error) {
       // openFDA answers a search with no matches with HTTP 404.

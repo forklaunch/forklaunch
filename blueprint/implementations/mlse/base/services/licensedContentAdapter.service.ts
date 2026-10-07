@@ -35,10 +35,13 @@ export class LicensedContentAdapter implements SourceFetcher {
     this.sourceKey = fetcher.sourceKey;
   }
 
-  async fetchDocuments(query: SourceQueryDto): Promise<FetchedDocumentDto[]> {
+  async fetchDocuments(
+    query: SourceQueryDto,
+    options?: { signal?: AbortSignal }
+  ): Promise<FetchedDocumentDto[]> {
     const license =
       this.terms.scope === 'full_text' ? LICENSED_FULL_TEXT : LICENSED_EXCERPT;
-    const documents = await this.fetcher.fetchDocuments(query);
+    const documents = await this.fetcher.fetchDocuments(query, options);
     return documents.map((document) => ({ ...document, license }));
   }
 }

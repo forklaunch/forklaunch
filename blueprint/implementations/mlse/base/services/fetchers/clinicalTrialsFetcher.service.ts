@@ -48,12 +48,14 @@ export class ClinicalTrialsFetcher implements SourceFetcher {
     this.baseUrl = options.baseUrl ?? 'https://clinicaltrials.gov/api/v2/studies';
   }
 
-  async fetchDocuments({
-    term,
-    limit
-  }: SourceQueryDto): Promise<FetchedDocumentDto[]> {
+  async fetchDocuments(
+    { term, limit }: SourceQueryDto,
+    { signal }: { signal?: AbortSignal } = {}
+  ): Promise<FetchedDocumentDto[]> {
     const url = `${this.baseUrl}?query.term=${encodeURIComponent(term)}&pageSize=${Math.min(Math.max(limit, 1), 100)}&format=json`;
-    const response = await this.client.getJson<CtGovResponse>(url);
+    const response = await this.client.getJson<CtGovResponse>(url, {
+      signal
+    });
     return (response.studies ?? [])
       .map((study) => this.toDocument(study))
       .filter((doc): doc is FetchedDocumentDto => doc !== undefined);
