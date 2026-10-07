@@ -1,8 +1,27 @@
 # Medical Literature Search Engine (MLSE) — Planning Document
 
-Status: **DRAFT — planning/specification only. No implementation has started.**
+Status: **DRAFT. A prototype has been built (#394); this plan's pre-build gate was skipped.**
 
-This document is a specification, not an implementation. Nothing described here has been built unless the "Existing ForkLaunch Architecture" section says so explicitly and cites a real path in the repository.
+## Status (October 2026)
+
+The plan's next steps were hands-on competitive testing and licensing conversations *before* writing code. That gate was skipped: a prototype module was built to test the approach, and it is in #394 (`blueprint/mlse-base`, with `interfaces-mlse` and `implementation-mlse-base` split into #421). `MLSE-ENGINEERING-PLAN.md` §3 lists what each phase built and how it was verified. In short: free-source ingestion (openFDA, DailyMed, ClinicalTrials.gov, PubMed, PMC OA, MeSH), Postgres full-text plus pgvector search with live retrieval, draft topic pages, Claude answer generation with a citation and support check, a rule-based safety classifier, licensed-content and reviewer gates, and voice off by default.
+
+Open questions from §26, answered or not:
+
+| # | Question | State |
+|---|---|---|
+| 1 | FDA CDS line | **Deferred.** Not answered. |
+| 2 | One module or split | **Answered:** one blueprint module plus two packages. |
+| 3 | Frontend | **Answered for now:** none in this repo; an API with a README for client developers. |
+| 4 | Postgres-native search vs a search service | **Partly:** Postgres FTS + pgvector chosen; the scale where it flips is not measured. |
+| 5 | UMLS / SNOMED CT / RxNorm licensing | **Deferred.** The prototype uses MeSH only; licensed content fails closed until an organization has a licence. |
+| 6 | LLM provider and data handling | **Partly:** Claude, with each client's own key; BAA and data handling not settled. |
+| 7 | What counts as a material source update | **Deferred.** |
+| 8 | Query-classification design | **Partly:** a rule-based classifier exists; a proper evaluation set is still to do (forklaunch#422). |
+| 9 | Competitive positioning | **Deferred.** Not tested hands-on. |
+| 10 | Citation-completeness target | **Deferred.** A gold-set format and eval script exist; no baseline yet. |
+
+The rest of this document is the original specification. Statements tagged FACT describe the repository as it was when the plan was written.
 
 ## How to read this document
 
@@ -97,7 +116,9 @@ This section is built entirely from reading the repository (`forklaunch-js`, bra
 
 ### 1.6 Auth & RBAC
 
-**FACT.** Two IAM modules exist: `iam-base` ("authorization only" per the CLI's own module description) provides organization/user/role/permission CRUD and JWT **verification** via a `jwksPublicKeyUrl`; `iam-better-auth` wraps the `better-auth` library, presumably for actual login/session/token issuance (not independently verified in this session — **TBD** exact responsibility split at the code level beyond the CLI's one-line description).
+**FACT.** Two IAM modules exist: `iam-base` ("authorization only" per the CLI's own module description) provides organization/user/role/permission CRUD and JWT **verification** via a `jwksPublicKeyUrl`; `iam-better-auth` wraps the `better-auth` library.
+
+**ASSUMPTION.** `iam-better-auth` handles login, sessions and token issuance. **TBD:** the exact split between the two modules at the code level, beyond the CLI's one-line descriptions, was not checked.
 
 **FACT.** RBAC primitives live in `blueprint/core/auth/rbac.ts`: `PERMISSIONS` (`platform:read`, `platform:write`, extensible), `ROLES` (`viewer`, `editor`, `admin`, `system`), and derived permission/role sets (`PLATFORM_READ_PERMISSIONS`, `PLATFORM_SYSTEM_ROLES`, etc.) consumed by controllers as `auth: { jwt: { jwksPublicKeyUrl }, allowedRoles / allowedPermissions }`. Modules extend this with their own permission slugs (e.g. `cac-base` defines `coder:manage_claims`).
 
@@ -323,7 +344,7 @@ Overview · Definition · Indications · Contraindications · Patient preparatio
 | `evidence_type` | the internal grading, distinct from source_type (a guideline can cite Level A or Level C evidence internally) |
 | `relevant_population` | free text + structured tags (age range, condition, comorbidities) where extractable |
 | `citation` | formatted citation string |
-| `identifier` | DOI / PMID / NCT number / FDA application number, as applicable |
+| `identifier` | DOI / PMID / NCT number / FDA application number, as applicable; for an institutional protocol, the organization's own document identifier and version (§11) |
 | `passage` | the specific chunk actually used to support a claim — never a whole-document citation for a specific claim |
 | `confidence_or_quality_metadata` | e.g. GRADE rating if the source publishes one, or an internally computed quality score (see below) |
 
@@ -553,7 +574,11 @@ graph LR
 | MeSH (Medical Subject Headings) | Controlled-vocabulary concept indexing — the PubMed-style tagging layer proposed in §8.1 | **Public domain, free to use via NLM** — no license agreement needed, unlike every other terminology system in this table. The one clean starting point. |
 | ICD-10-CM | diagnosis coding | **FACT:** `cac-base` already has real ICD-10-CM tables and a validation service (`CodeValidationService`) — reusable/adjacent, not duplicated |
 | CPT/HCPCS | procedure coding | **FACT:** same — `cac-base` already established that CPT requires an AMA license held by the adopting org, not ForkLaunch. Same constraint applies here if CPT-coded procedure search is wanted. |
-| SNOMED CT, RxNorm, UMLS Metathesaurus | clinical concept normalization, drug normalization | **Requires a UMLS Metathesaurus license (free for many use cases in the US via NLM, but requires an affiliate agreement and use-tracking; SNOMED CT itself requires national-affiliate membership outside "SNOMED International member" countries)** — **OPEN QUESTION**, not yet obtained, must be resolved before any SNOMED/RxNorm-based entity normalization ships |
+| RxNorm | drug normalization | The **Current Prescribable Content** subset is released by NLM without a licence. Full RxNorm includes content from other sources and needs a UMLS licence (free, with annual usage reporting). **PROPOSAL:** start with the prescribable subset. |
+| SNOMED CT | clinical concept normalization | Its own licensing model, through SNOMED International. Use is free in member countries (the US is one, with NLM distributing it under the UMLS licence); elsewhere it needs an affiliate licence, with fees in non-member countries. **OPEN QUESTION**, not obtained. |
+| UMLS Metathesaurus | cross-vocabulary mapping | UMLS licence from NLM: free, with annual usage reporting. Some source vocabularies inside it carry extra restrictions of their own, so a licence does not clear every source. **OPEN QUESTION**, not obtained. |
+
+The licence terms above are as generally published, not confirmed with NLM or SNOMED International for this product. Confirm each before any normalization built on it ships.
 
 Do not conflate "the terminology exists" with "we're licensed to use it" — this is the same category of mistake §4.1 warns about for literature content.
 
@@ -586,8 +611,19 @@ flowchart TD
 
 **PROPOSAL, concrete mechanism:**
 1. Parse the LLM's output for citation markers.
-2. For each marker, verify the referenced `evidence_id` (a) exists in the datastore, (b) was actually included in the retrieval set passed to the LLM for this query (prevents the model "citing" something real but irrelevant that it wasn't shown), and (c) the cited passage's text has non-trivial lexical/semantic overlap with the claim it's attached to (a cheap secondary check — e.g. an entailment or overlap-scoring model — not just "the ID exists").
+2. For each marker, verify the referenced `evidence_id` (a) exists in the datastore, (b) was actually included in the retrieval set passed to the LLM for this query (prevents the model "citing" something real but irrelevant that it wasn't shown), and (c) the cited passage **entails** the claim. Overlap is not enough: "aspirin did not reduce mortality" shares every word with a passage saying it did. The check must be directional and reject a claim that:
+   - is negated relative to the passage, or states the opposite ("recommended" vs "contraindicated");
+   - reverses a comparison ("A superior to B" where the passage says B is superior);
+   - binds a number to the wrong group, population or outcome ("20% with aspirin" where 20% is the placebo arm);
+   - changes a dose, unit or schedule;
+   - applies a finding to a population the passage does not cover (adults vs children, a different condition).
 3. Any claim that fails (a)/(b)/(c) is stripped from the response before it reaches the user, and the failure is logged as a safety event (§13 observability).
+
+**Requirement for (c):** an entailment check (an NLI model, or an LLM judge constrained to entail / contradict / not-enough-information), backed by the directional rules above. Word overlap is only a first filter.
+
+**Measured by the false-accept rate:** the share of claims the passage does not support that the check still passes. It is measured on a labelled gold set of claim–passage pairs that includes adversarial pairs built from supported claims by negating, reversing, swapping numbers between groups, changing doses and changing the population. Report it per category, not only overall. **PROPOSAL:** at most 1% on the adversarial pairs before answers are shown to clinicians; the false-reject rate is tracked alongside so the check is not tuned into refusing everything.
+
+**Where the prototype is (#394):** the support check is rule-based (`supportCheck.service.ts`). It covers negation, opposites, reversed comparisons, numbers bound to groups and dose schedules, but not population mismatch, and there is no entailment model yet. The false-accept rate has not been measured. Both are required before this gate counts as met.
 
 ### 9.3 Conflicting / outdated / missing evidence detection
 
@@ -735,7 +771,7 @@ Additional UI elements per the brief, all **PROPOSAL**: evidence-quality indicat
 | Outdated guideline presented as current | §9.3 staleness detection tied to source-type-specific thresholds, surfaced in the UI, not silently used |
 | Contraindication/interaction omission | Medication entity model (§6.3) requires `contraindications` and `interactions` fields to be populated from the source label/guideline before a medication record is considered "complete" for display; incomplete records are flagged, not silently shown as if reviewed |
 | Emergency-situation query | Query classifier (§11.4) detects emergency-pattern queries (e.g. "chest pain right now," "overdose") and returns a fixed, non-AI-generated redirect to emergency services / poison control instead of attempting literature synthesis — **this path bypasses the LLM entirely** |
-| Unverifiable source | Any document without a resolvable, verifiable source identifier (DOI/PMID/NCT/FDA number) is excluded from the AI-summarizable corpus regardless of content quality — ingestion-time gate (§19), not query-time |
+| Unverifiable source | Any document without a resolvable, verifiable source identifier is excluded from the AI-summarizable corpus regardless of content quality — ingestion-time gate (§19), not query-time. Published sources need a DOI, PMID, NCT or FDA number. **PROPOSAL:** an institutional protocol needs a source-local identifier from the adopting organization's document system, recorded with its version, approval date and the account that uploaded it. It is summarizable only for that organization, and only after the §19 reviewer approval. |
 | Conflicting evidence hidden | §5.3/§9.3 — surfaced by design, not resolved by the model |
 | Inappropriate extrapolation (e.g. adult evidence applied to a pediatric query without saying so) | Every evidence record carries `relevant_population` (§9.1); synthesis must check population match and flag extrapolation explicitly when the retrieved evidence's population doesn't match the query's apparent population |
 
