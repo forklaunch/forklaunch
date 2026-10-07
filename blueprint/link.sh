@@ -1,5 +1,5 @@
 # Define arrays of directories and packages
-DIRS=("core" "billing" "iam" "monitoring" "sample-worker")
+DIRS=("core" "billing" "iam" "messaging-base" "messaging-twilio" "monitoring" "sample-worker")
 PACKAGES=("common" "validator" "core" "express" "hyper-express" "universal-sdk")
 
 # Loop through each directory

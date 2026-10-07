@@ -88,7 +88,7 @@ pub(crate) fn inject_into_client_sdk<'a>(
         }
 
         let export_text = format!(
-            "export const {}SdkClient = async ({{\n  host,\n  registryOptions\n}}: {{\n  host: string;\n  registryOptions: RegistryOptions;\n}}) => ({{\n  core: await universalSdk<{}SdkClient>({{\n    host,\n    registryOptions: registryOptions\n  }}),\n  betterAuth: createAuthClient({{\n    baseURL: host,\n    plugins: [inferAdditionalFields<BetterAuthConfig>()]\n  }})\n}});",
+            "export const {}SdkClient = async ({{\n  host,\n  registryOptions\n}}: {{\n  host: string;\n  registryOptions: RegistryOptions;\n}}) => ({{\n  core: await universalSdk<{}SdkClient>({{\n    host,\n    registryOptions: registryOptions\n  }}),\n  betterAuth: createAuthClient({{\n    baseURL: host,\n    fetchOptions: {{ headers: {{ origin: new URL(host).origin }} }},\n    plugins: [inferAdditionalFields<BetterAuthConfig>()]\n  }})\n}});",
             camel_case_name, pascal_case_name
         );
         let export_program = parse_ast_program(
@@ -196,7 +196,7 @@ mod tests {
 
         assert!(result.is_ok());
 
-        let expected_code = "import { BillingSdkClient } from \"@forklaunch/blueprint-billing-base\";\nimport { BetterAuthConfig, IamSdkClient } from \"@forklaunch/iam\";\nimport { universalSdk } from \"@forklaunch/universal-sdk\";\nexport const billingSdkClient = universalSdk<BillingSdkClient>;\nimport { universalSdk, RegistryOptions } from \"@forklaunch/universal-sdk\";\nimport { createAuthClient } from \"better-auth/client\";\nimport { inferAdditionalFields } from \"better-auth/client/plugins\";\nexport const iamSdkClient = async ({ host, registryOptions }: {\n\thost: string;\n\tregistryOptions: RegistryOptions;\n}) => ({\n\tcore: await universalSdk<IamSdkClient>({\n\t\thost,\n\t\tregistryOptions\n\t}),\n\tbetterAuth: createAuthClient({\n\t\tbaseURL: host,\n\t\tplugins: [inferAdditionalFields<BetterAuthConfig>()]\n\t})\n});\n";
+        let expected_code = "import { BillingSdkClient } from \"@forklaunch/blueprint-billing-base\";\nimport { BetterAuthConfig, IamSdkClient } from \"@forklaunch/iam\";\nimport { universalSdk } from \"@forklaunch/universal-sdk\";\nexport const billingSdkClient = universalSdk<BillingSdkClient>;\nimport { universalSdk, RegistryOptions } from \"@forklaunch/universal-sdk\";\nimport { createAuthClient } from \"better-auth/client\";\nimport { inferAdditionalFields } from \"better-auth/client/plugins\";\nexport const iamSdkClient = async ({ host, registryOptions }: {\n\thost: string;\n\tregistryOptions: RegistryOptions;\n}) => ({\n\tcore: await universalSdk<IamSdkClient>({\n\t\thost,\n\t\tregistryOptions\n\t}),\n\tbetterAuth: createAuthClient({\n\t\tbaseURL: host,\n\t\tfetchOptions: { headers: { origin: new URL(host).origin } },\n\t\tplugins: [inferAdditionalFields<BetterAuthConfig>()]\n\t})\n});\n";
 
         assert_eq!(
             Codegen::new()

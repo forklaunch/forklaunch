@@ -4,7 +4,16 @@ category: Guides
 description: Learn how to add and configure modules in your application.
 ---
 
-## Adding a Module
+## Add a Module
+
+A **module** is a preconfigured, production-ready service that provides common functionality out of the box. Unlike regular services that you build from scratch, modules come with complete implementations for complex features like authentication (`iam-base`, `iam-better-auth`) and billing (`billing-base`, `billing-stripe`). Think of modules as ready-to-use building blocks that save you weeks of development time.
+
+In ForkLaunch, modules are complete services with full RCSIDES stacks, database integration, and API documentation, all configured and ready to use. You can customize them later using `forklaunch eject` if needed.
+
+## Getting Started
+
+
+### Using Commands (Recommended)
 
 To add a module to your application, run the following command:
 
@@ -25,7 +34,7 @@ To add a module to your application, run the following command:
   </Tab>
 </CodeTabs>
 
-This adds a new preconfigured module to your application. Modules are production-ready services that provide common functionality like authentication, billing, and payment processing.
+
 
 `ForkLaunch` will automatically add the module to your workspace, configure Docker Compose, and register any necessary scripts.
 
@@ -39,12 +48,25 @@ By default, you will not need to run any scripts to get going, but if your modul
 | `billing-stripe` | Stripe billing implementation | Complete Stripe integration with webhook handling and payment flow |
 | `iam-base` | Authorization only | Base Identity and Access Management with JWT support and custom auth methods |
 | `iam-better-auth` | Better auth implementation for IAM | BetterAuth integration for advanced authentication features |
+| `messaging-base` | Messaging hooks only | Base messaging infrastructure with an extensible delivery provider interface |
+| `messaging-twilio` | Twilio SMS implementation | Twilio-backed SMS sending with delivery-status webhook handling |
+| `cac-base` | Computer-assisted coding hooks only | Base medical claim coding/scrubbing infrastructure with an extensible procedure code-set provider interface |
+| `relay` | Managed-apps OAuth relay session-ingest endpoint | Injects the instance-side `/relay/session-ingest` endpoint into an existing better-auth iam service (HMAC verify, nonce replay guard, one-time handoff ticket, session cookie); leaves token storage as one hook |
 
-### Command Options
+> Note: `relay` is not a standalone service. Unlike the other modules it does
+> not scaffold a new project - it injects the managed-apps OAuth session-ingest
+> endpoint into your existing better-auth iam service, so it takes no `-d`
+> database of its own. Run it after the iam service exists:
+> `forklaunch init module -m relay -p <app>`. It writes the endpoint, a nonce
+> replay-guard entity + migration, and the browser handoff, and leaves one
+> clearly-marked hook (`establishSessionFromRelayTokens` in
+> `iam/domain/hooks/relayHooks.ts`) for where your app stores the OAuth tokens.
+
+### Init Command Options
 
 | Option | Short | Description | Valid Values |
 | :----- | :---- | :---------- | :----------- |
-| `--module` | `-m` | The module type to initialize | `billing-base`, `billing-stripe`, `iam-base`, `iam-better-auth` |
+| `--module` | `-m` | The module type to initialize | `billing-base`, `billing-stripe`, `iam-base`, `iam-better-auth`, `messaging-base`, `messaging-twilio`, `cac-base`, `relay` |
 | `--database` | `-d` | The database to use | `postgresql`, `mysql`, `mariadb`, `mssql`, `mongodb`, `libsql`, `sqlite`, `better-sqlite` |
 | `--path` | `-p` | The application path to initialize the module in | Any valid directory path |
 | `--dryrun` | `-n` | Dry run the command | Flag (no value) |
@@ -117,19 +139,19 @@ Check the generated `.env.example` file for complete variable lists.
 #### Adding a Billing Module
 ```bash
 # Interactive mode
-forklaunch init module
+forklaunch init module --path ./my-app
 
 # Direct specification
-forklaunch init module billing --module billing-stripe --database postgresql
+forklaunch init module billing --path ./my-app --module billing-stripe --database postgresql
 ```
 
 #### Adding an IAM Module  
 ```bash
 # Base IAM with JWT
-forklaunch init module auth --module iam-base --database postgresql
+forklaunch init module auth --path ./my-app --module iam-base --database postgresql
 
 # BetterAuth implementation
-forklaunch init module auth --module iam-better-auth --database postgresql
+forklaunch init module auth --path ./my-app --module iam-better-auth --database postgresql
 ```
 
 ### Next Steps

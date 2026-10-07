@@ -1,32 +1,35 @@
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, InferEntity } from '@mikro-orm/core';
 import Stripe from 'stripe';
 import { StripePaymentLinkDtos } from './stripe.dto.types';
 import { StripePaymentLinkEntities } from './stripe.entity.types';
 
 export type StripePaymentLinkMappers<
   StatusEnum,
-  Entities extends StripePaymentLinkEntities<StatusEnum>,
+  Entities extends StripePaymentLinkEntities,
   Dto extends StripePaymentLinkDtos<StatusEnum>
 > = {
   PaymentLinkMapper: {
+    entity: Entities['PaymentLinkMapper'];
     toDto: (
-      entity: Entities['PaymentLinkMapper']
+      entity: InferEntity<Entities['PaymentLinkMapper']>
     ) => Promise<Dto['PaymentLinkMapper']>;
   };
   CreatePaymentLinkMapper: {
+    entity: Entities['CreatePaymentLinkMapper'];
     toEntity: (
       dto: Dto['CreatePaymentLinkMapper'],
       em: EntityManager,
       stripePaymentLink: Stripe.PaymentLink,
       ...args: unknown[]
-    ) => Promise<Entities['CreatePaymentLinkMapper']>;
+    ) => Promise<InferEntity<Entities['CreatePaymentLinkMapper']>>;
   };
   UpdatePaymentLinkMapper: {
+    entity: Entities['UpdatePaymentLinkMapper'];
     toEntity: (
       dto: Dto['UpdatePaymentLinkMapper'],
       em: EntityManager,
       stripePaymentLink: Stripe.PaymentLink,
       ...args: unknown[]
-    ) => Promise<Entities['UpdatePaymentLinkMapper']>;
+    ) => Promise<InferEntity<Entities['UpdatePaymentLinkMapper']>>;
   };
 };

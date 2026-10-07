@@ -99,11 +99,70 @@ pub(crate) struct ResourceInventory {
     pub(crate) cache: Option<String>,
     pub(crate) queue: Option<String>,
     pub(crate) object_store: Option<String>,
+    pub(crate) redis_partition: Option<u32>,
+    /// Platform-held capabilities this service uses through the instance
+    /// gateway (payments, email, sms, whatsapp, voice), added with
+    /// `forklaunch infra add`. Each becomes a release-manifest resource of the
+    /// matching platform type, bound to this service.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) capabilities: Option<Vec<String>>,
+}
+
+pub(crate) fn next_available_redis_partition(projects: &[ProjectEntry]) -> u32 {
+    let used: std::collections::HashSet<u32> = projects
+        .iter()
+        .filter_map(|p| p.resources.as_ref())
+        .filter_map(|r| r.redis_partition)
+        .collect();
+    let mut partition = 0u32;
+    while used.contains(&partition) {
+        partition += 1;
+    }
+    partition
 }
 
 #[derive(Debug, Serialize, Deserialize, Content, Clone)]
 pub(crate) struct ProjectMetadata {
     pub(crate) r#type: Option<String>,
+    /// Backend hosting type. Optional — defaults to "ecs-fargate" on the platform
+    /// when absent. Allowed: "ecs-fargate" | "ecs-ec2".
+    #[serde(rename = "hostingType", alias = "hosting_type", default, skip_serializing_if = "Option::is_none")]
+    pub(crate) hosting_type: Option<String>,
+    /// Run the component's container in privileged mode. Required for nsjail's
+    /// namespace clone in the deploy sandbox; only valid with hostingType
+    /// "ecs-ec2" (Fargate forbids privileged mode). Optional — absent means false.
+    #[serde(
+        rename = "privileged",
+        alias = "privileged",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub(crate) privileged: Option<bool>,
+}
+
+/// A port a project serves beyond its main HTTP port, declared as
+/// `[[projects.serves]]` in `manifest.toml`.
+///
+/// Names the ENV VAR rather than the number because the value is
+/// environment-specific (a service can bind 8002 in compose and 8000 in
+/// production); the platform resolves `port_env` against the target
+/// environment at deploy time. HTTP (`PORT`) and MCP are framework conventions
+/// and are never declared here — only ports the project actually constructs a
+/// server for, such as a websocket server on `WS_PORT`.
+#[derive(Debug, Serialize, Deserialize, Content, Clone)]
+pub(crate) struct ServingPort {
+    /// "ws" | "http" | "mcp"
+    pub(crate) protocol: String,
+    #[serde(rename = "port_env", alias = "portEnv")]
+    pub(crate) port_env: String,
+    /// Must answer 2xx to a plain GET; the platform defaults it to `/health`.
+    #[serde(
+        rename = "health_path",
+        alias = "healthPath",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub(crate) health_path: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Content, Clone)]
@@ -115,6 +174,29 @@ pub(crate) struct ProjectEntry {
     pub(crate) resources: Option<ResourceInventory>,
     pub(crate) routers: Option<Vec<String>>,
     pub(crate) metadata: Option<ProjectMetadata>,
+    /// Extra serving ports, forwarded verbatim into the release manifest.
+    /// Absent means nothing beyond HTTP (and MCP) is fronted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) serves: Option<Vec<ServingPort>>,
+}
+
+/// Compliance configuration stored in the `[compliance]` section of `manifest.toml`.
+/// All fields are optional so existing manifests parse without changes.
+///
+/// Note: entity field classifications and retention policies are NOT stored here.
+/// They are scanned from source code at release/audit time and uploaded directly
+/// to the platform. This prevents leaking sensitive compliance metadata in the repo.
+#[derive(Debug, Serialize, Deserialize, Content, Clone, Default)]
+pub(crate) struct ComplianceManifestConfig {
+    /// Allowed deployment regions (e.g., `["us-east-1", "eu-west-1"]`).
+    /// Enforced by the platform compiler at deploy time.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) data_residency: Vec<String>,
+
+    /// Required secrets that must be present as environment variables at boot.
+    /// The framework's SecretsAccessor validates these at startup.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) secrets: Vec<String>,
 }
 
 #[macro_export]
@@ -166,12 +248,8 @@ macro_rules! internal_config_struct {
             $vis platform_application_id: Option<String>,
             #[serde(skip_serializing_if = "Option::is_none")]
             $vis platform_organization_id: Option<String>,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            $vis release_version: Option<String>,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            $vis release_git_commit: Option<String>,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            $vis release_git_branch: Option<String>,
+            #[serde(default, skip_serializing_if = "Option::is_none")]
+            $vis compliance: Option<crate::core::manifest::ComplianceManifestConfig>,
         }
     };
 }
@@ -273,9 +351,7 @@ macro_rules! config_struct {
                         license: shadow.license.clone(),
                         platform_application_id: shadow.platform_application_id.clone(),
                         platform_organization_id: shadow.platform_organization_id.clone(),
-                        release_version: shadow.release_version.clone(),
-                        release_git_commit: shadow.release_git_commit.clone(),
-                        release_git_branch: shadow.release_git_branch.clone(),
+                        compliance: shadow.compliance.clone(),
 
                         is_eslint: shadow.linter == "eslint",
                         is_biome: shadow.formatter == "biome",
@@ -377,6 +453,7 @@ pub(crate) fn add_project_definition_to_manifest<
         resources,
         routers,
         metadata,
+        serves: None,
     });
 
     let app_name = manifest_data.app_name().to_owned();

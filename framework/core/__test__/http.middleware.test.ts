@@ -54,6 +54,7 @@ describe('http middleware tests', () => {
   beforeEach(() => {
     contractDetails = {
       name: 'Test Contract',
+      access: 'public',
       summary: 'Test Contract Summary',
       body: testSchema,
       params: testSchema,

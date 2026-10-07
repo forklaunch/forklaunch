@@ -2,6 +2,7 @@
 macro_rules! log_info {
     ($out:expr, $($arg:tt)*) => {{
         $out.set_color(::termcolor::ColorSpec::new().set_fg(Some(::termcolor::Color::Cyan)))?;
+        write!($out, "[INFO] ")?;
         writeln!($out, $($arg)*)?;
         $out.reset()?;
     }};
@@ -11,6 +12,7 @@ macro_rules! log_info {
 macro_rules! log_ok {
     ($out:expr, $($arg:tt)*) => {{
         $out.set_color(::termcolor::ColorSpec::new().set_fg(Some(::termcolor::Color::Green)))?;
+        write!($out, "[OK] ")?;
         writeln!($out, $($arg)*)?;
         $out.reset()?;
     }};
@@ -20,6 +22,7 @@ macro_rules! log_ok {
 macro_rules! log_warn {
     ($out:expr, $($arg:tt)*) => {{
         $out.set_color(::termcolor::ColorSpec::new().set_fg(Some(::termcolor::Color::Yellow)))?;
+        write!($out, "[WARN] ")?;
         writeln!($out, $($arg)*)?;
         $out.reset()?;
     }};
@@ -29,6 +32,7 @@ macro_rules! log_warn {
 macro_rules! log_error {
     ($out:expr, $($arg:tt)*) => {{
         $out.set_color(::termcolor::ColorSpec::new().set_fg(Some(::termcolor::Color::Red)))?;
+        write!($out, "[ERROR] ")?;
         writeln!($out, $($arg)*)?;
         $out.reset()?;
     }};
@@ -43,39 +47,11 @@ macro_rules! log_header {
     }};
 }
 
-/// Inline progress (no newline) — caller appends [OK]/[ERROR] afterward
-macro_rules! log_progress {
-    ($out:expr, $($arg:tt)*) => {{
-        $out.set_color(::termcolor::ColorSpec::new().set_fg(Some(::termcolor::Color::Cyan)))?;
-        write!($out, $($arg)*)?;
-        $out.flush()?;
-        $out.reset()?;
-    }};
-}
-
 /// Inline colored text (no newline) — for building up a line piece by piece
 macro_rules! log_write {
     ($out:expr, $color:expr, $($arg:tt)*) => {{
         $out.set_color(::termcolor::ColorSpec::new().set_fg(Some($color)))?;
         write!($out, $($arg)*)?;
-        $out.reset()?;
-    }};
-}
-
-/// Inline suffix [OK] in Green (newline after)
-macro_rules! log_ok_suffix {
-    ($out:expr) => {{
-        $out.set_color(::termcolor::ColorSpec::new().set_fg(Some(::termcolor::Color::Green)))?;
-        writeln!($out, " [OK]")?;
-        $out.reset()?;
-    }};
-}
-
-/// Inline suffix [ERROR] in Red (newline after)
-macro_rules! log_error_suffix {
-    ($out:expr) => {{
-        $out.set_color(::termcolor::ColorSpec::new().set_fg(Some(::termcolor::Color::Red)))?;
-        writeln!($out, " [ERROR]")?;
         $out.reset()?;
     }};
 }

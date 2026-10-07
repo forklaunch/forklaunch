@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 
 use crate::core::{
-    ast::infrastructure::env::EnvVarUsage,
+    ast::infrastructure::env::{EnvVarUsage, fold_optionality},
     manifest::{ProjectType, application::ApplicationManifestData},
 };
 
@@ -21,6 +21,9 @@ pub(crate) struct ScopedEnvVar {
     pub scope_id: Option<String>, // service/worker name if scoped
     pub used_by: Vec<String>,     // List of projects using this variable
     pub value: Option<String>,    // Captured value from docker-compose (if available)
+    /// Declared optionality folded across every project that uses this
+    /// variable. `None` means no project declared a type for it.
+    pub optional: Option<bool>,
 }
 
 impl EnvironmentVariableScope {
@@ -40,6 +43,10 @@ pub(crate) fn determine_env_var_scopes(
     manifest: &ApplicationManifestData,
 ) -> Result<Vec<ScopedEnvVar>> {
     let mut var_usage: HashMap<String, Vec<String>> = HashMap::new();
+    // Optionality is folded a second time here: a variable promoted to
+    // application scope is one variable, so a project declaring it required
+    // must win over another declaring it optional.
+    let mut var_optionality: HashMap<String, Vec<Option<bool>>> = HashMap::new();
 
     for (project_name, env_vars) in project_env_vars {
         for env_var in env_vars {
@@ -47,6 +54,10 @@ pub(crate) fn determine_env_var_scopes(
                 .entry(env_var.var_name.clone())
                 .or_insert_with(Vec::new)
                 .push(project_name.clone());
+            var_optionality
+                .entry(env_var.var_name.clone())
+                .or_insert_with(Vec::new)
+                .push(env_var.optional);
         }
     }
 
@@ -87,12 +98,20 @@ pub(crate) fn determine_env_var_scopes(
             (EnvironmentVariableScope::Application, None)
         };
 
+        let optional = fold_optionality(
+            var_optionality
+                .get(&var_name)
+                .map(|v| v.as_slice())
+                .unwrap_or(&[]),
+        );
+
         scoped_vars.push(ScopedEnvVar {
             name: var_name,
             scope,
             scope_id,
             used_by: unique_projects,
             value: None,
+            optional,
         });
     }
 
@@ -128,6 +147,16 @@ pub(crate) fn determine_env_var_scopes(
     });
 
     Ok(scoped_vars)
+}
+
+/// Vars that are inherently per-component and must never be promoted to application scope.
+/// Each service/worker has its own distinct value for these.
+const NEVER_APPLICATION_SCOPED: &[&str] = &["QUEUE_NAME", "OTEL_SERVICE_NAME", "REDIS_URL"];
+
+/// Check if a var is inherently per-component and must never be application-scoped.
+pub(crate) fn is_never_application_scoped(var_name: &str) -> bool {
+    let upper = var_name.to_ascii_uppercase();
+    NEVER_APPLICATION_SCOPED.iter().any(|&v| v == upper)
 }
 
 /// Check if a variable should always be application-scoped (never service/worker-scoped).
@@ -194,6 +223,9 @@ fn is_observability_var(var_name: &str) -> bool {
     upper.starts_with("OTEL_")
         || upper.starts_with("LOKI_")
         || upper.starts_with("TEMPO_")
+        || upper.starts_with("MIMIR_")
+        // Retained for back-compat: projects scaffolded before the Mimir
+        // migration may still carry PROMETHEUS_* vars.
         || upper.starts_with("PROMETHEUS_")
 }
 
@@ -220,9 +252,32 @@ pub(crate) fn is_pulumi_injected(var_name: &str, project_names: &[String]) -> bo
     is_inter_service_url_var(var_name, project_names) || is_pulumi_injected_url(var_name)
 }
 
-/// Check if a var name matches the pattern `{SERVICE_NAME}_{URL|URI|FQDN|HOST}`
-/// where SERVICE_NAME corresponds to a known project (converted from kebab-case to SCREAMING_SNAKE_CASE).
+/// Known infixes for inter-service URL vars mapped to normalized transport.
+/// "http", "api", "service" all resolve to "http". "ws" resolves to "ws".
+const KNOWN_URL_INFIXES: &[(&str, &str)] = &[
+    ("HTTP", "http"),
+    ("WS", "ws"),
+    ("API", "http"),
+    ("SERVICE", "http"),
+    ("GRPC", "grpc"),
+];
+
+/// Check if a var name matches the pattern `{SERVICE_NAME}[_INFIX]_{URL|URI|FQDN|HOST}`
+/// where SERVICE_NAME corresponds to a known project (converted from kebab-case to SCREAMING_SNAKE_CASE)
+/// and INFIX is an optional segment like `SERVICE`, `API`, etc.
 fn is_inter_service_url_var(var_name: &str, project_names: &[String]) -> bool {
+    parse_inter_service_url_var(var_name, project_names).is_some()
+}
+
+/// Parse an inter-service URL var name into (target_service, transport, port_env_var).
+/// Transport is normalized: "api"/"service"/"http" → "http", "ws" → "ws".
+/// port_env_var indicates which env var on the target service provides the port
+/// (e.g. "PORT" for http, "WS_PORT" for ws).
+/// Returns `None` if the var doesn't match the pattern.
+pub(crate) fn parse_inter_service_url_var(
+    var_name: &str,
+    project_names: &[String],
+) -> Option<(String, String, String)> {
     let upper = var_name.to_ascii_uppercase();
 
     const URL_SUFFIXES: &[&str] = &["_URL", "_URI", "_FQDN", "_HOST"];
@@ -232,13 +287,34 @@ fn is_inter_service_url_var(var_name: &str, project_names: &[String]) -> bool {
             for project_name in project_names {
                 let screaming = project_name.to_ascii_uppercase().replace('-', "_");
                 if prefix == screaming {
-                    return true;
+                    // Exact match: e.g. BILLING_URL → http transport, PORT
+                    return Some((project_name.clone(), "http".to_string(), "PORT".to_string()));
+                }
+                if let Some(rest) = prefix.strip_prefix(&screaming) {
+                    if rest.starts_with('_') {
+                        let infix = &rest[1..]; // strip leading '_'
+                        let transport = KNOWN_URL_INFIXES
+                            .iter()
+                            .find(|(k, _)| *k == infix)
+                            .map(|(_, v)| *v)
+                            .unwrap_or("http");
+                        let port_env_var = match transport {
+                            "ws" => "WS_PORT",
+                            "grpc" => "GRPC_PORT",
+                            _ => "PORT",
+                        };
+                        return Some((
+                            project_name.clone(),
+                            transport.to_string(),
+                            port_env_var.to_string(),
+                        ));
+                    }
                 }
             }
         }
     }
 
-    false
+    None
 }
 
 #[cfg(test)]
@@ -282,9 +358,12 @@ mod tests {
                         cache: None,
                         queue: None,
                         object_store: None,
+                        redis_partition: None,
+                        capabilities: None,
                     }),
                     routers: None,
                     metadata: None,
+                    serves: None,
                 })
                 .collect(),
             project_peer_topology: HashMap::new(),
@@ -312,9 +391,7 @@ mod tests {
             is_jest: false,
             platform_application_id: None,
             platform_organization_id: None,
-            release_version: None,
-            release_git_commit: None,
-            release_git_branch: None,
+            compliance: None,
         }
     }
 
@@ -326,13 +403,11 @@ mod tests {
             vec![
                 EnvVarUsage {
                     var_name: "OTEL_EXPORTER_OTLP_ENDPOINT".to_string(),
-                    line: 1,
-                    column: 0,
+                    optional: None,
                 },
                 EnvVarUsage {
                     var_name: "PORT".to_string(),
-                    line: 2,
-                    column: 0,
+                    optional: None,
                 },
             ],
         );
@@ -355,6 +430,7 @@ mod tests {
     fn test_loki_tempo_prometheus_promoted() {
         assert!(is_observability_var("LOKI_URL"));
         assert!(is_observability_var("TEMPO_ENDPOINT"));
+        assert!(is_observability_var("MIMIR_URL"));
         assert!(is_observability_var("PROMETHEUS_PUSH_GATEWAY"));
         assert!(is_observability_var("OTEL_EXPORTER_OTLP_ENDPOINT"));
         assert!(!is_observability_var("DB_HOST"));
@@ -370,8 +446,7 @@ mod tests {
             "billing".to_string(),
             vec![EnvVarUsage {
                 var_name: "PLATFORM_MANAGEMENT_URL".to_string(),
-                line: 1,
-                column: 0,
+                optional: None,
             }],
         );
 
@@ -403,6 +478,12 @@ mod tests {
         assert!(is_inter_service_url_var("AUTH_URI", &projects));
         assert!(is_inter_service_url_var("BILLING_FQDN", &projects));
         assert!(is_inter_service_url_var("AUTH_HOST", &projects));
+        // Infix variants (e.g. _SERVICE_, _API_)
+        assert!(is_inter_service_url_var("BILLING_SERVICE_URL", &projects));
+        assert!(is_inter_service_url_var("BILLING_API_URL", &projects));
+        assert!(is_inter_service_url_var("AUTH_SERVICE_URI", &projects));
+        assert!(is_inter_service_url_var("PLATFORM_MANAGEMENT_API_URL", &projects));
+        // Non-matches
         assert!(!is_inter_service_url_var("UNKNOWN_URL", &projects));
         assert!(!is_inter_service_url_var("BILLING_PORT", &projects));
     }

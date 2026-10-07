@@ -113,6 +113,5 @@ describe('hasRoleChecks', () => {
       };
       expect(hasRoleChecks(auth)).toBe(false);
     });
-
   });
 });

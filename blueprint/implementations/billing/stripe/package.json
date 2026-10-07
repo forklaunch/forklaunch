@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/implementation-billing-stripe",
-  "version": "0.5.13",
+  "version": "1.2.11",
   "description": "Stripe implementation for forklaunch billing",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -36,13 +36,34 @@
       "import": "./lib/domain/types/index.mjs",
       "require": "./lib/domain/types/index.js",
       "default": "./lib/domain/types/index.js"
+    },
+    "./enum/*": {
+      "types": "./lib/domain/enum/*.d.ts"
+    },
+    "./schemas/*": {
+      "types": "./lib/domain/schemas/*.d.ts"
+    },
+    "./services/*": {
+      "types": "./lib/services/*.d.ts"
+    },
+    "./types/*": {
+      "types": "./lib/domain/types/*.d.ts"
+    },
+    "./persistence": {
+      "types": "./lib/persistence/entities/index.d.ts",
+      "import": "./lib/persistence/entities/index.mjs",
+      "require": "./lib/persistence/entities/index.js",
+      "default": "./lib/persistence/entities/index.js"
+    },
+    "./persistence/*": {
+      "types": "./lib/persistence/entities/*.d.ts"
     }
   },
   "files": [
     "lib/**"
   ],
   "scripts": {
-    "build": "tsgo --noEmit && tsup domain/schemas/index.ts services/index.ts domain/enum/index.ts domain/types/index.ts --format cjs,esm --no-splitting --dts --tsconfig tsconfig.json --out-dir lib --clean && if [ -f eject-package.bash ]; then pnpm package:eject; fi",
+    "build": "tsc --noEmit && tsup persistence/entities/index.ts domain/schemas/index.ts services/index.ts domain/enum/index.ts domain/types/index.ts --format cjs,esm --no-splitting --tsconfig tsconfig.json --out-dir lib --clean && tsc -p tsconfig.build.json --emitDeclarationOnly && if [ -f eject-package.bash ]; then pnpm package:eject; fi",
     "clean": "rm -rf lib pnpm.lock.yaml node_modules",
     "docs": "typedoc --out docs *",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
@@ -54,22 +75,27 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "^0.6.29",
-    "@forklaunch/core": "^0.18.2",
-    "@forklaunch/implementation-billing-base": "workspace:*",
-    "@forklaunch/interfaces-billing": "workspace:*",
-    "@forklaunch/internal": "^0.3.29",
-    "@forklaunch/validator": "^0.10.29",
-    "@mikro-orm/core": "^6.6.7",
-    "@sinclair/typebox": "^0.34.48",
-    "ajv": "^8.18.0",
-    "stripe": "^20.3.1",
-    "zod": "^4.3.6"
+    "@forklaunch/common": "^1.2.30",
+    "@forklaunch/core": "^3.0.1",
+    "@forklaunch/implementation-billing-base": "workspace:^",
+    "@forklaunch/interfaces-billing": "workspace:^",
+    "@forklaunch/internal": "^1.2.33",
+    "@forklaunch/validator": "^1.2.31",
+    "@mikro-orm/core": "7.2.3",
+    "@sinclair/typebox": "^0.34.52",
+    "ajv": "^8.20.0",
+    "stripe": "^22.6.2",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@typescript/native-preview": "7.0.0-dev.20260223.1",
+    "@mikro-orm/sqlite": "7.2.3",
     "depcheck": "^1.4.7",
-    "prettier": "^3.8.1",
-    "typedoc": "^0.28.17"
+    "prettier": "^3.9.9",
+    "typedoc": "^0.28.20",
+    "typescript": "^7.0.2",
+    "uuid": "^14.0.2"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

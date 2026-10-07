@@ -15,7 +15,8 @@ import {
   UpdatePermissionDto
 } from '@forklaunch/interfaces-iam/types';
 import { AnySchemaValidator } from '@forklaunch/validator';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, InferEntity } from '@mikro-orm/core';
+import { Permission } from '../persistence/entities';
 import { PermissionDtos } from '../domain/types/iamDto.types';
 import { PermissionEntities } from '../domain/types/iamEntities.types';
 import { PermissionMappers } from '../domain/types/permission.mapper.types';
@@ -24,8 +25,7 @@ export class BasePermissionService<
   SchemaValidator extends AnySchemaValidator,
   MapperEntities extends PermissionEntities = PermissionEntities,
   MapperDomains extends PermissionDtos = PermissionDtos
-> implements PermissionService
-{
+> implements PermissionService {
   private evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;
@@ -63,25 +63,25 @@ export class BasePermissionService<
 
   // start: global helper functions
   private async updateRolesWithPermissions(
-    roles: MapperEntities['RoleEntityMapper'][],
-    permissions: MapperEntities['PermissionMapper'][]
-  ): Promise<MapperEntities['RoleEntityMapper'][]> {
+    roles: InferEntity<MapperEntities['RoleEntityMapper']>[],
+    permissions: InferEntity<MapperEntities['PermissionMapper']>[]
+  ): Promise<InferEntity<MapperEntities['RoleEntityMapper']>[]> {
     return Promise.all(
       roles.map(async (role) => {
-        permissions.forEach((permission) => role.permissions.add(permission));
+        permissions.forEach((permission) => role.permissions?.add(permission));
         return role;
       })
     );
   }
 
   private async removePermissionsFromRoles(
-    roles: MapperEntities['RoleEntityMapper'][],
-    permissions: MapperEntities['PermissionMapper'][]
-  ): Promise<MapperEntities['RoleEntityMapper'][]> {
+    roles: InferEntity<MapperEntities['RoleEntityMapper']>[],
+    permissions: InferEntity<MapperEntities['PermissionMapper']>[]
+  ): Promise<InferEntity<MapperEntities['RoleEntityMapper']>[]> {
     return Promise.all(
       roles.map(async (role) => {
         permissions.forEach((permission) =>
-          role.permissions.remove(permission)
+          role.permissions?.remove(permission)
         );
         return role;
       })
@@ -91,16 +91,16 @@ export class BasePermissionService<
   private async getBatchRoles(
     roles?: IdsDto,
     em?: EntityManager
-  ): Promise<MapperEntities['RoleEntityMapper'][]> {
+  ): Promise<InferEntity<MapperEntities['RoleEntityMapper']>[]> {
     return roles
       ? await Promise.all(
           (await this.roleServiceFactory().getBatchRoles(roles, em)).map(
             async (role) => {
               return (em ?? this.em).merge(
-                await this.mappers.RoleEntityMapper.toEntity(
+                (await this.mappers.RoleEntityMapper.toEntity(
                   role,
                   em ?? this.em
-                )
+                )) as InferEntity<MapperEntities['RoleEntityMapper']>
               );
             }
           )
@@ -114,18 +114,21 @@ export class BasePermissionService<
     permission,
     addToRoles
   }: {
-    permission: MapperEntities['PermissionMapper'];
-    addToRoles: MapperEntities['RoleEntityMapper'][];
+    permission: InferEntity<MapperEntities['PermissionMapper']>;
+    addToRoles: InferEntity<MapperEntities['RoleEntityMapper']>[];
   }): Promise<{
-    permission: MapperEntities['PermissionMapper'];
-    roles: MapperEntities['RoleEntityMapper'][];
+    permission: InferEntity<MapperEntities['PermissionMapper']>;
+    roles: InferEntity<MapperEntities['RoleEntityMapper']>[];
   }> {
-    let roles: MapperEntities['RoleEntityMapper'][] = [];
+    let roles: InferEntity<MapperEntities['RoleEntityMapper']>[] = [];
     if (addToRoles) {
       roles = await this.updateRolesWithPermissions(addToRoles, [permission]);
     }
 
-    return { permission, roles };
+    return {
+      permission,
+      roles
+    };
   }
 
   private async extractCreatePermissionEntityToEntityData(
@@ -133,8 +136,8 @@ export class BasePermissionService<
     em?: EntityManager,
     ...args: unknown[]
   ): Promise<{
-    permission: MapperEntities['PermissionMapper'];
-    addToRoles: MapperEntities['RoleEntityMapper'][];
+    permission: InferEntity<MapperEntities['PermissionMapper']>;
+    addToRoles: InferEntity<MapperEntities['RoleEntityMapper']>[];
   }> {
     return {
       permission: (em ?? this.em).merge(
@@ -143,7 +146,7 @@ export class BasePermissionService<
           em ?? this.em,
           ...args
         )
-      ),
+      ) as InferEntity<MapperEntities['PermissionMapper']>,
       addToRoles: permissionDto.addToRolesIds
         ? await this.getBatchRoles({ ids: permissionDto.addToRolesIds }, em)
         : []
@@ -173,7 +176,7 @@ export class BasePermissionService<
     if (em) {
       await em.persist([permission, ...roles]);
     } else {
-      await this.em.persistAndFlush([permission, ...roles]);
+      await this.em.persist([permission, ...roles]).flush();
     }
 
     return this.mappers.PermissionMapper.toDto(permission);
@@ -189,8 +192,11 @@ export class BasePermissionService<
         permissionDtos
       );
     }
-    const rolesCache: Record<string, MapperEntities['RoleEntityMapper']> = {};
-    const permissions: MapperEntities['PermissionMapper'][] = [];
+    const rolesCache: Record<
+      string,
+      InferEntity<MapperEntities['RoleEntityMapper']>
+    > = {};
+    const permissions: InferEntity<MapperEntities['PermissionMapper']>[] = [];
     for (const createPermissionEntity of permissionDtos) {
       const { permission, roles } = await this.createPermissionEntity(
         await this.extractCreatePermissionEntityToEntityData(
@@ -200,15 +206,15 @@ export class BasePermissionService<
       );
       await Promise.all(
         roles.map(async (role) => {
-          if (!role.permissions.isInitialized()) {
-            return role.permissions.init();
+          if (!role.permissions?.isInitialized()) {
+            return role.permissions?.init();
           }
         })
       );
       await Promise.all(
         roles.map(async (role) => {
-          if (!role.permissions.isInitialized()) {
-            return role.permissions.init();
+          if (!role.permissions?.isInitialized()) {
+            return role.permissions?.init();
           }
         })
       );
@@ -217,9 +223,9 @@ export class BasePermissionService<
           rolesCache[role.id] &&
           role.permissions !== rolesCache[role.id].permissions
         ) {
-          role.permissions.getItems().forEach((permission) => {
-            if (!rolesCache[role.id].permissions.contains(permission)) {
-              rolesCache[role.id].permissions.add(permission);
+          role.permissions?.getItems().forEach((permission) => {
+            if (!rolesCache[role.id].permissions?.contains(permission)) {
+              rolesCache[role.id].permissions?.add(permission);
             }
           });
         } else {
@@ -233,7 +239,7 @@ export class BasePermissionService<
     if (em) {
       await em.persist(entities);
     } else {
-      await this.em.persistAndFlush(entities);
+      await this.em.persist(entities).flush();
     }
 
     return Promise.all(
@@ -250,9 +256,12 @@ export class BasePermissionService<
     if (this.evaluatedTelemetryOptions.logging) {
       this.openTelemetryCollector.info('Getting permission', idDto);
     }
-    const permission = await (em ?? this.em).findOneOrFail('Permission', idDto);
+    const permission = await (em ?? this.em).findOneOrFail(
+      this.mappers.PermissionMapper.entity as typeof Permission,
+      idDto
+    );
     return this.mappers.PermissionMapper.toDto(
-      permission as MapperEntities['PermissionMapper']
+      permission as InferEntity<MapperEntities['PermissionMapper']>
     );
   }
 
@@ -265,12 +274,15 @@ export class BasePermissionService<
     }
     return Promise.all(
       (
-        await (em ?? this.em).find('Permission', {
-          id: { $in: idsDto.ids }
-        })
+        await (em ?? this.em).find(
+          this.mappers.PermissionMapper.entity as typeof Permission,
+          {
+            id: { $in: idsDto.ids }
+          }
+        )
       ).map((permission) =>
         this.mappers.PermissionMapper.toDto(
-          permission as MapperEntities['PermissionMapper']
+          permission as InferEntity<MapperEntities['PermissionMapper']>
         )
       )
     );
@@ -282,8 +294,8 @@ export class BasePermissionService<
     em?: EntityManager,
     ...args: unknown[]
   ): Promise<{
-    permission: MapperEntities['PermissionMapper'];
-    roles: MapperEntities['RoleEntityMapper'][];
+    permission: InferEntity<MapperEntities['PermissionMapper']>;
+    roles: InferEntity<MapperEntities['RoleEntityMapper']>[];
   }> => {
     const permission = await this.mappers.UpdatePermissionMapper.toEntity(
       permissionDto,
@@ -297,17 +309,21 @@ export class BasePermissionService<
       ? await this.getBatchRoles({ ids: permissionDto.removeFromRolesIds }, em)
       : [];
 
-    let roles: MapperEntities['RoleEntityMapper'][] = [];
+    let roles: InferEntity<MapperEntities['RoleEntityMapper']>[] = [];
 
     roles = roles.concat(
-      await this.updateRolesWithPermissions(addToRoles, [permission])
+      await this.updateRolesWithPermissions(addToRoles, [
+        permission as InferEntity<MapperEntities['PermissionMapper']>
+      ])
     );
     roles = roles.concat(
-      await this.removePermissionsFromRoles(removeFromRoles, [permission])
+      await this.removePermissionsFromRoles(removeFromRoles, [
+        permission as InferEntity<MapperEntities['PermissionMapper']>
+      ])
     );
 
     return {
-      permission,
+      permission: permission as InferEntity<MapperEntities['PermissionMapper']>,
       roles
     };
   };
@@ -326,7 +342,7 @@ export class BasePermissionService<
     if (em) {
       await em.persist(entities);
     } else {
-      await this.em.persistAndFlush(entities);
+      await this.em.persist(entities).flush();
     }
 
     return this.mappers.PermissionMapper.toDto(permission);
@@ -342,8 +358,11 @@ export class BasePermissionService<
         permissionDtos
       );
     }
-    const rolesCache: Record<string, MapperEntities['RoleEntityMapper']> = {};
-    const permissions: MapperEntities['PermissionMapper'][] = [];
+    const rolesCache: Record<
+      string,
+      InferEntity<MapperEntities['RoleEntityMapper']>
+    > = {};
+    const permissions: InferEntity<MapperEntities['PermissionMapper']>[] = [];
     await (em ?? this.em).transactional(async (em) => {
       permissionDtos.map(async (updatePermissionDto) => {
         const { permission, roles } =
@@ -353,9 +372,9 @@ export class BasePermissionService<
             rolesCache[role.id] &&
             role.permissions !== rolesCache[role.id].permissions
           ) {
-            role.permissions.getItems().forEach((permission) => {
-              if (!rolesCache[role.id].permissions.contains(permission)) {
-                rolesCache[role.id].permissions.add(permission);
+            role.permissions?.getItems().forEach((permission) => {
+              if (!rolesCache[role.id].permissions?.contains(permission)) {
+                rolesCache[role.id].permissions?.add(permission);
               }
             });
           } else {
@@ -369,7 +388,7 @@ export class BasePermissionService<
       if (em) {
         await em.persist(entities);
       } else {
-        await this.em.persistAndFlush(entities);
+        await this.em.persist(entities).flush();
       }
     });
 
@@ -384,7 +403,10 @@ export class BasePermissionService<
     if (this.evaluatedTelemetryOptions.logging) {
       this.openTelemetryCollector.info('Deleting permission', idDto);
     }
-    await (em ?? this.em).nativeDelete('Permission', idDto);
+    await (em ?? this.em).nativeDelete(
+      this.mappers.PermissionMapper.entity as typeof Permission,
+      idDto
+    );
   }
 
   async deleteBatchPermissions(
@@ -394,8 +416,11 @@ export class BasePermissionService<
     if (this.evaluatedTelemetryOptions.logging) {
       this.openTelemetryCollector.info('Deleting batch permissions', idsDto);
     }
-    await (em ?? this.em).nativeDelete('Permission', {
-      id: { $in: idsDto.ids }
-    });
+    await (em ?? this.em).nativeDelete(
+      this.mappers.PermissionMapper.entity as typeof Permission,
+      {
+        id: { $in: idsDto.ids }
+      }
+    );
   }
 }

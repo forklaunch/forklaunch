@@ -15,6 +15,8 @@ import {
   deletePermission,
   deleteRole,
   deleteUser,
+  eraseUserData,
+  exportUserData,
   getBatchPermissions,
   getBatchRoles,
   getBatchUsers,
@@ -34,6 +36,10 @@ import {
 } from './api/controllers';
 
 export type IamSdk = {
+  compliance: {
+    eraseUserData: typeof eraseUserData;
+    exportUserData: typeof exportUserData;
+  };
   organization: {
     createOrganization: typeof createOrganization;
     getOrganization: typeof getOrganization;
@@ -75,6 +81,10 @@ export type IamSdk = {
 };
 
 export const iamSdkClient = {
+  compliance: {
+    eraseUserData: eraseUserData,
+    exportUserData: exportUserData
+  },
   organization: {
     createOrganization: createOrganization,
     getOrganization: getOrganization,

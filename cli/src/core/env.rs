@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fs,
     io::Write,
     path::{Path, PathBuf},
@@ -8,6 +8,8 @@ use std::{
 use anyhow::{Context, Result};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+
+use crate::core::rendered_template::RenderedTemplatesCache;
 
 #[derive(Debug, Serialize)]
 pub(crate) struct Env {
@@ -64,24 +66,22 @@ pub(crate) struct Env {
     #[serde(rename = "DOCS_PATH", skip_serializing_if = "Option::is_none")]
     pub(crate) docs_path: Option<String>,
     #[serde(
-        rename = "PASSWORD_ENCRYPTION_PUBLIC_KEY_PATH",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub(crate) password_encryption_public_key_path: Option<String>,
-    #[serde(
-        rename = "PASSWORD_ENCRYPTION_SECRET_PATH",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub(crate) password_encryption_secret_path: Option<String>,
-    #[serde(
         rename = "BETTER_AUTH_BASE_PATH",
         skip_serializing_if = "Option::is_none"
     )]
     pub(crate) better_auth_base_path: Option<String>,
+    #[serde(rename = "BETTER_AUTH_SECRET", skip_serializing_if = "Option::is_none")]
+    pub(crate) better_auth_secret: Option<String>,
     #[serde(rename = "CORS_ORIGINS", skip_serializing_if = "Option::is_none")]
     pub(crate) cors_origins: Option<String>,
     #[serde(rename = "STRIPE_API_KEY", skip_serializing_if = "Option::is_none")]
     pub(crate) stripe_api_key: Option<String>,
+    #[serde(rename = "TWILIO_ACCOUNT_SID", skip_serializing_if = "Option::is_none")]
+    pub(crate) twilio_account_sid: Option<String>,
+    #[serde(rename = "TWILIO_AUTH_TOKEN", skip_serializing_if = "Option::is_none")]
+    pub(crate) twilio_auth_token: Option<String>,
+    #[serde(rename = "TWILIO_FROM_NUMBER", skip_serializing_if = "Option::is_none")]
+    pub(crate) twilio_from_number: Option<String>,
     #[serde(rename = "HMAC_SECRET_KEY", skip_serializing_if = "Option::is_none")]
     pub(crate) hmac_secret_key: Option<String>,
     #[serde(
@@ -119,7 +119,8 @@ impl<'de> Deserialize<'de> for Env {
             Port,
             Version,
             DocsPath,
-            PasswordEncryptionPublicKeyPath,
+            BetterAuthSecret,
+            BetterAuthBasePath,
             HmacSecretKey,
             JwksPublicKeyUrl,
             Other(String),
@@ -162,11 +163,13 @@ impl<'de> Deserialize<'de> for Env {
                     port: None,
                     version: None,
                     docs_path: None,
-                    password_encryption_public_key_path: None,
-                    password_encryption_secret_path: None,
+                    better_auth_secret: None,
                     better_auth_base_path: None,
                     cors_origins: None,
                     stripe_api_key: None,
+                    twilio_account_sid: None,
+                    twilio_auth_token: None,
+                    twilio_from_number: None,
                     hmac_secret_key: None,
                     jwks_public_key_url: None,
                     additional_env_vars: HashMap::new(),
@@ -194,8 +197,9 @@ impl<'de> Deserialize<'de> for Env {
                         Field::Port => env.port = Some(map.next_value()?),
                         Field::Version => env.version = Some(map.next_value()?),
                         Field::DocsPath => env.docs_path = Some(map.next_value()?),
-                        Field::PasswordEncryptionPublicKeyPath => {
-                            env.password_encryption_public_key_path = Some(map.next_value()?)
+                        Field::BetterAuthSecret => env.better_auth_secret = Some(map.next_value()?),
+                        Field::BetterAuthBasePath => {
+                            env.better_auth_base_path = Some(map.next_value()?)
                         }
                         Field::HmacSecretKey => env.hmac_secret_key = Some(map.next_value()?),
                         Field::JwksPublicKeyUrl => {
@@ -215,43 +219,100 @@ impl<'de> Deserialize<'de> for Env {
     }
 }
 
+/// Reads a project's `.env.local` out of the rendered templates cache,
+/// treating an absent file as an empty environment rather than an error.
+///
+/// `*.env.local` is gitignored in generated applications, so a fresh
+/// checkout legitimately has none. Unwrapping the `Option` here made every
+/// `forklaunch change` subcommand abort with an opaque
+/// `called Option::unwrap() on a None value` panic. The callers all insert
+/// the result back into the cache, so the file is created on the way out.
+pub(crate) fn read_env_local_or_default(
+    rendered_templates_cache: &RenderedTemplatesCache,
+    env_local_path: &Path,
+) -> Result<Env> {
+    let content = rendered_templates_cache
+        .get(env_local_path)?
+        .map(|template| template.content)
+        .unwrap_or_default();
+
+    serde_envfile::from_str::<Env>(&content)
+        .with_context(|| format!("Failed to parse {}", env_local_path.display()))
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct EnvFile {
-    #[allow(dead_code)]
-    pub(crate) path: PathBuf,
     pub(crate) variables: HashMap<String, String>,
 }
 
-/// For multiline values `*i` is advanced to the closing-quote line so the caller's
-/// `i += 1` lands on the next key correctly.
+/// Index of the first unescaped closing quote, or None. Double-quoted
+/// values honor backslash escapes; single-quoted values are verbatim.
+fn find_closing_quote(s: &str, quote_char: char) -> Option<usize> {
+    let mut escaped = false;
+    for (idx, ch) in s.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if quote_char == '"' && ch == '\\' {
+            escaped = true;
+            continue;
+        }
+        if ch == quote_char {
+            return Some(idx);
+        }
+    }
+    None
+}
+
+/// Strip an inline comment from an UNQUOTED value: everything from the
+/// first whitespace-followed-by-`#` onward is dropped (e.g.
+/// `DOCKER_HOST=docker # ⚠ REJECTED — replace` parses as `docker`).
+/// A `#` with no preceding whitespace is part of the value (passwords,
+/// URLs with fragments). Quoted values never pass through here.
+fn strip_inline_comment(rest: &str) -> &str {
+    let bytes = rest.as_bytes();
+    for (idx, &b) in bytes.iter().enumerate() {
+        if b == b'#' && (idx == 0 || bytes[idx - 1].is_ascii_whitespace()) {
+            return &rest[..idx];
+        }
+    }
+    rest
+}
+
+/// Extract a value that may be quoted (verbatim, possibly multiline) or
+/// unquoted (inline comments stripped).
+///
+/// Quoted values are taken verbatim up to the first unescaped closing
+/// quote; anything after the closing quote on the same line (e.g. a
+/// trailing ` # comment`) is ignored. For multiline values `*i` is
+/// advanced to the closing-quote line so the caller's `i += 1` lands on
+/// the next key correctly.
 pub(crate) fn extract_env_value(lines: &[&str], i: &mut usize, rest: &str) -> String {
     if rest.starts_with('"') || rest.starts_with('\'') {
         let quote_char = rest.chars().next().unwrap();
         let inner = &rest[1..];
-        if !inner.is_empty() && inner.ends_with(quote_char) {
-            inner[..inner.len() - 1].to_string()
-        } else {
-            let mut value_lines = vec![inner.to_string()];
-            *i += 1;
-            while *i < lines.len() {
-                let next_line = lines[*i];
-                let trimmed = next_line.trim_end();
-                if trimmed.ends_with(quote_char) {
-                    value_lines.push(trimmed[..trimmed.len() - 1].to_string());
-                    break;
-                } else {
-                    value_lines.push(next_line.to_string());
-                    *i += 1;
-                }
+        if let Some(close) = find_closing_quote(inner, quote_char) {
+            // Single-line quoted value; trailing content after the close
+            // (comments, stray text) is intentionally discarded.
+            return inner[..close].to_string();
+        }
+        // Multiline: consume verbatim until a line containing the closing
+        // quote. Content after the close on that final line is discarded.
+        let mut value_lines = vec![inner.to_string()];
+        *i += 1;
+        while *i < lines.len() {
+            let next_line = lines[*i];
+            if let Some(close) = find_closing_quote(next_line, quote_char) {
+                value_lines.push(next_line[..close].to_string());
+                break;
             }
-            value_lines.join("\n")
+            value_lines.push(next_line.to_string());
+            *i += 1;
         }
+        value_lines.join("\n")
     } else {
-        if let Some(comment_pos) = rest.find(" #") {
-            rest[..comment_pos].trim().to_string()
-        } else {
-            rest.trim().to_string()
-        }
+        strip_inline_comment(rest).trim().to_string()
     }
 }
 
@@ -273,6 +334,12 @@ pub(crate) fn parse_env_file_items(path: &Path) -> Result<Vec<EnvFileItem>> {
     let content = fs::read_to_string(path)
         .with_context(|| format!("Failed to read env file: {}", path.display()))?;
 
+    Ok(parse_env_items_from_str(&content))
+}
+
+/// String-based variant of `parse_env_file_items` for content fetched over
+/// the wire (e.g. `config set` pulling the current scope before merging).
+pub(crate) fn parse_env_items_from_str(content: &str) -> Vec<EnvFileItem> {
     let lines: Vec<&str> = content.lines().collect();
     let mut items: Vec<EnvFileItem> = Vec::new();
     let mut i = 0;
@@ -303,7 +370,7 @@ pub(crate) fn parse_env_file_items(path: &Path) -> Result<Vec<EnvFileItem>> {
         i += 1;
     }
 
-    Ok(items)
+    items
 }
 
 pub(crate) fn load_env_file(path: &Path) -> Result<HashMap<String, String>> {
@@ -315,28 +382,30 @@ pub(crate) fn load_env_file(path: &Path) -> Result<HashMap<String, String>> {
         .with_context(|| format!("Failed to read env file: {}", path.display()))?;
 
     let mut variables = HashMap::new();
+    let lines: Vec<&str> = content.lines().collect();
+    let mut i = 0;
 
-    for line in content.lines() {
-        let line = line.trim();
+    // Same extraction semantics as parse_env_file_items: quoted values are
+    // verbatim (multiline supported, trailing comments after the closing
+    // quote ignored); unquoted values have inline ` # ...` comments stripped.
+    while i < lines.len() {
+        let line = lines[i].trim();
 
         if line.is_empty() || line.starts_with('#') {
+            i += 1;
             continue;
         }
 
-        if let Some((key, value)) = line.split_once('=') {
-            let key = key.trim().to_string();
-            let value = value.trim().to_string();
-
-            let value = if (value.starts_with('"') && value.ends_with('"'))
-                || (value.starts_with('\'') && value.ends_with('\''))
-            {
-                value[1..value.len() - 1].to_string()
-            } else {
-                value
-            };
-
-            variables.insert(key, value);
+        if let Some(eq_pos) = line.find('=') {
+            let key = line[..eq_pos].trim().to_string();
+            let rest = line[eq_pos + 1..].trim();
+            if !key.is_empty() {
+                let value = extract_env_value(&lines, &mut i, rest);
+                variables.insert(key, value);
+            }
         }
+
+        i += 1;
     }
 
     Ok(variables)
@@ -388,24 +457,10 @@ pub(crate) fn load_project_env_files(project_path: &Path) -> Result<Vec<EnvFile>
 
     for path in env_file_paths {
         let variables = load_env_file(&path)?;
-        env_files.push(EnvFile { path, variables });
+        env_files.push(EnvFile { variables });
     }
 
     Ok(env_files)
-}
-
-#[allow(dead_code)]
-pub(crate) fn get_all_env_vars_in_project(project_path: &Path) -> Result<HashSet<String>> {
-    let env_files = load_project_env_files(project_path)?;
-    let mut all_vars = HashSet::new();
-
-    for env_file in env_files {
-        for key in env_file.variables.keys() {
-            all_vars.insert(key.clone());
-        }
-    }
-
-    Ok(all_vars)
 }
 
 pub(crate) fn is_env_var_defined(project_path: &Path, var_name: &str) -> Result<bool> {
@@ -582,6 +637,56 @@ mod tests {
 
     use super::*;
 
+    // `*.env.local` is gitignored in generated applications, so a fresh
+    // checkout has none. Every `forklaunch change` subcommand used to unwrap
+    // the missing file and panic; a missing file must read as an empty Env.
+    #[test]
+    fn test_read_env_local_or_default_missing_file_is_empty_not_a_panic() {
+        let temp_dir = TempDir::new().unwrap();
+        let env_local_path = temp_dir.path().join(".env.local");
+        let cache = RenderedTemplatesCache::new();
+
+        let env = read_env_local_or_default(&cache, &env_local_path).unwrap();
+
+        assert!(env.queue_name.is_none());
+        assert!(env.db_name.is_none());
+        assert!(env.additional_env_vars.is_empty());
+        // Round-trips to an empty file that the caller can then populate.
+        assert_eq!(serde_envfile::to_string(&env).unwrap(), "");
+    }
+
+    #[test]
+    fn test_read_env_local_or_default_reads_existing_file_and_keeps_unknown_vars() {
+        let temp_dir = TempDir::new().unwrap();
+        let env_local_path = temp_dir.path().join(".env.local");
+        fs::write(
+            &env_local_path,
+            "DB_NAME=app-dev\nAPP_BASE_DOMAIN=example.test\n",
+        )
+        .unwrap();
+        let cache = RenderedTemplatesCache::new();
+
+        let env = read_env_local_or_default(&cache, &env_local_path).unwrap();
+
+        // NOTE: serde_envfile lower-cases keys on read and upper-cases them on
+        // write, so nothing lands in the named fields and everything round
+        // trips through `additional_env_vars`. That is pre-existing behaviour;
+        // what matters here is that an existing file is read and every
+        // variable in it survives the round trip.
+        assert_eq!(
+            env.additional_env_vars.get("db_name"),
+            Some(&"app-dev".to_string())
+        );
+        assert_eq!(
+            env.additional_env_vars.get("app_base_domain"),
+            Some(&"example.test".to_string())
+        );
+
+        let round_tripped = serde_envfile::to_string(&env).unwrap();
+        assert!(round_tripped.contains("DB_NAME"));
+        assert!(round_tripped.contains("APP_BASE_DOMAIN"));
+    }
+
     #[test]
     fn test_load_env_file() {
         let temp_dir = TempDir::new().unwrap();
@@ -601,6 +706,35 @@ mod tests {
     }
 
     #[test]
+    fn test_load_env_file_strips_inline_comments_and_keeps_quotes_verbatim() {
+        let temp_dir = TempDir::new().unwrap();
+        let env_path = temp_dir.path().join(".env");
+
+        fs::write(
+            &env_path,
+            concat!(
+                "DOCKER_HOST=docker # ⚠ REJECTED — replace with production value\n",
+                "QUOTED=\"keep # this\" # but drop this\n",
+                "GLUED=pa#ss\n",
+                "PEM=\"-----BEGIN\nabc\n-----END\"\n",
+                "AFTER=ok\n",
+            ),
+        )
+        .unwrap();
+
+        let vars = load_env_file(&env_path).unwrap();
+        assert_eq!(vars.get("DOCKER_HOST"), Some(&"docker".to_string()));
+        assert_eq!(vars.get("QUOTED"), Some(&"keep # this".to_string()));
+        assert_eq!(vars.get("GLUED"), Some(&"pa#ss".to_string()));
+        assert_eq!(
+            vars.get("PEM"),
+            Some(&"-----BEGIN\nabc\n-----END".to_string())
+        );
+        assert_eq!(vars.get("AFTER"), Some(&"ok".to_string()));
+        assert_eq!(vars.len(), 5);
+    }
+
+    #[test]
     fn test_extract_env_value_plain() {
         let lines = vec!["KEY=hello"];
         let mut i = 0;
@@ -612,15 +746,69 @@ mod tests {
     fn test_extract_env_value_plain_strips_inline_comment() {
         let lines = vec!["KEY=hello # a comment"];
         let mut i = 0;
-        assert_eq!(extract_env_value(&lines, &mut i, "hello # a comment"), "hello");
+        assert_eq!(
+            extract_env_value(&lines, &mut i, "hello # a comment"),
+            "hello"
+        );
         assert_eq!(i, 0);
+    }
+
+    #[test]
+    fn test_extract_env_value_hash_without_space_is_part_of_value() {
+        // Passwords / URL fragments keep a glued '#'.
+        let lines = vec!["KEY=pa#ss"];
+        let mut i = 0;
+        assert_eq!(extract_env_value(&lines, &mut i, "pa#ss"), "pa#ss");
+    }
+
+    #[test]
+    fn test_extract_env_value_quoted_with_trailing_comment() {
+        // The deploy template's exact shape: a quoted value followed by an
+        // annotation. Must NOT be treated as a multiline opener.
+        let lines = vec![
+            "DOCKER_HOST=\"docker\" # ⚠ REJECTED — replace with production value",
+            "NEXT=untouched",
+        ];
+        let mut i = 0;
+        assert_eq!(
+            extract_env_value(
+                &lines,
+                &mut i,
+                "\"docker\" # ⚠ REJECTED — replace with production value"
+            ),
+            "docker"
+        );
+        assert_eq!(i, 0); // must not swallow the next line
+    }
+
+    #[test]
+    fn test_extract_env_value_quoted_keeps_hash_verbatim() {
+        let lines = vec!["KEY=\"value # not a comment\""];
+        let mut i = 0;
+        assert_eq!(
+            extract_env_value(&lines, &mut i, "\"value # not a comment\""),
+            "value # not a comment"
+        );
+    }
+
+    #[test]
+    fn test_extract_env_value_double_quoted_escaped_quote() {
+        let lines = vec![r#"KEY="say \"hi\"""#];
+        let mut i = 0;
+        assert_eq!(
+            extract_env_value(&lines, &mut i, r#""say \"hi\"""#),
+            r#"say \"hi\""#
+        );
     }
 
     #[test]
     fn test_extract_env_value_single_line_double_quoted() {
         let lines = vec!["KEY=\"hello world\""];
         let mut i = 0;
-        assert_eq!(extract_env_value(&lines, &mut i, "\"hello world\""), "hello world");
+        assert_eq!(
+            extract_env_value(&lines, &mut i, "\"hello world\""),
+            "hello world"
+        );
         assert_eq!(i, 0);
     }
 
@@ -628,7 +816,10 @@ mod tests {
     fn test_extract_env_value_single_line_single_quoted() {
         let lines = vec!["KEY='hello world'"];
         let mut i = 0;
-        assert_eq!(extract_env_value(&lines, &mut i, "'hello world'"), "hello world");
+        assert_eq!(
+            extract_env_value(&lines, &mut i, "'hello world'"),
+            "hello world"
+        );
         assert_eq!(i, 0);
     }
 
@@ -671,17 +862,15 @@ mod tests {
     fn test_parse_env_file_items_preserves_section_headers() {
         let temp_dir = TempDir::new().unwrap();
         let path = temp_dir.path().join("test.env");
-        fs::write(
-            &path,
-            "# application\nA=1\n# my-service (abc-123)\nB=2\n",
-        )
-        .unwrap();
+        fs::write(&path, "# application\nA=1\n# my-service (abc-123)\nB=2\n").unwrap();
 
         let items = parse_env_file_items(&path).unwrap();
         assert_eq!(items.len(), 4);
         assert!(matches!(&items[0], EnvFileItem::SectionHeader(h) if h == "# application"));
         assert!(matches!(&items[1], EnvFileItem::KeyValue(k, v) if k == "A" && v == "1"));
-        assert!(matches!(&items[2], EnvFileItem::SectionHeader(h) if h == "# my-service (abc-123)"));
+        assert!(
+            matches!(&items[2], EnvFileItem::SectionHeader(h) if h == "# my-service (abc-123)")
+        );
         assert!(matches!(&items[3], EnvFileItem::KeyValue(k, v) if k == "B" && v == "2"));
     }
 
@@ -706,7 +895,9 @@ mod tests {
 
         let items = parse_env_file_items(&path).unwrap();
         assert_eq!(items.len(), 2);
-        assert!(matches!(&items[0], EnvFileItem::KeyValue(k, v) if k == "KEY" && v == "line one\nline two"));
+        assert!(
+            matches!(&items[0], EnvFileItem::KeyValue(k, v) if k == "KEY" && v == "line one\nline two")
+        );
         assert!(matches!(&items[1], EnvFileItem::KeyValue(k, v) if k == "OTHER" && v == "val"));
     }
 

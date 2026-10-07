@@ -1,4 +1,8 @@
-# Security Policy
+---
+title: Security Policy
+category: Community
+description: Security policy and vulnerability reporting guidelines for ForkLaunch.
+---
 
 ## Supported Versions
 

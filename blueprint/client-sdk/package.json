@@ -1,13 +1,14 @@
 {
   "name": "@forklaunch/blueprint-client-sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "private": true,
   "description": "The forklaunch client SDK to be used anywhere",
   "keywords": [],
   "license": "MIT",
   "author": "Rohin Bhargava",
   "scripts": {
-    "build": "tsc",
-    "clean": "rm -rf dist pnpm.lock.yaml node_modules",
+    "build": "tsc -b",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo pnpm.lock.yaml node_modules",
     "docs": "typedoc --out docs *",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
     "lint": "eslint . -c eslint.config.mjs",
@@ -16,17 +17,18 @@
     "test": "pnpm vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "^0.6.28",
-    "@forklaunch/universal-sdk": "^0.7.28",
-    "better-auth": "^1.4.18"
+    "@forklaunch/common": "^1.2.30",
+    "@forklaunch/universal-sdk": "^1.2.29",
+    "better-auth": "^1.7.6"
   },
   "devDependencies": {
-    "@forklaunch/blueprint-billing-base": "workspace:*",
-    "@forklaunch/blueprint-billing-stripe": "workspace:*",
-    "@forklaunch/blueprint-core": "workspace:*",
-    "@forklaunch/blueprint-iam-base": "workspace:*",
-    "@forklaunch/blueprint-iam-better-auth": "workspace:*",
-    "@forklaunch/blueprint-sample-worker": "workspace:*",
-    "@forklaunch/core": "^0.18.1"
+    "@forklaunch/blueprint-billing-base": "workspace:^",
+    "@forklaunch/blueprint-billing-stripe": "workspace:^",
+    "@forklaunch/blueprint-core": "workspace:^",
+    "@forklaunch/blueprint-iam-base": "workspace:^",
+    "@forklaunch/blueprint-iam-better-auth": "workspace:^",
+    "@forklaunch/blueprint-sample-worker": "workspace:^",
+    "@forklaunch/core": "^3.0.1",
+    "typescript": "^7.0.2"
   }
 }

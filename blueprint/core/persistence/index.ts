@@ -1,2 +1,2 @@
-export * from './nosql.base.entity';
-export * from './sql.base.entity';
+export * from './nosql.base.properties';
+export * from './sql.base.properties';

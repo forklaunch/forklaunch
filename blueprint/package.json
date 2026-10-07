@@ -1,6 +1,7 @@
 {
   "name": "@forklaunch/blueprint",
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "private": true,
   "description": "",
   "keywords": [],
   "license": "ISC",
@@ -11,6 +12,8 @@
     "iam-better-auth",
     "billing-base",
     "billing-stripe",
+    "messaging-base",
+    "messaging-twilio",
     "sample-worker",
     "monitoring",
     "implementations/**/*",
@@ -18,7 +21,7 @@
   ],
   "scripts": {
     "build": "pnpm -r run build",
-    "clean": "rm -rf node_modules pnpm-lock.yaml && pnpm --parallel -r clean && pnpm store prune",
+    "clean": "rm -rf node_modules pnpm-lock.yaml tsconfig.tsbuildinfo && pnpm --parallel -r clean && pnpm store prune",
     "clean:purge": "pnpm run clean && pnpm store clear",
     "dev": "RUNTIME=node docker compose -f docker-compose.base.yml -f docker-compose.node.yml up",
     "dev:build": "RUNTIME=node docker compose -f docker-compose.base.yml -f docker-compose.node.yml build",
@@ -38,38 +41,35 @@
     "seed": "docker compose -f docker-compose.base.yml up -d postgres && pnpm -r run seed",
     "test": "pnpm vitest --passWithNoTests",
     "types:watch": "tsc -b -w",
-    "up:packages": "pnpm -r update --latest"
+    "up:packages": "pnpm -r update --latest \"!uWebSockets.js\""
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.4",
-    "@changesets/cli": "^2.29.8",
+    "@biomejs/biome": "2.5.15",
+    "@changesets/cli": "^3.0.3",
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
-    "eslint": "^10.0.2",
-    "globals": "^17.3.0",
-    "jest": "^30.2.0",
-    "lint-staged": "^16.2.7",
-    "oxlint": "^1.50.0",
-    "prettier": "^3.8.1",
-    "sort-package-json": "^3.6.1",
-    "ts-jest": "^29.4.6",
+    "@types/node": "^26.6.3",
+    "eslint": "^10.11.0",
+    "globals": "^17.12.0",
+    "jest": "^30.5.2",
+    "lint-staged": "^17.6.0",
+    "oxlint": "^1.86.0",
+    "prettier": "^3.9.9",
+    "sort-package-json": "^4.0.0",
+    "ts-jest": "^29.4.14",
     "tsup": "^8.5.1",
-    "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "^8.56.1",
-    "vitest": "^4.0.18"
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^5.0.3"
   },
   "dependencies": {
-    "@forklaunch/common": "^0.6.29",
-    "@forklaunch/core": "^0.18.2",
-    "@forklaunch/express": "^0.10.6",
-    "@forklaunch/hyper-express": "^0.11.6",
-    "@forklaunch/universal-sdk": "^0.7.29",
-    "@forklaunch/validator": "^0.10.29"
-  },
-  "pnpm": {
-    "patchedDependencies": {
-      "@jercle/yargonaut@1.1.5": "./patches/@jercle__yargonaut.patch"
-    }
+    "@forklaunch/common": "^1.2.30",
+    "@forklaunch/core": "^3.0.1",
+    "@forklaunch/express": "^1.2.48",
+    "@forklaunch/hyper-express": "^1.2.48",
+    "@forklaunch/universal-sdk": "^1.2.29",
+    "@forklaunch/validator": "^1.2.31",
+    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.52.0"
   }
 }

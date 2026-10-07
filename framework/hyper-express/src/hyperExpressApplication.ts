@@ -13,6 +13,7 @@ import {
   OpenTelemetryCollector,
   SessionObject
 } from '@forklaunch/core/http';
+import { findApplicationRoot } from '@forklaunch/core/environment';
 import {
   MiddlewareHandler,
   MiddlewareNext,
@@ -25,6 +26,7 @@ import { ZodSchemaValidator } from '@forklaunch/validator/zod';
 import { apiReference } from '@scalar/express-api-reference';
 import crypto from 'crypto';
 import fs from 'fs';
+import path from 'path';
 import * as uWebsockets from 'uWebSockets.js';
 import { startHyperExpressCluster } from './cluster/hyperExpress.cluster';
 import { contentParse } from './middleware/contentParse.middleware';
@@ -68,14 +70,11 @@ export class Application<
 > {
   private docsConfiguration: DocsConfiguration | undefined;
   private mcpConfiguration:
-    | ExpressApplicationOptions<SV, SessionSchema>['mcp']
-    | undefined;
+    ExpressApplicationOptions<SV, SessionSchema>['mcp'] | undefined;
   private openapiConfiguration:
-    | ExpressApplicationOptions<SV, SessionSchema>['openapi']
-    | undefined;
+    ExpressApplicationOptions<SV, SessionSchema>['openapi'] | undefined;
   private hostingConfiguration:
-    | ExpressApplicationOptions<SV, SessionSchema>['hosting']
-    | undefined;
+    ExpressApplicationOptions<SV, SessionSchema>['hosting'] | undefined;
   /**
    * Creates an instance of the Application class.
    *
@@ -106,7 +105,7 @@ export class Application<
       }),
       [
         contentParse<SV>(configurationOptions),
-        enrichResponseTransmission as unknown as MiddlewareHandler
+        enrichResponseTransmission as MiddlewareHandler
       ],
       openTelemetryCollector,
       configurationOptions
@@ -171,8 +170,20 @@ export class Application<
         this,
         this.openapiConfiguration
       );
+      const serviceName = process.env.OTEL_SERVICE_NAME || 'unknown-service';
+      const appRoot = findApplicationRoot(process.cwd());
+      const outputPath =
+        process.env.FORKLAUNCH_OPENAPI_OUTPUT ||
+        path.join(
+          appRoot,
+          '.forklaunch',
+          'openapi',
+          serviceName,
+          'openapi.json'
+        );
+      fs.mkdirSync(path.dirname(outputPath), { recursive: true });
       fs.writeFileSync(
-        process.env.FORKLAUNCH_OPENAPI_OUTPUT as string,
+        outputPath,
         JSON.stringify(
           {
             ...openApiSpec,
@@ -184,6 +195,8 @@ export class Application<
       );
       process.exit(0);
     }
+
+    this.validateAllRoutes();
 
     if (typeof arg0 === 'number') {
       const port = arg0 || Number(process.env.PORT);
@@ -235,7 +248,7 @@ export class Application<
           host,
           port,
           version ?? '1.0.0',
-          this as unknown as ForklaunchRouter<ZodSchemaValidator>,
+          this as ForklaunchRouter<ZodSchemaValidator>,
           this.mcpConfiguration,
           options,
           contentTypeMapping
@@ -318,6 +331,8 @@ export class Application<
                 })),
                 ...(this.docsConfiguration?.sources ?? [])
               ]
+              // Scalar's `apiReference` returns an Express-typed handler; hyper-express
+              // expects its own `MiddlewareHandler`. Same function, disjoint signatures.
             }) as unknown as MiddlewareHandler
           );
         } else if (this.docsConfiguration?.type === 'swagger') {

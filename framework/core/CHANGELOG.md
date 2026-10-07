@@ -1,5 +1,1079 @@
 # @forklaunch/core
 
+## 3.0.1
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions, including @mikro-orm 7.2.3, so apps resolve a single copy of MikroORM with core.
+- Updated dependencies
+  - @forklaunch/common@1.2.30
+  - @forklaunch/validator@1.2.31
+
+## 3.0.0
+
+### Major Changes
+
+- **Breaking:** pii, phi and pci entity properties load as `CompliantField`. Read the value with `.deanon` (plaintext, audited through `onComplianceAccess`) or `.anon` (de-identified); there is no `toString`/`toJSON`/inspect overload, so a raw field cannot leak into a log, a response or a vendor call by accident.
+
+  - Plain values still work in `em.create`/`em.assign` and, for `queryable` fields, in `where` (blind index in `<column>_idx`).
+  - New `v4:` random-IV envelope; `reencryptEncryptedColumns` upgrades existing rows.
+  - `deanon(entity)` for spreads.
+  - Migrate with `npx -p @forklaunch/core forklaunch-migrate-compliant-fields [tsconfig.json]`, which now runs on TypeScript 7's API (`typescript/unstable/sync`); TypeScript 5 is no longer needed.
+
+### Minor Changes
+
+- Managed-instance integrations through the ForkLaunch instance gateway. No vendor key lives in the app: calls are signed with the instance's HMAC key and vendor events come back signed.
+
+  - `createInstanceGatewayTransport`, `verifyPlatformEvent` / `signPlatformEvent`, `isManagedInstance`.
+  - Clients: `createModelGatewayClient`, `createEmailClient`, `createSmsClient`, `createWhatsAppClient`, `createVoiceClient`, `createPaymentsClient`, and `createStripeClient` (the real Stripe SDK routed through the gateway; `stripe` is an optional peer dependency).
+  - `forklaunch-gateway-mock`: a local gateway and vendor mock with one route file per feature, signed event delivery and test control endpoints. `forklaunch-model-gateway-mock` remains as an alias.
+
+- f2b6357: Object store: real files, browser uploads and download links, keyless on ForkLaunch.
+
+  - `ObjectStore` gains `putFile(key, body, { contentType, filename?, metadata? })`,
+    `presignUpload(key, { contentType, maxBytes, expiresIn? })` (a presigned POST that
+    enforces size and content type) and `presignDownload(key, { expiresIn?, filename? })`.
+    Custom `ObjectStore` implementations must add them.
+  - `S3ObjectStore` takes `prefix` (confines every key), `presignLimits` (lifetime caps,
+    from `S3_PRESIGN_MAX_UPLOAD_SECONDS` / `S3_PRESIGN_MAX_DOWNLOAD_SECONDS`) and
+    `createBucketIfMissing`, which now defaults to true only when a custom endpoint
+    (MinIO) is configured: deployed buckets are provisioned by the platform.
+  - `s3ClientConfig({ url, region, accessKeyId, secretAccessKey })` passes keys only when
+    both are set, so deployed services use their task role.
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/common@1.2.29
+  - @forklaunch/validator@1.2.30
+
+## 2.1.1
+
+### Patch Changes
+
+- Refresh every framework dependency to its current release.
+
+  A routine sweep (`pnpm run up:packages`), taken as one wave rather than a
+  package at a time. `workspace:^` is frozen into a concrete range at publish,
+  so a package published ahead of its siblings pins the PREVIOUS version of
+  them and consumers resolve two copies — which is the whole class of bug
+  #311 and #331 existed to clear. Releasing the set together is what keeps
+  that from coming back.
+
+  `@mikro-orm/*` is deliberately NOT moved: framework and blueprint are both
+  on 7.2.1 exactly, and they only stay that way if they move together.
+
+- Updated dependencies
+  - @forklaunch/common@1.2.28
+  - @forklaunch/validator@1.2.29
+
+## 2.1.0
+
+### Minor Changes
+
+- **Compliance walks can be tenant-scoped, and failures are reported rather
+  than swallowed.**
+
+  `ComplianceDataService.erase/export` and `RetentionService.enforce` walked
+  every PII-bearing entity through `orm.em.fork()` — unbound. Every one of
+  those columns is encrypted under its row's tenant, and a WHERE value on an
+  encrypted column is encrypted under the CURRENT tenant before it is
+  compared, so an unbound walk searched with a key nothing was written with.
+  It matched nothing, everywhere.
+
+  For this service that is the worst possible failure: an erase that finds
+  nothing is indistinguishable from an erase with nothing to do, and it
+  reported success. A subject could be told their data was deleted while all
+  of it remained.
+
+  - `erase(userId, { tenantIds })` and `export(userId, { tenantIds })` run the
+    walk once per tenant and merge the results. An export appends per tenant
+    rather than overwriting, so a subject with rows under two organizations
+    gets both.
+  - `EnforcementOptions.tenantIds` does the same for retention.
+  - `EraseResult.failures` and `ExportResult.failures` are new. An entity the
+    walk could not read used to be logged and forgotten, leaving a clean
+    result; it is now reported. **A non-empty `failures` means the request is
+    incomplete** — the rows that could be processed still were, but the caller
+    must not treat it as done.
+
+  Omitting `tenantIds` keeps the previous single unbound pass, which is
+  correct only for a schema whose PII-bearing entities carry no encrypted
+  column. Since 2.0.0 that pass fails loudly instead of silently.
+
+## 2.0.0
+
+### Major Changes
+
+- **The empty tenant is not a tenant.** `''` is rejected wherever a tenant is
+  bound, and an encrypted column touched with no tenant bound throws instead of
+  falling back to the empty key.
+
+  `''` used to mean "the global tenant", so a deliberate global row and a tenant
+  nobody resolved shared ONE KEY. A path that simply forgot to bind wrote rows
+  that looked fine; the mistake surfaced later and elsewhere, as the owning
+  tenant's "Failed to decrypt encrypted column value", blaming the reader for the
+  writer's bug. The query path was quieter still: a WHERE value on an encrypted
+  column is encrypted before it is compared, so an unbound lookup produced
+  ciphertext under `''` that matched nothing — an empty result set, no error.
+
+  - `wrapEmWithTenantContext(em, '')`, `withEncryptionContext('')` and
+    `setEncryptionTenantId('')` throw `EmptyTenantError`, which names an explicit
+    constant as the replacement.
+  - Reading or writing an encrypted column with nothing bound throws
+    `UnboundTenantError`, naming the operation and how to bind one.
+  - `getBoundTenantId()` returns `string | undefined` — the distinction
+    `getCurrentTenantId()` cannot make. The latter is deprecated: the `''` it
+    answers when nothing is bound IS the bug.
+
+  `undefined` still means "do not wrap", so a lookup that has not resolved a
+  tenant and reads no encrypted column is unaffected.
+
+  **Upgrading.** An application holding rows encrypted under `''` must re-tenant
+  them before taking this, or those rows stop being readable. Pick a constant no
+  organization can collide with (`'_internal'` is what forklaunch-platform uses)
+  and migrate: snapshot each encrypted column's raw bytes first, decrypt under
+  `''`, rewrite under the row's canonical tenant.
+
+## 1.6.7
+
+### Patch Changes
+
+- A tenant-bound entity manager leaves `fork()` unbound again. 1.6.6 returned a proxy on
+  the parent's tenant from `fork()`, which made `getSuperAdminContext(em).fork()` inside an
+  explicit `withEncryptionContext(other, …)` lose to the parent's tenant; that idiom is how
+  a service steps out of the tenant on purpose. The fluent-return fix stays: `persist()` and
+  friends return the proxy, so `em.persist(row).flush()` runs inside the tenant.
+
+## 1.6.6
+
+### Patch Changes
+
+- **A tenant-bound entity manager stays bound through chained calls and forks.**
+
+  `wrapEmWithTenantContext` runs each method inside `withEncryptionContext(tenantId, …)`,
+  but a method that returns the entity manager itself (`persist`, `remove`, the other fluent
+  methods) handed back the _raw_ manager, so `em.persist(row).flush()` ran `flush` outside the
+  context and encrypted the row under whatever tenant the caller happened to be in. An
+  operator promote wrote an organization's subscription under the empty key this way; the
+  row then refused to decrypt under the organization's key.
+
+  A method that returns the manager now returns the proxy, and `fork()` returns a new proxy
+  on the same tenant. Tests cover the chained `persist().flush()` and the fork.
+
+## 1.6.5
+
+### Patch Changes
+
+- `ResolvedRelation` no longer special-cases `any`. A conditional type on `any` takes every
+  branch, so an `any` field resolves to a union no concrete value satisfies; the 1.6.4 guard
+  hid that instead of surfacing it. Shape entities that stand in for an app-defined enum
+  should declare the column as `fp.enum<string[]>()` (a string column with unknown members)
+  rather than `fp.enum()`, which infers `any`. The type test now uses that form and fails on
+  the untyped one.
+
+## 1.6.4
+
+### Patch Changes
+
+- `ResolvedRelation` passes `any` through instead of treating it as an entity. A shape
+  entity that declares `fp.enum()` without naming the enum infers the field as `any`, and
+  `keyof any` contains every symbol, so the previous check saw an entity there and produced
+  an index-signature type the app's real enum could not satisfy.
+
+## 1.6.3
+
+### Patch Changes
+
+- **`ResolvedEntity` now resolves relation targets, so module entity constraints keep working on mikro-orm 7.2.**
+
+  mikro-orm 7.2 declares its `defineEntity` property builders invariant (`in out`). The
+  builder record an inferred entity carries in its `IndexHints` slot therefore no longer
+  unifies between two definitions of "the same" entity: a module's minimal `Permission`
+  (`id`, `slug`) and an application's real one (`id` generated `onCreate`, timestamps,
+  `.unique()` on `slug`). `ResolvedEntity` already dropped that slot on the entity being
+  compared, but not on the entities behind its relations, so any constraint that crossed a
+  `Collection<Permission>` or a `manyToOne(Organization)` failed to compile
+  (`Type 'RoleMapperTypes' does not satisfy the constraint 'RoleEntities'` in the IAM
+  module).
+
+  `ResolvedEntity<T>` now maps `Collection<E>` to `Collection<ResolvedEntity<E>>`,
+  `Reference<E>` to `Reference<ResolvedEntity<E>>`, and a bare related entity to
+  `ResolvedEntity<E>`; scalars, dates, enums and `null`/`undefined` pass through. The new
+  `ResolvedRelation<V>` helper is exported for the per-field case. Type tests cover a
+  to-many, a nullable to-one, and the negative case.
+
+## 1.6.2
+
+### Patch Changes
+
+- Refresh dependencies to their latest published versions.
+
+  `@mikro-orm/*` moves from 7.1.15 to 7.2.1 in every package that pins it,
+  as one step: the framework, the blueprint and the CLI's scaffold constants
+  all agree on a single MikroORM version, so a freshly generated app resolves
+  exactly one copy (the duplicate-package type errors from mixed pins are the
+  reason it is pinned exactly). `@aws-sdk/client-s3` 3.1131 → 3.1136 in
+  infrastructure-s3. The rest is devDependency movement; `@types/node` 26.6
+  added `Socket.server`, which the Bun socket shim in express now declares.
+
+  Packages with only devDependency changes release too, so the whole
+  framework carries one MikroORM version on npm.
+
+- Updated dependencies
+  - @forklaunch/validator@1.2.28
+  - @forklaunch/common@1.2.27
+
+## 1.6.1
+
+### Patch Changes
+
+- **`wrapEmWithTenantContext(em, '')` now binds the empty tenant, and never leaks a tenant into the caller.**
+
+  Global rows (a billing plan, a trial, a template) are encrypted under the
+  empty tenant. Two defects together made reading or writing them depend on
+  what had run earlier on the same worker:
+
+  - `''` was treated like `undefined` ("do not wrap"), so a caller asking for
+    the no-tenant key got an entity manager bound to nothing.
+  - The wrapper called `setEncryptionTenantId`, whose `enterWith` mutates the
+    calling async resource. After one org-scoped EM was created on a request,
+    a later "no-tenant" EM silently read and wrote under that org's key.
+
+  The visible symptom was intermittent `Failed to decrypt encrypted column
+value` on rows that were encrypted correctly. Now `''` returns a Proxy that
+  runs every EM call inside `withEncryptionContext('', …)`, only `undefined`
+  skips wrapping, the tenant filter is set only for a real tenant id, and the
+  wrapper no longer touches the caller's context. Tests cover all four cases.
+
+## 1.6.0
+
+### Minor Changes
+
+- **Encryption key ring and rotation sweep.**
+
+  `FieldEncryptor` now holds a ring: the current key plus any number of
+  previous keys (`new FieldEncryptor(key, { previousKeys })`, or
+  `FieldEncryptor.fromEnv()` reading `ENCRYPTION_KEY` and
+  `LEGACY_ENCRYPTION_KEYS`). Writes use the current key; reads try the current
+  key and then each previous key, so `ENCRYPTION_KEY` can change without a
+  downtime window. Single-key behaviour and the on-disk `v2:` format are
+  unchanged.
+
+  - `open()` reports which key opened a value (by fingerprint) and whether a
+    rewrite would change it; `needsRotation()`, `rotate()`, `keyIds`,
+    `withPreviousKeys()`, `withFormat()`.
+  - New `v3:{keyId}:{iv}:{tag}:{data}` envelope, opt-in via
+    `ENCRYPTION_FORMAT=v3`: reads resolve the key directly, a missing key fails
+    by name, and `countValuesByKeyId()` answers "can this key be dropped?"
+    without decrypting. Every reader (`EncryptedType`, the redis cache, the S3
+    store) accepts all three envelopes.
+  - `reencryptEncryptedColumns()` is the rotation sweep for migrations: walks
+    every entity with `pii`/`phi`/`pci` fields, rewrites what is still under a
+    previous key with the same tenant it was written with, tries every known
+    organization as a fallback tenant, and reports per table.
+
+  See `docs/compliance/key-rotation.md` for the three-step rotation.
+
+## 1.5.20
+
+### Patch Changes
+
+- **Security:** authorization failures no longer log the credential.
+
+  `parseRequestAuth` wrote the raw `Authorization` header value into the
+  "JWT Verification Failed" and "Authorization Failed" log lines. For bearer
+  auth that is a token that stays valid until it expires; for basic auth it is
+  a password. Affected: every release up to and including 1.5.19. If your
+  application logs are shipped outside your own infrastructure, rotate any
+  token that failed authorization while on an affected version.
+
+  The log line now carries what the credential was for, not the credential:
+
+  - `reason`: `jwt_expired`, `jwt_bad_signature`, `jwt_malformed`,
+    `jwks_no_key`, `jwks_unavailable`, `jwt_claim_<name>`. Previously an
+    expired token and a forged one produced identical lines.
+  - `claimed`: the decoded, **unverified** `sub`, `organizationId`, `iss`,
+    `exp` and `kid`. Labelled `claimed` because on a failed verification they
+    are whatever the caller wrote. `email` is deliberately omitted.
+  - `tokenFingerprint`: the first 8 hex characters of SHA-256 of the header
+    value, to correlate retries and match a token you hold against a line.
+    Not reversible.
+  - `hasToken`.
+
+  Both lines move from `error` to `warn`: an expired token is normal traffic.
+
+  The JWKS verification path now surfaces the last `jose` error instead of
+  swallowing it, so `reason` is populated for `jwksPublicKeyUrl` consumers.
+  Status codes and response bodies are unchanged.
+
+## 1.5.19
+
+### Patch Changes
+
+- Re-emit the intra-framework dependency ranges so `core` and `internal` track
+  the rest of the set.
+
+  Both declare `@forklaunch/common` and `@forklaunch/validator` as `workspace:^`,
+  which is frozen into a concrete range at publish time. They were published one
+  wave ahead of `common` and `validator`, so they went out pinned to the previous
+  pair. A consumer then resolved two copies of each — and duplicated packages are
+  the whole class of bug this release exists to remove.
+
+  No source changes; this republishes them against the current set.
+
+## 1.5.18
+
+### Patch Changes
+
+- Pin `@mikro-orm/*` to an exact version instead of a caret range.
+
+  These three packages ranged on `^7.1.14` while `@forklaunch/interfaces-*` and
+  `@forklaunch/implementation-*-base` pinned `7.1.14` exactly. When MikroORM
+  published 7.1.15 the carets took it and the exact pins did not, so every
+  consumer resolved **two copies of `@mikro-orm/core`**.
+
+  That is not a harmless duplication. `EntityManager` and `EntitySchema` carry a
+  `#private` field, which TypeScript treats as a per-class brand, so the same
+  class coming from two copies is structurally incompatible and every generated
+  app stops compiling:
+
+      error TS2741: Property '#private' is missing in type
+        'PostgreSqlEntityManager<PostgreSqlDriver>' but required in 'EntityManager'
+      error TS2883: The inferred type of 'ci' cannot be named without a reference
+        to 'Connection' from '.bun/@mikro-orm+core@7.1.14/node_modules/@mikro-orm/core'
+
+  7.1.15 itself is not a breaking change — `EntityName` and `EntitySchema` are
+  byte-identical to 7.1.14. Only the duplication broke.
+
+  An exact pin here matches what the rest of the family already does, so a future
+  MikroORM patch cannot split the tree again by moving one half of it.
+
+## 1.5.17
+
+### Patch Changes
+
+- Refresh dependencies to their latest published versions.
+
+  Runtime dependency changes, which is why these five packages release rather
+  than the whole workspace: `zod` 4.4.3 → 4.5.4 (core, validator), `fastmcp`
+  4.16.10 → 4.17.1 (core, express), `qs` 6.15.3 → 6.16.0 and
+  `@scalar/express-api-reference` 0.10.16 → 0.10.17 (express, hyper-express),
+  `multer` 2.2.0 → 2.3.0 (express), and `@aws-sdk/client-s3` 3.1120.0 → 3.1121.0
+  (infrastructure-s3). All are patch or minor upstream releases with no API
+  change on our side; the build and test suites pass unmodified.
+
+  The remaining packages only saw devDependency movement (`jest` 30.4.2 → 30.5.0,
+  `tsx` 4.23.12 → 4.23.13), which no consumer installs, so they are not released.
+
+  `jest` 30.5.0 pulls in `@parcel/watcher` as a new transitive dependency, and
+  pnpm requires an explicit build decision for it. It is set to `false` in
+  `pnpm-workspace.yaml`: it arrives only through `jest-haste-map`, so it is
+  dev-only and never reaches a published package, and the platform prebuilt
+  binary is already resolved, so the native build script has nothing to add.
+  Without that entry `pnpm install` fails outright — pnpm writes a literal
+  `set this to true or false` placeholder into the file, which is not valid
+  configuration.
+
+- Updated dependencies
+  - @forklaunch/validator@1.2.26
+
+## 1.5.16
+
+### Patch Changes
+
+- Update internal package versions
+- Updated dependencies
+  - @forklaunch/common@1.2.24
+  - @forklaunch/validator@1.2.25
+
+## 1.5.9
+
+### Patch Changes
+
+- restrict wildcard subpath exports to the types condition (no runtime targets are emitted for deep files)
+
+## 1.5.8
+
+### Patch Changes
+
+- add wildcard subpath exports so per-file declaration output is addressable by consumers
+
+## 1.5.7
+
+### Patch Changes
+
+- publish internal @forklaunch dependencies as caret ranges (workspace:^) instead of exact pins
+
+## 1.5.6
+
+### Patch Changes
+
+- accept structural ORM types in setupRls, ComplianceDataService, and RetentionService (MikroORM v7 init returns a readonly entities array that a bare MikroORM parameter rejects)
+
+## 1.5.5
+
+### Patch Changes
+
+- TypeScript 7 build pipeline: tsgo declaration emit replaces tsup --dts
+- BatchLogRecordProcessor options-object API (@opentelemetry/sdk-logs 0.221)
+
+## 1.5.4
+
+### Patch Changes
+
+- update packages
+- Updated dependencies
+  - @forklaunch/validator@1.2.20
+  - @forklaunch/common@1.2.20
+
+## 1.5.3
+
+### Patch Changes
+
+- 92c06f9: dep upgrades
+- Updated dependencies [92c06f9]
+  - @forklaunch/validator@1.2.19
+  - @forklaunch/common@1.2.19
+
+## 1.5.2
+
+### Patch Changes
+
+- update dependency versions
+- Updated dependencies
+  - @forklaunch/validator@1.2.18
+  - @forklaunch/common@1.2.18
+
+## 1.5.1
+
+### Patch Changes
+
+- Update internal versions and allow ZodType early release
+- Updated dependencies
+  - @forklaunch/validator@1.2.17
+  - @forklaunch/common@1.2.17
+
+## 1.5.0
+
+### Minor Changes
+
+- Export wrapEmWithTenantContext for tenant based filtering
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/validator@1.2.16
+  - @forklaunch/common@1.2.16
+
+## 1.4.1
+
+### Patch Changes
+
+- chore: update internal package versions
+- Updated dependencies
+  - @forklaunch/validator@1.2.15
+  - @forklaunch/common@1.2.15
+
+## 1.4.0
+
+### Minor Changes
+
+- Encryption and decryption now take tenant id as a first party compliance input
+
+## 1.3.17
+
+### Patch Changes
+
+- update enum logic
+- Updated dependencies
+  - @forklaunch/validator@1.2.14
+  - @forklaunch/common@1.2.14
+
+## 1.3.16
+
+### Patch Changes
+
+- Update packages and enum constraint fix
+- Updated dependencies
+  - @forklaunch/validator@1.2.13
+  - @forklaunch/common@1.2.13
+
+## 1.3.15
+
+### Patch Changes
+
+- sync changes across packages
+- Updated dependencies
+  - @forklaunch/validator@1.2.12
+  - @forklaunch/common@1.2.12
+
+## 1.3.14
+
+### Patch Changes
+
+- Handle enums more robustly for ORM
+
+## 1.3.13
+
+### Patch Changes
+
+- no more private fields
+
+## 1.3.12
+
+### Patch Changes
+
+- Turn private into public members
+
+## 1.3.11
+
+### Patch Changes
+
+- exhaustively cover serde
+
+## 1.3.10
+
+### Patch Changes
+
+- Align package vers
+- Updated dependencies
+  - @forklaunch/validator@1.2.11
+  - @forklaunch/common@1.2.11
+
+## 1.3.9
+
+### Patch Changes
+
+- Only validate on real path, not openapi path
+
+## 1.3.8
+
+### Patch Changes
+
+- fix nested app and router
+- Updated dependencies
+  - @forklaunch/validator@1.2.10
+  - @forklaunch/common@1.2.10
+
+## 1.3.7
+
+### Patch Changes
+
+- Perf improvement
+- Updated dependencies
+  - @forklaunch/validator@1.2.9
+  - @forklaunch/common@1.2.9
+
+## 1.3.6
+
+### Patch Changes
+
+- bump package versions
+- Updated dependencies
+  - @forklaunch/validator@1.2.8
+  - @forklaunch/common@1.2.8
+
+## 1.3.5
+
+### Patch Changes
+
+- Access auth respected now
+
+## 1.3.4
+
+### Patch Changes
+
+- export consolidated retention logic
+- Updated dependencies
+  - @forklaunch/validator@1.2.7
+  - @forklaunch/common@1.2.7
+
+## 1.3.3
+
+### Patch Changes
+
+- accept custom relation and relation in tenant filtering
+
+## 1.3.2
+
+### Patch Changes
+
+- Encryptor required on redis and s3
+- Updated dependencies
+  - @forklaunch/validator@1.2.6
+  - @forklaunch/common@1.2.6
+
+## 1.3.1
+
+### Patch Changes
+
+- Make private fields respect interfaces
+- Updated dependencies
+  - @forklaunch/validator@1.2.5
+  - @forklaunch/common@1.2.5
+
+## 1.3.0
+
+### Minor Changes
+
+- Custom Entity type for encrypted fields
+
+## 1.2.9
+
+### Patch Changes
+
+- up packages
+- Updated dependencies
+  - @forklaunch/validator@1.2.4
+  - @forklaunch/common@1.2.4
+
+## 1.2.8
+
+### Patch Changes
+
+- encrypted level for pii too
+
+## 1.2.7
+
+### Patch Changes
+
+- decryption with tenant id = null
+
+## 1.2.6
+
+### Patch Changes
+
+- tenant id detail
+
+## 1.2.5
+
+### Patch Changes
+
+- update packages
+- Updated dependencies
+  - @forklaunch/validator@1.2.3
+  - @forklaunch/common@1.2.3
+
+## 1.2.4
+
+### Patch Changes
+
+- update tenant filter
+
+## 1.2.3
+
+### Patch Changes
+
+- tenant and rls configuration
+- Updated dependencies
+  - @forklaunch/validator@1.2.2
+  - @forklaunch/common@1.2.2
+
+## 1.2.2
+
+### Patch Changes
+
+- fix compliance entity
+- Updated dependencies
+  - @forklaunch/validator@1.2.1
+  - @forklaunch/common@1.2.1
+
+## 1.2.1
+
+### Patch Changes
+
+- ConfigInjector undefined vs defined
+
+## 1.2.0
+
+### Minor Changes
+
+- Validator 25% performance uptick and cleaner Config Injector syntax
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/validator@1.2.0
+  - @forklaunch/common@1.2.0
+
+## 1.1.8
+
+### Patch Changes
+
+- Simplify property chain for easier consumption
+- Updated dependencies
+  - @forklaunch/validator@1.1.8
+  - @forklaunch/common@1.1.8
+
+## 1.1.7
+
+### Patch Changes
+
+- More relations covered for compliance entity
+- Updated dependencies
+  - @forklaunch/validator@1.1.7
+  - @forklaunch/common@1.1.7
+
+## 1.1.6
+
+### Patch Changes
+
+- Restore MaybeOpt
+- Updated dependencies
+  - @forklaunch/validator@1.1.6
+  - @forklaunch/common@1.1.6
+
+## 1.1.5
+
+### Patch Changes
+
+- cross boundary inference fix compliance entities
+- Updated dependencies
+  - @forklaunch/validator@1.1.5
+  - @forklaunch/common@1.1.5
+
+## 1.1.4
+
+### Patch Changes
+
+- improve performance of entity branding
+- Updated dependencies
+  - @forklaunch/validator@1.1.4
+  - @forklaunch/common@1.1.4
+
+## 1.1.3
+
+### Patch Changes
+
+- Package versions and simplified compliance entity typing
+- Updated dependencies
+  - @forklaunch/validator@1.1.3
+  - @forklaunch/common@1.1.3
+
+## 1.1.2
+
+### Patch Changes
+
+- move FieldEncryptor into persistence (previously not exported)
+- Updated dependencies
+  - @forklaunch/validator@1.1.2
+  - @forklaunch/common@1.1.2
+
+## 1.1.1
+
+### Patch Changes
+
+- add compliance utilities
+- Updated dependencies
+  - @forklaunch/validator@1.1.1
+  - @forklaunch/common@1.1.1
+
+## 1.1.0
+
+### Minor Changes
+
+- retention policy update
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/validator@1.1.0
+  - @forklaunch/common@1.1.0
+
+## 1.0.13
+
+### Patch Changes
+
+- patch working"
+- Updated dependencies
+  - @forklaunch/validator@1.0.13
+  - @forklaunch/common@1.0.13
+
+## 1.0.12
+
+### Patch Changes
+
+- try removing return type to let inference take over
+- Updated dependencies
+  - @forklaunch/validator@1.0.12
+  - @forklaunch/common@1.0.12
+
+## 1.0.11
+
+### Patch Changes
+
+- refinement
+- Updated dependencies
+  - @forklaunch/validator@1.0.11
+  - @forklaunch/common@1.0.11
+
+## 1.0.10
+
+### Patch Changes
+
+- store property as internal property instead of branding
+- Updated dependencies
+  - @forklaunch/validator@1.0.10
+  - @forklaunch/common@1.0.10
+
+## 1.0.9
+
+### Patch Changes
+
+- branding fixes
+- Updated dependencies
+  - @forklaunch/validator@1.0.9
+  - @forklaunch/common@1.0.9
+
+## 1.0.8
+
+### Patch Changes
+
+- remove brand from entity
+- Updated dependencies
+  - @forklaunch/validator@1.0.8
+  - @forklaunch/common@1.0.8
+
+## 1.0.7
+
+### Patch Changes
+
+- inconsistent state
+- Updated dependencies
+  - @forklaunch/validator@1.0.7
+  - @forklaunch/common@1.0.7
+
+## 1.0.6
+
+### Patch Changes
+
+- string brand instead of symbol
+- Updated dependencies
+  - @forklaunch/validator@1.0.6
+  - @forklaunch/common@1.0.6
+
+## 1.0.5
+
+### Patch Changes
+
+- entity rework
+- fix compliance brands
+- Updated dependencies
+- Updated dependencies
+  - @forklaunch/validator@1.0.5
+  - @forklaunch/common@1.0.5
+
+## 1.0.4
+
+### Patch Changes
+
+- Handle functional definitions on mikroorm entities
+- Updated dependencies
+  - @forklaunch/validator@1.0.4
+  - @forklaunch/common@1.0.4
+
+## 1.0.3
+
+### Patch Changes
+
+- Update packages and fix entity type
+- Updated dependencies
+  - @forklaunch/validator@1.0.3
+  - @forklaunch/common@1.0.3
+
+## 1.0.2
+
+### Patch Changes
+
+- Fix type agreement
+- Updated dependencies
+  - @forklaunch/validator@1.0.2
+  - @forklaunch/common@1.0.2
+
+## 1.0.1
+
+### Patch Changes
+
+- Version thrash
+- Updated dependencies
+  - @forklaunch/validator@1.0.1
+  - @forklaunch/common@1.0.1
+
+## 1.0.0
+
+### Major Changes
+
+- Compliance features first party
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/common@1.0.0
+  - @forklaunch/validator@1.0.0
+
+## 0.19.5
+
+### Patch Changes
+
+- Another fix
+- Updated dependencies
+  - @forklaunch/validator@0.11.5
+  - @forklaunch/common@0.7.5
+
+## 0.19.4
+
+### Patch Changes
+
+- correct extension for mappers
+- Updated dependencies
+  - @forklaunch/validator@0.11.4
+  - @forklaunch/common@0.7.4
+
+## 0.19.3
+
+### Patch Changes
+
+- mapper fix
+- Updated dependencies
+  - @forklaunch/validator@0.11.3
+  - @forklaunch/common@0.7.3
+
+## 0.19.2
+
+### Patch Changes
+
+- Update packages and remove EntityMapper wrapping
+- Updated dependencies
+  - @forklaunch/validator@0.11.2
+  - @forklaunch/common@0.7.2
+
+## 0.19.1
+
+### Patch Changes
+
+- package upgrades
+- Updated dependencies
+  - @forklaunch/validator@0.11.1
+  - @forklaunch/common@0.7.1
+
+## 0.19.0
+
+### Minor Changes
+
+- update packages and update to mikro orm v7
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/validator@0.11.0
+  - @forklaunch/common@0.7.0
+
+## 0.18.15
+
+### Patch Changes
+
+- clean build
+- Updated dependencies
+  - @forklaunch/validator@0.10.38
+  - @forklaunch/common@0.6.38
+
+## 0.18.14
+
+### Patch Changes
+
+- fix mikroorm
+- Updated dependencies
+  - @forklaunch/common@0.6.37
+  - @forklaunch/validator@0.10.37
+
+## 0.18.13
+
+### Patch Changes
+
+- actually fix mikroorm
+
+## 0.18.12
+
+### Patch Changes
+
+- fix mikroorm package versions
+
+## 0.18.11
+
+### Patch Changes
+
+- internal package bump
+- Updated dependencies
+  - @forklaunch/validator@0.10.36
+  - @forklaunch/common@0.6.36
+
+## 0.18.10
+
+### Patch Changes
+
+- better trap on openapi ci proxy
+
+## 0.18.9
+
+### Patch Changes
+
+- Make thenable fast resolve
+
+## 0.18.8
+
+### Patch Changes
+
+- Downgrade mikro-orm back to normal
+- Updated dependencies
+  - @forklaunch/validator@0.10.35
+  - @forklaunch/common@0.6.35
+
+## 0.18.7
+
+### Patch Changes
+
+- bump packages and internal proxy await resilience
+- Updated dependencies
+  - @forklaunch/validator@0.10.34
+  - @forklaunch/common@0.6.34
+
+## 0.18.6
+
+### Patch Changes
+
+- proxy based injection for ci, and openapi path resiliency
+- Updated dependencies
+  - @forklaunch/validator@0.10.33
+  - @forklaunch/common@0.6.33
+
+## 0.18.5
+
+### Patch Changes
+
+- Small bugs
+- Updated dependencies
+  - @forklaunch/validator@0.10.32
+  - @forklaunch/common@0.6.32
+
+## 0.18.4
+
+### Patch Changes
+
+- Prevent 404 message hijacking and update packages
+- Updated dependencies
+  - @forklaunch/validator@0.10.31
+  - @forklaunch/common@0.6.31
+
+## 0.18.3
+
+### Patch Changes
+
+- Fix multiline config injection and update packages
+- Updated dependencies
+  - @forklaunch/validator@0.10.30
+  - @forklaunch/common@0.6.30
+
 ## 0.18.2
 
 ### Patch Changes

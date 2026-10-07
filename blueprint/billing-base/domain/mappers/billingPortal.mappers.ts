@@ -10,14 +10,10 @@ export const CreateBillingPortalMapper = requestMapper({
   entity: BillingPortal,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return BillingPortal.create(
-        {
-          ...dto,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        },
-        em
-      );
+      return em.create(BillingPortal, {
+        ...dto,
+        providerFields: dto.providerFields ?? null
+      });
     }
   }
 });
@@ -28,7 +24,9 @@ export const UpdateBillingPortalMapper = requestMapper({
   entity: BillingPortal,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return BillingPortal.update(dto, em);
+      const entity = await em.findOneOrFail(BillingPortal, { id: dto.id });
+      em.assign(entity, { ...dto });
+      return entity;
     }
   }
 });
@@ -38,8 +36,11 @@ export const BillingPortalMapper = responseMapper({
   schema: BillingPortalSchemas.BillingPortalSchema,
   entity: BillingPortal,
   mapperDefinition: {
-    toDto: async (entity: BillingPortal) => {
-      return await entity.read();
+    toDto: async (entity) => {
+      return {
+        ...entity,
+        uri: entity.uri ?? undefined
+      };
     }
   }
 });

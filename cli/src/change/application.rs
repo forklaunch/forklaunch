@@ -47,7 +47,7 @@ use crate::{
                 ApplicationDevDependencies, ApplicationPackageJson, ApplicationScripts,
             },
             package_json_constants::{
-                BIOME_VERSION, ESLINT_VERSION, EXPRESS_VERSION, HYPER_EXPRESS_VERSION,
+                BIOME_VERSION, ESLINT_VERSION, EXPRESS_VERSION, HYPER_EXPRESS_VERSION, UWEBSOCKETS_VERSION,
                 JEST_TYPES_VERSION, JEST_VERSION, OXLINT_VERSION, PRETTIER_VERSION,
                 TS_JEST_VERSION, TYPEBOX_VERSION, TYPESCRIPT_ESLINT_VERSION, VITEST_VERSION,
                 ZOD_VERSION, application_build_script, application_clean_purge_script,
@@ -57,18 +57,19 @@ use crate::{
                 application_up_packages_script, project_clean_script, project_dev_local_script,
                 project_dev_server_script, project_dev_worker_client_script, project_format_script,
                 project_lint_fix_script, project_lint_script, project_start_server_script,
-                project_start_worker_script, project_test_script,
+                project_start_worker_script, project_test_script, project_up_latest_script,
             },
             project_package_json::{
                 ProjectDependencies, ProjectDevDependencies, ProjectPackageJson, ProjectScripts,
             },
         },
         pnpm_workspace::PnpmWorkspace,
-        removal_template::{RemovalTemplate, RemovalTemplateType, remove_template_files},
+        removal_template::{RemovalTemplate, remove_template_files},
         rendered_template::{
             RenderedTemplate, RenderedTemplatesCache, TEMPLATES_DIR, write_rendered_templates,
         },
         symlink_template::{SymlinkTemplate, create_symlinks},
+        tsconfig::update_tsconfig_test_framework_types,
         watermark::apply_watermark,
     },
     prompt::{ArrayCompleter, prompt_field_from_selections_with_validation},
@@ -385,12 +386,10 @@ fn update_config_files(
                 for project in project_jsons_to_write.keys() {
                     removal_templates.push(RemovalTemplate {
                         path: base_path.join(project).join(file),
-                        r#type: RemovalTemplateType::File,
                     });
                 }
                 removal_templates.push(RemovalTemplate {
                     path: file_path,
-                    r#type: RemovalTemplateType::File,
                 });
             } else {
                 preserved_files.push(file_path.to_string_lossy().to_string());
@@ -760,6 +759,7 @@ fn change_http_framework(
         let dependencies = project.dependencies.as_mut().unwrap();
         dependencies.forklaunch_express = None;
         dependencies.forklaunch_hyper_express = None;
+        dependencies.uwebsockets_js = None;
 
         match http_framework {
             HttpFramework::Express => {
@@ -767,6 +767,7 @@ fn change_http_framework(
             }
             HttpFramework::HyperExpress => {
                 dependencies.forklaunch_hyper_express = Some(HYPER_EXPRESS_VERSION.to_string());
+                dependencies.uwebsockets_js = Some(UWEBSOCKETS_VERSION.to_string());
             }
         }
     }
@@ -822,7 +823,6 @@ fn change_runtime(
         Runtime::Node => {
             removal_templates.push(RemovalTemplate {
                 path: base_path.join("pnpm-workspace.yaml"),
-                r#type: RemovalTemplateType::File,
             });
             serde_yml::from_str::<PnpmWorkspace>(&read_to_string(
                 &base_path.join("pnpm-workspace.yaml"),
@@ -881,6 +881,19 @@ fn change_runtime(
 
         removal_templates.extend(test_framework_removal_templates);
         symlink_templates.extend(test_framework_symlink_templates);
+    } else if matches!(runtime, Runtime::Bun) {
+        // Bun has no separate test framework; strip any lingering test types from tsconfig.
+        let project_names: Vec<&str> = manifest_data
+            .projects
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect();
+        let tsconfig_templates =
+            update_tsconfig_test_framework_types(base_path, None, &project_names)?;
+        for template in tsconfig_templates {
+            let key = template.path.to_string_lossy().to_string();
+            rendered_templates_cache.insert(key, template);
+        }
     }
 
     let application_package_json_scripts = application_json_to_write.scripts.as_mut().unwrap();
@@ -1055,6 +1068,22 @@ fn change_runtime(
                 &project_clean_script(runtime),
                 None,
             ));
+            {
+                let old_up_latest = project_up_latest_script(&existing_runtime);
+                let new_up_latest = project_up_latest_script(runtime);
+                // Stash user customization if the existing value differs from what the old runtime generated
+                if project_scripts.up_latest != old_up_latest {
+                    if let Some(existing) = &project_scripts.up_latest {
+                        if new_up_latest.as_ref() != Some(existing) {
+                            project_scripts.additional_scripts.insert(
+                                format!("up:latest:{}", existing_runtime.to_string()),
+                                existing.clone(),
+                            );
+                        }
+                    }
+                }
+                project_scripts.up_latest = new_up_latest;
+            }
             match project_type {
                 ProjectType::Service => {
                     project_scripts.dev = Some(attempt_replacement(
@@ -1141,15 +1170,21 @@ fn change_runtime(
     match runtime {
         Runtime::Bun => {
             application_json_to_write.workspaces = Some(existing_workspaces);
+            if let Some(rendered) =
+                crate::core::bunfig::generate_bunfig(&base_path.to_string_lossy())?
+            {
+                rendered_templates_cache.insert("bunfig.toml".to_string(), rendered);
+            }
         }
         Runtime::Node => {
             rendered_templates_cache.insert(
                 "pnpm-workspace.yaml".to_string(),
                 RenderedTemplate {
                     path: base_path.join("pnpm-workspace.yaml"),
-                    content: serde_yml::to_string(&PnpmWorkspace {
-                        packages: existing_workspaces,
-                    })?,
+                    content: crate::core::pnpm_workspace::render_pnpm_workspace_with_packages(
+                        base_path,
+                        existing_workspaces,
+                    )?,
                     context: None,
                 },
             );
@@ -1447,6 +1482,22 @@ fn change_test_framework(
         &mut |_dev_dependencies| {},
     )?;
 
+    // Update tsconfig types for the new test framework
+    let project_names: Vec<&str> = manifest_data
+        .projects
+        .iter()
+        .map(|p| p.name.as_str())
+        .collect();
+    let tsconfig_templates = update_tsconfig_test_framework_types(
+        base_path,
+        Some(test_framework),
+        &project_names,
+    )?;
+    for template in tsconfig_templates {
+        let key = template.path.to_string_lossy().to_string();
+        rendered_templates_cache.insert(key, template);
+    }
+
     Ok((removal_templates, symlink_templates))
 }
 
@@ -1473,7 +1524,6 @@ fn change_license(
     if exists(&license_path)? {
         removal_template = Some(RemovalTemplate {
             path: license_path.clone(),
-            r#type: RemovalTemplateType::File,
         });
     }
 

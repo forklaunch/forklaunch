@@ -9,11 +9,12 @@ description: Reference for using Validation and Coercion in ForkLaunch.
 `@forklaunch/validator` wraps common validation libraries and simplifies validation and coercion for ForkLaunch applications. Validation schemas are used throughout the framework for:
 
 - **HTTP request/response validation** in [ContractDetails](/docs/framework/http.md)
-- **Automatic OpenAPI generation** for [documentation](/docs/framework/documentation.md) 
+- **Automatic OpenAPI generation** for [documentation](/docs/framework/documentation.md)
 - **MCP tool parameter validation** for [MCP autogeneration](/docs/framework/mcp.md)
 - **Type-safe API contracts** with the [Universal SDK](/docs/framework/universal-sdk.md)
 
 Available validators include:
+
 - [Zod](https://zod.dev/) - Recommended for full framework compatibility
 - [TypeBox](https://github.com/sinclairzx81/typebox) - Lightweight alternative
 
@@ -22,6 +23,7 @@ Available validators include:
 ### Schema Types
 
 #### Primitives
+
 - `string`: validates input is a string and coerces to string
 - `number`: validates input is a number and coerces to number
 - `boolean`: validates input is a boolean value and coerces to boolean
@@ -30,17 +32,20 @@ Available validators include:
 - `symbol`: validates input is a symbol and coerces to Symbol
 
 #### String Formats
+
 - `uuid`: validates input conforms to uuid format and coerces to string
 - `email`: validates input conforms to email format and coerces to string
 - `uri`: validates input conforms to uri format and coerces to string
 
 #### Special Types
+
 - `nullish`: validates input is null or undefined
 - `any`: accepts any input value without validation
 - `unknown`: accepts any input value but requires type checking before use
 - `never`: validates that no value can satisfy this type (useful for exhaustive checks)
 
 #### Schema Functions
+
 - `optional(schema)`: marks schema as optional
 - `array(schema)`: creates array of given schema
 - `union(schemas)`: creates union of multiple schemas
@@ -64,7 +69,7 @@ const complexSchema = {
     l: literal('l')
   },
   e: enum_(SomeEnum)
-}
+};
 ```
 
 ### Operations
@@ -74,7 +79,7 @@ const complexSchema = {
 - `openapi(schema)`: Generates OpenAPI definition from schema
 
 ```typescript
-import { string, parse } from '@forklaunch/validator/<validatorType>'
+import { string, parse } from '@forklaunch/validator/<validatorType>';
 
 const schema = string;
 const result = parse(schema, '123');
@@ -97,22 +102,28 @@ if (!result.ok) {
 ## Integration Examples
 
 ### HTTP Framework Integration
+
 ```typescript
 import { string, number } from '@forklaunch/validator/zod';
 
-app.post('/users', {
-  name: 'Create User',
-  body: {
-    name: string,
-    age: number
+app.post(
+  '/users',
+  {
+    name: 'Create User',
+    body: {
+      name: string,
+      age: number
+    },
+    responses: {
+      201: { id: number, name: string }
+    }
   },
-  responses: {
-    201: { id: number, name: string }
-  }
-}, handler);
+  handler
+);
 ```
 
 ### Universal SDK Usage
+
 ```typescript
 // Same schemas provide type safety in SDK
 const user = await sdk.post('/users', {

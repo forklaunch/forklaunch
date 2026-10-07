@@ -6,7 +6,10 @@ description: Learn how to use the forklaunch config command.
 
 ## Overview
 
-The `config` command pulls and pushes environment configuration between your local `.env` files and the ForkLaunch platform. You must be authenticated to use this command.
+The `config` command manages application configuration between your local environment and the ForkLaunch platform. You must be authenticated to use this command.
+
+`pull` and `push` move a whole `.env` file at a time; `set` and `unset` act on one
+variable.
 
 ## Usage
 
@@ -16,87 +19,146 @@ forklaunch config [COMMAND]
 
 ### Available Commands
 
-| Command | Description |
-| :------ | :---------- |
-| `pull`  | Pull environment variables from the platform to a local `.env` file |
-| `push`  | Push a local `.env` file to the platform |
+| Command | Description                          |
+| :------ | :----------------------------------- |
+| `pull`  | Pull environment configuration from platform |
+| `push`  | Push environment configuration to platform   |
+| `set`   | Set a single variable without touching the rest of the scope |
+| `unset` | Mark a variable as deliberately absent so the deploy gate stops requiring it |
 
----
-
-### `config pull`
-
-```bash
-forklaunch config pull -a <APP_ID> -r <REGION> -e <ENV> [-s <SERVICE>] [-o <FILE>]
-```
-
-| Flag | Short | Required | Description |
-| :--- | :---- | :------- | :---------- |
-| `--app` | `-a` | Yes | Application ID |
-| `--region` | `-r` | Yes | Region (e.g. `us-east-1`) |
-| `--environment` | `-e` | Yes | Environment name (e.g. `production`, `staging`) |
-| `--service` | `-s` | No | Filter to a specific service or worker name |
-| `--output` | `-o` | No | Output file path (defaults to `<environment>.env`) |
-
-#### Examples
+### pull
 
 ```bash
-# Pull production config to production.env
-forklaunch config pull -a app-123 -r us-east-1 -e production
-
-# Pull staging config for a specific service
-forklaunch config pull -a app-123 -r us-east-1 -e staging -s billing-service
-
-# Pull to a custom file path
-forklaunch config pull -a app-123 -r us-east-1 -e production -o ./config/.env.prod
+forklaunch config pull --region <region> --environment <env> [options]
 ```
 
----
+**Required:**
+- `-r, --region <region>` - Region (e.g., `us-east-1`)
+- `-e, --environment <env>` - Environment name (e.g., `production`, `staging`)
 
-### `config push`
+**Optional:**
+- `-s, --service <name>` - Filter to a specific service name
+- `-o, --output <file>` - Output file path (defaults to `<environment>.env`)
+- `-p, --path <path>` - Path to application root
+
+### push
 
 ```bash
-forklaunch config push -a <APP_ID> -r <REGION> -e <ENV> [-i <FILE>]
+forklaunch config push --region <region> --environment <env> [options]
 ```
 
-| Flag | Short | Required | Description |
-| :--- | :---- | :------- | :---------- |
-| `--app` | `-a` | Yes | Application ID |
-| `--region` | `-r` | Yes | Region (e.g. `us-east-1`) |
-| `--environment` | `-e` | Yes | Environment name (e.g. `production`, `staging`) |
-| `--input` | `-i` | No | Input file path (defaults to `<environment>.env`) |
+**Required:**
+- `-r, --region <region>` - Region (e.g., `us-east-1`)
+- `-e, --environment <env>` - Environment name (e.g., `production`, `staging`)
 
-#### Examples
+**Optional:**
+- `-i, --input <file>` - Input file path (defaults to `<environment>.env`)
+- `-p, --path <path>` - Path to application root
+- `--replace` - Treat the file as the whole truth for every scope it contains
+- `-y, --yes` - Skip the confirmation `--replace` asks for
+
+Push **merges** by default: only the keys named in the file change. A key that
+exists on the platform but is not in the file is left as it was. To clear a key,
+give it an empty value in the file (`STRIPE_KEY=`) or use `config unset`.
+
+> `--replace` is the older, authoritative behaviour: any variable in a scope the
+> file touches that is missing from the file is marked unset **and its stored
+> value is erased**. A component-scope unset also hides the application-level
+> value of the same name, so `--replace` first lists every key it will clear,
+> flags the ones that hide an application value, and asks. Non-interactive runs
+> (HMAC auth, or no terminal) refuse unless `--yes` is passed.
+
+### set
 
 ```bash
-# Push from production.env
-forklaunch config push -a app-123 -r us-east-1 -e production
-
-# Push from a custom file path
-forklaunch config push -a app-123 -r us-east-1 -e production -i ./config/.env.prod
+forklaunch config set KEY=VALUE --region <region> --environment <env> [options]
 ```
 
----
+Sets one variable, leaving every other variable in the scope alone.
 
-## Environment File Format
+**Required:**
+- `KEY=VALUE` - The variable to set (quote values containing spaces)
+- `-r, --region <region>` - Region (e.g., `us-east-1`)
+- `-e, --environment <env>` - Environment name (e.g., `production`, `staging`)
 
-The `.env` file uses comment headers to separate variables by source. Application-level variables appear under `# application`, while service- and worker-scoped variables appear under headers with the component name and ID.
+**Optional:**
+- `-s, --service <name>` - Scope to a service or worker (defaults to application scope)
+- `-f, --force` - Set the variable even when no component declares it
+- `-p, --path <path>` - Path to application root
 
-```env
-# application
-DATABASE_URL=postgres://...
-REDIS_URL=redis://...
+The output distinguishes `ADDED` (the name did not exist in this scope) from
+`UPDATED` (an existing value was replaced). If the name is one that no component
+declares and that the platform has never seen, `set` warns, suggests the closest
+declared names, and asks for confirmation before writing:
 
-# billing-service (svc-id-123)
-STRIPE_KEY=sk_test_...
-WEBHOOK_SECRET=whsec_...
-
-# email-worker (wkr-id-456)
-SMTP_HOST=smtp.example.com
+```
+[WARN] 'TWILIO_ACCOUNT_TOKEN' is not declared by any component in this application, and no variable by that name exists in production (us-east-1).
+[WARN]        Did you mean 'TWILIO_ACCOUNT_SID' or 'TWILIO_AUTH_TOKEN'?
+[WARN]        Setting it will store the value under a name nothing reads.
+? Set 'TWILIO_ACCOUNT_TOKEN' anyway? (y/N)
 ```
 
-When pushing, the comment headers determine which service or worker each variable belongs to. The `(id)` portion is used to resolve the target entity.
+The declared names come from the config the platform returns plus a scan of the
+local workspace. Neither is a complete picture on its own, so this is a warning
+rather than a refusal — a scripted run prints the warning and proceeds, and
+`--force` skips the prompt.
 
----
+### unset
+
+```bash
+forklaunch config unset KEY --region <region> --environment <env> [options]
+```
+
+Marks a variable as deliberately absent. The deploy gate stops requiring a value
+for it. Use this for variables that are injected at runtime and must never hold a
+value — `ECS_AGENT_URI`, which the ECS agent supplies per task, is the canonical
+case.
+
+**Required:**
+- `KEY` - Name of the variable to mark unset
+- `-r, --region <region>` - Region (e.g., `us-east-1`)
+- `-e, --environment <env>` - Environment name (e.g., `production`, `staging`)
+
+**Optional:**
+- `-s, --service <name>` - Scope to a service or worker (defaults to application scope)
+- `-y, --yes` - Skip the confirmation prompt (for CI/scripted use)
+- `-p, --path <path>` - Path to application root
+
+Unsetting a variable that currently holds a value **destroys that value** — the
+platform stores an empty string, and it cannot be recovered from the CLI or the
+dashboard. When that is the case, `unset` says so and asks for confirmation.
+Without a terminal to ask on, it refuses unless `--yes` is given. A variable that
+holds no value is unset with no prompt.
+
+Unlike `config push`, this touches only the key you name.
+
+### Examples
+
+```bash
+# Pull configuration for staging
+forklaunch config pull --region us-east-1 --environment staging
+
+# Pull configuration for a specific service
+forklaunch config pull --region us-east-1 --environment staging --service payments
+
+# Pull configuration to a specific file
+forklaunch config pull --region us-east-1 --environment production --output ./config/.env.prod
+
+# Push configuration for staging
+forklaunch config push --region us-east-1 --environment staging
+
+# Push configuration from a specific file
+forklaunch config push --region us-east-1 --environment production --input ./config/.env.prod
+
+# Set one variable at application scope
+forklaunch config set STRIPE_API_KEY=sk_live_xxx --region us-east-1 --environment production
+
+# Set one variable on a single service
+forklaunch config set QUEUE_NAME=orders --region us-east-1 --environment production --service payments
+
+# Mark a runtime-injected variable as deliberately absent
+forklaunch config unset ECS_AGENT_URI --region us-east-1 --environment production
+```
 
 ## Troubleshooting
 
@@ -105,21 +167,10 @@ When pushing, the comment headers determine which service or worker each variabl
 - Run `forklaunch login` to authenticate
 - Check session status with `forklaunch whoami`
 
-**Error: "Application not found"**
+**Error: "Permission denied"**
 
-- Verify the application ID is correct
-- Ensure you have access to the application in your organization
-
-**Error: "Environment not found"**
-
-- Verify the environment name (e.g. `production`, `staging`, `development`)
-- Check that the environment exists for the given application
-
-**Error: "Failed to pull/push config"**
-
-- Check internet connectivity
-- Ensure the platform API is reachable
-- Verify your authentication token hasn't expired
+- Ensure you have access to the configuration
+- Contact your organization admin if using team configurations
 
 **Error: "File not found" (push)**
 
@@ -128,9 +179,9 @@ When pushing, the comment headers determine which service or worker each variabl
 
 ## Related Commands
 
-- [`forklaunch login`](./authentication.md) - Authenticate with platform
-- [`forklaunch whoami`](./authentication.md) - Check authentication status
+- [`forklaunch login`](./authentication) - Authenticate with platform
+- [`forklaunch whoami`](./authentication) - Check authentication status
 
 ## Related Documentation
 
-- **[Authentication Guide](./authentication.md)** - Platform authentication
+- **[Authentication Guide](./authentication)** - Platform authentication

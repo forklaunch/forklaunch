@@ -50,6 +50,7 @@ mod tests {
     use oxc_codegen::{Codegen, CodegenOptions};
 
     use super::*;
+    use crate::core::ast::parse_ast_program::parse_ast_program;
 
     fn codegen(program: &Program) -> String {
         Codegen::new()
@@ -67,14 +68,14 @@ export * from './alpha.controller';
 export * from './mango.controller';
 export * from './zeta.controller';";
 
-        let mut index_program = crate::core::ast::parse_ast_program::parse_ast_program(
+        let mut index_program = parse_ast_program(
             &allocator,
             index_text,
             SourceType::ts(),
         );
 
         let injection_text = "export * from './beta.controller';";
-        let mut injection_program = crate::core::ast::parse_ast_program::parse_ast_program(
+        let mut injection_program = parse_ast_program(
             &allocator,
             injection_text,
             SourceType::ts(),
@@ -107,14 +108,14 @@ export * from './zeta.controller';";
 export * from './gamma.controller';
 export * from './omega.controller';";
 
-        let mut index_program = crate::core::ast::parse_ast_program::parse_ast_program(
+        let mut index_program = parse_ast_program(
             &allocator,
             index_text,
             SourceType::ts(),
         );
 
         let injection_text = "export * from './beta.controller';";
-        let mut injection_program = crate::core::ast::parse_ast_program::parse_ast_program(
+        let mut injection_program = parse_ast_program(
             &allocator,
             injection_text,
             SourceType::ts(),
@@ -139,14 +140,14 @@ export * from './omega.controller';";
 export * from './alpha.controller';
 export * from './beta.controller';";
 
-        let mut index_program = crate::core::ast::parse_ast_program::parse_ast_program(
+        let mut index_program = parse_ast_program(
             &allocator,
             index_text,
             SourceType::ts(),
         );
 
         let injection_text = "export * from './zeta.controller';";
-        let mut injection_program = crate::core::ast::parse_ast_program::parse_ast_program(
+        let mut injection_program = parse_ast_program(
             &allocator,
             injection_text,
             SourceType::ts(),

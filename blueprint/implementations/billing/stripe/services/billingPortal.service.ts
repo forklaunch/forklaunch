@@ -23,14 +23,12 @@ export class StripeBillingPortalService<
   SchemaValidator extends AnySchemaValidator,
   Entities extends StripeBillingPortalEntities,
   Dto extends StripeBillingPortalDtos = StripeBillingPortalDtos
-> implements
-    BillingPortalService<{
-      CreateBillingPortalDto: Dto['CreateBillingPortalMapper'];
-      UpdateBillingPortalDto: Dto['UpdateBillingPortalMapper'];
-      BillingPortalDto: Dto['BillingPortalMapper'];
-      IdDto: IdDto;
-    }>
-{
+> implements BillingPortalService<{
+  CreateBillingPortalDto: Dto['CreateBillingPortalMapper'];
+  UpdateBillingPortalDto: Dto['UpdateBillingPortalMapper'];
+  BillingPortalDto: Dto['BillingPortalMapper'];
+  IdDto: IdDto;
+}> {
   baseBillingPortalService: BaseBillingPortalService<
     SchemaValidator,
     Entities,

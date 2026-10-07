@@ -15,6 +15,7 @@ import {
   OpenTelemetryCollector,
   SessionObject
 } from '@forklaunch/core/http';
+import { findApplicationRoot } from '@forklaunch/core/environment';
 import { AnySchemaValidator } from '@forklaunch/validator';
 import { ZodSchemaValidator } from '@forklaunch/validator/zod';
 import { apiReference } from '@scalar/express-api-reference';
@@ -29,6 +30,7 @@ import express, {
 } from 'express';
 import fs from 'fs';
 import { Server } from 'http';
+import path from 'path';
 import swaggerUi from 'swagger-ui-express';
 import { startBunCluster } from './cluster/bun.cluster';
 import { startNodeCluster } from './cluster/node.cluster';
@@ -61,14 +63,11 @@ export class Application<
 > {
   private docsConfiguration: DocsConfiguration | undefined;
   private mcpConfiguration:
-    | ExpressLikeApplicationOptions<SV, SessionSchema>['mcp']
-    | undefined;
+    ExpressLikeApplicationOptions<SV, SessionSchema>['mcp'] | undefined;
   private openapiConfiguration:
-    | ExpressLikeApplicationOptions<SV, SessionSchema>['openapi']
-    | undefined;
+    ExpressLikeApplicationOptions<SV, SessionSchema>['openapi'] | undefined;
   private hostingConfiguration:
-    | ExpressLikeApplicationOptions<SV, SessionSchema>['hosting']
-    | undefined;
+    ExpressLikeApplicationOptions<SV, SessionSchema>['hosting'] | undefined;
   /**
    * Creates an instance of Application.
    *
@@ -84,10 +83,19 @@ export class Application<
     super(
       schemaValidator,
       express(),
-      [
-        contentParse<SV>(options),
-        enrichResponseTransmission as unknown as RequestHandler
-      ],
+      // In OpenAPI export mode the app never serves requests — `listen` just
+      // generates the spec and exits — so request body parsers are unnecessary.
+      // Constructing them eagerly can hard-crash the export when runtime config
+      // is unset/empty (e.g. body-parser@2 rejects an empty `limit` string that
+      // can materialize from empty-string env under `FORKLAUNCH_MODE=openapi`).
+      // Skip them in openapi mode so spec generation is resilient to missing
+      // runtime configuration.
+      process.env.FORKLAUNCH_MODE === 'openapi'
+        ? [enrichResponseTransmission as unknown as RequestHandler]
+        : [
+            contentParse<SV>(options),
+            enrichResponseTransmission as unknown as RequestHandler
+          ],
       openTelemetryCollector,
       options
     );
@@ -140,8 +148,20 @@ export class Application<
         this as ForklaunchRouter<SV>,
         this.openapiConfiguration
       );
+      const serviceName = process.env.OTEL_SERVICE_NAME || 'unknown-service';
+      const appRoot = findApplicationRoot(process.cwd());
+      const outputPath =
+        process.env.FORKLAUNCH_OPENAPI_OUTPUT ||
+        path.join(
+          appRoot,
+          '.forklaunch',
+          'openapi',
+          serviceName,
+          'openapi.json'
+        );
+      fs.mkdirSync(path.dirname(outputPath), { recursive: true });
       fs.writeFileSync(
-        process.env.FORKLAUNCH_OPENAPI_OUTPUT as string,
+        outputPath,
         JSON.stringify(
           {
             ...openApiSpec,
@@ -153,6 +173,8 @@ export class Application<
       );
       process.exit(0);
     }
+
+    this.validateAllRoutes();
 
     const port =
       typeof args[0] === 'number' ? args[0] : Number(process.env.PORT);
@@ -182,7 +204,7 @@ export class Application<
         host,
         port,
         version ?? '1.0.0',
-        this as unknown as ForklaunchRouter<ZodSchemaValidator>,
+        this as ForklaunchRouter<ZodSchemaValidator>,
         this.mcpConfiguration,
         options,
         contentTypeMapping,
@@ -343,7 +365,6 @@ export class Application<
       res.send('OK');
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
       const statusCode = Number(res.statusCode);
       res.locals.errorMessage = err.message;

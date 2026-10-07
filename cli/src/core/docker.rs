@@ -6,6 +6,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use convert_case::{Case, Casing};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_yml::{Value, from_str, from_value, to_string};
@@ -86,13 +87,38 @@ impl<'de> Deserialize<'de> for DockerCompose {
                                 from_value(value).map_err(serde::de::Error::custom)?;
                         }
                         "volumes" => {
-                            compose.volumes =
-                                from_value(value).map_err(serde::de::Error::custom)?;
-                        }
+                            if let Value::Mapping(map) = value {
+                                for (k, v) in map {
+                                    let child_key = yaml_value_to_string(k);
+                                    match from_value::<DockerVolume>(v.clone()) {
+                                        Ok(vol) => { compose.volumes.insert(child_key, vol); }
+                                        Err(_) => { compose.additional_entries
+                                            .entry("volumes".to_string())
+                                            .or_insert_with(|| Value::Mapping(Default::default()))
+                                            .as_mapping_mut()
+                                            .map(|m| m.insert(Value::String(child_key), v));
+                                        }
+                                    }
+                                }
+                            }
+                            // ignore non-mapping volumes (shouldn't happen)
+                        },
                         "networks" => {
-                            compose.networks =
-                                from_value(value).map_err(serde::de::Error::custom)?;
-                        }
+                            if let Value::Mapping(map) = value {
+                                for (k, v) in map {
+                                    let child_key = yaml_value_to_string(k);
+                                    match from_value::<DockerNetwork>(v.clone()) {
+                                        Ok(net) => { compose.networks.insert(child_key, net); }
+                                        Err(_) => { compose.additional_entries
+                                            .entry("networks".to_string())
+                                            .or_insert_with(|| Value::Mapping(Default::default()))
+                                            .as_mapping_mut()
+                                            .map(|m| m.insert(Value::String(child_key), v));
+                                        }
+                                    }
+                                }
+                            }
+                        },
                         "services" => {
                             compose.services =
                                 from_value(value).map_err(serde::de::Error::custom)?;
@@ -203,12 +229,30 @@ pub(crate) enum Command {
     Multiple(Vec<String>),
 }
 
+impl Command {
+    pub(crate) fn iter(&self) -> Box<dyn Iterator<Item = &String> + '_> {
+        match self {
+            Command::Simple(s) => Box::new(std::iter::once(s)),
+            Command::Multiple(v) => Box::new(v.iter()),
+        }
+    }
+
+    pub(crate) fn iter_mut(&mut self) -> Box<dyn Iterator<Item = &mut String> + '_> {
+        match self {
+            Command::Simple(s) => Box::new(std::iter::once(s)),
+            Command::Multiple(v) => Box::new(v.iter_mut()),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) enum Restart {
     #[serde(rename = "always")]
     Always,
     #[serde(rename = "unless-stopped")]
     UnlessStopped,
+    #[serde(rename = "on-failure")]
+    OnFailure,
     #[serde(rename = "no")]
     No,
 }
@@ -257,7 +301,7 @@ pub(crate) struct DockerService {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) working_dir: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) entrypoint: Option<Vec<String>>,
+    pub(crate) entrypoint: Option<Command>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) command: Option<Command>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -382,6 +426,7 @@ impl<'de> Deserialize<'de> for DockerService {
 
                 while let Some((key, value)) = access.next_entry::<String, Value>()? {
                     match key.as_str() {
+                        // Fields we strictly need — fail on parse error
                         "hostname" => {
                             service.hostname =
                                 from_value(value).map_err(serde::de::Error::custom)?
@@ -393,19 +438,9 @@ impl<'de> Deserialize<'de> for DockerService {
                         "image" => {
                             service.image = from_value(value).map_err(serde::de::Error::custom)?
                         }
-                        "restart" => {
-                            service.restart = from_value(value).map_err(serde::de::Error::custom)?
-                        }
-                        "build" => {
-                            service.build = from_value(value).map_err(serde::de::Error::custom)?
-                        }
                         "environment" => {
                             service.environment =
                                 parse_environment_value(value).map_err(serde::de::Error::custom)?;
-                        }
-                        "depends_on" => {
-                            service.depends_on =
-                                from_value(value).map_err(serde::de::Error::custom)?
                         }
                         "ports" => {
                             service.ports = from_value(value).map_err(serde::de::Error::custom)?
@@ -417,21 +452,35 @@ impl<'de> Deserialize<'de> for DockerService {
                         "volumes" => {
                             service.volumes = from_value(value).map_err(serde::de::Error::custom)?
                         }
-                        "working_dir" => {
-                            service.working_dir =
-                                from_value(value).map_err(serde::de::Error::custom)?
-                        }
-                        "entrypoint" => {
-                            service.entrypoint =
-                                from_value(value).map_err(serde::de::Error::custom)?
-                        }
-                        "command" => {
-                            service.command = from_value(value).map_err(serde::de::Error::custom)?
-                        }
-                        "healthcheck" => {
-                            service.healthcheck =
-                                from_value(value).map_err(serde::de::Error::custom)?
-                        }
+                        // Lenient fields — store raw value on parse failure
+                        "restart" => match from_value(value.clone()) {
+                            Ok(v) => service.restart = v,
+                            Err(_) => { additional_properties.insert(key, value); }
+                        },
+                        "build" => match from_value(value.clone()) {
+                            Ok(v) => service.build = v,
+                            Err(_) => { additional_properties.insert(key, value); }
+                        },
+                        "depends_on" => match from_value(value.clone()) {
+                            Ok(v) => service.depends_on = v,
+                            Err(_) => { additional_properties.insert(key, value); }
+                        },
+                        "working_dir" => match from_value(value.clone()) {
+                            Ok(v) => service.working_dir = v,
+                            Err(_) => { additional_properties.insert(key, value); }
+                        },
+                        "entrypoint" => match from_value(value.clone()) {
+                            Ok(v) => service.entrypoint = v,
+                            Err(_) => { additional_properties.insert(key, value); }
+                        },
+                        "command" => match from_value(value.clone()) {
+                            Ok(v) => service.command = v,
+                            Err(_) => { additional_properties.insert(key, value); }
+                        },
+                        "healthcheck" => match from_value(value.clone()) {
+                            Ok(v) => service.healthcheck = v,
+                            Err(_) => { additional_properties.insert(key, value); }
+                        },
                         _ => {
                             additional_properties.insert(key, value);
                         }
@@ -447,9 +496,46 @@ impl<'de> Deserialize<'de> for DockerService {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+#[derive(Debug, Serialize, Default, Clone)]
 pub(crate) struct DockerVolume {
     pub(crate) driver: String,
+
+    #[serde(flatten)]
+    pub(crate) additional_properties: HashMap<String, Value>,
+}
+
+impl<'de> Deserialize<'de> for DockerVolume {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        // Accept null/empty as default, otherwise parse as map
+        let value = Value::deserialize(deserializer)?;
+        match value {
+            Value::Null => Ok(DockerVolume::default()),
+            Value::Mapping(map) => {
+                let mut vol = DockerVolume::default();
+                for (k, v) in map {
+                    let key = yaml_value_to_string(k);
+                    match key.as_str() {
+                        "driver" => {
+                            vol.driver = from_value(v).unwrap_or_default();
+                        }
+                        _ => {
+                            vol.additional_properties.insert(key, v);
+                        }
+                    }
+                }
+                Ok(vol)
+            }
+            // String short-form (e.g., volume defined as just a string)
+            Value::String(s) => Ok(DockerVolume {
+                driver: s,
+                additional_properties: HashMap::new(),
+            }),
+            _ => Ok(DockerVolume::default()),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -458,10 +544,49 @@ pub(crate) struct DockerBuild {
     pub(crate) dockerfile: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Default, Clone)]
 pub(crate) struct DockerNetwork {
     pub(crate) name: String,
     pub(crate) driver: String,
+
+    #[serde(flatten)]
+    pub(crate) additional_properties: HashMap<String, Value>,
+}
+
+impl<'de> Deserialize<'de> for DockerNetwork {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = Value::deserialize(deserializer)?;
+        match value {
+            Value::Null => Ok(DockerNetwork::default()),
+            Value::Mapping(map) => {
+                let mut net = DockerNetwork::default();
+                for (k, v) in map {
+                    let key = yaml_value_to_string(k);
+                    match key.as_str() {
+                        "name" => {
+                            net.name = from_value(v).unwrap_or_default();
+                        }
+                        "driver" => {
+                            net.driver = from_value(v).unwrap_or_default();
+                        }
+                        _ => {
+                            net.additional_properties.insert(key, v);
+                        }
+                    }
+                }
+                Ok(net)
+            }
+            Value::String(s) => Ok(DockerNetwork {
+                name: s,
+                driver: String::new(),
+                additional_properties: HashMap::new(),
+            }),
+            _ => Ok(DockerNetwork::default()),
+        }
+    }
 }
 
 pub(crate) fn add_otel_to_docker_compose<'a>(
@@ -482,21 +607,108 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
             DockerNetwork {
                 name: network_name.clone(),
                 driver: "bridge".to_string(),
+                ..Default::default()
             },
         );
     }
 
+    // NOTE ON IMAGE PINS: every image below is pinned to the same version the
+    // ForkLaunch deployment agent runs in production. Floating `:latest` is what
+    // allowed this stack to drift away from production -- production moved to
+    // Mimir while local kept running Prometheus, so no local test could
+    // reproduce production behaviour and a health-check mismatch reached prod.
+    // Bump these deliberately, in step with the production template.
+
+    // MinIO (S3-compatible object store for Tempo, Loki and Mimir)
+    if !docker_compose.services.contains_key("minio") {
+        let mut minio_environment = IndexMap::new();
+        minio_environment.insert("MINIO_ROOT_USER".to_string(), "minioadmin".to_string());
+        minio_environment.insert("MINIO_ROOT_PASSWORD".to_string(), "minioadmin".to_string());
+
+        docker_compose.services.insert(
+            "minio".to_string(),
+            DockerService {
+                image: Some("minio/minio:RELEASE.2025-04-22T22-12-26Z".to_string()),
+                container_name: Some(format!("{}-minio", app_name)),
+                restart: Some(Restart::Always),
+                environment: Some(minio_environment),
+                ports: Some(vec!["9000:9000".to_string(), "9001:9001".to_string()]),
+                networks: Some(vec![format!("{}-network", app_name)]),
+                volumes: Some(vec!["minio-data:/data".to_string()]),
+                command: Some(Command::Simple(
+                    "server /data --console-address :9001".to_string(),
+                )),
+                healthcheck: Some(Healthcheck {
+                    test: HealthTest::List(vec![
+                        "CMD".to_string(),
+                        "mc".to_string(),
+                        "ready".to_string(),
+                        "local".to_string(),
+                    ]),
+                    interval: "30s".to_string(),
+                    timeout: "10s".to_string(),
+                    retries: 3,
+                    start_period: "30s".to_string(),
+                    additional_properties: HashMap::new(),
+                }),
+                ..Default::default()
+            },
+        );
+    }
+
+    if !docker_compose.volumes.contains_key("minio-data") {
+        docker_compose.volumes.insert(
+            "minio-data".to_string(),
+            DockerVolume {
+                driver: "local".to_string(),
+                ..Default::default()
+            },
+        );
+    }
+
+    // MinIO init (create telemetry bucket)
+    docker_compose.services.insert(
+        "minio-init".to_string(),
+        DockerService {
+            image: Some("minio/mc:RELEASE.2025-04-16T18-13-26Z".to_string()),
+            networks: Some(vec![format!("{}-network", app_name)]),
+            depends_on: Some(IndexMap::from([(
+                "minio".to_string(),
+                DependsOn {
+                    condition: DependencyCondition::ServiceHealthy,
+                },
+            )])),
+            entrypoint: Some(Command::Simple(
+                "/bin/sh -c \"mc alias set local http://minio:9000 minioadmin minioadmin && mc mb --ignore-existing local/forklaunch-telemetry\"".to_string(),
+            )),
+            ..Default::default()
+        },
+    );
+
+    // Tempo (distributed tracing backend)
     docker_compose.services.insert(
         "tempo".to_string(),
         DockerService {
-            image: Some("grafana/tempo:latest".to_string()),
-            command: Some(Command::Simple("-config.file=/etc/tempo.yaml".to_string())),
-            ports: Some(vec!["3200:3200".to_string(), "4317:4317".to_string()]),
-            volumes: Some(vec![format!(
-                "{}/monitoring/tempo.yaml:/etc/tempo.yaml",
-                context_path.to_string_lossy()
-            )]),
+            image: Some("grafana/tempo:3.0.0".to_string()),
+            command: Some(Command::Simple("-target=all -config.file=/etc/tempo.yaml".to_string())),
+            // Host port 4317 is deliberately not published: the OTel collector
+            // is the only front door for OTLP and reaches Tempo over the
+            // compose network.
+            ports: Some(vec!["3200:3200".to_string()]),
+            volumes: Some(vec![
+                format!(
+                    "{}/monitoring/tempo.yaml:/etc/tempo.yaml",
+                    context_path.to_string_lossy()
+                ),
+                "tempo-data:/var/tempo".to_string(),
+            ]),
             networks: Some(vec![format!("{}-network", app_name)]),
+            depends_on: Some(IndexMap::from([(
+                "minio-init".to_string(),
+                DependsOn {
+                    condition: DependencyCondition::ServiceCompletedSuccessfully,
+                },
+            )])),
             healthcheck: Some(Healthcheck {
                 test: HealthTest::List(vec![
                     "CMD".to_string(),
@@ -506,22 +718,37 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
                     "--spider".to_string(),
                     "http://localhost:3200/ready".to_string(),
                 ]),
-                interval: "30s".to_string(),
+                interval: "10s".to_string(),
                 timeout: "10s".to_string(),
-                retries: 3,
-                start_period: "60s".to_string(),
+                retries: 12,
+                start_period: "30s".to_string(),
                 additional_properties: HashMap::new(),
             }),
             ..Default::default()
         },
     );
 
+    // Loki (log aggregation)
     docker_compose.services.insert(
         "loki".to_string(),
         DockerService {
-            image: Some("grafana/loki:latest".to_string()),
+            image: Some("grafana/loki:3.7.7".to_string()),
+            command: Some(Command::Simple("-config.file=/etc/loki/local-config.yaml".to_string())),
             ports: Some(vec!["3100:3100".to_string()]),
+            volumes: Some(vec![
+                format!(
+                    "{}/monitoring/loki.yaml:/etc/loki/local-config.yaml",
+                    context_path.to_string_lossy()
+                ),
+                "loki-data:/loki".to_string(),
+            ]),
             networks: Some(vec![format!("{}-network", app_name)]),
+            depends_on: Some(IndexMap::from([(
+                "minio-init".to_string(),
+                DependsOn {
+                    condition: DependencyCondition::ServiceCompletedSuccessfully,
+                },
+            )])),
             healthcheck: Some(Healthcheck {
                 test: HealthTest::List(vec![
                     "CMD".to_string(),
@@ -531,9 +758,9 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
                     "--spider".to_string(),
                     "http://localhost:3100/ready".to_string(),
                 ]),
-                interval: "30s".to_string(),
+                interval: "10s".to_string(),
                 timeout: "10s".to_string(),
-                retries: 3,
+                retries: 12,
                 start_period: "30s".to_string(),
                 additional_properties: HashMap::new(),
             }),
@@ -541,16 +768,56 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
         },
     );
 
+    // Mimir (metrics). Replaces Prometheus + the Thanos sidecar, matching what
+    // the deployment agent runs in production.
+    //
+    // The health path MUST be /ready. Mimir answers Prometheus's /-/healthy with
+    // a 404 -- that exact mismatch, left behind after the production migration,
+    // failed every ALB health check and crash-looped the production monitoring
+    // task. Keeping the local stack on the same engine and the same path is the
+    // point of this definition.
+    for volume in ["mimir-data", "loki-data", "tempo-data"] {
+        if !docker_compose.volumes.contains_key(volume) {
+            docker_compose.volumes.insert(
+                volume.to_string(),
+                DockerVolume {
+                    driver: "local".to_string(),
+                    ..Default::default()
+                },
+            );
+        }
+    }
+
     docker_compose.services.insert(
-        "prometheus".to_string(),
+        "mimir".to_string(),
         DockerService {
-            image: Some("prom/prometheus:latest".to_string()),
+            image: Some("grafana/mimir:3.2.0".to_string()),
             ports: Some(vec!["9090:9090".to_string()]),
-            volumes: Some(vec![format!(
-                "{}/monitoring/prometheus.yaml:/etc/prometheus/prometheus.yml",
-                context_path.to_string_lossy()
-            )]),
+            volumes: Some(vec![
+                format!(
+                    "{}/monitoring/mimir.yaml:/etc/mimir/mimir.yaml",
+                    context_path.to_string_lossy()
+                ),
+                "mimir-data:/data".to_string(),
+            ]),
+            command: Some(Command::Simple(
+                "-config.file=/etc/mimir/mimir.yaml".to_string(),
+            )),
             networks: Some(vec![format!("{}-network", app_name)]),
+            depends_on: Some(IndexMap::from([
+                (
+                    "minio-init".to_string(),
+                    DependsOn {
+                        condition: DependencyCondition::ServiceCompletedSuccessfully,
+                    },
+                ),
+                (
+                    "memcached".to_string(),
+                    DependsOn {
+                        condition: DependencyCondition::ServiceStarted,
+                    },
+                ),
+            ])),
             healthcheck: Some(Healthcheck {
                 test: HealthTest::List(vec![
                     "CMD".to_string(),
@@ -558,11 +825,11 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
                     "--no-verbose".to_string(),
                     "--tries=1".to_string(),
                     "--spider".to_string(),
-                    "http://localhost:9090/-/healthy".to_string(),
+                    "http://localhost:9090/ready".to_string(),
                 ]),
-                interval: "30s".to_string(),
+                interval: "10s".to_string(),
                 timeout: "10s".to_string(),
-                retries: 3,
+                retries: 12,
                 start_period: "30s".to_string(),
                 additional_properties: HashMap::new(),
             }),
@@ -570,10 +837,23 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
         },
     );
 
+    // memcached: query cache for Mimir's bucket store. Present in production.
+    docker_compose.services.insert(
+        "memcached".to_string(),
+        DockerService {
+            image: Some("memcached:1.6-alpine".to_string()),
+            command: Some(Command::Simple("-m 64".to_string())),
+            networks: Some(vec![format!("{}-network", app_name)]),
+            ..Default::default()
+        },
+    );
+
+    // Grafana (dashboards). LOCAL ONLY -- production runs no Grafana; the
+    // ForkLaunch dashboard queries the backends directly.
     docker_compose.services.insert(
         "grafana".to_string(),
         DockerService {
-            image: Some("grafana/grafana:latest".to_string()),
+            image: Some("grafana/grafana:12.3.1".to_string()),
             ports: Some(vec!["3000:3000".to_string()]),
             volumes: Some(vec![
                 format!("{}/monitoring/grafana-provisioning/datasources:/etc/grafana/provisioning/datasources", context_path.to_string_lossy()),
@@ -599,19 +879,64 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
         },
     );
 
+    // OTel Collector.
+    //
+    // Must be the `-contrib` distribution: metrics reach Mimir through the
+    // `prometheus_remote_write` exporter, which the core image does not ship.
+    // Port 8889 is gone with Prometheus -- it was the scrape endpoint Prometheus
+    // pulled from. Mimir does not scrape; the collector pushes to it.
     docker_compose.services.insert(
         "otel-collector".to_string(),
         DockerService {
-            image: Some("otel/opentelemetry-collector:latest".to_string()),
+            image: Some("otel/opentelemetry-collector-contrib:0.159.0".to_string()),
             command: Some(Command::Simple(
                 "--config=/etc/otel-collector-config.yaml".to_string(),
             )),
-            ports: Some(vec!["4318:4318".to_string(), "8889:8889".to_string()]),
+            ports: Some(vec![
+                "4317:4317".to_string(),
+                "4318:4318".to_string(),
+                "13133:13133".to_string(),
+            ]),
             volumes: Some(vec![format!(
                 "{}/monitoring/otel-collector-config.yaml:/etc/otel-collector-config.yaml",
                 context_path.to_string_lossy()
             )]),
             networks: Some(vec![format!("{}-network", app_name)]),
+            depends_on: Some(IndexMap::from([
+                (
+                    "mimir".to_string(),
+                    DependsOn {
+                        condition: DependencyCondition::ServiceStarted,
+                    },
+                ),
+                (
+                    "loki".to_string(),
+                    DependsOn {
+                        condition: DependencyCondition::ServiceStarted,
+                    },
+                ),
+                (
+                    "tempo".to_string(),
+                    DependsOn {
+                        condition: DependencyCondition::ServiceStarted,
+                    },
+                ),
+            ])),
+            healthcheck: Some(Healthcheck {
+                test: HealthTest::List(vec![
+                    "CMD".to_string(),
+                    "wget".to_string(),
+                    "--no-verbose".to_string(),
+                    "--tries=1".to_string(),
+                    "--spider".to_string(),
+                    "http://localhost:13133/".to_string(),
+                ]),
+                interval: "10s".to_string(),
+                timeout: "10s".to_string(),
+                retries: 12,
+                start_period: "20s".to_string(),
+                additional_properties: HashMap::new(),
+            }),
             ..Default::default()
         },
     );
@@ -623,6 +948,7 @@ pub(crate) fn add_redis_to_docker_compose<'a>(
     app_name: &str,
     docker_compose: &'a mut DockerCompose,
     environment: &mut IndexMap<String, String>,
+    redis_partition: u32,
 ) -> Result<&'a mut DockerCompose> {
     // Ensure the network definition exists
     let network_name = format!("{}-network", app_name);
@@ -632,11 +958,15 @@ pub(crate) fn add_redis_to_docker_compose<'a>(
             DockerNetwork {
                 name: network_name.clone(),
                 driver: "bridge".to_string(),
+                ..Default::default()
             },
         );
     }
 
-    environment.insert("REDIS_URL".to_string(), "redis://redis:6379".to_string());
+    environment.insert(
+        "REDIS_URL".to_string(),
+        format!("redis://redis:6379/{}", redis_partition),
+    );
     if !docker_compose.services.contains_key("redis") {
         docker_compose.services.insert(
             "redis".to_string(),
@@ -690,6 +1020,7 @@ pub(crate) fn add_s3_to_docker_compose<'a>(
             DockerNetwork {
                 name: network_name.clone(),
                 driver: "bridge".to_string(),
+                ..Default::default()
             },
         );
     }
@@ -743,6 +1074,7 @@ pub(crate) fn add_s3_to_docker_compose<'a>(
             "minio-data".to_string(),
             DockerVolume {
                 driver: "local".to_string(),
+                ..Default::default()
             },
         );
     }
@@ -759,9 +1091,8 @@ pub(crate) fn remove_s3_from_docker_compose<'a>(
     environment.shift_remove("S3_ACCESS_KEY_ID");
     environment.shift_remove("S3_SECRET_ACCESS_KEY");
     environment.shift_remove("S3_BUCKET");
-    if docker_compose.services.contains_key("minio") {
-        docker_compose.services.shift_remove("minio");
-    }
+    // MinIO itself stays: the telemetry stack uses it too.
+    // `clean_up_unused_infrastructure_services` drops it once nothing does.
     Ok(docker_compose)
 }
 
@@ -812,6 +1143,7 @@ pub(crate) fn add_kafka_to_docker_compose<'a>(
             DockerNetwork {
                 name: network_name.clone(),
                 driver: "bridge".to_string(),
+                ..Default::default()
             },
         );
     }
@@ -932,7 +1264,7 @@ pub(crate) fn add_kafka_to_docker_compose<'a>(
                 },
             )])),
             networks: Some(vec![format!("{}-network", app_name)]),
-            entrypoint: Some(vec!["/bin/bash".to_string(), "-lc".to_string()]),
+            entrypoint: Some(Command::Multiple(vec!["/bin/bash".to_string(), "-lc".to_string()])),
             command: Some(Command::Simple(format!(
                 r#"set -e
 until kafka-topics --bootstrap-server kafka:29092 --list; do
@@ -988,6 +1320,7 @@ pub(crate) fn add_database_to_docker_compose(
             DockerNetwork {
                 name: network_name.clone(),
                 driver: "bridge".to_string(),
+                ..Default::default()
             },
         );
     }
@@ -1057,6 +1390,7 @@ pub(crate) fn add_database_to_docker_compose(
                     format!("{}-postgresql-data", app_name),
                     DockerVolume {
                         driver: "local".to_string(),
+                        ..Default::default()
                     },
                 );
             }
@@ -1119,6 +1453,7 @@ pub(crate) fn add_database_to_docker_compose(
                     format!("{}-mongodb-data", app_name),
                     DockerVolume {
                         driver: "local".to_string(),
+                        ..Default::default()
                     },
                 );
             }
@@ -1163,6 +1498,7 @@ pub(crate) fn add_database_to_docker_compose(
                     format!("{}-mysql-data", app_name),
                     DockerVolume {
                         driver: "local".to_string(),
+                        ..Default::default()
                     },
                 );
             }
@@ -1206,6 +1542,7 @@ pub(crate) fn add_database_to_docker_compose(
                     format!("{}-mariadb-data", app_name),
                     DockerVolume {
                         driver: "local".to_string(),
+                        ..Default::default()
                     },
                 );
             }
@@ -1248,6 +1585,7 @@ pub(crate) fn add_database_to_docker_compose(
                     format!("{}-mssql-data", app_name),
                     DockerVolume {
                         driver: "local".to_string(),
+                        ..Default::default()
                     },
                 );
             }
@@ -1296,6 +1634,9 @@ pub(crate) fn clean_up_unused_infrastructure_services(
                 let queue = queue.clone();
                 infrastructure_in_use.insert(queue);
             }
+            if let Some(object_store) = resources.object_store {
+                infrastructure_in_use.insert(object_store);
+            }
         }
     }
 
@@ -1316,6 +1657,7 @@ pub(crate) fn clean_up_unused_infrastructure_services(
         .difference(&infrastructure_in_use)
         .flat_map(|component| match component.parse::<Infrastructure>() {
             Ok(Infrastructure::Redis) => vec!["redis".to_string()],
+            Ok(Infrastructure::S3) => vec!["minio".to_string()],
             _ => match component.parse::<Database>() {
                 Ok(Database::MongoDB) => vec!["mongodb".to_string(), "mongo-init".to_string()],
                 _ => vec![component.to_string()],
@@ -1323,12 +1665,42 @@ pub(crate) fn clean_up_unused_infrastructure_services(
         });
 
     for infrastructure in unused_infrastructure {
+        // No project declares it, but something else in the stack may still
+        // run on it: MinIO backs the telemetry bucket (`minio-init`), and a
+        // module can reach Redis without declaring a cache. Removing it would
+        // break that service, so only drop what nothing else references.
+        if service_still_referenced(docker_compose, &infrastructure) {
+            continue;
+        }
         docker_compose
             .services
             .shift_remove(&infrastructure.to_string());
     }
 
     Ok(())
+}
+
+/// True when another compose service depends on `name` or addresses it by
+/// host (`redis://redis:6379`, `http://minio:9000`).
+fn service_still_referenced(docker_compose: &DockerCompose, name: &str) -> bool {
+    if !docker_compose.services.contains_key(name) {
+        return false;
+    }
+    let host = format!("//{name}:");
+    docker_compose
+        .services
+        .iter()
+        .filter(|(key, _)| key.as_str() != name)
+        .any(|(_, service)| {
+            service
+                .depends_on
+                .as_ref()
+                .is_some_and(|deps| deps.contains_key(name))
+                || service
+                    .environment
+                    .as_ref()
+                    .is_some_and(|env| env.values().any(|value| value.contains(&host)))
+        })
 }
 
 fn add_base_definition_to_docker_compose(
@@ -1356,6 +1728,7 @@ fn add_base_definition_to_docker_compose(
             DockerNetwork {
                 name: network_name,
                 driver: "bridge".to_string(),
+                ..Default::default()
             },
         );
     }
@@ -1440,9 +1813,15 @@ fn create_base_service(
             context: context_path.to_string_lossy().to_string(),
             dockerfile: format!("./Dockerfile"),
         }),
+        // Docker image repository names must be lowercase. The on-disk module dir
+        // (and hostname/working_dir) keep the raw component_name, but the image tag
+        // is kebab-cased so camelCase module names (e.g. "labPanel") don't produce
+        // an invalid tag like "app-labPanel-node:latest".
         image: Some(format!(
             "{}-{}-{}:latest",
-            app_name, component_name, runtime
+            app_name.to_case(Case::Kebab),
+            component_name.to_case(Case::Kebab),
+            runtime
         )),
         environment: Some(environment),
         depends_on: if depends_on.len() > 0 {
@@ -1470,7 +1849,7 @@ fn create_base_service(
         networks: Some(vec![format!("{}-network", app_name)]),
         volumes: Some(volumes),
         working_dir: Some(format!("/{}/{}", app_name, component_name)),
-        entrypoint: Some(vec![
+        entrypoint: Some(Command::Multiple(vec![
             match runtime {
                 "node" => "pnpm".to_string(),
                 "bun" => "bun".to_string(),
@@ -1478,7 +1857,7 @@ fn create_base_service(
             },
             "run".to_string(),
             entrypoint_command.to_string(),
-        ]),
+        ])),
         healthcheck: if let Some(port_number) = port_number {
             Some(Healthcheck {
                 test: HealthTest::List(vec![
@@ -1509,16 +1888,20 @@ fn add_iam_environment_variables_to_docker_compose(
     environment: &mut IndexMap<String, String>,
     hmac_secret: &str,
 ) -> Result<()> {
-    environment.insert("HMAC_SECRET_KEY".to_string(), hmac_secret.to_string());
+    // A project literally named "iam" only carries a `variant` when it came from the real
+    // `iam-base`/`iam-better-auth` module preset. A plain custom service happens to be named
+    // "iam" has no variant — skip IAM wiring entirely (including the HMAC secret, which it has
+    // no use for) instead of panicking; it isn't a real auth module.
+    let Some(iam_project_variant) = projects
+        .iter()
+        .find(|project| project.name == "iam")
+        .and_then(|project| project.variant.as_ref())
+        .and_then(|variant| variant.parse::<Module>().ok())
+    else {
+        return Ok(());
+    };
 
-    let iam_project = projects.iter().find(|project| project.name == "iam");
-    let iam_project_variant = iam_project
-        .unwrap()
-        .variant
-        .as_ref()
-        .unwrap()
-        .parse::<Module>()
-        .unwrap();
+    environment.insert("HMAC_SECRET_KEY".to_string(), hmac_secret.to_string());
 
     let iam_port = if service_name == "iam" {
         port_number
@@ -1573,17 +1956,7 @@ pub(crate) fn add_service_definition_to_docker_compose(
         docker_compose_string,
     )?;
 
-    if manifest_data.is_iam {
-        environment.insert(
-            "PASSWORD_ENCRYPTION_SECRET".to_string(),
-            manifest_data.generated_password_encryption_secret.clone(),
-        );
-    }
     if manifest_data.is_better_auth {
-        environment.insert(
-            "PASSWORD_ENCRYPTION_SECRET".to_string(),
-            manifest_data.generated_password_encryption_secret.clone(),
-        );
         environment.insert(
             "BETTER_AUTH_SECRET".to_string(),
             manifest_data.generated_better_auth_secret.clone(),
@@ -1604,6 +1977,20 @@ pub(crate) fn add_service_definition_to_docker_compose(
             "replace-with-stripe-webhook-secret".to_string(),
         );
     }
+    if manifest_data.is_twilio {
+        environment.insert(
+            "TWILIO_ACCOUNT_SID".to_string(),
+            "replace-with-twilio-account-sid".to_string(),
+        );
+        environment.insert(
+            "TWILIO_AUTH_TOKEN".to_string(),
+            "replace-with-twilio-auth-token".to_string(),
+        );
+        environment.insert(
+            "TWILIO_FROM_NUMBER".to_string(),
+            "replace-with-twilio-from-number".to_string(),
+        );
+    }
 
     if manifest_data.is_iam_configured {
         add_iam_environment_variables_to_docker_compose(
@@ -1617,11 +2004,19 @@ pub(crate) fn add_service_definition_to_docker_compose(
         )?;
     }
 
-    if manifest_data.is_cache_enabled {
+    // Provision a redis service whenever the service actually wires a Redis cache, not only
+    // when redis infra was explicitly requested. The service registrations template uses
+    // RedisTtlCache when `is_request_cache_needed` (= is_cache_enabled || is_iam_configured ||
+    // is_billing_configured), so an iam/billing app's service depends on redis at runtime even
+    // without `-i redis`. Gating compose provisioning on `is_cache_enabled` alone left those
+    // services pointed at a `redis://redis` host that was never provisioned -> ENOTFOUND and
+    // hung requests on first cache use.
+    if manifest_data.is_request_cache_needed {
         add_redis_to_docker_compose(
             &manifest_data.app_name,
             &mut docker_compose,
             &mut environment,
+            0,
         )
         .with_context(|| {
             format!(
@@ -1683,7 +2078,7 @@ pub(crate) fn add_service_definition_to_docker_compose(
     let service_name = manifest_data.service_name.clone();
     if !docker_compose.services.contains_key(&service_name) {
         docker_compose.services.insert(
-            service_name,
+            service_name.clone(),
             create_base_service(
                 &manifest_data.app_name,
                 &manifest_data.service_name,
@@ -1693,14 +2088,44 @@ pub(crate) fn add_service_definition_to_docker_compose(
                 manifest_data.is_s3_enabled,
                 manifest_data.is_in_memory_database,
                 Some(port_number),
-                environment,
-                volumes,
+                environment.clone(),
+                volumes.clone(),
                 None,
                 "dev",
                 vec![],
                 &context_path,
             ),
         );
+    }
+
+    // A module that ships a worker needs it running as its own container, the
+    // same way init/worker.rs emits one. Without this `docker compose up`
+    // starts the API alone: order events pile up in Redis, inventory is never
+    // adjusted, and nothing reports an error — the store just quietly stops
+    // decrementing stock.
+    if manifest_data.ships_worker {
+        let worker_service_name = format!("{}-worker", manifest_data.service_name);
+        if !docker_compose.services.contains_key(&worker_service_name) {
+            docker_compose.services.insert(
+                worker_service_name,
+                create_base_service(
+                    &manifest_data.app_name,
+                    &manifest_data.service_name,
+                    &manifest_data.runtime,
+                    &Some(manifest_data.database.clone()),
+                    manifest_data.is_cache_enabled,
+                    manifest_data.is_s3_enabled,
+                    manifest_data.is_in_memory_database,
+                    None,
+                    environment,
+                    volumes,
+                    Some("worker"),
+                    "dev:worker",
+                    vec![service_name],
+                    &context_path,
+                ),
+            );
+        }
     }
 
     Ok(to_string(&docker_compose)
@@ -1762,6 +2187,7 @@ pub(crate) fn add_worker_definition_to_docker_compose(
             &manifest_data.app_name,
             &mut docker_compose,
             &mut environment,
+            manifest_data.redis_partition,
         )
         .with_context(|| ERROR_FAILED_TO_ADD_PROJECT_METADATA_TO_DOCKER_COMPOSE)?;
     } else if manifest_data.is_database_enabled {
@@ -2097,9 +2523,23 @@ pub(crate) fn sync_docker_compose_env_vars(
     docker_compose: &mut DockerCompose,
     project_env_vars: &HashMap<String, Vec<super::ast::infrastructure::env::EnvVarUsage>>,
     manifest: &ApplicationManifestData,
+    modules_path: &std::path::Path,
     stdout: &mut StandardStream,
 ) -> Result<bool> {
+    use crate::core::env_defaults::{EnvContext, ExistingEnvValues, find_existing_hmac_secret, resolve_env_var_default};
+
     let mut changes_made = false;
+
+    // Collect existing env values for majority-value resolution
+    let existing_values = ExistingEnvValues::collect(modules_path);
+
+    // Find existing HMAC secret for consistency
+    let existing_hmac_secret = find_existing_hmac_secret(modules_path);
+    let hmac_secret_for_sync = existing_hmac_secret.unwrap_or_else(|| {
+        let mut bytes = vec![0u8; 32];
+        getrandom::getrandom(&mut bytes).expect("Failed to generate random bytes");
+        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes)
+    });
 
     let project_types: HashMap<String, super::manifest::ProjectType> = manifest
         .projects
@@ -2132,6 +2572,11 @@ pub(crate) fn sync_docker_compose_env_vars(
             continue;
         };
 
+        let context = EnvContext::DockerCompose {
+            service_key,
+            project_name: &project_name,
+        };
+
         let service = docker_compose.services.get_mut(service_key).unwrap();
         let environment = service.environment.get_or_insert_with(IndexMap::new);
 
@@ -2141,7 +2586,15 @@ pub(crate) fn sync_docker_compose_env_vars(
         if let Some(env_vars) = project_env_vars.get(&project_name) {
             for env_var in env_vars {
                 if !environment.contains_key(&env_var.var_name) {
-                    environment.insert(env_var.var_name.clone(), String::new());
+                    let default_value = resolve_env_var_default(
+                        &env_var.var_name,
+                        manifest,
+                        &context,
+                        Some(&hmac_secret_for_sync),
+                        &existing_values,
+                    )
+                    .unwrap_or_default();
+                    environment.insert(env_var.var_name.clone(), default_value);
                     added_vars.push(env_var.var_name.clone());
                 }
             }
@@ -2150,7 +2603,7 @@ pub(crate) fn sync_docker_compose_env_vars(
         if !added_vars.is_empty() {
             added_vars.sort();
             changes_made = true;
-            log_info!(stdout, "[INFO] Added {} env var(s) to docker-compose service '{}': {}", added_vars.len(), service_key, added_vars.join(", "));
+            log_info!(stdout, "Added {} env var(s) to docker-compose service '{}': {}", added_vars.len(), service_key, added_vars.join(", "));
         }
     }
 
@@ -2161,6 +2614,217 @@ pub(crate) fn sync_docker_compose_env_vars(
 mod tests {
     use super::*;
     use crate::constants::Runtime;
+    use crate::core::manifest::{ProjectEntry, ProjectType, application::ApplicationManifestData};
+
+    #[test]
+    fn test_add_iam_environment_variables_skips_gracefully_when_iam_project_has_no_variant() {
+        // A plain custom service that merely happens to be named "iam" (not scaffolded via
+        // the `iam-base`/`iam-better-auth` module preset) has no `variant`. This must not
+        // panic — it should just skip IAM wiring for the caller.
+        let projects = vec![ProjectEntry {
+            r#type: ProjectType::Service,
+            name: "iam".to_string(),
+            description: "a plain custom service named iam".to_string(),
+            variant: None,
+            resources: None,
+            routers: None,
+            metadata: None,
+            serves: None,
+        }];
+        let docker_compose = DockerCompose {
+            version: None,
+            volumes: IndexMap::new(),
+            networks: IndexMap::new(),
+            services: IndexMap::new(),
+            additional_entries: HashMap::new(),
+        };
+        let mut environment = IndexMap::new();
+
+        let result = add_iam_environment_variables_to_docker_compose(
+            "test-app",
+            "other-service",
+            8000,
+            projects,
+            &docker_compose,
+            &mut environment,
+            "hmac-secret",
+        );
+
+        assert!(result.is_ok());
+        assert!(!environment.contains_key("JWKS_PUBLIC_KEY_URL"));
+        assert!(!environment.contains_key("HMAC_SECRET_KEY"));
+    }
+
+    /// Minimal manifest for exercising `add_otel_to_docker_compose`.
+    fn otel_test_manifest() -> ApplicationManifestData {
+        ApplicationManifestData {
+            id: "test-id".to_string(),
+            cli_version: "1.0.0".to_string(),
+            app_name: "testapp".to_string(),
+            camel_case_app_name: "testapp".to_string(),
+            pascal_case_app_name: "Testapp".to_string(),
+            kebab_case_app_name: "testapp".to_string(),
+            title_case_app_name: "Testapp".to_string(),
+            modules_path: "src/modules".to_string(),
+            docker_compose_path: None,
+            dockerfile: None,
+            git_repository: None,
+            runtime: "node".to_string(),
+            formatter: "prettier".to_string(),
+            linter: "eslint".to_string(),
+            validator: "zod".to_string(),
+            http_framework: "express".to_string(),
+            test_framework: None,
+            app_description: "Test app".to_string(),
+            author: "Test".to_string(),
+            license: "MIT".to_string(),
+            projects: Vec::<ProjectEntry>::new(),
+            project_peer_topology: HashMap::new(),
+            database: "postgresql".to_string(),
+            is_postgres: true,
+            is_sqlite: false,
+            is_mysql: false,
+            is_mariadb: false,
+            is_better_sqlite: false,
+            is_libsql: false,
+            is_mssql: false,
+            is_mongo: false,
+            is_in_memory_database: false,
+            is_eslint: true,
+            is_biome: false,
+            is_oxlint: false,
+            is_prettier: true,
+            is_express: true,
+            is_hyper_express: false,
+            is_zod: true,
+            is_typebox: false,
+            is_bun: false,
+            is_node: true,
+            is_vitest: false,
+            is_jest: false,
+            platform_application_id: None,
+            platform_organization_id: None,
+            compliance: None,
+        }
+    }
+
+    fn generated_otel_compose() -> DockerCompose {
+        let mut compose = DockerCompose::default();
+        let manifest = otel_test_manifest();
+        add_otel_to_docker_compose("testapp", &mut compose, &manifest).unwrap();
+        compose
+    }
+
+    fn healthcheck_target(compose: &DockerCompose, service: &str) -> String {
+        match &compose
+            .services
+            .get(service)
+            .unwrap_or_else(|| panic!("missing service {service}"))
+            .healthcheck
+            .as_ref()
+            .unwrap_or_else(|| panic!("service {service} has no healthcheck"))
+            .test
+        {
+            HealthTest::List(parts) => parts.join(" "),
+            HealthTest::String(cmd) => cmd.clone(),
+        }
+    }
+
+    /// Regression test for the production outage this stack was migrated to
+    /// prevent. Production replaced Prometheus with Mimir on port 9090 but left
+    /// the load balancer health check on Prometheus's `/-/healthy`, which Mimir
+    /// answers with a 404. Every target failed its health check and ECS
+    /// crash-looped the task. Nothing local reproduced it, because the local
+    /// stack still ran real Prometheus.
+    ///
+    /// The local stack must therefore run the same engine on the same health
+    /// path as production.
+    #[test]
+    fn test_otel_stack_runs_mimir_on_ready_not_prometheus_on_healthy() {
+        let compose = generated_otel_compose();
+
+        // Mimir replaces Prometheus + the Thanos sidecar.
+        assert!(
+            compose.services.contains_key("mimir"),
+            "monitoring stack must run Mimir for metrics"
+        );
+        assert!(
+            !compose.services.contains_key("prometheus"),
+            "Prometheus must not come back: production runs Mimir"
+        );
+        assert!(
+            !compose.services.contains_key("thanos-sidecar"),
+            "the Thanos sidecar is part of the pre-migration architecture"
+        );
+
+        let mimir_health = healthcheck_target(&compose, "mimir");
+        assert!(
+            mimir_health.contains("/ready"),
+            "Mimir's health path must be /ready, got: {mimir_health}"
+        );
+        assert!(
+            !mimir_health.contains("/-/healthy"),
+            "/-/healthy is a Prometheus path; Mimir returns 404 for it. \
+             This exact mismatch caused a production outage. Got: {mimir_health}"
+        );
+
+        // Loki and Tempo are the same dskit stack and use the same path.
+        assert!(healthcheck_target(&compose, "loki").contains("/ready"));
+        assert!(healthcheck_target(&compose, "tempo").contains("/ready"));
+    }
+
+    /// Metrics reach Mimir via the `prometheus_remote_write` exporter, which
+    /// only ships in the `-contrib` collector distribution. The core image
+    /// would start and then silently drop every metric.
+    #[test]
+    fn test_otel_collector_uses_contrib_distribution() {
+        let compose = generated_otel_compose();
+        let image = compose
+            .services
+            .get("otel-collector")
+            .unwrap()
+            .image
+            .clone()
+            .unwrap();
+        assert!(
+            image.starts_with("otel/opentelemetry-collector-contrib:"),
+            "collector must be the -contrib build, got: {image}"
+        );
+    }
+
+    /// Floating `:latest` is how the local stack drifted away from production
+    /// in the first place, and it is separately why the pinned Tempo config had
+    /// stopped parsing. Every monitoring image must carry an explicit tag.
+    #[test]
+    fn test_monitoring_images_are_pinned() {
+        let compose = generated_otel_compose();
+        for service in [
+            "mimir",
+            "loki",
+            "tempo",
+            "grafana",
+            "otel-collector",
+            "memcached",
+            "minio",
+            "minio-init",
+        ] {
+            let image = compose
+                .services
+                .get(service)
+                .unwrap_or_else(|| panic!("missing service {service}"))
+                .image
+                .clone()
+                .unwrap_or_else(|| panic!("service {service} has no image"));
+            assert!(
+                image.contains(':'),
+                "{service} image must be pinned to a tag, got: {image}"
+            );
+            assert!(
+                !image.ends_with(":latest"),
+                "{service} must not float on :latest, got: {image}"
+            );
+        }
+    }
 
     #[test]
     fn test_update_dockerfile_contents_inserts_addendum_after_last_copy() {

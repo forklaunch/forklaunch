@@ -98,14 +98,6 @@ export function enrichExpressLikeSend<
     return;
   }
 
-  if (res.statusCode === 404) {
-    res.type('text/plain');
-    res.status(404);
-    req.openTelemetryCollector?.error('Not Found');
-    originalSend.call(instance, 'Not Found');
-    errorSent = true;
-  }
-
   let responses;
   if (
     req.contractDetails.responses == null &&
@@ -143,9 +135,9 @@ export function enrichExpressLikeSend<
       );
     }
     if (isNodeJsWriteableStream(res)) {
-      Readable.from(readableStreamToAsyncIterable(data.stream())).pipe(
-        res as unknown as NodeJS.WritableStream
-      );
+      // No cast: isNodeJsWriteableStream is a type predicate
+      // (`value is NodeJS.WritableStream`), so `res` is already narrowed here.
+      Readable.from(readableStreamToAsyncIterable(data.stream())).pipe(res);
     } else {
       res.type('text/plain');
       res.status(500);

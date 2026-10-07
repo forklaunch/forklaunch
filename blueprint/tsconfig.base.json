@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "ignoreDeprecations": "6.0",
     "declaration": true,
     "declarationMap": true,
     "experimentalDecorators": true,
@@ -15,6 +16,7 @@
     "allowJs": true,
     "esModuleInterop": true,
     "moduleResolution": "bundler",
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "types": ["node", "vitest/globals"]
   }
 }

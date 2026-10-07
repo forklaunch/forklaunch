@@ -12,3 +12,15 @@ packages:
   - internal
   - bunrun
   - ws
+
+blockExoticSubdeps: false
+
+allowBuilds:
+  '@parcel/watcher': false
+  "@scarf/scarf": true
+  cpu-features: true
+  esbuild: true
+  protobufjs: true
+  ssh2: true
+  tldjs: true
+  unrs-resolver: true

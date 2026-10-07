@@ -92,12 +92,12 @@ export type UnionTupleTResolve<
  */
 export type TResolve<T, Depth extends number = 0> = Depth extends 12
   ? TUnknown
-  : T extends LiteralSchema
-    ? TLiteral<T>
-    : T extends TSchema
+  : T extends TSchema
+    ? T
+    : T extends TKind
       ? T
-      : T extends TKind
-        ? T
+      : T extends LiteralSchema
+        ? TLiteral<T>
         : T extends UnboxedTObjectSchema
           ? SafeTObject<{
               [K in keyof T]: TResolve<T[K], Increment<Depth>>;

@@ -18,7 +18,7 @@ use super::core::{
 };
 use crate::{
     CliCommand,
-    change::core::change_database::change_database_seed_script,
+    change::core::change_database::{change_database_retention_script, change_database_seed_script},
     constants::{
         Database, ERROR_FAILED_TO_PARSE_MANIFEST, ERROR_FAILED_TO_READ_DOCKER_COMPOSE,
         ERROR_FAILED_TO_READ_MANIFEST, ERROR_FAILED_TO_READ_PACKAGE_JSON, Infrastructure,
@@ -53,7 +53,7 @@ use crate::{
             clean_up_unused_infrastructure_services, remove_redis_from_docker_compose,
             remove_s3_from_docker_compose, update_dockerfile_contents,
         },
-        env::Env,
+        env::read_env_local_or_default,
         format::format_code,
         manifest::{
             InitializableManifestConfig, InitializableManifestConfigMetadata, ManifestData,
@@ -77,10 +77,10 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub(super) struct ServiceCommand;
+pub(crate) struct ServiceCommand;
 
 impl ServiceCommand {
-    pub(super) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {}
     }
 }
@@ -210,12 +210,31 @@ fn change_database(
         },
     );
 
+    // Update registrations.ts import source for database-specific package
+    let registrations_path = base_path.join("registrations.ts");
+    if let Some(template) = rendered_templates_cache.get(&registrations_path)? {
+        let old_source = format!(
+            "@mikro-orm/{}",
+            existing_database.to_string().to_lowercase()
+        );
+        let new_source = format!(
+            "@mikro-orm/{}",
+            database.to_string().to_lowercase()
+        );
+        let new_content = template.content.replace(&old_source, &new_source);
+        rendered_templates_cache.insert(
+            registrations_path.to_string_lossy(),
+            RenderedTemplate {
+                path: registrations_path.clone(),
+                content: new_content,
+                context: None,
+            },
+        );
+    }
+
     let env_local_path = base_path.join(".env.local");
-    let env_local_content = rendered_templates_cache
-        .get(&env_local_path)?
-        .unwrap()
-        .content;
-    let mut env_local_content = serde_envfile::from_str::<Env>(&env_local_content)?;
+    let mut env_local_content =
+        read_env_local_or_default(rendered_templates_cache, &env_local_path)?;
 
     change_database_env_variables(
         &mut env_local_content,
@@ -226,6 +245,11 @@ fn change_database(
 
     change_database_postinstall_script(application_package_json, database);
     change_database_seed_script(project_package_json, database);
+    change_database_retention_script(
+        project_package_json,
+        &manifest_data.runtime.parse()?,
+        true, // changing database type means we have a database
+    );
 
     let removal_template = change_database_base_entity(
         base_path,
@@ -303,6 +327,7 @@ fn change_infrastructure(
                     &manifest_data.app_name,
                     docker_compose,
                     &mut environment,
+                    0,
                 )?;
                 docker_compose
                     .services
@@ -311,12 +336,8 @@ fn change_infrastructure(
                     .environment = Some(environment);
 
                 let env_local_path = base_path.join(".env.local");
-                let mut env_local_content = serde_envfile::from_str::<Env>(
-                    &rendered_templates_cache
-                        .get(&env_local_path)?
-                        .unwrap()
-                        .content,
-                )?;
+                let mut env_local_content =
+                    read_env_local_or_default(rendered_templates_cache, &env_local_path)?;
 
                 env_local_content.redis_url = Some("redis://localhost:6379".to_string());
 
@@ -400,12 +421,8 @@ fn change_infrastructure(
                     .environment = Some(environment);
 
                 let env_local_path = base_path.join(".env.local");
-                let mut env_local_content = serde_envfile::from_str::<Env>(
-                    &rendered_templates_cache
-                        .get(&env_local_path)?
-                        .unwrap()
-                        .content,
-                )?;
+                let mut env_local_content =
+                    read_env_local_or_default(rendered_templates_cache, &env_local_path)?;
 
                 env_local_content.s3_url = Some("http://localhost:9000".to_string());
                 env_local_content.s3_bucket = Some(format!(
@@ -501,12 +518,8 @@ fn change_infrastructure(
                 }
 
                 let env_local_path = base_path.join(".env.local");
-                let mut env_local_content = serde_envfile::from_str::<Env>(
-                    &rendered_templates_cache
-                        .get(&env_local_path)?
-                        .unwrap()
-                        .content,
-                )?;
+                let mut env_local_content =
+                    read_env_local_or_default(rendered_templates_cache, &env_local_path)?;
 
                 env_local_content.redis_url = None;
 
@@ -570,40 +583,25 @@ fn change_infrastructure(
                 });
             }
             Infrastructure::S3 => {
-                if !manifest_data.projects.iter_mut().any(|project| {
-                    if let Some(resources) = &mut project.resources {
-                        if let Some(object_store) = &mut resources.object_store {
-                            object_store == &Infrastructure::S3.to_string()
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    }
-                }) {
-                    let mut environment = docker_compose
-                        .services
-                        .get_mut(&manifest_data.service_name)
-                        .unwrap()
-                        .environment
-                        .as_ref()
-                        .unwrap()
-                        .clone();
-                    remove_s3_from_docker_compose(docker_compose, &mut environment)?;
-                    docker_compose
-                        .services
-                        .get_mut(&manifest_data.service_name)
-                        .unwrap()
-                        .environment = Some(environment);
-                }
+                // This service's S3 settings go whatever other services use.
+                let mut environment = docker_compose
+                    .services
+                    .get_mut(&manifest_data.service_name)
+                    .unwrap()
+                    .environment
+                    .as_ref()
+                    .unwrap()
+                    .clone();
+                remove_s3_from_docker_compose(docker_compose, &mut environment)?;
+                docker_compose
+                    .services
+                    .get_mut(&manifest_data.service_name)
+                    .unwrap()
+                    .environment = Some(environment);
 
                 let env_local_path = base_path.join(".env.local");
-                let mut env_local_content = serde_envfile::from_str::<Env>(
-                    &rendered_templates_cache
-                        .get(&env_local_path)?
-                        .unwrap()
-                        .content,
-                )?;
+                let mut env_local_content =
+                    read_env_local_or_default(rendered_templates_cache, &env_local_path)?;
 
                 env_local_content.s3_bucket = None;
                 env_local_content.s3_url = None;
@@ -705,15 +703,92 @@ fn service_to_worker(
         },
     );
 
+    // Detect naming convention from the registrations file. Read through the
+    // cache, not the filesystem: at this point the transformed registrations
+    // only exist in the cache, and on a chained change the on-disk copy may be
+    // stale (or missing) entirely.
+    let registrations_content = rendered_templates_cache
+        .get(&registrations_path)?
+        .map(|template| template.content)
+        .unwrap_or_default();
+    let otel_token = if registrations_content.contains("OtelCollector:") {
+        "OtelCollector"
+    } else {
+        "OpenTelemetryCollector"
+    };
+
+    // Database workers consume the persisted entity directly; every other
+    // worker type consumes the decrypted event-record interface.
+    let is_database_worker = *worker_type == WorkerType::Database;
+    let event_record_import_path = if is_database_worker {
+        format!("./persistence/entities/{camel_case_name}EventRecord.entity")
+    } else {
+        format!("./domain/types/{camel_case_name}EventRecord.types")
+    };
+
+    // worker.ts previously imported `processEvents`/`processErrors` from
+    // `./services/{name}.service` — a path that no scaffold uses (services live
+    // under ./domain/services) holding symbols the CLI never generated, so the
+    // import could never resolve. Emit the handlers inline instead, typed
+    // against the real WorkerProcessFunction/WorkerFailureHandler contracts, so
+    // the generated worker compiles as-is and the TODO is where the business
+    // logic goes rather than a broken import.
     let worker_ts_path = base_path.join("worker.ts");
     let worker_ts_content = format!(
-        r#"import {{ ci, tokens }} from './bootstrapper';
-import {{ processEvents, processErrors }} from './services/{camel_case_name}.service';
+        r#"import type {{
+  WorkerFailureHandler,
+  WorkerProcessFailureResult,
+  WorkerProcessFunction
+}} from '@forklaunch/interfaces-worker/types';
+import {{ ci, tokens }} from './bootstrapper';
+import type {{ {pascal_case_name}EventRecord }} from '{event_record_import_path}';
 
 /**
  * Creates an instance of OpenTelemetryCollector
  */
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.{otel_token});
+
+/**
+ * TODO: replace this with your own event handling. Return one entry per event
+ * that failed; anything you return here is passed to processErrors below.
+ */
+const processEvents: WorkerProcessFunction<{pascal_case_name}EventRecord> = async (
+  events
+) => {{
+  const failedEvents: WorkerProcessFailureResult<{pascal_case_name}EventRecord>[] = [];
+
+  for (const event of events) {{
+    try {{
+      openTelemetryCollector.info(
+        `processing message from ${{ci.resolve(tokens.QUEUE_NAME)}}: ${{event.message}}`
+      );
+      event.processed = true;
+    }} catch (error) {{
+      failedEvents.push({{
+        value: event,
+        error: error as Error
+      }});
+    }}
+  }}
+
+  return failedEvents;
+}};
+
+/**
+ * TODO: replace this with your own failure handling (dead letter queue, alert,
+ * retry budget, ...).
+ */
+const processErrors: WorkerFailureHandler<{pascal_case_name}EventRecord> = async (
+  results
+) => {{
+  results.forEach((result) => {{
+    openTelemetryCollector.error(
+      result.error,
+      'error processing message',
+      result.value
+    );
+  }});
+}};
 
 /**
  * Main worker entry point
@@ -729,7 +804,8 @@ const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
   openTelemetryCollector.info('🎉 {pascal_case_name} Worker is running! 🎉');
 }})();
 "#,
-        camel_case_name = camel_case_name,
+        event_record_import_path = event_record_import_path,
+        otel_token = otel_token,
         pascal_case_name = pascal_case_name
     );
     rendered_templates_cache.insert(
@@ -744,25 +820,32 @@ const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
     let entities_dir = base_path.join("persistence").join("entities");
     let event_entity_path = entities_dir.join(format!("{}EventRecord.entity.ts", camel_case_name));
     let is_mongo = manifest_data.database == "mongodb";
+    // `defineEntity` produces a VALUE. Without the companion `InferEntity` type
+    // alias, registrations.ts writing `WorkerProcessFunction<XEventRecord>`
+    // fails with TS2749 ("refers to a value, but is being used as a type").
+    // The alias shares the entity's name so the single import serves both the
+    // value and the type position, which is what the `init worker` template
+    // does.
     let event_entity_content = format!(
-        r#"import {{ Entity, Property }} from '@mikro-orm/core';
-import {{ {mongo_prefix}SqlBaseEntity }} from '@{app_name}/core';
+        r#"import {{ defineEntity, p }} from '@mikro-orm/core';
+import type {{ InferEntity }} from '@mikro-orm/core';
+import {{ {mongo_prefix}sqlBaseProperties }} from '@{app_name}/core';
 
-// Entity class that defines the structure of the {pascal_case_name}EventRecord table
-@Entity()
-export class {pascal_case_name}EventRecord extends {mongo_prefix}SqlBaseEntity {{
-  // message property that stores a message string
-  @Property()
-  message!: string;
+export const {pascal_case_name}EventRecord = defineEntity({{
+  name: '{pascal_case_name}EventRecord',
+  properties: {{
+    ...{mongo_prefix}sqlBaseProperties,
+    message: p.string(),
+    processed: p.boolean(),
+    retryCount: p.integer(),
+  }},
+}});
 
-  @Property()
-  processed!: boolean;
-
-  @Property()
-  retryCount!: number;
-}}
+export type {pascal_case_name}EventRecord = InferEntity<
+  typeof {pascal_case_name}EventRecord
+>;
 "#,
-        mongo_prefix = if is_mongo { "No" } else { "" },
+        mongo_prefix = if is_mongo { "no" } else { "" },
         app_name = manifest_data.app_name,
         pascal_case_name = pascal_case_name
     );
@@ -775,13 +858,59 @@ export class {pascal_case_name}EventRecord extends {mongo_prefix}SqlBaseEntity {
         },
     );
 
+    // mikro-orm.config.ts discovers entities through
+    // `import * as entities from './persistence/entities'`, so an entity that
+    // the barrel file does not re-export is invisible to the ORM: no migration
+    // is ever generated for it and the DatabaseWorkerConsumer has no table to
+    // read. Re-export it, the way the `init worker` template does.
+    let entities_index_path = entities_dir.join("index.ts");
+    let event_entity_export = format!("export * from './{camel_case_name}EventRecord.entity';");
+    let entities_index_content = rendered_templates_cache
+        .get(&entities_index_path)?
+        .map(|template| template.content);
+    let updated_entities_index = match entities_index_content {
+        Some(content) if content.contains(&format!("{camel_case_name}EventRecord.entity")) => None,
+        Some(content) => Some(format!("{}\n{}\n", content.trim_end(), event_entity_export)),
+        None => Some(format!("{event_entity_export}\n")),
+    };
+    if let Some(content) = updated_entities_index {
+        rendered_templates_cache.insert(
+            entities_index_path.to_string_lossy().to_string(),
+            RenderedTemplate {
+                path: entities_index_path.clone(),
+                content,
+                context: None,
+            },
+        );
+    }
+
+    // Generate the event record interface type file
+    let types_dir = base_path.join("domain").join("types");
+    let event_record_types_path =
+        types_dir.join(format!("{}EventRecord.types.ts", camel_case_name));
+    let event_record_types_content = format!(
+        r#"import type {{ WorkerEventEntity }} from '@forklaunch/interfaces-worker/types';
+
+export interface {pascal_case_name}EventRecord extends WorkerEventEntity {{
+  message: string;
+  createdAt: Date;
+  updatedAt: Date;
+}}
+"#,
+        pascal_case_name = pascal_case_name
+    );
+    rendered_templates_cache.insert(
+        event_record_types_path.to_string_lossy().to_string(),
+        RenderedTemplate {
+            path: event_record_types_path.clone(),
+            content: event_record_types_content,
+            context: None,
+        },
+    );
+
     let env_local_path = base_path.join(".env.local");
-    let mut env_local_content = serde_envfile::from_str::<Env>(
-        &rendered_templates_cache
-            .get(&env_local_path)?
-            .unwrap()
-            .content,
-    )?;
+    let mut env_local_content =
+                    read_env_local_or_default(rendered_templates_cache, &env_local_path)?;
     env_local_content.queue_name =
         Some(format!("{}-{}-queue", manifest_data.app_name, project_name));
     rendered_templates_cache.insert(
@@ -838,6 +967,8 @@ export class {pascal_case_name}EventRecord extends {mongo_prefix}SqlBaseEntity {
             } else {
                 project.metadata = Some(ProjectMetadata {
                     r#type: Some(worker_type.to_string()),
+                    hosting_type: None,
+                    privileged: None,
                 });
             }
         }
@@ -1219,6 +1350,9 @@ impl CliCommand for ServiceCommand {
         if let Some(queue) = &project_resources.queue {
             active_infrastructure.push(queue.to_string());
         }
+        if let Some(object_store) = &project_resources.object_store {
+            active_infrastructure.push(object_store.to_string());
+        }
 
         let infrastructure = prompt_comma_separated_list_from_selections(
             "infrastructure",
@@ -1386,5 +1520,456 @@ impl CliCommand for ServiceCommand {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::{create_dir_all, write};
+
+    use indexmap::IndexMap;
+    use tempfile::TempDir;
+
+    use super::*;
+    use crate::{
+        constants::Infrastructure,
+        core::{
+            docker::DockerService,
+            manifest::{
+                InitializableManifestConfig, InitializableManifestConfigMetadata,
+                ProjectInitializationMetadata,
+            },
+            package_json::{
+                application_package_json::{ApplicationPackageJson, ApplicationScripts},
+                project_package_json::{ProjectDependencies, ProjectPackageJson, ProjectScripts},
+            },
+            rendered_template::RenderedTemplatesCache,
+        },
+    };
+
+    const MINIMAL_REGISTRATIONS_TS: &str = r#"import {
+  number,
+  schemaValidator,
+  string
+} from '@test-app/core';
+import { OpenTelemetryCollector } from '@forklaunch/core/http';
+import {
+  createConfigInjector,
+  getEnvVar,
+  Lifetime
+} from '@forklaunch/core/services';
+import { EntityManager, ForkOptions, MikroORM } from '@mikro-orm/core';
+import mikroOrmOptionsConfig from './mikro-orm.config';
+
+const configInjector = createConfigInjector(schemaValidator, {
+  SERVICE_METADATA: {
+    lifetime: Lifetime.Singleton,
+    type: { name: string, version: string },
+    value: { name: 'test-svc', version: '0.1.0' }
+  }
+});
+
+const environmentConfig = configInjector.chain({
+  HOST: { lifetime: Lifetime.Singleton, type: string, value: getEnvVar('HOST') },
+  PORT: { lifetime: Lifetime.Singleton, type: number, value: Number(getEnvVar('PORT')) }
+});
+
+const runtimeDependencies = environmentConfig.chain({
+  MikroORM: {
+    lifetime: Lifetime.Singleton,
+    type: MikroORM,
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
+  },
+  OpenTelemetryCollector: {
+    lifetime: Lifetime.Singleton,
+    type: OpenTelemetryCollector,
+    factory: ({ OTEL_SERVICE_NAME, OTEL_LEVEL }) =>
+      new OpenTelemetryCollector(OTEL_SERVICE_NAME, OTEL_LEVEL || 'info')
+  },
+  EntityManager: {
+    lifetime: Lifetime.Scoped,
+    type: EntityManager,
+    factory: ({ MikroORM }, context) =>
+      MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined)
+  }
+});
+
+const serviceDependencies = runtimeDependencies.chain({});
+"#;
+
+    const MANIFEST_TOML: &str = r#"
+id = "test-id"
+cli_version = "0.6.3"
+app_name = "test-app"
+modules_path = "src/modules"
+app_description = "test"
+linter = "eslint"
+formatter = "prettier"
+validator = "zod"
+http_framework = "express"
+runtime = "node"
+author = "test"
+license = "MIT"
+
+[project_peer_topology]
+
+[[projects]]
+type = "Service"
+name = "test-svc"
+description = "test service"
+
+[projects.resources]
+database = "postgresql"
+"#;
+
+    fn setup() -> (
+        TempDir,
+        ServiceManifestData,
+        DockerCompose,
+        ProjectPackageJson,
+        RenderedTemplatesCache,
+    ) {
+        let tmp = TempDir::new().unwrap();
+        let base = tmp.path();
+
+        write(base.join("registrations.ts"), MINIMAL_REGISTRATIONS_TS).unwrap();
+        write(base.join(".env.local"), "").unwrap();
+
+        let raw: ServiceManifestData = toml::from_str(MANIFEST_TOML).unwrap();
+        let manifest =
+            raw.initialize(InitializableManifestConfigMetadata::Project(
+                ProjectInitializationMetadata {
+                    project_name: "test-svc".to_string(),
+                    database: None,
+                    infrastructure: None,
+                    description: None,
+                    worker_type: None,
+                },
+            ));
+
+        let mut docker_compose = DockerCompose::default();
+        docker_compose.services.insert(
+            "test-svc".to_string(),
+            DockerService {
+                environment: Some(IndexMap::new()),
+                ..Default::default()
+            },
+        );
+
+        let pkg_json = ProjectPackageJson {
+            dependencies: Some(ProjectDependencies::default()),
+            ..Default::default()
+        };
+
+        let cache = RenderedTemplatesCache::new();
+
+        (tmp, manifest, docker_compose, pkg_json, cache)
+    }
+
+    #[test]
+    fn test_change_infrastructure_add_s3_updates_docker_compose_manifest_and_deps() {
+        let (_tmp, mut manifest, mut docker, mut pkg, mut cache) = setup();
+        let base = _tmp.path();
+
+        change_infrastructure(
+            base,
+            vec![Infrastructure::S3],
+            vec![],
+            &mut pkg,
+            &mut manifest,
+            &mut docker,
+            &mut cache,
+        )
+        .expect("change_infrastructure should succeed");
+
+        // 1. docker-compose must have minio service
+        assert!(
+            docker.services.contains_key("minio"),
+            "Expected 'minio' in docker-compose services, got: {:?}",
+            docker.services.keys().collect::<Vec<_>>()
+        );
+
+        // 2. service environment must have S3 env vars injected
+        let env = docker.services["test-svc"].environment.as_ref().unwrap();
+        assert!(env.contains_key("S3_URL"), "Expected S3_URL in service environment");
+        assert!(env.contains_key("S3_BUCKET"), "Expected S3_BUCKET in service environment");
+
+        // 3. manifest object_store must be recorded as "s3"
+        let project = manifest
+            .projects
+            .iter()
+            .find(|p| p.name == "test-svc")
+            .unwrap();
+        assert_eq!(
+            project.resources.as_ref().unwrap().object_store,
+            Some("s3".to_string()),
+            "Expected manifest object_store = 's3'"
+        );
+
+        // 4. package.json S3 dependency must be set
+        assert!(
+            pkg.dependencies
+                .as_ref()
+                .unwrap()
+                .forklaunch_infrastructure_s3
+                .is_some(),
+            "Expected @forklaunch/infrastructure-s3 in package.json dependencies"
+        );
+
+        // 5. registrations.ts in cache must have S3 content injected
+        let reg = cache
+            .get(base.join("registrations.ts"))
+            .unwrap()
+            .unwrap();
+        assert!(
+            reg.content.contains("S3ObjectStore") || reg.content.contains("s3Url"),
+            "Expected S3 import/usage in registrations.ts cache"
+        );
+    }
+
+    #[test]
+    fn test_change_infrastructure_remove_s3_cleans_up_docker_compose_and_manifest() {
+        let (_tmp, mut manifest, mut docker, mut pkg, mut cache) = setup();
+        let base = _tmp.path();
+
+        // First add S3
+        change_infrastructure(
+            base,
+            vec![Infrastructure::S3],
+            vec![],
+            &mut pkg,
+            &mut manifest,
+            &mut docker,
+            &mut cache,
+        )
+        .expect("add S3 should succeed");
+
+        assert!(
+            docker.services.contains_key("minio"),
+            "Pre-condition: minio must exist after add"
+        );
+
+        // Now remove S3 — reuse the same cache so it can read updated registrations.ts
+        change_infrastructure(
+            base,
+            vec![],
+            vec![Infrastructure::S3],
+            &mut pkg,
+            &mut manifest,
+            &mut docker,
+            &mut cache,
+        )
+        .expect("remove S3 should succeed");
+
+        // 1. minio must be removed from docker-compose
+        assert!(
+            !docker.services.contains_key("minio"),
+            "Expected 'minio' to be removed from docker-compose after S3 removal"
+        );
+
+        // 2. manifest object_store must be cleared
+        let project = manifest
+            .projects
+            .iter()
+            .find(|p| p.name == "test-svc")
+            .unwrap();
+        assert!(
+            project.resources.as_ref().unwrap().object_store.is_none(),
+            "Expected object_store = None after S3 removal"
+        );
+
+        // 3. package.json S3 dependency must be cleared
+        assert!(
+            pkg.dependencies
+                .as_ref()
+                .unwrap()
+                .forklaunch_infrastructure_s3
+                .is_none(),
+            "Expected @forklaunch/infrastructure-s3 to be removed from dependencies"
+        );
+    }
+
+    const POSTGRESQL_MIKRO_ORM_CONFIG: &str = r#"import { createConfigInjector, getEnvVar, Lifetime } from '@forklaunch/core/services';
+import { Migrator } from '@mikro-orm/migrations';
+import { number, string } from '@test-app/core';
+import { defineConfig } from '@mikro-orm/postgresql';
+
+const configInjector = createConfigInjector(schemaValidator, {
+  DB_NAME: { lifetime: Lifetime.Singleton, type: string, value: getEnvVar('DB_NAME') },
+  DB_HOST: { lifetime: Lifetime.Singleton, type: string, value: getEnvVar('DB_HOST') },
+  DB_USER: { lifetime: Lifetime.Singleton, type: string, value: getEnvVar('DB_USER') },
+  DB_PASSWORD: { lifetime: Lifetime.Singleton, type: string, value: getEnvVar('DB_PASSWORD') },
+  DB_PORT: { lifetime: Lifetime.Singleton, type: number, value: Number(getEnvVar('DB_PORT')) }
+});
+
+const mikroOrmOptionsConfig = defineConfig({
+  dbName: validConfigInjector.resolve('DB_NAME'),
+  host: validConfigInjector.resolve('DB_HOST'),
+  user: validConfigInjector.resolve('DB_USER'),
+  password: validConfigInjector.resolve('DB_PASSWORD'),
+  port: validConfigInjector.resolve('DB_PORT'),
+  driver: PostgreSqlDriver,
+  migrations: { path: 'dist/migrations-postgresql', pathTs: 'migrations-postgresql' }
+});
+"#;
+
+    const MANIFEST_WITH_POSTGRESQL: &str = r#"
+id = "test-id"
+cli_version = "0.6.3"
+app_name = "test-app"
+modules_path = "src/modules"
+app_description = "test"
+linter = "eslint"
+formatter = "prettier"
+validator = "zod"
+http_framework = "express"
+runtime = "node"
+author = "test"
+license = "MIT"
+
+[project_peer_topology]
+
+[[projects]]
+type = "Service"
+name = "test-svc"
+description = "test service"
+
+[projects.resources]
+database = "postgresql"
+"#;
+
+    fn setup_change_database() -> (
+        TempDir,
+        ServiceManifestData,
+        DockerCompose,
+        ApplicationPackageJson,
+        ProjectPackageJson,
+    ) {
+        let tmp = TempDir::new().unwrap();
+        let base = tmp.path().join("test-svc");
+        create_dir_all(&base).unwrap();
+        create_dir_all(base.join("persistence").join("entities")).unwrap();
+
+        // Create the sql base properties file so transform_base_entity_ts returns None early
+        // (no actual base entity transformation needed for sql→sql tests)
+        let core_persistence = tmp.path().join("core").join("persistence");
+        create_dir_all(&core_persistence).unwrap();
+        write(
+            core_persistence.join("sql.base.properties.ts"),
+            "import { p } from '@mikro-orm/core';\nexport const sqlBaseProperties = { id: p.uuid().primary() };\n",
+        )
+        .unwrap();
+
+        write(base.join("mikro-orm.config.ts"), POSTGRESQL_MIKRO_ORM_CONFIG).unwrap();
+        write(base.join(".env.local"), "").unwrap();
+        write(
+            base.join("registrations.ts"),
+            "import { EntityManager } from '@mikro-orm/postgresql';\n",
+        )
+        .unwrap();
+
+        let raw: ServiceManifestData = toml::from_str(MANIFEST_WITH_POSTGRESQL).unwrap();
+        let manifest = raw.initialize(InitializableManifestConfigMetadata::Project(
+            ProjectInitializationMetadata {
+                project_name: "test-svc".to_string(),
+                database: None,
+                infrastructure: None,
+                description: None,
+                worker_type: None,
+            },
+        ));
+
+        let mut docker_compose = DockerCompose::default();
+        docker_compose.services.insert(
+            "test-svc".to_string(),
+            DockerService {
+                environment: Some(IndexMap::new()),
+                depends_on: Some(IndexMap::new()),
+                ..Default::default()
+            },
+        );
+
+        let app_pkg = ApplicationPackageJson {
+            scripts: Some(ApplicationScripts::default()),
+            ..Default::default()
+        };
+
+        let project_pkg = ProjectPackageJson {
+            dependencies: Some(ProjectDependencies::default()),
+            scripts: Some(ProjectScripts::default()),
+            ..Default::default()
+        };
+
+        (tmp, manifest, docker_compose, app_pkg, project_pkg)
+    }
+
+    #[test]
+    fn test_change_database_postgresql_to_mysql_updates_manifest_and_mikroorm_config() {
+        let (tmp, mut manifest, mut docker, mut app_pkg, mut project_pkg) =
+            setup_change_database();
+        let base = tmp.path().join("test-svc");
+        let mut removal_templates = Vec::new();
+        let mut cache = RenderedTemplatesCache::new();
+
+        change_database(
+            &base,
+            &Database::MySQL,
+            &mut manifest,
+            &mut app_pkg,
+            &mut project_pkg,
+            &mut docker,
+            &mut cache,
+            &mut removal_templates,
+        )
+        .expect("change_database should succeed");
+
+        // 1. manifest database must be updated
+        assert_eq!(manifest.database, "mysql");
+        let project = manifest.projects.iter().find(|p| p.name == "test-svc").unwrap();
+        assert_eq!(
+            project.resources.as_ref().unwrap().database,
+            Some("mysql".to_string())
+        );
+
+        // 2. mikro-orm.config.ts in cache must reference mysql
+        let config = cache
+            .get(base.join("mikro-orm.config.ts"))
+            .unwrap()
+            .unwrap();
+        assert!(
+            config.content.contains("@mikro-orm/mysql"),
+            "Expected @mikro-orm/mysql in mikro-orm.config.ts: {}",
+            config.content
+        );
+        assert!(
+            !config.content.contains("@mikro-orm/postgresql"),
+            "Expected @mikro-orm/postgresql removed: {}",
+            config.content
+        );
+
+        // 3. registrations.ts import source must be updated
+        let reg = cache
+            .get(base.join("registrations.ts"))
+            .unwrap()
+            .unwrap();
+        assert!(
+            reg.content.contains("@mikro-orm/mysql"),
+            "Expected @mikro-orm/mysql in registrations.ts: {}",
+            reg.content
+        );
+        assert!(
+            !reg.content.contains("@mikro-orm/postgresql"),
+            "Expected @mikro-orm/postgresql removed from registrations.ts: {}",
+            reg.content
+        );
+
+        // 4. docker-compose depends_on must reference mysql
+        let svc = docker.services.get("test-svc").unwrap();
+        let depends_on = svc.depends_on.as_ref().unwrap();
+        assert!(
+            depends_on.contains_key("mysql"),
+            "Expected mysql in depends_on: {:?}",
+            depends_on.keys().collect::<Vec<_>>()
+        );
     }
 }

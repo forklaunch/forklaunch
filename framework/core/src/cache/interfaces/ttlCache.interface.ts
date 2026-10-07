@@ -1,138 +1,129 @@
-import { TtlCacheRecord } from '../types/ttlCacheRecord.types';
+import {
+  ComplianceContext,
+  TtlCacheRecord
+} from '../types/ttlCacheRecord.types';
 
 /**
  * Interface representing a TTL (Time-To-Live) cache.
+ *
+ * Methods that read or write values accept an optional `compliance` parameter.
+ * When provided, values are encrypted on write and decrypted on read using
+ * the tenant ID for key derivation. When omitted, values are stored as plaintext.
  */
 export interface TtlCache {
   /**
    * Puts a record into the cache.
-   *
-   * @param {TtlCacheRecord} cacheRecord - The cache record to put into the cache.
-   * @returns {Promise<void>} - A promise that resolves when the record is put into the cache.
    */
-  putRecord<T>(cacheRecord: TtlCacheRecord<T>): Promise<void>;
+  putRecord<T>(
+    cacheRecord: TtlCacheRecord<T>,
+    compliance?: ComplianceContext
+  ): Promise<void>;
 
   /**
    * Puts a batch of records into the cache.
-   *
-   * @param {TtlCacheRecord<T>[]} cacheRecords - The cache records to put into the cache.
-   * @returns {Promise<void>} - A promise that resolves when the records are put into the cache.
    */
-  putBatchRecords<T>(cacheRecords: TtlCacheRecord<T>[]): Promise<void>;
+  putBatchRecords<T>(
+    cacheRecords: TtlCacheRecord<T>[],
+    compliance?: ComplianceContext
+  ): Promise<void>;
 
   /**
-   * Enqueues a record into the cache.
-   *
-   * @param {string} cacheRecordKey - The key of the cache record to enqueue.
-   * @returns {Promise<void>} - A promise that resolves when the record is enqueued into the cache.
+   * Enqueues a record into a list.
    */
-  enqueueRecord<T>(queueName: string, cacheRecord: T): Promise<void>;
+  enqueueRecord<T>(
+    queueName: string,
+    cacheRecord: T,
+    compliance?: ComplianceContext
+  ): Promise<void>;
 
   /**
-   *
-   * Enqueues a batch of records into the cache.
-   *
-   * @param {string[]} cacheRecordKeys - The keys of the cache records to enqueue.
-   * @returns {Promise<void>} - A promise that resolves when the records are enqueued into the cache.
+   * Enqueues a batch of records into a list.
    */
-  enqueueBatchRecords<T>(queueName: string, cacheRecords: T[]): Promise<void>;
+  enqueueBatchRecords<T>(
+    queueName: string,
+    cacheRecords: T[],
+    compliance?: ComplianceContext
+  ): Promise<void>;
 
   /**
    * Deletes a record from the cache.
-   *
-   * @param {string} cacheRecordKey - The key of the cache record to delete.
-   * @returns {Promise<void>} - A promise that resolves when the record is deleted from the cache.
    */
   deleteRecord(cacheRecordKey: string): Promise<void>;
 
   /**
    * Deletes a batch of records from the cache.
-   *
-   * @param {string[]} cacheRecordKeys - The keys of the cache records to delete.
-   * @returns {Promise<void>} - A promise that resolves when the records are deleted from the cache.
    */
   deleteBatchRecords(cacheRecordKeys: string[]): Promise<void>;
 
   /**
-   * Dequeues a record from the cache.
-   *
-   * @param {string} cacheRecordKey - The key of the cache record to dequeue.
-   * @returns {Promise<void>} - A promise that resolves when the record is dequeued from the cache.
+   * Dequeues a record from a list.
    */
-  dequeueRecord<T>(queueName: string): Promise<T>;
+  dequeueRecord<T>(
+    queueName: string,
+    compliance?: ComplianceContext
+  ): Promise<T>;
 
   /**
-   * Dequeues a batch of records from the cache.
-   *
-   * @param {string[]} cacheRecordKeys - The keys of the cache records to dequeue.
-   * @returns {Promise<void>} - A promise that resolves when the records are dequeued from the cache.
+   * Dequeues a batch of records from a list.
    */
-  dequeueBatchRecords<T>(queueName: string, pageSize: number): Promise<T[]>;
+  dequeueBatchRecords<T>(
+    queueName: string,
+    pageSize: number,
+    compliance?: ComplianceContext
+  ): Promise<T[]>;
 
   /**
    * Reads a record from the cache.
-   *
-   * @param {string} cacheRecordKey - The key of the cache record to read.
-   * @returns {Promise<TtlCacheRecord>} - A promise that resolves with the cache record.
    */
-  readRecord<T>(cacheRecordKey: string): Promise<TtlCacheRecord<T>>;
+  readRecord<T>(
+    cacheRecordKey: string,
+    compliance?: ComplianceContext
+  ): Promise<TtlCacheRecord<T>>;
 
   /**
    * Reads a batch of records from the cache.
-   *
-   * @param {string[] | string} cacheRecordKeysOrPrefix - The keys of the cache records to read or a prefix to match.
-   * @returns {Promise<TtlCacheRecord<T>[]>} - A promise that resolves with the cache records.
    */
   readBatchRecords<T>(
-    cacheRecordKeysOrPrefix: string[] | string
+    cacheRecordKeysOrPrefix: string[] | string,
+    compliance?: ComplianceContext
   ): Promise<TtlCacheRecord<T>[]>;
 
   /**
-   * Peeks at a record in the cache to check if it exists.
-   *
-   * @param {string} cacheRecordKey - The key of the cache record to peek at.
-   * @returns {Promise<boolean>} - A promise that resolves with a boolean indicating if the record exists.
+   * Checks if a record exists in the cache.
    */
   peekRecord(cacheRecordKey: string): Promise<boolean>;
 
   /**
-   * Peeks at a batch of records in the cache to check if they exist.
-   *
-   * @param {string[] | string} cacheRecordKeysOrPrefix - The keys of the cache records to peek at or a prefix to match.
-   * @returns {Promise<boolean[]>} - A promise that resolves with an array of booleans indicating if the records exist.
+   * Checks if a batch of records exist in the cache.
    */
   peekBatchRecords(
     cacheRecordKeysOrPrefix: string[] | string
   ): Promise<boolean[]>;
 
   /**
-   * Peeks at a record in the cache to check if it exists.
-   *
-   * @param {string} queueName - The name of the queue to peek at.
-   * @returns {Promise<T>} - A promise that resolves with the record.
+   * Peeks at the front of a queue without removing.
    */
-  peekQueueRecord<T>(queueName: string): Promise<T>;
+  peekQueueRecord<T>(
+    queueName: string,
+    compliance?: ComplianceContext
+  ): Promise<T>;
 
   /**
-   * Peeks at a batch of records in the cache to check if they exist.
-   *
-   * @param {string} queueName - The name of the queue to peek at.
-   * @returns {Promise<T[]>} - A promise that resolves with the records.
+   * Peeks at multiple records from a queue without removing.
    */
-  peekQueueRecords<T>(queueName: string, pageSize: number): Promise<T[]>;
+  peekQueueRecords<T>(
+    queueName: string,
+    pageSize: number,
+    compliance?: ComplianceContext
+  ): Promise<T[]>;
 
   /**
-   * Gets the TTL (Time-To-Live) in milliseconds.
-   *
-   * @returns {number} - The TTL in milliseconds.
+   * Gets the default TTL in milliseconds.
    */
   getTtlMilliseconds(): number;
 
   /**
-   * Lists the keys in the cache that match a pattern prefix.
-   *
-   * @param {string} pattern_prefix - The pattern prefix to match.
-   * @returns {Promise<string[]>} - A promise that resolves with an array of keys matching the pattern prefix.
+   * Lists keys matching a prefix.
    */
   listKeys(pattern_prefix: string): Promise<string[]>;
 }

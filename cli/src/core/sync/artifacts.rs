@@ -13,7 +13,7 @@ use crate::{
         Runtime, WorkerType,
     },
     core::{
-        client_sdk::remove_project_from_client_sdk,
+        client_sdk::{regenerate_client_sdk_compliance, remove_project_from_client_sdk},
         docker::{
             DockerCompose, add_service_definition_to_docker_compose,
             add_worker_definition_to_docker_compose, remove_service_from_docker_compose,
@@ -80,6 +80,8 @@ impl ProjectSyncMetadata {
                 cache,
                 queue,
                 object_store,
+                redis_partition: None,
+                capabilities: None,
             })
         } else {
             None
@@ -89,6 +91,8 @@ impl ProjectSyncMetadata {
     fn to_project_metadata(&self) -> Option<ProjectMetadata> {
         self.worker_type.map(|wt| ProjectMetadata {
             r#type: Some(wt.to_string()),
+            hosting_type: None,
+            privileged: None,
         })
     }
 }
@@ -144,7 +148,7 @@ fn sync_to_manifest(
         .iter()
         .any(|p| p.name == metadata.project_name)
     {
-        log_warn!(stdout, "[INFO] Already in manifest: {}", metadata.project_name);
+        log_info!(stdout, "Already in manifest: {}", metadata.project_name);
         return Ok(());
     }
 
@@ -163,6 +167,7 @@ fn sync_to_manifest(
         resources: metadata.to_resource_inventory(),
         routers,
         metadata: metadata.to_project_metadata(),
+        serves: None,
     });
 
     manifest_data
@@ -171,7 +176,7 @@ fn sync_to_manifest(
         .or_insert_with(Vec::new)
         .push(metadata.project_name.clone());
 
-    log_ok!(stdout, "[OK] Added to manifest: {}", metadata.project_name);
+    log_ok!(stdout, "Added to manifest: {}", metadata.project_name);
 
     Ok(())
 }
@@ -189,7 +194,7 @@ fn detect_routers_for_project(
             let detected_routers = detect_routers_from_service(&project_path)?;
 
             if !detected_routers.is_empty() {
-                log_ok!(stdout, "[INFO] Detected {} router(s): {}", detected_routers.len(), detected_routers.join(", "));
+                log_ok!(stdout, "Detected {} router(s): {}", detected_routers.len(), detected_routers.join(", "));
                 Some(detected_routers)
             } else {
                 None
@@ -237,7 +242,7 @@ fn sync_to_docker_compose(
         yaml_from_str(&docker_compose_content).context(ERROR_FAILED_TO_PARSE_DOCKER_COMPOSE)?;
 
     if docker_compose.services.contains_key(&metadata.project_name) {
-        log_warn!(stdout, "[INFO] Already in docker-compose: {}", metadata.project_name);
+        log_info!(stdout, "Already in docker-compose: {}", metadata.project_name);
         return Ok(());
     }
 
@@ -331,7 +336,7 @@ fn sync_to_package_json(
 
     let workspaces = pkg_json.workspaces.get_or_insert_with(Vec::new);
     if workspaces.contains(&metadata.project_name) {
-        log_warn!(stdout, "[INFO] Already in package.json: {}", metadata.project_name);
+        log_info!(stdout, "Already in package.json: {}", metadata.project_name);
         return Ok(());
     }
 
@@ -347,7 +352,7 @@ fn sync_to_package_json(
         },
     );
 
-    log_ok!(stdout, "[OK] Added to package.json: {}", metadata.project_name);
+    log_ok!(stdout, "Added to package.json: {}", metadata.project_name);
 
     Ok(())
 }
@@ -399,7 +404,9 @@ fn sync_to_client_sdk(
         },
     );
 
-    log_ok!(stdout, "[OK] Added to universal SDK: {}", metadata.project_name);
+    log_ok!(stdout, "Added to universal SDK: {}", metadata.project_name);
+
+    regenerate_client_sdk_compliance(cache, modules_path, &manifest_data.projects)?;
 
     Ok(())
 }
@@ -417,7 +424,7 @@ fn sync_to_modules_tsconfig(
         rendered_template,
     );
 
-    log_ok!(stdout, "[OK] Added to modules/tsconfig.json: {}", metadata.project_name);
+    log_ok!(stdout, "Added to modules/tsconfig.json: {}", metadata.project_name);
 
     Ok(())
 }
@@ -438,7 +445,7 @@ fn sync_to_pnpm_workspace(
         yaml_from_str(&template.content).context("Failed to parse pnpm-workspace.yaml")?;
 
     if workspace.packages.contains(&metadata.project_name) {
-        log_warn!(stdout, "[INFO] Already in pnpm-workspace: {}", metadata.project_name);
+        log_info!(stdout, "Already in pnpm-workspace: {}", metadata.project_name);
         return Ok(());
     }
 
@@ -454,7 +461,7 @@ fn sync_to_pnpm_workspace(
         },
     );
 
-    log_ok!(stdout, "[OK] Added to pnpm-workspace: {}", metadata.project_name);
+    log_ok!(stdout, "Added to pnpm-workspace: {}", metadata.project_name);
 
     Ok(())
 }
@@ -473,7 +480,7 @@ pub fn remove_project_from_artifacts(
         match artifact_type {
             ArtifactType::Manifest => {
                 remove_project_definition_from_manifest(manifest_data, &project_name.to_string())?;
-                log_ok!(stdout, "[OK] Removed from manifest");
+                log_ok!(stdout, "Removed from manifest");
             }
             ArtifactType::DockerCompose => {
                 if matches!(project_type, ProjectType::Service | ProjectType::Worker) {
@@ -517,7 +524,7 @@ pub fn remove_project_from_artifacts(
                             },
                         );
 
-                        log_ok!(stdout, "[OK] Removed from docker-compose");
+                        log_ok!(stdout, "Removed from docker-compose");
                     }
                 }
             }
@@ -556,7 +563,7 @@ pub fn remove_project_from_artifacts(
                                 },
                             );
 
-                            log_ok!(stdout, "[OK] Removed from pnpm-workspace");
+                            log_ok!(stdout, "Removed from pnpm-workspace");
                         }
                     }
                     Runtime::Bun => {
@@ -588,7 +595,7 @@ pub fn remove_project_from_artifacts(
                                 },
                             );
 
-                            log_ok!(stdout, "[OK] Removed from package.json workspaces");
+                            log_ok!(stdout, "Removed from package.json workspaces");
                         }
                     }
                 }
@@ -602,7 +609,13 @@ pub fn remove_project_from_artifacts(
                         project_name,
                     )?;
 
-                    log_ok!(stdout, "[OK] Removed from universal SDK");
+                    regenerate_client_sdk_compliance(
+                        rendered_templates_cache,
+                        modules_path,
+                        &manifest_data.projects,
+                    )?;
+
+                    log_ok!(stdout, "Removed from universal SDK");
                 }
             }
             ArtifactType::ModulesTsconfig => {

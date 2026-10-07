@@ -1,22 +1,26 @@
 #[macro_use]
 pub(crate) mod log;
 #[macro_use]
+pub(crate) mod accounts;
 pub(crate) mod ast;
 pub(crate) mod base_path;
+pub(crate) mod bunfig;
 pub(crate) mod choices;
 pub(crate) mod client_sdk;
 pub(crate) mod command;
 pub(crate) mod database;
 pub(crate) mod docker;
 pub(crate) mod env;
+pub(crate) mod env_defaults;
 pub(crate) mod env_scope;
 pub(crate) mod env_template;
+pub(crate) mod exit_code;
 pub(crate) mod format;
+pub(crate) mod github_configs;
 pub(crate) mod gitignore;
 pub(crate) mod hmac;
 pub(crate) mod http_client;
 pub(crate) mod husky;
-pub(crate) mod iam;
 pub(crate) mod library_scanner;
 pub(crate) mod license;
 pub(crate) mod manifest;
@@ -29,6 +33,8 @@ pub(crate) mod package_json;
 pub(crate) mod pnpm_workspace;
 pub(crate) mod relative_path;
 pub(crate) mod removal_template;
+pub(crate) mod report_card;
+pub(crate) mod workspace_archive;
 pub(crate) mod rendered_template;
 pub(crate) mod static_analysis;
 pub(crate) mod string;

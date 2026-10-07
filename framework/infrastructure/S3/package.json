@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/infrastructure-s3",
-  "version": "0.4.39",
+  "version": "1.5.1",
   "description": "S3 infrastructure for ForkLaunch components.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -18,6 +18,9 @@
       "import": "./lib/index.mjs",
       "require": "./lib/index.js",
       "default": "./lib/index.js"
+    },
+    "./*": {
+      "types": "./lib/*.d.ts"
     }
   },
   "types": "lib/index.d.ts",
@@ -28,7 +31,7 @@
     "lib/**"
   ],
   "scripts": {
-    "build": "tsgo --noEmit && tsup ./index.ts --format cjs,esm --no-splitting --dts --tsconfig tsconfig.json --out-dir lib --clean --sourcemap && if [ -f eject-infrastructure-package.bash ]; then pnpm package:eject; fi",
+    "build": "tsc --noEmit && tsup ./index.ts --format cjs,esm --no-splitting --tsconfig tsconfig.json --out-dir lib --clean --sourcemap && tsc -p tsconfig.build.json --emitDeclarationOnly && if [ -f eject-infrastructure-package.bash ]; then pnpm package:eject; fi",
     "clean": "rm -rf lib pnpm.lock.yaml node_modules",
     "docs": "typedoc --out docs *",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
@@ -40,22 +43,24 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.996.0",
-    "@forklaunch/common": "workspace:*",
-    "@forklaunch/core": "workspace:*"
+    "@aws-sdk/client-s3": "^3.1144.0",
+    "@aws-sdk/lib-storage": "^3.1144.0",
+    "@aws-sdk/s3-presigned-post": "^3.1144.0",
+    "@aws-sdk/s3-request-presigner": "^3.1144.0",
+    "@forklaunch/common": "workspace:^",
+    "@forklaunch/core": "workspace:^"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
-    "@typescript/native-preview": "7.0.0-dev.20260223.1",
-    "globals": "^17.3.0",
-    "jest": "^30.2.0",
-    "prettier": "^3.8.1",
-    "ts-jest": "^29.4.6",
+    "globals": "^17.12.0",
+    "jest": "^30.5.2",
+    "prettier": "^3.9.9",
+    "ts-jest": "^29.4.14",
     "ts-node": "^10.9.2",
     "tsup": "^8.5.1",
-    "typedoc": "^0.28.17",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "^8.56.1"
+    "typedoc": "^0.28.20",
+    "typescript": "^7.0.2",
+    "typescript-eslint": "^8.71.0"
   }
 }

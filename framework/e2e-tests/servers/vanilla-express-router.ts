@@ -33,6 +33,7 @@ const postHandler = handlers.post(
   '/sse',
   {
     name: 'Test',
+    access: 'public',
     summary: 'Test Summary',
     body: {
       f: string,

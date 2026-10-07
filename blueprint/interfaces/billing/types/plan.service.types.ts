@@ -11,15 +11,18 @@ export type CreatePlanDto<PlanCadenceEnum, CurrencyEnum, BillingProviderEnum> =
     features?: string[];
     providerFields?: unknown;
     externalId: string;
-    billingProvider?: BillingProviderEnum[keyof BillingProviderEnum];
+    billingProvider: BillingProviderEnum[keyof BillingProviderEnum];
   };
 export type UpdatePlanDto<PlanCadenceEnum, CurrencyEnum, BillingProviderEnum> =
   Partial<CreatePlanDto<PlanCadenceEnum, CurrencyEnum, BillingProviderEnum>> &
     IdDto;
-export type PlanDto<PlanCadenceEnum, CurrencyEnum, BillingProviderEnum> =
-  CreatePlanDto<PlanCadenceEnum, CurrencyEnum, BillingProviderEnum> &
-    IdDto &
-    Partial<RecordTimingDto>;
+export type PlanDto<PlanCadenceEnum, CurrencyEnum, BillingProviderEnum> = Omit<
+  CreatePlanDto<PlanCadenceEnum, CurrencyEnum, BillingProviderEnum>,
+  'billingProvider'
+> & {
+  billingProvider?: BillingProviderEnum[keyof BillingProviderEnum];
+} & IdDto &
+  Partial<RecordTimingDto>;
 
 export type PlanServiceParameters<
   PlanCadenceEnum,

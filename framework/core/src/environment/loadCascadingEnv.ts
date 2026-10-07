@@ -138,7 +138,7 @@ function collectEnvLocalFiles(
 /**
  * Finds application root by looking for .forklaunch/manifest.toml
  */
-function findApplicationRoot(startPath: string): string {
+export function findApplicationRoot(startPath: string): string {
   let currentPath = resolve(startPath);
   const originalStart = currentPath;
   const maxDepth = 10;

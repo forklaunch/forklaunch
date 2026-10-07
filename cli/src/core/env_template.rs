@@ -11,6 +11,7 @@ use termcolor::{StandardStream, WriteColor};
 use crate::core::{
     ast::infrastructure::env::find_all_env_vars,
     env::{add_env_vars_to_file, is_env_var_defined},
+    env_defaults::{EnvContext, ExistingEnvValues, find_existing_hmac_secret, resolve_env_var_default},
     env_scope::{EnvironmentVariableScope, determine_env_var_scopes, is_pulumi_injected},
     manifest::{ProjectType, application::ApplicationManifestData},
     rendered_template::{RenderedTemplate, RenderedTemplatesCache},
@@ -31,6 +32,8 @@ fn categorize_env_var(var_name: &str) -> &'static str {
         "Observability (OpenTelemetry)"
     } else if var_name.starts_with("STRIPE_") {
         "Billing (Stripe)"
+    } else if var_name.starts_with("TWILIO_") {
+        "Messaging (Twilio)"
     } else if var_name.starts_with("BETTER_AUTH_")
         || var_name.starts_with("PASSWORD_ENCRYPTION_")
         || var_name.starts_with("HMAC_")
@@ -163,7 +166,7 @@ pub fn generate_env_templates(
             },
         );
 
-        log_ok!(stdout, "[OK] Generated root .env.template");
+        log_ok!(stdout, "Generated root .env.template");
     }
 
     let mut symlink_templates: Vec<SymlinkTemplate> = Vec::new();
@@ -216,7 +219,7 @@ pub fn generate_env_templates(
                 },
             );
 
-            log_ok!(stdout, "[OK] Generated .env.template for {}", project_name);
+            log_ok!(stdout, "Generated .env.template for {}", project_name);
         }
     }
 
@@ -230,7 +233,7 @@ pub fn generate_env_templates(
                 .and_then(|p| p.file_name())
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default();
-            log_ok!(stdout, "[OK] Symlinked .env.template for worker {}", worker_name);
+            log_ok!(stdout, "Symlinked .env.template for worker {}", worker_name);
         }
     }
 
@@ -261,6 +264,18 @@ pub fn sync_env_local_files(
         .map(|v| v.name.clone())
         .collect();
 
+    // Collect existing env values for majority-value resolution
+    let existing_values = ExistingEnvValues::collect(modules_path);
+
+    // Find existing HMAC secret for consistency across services
+    let existing_hmac_secret = find_existing_hmac_secret(modules_path);
+    // Generate one if none exists, so all vars in this sync run share the same secret
+    let hmac_secret_for_sync = existing_hmac_secret.clone().unwrap_or_else(|| {
+        let mut bytes = vec![0u8; 32];
+        getrandom::getrandom(&mut bytes).expect("Failed to generate random bytes");
+        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes)
+    });
+
     // Sync application-scoped vars to root .env.local
     // Exclude inter-service URL vars — Pulumi injects these at deploy time
     if !application_var_names.is_empty() {
@@ -270,12 +285,22 @@ pub fn sync_env_local_files(
         let root_env_local = app_root.join(".env.local");
 
         let mut missing_root_vars: HashMap<String, String> = HashMap::new();
+        // Use a generic context for application-scoped vars
+        let context = EnvContext::EnvLocal { project_name: "app" };
         for var_name in &application_var_names {
             if is_pulumi_injected(var_name, &project_names) {
                 continue;
             }
             if !is_env_var_defined(app_root, var_name)? {
-                missing_root_vars.insert(var_name.clone(), String::new());
+                let default_value = resolve_env_var_default(
+                    var_name,
+                    manifest_data,
+                    &context,
+                    Some(&hmac_secret_for_sync),
+                    &existing_values,
+                )
+                .unwrap_or_default();
+                missing_root_vars.insert(var_name.clone(), default_value);
             }
         }
 
@@ -286,7 +311,7 @@ pub fn sync_env_local_files(
             let mut var_names: Vec<&String> = missing_root_vars.keys().collect();
             var_names.sort();
 
-            log_info!(stdout, "[INFO] Added {} missing application env var(s) to {}: {}", missing_root_vars.len(), root_env_local.display(), var_names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
+            log_info!(stdout, "Added {} missing application env var(s) to {}: {}", missing_root_vars.len(), root_env_local.display(), var_names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
         }
     }
 
@@ -308,6 +333,7 @@ pub fn sync_env_local_files(
 
         let project_path = modules_path.join(project_name);
         let env_local_path = project_path.join(".env.local");
+        let context = EnvContext::EnvLocal { project_name };
 
         let mut missing_vars: HashMap<String, String> = HashMap::new();
 
@@ -318,7 +344,15 @@ pub fn sync_env_local_files(
             }
 
             if !is_env_var_defined(&project_path, &env_var.var_name)? {
-                missing_vars.insert(env_var.var_name.clone(), String::new());
+                let default_value = resolve_env_var_default(
+                    &env_var.var_name,
+                    manifest_data,
+                    &context,
+                    Some(&hmac_secret_for_sync),
+                    &existing_values,
+                )
+                .unwrap_or_default();
+                missing_vars.insert(env_var.var_name.clone(), default_value);
             }
         }
 
@@ -329,7 +363,7 @@ pub fn sync_env_local_files(
             let mut var_names: Vec<&String> = missing_vars.keys().collect();
             var_names.sort();
 
-            log_info!(stdout, "[INFO] Added {} missing env var(s) to {}: {}", missing_vars.len(), env_local_path.display(), var_names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
+            log_info!(stdout, "Added {} missing env var(s) to {}: {}", missing_vars.len(), env_local_path.display(), var_names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
         }
     }
 
@@ -353,11 +387,11 @@ mod tests {
         );
         assert_eq!(categorize_env_var("STRIPE_API_KEY"), "Billing (Stripe)");
         assert_eq!(
-            categorize_env_var("BETTER_AUTH_BASE_PATH"),
-            "Authentication"
+            categorize_env_var("TWILIO_ACCOUNT_SID"),
+            "Messaging (Twilio)"
         );
         assert_eq!(
-            categorize_env_var("PASSWORD_ENCRYPTION_SECRET_PATH"),
+            categorize_env_var("BETTER_AUTH_BASE_PATH"),
             "Authentication"
         );
         assert_eq!(categorize_env_var("HMAC_SECRET_KEY"), "Authentication");

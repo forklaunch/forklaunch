@@ -8,12 +8,13 @@ description: Guide for safely deleting ForkLaunch project components.
 
 The ForkLaunch CLI provides commands to delete project components such as services, workers, routers, and libraries. These operations are **irreversible** and require confirmation to prevent accidental data loss.
 
-> **For detailed CLI syntax and options, see**:  
-> [Delete Command Reference](/docs/cli/delete.md)
+## Getting Started
 
----
+You can delete a project in two ways:
+1. [Using Commands](#using-commands-recommended)
+2. [Manual Deletion with Sync](#manual-deletion-with-sync)
 
-## Basic Usage
+### Using Commands (Recommended)
 
 ```bash
 forklaunch delete <component> <name> [OPTIONS]
@@ -21,7 +22,9 @@ forklaunch delete <component> <name> [OPTIONS]
 forklaunch del <component> <name> [OPTIONS]
 ```
 
-### Available Components
+This deletes the project directory and automatically updates all application artifacts to remove references.
+
+**Available Components:**
 
 | Component   | Command                            | Description                                 |
 | :---------- | :--------------------------------- | :------------------------------------------ |
@@ -29,6 +32,41 @@ forklaunch del <component> <name> [OPTIONS]
 | **Worker**  | `forklaunch delete worker <name>`  | Delete a worker and its queue configuration |
 | **Router**  | `forklaunch delete router <name>`  | Delete a router and its route definitions   |
 | **Library** | `forklaunch delete library <name>` | Delete a library and its exports            |
+
+### Manual Deletion with Sync
+
+If you manually delete a project directory, use `forklaunch sync` to clean up artifacts:
+
+```bash
+# After manually deleting the project directory
+forklaunch sync all
+```
+
+This updates artifacts (manifest, docker-compose, workspace, SDK, tsconfig) to remove references to the deleted project(s).
+
+> **For detailed CLI syntax and options, see**: [Delete Command Reference](/docs/cli/delete.md)
+
+## How Deletions Affect Artifacts
+
+When you delete a project, ForkLaunch automatically updates **application artifacts** - configuration files that manage your entire application:
+
+| Artifact | What Gets Updated |
+|----------|-------------------|
+| **Manifest** (`.forklaunch/manifest.toml`) | Project registry (removed from list) |
+| **Docker Compose** (`docker-compose.yaml`) | Service definitions removed (if service/worker) |
+| **Workspace Config** (`pnpm-workspace.yaml` or `package.json`) | Package references and scripts removed |
+| **Universal SDK** (`modules/universal-sdk/`) | API client exports removed (if service) |
+| **TypeScript Config** (`modules/tsconfig.json`) | Project references removed |
+
+**Example**: Deleting a service removes:
+- The service directory and all its files
+- Service entry from manifest.toml
+- Docker Compose service definition
+- Workspace package reference
+- SDK client exports
+- TypeScript project reference
+
+**Note**: Routers are deleted differently - they only remove files within the parent service and update that service's `server.ts` and `registrations.ts`, but don't affect application-level artifacts.
 
 ## Safety Features
 
@@ -175,7 +213,7 @@ If you accidentally delete a component:
 
    ```bash
    # Recreate the component
-   forklaunch add service restored-service --database postgresql
+   forklaunch init service restored-service --database postgresql
    ```
 
 3. **Fix Imports**
@@ -208,11 +246,10 @@ If deletion fails partway through:
 
 ## Related Documentation
 
-- [Adding Projects](/docs/adding-projects.md) - Create new components
-- [Changing Projects](/docs/changing-projects.md) - Modify existing components
-- [CLI Reference](/docs/cli.md) - All CLI commands
-- [Best Practices](/docs/best-practices.md) - Development best practices
-- [Troubleshooting](/docs/troubleshooting.md) - Common issues and solutions
+- [Adding Projects](/docs/adding-projects.md): Create new components
+- [Changing Projects](/docs/changing-projects.md): Modify existing components
+- [CLI Reference: delete](/docs/cli/delete.md): Full `delete` command options
+- [CLI Reference](/docs/cli.md): All CLI commands
 
 ## Security Considerations
 

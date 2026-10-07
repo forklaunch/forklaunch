@@ -8,6 +8,41 @@ description: Reference for Authorization in ForkLaunch.
 
 ForkLaunch provides comprehensive authorization through the `@forklaunch/core` package's authentication system, built into the `ContractDetails` auth property. The system supports multiple authentication methods with flexible access control strategies.
 
+
+## Authorization layers: HTTP endpoints vs MCP transport
+
+ForkLaunch authorization can apply at **two different layers**, and it’s common to use both:
+
+- **HTTP endpoint authorization (ContractDetails `auth`)**: Enforced on your normal REST/HTTP routes using `contractDetails.auth` (JWT/HMAC/Basic + roles/permissions/scopes + optional session typing).
+- **MCP transport authorization (FastMCP `authenticate`)**: Enforced on the `/mcp` control plane itself using an `authenticate(request)` callback. This is intentionally **auth-framework-agnostic**: the framework doesn’t implement OAuth; it only calls your callback so you can validate tokens however you want (JWT, Better Auth session, external IAM call, etc.).
+
+### MCP transport auth: `mcp.authenticate(request)`
+
+When MCP is enabled for an app, you can provide an `authenticate` callback in the app’s MCP options. It is invoked for each MCP request and should return a user/session/context object, or `undefined` to deny access.
+
+Example pattern:
+```ts
+const app = forklaunchExpress(schemaValidator, telemetryCollector, {
+  mcp: {
+    authenticate: async (request) => {
+    const token = request.headers.authorization?.replace('Bearer ', '');
+    if (!token) return undefined;
+      // Option A: validate locally (JWT/JWKS/etc)
+      // Option B: validate via IAM (recommended for centralized OAuth/session management)
+      return { subject: 'user-id-or-email' };
+    }
+  }
+});
+```
+**Important**: MCP transport auth is separate from HTTP route auth. Even if MCP authentication passes, the proxied HTTP route can still require `contractDetails.auth` (and should, for defense-in-depth).
+
+### Centralized OAuth/IAM pattern (recommended)
+A common architecture is:
+- IAM service owns OAuth providers / sessions (e.g. Better Auth).
+- Other services implement `mcp.authenticate` by calling IAM to validate the bearer token and returning the session/user object.
+- HTTP routes still use contract-level auth for roles/permissions/scopes.
+
+
 ## Authentication Methods
 
 The authorization system supports three main authentication methods:
@@ -86,6 +121,33 @@ const permissionControl = {
 }
 ```
 
+## Token decoding + session enrichment (`decodeResource`)
+
+Sometimes authorization needs extra context that isn’t directly in the JWT (example: `organizationId`). In that case, use `decodeResource` to transform the raw token into the payload/session shape your routes depend on.
+
+Typical use:
+- Verify token (often via JWKS)
+- Lookup additional context (e.g. user’s organization)
+- Return an augmented payload that becomes available as typed session context (via `sessionSchema`)
+
+Example pattern:
+```ts
+const contractDetails = {
+  auth: {
+    sessionSchema: {
+      organizationId: string
+    },
+    jwt: { jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL },
+    decodeResource: async (token: string) => {
+      const payload = await verifyAndDecodeJwt(token);
+      const organizationId = await lookupOrganizationId(payload.sub);
+      return { ...payload, organizationId };
+    },
+    allowedPermissions: new Set(['read:users'])
+  }
+};
+```
+
 ### Role-Based Access Control
 
 ```typescript
@@ -112,7 +174,7 @@ const scopeControl = {
   requiredScope: 'users:read',
   
   // Scope hierarchy (more specific scopes include less specific ones)
-  scopeHierarchy: ['admin', 'users:write', 'users:read'],
+  scopeHeirarchy: ['admin', 'users:write', 'users:read'],
   
   // Dynamic scope resolution
   surfaceScopes: async (resourceId: string, req: Request) => {
@@ -216,7 +278,7 @@ const contractDetails = {
   auth: {
     jwt: { signatureKey: process.env.JWT_SECRET },
     requiredScope: 'users:read',
-    scopeHierarchy: ['admin', 'users:write', 'users:read'],
+    scopeHeirarchy: ['admin', 'users:write', 'users:read'],
     surfaceScopes: async (resourceId: string, req: Request) => {
       // Extract scopes from JWT or determine based on user context
       return ['users:read'];

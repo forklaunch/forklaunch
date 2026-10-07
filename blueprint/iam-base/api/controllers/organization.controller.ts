@@ -13,7 +13,7 @@ import {
   UpdateOrganizationMapper
 } from '../../domain/mappers/organization.mappers';
 
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 const serviceFactory = ci.scopedResolver(tokens.OrganizationService);
 const HMAC_SECRET_KEY = ci.resolve(tokens.HMAC_SECRET_KEY);
 const JWKS_PUBLIC_KEY_URL = ci.resolve(tokens.JWKS_PUBLIC_KEY_URL);
@@ -23,6 +23,7 @@ export const createOrganization = handlers.post(
   '/',
   {
     name: 'Create Organization',
+    access: 'internal',
     summary: 'Creates a new organization',
     auth: {
       hmac: {
@@ -56,6 +57,7 @@ export const getOrganization = handlers.get(
   '/:id',
   {
     name: 'Get Organization',
+    access: 'protected',
     summary: 'Gets an organization by ID',
     auth: {
       jwt: {
@@ -86,6 +88,7 @@ export const updateOrganization = handlers.put(
   '/',
   {
     name: 'Update Organization',
+    access: 'internal',
     summary: 'Updates an organization by ID',
     auth: {
       hmac: {
@@ -111,6 +114,7 @@ export const deleteOrganization = handlers.delete(
   '/:id',
   {
     name: 'Delete Organization',
+    access: 'internal',
     summary: 'Deletes an organization by ID',
     auth: {
       hmac: {

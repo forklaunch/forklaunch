@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# The CLI binary. CI builds it once and exports FORKLAUNCH_CLI so the 43
+# scripts share one compile instead of each re-checking a release build.
+FL="${FORKLAUNCH_CLI:-cargo run --release}"
 
 # Integration test for sync command - orphan removal flow
 # Tests that sync correctly removes orphaned projects from artifacts
@@ -16,7 +19,7 @@ echo "[TEST] Sync Orphan Removal Flow"
 
 # Test with Node runtime
 echo "[INFO] Creating Node application"
-RUST_BACKTRACE=1 cargo run --release init application sync-test-node-application \
+RUST_BACKTRACE=1 $FL init application sync-test-node-application \
     -p sync-test-node-application \
     -o src/modules \
     -d postgresql \
@@ -28,22 +31,23 @@ RUST_BACKTRACE=1 cargo run --release init application sync-test-node-application
     -t vitest \
     -D "Test Sync Application" \
     -A "Test Author" \
-    -L 'MIT'
+    -L 'MIT' \
+    -m
 
 cd sync-test-node-application
 
-RUST_BACKTRACE=1 cargo run --release init service svc-test \
+RUST_BACKTRACE=1 $FL init service svc-test \
     -d postgresql \
     -p src/modules \
     -D "Test service"
 
-RUST_BACKTRACE=1 cargo run --release init worker wrk-test \
+RUST_BACKTRACE=1 $FL init worker wrk-test \
     -t database \
     -d postgresql \
     -p src/modules \
     -D "Test worker"
 
-RUST_BACKTRACE=1 cargo run --release init library lib-test \
+RUST_BACKTRACE=1 $FL init library lib-test \
     -p src/modules \
     -D "Test library"
 
@@ -53,7 +57,7 @@ rm -rf src/modules/svc-test src/modules/wrk-test src/modules/lib-test
 
 # Sync should detect and remove orphans
 echo "[INFO] Running sync all to clean up orphans"
-RUST_BACKTRACE=1 cargo run --release sync all -p . -c
+RUST_BACKTRACE=1 $FL sync all -p . -c
 
 # Verify build still works
 cd src/modules
@@ -64,7 +68,7 @@ cd ../../../..
 
 # Test with Bun runtime
 echo "[INFO] Creating Bun application"
-RUST_BACKTRACE=1 cargo run --release init application sync-test-bun-application \
+RUST_BACKTRACE=1 $FL init application sync-test-bun-application \
     -p sync-test-bun-application \
     -o src/modules \
     -d postgresql \
@@ -76,22 +80,23 @@ RUST_BACKTRACE=1 cargo run --release init application sync-test-bun-application 
     -t vitest \
     -D "Test Sync Application" \
     -A "Test Author" \
-    -L 'MIT'
+    -L 'MIT' \
+    -m
 
 cd sync-test-bun-application
 
-RUST_BACKTRACE=1 cargo run --release init service svc-test \
+RUST_BACKTRACE=1 $FL init service svc-test \
     -d postgresql \
     -p src/modules \
     -D "Test service"
 
-RUST_BACKTRACE=1 cargo run --release init worker wrk-test \
+RUST_BACKTRACE=1 $FL init worker wrk-test \
     -t database \
     -d postgresql \
     -p src/modules \
     -D "Test worker"
 
-RUST_BACKTRACE=1 cargo run --release init library lib-test \
+RUST_BACKTRACE=1 $FL init library lib-test \
     -p src/modules \
     -D "Test library"
 
@@ -101,7 +106,7 @@ rm -rf src/modules/svc-test src/modules/wrk-test src/modules/lib-test
 
 # Sync should detect and remove orphans
 echo "[INFO] Running sync all to clean up orphans"
-RUST_BACKTRACE=1 cargo run --release sync all -p . -c
+RUST_BACKTRACE=1 $FL sync all -p . -c
 
 # Verify build still works
 cd src/modules

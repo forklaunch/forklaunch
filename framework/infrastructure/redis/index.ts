@@ -1,11 +1,16 @@
 import { safeParse, safeStringify } from '@forklaunch/common';
-import { TtlCache, TtlCacheRecord } from '@forklaunch/core/cache';
+import {
+  type ComplianceContext,
+  TtlCache,
+  TtlCacheRecord
+} from '@forklaunch/core/cache';
 import {
   evaluateTelemetryOptions,
   MetricsDefinition,
   OpenTelemetryCollector,
   TelemetryOptions
 } from '@forklaunch/core/http';
+import { type FieldEncryptor } from '@forklaunch/core/persistence';
 import { createClient, RedisClientOptions } from 'redis';
 
 /**
@@ -13,58 +18,110 @@ import { createClient, RedisClientOptions } from 'redis';
  * Can be a string, number, Buffer, null, undefined, or array of raw replies.
  */
 type RedisCommandRawReply =
-  | string
-  | number
-  | Buffer
-  | null
-  | undefined
-  | Array<RedisCommandRawReply>;
+  string | number | Buffer | null | undefined | Array<RedisCommandRawReply>;
+
+const ENCRYPTED_PREFIXES = ['v1:', 'v2:', 'v3:'] as const;
+
+function isEncrypted(value: string): boolean {
+  return ENCRYPTED_PREFIXES.some((p) => value.startsWith(p));
+}
+
+/**
+ * Options for configuring encryption on the Redis cache.
+ * Required — every consumer must explicitly configure encryption.
+ */
+export interface RedisCacheEncryptionOptions {
+  /** The FieldEncryptor instance to use for encrypting cache values. */
+  encryptor: FieldEncryptor;
+}
 
 /**
  * Class representing a Redis-based TTL (Time-To-Live) cache.
  * Implements the TtlCache interface to provide caching functionality with automatic expiration.
+ *
+ * Encryption is activated per-operation when a `compliance` context is provided.
+ * Without it, values are stored and read as plaintext.
  */
 export class RedisTtlCache implements TtlCache {
   private client;
   private telemetryOptions;
+  private encryptor?: FieldEncryptor;
 
   /**
    * Creates an instance of RedisTtlCache.
    *
    * @param {number} ttlMilliseconds - The default Time-To-Live in milliseconds for cache entries
    * @param {OpenTelemetryCollector<MetricsDefinition>} openTelemetryCollector - Collector for OpenTelemetry metrics
-   * @param {RedisClientOptions} hostingOptions - Configuration options for the Redis client
+   * @param {RedisClientOptions} options - Configuration options for the Redis client
    * @param {TelemetryOptions} telemetryOptions - Configuration options for telemetry
+   * @param {RedisCacheEncryptionOptions} encryption - Encryption configuration
    */
   constructor(
     private ttlMilliseconds: number,
     private openTelemetryCollector: OpenTelemetryCollector<MetricsDefinition>,
     options: RedisClientOptions,
-    telemetryOptions: TelemetryOptions
+    telemetryOptions: TelemetryOptions,
+    encryption: RedisCacheEncryptionOptions
   ) {
     this.telemetryOptions = evaluateTelemetryOptions(telemetryOptions);
     this.client = createClient(options);
+    this.encryptor = encryption.encryptor;
     if (this.telemetryOptions.enabled.logging) {
       this.client.on('error', (err) => this.openTelemetryCollector.error(err));
       this.client.connect().catch(this.openTelemetryCollector.error);
     }
   }
 
-  /**
-   * Parses a raw Redis reply into the expected type.
-   * Handles null values, arrays, buffers, and JSON strings.
-   *
-   * @template T - The expected type of the parsed value
-   * @param {RedisCommandRawReply} value - The raw value from Redis to parse
-   * @returns {T} The parsed value cast to type T
-   */
-  private parseValue<T>(value: RedisCommandRawReply): T {
+  // ---------------------------------------------------------------------------
+  // Encryption helpers — only active when compliance context is provided
+  // ---------------------------------------------------------------------------
+
+  private encryptValue(
+    serialized: string,
+    compliance?: ComplianceContext
+  ): string {
+    if (!compliance || !this.encryptor) return serialized;
+    return (
+      this.encryptor.encrypt(serialized, compliance.tenantId) ?? serialized
+    );
+  }
+
+  private decryptValue(value: string, compliance?: ComplianceContext): string {
+    if (!compliance || !this.encryptor) return value;
+    if (!isEncrypted(value)) return value;
+    // If a value is encrypted but we cannot decrypt it, treat the entry as
+    // unreadable rather than returning the ciphertext. Returning the raw
+    // bytes lets callers (e.g. cache services that JSON.parse the result)
+    // surface garbage as if it were a successful read, masking key/tenant
+    // mismatches and corrupting downstream consumers. Throwing forces the
+    // caller's catch path (cache miss) to run.
+    let decrypted: string | null;
+    try {
+      decrypted = this.encryptor.decrypt(value, compliance.tenantId);
+    } catch (err) {
+      throw new Error(
+        `Redis: failed to decrypt value for tenant ${compliance.tenantId}: ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err }
+      );
+    }
+    if (decrypted === null) {
+      throw new Error(
+        `Redis: encrypted value for tenant ${compliance.tenantId} could not be decrypted (null result)`
+      );
+    }
+    return decrypted;
+  }
+
+  private parseValue<T>(
+    value: RedisCommandRawReply,
+    compliance?: ComplianceContext
+  ): T {
     if (value == null) {
       return null as T;
     }
 
     if (Array.isArray(value)) {
-      return value.map((v) => this.parseValue<T>(v)) as T;
+      return value.map((v) => this.parseValue<T>(v, compliance)) as T;
     }
 
     if (Buffer.isBuffer(value)) {
@@ -74,96 +131,75 @@ export class RedisTtlCache implements TtlCache {
     switch (typeof value) {
       case 'object':
       case 'string':
-        return safeParse(value) as T;
+        return safeParse(this.decryptValue(String(value), compliance)) as T;
       case 'number':
         return value as T;
     }
   }
 
-  /**
-   * Puts a record into the Redis cache.
-   *
-   * @template T - The type of value being cached
-   * @param {TtlCacheRecord<T>} param0 - The cache record containing key, value and optional TTL
-   * @param {string} param0.key - The key to store the value under
-   * @param {T} param0.value - The value to cache
-   * @param {number} [param0.ttlMilliseconds] - Optional TTL in milliseconds, defaults to constructor value
-   * @returns {Promise<void>} A promise that resolves when the value is cached
-   */
-  async putRecord<T>({
-    key,
-    value,
-    ttlMilliseconds = this.ttlMilliseconds
-  }: TtlCacheRecord<T>): Promise<void> {
+  // ---------------------------------------------------------------------------
+  // TtlCache implementation
+  // ---------------------------------------------------------------------------
+
+  async putRecord<T>(
+    { key, value, ttlMilliseconds = this.ttlMilliseconds }: TtlCacheRecord<T>,
+    compliance?: ComplianceContext
+  ): Promise<void> {
     if (this.telemetryOptions.enabled.logging) {
       this.openTelemetryCollector.info(`Putting record into cache: ${key}`);
     }
-    await this.client.set(key, safeStringify(value), {
-      PX: ttlMilliseconds
-    });
+    await this.client.set(
+      key,
+      this.encryptValue(safeStringify(value), compliance),
+      { PX: ttlMilliseconds }
+    );
   }
 
-  /**
-   * Puts multiple records into the Redis cache in a single transaction.
-   *
-   * @template T - The type of values being cached
-   * @param {TtlCacheRecord<T>[]} cacheRecords - Array of cache records to store
-   * @returns {Promise<void>} A promise that resolves when all values are cached
-   */
-  async putBatchRecords<T>(cacheRecords: TtlCacheRecord<T>[]): Promise<void> {
+  async putBatchRecords<T>(
+    cacheRecords: TtlCacheRecord<T>[],
+    compliance?: ComplianceContext
+  ): Promise<void> {
     const multiCommand = this.client.multi();
     for (const { key, value, ttlMilliseconds } of cacheRecords) {
-      multiCommand.set(key, safeStringify(value), {
-        PX: ttlMilliseconds || this.ttlMilliseconds
-      });
+      multiCommand.set(
+        key,
+        this.encryptValue(safeStringify(value), compliance),
+        { PX: ttlMilliseconds || this.ttlMilliseconds }
+      );
     }
     await multiCommand.exec();
   }
 
-  /**
-   * Adds a value to the left end of a Redis list.
-   *
-   * @template T - The type of value being enqueued
-   * @param {string} queueName - The name of the Redis list
-   * @param {T} value - The value to add to the list
-   * @returns {Promise<void>} A promise that resolves when the value is enqueued
-   */
-  async enqueueRecord<T>(queueName: string, value: T): Promise<void> {
-    await this.client.lPush(queueName, safeStringify(value));
+  async enqueueRecord<T>(
+    queueName: string,
+    value: T,
+    compliance?: ComplianceContext
+  ): Promise<void> {
+    await this.client.lPush(
+      queueName,
+      this.encryptValue(safeStringify(value), compliance)
+    );
   }
 
-  /**
-   * Adds multiple values to the left end of a Redis list in a single transaction.
-   *
-   * @template T - The type of values being enqueued
-   * @param {string} queueName - The name of the Redis list
-   * @param {T[]} values - Array of values to add to the list
-   * @returns {Promise<void>} A promise that resolves when all values are enqueued
-   */
-  async enqueueBatchRecords<T>(queueName: string, values: T[]): Promise<void> {
+  async enqueueBatchRecords<T>(
+    queueName: string,
+    values: T[],
+    compliance?: ComplianceContext
+  ): Promise<void> {
     const multiCommand = this.client.multi();
     for (const value of values) {
-      multiCommand.lPush(queueName, safeStringify(value));
+      multiCommand.lPush(
+        queueName,
+        this.encryptValue(safeStringify(value), compliance)
+      );
     }
     await multiCommand.exec();
   }
 
-  /**
-   * Deletes a record from the Redis cache.
-   *
-   * @param {string} cacheRecordKey - The key of the record to delete
-   * @returns {Promise<void>} A promise that resolves when the record is deleted
-   */
   async deleteRecord(cacheRecordKey: string): Promise<void> {
     await this.client.del(cacheRecordKey);
   }
 
-  /**
-   * Deletes multiple records from the Redis cache in a single transaction.
-   *
-   * @param {string[]} cacheRecordKeys - Array of keys to delete
-   * @returns {Promise<void>} A promise that resolves when all records are deleted
-   */
   async deleteBatchRecords(cacheRecordKeys: string[]): Promise<void> {
     const multiCommand = this.client.multi();
     for (const key of cacheRecordKeys) {
@@ -172,33 +208,21 @@ export class RedisTtlCache implements TtlCache {
     await multiCommand.exec();
   }
 
-  /**
-   * Removes and returns the rightmost element from a Redis list.
-   *
-   * @template T - The type of value being dequeued
-   * @param {string} queueName - The name of the Redis list
-   * @returns {Promise<T>} A promise that resolves with the dequeued value
-   * @throws {Error} If the queue is empty
-   */
-  async dequeueRecord<T>(queueName: string): Promise<T> {
+  async dequeueRecord<T>(
+    queueName: string,
+    compliance?: ComplianceContext
+  ): Promise<T> {
     const value = await this.client.rPop(queueName);
     if (value === null) {
       throw new Error(`Queue is empty: ${queueName}`);
     }
-    return safeParse(value) as T;
+    return safeParse(this.decryptValue(value, compliance)) as T;
   }
 
-  /**
-   * Removes and returns multiple elements from the right end of a Redis list.
-   *
-   * @template T - The type of values being dequeued
-   * @param {string} queueName - The name of the Redis list
-   * @param {number} pageSize - Maximum number of elements to dequeue
-   * @returns {Promise<T[]>} A promise that resolves with an array of dequeued values
-   */
   async dequeueBatchRecords<T>(
     queueName: string,
-    pageSize: number
+    pageSize: number,
+    compliance?: ComplianceContext
   ): Promise<T[]> {
     const multiCommand = this.client.multi();
     for (let i = 0; i < pageSize; i++) {
@@ -207,20 +231,18 @@ export class RedisTtlCache implements TtlCache {
     const values = await multiCommand.exec();
     return values
       .map((value) =>
-        this.parseValue<T>(value as unknown as RedisCommandRawReply)
+        // node-redis hands back `ReplyUnion`, while the parse/serialize helpers
+        // are typed against `RedisCommandRawReply`. The two unions describe the
+        // same wire values but share no member, so TypeScript sees no overlap.
+        this.parseValue<T>(value as unknown as RedisCommandRawReply, compliance)
       )
       .filter(Boolean);
   }
 
-  /**
-   * Reads a record from the Redis cache.
-   *
-   * @template T - The type of value being read
-   * @param {string} cacheRecordKey - The key of the record to read
-   * @returns {Promise<TtlCacheRecord<T>>} A promise that resolves with the cache record
-   * @throws {Error} If the record is not found
-   */
-  async readRecord<T>(cacheRecordKey: string): Promise<TtlCacheRecord<T>> {
+  async readRecord<T>(
+    cacheRecordKey: string,
+    compliance?: ComplianceContext
+  ): Promise<TtlCacheRecord<T>> {
     const [value, ttl] = await this.client
       .multi()
       .get(cacheRecordKey)
@@ -232,21 +254,24 @@ export class RedisTtlCache implements TtlCache {
 
     return {
       key: cacheRecordKey,
-      value: this.parseValue<T>(value as unknown as RedisCommandRawReply),
+      value: this.parseValue<T>(
+        // node-redis hands back `ReplyUnion`, while the parse/serialize helpers
+        // are typed against `RedisCommandRawReply`. The two unions describe the
+        // same wire values but share no member, so TypeScript sees no overlap.
+        value as unknown as RedisCommandRawReply,
+        compliance
+      ),
       ttlMilliseconds:
-        this.parseValue<number>(ttl as unknown as RedisCommandRawReply) * 1000
+        this.parseValue<number>(
+          ttl as unknown as RedisCommandRawReply,
+          compliance
+        ) * 1000
     };
   }
 
-  /**
-   * Reads multiple records from the Redis cache.
-   *
-   * @template T - The type of values being read
-   * @param {string[] | string} cacheRecordKeysOrPrefix - Array of keys to read, or a prefix pattern
-   * @returns {Promise<TtlCacheRecord<T>[]>} A promise that resolves with an array of cache records
-   */
   async readBatchRecords<T>(
-    cacheRecordKeysOrPrefix: string[] | string
+    cacheRecordKeysOrPrefix: string[] | string,
+    compliance?: ComplianceContext
   ): Promise<TtlCacheRecord<T>[]> {
     const keys = Array.isArray(cacheRecordKeysOrPrefix)
       ? cacheRecordKeysOrPrefix
@@ -260,10 +285,14 @@ export class RedisTtlCache implements TtlCache {
     return values.reduce<TtlCacheRecord<T>[]>((acc, value, index) => {
       if (index % 2 === 0) {
         const maybeValue = this.parseValue<T>(
-          value as unknown as RedisCommandRawReply
+          // `ReplyUnion` and `RedisCommandRawReply` name the same wire values
+          // through disjoint unions, so neither is assignable to the other.
+          value as unknown as RedisCommandRawReply,
+          compliance
         );
         const ttl = this.parseValue<number>(
-          values[index + 1] as unknown as RedisCommandRawReply
+          values[index + 1] as unknown as RedisCommandRawReply,
+          compliance
         );
         if (maybeValue && ttl) {
           acc.push({
@@ -277,34 +306,15 @@ export class RedisTtlCache implements TtlCache {
     }, []);
   }
 
-  /**
-   * Lists all keys in the Redis cache that match a pattern prefix.
-   *
-   * @param {string} pattern_prefix - The prefix pattern to match keys against
-   * @returns {Promise<string[]>} A promise that resolves with an array of matching keys
-   */
   async listKeys(pattern_prefix: string): Promise<string[]> {
-    const keys = await this.client.keys(pattern_prefix + '*');
-    return keys;
+    return this.client.keys(pattern_prefix + '*');
   }
 
-  /**
-   * Checks if a record exists in the Redis cache.
-   *
-   * @param {string} cacheRecordKey - The key to check
-   * @returns {Promise<boolean>} A promise that resolves with true if the record exists, false otherwise
-   */
   async peekRecord(cacheRecordKey: string): Promise<boolean> {
     const result = await this.client.exists(cacheRecordKey);
     return result === 1;
   }
 
-  /**
-   * Checks if multiple records exist in the Redis cache.
-   *
-   * @param {string[] | string} cacheRecordKeysOrPrefix - Array of keys to check, or a prefix pattern
-   * @returns {Promise<boolean[]>} A promise that resolves with an array of existence booleans
-   */
   async peekBatchRecords(
     cacheRecordKeysOrPrefix: string[] | string
   ): Promise<boolean[]> {
@@ -319,54 +329,41 @@ export class RedisTtlCache implements TtlCache {
     return results.map((result) => (result as unknown as number) === 1);
   }
 
-  /**
-   * Peeks at a record in the Redis cache.
-   *
-   * @template T - The type of value being peeked at
-   * @param {string} queueName - The name of the Redis queue
-   * @returns {Promise<T>} A promise that resolves with the peeked value
-   */
-  async peekQueueRecord<T>(queueName: string): Promise<T> {
-    const value = await this.client.lRange(queueName, 0, 0);
-    return this.parseValue<T>(value[0]);
+  async peekQueueRecord<T>(
+    queueName: string,
+    compliance?: ComplianceContext
+  ): Promise<T> {
+    // Queues use lPush + rPop, so the next item to dequeue lives at the
+    // tail of the list, not the head. Reading lRange(0, 0) would return the
+    // most-recently-pushed item — the opposite of dequeue order.
+    const value = await this.client.lRange(queueName, -1, -1);
+    return this.parseValue<T>(value[0], compliance);
   }
 
-  /**
-   * Peeks at multiple records in the Redis cache.
-   *
-   * @template T - The type of values being peeked at
-   * @param {string} queueName - The name of the Redis queue
-   * @param {number} pageSize - The number of records to peek at
-   * @returns {Promise<T[]>} A promise that resolves with an array of peeked values
-   */
-  async peekQueueRecords<T>(queueName: string, pageSize: number): Promise<T[]> {
-    const values = await this.client.lRange(queueName, 0, pageSize - 1);
-    return values.map((value) => this.parseValue<T>(value)).filter(Boolean);
+  async peekQueueRecords<T>(
+    queueName: string,
+    pageSize: number,
+    compliance?: ComplianceContext
+  ): Promise<T[]> {
+    // Tail-relative range: the last `pageSize` items, where the very last
+    // item is the next to be dequeued. Redis returns them in list order
+    // (oldest-tail-end first), so reverse to put next-to-dequeue first.
+    const values = await this.client.lRange(queueName, -pageSize, -1);
+    if (values.length === 0) return [];
+    return values
+      .reverse()
+      .map((value) => this.parseValue<T>(value, compliance))
+      .filter(Boolean);
   }
 
-  /**
-   * Gracefully disconnects from the Redis server.
-   *
-   * @returns {Promise<void>} A promise that resolves when the connection is closed
-   */
   async disconnect(): Promise<void> {
     await this.client.quit();
   }
 
-  /**
-   * Gets the default Time-To-Live value in milliseconds.
-   *
-   * @returns {number} The default TTL in milliseconds
-   */
   getTtlMilliseconds(): number {
     return this.ttlMilliseconds;
   }
 
-  /**
-   * Gets the underlying Redis client instance.
-   *
-   * @returns {typeof this.client} The Redis client instance
-   */
   getClient(): typeof this.client {
     return this.client;
   }

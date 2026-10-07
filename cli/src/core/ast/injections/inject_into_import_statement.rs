@@ -12,6 +12,38 @@ pub(crate) fn inject_into_import_statement<'a>(
     import_source_identifier: &str,
     source_text: &str,
 ) -> Result<()> {
+    // Extract specifier names from the injection
+    let injection_specifiers: Vec<Cow<'_, str>> = injection_program_ast
+        .body
+        .iter()
+        .filter_map(|stmt| match stmt {
+            Statement::ImportDeclaration(import) => import.specifiers.as_ref(),
+            _ => None,
+        })
+        .flat_map(|specs| specs.iter().map(|s| s.name()))
+        .collect();
+
+    // Check if an import from the same source already exists with all the specifiers
+    let existing_has_all = app_program_ast.body.iter().any(|stmt| {
+        let import = match stmt {
+            Statement::ImportDeclaration(import) => import,
+            _ => return false,
+        };
+        if Cow::Borrowed(import.source.value.as_str()) != Cow::Borrowed(import_source_identifier) {
+            return false;
+        }
+        if let Some(specs) = &import.specifiers {
+            let existing_names: Vec<Cow<'_, str>> = specs.iter().map(|s| s.name()).collect();
+            injection_specifiers.iter().all(|name| existing_names.contains(name))
+        } else {
+            false
+        }
+    });
+
+    if existing_has_all {
+        return Ok(());
+    }
+
     let mut injection_pos = None;
     let mut found_import = false;
 

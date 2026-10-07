@@ -8,8 +8,7 @@ import {
 import { EventSchema, EventSchemaEntry } from './types/eventSchema.types';
 
 type SchemaRecord<SV extends AnySchemaValidator> =
-  | Record<string, EventSchemaEntry<SV>>
-  | undefined;
+  Record<string, EventSchemaEntry<SV>> | undefined;
 
 export function buildUnionSchema<SV extends AnySchemaValidator>(
   schemaValidator: SchemaValidator,

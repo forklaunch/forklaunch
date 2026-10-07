@@ -9,7 +9,9 @@ use crate::{
     core::{
         ast::infrastructure::env::{EnvVarUsage, find_all_env_vars},
         env::{find_workspace_root, get_modules_path, is_env_var_defined},
-        env_scope::{EnvironmentVariableScope, ScopedEnvVar, determine_env_var_scopes},
+        env_scope::{
+            EnvironmentVariableScope, ScopedEnvVar, determine_env_var_scopes, is_pulumi_injected,
+        },
         rendered_template::RenderedTemplatesCache,
     },
 };
@@ -56,11 +58,30 @@ impl CliCommand for ValidateCommand {
             writeln!(stdout, "  - {}", project_name)?;
         }
 
-        let scoped_env_vars = determine_env_var_scopes(&project_env_vars, &manifest)?;
+        let project_names: Vec<String> = manifest
+            .projects
+            .iter()
+            .map(|p| p.name.clone())
+            .collect();
+
+        // Filter out Pulumi-injected vars (inter-service URLs, auth URLs) — these are
+        // injected at deploy time and should not be flagged as missing locally.
+        let filtered_project_env_vars: HashMap<String, Vec<EnvVarUsage>> = project_env_vars
+            .into_iter()
+            .map(|(name, vars)| {
+                let filtered = vars
+                    .into_iter()
+                    .filter(|v| !is_pulumi_injected(&v.var_name, &project_names))
+                    .collect();
+                (name, filtered)
+            })
+            .collect();
+
+        let scoped_env_vars = determine_env_var_scopes(&filtered_project_env_vars, &manifest)?;
 
         let mut validation_results = ValidationResults::new();
 
-        for (project_name, env_vars) in &project_env_vars {
+        for (project_name, env_vars) in &filtered_project_env_vars {
             let project_path = modules_path.join(project_name);
             let project_result = validate_project(&project_path, env_vars)?;
             validation_results.add_project_result(project_name.clone(), project_result);
@@ -69,7 +90,7 @@ impl CliCommand for ValidateCommand {
         display_validation_results(&validation_results, &scoped_env_vars, &mut stdout)?;
 
         analyze_env_hierarchy(
-            &project_env_vars,
+            &filtered_project_env_vars,
             &modules_path,
             &workspace_root,
             &mut stdout,
@@ -216,7 +237,7 @@ fn display_validation_results(
     if has_any_missing {
         log_info!(
             stdout,
-            "\nRun 'forklaunch environment sync' to automatically add missing variables with blank values"
+            "\nRun 'forklaunch environment sync' to automatically add missing variables with blank values. Empty vars can be satisfied with \"placeholder\"."
         );
     } else {
         log_ok!(

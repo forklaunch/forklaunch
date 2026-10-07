@@ -19,7 +19,7 @@ use crate::{
     },
     core::{
         base_path::{RequiredLocation, find_app_root_path, prompt_base_path},
-        client_sdk::remove_project_from_client_sdk,
+        client_sdk::{regenerate_client_sdk_compliance, remove_project_from_client_sdk},
         command::command,
         docker::{DockerCompose, remove_service_from_docker_compose},
         manifest::{
@@ -226,6 +226,12 @@ impl CliCommand for ServiceCommand {
             &service_base_path,
             &manifest_data.app_name,
             &service_name,
+        )?;
+
+        regenerate_client_sdk_compliance(
+            &mut rendered_templates_cache,
+            &service_base_path,
+            &manifest_data.projects,
         )?;
 
         let tsconfig_template =

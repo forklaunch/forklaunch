@@ -28,6 +28,7 @@ describe('openApiV3Generator tests', () => {
             method: 'get',
             contractDetails: {
               name: 'Test Contract',
+              access: 'public',
               summary: 'Test Contract Summary',
               body: testSchema,
               params: testSchema,
@@ -112,6 +113,7 @@ describe('openApiV3Generator tests', () => {
                 method: 'get',
                 contractDetails: {
                   name: 'Get User',
+                  access: 'public',
                   summary: 'Get user by ID',
                   params: { id: literal('123') },
                   responses: {

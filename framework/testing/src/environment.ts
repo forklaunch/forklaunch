@@ -28,7 +28,6 @@ function getDatabasePort(type: DatabaseType): number {
     case 'mssql':
       return 1433;
     case 'sqlite':
-    case 'better-sqlite':
     case 'libsql':
       return 0; // SQLite is file-based, no port
     default:
@@ -56,11 +55,7 @@ export function setupTestEnvironment(config: TestEnvConfig): void {
     process.env.DB_NAME = 'test_db';
 
     // SQLite databases are file-based, no container needed
-    if (
-      databaseType === 'sqlite' ||
-      databaseType === 'better-sqlite' ||
-      databaseType === 'libsql'
-    ) {
+    if (databaseType === 'sqlite' || databaseType === 'libsql') {
       process.env.DB_PATH = ':memory:'; // In-memory SQLite for tests
     } else if (database) {
       process.env.DB_HOST = database.getHost();

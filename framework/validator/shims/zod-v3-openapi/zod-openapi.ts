@@ -239,12 +239,10 @@ function parseObject({
   let additionalProperties: SchemaObject['additionalProperties'];
 
   // `catchall` obviates `strict`, `strip`, and `passthrough`
-  if (
-    !(
-      zodRef._def.catchall instanceof z.ZodNever ||
-      zodRef._def.catchall?._def.typeName === 'ZodNever'
-    )
-  )
+  if (!(
+    zodRef._def.catchall instanceof z.ZodNever ||
+    zodRef._def.catchall?._def.typeName === 'ZodNever'
+  ))
     additionalProperties = generateSchema(
       zodRef._def.catchall,
       useOutput,
@@ -469,8 +467,7 @@ function parseEnum({
   openApiVersion
 }: ParsingArgs<z.ZodEnum<never> | z.ZodNativeEnum<never>>): SchemaObject {
   const type = typeof Object.values(zodRef._def.values)[0] as
-    | 'string'
-    | 'number';
+    'string' | 'number';
   return merge(
     {
       type: typeFormat(type, openApiVersion),

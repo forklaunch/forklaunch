@@ -1,3 +1,10 @@
+# The CLI binary. CI builds it once and exports FORKLAUNCH_CLI so the 43
+# scripts share one compile instead of each re-checking a release build.
+FL="${FORKLAUNCH_CLI:-cargo run --release}"
+# KNOWN-ISSUE set-e exemption — this script tolerates in-test failures until
+# #266: `forklaunch login` needs a live platform (device-code auth); fails in CI.
+# Remove this exemption (restore `set -e`) when the issue is fixed.
+
 echo "Processing applications..."
 if [ -d "output/init-application" ]; then
     rm -rf output/init-application
@@ -9,7 +16,7 @@ cd output/init-application
 CACHE_FILE="processed_apps.cache"
 touch "$CACHE_FILE"
 
-RUST_BACKTRACE=1 cargo run --release login
+RUST_BACKTRACE=1 $FL login
 
 # databases=("postgresql" "mongodb" "sqlite" "mysql" "mssql" "libsql" "better-sqlite")
 databases=("postgresql" "mongodb" "sqlite")
@@ -41,7 +48,7 @@ for database in "${databases[@]}"; do
 
                 
                 # Test current directory scenario
-                RUST_BACKTRACE=1 cargo run --release init application "$app_name" \
+                RUST_BACKTRACE=1 $FL init application "$app_name" \
                     --path "./$app_name" \
                     -o "src/modules" \
                     -d "$database" \

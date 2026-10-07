@@ -1,13 +1,33 @@
-import { MikroORM, Options } from '@mikro-orm/core';
+import { MikroORM } from '@mikro-orm/core';
+
+/**
+ * The type `MikroORM.init()` actually returns. Its `Entities` parameter is a
+ * readonly array, which is not assignable to a bare `MikroORM` annotation
+ * (whose `Entities` default is mutable) — so the harness names the returned
+ * type directly rather than widening the parameters to `any`, which would have
+ * accepted anything at all instead of exactly what `init()` hands back.
+ */
+export type AnyMikroORM = Awaited<ReturnType<typeof MikroORM.init>>;
 import Redis from 'ioredis';
 import { StartedTestContainer } from 'testcontainers';
 import { DatabaseType } from './containers';
+
+/**
+ * MikroORM options that accept any driver's `defineConfig()` return —
+ * mutable or readonly entities, base or driver-specific `Options`
+ * (e.g. `Options<PostgreSqlDriver, ...>` is not assignable to the
+ * base-driver `Options` default). Taken from the parameter `init()` accepts,
+ * so the harness tracks MikroORM's own shape instead of restating it.
+ */
+export type AnyMikroOrmOptions = Partial<
+  NonNullable<Parameters<typeof MikroORM.init>[0]>
+>;
 
 export interface MikroOrmTestConfig {
   /**
    * MikroORM config object (imported from mikro-orm.config)
    */
-  mikroOrmConfig: Options;
+  mikroOrmConfig: AnyMikroOrmOptions;
 
   /**
    * Database type (postgres, mysql, mongodb, etc.)
@@ -16,8 +36,8 @@ export interface MikroOrmTestConfig {
 
   /**
    * Whether to use migrations (true) or schema generation (false)
-   * - true: IAM blueprints (uses getMigrator().up())
-   * - false: Billing blueprints (uses getSchemaGenerator().createSchema())
+   * - true: IAM blueprints (uses orm.migrator.up())
+   * - false: Billing blueprints (uses orm.schema.create())
    */
   useMigrations?: boolean;
 
@@ -49,7 +69,6 @@ function getDatabasePort(type: DatabaseType): number {
     case 'mssql':
       return 1433;
     case 'sqlite':
-    case 'better-sqlite':
     case 'libsql':
       return 0; // SQLite is file-based, no port
     default:
@@ -62,7 +81,7 @@ function getDatabasePort(type: DatabaseType): number {
  */
 export async function setupTestORM(
   config: MikroOrmTestConfig
-): Promise<MikroORM> {
+): Promise<AnyMikroORM> {
   const {
     mikroOrmConfig,
     databaseType,
@@ -73,12 +92,8 @@ export async function setupTestORM(
   const dbPort = getDatabasePort(databaseType);
 
   // SQLite databases are file-based
-  let ormConfig: Options = {};
-  if (
-    databaseType === 'sqlite' ||
-    databaseType === 'better-sqlite' ||
-    databaseType === 'libsql'
-  ) {
+  let ormConfig: AnyMikroOrmOptions = {};
+  if (databaseType === 'sqlite' || databaseType === 'libsql') {
     ormConfig = {
       ...mikroOrmConfig,
       dbName: ':memory:', // In-memory SQLite for tests
@@ -126,9 +141,9 @@ export async function setupTestORM(
   const orm = await MikroORM.init(ormConfig);
 
   if (useMigrations) {
-    await orm.getMigrator().up();
+    await orm.migrator.up();
   } else {
-    await orm.getSchemaGenerator().createSchema();
+    await orm.schema.create();
   }
 
   return orm;
@@ -138,7 +153,7 @@ export async function setupTestORM(
  * Clear all data from the test database and/or cache
  */
 export async function clearTestDatabase(options?: {
-  orm?: MikroORM;
+  orm?: AnyMikroORM;
   redis?: Redis;
 }): Promise<void> {
   const { orm, redis } = options || {};
@@ -149,18 +164,45 @@ export async function clearTestDatabase(options?: {
 
   if (orm) {
     const em = orm.em.fork();
-    const entities = Object.values(orm.getMetadata().getAll());
+    // orm.getMetadata().getAll() returns an empty object under MikroORM v7, so
+    // the configured entity list is the reliable source of what to clear.
+    type Deletable = Parameters<typeof em.nativeDelete>[0];
+    let remaining = [...(orm.config.get('entities') as Deletable[])];
 
-    // Delete in reverse order to avoid foreign key constraints
-    for (const entity of entities.reverse()) {
-      try {
-        await em.nativeDelete(entity.class, {});
-      } catch (error) {
-        // Ignore "table does not exist" errors
-        if (!(error as Error).message?.includes('does not exist')) {
+    // The entity list is in declaration order, not FK-dependency order, so a
+    // single reverse pass can still violate foreign keys. Retry the ones that
+    // fail on a constraint until a full pass clears nothing new — that leaves
+    // only genuine errors (a real FK cycle, which would stop making progress).
+    while (remaining.length > 0) {
+      const stillBlocked: Deletable[] = [];
+      let lastConstraintError: Error | undefined;
+      let progressed = false;
+
+      for (const entity of remaining) {
+        try {
+          await em.nativeDelete(entity, {});
+          progressed = true;
+        } catch (error) {
+          const message = (error as Error).message ?? '';
+          if (message.includes('does not exist')) {
+            continue; // table not created — nothing to clear
+          }
+          if (/foreign key|constraint/i.test(message)) {
+            stillBlocked.push(entity);
+            lastConstraintError = error as Error;
+            continue;
+          }
           throw error;
         }
       }
+
+      if (!progressed) {
+        if (lastConstraintError) {
+          throw lastConstraintError; // no progress => unbreakable FK cycle
+        }
+        break;
+      }
+      remaining = stillBlocked;
     }
 
     await em.flush();

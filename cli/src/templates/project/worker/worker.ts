@@ -3,16 +3,23 @@ import {
   WorkerProcessFunction
 } from '@forklaunch/interfaces-worker/types';
 import { getEnvVar } from '@forklaunch/common';
-import dotenv from 'dotenv';
+{{#is_database_enabled}}import { setupRls, setupTenantFilter } from '@forklaunch/core/persistence';
+{{/is_database_enabled}}import dotenv from 'dotenv';
 import { createDependencyContainer } from './registrations';
-import { {{pascal_case_name}}EventRecord} from './persistence/entities/{{camel_case_name}}EventRecord.entity';
+{{#is_database_worker}}import type { {{pascal_case_name}}EventRecord } from './persistence/entities';{{/is_database_worker}}{{^is_database_worker}}import type { {{pascal_case_name}}EventRecord } from './domain/types/{{camel_case_name}}EventRecord.types';{{/is_database_worker}}
 
 const envFilePath = getEnvVar('DOTENV_FILE_PATH');
 dotenv.config({ path: envFilePath });
 const { ci, tokens } = createDependencyContainer(envFilePath);
 
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
-
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
+{{#is_database_enabled}}
+//! registers tenant isolation on the worker's ORM so background jobs are
+//! gated the same way as request handling
+const orm = ci.resolve(tokens.Orm);
+setupTenantFilter(orm, { logger: openTelemetryCollector });
+setupRls(orm, { logger: openTelemetryCollector });
+{{/is_database_enabled}}
 const processEvents: WorkerProcessFunction<{{pascal_case_name}}EventRecord> =
   async (events) => {
     const failedEvents = [];

@@ -59,6 +59,19 @@ This directory contains internal planning documents, implementation specs, and t
 
 ## Contents
 
+### Medical Coding / Billing Platform (CAC module — see [plan/cac/](cac/))
+- **[cac/MEDICAL-CODING-IMPLEMENTATION-PLAN.md](cac/MEDICAL-CODING-IMPLEMENTATION-PLAN.md)** - Free-first implementation plan for a HIPAA-compliant medical coding/billing module
+  - **Decision flipped mid-plan (§1):** originally an app-level service outside the CLI's module system; now built as a first-class `Module::BaseCac` (`cac-base`) — named `cac` per the founder, the industry term for Computer-Assisted Coding — the same way `billing-base`/`iam-base`/`messaging-base` are, after confirming the pattern is proven (PR #264 added `messaging` the same way, 346 tests passing) and blocker-free (RBAC merged, no structural gaps — one cautionary precedent noted: don't leave it half-wired like `ecommerce-stripe` was)
+  - `framework/core`/`express`/`common` need zero changes either way; the CLI (`cli/`) plus three new `blueprint/` packages are the entire lift (§3 has the concrete file checklist)
+  - Launches on free code sets (ICD-10, HCPCS); the paid AMA CPT license itself stays deferred until a hospital confirms as a paying client — but per founder direction, `CptCodeProvider`'s engineering is built to full readiness in Phase 2, in parallel with the mock-code work, so enabling CPT later is a flag flip against finished code, not new engineering
+  - CPT license gating modeled as a feature flag reusing the existing `hasFeatureChecks`/`surfaceFeatures` guard, so no framework changes are needed
+  - Phased delivery plan (Phase 0-6) and AMA licensing timeline (~4-6 weeks, trigger-based)
+  - Claim scrubbing engine corrected to three distinct rule layers (NCCI PTP, NCCI MUE, LCD/NCD medical necessity) after domain research found the source doc's original single-check design conflated unrelated CMS mechanisms
+  - Code-set refresh pipeline, EDI transaction set list, clearinghouse choice (Stedi), and success-metric targets benchmarked against MGMA/HFMA industry data — see §15 Sources
+  - Executive summary up top; explicit open questions flag the LCD/CPT licensing coupling and unvalidated phase-timeline estimates rather than leaving them implicit
+  - §14 breaks delivery into one PR per phase (six PRs total), flagging Phase 2's PR as by far the largest since it carries the claim engine, all three scrubbing layers, and the full CPT-readiness build
+- **[cac/cac_objective.md](cac/cac_objective.md)** - One-page plain-language summary of what the `cac-base` module does and how it works, for anyone who wants the shape of it without reading the full plan
+
 ### Release & Deploy Implementation
 - **[release-deploy-implementation.md](release-deploy-implementation.md)** - Implementation plan for release and deploy CLI commands
   - 4 new CLI commands: `integrate`, `openapi export`, `release create`, `deploy create`

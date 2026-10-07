@@ -8,7 +8,12 @@ use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 use crate::{
     CliCommand,
     constants::{ERROR_FAILED_TO_SEND_REQUEST, get_platform_management_api_url, get_platform_ui_url},
-    core::command::command,
+    core::{
+        command::command,
+        http_client,
+        validate::{require_active_account, require_integration, require_manifest, resolve_auth},
+    },
+    deploy::utils::stream_deployment_status,
 };
 
 #[derive(Debug, Serialize)]
@@ -72,9 +77,10 @@ impl CliCommand for DestroyCommand {
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-        let auth_mode = crate::core::validate::resolve_auth()?;
-        let (_app_root, manifest) = crate::core::validate::require_manifest(matches)?;
-        let application_id = crate::core::validate::require_integration(&manifest)?;
+        let auth_mode = resolve_auth()?;
+        require_active_account(&auth_mode)?;
+        let (_app_root, manifest) = require_manifest(matches)?;
+        let application_id = require_integration(&manifest)?;
 
         let environment = matches
             .get_one::<String>("environment")
@@ -97,24 +103,6 @@ impl CliCommand for DestroyCommand {
         );
         writeln!(stdout)?;
 
-        // Confirmation prompt?
-        // The implementation plan didn't explicitly ask for one in the logic section, but frontend has it.
-        // For CLI, explicit destroy command is usually enough, but let's add a warning if not "preserve-data".
-        // Actually, let's trust the user knows what they are doing if they run `destroy`.
-
-        // Removed the old request_body and client setup
-        // let request_body = DestroyDeploymentRequest { mode: mode.clone() };
-        // let url = format!(
-        //     "{}/applications/{}/environments/{}/regions/{}/destroy",
-        //     get_platform_management_api_url(),
-        //     application_id,
-        //     environment,
-        //     region
-        // );
-        // let client = Client::new();
-
-        log_progress!(stdout, "[INFO] Triggering destruction...");
-
         let request_body = DestroyDeploymentRequest { mode: mode.clone() };
 
         let url = format!(
@@ -124,8 +112,6 @@ impl CliCommand for DestroyCommand {
             environment,
             region
         );
-
-        use crate::core::http_client;
 
         let response =
             http_client::post_with_auth(&auth_mode, &url, serde_json::to_value(&request_body)?)
@@ -138,31 +124,36 @@ impl CliCommand for DestroyCommand {
             let deployment: DestroyDeploymentResponse = serde_json::from_str(&response_text)
                 .with_context(|| format!("Failed to parse destroy response: {}", response_text))?;
 
-            log_ok_suffix!(stdout);
-            writeln!(stdout, "[INFO] Deployment ID: {}", deployment.id)?;
+            log_ok!(stdout, "Triggered destruction");
+            log_info!(stdout, "Deployment ID: {}", deployment.id);
+
+            let dashboard_url = format!(
+                "{}/dashboard/deployments/{}",
+                get_platform_ui_url(), deployment.id
+            );
 
             if wait {
                 writeln!(stdout)?;
-                crate::deploy::utils::stream_deployment_status(
+                stream_deployment_status(
                     &auth_mode,
                     &deployment.id,
+                    None,
+                    None,
                     &mut stdout,
                 )?;
+                writeln!(stdout)?;
+                log_info!(stdout, "Dashboard: {}", dashboard_url);
             } else {
                 writeln!(stdout)?;
-                log_info!(stdout, "[INFO] Destruction started. Check status at:");
-                writeln!(
-                    stdout,
-                    "  {}/apps/{}/deployments/{}",
-                    get_platform_ui_url(), application_id, deployment.id
-                )?;
+                writeln!(stdout, "Destruction started. Check status at:")?;
+                writeln!(stdout, "  {}", dashboard_url)?;
             }
         } else if status.as_u16() == 409 {
             let error_text = response
                 .text()
                 .unwrap_or_else(|_| "Unknown error".to_string());
 
-            log_error_suffix!(stdout);
+            log_error!(stdout, "Deployment conflict");
 
             anyhow::bail!(
                 "Deployment conflict: {}. Wait for the current deployment to complete or cancel it first.",
@@ -173,7 +164,7 @@ impl CliCommand for DestroyCommand {
                 .text()
                 .unwrap_or_else(|_| "Unknown error".to_string());
 
-            log_error_suffix!(stdout);
+            log_error!(stdout, "Forbidden");
 
             anyhow::bail!("{}", error_text);
         } else {
@@ -181,7 +172,7 @@ impl CliCommand for DestroyCommand {
                 .text()
                 .unwrap_or_else(|_| "Unknown error".to_string());
 
-            log_error_suffix!(stdout);
+            log_error!(stdout, "Failed to destroy infrastructure (Status: {})", status);
 
             anyhow::bail!(
                 "Failed to destroy infrastructure: {} (Status: {})",

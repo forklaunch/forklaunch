@@ -57,6 +57,14 @@ export function contentParse<SV extends AnySchemaValidator>(options?: {
     );
 
     if (discriminatedBody != null) {
+      // Capture the exact request bytes for HMAC/webhook signature
+      // verification before parsing. hyper-express caches the received body,
+      // so json()/text()/urlencoded() below reuse the same buffered payload.
+      // Multipart is excluded: it consumes the stream field-by-field.
+      if (discriminatedBody.parserType !== 'multipart') {
+        (req as { _rawBody?: Buffer })._rawBody = await req.buffer();
+      }
+
       switch (discriminatedBody.parserType) {
         case 'file':
           req.body = await req.buffer();

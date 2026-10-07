@@ -6,7 +6,7 @@ import {
   TEST_TOKENS,
   TestSetupResult
 } from '@forklaunch/testing';
-import { EntityManager, MikroORM } from '@mikro-orm/core';
+import { EntityManager } from '@mikro-orm/core';
 import dotenv from 'dotenv';
 import Redis from 'ioredis';
 import * as path from 'path';
@@ -21,7 +21,13 @@ export const setupTestDatabase = async (): Promise<TestSetupResult> => {
   harness = new BlueprintTestHarness({
     getConfig: async () => {
       const { default: config } = await import('../mikro-orm.config');
-      return config;
+      // MikroORM.init() mutates options.discovery.skipSyncDiscovery = true on
+      // the object it receives. mikro-orm.config exports a single shared object
+      // that the app's own DI container also builds a MikroORM from, so letting
+      // the harness mutate it leaves the app's `new MikroORM(config)` with an
+      // undefined `.em` (every route then crashes on `Orm.em.fork`). Hand the
+      // harness its own discovery object so the mutation can't leak.
+      return { ...config, discovery: { ...config.discovery } };
     },
     databaseType: getEnvVar('DATABASE_TYPE') as DatabaseType,
     useMigrations: false,
@@ -38,7 +44,7 @@ export const cleanupTestDatabase = async (): Promise<void> => {
 };
 
 export const clearDatabase = async (options?: {
-  orm?: MikroORM;
+  orm?: TestSetupResult['orm'];
   redis?: Redis;
 }): Promise<void> => {
   await clearTestDatabase(options);
@@ -75,9 +81,7 @@ export const setupTestData = async (em: EntityManager) => {
   em.create(BillingProvider, {
     id: '123e4567-e89b-12d3-a456-426614174001',
     billingProvider: BillingProviderEnum.STRIPE,
-    providerFields: { apiKey: 'test-api-key' },
-    createdAt: new Date(),
-    updatedAt: new Date()
+    providerFields: { apiKey: 'test-api-key' }
   });
 
   em.create(Plan, {
@@ -91,8 +95,7 @@ export const setupTestData = async (em: EntityManager) => {
     features: ['feature1', 'feature2'],
     externalId: 'plan_test_123',
     billingProvider: BillingProviderEnum.STRIPE,
-    createdAt: new Date(),
-    updatedAt: new Date()
+    providerFields: null
   });
 
   em.create(Subscription, {
@@ -106,8 +109,7 @@ export const setupTestData = async (em: EntityManager) => {
     billingProvider: BillingProviderEnum.STRIPE,
     startDate: new Date(),
     status: 'active',
-    createdAt: new Date(),
-    updatedAt: new Date()
+    providerFields: null
   });
 
   em.create(CheckoutSession, {
@@ -120,8 +122,7 @@ export const setupTestData = async (em: EntityManager) => {
     cancelRedirectUri: 'https://example.com/cancel',
     expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     status: StatusEnum.PENDING,
-    createdAt: new Date(),
-    updatedAt: new Date()
+    providerFields: null
   });
 
   em.create(PaymentLink, {
@@ -131,8 +132,7 @@ export const setupTestData = async (em: EntityManager) => {
     currency: CurrencyEnum.USD,
     description: 'A test payment link',
     status: StatusEnum.PENDING,
-    createdAt: new Date(),
-    updatedAt: new Date()
+    providerFields: null
   });
 
   em.create(BillingPortal, {
@@ -140,9 +140,7 @@ export const setupTestData = async (em: EntityManager) => {
     customerId: 'cus_test_123',
     uri: 'https://example.com/billing',
     providerFields: { apiKey: 'test-api-key' },
-    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-    createdAt: new Date(),
-    updatedAt: new Date()
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
   });
 
   await em.flush();
@@ -170,9 +168,7 @@ export const mockUpdatePlanData = {
   cadence: 'ANNUALLY' as const,
   features: ['feature1', 'feature2', 'feature3'],
   externalId: 'plan_updated_123',
-  billingProvider: 'stripe' as const,
-  createdAt: new Date(),
-  updatedAt: new Date()
+  billingProvider: 'stripe' as const
 };
 
 export const mockSubscriptionData = {
@@ -199,9 +195,7 @@ export const mockUpdateSubscriptionData = {
   billingProvider: 'stripe' as const,
   startDate: new Date(),
   endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-  status: 'cancelled',
-  createdAt: new Date(),
-  updatedAt: new Date()
+  status: 'cancelled'
 };
 
 export const mockCheckoutSessionData = {

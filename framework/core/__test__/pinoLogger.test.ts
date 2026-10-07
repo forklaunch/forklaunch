@@ -11,6 +11,7 @@ describe('PinoLogger Error Handling', () => {
   beforeEach(() => {
     mockEmit = vi.fn();
     vi.spyOn(logs, 'getLogger').mockReturnValue({
+      enabled: () => true,
       emit: mockEmit
     });
     testLogger = logger('debug');

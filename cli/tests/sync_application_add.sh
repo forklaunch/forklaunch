@@ -1,3 +1,10 @@
+# The CLI binary. CI builds it once and exports FORKLAUNCH_CLI so the 43
+# scripts share one compile instead of each re-checking a release build.
+FL="${FORKLAUNCH_CLI:-cargo run --release}"
+# KNOWN-ISSUE set-e exemption — this script tolerates in-test failures until
+# #268: sync-path service references JWKS token its registrations never define.
+# Remove this exemption (restore `set -e`) when the issue is fixed.
+
 if [ -d "output/sync-application-add" ]; then
     rm -rf output/sync-application-add
 fi
@@ -5,7 +12,7 @@ fi
 mkdir -p output/sync-application-add
 cd output/sync-application-add
 
-RUST_BACKTRACE=1 cargo run --release init application sync-test-node-application \
+RUST_BACKTRACE=1 $FL init application sync-test-node-application \
     -p sync-test-node-application \
     -o src/modules \
     -d postgresql \
@@ -17,10 +24,11 @@ RUST_BACKTRACE=1 cargo run --release init application sync-test-node-application
     -t vitest \
     -D "Test Sync Application" \
     -A "Mushroom Research" \
-    -L 'AGPL-3.0'
+    -L 'AGPL-3.0' \
+    -m
 
 # Init dummy application
-RUST_BACKTRACE=1 cargo run --release init application sync-test-dummy-application \
+RUST_BACKTRACE=1 $FL init application sync-test-dummy-application \
     -p sync-test-dummy-application \
     -o src/modules \
     -d postgresql \
@@ -32,27 +40,28 @@ RUST_BACKTRACE=1 cargo run --release init application sync-test-dummy-applicatio
     -t vitest \
     -D "Test Sync Application Dummy" \
     -A "Mushroom Research" \
-    -L 'AGPL-3.0'
+    -L 'AGPL-3.0' \
+    -m
 
-RUST_BACKTRACE=1 cargo run --release init library lib-dummy \
+RUST_BACKTRACE=1 $FL init library lib-dummy \
     -p sync-test-dummy-application/src/modules \
     -D "Test library"
 
-RUST_BACKTRACE=1 cargo run --release init service svc-dummy \
+RUST_BACKTRACE=1 $FL init service svc-dummy \
     -d postgresql \
     -p sync-test-dummy-application/src/modules \
     -D "Test service"
 
-RUST_BACKTRACE=1 cargo run --release init worker wrk-dummy \
+RUST_BACKTRACE=1 $FL init worker wrk-dummy \
     -t database \
     -d postgresql \
     -p sync-test-dummy-application/src/modules \
     -D "Test worker"
 
-RUST_BACKTRACE=1 cargo run --release init router rtr-dummy \
+RUST_BACKTRACE=1 $FL init router rtr-dummy \
     -p sync-test-dummy-application/src/modules/svc-dummy
 
-RUST_BACKTRACE=1 cargo run --release init router rtr-dummy-two \
+RUST_BACKTRACE=1 $FL init router rtr-dummy-two \
     -p sync-test-dummy-application/src/modules/svc-dummy
 
 # Define copy operations with proper key-value syntax
@@ -88,7 +97,7 @@ find sync-test-node-application/src/modules -name "*.bak" -type f -delete
 echo "[INFO] Running sync all to add new projects"
 PROMPTS_JSON='{"svc-dummy": {"category": "service", "database": "postgresql", "infrastructure": "none", "description": "Dummy service"}, "lib-dummy": {"category": "library", "description": "Dummy library"}, "wrk-dummy": {"category": "worker", "type": "database", "database": "postgresql", "description": "Dummy worker"}}'
 
-RUST_BACKTRACE=1 cargo run --release sync all -p sync-test-node-application -c -P "$PROMPTS_JSON"
+RUST_BACKTRACE=1 $FL sync all -p sync-test-node-application -c -P "$PROMPTS_JSON"
 
 # Verify build
 cd sync-test-node-application/src/modules

@@ -71,14 +71,14 @@ pub(crate) fn generate_index_ts_database_export(
         .iter()
         .map(|database| {
             let export_string = match database.parse::<Database>()? {
-                Database::MongoDB => Some("nosql.base.entity"),
-                Database::PostgreSQL => Some("sql.base.entity"),
-                Database::SQLite => Some("sql.base.entity"),
-                Database::MySQL => Some("sql.base.entity"),
-                Database::MariaDB => Some("sql.base.entity"),
-                Database::MsSQL => Some("sql.base.entity"),
-                Database::BetterSQLite => Some("sql.base.entity"),
-                Database::LibSQL => Some("sql.base.entity"),
+                Database::MongoDB => Some("nosql.base.properties"),
+                Database::PostgreSQL => Some("sql.base.properties"),
+                Database::SQLite => Some("sql.base.properties"),
+                Database::MySQL => Some("sql.base.properties"),
+                Database::MariaDB => Some("sql.base.properties"),
+                Database::MsSQL => Some("sql.base.properties"),
+                Database::BetterSQLite => Some("sql.base.properties"),
+                Database::LibSQL => Some("sql.base.properties"),
             };
 
             if let Some(export_string) = export_string {
@@ -137,14 +137,14 @@ pub(crate) fn update_core_package_json(
 
 pub(crate) fn get_base_entity_filename(database: &Database) -> Result<&str> {
     match database {
-        Database::MongoDB => Ok("nosql.base.entity.ts"),
-        Database::PostgreSQL => Ok("sql.base.entity.ts"),
-        Database::SQLite => Ok("sql.base.entity.ts"),
-        Database::MySQL => Ok("sql.base.entity.ts"),
-        Database::MariaDB => Ok("sql.base.entity.ts"),
-        Database::BetterSQLite => Ok("sql.base.entity.ts"),
-        Database::LibSQL => Ok("sql.base.entity.ts"),
-        Database::MsSQL => Ok("sql.base.entity.ts"),
+        Database::MongoDB => Ok("nosql.base.properties.ts"),
+        Database::PostgreSQL => Ok("sql.base.properties.ts"),
+        Database::SQLite => Ok("sql.base.properties.ts"),
+        Database::MySQL => Ok("sql.base.properties.ts"),
+        Database::MariaDB => Ok("sql.base.properties.ts"),
+        Database::BetterSQLite => Ok("sql.base.properties.ts"),
+        Database::LibSQL => Ok("sql.base.properties.ts"),
+        Database::MsSQL => Ok("sql.base.properties.ts"),
     }
 }
 

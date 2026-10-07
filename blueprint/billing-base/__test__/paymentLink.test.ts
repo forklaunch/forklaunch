@@ -253,9 +253,7 @@ describe('PaymentLink Routes E2E Tests with PostgreSQL Container', () => {
         paymentMethods: ['credit_card' as const],
         currency: 'GBP' as const,
         description: 'An updated test payment link',
-        status: 'COMPLETED' as const,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        status: 'COMPLETED' as const
       };
 
       const response = await updatePaymentLinkRoute.sdk.updatePaymentLink({

@@ -7,8 +7,13 @@ use serde_json::Value;
 use crate::{
     constants::RELEASE_MANIFEST_SCHEMA_VERSION,
     core::{
+        ast::infrastructure::{
+            compliance::scan_all_compliance,
+            integrations::Integration,
+            worker_config::WorkerConfig as AstWorkerConfig,
+        },
         library_scanner::{
-            CodeNode, ImportScanner, LibraryDefinition, parse_route_file,
+            Topology, ImportScanner, LibraryDefinition, parse_route_file,
             scan_project_libraries,
         },
         manifest::{ProjectType, ResourceInventory, application::ApplicationManifestData},
@@ -107,6 +112,18 @@ pub(crate) struct EnvironmentVariableComponent {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct InterServiceUrlInfo {
+    /// Target project/service name (e.g., "matching", "billing")
+    #[serde(rename = "targetService")]
+    pub target_service: String,
+    /// Transport protocol: "http" (default) or "ws"
+    pub transport: String,
+    /// Env var on the target service that provides the port (e.g., "WS_PORT" for ws, "PORT" for http)
+    #[serde(rename = "portEnvVar")]
+    pub port_env_var: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct EnvironmentVariableRequirement {
     pub name: String,
     pub scope: EnvironmentVariableScope,
@@ -116,6 +133,30 @@ pub(crate) struct EnvironmentVariableRequirement {
     pub component: Option<EnvironmentVariableComponent>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub origin: Option<String>,
+    #[serde(rename = "interServiceUrl", skip_serializing_if = "Option::is_none")]
+    pub inter_service_url: Option<InterServiceUrlInfo>,
+    /// Whether the app declares this variable `optional(...)` at the schema
+    /// level. Omitted when the scanner saw no declared type, so an older
+    /// platform — or one reading this under manifest schema 1.0.0 — falls back
+    /// to today's behaviour.
+    ///
+    /// NOTE: this field is only carried through platform ingestion from
+    /// manifest schema version 1.1.0 onward. Under 1.0.0 it is validated away
+    /// silently. See `RELEASE_MANIFEST_SCHEMA_VERSION`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub optional: Option<bool>,
+    /// The projects (services and workers) that read this variable, sorted.
+    /// For an inter-service URL var this names the callers of
+    /// `interServiceUrl.targetService`: `IAM_URL` read by billing and insights
+    /// means billing → iam and insights → iam. The platform builds per-service
+    /// network access from these edges when TLS in transit is on. Omitted when
+    /// empty.
+    ///
+    /// NOTE: this field is only carried through platform ingestion from
+    /// manifest schema version 1.2.0 onward. See
+    /// `RELEASE_MANIFEST_SCHEMA_VERSION`.
+    #[serde(rename = "usedBy", skip_serializing_if = "Vec::is_empty", default)]
+    pub used_by: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -152,6 +193,33 @@ pub(crate) struct ReleaseManifest {
     pub required_environment_variables: Option<Vec<EnvironmentVariableRequirement>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub libraries: Option<Vec<LibraryDefinition>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compliance: Option<ReleaseComplianceData>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReleaseComplianceData {
+    pub entities: Vec<ReleaseEntityCompliance>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub data_residency: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub secrets: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReleaseEntityCompliance {
+    pub name: String,
+    pub fields: HashMap<String, String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retention: Option<ReleaseRetentionConfig>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct ReleaseRetentionConfig {
+    pub duration: String,
+    pub action: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -200,10 +268,48 @@ pub(crate) struct ServiceConfig {
     pub runtime_dependencies: Option<Vec<String>>,
     #[serde(rename = "instanceSize", skip_serializing_if = "Option::is_none")]
     pub instance_size: Option<String>,
+    #[serde(rename = "hostingType", skip_serializing_if = "Option::is_none")]
+    pub hosting_type: Option<String>,
     #[serde(rename = "healthCheck", skip_serializing_if = "Option::is_none")]
     pub health_check: Option<Value>,
     #[serde(rename = "isWorkerService", skip_serializing_if = "Option::is_none")]
     pub is_worker_service: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privileged: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub serves: Option<Vec<ServingPortDefinition>>,
+}
+
+/// Release-manifest shape of a `[[projects.serves]]` entry. The platform
+/// creates a listener, target group and security-group ingress for each one,
+/// resolving `portEnv` against the deployed environment's variables.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct ServingPortDefinition {
+    pub protocol: String,
+    #[serde(rename = "portEnv")]
+    pub port_env: String,
+    #[serde(rename = "healthPath", skip_serializing_if = "Option::is_none")]
+    pub health_path: Option<String>,
+}
+
+impl From<&crate::core::manifest::ServingPort> for ServingPortDefinition {
+    fn from(port: &crate::core::manifest::ServingPort) -> Self {
+        Self {
+            protocol: port.protocol.clone(),
+            port_env: port.port_env.clone(),
+            health_path: port.health_path.clone(),
+        }
+    }
+}
+
+fn serving_ports(
+    project: &crate::core::manifest::ProjectEntry,
+) -> Option<Vec<ServingPortDefinition>> {
+    project
+        .serves
+        .as_ref()
+        .filter(|ports| !ports.is_empty())
+        .map(|ports| ports.iter().map(ServingPortDefinition::from).collect())
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -233,8 +339,14 @@ pub(crate) struct WorkerConfig {
     pub runtime_dependencies: Option<Vec<String>>,
     #[serde(rename = "instanceSize", skip_serializing_if = "Option::is_none")]
     pub instance_size: Option<String>,
+    #[serde(rename = "hostingType", skip_serializing_if = "Option::is_none")]
+    pub hosting_type: Option<String>,
     #[serde(rename = "healthCheck", skip_serializing_if = "Option::is_none")]
     pub health_check: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privileged: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub serves: Option<Vec<ServingPortDefinition>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -258,7 +370,7 @@ pub(crate) struct RouteDefinition {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auth: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub topology: Option<CodeNode>,
+    pub topology: Option<Topology>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -295,6 +407,7 @@ pub(crate) struct ResourceDefinition {
     #[serde(rename = "type")]
     pub resource_type: String,
     pub name: String,
+    pub technology: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub region: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -319,18 +432,14 @@ pub(crate) fn generate_release_manifest(
     git_branch: Option<String>,
     code_source_url: Option<String>,
     manifest: &ApplicationManifestData,
-    openapi_specs: &std::collections::HashMap<String, Value>,
+    openapi_specs: &HashMap<String, Value>,
     required_env_vars: Vec<EnvironmentVariableRequirement>,
-    project_runtime_deps: &std::collections::HashMap<String, Vec<String>>,
-    project_integrations: &std::collections::HashMap<
-        String,
-        Vec<crate::core::ast::infrastructure::integrations::Integration>,
-    >,
-    worker_configs: &std::collections::HashMap<
-        String,
-        crate::core::ast::infrastructure::worker_config::WorkerConfig,
-    >,
-    service_dependencies: &std::collections::HashMap<String, Vec<(String, String)>>,
+    project_runtime_deps: &HashMap<String, Vec<String>>,
+    project_integrations: &HashMap<String, Vec<Integration>>,
+    worker_configs: &HashMap<String, AstWorkerConfig>,
+    service_dependencies: &HashMap<String, Vec<(String, String)>>,
+    openapi_s3_keys: &HashMap<String, String>,
+    user_managed_db_projects: &std::collections::HashSet<String>,
 ) -> Result<ReleaseManifest> {
     let timestamp = chrono::Utc::now().to_rfc3339();
 
@@ -343,7 +452,11 @@ pub(crate) fn generate_release_manifest(
     let mut services = Vec::new();
     for project in &manifest.projects {
         if project.r#type == ProjectType::Service {
-            let open_api_spec = openapi_specs.get(&project.name).cloned();
+            let open_api_spec = if let Some(s3_key) = openapi_s3_keys.get(&project.name) {
+                Some(Value::String(s3_key.clone()))
+            } else {
+                openapi_specs.get(&project.name).cloned()
+            };
             let runtime_deps = project_runtime_deps.get(&project.name).cloned();
             let deps = service_dependencies.get(&project.name).map(|dep_tuples| {
                 dep_tuples
@@ -441,8 +554,14 @@ pub(crate) fn generate_release_manifest(
                     dependencies: deps,
                     runtime_dependencies: runtime_deps,
                     instance_size: None,
+                    hosting_type: project
+                        .metadata
+                        .as_ref()
+                        .and_then(|m| m.hosting_type.clone()),
                     health_check: None,
                     is_worker_service: None,
+                    privileged: project.metadata.as_ref().and_then(|m| m.privileged),
+                    serves: serving_ports(project),
                 }),
                 build_context: if app_root
                     .join(&manifest.modules_path)
@@ -486,7 +605,11 @@ pub(crate) fn generate_release_manifest(
                     })
                     .collect()
             });
-            let open_api_spec = openapi_specs.get(&project.name).cloned();
+            let open_api_spec = if let Some(s3_key) = openapi_s3_keys.get(&project.name) {
+                Some(Value::String(s3_key.clone()))
+            } else {
+                openapi_specs.get(&project.name).cloned()
+            };
 
             let worker_path = app_root.join(&manifest.modules_path).join(&project.name);
             let controllers = if worker_path.join("api").join("routes").exists() {
@@ -571,8 +694,14 @@ pub(crate) fn generate_release_manifest(
                     dependencies: deps.clone(),
                     runtime_dependencies: runtime_deps.clone(),
                     instance_size: None,
+                    hosting_type: project
+                        .metadata
+                        .as_ref()
+                        .and_then(|m| m.hosting_type.clone()),
                     health_check: None,
                     is_worker_service: Some(true),
+                    privileged: project.metadata.as_ref().and_then(|m| m.privileged),
+                    serves: serving_ports(project),
                 }),
                 build_context: if app_root
                     .join(&manifest.modules_path)
@@ -621,7 +750,13 @@ pub(crate) fn generate_release_manifest(
                 additional: None,
                 runtime_dependencies: runtime_deps,
                 instance_size: None,
+                hosting_type: project
+                    .metadata
+                    .as_ref()
+                    .and_then(|m| m.hosting_type.clone()),
                 health_check: None,
+                privileged: project.metadata.as_ref().and_then(|m| m.privileged),
+                serves: serving_ports(project),
             };
 
             services.push(ServiceDefinition {
@@ -655,19 +790,34 @@ pub(crate) fn generate_release_manifest(
     let mut resources = Vec::new();
     for project in &manifest.projects {
         if let Some(project_resources) = &project.resources {
+            let user_managed_db = user_managed_db_projects.contains(&project.name);
+
             // For worker projects, resources need to be accessible to both
             // the "{name}-service" and "{name}-worker" components
             if project.r#type == ProjectType::Worker {
-                // Create resources for the worker-service component
-                let service_name = format!("{}-service", project.name);
-                add_resources_from_inventory(&service_name, project_resources, &mut resources);
+                if user_managed_db {
+                    // When DB is user-managed, emit a single detached DB resource (no service_name)
+                    // to avoid duplicates, then add non-DB resources for each component
+                    add_resources_from_inventory(&project.name, project_resources, &mut resources, true);
 
-                // Create resources for the worker-worker component
-                let worker_name = format!("{}-worker", project.name);
-                add_resources_from_inventory(&worker_name, project_resources, &mut resources);
+                    // Add non-DB resources for service and worker components
+                    let service_name = format!("{}-service", project.name);
+                    add_non_db_resources(&service_name, project_resources, &mut resources);
+
+                    let worker_name = format!("{}-worker", project.name);
+                    add_non_db_resources(&worker_name, project_resources, &mut resources);
+                } else {
+                    // Create resources for the worker-service component
+                    let service_name = format!("{}-service", project.name);
+                    add_resources_from_inventory(&service_name, project_resources, &mut resources, false);
+
+                    // Create resources for the worker-worker component
+                    let worker_name = format!("{}-worker", project.name);
+                    add_resources_from_inventory(&worker_name, project_resources, &mut resources, false);
+                }
             } else {
                 // For regular service projects, create resources with the project name
-                add_resources_from_inventory(&project.name, project_resources, &mut resources);
+                add_resources_from_inventory(&project.name, project_resources, &mut resources, user_managed_db);
             }
         }
     }
@@ -699,6 +849,48 @@ pub(crate) fn generate_release_manifest(
         _ => None,
     };
 
+    // Scan compliance data from source code (never stored in manifest)
+    let compliance_data = scan_all_compliance(&modules_root).ok().map(
+        |(field_classifications, retention_policies)| {
+            let compliance_config = manifest.compliance.as_ref();
+            let mut entity_names: std::collections::BTreeSet<String> =
+                std::collections::BTreeSet::new();
+            entity_names.extend(field_classifications.keys().cloned());
+            entity_names.extend(retention_policies.keys().cloned());
+
+            let entities: Vec<ReleaseEntityCompliance> = entity_names
+                .into_iter()
+                .map(|name| {
+                    let fields = field_classifications
+                        .get(&name)
+                        .cloned()
+                        .unwrap_or_default();
+                    let retention = retention_policies.get(&name).map(|r| {
+                        ReleaseRetentionConfig {
+                            duration: r.duration.clone(),
+                            action: r.action.clone(),
+                        }
+                    });
+                    ReleaseEntityCompliance {
+                        name,
+                        fields,
+                        retention,
+                    }
+                })
+                .collect();
+
+            ReleaseComplianceData {
+                entities,
+                data_residency: compliance_config
+                    .map(|c| c.data_residency.clone())
+                    .unwrap_or_default(),
+                secrets: compliance_config
+                    .map(|c| c.secrets.clone())
+                    .unwrap_or_default(),
+            }
+        },
+    );
+
     Ok(ReleaseManifest {
         schema_version: Some(RELEASE_MANIFEST_SCHEMA_VERSION.to_string()),
         application_id,
@@ -719,17 +911,40 @@ pub(crate) fn generate_release_manifest(
             Some(required_env_vars)
         },
         libraries: scan_project_libraries(&app_root.join("package.json")).ok(),
+        compliance: compliance_data,
     })
+}
+
+/// Platform-held capabilities as resources, one per capability, bound to the
+/// service. The type is the platform's IntegrationType literal.
+fn add_capability_resources(
+    service_name: &str,
+    inventory: &ResourceInventory,
+    resources: &mut Vec<ResourceDefinition>,
+) {
+    for capability in inventory.capabilities.iter().flatten() {
+        let resource_type = crate::infra::capabilities::resource_type(capability);
+        resources.push(ResourceDefinition {
+            id: format!("{service_name}-{capability}"),
+            resource_type: resource_type.to_string(),
+            name: format!("{service_name}-{capability}"),
+            technology: "platform-gateway".to_string(),
+            region: None,
+            config: None,
+            service_name: Some(service_name.to_string()),
+        });
+    }
 }
 
 fn add_resources_from_inventory(
     service_name: &str,
     inventory: &ResourceInventory,
     resources: &mut Vec<ResourceDefinition>,
+    user_managed_db: bool,
 ) {
     if let Some(database) = &inventory.database {
         let mut config = HashMap::new();
-        config.insert("technology".to_string(), Value::String(database.clone()));
+        config.insert("mode".to_string(), Value::String("centralized".to_string()));
 
         resources.push(ResourceDefinition {
             id: format!("{}-db", service_name),
@@ -737,21 +952,29 @@ fn add_resources_from_inventory(
             // see forklaunch-platform/src/modules/platform-management/domain/enum/integration-type.enum.ts
             resource_type: "database".to_string(),
             name: format!("{}-database", service_name),
+            technology: database.clone(),
             region: None,
             config: Some(config),
-            service_name: Some(service_name.to_string()),
+            // If user manages DB_HOST themselves, don't connect the resource to the service
+            // (keep the resource visible in resource view but not as an ApplicationResource)
+            service_name: if user_managed_db {
+                None
+            } else {
+                Some(service_name.to_string())
+            },
         });
     }
 
     if let Some(cache) = &inventory.cache {
         let mut config = HashMap::new();
-        config.insert("technology".to_string(), Value::String(cache.clone()));
+        config.insert("mode".to_string(), Value::String("distributed".to_string()));
 
         resources.push(ResourceDefinition {
             id: format!("{}-cache", service_name),
             // Cache resources map to the "cache" integration type
             resource_type: "cache".to_string(),
             name: format!("{}-cache", service_name),
+            technology: cache.clone(),
             region: None,
             config: Some(config),
             service_name: Some(service_name.to_string()),
@@ -760,33 +983,83 @@ fn add_resources_from_inventory(
 
     if let Some(queue) = &inventory.queue {
         let mut config = HashMap::new();
-        config.insert("technology".to_string(), Value::String(queue.clone()));
+        config.insert("mode".to_string(), Value::String("distributed".to_string()));
 
         resources.push(ResourceDefinition {
             id: format!("{}-queue", service_name),
             // Queues are modeled as message queues in the platform schema
             resource_type: "messagequeue".to_string(),
             name: format!("{}-queue", service_name),
+            technology: queue.clone(),
             region: None,
             config: Some(config),
             service_name: Some(service_name.to_string()),
         });
     }
 
-    if let Some(object_store) = &inventory.object_store {
-        let mut config = HashMap::new();
-        config.insert(
-            "technology".to_string(),
-            Value::String(object_store.clone()),
-        );
+    add_capability_resources(service_name, inventory, resources);
 
+    if let Some(object_store) = &inventory.object_store {
         resources.push(ResourceDefinition {
             id: format!("{}-storage", service_name),
             // Object storage maps to the "objectstore" integration type
             resource_type: "objectstore".to_string(),
             name: format!("{}-storage", service_name),
+            technology: object_store.clone(),
+            region: None,
+            config: None,
+            service_name: Some(service_name.to_string()),
+        });
+    }
+}
+
+/// Adds non-database resources from inventory (cache, queue, object_store).
+/// Used for worker components when DB is user-managed to avoid duplicate DB resources.
+fn add_non_db_resources(
+    service_name: &str,
+    inventory: &ResourceInventory,
+    resources: &mut Vec<ResourceDefinition>,
+) {
+    if let Some(cache) = &inventory.cache {
+        let mut config = HashMap::new();
+        config.insert("mode".to_string(), Value::String("distributed".to_string()));
+
+        resources.push(ResourceDefinition {
+            id: format!("{}-cache", service_name),
+            resource_type: "cache".to_string(),
+            name: format!("{}-cache", service_name),
+            technology: cache.clone(),
             region: None,
             config: Some(config),
+            service_name: Some(service_name.to_string()),
+        });
+    }
+
+    if let Some(queue) = &inventory.queue {
+        let mut config = HashMap::new();
+        config.insert("mode".to_string(), Value::String("distributed".to_string()));
+
+        resources.push(ResourceDefinition {
+            id: format!("{}-queue", service_name),
+            resource_type: "messagequeue".to_string(),
+            name: format!("{}-queue", service_name),
+            technology: queue.clone(),
+            region: None,
+            config: Some(config),
+            service_name: Some(service_name.to_string()),
+        });
+    }
+
+    add_capability_resources(service_name, inventory, resources);
+
+    if let Some(object_store) = &inventory.object_store {
+        resources.push(ResourceDefinition {
+            id: format!("{}-storage", service_name),
+            resource_type: "objectstore".to_string(),
+            name: format!("{}-storage", service_name),
+            technology: object_store.clone(),
+            region: None,
+            config: None,
             service_name: Some(service_name.to_string()),
         });
     }
@@ -797,8 +1070,96 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_required_env_var_serializes_declared_optionality() {
+        // The scanner's work is only useful if the field survives serialization
+        // into the manifest the platform actually reads.
+        let requirement = EnvironmentVariableRequirement {
+            name: "OTEL_LEVEL".to_string(),
+            scope: EnvironmentVariableScope::Service,
+            scope_id: Some("billing".to_string()),
+            component: None,
+            origin: None,
+            inter_service_url: None,
+            optional: Some(true),
+            used_by: Vec::new(),
+        };
+
+        let json = serde_json::to_value(&requirement).unwrap();
+        assert_eq!(json["optional"], serde_json::json!(true));
+
+        // Required is carried explicitly rather than omitted, so the platform can
+        // tell "declared required" from "an older CLI said nothing".
+        let required = EnvironmentVariableRequirement {
+            optional: Some(false),
+            ..requirement
+        };
+        assert_eq!(
+            serde_json::to_value(&required).unwrap()["optional"],
+            serde_json::json!(false)
+        );
+    }
+
+    #[test]
+    fn test_required_env_var_omits_unknown_optionality() {
+        // A synthesized variable the scanner never sighted has no optionality to
+        // report; the field is omitted so the platform falls back to today's
+        // behaviour rather than reading it as "required".
+        let requirement = EnvironmentVariableRequirement {
+            name: "PLATFORM_INJECTED".to_string(),
+            scope: EnvironmentVariableScope::Application,
+            scope_id: None,
+            component: None,
+            origin: Some("platform".to_string()),
+            inter_service_url: None,
+            optional: None,
+            used_by: Vec::new(),
+        };
+
+        let json = serde_json::to_value(&requirement).unwrap();
+        assert!(
+            json.get("optional").is_none(),
+            "unknown optionality must not serialize, got: {json}"
+        );
+    }
+
+    #[test]
+    fn test_required_env_var_serializes_used_by() {
+        // The callers of an inter-service URL are what the platform turns into
+        // per-service network access, so they must reach the manifest.
+        let requirement = EnvironmentVariableRequirement {
+            name: "IAM_URL".to_string(),
+            scope: EnvironmentVariableScope::Application,
+            scope_id: None,
+            component: None,
+            origin: Some("platform".to_string()),
+            inter_service_url: Some(InterServiceUrlInfo {
+                target_service: "iam".to_string(),
+                transport: "http".to_string(),
+                port_env_var: "PORT".to_string(),
+            }),
+            optional: None,
+            used_by: vec!["billing".to_string(), "insights".to_string()],
+        };
+
+        let json = serde_json::to_value(&requirement).unwrap();
+        assert_eq!(json["usedBy"], serde_json::json!(["billing", "insights"]));
+
+        let unused = EnvironmentVariableRequirement {
+            used_by: Vec::new(),
+            ..requirement
+        };
+        let json = serde_json::to_value(&unused).unwrap();
+        assert!(
+            json.get("usedBy").is_none(),
+            "an empty caller list must not serialize, got: {json}"
+        );
+    }
+
+    #[test]
     fn test_route_definition_has_topology_with_versions() {
-        // Verify that RouteDefinition carries per-route topology with npm version info
+        use crate::core::library_scanner::Dependency;
+
+        // Verify that RouteDefinition carries flat topology with deps and source files
         let route = RouteDefinition {
             id: "get-users".to_string(),
             method: "GET".to_string(),
@@ -807,47 +1168,37 @@ mod tests {
             middleware: None,
             schema: None,
             auth: None,
-            topology: Some(CodeNode {
-                name: "user.controller".to_string(),
-                node_type: "local".to_string(),
-                version: None,
-                children: Some(vec![
-                    CodeNode {
+            topology: Some(Topology {
+                deps: vec![
+                    Dependency {
                         name: "@forklaunch/core".to_string(),
-                        node_type: "npm".to_string(),
+                        dep_type: "npm".to_string(),
                         version: Some("^0.6.5".to_string()),
-                        children: None,
-                        path: None,
                         target_service: None,
+                        source_files: vec![
+                            "api/controllers/user.controller.ts".to_string(),
+                            "domain/services/user.service.ts".to_string(),
+                        ],
                     },
-                    CodeNode {
+                    Dependency {
                         name: "stripe".to_string(),
-                        node_type: "npm".to_string(),
+                        dep_type: "npm".to_string(),
                         version: Some("^17.7.0".to_string()),
-                        children: None,
-                        path: None,
                         target_service: None,
+                        source_files: vec![
+                            "domain/services/user.service.ts".to_string(),
+                        ],
                     },
-                    CodeNode {
-                        name: "user.service".to_string(),
-                        node_type: "local".to_string(),
-                        version: None,
-                        children: Some(vec![
-                            CodeNode {
-                                name: "@mikro-orm/core".to_string(),
-                                node_type: "npm".to_string(),
-                                version: Some("^6.5.0".to_string()),
-                                children: None,
-                                path: None,
-                                target_service: None,
-                            },
-                        ]),
-                        path: Some("domain/services/user.service.ts".to_string()),
+                    Dependency {
+                        name: "@mikro-orm/core".to_string(),
+                        dep_type: "npm".to_string(),
+                        version: Some("^6.5.0".to_string()),
                         target_service: None,
+                        source_files: vec![
+                            "domain/services/user.service.ts".to_string(),
+                        ],
                     },
-                ]),
-                path: Some("api/controllers/user.controller.ts".to_string()),
-                target_service: None,
+                ],
             }),
         };
 
@@ -856,9 +1207,10 @@ mod tests {
 
         let json_str = json.unwrap();
 
-        // Verify route-level topology is present
+        // Verify flat topology structure
         assert!(json_str.contains("\"topology\""), "JSON should contain topology field");
-        assert!(json_str.contains("\"children\""), "JSON should have children array");
+        assert!(json_str.contains("\"deps\""), "JSON should have deps array");
+        assert!(json_str.contains("\"sourceFiles\""), "JSON should have per-dep sourceFiles");
 
         // Verify npm dependencies have versions
         assert!(json_str.contains("\"@forklaunch/core\""), "Should contain npm dependency");
@@ -866,12 +1218,12 @@ mod tests {
         assert!(json_str.contains("\"stripe\""), "Should contain stripe dependency");
         assert!(json_str.contains("\"^17.7.0\""), "Should contain version for stripe");
 
-        // Verify local children also have npm deps with versions
+        // Verify nested deps are flattened
         assert!(json_str.contains("\"@mikro-orm/core\""), "Should contain nested npm dep");
-        assert!(json_str.contains("\"^6.5.0\""), "Should contain version for nested dep");
 
-        // Verify local nodes have paths
+        // Verify source files
         assert!(json_str.contains("\"domain/services/user.service.ts\""), "Should have local path");
+        assert!(json_str.contains("\"api/controllers/user.controller.ts\""), "Should have controller path");
     }
 
     #[test]
@@ -889,13 +1241,8 @@ mod tests {
                 middleware: None,
                 schema: None,
                 auth: None,
-                topology: Some(CodeNode {
-                    name: "test.controller".to_string(),
-                    node_type: "local".to_string(),
-                    version: None,
-                    children: None,
-                    path: Some("api/controllers/test.controller.ts".to_string()),
-                    target_service: None,
+                topology: Some(Topology {
+                    deps: vec![],
                 }),
             }],
         };
@@ -916,5 +1263,187 @@ mod tests {
         let routes = obj.get("routes").unwrap().as_array().unwrap();
         let first_route = routes[0].as_object().unwrap();
         assert!(first_route.contains_key("topology"), "Route should have topology");
+    }
+
+    #[test]
+    fn test_service_config_hosting_type_ecs_ec2() {
+        let config = ServiceConfig {
+            service_type: ConfigType::Service,
+            controllers: None,
+            integrations: None,
+            open_api_spec: None,
+            dependencies: None,
+            runtime_dependencies: None,
+            instance_size: None,
+            hosting_type: Some("ecs-ec2".to_string()),
+            health_check: None,
+            is_worker_service: None,
+            privileged: None,
+            serves: None,
+        };
+        let json = serde_json::to_value(&config).unwrap();
+        assert_eq!(json["hostingType"], "ecs-ec2");
+    }
+
+    #[test]
+    fn test_service_config_hosting_type_defaults_absent() {
+        let config = ServiceConfig {
+            service_type: ConfigType::Service,
+            controllers: None,
+            integrations: None,
+            open_api_spec: None,
+            dependencies: None,
+            runtime_dependencies: None,
+            instance_size: None,
+            hosting_type: None,
+            health_check: None,
+            is_worker_service: None,
+            privileged: None,
+            serves: None,
+        };
+        let json = serde_json::to_value(&config).unwrap();
+        assert!(
+            json.get("hostingType").is_none(),
+            "hostingType should be omitted when None"
+        );
+    }
+
+    #[test]
+    fn test_worker_config_hosting_type_ecs_ec2() {
+        let config = WorkerConfig {
+            config_type: ConfigType::Worker,
+            worker_type: WorkerType::BullMQ,
+            concurrency: None,
+            timeout: None,
+            max_retries: None,
+            queue: None,
+            priority: None,
+            dead_letter_queue: None,
+            additional: None,
+            runtime_dependencies: None,
+            instance_size: None,
+            hosting_type: Some("ecs-ec2".to_string()),
+            health_check: None,
+            privileged: None,
+            serves: None,
+        };
+        let json = serde_json::to_value(&config).unwrap();
+        assert_eq!(json["hostingType"], "ecs-ec2");
+    }
+
+    #[test]
+    fn test_worker_config_privileged_round_trips() {
+        let config = WorkerConfig {
+            config_type: ConfigType::Worker,
+            worker_type: WorkerType::BullMQ,
+            concurrency: None,
+            timeout: None,
+            max_retries: None,
+            queue: None,
+            priority: None,
+            dead_letter_queue: None,
+            additional: None,
+            runtime_dependencies: None,
+            instance_size: None,
+            hosting_type: Some("ecs-ec2".to_string()),
+            health_check: None,
+            privileged: Some(true),
+            serves: None,
+        };
+        let json = serde_json::to_value(&config).unwrap();
+        assert_eq!(json["privileged"], true);
+    }
+
+    #[test]
+    fn test_worker_config_privileged_omitted_when_absent() {
+        let config = WorkerConfig {
+            config_type: ConfigType::Worker,
+            worker_type: WorkerType::BullMQ,
+            concurrency: None,
+            timeout: None,
+            max_retries: None,
+            queue: None,
+            priority: None,
+            dead_letter_queue: None,
+            additional: None,
+            runtime_dependencies: None,
+            instance_size: None,
+            hosting_type: None,
+            health_check: None,
+            privileged: None,
+            serves: None,
+        };
+        let json = serde_json::to_value(&config).unwrap();
+        assert!(
+            json.get("privileged").is_none(),
+            "privileged should be omitted when None"
+        );
+    }
+
+    #[test]
+    fn test_worker_config_hosting_type_defaults_absent() {
+        let config = WorkerConfig {
+            config_type: ConfigType::Worker,
+            worker_type: WorkerType::BullMQ,
+            concurrency: None,
+            timeout: None,
+            max_retries: None,
+            queue: None,
+            priority: None,
+            dead_letter_queue: None,
+            additional: None,
+            runtime_dependencies: None,
+            instance_size: None,
+            hosting_type: None,
+            health_check: None,
+            privileged: None,
+            serves: None,
+        };
+        let json = serde_json::to_value(&config).unwrap();
+        assert!(
+            json.get("hostingType").is_none(),
+            "hostingType should be omitted when None"
+        );
+    }
+
+    #[test]
+    fn test_serving_ports_reach_the_release_manifest_in_camel_case() {
+        // `[[projects.serves]]` in manifest.toml is the ONLY way the platform
+        // learns that a service binds a websocket port. It used to be dropped on
+        // the floor here, so nothing ever fronted WS_PORT.
+        let project: crate::core::manifest::ProjectEntry = toml::from_str(
+            r#"
+type = "Service"
+name = "platform-management"
+description = "control plane"
+
+[[serves]]
+protocol = "ws"
+port_env = "WS_PORT"
+health_path = "/health"
+"#,
+        )
+        .unwrap();
+
+        let serves = serving_ports(&project).expect("declared ports are forwarded");
+        let json = serde_json::to_value(&serves).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!([{
+                "protocol": "ws",
+                "portEnv": "WS_PORT",
+                "healthPath": "/health"
+            }])
+        );
+
+        // The manifest keeps the declaration when the CLI rewrites it, and a
+        // project that declares nothing serializes without the key at all.
+        let rewritten = toml::to_string(&project).unwrap();
+        assert!(rewritten.contains("port_env = \"WS_PORT\""), "{rewritten}");
+        let bare: crate::core::manifest::ProjectEntry =
+            toml::from_str("type = \"Service\"\nname = \"iam\"\ndescription = \"\"\n")
+                .unwrap();
+        assert!(serving_ports(&bare).is_none());
+        assert!(!toml::to_string(&bare).unwrap().contains("serves"));
     }
 }

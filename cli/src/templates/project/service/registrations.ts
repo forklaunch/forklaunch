@@ -1,21 +1,28 @@
-import { {{#is_kafka_enabled}}array, {{/is_kafka_enabled}}{{#is_iam_configured}}createAuthCacheService, type AuthCacheService, {{/is_iam_configured}}{{#is_billing_configured}}createBillingCacheService, type BillingCacheService, {{/is_billing_configured}}{{#is_worker}}function_, {{/is_worker}}number, SchemaValidator, string{{#is_type_needed}}, type{{/is_type_needed}} } from "@{{app_name}}/core";
+import { {{#is_kafka_enabled}}array, {{/is_kafka_enabled}}{{#is_iam_configured}}createAuthCacheService, type AuthCacheService, {{/is_iam_configured}}{{#is_billing_configured}}createBillingCacheService, type BillingCacheService, {{/is_billing_configured}}{{#is_worker}}function_, {{/is_worker}}number, optional, SchemaValidator, string{{#is_type_needed}}, type{{/is_type_needed}} } from "@{{app_name}}/core";
 import { metrics } from "@{{app_name}}/monitoring";{{#is_request_cache_needed}}
 import { RedisTtlCache } from "@forklaunch/infrastructure-redis";{{/is_request_cache_needed}}{{#is_s3_enabled}}
-import { S3ObjectStore } from "@forklaunch/infrastructure-s3";{{/is_s3_enabled}}
+import { S3ObjectStore, s3ClientConfig } from "@forklaunch/infrastructure-s3";{{/is_s3_enabled}}
 import { OpenTelemetryCollector } from "@forklaunch/core/http";
 import {
+  ComplianceDataService,
   createConfigInjector,
   getEnvVar,
   Lifetime,
-} from "@forklaunch/core/services";{{#is_worker}}
+  RetentionService,
+} from "@forklaunch/core/services";
+import { FieldEncryptor, parseEncryptionKeyList, wrapEmWithTenantContext } from "@forklaunch/core/persistence";{{#is_worker}}
 import { {{worker_type}}WorkerConsumer } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/consumers';
 import { {{worker_type}}WorkerProducer } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/producers';
 import { {{worker_type}}WorkerSchemas } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/schemas';
-import { {{worker_type}}WorkerOptions } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/types';
-import { WorkerProcessFunction, WorkerFailureHandler } from '@forklaunch/interfaces-worker/types';{{/is_worker}}{{#is_database_enabled}}
-import { EntityManager, ForkOptions, MikroORM } from "@mikro-orm/core";
-import mikroOrmOptionsConfig from './mikro-orm.config';{{/is_database_enabled}}{{#is_worker}}
-import { {{pascal_case_name}}EventRecord } from "./persistence/entities/{{camel_case_name}}EventRecord.entity";{{/is_worker}}
+import { {{worker_type}}WorkerOptions } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/types';{{^is_database_worker}}
+import { EncryptingWorkerProducer, withDecryption, withDecryptionFailureHandler } from '@forklaunch/interfaces-worker/interfaces';
+import { type EncryptedEventEnvelope, WorkerProcessFunction, WorkerFailureHandler } from '@forklaunch/interfaces-worker/types';{{/is_database_worker}}{{#is_database_worker}}
+import { WorkerProcessFunction, WorkerFailureHandler } from '@forklaunch/interfaces-worker/types';{{/is_database_worker}}
+{{^is_database_worker}}import type { {{pascal_case_name}}EventRecord } from './domain/types/{{camel_case_name}}EventRecord.types';{{/is_database_worker}}{{/is_worker}}{{#is_database_enabled}}
+import { ForkOptions } from "@mikro-orm/core";
+import { EntityManager, MikroORM } from "@mikro-orm/{{database}}";
+import mikroOrmOptionsConfig from './mikro-orm.config';{{/is_database_enabled}}{{#is_worker}}{{#is_database_enabled}}
+import { {{pascal_case_name}}EventRecord } from "./persistence/entities/{{camel_case_name}}EventRecord.entity";{{/is_database_enabled}}{{/is_worker}}
 import { Base{{pascal_case_name}}Service } from "./domain/services/{{camel_case_name}}.service";
 
 //! instantiates the config injector
@@ -102,34 +109,44 @@ const environmentConfig = configInjector.chain({
   },{{/is_worker}}{{#is_s3_enabled}}
   S3_REGION: {
     lifetime: Lifetime.Singleton,
-    type: string,
+    type: optional(string),
     value: getEnvVar('S3_REGION')
   },
   S3_ACCESS_KEY_ID: {
     lifetime: Lifetime.Singleton,
-    type: string,
+    type: optional(string),
     value: getEnvVar('S3_ACCESS_KEY_ID')
   },
   S3_SECRET_ACCESS_KEY: {
     lifetime: Lifetime.Singleton,
-    type: string,
+    type: optional(string),
     value: getEnvVar('S3_SECRET_ACCESS_KEY')
   },
   S3_URL: {
     lifetime: Lifetime.Singleton,
-    type: string,
+    type: optional(string),
     value: getEnvVar('S3_URL')
   },
   S3_BUCKET: {
     lifetime: Lifetime.Singleton,
     type: string,
     value: getEnvVar('S3_BUCKET')
-  },{{/is_s3_enabled}}{{#is_iam_configured}}
-  HMAC_SECRET_KEY: {
-    lifetime: Lifetime.Singleton,
-    type: string,
-    value: getEnvVar('HMAC_SECRET_KEY')
   },
+  S3_PREFIX: {
+    lifetime: Lifetime.Singleton,
+    type: optional(string),
+    value: getEnvVar('S3_PREFIX')
+  },
+  S3_PRESIGN_MAX_UPLOAD_SECONDS: {
+    lifetime: Lifetime.Singleton,
+    type: optional(number),
+    value: Number(getEnvVar('S3_PRESIGN_MAX_UPLOAD_SECONDS')) || undefined
+  },
+  S3_PRESIGN_MAX_DOWNLOAD_SECONDS: {
+    lifetime: Lifetime.Singleton,
+    type: optional(number),
+    value: Number(getEnvVar('S3_PRESIGN_MAX_DOWNLOAD_SECONDS')) || undefined
+  },{{/is_s3_enabled}}{{#is_iam_configured}}
   JWKS_PUBLIC_KEY_URL: {
     lifetime: Lifetime.Singleton,
     type: string,
@@ -144,24 +161,32 @@ const environmentConfig = configInjector.chain({
     lifetime: Lifetime.Singleton,
     type: string,
     value: getEnvVar('BILLING_URL')
-  },
-  {{^is_iam_configured}}
+  },{{/is_billing_configured}}
   HMAC_SECRET_KEY: {
     lifetime: Lifetime.Singleton,
     type: string,
     value: getEnvVar('HMAC_SECRET_KEY')
   },
-  {{/is_iam_configured}}
-  {{/is_billing_configured}}
+  ENCRYPTION_KEY: {
+    lifetime: Lifetime.Singleton,
+    type: string,
+    value: getEnvVar('ENCRYPTION_KEY')
+  },
+  //! previous encryption keys, comma separated; read-only, so a key can be rotated without downtime
+  LEGACY_ENCRYPTION_KEYS: {
+    lifetime: Lifetime.Singleton,
+    type: optional(string),
+    value: getEnvVar('LEGACY_ENCRYPTION_KEYS')
+  }
 });
 
 //! defines the runtime dependencies for the application
 const runtimeDependencies = environmentConfig.chain({
   {{#is_database_enabled}}
-  MikroORM: {
+  Orm: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },{{/is_database_enabled}}
   {{#is_worker}}WorkerOptions: {
     lifetime: Lifetime.Singleton,
@@ -170,7 +195,7 @@ const runtimeDependencies = environmentConfig.chain({
     }),
     {{{default_worker_options}}}
   },
-  {{/is_worker}}OpenTelemetryCollector: {
+  {{/is_worker}}OtelCollector: {
     lifetime: Lifetime.Singleton,
     type: OpenTelemetryCollector,
     factory: ({ OTEL_SERVICE_NAME, OTEL_LEVEL }) =>
@@ -183,52 +208,78 @@ const runtimeDependencies = environmentConfig.chain({
   TtlCache: {
     lifetime: Lifetime.Singleton,
     type: RedisTtlCache,
-    factory: ({ REDIS_URL, OpenTelemetryCollector }) =>
-      new RedisTtlCache(60 * 60 * 1000, OpenTelemetryCollector, {
+    factory: ({ REDIS_URL, OtelCollector, ENCRYPTION_KEY, LEGACY_ENCRYPTION_KEYS }) =>
+      new RedisTtlCache(60 * 60 * 1000, OtelCollector, {
         url: REDIS_URL,
       }, {
         enabled: true,
         level: "info",
+      }, {
+        encryptor: new FieldEncryptor(ENCRYPTION_KEY, { previousKeys: parseEncryptionKeyList(LEGACY_ENCRYPTION_KEYS) }),
       }),
   },{{/is_request_cache_needed}}{{#is_s3_enabled}}
-  S3ObjectStore: {
+  ObjectStore: {
     lifetime: Lifetime.Singleton,
     type: S3ObjectStore,
     factory: ({
-      OpenTelemetryCollector,
+      OtelCollector,
       OTEL_LEVEL,
       S3_REGION,
       S3_ACCESS_KEY_ID,
       S3_SECRET_ACCESS_KEY,
       S3_URL,
-      S3_BUCKET
+      S3_BUCKET,
+      S3_PREFIX,
+      S3_PRESIGN_MAX_UPLOAD_SECONDS,
+      S3_PRESIGN_MAX_DOWNLOAD_SECONDS,
+      ENCRYPTION_KEY,
+      LEGACY_ENCRYPTION_KEYS
     }) =>
       new S3ObjectStore(
-        OpenTelemetryCollector,
+        OtelCollector,
         {
           bucket: S3_BUCKET,
-          clientConfig: {
-            endpoint: S3_URL,
+          prefix: S3_PREFIX,
+          // Deployed on ForkLaunch only the region is set: credentials come
+          // from the service's task role. Keys and S3_URL are for local MinIO.
+          clientConfig: s3ClientConfig({
+            url: S3_URL,
             region: S3_REGION,
-            credentials: {
-              accessKeyId: S3_ACCESS_KEY_ID,
-              secretAccessKey: S3_SECRET_ACCESS_KEY
-            },
-            forcePathStyle: true // Required for MinIO and path-style S3
+            accessKeyId: S3_ACCESS_KEY_ID,
+            secretAccessKey: S3_SECRET_ACCESS_KEY
+          }),
+          presignLimits: {
+            maxUploadSeconds: S3_PRESIGN_MAX_UPLOAD_SECONDS,
+            maxDownloadSeconds: S3_PRESIGN_MAX_DOWNLOAD_SECONDS
           }
         },
         {
           enabled: true,
           level: OTEL_LEVEL || 'info'
+        },
+        {
+          encryptor: new FieldEncryptor(ENCRYPTION_KEY, { previousKeys: parseEncryptionKeyList(LEGACY_ENCRYPTION_KEYS) }),
         }
       )
   },
-  {{/is_s3_enabled}}{{#is_database_enabled}}
-  EntityManager: {
+  {{/is_s3_enabled}}{{#is_worker}}{{^is_database_worker}}EventEncryptor: {
+    lifetime: Lifetime.Singleton,
+    type: FieldEncryptor,
+    factory: ({ ENCRYPTION_KEY, LEGACY_ENCRYPTION_KEYS }) =>
+      new FieldEncryptor(ENCRYPTION_KEY, { previousKeys: parseEncryptionKeyList(LEGACY_ENCRYPTION_KEYS) })
+  },
+  {{/is_database_worker}}{{/is_worker}}{{#is_database_enabled}}
+  EntityMgr: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
-    factory: ({ MikroORM }, _resolve, context) =>
-      MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined),
+    factory: (
+      { Orm },
+      context?: { entityManagerOptions?: ForkOptions; tenantId?: string }
+    ) =>
+      wrapEmWithTenantContext(
+        Orm.em.fork(context?.entityManagerOptions),
+        context?.tenantId
+      ) as EntityManager,
   },{{/is_database_enabled}}{{#is_iam_configured}}
   AuthCacheService: {
     lifetime: Lifetime.Singleton,
@@ -243,7 +294,7 @@ const runtimeDependencies = environmentConfig.chain({
 });
 
 //! defines the service dependencies for the application
-const serviceDependencies = runtimeDependencies.chain({ {{#is_worker}}
+const serviceDependencies = runtimeDependencies.chain({ {{#is_worker}}{{#is_database_worker}}
   WorkerConsumer: {
     lifetime: Lifetime.Scoped,
     type: function_([
@@ -252,7 +303,7 @@ const serviceDependencies = runtimeDependencies.chain({ {{#is_worker}}
     ],
       type<{{worker_type}}WorkerConsumer<{{pascal_case_name}}EventRecord, {{worker_type}}WorkerOptions>>()
     ),
-    factory: 
+    factory:
       {{{worker_consumer_factory}}}
   },
   WorkerProducer: {
@@ -260,20 +311,48 @@ const serviceDependencies = runtimeDependencies.chain({ {{#is_worker}}
     type: {{worker_type}}WorkerProducer,
     factory: {{{worker_producer_factory}}}
   },
-  {{/is_worker}}{{pascal_case_name}}Service: {
+  {{/is_database_worker}}{{^is_database_worker}}
+  WorkerConsumer: {
+    lifetime: Lifetime.Scoped,
+    type: function_([
+      type<WorkerProcessFunction<{{pascal_case_name}}EventRecord>>(),
+      type<WorkerFailureHandler<{{pascal_case_name}}EventRecord>>()
+    ],
+      type<{{worker_type}}WorkerConsumer<EncryptedEventEnvelope, {{worker_type}}WorkerOptions>>()
+    ),
+    factory: {{{worker_consumer_factory}}}
+  },
+  WorkerProducer: {
+    lifetime: Lifetime.Scoped,
+    type: EncryptingWorkerProducer,
+    factory: {{{worker_producer_factory}}}
+  },
+  {{/is_database_worker}}{{/is_worker}}{{pascal_case_name}}Service: {
     lifetime: Lifetime.Scoped,
     type: Base{{pascal_case_name}}Service,
     factory: ({ {{^is_worker}}
-      EntityManager,{{/is_worker}}{{#is_worker}}
+      EntityMgr,{{/is_worker}}{{#is_worker}}
       WorkerProducer,{{/is_worker}}
-      OpenTelemetryCollector
+      OtelCollector
     }) =>
       new Base{{pascal_case_name}}Service({{^is_worker}}
-        EntityManager,{{/is_worker}}{{#is_worker}}
+        EntityMgr,{{/is_worker}}{{#is_worker}}
         WorkerProducer,{{/is_worker}}
-        OpenTelemetryCollector
+        OtelCollector
       )
-  }
+  },{{#is_database_enabled}}
+  RetentionService: {
+    lifetime: Lifetime.Singleton,
+    type: RetentionService,
+    factory: ({ Orm, OtelCollector }) =>
+      new RetentionService(Orm, OtelCollector)
+  },
+  ComplianceDataService: {
+    lifetime: Lifetime.Singleton,
+    type: ComplianceDataService,
+    factory: ({ Orm, OtelCollector }) =>
+      new ComplianceDataService(Orm, OtelCollector)
+  }{{/is_database_enabled}}
 });
 
 //! validates the configuration and returns the dependencies for the application

@@ -24,23 +24,21 @@ import { StripePaymentLinkEntities } from '../domain/types/stripe.entity.types';
 export class StripePaymentLinkService<
   SchemaValidator extends AnySchemaValidator,
   StatusEnum,
-  Entities extends StripePaymentLinkEntities<StatusEnum>,
-  Dto extends
-    StripePaymentLinkDtos<StatusEnum> = StripePaymentLinkDtos<StatusEnum>
-> implements
-    PaymentLinkService<
-      PaymentMethodEnum,
-      typeof CurrencyEnum,
-      StatusEnum,
-      {
-        CreatePaymentLinkDto: StripeCreatePaymentLinkDto<StatusEnum>;
-        UpdatePaymentLinkDto: StripeUpdatePaymentLinkDto<StatusEnum>;
-        PaymentLinkDto: StripePaymentLinkDto<StatusEnum>;
-        IdDto: IdDto;
-        IdsDto: IdsDto;
-      }
-    >
-{
+  Entities extends StripePaymentLinkEntities,
+  Dto extends StripePaymentLinkDtos<StatusEnum> =
+    StripePaymentLinkDtos<StatusEnum>
+> implements PaymentLinkService<
+  PaymentMethodEnum,
+  typeof CurrencyEnum,
+  StatusEnum,
+  {
+    CreatePaymentLinkDto: StripeCreatePaymentLinkDto<StatusEnum>;
+    UpdatePaymentLinkDto: StripeUpdatePaymentLinkDto<StatusEnum>;
+    PaymentLinkDto: StripePaymentLinkDto<StatusEnum>;
+    IdDto: IdDto;
+    IdsDto: IdsDto;
+  }
+> {
   basePaymentLinkService: BasePaymentLinkService<
     SchemaValidator,
     PaymentMethodEnum,
@@ -138,18 +136,20 @@ export class StripePaymentLinkService<
     );
 
     const paymentLink = await this.basePaymentLinkService.updatePaymentLink(
-      await this.mappers.UpdatePaymentLinkMapper.toEntity(
-        {
-          ...paymentLinkDto,
-          id: session.id,
-          amount:
-            session.line_items?.data.reduce<number>(
-              (total, item) => total + item.amount_total,
-              0
-            ) ?? 0
-        },
-        this.em,
-        session
+      await this.mappers.PaymentLinkMapper.toDto(
+        await this.mappers.UpdatePaymentLinkMapper.toEntity(
+          {
+            ...paymentLinkDto,
+            id: session.id,
+            amount:
+              session.line_items?.data.reduce<number>(
+                (total, item) => total + item.amount_total,
+                0
+              ) ?? 0
+          },
+          this.em,
+          session
+        )
       ),
       ...args
     );

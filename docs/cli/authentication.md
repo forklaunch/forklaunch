@@ -6,8 +6,6 @@ description: Learn how to authenticate with ForkLaunch services.
 
 ## Overview
 
-THIS COMMAND IS CURRENTLY UNDER DEVELOPMENT AND IS NOT YET AVAILABLE.
-
 Manage authentication with the ForkLaunch platform.
 
 ## Usage
@@ -17,10 +15,13 @@ Manage authentication with the ForkLaunch platform.
 Authenticate with your ForkLaunch account.
 
 ```bash
-forklaunch login
+forklaunch login [options]
 ```
 
-**Process:**
+**Options:**
+- `-t, --token <token>` - API token for headless authentication (for CI/CD). Can also be set via `FORKLAUNCH_API_TOKEN` environment variable.
+
+**Interactive login (default):**
 
 1. Opens browser to ForkLaunch login page
 2. Handles OAuth authentication flow
@@ -31,6 +32,17 @@ forklaunch login
 $ forklaunch login
 Opening browser for authentication...
 Successfully authenticated as user@example.com
+```
+
+**Token-based login (CI/CD):**
+
+```bash
+# Pass token directly
+forklaunch login --token <your-api-token>
+
+# Or set via environment variable
+export FORKLAUNCH_API_TOKEN=<your-api-token>
+forklaunch login
 ```
 
 ### Logout
@@ -44,7 +56,6 @@ forklaunch logout
 **Actions:**
 
 - Clears local tokens
-- Revokes server session (if connected)
 - Confirms logout
 
 ```bash
@@ -54,23 +65,15 @@ Successfully logged out from ForkLaunch
 
 ### Whoami
 
-Display current session information.
+Display current authentication token.
 
 ```bash
 forklaunch whoami
 ```
 
-**Shows:**
-
-- Username/Email
-- Organization (if applicable)
-- Session status and expiry
-
 ```bash
 $ forklaunch whoami
-Logged in as: user@example.com
-Organization: My Company
-Session expires: 2024-12-31 23:59:59 UTC
+<current auth token>
 ```
 
 When not authenticated:
@@ -80,6 +83,51 @@ $ forklaunch whoami
 Not currently logged in to ForkLaunch
 Run 'forklaunch login' to authenticate
 ```
+
+### Multiple accounts
+
+One machine can hold several logins, one per organization you work in. Each is stored under a name in `~/.forklaunch/accounts/`, and every command picks one:
+
+1. `--account <name>` on the command
+2. the `FORKLAUNCH_ACCOUNT` environment variable
+3. the account bound to the application the command runs in
+4. the default login
+
+Only the default is machine-wide. The first three are per command, so two terminals (or two agents) can release for two organizations at the same time.
+
+```bash
+# Add a login without disturbing the ones already here
+forklaunch login --account acme
+forklaunch login --account acme --token <api-key>   # headless
+
+# Keep the login you already had, under a name
+forklaunch account save personal
+
+# See what is on this machine
+forklaunch account list
+
+# Always use an account for one application, from any clone or worktree of it
+cd ~/code/acme-api
+forklaunch account bind acme
+
+# Which login would a command run here use, and why?
+forklaunch account current
+forklaunch account current --json
+
+# One-off
+forklaunch release create --version 1.4.0 --account acme
+FORKLAUNCH_ACCOUNT=acme forklaunch deploy create --release 1.4.0 --environment staging --region us-east-1
+
+# Change the default, or forget an account
+forklaunch account use acme
+forklaunch account remove acme
+```
+
+A binding is keyed by the application id in `.forklaunch/manifest.toml` and stored on your machine only, so it is never committed and each teammate chooses their own account names.
+
+**Projects that pin an older CLI.** When `cli_version` in the manifest names a release from before accounts existed, the CLI still runs that release as the account the command resolved to. That release can only read `~/.forklaunch/token`, so the CLI points that path at the account while the command runs and puts it back afterwards. The one cost: for such projects, commands for *different* accounts run one at a time (the second waits and says so); commands for the same account, and everything in projects on a current `cli_version`, run concurrently.
+
+Each pinned version is cached at `~/.forklaunch/bin/forklaunch-<version>` and no longer replaces the `forklaunch` you installed.
 
 ## Workflow
 
@@ -91,8 +139,8 @@ forklaunch whoami
 forklaunch login
 
 # Use authenticated commands
-forklaunch init application
-forklaunch depcheck
+forklaunch release create --version 1.0.0
+forklaunch deploy create --release 1.0.0 --environment staging --region us-east-1
 
 # Logout when done (optional)
 forklaunch logout
@@ -151,12 +199,10 @@ forklaunch logout
 
 ## Related Commands
 
-- [`forklaunch version`](./config.md#version) - Check CLI version and connectivity
-- [`forklaunch init`](./init.md) - Initialize projects (requires authentication)
-- [`forklaunch depcheck`](./depcheck.md) - Check dependencies (may require authentication)
+- [`forklaunch init`](./init) - Initialize projects (requires authentication)
+- [`forklaunch integrate`](./integrate) - Link with platform (requires authentication)
 
 ## Related Documentation
 
-- **[Getting Started](../getting-started.md)** - Initial setup and verification
-- **[CLI Overview](../cli.md)** - Complete command reference
-- **[Configuration](./config.md)** - Advanced configuration options
+- **[Getting Started](../getting-started)** - Initial setup and verification
+- **[CLI Overview](../cli)** - Complete command reference

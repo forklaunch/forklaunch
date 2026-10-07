@@ -5,7 +5,7 @@ import {
   SampleWorkerResponseMapper
 } from '../../domain/mappers/sampleWorker.mappers';
 
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 const serviceFactory = ci.scopedResolver(tokens.SampleWorkerService);
 const HMAC_SECRET_KEY = ci.resolve(tokens.HMAC_SECRET_KEY);
 
@@ -15,6 +15,7 @@ export const sampleWorkerGet = handlers.get(
   '/:id',
   {
     name: 'sampleWorkerGet',
+    access: 'internal',
     summary: 'Get sample worker',
     auth: {
       hmac: {
@@ -46,6 +47,7 @@ export const sampleWorkerPost = handlers.post(
   '/',
   {
     name: 'sampleWorkerPost',
+    access: 'internal',
     summary: 'Create sample worker',
     auth: {
       hmac: {

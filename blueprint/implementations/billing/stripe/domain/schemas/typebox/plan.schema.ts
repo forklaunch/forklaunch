@@ -27,7 +27,7 @@ export const CreatePlanSchema = {
   features: optional(array(string)),
   stripeFields: type<StripeCreatePlanDto['stripeFields']>(),
   externalId: string,
-  billingProvider: optional(enum_(BillingProviderEnum)),
+  billingProvider: enum_(BillingProviderEnum),
   active: boolean
 };
 

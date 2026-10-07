@@ -56,6 +56,7 @@ const getHandler = handlers.get(
   '/test',
   {
     name: 'Test',
+    access: 'public',
     summary: 'Test Summary',
     responses: {
       200: {
@@ -97,6 +98,7 @@ const postHandler = handlers.post(
   '/test',
   {
     name: 'Test',
+    access: 'public',
     summary: 'Test Summary',
     body: {
       f: string,
@@ -142,6 +144,7 @@ const jsonPatchHandler = handlers.patch(
   '/test',
   {
     name: 'Test',
+    access: 'public',
     summary: 'Test Summary',
     body: {
       f: string,
@@ -168,6 +171,7 @@ const multipartHandler = handlers.post(
   '/test/multipart',
   {
     name: 'Test',
+    access: 'public',
     summary: 'Test Summary',
     body: {
       multipartForm: {
@@ -192,6 +196,7 @@ const urlEncodedFormHandler = handlers.post(
   '/test/url-encoded-form',
   {
     name: 'Test',
+    access: 'public',
     summary: 'Test Summary',
     body: {
       urlEncodedForm: {
@@ -233,6 +238,7 @@ const filePostHandler = handlers.post(
   '/test/file',
   {
     name: 'Test File Upload + Download',
+    access: 'public',
     summary: 'Returns a file',
     body: file,
     responses: {
@@ -324,6 +330,7 @@ forklaunchApplication.get(
   '/alfalfa',
   {
     name: 'Test',
+    access: 'public',
     summary: 'Test',
     responses: {
       200: string

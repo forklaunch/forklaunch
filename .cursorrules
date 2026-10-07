@@ -141,17 +141,17 @@ forklaunch init service billing --database postgresql
 forklaunch init worker email-worker --type bullmq
 forklaunch init library shared-utils
 
-# Modifying projects (ALWAYS use --dry-run first)
-forklaunch change application --runtime bun --dry-run
+# Modifying projects (ALWAYS use --dryrun first)
+forklaunch change application --runtime bun --dryrun
 forklaunch change application --runtime bun
 
-forklaunch change service my-service --database postgresql --dry-run
+forklaunch change service my-service --database postgresql --dryrun
 forklaunch change service my-service --database postgresql
 
 # Deployment
-forklaunch deploy --environment staging --region us-east-1
-forklaunch environment create production --region us-east-1
 forklaunch release create --version 1.2.3
+forklaunch deploy create --environment staging --region us-east-1
+forklaunch deploy create --environment production --region us-east-1
 ```
 
 ## File Naming Conventions
@@ -588,9 +588,9 @@ forklaunch init service <name> --database postgresql
 forklaunch init worker <name> --type bullmq
 forklaunch init library <name>
 
-# Modify projects (ALWAYS --dry-run first!)
-forklaunch change application --runtime bun --dry-run
-forklaunch change service <name> --database mysql --dry-run
+# Modify projects (ALWAYS --dryrun first!)
+forklaunch change application --runtime bun --dryrun
+forklaunch change service <name> --database mysql --dryrun
 
 # Delete projects
 forklaunch delete service <name>
@@ -612,7 +612,7 @@ forklaunch env validate         # Short alias
 forklaunch openapi export --output ./docs/api
 
 # SDK management
-forklaunch sdk mode [lean|full] # Configure SDK generation
+forklaunch sdk mode --type [generated|live] # Configure SDK generation
 ```
 
 ### Deployment & Release
@@ -663,7 +663,7 @@ pnpm test:watch         # Watch mode
 ❌ Importing from `@modules/core` (use `@forklaunch` packages)
 ❌ Using mappers in service layer (only in controllers)
 ❌ Manually editing manifest.toml (use CLI commands)
-❌ Skipping `--dry-run` for changes
+❌ Skipping `--dryrun` for changes
 ❌ Not organizing imports in 7 layers
 ❌ Putting business logic in controllers
 ❌ Passing DTOs between internal services
@@ -688,7 +688,7 @@ pnpm test:watch         # Watch mode
 ❌ Not handling reconnection logic
 
 ### CLI Usage
-❌ Running `forklaunch change` without `--dry-run` first
+❌ Running `forklaunch change` without `--dryrun` first
 ❌ Not running `forklaunch sync` after manifest changes
 ❌ Not validating environment variables with `forklaunch env validate`
 
@@ -698,8 +698,8 @@ pnpm test:watch         # Watch mode
 # 1. Commit current state
 git add . && git commit -m "Before change"
 
-# 2. Preview with dry-run
-forklaunch change application --runtime bun --dry-run
+# 2. Preview with --dryrun
+forklaunch change application --runtime bun --dryrun
 
 # 3. Apply change
 forklaunch change application --runtime bun

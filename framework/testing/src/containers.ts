@@ -9,8 +9,7 @@ export type DatabaseType =
   | 'mongo'
   | 'mssql'
   | 'libsql'
-  | 'sqlite'
-  | 'better-sqlite';
+  | 'sqlite';
 
 export interface PostgresConfig {
   user?: string;
@@ -70,11 +69,7 @@ export interface S3Config {
 }
 
 export type DatabaseConfig =
-  | PostgresConfig
-  | MySQLConfig
-  | MongoDBConfig
-  | MSSQLConfig
-  | SQLiteConfig;
+  PostgresConfig | MySQLConfig | MongoDBConfig | MSSQLConfig | SQLiteConfig;
 
 /**
  * Manages test containers (PostgreSQL, MySQL, MongoDB, Redis, etc.) for E2E testing
@@ -127,7 +122,6 @@ export class TestContainerManager {
       case 'mssql':
         return 'mssql';
       case 'sqlite':
-      case 'better-sqlite':
       case 'libsql':
         return 'sqlite';
       default:

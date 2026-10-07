@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Deliberately NOT the prebuilt binary. This test rewrites the CLI's own
+# version in Cargo.toml and needs the next invocation to reflect it, which
+# only a rebuild can do — a prebuilt binary has its version compiled in.
+FL="cargo run --release"
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,7 +23,7 @@ rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cd "$TEST_DIR"
 
-RUST_BACKTRACE=1 cargo run --release init application app \
+RUST_BACKTRACE=1 $FL init application app \
   -p . \
   -o modules \
   -d postgresql \
@@ -43,7 +47,7 @@ else
 fi
 
 set +e
-printf "n\n" | RUST_BACKTRACE=1 cargo run --release depcheck -p . >/dev/null 2>&1
+printf "n\n" | RUST_BACKTRACE=1 $FL depcheck -p . >/dev/null 2>&1
 EXIT_CODE=$?
 set -e
 

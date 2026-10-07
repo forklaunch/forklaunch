@@ -1,6 +1,7 @@
 // thank you @colinhacks: https://github.com/colinhacks/live-typescript-monorepo/blob/main/custom-conditions
 {
   "compilerOptions": {
+    "ignoreDeprecations": "6.0",
     "declaration": true,
     "declarationMap": true,
     "customConditions": ["@forklaunch/source"],
@@ -14,6 +15,7 @@
     "esModuleInterop": true,
     "moduleResolution": "bundler",
     "skipLibCheck": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "types": ["node", "vitest/globals"]
   }
 }

@@ -8,9 +8,15 @@ import {
 import { Metrics, metrics } from '@forklaunch/blueprint-monitoring';
 import { OpenTelemetryCollector } from '@forklaunch/core/http';
 import {
+  FieldEncryptor,
+  wrapEmWithTenantContext
+} from '@forklaunch/core/persistence';
+import {
+  ComplianceDataService,
   createConfigInjector,
   getEnvVar,
-  Lifetime
+  Lifetime,
+  RetentionService
 } from '@forklaunch/core/services';
 import {
   BaseBillingPortalService,
@@ -20,7 +26,8 @@ import {
   BaseSubscriptionService
 } from '@forklaunch/implementation-billing-base/services';
 import { RedisTtlCache } from '@forklaunch/infrastructure-redis';
-import { EntityManager, ForkOptions, MikroORM } from '@mikro-orm/core';
+import { ForkOptions } from '@mikro-orm/core';
+import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
 import { BillingProviderEnum } from './domain/enum/billingProvider.enum';
 import { CurrencyEnum } from './domain/enum/currency.enum';
 import { PartyEnum } from './domain/enum/party.enum';
@@ -132,17 +139,27 @@ const environmentConfig = configInjector.chain({
     lifetime: Lifetime.Singleton,
     type: string,
     value: getEnvVar('JWKS_PUBLIC_KEY_URL')
+  },
+  IAM_URL: {
+    lifetime: Lifetime.Singleton,
+    type: string,
+    value: getEnvVar('IAM_URL')
+  },
+  ENCRYPTION_KEY: {
+    lifetime: Lifetime.Singleton,
+    type: string,
+    value: getEnvVar('ENCRYPTION_KEY')
   }
 });
 
 //! defines the runtime dependencies for the application
 const runtimeDependencies = environmentConfig.chain({
-  MikroORM: {
+  Orm: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
-  OpenTelemetryCollector: {
+  OtelCollector: {
     lifetime: Lifetime.Singleton,
     type: OpenTelemetryCollector<Metrics>,
     factory: ({ OTEL_SERVICE_NAME, OTEL_LEVEL }) =>
@@ -155,24 +172,33 @@ const runtimeDependencies = environmentConfig.chain({
   TtlCache: {
     lifetime: Lifetime.Singleton,
     type: RedisTtlCache,
-    factory: ({ REDIS_URL, OpenTelemetryCollector, OTEL_LEVEL }) =>
+    factory: ({ REDIS_URL, OtelCollector, OTEL_LEVEL, ENCRYPTION_KEY }) =>
       new RedisTtlCache(
         60 * 60 * 1000,
-        OpenTelemetryCollector,
+        OtelCollector,
         {
           url: REDIS_URL
         },
         {
           enabled: true,
           level: OTEL_LEVEL || 'info'
+        },
+        {
+          encryptor: new FieldEncryptor(ENCRYPTION_KEY)
         }
       )
   },
   EntityManager: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
-    factory: ({ MikroORM }, _resolve, context) =>
-      MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined)
+    factory: (
+      { Orm },
+      context: { entityManagerOptions?: ForkOptions; tenantId?: string }
+    ) =>
+      wrapEmWithTenantContext(
+        Orm.em.fork(context?.entityManagerOptions),
+        context?.tenantId
+      ) as EntityManager
   }
 });
 
@@ -185,17 +211,13 @@ const serviceDependencies = runtimeDependencies.chain({
       BillingPortalMapperTypes,
       BillingPortalDtoTypes
     >,
-    factory: (
-      { EntityManager, TtlCache, OpenTelemetryCollector },
-      resolve,
-      context
-    ) =>
+    factory: ({ EntityManager, TtlCache, OtelCollector }, context, resolve) =>
       new BaseBillingPortalService(
         context.entityManagerOptions
           ? resolve('EntityManager', context)
           : EntityManager,
         TtlCache,
-        OpenTelemetryCollector,
+        OtelCollector,
         schemaValidator,
         {
           BillingPortalMapper,
@@ -214,17 +236,13 @@ const serviceDependencies = runtimeDependencies.chain({
       CheckoutSessionMapperTypes,
       CheckoutSessionDtoTypes
     >,
-    factory: (
-      { EntityManager, TtlCache, OpenTelemetryCollector },
-      resolve,
-      context
-    ) =>
+    factory: ({ EntityManager, TtlCache, OtelCollector }, context, resolve) =>
       new BaseCheckoutSessionService(
         context.entityManagerOptions
           ? resolve('EntityManager', context)
           : EntityManager,
         TtlCache,
-        OpenTelemetryCollector,
+        OtelCollector,
         schemaValidator,
         {
           CheckoutSessionMapper,
@@ -243,17 +261,13 @@ const serviceDependencies = runtimeDependencies.chain({
       PaymentLinkMapperTypes,
       PaymentLinkDtoTypes
     >,
-    factory: (
-      { EntityManager, TtlCache, OpenTelemetryCollector },
-      resolve,
-      context
-    ) =>
+    factory: ({ EntityManager, TtlCache, OtelCollector }, context, resolve) =>
       new BasePaymentLinkService(
         context.entityManagerOptions
           ? resolve('EntityManager', context)
           : EntityManager,
         TtlCache,
-        OpenTelemetryCollector,
+        OtelCollector,
         schemaValidator,
         {
           PaymentLinkMapper,
@@ -272,12 +286,12 @@ const serviceDependencies = runtimeDependencies.chain({
       PlanMapperTypes,
       PlanDtoTypes
     >,
-    factory: ({ EntityManager, OpenTelemetryCollector }, resolve, context) =>
+    factory: ({ EntityManager, OtelCollector }, context, resolve) =>
       new BasePlanService(
         context.entityManagerOptions
           ? resolve('EntityManager', context)
           : EntityManager,
-        OpenTelemetryCollector,
+        OtelCollector,
         schemaValidator,
         {
           PlanMapper,
@@ -295,12 +309,12 @@ const serviceDependencies = runtimeDependencies.chain({
       SubscriptionMapperTypes,
       SubscriptionDtoTypes
     >,
-    factory: ({ EntityManager, OpenTelemetryCollector }, resolve, context) =>
+    factory: ({ EntityManager, OtelCollector }, context, resolve) =>
       new BaseSubscriptionService(
         context.entityManagerOptions
           ? resolve('EntityManager', context)
           : EntityManager,
-        OpenTelemetryCollector,
+        OtelCollector,
         schemaValidator,
         {
           SubscriptionMapper,
@@ -308,6 +322,23 @@ const serviceDependencies = runtimeDependencies.chain({
           UpdateSubscriptionMapper
         }
       )
+  },
+  ComplianceDataService: {
+    lifetime: Lifetime.Singleton,
+    type: ComplianceDataService,
+    factory: ({ Orm, OtelCollector }) =>
+      new ComplianceDataService(Orm, OtelCollector, {
+        Subscription: 'partyId',
+        CheckoutSession: 'customerId',
+        PaymentLink: 'customerId',
+        BillingPortal: 'customerId'
+      })
+  },
+  RetentionService: {
+    lifetime: Lifetime.Singleton,
+    type: RetentionService,
+    factory: ({ Orm, OtelCollector }) =>
+      new RetentionService(Orm, OtelCollector)
   }
 });
 

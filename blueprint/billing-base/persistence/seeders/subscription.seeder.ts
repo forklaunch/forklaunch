@@ -6,6 +6,6 @@ import { subscription } from '../seed.data';
 export class SubscriptionSeeder extends Seeder {
   async run(em: EntityManager): Promise<void> {
     const createdSubscription = em.create(Subscription, subscription);
-    return em.persistAndFlush(createdSubscription);
+    await em.persist(createdSubscription).flush();
   }
 }

@@ -29,7 +29,7 @@ export const CreateSubscriptionSchema = <
   startDate: date,
   endDate: optional(date),
   status: string,
-  billingProvider: optional(enum_(BillingProviderEnum)),
+  billingProvider: enum_(BillingProviderEnum),
   stripeFields: type<StripeCreateSubscriptionDto<T>['stripeFields']>()
 });
 

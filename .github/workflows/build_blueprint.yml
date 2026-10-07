@@ -1,6 +1,7 @@
 name: Build Blueprint
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -16,17 +17,17 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v6
         with:
-          node-version: '23'
+          node-version: '24'
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v4
         with:
-          version: 8
+          version: 11.1.0
       - name: Install dependencies
         working-directory: ./blueprint
         run: pnpm install

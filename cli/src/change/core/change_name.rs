@@ -11,15 +11,18 @@ use super::clean_application::clean_application;
 use crate::{
     constants::Runtime,
     core::{
-        client_sdk::change_project_in_client_sdk,
-        docker::{Command, DependsOn, DockerBuild, DockerCompose, DockerService, Healthcheck},
+        client_sdk::{change_project_in_client_sdk, regenerate_client_sdk_compliance},
+        docker::{
+            Command, DependsOn, DockerBuild, DockerCompose, DockerService, HealthTest,
+            Healthcheck,
+        },
         manifest::{MutableManifestData, ProjectEntry, ProjectType},
-        move_template::{MoveTemplate, MoveTemplateType},
+        move_template::MoveTemplate,
         package_json::{
             application_package_json::ApplicationPackageJson,
             project_package_json::ProjectPackageJson, replace_project_in_workspace_definition,
         },
-        removal_template::{RemovalTemplate, RemovalTemplateType},
+        removal_template::RemovalTemplate,
         rendered_template::{RenderedTemplate, RenderedTemplatesCache},
         string::short_circuit_replacement,
         tsconfig::update_project_in_modules_tsconfig,
@@ -108,7 +111,6 @@ pub(crate) fn change_name_in_files(
             if relative_path.to_string_lossy().to_string() != new_file_name.clone() {
                 removal_templates.push(RemovalTemplate {
                     path: entry.path().to_path_buf(),
-                    r#type: RemovalTemplateType::File,
                 })
             }
         }
@@ -132,13 +134,13 @@ pub(crate) fn change_name(
     let existing_name = base_path.file_name().unwrap().to_string_lossy().to_string();
 
     // TODO: change the name of the package in client-sdk if service or worker (could just be simple find/replace)
-    let (runtime, app_name, mut project_entries, project_peer_topology) = match manifest_data {
+    let (runtime, app_name, projects, project_peer_topology) = match manifest_data {
         MutableManifestData::Service(manifest_data) => {
             manifest_data.service_name = name.to_string();
             (
                 manifest_data.runtime.as_mut(),
                 manifest_data.app_name.as_mut(),
-                manifest_data.projects.iter_mut(),
+                &mut manifest_data.projects,
                 manifest_data.project_peer_topology.values_mut(),
             )
         }
@@ -147,7 +149,7 @@ pub(crate) fn change_name(
             (
                 manifest_data.runtime.as_mut(),
                 manifest_data.app_name.as_mut(),
-                manifest_data.projects.iter_mut(),
+                &mut manifest_data.projects,
                 manifest_data.project_peer_topology.values_mut(),
             )
         }
@@ -156,7 +158,7 @@ pub(crate) fn change_name(
             (
                 manifest_data.runtime.as_mut(),
                 manifest_data.app_name.as_mut(),
-                manifest_data.projects.iter_mut(),
+                &mut manifest_data.projects,
                 manifest_data.project_peer_topology.values_mut(),
             )
         }
@@ -165,7 +167,7 @@ pub(crate) fn change_name(
             (
                 manifest_data.runtime.as_mut(),
                 manifest_data.app_name.as_mut(),
-                manifest_data.projects.iter_mut(),
+                &mut manifest_data.projects,
                 manifest_data.project_peer_topology.values_mut(),
             )
         }
@@ -181,7 +183,8 @@ pub(crate) fn change_name(
         rendered_templates_cache,
     )?;
 
-    let project_entry = project_entries
+    let project_entry = projects
+        .iter_mut()
         .find(|project| project.name == existing_name)
         .unwrap();
 
@@ -279,22 +282,27 @@ pub(crate) fn change_name(
                                         .collect(),
                                 ),
                             }),
-                            entrypoint: value.entrypoint.as_ref().map(|entrypoint| {
-                                entrypoint
-                                    .iter()
-                                    .map(|entrypoint| entrypoint.replace(&existing_name, &name))
-                                    .collect()
+                            entrypoint: value.entrypoint.as_ref().map(|entrypoint| match entrypoint {
+                                Command::Simple(s) => {
+                                    Command::Simple(s.replace(&existing_name, &name))
+                                }
+                                Command::Multiple(args) => Command::Multiple(
+                                    args
+                                        .iter()
+                                        .map(|arg| arg.replace(&existing_name, &name))
+                                        .collect(),
+                                ),
                             }),
                             healthcheck: value.healthcheck.as_ref().map(|healthcheck| {
                                 Healthcheck {
                                     test: match &healthcheck.test {
-                                        crate::core::docker::HealthTest::String(s) => {
-                                            crate::core::docker::HealthTest::String(
+                                        HealthTest::String(s) => {
+                                            HealthTest::String(
                                                 s.replace(&existing_name, &name),
                                             )
                                         }
-                                        crate::core::docker::HealthTest::List(list) => {
-                                            crate::core::docker::HealthTest::List(
+                                        HealthTest::List(list) => {
+                                            HealthTest::List(
                                                 list.iter()
                                                     .map(|item| item.replace(&existing_name, &name))
                                                     .collect(),
@@ -361,13 +369,23 @@ pub(crate) fn change_name(
         stdout,
     )?);
 
-    if project_entry.r#type == ProjectType::Service || project_entry.r#type == ProjectType::Worker {
+    let project_changed_type = project_entry.r#type.clone();
+    if project_changed_type == ProjectType::Service
+        || project_changed_type == ProjectType::Worker
+    {
         change_project_in_client_sdk(
             rendered_templates_cache,
             base_path.parent().unwrap(),
             &app_name,
             &existing_name,
             &name,
+        )?;
+
+        // project_entry borrow ends above; safe to re-borrow `projects` as &[_]
+        regenerate_client_sdk_compliance(
+            rendered_templates_cache,
+            base_path.parent().unwrap(),
+            projects,
         )?;
     }
 
@@ -381,6 +399,5 @@ pub(crate) fn change_name(
     Ok(MoveTemplate {
         path: base_path.to_path_buf(),
         target: base_path.parent().unwrap().join(name),
-        r#type: MoveTemplateType::Directory,
     })
 }

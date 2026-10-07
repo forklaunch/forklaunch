@@ -38,24 +38,28 @@ impl IntegrationsVisitor {
 
     fn map_dependency_to_integration_type(dep_name: &str) -> Option<String> {
         match dep_name {
-            // Database
-            "MikroORM" => Some("database".to_string()),
+            // Database (Orm is the new token name, MikroORM is legacy)
+            "Orm" | "MikroORM" => Some("database".to_string()),
 
-            // EntityManager is ignored - it's a scoped dependency of MikroORM
-            "EntityManager" => None,
+            // EntityMgr/EntityManager is ignored - it's a scoped dependency of Orm
+            "EntityMgr" | "EntityManager" => None,
 
             // Cache
             "RedisClient" | "Redis" | "RedisCache" | "TtlCache" => Some("cache".to_string()),
 
-            // Object Store
-            "S3ObjectStore" | "S3Client" | "S3" => Some("objectstore".to_string()),
+            // Object Store (ObjectStore is the new token name, S3ObjectStore is legacy)
+            "ObjectStore" | "S3ObjectStore" | "S3Client" | "S3" => {
+                Some("objectstore".to_string())
+            }
 
             // Message Queue
             "KafkaClient" | "Kafka" | "QueueClient" => Some("messagequeue".to_string()),
             "BullMQ" => Some("messagequeue".to_string()),
 
-            // Observability
-            "OpenTelemetryCollector" | "PrometheusClient" => Some("observability".to_string()),
+            // Observability (OtelCollector is the new token name, OpenTelemetryCollector is legacy)
+            "OtelCollector" | "OpenTelemetryCollector" | "PrometheusClient" => {
+                Some("observability".to_string())
+            }
 
             // Skip these - they're not integrations
             "SchemaValidator" | "Metrics" | "WorkerOptions" | "WorkerConsumer"
@@ -69,13 +73,13 @@ impl IntegrationsVisitor {
     fn map_dependency_to_technology(dep_name: &str) -> Option<String> {
         match dep_name {
             // Database - technology determined from mikro-orm.config.ts
-            "MikroORM" => None,
+            "Orm" | "MikroORM" => None,
 
             // Cache technologies
             "RedisClient" | "Redis" | "RedisCache" | "TtlCache" => Some("redis".to_string()),
 
             // Object Store technologies
-            "S3ObjectStore" | "S3Client" | "S3" => Some("s3".to_string()),
+            "ObjectStore" | "S3ObjectStore" | "S3Client" | "S3" => Some("s3".to_string()),
 
             // Message Queue technologies
             "BullMQ" => Some("bullmq".to_string()),
@@ -310,7 +314,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(config)
+    factory: () => new MikroORM(config)
   },
   RedisClient: {
     lifetime: Lifetime.Singleton,

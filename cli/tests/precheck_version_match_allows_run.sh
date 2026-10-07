@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Deliberately NOT the prebuilt binary. This test rewrites the CLI's own
+# version in Cargo.toml and needs the next invocation to reflect it, which
+# only a rebuild can do — a prebuilt binary has its version compiled in.
+FL="cargo run --release"
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,7 +23,7 @@ rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cd "$TEST_DIR"
 
-RUST_BACKTRACE=1 cargo run --release init application app \
+RUST_BACKTRACE=1 $FL init application app \
   -p . \
   -o modules \
   -d postgresql \
@@ -42,6 +46,6 @@ else
   sed -E -i 's/^cli_version[[:space:]]*=[[:space:]]*"[^"]*"/cli_version = "0.5.1"/' "$MANIFEST"
 fi
 
-RUST_BACKTRACE=1 cargo run --release depcheck -p .
+RUST_BACKTRACE=1 $FL depcheck -p .
 
 echo "OK: precheck version match allowed command to run"

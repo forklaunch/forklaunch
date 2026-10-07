@@ -59,7 +59,7 @@ impl CliCommand for ExportCommand {
 
         match result {
             Ok(exported_services) => {
-                log_header!(stdout, Color::Green, "[OK] Successfully exported {} OpenAPI specification(s)", exported_services.len());
+                log_header!(stdout, Color::Green, "Successfully exported {} OpenAPI specification(s)", exported_services.len());
                 writeln!(stdout, "  Output: {}", output_path.display())?;
 
                 for service_name in &exported_services {
@@ -67,7 +67,7 @@ impl CliCommand for ExportCommand {
                 }
             }
             Err(e) => {
-                log_error!(stdout, "[ERROR] Failed to export OpenAPI specifications");
+                log_error!(stdout, "Failed to export OpenAPI specifications");
                 return Err(e);
             }
         }

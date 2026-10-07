@@ -1,0 +1,1 @@
+../../../iam-base/api/routes/discovery.routes.ts

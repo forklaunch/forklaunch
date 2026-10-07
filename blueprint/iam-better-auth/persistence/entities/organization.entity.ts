@@ -1,29 +1,19 @@
-import { SqlBaseEntity } from '@forklaunch/blueprint-core';
-import { Collection, Entity, OneToMany, Property } from '@mikro-orm/core';
-import { OrganizationStatus } from '../../domain/enum/organizationStatus.enum';
-import type { User } from './user.entity';
+import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
+import type { InferEntity } from '@mikro-orm/core';
+import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 
-// Experiment with importing types from another service and see if it generates entity. The goal is to not generate an entity, but to have an object serialization
-@Entity()
-export class Organization extends SqlBaseEntity {
-  @Property()
-  name!: string;
+export const Organization = defineComplianceEntity({
+  name: 'Organization',
+  properties: {
+    ...sqlBaseProperties,
+    name: fp.string().compliance('none'),
+    slug: fp.string().unique().compliance('none'),
+    logo: fp.string().nullable().compliance('none'),
+    metadata: fp.json<unknown>().nullable().compliance('none'),
+    domain: fp.string().nullable().compliance('none'),
+    subscription: fp.string().nullable().compliance('none'),
+    status: fp.string().nullable().compliance('none')
+  }
+});
 
-  @OneToMany(
-    'User',
-    (user: { organization: Organization }) => user.organization
-  )
-  users = new Collection<User>(this);
-
-  @Property()
-  domain!: string;
-
-  @Property({ nullable: true })
-  logoUrl?: string;
-
-  @Property()
-  subscription!: string;
-
-  @Property()
-  status: OrganizationStatus = OrganizationStatus.ACTIVE;
-}
+export type Organization = InferEntity<typeof Organization>;

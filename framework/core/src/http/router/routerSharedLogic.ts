@@ -1,7 +1,11 @@
 import { isRecord } from '@forklaunch/common';
 import { AnySchemaValidator, SchemaValidator } from '@forklaunch/validator';
+import { hasPermissionChecks } from '../guards/hasPermissionChecks';
+import { hasRoleChecks } from '../guards/hasRoleChecks';
+import { hasScopeChecks } from '../guards/hasScopeChecks';
 import { hasVersionedSchema } from '../guards/hasVersionedSchema';
 import { isExpressLikeSchemaHandler } from '../guards/isExpressLikeSchemaHandler';
+import { isHmacMethod } from '../guards/isHmacMethod';
 import { isHttpContractDetails } from '../guards/isHttpContractDetails';
 import { isPathParamHttpContractDetails } from '../guards/isPathParamContractDetails';
 import { isTypedHandler } from '../guards/isTypedHandler';
@@ -465,6 +469,53 @@ export function validateContractDetails<
     throw new Error('Contract details are malformed for route definition');
   }
 
+  // Validate access field and auth narrowing (runtime safety net for JS users)
+  const access = (contractDetails as Record<string, unknown>)['access'] as
+    string | undefined;
+  const auth = (contractDetails as Record<string, unknown>)['auth'];
+
+  if (access != null) {
+    const validAccess = ['public', 'authenticated', 'protected', 'internal'];
+    if (!validAccess.includes(access)) {
+      throw new Error(
+        `Route '${contractDetails.name}': invalid access level '${access}'. ` +
+          `Must be one of: ${validAccess.join(', ')}`
+      );
+    }
+
+    if (access === 'public' && auth != null) {
+      throw new Error(
+        `Route '${contractDetails.name}': access 'public' cannot have auth configured`
+      );
+    }
+
+    if (access === 'protected') {
+      if (!auth) {
+        throw new Error(
+          `Route '${contractDetails.name}': access 'protected' requires auth with roles, permissions, or scope`
+        );
+      }
+      if (
+        !hasPermissionChecks(auth) &&
+        !hasRoleChecks(auth) &&
+        !hasScopeChecks(auth)
+      ) {
+        throw new Error(
+          `Route '${contractDetails.name}': access 'protected' requires at least one of ` +
+            `allowedRoles, forbiddenRoles, allowedPermissions, forbiddenPermissions, or requiredScope`
+        );
+      }
+    }
+
+    if (access === 'internal') {
+      if (!auth || !isHmacMethod(auth)) {
+        throw new Error(
+          `Route '${contractDetails.name}': access 'internal' requires HMAC auth`
+        );
+      }
+    }
+  }
+
   if (contractDetails.versions) {
     const parserTypes = Object.values(contractDetails.versions).map(
       (version) => discriminateBody(schemaValidator, version.body)?.parserType
@@ -513,7 +564,7 @@ export function processContractDetailsIO<
     requestSchema: schemaValidator.compile(
       schemaValidator.schemify({
         ...(routeParams != null
-          ? { params: routeParams as unknown as ParamsDictionary }
+          ? { params: routeParams as ParamsDictionary }
           : { params: schemaValidator.unknown as ParamsObject<SV> }),
         ...(contractDetailsIO.requestHeaders != null
           ? { headers: contractDetailsIO.requestHeaders }
@@ -590,8 +641,7 @@ export function compileRouteSchemas<
   const validator = schemaValidator as SV & SchemaValidator;
   let requestSchema: unknown | Record<string, unknown>;
   let responseSchemas:
-    | ResponseCompiledSchema
-    | Record<string, ResponseCompiledSchema>;
+    ResponseCompiledSchema | Record<string, ResponseCompiledSchema>;
 
   if (hasVersionedSchema(contractDetails)) {
     requestSchema = {};
@@ -605,7 +655,7 @@ export function compileRouteSchemas<
         } = processContractDetailsIO(
           validator,
           versionedContractDetails,
-          contractDetails.params as unknown as P
+          contractDetails.params as P
         );
 
         if (isRecord(requestSchema)) {
@@ -659,7 +709,7 @@ export function compileRouteSchemas<
             ? contractDetails.responses
             : (validator.unknown as ResponsesObject<SV>)
       },
-      contractDetails.params as unknown as P
+      contractDetails.params as P
     );
 
     requestSchema = unversionedRequestSchema;
@@ -716,8 +766,7 @@ export function resolveRouteMiddlewares<
   >;
   requestSchema: unknown;
   responseSchemas:
-    | ResponseCompiledSchema
-    | Record<string, ResponseCompiledSchema>;
+    ResponseCompiledSchema | Record<string, ResponseCompiledSchema>;
   openTelemetryCollector?: OpenTelemetryCollector<MetricsDefinition>;
   routerOptions?: ExpressLikeRouterOptions<SV, RouterSession>;
   postEnrichMiddleware?: RouterHandler[];
@@ -804,7 +853,7 @@ export function resolveRouteMiddlewares<
       RouterSession
     >,
     ...handlersCopy
-  ] as unknown as RouterHandler[];
+  ] as RouterHandler[];
 
   return {
     middlewares,

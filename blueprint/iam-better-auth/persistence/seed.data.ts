@@ -4,65 +4,14 @@
  * This is an auto-generated file. Modifications are encouraged but may inhibit automated upgrades.
  */
 
-import { PERMISSIONS, ROLES } from '@forklaunch/blueprint-core';
 import { RequiredEntityData } from '@mikro-orm/core';
 import { v4 as uuidv4 } from 'uuid';
-import { OrganizationStatus } from '../domain/enum/organizationStatus.enum';
-import { Organization } from '../persistence/entities/organization.entity';
-import { Permission } from '../persistence/entities/permission.entity';
-import { Role } from '../persistence/entities/role.entity';
 import { User } from '../persistence/entities/user.entity';
 import { Account } from './entities/account.entity';
 import { Session } from './entities/session.entity';
 import { Verification } from './entities/verification.entity';
 
-//! Begin seed data - RBAC Permissions
-export const platformReadPermission = {
-  id: uuidv4(),
-  slug: PERMISSIONS.PLATFORM_READ,
-  createdAt: new Date(),
-  updatedAt: new Date()
-} satisfies RequiredEntityData<Permission>;
-
-export const platformWritePermission = {
-  id: uuidv4(),
-  slug: PERMISSIONS.PLATFORM_WRITE,
-  createdAt: new Date(),
-  updatedAt: new Date()
-} satisfies RequiredEntityData<Permission>;
-
-//! RBAC Roles
-export const viewerRole = {
-  id: uuidv4(),
-  name: ROLES.VIEWER,
-  permissions: [platformReadPermission.id],
-  createdAt: new Date(),
-  updatedAt: new Date()
-} satisfies RequiredEntityData<Role>;
-
-export const editorRole = {
-  id: uuidv4(),
-  name: ROLES.EDITOR,
-  permissions: [platformReadPermission.id, platformWritePermission.id],
-  createdAt: new Date(),
-  updatedAt: new Date()
-} satisfies RequiredEntityData<Role>;
-
-export const adminRole = {
-  id: uuidv4(),
-  name: ROLES.ADMIN,
-  permissions: [platformReadPermission.id, platformWritePermission.id],
-  createdAt: new Date(),
-  updatedAt: new Date()
-} satisfies RequiredEntityData<Role>;
-
-export const systemRole = {
-  id: uuidv4(),
-  name: ROLES.SYSTEM,
-  permissions: [platformReadPermission.id, platformWritePermission.id],
-  createdAt: new Date(),
-  updatedAt: new Date()
-} satisfies RequiredEntityData<Role>;
+//! Begin seed data
 
 export const user = {
   id: uuidv4(),
@@ -71,20 +20,8 @@ export const user = {
   name: 'test',
   firstName: 'Test',
   lastName: 'User',
-  roles: [adminRole.id],
-  createdAt: new Date(),
-  updatedAt: new Date()
+  providerFields: null
 } satisfies RequiredEntityData<User>;
-
-export const organization = {
-  name: 'Test',
-  users: [user.id],
-  subscription: 'test',
-  domain: 'test.com',
-  status: OrganizationStatus.ACTIVE,
-  createdAt: new Date(),
-  updatedAt: new Date()
-} satisfies RequiredEntityData<Organization>;
 
 export const account = {
   user: user.id,
@@ -93,9 +30,7 @@ export const account = {
   accessToken: 'test',
   refreshToken: 'test',
   accessTokenExpiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-  refreshTokenExpiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-  createdAt: new Date(),
-  updatedAt: new Date()
+  refreshTokenExpiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24)
 } satisfies RequiredEntityData<Account>;
 
 export const session = {
@@ -103,15 +38,11 @@ export const session = {
   token: 'test',
   expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
   ipAddress: '127.0.0.1',
-  userAgent: 'test',
-  createdAt: new Date(),
-  updatedAt: new Date()
+  userAgent: 'test'
 } satisfies RequiredEntityData<Session>;
 
 export const verification = {
   identifier: 'test',
   value: 'test',
-  expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-  createdAt: new Date(),
-  updatedAt: new Date()
+  expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24)
 } satisfies RequiredEntityData<Verification>;

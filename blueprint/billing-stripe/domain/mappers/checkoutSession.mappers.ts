@@ -16,15 +16,17 @@ export const CreateCheckoutSessionMapper = requestMapper({
       em: EntityManager,
       providerFields: Stripe.Checkout.Session
     ) => {
-      return CheckoutSession.create(
-        {
-          ...dto,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          providerFields
-        },
-        em
-      );
+      return em.create(CheckoutSession, {
+        customerId: dto.customerId,
+        paymentMethods: dto.paymentMethods,
+        currency: dto.currency,
+        uri: dto.uri,
+        successRedirectUri: dto.successRedirectUri ?? null,
+        cancelRedirectUri: dto.cancelRedirectUri ?? null,
+        expiresAt: dto.expiresAt,
+        status: dto.status,
+        providerFields
+      });
     }
   }
 });
@@ -39,13 +41,14 @@ export const UpdateCheckoutSessionMapper = requestMapper({
       em: EntityManager,
       providerFields: Stripe.Checkout.Session
     ) => {
-      return CheckoutSession.update(
-        {
-          ...dto,
-          providerFields
-        },
-        em
-      );
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { stripeFields, ...rest } = dto;
+      const entity = await em.findOneOrFail(CheckoutSession, { id: rest.id });
+      em.assign(entity, {
+        ...rest,
+        providerFields
+      });
+      return entity;
     }
   }
 });
@@ -55,9 +58,11 @@ export const CheckoutSessionMapper = responseMapper({
   schema: CheckoutSessionSchemas.CheckoutSessionSchema(StatusEnum),
   entity: CheckoutSession,
   mapperDefinition: {
-    toDto: async (entity: CheckoutSession) => {
+    toDto: async (entity) => {
       return {
-        ...(await entity.read()),
+        ...entity,
+        successRedirectUri: entity.successRedirectUri ?? undefined,
+        cancelRedirectUri: entity.cancelRedirectUri ?? undefined,
         stripeFields: entity.providerFields
       };
     }

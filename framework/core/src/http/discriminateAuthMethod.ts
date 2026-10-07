@@ -51,7 +51,16 @@ export async function getCachedJwks(jwksPublicKeyUrl: string): Promise<JWK[]> {
     return cachedJwks.value;
   } else {
     const jwksResponse = await fetch(jwksPublicKeyUrl);
-    const jwks = (await jwksResponse.json()).keys;
+    const text = await jwksResponse.text();
+    if (!text) {
+      if (cachedJwks.value) {
+        return cachedJwks.value;
+      }
+      throw new Error(
+        `JWKS endpoint returned empty response (status ${jwksResponse.status})`
+      );
+    }
+    const jwks = (JSON.parse(text) as { keys: JWK[] }).keys;
     cachedJwks.value = jwks;
     cachedJwks.lastUpdated = new Date();
     cachedJwks.ttl =
@@ -188,17 +197,23 @@ export async function discriminateAuthMethod<
         jwks = [jwt.jwksPublicKey];
       }
       verificationFunction = async (token) => {
+        // Keep the last failure so the middleware can log WHY (expired vs
+        // bad signature) instead of a bare "invalid token". The caller's
+        // catch maps any throw to the same 403 as an undefined return.
+        let lastError: unknown;
         for (const key of jwks) {
           try {
             const { payload } = await jwtVerify(token, key);
             return payload;
-          } catch {
+          } catch (error) {
+            lastError = error;
             cachedJwks.value = null;
             cachedJwks.lastUpdated = null;
             cachedJwks.ttl = DEFAULT_TTL;
             continue;
           }
         }
+        if (lastError !== undefined) throw lastError;
       };
     }
     authMethod = {

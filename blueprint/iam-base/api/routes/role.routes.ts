@@ -11,7 +11,7 @@ import {
   updateRole
 } from '../controllers/role.controller';
 
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 
 export const roleRouter = forklaunchRouter(
   '/role',

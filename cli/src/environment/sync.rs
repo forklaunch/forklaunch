@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::Write, path::Path};
+use std::{collections::{HashMap, HashSet}, env, fs, io::Write, path::{Path, PathBuf}};
 
 use anyhow::{Context, Result};
 use clap::{ArgMatches, Command};
@@ -13,6 +13,8 @@ use crate::{
             add_env_vars_to_file, find_workspace_root, get_modules_path, get_target_env_file,
             is_env_var_defined,
         },
+        env_scope::is_pulumi_injected,
+        env_template::generate_env_templates,
         manifest::application::ApplicationManifestData,
         rendered_template::{RenderedTemplatesCache, write_rendered_templates},
     },
@@ -51,12 +53,24 @@ impl CliCommand for SyncCommand {
             log_info!(stdout, "Syncing environment variables...");
         }
 
-        let current_dir = std::env::current_dir()?;
+        let current_dir = env::current_dir()?;
         let workspace_root = find_workspace_root(&current_dir)?;
         let modules_path = get_modules_path(&workspace_root)?;
 
         writeln!(stdout, "Workspace: {}", workspace_root.display())?;
         writeln!(stdout, "Modules path: {}", modules_path.display())?;
+
+        let manifest_path = workspace_root.join(".forklaunch").join("manifest.toml");
+        let manifest_content = fs::read_to_string(&manifest_path)
+            .with_context(|| format!("Failed to read manifest: {}", manifest_path.display()))?;
+        let manifest_data: ApplicationManifestData =
+            toml::from_str(&manifest_content)
+                .with_context(|| ERROR_FAILED_TO_PARSE_MANIFEST)?;
+        let project_names: Vec<String> = manifest_data
+            .projects
+            .iter()
+            .map(|p| p.name.clone())
+            .collect();
 
         let rendered_templates_cache = RenderedTemplatesCache::new();
         let project_env_vars = find_all_env_vars(&modules_path, &rendered_templates_cache)?;
@@ -71,9 +85,14 @@ impl CliCommand for SyncCommand {
 
         for (project_name, env_vars) in &project_env_vars {
             let project_path = modules_path.join(project_name);
-            let mut missing_set = std::collections::HashSet::new();
+            let mut missing_set = HashSet::new();
 
             for env_var in env_vars {
+                // Skip Pulumi-injected vars (inter-service URLs, auth URLs) —
+                // these are injected at deploy time
+                if is_pulumi_injected(&env_var.var_name, &project_names) {
+                    continue;
+                }
                 if !is_env_var_defined(&project_path, &env_var.var_name)? {
                     missing_set.insert(env_var.var_name.clone());
                 }
@@ -99,14 +118,8 @@ impl CliCommand for SyncCommand {
             execute_sync_plan(&sync_plan, &mut stdout)?;
 
             // Generate .env.template files
-            let manifest_path = workspace_root.join(".forklaunch").join("manifest.toml");
-            let manifest_content = std::fs::read_to_string(&manifest_path)
-                .with_context(|| format!("Failed to read manifest: {}", manifest_path.display()))?;
-            let manifest_data: ApplicationManifestData =
-                toml::from_str(&manifest_content)
-                    .with_context(|| ERROR_FAILED_TO_PARSE_MANIFEST)?;
             let mut env_template_cache = RenderedTemplatesCache::new();
-            crate::core::env_template::generate_env_templates(
+            generate_env_templates(
                 &modules_path,
                 &manifest_data,
                 &mut env_template_cache,
@@ -121,7 +134,7 @@ impl CliCommand for SyncCommand {
             log_ok!(stdout, "\nEnvironment sync completed!");
             writeln!(
                 stdout,
-                "Remember to fill in the actual values for the added variables."
+                "Remember to fill in the actual values for the added variables. Empty vars can be satisfied with \"placeholder\"."
             )?;
         } else {
             log_info!(
@@ -138,8 +151,8 @@ impl CliCommand for SyncCommand {
 struct SyncPlan {
     root_vars: Vec<String>,
     project_vars: HashMap<String, Vec<String>>,
-    root_env_file: std::path::PathBuf,
-    project_env_files: HashMap<String, std::path::PathBuf>,
+    root_env_file: PathBuf,
+    project_env_files: HashMap<String, PathBuf>,
 }
 
 fn create_sync_plan(

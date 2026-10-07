@@ -187,6 +187,10 @@ export class ForklaunchWebSocketServer<
   ): ForklaunchWebSocket<SV, ServerEventSchema<SV, ES>> {
     Object.setPrototypeOf(ws, ForklaunchWebSocket.prototype);
 
+    // Object.setPrototypeOf above grafts the Forklaunch prototype onto the raw
+    // ws socket, so this is true at runtime — but the decorated shape has
+    // members the bare socket does not, so the types do not overlap and a
+    // direct assertion is refused. The hop is what carries it across that gap.
     const enhancedWs = ws as unknown as ForklaunchWebSocket<
       SV,
       ServerEventSchema<SV, ES>

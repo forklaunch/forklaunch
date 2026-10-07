@@ -2,12 +2,17 @@ import {
   array,
   function_,
   number,
+  optional,
   schemaValidator,
   string,
   type
 } from '@forklaunch/blueprint-core';
 import { Metrics, metrics } from '@forklaunch/blueprint-monitoring';
 import { OpenTelemetryCollector } from '@forklaunch/core/http';
+import {
+  FieldEncryptor,
+  wrapEmWithTenantContext
+} from '@forklaunch/core/persistence';
 import {
   createConfigInjector,
   getEnvVar,
@@ -30,12 +35,13 @@ import { RedisWorkerProducer } from '@forklaunch/implementation-worker-redis/pro
 import { RedisWorkerSchemas } from '@forklaunch/implementation-worker-redis/schemas';
 import { RedisWorkerOptions } from '@forklaunch/implementation-worker-redis/types';
 import { RedisTtlCache } from '@forklaunch/infrastructure-redis';
-import { S3ObjectStore } from '@forklaunch/infrastructure-s3';
+import { S3ObjectStore, s3ClientConfig } from '@forklaunch/infrastructure-s3';
 import {
   WorkerFailureHandler,
   WorkerProcessFunction
 } from '@forklaunch/interfaces-worker/types';
-import { EntityManager, ForkOptions, MikroORM } from '@mikro-orm/core';
+import { ForkOptions } from '@mikro-orm/core';
+import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
 import mikroOrmOptionsConfig from './mikro-orm.config';
 import { SampleWorkerEventRecord } from './persistence/entities';
 import { BaseSampleWorkerService } from './services/sampleWorker.service';
@@ -140,17 +146,17 @@ const environmentConfig = configInjector.chain({
   },
   S3_REGION: {
     lifetime: Lifetime.Singleton,
-    type: string,
+    type: optional(string),
     value: getEnvVar('S3_REGION')
   },
   S3_ACCESS_KEY_ID: {
     lifetime: Lifetime.Singleton,
-    type: string,
+    type: optional(string),
     value: getEnvVar('S3_ACCESS_KEY_ID')
   },
   S3_SECRET_ACCESS_KEY: {
     lifetime: Lifetime.Singleton,
-    type: string,
+    type: optional(string),
     value: getEnvVar('S3_SECRET_ACCESS_KEY')
   },
   S3_BUCKET: {
@@ -160,22 +166,27 @@ const environmentConfig = configInjector.chain({
   },
   S3_URL: {
     lifetime: Lifetime.Singleton,
-    type: string,
+    type: optional(string),
     value: getEnvVar('S3_URL')
   },
   HMAC_SECRET_KEY: {
     lifetime: Lifetime.Singleton,
     type: string,
     value: getEnvVar('HMAC_SECRET_KEY')
+  },
+  ENCRYPTION_KEY: {
+    lifetime: Lifetime.Singleton,
+    type: string,
+    value: getEnvVar('ENCRYPTION_KEY')
   }
 });
 
 //! defines the runtime dependencies for the application
 const runtimeDependencies = environmentConfig.chain({
-  MikroORM: {
+  Orm: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
   RedisWorkerOptions: {
     lifetime: Lifetime.Singleton,
@@ -220,7 +231,7 @@ const runtimeDependencies = environmentConfig.chain({
       interval: 5000
     }
   },
-  OpenTelemetryCollector: {
+  OtelCollector: {
     lifetime: Lifetime.Singleton,
     type: OpenTelemetryCollector<Metrics>,
     factory: ({ OTEL_SERVICE_NAME, OTEL_LEVEL }) =>
@@ -233,16 +244,19 @@ const runtimeDependencies = environmentConfig.chain({
   TtlCache: {
     lifetime: Lifetime.Singleton,
     type: RedisTtlCache,
-    factory: ({ REDIS_URL, OpenTelemetryCollector, OTEL_LEVEL }) =>
+    factory: ({ REDIS_URL, OtelCollector, OTEL_LEVEL, ENCRYPTION_KEY }) =>
       new RedisTtlCache(
         60 * 60 * 1000,
-        OpenTelemetryCollector,
+        OtelCollector,
         {
           url: REDIS_URL
         },
         {
           enabled: true,
           level: OTEL_LEVEL || 'info'
+        },
+        {
+          encryptor: new FieldEncryptor(ENCRYPTION_KEY)
         }
       )
   },
@@ -250,39 +264,48 @@ const runtimeDependencies = environmentConfig.chain({
     lifetime: Lifetime.Singleton,
     type: S3ObjectStore,
     factory: ({
-      OpenTelemetryCollector,
+      OtelCollector,
       OTEL_LEVEL,
       S3_REGION,
       S3_ACCESS_KEY_ID,
       S3_SECRET_ACCESS_KEY,
       S3_BUCKET,
-      S3_URL
+      S3_URL,
+      ENCRYPTION_KEY
     }) =>
       new S3ObjectStore(
-        OpenTelemetryCollector,
+        OtelCollector,
         {
           bucket: S3_BUCKET,
-          clientConfig: {
-            endpoint: S3_URL,
+          // Deployed on ForkLaunch only the region is set: credentials come
+          // from the worker's task role. Keys and S3_URL are for local MinIO.
+          clientConfig: s3ClientConfig({
+            url: S3_URL,
             region: S3_REGION,
-            credentials: {
-              accessKeyId: S3_ACCESS_KEY_ID,
-              secretAccessKey: S3_SECRET_ACCESS_KEY
-            },
-            forcePathStyle: true // Required for MinIO and path-style S3
-          }
+            accessKeyId: S3_ACCESS_KEY_ID,
+            secretAccessKey: S3_SECRET_ACCESS_KEY
+          })
         },
         {
           enabled: true,
           level: OTEL_LEVEL || 'info'
+        },
+        {
+          encryptor: new FieldEncryptor(ENCRYPTION_KEY)
         }
       )
   },
   EntityManager: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
-    factory: ({ MikroORM }, _resolve, context) =>
-      MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined)
+    factory: (
+      { Orm },
+      context: { entityManagerOptions?: ForkOptions; tenantId?: string }
+    ) =>
+      wrapEmWithTenantContext(
+        Orm.em.fork(context?.entityManagerOptions),
+        context?.tenantId
+      ) as EntityManager
   }
 });
 
@@ -369,7 +392,7 @@ const serviceDependencies = runtimeDependencies.chain({
       type<KafkaWorkerConsumer<SampleWorkerEventRecord, KafkaWorkerOptions>>()
     ),
     factory:
-      ({ SAMPLE_WORKER_QUEUE, KafkaWorkerOptions, OpenTelemetryCollector }) =>
+      ({ SAMPLE_WORKER_QUEUE, KafkaWorkerOptions, OtelCollector }) =>
       (
         processEventsFunction: WorkerProcessFunction<SampleWorkerEventRecord>,
         failureHandler: WorkerFailureHandler<SampleWorkerEventRecord>
@@ -379,7 +402,7 @@ const serviceDependencies = runtimeDependencies.chain({
           KafkaWorkerOptions,
           processEventsFunction,
           failureHandler,
-          OpenTelemetryCollector
+          OtelCollector
         )
   },
   SampleWorkerDatabaseProducer: {
@@ -411,12 +434,14 @@ const serviceDependencies = runtimeDependencies.chain({
     lifetime: Lifetime.Scoped,
     type: BaseSampleWorkerService,
     factory: ({
+      EntityManager,
       SampleWorkerDatabaseProducer,
       SampleWorkerBullMqProducer,
       SampleWorkerKafkaProducer,
       SampleWorkerRedisProducer
     }) =>
       new BaseSampleWorkerService(
+        EntityManager,
         SampleWorkerDatabaseProducer,
         SampleWorkerBullMqProducer,
         SampleWorkerRedisProducer,

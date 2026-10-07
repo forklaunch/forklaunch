@@ -1,14 +1,32 @@
+# Grafana datasources — LOCAL ONLY.
+#
+# Production runs no Grafana; the ForkLaunch dashboard queries the backends
+# directly. This file exists so a developer running the local stack gets
+# working dashboards.
+#
+# Loki, Tempo and Mimir all run with multitenancy enabled here, matching
+# production, so every datasource must send an X-Scope-OrgID header. Without it
+# reads fail with "no org id". The local tenant is `local`, and it must match
+# the value the OTel collector writes with in otel-collector-config.yaml.
+#
+# Mimir speaks the Prometheus query API, so `type: prometheus` is correct — it
+# serves that API under the /prometheus prefix.
+
 apiVersion: 1
 
 datasources:
-  - name: Prometheus
+  - name: Mimir
     type: prometheus
-    uid: DS_PROMETHEUS
+    uid: DS_MIMIR
     access: proxy
-    url: http://prometheus:9090
+    url: http://mimir:9090/prometheus
     jsonData:
       httpMethod: POST
       manageAlerts: true
+      prometheusType: Mimir
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: local
     version: 1
     editable: true
 
@@ -19,6 +37,9 @@ datasources:
     url: http://loki:3100
     jsonData:
       maxLines: 1000
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: local
     version: 1
     editable: true
 
@@ -29,7 +50,10 @@ datasources:
     url: http://tempo:3200
     jsonData:
       httpMethod: GET
+      httpHeaderName1: X-Scope-OrgID
       serviceMap:
-        datasourceUid: DS_PROMETHEUS
+        datasourceUid: DS_MIMIR
+    secureJsonData:
+      httpHeaderValue1: local
     version: 1
     editable: true

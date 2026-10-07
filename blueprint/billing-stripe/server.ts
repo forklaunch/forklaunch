@@ -4,16 +4,23 @@ import {
   ROLES,
   schemaValidator
 } from '@forklaunch/blueprint-core';
+import { setupRls, setupTenantFilter } from '@forklaunch/core/persistence';
 import { billingPortalRouter } from './api/routes/billingPortal.routes';
 import { checkoutSessionRouter } from './api/routes/checkoutSession.routes';
 import { paymentLinkRouter } from './api/routes/paymentLink.routes';
 import { planRouter } from './api/routes/plan.routes';
 import { subscriptionRouter } from './api/routes/subscription.routes';
+import { webhookRouter } from './api/routes/webhook.routes';
+import { complianceRouter } from './api/routes/compliance.routes';
+import { platformEventsRouter } from './api/routes/platformEvents.routes';
 import { ci, tokens } from './bootstrapper';
 import { billingSdkClient } from './sdk';
 
 //! resolves the openTelemetryCollector from the configuration
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
+const orm = ci.resolve(tokens.Orm);
+setupTenantFilter(orm, { logger: openTelemetryCollector });
+setupRls(orm, { logger: openTelemetryCollector });
 
 //! creates an instance of forklaunchExpress
 const app = forklaunchExpress(schemaValidator, openTelemetryCollector, {
@@ -43,6 +50,9 @@ app.use(checkoutSessionRouter);
 app.use(paymentLinkRouter);
 app.use(planRouter);
 app.use(subscriptionRouter);
+app.use(webhookRouter);
+app.use(complianceRouter);
+app.use(platformEventsRouter);
 
 // //! registers the sdk client
 app.registerSdks(billingSdkClient);

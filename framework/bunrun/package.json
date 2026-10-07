@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/bunrun",
-  "version": "0.0.23",
+  "version": "1.2.26",
   "description": "Bun-native TypeScript workspace script runner with topological ordering",
   "keywords": [
     "bun",
@@ -29,7 +29,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsgo --noEmit && tsup",
+    "build": "tsc --noEmit && tsup",
     "check": "depcheck",
     "clean": "rm -rf dist pnpm.lock.yaml node_modules",
     "docs": "typedoc --out docs *",
@@ -41,10 +41,9 @@
     "test": "vitest --passWithNoTests"
   },
   "devDependencies": {
-    "@types/node": "^25.3.0",
-    "@typescript/native-preview": "7.0.0-dev.20260223.1",
+    "@types/node": "^26.6.3",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3"
+    "typescript": "^7.0.2"
   },
   "engines": {
     "bun": ">=1.1.0"

@@ -16,10 +16,35 @@ pub(crate) enum BillingConfig {
     StripeBilling,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum EcommerceConfig {
+    StripeEcommerce,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum MessagingConfig {
+    BaseMessaging,
+    TwilioMessaging,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum CacConfig {
+    BaseCac,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum RelayConfig {
+    Relay,
+}
+
 #[derive(Debug, PartialEq, Eq, Default)]
 pub(crate) struct ModuleConfig {
     pub(crate) iam: Option<IamConfig>,
     pub(crate) billing: Option<BillingConfig>,
+    pub(crate) ecommerce: Option<EcommerceConfig>,
+    pub(crate) messaging: Option<MessagingConfig>,
+    pub(crate) cac: Option<CacConfig>,
+    pub(crate) relay: Option<RelayConfig>,
 }
 
 pub(crate) fn validate_modules(
@@ -41,6 +66,21 @@ pub(crate) fn validate_modules(
             }
             Module::StripeBilling => {
                 global_module_config.billing = Some(BillingConfig::StripeBilling);
+            }
+            Module::StripeEcommerce => {
+                global_module_config.ecommerce = Some(EcommerceConfig::StripeEcommerce);
+            }
+            Module::BaseMessaging => {
+                global_module_config.messaging = Some(MessagingConfig::BaseMessaging);
+            }
+            Module::TwilioMessaging => {
+                global_module_config.messaging = Some(MessagingConfig::TwilioMessaging);
+            }
+            Module::BaseCac => {
+                global_module_config.cac = Some(CacConfig::BaseCac);
+            }
+            Module::Relay => {
+                global_module_config.relay = Some(RelayConfig::Relay);
             }
         }
 

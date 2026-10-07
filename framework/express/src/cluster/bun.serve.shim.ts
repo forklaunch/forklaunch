@@ -362,6 +362,7 @@ export function serveExpress(
 
         strictContentLength: false,
         writeProcessing: () => {},
+        writeInformation: () => {},
         chunkedEncoding: false,
         shouldKeepAlive: true,
         useChunkedEncodingByDefault: true,
@@ -390,6 +391,8 @@ export function serveExpress(
         _sent100: false,
         _expect_continue: false,
         _maxRequestsPerSocket: 0,
+        // The shim builds the request object field by field below; this seeds the
+        // property Express' `Request` declares as required before it is filled in.
         req: undefined as unknown as ExpressRequest,
 
         writable: true,
@@ -401,71 +404,6 @@ export function serveExpress(
         [Symbol.asyncDispose]: async () => {
           cleanup();
         },
-        // compose: (<T extends NodeJS.ReadableStream>(
-        //   stream:
-        //     | T
-        //     | ((source: unknown) => void)
-        //     | Iterable<T>
-        //     | AsyncIterable<T>
-        // ): T => {
-        //   if (stream && typeof stream === 'object' && 'pipe' in stream) {
-        //     return stream as T;
-        //   }
-
-        //   if (typeof stream === 'function') {
-        //     const transform = new Transform({
-        //       objectMode: true,
-        //       transform(chunk, encoding, callback) {
-        //         try {
-        //           (stream as (source: unknown) => void)(chunk);
-        //           callback(null, chunk);
-        //         } catch (error) {
-        //           callback(error as Error);
-        //         }
-        //       }
-        //     });
-        //     return transform as unknown as T;
-        //   }
-
-        //   if (
-        //     stream &&
-        //     typeof stream === 'object' &&
-        //     Symbol.iterator in stream
-        //   ) {
-        //     const iterator = (stream as Iterable<unknown>)[Symbol.iterator]();
-        //     const first = iterator.next();
-        //     if (
-        //       !first.done &&
-        //       first.value &&
-        //       typeof first.value === 'object' &&
-        //       'pipe' in first.value
-        //     ) {
-        //       return first.value as T;
-        //     }
-        //   }
-
-        //   if (
-        //     stream &&
-        //     typeof stream === 'object' &&
-        //     Symbol.asyncIterator in stream
-        //   ) {
-        //     const readable = new Readable({
-        //       objectMode: true,
-        //       read() {
-        //         this.push(null);
-        //       }
-        //     });
-        //     return readable as unknown as T;
-        //   }
-
-        //   const emptyStream = new Readable({
-        //     read() {
-        //       this.push(null);
-        //     }
-        //   }) as unknown as T;
-
-        //   return emptyStream;
-        // }) as ExpressResponse['compose'],
         setTimeout: (msecs: number, callback?: () => void) => {
           setTimeout(callback || (() => {}), msecs);
           return res;
@@ -582,10 +520,7 @@ export function serveExpress(
 
         end(
           chunk?:
-            | string
-            | Uint8Array
-            | Buffer
-            | ((error?: Error | null) => void),
+            string | Uint8Array | Buffer | ((error?: Error | null) => void),
           encoding?: BufferEncoding | ((error?: Error | null) => void),
           callback?: (error?: Error | null) => void
         ): ExpressResponse {
@@ -944,6 +879,8 @@ export function serveExpress(
                 new Date(ifModifiedSince) >= lastModified
               ) {
                 res.status(304).end();
+                // Node's stream callbacks declare `Error` as required but are called with no
+                // argument on the success path; `undefined` is what the runtime passes.
                 if (callback) callback(undefined as unknown as Error);
                 return;
               }
@@ -978,6 +915,8 @@ export function serveExpress(
               } finally {
                 await writer.close();
                 resEE.emit('finish');
+                // Same as above: the callback declares `Error` but is invoked with no
+                // argument when the write succeeds.
                 if (callback) callback(undefined as unknown as Error);
               }
             } catch (error) {
@@ -1010,8 +949,7 @@ export function serveExpress(
         render: (
           view: string,
           locals?:
-            | Record<string, unknown>
-            | ((err: Error, html: string) => void),
+            Record<string, unknown> | ((err: Error, html: string) => void),
           callback?: (err: Error, html: string) => void
         ) => {
           const errback = typeof locals === 'function' ? locals : callback;
@@ -1173,6 +1111,7 @@ export function serveExpress(
 
       req = Object.assign(reqEE, {
         method: request.method,
+        signal: request.signal,
         url: url.pathname + url.search,
         originalUrl: url.pathname + url.search,
         headers,
@@ -1489,13 +1428,26 @@ export function serveExpress(
       };
       abort.signal.addEventListener('abort', onAbort);
 
+      // client disconnects surface on the fetch request signal; forward them
+      // so writer/responsePromise are released
+      const onClientAbort = () => abort.abort();
+      if (request.signal.aborted) {
+        abort.abort();
+      } else {
+        request.signal.addEventListener('abort', onClientAbort, {
+          once: true
+        });
+      }
+
       res.once('finish', cleanup);
       res.once('close', cleanup);
       res.once('finish', () => {
         abort.signal.removeEventListener('abort', onAbort);
+        request.signal.removeEventListener('abort', onClientAbort);
       });
       res.once('close', () => {
         abort.signal.removeEventListener('abort', onAbort);
+        request.signal.removeEventListener('abort', onClientAbort);
       });
 
       try {
@@ -1559,7 +1511,7 @@ export function serveExpress(
         }
 
         try {
-          app(req as unknown as ExpressRequest, res, next);
+          app(req as ExpressRequest, res, next);
         } catch (syncError) {
           openTelemetryCollector.error(
             'Synchronous Express application error:',

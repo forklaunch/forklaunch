@@ -9,6 +9,11 @@
  * - file: Parses body as binary buffer (uses raw parser)
  * - multipart: Parses body as multipart form data using Busboy, handling both files and fields
  *
+ * Every body-parser-backed parse also captures the exact request bytes on
+ * `req._rawBody` (via body-parser's `verify` hook), so handlers can perform
+ * HMAC/webhook signature verification over the payload as sent, while
+ * `req.body` remains the parsed value.
+ *
  * @param {object} options - Configuration options
  * @param {number} options.limit - Size limit for the request body (default: '10mb')
  * @returns {Function} Express middleware function
@@ -23,32 +28,129 @@ import {
   OptionsUrlencoded
 } from 'body-parser';
 import Busboy, { BusboyConfig } from 'busboy';
-import express, { NextFunction, Request, Response } from 'express';
+import express, {
+  NextFunction,
+  Request,
+  RequestHandler,
+  Response
+} from 'express';
 import expressStatic from 'express-serve-static-core';
 import { ParsedQs } from 'qs';
 import { Range } from 'range-parser';
 import { SetExportTypes } from '../types/export.types';
 
-function contentParse<SV extends AnySchemaValidator>(options?: {
+type ContentParseOptions = {
   busboy?: BusboyConfig;
   text?: OptionsText;
   json?: OptionsJson;
   urlencoded?: OptionsUrlencoded;
   raw?: Options;
-}) {
-  const jsonParser = express.json(options?.json);
-  const urlencodedParser = express.urlencoded({
-    extended: true,
-    ...options?.urlencoded
-  });
-  const textParser = express.text(options?.text);
-  const rawParser = express.raw(options?.raw);
+};
+
+type BodyParserVerify = (
+  req: Request,
+  res: Response,
+  buf: Buffer,
+  encoding: string
+) => void;
+
+/**
+ * The content types body-parser matches by default for each parser type
+ * (mirrors the defaults `discriminateBody` reports). A route-declared
+ * `contentType` only overrides the parser's `type` matcher when it differs
+ * from these, preserving body-parser's default matching semantics otherwise.
+ */
+const DEFAULT_CONTENT_TYPES = {
+  json: 'application/json',
+  text: 'text/plain',
+  urlEncoded: 'application/x-www-form-urlencoded',
+  file: 'application/octet-stream',
+  multipart: 'multipart/form-data'
+} as const;
+
+function contentParse<SV extends AnySchemaValidator>(
+  options?: ContentParseOptions
+) {
+  // Options are resolved lazily on first request: at construction time the
+  // application's options have not yet been merged into the owning router's
+  // options (addRouterOptions runs at mount time), but req._globalOptions()
+  // exposes the merged result at request time.
+  let resolvedOptions: ContentParseOptions | undefined;
+  const parserCache = new Map<string, RequestHandler>();
+
+  const captureRawBody = (base?: { verify?: unknown }): BodyParserVerify => {
+    const userVerify = base?.verify as BodyParserVerify | undefined;
+    return (req, res, buf, encoding) => {
+      userVerify?.(req, res, buf, encoding);
+      (req as { _rawBody?: Buffer })._rawBody = buf;
+    };
+  };
+
+  const buildParser = (
+    parserType: 'json' | 'urlEncoded' | 'text' | 'file',
+    contentTypeOverride: string | undefined
+  ): RequestHandler => {
+    const typeOverride = contentTypeOverride
+      ? { type: contentTypeOverride }
+      : {};
+    switch (parserType) {
+      case 'json':
+        return express.json({
+          ...resolvedOptions?.json,
+          verify: captureRawBody(resolvedOptions?.json),
+          ...typeOverride
+        });
+      case 'urlEncoded':
+        return express.urlencoded({
+          extended: true,
+          ...resolvedOptions?.urlencoded,
+          verify: captureRawBody(resolvedOptions?.urlencoded),
+          ...typeOverride
+        });
+      case 'text':
+        return express.text({
+          ...resolvedOptions?.text,
+          verify: captureRawBody(resolvedOptions?.text),
+          ...typeOverride
+        });
+      case 'file':
+        return express.raw({
+          ...resolvedOptions?.raw,
+          verify: captureRawBody(resolvedOptions?.raw),
+          ...typeOverride
+        });
+      default:
+        isNever(parserType);
+        throw new Error('Unsupported parser type: ' + parserType);
+    }
+  };
+
+  const parserFor = (
+    parserType: 'json' | 'urlEncoded' | 'text' | 'file',
+    contentType: string
+  ): RequestHandler => {
+    const contentTypeOverride =
+      contentType !== DEFAULT_CONTENT_TYPES[parserType]
+        ? contentType
+        : undefined;
+    const cacheKey = `${parserType}:${contentTypeOverride ?? ''}`;
+    let parser = parserCache.get(cacheKey);
+    if (!parser) {
+      parser = buildParser(parserType, contentTypeOverride);
+      parserCache.set(cacheKey, parser);
+    }
+    return parser;
+  };
 
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
+      // `_rawBody` and the other fields read below are attached by earlier
+      // middleware, not declared on Express' `Request`, so the augmented shape
+      // shares no declared member with it.
       const coercedRequest = req as unknown as {
         schemaValidator: SV;
         contractDetails: HttpContractDetails<SV>;
+        _globalOptions?: () => ContentParseOptions | undefined;
       };
 
       let contractBody;
@@ -68,24 +170,40 @@ function contentParse<SV extends AnySchemaValidator>(options?: {
         return next();
       }
 
+      if (!resolvedOptions) {
+        const globalOptions = coercedRequest._globalOptions?.();
+        resolvedOptions = {
+          busboy: globalOptions?.busboy ?? options?.busboy,
+          text: globalOptions?.text ?? options?.text,
+          json: globalOptions?.json ?? options?.json,
+          urlencoded: globalOptions?.urlencoded ?? options?.urlencoded,
+          raw: globalOptions?.raw ?? options?.raw
+        };
+      }
+
       switch (discriminatedBody.parserType) {
         case 'json':
-          return jsonParser(req, res, next);
         case 'urlEncoded':
-          return urlencodedParser(req, res, next);
         case 'text':
-          return textParser(req, res, next);
+          return parserFor(
+            discriminatedBody.parserType,
+            discriminatedBody.contentType
+          )(req, res, next);
         case 'file':
-          return rawParser(req, res, async (err) => {
-            if (err) {
-              return next(err);
+          return parserFor('file', discriminatedBody.contentType)(
+            req,
+            res,
+            async (err) => {
+              if (err) {
+                return next(err);
+              }
+              next();
             }
-            next();
-          });
+          );
         case 'multipart': {
           const bb = Busboy({
             headers: req.headers,
-            ...options?.busboy
+            ...resolvedOptions?.busboy
           });
           const body: Record<string, unknown> = {};
 

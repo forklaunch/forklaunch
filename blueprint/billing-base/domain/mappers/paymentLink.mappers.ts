@@ -17,14 +17,10 @@ export const CreatePaymentLinkMapper = requestMapper({
   entity: PaymentLink,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return PaymentLink.create(
-        {
-          ...dto,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        },
-        em
-      );
+      return em.create(PaymentLink, {
+        ...dto,
+        providerFields: dto.providerFields ?? null
+      });
     }
   }
 });
@@ -39,7 +35,9 @@ export const UpdatePaymentLinkMapper = requestMapper({
   entity: PaymentLink,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return PaymentLink.update(dto, em);
+      const entity = await em.findOneOrFail(PaymentLink, { id: dto.id });
+      em.assign(entity, { ...dto });
+      return entity;
     }
   }
 });
@@ -53,8 +51,11 @@ export const PaymentLinkMapper = responseMapper({
   ),
   entity: PaymentLink,
   mapperDefinition: {
-    toDto: async (entity: PaymentLink) => {
-      return await entity.read();
+    toDto: async (entity) => {
+      return {
+        ...entity,
+        amount: Number(entity.amount)
+      };
     }
   }
 });

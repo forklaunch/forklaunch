@@ -412,9 +412,7 @@ describe('Role Routes E2E Tests with PostgreSQL Container', () => {
 
       em.create(Permission, {
         id: '123e4567-e89b-12d3-a456-426614174003',
-        slug: 'write:organizations',
-        createdAt: new Date(),
-        updatedAt: new Date()
+        slug: 'write:organizations'
       });
       await em.flush();
 

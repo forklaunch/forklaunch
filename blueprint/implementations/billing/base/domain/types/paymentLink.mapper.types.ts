@@ -1,4 +1,4 @@
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, InferEntity } from '@mikro-orm/core';
 import { BasePaymentLinkDtos } from './baseBillingDto.types';
 import { BasePaymentLinkEntities } from './baseBillingEntity.types';
 
@@ -6,11 +6,7 @@ export type PaymentLinkMappers<
   PaymentMethodEnum,
   CurrencyEnum,
   StatusEnum,
-  MapperEntities extends BasePaymentLinkEntities<
-    PaymentMethodEnum,
-    CurrencyEnum,
-    StatusEnum
-  >,
+  MapperEntities extends BasePaymentLinkEntities,
   MapperDomains extends BasePaymentLinkDtos<
     PaymentMethodEnum,
     CurrencyEnum,
@@ -18,22 +14,25 @@ export type PaymentLinkMappers<
   >
 > = {
   PaymentLinkMapper: {
+    entity: MapperEntities['PaymentLinkMapper'];
     toDto: (
-      entity: MapperEntities['PaymentLinkMapper']
+      entity: InferEntity<MapperEntities['PaymentLinkMapper']>
     ) => Promise<MapperDomains['PaymentLinkMapper']>;
   };
   CreatePaymentLinkMapper: {
+    entity: MapperEntities['CreatePaymentLinkMapper'];
     toEntity: (
       dto: MapperDomains['CreatePaymentLinkMapper'],
       em: EntityManager,
       ...args: unknown[]
-    ) => Promise<MapperEntities['CreatePaymentLinkMapper']>;
+    ) => Promise<InferEntity<MapperEntities['CreatePaymentLinkMapper']>>;
   };
   UpdatePaymentLinkMapper: {
+    entity: MapperEntities['UpdatePaymentLinkMapper'];
     toEntity: (
       dto: MapperDomains['UpdatePaymentLinkMapper'],
       em: EntityManager,
       ...args: unknown[]
-    ) => Promise<MapperEntities['UpdatePaymentLinkMapper']>;
+    ) => Promise<InferEntity<MapperEntities['UpdatePaymentLinkMapper']>>;
   };
 };

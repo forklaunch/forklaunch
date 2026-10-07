@@ -262,7 +262,8 @@ describe('schema equality', () => {
           subscription: 'test',
           providerFields: {
             test: 'test'
-          }
+          },
+          organization: 'test'
         })
       )
     ).toBeTruthy();
@@ -328,7 +329,8 @@ describe('schema equality', () => {
                     permissions: [{ id: 'test', slug: 'test' }],
                     providerFields: { test: 'test' }
                   }
-                ]
+                ],
+                organization: 'test'
               }
             ]
           }

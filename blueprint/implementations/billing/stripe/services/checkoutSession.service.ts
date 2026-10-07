@@ -23,27 +23,25 @@ import { StripeCheckoutSessionEntities } from '../domain/types/stripe.entity.typ
 export class StripeCheckoutSessionService<
   SchemaValidator extends AnySchemaValidator,
   StatusEnum,
-  Entities extends StripeCheckoutSessionEntities<StatusEnum>,
-  Dto extends
-    StripeCheckoutSessionDtos<StatusEnum> = StripeCheckoutSessionDtos<StatusEnum>
-> implements
-    CheckoutSessionService<
-      typeof PaymentMethodEnum,
-      typeof CurrencyEnum,
-      StatusEnum,
-      {
-        CreateCheckoutSessionDto: Dto['CreateCheckoutSessionMapper'];
-        CheckoutSessionDto: Dto['CheckoutSessionMapper'];
-        IdDto: IdDto;
-      }
-    >
-{
+  MapperEntities extends StripeCheckoutSessionEntities,
+  Dto extends StripeCheckoutSessionDtos<StatusEnum> =
+    StripeCheckoutSessionDtos<StatusEnum>
+> implements CheckoutSessionService<
+  typeof PaymentMethodEnum,
+  typeof CurrencyEnum,
+  StatusEnum,
+  {
+    CreateCheckoutSessionDto: Dto['CreateCheckoutSessionMapper'];
+    CheckoutSessionDto: Dto['CheckoutSessionMapper'];
+    IdDto: IdDto;
+  }
+> {
   baseCheckoutSessionService: BaseCheckoutSessionService<
     SchemaValidator,
     PaymentMethodEnum,
     CurrencyEnum,
     StatusEnum,
-    Entities,
+    MapperEntities,
     Dto
   >;
   protected readonly stripeClient: Stripe;
@@ -53,7 +51,7 @@ export class StripeCheckoutSessionService<
   protected readonly schemaValidator: SchemaValidator;
   protected readonly mappers: StripeCheckoutSessionMappers<
     StatusEnum,
-    Entities,
+    MapperEntities,
     Dto
   >;
 
@@ -63,7 +61,7 @@ export class StripeCheckoutSessionService<
     cache: TtlCache,
     openTelemetryCollector: OpenTelemetryCollector<MetricsDefinition>,
     schemaValidator: SchemaValidator,
-    mappers: StripeCheckoutSessionMappers<StatusEnum, Entities, Dto>,
+    mappers: StripeCheckoutSessionMappers<StatusEnum, MapperEntities, Dto>,
     readonly options?: {
       enableDatabaseBackup?: boolean;
       telemetry?: TelemetryOptions;
@@ -84,7 +82,7 @@ export class StripeCheckoutSessionService<
         PaymentMethodEnum,
         CurrencyEnum,
         StatusEnum,
-        Entities,
+        MapperEntities,
         Dto
       >,
       options

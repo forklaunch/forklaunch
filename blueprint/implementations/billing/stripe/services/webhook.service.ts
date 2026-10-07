@@ -3,9 +3,8 @@ import {
   OpenTelemetryCollector
 } from '@forklaunch/core/http';
 import { AnySchemaValidator } from '@forklaunch/validator';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, EntityName } from '@mikro-orm/core';
 import Stripe from 'stripe';
-import { PartyEnum } from '../../../../billing-base/domain/enum/party.enum';
 import { BillingProviderEnum } from '../domain/enum/billingProvider.enum';
 import { CurrencyEnum } from '../domain/enum/currency.enum';
 import { PaymentMethodEnum } from '../domain/enum/paymentMethod.enum';
@@ -18,10 +17,40 @@ import {
   StripeSubscriptionEntities
 } from '../domain/types/stripe.entity.types';
 import { StripeBillingPortalService } from './billingPortal.service';
+
 import { StripeCheckoutSessionService } from './checkoutSession.service';
 import { StripePaymentLinkService } from './paymentLink.service';
 import { StripePlanService } from './plan.service';
 import { StripeSubscriptionService } from './subscription.service';
+
+/**
+ * Webhook idempotency records are looked up and written BY NAME so they
+ * resolve against the consuming application's discovered metadata. Passing
+ * this package's internal `StripeWebhookEvent` object to the EntityManager
+ * queries an entity the app's ORM never discovered, which mikro-orm 7.1.x
+ * rejects deep in EntityLoader (`meta.relations` is undefined for
+ * undiscovered entities). Applications must discover an entity named
+ * `StripeWebhookEvent` — either their own definition (the blueprint app
+ * ships one) or this package's, importable from
+ * `@forklaunch/implementation-billing-stripe/persistence`.
+ */
+
+/**
+ * Structural constraint for injectable webhook event entities — the fields
+ * the idempotency flow reads and writes. Applications inject their own
+ * (typically richer, sqlBaseProperties-based) entity; the generic infers
+ * from the injected schema exactly like the mapper entity generics do.
+ */
+export type StripeWebhookEventShape = {
+  stripeId: string;
+  idempotencyKey?: string | null;
+  eventType: string;
+  eventData: unknown;
+};
+
+/** Stripe statuses under which the subscription still grants access. */
+const isActiveStatus = (status: Stripe.Subscription.Status): boolean =>
+  status === 'active' || status === 'trialing';
 
 export class StripeWebhookService<
   SchemaValidator extends AnySchemaValidator,
@@ -30,13 +59,16 @@ export class StripeWebhookService<
   BillingPortalEntities extends
     StripeBillingPortalEntities = StripeBillingPortalEntities,
   CheckoutSessionEntities extends
-    StripeCheckoutSessionEntities<StatusEnum> = StripeCheckoutSessionEntities<StatusEnum>,
+    StripeCheckoutSessionEntities = StripeCheckoutSessionEntities,
   PaymentLinkEntities extends
-    StripePaymentLinkEntities<StatusEnum> = StripePaymentLinkEntities<StatusEnum>,
+    StripePaymentLinkEntities = StripePaymentLinkEntities,
   PlanEntities extends StripePlanEntities = StripePlanEntities,
   SubscriptionEntities extends
-    StripeSubscriptionEntities<PartyEnum> = StripeSubscriptionEntities<PartyEnum>
+    StripeSubscriptionEntities = StripeSubscriptionEntities,
+  WebhookEventEntity extends StripeWebhookEventShape = StripeWebhookEventShape
 > {
+  protected readonly partyEnum: PartyEnum;
+  protected readonly webhookEventEntity: { '~entity': WebhookEventEntity };
   protected readonly stripeClient: Stripe;
   protected readonly em: EntityManager;
   protected readonly schemaValidator: SchemaValidator;
@@ -89,8 +121,25 @@ export class StripeWebhookService<
       SchemaValidator,
       PartyEnum,
       SubscriptionEntities
-    >
+    >,
+    partyEnum: PartyEnum,
+    /**
+     * The entity used for webhook idempotency records. Defaults to
+     * resolving the application's discovered entity named
+     * 'StripeWebhookEvent'; inject your own entity (mapper-style) to use a
+     * different one.
+     */
+    /**
+     * The application's discovered webhook idempotency entity — this sealed
+     * package must operate on the entity the app's ORM actually discovered
+     * (its own definition, or this package's via the ./persistence subpath).
+     * Querying an undiscovered entity object crashes mikro-orm 7.1.x deep in
+     * EntityLoader (meta.relations undefined).
+     */
+    webhookEventEntity: { '~entity': WebhookEventEntity }
   ) {
+    this.webhookEventEntity = webhookEventEntity;
+    this.partyEnum = partyEnum;
     this.stripeClient = stripeClient;
     this.em = em;
     this.schemaValidator = schemaValidator;
@@ -100,6 +149,21 @@ export class StripeWebhookService<
     this.paymentLinkService = paymentLinkService;
     this.planService = planService;
     this.subscriptionService = subscriptionService;
+  }
+
+  /**
+   * Resolve the party type for a subscription event.
+   * Stripe subscriptions are customer-scoped — customers map to users
+   * by default. Override this method to implement organization-level
+   * subscriptions or other party resolution logic.
+   */
+  protected resolvePartyType(_event: Stripe.Event): PartyEnum[keyof PartyEnum] {
+    // Default: first value in the enum container.
+    // Subclasses can override to inspect event metadata for party type.
+    const keys = Object.keys(this.partyEnum as Record<string, unknown>);
+    return (this.partyEnum as Record<string, PartyEnum[keyof PartyEnum]>)[
+      keys[0]
+    ];
   }
 
   /**
@@ -130,15 +194,37 @@ export class StripeWebhookService<
       .filter((f) => f.length > 0);
   }
 
+  /**
+   * Our row for a Stripe subscription. Stripe events carry Stripe's
+   * subscription id, which is our `externalId`, never our primary key.
+   */
+  protected findSubscriptionId(
+    stripeSubscriptionId: string
+  ): Promise<{ id: string } | null> {
+    return this.subscriptionService.baseSubscriptionService.findSubscriptionIdByExternalId(
+      { externalId: stripeSubscriptionId }
+    );
+  }
+
   async handleWebhookEvent(event: Stripe.Event): Promise<void> {
     if (this.openTelemetryCollector) {
       this.openTelemetryCollector.info('Handling webhook event', event);
     }
 
     if (
-      await this.em.findOne('StripeWebhookEvent', {
-        idempotencyKey: event.request?.idempotency_key
-      })
+      // The Stripe event id is the idempotency key: `request.idempotency_key`
+      // is null for every event Stripe originates itself (renewals, failed
+      // payments, dashboard edits), and a null in the WHERE clause matched
+      // whatever row happened to have none. Only the id is selected, so the
+      // check never decrypts the recorded payload and works under any tenant.
+      // Querying through the structural shape with an internal cast, the same
+      // way the mapper services do (`mapper.entity as typeof Plan`).
+      await this.em.findOne(
+        this
+          .webhookEventEntity as unknown as EntityName<StripeWebhookEventShape>,
+        { stripeId: event.id },
+        { fields: ['stripeId'] }
+      )
     ) {
       this.openTelemetryCollector.info(
         'Webhook event already processed',
@@ -376,7 +462,7 @@ export class StripeWebhookService<
               typeof event.data.object.customer === 'string'
                 ? event.data.object.customer
                 : event.data.object.customer.id,
-            partyType: PartyEnum.USER as PartyEnum[keyof PartyEnum],
+            partyType: this.resolvePartyType(event),
             description: event.data.object.description ?? undefined,
             active: true,
             productId: event.data.object.items.data[0].plan.id,
@@ -402,16 +488,39 @@ export class StripeWebhookService<
             `Invalid subscription: missing items or plan ID for subscription ${event.data.object.id}`
           );
         }
+        const existing = await this.findSubscriptionId(event.data.object.id);
+        if (!existing) {
+          // An update for a subscription we never recorded (the created
+          // event was missed, or predates this integration): record it now.
+          await this.subscriptionService.baseSubscriptionService.createSubscription(
+            {
+              partyId:
+                typeof event.data.object.customer === 'string'
+                  ? event.data.object.customer
+                  : event.data.object.customer.id,
+              partyType: this.resolvePartyType(event),
+              description: event.data.object.description ?? undefined,
+              active: isActiveStatus(event.data.object.status),
+              productId: event.data.object.items.data[0].plan.id,
+              externalId: event.data.object.id,
+              billingProvider: BillingProviderEnum.STRIPE,
+              startDate: new Date(event.data.object.created * 1000),
+              endDate: event.data.object.cancel_at
+                ? new Date(event.data.object.cancel_at * 1000)
+                : undefined,
+              status: event.data.object.status
+            }
+          );
+          break;
+        }
+        // The party is the application's to assign (it maps Stripe customers
+        // onto its own users or organizations after the fact), so an update
+        // never rewrites it.
         await this.subscriptionService.baseSubscriptionService.updateSubscription(
           {
-            id: event.data.object.id,
-            partyId:
-              typeof event.data.object.customer === 'string'
-                ? event.data.object.customer
-                : event.data.object.customer.id,
-            partyType: PartyEnum.USER as PartyEnum[keyof PartyEnum],
+            id: existing.id,
             description: event.data.object.description ?? undefined,
-            active: true,
+            active: isActiveStatus(event.data.object.status),
             externalId: event.data.object.id,
             billingProvider: BillingProviderEnum.STRIPE,
             startDate: new Date(event.data.object.created * 1000),
@@ -426,23 +535,32 @@ export class StripeWebhookService<
       }
 
       case 'customer.subscription.deleted': {
-        await this.subscriptionService.deleteSubscription({
-          id: event.data.object.id
-        });
+        const existing = await this.findSubscriptionId(event.data.object.id);
+        if (existing) {
+          await this.subscriptionService.baseSubscriptionService.deleteSubscription(
+            existing
+          );
+        }
         break;
       }
 
       case 'customer.subscription.paused': {
-        await this.subscriptionService.cancelSubscription({
-          id: event.data.object.id
-        });
+        const existing = await this.findSubscriptionId(event.data.object.id);
+        if (existing) {
+          await this.subscriptionService.baseSubscriptionService.cancelSubscription(
+            existing
+          );
+        }
         break;
       }
 
       case 'customer.subscription.resumed': {
-        await this.subscriptionService.resumeSubscription({
-          id: event.data.object.id
-        });
+        const existing = await this.findSubscriptionId(event.data.object.id);
+        if (existing) {
+          await this.subscriptionService.baseSubscriptionService.resumeSubscription(
+            existing
+          );
+        }
         break;
       }
 
@@ -454,12 +572,18 @@ export class StripeWebhookService<
         break;
     }
 
-    await this.em.insert('StripeWebhookEvent', {
-      stripeId: event.id,
-      idempotencyKey: event.request?.idempotency_key,
-      eventType: event.type,
-      eventData: event.data
-    });
+    // em.create (not native em.insert): the app's entity generates its id and
+    // timestamps via onCreate hooks, which native inserts bypass — a native
+    // insert fails NOT NULL on id for sqlBaseProperties-style entities.
+    this.em.create<StripeWebhookEventShape>(
+      this.webhookEventEntity as unknown as EntityName<StripeWebhookEventShape>,
+      {
+        stripeId: event.id,
+        idempotencyKey: event.request?.idempotency_key,
+        eventType: event.type,
+        eventData: event.data
+      } as never
+    );
     await this.em.flush();
   }
 }

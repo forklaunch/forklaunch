@@ -35,6 +35,17 @@ export const clientIamBetterAuthSdkClient = async ({
   }),
   betterAuth: createAuthClient({
     baseURL: host,
+    // The Better Auth client always sends `credentials: 'include'`, so every
+    // request is cookie-bearing and hits Better Auth's origin/CSRF guard.
+    // Browsers set `Origin` automatically; non-browser runtimes (Node SDK
+    // consumers, e2e tests) do not, so a cookie-bearing request would arrive
+    // with a null Origin and be rejected (MISSING_OR_NULL_ORIGIN). Present this
+    // client's own API origin — which Better Auth trusts as its `baseURL`.
+    // Browsers ignore attempts to set the forbidden `Origin` header (using the
+    // real one), so this is correct and harmless in every runtime.
+    fetchOptions: {
+      headers: { origin: new URL(host).origin }
+    },
     plugins: [inferAdditionalFields<BetterAuthConfig>()]
   })
 });

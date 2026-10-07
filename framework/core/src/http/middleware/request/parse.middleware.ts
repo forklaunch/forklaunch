@@ -64,9 +64,12 @@ export function parse<
       ? 'none'
       : globalOptions?.validation?.request);
 
-  // Preserve the original body before schema validation for HMAC verification
-  // This ensures HMAC is computed on the body as sent by the client, not after property reordering
-  req._rawBody = req.body;
+  // Preserve the pre-validation body for HMAC verification when the content
+  // parser did not already capture the exact request bytes. Never clobber a
+  // parser-captured _rawBody: that value is the raw payload as sent by the
+  // client, which signature verification (Stripe et al.) must be computed
+  // over — req.body may already be a parsed object here.
+  req._rawBody ??= req.body;
 
   const request = {
     params: req.params,

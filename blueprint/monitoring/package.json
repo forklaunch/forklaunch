@@ -1,6 +1,7 @@
 {
   "name": "@forklaunch/blueprint-monitoring",
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "private": true,
   "description": "Forklaunch Monitoring Framework",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -15,8 +16,8 @@
   "type": "module",
   "types": "lib/index.d.ts",
   "scripts": {
-    "build": "tsc",
-    "clean": "rm -rf lib pnpm.lock.yaml node_modules",
+    "build": "tsc -b",
+    "clean": "rm -rf lib tsconfig.tsbuildinfo pnpm.lock.yaml node_modules",
     "docs": "typedoc --out docs *",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
     "lint": "eslint . -c eslint.config.mjs",
@@ -25,6 +26,9 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/core": "^0.18.2"
+    "@forklaunch/core": "^3.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
   }
 }

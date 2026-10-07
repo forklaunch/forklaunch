@@ -7,6 +7,7 @@ description: Reference for Error Handling in ForkLaunch.
 ## Overview
 
 ForkLaunch provides standardized error handling with automatic:
+
 - **HTTP status code mapping** - Consistent error responses across all endpoints
 - **Correlation ID tracking** - Links errors to specific requests for debugging
 - **Telemetry integration** - Automatic error logging and metrics collection
@@ -19,77 +20,71 @@ Integrated with [Authorization](/docs/framework/authorization.md), [HTTP Framewo
 ForkLaunch uses Express-style error handling with a default handler that returns a 500 status code and correlation ID, hiding internal error details.
 
 ### Authentication Errors
+
 - **401 Unauthorized**: Missing or invalid credentials
 - **403 Forbidden**: Valid credentials but insufficient permissions
 
 ### Validation Errors
+
 - **400 Bad Request**: Invalid input data that fails [validation](/docs/framework/validation.md) schemas
 
 ### Not Found (404)
+
 Resource not found errors with path information
 
 ### Server Errors (500)
+
 Unexpected errors with safe error messages
 
 ## Framework Integration
 
 ### HTTP Contract Error Handling
+
 ```typescript
-import { forklaunchExpress } from '@forklaunch/express';
-import { z } from 'zod';
-
-const app = forklaunchExpress(schemaValidator, openTelemetryCollector);
-
 // Errors are automatically handled and formatted
-app.post('/users', {
-  name: 'Create User',
-  body: z.object({ 
-    name: z.string().min(1), 
-    email: z.string().email() 
-  }), // Validation errors → 400
-  responses: {
-    201: z.object({ id: z.string() }),
-    // Override default error responses
-    400: z.object({ error: z.string() }), // Validation failure
-    401: z.object({ error: z.string() }), // Auth required
-    403: z.object({ error: z.string() }), // Forbidden
-    500: z.object({ 
-      error: z.string(), 
-      correlationId: z.string() 
-    })
-  }
-}, async (req, res) => {
-  // Your handler logic
-  const user = await createUser(req.body);
-  res.status(201).json({ id: user.id });
-});
+app.post(
+  '/users',
+  {
+    name: 'Create User',
+    body: { name: string, email: email }, // Validation errors → 400
+    responses: {
+      201: { id: number },
+      // override default error responses
+      400: { error: string }, // Validation failure
+      401: { error: string }, // Auth required
+      500: { error: string, correlationId: string }
+    }
+  },
+  handler
+);
 ```
 
 ### Authorization Integration
+
 ```typescript
 // Authorization errors are handled automatically
 const contractDetails = {
   auth: {
-    jwt: { signatureKey: process.env.JWT_SECRET },
-    allowedRoles: new Set(['admin']),
-    surfaceRoles: async (resourceId: string, req: Request) => {
-      return new Set(['admin']);
-    }
-  },
-  // 401/403 responses added automatically based on auth configuration
+    method: 'jwt',
+    allowedRoles: new Set(['admin'])
+  }
+  // 401/403 responses added automatically
 };
 ```
 
 ## Correlation IDs
 
 Every workflow gets a unique correlation ID that:
+
 - **Links related logs, metrics, and traces** across services
-- **Helps with request tracking** through the entire request lifecycle  
+- **Helps with request tracking** through the entire request lifecycle
 - **Simplifies debugging and support** with traceable request context
 - **Integrates with telemetry** for comprehensive observability
 
 ## Error Logging
+
 Errors are automatically:
+
 - **Logged with appropriate severity** levels based on error type
 - **Tagged with correlation IDs** for request correlation
 - **Linked to related telemetry** including traces and metrics
@@ -105,15 +100,15 @@ Errors are automatically:
 
 ## Response Status Codes
 
-| Code | Description | Usage |
-|------|-------------|-------|
-| 400 | Bad Request | Invalid input, validation errors |
-| 401 | Unauthorized | Missing or invalid authentication |
-| 403 | Forbidden | Valid auth but insufficient permissions |
-| 404 | Not Found | Resource doesn't exist |
-| 429 | Too Many Requests | Rate limit exceeded (coming soon) |
-| 500 | Internal Server Error | Unexpected server errors |
-| 503 | Service Unavailable | Service temporarily unavailable |
+| Code | Description           | Usage                                   |
+| ---- | --------------------- | --------------------------------------- |
+| 400  | Bad Request           | Invalid input, validation errors        |
+| 401  | Unauthorized          | Missing or invalid authentication       |
+| 403  | Forbidden             | Valid auth but insufficient permissions |
+| 404  | Not Found             | Resource doesn't exist                  |
+| 429  | Too Many Requests     | Rate limit exceeded (coming soon)       |
+| 500  | Internal Server Error | Unexpected server errors                |
+| 503  | Service Unavailable   | Service temporarily unavailable         |
 
 ## Related Documentation
 

@@ -47,8 +47,7 @@ const schemas = {
 const validator = new ZodSchemaValidator();
 
 type TestClient =
-  | WebSocket
-  | ForklaunchWebSocket<ZodSchemaValidator, typeof schemas>;
+  WebSocket | ForklaunchWebSocket<ZodSchemaValidator, typeof schemas>;
 
 function waitForOpen(ws: TestClient): Promise<void> {
   return new Promise((resolve) => {

@@ -81,43 +81,44 @@ type ExclusiveResponseBodyBase<SV extends AnySchemaValidator> = {
 };
 
 type ExclusiveSchemaCatchall<SV extends AnySchemaValidator> = {
-  [K in keyof SV['_SchemaCatchall'] as string extends K
-    ? never
-    : number extends K
+  [
+    K in keyof SV['_SchemaCatchall'] as string extends K
       ? never
-      : symbol extends K
+      : number extends K
         ? never
-        : K]?: undefined;
+        : symbol extends K
+          ? never
+          : K
+  ]?: undefined;
 };
 
 export type TypedResponseBody<SV extends AnySchemaValidator> =
   | {
-      [K in keyof (ExclusiveSchemaCatchall<SV> &
-        ExclusiveResponseBodyBase<SV>)]?: K extends keyof TextBody<SV>
-        ? TextBody<SV>[K]
-        : undefined;
+      [
+        K in keyof (ExclusiveSchemaCatchall<SV> & ExclusiveResponseBodyBase<SV>)
+      ]?: K extends keyof TextBody<SV> ? TextBody<SV>[K] : undefined;
     }
   | {
-      [K in keyof (ExclusiveSchemaCatchall<SV> &
-        ExclusiveResponseBodyBase<SV>)]?: K extends keyof JsonBody<SV>
-        ? JsonBody<SV>[K]
-        : undefined;
+      [
+        K in keyof (ExclusiveSchemaCatchall<SV> & ExclusiveResponseBodyBase<SV>)
+      ]?: K extends keyof JsonBody<SV> ? JsonBody<SV>[K] : undefined;
     }
   | {
-      [K in keyof (ExclusiveSchemaCatchall<SV> &
-        ExclusiveResponseBodyBase<SV>)]?: K extends keyof FileBody<SV>
-        ? FileBody<SV>[K]
-        : undefined;
+      [
+        K in keyof (ExclusiveSchemaCatchall<SV> & ExclusiveResponseBodyBase<SV>)
+      ]?: K extends keyof FileBody<SV> ? FileBody<SV>[K] : undefined;
     }
   | {
-      [K in keyof (ExclusiveSchemaCatchall<SV> &
-        ExclusiveResponseBodyBase<SV>)]?: K extends keyof ServerSentEventBody<SV>
+      [
+        K in keyof (ExclusiveSchemaCatchall<SV> & ExclusiveResponseBodyBase<SV>)
+      ]?: K extends keyof ServerSentEventBody<SV>
         ? ServerSentEventBody<SV>[K]
         : undefined;
     }
   | {
-      [K in keyof (ExclusiveSchemaCatchall<SV> &
-        ExclusiveResponseBodyBase<SV>)]?: K extends keyof UnknownResponseBody<SV>
+      [
+        K in keyof (ExclusiveSchemaCatchall<SV> & ExclusiveResponseBodyBase<SV>)
+      ]?: K extends keyof UnknownResponseBody<SV>
         ? UnknownResponseBody<SV>[K]
         : undefined;
     };
@@ -244,40 +245,36 @@ type ExclusiveRequestBodyBase<SV extends AnySchemaValidator> = {
 
 export type TypedRequestBody<SV extends AnySchemaValidator> =
   | {
-      [K in keyof (ExclusiveSchemaCatchall<SV> &
-        ExclusiveRequestBodyBase<SV>)]?: K extends keyof TextBody<SV>
-        ? TextBody<SV>[K]
-        : undefined;
+      [
+        K in keyof (ExclusiveSchemaCatchall<SV> & ExclusiveRequestBodyBase<SV>)
+      ]?: K extends keyof TextBody<SV> ? TextBody<SV>[K] : undefined;
     }
   | {
-      [K in keyof (ExclusiveSchemaCatchall<SV> &
-        ExclusiveRequestBodyBase<SV>)]?: K extends keyof JsonBody<SV>
-        ? JsonBody<SV>[K]
-        : undefined;
+      [
+        K in keyof (ExclusiveSchemaCatchall<SV> & ExclusiveRequestBodyBase<SV>)
+      ]?: K extends keyof JsonBody<SV> ? JsonBody<SV>[K] : undefined;
     }
   | {
-      [K in keyof (ExclusiveSchemaCatchall<SV> &
-        ExclusiveRequestBodyBase<SV>)]?: K extends keyof FileBody<SV>
-        ? FileBody<SV>[K]
-        : undefined;
+      [
+        K in keyof (ExclusiveSchemaCatchall<SV> & ExclusiveRequestBodyBase<SV>)
+      ]?: K extends keyof FileBody<SV> ? FileBody<SV>[K] : undefined;
     }
   | {
-      [K in keyof (ExclusiveSchemaCatchall<SV> &
-        ExclusiveRequestBodyBase<SV>)]?: K extends keyof MultipartForm<SV>
-        ? MultipartForm<SV>[K]
-        : undefined;
+      [
+        K in keyof (ExclusiveSchemaCatchall<SV> & ExclusiveRequestBodyBase<SV>)
+      ]?: K extends keyof MultipartForm<SV> ? MultipartForm<SV>[K] : undefined;
     }
   | {
-      [K in keyof (ExclusiveSchemaCatchall<SV> &
-        ExclusiveRequestBodyBase<SV>)]?: K extends keyof UrlEncodedForm<SV>
+      [
+        K in keyof (ExclusiveSchemaCatchall<SV> & ExclusiveRequestBodyBase<SV>)
+      ]?: K extends keyof UrlEncodedForm<SV>
         ? UrlEncodedForm<SV>[K]
         : undefined;
     }
   | {
-      [K in keyof (ExclusiveSchemaCatchall<SV> &
-        ExclusiveRequestBodyBase<SV>)]?: K extends keyof UnknownBody<SV>
-        ? UnknownBody<SV>[K]
-        : undefined;
+      [
+        K in keyof (ExclusiveSchemaCatchall<SV> & ExclusiveRequestBodyBase<SV>)
+      ]?: K extends keyof UnknownBody<SV> ? UnknownBody<SV>[K] : undefined;
     };
 
 export type TypedBody<SV extends AnySchemaValidator> =
@@ -349,28 +346,72 @@ export type DecodeResource = (
   token: string
 ) => JWTPayload | Promise<JWTPayload>;
 
-export type AuthMethodsBase = TokenOptions &
-  (
-    | HmacMethods
-    | ({
-        readonly decodeResource?: DecodeResource;
-      } & (PermissionSet | RoleSet) &
-        (BasicAuthMethods | JwtAuthMethods))
-  );
-
-type PermissionSet =
+export type PermissionSet =
   | {
       readonly allowedPermissions: Set<string>;
     }
   | { readonly forbiddenPermissions: Set<string> };
 
-type RoleSet =
+export type RoleSet =
   | {
       readonly allowedRoles: Set<string>;
     }
   | {
       readonly forbiddenRoles: Set<string>;
     };
+
+/** Constraints that forbid RBAC fields on authenticated routes. */
+type NoRbacConstraint = {
+  readonly allowedPermissions?: never;
+  readonly forbiddenPermissions?: never;
+  readonly allowedRoles?: never;
+  readonly forbiddenRoles?: never;
+};
+
+export type AuthMethodsBase = TokenOptions &
+  (
+    | HmacMethods
+    | ({
+        readonly decodeResource?: DecodeResource;
+      } & (BasicAuthMethods | JwtAuthMethods))
+  );
+
+/**
+ * Route access level — determines authentication and authorization requirements.
+ *
+ * - `'public'` — No authentication required. `auth` must not be provided.
+ * - `'authenticated'` — JWT or Basic auth required, any valid user. RBAC not allowed.
+ * - `'protected'` — JWT or Basic auth required. Must declare roles, permissions, or scope.
+ * - `'internal'` — HMAC auth required (inter-service communication).
+ */
+export type AccessLevel = 'public' | 'authenticated' | 'protected' | 'internal';
+
+/**
+ * Discriminated union that narrows the `auth` type based on the `access` level.
+ * - `public`: auth not allowed
+ * - `authenticated`: JWT/Basic auth required, RBAC fields disallowed
+ * - `protected`: auth required, must include at least one RBAC declaration
+ *   (surfacing functions are optional here — they can be provided at router/app level)
+ * - `internal`: auth required, must be HMAC
+ */
+type AccessAuth<Auth> =
+  | { readonly access: 'public'; readonly auth?: never }
+  | {
+      readonly access: 'authenticated';
+      readonly auth?: Auth & NoRbacConstraint;
+    }
+  | {
+      readonly access: 'protected';
+      readonly auth: Auth &
+        (
+          | { readonly allowedPermissions: Set<string> }
+          | { readonly forbiddenPermissions: Set<string> }
+          | { readonly allowedRoles: Set<string> }
+          | { readonly forbiddenRoles: Set<string> }
+          | { readonly requiredScope: string }
+        );
+    }
+  | { readonly access: 'internal'; readonly auth: Auth & HmacMethods };
 
 /**
  * Type representing the authentication methods.
@@ -397,34 +438,29 @@ export type SchemaAuthMethods<
     SessionObject<SV>,
     BaseRequest
   >;
+  readonly surfacePermissions?: ExpressLikeSchemaAuthMapper<
+    SV,
+    ParamsSchema,
+    ReqBody,
+    QuerySchema,
+    ReqHeaders,
+    VersionedApi,
+    SessionObject<SV>,
+    BaseRequest
+  >;
+  readonly surfaceRoles?: ExpressLikeSchemaAuthMapper<
+    SV,
+    ParamsSchema,
+    ReqBody,
+    QuerySchema,
+    ReqHeaders,
+    VersionedApi,
+    SessionObject<SV>,
+    BaseRequest
+  >;
   readonly requiredFeatures?: string[];
   readonly requireActiveSubscription?: boolean;
-} & (
-    | {
-        readonly surfacePermissions?: ExpressLikeSchemaAuthMapper<
-          SV,
-          ParamsSchema,
-          ReqBody,
-          QuerySchema,
-          ReqHeaders,
-          VersionedApi,
-          SessionObject<SV>,
-          BaseRequest
-        >;
-      }
-    | {
-        readonly surfaceRoles?: ExpressLikeSchemaAuthMapper<
-          SV,
-          ParamsSchema,
-          ReqBody,
-          QuerySchema,
-          ReqHeaders,
-          VersionedApi,
-          SessionObject<SV>,
-          BaseRequest
-        >;
-      }
-  );
+};
 
 export type AuthMethods<
   SV extends AnySchemaValidator,
@@ -448,34 +484,33 @@ export type AuthMethods<
     SessionObject<SV>,
     BaseRequest
   >;
+  readonly surfacePermissions?: ExpressLikeAuthMapper<
+    SV,
+    P,
+    ReqBody,
+    ReqQuery,
+    ReqHeaders,
+    VersionedReqs,
+    SessionObject<SV>,
+    BaseRequest
+  >;
+  readonly surfaceRoles?: ExpressLikeAuthMapper<
+    SV,
+    P,
+    ReqBody,
+    ReqQuery,
+    ReqHeaders,
+    VersionedReqs,
+    SessionObject<SV>,
+    BaseRequest
+  >;
+  readonly allowedPermissions?: Set<string>;
+  readonly forbiddenPermissions?: Set<string>;
+  readonly allowedRoles?: Set<string>;
+  readonly forbiddenRoles?: Set<string>;
   readonly requiredFeatures?: string[];
   readonly requireActiveSubscription?: boolean;
-} & (
-    | ({
-        readonly surfacePermissions?: ExpressLikeAuthMapper<
-          SV,
-          P,
-          ReqBody,
-          ReqQuery,
-          ReqHeaders,
-          VersionedReqs,
-          SessionObject<SV>,
-          BaseRequest
-        >;
-      } & PermissionSet)
-    | ({
-        readonly surfaceRoles?: ExpressLikeAuthMapper<
-          SV,
-          P,
-          ReqBody,
-          ReqQuery,
-          ReqHeaders,
-          VersionedReqs,
-          SessionObject<SV>,
-          BaseRequest
-        >;
-      } & RoleSet)
-  );
+};
 
 /**
  * Type representing a mapped schema.
@@ -488,7 +523,14 @@ export type AuthMethods<
 export type MapSchema<
   SV extends AnySchemaValidator,
   T extends IdiomaticSchema<SV> | SV['_ValidSchemaObject']
-> = Schema<T, SV> extends infer U ? (T extends U ? unknown : U) : never;
+> =
+  Schema<T, SV> extends infer U
+    ? T extends SV['_SchemaCatchall']
+      ? U
+      : T extends U
+        ? unknown
+        : U
+    : never;
 
 /**
  * Type representing the parameters in a request.
@@ -649,10 +691,8 @@ export type PathParamHttpContractDetails<
         readonly responseHeaders?: never;
         readonly responses?: never;
       })
-  ) & {
-    /** Optional authentication details for the contract */
-    readonly auth?: Auth;
-  };
+  ) &
+  AccessAuth<Auth>;
 
 type VersionedHttpContractDetailsIO<
   SV extends AnySchemaValidator,
@@ -721,9 +761,8 @@ export type HttpContractDetails<
         readonly body?: never;
         readonly responses?: never;
       })
-  ) & {
-    readonly auth?: Auth;
-  };
+  ) &
+  AccessAuth<Auth>;
 
 /**
  * Interface representing HTTP contract details for middleware.

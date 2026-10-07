@@ -8,9 +8,11 @@ import {
 import { Metrics, metrics } from '@forklaunch/blueprint-monitoring';
 import { OpenTelemetryCollector } from '@forklaunch/core/http';
 import {
+  ComplianceDataService,
   createConfigInjector,
   getEnvVar,
-  Lifetime
+  Lifetime,
+  RetentionService
 } from '@forklaunch/core/services';
 import {
   BaseOrganizationService,
@@ -18,6 +20,7 @@ import {
   BaseRoleService,
   BaseUserService
 } from '@forklaunch/implementation-iam-base/services';
+import { wrapEmWithTenantContext } from '@forklaunch/core/persistence';
 import { EntityManager, ForkOptions, MikroORM } from '@mikro-orm/core';
 import { OrganizationStatus } from './domain/enum/organizationStatus.enum';
 import {
@@ -119,12 +122,12 @@ const environmentConfig = configInjector.chain({
 
 //! defines the runtime dependencies for the application
 const runtimeDependencies = environmentConfig.chain({
-  MikroORM: {
+  Orm: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(mikroOrmOptionsConfig)
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
-  OpenTelemetryCollector: {
+  OtelCollector: {
     lifetime: Lifetime.Singleton,
     type: OpenTelemetryCollector<Metrics>,
     factory: ({ OTEL_SERVICE_NAME, OTEL_LEVEL }) =>
@@ -137,8 +140,14 @@ const runtimeDependencies = environmentConfig.chain({
   EntityManager: {
     lifetime: Lifetime.Scoped,
     type: EntityManager,
-    factory: ({ MikroORM }, _resolve, context) =>
-      MikroORM.em.fork(context?.entityManagerOptions as ForkOptions | undefined)
+    factory: (
+      { Orm },
+      context: { entityManagerOptions?: ForkOptions; tenantId?: string }
+    ) =>
+      wrapEmWithTenantContext(
+        Orm.em.fork(context?.entityManagerOptions),
+        context?.tenantId
+      ) as EntityManager
   }
 });
 
@@ -152,12 +161,12 @@ const serviceDependencies = runtimeDependencies.chain({
       OrganizationMapperTypes,
       OrganizationDtoTypes
     >,
-    factory: ({ EntityManager, OpenTelemetryCollector }, resolve, context) =>
+    factory: ({ EntityManager, OtelCollector }, context, resolve) =>
       new BaseOrganizationService(
-        context.entityManagerOptions
-          ? resolve('EntityManager', context)
+        context?.entityManagerOptions
+          ? resolve?.('EntityManager', context)
           : EntityManager,
-        OpenTelemetryCollector,
+        OtelCollector,
         schemaValidator,
         {
           OrganizationMapper,
@@ -173,13 +182,13 @@ const serviceDependencies = runtimeDependencies.chain({
       PermissionMapperTypes,
       PermissionDtoTypes
     >,
-    factory: ({ EntityManager, OpenTelemetryCollector }, resolve, context) =>
+    factory: ({ EntityManager, OtelCollector }, context, resolve) =>
       new BasePermissionService(
         context.entityManagerOptions
           ? resolve('EntityManager', context)
           : EntityManager,
         () => resolve('RoleService', context),
-        OpenTelemetryCollector,
+        OtelCollector,
         schemaValidator,
         {
           PermissionMapper,
@@ -192,12 +201,12 @@ const serviceDependencies = runtimeDependencies.chain({
   RoleService: {
     lifetime: Lifetime.Scoped,
     type: BaseRoleService<SchemaValidator, RoleMapperTypes, RoleDtoTypes>,
-    factory: ({ EntityManager, OpenTelemetryCollector }, resolve, context) =>
+    factory: ({ EntityManager, OtelCollector }, context, resolve) =>
       new BaseRoleService(
         context.entityManagerOptions
           ? resolve('EntityManager', context)
           : EntityManager,
-        OpenTelemetryCollector,
+        OtelCollector,
         schemaValidator,
         {
           RoleMapper,
@@ -214,12 +223,12 @@ const serviceDependencies = runtimeDependencies.chain({
       UserMapperTypes,
       UserDtoTypes
     >,
-    factory: ({ EntityManager, OpenTelemetryCollector }, resolve, context) =>
+    factory: ({ EntityManager, OtelCollector }, context, resolve) =>
       new BaseUserService(
         EntityManager,
         () => resolve('RoleService', context),
         () => resolve('OrganizationService', context),
-        OpenTelemetryCollector,
+        OtelCollector,
         schemaValidator,
         {
           UserMapper,
@@ -227,6 +236,20 @@ const serviceDependencies = runtimeDependencies.chain({
           UpdateUserMapper
         }
       )
+  },
+  ComplianceDataService: {
+    lifetime: Lifetime.Singleton,
+    type: ComplianceDataService,
+    factory: ({ Orm, OtelCollector }) =>
+      new ComplianceDataService(Orm, OtelCollector, {
+        User: 'id'
+      })
+  },
+  RetentionService: {
+    lifetime: Lifetime.Singleton,
+    type: RetentionService,
+    factory: ({ Orm, OtelCollector }) =>
+      new RetentionService(Orm, OtelCollector)
   }
 });
 

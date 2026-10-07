@@ -64,5 +64,13 @@ export abstract class ForklaunchExpressLikeApplication<
     this.internal.use(cors(this.appOptions?.cors ?? {}) as RouterHandler);
   }
 
+  /**
+   * Validates all registered routes across the app and all mounted routers.
+   * Call this at the start of listen() to fail fast at startup.
+   */
+  protected validateAllRoutes() {
+    this.validateSurfacingFunctions();
+  }
+
   abstract listen(...args: unknown[]): void;
 }

@@ -1,0 +1,1 @@
+../../../../../blueprint/ecommerce-stripe/registrations.ts

@@ -1,7 +1,8 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "lib"
+    "outDir": "lib",
+    "types": ["node", "vitest/globals", "bun"]
   },
   "exclude": ["node_modules", "lib", "eslint.config.mjs"]
 }

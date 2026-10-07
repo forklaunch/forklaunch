@@ -1,50 +1,21 @@
-import { SqlBaseEntity } from '@forklaunch/blueprint-core';
-import {
-  Collection,
-  Entity,
-  ManyToMany,
-  ManyToOne,
-  Property,
-  Unique
-} from '@mikro-orm/core';
-import type { Organization } from './organization.entity';
-import type { Role } from './role.entity';
+import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
+import type { InferEntity } from '@mikro-orm/core';
+import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 
-@Entity()
-export class User extends SqlBaseEntity {
-  @Property()
-  @Unique()
-  email!: string;
+export const User = defineComplianceEntity({
+  name: 'User',
+  properties: {
+    ...sqlBaseProperties,
+    email: fp.string().unique().compliance('none'),
+    emailVerified: fp.boolean().compliance('none'),
+    name: fp.string().compliance('none'),
+    firstName: fp.string().compliance('none'),
+    lastName: fp.string().compliance('none'),
+    image: fp.string().nullable().compliance('none'),
+    phoneNumber: fp.string().nullable().compliance('none'),
+    subscription: fp.string().unique().nullable().compliance('none'),
+    providerFields: fp.json<unknown>().nullable().compliance('none')
+  }
+});
 
-  @Property()
-  emailVerified!: boolean;
-
-  @Property()
-  @Unique()
-  name!: string;
-
-  @Property()
-  firstName!: string;
-
-  @Property()
-  lastName!: string;
-
-  @Property()
-  image?: string;
-
-  @Property({ nullable: true })
-  phoneNumber?: string;
-
-  @ManyToOne('Organization', { nullable: true })
-  organization?: Organization;
-
-  @ManyToMany('Role')
-  roles = new Collection<Role>(this);
-
-  @Property()
-  @Unique()
-  subscription?: string;
-
-  @Property({ type: 'json', nullable: true })
-  providerFields?: unknown;
-}
+export type User = InferEntity<typeof User>;

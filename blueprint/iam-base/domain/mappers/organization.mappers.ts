@@ -12,16 +12,12 @@ export const CreateOrganizationMapper = requestMapper({
   entity: Organization,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return Organization.create(
-        {
-          ...dto,
-          users: [],
-          status: OrganizationStatus.ACTIVE,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        },
-        em
-      );
+      return em.create(Organization, {
+        ...dto,
+        providerFields: dto.providerFields ?? null,
+        users: [],
+        status: OrganizationStatus.ACTIVE
+      });
     }
   }
 });
@@ -32,7 +28,9 @@ export const UpdateOrganizationMapper = requestMapper({
   entity: Organization,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return Organization.update(dto, em);
+      const entity = await em.findOneOrFail(Organization, { id: dto.id });
+      em.assign(entity, { ...dto });
+      return entity;
     }
   }
 });
@@ -42,12 +40,10 @@ export const OrganizationMapper = responseMapper({
   schema: OrganizationSchemas.OrganizationSchema(OrganizationStatus),
   entity: Organization,
   mapperDefinition: {
-    toDto: async (entity: Organization) => {
-      const entityData = await entity.read();
-
+    toDto: async (entity) => {
       return {
-        ...entityData,
-        logoUrl: entityData.logoUrl || undefined, // Convert null to undefined
+        ...entity,
+        logoUrl: entity.logoUrl || undefined,
         users: await Promise.all(
           (entity.users.isInitialized()
             ? entity.users
@@ -55,7 +51,6 @@ export const OrganizationMapper = responseMapper({
           )
             .getItems()
             .map(async (user) => {
-              // Use the mapper function directly to avoid circular dependency
               return UserMapper.toDto(user);
             })
         )

@@ -1,1 +1,0 @@
-../../../iam-base/persistence/seeders/role.seeder.ts

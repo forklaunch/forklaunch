@@ -1,83 +1,79 @@
+import { ResolvedEntity } from '@forklaunch/core/persistence';
 import {
-  BillingPortalDto,
-  CheckoutSessionDto,
-  PaymentLinkDto,
-  PlanDto,
-  SubscriptionDto
-} from '@forklaunch/interfaces-billing/types';
-import Stripe from 'stripe';
-import { BillingProviderEnum } from '../enum/billingProvider.enum';
-import { CurrencyEnum } from '../enum/currency.enum';
-import { PaymentMethodEnum } from '../enum/paymentMethod.enum';
-import { PlanCadenceEnum } from '../enum/planCadence.enum';
+  BillingPortal,
+  CheckoutSession,
+  PaymentLink,
+  Plan,
+  Subscription
+} from '../../persistence/entities';
+import {
+  BillingProviderEnum,
+  CurrencyEnum,
+  PaymentMethodEnum,
+  PlanCadenceEnum
+} from '../enum';
 
 // Billing Portal Types
-export type StripeBillingPortalEntity = BillingPortalDto & {
-  providerFields: Stripe.BillingPortal.Session;
-};
-
 export type StripeBillingPortalEntities = {
-  BillingPortalMapper: StripeBillingPortalEntity;
-  CreateBillingPortalMapper: StripeBillingPortalEntity;
-  UpdateBillingPortalMapper: StripeBillingPortalEntity;
+  BillingPortalMapper: {
+    '~entity': ResolvedEntity<(typeof BillingPortal)['~entity']>;
+  };
+  CreateBillingPortalMapper: {
+    '~entity': ResolvedEntity<(typeof BillingPortal)['~entity']>;
+  };
+  UpdateBillingPortalMapper: {
+    '~entity': ResolvedEntity<(typeof BillingPortal)['~entity']>;
+  };
 };
 
 // Checkout Session Types
-
-export type StripeCheckoutSessionEntity<StatusEnum> = CheckoutSessionDto<
-  typeof PaymentMethodEnum,
-  typeof CurrencyEnum,
-  StatusEnum
-> & {
-  providerFields: Stripe.Checkout.Session;
-};
-
-export type StripeCheckoutSessionEntities<StatusEnum> = {
-  CheckoutSessionMapper: StripeCheckoutSessionEntity<StatusEnum>;
-  CreateCheckoutSessionMapper: StripeCheckoutSessionEntity<StatusEnum>;
-  UpdateCheckoutSessionMapper: StripeCheckoutSessionEntity<StatusEnum>;
+export type StripeCheckoutSessionEntities = {
+  CheckoutSessionMapper: {
+    '~entity': ResolvedEntity<(typeof CheckoutSession)['~entity']>;
+  };
+  CreateCheckoutSessionMapper: {
+    '~entity': ResolvedEntity<(typeof CheckoutSession)['~entity']>;
+  };
+  UpdateCheckoutSessionMapper: {
+    '~entity': ResolvedEntity<(typeof CheckoutSession)['~entity']>;
+  };
 };
 
 // Payment Link Types
-export type StripePaymentLinkEntity<StatusEnum> = PaymentLinkDto<
-  typeof PaymentMethodEnum,
-  typeof CurrencyEnum,
-  StatusEnum
-> & {
-  providerFields: Stripe.PaymentLink;
-};
-
-export type StripePaymentLinkEntities<StatusEnum> = {
-  PaymentLinkMapper: StripePaymentLinkEntity<StatusEnum>;
-  CreatePaymentLinkMapper: StripePaymentLinkEntity<StatusEnum>;
-  UpdatePaymentLinkMapper: StripePaymentLinkEntity<StatusEnum>;
+export type StripePaymentLinkEntities = {
+  PaymentLinkMapper: {
+    '~entity': ResolvedEntity<(typeof PaymentLink)['~entity']>;
+  };
+  CreatePaymentLinkMapper: {
+    '~entity': ResolvedEntity<(typeof PaymentLink)['~entity']>;
+  };
+  UpdatePaymentLinkMapper: {
+    '~entity': ResolvedEntity<(typeof PaymentLink)['~entity']>;
+  };
 };
 
 // Plan Types
-export type StripePlanEntity = PlanDto<
-  typeof PlanCadenceEnum,
-  typeof CurrencyEnum,
-  typeof BillingProviderEnum
-> & {
-  providerFields: Stripe.Product;
-};
-
 export type StripePlanEntities = {
-  PlanMapper: StripePlanEntity;
-  CreatePlanMapper: StripePlanEntity;
-  UpdatePlanMapper: StripePlanEntity;
+  PlanMapper: {
+    '~entity': ResolvedEntity<(typeof Plan)['~entity']>;
+  };
+  CreatePlanMapper: {
+    '~entity': ResolvedEntity<(typeof Plan)['~entity']>;
+  };
+  UpdatePlanMapper: {
+    '~entity': ResolvedEntity<(typeof Plan)['~entity']>;
+  };
 };
 
 // Subscription Types
-export type StripeSubscriptionEntity<PartyType> = SubscriptionDto<
-  PartyType,
-  typeof BillingProviderEnum
-> & {
-  providerFields: Stripe.Subscription;
-};
-
-export type StripeSubscriptionEntities<PartyType> = {
-  SubscriptionMapper: StripeSubscriptionEntity<PartyType>;
-  CreateSubscriptionMapper: StripeSubscriptionEntity<PartyType>;
-  UpdateSubscriptionMapper: StripeSubscriptionEntity<PartyType>;
+export type StripeSubscriptionEntities = {
+  SubscriptionMapper: {
+    '~entity': ResolvedEntity<(typeof Subscription)['~entity']>;
+  };
+  CreateSubscriptionMapper: {
+    '~entity': ResolvedEntity<(typeof Subscription)['~entity']>;
+  };
+  UpdateSubscriptionMapper: {
+    '~entity': ResolvedEntity<(typeof Subscription)['~entity']>;
+  };
 };

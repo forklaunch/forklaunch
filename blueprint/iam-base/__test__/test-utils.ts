@@ -6,7 +6,7 @@ import {
   TEST_TOKENS,
   TestSetupResult
 } from '@forklaunch/testing';
-import { EntityManager, MikroORM } from '@mikro-orm/core';
+import { EntityManager } from '@mikro-orm/core';
 import dotenv from 'dotenv';
 import * as path from 'path';
 
@@ -20,7 +20,13 @@ export const setupTestDatabase = async (): Promise<TestSetupResult> => {
   harness = new BlueprintTestHarness({
     getConfig: async () => {
       const { default: config } = await import('../mikro-orm.config');
-      return config;
+      // MikroORM.init() mutates options.discovery.skipSyncDiscovery = true on
+      // the object it receives. mikro-orm.config exports a single shared object
+      // that the app's own DI container also builds a MikroORM from, so letting
+      // the harness mutate it leaves the app's `new MikroORM(config)` with an
+      // undefined `.em` (every route then crashes on `Orm.em.fork`). Hand the
+      // harness its own discovery object so the mutation can't leak.
+      return { ...config, discovery: { ...config.discovery } };
     },
     databaseType: getEnvVar('DATABASE_TYPE') as DatabaseType,
     useMigrations: true,
@@ -36,12 +42,12 @@ export const cleanupTestDatabase = async (): Promise<void> => {
   }
 };
 
-export const clearDatabase = async (options?: {
-  orm?: MikroORM;
+export async function clearDatabase(options?: {
+  orm?: TestSetupResult['orm'];
   redis?: TestSetupResult['redis'];
-}): Promise<void> => {
+}): Promise<void> {
   await clearTestDatabase(options);
-};
+}
 
 export const setupTestData = async (em: EntityManager) => {
   const { Permission } = await import(
@@ -57,31 +63,26 @@ export const setupTestData = async (em: EntityManager) => {
   );
 
   // Create test organization
-  const organization = em.create(Organization, {
+  const createdOrganization = em.create(Organization, {
     id: '123e4567-e89b-12d3-a456-426614174001',
     name: 'Test Organization',
     domain: 'test.com',
     subscription: 'premium',
     status: OrganizationStatus.ACTIVE,
-    createdAt: new Date(),
-    updatedAt: new Date()
+    providerFields: null
   });
 
   // Create test permission
-  const permission = em.create(Permission, {
+  const createdPermission = em.create(Permission, {
     id: '123e4567-e89b-12d3-a456-426614174002',
-    slug: 'read:users',
-    createdAt: new Date(),
-    updatedAt: new Date()
+    slug: 'read:users'
   });
 
   // Create test role
-  const role = em.create(Role, {
+  const createdRole = em.create(Role, {
     id: '123e4567-e89b-12d3-a456-426614174000',
     name: 'admin',
-    permissions: [permission],
-    createdAt: new Date(),
-    updatedAt: new Date()
+    permissions: [createdPermission]
   });
 
   // Create test user
@@ -91,11 +92,10 @@ export const setupTestData = async (em: EntityManager) => {
     firstName: 'John',
     lastName: 'Doe',
     phoneNumber: '+1234567890',
-    organization: organization,
-    roles: [role],
+    organization: createdOrganization,
+    roles: [createdRole],
     subscription: 'enterprise',
-    createdAt: new Date(),
-    updatedAt: new Date()
+    providerFields: []
   });
 
   await em.flush();
@@ -145,9 +145,7 @@ export const mockPermissionData = {
 
 export const mockUpdatePermissionData = {
   id: '123e4567-e89b-12d3-a456-426614174002',
-  slug: 'write:organizations',
-  createdAt: new Date(),
-  updatedAt: new Date()
+  slug: 'write:organizations'
 };
 
 export const mockRoleData = {

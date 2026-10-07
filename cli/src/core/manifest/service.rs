@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// Generate a random base64-encoded secret of specified length
-fn generate_random_secret(byte_length: usize) -> String {
+pub(crate) fn generate_random_secret(byte_length: usize) -> String {
     let mut bytes = vec![0u8; byte_length];
     getrandom::getrandom(&mut bytes).expect("Failed to generate random bytes");
     STANDARD.encode(&bytes)
@@ -28,6 +28,7 @@ config_struct!(
         pub(crate) service_path: String,
         #[serde(skip_serializing, skip_deserializing)]
         pub(crate) camel_case_name: String,
+        pub(crate) snake_case_name: String,
         #[serde(skip_serializing, skip_deserializing)]
         pub(crate) pascal_case_name: String,
         #[serde(skip_serializing, skip_deserializing)]
@@ -77,6 +78,27 @@ config_struct!(
         pub(crate) is_better_auth: bool,
         #[serde(skip_serializing, skip_deserializing)]
         pub(crate) is_stripe: bool,
+        #[serde(skip_serializing, skip_deserializing)]
+        pub(crate) is_messaging: bool,
+        #[serde(skip_serializing, skip_deserializing)]
+        pub(crate) is_twilio: bool,
+        #[serde(skip_serializing, skip_deserializing)]
+        pub(crate) is_cac: bool,
+        /// True when scaffolding the stripe ecommerce module. Kept separate
+        /// from `is_stripe` (which means "the stripe *billing* module") because
+        /// that flag also pulls in @forklaunch/implementation-billing-stripe —
+        /// an ecommerce project needs the Stripe SDK and Stripe env vars, but
+        /// not the billing implementation.
+        #[serde(skip_serializing, skip_deserializing)]
+        pub(crate) is_ecommerce: bool,
+
+        /// True when the module's template includes a worker.ts, so the
+        /// generated package.json needs entry points that start it. Kept
+        /// separate from is_ecommerce: shipping a worker is the property the
+        /// scripts depend on, and the next module to ship one should not have
+        /// to be called ecommerce to get them.
+        #[serde(skip_serializing, skip_deserializing)]
+        pub(crate) ships_worker: bool,
 
         #[serde(skip_serializing, skip_deserializing)]
         pub(crate) is_iam_configured: bool,
@@ -96,11 +118,14 @@ config_struct!(
 
         // Generated secrets - each instantiation gets unique random values
         #[serde(skip_serializing, skip_deserializing)]
-        pub(crate) generated_password_encryption_secret: String,
-        #[serde(skip_serializing, skip_deserializing)]
         pub(crate) generated_better_auth_secret: String,
         #[serde(skip_serializing, skip_deserializing)]
         pub(crate) generated_hmac_secret: String,
+        #[serde(skip_serializing, skip_deserializing)]
+        pub(crate) generated_encryption_key: String,
+
+        #[serde(skip_serializing, skip_deserializing)]
+        pub(crate) otel_token: String,
     }
 );
 
@@ -161,6 +186,7 @@ impl InitializableManifestConfig for ServiceManifestData {
         Self {
             service_name: service_name.clone(),
             camel_case_name: service_name.clone().to_case(Case::Camel),
+            snake_case_name: service_name.clone().to_case(Case::Snake),
             pascal_case_name: service_name.clone().to_case(Case::Pascal),
             kebab_case_name: service_name.clone().to_case(Case::Kebab),
             database: database.to_string(),
@@ -187,6 +213,8 @@ impl InitializableManifestConfig for ServiceManifestData {
                 || service_name == get_service_module_name(&Module::BetterAuthIam),
             is_billing: service_name == get_service_module_name(&Module::BaseBilling)
                 || service_name == get_service_module_name(&Module::StripeBilling),
+            is_messaging: service_name == get_service_module_name(&Module::BaseMessaging)
+                || service_name == get_service_module_name(&Module::TwilioMessaging),
             is_cache_enabled,
             is_s3_enabled: service_metadata
                 .infrastructure
@@ -213,6 +241,14 @@ impl InitializableManifestConfig for ServiceManifestData {
                     .parse::<Module>()
                     .unwrap()
                     == Module::BetterAuthIam,
+            is_twilio: project_entry.variant.is_some()
+                && project_entry
+                    .variant
+                    .as_ref()
+                    .unwrap()
+                    .parse::<Module>()
+                    .unwrap()
+                    == Module::TwilioMessaging,
 
             is_iam_configured,
             is_billing_configured,
@@ -225,9 +261,11 @@ impl InitializableManifestConfig for ServiceManifestData {
             iam_secret: None,
 
             // Generate unique random secrets for each service/environment
-            generated_password_encryption_secret: generate_random_secret(32), // 32 bytes = 256 bits
             generated_better_auth_secret: generate_random_secret(32),
             generated_hmac_secret: generate_random_secret(32),
+            generated_encryption_key: generate_random_secret(32),
+
+            otel_token: "OtelCollector".to_string(),
 
             ..self.clone()
         }

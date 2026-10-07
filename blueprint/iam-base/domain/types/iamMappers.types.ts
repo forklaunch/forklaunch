@@ -30,9 +30,9 @@ import {
 
 // organization mappers
 export type OrganizationMapperTypes = {
-  OrganizationMapper: Organization;
-  CreateOrganizationMapper: Organization;
-  UpdateOrganizationMapper: Organization;
+  OrganizationMapper: typeof Organization;
+  CreateOrganizationMapper: typeof Organization;
+  UpdateOrganizationMapper: typeof Organization;
 };
 
 // organization dto types
@@ -50,10 +50,10 @@ export type OrganizationDtoTypes = {
 
 // permission mappers
 export type PermissionMapperTypes = {
-  PermissionMapper: Permission;
-  CreatePermissionMapper: Permission;
-  UpdatePermissionMapper: Permission;
-  RoleEntityMapper: Role;
+  PermissionMapper: typeof Permission;
+  CreatePermissionMapper: typeof Permission;
+  UpdatePermissionMapper: typeof Permission;
+  RoleEntityMapper: typeof Role;
 };
 
 // permission dto types
@@ -72,9 +72,9 @@ export type PermissionDtoTypes = {
 
 // role mappers
 export type RoleMapperTypes = {
-  RoleMapper: Role;
-  CreateRoleMapper: Role;
-  UpdateRoleMapper: Role;
+  RoleMapper: typeof Role;
+  CreateRoleMapper: typeof Role;
+  UpdateRoleMapper: typeof Role;
 };
 
 // role dto types
@@ -86,9 +86,9 @@ export type RoleDtoTypes = {
 
 // user mappers
 export type UserMapperTypes = {
-  UserMapper: User;
-  CreateUserMapper: User;
-  UpdateUserMapper: User;
+  UserMapper: typeof User;
+  CreateUserMapper: typeof User;
+  UpdateUserMapper: typeof User;
 };
 
 // user dto types

@@ -89,11 +89,20 @@ SetErrorFunction((params) => {
 });
 
 /**
+ * Function type for creating a typed TypeBox schema.
+ *
+ * Named (rather than written inline as the first type argument) so declaration
+ * emit does not produce `SV<<T>...`, which the TypeScript 7 native compiler
+ * fails to re-parse.
+ */
+type TypeboxTypeFunction = <T>() => TTransform<TAny, T>;
+
+/**
  * Class representing a TypeBox schema definition.
  * @implements {SchemaValidator}
  */
 export class TypeboxSchemaValidator implements SV<
-  <T>() => TTransform<TAny, T>,
+  TypeboxTypeFunction,
   <T extends SafeTObject<TProperties>>(schema: T) => TypeCheck<T>,
   <T extends TIdiomaticSchema>(schema: T) => TResolve<T>,
   <T extends TIdiomaticSchema>(schema: T) => TOptional<TResolve<T>>,
@@ -135,8 +144,7 @@ export class TypeboxSchemaValidator implements SV<
   _Type = 'TypeBox' as const;
   _SchemaCatchall!: TCatchall;
   _ValidSchemaObject!:
-    | SafeTObject<TProperties>
-    | TArray<SafeTObject<TProperties>>;
+    SafeTObject<TProperties> | TArray<SafeTObject<TProperties>>;
 
   string: TString = Type.String({
     example: 'a string',
@@ -439,7 +447,7 @@ export class TypeboxSchemaValidator implements SV<
       }
     });
 
-    return Type.Object(newSchema) as unknown as TResolve<T>;
+    return Type.Object(newSchema) as TResolve<T>;
   }
 
   /**
@@ -512,6 +520,11 @@ export class TypeboxSchemaValidator implements SV<
       }[keyof T]
     ]
   > {
+    // The hop through unknown is load-bearing. `union()` is typed for a fixed
+    // tuple, and mapping an enum's values produces an array whose length is not
+    // known statically, so the two union shapes never overlap enough for a
+    // direct assertion. The runtime value is correct — one literal per enum
+    // member — but that correspondence is not expressible here.
     return this.union(
       Object.values(schemaEnum).map((value) => this.literal(value))
     ) as unknown as TUnion<

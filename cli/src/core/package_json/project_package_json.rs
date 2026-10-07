@@ -75,6 +75,10 @@ pub(crate) struct ProjectScripts {
     pub(crate) start_worker: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) test: Option<String>,
+    #[serde(rename = "up:latest", skip_serializing_if = "Option::is_none")]
+    pub(crate) up_latest: Option<String>,
+    #[serde(rename = "retention:enforce", skip_serializing_if = "Option::is_none")]
+    pub(crate) retention_enforce: Option<String>,
 
     #[serde(flatten)]
     pub(crate) additional_scripts: HashMap<String, String>,
@@ -118,6 +122,8 @@ impl<'de> Deserialize<'de> for ProjectScripts {
                     start_server: None,
                     start_worker: None,
                     test: None,
+                    up_latest: None,
+                    retention_enforce: None,
                     additional_scripts: HashMap::new(),
                 };
 
@@ -142,6 +148,8 @@ impl<'de> Deserialize<'de> for ProjectScripts {
                         "start:server" => scripts.start_server = Some(value),
                         "start:worker" => scripts.start_worker = Some(value),
                         "test" => scripts.test = Some(value),
+                        "up:latest" => scripts.up_latest = Some(value),
+                        "retention:enforce" => scripts.retention_enforce = Some(value),
                         _ => {
                             scripts.additional_scripts.insert(key, value);
                         }
@@ -170,11 +178,21 @@ pub(crate) struct ProjectDependencies {
     pub(crate) forklaunch_core: Option<String>,
     pub(crate) forklaunch_express: Option<String>,
     pub(crate) forklaunch_hyper_express: Option<String>,
+    pub(crate) uwebsockets_js: Option<String>,
     pub(crate) forklaunch_implementation_billing_base: Option<String>,
     pub(crate) forklaunch_implementation_billing_stripe: Option<String>,
     pub(crate) forklaunch_interfaces_billing: Option<String>,
+    pub(crate) forklaunch_implementation_ecommerce_base: Option<String>,
+    pub(crate) forklaunch_implementation_ecommerce_stripe: Option<String>,
+    pub(crate) forklaunch_implementation_ecommerce_paypal: Option<String>,
+    pub(crate) forklaunch_interfaces_ecommerce: Option<String>,
     pub(crate) forklaunch_implementation_iam_base: Option<String>,
     pub(crate) forklaunch_interfaces_iam: Option<String>,
+    pub(crate) forklaunch_implementation_messaging_base: Option<String>,
+    pub(crate) forklaunch_implementation_messaging_twilio: Option<String>,
+    pub(crate) forklaunch_interfaces_messaging: Option<String>,
+    pub(crate) forklaunch_implementation_cac_base: Option<String>,
+    pub(crate) forklaunch_interfaces_cac: Option<String>,
     pub(crate) forklaunch_implementation_worker_bullmq: Option<String>,
     pub(crate) forklaunch_implementation_worker_redis: Option<String>,
     pub(crate) forklaunch_implementation_worker_database: Option<String>,
@@ -191,6 +209,9 @@ pub(crate) struct ProjectDependencies {
     pub(crate) mikro_orm_reflection: Option<String>,
     pub(crate) mikro_orm_seeder: Option<String>,
     pub(crate) opentelemetry_api: Option<String>,
+    pub(crate) types_express: Option<String>,
+    pub(crate) types_express_serve_static_core: Option<String>,
+    pub(crate) types_qs: Option<String>,
     pub(crate) typebox: Option<String>,
     pub(crate) ajv: Option<String>,
     pub(crate) better_auth: Option<String>,
@@ -246,6 +267,11 @@ impl Serialize for ProjectDependencies {
         if let Some(ref v) = self.forklaunch_hyper_express {
             map.serialize_entry("@forklaunch/hyper-express", v)?;
         }
+        // Paired with hyper-express: it is a peer of that package, so the
+        // generated project has to depend on it directly.
+        if let Some(ref v) = self.uwebsockets_js {
+            map.serialize_entry("uWebSockets.js", v)?;
+        }
         if let Some(ref v) = self.forklaunch_implementation_billing_base {
             map.serialize_entry("@forklaunch/implementation-billing-base", v)?;
         }
@@ -255,11 +281,38 @@ impl Serialize for ProjectDependencies {
         if let Some(ref v) = self.forklaunch_interfaces_billing {
             map.serialize_entry("@forklaunch/interfaces-billing", v)?;
         }
+        if let Some(ref v) = self.forklaunch_implementation_ecommerce_base {
+            map.serialize_entry("@forklaunch/implementation-ecommerce-base", v)?;
+        }
+        if let Some(ref v) = self.forklaunch_implementation_ecommerce_stripe {
+            map.serialize_entry("@forklaunch/implementation-ecommerce-stripe", v)?;
+        }
+        if let Some(ref v) = self.forklaunch_implementation_ecommerce_paypal {
+            map.serialize_entry("@forklaunch/implementation-ecommerce-paypal", v)?;
+        }
+        if let Some(ref v) = self.forklaunch_interfaces_ecommerce {
+            map.serialize_entry("@forklaunch/interfaces-ecommerce", v)?;
+        }
         if let Some(ref v) = self.forklaunch_implementation_iam_base {
             map.serialize_entry("@forklaunch/implementation-iam-base", v)?;
         }
         if let Some(ref v) = self.forklaunch_interfaces_iam {
             map.serialize_entry("@forklaunch/interfaces-iam", v)?;
+        }
+        if let Some(ref v) = self.forklaunch_implementation_messaging_base {
+            map.serialize_entry("@forklaunch/implementation-messaging-base", v)?;
+        }
+        if let Some(ref v) = self.forklaunch_implementation_messaging_twilio {
+            map.serialize_entry("@forklaunch/implementation-messaging-twilio", v)?;
+        }
+        if let Some(ref v) = self.forklaunch_interfaces_messaging {
+            map.serialize_entry("@forklaunch/interfaces-messaging", v)?;
+        }
+        if let Some(ref v) = self.forklaunch_implementation_cac_base {
+            map.serialize_entry("@forklaunch/implementation-cac-base", v)?;
+        }
+        if let Some(ref v) = self.forklaunch_interfaces_cac {
+            map.serialize_entry("@forklaunch/interfaces-cac", v)?;
         }
         if let Some(ref v) = self.forklaunch_implementation_worker_bullmq {
             map.serialize_entry("@forklaunch/implementation-worker-bullmq", v)?;
@@ -316,6 +369,15 @@ impl Serialize for ProjectDependencies {
         }
         if let Some(ref v) = self.opentelemetry_api {
             map.serialize_entry("@opentelemetry/api", v)?;
+        }
+        if let Some(ref v) = self.types_express {
+            map.serialize_entry("@types/express", v)?;
+        }
+        if let Some(ref v) = self.types_express_serve_static_core {
+            map.serialize_entry("@types/express-serve-static-core", v)?;
+        }
+        if let Some(ref v) = self.types_qs {
+            map.serialize_entry("@types/qs", v)?;
         }
         if let Some(ref v) = self.typebox {
             map.serialize_entry("@sinclair/typebox", v)?;
@@ -497,6 +559,7 @@ impl<'de> Deserialize<'de> for ProjectDependencies {
                         "@forklaunch/core" => deps.forklaunch_core = Some(value),
                         "@forklaunch/express" => deps.forklaunch_express = Some(value),
                         "@forklaunch/hyper-express" => deps.forklaunch_hyper_express = Some(value),
+                        "uWebSockets.js" => deps.uwebsockets_js = Some(value),
                         "@forklaunch/implementation-billing-base" => {
                             deps.forklaunch_implementation_billing_base = Some(value)
                         }
@@ -506,11 +569,38 @@ impl<'de> Deserialize<'de> for ProjectDependencies {
                         "@forklaunch/interfaces-billing" => {
                             deps.forklaunch_interfaces_billing = Some(value)
                         }
+                        "@forklaunch/implementation-ecommerce-base" => {
+                            deps.forklaunch_implementation_ecommerce_base = Some(value)
+                        }
+                        "@forklaunch/implementation-ecommerce-stripe" => {
+                            deps.forklaunch_implementation_ecommerce_stripe = Some(value)
+                        }
+                        "@forklaunch/implementation-ecommerce-paypal" => {
+                            deps.forklaunch_implementation_ecommerce_paypal = Some(value)
+                        }
+                        "@forklaunch/interfaces-ecommerce" => {
+                            deps.forklaunch_interfaces_ecommerce = Some(value)
+                        }
                         "@forklaunch/implementation-iam-base" => {
                             deps.forklaunch_implementation_iam_base = Some(value)
                         }
                         "@forklaunch/interfaces-iam" => {
                             deps.forklaunch_interfaces_iam = Some(value)
+                        }
+                        "@forklaunch/implementation-messaging-base" => {
+                            deps.forklaunch_implementation_messaging_base = Some(value)
+                        }
+                        "@forklaunch/implementation-messaging-twilio" => {
+                            deps.forklaunch_implementation_messaging_twilio = Some(value)
+                        }
+                        "@forklaunch/interfaces-messaging" => {
+                            deps.forklaunch_interfaces_messaging = Some(value)
+                        }
+                        "@forklaunch/implementation-cac-base" => {
+                            deps.forklaunch_implementation_cac_base = Some(value)
+                        }
+                        "@forklaunch/interfaces-cac" => {
+                            deps.forklaunch_interfaces_cac = Some(value)
                         }
                         "@forklaunch/implementation-worker-bullmq" => {
                             deps.forklaunch_implementation_worker_bullmq = Some(value)
@@ -540,6 +630,11 @@ impl<'de> Deserialize<'de> for ProjectDependencies {
                         "@mikro-orm/reflection" => deps.mikro_orm_reflection = Some(value),
                         "@mikro-orm/seeder" => deps.mikro_orm_seeder = Some(value),
                         "@opentelemetry/api" => deps.opentelemetry_api = Some(value),
+                        "@types/express" => deps.types_express = Some(value),
+                        "@types/express-serve-static-core" => {
+                            deps.types_express_serve_static_core = Some(value)
+                        }
+                        "@types/qs" => deps.types_qs = Some(value),
                         "@sinclair/typebox" => deps.typebox = Some(value),
                         "ajv" => deps.ajv = Some(value),
                         "better-auth" => deps.better_auth = Some(value),
@@ -580,17 +675,8 @@ pub(crate) struct ProjectDevDependencies {
     pub(crate) testing: Option<String>,
     #[serde(rename = "@mikro-orm/cli", skip_serializing_if = "Option::is_none")]
     pub(crate) mikro_orm_cli: Option<String>,
-    #[serde(rename = "@types/express", skip_serializing_if = "Option::is_none")]
-    pub(crate) types_express: Option<String>,
     #[serde(rename = "@types/jest", skip_serializing_if = "Option::is_none")]
     pub(crate) types_jest: Option<String>,
-    #[serde(
-        rename = "@types/express-serve-static-core",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub(crate) types_express_serve_static_core: Option<String>,
-    #[serde(rename = "@types/qs", skip_serializing_if = "Option::is_none")]
-    pub(crate) types_qs: Option<String>,
     #[serde(rename = "@types/uuid", skip_serializing_if = "Option::is_none")]
     pub(crate) types_uuid: Option<String>,
     #[serde(rename = "@types/pino", skip_serializing_if = "Option::is_none")]
@@ -641,10 +727,7 @@ impl<'de> Deserialize<'de> for ProjectDevDependencies {
                     eslint_js: None,
                     testing: None,
                     mikro_orm_cli: None,
-                    types_express: None,
-                    types_express_serve_static_core: None,
                     types_jest: None,
-                    types_qs: None,
                     types_uuid: None,
                     types_pino: None,
                     types_ioredis: None,
@@ -665,12 +748,7 @@ impl<'de> Deserialize<'de> for ProjectDevDependencies {
                         "@eslint/js" => deps.eslint_js = Some(value),
                         "@forklaunch/testing" => deps.testing = Some(value),
                         "@mikro-orm/cli" => deps.mikro_orm_cli = Some(value),
-                        "@types/express" => deps.types_express = Some(value),
-                        "@types/express-serve-static-core" => {
-                            deps.types_express_serve_static_core = Some(value)
-                        }
                         "@types/jest" => deps.types_jest = Some(value),
-                        "@types/qs" => deps.types_qs = Some(value),
                         "@types/uuid" => deps.types_uuid = Some(value),
                         "@types/pino" => deps.types_pino = Some(value),
                         "@types/ioredis" => deps.types_ioredis = Some(value),

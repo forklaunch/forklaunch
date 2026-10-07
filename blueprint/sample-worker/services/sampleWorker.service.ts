@@ -6,6 +6,7 @@ import { KafkaWorkerProducer } from '@forklaunch/implementation-worker-kafka/pro
 import { KafkaWorkerOptions } from '@forklaunch/implementation-worker-kafka/types';
 import { RedisWorkerProducer } from '@forklaunch/implementation-worker-redis/producers';
 import { RedisWorkerOptions } from '@forklaunch/implementation-worker-redis/types';
+import { EntityManager } from '@mikro-orm/core';
 import { SampleWorkerService } from '../domain/interfaces/sampleWorkerService.interface';
 import {
   SampleWorkerRequestDto,
@@ -13,10 +14,11 @@ import {
   SampleWorkerResponseDto,
   SampleWorkerResponseMapper
 } from '../domain/mappers/sampleWorker.mappers';
-import { SampleWorkerEventRecord } from '../persistence/entities';
+import { type SampleWorkerEventRecord } from '../persistence/entities';
 
 // BaseSampleWorkerService class that implements the SampleWorkerService interface
 export class BaseSampleWorkerService implements SampleWorkerService {
+  private em: EntityManager;
   private databaseWorkerProducer: DatabaseWorkerProducer<
     SampleWorkerEventRecord,
     DatabaseWorkerOptions
@@ -35,6 +37,7 @@ export class BaseSampleWorkerService implements SampleWorkerService {
   >;
 
   constructor(
+    em: EntityManager,
     databaseWorkerProducer: DatabaseWorkerProducer<
       SampleWorkerEventRecord,
       DatabaseWorkerOptions
@@ -52,6 +55,7 @@ export class BaseSampleWorkerService implements SampleWorkerService {
       KafkaWorkerOptions
     >
   ) {
+    this.em = em;
     this.databaseWorkerProducer = databaseWorkerProducer;
     this.bullMqWorkerProducer = bullMqWorkerProducer;
     this.redisWorkerProducer = redisWorkerProducer;
@@ -62,15 +66,13 @@ export class BaseSampleWorkerService implements SampleWorkerService {
   sampleWorkerPost = async (
     dto: SampleWorkerRequestDto
   ): Promise<SampleWorkerResponseDto> => {
-    // Create entity using the new mapper approach
-    const entity = await SampleWorkerRequestMapper.toEntity(dto);
+    const entity = await SampleWorkerRequestMapper.toEntity(dto, this.em);
 
     await this.databaseWorkerProducer.enqueueJob(entity);
     await this.bullMqWorkerProducer.enqueueJob(entity);
     await this.redisWorkerProducer.enqueueJob(entity);
     await this.kafkaWorkerProducer.enqueueJob(entity);
 
-    // Convert entity to response DTO using the new mapper approach
     return await SampleWorkerResponseMapper.toDto(entity);
   };
 }

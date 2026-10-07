@@ -32,9 +32,8 @@ export class UniversalSdk {
     private ajv: Ajv,
     private registryOptions: RegistryOptions,
     private contentTypeParserMap:
-      | Record<string, ResponseContentParserType>
-      | undefined
-  ) { }
+      Record<string, ResponseContentParserType> | undefined
+  ) {}
 
   /**
    * Creates an instance of UniversalSdk.
@@ -60,14 +59,14 @@ export class UniversalSdk {
     path: string,
     request?: RequestType & {
       method:
-      | 'get'
-      | 'post'
-      | 'put'
-      | 'patch'
-      | 'delete'
-      | 'options'
-      | 'head'
-      | 'trace';
+        | 'get'
+        | 'post'
+        | 'put'
+        | 'patch'
+        | 'delete'
+        | 'options'
+        | 'head'
+        | 'trace';
     } & {
       version?: string;
     }
@@ -246,10 +245,10 @@ export class UniversalSdk {
     const responseOpenApi =
       path != null && method != null
         ? this.registryOpenApiJson?.[version]?.paths?.[
-          openApiCompliantPath(path)
-        ]?.[method?.toLowerCase() as typeof method]?.responses?.[
-        response.status
-        ]
+            openApiCompliantPath(path)
+          ]?.[method?.toLowerCase() as typeof method]?.responses?.[
+            response.status
+          ]
         : null;
 
     if (responseOpenApi == null) {

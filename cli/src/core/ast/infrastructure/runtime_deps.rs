@@ -53,23 +53,25 @@ impl RuntimeDepsVisitor {
 
     fn map_dependency_to_resource_type(dep_name: &str) -> Option<ResourceType> {
         match dep_name {
-            // Database
-            "MikroORM" => Some(ResourceType::Database),
+            // Database (Orm is the new token name, MikroORM is legacy)
+            "Orm" | "MikroORM" => Some(ResourceType::Database),
 
-            // EntityManager is ignored - it's a scoped dependency of MikroORM
-            "EntityManager" => None,
+            // EntityMgr/EntityManager is ignored - it's a scoped dependency of Orm
+            "EntityMgr" | "EntityManager" => None,
 
             // Cache
             "RedisClient" | "Redis" | "RedisCache" => Some(ResourceType::Cache),
 
-            // Storage
-            "S3ObjectStore" | "S3Client" | "S3" => Some(ResourceType::Storage),
+            // Storage (ObjectStore is the new token name, S3ObjectStore is legacy)
+            "ObjectStore" | "S3ObjectStore" | "S3Client" | "S3" => Some(ResourceType::Storage),
 
             // Queue/Message Broker
             "KafkaClient" | "Kafka" | "BullMQ" | "QueueClient" => Some(ResourceType::Queue),
 
-            // Monitoring (usually app-level, not a resource to provision)
-            "OpenTelemetryCollector" | "PrometheusClient" => Some(ResourceType::Monitoring),
+            // Monitoring (OtelCollector is the new token name, OpenTelemetryCollector is legacy)
+            "OtelCollector" | "OpenTelemetryCollector" | "PrometheusClient" => {
+                Some(ResourceType::Monitoring)
+            }
 
             // Skip these - they're not infrastructure resources
             "SchemaValidator" | "Metrics" => None,
@@ -220,7 +222,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(config)
+    factory: () => new MikroORM(config)
   },
   RedisClient: {
     lifetime: Lifetime.Singleton,
@@ -259,7 +261,7 @@ const runtimeDependencies = environmentConfig.chain({
   MikroORM: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
-    factory: () => MikroORM.initSync(config)
+    factory: () => new MikroORM(config)
   },
   EntityManager: {
     lifetime: Lifetime.Scoped,
@@ -281,5 +283,50 @@ const runtimeDependencies = environmentConfig.chain({
             !deps.iter()
                 .any(|d| d.name == "EntityManager")
         );
+    }
+
+    #[test]
+    fn test_new_token_names() {
+        let source = r#"
+const runtimeDependencies = environmentConfig.chain({
+  Orm: {
+    lifetime: Lifetime.Singleton,
+    type: MikroORM,
+    factory: () => new MikroORM(config)
+  },
+  OtelCollector: {
+    lifetime: Lifetime.Singleton,
+    type: OpenTelemetryCollector,
+    factory: () => new OpenTelemetryCollector()
+  },
+  ObjectStore: {
+    lifetime: Lifetime.Singleton,
+    type: S3ObjectStore,
+    factory: () => new S3ObjectStore()
+  },
+  EntityMgr: {
+    lifetime: Lifetime.Scoped,
+    type: EntityManager,
+    factory: ({ Orm }) => Orm.em.fork()
+  }
+});
+        "#;
+
+        let deps = extract_runtime_deps_from_source(source).unwrap();
+
+        assert_eq!(deps.len(), 3); // EntityMgr is ignored
+        assert!(
+            deps.iter()
+                .any(|d| d.name == "Orm" && d.resource_type == ResourceType::Database)
+        );
+        assert!(
+            deps.iter()
+                .any(|d| d.name == "OtelCollector" && d.resource_type == ResourceType::Monitoring)
+        );
+        assert!(
+            deps.iter()
+                .any(|d| d.name == "ObjectStore" && d.resource_type == ResourceType::Storage)
+        );
+        assert!(!deps.iter().any(|d| d.name == "EntityMgr"));
     }
 }

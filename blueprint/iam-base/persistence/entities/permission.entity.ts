@@ -1,8 +1,10 @@
-import { SqlBaseEntity } from '@forklaunch/blueprint-core';
-import { Entity, Property } from '@mikro-orm/core';
+import { sqlBaseProperties } from '@forklaunch/blueprint-core';
+import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
 
-@Entity()
-export class Permission extends SqlBaseEntity {
-  @Property()
-  slug!: string;
-}
+export const Permission = defineComplianceEntity({
+  name: 'Permission',
+  properties: {
+    ...sqlBaseProperties,
+    slug: fp.string().compliance('none')
+  }
+});

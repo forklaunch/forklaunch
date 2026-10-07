@@ -3,21 +3,50 @@
 # This is an auto-generated file. Modifications are encouraged but may inhibit automated upgrades.
 
 packages:
-- core
-- monitoring
-- billing-base
-- billing-stripe
-- iam-base
-- iam-better-auth
-- sample-worker
-- interfaces/billing
-- interfaces/iam
-- interfaces/worker
-- implementations/billing/base
-- implementations/billing/stripe
-- implementations/iam/base
-- implementations/worker/bullmq
-- implementations/worker/database
-- implementations/worker/kafka
-- implementations/worker/redis
-- universal-sdk
+  - cac-base
+  - core
+  - monitoring
+  - billing-base
+  - billing-stripe
+  - ecommerce-stripe
+  - iam-base
+  - iam-better-auth
+  - messaging-base
+  - messaging-twilio
+  - sample-worker
+  - interfaces/billing
+  - interfaces/cac
+  - interfaces/ecommerce
+  - interfaces/iam
+  - interfaces/messaging
+  - interfaces/worker
+  - implementations/billing/base
+  - implementations/billing/stripe
+  - implementations/messaging/base
+  - implementations/messaging/twilio
+  - implementations/cac/base
+  - implementations/ecommerce/base
+  - implementations/ecommerce/stripe
+  - implementations/ecommerce/paypal
+  - implementations/iam/base
+  - implementations/worker/bullmq
+  - implementations/worker/database
+  - implementations/worker/kafka
+  - implementations/worker/redis
+  - client-sdk
+
+blockExoticSubdeps: false
+
+allowBuilds:
+  '@parcel/watcher': false
+  "@scarf/scarf": true
+  better-sqlite3: true
+  cpu-features: true
+  esbuild: true
+  msgpackr-extract: true
+  protobufjs: true
+  sqlite3: true
+  ssh2: true
+  tldjs: true
+  unrs-resolver: true
+

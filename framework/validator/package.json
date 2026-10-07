@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/validator",
-  "version": "0.10.29",
+  "version": "1.2.31",
   "description": "Schema validator for ForkLaunch components.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -48,6 +48,9 @@
       "import": "./lib/__test__/utils/mockSchemaValidator.mjs",
       "require": "./lib/__test__/utils/mockSchemaValidator.js",
       "default": "./lib/__test__/utils/mockSchemaValidator.js"
+    },
+    "./*": {
+      "types": "./lib/*.d.ts"
     }
   },
   "types": "lib/index.d.ts",
@@ -58,7 +61,7 @@
     "lib/**"
   ],
   "scripts": {
-    "build": "tsgo --noEmit && tsup index.ts src/typebox/index.ts src/zod/index.ts __test__/utils/mockSchemaValidator.ts shims/zod-v3-openapi/zod-extensions.ts --format cjs,esm --no-splitting --tsconfig tsconfig.json --outDir lib --dts --clean",
+    "build": "tsc --noEmit && tsup index.ts src/typebox/index.ts src/zod/index.ts __test__/utils/mockSchemaValidator.ts shims/zod-v3-openapi/zod-extensions.ts --format cjs,esm --no-splitting --tsconfig tsconfig.json --outDir lib --clean && tsc -p tsconfig.build.json --emitDeclarationOnly",
     "check": "depcheck",
     "clean": "rm -rf lib pnpm.lock.yaml node_modules",
     "docs": "typedoc --out docs *",
@@ -70,26 +73,26 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "workspace:*",
-    "@sinclair/typebox": "^0.34.48",
-    "ts-deepmerge": "^7.0.3",
-    "zod": "^4.3.6"
+    "@forklaunch/common": "workspace:^",
+    "@sinclair/typebox": "^0.34.52",
+    "ts-deepmerge": "^8.0.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
-    "@types/node": "^25.3.0",
-    "@typescript/native-preview": "7.0.0-dev.20260223.1",
-    "@vitest/coverage-v8": "^4.0.18",
+    "@types/node": "^26.6.3",
+    "@vitest/coverage-v8": "^5.0.3",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-prettier": "^5.5.5",
-    "globals": "^17.3.0",
-    "jest": "^30.2.0",
-    "openapi3-ts": "^4.5.0",
-    "ts-jest": "^29.4.6",
+    "eslint-plugin-prettier": "^5.5.6",
+    "globals": "^17.12.0",
+    "jest": "^30.5.2",
+    "openapi3-ts": "^4.6.1",
+    "ts-jest": "^29.4.14",
     "ts-node": "^10.9.2",
     "tsup": "^8.5.1",
-    "typedoc": "^0.28.17",
-    "typescript-eslint": "^8.56.1"
+    "typedoc": "^0.28.20",
+    "typescript": "^7.0.2",
+    "typescript-eslint": "^8.71.0"
   }
 }

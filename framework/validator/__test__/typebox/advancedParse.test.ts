@@ -185,7 +185,7 @@ describe('typebox advanced parse', () => {
       if (parsed.ok) {
         compare(parsed.value, BigInt('12345678901234567890'));
       } else {
-        fail();
+        expect.fail('Expected parsed.ok to be true');
       }
     });
 
@@ -194,7 +194,7 @@ describe('typebox advanced parse', () => {
       if (parsed.ok) {
         compare(parsed.value, BigInt(123123));
       } else {
-        fail();
+        expect.fail('Expected parsed.ok to be true');
       }
     });
 
@@ -203,7 +203,7 @@ describe('typebox advanced parse', () => {
       if (parsed.ok) {
         compare(parsed.value, BigInt(1));
       } else {
-        fail();
+        expect.fail('Expected parsed.ok to be true');
       }
     });
 
@@ -212,7 +212,7 @@ describe('typebox advanced parse', () => {
       if (parsed.ok) {
         compare(parsed.value, BigInt(0));
       } else {
-        fail();
+        expect.fail('Expected parsed.ok to be true');
       }
     });
 
@@ -645,7 +645,7 @@ describe('typebox advanced parse', () => {
       if (parsed.ok) {
         compare(parsed.value, BigInt(123));
       } else {
-        fail();
+        expect.fail('Expected parsed.ok to be true');
       }
     });
 
@@ -721,7 +721,7 @@ describe('typebox advanced parse', () => {
       if (parsed.ok) {
         compare(parsed.value, BigInt(123));
       } else {
-        fail();
+        expect.fail('Expected parsed.ok to be true');
       }
     });
 

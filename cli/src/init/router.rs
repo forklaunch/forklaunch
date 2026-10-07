@@ -50,6 +50,14 @@ fn generate_basic_router(
     dryrun: bool,
     manifest_path: &Path,
 ) -> Result<()> {
+    // Detect naming convention from existing registrations file
+    let registrations_path = base_path.join("registrations.ts");
+    if let Ok(registrations_content) = read_to_string(&registrations_path) {
+        if registrations_content.contains("OpenTelemetryCollector:") {
+            manifest_data.otel_token = "OpenTelemetryCollector".to_string();
+        }
+    }
+
     let output_path = base_path.to_string_lossy().to_string();
     let template_dir = PathIO {
         input_path: Path::new("router").to_string_lossy().to_string(),

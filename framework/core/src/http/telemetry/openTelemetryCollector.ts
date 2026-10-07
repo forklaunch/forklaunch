@@ -44,9 +44,9 @@ import { logger, PinoLogger } from './pinoLogger';
 export class OpenTelemetryCollector<
   AppliedMetricsDefinition extends MetricsDefinition
 > {
-  #logger: PinoLogger;
-  #serviceName: string;
-  #metrics: Record<
+  _logger: PinoLogger;
+  _serviceName: string;
+  _metrics: Record<
     keyof AppliedMetricsDefinition,
     | Counter
     | Gauge
@@ -63,10 +63,10 @@ export class OpenTelemetryCollector<
     level?: LevelWithSilentOrString,
     metricDefinitions?: AppliedMetricsDefinition
   ) {
-    this.#serviceName = serviceName;
-    this.#logger = logger(level || 'info');
+    this._serviceName = serviceName;
+    this._logger = logger(level || 'info');
 
-    this.#metrics = {} as Record<
+    this._metrics = {} as Record<
       keyof AppliedMetricsDefinition,
       MetricType<AppliedMetricsDefinition[keyof AppliedMetricsDefinition]>
     >;
@@ -76,38 +76,38 @@ export class OpenTelemetryCollector<
     )) {
       switch (metricType) {
         case 'counter':
-          this.#metrics[metricId as keyof AppliedMetricsDefinition] = metrics
-            .getMeter(this.#serviceName)
+          this._metrics[metricId as keyof AppliedMetricsDefinition] = metrics
+            .getMeter(this._serviceName)
             .createCounter(metricId);
           break;
         case 'gauge':
-          this.#metrics[metricId as keyof AppliedMetricsDefinition] = metrics
-            .getMeter(this.#serviceName)
+          this._metrics[metricId as keyof AppliedMetricsDefinition] = metrics
+            .getMeter(this._serviceName)
             .createGauge(metricId);
           break;
         case 'histogram':
-          this.#metrics[metricId as keyof AppliedMetricsDefinition] = metrics
-            .getMeter(this.#serviceName)
+          this._metrics[metricId as keyof AppliedMetricsDefinition] = metrics
+            .getMeter(this._serviceName)
             .createHistogram(metricId);
           break;
         case 'upDownCounter':
-          this.#metrics[metricId as keyof AppliedMetricsDefinition] = metrics
-            .getMeter(this.#serviceName)
+          this._metrics[metricId as keyof AppliedMetricsDefinition] = metrics
+            .getMeter(this._serviceName)
             .createUpDownCounter(metricId);
           break;
         case 'observableCounter':
-          this.#metrics[metricId as keyof AppliedMetricsDefinition] = metrics
-            .getMeter(this.#serviceName)
+          this._metrics[metricId as keyof AppliedMetricsDefinition] = metrics
+            .getMeter(this._serviceName)
             .createObservableCounter(metricId);
           break;
         case 'observableGauge':
-          this.#metrics[metricId as keyof AppliedMetricsDefinition] = metrics
-            .getMeter(this.#serviceName)
+          this._metrics[metricId as keyof AppliedMetricsDefinition] = metrics
+            .getMeter(this._serviceName)
             .createObservableGauge(metricId);
           break;
         case 'observableUpDownCounter':
-          this.#metrics[metricId as keyof AppliedMetricsDefinition] = metrics
-            .getMeter(this.#serviceName)
+          this._metrics[metricId as keyof AppliedMetricsDefinition] = metrics
+            .getMeter(this._serviceName)
             .createObservableUpDownCounter(metricId);
           break;
       }
@@ -120,48 +120,48 @@ export class OpenTelemetryCollector<
   }
 
   log(level: LevelWithSilent, ...args: (string | unknown | LoggerMeta)[]) {
-    this.#logger.log(level, ...args);
+    this._logger.log(level, ...args);
   }
 
   info: LogFn = (
     msg: string | unknown | LoggerMeta,
     ...args: (string | unknown | LoggerMeta)[]
   ) => {
-    this.#logger.log('info', msg, ...args);
+    this._logger.log('info', msg, ...args);
   };
 
   error: LogFn = (
     msg: string | unknown | LoggerMeta,
     ...args: (string | unknown | LoggerMeta)[]
   ) => {
-    this.#logger.log('error', msg, ...args);
+    this._logger.log('error', msg, ...args);
   };
 
   warn: LogFn = (
     msg: string | unknown | LoggerMeta,
     ...args: (string | unknown | LoggerMeta)[]
   ) => {
-    this.#logger.log('warn', msg, ...args);
+    this._logger.log('warn', msg, ...args);
   };
 
   debug: LogFn = (
     msg: string | unknown | LoggerMeta,
     ...args: (string | unknown | LoggerMeta)[]
   ) => {
-    this.#logger.log('debug', msg, ...args);
+    this._logger.log('debug', msg, ...args);
   };
 
   trace: LogFn = (
     msg: string | unknown | LoggerMeta,
     ...args: (string | unknown | LoggerMeta)[]
   ) => {
-    this.#logger.log('trace', msg, ...args);
+    this._logger.log('trace', msg, ...args);
   };
 
   getMetric<T extends keyof AppliedMetricsDefinition>(
     metricId: T
   ): MetricType<AppliedMetricsDefinition[T]> {
-    return this.#metrics[metricId] as MetricType<AppliedMetricsDefinition[T]>;
+    return this._metrics[metricId] as MetricType<AppliedMetricsDefinition[T]>;
   }
 }
 
@@ -205,14 +205,14 @@ new NodeSDK({
     exportIntervalMillis: 5000
   }),
   logRecordProcessors: [
-    new BatchLogRecordProcessor(
-      new OTLPLogExporter({
+    new BatchLogRecordProcessor({
+      exporter: new OTLPLogExporter({
         url: `${
           getEnvVar('OTEL_EXPORTER_OTLP_ENDPOINT') ?? 'http://localhost:4318'
         }/v1/logs`,
         headers: otelHeaders
       })
-    )
+    })
   ],
   instrumentations: [
     new HttpInstrumentation({
@@ -258,4 +258,38 @@ export const httpServerDurationHistogram = metrics
   }>('http_server_duration', {
     description: 'Duration of HTTP server requests',
     unit: 's'
+  });
+
+export const httpRequestDurationMsHistogram = metrics
+  .getMeter(getEnvVar('OTEL_SERVICE_NAME') || 'unknown')
+  .createHistogram<{
+    [ATTR_SERVICE_NAME]: string;
+    [ATTR_APPLICATION_ID]?: string;
+    [ATTR_API_NAME]: string;
+    [ATTR_HTTP_REQUEST_METHOD]: string;
+    [ATTR_HTTP_ROUTE]: string;
+    [ATTR_HTTP_RESPONSE_STATUS_CODE]: number;
+  }>('http_request_duration_ms', {
+    description: 'Duration of HTTP requests in milliseconds'
+  });
+
+export const httpErrorsTotalCounter = metrics
+  .getMeter(getEnvVar('OTEL_SERVICE_NAME') || 'unknown')
+  .createCounter<{
+    [ATTR_SERVICE_NAME]: string;
+    [ATTR_APPLICATION_ID]?: string;
+    [ATTR_API_NAME]: string;
+    [ATTR_HTTP_REQUEST_METHOD]: string;
+    [ATTR_HTTP_ROUTE]: string;
+    [ATTR_HTTP_RESPONSE_STATUS_CODE]: number;
+  }>('http_errors_total', {
+    description: 'Total number of HTTP errors (4xx/5xx)'
+  });
+
+export const httpRequestsInFlightCounter = metrics
+  .getMeter(getEnvVar('OTEL_SERVICE_NAME') || 'unknown')
+  .createUpDownCounter<{
+    [ATTR_SERVICE_NAME]: string;
+  }>('http_requests_in_flight', {
+    description: 'Number of HTTP requests currently in flight'
   });

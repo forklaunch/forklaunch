@@ -4,9 +4,19 @@ category: Guides
 description: Learn how to add and configure workers in your application.
 ---
 
-## Adding a Worker
+## Add a Worker
 
-To add a worker to your application, run the following command:
+A **worker** is a background process that handles asynchronous tasks and job processing. While services handle HTTP requests synchronously, workers process jobs in the background, like sending emails, processing images, generating reports, or handling scheduled tasks. Think of it as a dedicated employee working behind the scenes: when a user places an order, a service handles the request immediately, while a worker processes the order fulfillment, sends confirmation emails, and updates inventory asynchronously.
+
+In ForkLaunch, workers can use different backends (database, Redis, Kafka, BullMQ) depending on your needs for durability, performance, and complexity. Each worker has both a `worker` entry point for processing jobs and a `server` entry point for health checks and management APIs.
+
+## Getting Started
+
+You can add a worker in two ways:
+1. [Using Commands](/docs/adding-projects/workers.md#using-commands-recommended)
+2. [Manual Creation with Sync](/docs/adding-projects/workers.md#manual-creation-with-sync)
+
+### Using Commands (Recommended)
 
 <CodeTabs type="instantiate">
   <Tab title="init">
@@ -21,17 +31,31 @@ To add a worker to your application, run the following command:
   ```bash
   forklaunch add worker
   ```
-  
+
   </Tab>
 </CodeTabs>
 
-This adds a new worker that has a `worker` and `server` entry point. The worker handles asynchronous job processing, and the server provides health checks and optionally exposes management APIs.
+This creates a new worker with `worker` and `server` entry points. The worker handles asynchronous job processing, and the server provides health checks and optionally exposes management APIs. All application artifacts are automatically updated.
 
-`ForkLaunch` will automatically add the worker to your workspace, docker-compose, and register any necessary scripts.
+### Manual Creation with Sync
 
-By default, you will not need to run any scripts to get going, but if you have added a new backend, you may need to run `build` and `install` scripts from the top level of the application.
+If you manually create a worker directory, use `forklaunch sync` to register it:
 
-### Command Options
+```bash
+# After manually creating the worker structure
+forklaunch sync worker worker-name
+```
+
+This updates artifacts (manifest, docker-compose, workspace, tsconfig) to include your manually created worker.
+
+### Sync Command Options
+
+| Option | Short | Description | Valid Values |
+| :----- | :---- | :---------- | :----------- |
+| `--path` | `-p` | The application path | Any valid directory path that contains /modules |
+| `--prompts` | `-P` | JSON object with pre-provided answers for worker options (see init options) | JSON string |
+
+### Init Command Options
 
 | Option | Short | Description | Valid Values |
 | :----- | :---- | :---------- | :----------- |
@@ -39,6 +63,7 @@ By default, you will not need to run any scripts to get going, but if you have a
 | `--database` | `-d` | The database to use (for database workers) | `postgresql`, `mysql`, `mariadb`, `mssql`, `mongodb`, `libsql`, `sqlite`, `better-sqlite` |
 | `--path` | `-p` | The application path to initialize the worker in | Any valid directory path |
 | `--description` | `-D` | The description of the worker | Any string |
+| `--mappers` |  | Generate mapper files for entity/DTO transformation | Flag (no value) |
 | `--dryrun` | `-n` | Dry run the command | Flag (no value) |
 
 ### Worker Aliases
@@ -110,20 +135,22 @@ A worker follows the standard ForkLaunch service structure:
 
 ```bash
 # Basic database worker
-forklaunch init worker email-processor --type database --database postgresql
+forklaunch init worker email-processor --path ./my-app/src/modules --type database --database postgresql
 
 # Redis worker for real-time tasks
-forklaunch init worker notification-worker --type redis
+forklaunch init worker notification-worker --path ./my-app/src/modules --type redis
 
 # BullMQ worker with advanced features
-forklaunch init worker scheduled-jobs --type bullmq
+forklaunch init worker scheduled-jobs --path ./my-app/src/modules --type bullmq
 
 # Kafka worker for event streaming
-forklaunch init worker analytics-consumer --type kafka
+forklaunch init worker analytics-consumer --path ./my-app/src/modules --type kafka
 
 # Custom path and description
 forklaunch init worker background-tasks --path ./workers --description "Background task processor"
 ```
+
+For a complete step-by-step example with services, see the [Dice Roll Example](/docs/examples/dice-roll-node-app.md).
 
 ### Next Steps
 
@@ -132,8 +159,8 @@ After creating a worker:
 2. Implement your worker logic in the worker file
 3. Set up any necessary data models (for database workers)
 4. Configure event processing patterns
-5. Add error handling and retries
-6. Write tests for your implementation
+
+For database setup, migrations, building, and running the worker, see [Local Development](/docs/local-development.md).
 
 ### Common Issues
 
@@ -144,52 +171,18 @@ After creating a worker:
 5. **Error Handling**: Implement proper retry logic and dead letter queues
 6. **Scaling**: Configure worker scaling based on job queue length
 
-### Deployment Defaults
+### Deployment
 
-When you deploy a worker using `forklaunch deploy`, the platform automatically provisions resources using **AWS Free Tier** defaults to minimize costs:
+When you're ready to deploy your worker, see [Release](/docs/cli/release.md) and [Deploy](/docs/cli/deploy.md) for information about:
+- Deployment commands and workflows
+- Default AWS Free Tier resources
+- Cost estimates and scaling options
 
-#### Compute (Per Worker)
-- **CPU**: 256m (0.25 vCPU) - Fargate free tier eligible
-- **Memory**: 512Mi (0.5 GB) - Fargate free tier eligible
-- **Replicas**: 1 minimum, 2 maximum - Auto-scaling based on queue depth
-- **Concurrency**: 5 concurrent jobs per worker instance
-
-#### Queue Backend (By Worker Type)
-
-**Database Workers**:
-- Uses same database as application (see service defaults)
-- Job table with indexing
-- Polling interval: 5 seconds
-
-**Redis Workers**:
-- **Instance**: cache.t3.micro (free tier eligible)
-- **Connection Pool**: 10 connections
-- **Persistence**: RDB snapshots (1 day retention)
-
-**BullMQ Workers**:
-- Uses Redis (same as Redis workers above)
-- **Job Retention**: 24 hours for completed jobs
-- **Failed Job Retention**: 7 days
-- **Rate Limiting**: 100 jobs/minute per worker
-
-**Kafka Workers**:
-- **Not in free tier** - minimum cost ~$70/month
-- Consider Redis or Database workers for free tier deployments
-- Recommended for production event streaming only
-
-#### Storage
-- **Dead Letter Queue**: Automatic for failed jobs
-- **Job Logs**: 7 day retention in CloudWatch
-- **Metrics**: Job duration, success rate, queue depth
-
-**Note**: You can upgrade these defaults via the Platform UI when your application grows. The free tier defaults are designed to keep costs at $0/month for development and small production workloads.
-
-**Cost Estimate**:
-- Database/Redis/BullMQ Workers: $0/month (within free tier)
-- Kafka Workers: $70+/month (not free tier eligible)
-- Can scale up via Platform UI as needed
-
-**Recommendation**: Start with Database or BullMQ workers for free tier deployments. Migrate to Kafka only when you need high-throughput event streaming.
+**Worker-Specific Deployment Notes:**
+- Workers use the same compute defaults as services (256m CPU, 512Mi RAM)
+- Auto-scaling is based on queue depth for workers
+- Database/Redis/BullMQ workers are free-tier eligible
+- Kafka workers require paid infrastructure (~$70+/month)
 
 ### Best Practices
 

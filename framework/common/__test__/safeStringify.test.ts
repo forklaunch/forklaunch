@@ -19,8 +19,8 @@ describe('safeStringify', () => {
 
     // Type safety: string "123" should differ from number 123
     expect(safeStringify('123')).not.toBe(safeStringify(123));
-    expect(safeStringify('123')).toBe('"123"');  // String with quotes
-    expect(safeStringify(123)).toBe('123');      // Number without quotes
+    expect(safeStringify('123')).toBe('"123"'); // String with quotes
+    expect(safeStringify(123)).toBe('123'); // Number without quotes
 
     // Special characters should be escaped
     expect(safeStringify('hello "world"')).toBe('"hello \\"world\\""');
@@ -42,8 +42,8 @@ describe('safeStringify', () => {
   it('should handle special types', () => {
     expect(safeStringify(BigInt(123))).toBe('"123n"');
     expect(safeStringify(Symbol('test'))).toBe('"Symbol(test)"');
-    expect(safeStringify(() => { })).toBe('"[Function: anonymous]"');
-    expect(safeStringify(function named() { })).toBe('"[Function: named]"');
+    expect(safeStringify(() => {})).toBe('"[Function: anonymous]"');
+    expect(safeStringify(function named() {})).toBe('"[Function: named]"');
   });
 
   it('should handle special number values', () => {
@@ -88,7 +88,7 @@ describe('safeStringify', () => {
 
     const complex = {
       error: new Error('test'),
-      fn: () => { },
+      fn: () => {},
       sym: Symbol('test'),
       date: new Date('2023-01-01'),
       map: new Map([['key', 'value']]),
@@ -201,6 +201,23 @@ describe('toPlainString', () => {
         throw new Error('Cannot serialize');
       }
     };
-    expect(toPlainString(throwingObject)).toBe('[Unserializable: Cannot serialize]');
+    expect(toPlainString(throwingObject)).toBe(
+      '[Unserializable: Cannot serialize]'
+    );
+  });
+
+  it('always returns a string, even for a function or a symbol', () => {
+    // JSON.stringify returns undefined for these
+    expect(toPlainString(Symbol('tag'))).toBe('Symbol(tag)');
+    expect(typeof toPlainString(() => 1)).toBe('string');
+  });
+
+  it('round-trips a string through safeStringify and safeParse', async () => {
+    // the persistence and cache paths write with safeStringify and read with
+    // safeParse; a string that looks like a number or JSON must stay a string
+    const { safeParse } = await import('../src/safeParse');
+    expect(safeParse(safeStringify('123'))).toBe('123');
+    expect(safeParse(safeStringify('true'))).toBe('true');
+    expect(safeParse(safeStringify('{"a":1}'))).toBe('{"a":1}');
   });
 });

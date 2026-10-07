@@ -17,14 +17,10 @@ export const CreateCheckoutSessionMapper = requestMapper({
   entity: CheckoutSession,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return CheckoutSession.create(
-        {
-          ...dto,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        },
-        em
-      );
+      return em.create(CheckoutSession, {
+        ...dto,
+        providerFields: dto.providerFields ?? null
+      });
     }
   }
 });
@@ -39,7 +35,9 @@ export const UpdateCheckoutSessionMapper = requestMapper({
   entity: CheckoutSession,
   mapperDefinition: {
     toEntity: async (dto, em: EntityManager) => {
-      return CheckoutSession.update(dto, em);
+      const entity = await em.findOneOrFail(CheckoutSession, { id: dto.id });
+      em.assign(entity, { ...dto });
+      return entity;
     }
   }
 });
@@ -53,8 +51,13 @@ export const CheckoutSessionMapper = responseMapper({
   ),
   entity: CheckoutSession,
   mapperDefinition: {
-    toDto: async (entity: CheckoutSession) => {
-      return await entity.read();
+    toDto: async (entity) => {
+      return {
+        ...entity,
+        uri: entity.uri ?? undefined,
+        successRedirectUri: entity.successRedirectUri ?? undefined,
+        cancelRedirectUri: entity.cancelRedirectUri ?? undefined
+      };
     }
   }
 });

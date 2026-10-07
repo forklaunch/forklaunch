@@ -1,16 +1,16 @@
 import { number, schemaValidator, string } from '@forklaunch/blueprint-core';
 import {
+  FieldEncryptor,
+  registerEncryptor
+} from '@forklaunch/core/persistence';
+import {
   createConfigInjector,
   getEnvVar,
   Lifetime
 } from '@forklaunch/core/services';
+import { Platform, TextType, Type } from '@mikro-orm/core';
 import { Migrator } from '@mikro-orm/migrations';
-// import { MongoDriver } from '@mikro-orm/mongodb';
-// import { MySqlDriver } from '@mikro-orm/mysql';
-import { defineConfig, Platform, TextType, Type } from '@mikro-orm/core';
-import { PostgreSqlDriver } from '@mikro-orm/postgresql';
-import { TsMorphMetadataProvider } from '@mikro-orm/reflection';
-// import { SqliteDriver } from '@mikro-orm/sqlite';
+import { defineConfig } from '@mikro-orm/postgresql';
 import dotenv from 'dotenv';
 import * as entities from './persistence/entities';
 
@@ -46,23 +46,31 @@ const configInjector = createConfigInjector(schemaValidator, {
     lifetime: Lifetime.Singleton,
     type: string,
     value: getEnvVar('NODE_ENV')
+  },
+  ENCRYPTION_KEY: {
+    lifetime: Lifetime.Singleton,
+    type: string,
+    value: getEnvVar('ENCRYPTION_KEY')
   }
 });
 
 export const validConfigInjector = configInjector.validateConfigSingletons(
   getEnvVar('DOTENV_FILE_PATH')
 );
+const tokens = validConfigInjector.tokens();
+
+registerEncryptor(
+  new FieldEncryptor(validConfigInjector.resolve(tokens.ENCRYPTION_KEY))
+);
 
 const mikroOrmOptionsConfig = defineConfig({
-  driver: PostgreSqlDriver,
-  dbName: validConfigInjector.resolve('DB_NAME'),
-  host: validConfigInjector.resolve('DB_HOST'),
-  user: validConfigInjector.resolve('DB_USER'),
-  password: validConfigInjector.resolve('DB_PASSWORD'),
-  port: validConfigInjector.resolve('DB_PORT'),
+  dbName: validConfigInjector.resolve(tokens.DB_NAME),
+  host: validConfigInjector.resolve(tokens.DB_HOST),
+  user: validConfigInjector.resolve(tokens.DB_USER),
+  password: validConfigInjector.resolve(tokens.DB_PASSWORD),
+  port: validConfigInjector.resolve(tokens.DB_PORT),
   entities: Object.values(entities),
-  metadataProvider: TsMorphMetadataProvider,
-  debug: validConfigInjector.resolve('NODE_ENV') === 'development',
+  debug: validConfigInjector.resolve(tokens.NODE_ENV) === 'development',
   extensions: [Migrator],
   discovery: {
     getMappedType(type: string, platform: Platform) {

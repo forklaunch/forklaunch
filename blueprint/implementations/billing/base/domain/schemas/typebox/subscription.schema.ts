@@ -25,7 +25,7 @@ export const CreateSubscriptionSchema = <
   startDate: date,
   endDate: optional(date),
   status: string,
-  billingProvider: optional(enum_(BillingProviderEnum)),
+  billingProvider: enum_(BillingProviderEnum),
   providerFields: optional(unknown)
 });
 

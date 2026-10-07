@@ -26,7 +26,9 @@ export { setupTestEnvironment, TestEnvConfig } from './environment';
 export {
   clearTestDatabase,
   MikroOrmTestConfig,
-  setupTestORM
+  setupTestORM,
+  type AnyMikroORM,
+  type AnyMikroOrmOptions
 } from './database';
 
 export {

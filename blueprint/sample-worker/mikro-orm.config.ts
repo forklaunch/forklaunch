@@ -4,10 +4,9 @@ import {
   getEnvVar,
   Lifetime
 } from '@forklaunch/core/services';
-import { defineConfig, Platform, TextType, Type } from '@mikro-orm/core';
+import { Platform, TextType, Type } from '@mikro-orm/core';
 import { Migrator } from '@mikro-orm/migrations';
-import { PostgreSqlDriver } from '@mikro-orm/postgresql';
-import { TsMorphMetadataProvider } from '@mikro-orm/reflection';
+import { defineConfig } from '@mikro-orm/postgresql';
 import dotenv from 'dotenv';
 import * as entities from './persistence/entities';
 
@@ -50,14 +49,12 @@ export const validConfigInjector = configInjector.validateConfigSingletons(
   getEnvVar('DOTENV_FILE_PATH')
 );
 const mikroOrmOptionsConfig = defineConfig({
-  driver: PostgreSqlDriver,
   dbName: validConfigInjector.resolve('DB_NAME'),
   host: validConfigInjector.resolve('DB_HOST'),
   user: validConfigInjector.resolve('DB_USER'),
   password: validConfigInjector.resolve('DB_PASSWORD'),
   port: validConfigInjector.resolve('DB_PORT'),
   entities: Object.values(entities),
-  metadataProvider: TsMorphMetadataProvider,
   debug: validConfigInjector.resolve('NODE_ENV') === 'development',
   extensions: [Migrator],
   discovery: {
