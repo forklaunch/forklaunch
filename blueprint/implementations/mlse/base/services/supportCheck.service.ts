@@ -236,7 +236,9 @@ function numbersBoundAlike(claim: string[], sources: string[][]): string | undef
 function doseSchedules(text: string): { dose: string; schedule: string }[] {
   const lower = text.toLowerCase();
   const out: { dose: string; schedule: string }[] = [];
-  const doseRe = /(\d+(?:\.\d+)?)\s*(mg\/kg|mcg\/kg|mg|mcg|g|units|ml)\b/g;
+  // A match may not start inside a number, and the digit runs are capped,
+  // so a long run of digits with no unit costs linear time, not quadratic.
+  const doseRe = /(?<![\d.])(\d{1,7}(?:\.\d{1,4})?)\s*(mg\/kg|mcg\/kg|mg|mcg|g|units|ml)\b/g;
   for (const m of lower.matchAll(doseRe)) {
     const after = lower.slice((m.index ?? 0) + m[0].length, (m.index ?? 0) + m[0].length + 40);
     const schedule = scheduleIn(after);
