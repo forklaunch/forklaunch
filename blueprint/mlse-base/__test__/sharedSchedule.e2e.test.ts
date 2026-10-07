@@ -1,3 +1,4 @@
+import { FieldEncryptor } from '@forklaunch/core/persistence';
 import { RedisTtlCache } from '@forklaunch/infrastructure-redis';
 import { GenericContainer, StartedTestContainer, Wait } from 'testcontainers';
 import {
@@ -24,7 +25,7 @@ describe('RedisRequestSchedule', () => {
       { url: `redis://${container.getHost()}:${container.getMappedPort(6379)}` },
       // as registrations.ts builds it: the cache connects when enabled
       { enabled: true, level: 'error' },
-      {}
+      { encryptor: new FieldEncryptor('test-encryption-key') }
     );
   }, 120_000);
 
