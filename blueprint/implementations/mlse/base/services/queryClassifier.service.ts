@@ -1,160 +1,101 @@
 import { QueryClassificationDto } from '@forklaunch/interfaces-mlse/types';
+import { activeSafetyRules, type SafetyRules } from '../domain/safetyRules';
 import { queryTerms } from './ranking.service';
 
 // Rule-based and deterministic on purpose: whether a query reaches the AI at
 // all must not depend on a model's judgment. Matching works on whole words
 // of the normalized query (no backtracking regular expressions), so it runs
-// in linear time on any input.
+// in linear time on any input. The phrase lists live in
+// domain/safetyRules.ts, where they can be reviewed and extended.
 
-// An emergency needs both an acute event and a sign it is happening now.
-// "Management of acetaminophen overdose" is a literature question for a
-// doctor; "patient just took 40 tablets" is not.
-const ACUTE_EVENTS = [
-  'overdose',
-  'overdosed',
-  'cardiac arrest',
-  'not breathing',
-  'stopped breathing',
-  'not responding',
-  'unresponsive',
-  'collapsed',
-  'seizing',
-  'seizure',
-  'choking',
-  'anaphylaxis',
-  'bleeding',
-  'hemorrhaging',
-  'haemorrhaging',
-  'suicidal',
-  'suicide',
-  'poisoned',
-  'swallowed',
-  'chest pain',
-  'stroke'
-];
-// Phrases, not single words: "now", "help" or "urgent" alone also appear in
-// literature questions ("does aspirin help prevent stroke").
-const HAPPENING_NOW = [
-  'right now',
-  'happening now',
-  'just took',
-  'just swallowed',
-  'just ingested',
-  'just collapsed',
-  'is having',
-  // "is not" alone is too broad: "bleeding risk when aspirin is not stopped"
-  // is a literature question
-  'is not breathing',
-  'is not responding',
-  'is not responsive',
-  'is bleeding',
-  'is unresponsive',
-  'is seizing',
-  'is choking',
-  'has collapsed',
-  'help me',
-  'please help',
-  'need help',
-  'what do i do',
-  'asap'
-];
+// How many words may separate an acute event from a sign it is happening
+// now: "he is having a really bad seizure" has 3.
+const NOW_WINDOW = 3;
 
-// Events that are an emergency as soon as they are told about a person,
-// even in the past tense: "my 3-year-old swallowed my pills". Chronic
-// conditions (stroke, seizure, chest pain) are not here: "my patient had a
-// stroke last year" is a literature question.
-const ACUTE_FOR_A_PERSON = [
-  'swallowed',
-  'ingested',
-  'overdose',
-  'overdosed',
-  'poisoned',
-  'took too many',
-  'not breathing',
-  'stopped breathing',
-  'not responding',
-  'unresponsive',
-  'collapsed',
-  'choking',
-  'suicidal'
-];
-// Someone the asker is with; "my patient" and ages are in INDIVIDUAL_PATIENT
-// and describesIndividual.
-const SOMEONE = [
-  'my son',
-  'my daughter',
-  'my child',
-  'my kid',
-  'my baby',
-  'my toddler',
-  'my husband',
-  'my wife',
-  'my partner',
-  'my mother',
-  'my father',
-  'my mom',
-  'my dad',
-  'my friend',
-  'someone',
-  'somebody'
-];
+// An event right after these is a point in time, not something happening:
+// "useful after stroke", "following cardiac arrest".
+const EVENT_AS_TIME = new Set(['after', 'before', 'following', 'post']);
 
-const PRESCRIPTION_REQUESTS = [
-  'prescribe me',
-  'write a prescription',
-  'write me a prescription',
-  'prescription for me',
-  'get a prescription',
-  'refill my',
-  'can you prescribe',
-  'please prescribe'
-];
+// Words that turn an acute event into a topic: "seizure prophylaxis",
+// "bleeding risk", "overdose management". Deliberately in code, not in the
+// rules: these make the classifier LESS careful, and a deployment may only
+// make it more careful.
+const EVENT_AS_TOPIC = new Set([
+  'prophylaxis',
+  'prevention',
+  'risk',
+  'risks',
+  'guideline',
+  'guidelines',
+  'protocol',
+  'protocols',
+  'score',
+  'scores',
+  'rate',
+  'rates',
+  'incidence',
+  'threshold',
+  'outcomes'
+]);
+// Not "history", "treatment" or "management": "chest pain, history of MI"
+// is still chest pain, and missing an emergency costs more than a false
+// alarm.
 
-// Signs the query is about one individual rather than the literature.
-const INDIVIDUAL_PATIENT = [
-  'my patient',
-  'this patient',
-  'our patient',
-  'the patient is',
-  'patient weighs',
-  'he weighs',
-  'she weighs',
-  'should i give',
-  'should i prescribe',
-  'should i start',
-  'what should i give',
-  'how much should i give',
-  'how much do i give',
-  'dose for him',
-  'dose for her',
-  // the asker's own treatment: "should I stop my warfarin?"
-  'should i stop',
-  'should i take',
-  'should i continue',
-  'should i skip',
-  'should i double',
-  'should i increase',
-  'should i reduce',
-  'should i lower',
-  'should i switch',
-  'can i stop',
-  'can i take',
-  'can i skip',
-  'how much should i take',
-  'is it safe for me',
-  'my dose',
-  'my medication',
-  'my medications',
-  'my medicine',
-  'my medicines',
-  'my pills',
-  'my tablets',
-  'my blood sugar',
-  'my blood pressure is'
+// After an ingestion verb: an amount ("took 30 tablets", "took too many").
+const AMOUNT_PHRASES = [
+  'too many',
+  'too much',
+  'a bottle',
+  'a whole',
+  'the whole',
+  'all my',
+  'all of',
+  'all the',
+  'a handful',
+  'a lot'
 ];
-const BODY_WEIGHT_UNITS = new Set(['kg', 'kgs', 'kilo', 'kilos', 'kilogram', 'kilograms', 'lb', 'lbs', 'pound', 'pounds']);
-const AGE_UNITS = new Set(['year', 'years', 'yr', 'yrs', 'month', 'months', 'week', 'weeks']);
+// How many words after the verb an amount or poison may come.
+const INGESTION_WINDOW = 4;
+// A count of tablets taken at once that is worth treating as an overdose.
+// "took 500 mg" is a dose, not a count, and is left alone.
+const OVERDOSE_COUNT = 5;
+const DOSE_UNITS = new Set([
+  'mg',
+  'mcg',
+  'g',
+  'gram',
+  'grams',
+  'ml',
+  'units',
+  'iu',
+  'mmol'
+]);
+
+const BODY_WEIGHT_UNITS = new Set([
+  'kg',
+  'kgs',
+  'kilo',
+  'kilos',
+  'kilogram',
+  'kilograms',
+  'lb',
+  'lbs',
+  'pound',
+  'pounds'
+]);
+const AGE_UNITS = new Set([
+  'year',
+  'years',
+  'yr',
+  'yrs',
+  'month',
+  'months',
+  'week',
+  'weeks'
+]);
 const INDIVIDUAL_ARTICLES = new Set(['a', 'an', 'my', 'this', 'our']);
+// "67m", "54f", "80yo", "3yom": an age, glued to a sex or "yo"
+const GLUED_AGE_SEX = new Set(['m', 'f', 'yo', 'yom', 'yof']);
 
 const DOSING_WORDS = new Set([
   'dose',
@@ -191,26 +132,119 @@ function trimDots(word: string): string {
   return word.slice(start, end);
 }
 
-function containsPhrase(words: string[], phrases: string[]): string | undefined {
+function containsPhrase(
+  words: string[],
+  phrases: string[]
+): string | undefined {
   const text = ` ${words.join(' ')} `;
   return phrases.find((phrase) => text.includes(` ${phrase} `));
 }
 
-// "80 kg", "80kg", "a 54-year-old", "this 3 month old"
+type Occurrence = { phrase: string; start: number; end: number };
+
+// Every place a phrase occurs, as word positions (end exclusive).
+function occurrences(words: string[], phrases: string[]): Occurrence[] {
+  const found: Occurrence[] = [];
+  for (const phrase of phrases) {
+    const parts = phrase.split(' ');
+    for (let i = 0; i + parts.length <= words.length; i++) {
+      let match = true;
+      for (let j = 0; j < parts.length; j++) {
+        if (words[i + j] !== parts[j]) {
+          match = false;
+          break;
+        }
+      }
+      if (match) found.push({ phrase, start: i, end: i + parts.length });
+    }
+  }
+  return found;
+}
+
+function isNumber(word: string | undefined): boolean {
+  return word !== undefined && /^\d+(\.\d+)?$/.test(word);
+}
+
+// An acute event happening now: the event (not used as a topic, as in
+// "seizure prophylaxis") within a few words of a sign it is happening now.
+function acuteNow(words: string[], rules: SafetyRules): string | undefined {
+  const events = occurrences(words, rules.acuteEvents).filter(
+    (e) =>
+      !EVENT_AS_TOPIC.has(words[e.end] ?? '') &&
+      !EVENT_AS_TIME.has(words[e.start - 1] ?? '')
+  );
+  if (events.length === 0) return undefined;
+  const nows = occurrences(words, rules.happeningNow);
+  for (const event of events) {
+    for (const now of nows) {
+      const gap =
+        event.start >= now.end
+          ? event.start - now.end
+          : now.start >= event.end
+            ? now.start - event.end
+            : 0;
+      if (gap <= NOW_WINDOW) {
+        return `acute event "${event.phrase}" happening "${now.phrase}"`;
+      }
+    }
+  }
+  return undefined;
+}
+
+// Someone (the asker, a person they are with, or one patient) taking an
+// amount of something, or a poison: "I took 30 paracetamol", "my daughter
+// drank bleach". "I took ibuprofen with my statin" has neither, and is a
+// question about one person instead.
+function ingestion(
+  words: string[],
+  rules: SafetyRules,
+  person: string | undefined
+): string | undefined {
+  for (const verb of occurrences(words, rules.ingestionVerbs)) {
+    const before = words[verb.start - 1];
+    const byAPerson =
+      before === 'i' || before === 'just' ? true : person !== undefined;
+    if (!byAPerson) continue;
+    const after = words.slice(verb.end, verb.end + INGESTION_WINDOW);
+    const count = after.findIndex(
+      (w, i) =>
+        isNumber(w) &&
+        Number(w) >= OVERDOSE_COUNT &&
+        !DOSE_UNITS.has(after[i + 1] ?? '')
+    );
+    if (count >= 0) {
+      return `took an amount ("${verb.phrase} ${after.join(' ')}")`;
+    }
+    const amount = containsPhrase(after, AMOUNT_PHRASES);
+    if (amount) return `took "${amount}"`;
+    const poison = containsPhrase(after, rules.poisons);
+    if (poison) return `took a poison ("${poison}")`;
+  }
+  return undefined;
+}
+
+// "80 kg", "80kg", "a 54-year-old", "this 3 month old", "67M", "80 yo"
 function describesIndividual(words: string[]): string | undefined {
   for (let i = 0; i < words.length; i++) {
     const word = words[i];
-    const glued = word.match(/^(\d+(?:\.\d+)?)([a-z]+)$/);
+    const glued = word.match(/^(\d{1,3}(?:\.\d+)?)([a-z]+)$/);
     if (glued && BODY_WEIGHT_UNITS.has(glued[2])) {
       return 'body weight';
     }
-    if (/^\d+(\.\d+)?$/.test(word)) {
-      if (BODY_WEIGHT_UNITS.has(words[i + 1] ?? '')) {
+    if (glued && GLUED_AGE_SEX.has(glued[2]) && !glued[1].includes('.')) {
+      return 'age of one person';
+    }
+    if (isNumber(word)) {
+      const next = words[i + 1] ?? '';
+      if (BODY_WEIGHT_UNITS.has(next)) {
         return 'body weight';
+      }
+      if (next === 'yo' || (next === 'y' && words[i + 2] === 'o')) {
+        return 'age of one person';
       }
       if (
         INDIVIDUAL_ARTICLES.has(words[i - 1] ?? '') &&
-        AGE_UNITS.has(words[i + 1] ?? '') &&
+        AGE_UNITS.has(next) &&
         words[i + 2] === 'old'
       ) {
         return 'age of one person';
@@ -224,10 +258,14 @@ function describesIndividual(words: string[]): string | undefined {
 // bounded run, so there is nothing to backtrack over.
 function sourceReferences(query: string): string[] {
   const found = new Set<string>();
-  for (const match of query.matchAll(/\bPMID:?\s?(\d{5,9})\b/gi)) found.add(`PMID:${match[1]}`);
-  for (const match of query.matchAll(/\bPMC(\d{4,9})\b/gi)) found.add(`PMC${match[1]}`);
-  for (const match of query.matchAll(/\bNCT(\d{8})\b/gi)) found.add(`NCT${match[1]}`);
-  for (const match of query.matchAll(/\b(10\.\d{4,9}\/[^\s"'<>]{1,200})/g)) found.add(match[1].replace(/[.,;)]+$/, ''));
+  for (const match of query.matchAll(/\bPMID:?\s?(\d{5,9})\b/gi))
+    found.add(`PMID:${match[1]}`);
+  for (const match of query.matchAll(/\bPMC(\d{4,9})\b/gi))
+    found.add(`PMC${match[1]}`);
+  for (const match of query.matchAll(/\bNCT(\d{8})\b/gi))
+    found.add(`NCT${match[1]}`);
+  for (const match of query.matchAll(/\b(10\.\d{4,9}\/[^\s"'<>]{1,200})/g))
+    found.add(match[1].replace(/[.,;)]+$/, ''));
   return [...found];
 }
 
@@ -236,52 +274,82 @@ function sourceReferences(query: string): string[] {
  * Checked in order of harm: emergency, prescription, one patient, dose
  * without context, then ordinary literature lookup.
  */
-export function classifyQuery(query: string): QueryClassificationDto {
+export function classifyQuery(
+  query: string,
+  rules: SafetyRules = activeSafetyRules()
+): QueryClassificationDto {
   const words = normalize(query.slice(0, 2000));
   const references = sourceReferences(query.slice(0, 2000));
-  const subjectTerms = queryTerms(words.filter((w) => !DOSING_WORDS.has(w)).join(' ')).filter(
-    (term) => !/^\d/.test(term)
-  );
-  const result = (queryClass: QueryClassificationDto['queryClass'], reason: string): QueryClassificationDto => ({
+  const subjectTerms = queryTerms(
+    words.filter((w) => !DOSING_WORDS.has(w)).join(' ')
+  ).filter((term) => !/^\d/.test(term));
+  const result = (
+    queryClass: QueryClassificationDto['queryClass'],
+    reason: string
+  ): QueryClassificationDto => ({
     queryClass,
     reason,
     sourceReferences: references,
     subjectTerms
   });
 
-  const acute = containsPhrase(words, ACUTE_EVENTS);
-  const now = containsPhrase(words, HAPPENING_NOW);
-  if (acute && now) {
-    return result('emergency_pattern', `acute event "${acute}" happening "${now}"`);
+  const selfHarm = containsPhrase(words, rules.selfHarm);
+  if (selfHarm) {
+    return result('emergency_pattern', `risk of self-harm ("${selfHarm}")`);
   }
-  const acuteForPerson = containsPhrase(words, ACUTE_FOR_A_PERSON);
-  const person =
-    containsPhrase(words, SOMEONE) ?? containsPhrase(words, INDIVIDUAL_PATIENT) ?? describesIndividual(words);
+  const now = acuteNow(words, rules);
+  if (now) {
+    return result('emergency_pattern', now);
+  }
+  const individual =
+    containsPhrase(words, rules.individualPatient) ??
+    describesIndividual(words);
+  const person = containsPhrase(words, rules.someone) ?? individual;
+  const acuteForPerson = containsPhrase(words, rules.acuteForAPerson);
   if (acuteForPerson && person) {
-    return result('emergency_pattern', `acute event "${acuteForPerson}" told about one person (${person})`);
+    return result(
+      'emergency_pattern',
+      `acute event "${acuteForPerson}" told about one person (${person})`
+    );
+  }
+  const took = ingestion(words, rules, person);
+  if (took) {
+    return result('emergency_pattern', took);
   }
 
-  const prescription = containsPhrase(words, PRESCRIPTION_REQUESTS);
+  const prescription = containsPhrase(words, rules.prescriptionRequests);
   if (prescription) {
-    return result('prescription_request', `asks for a prescription ("${prescription}")`);
+    return result(
+      'prescription_request',
+      `asks for a prescription ("${prescription}")`
+    );
   }
 
-  const individual = containsPhrase(words, INDIVIDUAL_PATIENT) ?? describesIndividual(words);
   if (individual) {
-    return result('patient_specific_treatment', `about one patient (${individual})`);
+    return result(
+      'patient_specific_treatment',
+      `about one patient (${individual})`
+    );
   }
 
   const asksDose =
-    words.some((w) => w === 'dose' || w === 'doses' || w === 'dosage' || w === 'dosing') ||
-    containsPhrase(words, ['how much', 'how many mg']) !== undefined;
+    words.some(
+      (w) => w === 'dose' || w === 'doses' || w === 'dosage' || w === 'dosing'
+    ) || containsPhrase(words, ['how much', 'how many mg']) !== undefined;
   // "propofol dose" names only the drug; "cefazolin dose surgical
   // prophylaxis" gives an indication. Neither is AI-written: both are
   // answered with the label's dosing section, quoted.
   if (asksDose && subjectTerms.length <= 1) {
-    return result('exact_dosage_no_context', 'dose asked without indication or population');
+    return result(
+      'exact_dosage_no_context',
+      'dose asked without indication or population'
+    );
   }
   if (asksDose) {
-    return result('dosage_question', 'dose asked: answered from the quoted label, not the AI');
+    return result(
+      'dosage_question',
+      'dose asked: answered from the quoted label, not the AI'
+    );
   }
 
   return result('literature_lookup', 'no boundary rule matched');

@@ -37,6 +37,7 @@ export * from '../domain/boundaryMessages';
 export * from '../domain/followUpQuestions';
 export * from '../domain/overviewSections';
 export * from '../domain/questionFrameworks';
+export * from '../domain/safetyRules';
 export type { FetchLike } from '../domain/http';
 export { SourceRequestError } from '../domain/http';
 
