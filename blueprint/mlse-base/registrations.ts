@@ -49,6 +49,7 @@ import { ForkOptions } from '@mikro-orm/core';
 import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
 import { mlseMetrics, MlseMetrics } from './domain/metrics';
 import { applySafetyRulesFile } from './domain/safetyRulesConfig';
+import { ncbiScheduleKey, RedisRequestSchedule } from './domain/sharedSchedule';
 import { AnswerService } from './domain/services/answer.service';
 import { GovernanceService } from './domain/services/governance.service';
 import { SavedSearchService } from './domain/services/savedSearch.service';
@@ -69,6 +70,17 @@ const RedisWorkerOptionsSchema = RedisWorkerSchemas({
 const DEFAULT_EMBEDDING_DIMENSIONS = 8;
 
 const LLM_EFFORTS: ClaudeEffort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
+
+// NCBI's limit is per API key across every process, so the server and the
+// worker book their requests in one Redis schedule.
+const ncbiSchedule = (
+  cache: RedisTtlCache,
+  otel: OpenTelemetryCollector<MlseMetrics>,
+  apiKey: string | undefined
+) =>
+  new RedisRequestSchedule(cache.getClient(), ncbiScheduleKey(apiKey), (error) =>
+    otel.warn(`[mlse] shared NCBI schedule unavailable, using this process's own: ${error.message}`)
+  );
 
 //! defines the configuration schema for the application
 const configInjector = createConfigInjector(schemaValidator, {
@@ -379,12 +391,20 @@ const serviceDependencies = runtimeDependencies.chain({
   SourceFetchers: {
     lifetime: Lifetime.Singleton,
     type: SourceFetcherRegistry,
-    factory: ({ NCBI_TOOL, NCBI_EMAIL, NCBI_API_KEY, OPENFDA_API_KEY }) => {
+    factory: ({
+      NCBI_TOOL,
+      NCBI_EMAIL,
+      NCBI_API_KEY,
+      OPENFDA_API_KEY,
+      TtlCache,
+      OtelCollector
+    }) => {
       const fetchImpl: FetchLike = (url, init) => fetch(url, init);
       const ncbi = {
         tool: NCBI_TOOL,
         email: NCBI_EMAIL,
-        apiKey: NCBI_API_KEY || undefined
+        apiKey: NCBI_API_KEY || undefined,
+        schedule: ncbiSchedule(TtlCache, OtelCollector, NCBI_API_KEY)
       };
       return new SourceFetcherRegistry([
         new OpenFdaFetcher(fetchImpl, { apiKey: OPENFDA_API_KEY || undefined }),
@@ -412,11 +432,12 @@ const serviceDependencies = runtimeDependencies.chain({
   QuerySuggestionService: {
     lifetime: Lifetime.Singleton,
     type: QuerySuggestionService,
-    factory: ({ NCBI_TOOL, NCBI_EMAIL, NCBI_API_KEY }) =>
+    factory: ({ NCBI_TOOL, NCBI_EMAIL, NCBI_API_KEY, TtlCache, OtelCollector }) =>
       new QuerySuggestionService((url, init) => fetch(url, init), {
         tool: NCBI_TOOL,
         email: NCBI_EMAIL,
-        apiKey: NCBI_API_KEY || undefined
+        apiKey: NCBI_API_KEY || undefined,
+        schedule: ncbiSchedule(TtlCache, OtelCollector, NCBI_API_KEY)
       })
   },
   LiveRetrievalService: {
