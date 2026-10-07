@@ -1,6 +1,8 @@
 use anyhow::Result;
 use chrono::{SecondsFormat, Utc};
-use hmac::{Hmac, Mac};
+// hmac 0.13 no longer surfaces `new_from_slice` through `Mac`; it comes from
+// `KeyInit`, which must now be imported explicitly.
+use hmac::{Hmac, KeyInit, Mac};
 use serde_json::Value;
 use sha2::Sha256;
 use uuid::Uuid;

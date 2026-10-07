@@ -11,7 +11,7 @@ import {
   updatePermission
 } from '../controllers/permission.controller';
 
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 
 export const permissionRouter = forklaunchRouter(
   '/permission',

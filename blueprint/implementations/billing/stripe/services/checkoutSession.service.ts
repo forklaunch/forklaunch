@@ -23,21 +23,19 @@ import { StripeCheckoutSessionEntities } from '../domain/types/stripe.entity.typ
 export class StripeCheckoutSessionService<
   SchemaValidator extends AnySchemaValidator,
   StatusEnum,
-  MapperEntities extends StripeCheckoutSessionEntities<StatusEnum>,
-  Dto extends
-    StripeCheckoutSessionDtos<StatusEnum> = StripeCheckoutSessionDtos<StatusEnum>
-> implements
-    CheckoutSessionService<
-      typeof PaymentMethodEnum,
-      typeof CurrencyEnum,
-      StatusEnum,
-      {
-        CreateCheckoutSessionDto: Dto['CreateCheckoutSessionMapper'];
-        CheckoutSessionDto: Dto['CheckoutSessionMapper'];
-        IdDto: IdDto;
-      }
-    >
-{
+  MapperEntities extends StripeCheckoutSessionEntities,
+  Dto extends StripeCheckoutSessionDtos<StatusEnum> =
+    StripeCheckoutSessionDtos<StatusEnum>
+> implements CheckoutSessionService<
+  typeof PaymentMethodEnum,
+  typeof CurrencyEnum,
+  StatusEnum,
+  {
+    CreateCheckoutSessionDto: Dto['CreateCheckoutSessionMapper'];
+    CheckoutSessionDto: Dto['CheckoutSessionMapper'];
+    IdDto: IdDto;
+  }
+> {
   baseCheckoutSessionService: BaseCheckoutSessionService<
     SchemaValidator,
     PaymentMethodEnum,

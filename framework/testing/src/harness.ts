@@ -1,8 +1,12 @@
-import { MikroORM, Options } from '@mikro-orm/core';
 import Redis from 'ioredis';
 import { StartedTestContainer } from 'testcontainers';
 import { DatabaseType, TestContainerManager } from './containers';
-import { clearTestDatabase, setupTestORM } from './database';
+import {
+  AnyMikroORM,
+  AnyMikroOrmOptions,
+  clearTestDatabase,
+  setupTestORM
+} from './database';
 import { setupTestEnvironment } from './environment';
 
 export interface BlueprintTestConfig {
@@ -11,7 +15,7 @@ export interface BlueprintTestConfig {
    * This is called AFTER environment variables are set
    * Optional - if not provided, no database will be set up
    */
-  getConfig?: () => Promise<Partial<Options>>;
+  getConfig?: () => Promise<AnyMikroOrmOptions>;
 
   /**
    * Database type (postgres, mysql, mongodb, etc.)
@@ -65,7 +69,7 @@ export interface TestSetupResult {
   redisContainer?: StartedTestContainer;
   kafkaContainer?: StartedTestContainer;
   s3Container?: StartedTestContainer;
-  orm?: MikroORM;
+  orm?: AnyMikroORM;
   redis?: Redis;
 }
 
@@ -145,7 +149,7 @@ export class BlueprintTestHarness {
   async setup(): Promise<TestSetupResult> {
     // Setup database container only if database is needed
     let container: StartedTestContainer | null = null;
-    let orm: MikroORM | undefined;
+    let orm: AnyMikroORM | undefined;
     let redisContainer: StartedTestContainer | undefined;
     let kafkaContainer: StartedTestContainer | undefined;
     let s3Container: StartedTestContainer | undefined;

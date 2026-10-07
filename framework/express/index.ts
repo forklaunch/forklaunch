@@ -275,6 +275,9 @@ export const port = <
 
   return [
     ...(handlers.middlewares as RequestHandler[]),
+    // A controller handler is typed against the framework's request/response
+    // shapes, Express against `ParamsDictionary`/`ParsedQs`. The generics do not
+    // overlap, so the two handler types are unrelated to TypeScript.
     handlers.controllerHandler as unknown as RequestHandler
   ];
 };

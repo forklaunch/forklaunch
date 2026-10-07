@@ -58,6 +58,11 @@ Before any development, review security guidelines in `cli/SECURITY`
 3. Run clippy: `cargo clippy`
 4. Test: `cargo test`
 
+Before tagging a `cli-v*` release, verify the vendored skill pack (`fl context`)
+is current: `scripts/sync-skills.bash --check` (requires a sibling checkout of
+the private `forklaunch-platform` repo). This isn't wired into CI yet, so it's
+a manual step — see `docs/skill-pack-sync.md`.
+
 ### Blueprint & Framework Development
 
 1. Make your changes

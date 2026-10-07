@@ -7,7 +7,7 @@ import {
   updateOrganization
 } from '../controllers/organization.controller';
 
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 
 export const organizationRouter = forklaunchRouter(
   '/organization',

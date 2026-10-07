@@ -295,8 +295,9 @@ function generateOperationObject<SV extends AnySchemaValidator>(
       operationObject.security = [
         {
           basic: Array.from(
-            'allowedPermissions' in auth
-              ? auth.allowedPermissions?.values() || []
+            'allowedPermissions' in auth &&
+              auth.allowedPermissions instanceof Set
+              ? auth.allowedPermissions.values()
               : []
           )
         }
@@ -311,8 +312,9 @@ function generateOperationObject<SV extends AnySchemaValidator>(
         {
           [auth.headerName !== 'Authorization' ? 'bearer' : 'apiKey']:
             Array.from(
-              'allowedPermissions' in auth
-                ? auth.allowedPermissions?.values() || []
+              'allowedPermissions' in auth &&
+                auth.allowedPermissions instanceof Set
+                ? auth.allowedPermissions.values()
                 : []
             )
         }
@@ -384,13 +386,11 @@ export function generateOpenApiSpecs<SV extends AnySchemaValidator>(
       const { name, summary, params, versions, auth, options } =
         route.contractDetails;
 
-      if (
-        !(
-          options?.openapi ??
-          router.routerOptions?.openapi ??
-          appOptions !== false
-        )
-      ) {
+      if (!(
+        options?.openapi ??
+        router.routerOptions?.openapi ??
+        appOptions !== false
+      )) {
         return;
       }
 

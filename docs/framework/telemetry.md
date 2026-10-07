@@ -144,9 +144,16 @@ otelCollector.info('User login', {
 ### Data Retention
 
 ```yaml
-# Configure retention in prometheus.yaml
-global:
-  retention: 30d # Adjust based on storage capacity
+# Configure metric retention in monitoring/mimir.yaml
+limits:
+  compactor_blocks_retention_period: 30d # Adjust based on storage capacity
+```
+
+Log retention is set separately, in `monitoring/loki.yaml`:
+
+```yaml
+limits_config:
+  retention_period: 720h
 ```
 
 ## Default Instrumentation

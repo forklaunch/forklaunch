@@ -53,7 +53,7 @@ use crate::{
             clean_up_unused_infrastructure_services, remove_redis_from_docker_compose,
             remove_s3_from_docker_compose, update_dockerfile_contents,
         },
-        env::Env,
+        env::read_env_local_or_default,
         format::format_code,
         manifest::{
             InitializableManifestConfig, InitializableManifestConfigMetadata, ManifestData,
@@ -77,10 +77,10 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub(super) struct ServiceCommand;
+pub(crate) struct ServiceCommand;
 
 impl ServiceCommand {
-    pub(super) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {}
     }
 }
@@ -233,11 +233,8 @@ fn change_database(
     }
 
     let env_local_path = base_path.join(".env.local");
-    let env_local_content = rendered_templates_cache
-        .get(&env_local_path)?
-        .unwrap()
-        .content;
-    let mut env_local_content = serde_envfile::from_str::<Env>(&env_local_content)?;
+    let mut env_local_content =
+        read_env_local_or_default(rendered_templates_cache, &env_local_path)?;
 
     change_database_env_variables(
         &mut env_local_content,
@@ -339,12 +336,8 @@ fn change_infrastructure(
                     .environment = Some(environment);
 
                 let env_local_path = base_path.join(".env.local");
-                let mut env_local_content = serde_envfile::from_str::<Env>(
-                    &rendered_templates_cache
-                        .get(&env_local_path)?
-                        .unwrap()
-                        .content,
-                )?;
+                let mut env_local_content =
+                    read_env_local_or_default(rendered_templates_cache, &env_local_path)?;
 
                 env_local_content.redis_url = Some("redis://localhost:6379".to_string());
 
@@ -428,12 +421,8 @@ fn change_infrastructure(
                     .environment = Some(environment);
 
                 let env_local_path = base_path.join(".env.local");
-                let mut env_local_content = serde_envfile::from_str::<Env>(
-                    &rendered_templates_cache
-                        .get(&env_local_path)?
-                        .unwrap()
-                        .content,
-                )?;
+                let mut env_local_content =
+                    read_env_local_or_default(rendered_templates_cache, &env_local_path)?;
 
                 env_local_content.s3_url = Some("http://localhost:9000".to_string());
                 env_local_content.s3_bucket = Some(format!(
@@ -529,12 +518,8 @@ fn change_infrastructure(
                 }
 
                 let env_local_path = base_path.join(".env.local");
-                let mut env_local_content = serde_envfile::from_str::<Env>(
-                    &rendered_templates_cache
-                        .get(&env_local_path)?
-                        .unwrap()
-                        .content,
-                )?;
+                let mut env_local_content =
+                    read_env_local_or_default(rendered_templates_cache, &env_local_path)?;
 
                 env_local_content.redis_url = None;
 
@@ -598,40 +583,25 @@ fn change_infrastructure(
                 });
             }
             Infrastructure::S3 => {
-                if !manifest_data.projects.iter_mut().any(|project| {
-                    if let Some(resources) = &mut project.resources {
-                        if let Some(object_store) = &mut resources.object_store {
-                            object_store == &Infrastructure::S3.to_string()
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    }
-                }) {
-                    let mut environment = docker_compose
-                        .services
-                        .get_mut(&manifest_data.service_name)
-                        .unwrap()
-                        .environment
-                        .as_ref()
-                        .unwrap()
-                        .clone();
-                    remove_s3_from_docker_compose(docker_compose, &mut environment)?;
-                    docker_compose
-                        .services
-                        .get_mut(&manifest_data.service_name)
-                        .unwrap()
-                        .environment = Some(environment);
-                }
+                // This service's S3 settings go whatever other services use.
+                let mut environment = docker_compose
+                    .services
+                    .get_mut(&manifest_data.service_name)
+                    .unwrap()
+                    .environment
+                    .as_ref()
+                    .unwrap()
+                    .clone();
+                remove_s3_from_docker_compose(docker_compose, &mut environment)?;
+                docker_compose
+                    .services
+                    .get_mut(&manifest_data.service_name)
+                    .unwrap()
+                    .environment = Some(environment);
 
                 let env_local_path = base_path.join(".env.local");
-                let mut env_local_content = serde_envfile::from_str::<Env>(
-                    &rendered_templates_cache
-                        .get(&env_local_path)?
-                        .unwrap()
-                        .content,
-                )?;
+                let mut env_local_content =
+                    read_env_local_or_default(rendered_templates_cache, &env_local_path)?;
 
                 env_local_content.s3_bucket = None;
                 env_local_content.s3_url = None;
@@ -733,8 +703,13 @@ fn service_to_worker(
         },
     );
 
-    // Detect naming convention from existing registrations file
-    let registrations_content = std::fs::read_to_string(base_path.join("registrations.ts"))
+    // Detect naming convention from the registrations file. Read through the
+    // cache, not the filesystem: at this point the transformed registrations
+    // only exist in the cache, and on a chained change the on-disk copy may be
+    // stale (or missing) entirely.
+    let registrations_content = rendered_templates_cache
+        .get(&registrations_path)?
+        .map(|template| template.content)
         .unwrap_or_default();
     let otel_token = if registrations_content.contains("OtelCollector:") {
         "OtelCollector"
@@ -742,15 +717,78 @@ fn service_to_worker(
         "OpenTelemetryCollector"
     };
 
+    // Database workers consume the persisted entity directly; every other
+    // worker type consumes the decrypted event-record interface.
+    let is_database_worker = *worker_type == WorkerType::Database;
+    let event_record_import_path = if is_database_worker {
+        format!("./persistence/entities/{camel_case_name}EventRecord.entity")
+    } else {
+        format!("./domain/types/{camel_case_name}EventRecord.types")
+    };
+
+    // worker.ts previously imported `processEvents`/`processErrors` from
+    // `./services/{name}.service` — a path that no scaffold uses (services live
+    // under ./domain/services) holding symbols the CLI never generated, so the
+    // import could never resolve. Emit the handlers inline instead, typed
+    // against the real WorkerProcessFunction/WorkerFailureHandler contracts, so
+    // the generated worker compiles as-is and the TODO is where the business
+    // logic goes rather than a broken import.
     let worker_ts_path = base_path.join("worker.ts");
     let worker_ts_content = format!(
-        r#"import {{ ci, tokens }} from './bootstrapper';
-import {{ processEvents, processErrors }} from './services/{camel_case_name}.service';
+        r#"import type {{
+  WorkerFailureHandler,
+  WorkerProcessFailureResult,
+  WorkerProcessFunction
+}} from '@forklaunch/interfaces-worker/types';
+import {{ ci, tokens }} from './bootstrapper';
+import type {{ {pascal_case_name}EventRecord }} from '{event_record_import_path}';
 
 /**
  * Creates an instance of OpenTelemetryCollector
  */
 const openTelemetryCollector = ci.resolve(tokens.{otel_token});
+
+/**
+ * TODO: replace this with your own event handling. Return one entry per event
+ * that failed; anything you return here is passed to processErrors below.
+ */
+const processEvents: WorkerProcessFunction<{pascal_case_name}EventRecord> = async (
+  events
+) => {{
+  const failedEvents: WorkerProcessFailureResult<{pascal_case_name}EventRecord>[] = [];
+
+  for (const event of events) {{
+    try {{
+      openTelemetryCollector.info(
+        `processing message from ${{ci.resolve(tokens.QUEUE_NAME)}}: ${{event.message}}`
+      );
+      event.processed = true;
+    }} catch (error) {{
+      failedEvents.push({{
+        value: event,
+        error: error as Error
+      }});
+    }}
+  }}
+
+  return failedEvents;
+}};
+
+/**
+ * TODO: replace this with your own failure handling (dead letter queue, alert,
+ * retry budget, ...).
+ */
+const processErrors: WorkerFailureHandler<{pascal_case_name}EventRecord> = async (
+  results
+) => {{
+  results.forEach((result) => {{
+    openTelemetryCollector.error(
+      result.error,
+      'error processing message',
+      result.value
+    );
+  }});
+}};
 
 /**
  * Main worker entry point
@@ -766,7 +804,8 @@ const openTelemetryCollector = ci.resolve(tokens.{otel_token});
   openTelemetryCollector.info('🎉 {pascal_case_name} Worker is running! 🎉');
 }})();
 "#,
-        camel_case_name = camel_case_name,
+        event_record_import_path = event_record_import_path,
+        otel_token = otel_token,
         pascal_case_name = pascal_case_name
     );
     rendered_templates_cache.insert(
@@ -781,8 +820,15 @@ const openTelemetryCollector = ci.resolve(tokens.{otel_token});
     let entities_dir = base_path.join("persistence").join("entities");
     let event_entity_path = entities_dir.join(format!("{}EventRecord.entity.ts", camel_case_name));
     let is_mongo = manifest_data.database == "mongodb";
+    // `defineEntity` produces a VALUE. Without the companion `InferEntity` type
+    // alias, registrations.ts writing `WorkerProcessFunction<XEventRecord>`
+    // fails with TS2749 ("refers to a value, but is being used as a type").
+    // The alias shares the entity's name so the single import serves both the
+    // value and the type position, which is what the `init worker` template
+    // does.
     let event_entity_content = format!(
         r#"import {{ defineEntity, p }} from '@mikro-orm/core';
+import type {{ InferEntity }} from '@mikro-orm/core';
 import {{ {mongo_prefix}sqlBaseProperties }} from '@{app_name}/core';
 
 export const {pascal_case_name}EventRecord = defineEntity({{
@@ -794,6 +840,10 @@ export const {pascal_case_name}EventRecord = defineEntity({{
     retryCount: p.integer(),
   }},
 }});
+
+export type {pascal_case_name}EventRecord = InferEntity<
+  typeof {pascal_case_name}EventRecord
+>;
 "#,
         mongo_prefix = if is_mongo { "no" } else { "" },
         app_name = manifest_data.app_name,
@@ -807,6 +857,32 @@ export const {pascal_case_name}EventRecord = defineEntity({{
             context: None,
         },
     );
+
+    // mikro-orm.config.ts discovers entities through
+    // `import * as entities from './persistence/entities'`, so an entity that
+    // the barrel file does not re-export is invisible to the ORM: no migration
+    // is ever generated for it and the DatabaseWorkerConsumer has no table to
+    // read. Re-export it, the way the `init worker` template does.
+    let entities_index_path = entities_dir.join("index.ts");
+    let event_entity_export = format!("export * from './{camel_case_name}EventRecord.entity';");
+    let entities_index_content = rendered_templates_cache
+        .get(&entities_index_path)?
+        .map(|template| template.content);
+    let updated_entities_index = match entities_index_content {
+        Some(content) if content.contains(&format!("{camel_case_name}EventRecord.entity")) => None,
+        Some(content) => Some(format!("{}\n{}\n", content.trim_end(), event_entity_export)),
+        None => Some(format!("{event_entity_export}\n")),
+    };
+    if let Some(content) = updated_entities_index {
+        rendered_templates_cache.insert(
+            entities_index_path.to_string_lossy().to_string(),
+            RenderedTemplate {
+                path: entities_index_path.clone(),
+                content,
+                context: None,
+            },
+        );
+    }
 
     // Generate the event record interface type file
     let types_dir = base_path.join("domain").join("types");
@@ -833,12 +909,8 @@ export interface {pascal_case_name}EventRecord extends WorkerEventEntity {{
     );
 
     let env_local_path = base_path.join(".env.local");
-    let mut env_local_content = serde_envfile::from_str::<Env>(
-        &rendered_templates_cache
-            .get(&env_local_path)?
-            .unwrap()
-            .content,
-    )?;
+    let mut env_local_content =
+                    read_env_local_or_default(rendered_templates_cache, &env_local_path)?;
     env_local_content.queue_name =
         Some(format!("{}-{}-queue", manifest_data.app_name, project_name));
     rendered_templates_cache.insert(
@@ -895,6 +967,8 @@ export interface {pascal_case_name}EventRecord extends WorkerEventEntity {{
             } else {
                 project.metadata = Some(ProjectMetadata {
                     r#type: Some(worker_type.to_string()),
+                    hosting_type: None,
+                    privileged: None,
                 });
             }
         }

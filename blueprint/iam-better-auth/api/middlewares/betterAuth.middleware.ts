@@ -12,6 +12,7 @@ import {
 import { context, trace } from '@opentelemetry/api';
 import { betterAuth, BetterAuthOptions } from 'better-auth';
 import { toNodeHandler } from 'better-auth/node';
+import { withEncryptionContextLatch } from '../../domain/utils/encryptionContext.util';
 import {
   Request as ExpressRequest,
   Response as ExpressResponse
@@ -50,9 +51,11 @@ export function enrichBetterAuthApi<T extends BetterAuthOptions>(
     if (!isBetterAuthRequest(req)) {
       throw new Error('Invalid request');
     }
-    await toNodeHandler(auth)(
-      req as unknown as ExpressRequest,
-      res as unknown as ExpressResponse
+    // Scope for the whole handler. A multi-tenant deployment should call
+    // `latchEncryptionContext(tenantId)` once the request's tenant is known,
+    // and every Better Auth read below will decrypt with that tenant's key.
+    await withEncryptionContextLatch(() =>
+      toNodeHandler(auth)(req as ExpressRequest, res as ExpressResponse)
     );
 
     httpRequestsTotalCounter.add(1, {

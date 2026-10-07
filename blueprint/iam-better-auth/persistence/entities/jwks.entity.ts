@@ -7,7 +7,11 @@ export const Jwks = defineComplianceEntity({
   properties: {
     ...sqlBaseProperties,
     publicKey: fp.string().compliance('none'),
-    privateKey: fp.string().compliance('pci')
+    privateKey: fp.string().compliance('pci'),
+    // better-auth >= 1.7.0 JWKS fields (key expiry + algorithm/curve metadata).
+    expiresAt: fp.datetime().nullable().compliance('none'),
+    alg: fp.string().nullable().compliance('none'),
+    crv: fp.string().nullable().compliance('none')
   }
 });
 

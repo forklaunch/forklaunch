@@ -71,7 +71,7 @@ export const SubscriptionSchema =
     startDate: date,
     endDate: optional(date),
     status: string,
-    billingProvider: enum_(BillingProviderEnum),
+    billingProvider: optional(enum_(BillingProviderEnum)),
     providerFields: optional(unknown),
     createdAt: optional(date),
     updatedAt: optional(date)

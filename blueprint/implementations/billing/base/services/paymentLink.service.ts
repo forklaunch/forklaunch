@@ -23,18 +23,13 @@ export class BasePaymentLinkService<
   PaymentMethodEnum,
   CurrencyEnum,
   StatusEnum,
-  MapperEntities extends BasePaymentLinkEntities<
-    PaymentMethodEnum,
-    CurrencyEnum,
-    StatusEnum
-  >,
+  MapperEntities extends BasePaymentLinkEntities,
   MapperDomains extends BasePaymentLinkDtos<
     PaymentMethodEnum,
     CurrencyEnum,
     StatusEnum
   > = BasePaymentLinkDtos<PaymentMethodEnum, CurrencyEnum, StatusEnum>
-> implements PaymentLinkService<PaymentMethodEnum, CurrencyEnum, StatusEnum>
-{
+> implements PaymentLinkService<PaymentMethodEnum, CurrencyEnum, StatusEnum> {
   private evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;

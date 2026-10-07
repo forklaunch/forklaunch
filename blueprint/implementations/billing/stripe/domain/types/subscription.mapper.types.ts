@@ -5,7 +5,7 @@ import { StripeSubscriptionEntities } from './stripe.entity.types';
 
 export type StripeSubscriptionMappers<
   PartyTypeEnum,
-  Entities extends StripeSubscriptionEntities<PartyTypeEnum>,
+  Entities extends StripeSubscriptionEntities,
   Dto extends StripeSubscriptionDtos<PartyTypeEnum>
 > = {
   SubscriptionMapper: {

@@ -71,7 +71,7 @@ export class Router<
       new ExpressRouter(),
       [
         contentParse<SV>(options),
-        enrichResponseTransmission as unknown as MiddlewareHandler
+        enrichResponseTransmission as MiddlewareHandler
       ],
       openTelemetryCollector,
       options

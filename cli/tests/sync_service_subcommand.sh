@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# The CLI binary. CI builds it once and exports FORKLAUNCH_CLI so the 43
+# scripts share one compile instead of each re-checking a release build.
+FL="${FORKLAUNCH_CLI:-cargo run --release}"
 
 # E2E test for sync service subcommand
 # Tests syncing a specific service to all artifacts
@@ -15,7 +18,7 @@ cd output/sync-service-subcommand
 echo "[TEST] sync service subcommand"
 
 # Create test application
-RUST_BACKTRACE=1 cargo run --release init application test-app \
+RUST_BACKTRACE=1 $FL init application test-app \
     -p test-app \
     -o src/modules \
     -d postgresql \
@@ -33,7 +36,7 @@ RUST_BACKTRACE=1 cargo run --release init application test-app \
 cd test-app
 
 # Initialize first service
-RUST_BACKTRACE=1 cargo run --release init service users \
+RUST_BACKTRACE=1 $FL init service users \
     -p src/modules \
     -d postgresql \
     -D "Users service"
@@ -62,7 +65,7 @@ fi
 # Test 2: Sync specific service with prompts
 PROMPTS_JSON='{"products": {"database": "postgresql", "infrastructure": "none", "description": "Products service"}}'
 
-if RUST_BACKTRACE=1 cargo run --release sync service products -p . -P "$PROMPTS_JSON" > /dev/null 2>&1; then
+if RUST_BACKTRACE=1 $FL sync service products -p . -P "$PROMPTS_JSON" > /dev/null 2>&1; then
     echo "[PASS] Sync service command executed"
 else
     echo "[FAIL] Sync service command failed"
@@ -97,7 +100,7 @@ else
 fi
 
 # Test 6: Try syncing same service again (should be idempotent)
-if RUST_BACKTRACE=1 cargo run --release sync service products -p . -P "$PROMPTS_JSON" > /dev/null 2>&1; then
+if RUST_BACKTRACE=1 $FL sync service products -p . -P "$PROMPTS_JSON" > /dev/null 2>&1; then
     echo "[PASS] Sync is idempotent (no error when already synced)"
 else
     echo "[FAIL] Sync should be idempotent"
@@ -105,7 +108,7 @@ else
 fi
 
 # Test 7: Try syncing non-existent service (should fail gracefully)
-if ! RUST_BACKTRACE=1 cargo run --release sync service nonexistent -p . 2>&1 | grep -q "not found"; then
+if ! RUST_BACKTRACE=1 $FL sync service nonexistent -p . 2>&1 | grep -q "not found"; then
     echo "[FAIL] Should fail for non-existent service"
     exit 1
 else

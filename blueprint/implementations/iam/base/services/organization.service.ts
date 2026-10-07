@@ -19,13 +19,11 @@ import { Organization } from '../persistence/entities';
 
 export class BaseOrganizationService<
   SchemaValidator extends AnySchemaValidator,
-  OrganizationStatus = unknown,
-  MapperEntities extends
-    OrganizationEntities<OrganizationStatus> = OrganizationEntities<OrganizationStatus>,
-  MapperDomains extends
-    OrganizationDtos<OrganizationStatus> = OrganizationDtos<OrganizationStatus>
-> implements OrganizationService<OrganizationStatus>
-{
+  OrganizationStatus extends Record<string, string> = Record<string, string>,
+  MapperEntities extends OrganizationEntities = OrganizationEntities,
+  MapperDomains extends OrganizationDtos<OrganizationStatus> =
+    OrganizationDtos<OrganizationStatus>
+> implements OrganizationService<OrganizationStatus> {
   // protected _mappers: InternalMapper<InstanceTypeRecord<typeof this.mappers>>;
   private evaluatedTelemetryOptions: {
     logging?: boolean;

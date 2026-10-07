@@ -37,7 +37,8 @@ pub struct EntityAnalyzer;
 
 impl EntityAnalyzer {
     /// Parse a TypeScript entity file and extract entity definitions.
-    /// Supports the v7 defineEntity() format:
+    /// Supports the v7 class-free entity factories `defineEntity()` (builder `p`) and
+    /// `defineComplianceEntity()` (builder `fp`, with per-property `.compliance(...)` tags):
     ///
     /// ```typescript
     /// export const User = defineEntity({
@@ -46,6 +47,15 @@ impl EntityAnalyzer {
     ///     ...sqlBaseProperties,
     ///     email: p.string().unique(),
     ///     organization: () => p.manyToOne(Organization).nullable(),
+    ///   },
+    /// });
+    ///
+    /// export const Profile = defineComplianceEntity({
+    ///   name: 'Profile',
+    ///   properties: {
+    ///     ...sqlBaseProperties,
+    ///     displayName: fp.string().compliance('pii'),
+    ///     retryCount: fp.integer().nullable().compliance('none'),
     ///   },
     /// });
     /// ```
@@ -88,11 +98,18 @@ impl EntityAnalyzer {
         Ok(entities)
     }
 
-    /// Check if an expression is a defineEntity() call
+    /// Check if an expression is a defineEntity() / defineComplianceEntity() call.
+    ///
+    /// Both are class-free entity factories with the same `{ name, properties }` shape; the
+    /// compliance variant (from `@forklaunch/core/persistence`) additionally tags each property with
+    /// a `.compliance(...)` classification and uses the `fp` builder instead of `p`. The framework's
+    /// own templates use `defineComplianceEntity` for the large majority of entities, so matching only
+    /// `defineEntity` silently dropped most entities from the analysis.
     fn is_define_entity_call(expr: &Expression) -> bool {
         if let Expression::CallExpression(call) = expr {
             if let Expression::Identifier(id) = &call.callee {
-                return id.name.as_str() == "defineEntity";
+                let name = id.name.as_str();
+                return name == "defineEntity" || name == "defineComplianceEntity";
             }
         }
         false
@@ -241,9 +258,11 @@ impl EntityAnalyzer {
         }
     }
 
-    /// Check if an expression is the `p` identifier (the property builder namespace)
+    /// Check if an expression is the property builder namespace at the base of a chain: `p` (plain
+    /// `defineEntity`) or `fp` (compliance `defineComplianceEntity`). Without accepting `fp`, every
+    /// compliance-entity property resolves to `unknown` because the walk never reaches its base type.
     fn is_p_identifier(expr: &Expression) -> bool {
-        matches!(expr, Expression::Identifier(id) if id.name.as_str() == "p")
+        matches!(expr, Expression::Identifier(id) if matches!(id.name.as_str(), "p" | "fp"))
     }
 
     /// Resolve the base type from a p.xxx() call
@@ -500,5 +519,68 @@ export type IUser = InferEntity<typeof User>;
         assert_eq!(org_prop.relation_type, Some(RelationType::ManyToOne));
         assert!(org_prop.is_nullable);
         assert_eq!(org_prop.type_name, "Organization");
+    }
+
+    #[test]
+    fn test_parse_define_compliance_entity() {
+        let dir = tempdir().unwrap();
+        let entity_path = dir.path().join("profile.entity.ts");
+
+        // Compliance entities use `defineComplianceEntity` + the `fp` builder + `.compliance(...)`
+        // tags. The framework's templates use this form for most entities, so the analyzer must
+        // parse it identically to `defineEntity` (the compliance tags are ignored, like any modifier).
+        write(
+            &entity_path,
+            r#"
+import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
+import type { InferEntity } from '@mikro-orm/core';
+import { sqlBaseProperties } from '@app/core';
+import { Organization } from './organization.entity';
+
+export const Profile = defineComplianceEntity({
+  name: 'Profile',
+  properties: {
+    ...sqlBaseProperties,
+    displayName: fp.string().compliance('pii'),
+    retryCount: fp.integer().nullable().compliance('none'),
+    organization: () => fp.manyToOne(Organization).nullable().compliance('none'),
+  },
+});
+
+export type Profile = InferEntity<typeof Profile>;
+"#,
+        )
+        .unwrap();
+
+        let entities = EntityAnalyzer::parse_entity_file(&entity_path).unwrap();
+        assert_eq!(entities.len(), 1);
+
+        let profile = &entities[0];
+        assert_eq!(profile.name, "Profile");
+        assert_eq!(profile.properties.len(), 3);
+
+        let display = profile
+            .properties
+            .iter()
+            .find(|p| p.name == "displayName")
+            .unwrap();
+        assert_eq!(display.type_name, "string"); // fp base type resolves (not "unknown")
+
+        let retry = profile
+            .properties
+            .iter()
+            .find(|p| p.name == "retryCount")
+            .unwrap();
+        assert_eq!(retry.type_name, "number");
+        assert!(retry.is_nullable);
+
+        let org = profile
+            .properties
+            .iter()
+            .find(|p| p.name == "organization")
+            .unwrap();
+        assert_eq!(org.relation_type, Some(RelationType::ManyToOne));
+        assert!(org.is_nullable);
+        assert_eq!(org.type_name, "Organization");
     }
 }

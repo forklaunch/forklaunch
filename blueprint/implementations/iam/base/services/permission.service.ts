@@ -25,8 +25,7 @@ export class BasePermissionService<
   SchemaValidator extends AnySchemaValidator,
   MapperEntities extends PermissionEntities = PermissionEntities,
   MapperDomains extends PermissionDtos = PermissionDtos
-> implements PermissionService
-{
+> implements PermissionService {
   private evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;

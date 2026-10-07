@@ -1,132 +1,41 @@
-import { generateHmacAuthHeaders } from '@forklaunch/core/http';
+import { clientBillingSdkClient, clientIamSdkClient } from './clientSdk';
 
-export interface ServiceComplianceResult<T> {
-  service: string;
-  status: 'fulfilled' | 'rejected';
-  result?: T;
-  error?: string;
-}
-
-interface EraseResult {
-  entitiesAffected: string[];
-  recordsDeleted: number;
-}
-
-interface ExportResult {
-  userId: string;
-  entities: Record<string, unknown[]>;
-}
-
-export interface ComplianceCapableService {
-  compliance: {
-    eraseUserData: (params: {
-      params: { userId: string };
-      headers: Record<string, string>;
-    }) => Promise<{ code: number; response: unknown }>;
-    exportUserData: (params: {
-      params: { userId: string };
-      headers: Record<string, string>;
-    }) => Promise<{ code: number; response: unknown }>;
-  };
-}
+type IamClient = Awaited<ReturnType<typeof clientIamSdkClient>>;
+type BillingClient = Awaited<ReturnType<typeof clientBillingSdkClient>>;
 
 /**
- * Fan-out compliance client. Calls erase/export on all registered services
- * in parallel and returns per-service results.
+ * Compliance fan-out client. Calls erase/export on every registered service
+ * in parallel. Per-service responses are the exact discriminated unions
+ * produced by each SDK (e.g. `{ code: 200; response: {...} } | { code: 404; response: string }`),
+ * so callers narrow on `code` without any casts.
+ *
+ * Requires a JWT token from a user with SYSTEM role.
  */
 export function createComplianceClient(config: {
-  hmacSecretKey: string;
-  services: Record<string, ComplianceCapableService>;
+  token: string;
+  iam: IamClient;
+  billing: BillingClient;
 }) {
-  const { hmacSecretKey, services } = config;
+  const headers = { authorization: `Bearer ${config.token}` } as const;
 
   return {
-    async erase(
-      userId: string
-    ): Promise<Record<string, ServiceComplianceResult<EraseResult>>> {
-      const entries = Object.entries(services);
-      const headers = generateHmacAuthHeaders({
-        secretKey: hmacSecretKey,
-        method: 'DELETE',
-        path: `/erase/${userId}`
-      });
-
-      const results = await Promise.allSettled(
-        entries.map(async ([name, sdk]) => {
-          const response = await sdk.compliance.eraseUserData({
-            params: { userId },
-            headers
-          });
-          return { name, response };
-        })
-      );
-
-      const output: Record<string, ServiceComplianceResult<EraseResult>> = {};
-      for (let i = 0; i < entries.length; i++) {
-        const [name] = entries[i];
-        const result = results[i];
-        if (result.status === 'fulfilled') {
-          output[name] = {
-            service: name,
-            status: 'fulfilled',
-            result:
-              result.value.response.code === 200
-                ? (result.value.response.response as EraseResult)
-                : { entitiesAffected: [], recordsDeleted: 0 }
-          };
-        } else {
-          output[name] = {
-            service: name,
-            status: 'rejected',
-            error: String(result.reason)
-          };
-        }
-      }
-      return output;
+    async erase(userId: string) {
+      const [iam, billing] = await Promise.all([
+        config.iam.compliance.eraseUserData({ params: { userId }, headers }),
+        config.billing.compliance.eraseUserData({ params: { userId }, headers })
+      ]);
+      return { iam, billing };
     },
 
-    async export(
-      userId: string
-    ): Promise<Record<string, ServiceComplianceResult<ExportResult>>> {
-      const entries = Object.entries(services);
-      const headers = generateHmacAuthHeaders({
-        secretKey: hmacSecretKey,
-        method: 'GET',
-        path: `/export/${userId}`
-      });
-
-      const results = await Promise.allSettled(
-        entries.map(async ([name, sdk]) => {
-          const response = await sdk.compliance.exportUserData({
-            params: { userId },
-            headers
-          });
-          return { name, response };
+    async export(userId: string) {
+      const [iam, billing] = await Promise.all([
+        config.iam.compliance.exportUserData({ params: { userId }, headers }),
+        config.billing.compliance.exportUserData({
+          params: { userId },
+          headers
         })
-      );
-
-      const output: Record<string, ServiceComplianceResult<ExportResult>> = {};
-      for (let i = 0; i < entries.length; i++) {
-        const [name] = entries[i];
-        const result = results[i];
-        if (result.status === 'fulfilled') {
-          output[name] = {
-            service: name,
-            status: 'fulfilled',
-            result:
-              result.value.response.code === 200
-                ? (result.value.response.response as ExportResult)
-                : { userId, entities: {} }
-          };
-        } else {
-          output[name] = {
-            service: name,
-            status: 'rejected',
-            error: String(result.reason)
-          };
-        }
-      }
-      return output;
+      ]);
+      return { iam, billing };
     }
   };
 }

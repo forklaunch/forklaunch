@@ -1,3 +1,8 @@
+# The CLI binary. CI builds it once and exports FORKLAUNCH_CLI so the 43
+# scripts share one compile instead of each re-checking a release build.
+FL="${FORKLAUNCH_CLI:-cargo run --release}"
+set -e
+
 echo "Testing environment validate command..."
 
 if [ -d "output/environment-validate" ]; then
@@ -8,7 +13,7 @@ mkdir -p output/environment-validate
 cd output/environment-validate
 
 echo "Creating test application..."
-RUST_BACKTRACE=1 cargo run --release init application env-test-app \
+RUST_BACKTRACE=1 $FL init application env-test-app \
     -p env-test-app \
     -o src/modules \
     -d postgresql \
@@ -25,7 +30,7 @@ RUST_BACKTRACE=1 cargo run --release init application env-test-app \
     -L "MIT"
 
 echo "Adding custom service..."
-RUST_BACKTRACE=1 cargo run --release init service custom-svc \
+RUST_BACKTRACE=1 $FL init service custom-svc \
     -d postgresql \
     -p env-test-app/src/modules \
     -D "Custom service for env testing"
@@ -33,7 +38,10 @@ RUST_BACKTRACE=1 cargo run --release init service custom-svc \
 cd env-test-app
 
 echo "Testing environment validate (expecting missing variables)..."
-RUST_BACKTRACE=1 cargo run --release environment validate
+# validate exits nonzero when variables are missing — that is the expected
+# outcome of this invocation, not a test failure.
+RUST_BACKTRACE=1 $FL environment validate \
+    || echo "[EXPECTED] validate reported missing variables"
 
 # Create some .env files with partial variables
 echo "Creating partial .env files..."
@@ -46,6 +54,8 @@ echo "HOST=localhost" > src/modules/iam/.env.local
 echo "HMAC_SECRET_KEY=test-secret" >> src/modules/iam/.env.local
 
 echo "Testing environment validate after adding some variables..."
-RUST_BACKTRACE=1 cargo run --release environment validate
+# Still nonzero by design: only partial variables were added above.
+RUST_BACKTRACE=1 $FL environment validate \
+    || echo "[EXPECTED] validate reported remaining missing variables"
 
 echo "Environment validate test completed!"

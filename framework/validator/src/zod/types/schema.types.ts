@@ -69,8 +69,7 @@ export type ZodIdiomaticSchema = IdiomaticSchema<ZodSchemaValidator>;
  * Represents a container for a union of Zod idiomatic schemas.
  */
 export type ZodTupleContainer =
-  | readonly []
-  | readonly [ZodIdiomaticSchema, ...ZodIdiomaticSchema[]];
+  readonly [] | readonly [ZodIdiomaticSchema, ...ZodIdiomaticSchema[]];
 
 /**
  * Resolves a union container to a tuple of resolved Zod idiomatic schemas.

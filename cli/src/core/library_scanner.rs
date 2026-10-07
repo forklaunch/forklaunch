@@ -405,9 +405,28 @@ impl ImportScanner {
             }
         }
 
-        // Return cached result if this file was already fully scanned (DAG dedup)
+        // Return a SHALLOW stub if this file was already fully scanned (DAG dedup).
+        //
+        // Deep-cloning the cached subtree here (`cached.clone()`) is an
+        // accidental combinatorial explosion: in a diamond-heavy import graph
+        // every importer of a shared hub embeds a full copy of the hub's
+        // entire transitive subtree, materializing the DAG as an
+        // exponentially-sized tree. On a large monorepo this alone allocated
+        // >12 GB and OOM-killed `release create` inside the 16 GB deployment
+        // worker. `flatten_topology` dedups by visited path and early-returns
+        // on repeat encounters, so those embedded copies were pure waste — a
+        // childless stub is behavior-identical: the first (in-tree) occurrence
+        // carries the full subtree, later occurrences only need the node
+        // identity.
         if let Some(cached) = self.result_cache.get(file_path) {
-            return Ok(cached.clone());
+            return Ok(CodeNode {
+                name: cached.name.clone(),
+                node_type: cached.node_type.clone(),
+                version: cached.version.clone(),
+                children: None,
+                path: cached.path.clone(),
+                target_service: cached.target_service.clone(),
+            });
         }
 
         // Circular dependency check (file is currently being scanned in this call stack)

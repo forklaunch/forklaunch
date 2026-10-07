@@ -7,7 +7,7 @@ use oxc_ast::ast::SourceType;
 use oxc_codegen::{Codegen, CodegenOptions};
 
 use crate::{
-    constants::{WorkerType, error_failed_to_read_file},
+    constants::{error_failed_to_read_file, WorkerType},
     core::{
         ast::{
             infrastructure::{
@@ -201,23 +201,29 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
         )?;
     }
 
-    // Add event record entity import (used at runtime in database worker factory)
+    // Add event record entity import. Only database workers need it: the
+    // DatabaseWorkerConsumer factory passes the entity as a runtime value, and
+    // its `InferEntity` alias supplies the type positions. The other worker
+    // types already import a type of the same name from ./domain/types, so
+    // importing the entity as well would be a duplicate identifier.
     let event_record_text = format!(
         "import {{ {}EventRecord }} from './persistence/entities/{}EventRecord.entity';",
         pascal_case_name,
         project_name.to_case(Case::Camel)
     );
-    let mut event_record_import =
-        parse_ast_program(&allocator, &event_record_text, SourceType::ts());
-    inject_into_import_statement(
-        &mut program,
-        &mut event_record_import,
-        &format!(
-            "./persistence/entities/{}EventRecord.entity",
-            project_name.to_case(Case::Camel)
-        ),
-        &registrations_text,
-    )?;
+    if is_database_worker {
+        let mut event_record_import =
+            parse_ast_program(&allocator, &event_record_text, SourceType::ts());
+        inject_into_import_statement(
+            &mut program,
+            &mut event_record_import,
+            &format!(
+                "./persistence/entities/{}EventRecord.entity",
+                project_name.to_case(Case::Camel)
+            ),
+            &registrations_text,
+        )?;
+    }
 
     // Detect naming convention from existing registrations file
     let otel_token = if registrations_text.contains("OtelCollector:") {
@@ -248,7 +254,12 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
             redis_ttl_cache_runtime_dependency(&allocator, &mut program, otel_token)?;
         }
         WorkerType::Database => {
-            database_entity_manager_runtime_dependency(&allocator, &mut program, orm_token, em_token)?;
+            database_entity_manager_runtime_dependency(
+                &allocator,
+                &mut program,
+                orm_token,
+                em_token,
+            )?;
         }
         WorkerType::Kafka => {
             inject_specifier_into_import_statement(
@@ -298,7 +309,8 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
             "environmentConfig",
         )?;
 
-        let event_encryptor_text = "const configInjector = createConfigInjector(SchemaValidator(), {
+        let event_encryptor_text =
+            "const configInjector = createConfigInjector(SchemaValidator(), {
             EventEncryptor: {
                 lifetime: Lifetime.Singleton,
                 type: FieldEncryptor,
@@ -374,12 +386,7 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
                 WorkerProducer: {{
                     lifetime: Lifetime.Scoped,
                     type: EncryptingWorkerProducer,
-                    factory: (container, context) =>
-                        new EncryptingWorkerProducer(
-                            ({})(container),
-                            container.EventEncryptor,
-                            (context?.tenantId as string) ?? ''
-                        )
+                    factory: {}
                 }},
                 WorkerConsumer: {{
                     lifetime: Lifetime.Scoped,
@@ -390,17 +397,7 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
                         ],
                         type<{}WorkerConsumer<EncryptedEventEnvelope, {}WorkerOptions>>()
                     ),
-                    factory: (container) => {{
-                        const createConsumer = ({})(container);
-                        return (
-                            processEventsFunction: WorkerProcessFunction<{}EventRecord>,
-                            failureHandler: WorkerFailureHandler<{}EventRecord>
-                        ) =>
-                            createConsumer(
-                                withDecryption<{}EventRecord>(processEventsFunction, container.EventEncryptor),
-                                withDecryptionFailureHandler<{}EventRecord>(failureHandler, container.EventEncryptor)
-                            );
-                    }}
+                    factory: {}
                 }}
             }});",
             get_worker_producer_factory(worker_type),
@@ -409,10 +406,6 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
             worker_type_name,
             worker_type_name,
             get_worker_consumer_factory(worker_type, &pascal_case_name),
-            pascal_case_name,
-            pascal_case_name,
-            pascal_case_name,
-            pascal_case_name,
         )
     };
     let mut worker_deps_injection =
@@ -662,5 +655,123 @@ export const createDependencyContainer = (envFilePath: string) => ({
 
         // Verify Redis infrastructure was added
         assert!(transformed_code.contains("REDIS_URL"));
+
+        // Non-database workers take the event record from the types file. The
+        // entity export carries the same name, so importing it too was a
+        // duplicate identifier (TS2300).
+        assert!(
+            transformed_code.contains("EventRecord.types"),
+            "Expected types import for a non-database worker: {transformed_code}"
+        );
+        assert!(
+            !transformed_code.contains("persistence/entities/testServiceEventRecord.entity"),
+            "Non-database worker must not also import the entity: {transformed_code}"
+        );
+    }
+
+    // Regenerating registrations.ts must not silently drop config entries or
+    // service registrations that were added by hand — the template does not
+    // know about them, and losing them is invisible until the build breaks.
+    #[test]
+    fn test_transform_registrations_ts_service_to_worker_preserves_hand_added_registrations() {
+        let registrations_content = r#"
+import {
+  number,
+  SchemaValidator,
+  string
+} from '@test-app/core';
+import { OpenTelemetryCollector } from '@forklaunch/core/http';
+import {
+  createConfigInjector,
+  getEnvVar,
+  Lifetime
+} from '@forklaunch/core/services';
+import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
+import { CustomThing } from './domain/services/custom-thing.service';
+
+const configInjector = createConfigInjector(SchemaValidator(), {
+  SERVICE_METADATA: {
+    lifetime: Lifetime.Singleton,
+    type: {
+      name: string,
+      version: string
+    },
+    value: {
+      name: 'test-service',
+      version: '0.1.0'
+    }
+  }
+});
+
+const environmentConfig = configInjector.chain({
+  HOST: {
+    lifetime: Lifetime.Singleton,
+    type: string,
+    value: getEnvVar('HOST')
+  },
+  APP_BASE_DOMAIN: {
+    lifetime: Lifetime.Singleton,
+    type: string,
+    value: getEnvVar('APP_BASE_DOMAIN') || 'localhost'
+  }
+});
+
+const runtimeDependencies = environmentConfig.chain({
+  Orm: {
+    lifetime: Lifetime.Singleton,
+    type: MikroORM,
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
+  },
+  EntityMgr: {
+    lifetime: Lifetime.Scoped,
+    type: EntityManager,
+    factory: ({ Orm }) => Orm.em.fork()
+  }
+});
+
+const serviceDependencies = runtimeDependencies.chain({
+  CustomThingService: {
+    lifetime: Lifetime.Scoped,
+    type: CustomThing,
+    factory: ({ EntityMgr }) => new CustomThing(EntityMgr)
+  }
+});
+
+export const createDependencyContainer = (envFilePath: string) => ({
+  ci: serviceDependencies.validateConfigSingletons(envFilePath),
+  tokens: serviceDependencies.tokens()
+});
+"#;
+
+        let temp_dir = create_temp_project_structure(registrations_content);
+        let project_path = temp_dir.path().join("test-project");
+        let cache = RenderedTemplatesCache::new();
+
+        let transformed_code = transform_registrations_ts_service_to_worker(
+            &cache,
+            &project_path,
+            "test-app",
+            "test-service",
+            &WorkerType::Database,
+        )
+        .unwrap();
+
+        // Hand-added environment config entry survives.
+        assert!(
+            transformed_code.contains("APP_BASE_DOMAIN"),
+            "Hand-added config entry was dropped: {transformed_code}"
+        );
+        // Hand-added service registration and its import survive.
+        assert!(
+            transformed_code.contains("CustomThingService"),
+            "Hand-added service registration was dropped: {transformed_code}"
+        );
+        assert!(
+            transformed_code.contains("./domain/services/custom-thing.service"),
+            "Hand-added import was dropped: {transformed_code}"
+        );
+        // ...alongside the worker registrations that were just injected.
+        assert!(transformed_code.contains("QUEUE_NAME"));
+        assert!(transformed_code.contains("WorkerConsumer"));
     }
 }

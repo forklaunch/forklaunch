@@ -1,0 +1,64 @@
+{
+  "name": "@forklaunch/interfaces-cac",
+  "version": "0.2.6",
+  "description": "Computer-assisted coding interfaces for forklaunch",
+  "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
+  "bugs": {
+    "url": "https://github.com/forklaunch/forklaunch-js/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/forklaunch/forklaunch-js.git"
+  },
+  "license": "MIT",
+  "author": "Forklift Technologies, Inc.",
+  "exports": {
+    "./interfaces": {
+      "types": "./lib/interfaces/index.d.ts",
+      "import": "./lib/interfaces/index.mjs",
+      "require": "./lib/interfaces/index.js",
+      "default": "./lib/interfaces/index.js"
+    },
+    "./types": {
+      "types": "./lib/types/index.d.ts",
+      "import": "./lib/types/index.mjs",
+      "require": "./lib/types/index.js",
+      "default": "./lib/types/index.js"
+    },
+    "./interfaces/*": {
+      "types": "./lib/interfaces/*.d.ts"
+    },
+    "./types/*": {
+      "types": "./lib/types/*.d.ts"
+    }
+  },
+  "types": "lib/index.d.ts",
+  "files": [
+    "lib/**"
+  ],
+  "scripts": {
+    "build": "tsc --noEmit && tsup interfaces/index.ts types/index.ts --format cjs,esm --no-splitting --tsconfig tsconfig.json --out-dir lib --clean && tsc -p tsconfig.build.json --emitDeclarationOnly && if [ -f eject-package.bash ]; then pnpm package:eject; fi",
+    "clean": "rm -rf lib tsconfig.tsbuildinfo pnpm.lock.yaml node_modules",
+    "docs": "typedoc --out docs *",
+    "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
+    "lint": "eslint . -c eslint.config.mjs",
+    "lint:fix": "eslint . -c eslint.config.mjs --fix",
+    "package:eject": "./eject-package.bash",
+    "prepack": "pnpm run build",
+    "publish:package": "./publish-package.bash",
+    "test": "vitest --passWithNoTests"
+  },
+  "dependencies": {
+    "@forklaunch/common": "^1.2.30",
+    "@mikro-orm/core": "7.2.3"
+  },
+  "devDependencies": {
+    "depcheck": "^1.4.7",
+    "prettier": "^3.9.9",
+    "typedoc": "^0.28.20",
+    "typescript": "^7.0.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -207,12 +207,14 @@ fn test_framework_type_entry(test_framework: &TestFramework) -> &'static str {
     }
 }
 
+const ALL_TEST_FRAMEWORK_TYPE_ENTRIES: &[&str] = &["vitest/globals", "jest"];
+
 /// Updates the test framework type entry in a tsconfig's compilerOptions.types array.
-/// Swaps old_type for new_type. If the types array doesn't exist, does nothing.
+/// Strips every known test framework type entry, then appends new_type if set.
+/// If the types array doesn't exist, does nothing.
 fn swap_test_type_in_tsconfig(
     tsconfig: &mut serde_json::Map<String, Value>,
-    old_type: &str,
-    new_type: &str,
+    new_type: Option<&str>,
 ) {
     if let Some(compiler_options) = tsconfig
         .get_mut("compilerOptions")
@@ -222,26 +224,29 @@ fn swap_test_type_in_tsconfig(
             .get_mut("types")
             .and_then(|t| t.as_array_mut())
         {
-            types.retain(|t| t.as_str() != Some(old_type));
-            if !types.iter().any(|t| t.as_str() == Some(new_type)) {
-                types.push(json!(new_type));
+            types.retain(|t| {
+                t.as_str()
+                    .map(|s| !ALL_TEST_FRAMEWORK_TYPE_ENTRIES.contains(&s))
+                    .unwrap_or(true)
+            });
+            if let Some(new_type) = new_type {
+                if !types.iter().any(|t| t.as_str() == Some(new_type)) {
+                    types.push(json!(new_type));
+                }
             }
         }
     }
 }
 
 /// Updates tsconfig.base.json and per-project tsconfig.json files when the test framework changes.
-/// Swaps the old test framework type entry for the new one in the types array.
+/// Removes every known test framework type entry, then adds the new one if specified.
+/// Pass None for new_test_framework to strip test types without replacement (e.g. switching to Bun).
 pub(crate) fn update_tsconfig_test_framework_types(
     base_path: &Path,
-    new_test_framework: &TestFramework,
-    existing_test_framework: Option<&TestFramework>,
+    new_test_framework: Option<&TestFramework>,
     project_names: &[&str],
 ) -> Result<Vec<RenderedTemplate>> {
-    let new_type = test_framework_type_entry(new_test_framework);
-    let old_type = existing_test_framework
-        .map(test_framework_type_entry)
-        .unwrap_or("");
+    let new_type = new_test_framework.map(test_framework_type_entry);
 
     let mut templates = vec![];
 
@@ -253,7 +258,7 @@ pub(crate) fn update_tsconfig_test_framework_types(
         let mut tsconfig: serde_json::Map<String, Value> =
             serde_json::from_str(&content).with_context(|| "Failed to parse tsconfig.base.json")?;
 
-        swap_test_type_in_tsconfig(&mut tsconfig, old_type, new_type);
+        swap_test_type_in_tsconfig(&mut tsconfig, new_type);
 
         templates.push(RenderedTemplate {
             path: base_tsconfig_path,
@@ -277,7 +282,7 @@ pub(crate) fn update_tsconfig_test_framework_types(
                 .and_then(|co| co.get("types"))
                 .is_some()
             {
-                swap_test_type_in_tsconfig(&mut tsconfig, old_type, new_type);
+                swap_test_type_in_tsconfig(&mut tsconfig, new_type);
 
                 templates.push(RenderedTemplate {
                     path: project_tsconfig_path,

@@ -8,14 +8,32 @@ use crate::{choice, core::choices::Choice};
 // All URLs can be overridden via environment variables.
 
 const DEV_PLATFORM_MANAGEMENT_API_URL: &str = "http://localhost:8004";
+const DEV_OBSERVABILITY_API_URL: &str = "http://localhost:8007";
 const DEV_IAM_API_URL: &str = "http://localhost:8001";
 const DEV_BILLING_API_URL: &str = "http://localhost:8000";
 const DEV_PLATFORM_UI_URL: &str = "http://localhost:5173";
+const DEV_STUDIO_ORCHESTRATOR_API_URL: &str = "http://localhost:8008";
+const DEV_RESOURCE_MANAGEMENT_API_URL: &str = "http://localhost:8005";
+const DEV_DEVELOPER_TOOLS_API_URL: &str = "http://localhost:8006";
 
 const PROD_PLATFORM_MANAGEMENT_API_URL: &str = "https://platform-management.forklaunch.com";
+const PROD_OBSERVABILITY_API_URL: &str = "https://observability-api.forklaunch.com";
 const PROD_IAM_API_URL: &str = "https://iam.forklaunch.com";
 const PROD_BILLING_API_URL: &str = "https://billing.forklaunch.com";
 const PROD_PLATFORM_UI_URL: &str = "https://forklaunch.com";
+const PROD_STUDIO_ORCHESTRATOR_API_URL: &str = "https://studio-orchestrator.forklaunch.com";
+const PROD_RESOURCE_MANAGEMENT_API_URL: &str = "https://resource-management.forklaunch.com";
+// NOT A STABLE ALIAS, unlike the other services above: developer-tools has
+// no custom domain configured yet, so this is the raw per-deployment
+// hostname (`<service>.<app>-<env>-<region>-<hash>.app.forklaunch.com`) for
+// ForkLaunch's own production app, confirmed reachable (`/health` and
+// `/api/v1/openapi` both 200). The `-0aef7f56` hash is tied to this specific
+// deployment — if the forklaunch app is ever redeployed fresh or migrated,
+// this will need updating (or, better, developer-tools gets a real alias
+// like the others). Override via `FORKLAUNCH_DEVELOPER_TOOLS_API_URL` if it
+// breaks before this constant is fixed.
+const PROD_DEVELOPER_TOOLS_API_URL: &str =
+    "https://developer-tools.forklaunch-production-us-west-2-0aef7f56.app.forklaunch.com";
 
 pub(crate) fn is_dev_build() -> bool {
     std::env::current_exe()
@@ -32,7 +50,13 @@ pub(crate) fn is_dev_build() -> bool {
         .unwrap_or(false)
 }
 
-pub(crate) const RELEASE_MANIFEST_SCHEMA_VERSION: &str = "1.0.0";
+// Manifest schema 1.1.0 added `optional` to each environment variable
+// requirement; 1.2.0 adds `usedBy` (the projects that read it). The platform's
+// ingestion rejects a schema version it does not know rather than degrading,
+// so this must not move ahead of the platform — forklaunch-platform#389 landed
+// 1.1.0 support, and forklaunch-platform#929 (the platform PR that accepts
+// 1.2.0) must land before this bump ships.
+pub(crate) const RELEASE_MANIFEST_SCHEMA_VERSION: &str = "1.2.0";
 
 pub(crate) fn get_platform_management_api_url() -> String {
     std::env::var("FORKLAUNCH_PLATFORM_MANAGEMENT_API_URL").unwrap_or_else(|_| {
@@ -43,6 +67,21 @@ pub(crate) fn get_platform_management_api_url() -> String {
         }
         .to_string()
     })
+}
+
+pub(crate) fn get_observability_api_url() -> String {
+    std::env::var("FORKLAUNCH_OBSERVABILITY_API_URL")
+        .ok()
+        .map(|api_url| api_url.trim().to_string())
+        .filter(|api_url| !api_url.is_empty())
+        .unwrap_or_else(|| {
+            if is_dev_build() {
+                DEV_OBSERVABILITY_API_URL
+            } else {
+                PROD_OBSERVABILITY_API_URL
+            }
+            .to_string()
+        })
 }
 
 pub(crate) fn get_iam_api_url() -> String {
@@ -67,12 +106,34 @@ pub(crate) fn get_billing_api_url() -> String {
     })
 }
 
+pub(crate) fn get_developer_tools_api_url() -> String {
+    std::env::var("FORKLAUNCH_DEVELOPER_TOOLS_API_URL").unwrap_or_else(|_| {
+        if is_dev_build() {
+            DEV_DEVELOPER_TOOLS_API_URL
+        } else {
+            PROD_DEVELOPER_TOOLS_API_URL
+        }
+        .to_string()
+    })
+}
+
 pub(crate) fn get_platform_ui_url() -> String {
     std::env::var("FORKLAUNCH_PLATFORM_UI_URL").unwrap_or_else(|_| {
         if is_dev_build() {
             DEV_PLATFORM_UI_URL
         } else {
             PROD_PLATFORM_UI_URL
+        }
+        .to_string()
+    })
+}
+
+pub(crate) fn get_resource_management_api_url() -> String {
+    std::env::var("FORKLAUNCH_RESOURCE_MANAGEMENT_API_URL").unwrap_or_else(|_| {
+        if is_dev_build() {
+            DEV_RESOURCE_MANAGEMENT_API_URL
+        } else {
+            PROD_RESOURCE_MANAGEMENT_API_URL
         }
         .to_string()
     })
@@ -317,6 +378,31 @@ choice! {
             id: "iam-better-auth",
             description: Some("better auth implementation for iam"),
             exclusive_files: Some(&["iam-better-auth"])
+        },
+        StripeEcommerce = Choice {
+            id: "ecommerce-stripe",
+            description: Some("stripe ecommerce implementation (catalog, cart, orders, payments, subscriptions)"),
+            exclusive_files: Some(&["ecommerce-stripe"])
+        },
+        BaseMessaging = Choice {
+            id: "messaging-base",
+            description: Some("messaging hooks only (no delivery provider)"),
+            exclusive_files: Some(&["messaging-base"]),
+        },
+        TwilioMessaging = Choice {
+            id: "messaging-twilio",
+            description: Some("twilio sms implementation for messaging"),
+            exclusive_files: Some(&["messaging-twilio"]),
+        },
+        BaseCac = Choice {
+            id: "cac-base",
+            description: Some("computer-assisted coding hooks only"),
+            exclusive_files: Some(&["cac-base"]),
+        },
+        Relay = Choice {
+            id: "relay",
+            description: Some("managed-apps OAuth relay session-ingest endpoint (adds to an existing iam service)"),
+            exclusive_files: Some(&["relay"]),
         }
     }
 
@@ -439,6 +525,7 @@ pub(crate) const ERROR_FAILED_TO_CREATE_LICENSE: &str =
     "Failed to create license file. Please check your target directory is writable.";
 pub(crate) const ERROR_FAILED_TO_GENERATE_PNPM_WORKSPACE: &str =
     "Failed to generate pnpm-workspace.yaml.";
+pub(crate) const ERROR_FAILED_TO_GENERATE_BUNFIG: &str = "Failed to generate bunfig.toml.";
 pub(crate) const ERROR_FAILED_TO_ADD_PROJECT_METADATA_TO_DOCKER_COMPOSE: &str =
     "Failed to add project metadata to docker compose yaml.";
 pub(crate) const ERROR_FAILED_TO_ADD_PROJECT_METADATA_TO_MANIFEST: &str =
@@ -463,6 +550,11 @@ pub(crate) const ERROR_FAILED_TO_CREATE_DATABASE_EXPORT_INDEX_TS: &str =
     "Failed to create database export index.ts in core/persistence.";
 pub(crate) const ERROR_FAILED_TO_CREATE_LIBRARY_PACKAGE_JSON: &str =
     "Failed to create library package.json.";
+pub(crate) const ERROR_FAILED_TO_READ_STOREFRONT_MANIFEST: &str =
+    "Failed to read the storefront manifest.json. Please check the --from path is correct.";
+pub(crate) const ERROR_FAILED_TO_PARSE_STOREFRONT_MANIFEST: &str = "Failed to parse the storefront manifest.json. Please verify the file is valid json produced by the storefront capture tool.";
+pub(crate) const ERROR_STOREFRONT_PROJECT_ALREADY_EXISTS: &str = "A project directory with this name already exists. Please choose a different name or remove the existing directory.";
+pub(crate) const ERROR_FAILED_TO_COPY_STOREFRONT_SITE: &str = "Failed to copy captured storefront site assets. Please check the source site/ directory and target directory are accessible.";
 pub(crate) const ERROR_FAILED_TO_ADD_SERVICE_METADATA_TO_ARTIFACTS: &str =
     "Failed to add service metadata to artifacts.";
 pub(crate) const ERROR_FAILED_TO_UPDATE_APPLICATION_PACKAGE_JSON: &str =
@@ -496,6 +588,14 @@ pub(crate) fn get_service_module_name(service_type: &Module) -> String {
     match service_type {
         Module::BaseBilling | Module::StripeBilling => "billing".to_string(),
         Module::BaseIam | Module::BetterAuthIam => "iam".to_string(),
+        Module::StripeEcommerce => "ecommerce".to_string(),
+        Module::BaseMessaging | Module::TwilioMessaging => "messaging".to_string(),
+        Module::BaseCac => "cac".to_string(),
+        // Relay does not scaffold its own service - it injects the
+        // session-ingest endpoint into the existing iam service (see
+        // init/relay.rs). This name is only used for conflict detection, so it
+        // gets its own class rather than colliding with "iam".
+        Module::Relay => "relay".to_string(),
     }
 }
 
@@ -507,12 +607,23 @@ pub(crate) fn get_service_module_description(name: &str, service_type: &Module) 
         match service_type {
             Module::BaseBilling | Module::StripeBilling => "billing service APIs",
             Module::BaseIam | Module::BetterAuthIam => "identity and access management APIs",
+            Module::StripeEcommerce => "ecommerce service APIs",
+            Module::BaseMessaging | Module::TwilioMessaging => "messaging service APIs",
+            Module::BaseCac => "computer-assisted coding service APIs",
+            Module::Relay => "the managed-apps OAuth relay session-ingest endpoint",
         }
     )
 }
 pub(crate) fn get_service_module_cache(service_type: &Module) -> Option<String> {
     match service_type {
         Module::BaseBilling | Module::StripeBilling => Some(Infrastructure::Redis.to_string()),
+        // The messaging blueprint's registrations wire a RedisTtlCache.
+        Module::BaseMessaging | Module::TwilioMessaging => {
+            Some(Infrastructure::Redis.to_string())
+        }
+        // The ecommerce blueprint reads REDIS_URL at startup for both the cart
+        // cache and the order-event queue, and exits if it is unset.
+        Module::StripeEcommerce => Some(Infrastructure::Redis.to_string()),
         _ => None,
     }
 }
@@ -529,3 +640,51 @@ pub(crate) const DIRS_TO_IGNORE: &[&str] = &[
     "core",
     "client-sdk",
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every module whose blueprint reads REDIS_URL at startup must declare a
+    /// cache resource, otherwise `init module` writes a manifest with no Redis
+    /// in it and the scaffolded project cannot boot once deployed.
+    #[test]
+    fn modules_needing_redis_declare_a_cache_resource() {
+        for module in [
+            Module::BaseBilling,
+            Module::StripeBilling,
+            Module::BaseMessaging,
+            Module::TwilioMessaging,
+            Module::StripeEcommerce,
+        ] {
+            assert_eq!(
+                get_service_module_cache(&module),
+                Some(Infrastructure::Redis.to_string()),
+                "{module:?} needs a Redis cache resource in its manifest"
+            );
+        }
+    }
+
+    /// The iam modules wire no cache, so the helper must keep returning None
+    /// for them rather than handing every module a Redis resource it will
+    /// never use.
+    #[test]
+    fn modules_without_a_cache_declare_none() {
+        assert_eq!(get_service_module_cache(&Module::BaseIam), None);
+        assert_eq!(get_service_module_cache(&Module::BetterAuthIam), None);
+    }
+}
+
+/// Studio orchestrator, which owns the analysis + report-card endpoints. Mirrors
+/// the client's `STUDIO_API_URL` resolution so the CLI and the dashboard reach
+/// the same service.
+pub(crate) fn get_studio_orchestrator_api_url() -> String {
+    std::env::var("FORKLAUNCH_STUDIO_ORCHESTRATOR_API_URL").unwrap_or_else(|_| {
+        if is_dev_build() {
+            DEV_STUDIO_ORCHESTRATOR_API_URL
+        } else {
+            PROD_STUDIO_ORCHESTRATOR_API_URL
+        }
+        .to_string()
+    })
+}

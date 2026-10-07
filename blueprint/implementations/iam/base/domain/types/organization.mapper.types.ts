@@ -4,7 +4,7 @@ import { OrganizationEntities } from './iamEntities.types';
 
 export type OrganizationMappers<
   OrganizationStatus,
-  MapperEntities extends OrganizationEntities<OrganizationStatus>,
+  MapperEntities extends OrganizationEntities,
   MapperDomains extends OrganizationDtos<OrganizationStatus>
 > = {
   OrganizationMapper: {

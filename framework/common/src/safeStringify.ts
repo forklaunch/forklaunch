@@ -86,6 +86,12 @@ export function safeStringify(arg: unknown): string {
     if (ArrayBuffer.isView(value)) {
       return {
         __type: value.constructor.name,
+        // ArrayBuffer.isView narrows to ArrayBufferView, which covers DataView
+        // as well as the typed arrays. DataView is genuinely not indexable, so
+        // TypeScript is right that the two types do not overlap and refuses a
+        // direct assertion. The hop through unknown is load-bearing here rather
+        // than habit: every typed array reaching this branch is ArrayLike, and
+        // a DataView yields an empty array instead of throwing.
         value: Array.from(value as unknown as ArrayLike<unknown>)
       };
     }

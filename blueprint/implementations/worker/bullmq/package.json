@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/implementation-worker-bullmq",
-  "version": "1.0.15",
+  "version": "1.0.38",
   "description": "BullMQ implementation for forklaunch workers",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -36,13 +36,25 @@
       "import": "./lib/domain/types/index.mjs",
       "require": "./lib/domain/types/index.js",
       "default": "./lib/domain/types/index.js"
+    },
+    "./consumers/*": {
+      "types": "./lib/consumers/*.d.ts"
+    },
+    "./producers/*": {
+      "types": "./lib/producers/*.d.ts"
+    },
+    "./schemas/*": {
+      "types": "./lib/domain/schemas/*.d.ts"
+    },
+    "./types/*": {
+      "types": "./lib/domain/types/*.d.ts"
     }
   },
   "files": [
     "lib/**"
   ],
   "scripts": {
-    "build": "tsgo --noEmit && tsup producers/index.ts consumers/index.ts domain/schemas/index.ts domain/types/index.ts --format cjs,esm --no-splitting --dts --tsconfig tsconfig.json --out-dir lib --clean && if [ -f eject-package.bash ]; then pnpm package:eject; fi",
+    "build": "tsc --noEmit && tsup producers/index.ts consumers/index.ts domain/schemas/index.ts domain/types/index.ts --format cjs,esm --no-splitting --tsconfig tsconfig.json --out-dir lib --clean && tsc -p tsconfig.build.json --emitDeclarationOnly && if [ -f eject-package.bash ]; then pnpm package:eject; fi",
     "clean": "rm -rf lib pnpm.lock.yaml node_modules",
     "docs": "typedoc --out docs *",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
@@ -54,19 +66,23 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/core": "^1.3.3",
-    "@forklaunch/interfaces-worker": "workspace:*",
-    "@forklaunch/internal": "^1.2.6",
-    "@sinclair/typebox": "^0.34.48",
-    "bullmq": "^5.71.1",
-    "zod": "^4.3.6"
+    "@forklaunch/core": "^3.0.1",
+    "@forklaunch/interfaces-worker": "workspace:^",
+    "@forklaunch/internal": "^1.2.33",
+    "@forklaunch/validator": "^1.2.31",
+    "@sinclair/typebox": "^0.34.52",
+    "bullmq": "^6.3.10",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@typescript/native-preview": "7.0.0-dev.20260320.1",
     "depcheck": "^1.4.7",
-    "eslint": "^10.1.0",
-    "prettier": "^3.8.1",
-    "typedoc": "^0.28.18",
-    "typescript-eslint": "^8.57.2"
+    "eslint": "^10.11.0",
+    "prettier": "^3.9.9",
+    "typedoc": "^0.28.20",
+    "typescript": "^7.0.2",
+    "typescript-eslint": "^8.71.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

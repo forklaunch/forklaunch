@@ -23,6 +23,10 @@ export const Account = defineComplianceEntity({
     accessTokenExpiresAt: fp.datetime().nullable().compliance('none'),
     refreshTokenExpiresAt: fp.datetime().nullable().compliance('none'),
     scope: fp.string().nullable().compliance('none'),
+    // better-auth >= 1.7.0 maps an `issuer` field on the account model; without
+    // it the mikro-orm adapter throws "Can't find property issuer on entity
+    // Account" during sign-up. Nullable so it is harmless on older versions.
+    issuer: fp.string().nullable().compliance('none'),
     idToken: fp.string().nullable().compliance('pci'),
     password: fp.string().nullable().compliance('pci')
   }

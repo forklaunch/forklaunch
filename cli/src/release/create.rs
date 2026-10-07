@@ -43,6 +43,21 @@ struct ApplicationGitInfo {
     git_repository: Option<String>,
 }
 
+/// Decide release mode from flags. Returns None when an interactive prompt is needed.
+/// When `auto_yes` is set (e.g. --yes or HMAC auth), defaults to local mode to avoid
+/// blocking in non-TTY environments like CI/deployment workers.
+fn resolve_release_mode(flag_local: bool, flag_git: bool, auto_yes: bool) -> Option<bool> {
+    if flag_local {
+        Some(true)
+    } else if flag_git {
+        Some(false)
+    } else if auto_yes {
+        Some(true)
+    } else {
+        None
+    }
+}
+
 /// Opens the platform git integration page and polls until the git repository
 /// URL is configured. Returns the git repository URL.
 fn poll_for_git_repository(
@@ -56,18 +71,11 @@ fn poll_for_git_repository(
         application_id
     );
 
-    log_info!(
-        stdout,
-        "Opening git integration page in your browser..."
-    );
+    log_info!(stdout, "Opening git integration page in your browser...");
     writeln!(stdout, "  {}", integration_url)?;
 
     if let Err(e) = opener::open(&integration_url) {
-        log_warn!(
-            stdout,
-            "Could not open browser automatically: {}",
-            e
-        );
+        log_warn!(stdout, "Could not open browser automatically: {}", e);
         log_info!(stdout, "Please open the URL above manually.");
     }
 
@@ -109,20 +117,18 @@ fn poll_for_git_repository(
     }
 }
 
-use std::thread::sleep;
-use std::time::Duration;
+use std::{thread::sleep, time::Duration};
 
 use anyhow::{Context, Result, bail};
 use clap::{Arg, ArgMatches, Command};
 use dialoguer::{Confirm, Select, theme::ColorfulTheme};
-use serde::Deserialize;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 use toml::to_string_pretty;
 
 use super::{
-    git::{get_git_branch, get_git_commit, is_git_repo},
+    git::{get_git_branch, get_git_commit, get_git_remote_url, is_git_repo},
     manifest_generator::{
         EnvironmentVariableComponent, EnvironmentVariableComponentProperty,
         EnvironmentVariableComponentType, EnvironmentVariableRequirement, EnvironmentVariableScope,
@@ -133,7 +139,6 @@ use crate::{
     CliCommand,
     constants::{get_platform_management_api_url, get_platform_ui_url},
     core::{
-        openapi_export::resolve_command,
         ast::infrastructure::{
             env::find_all_env_vars,
             integrations::find_all_integrations,
@@ -152,12 +157,24 @@ use crate::{
         hmac::AuthMode,
         http_client,
         manifest::{ProjectType, application::ApplicationManifestData},
-        openapi_export::export_all_services,
+        openapi_export::{export_all_services, resolve_command},
         rendered_template::RenderedTemplatesCache,
         validate::{require_active_account, require_integration, require_manifest, resolve_auth},
     },
     sync::all::sync_all_projects,
 };
+
+/// Shape of `GET /releases?applicationId=` — `{ releases: [...] }`.
+#[derive(Debug, Deserialize)]
+struct ExistingReleaseList {
+    #[serde(default)]
+    releases: Vec<ExistingRelease>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ExistingRelease {
+    version: String,
+}
 
 #[derive(Debug, Serialize)]
 struct CreateReleaseRequest {
@@ -166,6 +183,11 @@ struct CreateReleaseRequest {
     manifest: ReleaseManifest,
     #[serde(rename = "releasedBy", skip_serializing_if = "Option::is_none")]
     released_by: Option<String>,
+    /// Pin the autodeploy fan-out to a specific environment. Honored by
+    /// `FORKLAUNCH_TARGET_ENVIRONMENT` env var (set by the worker when the
+    /// webhook already matched the push to an env via the branch matrix).
+    #[serde(rename = "targetEnvironment", skip_serializing_if = "Option::is_none")]
+    target_environment: Option<String>,
 }
 
 #[derive(Debug)]
@@ -184,7 +206,9 @@ impl CliCommand for CreateCommand {
             .arg(
                 Arg::new("release_version")
                     .long("version")
+                    .visible_alias("release")
                     .short('v')
+                    .visible_short_alias('r')
                     .required(true)
                     .help("Release version (e.g., 1.0.0)"),
             )
@@ -224,6 +248,13 @@ impl CliCommand for CreateCommand {
                     .action(clap::ArgAction::SetTrue)
                     .help("Skip automatic sync of projects with manifest before creating release"),
             )
+            .arg(
+                Arg::new("yes")
+                    .long("yes")
+                    .short('y')
+                    .action(clap::ArgAction::SetTrue)
+                    .help("Skip confirmation prompts (for non-interactive/CI environments)"),
+            )
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
@@ -236,12 +267,13 @@ impl CliCommand for CreateCommand {
 
         let version = matches
             .get_one::<String>("release_version")
-            .ok_or_else(|| anyhow::anyhow!("Version is required"))?;
+            .ok_or_else(|| anyhow::anyhow!("Release version is required. Use --version <VERSION> or -v <VERSION> (e.g., --version 1.0.0)"))?;
 
         let dry_run = matches.get_flag("dry-run");
         let flag_local = matches.get_flag("local");
         let flag_git = matches.get_flag("git");
         let skip_sync = matches.get_flag("skip-sync");
+        let auto_yes = matches.get_flag("yes") || auth_mode.is_hmac();
 
         if flag_local && flag_git {
             bail!("Cannot specify both --local and --git flags");
@@ -249,25 +281,29 @@ impl CliCommand for CreateCommand {
 
         // Early version conflict check (skip for dry runs)
         if !dry_run {
-            let check_url = if auth_mode.is_hmac() {
-                format!(
-                    "{}/releases/internal/{}/{}",
+            // `/releases/{app}/{version}` was never a route — the platform mounts
+            // `/releases/:id` and `/releases?applicationId=`. The 404 landed in the
+            // `is_success()` check below, so this guard silently never fired and a
+            // duplicate version was only caught by the create itself, several
+            // minutes of syncing and uploading later. There is no internal list
+            // route, so under HMAC the create remains the only check.
+            if !auth_mode.is_hmac() {
+                let check_url = format!(
+                    "{}/releases?applicationId={}",
                     get_platform_management_api_url(),
-                    application_id,
-                    version
-                )
-            } else {
-                format!(
-                    "{}/releases/{}/{}",
-                    get_platform_management_api_url(),
-                    application_id,
-                    version
-                )
-            };
-
-            if let Ok(response) = http_client::get_with_auth(&auth_mode, &check_url) {
-                if response.status().is_success() {
-                    bail!("Release version '{}' already exists. Bump the version in your manifest and try again.", version);
+                    urlencoding::encode(&application_id)
+                );
+                if let Ok(response) = http_client::get_with_auth(&auth_mode, &check_url) {
+                    if response.status().is_success() {
+                        if let Ok(list) = response.json::<ExistingReleaseList>() {
+                            if list.releases.iter().any(|r| r.version == *version) {
+                                bail!(
+                                    "Release version '{}' already exists. Bump the version in your manifest and try again.",
+                                    version
+                                );
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -307,7 +343,11 @@ impl CliCommand for CreateCommand {
 
                 log_ok!(stdout, "Sync completed with changes");
 
-                log_header!(stdout, Color::Yellow, "Manifest was updated. Please commit the changes to manifest.toml");
+                log_header!(
+                    stdout,
+                    Color::Yellow,
+                    "Manifest was updated. Please commit the changes to manifest.toml"
+                );
                 writeln!(stdout)?;
             } else {
                 log_ok!(stdout, "Sync completed - no changes detected");
@@ -319,25 +359,23 @@ impl CliCommand for CreateCommand {
         }
 
         // Determine release mode: local (default) or git
-        let local_mode = if flag_local {
-            true
-        } else if flag_git {
-            false
-        } else {
-            // Prompt user to choose
-            let options = [
-                "Package locally (upload code directly)",
-                "Use git (connect GitHub repository)",
-            ];
-            let selection = Select::with_theme(&ColorfulTheme::default())
-                .with_prompt("How would you like to release?")
-                .items(&options)
-                .default(0)
-                .interact()?;
+        let local_mode = match resolve_release_mode(flag_local, flag_git, auto_yes) {
+            Some(mode) => mode,
+            None => {
+                let options = [
+                    "Package locally (upload code directly)",
+                    "Use git (connect GitHub repository)",
+                ];
+                let selection = Select::with_theme(&ColorfulTheme::default())
+                    .with_prompt("How would you like to release?")
+                    .items(&options)
+                    .default(0)
+                    .interact()?;
 
-            match selection {
-                1 => false,
-                _ => true,
+                match selection {
+                    1 => false,
+                    _ => true,
+                }
             }
         };
 
@@ -345,11 +383,7 @@ impl CliCommand for CreateCommand {
         if !local_mode {
             // Git mode: connect GitHub repository if not in a git repo
             if !is_git_repo() {
-                let git_repo = poll_for_git_repository(
-                    &auth_mode,
-                    &application_id,
-                    &mut stdout,
-                )?;
+                let git_repo = poll_for_git_repository(&auth_mode, &application_id, &mut stdout)?;
 
                 manifest.git_repository = Some(git_repo);
 
@@ -366,51 +400,42 @@ impl CliCommand for CreateCommand {
         if local_mode {
             log_info!(stdout, "Using local mode - packaging code directly");
         } else if is_git_repo() {
-            // Warn user and checkout main branch with latest changes
-            log_warn!(
+            // Git mode releases whatever commit is checked out, but the working
+            // tree must be clean — uncommitted changes would not be reproducible
+            // from the released commit alone.
+            let status_output = ProcessCommand::new("git")
+                .args(&["status", "--porcelain"])
+                .output()
+                .with_context(|| "Failed to check git status")?;
+            if !status_output.status.success() {
+                bail!("Failed to check git status");
+            }
+            let dirty = !status_output.stdout.is_empty();
+            if dirty {
+                let dirty_text = String::from_utf8_lossy(&status_output.stdout);
+                bail!(
+                    "Working tree has uncommitted changes; commit, stash, or discard them before releasing from git:\n{}",
+                    dirty_text.trim_end()
+                );
+            }
+
+            let current_branch = get_git_branch().unwrap_or_else(|_| "HEAD".to_string());
+            log_info!(
                 stdout,
-                "Releasing from git will checkout the main branch and pull latest changes."
+                "Releasing from current branch '{}' (no checkout, no pull)",
+                current_branch
             );
-            log_warn!(stdout, "Please save any uncommitted work before proceeding.");
-            writeln!(stdout)?;
 
-            let confirmed = Confirm::with_theme(&ColorfulTheme::default())
-                .with_prompt("Continue?")
-                .default(true)
-                .interact()?;
+            if !auto_yes {
+                let confirmed = Confirm::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Continue?")
+                    .default(true)
+                    .interact()?;
 
-            if !confirmed {
-                bail!("Release cancelled by user");
+                if !confirmed {
+                    bail!("Release cancelled by user");
+                }
             }
-
-            log_header!(stdout, Color::Cyan, "Checking out main branch...");
-            writeln!(stdout)?;
-
-            let checkout_status = ProcessCommand::new("git")
-                .args(&["checkout", "main"])
-                .status()
-                .with_context(|| "Failed to checkout main branch")?;
-
-            if !checkout_status.success() {
-                bail!("Failed to checkout main branch");
-            }
-
-            log_ok!(stdout, "Checked out main branch");
-
-            log_header!(stdout, Color::Cyan, "Pulling latest changes...");
-            writeln!(stdout)?;
-
-            let pull_status = ProcessCommand::new("git")
-                .args(&["pull"])
-                .status()
-                .with_context(|| "Failed to pull latest changes")?;
-
-            if !pull_status.success() {
-                bail!("Failed to pull latest changes");
-            }
-
-            log_ok!(stdout, "Pulled latest changes");
-            writeln!(stdout)?;
         }
 
         log_header!(stdout, Color::Cyan, "Creating release {}...", version);
@@ -421,10 +446,19 @@ impl CliCommand for CreateCommand {
 
         // Step 0.5: Install dependencies and build in modules path
         {
-            let runtime_cmd = if manifest.runtime == "bun" { "bun" } else { "pnpm" };
+            let runtime_cmd = if manifest.runtime == "bun" {
+                "bun"
+            } else {
+                "pnpm"
+            };
             let resolved = resolve_command(runtime_cmd);
 
-            log_header!(stdout, Color::Cyan, "Installing dependencies ({})...", runtime_cmd);
+            log_header!(
+                stdout,
+                Color::Cyan,
+                "Installing dependencies ({})...",
+                runtime_cmd
+            );
             writeln!(stdout)?;
 
             let has_lockfile = if manifest.runtime == "bun" {
@@ -439,9 +473,20 @@ impl CliCommand for CreateCommand {
                 vec!["install"]
             };
 
-            let install_status = ProcessCommand::new(&resolved)
+            let mut install_command = ProcessCommand::new(&resolved);
+            install_command
                 .args(&install_args)
-                .current_dir(&modules_path)
+                .current_dir(&modules_path);
+            // Bun's installer can be blocked by its temporary-directory
+            // sandbox in restricted environments; point it at a project-local
+            // temp dir that is always writable.
+            if manifest.runtime == "bun" {
+                let bun_tmp = modules_path.join(".forklaunch-tmp");
+                std::fs::create_dir_all(&bun_tmp)
+                    .with_context(|| "Failed to create bun temp directory")?;
+                install_command.env("TMPDIR", &bun_tmp);
+            }
+            let install_status = install_command
                 .status()
                 .with_context(|| format!("Failed to run {} install", runtime_cmd))?;
 
@@ -482,7 +527,10 @@ impl CliCommand for CreateCommand {
                 Err(_) => {
                     // git repo exists but no commits yet
                     log_warn!(stdout, "No commits found (using local defaults)");
-                    ("local-build".to_string(), get_git_branch().ok().or(Some("local".to_string())))
+                    (
+                        "local-build".to_string(),
+                        get_git_branch().ok().or(Some("local".to_string())),
+                    )
                 }
             }
         } else if local_mode || connected_github {
@@ -504,6 +552,40 @@ impl CliCommand for CreateCommand {
             git_branch.as_deref().unwrap_or("unknown")
         );
 
+        // A git-mode release from inside a checkout must also say WHICH repo the
+        // commit lives in, or the deploy has nothing to clone. Record the origin
+        // remote of the checkout in the manifest; a manifest that already names
+        // a different repository is kept but flagged.
+        if !local_mode && is_git_repo() {
+            match (get_git_remote_url(), manifest.git_repository.as_deref()) {
+                (Some(remote), Some(existing)) if existing.trim_end_matches('/') != remote => {
+                    log_warn!(
+                        stdout,
+                        "manifest.toml names git_repository {} but this checkout's origin is {}; the release will be built from {}",
+                        existing,
+                        remote,
+                        existing
+                    );
+                }
+                (Some(_), Some(_)) => {}
+                (Some(remote), None) => {
+                    manifest.git_repository = Some(remote.clone());
+                    let manifest_str = to_string_pretty(&manifest)
+                        .with_context(|| "Failed to serialize manifest")?;
+                    fs::write(&manifest_path, manifest_str)
+                        .with_context(|| "Failed to write manifest")?;
+                    log_ok!(stdout, "Git repository recorded from origin: {}", remote);
+                }
+                (None, Some(_)) => {}
+                (None, None) => {
+                    log_warn!(
+                        stdout,
+                        "No 'origin' remote found; the deploy will use the repository connected to this application on the platform"
+                    );
+                }
+            }
+        }
+
         // Step 2: Export OpenAPI specs
         let openapi_path = app_root.join(".forklaunch").join("openapi");
         create_dir_all(&openapi_path).with_context(|| "Failed to create openapi directory")?;
@@ -511,7 +593,11 @@ impl CliCommand for CreateCommand {
 
         let exported_services = export_all_services(&app_root, &manifest, &openapi_path)?;
 
-        log_ok!(stdout, "Exported OpenAPI specifications ({} services)", exported_services.len());
+        log_ok!(
+            stdout,
+            "Exported OpenAPI specifications ({} services)",
+            exported_services.len()
+        );
 
         let mut openapi_specs = HashMap::new();
         for project in &manifest.projects {
@@ -558,9 +644,7 @@ impl CliCommand for CreateCommand {
                     let vars: HashSet<String> = contents
                         .lines()
                         .filter(|line| !line.trim().is_empty() && !line.starts_with('#'))
-                        .filter_map(|line| {
-                            line.split('=').next().map(|k| k.trim().to_string())
-                        })
+                        .filter_map(|line| line.split('=').next().map(|k| k.trim().to_string()))
                         .collect();
                     env_local_vars.insert(project.name.clone(), vars);
                 }
@@ -568,12 +652,13 @@ impl CliCommand for CreateCommand {
 
             for var_name in &never_app_vars {
                 for (project_name, env_vars) in &project_env_vars {
-                    let in_source = env_vars.iter().any(|v| v.var_name == *var_name);
+                    // Sightings are already folded to one entry per name.
+                    let source_usage = env_vars.iter().find(|v| v.var_name == *var_name);
                     let in_env_local = env_local_vars
                         .get(project_name)
                         .is_some_and(|vars| vars.contains(var_name));
 
-                    if !in_source && !in_env_local {
+                    if source_usage.is_none() && !in_env_local {
                         continue;
                     }
 
@@ -584,14 +669,12 @@ impl CliCommand for CreateCommand {
                         .map(|p| &p.r#type);
 
                     let (scope, scope_id) = match project_type {
-                        Some(ProjectType::Service) => (
-                            EnvScope::Service,
-                            Some(project_name.clone()),
-                        ),
-                        Some(ProjectType::Worker) => (
-                            EnvScope::Worker,
-                            Some(format!("{}-worker", project_name)),
-                        ),
+                        Some(ProjectType::Service) => {
+                            (EnvScope::Service, Some(project_name.clone()))
+                        }
+                        Some(ProjectType::Worker) => {
+                            (EnvScope::Worker, Some(format!("{}-worker", project_name)))
+                        }
                         _ => continue,
                     };
 
@@ -601,6 +684,9 @@ impl CliCommand for CreateCommand {
                         scope_id,
                         used_by: vec![project_name.clone()],
                         value: None,
+                        // Present only when the code scan saw it; a variable
+                        // known solely from .env.local has no declared type.
+                        optional: source_usage.and_then(|v| v.optional),
                     });
                 }
             }
@@ -616,11 +702,10 @@ impl CliCommand for CreateCommand {
             .collect();
 
         // Add all env vars from docker-compose for each service/worker
-        let mut existing_vars: HashSet<(String, Option<String>)> =
-            scoped_env_vars
-                .iter()
-                .map(|v| (v.name.clone(), v.scope_id.clone()))
-                .collect();
+        let mut existing_vars: HashSet<(String, Option<String>)> = scoped_env_vars
+            .iter()
+            .map(|v| (v.name.clone(), v.scope_id.clone()))
+            .collect();
 
         // Inject platform defaults at APPLICATION scope.
         // These are hardcoded defaults that apply to all services/workers.
@@ -655,8 +740,12 @@ impl CliCommand for CreateCommand {
         let pulumi_injected_component_vars: HashSet<&str> = [
             "REDIS_URL",
             "DB_NAME",
-            "KAFKA_BROKERS", "KAFKA_BOOTSTRAP_SERVERS",
-        ].iter().copied().collect();
+            "KAFKA_BROKERS",
+            "KAFKA_BOOTSTRAP_SERVERS",
+        ]
+        .iter()
+        .copied()
+        .collect();
 
         for (default_key, default_value) in &platform_defaults {
             let app_key = (default_key.to_string(), None);
@@ -667,6 +756,8 @@ impl CliCommand for CreateCommand {
                     scope_id: None,
                     used_by: vec!["platform".to_string()],
                     value: Some(default_value.to_string()),
+                    // A platform default is not a code declaration.
+                    optional: None,
                 });
                 existing_vars.insert(app_key);
             }
@@ -681,39 +772,36 @@ impl CliCommand for CreateCommand {
 
             let worker_alias_info = classify_worker_alias(&service_name, &project_types);
 
-            let (scope, scope_id) =
-                if let Some((component_type, base_worker_name)) = worker_alias_info {
-                    match component_type {
-                        EnvironmentVariableComponentType::Service => (
-                            EnvScope::Service,
-                            Some(format!("{}-service", base_worker_name)),
-                        ),
-                        EnvironmentVariableComponentType::Worker => (
-                            EnvScope::Worker,
-                            Some(format!("{}-worker", base_worker_name)),
-                        ),
-                        _ => continue,
-                    }
-                } else {
-                    // Check if it's a direct project match
-                    let project_type = manifest
-                        .projects
-                        .iter()
-                        .find(|p| p.name == service_name)
-                        .map(|p| &p.r#type);
+            let (scope, scope_id) = if let Some((component_type, base_worker_name)) =
+                worker_alias_info
+            {
+                match component_type {
+                    EnvironmentVariableComponentType::Service => (
+                        EnvScope::Service,
+                        Some(format!("{}-service", base_worker_name)),
+                    ),
+                    EnvironmentVariableComponentType::Worker => (
+                        EnvScope::Worker,
+                        Some(format!("{}-worker", base_worker_name)),
+                    ),
+                    _ => continue,
+                }
+            } else {
+                // Check if it's a direct project match
+                let project_type = manifest
+                    .projects
+                    .iter()
+                    .find(|p| p.name == service_name)
+                    .map(|p| &p.r#type);
 
-                    match project_type {
-                        Some(ProjectType::Service) => (
-                            EnvScope::Service,
-                            Some(service_name.clone()),
-                        ),
-                        Some(ProjectType::Worker) => (
-                            EnvScope::Worker,
-                            Some(format!("{}-worker", service_name)),
-                        ),
-                        _ => continue, // Skip if not a service or worker
+                match project_type {
+                    Some(ProjectType::Service) => (EnvScope::Service, Some(service_name.clone())),
+                    Some(ProjectType::Worker) => {
+                        (EnvScope::Worker, Some(format!("{}-worker", service_name)))
                     }
-                };
+                    _ => continue, // Skip if not a service or worker
+                }
+            };
 
             let project_names_for_scope: Vec<String> =
                 manifest.projects.iter().map(|p| p.name.clone()).collect();
@@ -739,7 +827,8 @@ impl CliCommand for CreateCommand {
                     } else {
                         String::new()
                     }
-                } else if pulumi_injected_component_vars.contains(key.to_ascii_uppercase().as_str()) {
+                } else if pulumi_injected_component_vars.contains(key.to_ascii_uppercase().as_str())
+                {
                     String::new()
                 } else if is_inter_service_url(&key, &project_names_for_scope) {
                     // Inter-service URL vars are injected by Pulumi at deploy time
@@ -751,10 +840,8 @@ impl CliCommand for CreateCommand {
                     value.clone()
                 };
 
-                let is_app_scoped = is_application_scoped_var(
-                    &key,
-                    &project_names_for_scope,
-                ) && !is_never_application_scoped(&key);
+                let is_app_scoped = is_application_scoped_var(&key, &project_names_for_scope)
+                    && !is_never_application_scoped(&key);
 
                 if is_app_scoped {
                     // Ensure an APPLICATION-scoped entry exists
@@ -766,6 +853,8 @@ impl CliCommand for CreateCommand {
                             scope_id: None,
                             used_by: vec![service_name.clone()],
                             value: Some(effective_value.clone()),
+                            // Read out of docker-compose, not declared in code.
+                            optional: None,
                         });
                         existing_vars.insert(app_key);
                     }
@@ -773,11 +862,7 @@ impl CliCommand for CreateCommand {
                     // If this component has a different value, add a component-scoped override
                     let app_value = scoped_env_vars
                         .iter()
-                        .find(|v| {
-                            v.name == key
-                                && v.scope
-                                    == EnvScope::Application
-                        })
+                        .find(|v| v.name == key && v.scope == EnvScope::Application)
                         .and_then(|v| v.value.as_deref());
 
                     if app_value != Some(effective_value.as_str()) {
@@ -789,6 +874,7 @@ impl CliCommand for CreateCommand {
                                 scope_id: scope_id.clone(),
                                 used_by: vec![service_name.clone()],
                                 value: Some(effective_value.clone()),
+                                optional: None,
                             });
                             existing_vars.insert(comp_key);
                         }
@@ -807,6 +893,7 @@ impl CliCommand for CreateCommand {
                     scope_id: scope_id.clone(),
                     used_by: vec![service_name.clone()],
                     value: Some(effective_value.clone()),
+                    optional: None,
                 });
 
                 existing_vars.insert((key, scope_id.clone()));
@@ -878,7 +965,11 @@ impl CliCommand for CreateCommand {
         // Cross-scope deduplication: remove service/worker copies when an application-scope copy exists
         deduplicate_cross_scope(&mut scoped_env_vars);
 
-        log_ok!(stdout, "Detected required environment variables ({} variables)", scoped_env_vars.len());
+        log_ok!(
+            stdout,
+            "Detected required environment variables ({} variables)",
+            scoped_env_vars.len()
+        );
 
         let all_runtime_deps = find_all_runtime_deps(&modules_path, &rendered_templates_cache)?;
 
@@ -897,24 +988,39 @@ impl CliCommand for CreateCommand {
         }
 
         let total_resources: usize = project_runtime_deps.values().map(|v| v.len()).sum();
-        log_ok!(stdout, "Detected runtime dependencies ({} resources)", total_resources);
+        log_ok!(
+            stdout,
+            "Detected runtime dependencies ({} resources)",
+            total_resources
+        );
 
         let all_integrations = find_all_integrations(&modules_path, &rendered_templates_cache)?;
 
         let total_integrations: usize = all_integrations.values().map(|v| v.len()).sum();
-        log_ok!(stdout, "Detected integrations ({} integrations)", total_integrations);
+        log_ok!(
+            stdout,
+            "Detected integrations ({} integrations)",
+            total_integrations
+        );
 
-        let all_worker_configs =
-            find_all_worker_configs(&modules_path, &rendered_templates_cache)?;
+        let all_worker_configs = find_all_worker_configs(&modules_path, &rendered_templates_cache)?;
 
         let total_worker_configs = all_worker_configs.len();
-        log_ok!(stdout, "Detected worker configurations ({} workers)", total_worker_configs);
+        log_ok!(
+            stdout,
+            "Detected worker configurations ({} workers)",
+            total_worker_configs
+        );
 
         let all_service_deps =
             find_all_service_dependencies(&modules_path, &rendered_templates_cache)?;
 
         let total_service_deps: usize = all_service_deps.values().map(|v| v.len()).sum();
-        log_ok!(stdout, "Detected service mesh connections ({} connections)", total_service_deps);
+        log_ok!(
+            stdout,
+            "Detected service mesh connections ({} connections)",
+            total_service_deps
+        );
 
         let project_names_for_origin: Vec<String> =
             manifest.projects.iter().map(|p| p.name.clone()).collect();
@@ -924,17 +1030,18 @@ impl CliCommand for CreateCommand {
             .map(|v| EnvironmentVariableRequirement {
                 name: v.name.clone(),
                 scope: match v.scope {
-                    EnvScope::Application => {
-                        EnvironmentVariableScope::Application
-                    }
-                    EnvScope::Service => {
-                        EnvironmentVariableScope::Service
-                    }
-                    EnvScope::Worker => {
-                        EnvironmentVariableScope::Worker
-                    }
+                    EnvScope::Application => EnvironmentVariableScope::Application,
+                    EnvScope::Service => EnvironmentVariableScope::Service,
+                    EnvScope::Worker => EnvironmentVariableScope::Worker,
                 },
                 scope_id: v.scope_id.clone(),
+                optional: v.optional,
+                used_by: {
+                    let mut used_by = v.used_by.clone();
+                    used_by.sort();
+                    used_by.dedup();
+                    used_by
+                },
                 component: env_var_components.get(&v.name).map(
                     |(component_type, property, target, path, passthrough)| {
                         EnvironmentVariableComponent {
@@ -947,10 +1054,8 @@ impl CliCommand for CreateCommand {
                     },
                 ),
                 origin: {
-                    let inter_service = parse_inter_service_url_var(
-                        &v.name,
-                        &project_names_for_origin,
-                    );
+                    let inter_service =
+                        parse_inter_service_url_var(&v.name, &project_names_for_origin);
                     if is_platform_managed_var(&v.name)
                         || is_pulumi_provisioned_component(&v.name, &env_var_components)
                         || inter_service.is_some()
@@ -960,17 +1065,14 @@ impl CliCommand for CreateCommand {
                         Some("user".to_string())
                     }
                 },
-                inter_service_url: parse_inter_service_url_var(
-                    &v.name,
-                    &project_names_for_origin,
-                )
-                .map(|(target_service, transport, port_env_var)| {
-                    super::manifest_generator::InterServiceUrlInfo {
-                        target_service,
-                        transport,
-                        port_env_var,
-                    }
-                }),
+                inter_service_url: parse_inter_service_url_var(&v.name, &project_names_for_origin)
+                    .map(|(target_service, transport, port_env_var)| {
+                        super::manifest_generator::InterServiceUrlInfo {
+                            target_service,
+                            transport,
+                            port_env_var,
+                        }
+                    }),
             })
             .collect();
 
@@ -1043,7 +1145,11 @@ impl CliCommand for CreateCommand {
                 }
             }
 
-            log_ok!(stdout, "Uploaded OpenAPI specs to S3 ({} specs)", s3_keys.len());
+            log_ok!(
+                stdout,
+                "Uploaded OpenAPI specs to S3 ({} specs)",
+                s3_keys.len()
+            );
 
             s3_keys
         } else {
@@ -1100,11 +1206,7 @@ impl CliCommand for CreateCommand {
                 &manifest_file,
                 serde_json::to_string_pretty(&release_manifest)?,
             )?;
-            log_info!(
-                stdout,
-                "Manifest written to: {}",
-                manifest_file.display()
-            );
+            log_info!(stdout, "Manifest written to: {}", manifest_file.display());
         } else {
             let manifest_json = serde_json::to_string(&release_manifest)?;
             log_info!(
@@ -1116,11 +1218,15 @@ impl CliCommand for CreateCommand {
             upload_release(&application_id, release_manifest, &auth_mode)?;
 
             log_ok!(stdout, "Uploaded release to platform");
-
         }
 
         writeln!(stdout)?;
-        log_header!(stdout, Color::Green, "Release {} created successfully!", version);
+        log_header!(
+            stdout,
+            Color::Green,
+            "Release {} created successfully!",
+            version
+        );
 
         if !dry_run {
             writeln!(stdout)?;
@@ -1146,17 +1252,31 @@ fn upload_release(
         application_id: application_id.to_string(),
         manifest,
         released_by: None, // TODO: Get from token
+        target_environment: std::env::var("FORKLAUNCH_TARGET_ENVIRONMENT")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
     };
 
-    let url = if auth_mode.is_hmac() {
-        format!("{}/releases/internal", get_platform_management_api_url())
+    let (url, sign_path) = if auth_mode.is_hmac() {
+        (
+            format!("{}/releases/internal", get_platform_management_api_url()),
+            "/internal",
+        )
     } else {
-        format!("{}/releases", get_platform_management_api_url())
+        (
+            format!("{}/releases", get_platform_management_api_url()),
+            "/",
+        )
     };
 
-    let response =
-        http_client::post_with_auth(auth_mode, &url, serde_json::to_value(&request_body)?)
-            .with_context(|| "Failed to create release")?;
+    let response = http_client::post_with_auth_and_sign_path(
+        auth_mode,
+        &url,
+        sign_path,
+        serde_json::to_value(&request_body)?,
+    )
+    .with_context(|| "Failed to create release")?;
 
     let status = response.status();
     let response_body = response.text().unwrap_or_else(|_| "{}".to_string());
@@ -1166,7 +1286,9 @@ fn upload_release(
 
     if !status.is_success() {
         if status.as_u16() == 409 {
-            bail!("Release version already exists. Bump the version in your manifest and try again.");
+            bail!(
+                "Release version already exists. Bump the version in your manifest and try again."
+            );
         }
         bail!(
             "Failed to create release: {} (Status: {})",
@@ -1336,7 +1458,9 @@ fn build_env_var_component_map(
                                         Entry::Occupied(mut entry) => {
                                             let current = entry.get();
                                             // Preserve existing passthrough unless we have a new one
-                                            let passthrough = final_passthrough.clone().or_else(|| current.4.clone());
+                                            let passthrough = final_passthrough
+                                                .clone()
+                                                .or_else(|| current.4.clone());
                                             entry.insert((
                                                 component_type,
                                                 property,
@@ -1478,9 +1602,7 @@ fn infer_component_details(
     // derived from the var name pattern (e.g. BILLING_URL → "billing").
     {
         let project_names: Vec<String> = project_types.keys().cloned().collect();
-        if let Some((target_service, ..)) =
-            parse_inter_service_url_var(key, &project_names)
-        {
+        if let Some((target_service, ..)) = parse_inter_service_url_var(key, &project_names) {
             let property = infer_component_property(&key_upper).unwrap_or_else(|| {
                 default_component_property(&EnvironmentVariableComponentType::Service, &key_upper)
             });
@@ -1923,9 +2045,7 @@ fn should_passthrough(key: &str, value: &str) -> bool {
     true
 }
 
-const CLI_GENERATED_KEY_VARS: &[&str] = &[
-    "HMAC_SECRET_KEY",
-];
+const CLI_GENERATED_KEY_VARS: &[&str] = &["HMAC_SECRET_KEY"];
 
 fn is_cli_generated_key_var(key_upper: &str) -> bool {
     CLI_GENERATED_KEY_VARS
@@ -2034,7 +2154,6 @@ fn looks_base64(value: &str) -> bool {
 /// Promotes service/worker vars to application scope when 2+ copies share the same value,
 /// keeping minority overrides at service/worker scope.
 fn deduplicate_cross_scope(scoped_env_vars: &mut Vec<ScopedEnvVar>) {
-
     // Pre-pass: fill in blank/empty values from sibling copies.
     // If VAR is blank in service A but "abc" in services B and C, set A to "abc".
     // This ensures consolidation sees consistent values across components.
@@ -2093,9 +2212,9 @@ fn deduplicate_cross_scope(scoped_env_vars: &mut Vec<ScopedEnvVar>) {
             continue;
         }
 
-        let has_app_scope = indices.iter().any(|&i| {
-            scoped_env_vars[i].scope == EnvScope::Application
-        });
+        let has_app_scope = indices
+            .iter()
+            .any(|&i| scoped_env_vars[i].scope == EnvScope::Application);
 
         if has_app_scope {
             // Compute the majority value across all service/worker copies.
@@ -2103,19 +2222,14 @@ fn deduplicate_cross_scope(scoped_env_vars: &mut Vec<ScopedEnvVar>) {
             // the majority are removed. Minority diversions are kept as overrides.
             let app_idx = indices
                 .iter()
-                .find(|&&i| {
-                    scoped_env_vars[i].scope
-                        == EnvScope::Application
-                })
+                .find(|&&i| scoped_env_vars[i].scope == EnvScope::Application)
                 .copied()
                 .unwrap();
 
             // Count occurrences of each non-empty value across service/worker copies
             let mut value_counts: HashMap<String, usize> = HashMap::new();
             for &idx in indices {
-                if scoped_env_vars[idx].scope
-                    != EnvScope::Application
-                {
+                if scoped_env_vars[idx].scope != EnvScope::Application {
                     if let Some(v) = &scoped_env_vars[idx].value {
                         let trimmed = v.trim().to_string();
                         if !trimmed.is_empty() {
@@ -2139,9 +2253,7 @@ fn deduplicate_cross_scope(scoped_env_vars: &mut Vec<ScopedEnvVar>) {
             // Remove service/worker copies that match the majority or are blank.
             // Keep copies that differ from the majority (overrides).
             for &idx in indices {
-                if scoped_env_vars[idx].scope
-                    != EnvScope::Application
-                {
+                if scoped_env_vars[idx].scope != EnvScope::Application {
                     let matches_majority = match &scoped_env_vars[idx].value {
                         None => true,
                         Some(v) => {
@@ -2189,6 +2301,9 @@ fn deduplicate_cross_scope(scoped_env_vars: &mut Vec<ScopedEnvVar>) {
                         scope_id: None,
                         used_by: scoped_env_vars[first_idx].used_by.clone(),
                         value: Some("".to_string()),
+                        // Promotion re-scopes an existing variable, so its
+                        // declared optionality travels with it.
+                        optional: scoped_env_vars[first_idx].optional,
                     };
                     scoped_env_vars.push(app_entry);
 
@@ -2290,6 +2405,12 @@ fn is_platform_managed_var(var_name: &str) -> bool {
         // Pulumi-generated: derived from other vars at deploy time
         "JWKS_PUBLIC_KEY_URL",
         "BETTER_AUTH_BASE_URL",
+        // Pulumi-generated: derived from the iam service URL (auth.ts wires
+        // BETTER_AUTH_URL = the deployed iam FQDN).
+        "BETTER_AUTH_URL",
+        // Pulumi-generated: derived from the application's public client URL
+        // (CORS_ORIGINS = the deployed frontend origin(s)).
+        "CORS_ORIGINS",
         // Pulumi-generated: IAM-specific database
         "IAM_DB_NAME",
         // Pulumi-generated: database
@@ -2322,6 +2443,8 @@ fn is_platform_managed_var(var_name: &str) -> bool {
         "OTEL_METRICS_EXPORTER",
         "OTEL_LOGS_EXPORTER",
         "OTEL_LEVEL",
+        "MIMIR_URL",
+        // Retained for back-compat with projects scaffolded pre-Mimir.
         "PROMETHEUS_URL",
         "LOKI_URL",
         "TEMPO_URL",
@@ -2379,9 +2502,11 @@ mod tests {
                         queue: None,
                         object_store: None,
                         redis_partition: None,
+                        capabilities: None,
                     }),
                     routers: None,
                     metadata: None,
+                    serves: None,
                 })
                 .collect(),
             project_peer_topology: HashMap::new(),
@@ -2531,8 +2656,7 @@ mod tests {
 
         // Simulate the logic from the main function
         let mut scoped_env_vars = Vec::new();
-        let mut existing_vars: HashSet<(String, Option<String>)> =
-            HashSet::new();
+        let mut existing_vars: HashSet<(String, Option<String>)> = HashSet::new();
 
         for (service_name, env_vars) in docker_compose_env_vars {
             let project_type = manifest
@@ -2542,14 +2666,10 @@ mod tests {
                 .map(|p| &p.r#type);
 
             let (scope, scope_id) = match project_type {
-                Some(ProjectType::Service) => (
-                    EnvScope::Service,
-                    Some(service_name.clone()),
-                ),
-                Some(ProjectType::Worker) => (
-                    EnvScope::Worker,
-                    Some(format!("{}-worker", service_name)),
-                ),
+                Some(ProjectType::Service) => (EnvScope::Service, Some(service_name.clone())),
+                Some(ProjectType::Worker) => {
+                    (EnvScope::Worker, Some(format!("{}-worker", service_name)))
+                }
                 _ => continue,
             };
 
@@ -2584,6 +2704,7 @@ mod tests {
                     scope_id: scope_id.clone(),
                     used_by: vec![service_name.clone()],
                     value: None,
+                    optional: None,
                 });
 
                 existing_vars.insert((key, scope_id.clone()));
@@ -2600,10 +2721,7 @@ mod tests {
 
         // Verify they're scoped to the service
         for var in &scoped_env_vars {
-            assert_eq!(
-                var.scope,
-                EnvScope::Service
-            );
+            assert_eq!(var.scope, EnvScope::Service);
             assert_eq!(var.scope_id, Some("my-service".to_string()));
         }
 
@@ -2639,13 +2757,13 @@ mod tests {
             scope_id: Some("my-service".to_string()),
             used_by: vec!["my-service".to_string()],
             value: None,
+            optional: None,
         }];
 
-        let mut existing_vars: HashSet<(String, Option<String>)> =
-            scoped_env_vars
-                .iter()
-                .map(|v| (v.name.clone(), v.scope_id.clone()))
-                .collect();
+        let mut existing_vars: HashSet<(String, Option<String>)> = scoped_env_vars
+            .iter()
+            .map(|v| (v.name.clone(), v.scope_id.clone()))
+            .collect();
 
         // Add docker-compose env vars (simulating the main function logic)
         for (service_name, env_vars) in docker_compose_env_vars {
@@ -2656,10 +2774,7 @@ mod tests {
                 .map(|p| &p.r#type);
 
             let (scope, scope_id) = match project_type {
-                Some(ProjectType::Service) => (
-                    EnvScope::Service,
-                    Some(service_name.clone()),
-                ),
+                Some(ProjectType::Service) => (EnvScope::Service, Some(service_name.clone())),
                 _ => continue,
             };
 
@@ -2675,6 +2790,7 @@ mod tests {
                     scope_id: scope_id.clone(),
                     used_by: vec![service_name.clone()],
                     value: None,
+                    optional: None,
                 });
 
                 existing_vars.insert((key, scope_id.clone()));
@@ -2699,6 +2815,7 @@ mod tests {
                 scope_id: Some("billing".to_string()),
                 used_by: vec!["billing".to_string()],
                 value: Some("my-bucket".to_string()),
+                optional: None,
             },
             ScopedEnvVar {
                 name: "S3_BUCKET".to_string(),
@@ -2706,13 +2823,19 @@ mod tests {
                 scope_id: Some("platform-management".to_string()),
                 used_by: vec!["platform-management".to_string()],
                 value: Some("my-bucket".to_string()),
+                optional: None,
             },
         ];
 
         deduplicate_cross_scope(&mut vars);
 
         // Should have one application-scoped entry with blank value
-        assert_eq!(vars.len(), 1, "Expected 1 var after dedup, got {}", vars.len());
+        assert_eq!(
+            vars.len(),
+            1,
+            "Expected 1 var after dedup, got {}",
+            vars.len()
+        );
         assert_eq!(vars[0].scope, EnvScope::Application);
         assert_eq!(vars[0].scope_id, None);
         assert_eq!(vars[0].value, Some("".to_string()));
@@ -2729,6 +2852,7 @@ mod tests {
                 scope_id: Some("billing".to_string()),
                 used_by: vec!["billing".to_string()],
                 value: Some("billing_db".to_string()),
+                optional: None,
             },
             ScopedEnvVar {
                 name: "DB_NAME".to_string(),
@@ -2736,13 +2860,19 @@ mod tests {
                 scope_id: Some("iam".to_string()),
                 used_by: vec!["iam".to_string()],
                 value: Some("iam_db".to_string()),
+                optional: None,
             },
         ];
 
         deduplicate_cross_scope(&mut vars);
 
         // Both should remain — no majority (each value appears once)
-        assert_eq!(vars.len(), 2, "Expected 2 vars after dedup, got {}", vars.len());
+        assert_eq!(
+            vars.len(),
+            2,
+            "Expected 2 vars after dedup, got {}",
+            vars.len()
+        );
         assert!(vars.iter().all(|v| v.scope == EnvScope::Service));
     }
 
@@ -2756,6 +2886,7 @@ mod tests {
                 scope_id: None,
                 used_by: vec![],
                 value: None,
+                optional: None,
             },
             ScopedEnvVar {
                 name: "REDIS_URL".to_string(),
@@ -2763,6 +2894,7 @@ mod tests {
                 scope_id: Some("billing".to_string()),
                 used_by: vec!["billing".to_string()],
                 value: Some("redis://localhost:6379".to_string()),
+                optional: None,
             },
             ScopedEnvVar {
                 name: "REDIS_URL".to_string(),
@@ -2770,13 +2902,19 @@ mod tests {
                 scope_id: Some("iam".to_string()),
                 used_by: vec!["iam".to_string()],
                 value: Some("redis://localhost:6379".to_string()),
+                optional: None,
             },
         ];
 
         deduplicate_cross_scope(&mut vars);
 
         // Should have one application-scoped entry with the majority value
-        assert_eq!(vars.len(), 1, "Expected 1 var after dedup, got {}", vars.len());
+        assert_eq!(
+            vars.len(),
+            1,
+            "Expected 1 var after dedup, got {}",
+            vars.len()
+        );
         assert_eq!(vars[0].scope, EnvScope::Application);
         assert_eq!(vars[0].scope_id, None);
         // The has_app_scope branch sets the app entry's value to the majority
@@ -2793,6 +2931,7 @@ mod tests {
                 scope_id: Some("billing".to_string()),
                 used_by: vec!["billing".to_string()],
                 value: Some("us-east-1".to_string()),
+                optional: None,
             },
             ScopedEnvVar {
                 name: "S3_REGION".to_string(),
@@ -2800,6 +2939,7 @@ mod tests {
                 scope_id: Some("iam".to_string()),
                 used_by: vec!["iam".to_string()],
                 value: Some("us-east-1".to_string()),
+                optional: None,
             },
             ScopedEnvVar {
                 name: "S3_REGION".to_string(),
@@ -2807,13 +2947,19 @@ mod tests {
                 scope_id: Some("special".to_string()),
                 used_by: vec!["special".to_string()],
                 value: Some("eu-west-1".to_string()),
+                optional: None,
             },
         ];
 
         deduplicate_cross_scope(&mut vars);
 
         // Should have: 1 application-scoped (blank) + 1 minority service override
-        assert_eq!(vars.len(), 2, "Expected 2 vars after dedup, got {}", vars.len());
+        assert_eq!(
+            vars.len(),
+            2,
+            "Expected 2 vars after dedup, got {}",
+            vars.len()
+        );
 
         let app_var = vars.iter().find(|v| v.scope == EnvScope::Application);
         assert!(app_var.is_some(), "Should have an application-scoped entry");
@@ -2828,15 +2974,14 @@ mod tests {
     #[test]
     fn test_deduplicate_cross_scope_single_entry_unchanged() {
         // Single service entry → no promotion
-        let mut vars = vec![
-            ScopedEnvVar {
-                name: "CUSTOM_VAR".to_string(),
-                scope: EnvScope::Service,
-                scope_id: Some("billing".to_string()),
-                used_by: vec!["billing".to_string()],
-                value: Some("some-value".to_string()),
-            },
-        ];
+        let mut vars = vec![ScopedEnvVar {
+            name: "CUSTOM_VAR".to_string(),
+            scope: EnvScope::Service,
+            scope_id: Some("billing".to_string()),
+            used_by: vec!["billing".to_string()],
+            value: Some("some-value".to_string()),
+            optional: None,
+        }];
 
         deduplicate_cross_scope(&mut vars);
 
@@ -2855,6 +3000,7 @@ mod tests {
                 scope_id: Some("billing".to_string()),
                 used_by: vec!["billing".to_string()],
                 value: Some("".to_string()), // blank in docker-compose
+                optional: None,
             },
             ScopedEnvVar {
                 name: "API_KEY".to_string(),
@@ -2862,6 +3008,7 @@ mod tests {
                 scope_id: Some("iam".to_string()),
                 used_by: vec!["iam".to_string()],
                 value: Some("abc123".to_string()),
+                optional: None,
             },
             ScopedEnvVar {
                 name: "API_KEY".to_string(),
@@ -2869,13 +3016,19 @@ mod tests {
                 scope_id: Some("platform-management".to_string()),
                 used_by: vec!["platform-management".to_string()],
                 value: Some("abc123".to_string()),
+                optional: None,
             },
         ];
 
         deduplicate_cross_scope(&mut vars);
 
         // All three had the same value after fill-in → promoted to application scope
-        assert_eq!(vars.len(), 1, "Expected 1 var after dedup, got {}", vars.len());
+        assert_eq!(
+            vars.len(),
+            1,
+            "Expected 1 var after dedup, got {}",
+            vars.len()
+        );
         assert_eq!(vars[0].scope, EnvScope::Application);
         assert_eq!(vars[0].name, "API_KEY");
     }
@@ -2891,6 +3044,7 @@ mod tests {
                 scope_id: Some("svc-a".to_string()),
                 used_by: vec!["svc-a".to_string()],
                 value: Some("".to_string()),
+                optional: None,
             },
             ScopedEnvVar {
                 name: "SETTING".to_string(),
@@ -2898,6 +3052,7 @@ mod tests {
                 scope_id: Some("svc-b".to_string()),
                 used_by: vec!["svc-b".to_string()],
                 value: Some("abx".to_string()),
+                optional: None,
             },
             ScopedEnvVar {
                 name: "SETTING".to_string(),
@@ -2905,6 +3060,7 @@ mod tests {
                 scope_id: Some("svc-c".to_string()),
                 used_by: vec!["svc-c".to_string()],
                 value: Some("abx".to_string()),
+                optional: None,
             },
             ScopedEnvVar {
                 name: "SETTING".to_string(),
@@ -2912,13 +3068,19 @@ mod tests {
                 scope_id: Some("svc-d".to_string()),
                 used_by: vec!["svc-d".to_string()],
                 value: Some("abc".to_string()),
+                optional: None,
             },
         ];
 
         deduplicate_cross_scope(&mut vars);
 
         // Should have: 1 application-scoped (blank) + 1 minority service override for svc-d
-        assert_eq!(vars.len(), 2, "Expected 2 vars after dedup, got {}", vars.len());
+        assert_eq!(
+            vars.len(),
+            2,
+            "Expected 2 vars after dedup, got {}",
+            vars.len()
+        );
 
         let app_var = vars.iter().find(|v| v.scope == EnvScope::Application);
         assert!(app_var.is_some(), "Should have an application-scoped entry");
@@ -2940,5 +3102,29 @@ mod tests {
     fn test_should_passthrough_allows_non_localhost() {
         assert!(should_passthrough("SOME_VAR", "production"));
         assert!(should_passthrough("APP_NAME", "my-app"));
+    }
+
+    #[test]
+    fn test_resolve_release_mode_local_flag() {
+        assert_eq!(resolve_release_mode(true, false, false), Some(true));
+        assert_eq!(resolve_release_mode(true, false, true), Some(true));
+    }
+
+    #[test]
+    fn test_resolve_release_mode_git_flag() {
+        assert_eq!(resolve_release_mode(false, true, false), Some(false));
+        assert_eq!(resolve_release_mode(false, true, true), Some(false));
+    }
+
+    #[test]
+    fn test_resolve_release_mode_auto_yes_defaults_local() {
+        // Non-TTY path: auto_yes must resolve without prompting so the CLI
+        // does not fail with "IO error: not a terminal" in deployment workers.
+        assert_eq!(resolve_release_mode(false, false, true), Some(true));
+    }
+
+    #[test]
+    fn test_resolve_release_mode_interactive_requires_prompt() {
+        assert_eq!(resolve_release_mode(false, false, false), None);
     }
 }

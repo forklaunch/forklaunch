@@ -26,20 +26,18 @@ export class StripePlanService<
   SchemaValidator extends AnySchemaValidator,
   Entities extends StripePlanEntities,
   Dto extends StripePlanDtos = StripePlanDtos
-> implements
-    PlanService<
-      typeof PlanCadenceEnum,
-      typeof CurrencyEnum,
-      typeof BillingProviderEnum,
-      {
-        CreatePlanDto: StripeCreatePlanDto;
-        UpdatePlanDto: StripeUpdatePlanDto;
-        PlanDto: StripePlanDto;
-        IdDto: IdDto;
-        IdsDto: IdsDto;
-      }
-    >
-{
+> implements PlanService<
+  typeof PlanCadenceEnum,
+  typeof CurrencyEnum,
+  typeof BillingProviderEnum,
+  {
+    CreatePlanDto: StripeCreatePlanDto;
+    UpdatePlanDto: StripeUpdatePlanDto;
+    PlanDto: StripePlanDto;
+    IdDto: IdDto;
+    IdsDto: IdsDto;
+  }
+> {
   basePlanService: BasePlanService<
     SchemaValidator,
     PlanCadenceEnum,
@@ -155,7 +153,10 @@ export class StripePlanService<
     await this.stripeClient.plans.del(planEntity.externalId);
     let updatedPlan = await this.stripeClient.plans.create({
       ...planDto.stripeFields,
-      interval: planDto.cadence ?? existingPlan.interval,
+      interval:
+        planDto.cadence ??
+        // a fetched plan's interval was valid at creation, so it round-trips
+        (existingPlan.interval as Stripe.PlanCreateParams.Interval),
       currency: planDto.currency ?? existingPlan.currency,
       amount: planDto.price ?? existingPlan.amount ?? undefined,
       product: productId

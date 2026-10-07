@@ -1,5 +1,328 @@
 # @forklaunch/infrastructure-redis
 
+## 1.4.19
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions, including @mikro-orm 7.2.3, so apps resolve a single copy of MikroORM with core.
+- Updated dependencies
+  - @forklaunch/common@1.2.30
+  - @forklaunch/core@3.0.1
+
+## 1.4.18
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions (`pnpm up:packages`).
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies [f2b6357]
+  - @forklaunch/core@3.0.0
+  - @forklaunch/common@1.2.29
+
+## 1.4.17
+
+### Patch Changes
+
+- Refresh every framework dependency to its current release.
+
+  A routine sweep (`pnpm run up:packages`), taken as one wave rather than a
+  package at a time. `workspace:^` is frozen into a concrete range at publish,
+  so a package published ahead of its siblings pins the PREVIOUS version of
+  them and consumers resolve two copies — which is the whole class of bug
+  #311 and #331 existed to clear. Releasing the set together is what keeps
+  that from coming back.
+
+  `@mikro-orm/*` is deliberately NOT moved: framework and blueprint are both
+  on 7.2.1 exactly, and they only stay that way if they move together.
+
+- Updated dependencies
+  - @forklaunch/common@1.2.28
+  - @forklaunch/core@2.1.1
+
+## 1.4.15
+
+### Patch Changes
+
+- Refresh dependencies to their latest published versions.
+
+  `@mikro-orm/*` moves from 7.1.15 to 7.2.1 in every package that pins it,
+  as one step: the framework, the blueprint and the CLI's scaffold constants
+  all agree on a single MikroORM version, so a freshly generated app resolves
+  exactly one copy (the duplicate-package type errors from mixed pins are the
+  reason it is pinned exactly). `@aws-sdk/client-s3` 3.1131 → 3.1136 in
+  infrastructure-s3. The rest is devDependency movement; `@types/node` 26.6
+  added `Socket.server`, which the Bun socket shim in express now declares.
+
+  Packages with only devDependency changes release too, so the whole
+  framework carries one MikroORM version on npm.
+
+- Updated dependencies
+  - @forklaunch/core@1.6.2
+  - @forklaunch/common@1.2.27
+
+## 1.4.14
+
+### Patch Changes
+
+- **Encryption key ring and rotation sweep.**
+
+  `FieldEncryptor` now holds a ring: the current key plus any number of
+  previous keys (`new FieldEncryptor(key, { previousKeys })`, or
+  `FieldEncryptor.fromEnv()` reading `ENCRYPTION_KEY` and
+  `LEGACY_ENCRYPTION_KEYS`). Writes use the current key; reads try the current
+  key and then each previous key, so `ENCRYPTION_KEY` can change without a
+  downtime window. Single-key behaviour and the on-disk `v2:` format are
+  unchanged.
+
+  - `open()` reports which key opened a value (by fingerprint) and whether a
+    rewrite would change it; `needsRotation()`, `rotate()`, `keyIds`,
+    `withPreviousKeys()`, `withFormat()`.
+  - New `v3:{keyId}:{iv}:{tag}:{data}` envelope, opt-in via
+    `ENCRYPTION_FORMAT=v3`: reads resolve the key directly, a missing key fails
+    by name, and `countValuesByKeyId()` answers "can this key be dropped?"
+    without decrypting. Every reader (`EncryptedType`, the redis cache, the S3
+    store) accepts all three envelopes.
+  - `reencryptEncryptedColumns()` is the rotation sweep for migrations: walks
+    every entity with `pii`/`phi`/`pci` fields, rewrites what is still under a
+    previous key with the same tenant it was written with, tries every known
+    organization as a fallback tenant, and reports per table.
+
+  See `docs/compliance/key-rotation.md` for the three-step rotation.
+
+- Updated dependencies
+  - @forklaunch/core@1.6.0
+
+## 1.4.13
+
+### Patch Changes
+
+- Release the framework set together so every package depends on the same
+  `@forklaunch/core`.
+
+  `core` was bumped to pin `@mikro-orm/*` exactly, but `express`, `hyper-express`,
+  `ws` and the `infrastructure-*` packages were still published against the
+  previous `core`. A consumer therefore resolved two copies of
+  `@forklaunch/core`, and through them two copies of `@mikro-orm/core` — which is
+  the duplication the `core` bump exists to remove. `EntityManager` and
+  `EntitySchema` carry a `#private` brand, so two copies are structurally
+  incompatible and the consumer stops compiling.
+
+  No source changes here; these packages move so the set stays internally
+  consistent.
+
+- Updated dependencies
+  - @forklaunch/common@1.2.26
+
+## 1.4.12
+
+### Patch Changes
+
+- Release the rest of the workspace alongside the dependency refresh, so every
+  published package moves together on this pass.
+
+  `up:packages` reached these differently than the five that changed runtime
+  dependencies: `universal-sdk`, `ws` and `infrastructure-redis` picked up
+  devDependency movement only (`jest` 30.4.2 → 30.5.0), and `bunrun`, `common`,
+  `internal` and `testing` saw no manifest change at all. Their emitted output is
+  therefore unchanged.
+
+  They are released regardless to keep the whole set on one refresh, rather than
+  leaving consumers to work out which packages a given update did and did not
+  touch.
+
+- Updated dependencies
+  - @forklaunch/common@1.2.25
+
+## 1.4.11
+
+### Patch Changes
+
+- Update internal package versions
+- Updated dependencies
+  - @forklaunch/common@1.2.24
+  - @forklaunch/core@1.5.16
+
+## 1.4.6
+
+### Patch Changes
+
+- update packages
+- Updated dependencies
+  - @forklaunch/common@1.2.20
+  - @forklaunch/core@1.5.4
+
+## 1.4.5
+
+### Patch Changes
+
+- 92c06f9: dep upgrades
+- Updated dependencies [92c06f9]
+  - @forklaunch/common@1.2.19
+  - @forklaunch/core@1.5.3
+
+## 1.4.4
+
+### Patch Changes
+
+- update dependency versions
+- Updated dependencies
+  - @forklaunch/common@1.2.18
+  - @forklaunch/core@1.5.2
+
+## 1.4.3
+
+### Patch Changes
+
+- Update internal versions and allow ZodType early release
+- Updated dependencies
+  - @forklaunch/common@1.2.17
+  - @forklaunch/core@1.5.1
+
+## 1.4.2
+
+### Patch Changes
+
+- Export wrapEmWithTenantContext for tenant based filtering
+- Updated dependencies
+  - @forklaunch/core@1.5.0
+  - @forklaunch/common@1.2.16
+
+## 1.4.1
+
+### Patch Changes
+
+- chore: update internal package versions
+- Updated dependencies
+  - @forklaunch/common@1.2.15
+  - @forklaunch/core@1.4.1
+
+## 1.4.0
+
+### Minor Changes
+
+- Encryption and decryption now take tenant id as a first party compliance input
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.4.0
+
+## 1.3.15
+
+### Patch Changes
+
+- update enum logic
+- Updated dependencies
+  - @forklaunch/common@1.2.14
+  - @forklaunch/core@1.3.17
+
+## 1.3.14
+
+### Patch Changes
+
+- Update packages and enum constraint fix
+- Updated dependencies
+  - @forklaunch/common@1.2.13
+  - @forklaunch/core@1.3.16
+
+## 1.3.13
+
+### Patch Changes
+
+- sync changes across packages
+- Updated dependencies
+  - @forklaunch/common@1.2.12
+  - @forklaunch/core@1.3.15
+
+## 1.3.12
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.14
+
+## 1.3.11
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.13
+
+## 1.3.10
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.12
+
+## 1.3.9
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.11
+
+## 1.3.8
+
+### Patch Changes
+
+- Align package vers
+- Updated dependencies
+  - @forklaunch/common@1.2.11
+  - @forklaunch/core@1.3.10
+
+## 1.3.7
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.9
+
+## 1.3.6
+
+### Patch Changes
+
+- fix nested app and router
+- Updated dependencies
+  - @forklaunch/common@1.2.10
+  - @forklaunch/core@1.3.8
+
+## 1.3.5
+
+### Patch Changes
+
+- Perf improvement
+- Updated dependencies
+  - @forklaunch/common@1.2.9
+  - @forklaunch/core@1.3.7
+
+## 1.3.4
+
+### Patch Changes
+
+- bump package versions
+- Updated dependencies
+  - @forklaunch/common@1.2.8
+  - @forklaunch/core@1.3.6
+
+## 1.3.3
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.5
+
+## 1.3.2
+
+### Patch Changes
+
+- export consolidated retention logic
+- Updated dependencies
+  - @forklaunch/common@1.2.7
+  - @forklaunch/core@1.3.4
+
 ## 1.3.1
 
 ### Patch Changes

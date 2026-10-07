@@ -1,0 +1,18 @@
+node_modules
+.idea
+.DS_Store
+
+lib
+
+.vscode
+
+*dist
+*lib
+
+temp
+
+.env.local
+
+# MikroORM writes a .snapshot-<dbName>.json next to migrations; the name is
+# environment-specific, so it is local state rather than something to commit.
+migrations/.snapshot-*.json

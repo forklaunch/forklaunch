@@ -150,7 +150,7 @@ cd <repo>
 # Integration already in manifest.toml
 # Just login and start working
 forklaunch login
-forklaunch env sync --environment development --region us-west-2
+forklaunch env sync
 pnpm dev
 ```
 
@@ -200,7 +200,7 @@ Once integrated, you can:
 
 3. **Manage Environment Variables**:
    ```bash
-   forklaunch env sync --environment development --region us-west-2
+   forklaunch env sync
    ```
 
 4. **View Application on Platform**:

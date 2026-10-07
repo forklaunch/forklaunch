@@ -21,6 +21,62 @@ import { CurrencyEnum } from '../enum/currency.enum';
 import { PaymentMethodEnum } from '../enum/paymentMethod.enum';
 import { PlanCadenceEnum } from '../enum/planCadence.enum';
 
+// stripe@22's type packaging stopped re-exporting `SessionCreateParams` from
+// the BillingPortal/Checkout namespaces at the top level — the interfaces
+// still exist in the deep submodule (`Sessions.d.ts`) but aren't reachable as
+// `StripeBillingPortalSessionCreateParams` / `StripeCheckoutSessionCreateParams`.
+// Derive them from the actual method signatures, which are reachable and
+// won't break if stripe rearranges its internal file layout again.
+type UnwrapStripeResponse<T> =
+  T extends Promise<infer R>
+    ? R extends { lastResponse?: unknown }
+      ? Omit<R, 'lastResponse'>
+      : R
+    : never;
+
+// Use `interface ... extends ...` instead of `type ... = ...` so the names
+// survive declaration emit. Pure type aliases get expanded back to their
+// canonical resolution (the deep stripe submodule paths) which then trips
+// TS2883 in any consumer of this module — interfaces, by contrast, form
+// nominal names that tsc preserves in `.d.ts` output. Empty bodies are
+// intentional — we're solely re-naming the supertype.
+/* eslint-disable @typescript-eslint/no-empty-object-type */
+export interface StripeBillingPortalSessionCreateParams
+  extends NonNullable<
+    Parameters<Stripe['billingPortal']['sessions']['create']>[0]
+  > {}
+export interface StripeBillingPortalSession
+  extends UnwrapStripeResponse<
+    ReturnType<Stripe['billingPortal']['sessions']['create']>
+  > {}
+export interface StripeCheckoutSessionCreateParams
+  extends NonNullable<
+    Parameters<Stripe['checkout']['sessions']['create']>[0]
+  > {}
+export interface StripeCheckoutSession
+  extends UnwrapStripeResponse<
+    ReturnType<Stripe['checkout']['sessions']['create']>
+  > {}
+export interface StripePaymentLinkCreateParams
+  extends NonNullable<Parameters<Stripe['paymentLinks']['create']>[0]> {}
+export interface StripePaymentLinkUpdateParams
+  extends NonNullable<Parameters<Stripe['paymentLinks']['update']>[1]> {}
+export interface StripePaymentLink
+  extends UnwrapStripeResponse<ReturnType<Stripe['paymentLinks']['create']>> {}
+export interface StripePlanCreateParams
+  extends NonNullable<Parameters<Stripe['plans']['create']>[0]> {}
+export interface StripePlanUpdateParams
+  extends NonNullable<Parameters<Stripe['plans']['update']>[1]> {}
+export interface StripeProduct
+  extends UnwrapStripeResponse<ReturnType<Stripe['products']['create']>> {}
+export interface StripeSubscriptionCreateParams
+  extends NonNullable<Parameters<Stripe['subscriptions']['create']>[0]> {}
+export interface StripeSubscriptionUpdateParams
+  extends NonNullable<Parameters<Stripe['subscriptions']['update']>[1]> {}
+export interface StripeSubscription
+  extends UnwrapStripeResponse<ReturnType<Stripe['subscriptions']['create']>> {}
+/* eslint-enable @typescript-eslint/no-empty-object-type */
+
 // Billing Portal Types
 type BillingPortalOmissions = 'customer';
 
@@ -29,7 +85,7 @@ export type StripeCreateBillingPortalDto = Omit<
   'providerFields'
 > & {
   stripeFields: Omit<
-    Stripe.BillingPortal.SessionCreateParams,
+    StripeBillingPortalSessionCreateParams,
     BillingPortalOmissions
   >;
 };
@@ -39,7 +95,7 @@ export type StripeUpdateBillingPortalDto = Omit<
   'providerFields'
 > & {
   stripeFields?: Omit<
-    Stripe.BillingPortal.SessionCreateParams,
+    StripeBillingPortalSessionCreateParams,
     BillingPortalOmissions
   >;
 };
@@ -48,7 +104,7 @@ export type StripeBillingPortalDto = Omit<
   BillingPortalDto,
   'providerFields'
 > & {
-  stripeFields: Stripe.BillingPortal.Session;
+  stripeFields: StripeBillingPortalSession;
 };
 
 export type StripeBillingPortalDtos = {
@@ -74,7 +130,7 @@ export type StripeCreateCheckoutSessionDto<StatusEnum> = Omit<
 > & {
   uri: string;
   stripeFields: Omit<
-    Stripe.Checkout.SessionCreateParams,
+    StripeCheckoutSessionCreateParams,
     CheckoutSessionOmissions
   >;
 };
@@ -88,7 +144,7 @@ export type StripeUpdateCheckoutSessionDto<StatusEnum> = Omit<
   'providerFields'
 > & {
   stripeFields?: Omit<
-    Stripe.Checkout.SessionCreateParams,
+    StripeCheckoutSessionCreateParams,
     CheckoutSessionOmissions
   >;
 };
@@ -98,7 +154,7 @@ export type StripeCheckoutSessionDto<StatusEnum> = Omit<
   'providerFields' | 'uri'
 > & {
   uri: string;
-  stripeFields: Stripe.Checkout.Session;
+  stripeFields: StripeCheckoutSession;
 };
 
 export type StripeCheckoutSessionDtos<StatusEnum> = {
@@ -116,7 +172,7 @@ export type StripeCreatePaymentLinkDto<StatusEnum> = Omit<
   >,
   'providerFields'
 > & {
-  stripeFields: Stripe.PaymentLinkCreateParams;
+  stripeFields: StripePaymentLinkCreateParams;
 };
 
 export type StripeUpdatePaymentLinkDto<StatusEnum> = Omit<
@@ -127,14 +183,14 @@ export type StripeUpdatePaymentLinkDto<StatusEnum> = Omit<
   >,
   'providerFields'
 > & {
-  stripeFields?: Stripe.PaymentLinkUpdateParams;
+  stripeFields?: StripePaymentLinkUpdateParams;
 };
 
 export type StripePaymentLinkDto<StatusEnum> = Omit<
   PaymentLinkDto<typeof PaymentMethodEnum, typeof CurrencyEnum, StatusEnum>,
   'providerFields'
 > & {
-  stripeFields: Stripe.PaymentLink;
+  stripeFields: StripePaymentLink;
 };
 
 export type StripePaymentLinkDtos<StatusEnum> = {
@@ -154,7 +210,7 @@ export type StripeCreatePlanDto = Omit<
   >,
   'providerFields'
 > & {
-  stripeFields: Omit<Stripe.PlanCreateParams, PlanOmissions>;
+  stripeFields: Omit<StripePlanCreateParams, PlanOmissions>;
 };
 
 export type StripeUpdatePlanDto = Omit<
@@ -165,7 +221,7 @@ export type StripeUpdatePlanDto = Omit<
   >,
   'providerFields'
 > & {
-  stripeFields?: Omit<Stripe.PlanUpdateParams, PlanOmissions>;
+  stripeFields?: Omit<StripePlanUpdateParams, PlanOmissions>;
 };
 
 export type StripePlanDto = Omit<
@@ -176,7 +232,7 @@ export type StripePlanDto = Omit<
   >,
   'providerFields'
 > & {
-  stripeFields: Stripe.Product;
+  stripeFields: StripeProduct;
 };
 
 export type StripePlanDtos = {
@@ -192,21 +248,21 @@ export type StripeCreateSubscriptionDto<PartyType> = Omit<
   CreateSubscriptionDto<PartyType, typeof BillingProviderEnum>,
   'providerFields'
 > & {
-  stripeFields: Omit<Stripe.SubscriptionCreateParams, SubscriptionOmissions>;
+  stripeFields: Omit<StripeSubscriptionCreateParams, SubscriptionOmissions>;
 };
 
 export type StripeUpdateSubscriptionDto<PartyType> = Omit<
   UpdateSubscriptionDto<PartyType, typeof BillingProviderEnum>,
   'providerFields'
 > & {
-  stripeFields?: Omit<Stripe.SubscriptionUpdateParams, SubscriptionOmissions>;
+  stripeFields?: Omit<StripeSubscriptionUpdateParams, SubscriptionOmissions>;
 };
 
 export type StripeSubscriptionDto<PartyType> = Omit<
   SubscriptionDto<PartyType, typeof BillingProviderEnum>,
   'providerFields'
 > & {
-  stripeFields: Stripe.Subscription;
+  stripeFields: StripeSubscription;
 };
 
 export type StripeSubscriptionDtos<PartyType> = {

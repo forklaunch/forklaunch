@@ -1,3 +1,8 @@
+# The CLI binary. CI builds it once and exports FORKLAUNCH_CLI so the 43
+# scripts share one compile instead of each re-checking a release build.
+FL="${FORKLAUNCH_CLI:-cargo run --release}"
+set -e
+
 if [ -d "output/existing-docker-compose" ]; then
     rm -rf output/existing-docker-compose
 fi
@@ -46,7 +51,7 @@ if ! grep -q "redis:" infra/docker-compose.yaml; then
     exit 1
 fi
 
-RUST_BACKTRACE=1 cargo run --release init application test-app \
+RUST_BACKTRACE=1 $FL init application test-app \
     --path "." \
     -o "src/modules" \
     -d "postgresql" \
@@ -79,7 +84,7 @@ if ! grep -q "redis:" infra/docker-compose.yaml; then
     exit 1
 fi
 
-RUST_BACKTRACE=1 cargo run --release init service test-service \
+RUST_BACKTRACE=1 $FL init service test-service \
     -d "postgresql" \
     -p "src/modules" \
     -D "Test service for existing docker-compose"

@@ -2,11 +2,11 @@ use std::{
     collections::{HashMap, HashSet},
     env,
     fs::read_to_string,
-    io::Write,
-    path::Path,
+    io::{IsTerminal, Write},
+    path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use convert_case::{Case, Casing};
 use rustyline::{Editor, history::DefaultHistory};
@@ -21,7 +21,8 @@ use crate::{
     constants::{
         Database, ERROR_FAILED_TO_CREATE_DATABASE_EXPORT_INDEX_TS,
         ERROR_FAILED_TO_CREATE_GITIGNORE, ERROR_FAILED_TO_CREATE_LICENSE,
-        ERROR_FAILED_TO_GENERATE_PNPM_WORKSPACE, ERROR_FAILED_TO_PARSE_DOCKER_COMPOSE,
+        ERROR_FAILED_TO_GENERATE_BUNFIG, ERROR_FAILED_TO_GENERATE_PNPM_WORKSPACE,
+        ERROR_FAILED_TO_PARSE_DOCKER_COMPOSE,
         Formatter, HttpFramework, License, Linter, Module, ModulesPath,
         Runtime, TestFramework, Validator, get_core_module_description,
         get_monitoring_module_description, get_service_module_cache,
@@ -57,7 +58,7 @@ use crate::{
                 AJV_VERSION, APP_DEV_BUILD_SCRIPT, APP_DEV_SCRIPT, APP_PREPARE_SCRIPT,
                 BETTER_AUTH_VERSION, BETTER_SQLITE3_VERSION, BIOME_VERSION, BUNRUN_VERSION,
                 COMMON_VERSION, CORE_VERSION, DOTENV_VERSION, ESLINT_VERSION, EXPRESS_VERSION,
-                GLOBALS_VERSION, HUSKY_VERSION, HYPER_EXPRESS_VERSION, JEST_TYPES_VERSION,
+                GLOBALS_VERSION, HUSKY_VERSION, HYPER_EXPRESS_VERSION, UWEBSOCKETS_VERSION, JEST_TYPES_VERSION,
                 JEST_VERSION, LINT_STAGED_VERSION, MIKRO_ORM_CORE_VERSION,
                 MIKRO_ORM_DATABASE_VERSION, MIKRO_ORM_MIGRATIONS_VERSION,
                 NODE_GYP_VERSION, OXLINT_VERSION, PRETTIER_VERSION,
@@ -65,7 +66,7 @@ use crate::{
                 SQLITE3_VERSION, TS_JEST_VERSION, TS_NODE_VERSION, TSX_VERSION, TYPEBOX_VERSION,
                 TYPES_BUILD_SCRIPT, TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION, TYPES_EXPRESS_VERSION,
                 TYPES_NODE_VERSION, TYPES_QS_VERSION, TYPES_UUID_VERSION, TYPES_WATCH_SCRIPT,
-                TYPESCRIPT_ESLINT_VERSION, TYPESCRIPT_NATIVE_PREVIEW_VERSION, TYPESCRIPT_VERSION, UNIVERSAL_SDK_VERSION, UUID_VERSION,
+                TYPESCRIPT_ESLINT_VERSION, TYPESCRIPT_VERSION, UNIVERSAL_SDK_VERSION, UUID_VERSION,
                 VALIDATOR_VERSION, VITEST_VERSION, ZOD_VERSION, application_build_script,
                 application_clean_purge_script, application_clean_script, application_docs_script,
                 application_format_script, application_lint_fix_script, application_lint_script,
@@ -76,6 +77,7 @@ use crate::{
             },
             project_package_json::{ProjectDependencies, ProjectDevDependencies, ProjectScripts},
         },
+        bunfig::generate_bunfig,
         pnpm_workspace::generate_pnpm_workspace,
         rendered_template::{RenderedTemplate, create_forklaunch_dir, write_rendered_templates},
         symlinks::generate_symlinks,
@@ -244,7 +246,10 @@ fn generate_application_package_json(
             ts_node: Some(TS_NODE_VERSION.to_string()),
             tsx: Some(TSX_VERSION.to_string()),
             typescript: Some(TYPESCRIPT_VERSION.to_string()),
-            typescript_native_preview: Some(TYPESCRIPT_NATIVE_PREVIEW_VERSION.to_string()),
+            // TypeScript 7 ships the native compiler as `tsc`, so the
+            // preview package that provided `tsgo` is no longer needed. The
+            // field is skipped when None, so generated manifests omit it.
+            typescript_native_preview: None,
             typescript_eslint: if data.is_eslint {
                 Some(TYPESCRIPT_ESLINT_VERSION.to_string())
             } else {
@@ -276,6 +281,59 @@ impl ApplicationCommand {
     pub(super) fn new() -> Self {
         Self {}
     }
+}
+
+/// Render a path relative to the current directory when it is underneath it,
+/// so the hint reads `./my-app` rather than a wall of absolute path.
+fn display_path(path: &Path) -> String {
+    let rendered = std::env::current_dir()
+        .ok()
+        .and_then(|cwd| path.strip_prefix(&cwd).ok().map(|p| p.to_path_buf()))
+        .map(|relative| {
+            if relative.as_os_str().is_empty() {
+                PathBuf::from(".")
+            } else {
+                PathBuf::from(".").join(relative)
+            }
+        })
+        .unwrap_or_else(|| path.to_path_buf());
+    rendered.to_string_lossy().to_string()
+}
+
+/// A scaffolded application has TWO roots, and they are not the same directory.
+///
+/// The manifest lives at the application root; the pnpm/bun workspace lives
+/// inside `--modules-path`. So `forklaunch` commands run in one place and
+/// package-manager commands run in another, and running `pnpm install` at the
+/// application root fails with `ERR_PNPM_NO_PKG_MANIFEST` — which reads as a
+/// broken scaffold rather than as the wrong directory.
+///
+/// Nothing said so at the one moment the user is guaranteed to be looking: the
+/// end of `init`. Saying it once here is cheaper than every user rediscovering
+/// it, and cheaper than the support answer.
+fn next_steps(app_root: &Path, workspace_root: &Path, runtime: &str) -> String {
+    let package_manager = if runtime == "bun" { "bun" } else { "pnpm" };
+    let app = display_path(app_root);
+    let workspace = display_path(workspace_root);
+
+    // When modules-path is empty the two roots coincide and there is no trap to
+    // warn about — do not invent a distinction the user does not have.
+    if app == workspace {
+        return format!(
+            "\nNext steps\n  cd {app}\n  {package_manager} install\n  forklaunch score --offline\n"
+        );
+    }
+
+    format!(
+        "\nTwo directories, and they are not the same one:\n\
+         \n  {app:<width$}  forklaunch commands run here (.forklaunch/manifest.toml)\
+         \n  {workspace:<width$}  {package_manager} commands run here (package.json, workspace root)\
+         \n\
+         \nNext steps\n  cd {workspace} && {package_manager} install\n  cd {app} && forklaunch score --offline\n\
+         \n`{package_manager} install` at {app} fails with a \"no package.json\" error.\n\
+         That is the wrong directory, not a broken scaffold.\n",
+        width = app.len().max(workspace.len())
+    )
 }
 
 impl CliCommand for ApplicationCommand {
@@ -567,14 +625,24 @@ impl CliCommand for ApplicationCommand {
         let mut global_module_config = ModuleConfig {
             iam: None,
             billing: None,
-        };
-        let mut modules: Vec<Module> = if matches.get_many::<String>("modules").is_none() {
+            ecommerce: None,
+            messaging: None,
+            cac: None,
+            relay: None,
+            };
+        let mut modules: Vec<Module> = if matches.get_many::<String>("modules").is_none()
+            && std::io::stdin().is_terminal()
+        {
             let mut modules_to_test;
             loop {
                 global_module_config = ModuleConfig {
                     iam: None,
                     billing: None,
-                };
+                    ecommerce: None,
+                    messaging: None,
+                    cac: None,
+                    relay: None,
+                    };
                 modules_to_test = prompt_comma_separated_list(
                     &mut line_editor,
                     "modules",
@@ -595,6 +663,9 @@ impl CliCommand for ApplicationCommand {
                 }
             }
             modules_to_test
+        } else if matches.get_many::<String>("modules").is_none() {
+            // Non-interactive mode with no --modules flag: default to empty
+            vec![]
         } else {
             let modules_to_test = match matches.get_many::<String>("modules") {
                 Some(values) => values.map(|module| module.parse().unwrap()).collect(),
@@ -604,10 +675,26 @@ impl CliCommand for ApplicationCommand {
             modules_to_test
         };
 
+        // Relay is not a standalone service - it injects into an existing iam
+        // service and so cannot be part of a fresh application scaffold. Point
+        // the user at the module surface instead of scaffolding a broken
+        // "relay" project.
+        if modules.contains(&Module::Relay) {
+            bail!(
+                "The 'relay' module extends an existing iam service and cannot be added during \
+                 `init application`. Scaffold the app first, then run \
+                 `forklaunch init module -m relay -p <app>`."
+            );
+        }
+
         modules.sort_by_key(|module| {
             match module {
                 Module::BaseIam | Module::BetterAuthIam => 0,
                 Module::BaseBilling | Module::StripeBilling => 1,
+                Module::StripeEcommerce => 2,
+                Module::BaseMessaging | Module::TwilioMessaging => 3,
+                Module::BaseCac => 4,
+                Module::Relay => 5,
             }
         });
 
@@ -668,6 +755,7 @@ impl CliCommand for ApplicationCommand {
                 resources: None,
                 routers: None,
                 metadata: None,
+                serves: None,
             },
             ProjectEntry {
                 r#type: ProjectType::Library,
@@ -677,6 +765,7 @@ impl CliCommand for ApplicationCommand {
                 resources: None,
                 routers: None,
                 metadata: None,
+                serves: None,
             },
             ProjectEntry {
                 r#type: ProjectType::Library,
@@ -686,6 +775,7 @@ impl CliCommand for ApplicationCommand {
                 resources: None,
                 routers: None,
                 metadata: None,
+                serves: None,
             },
         ];
         additional_projects.extend(modules.clone().into_iter().map(|package| ProjectEntry {
@@ -699,9 +789,11 @@ impl CliCommand for ApplicationCommand {
                 queue: None,
                 object_store: None,
                 redis_partition: None,
+                capabilities: None,
             }),
             routers: get_routers_from_standard_package(package),
             metadata: None,
+            serves: None,
         }));
 
         let additional_projects_names = additional_projects
@@ -849,6 +941,11 @@ impl CliCommand for ApplicationCommand {
             .unwrap(),
         );
 
+        // One field-encryption key for the whole app: services share encrypted
+        // cache records, so per-service keys would fail cross-service decrypts.
+        let generated_encryption_key =
+            crate::core::manifest::service::generate_random_secret(32);
+
         for template_dir in template_dirs {
             let mut service_data = ServiceManifestData {
                 id: data.id.clone(),
@@ -865,6 +962,7 @@ impl CliCommand for ApplicationCommand {
                 service_name: template_dir.output_path.clone(),
                 service_path: template_dir.output_path.to_string(),
                 camel_case_name: template_dir.output_path.to_case(Case::Camel),
+                snake_case_name: template_dir.output_path.to_case(Case::Snake),
                 pascal_case_name: template_dir.output_path.to_case(Case::Pascal),
                 kebab_case_name: template_dir.output_path.to_case(Case::Kebab),
                 title_case_name: template_dir.output_path.to_case(Case::Title),
@@ -920,8 +1018,12 @@ impl CliCommand for ApplicationCommand {
                     || template_dir.module_id == Some(Module::BetterAuthIam),
                 is_billing: template_dir.module_id == Some(Module::BaseBilling)
                     || template_dir.module_id == Some(Module::StripeBilling),
-                is_cache_enabled: template_dir.module_id == Some(Module::BaseBilling)
-                    || template_dir.module_id == Some(Module::StripeBilling),
+                // Derive from the module registry — a hardcoded billing list
+                // silently skipped the cache for newer modules (messaging).
+                is_cache_enabled: template_dir
+                    .module_id
+                    .as_ref()
+                    .is_some_and(|module| get_service_module_cache(module).is_some()),
                 is_s3_enabled: false,
                 is_database_enabled: true,
                 platform_application_id: data.platform_application_id.clone(),
@@ -930,6 +1032,12 @@ impl CliCommand for ApplicationCommand {
 
                 is_better_auth: template_dir.module_id == Some(Module::BetterAuthIam),
                 is_stripe: template_dir.module_id == Some(Module::StripeBilling),
+                is_messaging: template_dir.module_id == Some(Module::BaseMessaging)
+                    || template_dir.module_id == Some(Module::TwilioMessaging),
+                is_twilio: template_dir.module_id == Some(Module::TwilioMessaging),
+                is_cac: template_dir.module_id == Some(Module::BaseCac),
+                is_ecommerce: template_dir.module_id == Some(Module::StripeEcommerce),
+                ships_worker: template_dir.module_id == Some(Module::StripeEcommerce),
 
                 is_iam_configured: data.projects.iter().any(|project_entry| {
                     if project_entry.name == "iam" {
@@ -945,8 +1053,10 @@ impl CliCommand for ApplicationCommand {
                     return false;
                 }),
 
-                is_request_cache_needed: (template_dir.module_id == Some(Module::BaseBilling)
-                    || template_dir.module_id == Some(Module::StripeBilling))
+                is_request_cache_needed: template_dir
+                    .module_id
+                    .as_ref()
+                    .is_some_and(|module| get_service_module_cache(module).is_some())
                     || data.projects.iter().any(|project_entry| project_entry.name == "iam" || project_entry.name == "billing"),
                 is_type_needed: data.projects.iter().any(|project_entry| project_entry.name == "iam" || project_entry.name == "billing"),
 
@@ -958,12 +1068,19 @@ impl CliCommand for ApplicationCommand {
                 // These will be properly generated when initialized
                 generated_better_auth_secret: String::new(),
                 generated_hmac_secret: String::new(),
+                generated_encryption_key: generated_encryption_key.clone(),
                 otel_token: "OtelCollector".to_string(),
             };
 
             if service_data.service_name == "client-sdk" {
                 service_data.is_iam = global_module_config.iam.is_some();
                 service_data.is_billing = global_module_config.billing.is_some();
+                service_data.is_messaging = global_module_config.messaging.is_some();
+                service_data.is_cac = global_module_config.cac.is_some();
+                service_data.is_better_auth = global_module_config
+                    .iam
+                    .as_ref()
+                    .is_some_and(|iam| iam == &IamConfig::BetterAuthIam);
             }
 
             if !HashSet::from([
@@ -1021,6 +1138,11 @@ impl CliCommand for ApplicationCommand {
                         },
                         forklaunch_hyper_express: if service_data.is_hyper_express {
                             Some(HYPER_EXPRESS_VERSION.to_string())
+                        } else {
+                            None
+                        },
+                        uwebsockets_js: if service_data.is_hyper_express {
+                            Some(UWEBSOCKETS_VERSION.to_string())
                         } else {
                             None
                         },
@@ -1086,6 +1208,8 @@ impl CliCommand for ApplicationCommand {
                             &service_data.app_name,
                             global_module_config.billing.is_some(),
                             global_module_config.iam.is_some(),
+                            global_module_config.messaging.is_some(),
+                            global_module_config.cac.is_some(),
                         ),
                         ..Default::default()
                     }),
@@ -1191,6 +1315,11 @@ impl CliCommand for ApplicationCommand {
                 generate_pnpm_workspace(&application_path, &additional_projects)
                     .with_context(|| ERROR_FAILED_TO_GENERATE_PNPM_WORKSPACE)?,
             );
+        } else if runtime == Runtime::Bun {
+            rendered_templates.extend(
+                generate_bunfig(&application_path)
+                    .with_context(|| ERROR_FAILED_TO_GENERATE_BUNFIG)?,
+            );
         }
 
 
@@ -1249,6 +1378,11 @@ impl CliCommand for ApplicationCommand {
 
         if !dryrun {
             log_ok!(stdout, "{} initialized successfully!", name);
+            write!(
+                stdout,
+                "{}",
+                next_steps(&origin_path, &generation_path, &data.runtime)
+            )?;
             format_code(&Path::new(&application_path), &data.runtime.parse()?);
         }
 
@@ -1317,5 +1451,47 @@ mod tests {
         let new_condition = matches.get_many::<String>("modules").is_none();
         assert!(!old_condition, "old condition incorrectly returns false with name arg");
         assert!(new_condition, "new condition correctly identifies modules prompt is needed");
+    }
+}
+
+#[cfg(test)]
+mod next_steps_tests {
+    use super::*;
+
+    /// The trap this exists to prevent: `pnpm install` at the application root,
+    /// which fails in a way that reads as a broken scaffold.
+    #[test]
+    fn names_both_roots_and_the_failure_they_cause() {
+        let out = next_steps(
+            Path::new("/tmp/my-app"),
+            Path::new("/tmp/my-app/src/modules"),
+            "node",
+        );
+        assert!(out.contains("/tmp/my-app"), "{out}");
+        assert!(out.contains("/tmp/my-app/src/modules"), "{out}");
+        assert!(out.contains("forklaunch commands run here"), "{out}");
+        assert!(out.contains("pnpm commands run here"), "{out}");
+        assert!(out.contains("wrong directory"), "{out}");
+    }
+
+    #[test]
+    fn names_the_runtimes_own_package_manager() {
+        let bun = next_steps(
+            Path::new("/tmp/a"),
+            Path::new("/tmp/a/modules"),
+            "bun",
+        );
+        assert!(bun.contains("bun install"), "{bun}");
+        assert!(!bun.contains("pnpm"), "{bun}");
+    }
+
+    /// With no modules path the two roots coincide. Warning about a distinction
+    /// the user does not have would be noise, and worse, confusing.
+    #[test]
+    fn says_nothing_about_two_roots_when_there_is_only_one() {
+        let out = next_steps(Path::new("/tmp/a"), Path::new("/tmp/a"), "node");
+        assert!(!out.contains("Two directories"), "{out}");
+        assert!(!out.contains("wrong directory"), "{out}");
+        assert!(out.contains("pnpm install"), "{out}");
     }
 }

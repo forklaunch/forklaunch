@@ -47,7 +47,7 @@ use crate::{
                 ApplicationDevDependencies, ApplicationPackageJson, ApplicationScripts,
             },
             package_json_constants::{
-                BIOME_VERSION, ESLINT_VERSION, EXPRESS_VERSION, HYPER_EXPRESS_VERSION,
+                BIOME_VERSION, ESLINT_VERSION, EXPRESS_VERSION, HYPER_EXPRESS_VERSION, UWEBSOCKETS_VERSION,
                 JEST_TYPES_VERSION, JEST_VERSION, OXLINT_VERSION, PRETTIER_VERSION,
                 TS_JEST_VERSION, TYPEBOX_VERSION, TYPESCRIPT_ESLINT_VERSION, VITEST_VERSION,
                 ZOD_VERSION, application_build_script, application_clean_purge_script,
@@ -759,6 +759,7 @@ fn change_http_framework(
         let dependencies = project.dependencies.as_mut().unwrap();
         dependencies.forklaunch_express = None;
         dependencies.forklaunch_hyper_express = None;
+        dependencies.uwebsockets_js = None;
 
         match http_framework {
             HttpFramework::Express => {
@@ -766,6 +767,7 @@ fn change_http_framework(
             }
             HttpFramework::HyperExpress => {
                 dependencies.forklaunch_hyper_express = Some(HYPER_EXPRESS_VERSION.to_string());
+                dependencies.uwebsockets_js = Some(UWEBSOCKETS_VERSION.to_string());
             }
         }
     }
@@ -879,6 +881,19 @@ fn change_runtime(
 
         removal_templates.extend(test_framework_removal_templates);
         symlink_templates.extend(test_framework_symlink_templates);
+    } else if matches!(runtime, Runtime::Bun) {
+        // Bun has no separate test framework; strip any lingering test types from tsconfig.
+        let project_names: Vec<&str> = manifest_data
+            .projects
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect();
+        let tsconfig_templates =
+            update_tsconfig_test_framework_types(base_path, None, &project_names)?;
+        for template in tsconfig_templates {
+            let key = template.path.to_string_lossy().to_string();
+            rendered_templates_cache.insert(key, template);
+        }
     }
 
     let application_package_json_scripts = application_json_to_write.scripts.as_mut().unwrap();
@@ -1155,15 +1170,21 @@ fn change_runtime(
     match runtime {
         Runtime::Bun => {
             application_json_to_write.workspaces = Some(existing_workspaces);
+            if let Some(rendered) =
+                crate::core::bunfig::generate_bunfig(&base_path.to_string_lossy())?
+            {
+                rendered_templates_cache.insert("bunfig.toml".to_string(), rendered);
+            }
         }
         Runtime::Node => {
             rendered_templates_cache.insert(
                 "pnpm-workspace.yaml".to_string(),
                 RenderedTemplate {
                     path: base_path.join("pnpm-workspace.yaml"),
-                    content: serde_yml::to_string(&PnpmWorkspace {
-                        packages: existing_workspaces,
-                    })?,
+                    content: crate::core::pnpm_workspace::render_pnpm_workspace_with_packages(
+                        base_path,
+                        existing_workspaces,
+                    )?,
                     context: None,
                 },
             );
@@ -1469,8 +1490,7 @@ fn change_test_framework(
         .collect();
     let tsconfig_templates = update_tsconfig_test_framework_types(
         base_path,
-        test_framework,
-        existing_test_framework.as_ref(),
+        Some(test_framework),
         &project_names,
     )?;
     for template in tsconfig_templates {

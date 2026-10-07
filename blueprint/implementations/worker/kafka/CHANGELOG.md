@@ -1,5 +1,245 @@
 # @forklaunch/implementation-worker-kafka
 
+## 1.0.38
+
+### Patch Changes
+
+- Depend on @forklaunch/core 3 (pii/phi/pci properties load as CompliantField; read them with .deanon or .anon) and refresh dependencies to their latest versions, including @mikro-orm 7.2.3.
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.35
+
+## 1.0.37
+
+### Patch Changes
+
+- Refresh every dependency and move the blueprint onto the framework wave released alongside it.
+
+  The whole set is versioned together on purpose. These packages reference each other as `workspace:^`, which is rewritten to the sibling's _current_ version at publish time — so releasing one ahead of the others pins their **previous** versions and a scaffolded app installs two copies of the same package. That is what produced the duplicate-`@forklaunch/core` type errors behind #311 and #331, and the fix is procedural rather than technical: release the whole set in one wave.
+
+  Framework references now point at `@forklaunch/core@^2.1.1` and its siblings (`common@^1.2.28`, `validator@^1.2.29`, `express`/`hyper-express@^1.2.46`, `internal@^1.2.31`, `testing@^1.2.33`, `universal-sdk@^1.2.29`, `infrastructure-redis`/`infrastructure-s3@^1.4.17`).
+
+  `@mikro-orm/*` is **deliberately held at 7.2.1** rather than moved to the 7.2.2 that shipped during this wave. The framework packages were published pinned to 7.2.1, and MikroORM's decorators and `EntityManager` identity do not survive two copies in one dependency graph — a blueprint on 7.2.2 against a framework on 7.2.1 is the same duplicate-package failure in a different package. `pnpm update --latest` moved six of the eleven `@mikro-orm/*` entries and left five, which is the split this normalizes; the pair moves together in the next wave.
+
+  Also adds the three `__test__/test-utils.ts` files the shared `vitest.config.ts` names in `setupFiles` but that were never created — `implementations/iam/base`, `implementations/ecommerce/stripe`, and `implementations/worker/redis`. Without the file vitest cannot load the suite and reports "no tests" rather than an error, so those 16 tests had never run in CI. They pass.
+
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.34
+
+## 1.0.35
+
+### Patch Changes
+
+- `@forklaunch/core` 1.6.5, and shape entities that carry no `any`.
+
+  The implementation packages describe the entities they work with through minimal "shape"
+  entities. Their enum columns were declared `fp.enum()` with no members, which infers
+  `any`; `ResolvedEntity` in core 1.6.5 no longer papers over that, so every such column is
+  now `fp.enum<string[]>()`: a string column whose members the application supplies.
+
+  With the shape typed honestly, the `& { status: StatusEnum[keyof StatusEnum] }`
+  intersections on the entity constraint types (`OrganizationEntities`, `BaseSmsEntities`,
+  `BaseCheckoutSessionEntities`, `BasePaymentLinkEntities`, `BasePlanEntities`,
+  `BaseSubscriptionEntities`, and the Stripe equivalents) had to go: a service queries with
+  the shape schema (`entity as typeof Plan`), and that cast is only valid when the shape is
+  comparable to the constraint, which a generic enum member never is. The services never
+  read those columns; the DTO types still carry the enums, and the application's mapper is
+  where entity and DTO meet. The constraint types therefore lose their enum type parameters
+  (`BasePlanEntities<Cadence, Currency, Provider>` is now `BasePlanEntities`); services and
+  mapper types keep theirs for the DTO side.
+
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.33
+
+## 1.0.34
+
+### Patch Changes
+
+- Refresh dependencies to their latest published versions and move to `@forklaunch/core`
+  1.6.4 on mikro-orm 7.2.1.
+
+  The framework, the blueprint and the CLI's scaffold constants now agree on a single
+  mikro-orm version (7.2.1, pinned exactly), so a generated app resolves one copy. The
+  worker implementations (bullmq, database, kafka, redis) now declare `@forklaunch/validator`
+  directly: their schema resolvers name `AnySchemaValidator` in emitted declarations, and
+  TypeScript refuses to reference a package that is not a dependency of the emitting one.
+
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.32
+
+## 1.0.33
+
+### Patch Changes
+
+- Refresh dependencies to their latest published versions and drop the pnpm
+  overrides block.
+
+  Consumes the newly published framework packages (@forklaunch/core 1.5.17,
+  validator 1.2.26, common 1.2.25, express and hyper-express 1.2.42, internal
+  1.2.27, universal-sdk 1.2.26, infrastructure-redis and -s3 1.4.12, testing
+  1.2.30, ws 1.2.40, bunrun 1.2.23) along with MikroORM 7.1.14, stripe 22.6.0,
+  zod 4.5.4, jose 6.2.10, uuid 14.0.2 and vitest 4.1.11.
+
+  The `overrides` block is gone. It had pinned @mikro-orm/* to 7.1.13 to keep a
+  single copy resolving workspace-wide, and pinned @forklaunch/core to a floor
+  that silently held it back -- the override replaces the requested range, so core
+  stayed on 1.5.16 no matter what the manifests asked for. Every package now
+  declares the versions it actually wants and resolution agrees without help:
+  one copy each of @mikro-orm/core, @forklaunch/core, validator and common.
+
+  Three source changes were required by the upgrades:
+
+  - MikroORM 7.1.14 made a MikroORM instance's entity list `readonly`, so the
+    local `clearDatabase` helpers no longer accepted the orm they are handed.
+    They now type that parameter as `TestSetupResult['orm']`, matching both the
+    value's real origin and the adjacent `redis` field, instead of a bare
+    `MikroORM` whose type argument defaulted to a mutable array. Six test-utils
+    files across billing, iam, messaging and sample-worker.
+  - stripe 22.6.0 moved its pinned API version literal, so the two billing-stripe
+    scripts now request '2026-08-26.dahlia'.
+  - `@forklaunch/blueprint-core` had to be rebuilt from clean. Its gitignored
+    `lib/` still held declarations emitted against an older core, in which
+    `.compliance('none')` produced a `'~c': true` marker rather than a
+    `ComplianceLevel`. That stale output alone accounted for 13 of the 17
+    compile errors this upgrade first surfaced, none of which were real.
+
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.31
+
+## 1.0.32
+
+### Patch Changes
+
+- 927378c: Declare uWebSockets.js directly and align first-party dependency versions.
+
+  `@forklaunch/hyper-express` and `@forklaunch/hyper-express-fork` now take
+  uWebSockets.js as a peer rather than a dependency. pnpm 11 refuses a
+  git-resolved package when it arrives as a subdependency and permits it as a
+  direct one, and uWebSockets.js is only ever installed from its GitHub tarball —
+  so every package depending on either one has to declare it itself. That covers
+  packages depending on the fork directly, not only on the wrapper.
+
+  The first-party `@forklaunch/*` ranges move to the currently published versions
+  in the same pass. They had to: taking the new hyper-express on its own left two
+  copies of `@forklaunch/validator` in the tree, and TypeScript rejected the
+  result outright rather than picking one —
+
+      error TS2883: The inferred type of 'BaseUserServiceSchemas' cannot be named
+      without a reference to 'AnySchemaValidator' from
+      '.pnpm/@forklaunch+validator@1.2.25/...'. This is likely not portable.
+
+  The mechanism is worth remembering, because a version range that already
+  tolerates the newer release is exactly the case where nothing forces a
+  re-resolution: the lockfile keeps the old version for the packages that declare
+  it, while a newly added dependency resolves the same range to the new one, and
+  the two copies coexist until something type-checks across them.
+
+- Updated dependencies [927378c]
+  - @forklaunch/interfaces-worker@1.0.30
+
+## 1.0.28
+
+### Patch Changes
+
+- package bump
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.26
+
+## 1.0.27
+
+### Patch Changes
+
+- internal package upgrade
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.25
+
+## 1.0.26
+
+### Patch Changes
+
+- Internal package updates
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.24
+
+## 1.0.25
+
+### Patch Changes
+
+- chore: update internal packages
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.23
+
+## 1.0.24
+
+### Patch Changes
+
+- chore: bump internal package versions
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.22
+
+## 1.0.23
+
+### Patch Changes
+
+- package version bumps
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.21
+
+## 1.0.22
+
+### Patch Changes
+
+- update internal packages
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.20
+
+## 1.0.21
+
+### Patch Changes
+
+- update packages
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.19
+
+## 1.0.20
+
+### Patch Changes
+
+- update packages
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.18
+
+## 1.0.19
+
+### Patch Changes
+
+- update package versions
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.17
+
+## 1.0.18
+
+### Patch Changes
+
+- update packages
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.16
+
+## 1.0.17
+
+### Patch Changes
+
+- bump packages
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.15
+
+## 1.0.16
+
+### Patch Changes
+
+- update packages
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.14
+
 ## 1.0.15
 
 ### Patch Changes

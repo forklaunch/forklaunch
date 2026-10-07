@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# The CLI binary. CI builds it once and exports FORKLAUNCH_CLI so the 43
+# scripts share one compile instead of each re-checking a release build.
+FL="${FORKLAUNCH_CLI:-cargo run --release}"
 
 # E2E test for sync worker subcommand
 # Tests syncing a specific worker to all artifacts
@@ -15,7 +18,7 @@ cd output/sync-worker-subcommand
 echo "[TEST] sync worker subcommand"
 
 # Create test application
-RUST_BACKTRACE=1 cargo run --release init application test-app \
+RUST_BACKTRACE=1 $FL init application test-app \
     -p test-app \
     -o src/modules \
     -d postgresql \
@@ -33,7 +36,7 @@ RUST_BACKTRACE=1 cargo run --release init application test-app \
 cd test-app
 
 # Initialize first worker
-RUST_BACKTRACE=1 cargo run --release init worker email-sender \
+RUST_BACKTRACE=1 $FL init worker email-sender \
     -t database \
     -d postgresql \
     -p src/modules \
@@ -63,7 +66,7 @@ fi
 # Test 2: Sync specific worker with prompts
 PROMPTS_JSON='{"video-processor": {"type": "database", "database": "postgresql", "description": "Video processing worker"}}'
 
-if RUST_BACKTRACE=1 cargo run --release sync worker video-processor -p . -P "$PROMPTS_JSON" > /dev/null 2>&1; then
+if RUST_BACKTRACE=1 $FL sync worker video-processor -p . -P "$PROMPTS_JSON" > /dev/null 2>&1; then
     echo "[PASS] Sync worker command executed"
 else
     echo "[FAIL] Sync worker command failed"
@@ -98,7 +101,7 @@ else
 fi
 
 # Test 6: Idempotency check
-if RUST_BACKTRACE=1 cargo run --release sync worker video-processor -p . -P "$PROMPTS_JSON" > /dev/null 2>&1; then
+if RUST_BACKTRACE=1 $FL sync worker video-processor -p . -P "$PROMPTS_JSON" > /dev/null 2>&1; then
     echo "[PASS] Sync is idempotent"
 else
     echo "[FAIL] Sync should be idempotent"
@@ -106,7 +109,7 @@ else
 fi
 
 # Test 7: Non-existent worker handling
-if ! RUST_BACKTRACE=1 cargo run --release sync worker nonexistent -p . 2>&1 | grep -q "not found"; then
+if ! RUST_BACKTRACE=1 $FL sync worker nonexistent -p . 2>&1 | grep -q "not found"; then
     echo "[FAIL] Should fail for non-existent worker"
     exit 1
 else

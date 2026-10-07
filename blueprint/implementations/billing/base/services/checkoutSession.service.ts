@@ -20,18 +20,17 @@ export class BaseCheckoutSessionService<
   PaymentMethodEnum,
   CurrencyEnum,
   StatusEnum,
-  MapperEntities extends BaseCheckoutSessionEntities<
-    PaymentMethodEnum,
-    CurrencyEnum,
-    StatusEnum
-  >,
+  MapperEntities extends BaseCheckoutSessionEntities,
   MapperDomains extends BaseCheckoutSessionDtos<
     PaymentMethodEnum,
     CurrencyEnum,
     StatusEnum
   > = BaseCheckoutSessionDtos<PaymentMethodEnum, CurrencyEnum, StatusEnum>
-> implements CheckoutSessionService<PaymentMethodEnum, CurrencyEnum, StatusEnum>
-{
+> implements CheckoutSessionService<
+  PaymentMethodEnum,
+  CurrencyEnum,
+  StatusEnum
+> {
   private evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;

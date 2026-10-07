@@ -8,7 +8,7 @@ import {
   updatePlan
 } from '../controllers/plan.controller';
 
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 
 export const planRouter = forklaunchRouter(
   '/plan',

@@ -23,8 +23,7 @@ export class BaseRoleService<
   SchemaValidator extends AnySchemaValidator,
   MapperEntities extends RoleEntities = RoleEntities,
   MapperDomains extends RoleDtos = RoleDtos
-> implements RoleService
-{
+> implements RoleService {
   private evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;

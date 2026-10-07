@@ -1,8 +1,8 @@
 import { createConfigInjector, getEnvVar, Lifetime } from '@forklaunch/core/services';
-import { FieldEncryptor, registerEncryptor } from '@forklaunch/core/persistence';
+import { FieldEncryptor, parseEncryptionKeyList, registerEncryptor } from '@forklaunch/core/persistence';
 
 import { Migrator } from '@mikro-orm/migrations{{#is_mongo}}-mongodb{{/is_mongo}}';
-import { number, SchemaValidator, string } from '@{{app_name}}/core';
+import { number, optional, SchemaValidator, string } from '@{{app_name}}/core';
 {{^is_mongo}}import { Platform, TextType, Type } from '@mikro-orm/core';{{/is_mongo}}
 import { defineConfig } from '@mikro-orm/{{database}}';
 import dotenv from 'dotenv';
@@ -49,6 +49,11 @@ const configInjector = createConfigInjector(
       lifetime: Lifetime.Singleton,
       type: string,
       value: getEnvVar('ENCRYPTION_KEY')
+    },
+    LEGACY_ENCRYPTION_KEYS: {
+      lifetime: Lifetime.Singleton,
+      type: optional(string),
+      value: getEnvVar('LEGACY_ENCRYPTION_KEYS')
     }
   }
 );
@@ -60,7 +65,13 @@ export const validConfigInjector = configInjector.validateConfigSingletons(
 const tokens = validConfigInjector.tokens();
 
 //! Register the field encryptor
-registerEncryptor(new FieldEncryptor(validConfigInjector.resolve(tokens.ENCRYPTION_KEY)));
+registerEncryptor(
+  new FieldEncryptor(validConfigInjector.resolve(tokens.ENCRYPTION_KEY), {
+    previousKeys: parseEncryptionKeyList(
+      validConfigInjector.resolve(tokens.LEGACY_ENCRYPTION_KEYS)
+    )
+  })
+);
 
 //! Define the mikro-orm options config
 const mikroOrmOptionsConfig = defineConfig({ {{#is_mongo}}
@@ -89,8 +100,30 @@ const mikroOrmOptionsConfig = defineConfig({ {{#is_mongo}}
   ),
   port: validConfigInjector.resolve(
     tokens.DB_PORT
-  ),{{/is_in_memory_database}}{{/is_mongo}}
-  entities: Object.values(entities),
+  ),
+  driverOptions: {
+    // DB_SSL=true enables TLS with FULL certificate verification — never
+    // disable rejectUnauthorized; RDS trust comes from the CA bundle baked
+    // into the image via NODE_EXTRA_CA_CERTS
+    ssl:
+      getEnvVar('DB_SSL') != null
+        ? getEnvVar('DB_SSL') === 'true'
+        : validConfigInjector.resolve(tokens.NODE_ENV) !== 'development'
+  },{{#is_postgres}}
+  // per-app schema on shared-infrastructure tiers (one database, many schemas)
+  schema: getEnvVar('DB_SCHEMA') || 'public',{{/is_postgres}}{{/is_in_memory_database}}{{/is_mongo}}
+  // Annotated because a module can legitimately start with no entities: over an
+  // empty entities module Object.values() widens to unknown[], which MikroORM
+  // rejects, so the module fails to build the moment it is scaffolded. The
+  // annotation names the shape MikroORM accepts rather than one concrete kind —
+  // modules define entities as schemas or as classes, and a cast to either one
+  // alone rejects the other. Reading the type off `defineConfig` states that
+  // requirement directly instead of restating it with `any` in it, and takes no
+  // extra import — `forklaunch change service` rewrites the driver import
+  // wholesale when the database changes, which would drop one.
+  entities: Object.values(entities) as Parameters<
+    typeof defineConfig
+  >[0]['entities'],
   debug: validConfigInjector.resolve(
     tokens.NODE_ENV
   ) === 'development',
@@ -106,12 +139,15 @@ const mikroOrmOptionsConfig = defineConfig({ {{#is_mongo}}
     }
   },{{/is_mongo}}
   migrations: {
-    path: 'dist/migrations-{{database}}',
-    pathTs: 'migrations-{{database}}'
+    path: 'migrations-{{database}}',
+    // distinct per-service table so services can share one database on
+    // shared-infrastructure tiers
+    tableName: 'mikro_orm_migrations_{{snake_case_name}}'
   },
+  // Individual seeders live in persistence/seeders/ and are wired through DatabaseSeeder.
   seeder: {
-    path: 'dist/persistence',
-    glob: 'seeder.js'
+    path: 'persistence',
+    glob: 'seeder.ts'
   }{{#is_better_auth}},
   allowGlobalContext: true{{/is_better_auth}}
 });

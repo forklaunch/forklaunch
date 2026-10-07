@@ -1,0 +1,69 @@
+use anyhow::Result;
+use clap::{ArgMatches, Command};
+
+use crate::{CliCommand, core::command::command};
+
+mod issues;
+mod logs;
+mod metrics;
+mod query;
+mod status;
+mod traces;
+
+use issues::IssuesCommand;
+use logs::LogsCommand;
+use metrics::MetricsCommand;
+use query::QueryCommand;
+use status::StatusCommand;
+use traces::TracesCommand;
+
+#[derive(Debug)]
+pub(crate) struct ObserveCommand {
+    status: StatusCommand,
+    logs: LogsCommand,
+    metrics: MetricsCommand,
+    traces: TracesCommand,
+    issues: IssuesCommand,
+    query: QueryCommand,
+}
+
+impl ObserveCommand {
+    pub(crate) fn new() -> Self {
+        Self {
+            status: StatusCommand::new(),
+            logs: LogsCommand::new(),
+            metrics: MetricsCommand::new(),
+            traces: TracesCommand::new(),
+            issues: IssuesCommand::new(),
+            query: QueryCommand::new(),
+        }
+    }
+}
+
+impl CliCommand for ObserveCommand {
+    fn command(&self) -> Command {
+        command(
+            "observe",
+            "Inspect logs, metrics, traces, and live health for a ForkLaunch application",
+        )
+        .subcommand(self.status.command())
+        .subcommand(self.logs.command())
+        .subcommand(self.metrics.command())
+        .subcommand(self.traces.command())
+        .subcommand(self.issues.command())
+        .subcommand(self.query.command())
+        .subcommand_required(true)
+    }
+
+    fn handler(&self, matches: &ArgMatches) -> Result<()> {
+        match matches.subcommand() {
+            Some(("status", sub_matches)) => self.status.handler(sub_matches),
+            Some(("logs", sub_matches)) => self.logs.handler(sub_matches),
+            Some(("metrics", sub_matches)) => self.metrics.handler(sub_matches),
+            Some(("traces", sub_matches)) => self.traces.handler(sub_matches),
+            Some(("issues", sub_matches)) => self.issues.handler(sub_matches),
+            Some(("query", sub_matches)) => self.query.handler(sub_matches),
+            _ => unreachable!(),
+        }
+    }
+}

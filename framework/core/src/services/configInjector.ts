@@ -104,8 +104,15 @@ export class ConfigInjector<
     resolutionPath: (keyof CV)[] = []
   ): ResolvedConfigValidator<SV, CV>[T] {
     if (process.env.FORKLAUNCH_MODE === 'openapi') {
+      // The handler below installs `apply` and `construct` traps, which are
+      // only valid on a callable target — hence a function rather than `{}`.
+      // The proxy is what makes every string key resolve; the target itself
+      // has none, so this shape cannot be inferred and has to be asserted.
+      // Named and asserted once, rather than laundered through `unknown`.
+      type NoopTarget = ((...args: never[]) => unknown) &
+        Record<string, unknown>;
       const noopProxy: Record<string, unknown> = new Proxy(
-        function () {} as unknown as Record<string, unknown>,
+        function () {} as NoopTarget,
         {
           get(_target, prop) {
             if (prop === Symbol.toPrimitive) return () => '';
@@ -182,7 +189,7 @@ export class ConfigInjector<
           const resolvedArg = this.resolve(arg, context, newResolutionPath);
           return [arg, resolvedArg];
         })
-    ) as unknown as Omit<ResolvedConfigValidator<SV, CV>, T>;
+    ) as Omit<ResolvedConfigValidator<SV, CV>, T>;
     return definition.factory(
       resolvedArguments,
       context ?? {},
@@ -478,6 +485,12 @@ export class ConfigInjector<
     return new ConfigInjector<SV, CV>(this.schemaValidator, {
       ...this.dependenciesDefinition,
       ...dependenciesDefinition
+      // The hop through unknown is required, not habitual. A direct assertion
+      // makes the compiler structurally compare two deeply recursive
+      // ConfigInjector instantiations and it gives up with TS2589, "type
+      // instantiation is excessively deep and possibly infinite". Going via
+      // unknown stops that comparison. The widening itself is sound: the
+      // dependencies of both injectors are merged immediately above.
     }).load({ ...this.instances }) as unknown as ConfigInjector<
       SV,
       CV & ChainedCV

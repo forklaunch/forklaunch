@@ -5,7 +5,7 @@ import {
 } from '../controllers/compliance.controller';
 import { ci, tokens } from '../../bootstrapper';
 
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 
 export const complianceRouter = forklaunchRouter(
   '/compliance',

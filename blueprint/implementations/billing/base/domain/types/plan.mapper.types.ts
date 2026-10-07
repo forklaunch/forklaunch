@@ -6,11 +6,7 @@ export type PlanMappers<
   PlanCadenceEnum,
   CurrencyEnum,
   BillingProviderEnum,
-  MapperEntities extends BasePlanEntities<
-    PlanCadenceEnum,
-    CurrencyEnum,
-    BillingProviderEnum
-  >,
+  MapperEntities extends BasePlanEntities,
   MapperDomains extends BasePlanDtos<
     PlanCadenceEnum,
     CurrencyEnum,

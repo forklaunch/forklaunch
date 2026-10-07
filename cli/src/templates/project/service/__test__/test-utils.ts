@@ -1,12 +1,13 @@
 import { getEnvVar } from '@forklaunch/common';
 import {
-  BlueprintTestHarness,
+  {{#is_database_enabled}}AnyMikroORM,
+  {{/is_database_enabled}}BlueprintTestHarness,
   clearTestDatabase,
   {{#is_database_enabled}}DatabaseType,
   {{/is_database_enabled}}TEST_TOKENS,
   TestSetupResult
 } from '@forklaunch/testing';
-{{#is_database_enabled}}import { EntityManager, MikroORM } from '@mikro-orm/core';{{/is_database_enabled}}
+{{#is_database_enabled}}import { EntityManager } from '@mikro-orm/core';{{/is_database_enabled}}
 import dotenv from 'dotenv';
 import * as path from 'path';
 
@@ -20,7 +21,13 @@ export const setupTestDatabase = async (): Promise<TestSetupResult> => {
   harness = new BlueprintTestHarness({
     {{#is_database_enabled}}getConfig: async () => {
       const { default: config } = await import('../mikro-orm.config');
-      return config;
+      // MikroORM.init() mutates options.discovery.skipSyncDiscovery = true on
+      // the object it receives. mikro-orm.config exports a single shared object
+      // that the app's own DI container also builds a MikroORM from, so letting
+      // the harness mutate it leaves the app's `new MikroORM(config)` with an
+      // undefined `.em` (every route then crashes on `Orm.em.fork`). Hand the
+      // harness its own discovery object so the mutation can't leak.
+      return { ...config, discovery: { ...config.discovery } };
     },
     databaseType: getEnvVar('DATABASE_TYPE') as DatabaseType,
     useMigrations: true,
@@ -42,7 +49,7 @@ export const cleanupTestDatabase = async (): Promise<void> => {
 };
 
 export const clearDatabase = async (options?: {
-  {{#is_database_enabled}}orm?: MikroORM;
+  {{#is_database_enabled}}orm?: AnyMikroORM;
   {{/is_database_enabled}}redis?: TestSetupResult['redis'];
 }): Promise<void> => {
   await clearTestDatabase(options);

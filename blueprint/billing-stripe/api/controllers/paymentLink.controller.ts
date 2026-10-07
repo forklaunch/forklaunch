@@ -13,7 +13,7 @@ import {
   UpdatePaymentLinkMapper
 } from '../../domain/mappers/paymentLink.mappers';
 
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 const serviceFactory = ci.scopedResolver(tokens.PaymentLinkService);
 const HMAC_SECRET_KEY = ci.resolve(tokens.HMAC_SECRET_KEY);
 

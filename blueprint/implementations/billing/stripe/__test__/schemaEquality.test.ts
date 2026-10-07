@@ -274,7 +274,8 @@ describe('schema equality', () => {
             externalId: 'test',
             stripeFields: {} as Stripe.PlanCreateParams,
             active: true,
-            description: 'test'
+            description: 'test',
+            billingProvider: BillingProviderEnum.STRIPE
           }
         )
       )

@@ -5,7 +5,7 @@ import {
   sampleWorkerPost
 } from '../controllers/sampleWorker.controller';
 
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 
 export const sampleWorkerRouter = forklaunchRouter(
   '/sample-worker',

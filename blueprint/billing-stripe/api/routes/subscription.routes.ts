@@ -12,7 +12,7 @@ import {
   updateSubscription
 } from '../controllers/subscription.controller';
 
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 
 export const subscriptionRouter = forklaunchRouter(
   '/subscription',

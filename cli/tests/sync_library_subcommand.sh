@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# The CLI binary. CI builds it once and exports FORKLAUNCH_CLI so the 43
+# scripts share one compile instead of each re-checking a release build.
+FL="${FORKLAUNCH_CLI:-cargo run --release}"
 
 # E2E test for sync library subcommand
 # Tests syncing a specific library to all artifacts
@@ -15,7 +18,7 @@ cd output/sync-library-subcommand
 echo "[TEST] sync library subcommand"
 
 # Create test application
-RUST_BACKTRACE=1 cargo run --release init application test-app \
+RUST_BACKTRACE=1 $FL init application test-app \
     -p test-app \
     -o src/modules \
     -d postgresql \
@@ -33,7 +36,7 @@ RUST_BACKTRACE=1 cargo run --release init application test-app \
 cd test-app
 
 # Initialize first library
-RUST_BACKTRACE=1 cargo run --release init library shared-types \
+RUST_BACKTRACE=1 $FL init library shared-types \
     -p src/modules \
     -D "Shared types library"
 
@@ -61,7 +64,7 @@ fi
 # Test 2: Sync specific library with prompts
 PROMPTS_JSON='{"common-utils": {"description": "Common utilities library"}}'
 
-if RUST_BACKTRACE=1 cargo run --release sync library common-utils -p . -P "$PROMPTS_JSON" > /dev/null 2>&1; then
+if RUST_BACKTRACE=1 $FL sync library common-utils -p . -P "$PROMPTS_JSON" > /dev/null 2>&1; then
     echo "[PASS] Sync library command executed"
 else
     echo "[FAIL] Sync library command failed"
@@ -95,7 +98,7 @@ else
 fi
 
 # Test 6: Idempotency check
-if RUST_BACKTRACE=1 cargo run --release sync library common-utils -p . -P "$PROMPTS_JSON" > /dev/null 2>&1; then
+if RUST_BACKTRACE=1 $FL sync library common-utils -p . -P "$PROMPTS_JSON" > /dev/null 2>&1; then
     echo "[PASS] Sync is idempotent"
 else
     echo "[FAIL] Sync should be idempotent"
@@ -103,7 +106,7 @@ else
 fi
 
 # Test 7: Non-existent library handling
-if ! RUST_BACKTRACE=1 cargo run --release sync library nonexistent -p . 2>&1 | grep -q "not found"; then
+if ! RUST_BACKTRACE=1 $FL sync library nonexistent -p . 2>&1 | grep -q "not found"; then
     echo "[FAIL] Should fail for non-existent library"
     exit 1
 else

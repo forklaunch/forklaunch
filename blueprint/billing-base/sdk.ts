@@ -9,6 +9,8 @@ import {
   createSubscription,
   deletePlan,
   deleteSubscription,
+  eraseUserData,
+  exportUserData,
   expireBillingPortalSession,
   expireCheckoutSession,
   expirePaymentLink,
@@ -34,6 +36,10 @@ import {
 } from './api/controllers';
 
 export type BillingSdk = {
+  compliance: {
+    eraseUserData: typeof eraseUserData;
+    exportUserData: typeof exportUserData;
+  };
   plan: {
     createPlan: typeof createPlan;
     getPlan: typeof getPlan;
@@ -77,6 +83,10 @@ export type BillingSdk = {
 };
 
 export const billingSdkClient = {
+  compliance: {
+    eraseUserData,
+    exportUserData
+  },
   plan: {
     createPlan: createPlan,
     getPlan: getPlan,

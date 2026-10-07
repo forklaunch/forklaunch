@@ -7,7 +7,7 @@ import {
   updateBillingPortalSession
 } from '../controllers/billingPortal.controller';
 
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 
 export const billingPortalRouter = forklaunchRouter(
   '/billing-portal',

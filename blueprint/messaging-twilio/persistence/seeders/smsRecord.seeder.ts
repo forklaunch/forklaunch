@@ -1,0 +1,1 @@
+../../../messaging-base/persistence/seeders/smsRecord.seeder.ts

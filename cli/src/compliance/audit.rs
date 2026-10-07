@@ -1,4 +1,9 @@
-use std::{fs, io::Write, path::Path};
+use std::{
+    collections::HashMap,
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result};
 use clap::{Arg, ArgAction, ArgMatches, Command};
@@ -9,7 +14,7 @@ use crate::{
     CliCommand,
     constants::get_platform_management_api_url,
     core::{
-        ast::infrastructure::compliance::scan_all_compliance,
+        ast::infrastructure::compliance::{scan_all_compliance, scan_entity_compliance},
         command::command,
         hmac::AuthMode,
         http_client::post_with_auth,
@@ -104,6 +109,13 @@ impl CliCommand for AuditCommand {
                     (Default::default(), Default::default())
                 });
 
+        // Which module owns each entity, and whether that module actually wires a
+        // FieldEncryptor. Encryption at rest is NOT implied by the classification
+        // alone: `EncryptedType` falls back to writing plaintext when no encryptor
+        // is registered, silently. Without this, the report can only restate the
+        // tag it was given.
+        let module_ctx = scan_module_encryption_context(&modules_path_buf);
+
         let mut entity_names: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         entity_names.extend(field_classifications.keys().cloned());
         entity_names.extend(retention_policies.keys().cloned());
@@ -111,26 +123,38 @@ impl CliCommand for AuditCommand {
         let entities: Vec<EntityReport> = entity_names
             .into_iter()
             .map(|name| {
-                let field_reports: Vec<FieldReport> = field_classifications
+                let mut field_reports: Vec<FieldReport> = field_classifications
                     .get(&name)
                     .map(|fields| {
                         fields
                             .iter()
-                            .map(|(field_name, classification)| FieldReport {
-                                name: field_name.clone(),
-                                compliance: classification.clone(),
-                                encrypted: classification == "phi"
-                                    || classification == "pci",
+                            .map(|(field_name, classification)| {
+                                // All three classified levels encrypt (the framework's
+                                // `wrapClassified` applies EncryptedType to pii/phi/pci
+                                // alike) — but only if the owning module registered an
+                                // encryptor.
+                                let encrypts = classification_encrypts(classification);
+                                let protected = encrypts
+                                    && module_ctx.entity_is_protected(&name);
+                                FieldReport {
+                                    name: field_name.clone(),
+                                    compliance: classification.clone(),
+                                    encrypted: protected,
+                                }
                             })
                             .collect()
                     })
                     .unwrap_or_default();
+                // `field_classifications` is a HashMap, so its fields iterate in a non-deterministic
+                // order — sort by name so the report (and `--json`) is byte-stable for the same code.
+                field_reports.sort_by(|a, b| a.name.cmp(&b.name));
                 let retention =
                     retention_policies.get(&name).map(|r| RetentionReport {
                         duration: r.duration.clone(),
                         action: r.action.clone(),
                     });
                 EntityReport {
+                    module: module_ctx.entity_module.get(&name).cloned(),
                     name,
                     fields: field_reports,
                     retention,
@@ -139,13 +163,69 @@ impl CliCommand for AuditCommand {
             .collect();
 
         // Collect route data from OpenAPI spec (if available)
-        let routes = collect_routes_from_openapi(&app_root, modules_path);
+        let (routes, specs_found) = collect_routes_from_openapi(&app_root, modules_path);
+        if !specs_found {
+            // Write to stderr so stdout stays parseable for --json / --output
+            let mut stderr = StandardStream::stderr(ColorChoice::Always);
+            log_warn!(
+                stderr,
+                "No OpenAPI specs found — route access levels were NOT audited."
+            );
+            log_info!(
+                stderr,
+                "Run `forklaunch openapi export` and re-run the audit to include routes."
+            );
+        }
+
+        // Run offline wiring + sensitive-field checks
+        let local_findings = super::checks::run_local_checks(&modules_path_buf)
+            .unwrap_or_else(|e| {
+                let _ = writeln!(stdout, "[WARN] Failed to run local compliance checks: {}", e);
+                Vec::new()
+            });
+
+        // The same deterministic scan `compliance audit-tenancy` runs. Best
+        // effort: a report that cannot scan is still worth sending, it just
+        // carries no tenancy signal rather than a falsely clean one.
+        let tenancy = match super::tenancy::audit_tenancy(&modules_path_buf) {
+            Ok(report) => {
+                let findings: Vec<TenancySummaryFinding> = report
+                    .findings
+                    .iter()
+                    .map(|f| TenancySummaryFinding {
+                        severity: match f.severity {
+                            super::tenancy::TenancySeverity::Error => "error".to_string(),
+                            super::tenancy::TenancySeverity::Warning => "warning".to_string(),
+                        },
+                        rule: f.rule.to_string(),
+                        file: f.file.clone(),
+                        line: f.line,
+                        message: f.message.to_string(),
+                    })
+                    .collect();
+                Some(TenancySummary {
+                    files_scanned: report.files_scanned,
+                    errors: findings.iter().filter(|f| f.severity == "error").count(),
+                    warnings: findings.iter().filter(|f| f.severity == "warning").count(),
+                    exemptions: report.exemptions.len(),
+                    findings,
+                })
+            }
+            Err(e) => {
+                let _ = writeln!(stdout, "[WARN] Tenancy scan failed: {}", e);
+                None
+            }
+        };
 
         // Build the local report
         let report = ComplianceReport {
             generated_at: chrono::Utc::now().to_rfc3339(),
             routes,
+            modules: module_ctx.module_reports(),
             entities,
+            local_findings,
+            local_checks: super::checks::LOCAL_CHECK_IDS.to_vec(),
+            tenancy,
             secrets: SecretsReport {
                 declared: compliance.secrets.clone(),
                 count: compliance.secrets.len(),
@@ -190,15 +270,17 @@ impl CliCommand for AuditCommand {
 
         // Pretty terminal output
         print_header(&mut stdout)?;
-        print_summary(&mut stdout, &report)?;
+        print_summary(&mut stdout, &report, specs_found)?;
 
         match &platform_response {
             Ok(resp) => {
                 if show_all || show_risk_score {
                     print_risk_score(&mut stdout, resp)?;
+                    print_scorecard(&mut stdout, resp)?;
                     print_findings(&mut stdout, resp)?;
                 }
 
+                print_local_checks(&mut stdout, &report)?;
                 print_entities(&mut stdout, &report)?;
                 print_routes(&mut stdout, &report)?;
 
@@ -219,6 +301,7 @@ impl CliCommand for AuditCommand {
             }
             Err(e) => {
                 // Fallback: local-only display
+                print_local_checks(&mut stdout, &report)?;
                 print_entities(&mut stdout, &report)?;
                 print_routes(&mut stdout, &report)?;
 
@@ -230,7 +313,7 @@ impl CliCommand for AuditCommand {
                 );
                 log_info!(
                     stdout,
-                    "For risk scoring, data flow diagrams, and DPIA, configure FORKLAUNCH_HMAC_SECRET and set platform_application_id in manifest.toml"
+                    "For risk scoring, data flow diagrams, and DPIA, log in with `forklaunch login` and set platform_application_id in manifest.toml"
                 );
             }
         }
@@ -254,18 +337,23 @@ fn upload_to_platform(
         .ok_or_else(|| anyhow::anyhow!("--environment flag is required for platform upload"))?;
 
     let auth_mode = AuthMode::detect();
-    if !auth_mode.is_hmac() {
-        anyhow::bail!("FORKLAUNCH_HMAC_SECRET not set — cannot authenticate with platform");
-    }
 
     let api_url = get_platform_management_api_url();
-    let url = format!(
-        "{}/compliance/applications/{}/environments/{}/audit/report",
-        api_url, app_id, env_name
-    );
+    let url = if auth_mode.is_hmac() {
+        format!(
+            "{}/compliance/applications/{}/environments/{}/audit/report",
+            api_url, app_id, env_name
+        )
+    } else {
+        format!(
+            "{}/compliance/applications/{}/environments/{}/audit/report/user",
+            api_url, app_id, env_name
+        )
+    };
 
     let body = serde_json::json!({
         "routes": report.routes,
+        "modules": report.modules,
         "entities": report.entities,
         "secrets": report.secrets,
         "dataResidency": report.data_residency,
@@ -299,7 +387,11 @@ fn print_header(out: &mut StandardStream) -> Result<()> {
     Ok(())
 }
 
-fn print_summary(out: &mut StandardStream, report: &ComplianceReport) -> Result<()> {
+fn print_summary(
+    out: &mut StandardStream,
+    report: &ComplianceReport,
+    specs_found: bool,
+) -> Result<()> {
     writeln!(out)?;
     out.set_color(ColorSpec::new().set_fg(Some(Color::White)).set_bold(true))?;
     write!(out, "  Generated: ")?;
@@ -314,7 +406,17 @@ fn print_summary(out: &mut StandardStream, report: &ComplianceReport) -> Result<
     out.set_color(ColorSpec::new().set_fg(Some(Color::White)).set_bold(true))?;
     write!(out, "  Routes:    ")?;
     out.reset()?;
-    writeln!(out, "{}", report.routes.len())?;
+    if specs_found {
+        writeln!(out, "{}", report.routes.len())?;
+    } else {
+        write!(out, "{}", report.routes.len())?;
+        out.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
+        writeln!(
+            out,
+            " (no OpenAPI specs found — run `forklaunch openapi export`)"
+        )?;
+        out.reset()?;
+    }
 
     out.set_color(ColorSpec::new().set_fg(Some(Color::White)).set_bold(true))?;
     write!(out, "  Secrets:   ")?;
@@ -328,6 +430,147 @@ fn print_summary(out: &mut StandardStream, report: &ComplianceReport) -> Result<
         writeln!(out, "(none configured)")?;
     } else {
         writeln!(out, "{}", report.data_residency.allowed_regions.join(", "))?;
+    }
+
+    Ok(())
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+struct DimensionScores {
+    compliance: f64,
+    security: f64,
+    scale: f64,
+    observability: f64,
+    governance: f64,
+    #[serde(default)]
+    coverage: Option<DimensionCoverage>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+struct DimensionCoverage {
+    #[serde(default)]
+    unscored: Vec<String>,
+}
+
+/// Category -> dimensions mapping. Mirrors the platform's
+/// `CATEGORY_DIMENSIONS` (the source of truth); unknown categories count
+/// against compliance.
+fn dims_for_category(category: &str) -> &'static [&'static str] {
+    match category {
+        "encryption" => &["security", "compliance"],
+        "access-control" => &["security", "governance"],
+        "tenant-isolation" => &["security", "compliance"],
+        "data-retention" => &["compliance", "governance"],
+        "multi-az" | "capacity" => &["scale"],
+        "alerting" => &["observability"],
+        "logging" => &["observability", "governance"],
+        "audit" => &["governance", "compliance"],
+        "construction" => &["governance"],
+        _ => &["compliance"],
+    }
+}
+
+/// Lowest score a rail can reach from findings alone. A construction
+/// failure is an ordinary (critical) governance finding, not a zero.
+const MIN_RAIL_SCORE: f64 = 5.0;
+
+/// JavaScript `Math.round`: halves round toward +infinity.
+fn js_round(x: f64) -> f64 {
+    (x + 0.5).floor()
+}
+
+/// `retained` fraction -> 0..100 score with one decimal, floored at
+/// `MIN_RAIL_SCORE`. Matches the platform's `clamp`.
+fn clamp_rail(retained: f64) -> f64 {
+    MIN_RAIL_SCORE.max(js_round(retained * 100.0 * 10.0) / 10.0)
+}
+
+/// Client-side port of the platform's `computeDimensionScores` (the shared
+/// formula), used when the platform response carries no server-computed
+/// dimension scores and by `score --offline`. Findings compound
+/// multiplicatively: each finding retains `1 - points/100` of the rail.
+fn derive_dimension_scores(findings: &[PlatformFinding]) -> DimensionScores {
+    compute_dimension_scores(findings.iter().map(|f| (f.category.as_str(), f.points)))
+}
+
+fn compute_dimension_scores<'a>(
+    findings: impl IntoIterator<Item = (&'a str, f64)>,
+) -> DimensionScores {
+    let mut retained: std::collections::HashMap<&str, f64> = [
+        ("compliance", 1.0),
+        ("security", 1.0),
+        ("scale", 1.0),
+        ("observability", 1.0),
+        ("governance", 1.0),
+    ]
+    .into_iter()
+    .collect();
+    let mut touched: std::collections::HashSet<&str> = Default::default();
+    for (category, points) in findings {
+        let severity = points.clamp(0.0, 100.0) / 100.0;
+        for dim in dims_for_category(category) {
+            if let Some(r) = retained.get_mut(dim) {
+                *r *= 1.0 - severity;
+            }
+            touched.insert(dim);
+        }
+    }
+    let score = |dim: &str| clamp_rail(retained[dim]);
+    DimensionScores {
+        compliance: score("compliance"),
+        security: score("security"),
+        scale: score("scale"),
+        observability: score("observability"),
+        governance: score("governance"),
+        coverage: Some(DimensionCoverage {
+            unscored: ["scale", "observability"]
+                .iter()
+                .filter(|d| !touched.contains(**d))
+                .map(|d| d.to_string())
+                .collect(),
+        }),
+    }
+}
+
+fn print_scorecard(out: &mut StandardStream, resp: &PlatformAuditResponse) -> Result<()> {
+    let scores = resp
+        .dimension_scores
+        .clone()
+        .unwrap_or_else(|| derive_dimension_scores(&resp.findings));
+
+    writeln!(out)?;
+    out.set_color(ColorSpec::new().set_fg(Some(Color::White)).set_bold(true))?;
+    writeln!(out, "  ── Scorecard ──")?;
+    out.reset()?;
+
+    let unscored = scores
+        .coverage
+        .as_ref()
+        .map(|c| c.unscored.clone())
+        .unwrap_or_default();
+    for (label, value) in [
+        ("Compliance", scores.compliance),
+        ("Security", scores.security),
+        ("Scale", scores.scale),
+        ("Observability", scores.observability),
+        ("Governance", scores.governance),
+    ] {
+        let color = if value >= 90.0 {
+            Color::Green
+        } else if value >= 70.0 {
+            Color::Yellow
+        } else {
+            Color::Red
+        };
+        write!(out, "  {:<14}", format!("{}:", label))?;
+        out.set_color(ColorSpec::new().set_fg(Some(color)).set_bold(true))?;
+        write!(out, "{:>5.1}/100", value)?;
+        out.reset()?;
+        if unscored.iter().any(|d| d.eq_ignore_ascii_case(label)) {
+            write!(out, "  (no audit signals yet)")?;
+        }
+        writeln!(out)?;
     }
 
     Ok(())
@@ -402,6 +645,47 @@ fn print_findings(out: &mut StandardStream, resp: &PlatformAuditResponse) -> Res
     Ok(())
 }
 
+fn print_local_checks(out: &mut StandardStream, report: &ComplianceReport) -> Result<()> {
+    writeln!(out)?;
+    out.set_color(ColorSpec::new().set_fg(Some(Color::White)).set_bold(true))?;
+    writeln!(
+        out,
+        "  ── Local checks ({}) ──",
+        report.local_findings.len()
+    )?;
+    out.reset()?;
+
+    if report.local_findings.is_empty() {
+        out.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
+        writeln!(
+            out,
+            "  ✓ Tenant isolation, retention/erasure wiring, and field classifications look consistent"
+        )?;
+        out.reset()?;
+        return Ok(());
+    }
+
+    for finding in &report.local_findings {
+        let (icon, color, label) = match finding.severity {
+            super::checks::Severity::Warning => ("▲", Color::Yellow, "WARNING"),
+            super::checks::Severity::Info => ("●", Color::Cyan, "REVIEW"),
+        };
+
+        write!(out, "  ")?;
+        out.set_color(ColorSpec::new().set_fg(Some(color)).set_bold(true))?;
+        write!(out, "{} [{:>7}]", icon, label)?;
+        out.reset()?;
+
+        out.set_color(ColorSpec::new().set_fg(Some(Color::White)))?;
+        write!(out, " [{}] {}:{}", finding.check, finding.project, finding.subject)?;
+        out.reset()?;
+
+        writeln!(out, " — {}", finding.message)?;
+    }
+
+    Ok(())
+}
+
 fn print_entities(out: &mut StandardStream, report: &ComplianceReport) -> Result<()> {
     if report.entities.is_empty() {
         return Ok(());
@@ -412,13 +696,32 @@ fn print_entities(out: &mut StandardStream, report: &ComplianceReport) -> Result
     writeln!(out, "  ── Entity Classifications ──")?;
     out.reset()?;
 
+    // Compute dynamic column width for ENTITY.FIELD based on actual data
+    let min_field_width = "ENTITY.FIELD".len();
+    let max_field_width = report
+        .entities
+        .iter()
+        .flat_map(|e| {
+            e.fields
+                .iter()
+                .map(move |f| format!("{}.{}", e.name, f.name).len())
+        })
+        .max()
+        .unwrap_or(min_field_width);
+    let field_col = max_field_width.max(min_field_width);
+    let class_col = 20;
+    let enc_col = 12;
+
     // Table header
     writeln!(
         out,
-        "  {:<30} {:<20} {:<12} {}",
-        "ENTITY.FIELD", "CLASSIFICATION", "ENCRYPTED", "STATUS"
+        "  {:<field_col$} {:<class_col$} {:<enc_col$} {}",
+        "ENTITY.FIELD", "CLASSIFICATION", "ENCRYPTED", "STATUS",
+        field_col = field_col,
+        class_col = class_col,
+        enc_col = enc_col,
     )?;
-    writeln!(out, "  {}", "─".repeat(74))?;
+    writeln!(out, "  {}", "─".repeat(field_col + class_col + enc_col + 10))?;
 
     for entity in &report.entities {
         for field in &entity.fields {
@@ -429,7 +732,11 @@ fn print_entities(out: &mut StandardStream, report: &ComplianceReport) -> Result
                 _ => Color::Green,
             };
 
-            let needs_encryption = field.compliance == "phi" || field.compliance == "pci";
+            // Every classified level encrypts, so any of them can be genuinely
+            // unprotected — previously this excluded pii, which (together with
+            // `encrypted` being derived from the same predicate) made the
+            // UNENCRYPTED branch below unreachable.
+            let needs_encryption = classification_encrypts(&field.compliance);
             let status = if needs_encryption && field.encrypted {
                 ("✓", Color::Green)
             } else if needs_encryption && !field.encrypted {
@@ -440,15 +747,16 @@ fn print_entities(out: &mut StandardStream, report: &ComplianceReport) -> Result
 
             write!(
                 out,
-                "  {:<30} ",
-                format!("{}.{}", entity.name, field.name)
+                "  {:<width$} ",
+                format!("{}.{}", entity.name, field.name),
+                width = field_col,
             )?;
 
             out.set_color(ColorSpec::new().set_fg(Some(classification_color)))?;
-            write!(out, "{:<20} ", field.compliance.to_uppercase())?;
+            write!(out, "{:<width$} ", field.compliance.to_uppercase(), width = class_col)?;
             out.reset()?;
 
-            write!(out, "{:<12} ", if field.encrypted { "yes" } else { "no" })?;
+            write!(out, "{:<width$} ", if field.encrypted { "yes" } else { "no" }, width = enc_col)?;
 
             out.set_color(ColorSpec::new().set_fg(Some(status.1)))?;
             writeln!(out, "{}", status.0)?;
@@ -615,9 +923,50 @@ fn format_key(key: &str) -> String {
 struct ComplianceReport {
     generated_at: String,
     routes: Vec<RouteReport>,
+    /// Per-module encryption wiring. A module here with
+    /// `encryptorRegistered: false` and a non-zero classified field count is
+    /// storing classified data in plaintext.
+    modules: Vec<ModuleReport>,
     entities: Vec<EntityReport>,
+    local_findings: Vec<super::checks::LocalFinding>,
+    /// Every local check this CLI ran; a listed check with no finding passed.
+    local_checks: Vec<&'static str>,
+    /// Tenant-binding discipline, from the same deterministic scan as
+    /// `compliance audit-tenancy`.
+    ///
+    /// The server's report card already had a `tenant-isolation` category,
+    /// but the only thing feeding it was a SCHEMA check — "this entity has PII
+    /// columns and no organizationId". That says nothing about whether the
+    /// code ever binds the tenant it has, so every bug in the 2026-09 tenant
+    /// remediation passed it: the entities all had their tenant columns, and
+    /// the failures were unbound managers, `''` bindings and forks that lost
+    /// the encryption context at run time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tenancy: Option<TenancySummary>,
     secrets: SecretsReport,
     data_residency: DataResidencyReport,
+}
+
+/// What the tenancy scan found, flattened for the report card. Exemptions are
+/// counted but not listed: an allow is a reviewed decision, not a finding.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TenancySummary {
+    files_scanned: usize,
+    errors: usize,
+    warnings: usize,
+    exemptions: usize,
+    findings: Vec<TenancySummaryFinding>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TenancySummaryFinding {
+    severity: String,
+    rule: String,
+    file: String,
+    line: usize,
+    message: String,
 }
 
 #[derive(Serialize)]
@@ -629,10 +978,128 @@ struct RouteReport {
     access: Option<String>,
 }
 
+/// Whether a classification level causes the framework to encrypt the column.
+/// `wrapClassified` applies `EncryptedType` to every classified level — pii is
+/// NOT an exception (it was previously treated as one, which reported encrypted
+/// data as unprotected and could never observe an actually-unprotected field).
+fn classification_encrypts(classification: &str) -> bool {
+    matches!(classification, "pii" | "phi" | "pci")
+}
+
+/// Per-module encryption wiring: entity ownership plus whether the module
+/// registers a `FieldEncryptor`.
+#[derive(Default)]
+struct ModuleEncryptionContext {
+    /// entity name -> owning module name
+    entity_module: HashMap<String, String>,
+    /// module name -> registers a FieldEncryptor
+    module_registers_encryptor: HashMap<String, bool>,
+    /// module name -> number of classified (pii/phi/pci) fields it declares
+    module_classified_fields: HashMap<String, usize>,
+}
+
+impl ModuleEncryptionContext {
+    /// True when the entity's module wires an encryptor. Unknown ownership is
+    /// treated as unprotected: claiming protection we cannot prove is the
+    /// failure mode that made this report untrustworthy in the first place.
+    fn entity_is_protected(&self, entity: &str) -> bool {
+        self.entity_module
+            .get(entity)
+            .and_then(|m| self.module_registers_encryptor.get(m))
+            .copied()
+            .unwrap_or(false)
+    }
+
+    /// Serializable per-module view for the report.
+    fn module_reports(&self) -> Vec<ModuleReport> {
+        let mut out: Vec<ModuleReport> = self
+            .module_registers_encryptor
+            .iter()
+            .map(|(name, registered)| ModuleReport {
+                name: name.clone(),
+                encryptor_registered: *registered,
+                classified_field_count: self
+                    .module_classified_fields
+                    .get(name)
+                    .copied()
+                    .unwrap_or(0),
+            })
+            .collect();
+        out.sort_by(|a, b| a.name.cmp(&b.name));
+        out
+    }
+
+}
+
+/// Detect, per module, which entities it owns and whether it registers a
+/// FieldEncryptor. Registration is looked for in the module's mikro-orm config
+/// and its DI registrations — the two places the platform wires one.
+fn scan_module_encryption_context(modules_path: &Path) -> ModuleEncryptionContext {
+    let mut ctx = ModuleEncryptionContext::default();
+    let Ok(entries) = fs::read_dir(modules_path) else {
+        return ctx;
+    };
+
+    for entry in entries.flatten() {
+        let project_path = entry.path();
+        if !project_path.is_dir() {
+            continue;
+        }
+        let Some(module_name) = project_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(|s| s.to_string())
+        else {
+            continue;
+        };
+
+        let registers = ["mikro-orm.config.ts", "registrations.ts"].iter().any(|f| {
+            fs::read_to_string(project_path.join(f))
+                .map(|c| c.contains("registerEncryptor"))
+                .unwrap_or(false)
+        });
+        ctx.module_registers_encryptor
+            .insert(module_name.clone(), registers);
+
+        let Ok(entities) = scan_entity_compliance(&project_path) else {
+            continue;
+        };
+        for entity in entities {
+            let classified = entity
+                .field_classifications
+                .values()
+                .filter(|c| classification_encrypts(c))
+                .count();
+            *ctx.module_classified_fields
+                .entry(module_name.clone())
+                .or_insert(0) += classified;
+            ctx.entity_module
+                .insert(entity.entity_name.clone(), module_name.clone());
+        }
+    }
+
+    ctx
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ModuleReport {
+    name: String,
+    /// The module wires a FieldEncryptor. When false, any classified field it
+    /// declares is written to the database in plaintext.
+    encryptor_registered: bool,
+    /// Classified (pii/phi/pci) fields declared by this module.
+    classified_field_count: usize,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct EntityReport {
     name: String,
+    /// Module that declares this entity — lets a consumer attribute an
+    /// unprotected field to the module whose wiring caused it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    module: Option<String>,
     fields: Vec<FieldReport>,
     #[serde(skip_serializing_if = "Option::is_none")]
     retention: Option<RetentionReport>,
@@ -677,6 +1144,8 @@ struct PlatformAuditResponse {
     risk_score: f64,
     risk_level: String,
     findings: Vec<PlatformFinding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    dimension_scores: Option<DimensionScores>,
     #[serde(skip_serializing_if = "Option::is_none")]
     data_flow_diagram: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -698,37 +1167,41 @@ struct PlatformFinding {
 // ---------------------------------------------------------------------------
 
 /// Attempt to read routes from generated OpenAPI specs.
-/// Returns an empty vec if no specs are found.
-fn collect_routes_from_openapi(app_root: &Path, modules_path: &str) -> Vec<RouteReport> {
+/// Returns the routes and whether any spec files were found at all.
+fn collect_routes_from_openapi(app_root: &Path, modules_path: &str) -> (Vec<RouteReport>, bool) {
     let mut routes = Vec::new();
+    let mut specs_found = false;
 
-    // OpenAPI specs are typically generated in each service's directory
-    let openapi_patterns = [
+    let mut spec_paths: Vec<PathBuf> = vec![
         app_root.join("openapi.json"),
         app_root.join("docs").join("openapi.json"),
     ];
 
-    // Search in <modules_path>/*/openapi.json (e.g., src/modules or modules)
-    if let Ok(entries) = fs::read_dir(app_root.join(modules_path)) {
+    // Specs written by `forklaunch openapi export` (default output directory):
+    // .forklaunch/openapi/<service>/openapi.json
+    if let Ok(entries) = fs::read_dir(app_root.join(".forklaunch").join("openapi")) {
         for entry in entries.flatten() {
-            let spec_path = entry.path().join("openapi.json");
-            if spec_path.exists() {
-                if let Ok(spec_routes) = parse_openapi_routes(&spec_path) {
-                    routes.extend(spec_routes);
-                }
-            }
+            spec_paths.push(entry.path().join("openapi.json"));
         }
     }
 
-    for pattern in &openapi_patterns {
-        if pattern.exists() {
-            if let Ok(spec_routes) = parse_openapi_routes(pattern) {
+    // Search in <modules_path>/*/openapi.json (e.g., src/modules or modules)
+    if let Ok(entries) = fs::read_dir(app_root.join(modules_path)) {
+        for entry in entries.flatten() {
+            spec_paths.push(entry.path().join("openapi.json"));
+        }
+    }
+
+    for spec_path in &spec_paths {
+        if spec_path.exists() {
+            specs_found = true;
+            if let Ok(spec_routes) = parse_openapi_routes(spec_path) {
                 routes.extend(spec_routes);
             }
         }
     }
 
-    routes
+    (routes, specs_found)
 }
 
 fn parse_openapi_routes(path: &Path) -> Result<Vec<RouteReport>> {
@@ -766,4 +1239,78 @@ fn parse_openapi_routes(path: &Path) -> Result<Vec<RouteReport>> {
     }
 
     Ok(routes)
+}
+
+#[cfg(test)]
+mod dimension_score_tests {
+    use super::*;
+
+    #[derive(Deserialize)]
+    struct Vectors {
+        cases: Vec<Case>,
+    }
+    #[derive(Deserialize)]
+    struct Case {
+        name: String,
+        findings: Vec<VectorFinding>,
+        expect: Expect,
+    }
+    #[derive(Deserialize)]
+    struct VectorFinding {
+        category: String,
+        points: f64,
+    }
+    #[derive(Deserialize)]
+    struct Expect {
+        compliance: f64,
+        security: f64,
+        scale: f64,
+        observability: f64,
+        governance: f64,
+        unscored: Vec<String>,
+    }
+
+    #[test]
+    fn dimension_scores_match_platform_golden_vectors() {
+        let vectors: Vectors =
+            serde_json::from_str(include_str!("dimension-scores.vectors.json")).unwrap();
+        assert!(!vectors.cases.is_empty());
+        for case in vectors.cases {
+            let findings: Vec<PlatformFinding> = case
+                .findings
+                .iter()
+                .map(|f| PlatformFinding {
+                    severity: "medium".into(),
+                    category: f.category.clone(),
+                    description: String::new(),
+                    points: f.points,
+                })
+                .collect();
+            let got = derive_dimension_scores(&findings);
+            let e = &case.expect;
+            for (dim, g, want) in [
+                ("compliance", got.compliance, e.compliance),
+                ("security", got.security, e.security),
+                ("scale", got.scale, e.scale),
+                ("observability", got.observability, e.observability),
+                ("governance", got.governance, e.governance),
+            ] {
+                assert_eq!(g, want, "case {:?}: {}", case.name, dim);
+            }
+            assert_eq!(
+                got.coverage.map(|c| c.unscored).unwrap_or_default(),
+                e.unscored,
+                "case {:?}: unscored",
+                case.name
+            );
+        }
+    }
+
+    #[test]
+    fn js_round_rounds_halves_up() {
+        assert_eq!(js_round(0.5), 1.0);
+        assert_eq!(js_round(-0.5), 0.0);
+        assert_eq!(js_round(2.5), 3.0);
+        assert_eq!(js_round(-2.5), -2.0);
+    }
 }

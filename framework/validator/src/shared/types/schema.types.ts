@@ -407,9 +407,7 @@ export type LiteralSchema = string | number | boolean;
  * @template SV - The type of the schema validator.
  */
 export type IdiomaticSchema<SV extends AnySchemaValidator> =
-  | LiteralSchema
-  | SV['_SchemaCatchall']
-  | UnboxedObjectSchema<SV>;
+  LiteralSchema | SV['_SchemaCatchall'] | UnboxedObjectSchema<SV>;
 
 /**
  * Tuple-based lookup for incrementing a number type by one. O(1) indexed access

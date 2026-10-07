@@ -11,9 +11,9 @@ import {
 import { CurrencyEnum } from '../../enum/currency.enum';
 import { PaymentMethodEnum } from '../../enum/paymentMethod.enum';
 import {
-  StripeCreatePaymentLinkDto,
-  StripePaymentLinkDto,
-  StripeUpdatePaymentLinkDto
+  StripePaymentLink,
+  StripePaymentLinkCreateParams,
+  StripePaymentLinkUpdateParams
 } from '../../types/stripe.dto.types';
 
 export const CreatePaymentLinkSchema = <
@@ -26,7 +26,7 @@ export const CreatePaymentLinkSchema = <
   currency: enum_(CurrencyEnum),
   paymentMethods: array(enum_(PaymentMethodEnum)),
   status: enum_(StatusEnum),
-  stripeFields: type<StripeCreatePaymentLinkDto<T>['stripeFields']>()
+  stripeFields: type<StripePaymentLinkCreateParams>()
 });
 
 export const UpdatePaymentLinkSchema = <
@@ -39,7 +39,7 @@ export const UpdatePaymentLinkSchema = <
   currency: optional(enum_(CurrencyEnum)),
   paymentMethods: optional(array(enum_(PaymentMethodEnum))),
   status: optional(enum_(StatusEnum)),
-  stripeFields: optional(type<StripeUpdatePaymentLinkDto<T>['stripeFields']>())
+  stripeFields: optional(type<StripePaymentLinkUpdateParams>())
 });
 
 export const PaymentLinkSchema = <T extends Record<string, LiteralSchema>>(
@@ -50,7 +50,7 @@ export const PaymentLinkSchema = <T extends Record<string, LiteralSchema>>(
   currency: enum_(CurrencyEnum),
   paymentMethods: array(enum_(PaymentMethodEnum)),
   status: enum_(StatusEnum),
-  stripeFields: type<StripePaymentLinkDto<T>['stripeFields']>(),
+  stripeFields: type<StripePaymentLink>(),
   createdAt: optional(date),
   updatedAt: optional(date)
 });

@@ -105,3 +105,39 @@ impl RenderedTemplatesCache {
         self.internal_cache.drain()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::TEMPLATES_DIR;
+    use crate::constants::Module;
+
+    // ecommerce-stripe was registered in the Module enum without the rest of
+    // the pipeline: no cli/src/templates/project/ecommerce-stripe farm (panics
+    // at scaffold time), no ProjectDependencies fields, no version consts, no
+    // is_ecommerce manifest flag, and blueprint/ecommerce-stripe ships no
+    // __test__. Completing it is its own change; do not add to this list.
+    const KNOWN_MISSING_TEMPLATE_DIRS: &[&str] = &["ecommerce-stripe"];
+
+    #[test]
+    fn every_module_variant_has_an_embedded_template_dir() {
+        for variant in Module::VARIANTS {
+            let module = Module::from_str(variant).unwrap();
+            let Some(exclusive_files) = module.metadata().exclusive_files else {
+                continue;
+            };
+            for dir in exclusive_files {
+                if KNOWN_MISSING_TEMPLATE_DIRS.contains(dir) {
+                    continue;
+                }
+                assert!(
+                    TEMPLATES_DIR
+                        .get_dir(std::path::Path::new("project").join(dir))
+                        .is_some(),
+                    "Module '{variant}' declares template dir '{dir}' but src/templates/project/{dir} is not embedded — `forklaunch init module -m {variant}` would panic"
+                );
+            }
+        }
+    }
+}

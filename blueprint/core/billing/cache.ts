@@ -45,8 +45,15 @@ export type BillingCacheService = {
     data: SubscriptionCacheData
   ) => Promise<void>;
   deleteCachedSubscription: (organizationId: string) => Promise<void>;
-  getCachedPlan: (planId: string) => Promise<PlanCacheData | null>;
-  setCachedPlan: (planId: string, data: PlanCacheData) => Promise<void>;
+  getCachedPlan: (
+    organizationId: string,
+    planId: string
+  ) => Promise<PlanCacheData | null>;
+  setCachedPlan: (
+    organizationId: string,
+    planId: string,
+    data: PlanCacheData
+  ) => Promise<void>;
   getCachedFeatures: (organizationId: string) => Promise<Set<string> | null>;
   setCachedFeatures: (
     organizationId: string,
@@ -72,8 +79,12 @@ export function createBillingCacheService(
     async getCachedSubscription(organizationId: string) {
       try {
         const result = await cache.readRecord<SubscriptionCacheData>(
-          `${SUBSCRIPTION_CACHE_PREFIX}${organizationId}`
+          `${SUBSCRIPTION_CACHE_PREFIX}${organizationId}`,
+          { tenantId: organizationId }
         );
+        if (!result.value || typeof result.value !== 'object') {
+          return null;
+        }
         const subscription = result.value;
         if (typeof subscription.currentPeriodEnd === 'string') {
           subscription.currentPeriodEnd = new Date(
@@ -90,11 +101,14 @@ export function createBillingCacheService(
       data: SubscriptionCacheData
     ) {
       try {
-        await cache.putRecord({
-          key: `${SUBSCRIPTION_CACHE_PREFIX}${organizationId}`,
-          value: data,
-          ttlMilliseconds: TTL
-        });
+        await cache.putRecord(
+          {
+            key: `${SUBSCRIPTION_CACHE_PREFIX}${organizationId}`,
+            value: data,
+            ttlMilliseconds: TTL
+          },
+          { tenantId: organizationId }
+        );
       } catch {
         // Silently fail - cache is not critical
       }
@@ -108,23 +122,31 @@ export function createBillingCacheService(
         // Silently fail
       }
     },
-    async getCachedPlan(planId: string) {
+    async getCachedPlan(organizationId: string, planId: string) {
       try {
         const result = await cache.readRecord<PlanCacheData>(
-          `${PLAN_CACHE_PREFIX}${planId}`
+          `${PLAN_CACHE_PREFIX}${organizationId}:${planId}`,
+          { tenantId: organizationId }
         );
         return result.value;
       } catch {
         return null;
       }
     },
-    async setCachedPlan(planId: string, data: PlanCacheData) {
+    async setCachedPlan(
+      organizationId: string,
+      planId: string,
+      data: PlanCacheData
+    ) {
       try {
-        await cache.putRecord({
-          key: `${PLAN_CACHE_PREFIX}${planId}`,
-          value: data,
-          ttlMilliseconds: PLAN_TTL
-        });
+        await cache.putRecord(
+          {
+            key: `${PLAN_CACHE_PREFIX}${organizationId}:${planId}`,
+            value: data,
+            ttlMilliseconds: PLAN_TTL
+          },
+          { tenantId: organizationId }
+        );
       } catch {
         // Silently fail
       }
@@ -132,7 +154,8 @@ export function createBillingCacheService(
     async getCachedFeatures(organizationId: string) {
       try {
         const result = await cache.readRecord<string[]>(
-          `${FEATURES_CACHE_PREFIX}${organizationId}`
+          `${FEATURES_CACHE_PREFIX}${organizationId}`,
+          { tenantId: organizationId }
         );
         if (Array.isArray(result.value)) {
           return new Set<string>(result.value);
@@ -144,11 +167,14 @@ export function createBillingCacheService(
     },
     async setCachedFeatures(organizationId: string, features: Set<string>) {
       try {
-        await cache.putRecord({
-          key: `${FEATURES_CACHE_PREFIX}${organizationId}`,
-          value: Array.from(features),
-          ttlMilliseconds: TTL
-        });
+        await cache.putRecord(
+          {
+            key: `${FEATURES_CACHE_PREFIX}${organizationId}`,
+            value: Array.from(features),
+            ttlMilliseconds: TTL
+          },
+          { tenantId: organizationId }
+        );
       } catch {
         // Silently fail
       }
@@ -156,7 +182,8 @@ export function createBillingCacheService(
     async getCachedEntitlements(partyKey: string) {
       try {
         const result = await cache.readRecord<EntitlementCacheData>(
-          `${ENTITLEMENT_PREFIX}${partyKey}`
+          `${ENTITLEMENT_PREFIX}${partyKey}`,
+          { tenantId: partyKey }
         );
         const entitlement = result.value;
         if (typeof entitlement.syncedAt === 'string') {
@@ -169,11 +196,14 @@ export function createBillingCacheService(
     },
     async setCachedEntitlements(partyKey: string, data: EntitlementCacheData) {
       try {
-        await cache.putRecord({
-          key: `${ENTITLEMENT_PREFIX}${partyKey}`,
-          value: data,
-          ttlMilliseconds: TTL
-        });
+        await cache.putRecord(
+          {
+            key: `${ENTITLEMENT_PREFIX}${partyKey}`,
+            value: data,
+            ttlMilliseconds: TTL
+          },
+          { tenantId: partyKey }
+        );
       } catch {
         // Silently fail
       }

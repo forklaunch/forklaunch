@@ -20,6 +20,7 @@ import {
   BaseRoleService,
   BaseUserService
 } from '@forklaunch/implementation-iam-base/services';
+import { wrapEmWithTenantContext } from '@forklaunch/core/persistence';
 import { EntityManager, ForkOptions, MikroORM } from '@mikro-orm/core';
 import { OrganizationStatus } from './domain/enum/organizationStatus.enum';
 import {
@@ -121,12 +122,12 @@ const environmentConfig = configInjector.chain({
 
 //! defines the runtime dependencies for the application
 const runtimeDependencies = environmentConfig.chain({
-  MikroORM: {
+  Orm: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
     factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
-  OpenTelemetryCollector: {
+  OtelCollector: {
     lifetime: Lifetime.Singleton,
     type: OpenTelemetryCollector<Metrics>,
     factory: ({ OTEL_SERVICE_NAME, OTEL_LEVEL }) =>
@@ -140,15 +141,13 @@ const runtimeDependencies = environmentConfig.chain({
     lifetime: Lifetime.Scoped,
     type: EntityManager,
     factory: (
-      { MikroORM },
+      { Orm },
       context: { entityManagerOptions?: ForkOptions; tenantId?: string }
-    ) => {
-      const em = MikroORM.em.fork(context.entityManagerOptions);
-      if (context.tenantId) {
-        em.setFilterParams('tenant', { tenantId: context.tenantId });
-      }
-      return em;
-    }
+    ) =>
+      wrapEmWithTenantContext(
+        Orm.em.fork(context?.entityManagerOptions),
+        context?.tenantId
+      ) as EntityManager
   }
 });
 
@@ -162,12 +161,12 @@ const serviceDependencies = runtimeDependencies.chain({
       OrganizationMapperTypes,
       OrganizationDtoTypes
     >,
-    factory: ({ EntityManager, OpenTelemetryCollector }, context, resolve) =>
+    factory: ({ EntityManager, OtelCollector }, context, resolve) =>
       new BaseOrganizationService(
         context?.entityManagerOptions
           ? resolve?.('EntityManager', context)
           : EntityManager,
-        OpenTelemetryCollector,
+        OtelCollector,
         schemaValidator,
         {
           OrganizationMapper,
@@ -183,13 +182,13 @@ const serviceDependencies = runtimeDependencies.chain({
       PermissionMapperTypes,
       PermissionDtoTypes
     >,
-    factory: ({ EntityManager, OpenTelemetryCollector }, context, resolve) =>
+    factory: ({ EntityManager, OtelCollector }, context, resolve) =>
       new BasePermissionService(
         context.entityManagerOptions
           ? resolve('EntityManager', context)
           : EntityManager,
         () => resolve('RoleService', context),
-        OpenTelemetryCollector,
+        OtelCollector,
         schemaValidator,
         {
           PermissionMapper,
@@ -202,12 +201,12 @@ const serviceDependencies = runtimeDependencies.chain({
   RoleService: {
     lifetime: Lifetime.Scoped,
     type: BaseRoleService<SchemaValidator, RoleMapperTypes, RoleDtoTypes>,
-    factory: ({ EntityManager, OpenTelemetryCollector }, context, resolve) =>
+    factory: ({ EntityManager, OtelCollector }, context, resolve) =>
       new BaseRoleService(
         context.entityManagerOptions
           ? resolve('EntityManager', context)
           : EntityManager,
-        OpenTelemetryCollector,
+        OtelCollector,
         schemaValidator,
         {
           RoleMapper,
@@ -224,12 +223,12 @@ const serviceDependencies = runtimeDependencies.chain({
       UserMapperTypes,
       UserDtoTypes
     >,
-    factory: ({ EntityManager, OpenTelemetryCollector }, context, resolve) =>
+    factory: ({ EntityManager, OtelCollector }, context, resolve) =>
       new BaseUserService(
         EntityManager,
         () => resolve('RoleService', context),
         () => resolve('OrganizationService', context),
-        OpenTelemetryCollector,
+        OtelCollector,
         schemaValidator,
         {
           UserMapper,
@@ -241,16 +240,16 @@ const serviceDependencies = runtimeDependencies.chain({
   ComplianceDataService: {
     lifetime: Lifetime.Singleton,
     type: ComplianceDataService,
-    factory: ({ MikroORM, OpenTelemetryCollector }) =>
-      new ComplianceDataService(MikroORM, OpenTelemetryCollector, {
+    factory: ({ Orm, OtelCollector }) =>
+      new ComplianceDataService(Orm, OtelCollector, {
         User: 'id'
       })
   },
   RetentionService: {
     lifetime: Lifetime.Singleton,
     type: RetentionService,
-    factory: ({ MikroORM, OpenTelemetryCollector }) =>
-      new RetentionService(MikroORM, OpenTelemetryCollector)
+    factory: ({ Orm, OtelCollector }) =>
+      new RetentionService(Orm, OtelCollector)
   }
 });
 

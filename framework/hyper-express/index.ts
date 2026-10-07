@@ -227,6 +227,9 @@ export const port = <
 
   return [
     ...(handlers.middlewares as MiddlewareHandler[]),
+    // A controller handler is typed against the framework's own request/response
+    // shapes; uWebSockets' `MiddlewareHandler` names its own. The runtime object
+    // is the same function — only the two signatures fail to overlap.
     handlers.controllerHandler as unknown as MiddlewareHandler
   ];
 };

@@ -6,11 +6,7 @@ export type CheckoutSessionMappers<
   PaymentMethodEnum,
   CurrencyEnum,
   StatusEnum,
-  MapperEntities extends BaseCheckoutSessionEntities<
-    PaymentMethodEnum,
-    CurrencyEnum,
-    StatusEnum
-  >,
+  MapperEntities extends BaseCheckoutSessionEntities,
   MapperDomains extends BaseCheckoutSessionDtos<
     PaymentMethodEnum,
     CurrencyEnum,

@@ -135,9 +135,9 @@ export function enrichExpressLikeSend<
       );
     }
     if (isNodeJsWriteableStream(res)) {
-      Readable.from(readableStreamToAsyncIterable(data.stream())).pipe(
-        res as unknown as NodeJS.WritableStream
-      );
+      // No cast: isNodeJsWriteableStream is a type predicate
+      // (`value is NodeJS.WritableStream`), so `res` is already narrowed here.
+      Readable.from(readableStreamToAsyncIterable(data.stream())).pipe(res);
     } else {
       res.type('text/plain');
       res.status(500);

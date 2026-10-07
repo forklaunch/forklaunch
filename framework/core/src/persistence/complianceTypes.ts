@@ -1,3 +1,4 @@
+import type { CompliantField, ComplianceOptions } from './compliantField';
 export const ComplianceLevel = {
   pii: 'pii',
   phi: 'phi',
@@ -8,6 +9,23 @@ export type ComplianceLevel =
   (typeof ComplianceLevel)[keyof typeof ComplianceLevel];
 
 export const COMPLIANCE_KEY = '~compliance' as const;
+
+/**
+ * The property type a classification produces. `none` leaves the value as
+ * it is; pii, phi and pci wrap it in a {@link CompliantField}, keeping
+ * `null`/`undefined` outside the wrapper so nullability reads naturally.
+ */
+export type CompliantValue<V, L, O = Record<never, never>> = L extends
+  'pii' | 'phi' | 'pci'
+  ? [V] extends [null | undefined]
+    ? V
+    : | CompliantField<
+          NonNullable<V>,
+          L,
+          O extends { readonly queryable: true } ? true : false
+        >
+      | Extract<V, null | undefined>
+  : V;
 
 // ---------------------------------------------------------------------------
 // Registry
@@ -173,15 +191,88 @@ declare module '@mikro-orm/core' {
   }
 
   interface UniversalPropertyOptionsBuilder<Value, Options, IncludeKeys> {
-    compliance(
-      level: ComplianceLevel
+    /**
+     * The level is captured as a literal type parameter rather than widened to
+     * `ComplianceLevel`, so the marker records WHICH classification a property
+     * carries and not merely that it has one.
+     *
+     * That distinction is what makes {@link EncryptedKeysOf} possible: `pii`,
+     * `phi` and `pci` are encrypted at rest and `none` is not, and a `true`
+     * marker cannot tell them apart. See {@link RequiresEncryptionContext} for
+     * why the difference matters at a call site.
+     */
+    compliance<
+      const L extends ComplianceLevel,
+      const O extends ComplianceOptions = Record<never, never>
+    >(
+      level: L,
+      options?: L extends EncryptedComplianceLevel ? O : never
     ): Pick<
       UniversalPropertyOptionsBuilder<
-        Value,
-        Options & { readonly '~c': true },
+        CompliantValue<Value, L, O>,
+        Options & { readonly '~c': L },
         IncludeKeys
       >,
       IncludeKeys & keyof UniversalPropertyOptionsBuilder<never, never, never>
     >;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Type-level compliance introspection
+// ---------------------------------------------------------------------------
+
+/**
+ * The classifications that cause a column to be encrypted at rest by
+ * `EncryptedType`. `none` is deliberately excluded — it is a real, deliberate
+ * classification, just not an encrypting one.
+ */
+export type EncryptedComplianceLevel = Extract<
+  ComplianceLevel,
+  'pii' | 'phi' | 'pci'
+>;
+
+/**
+ * The property names of `TProperties` whose classification means the column is
+ * encrypted at rest.
+ *
+ * Reading such a column requires the same encryption context it was written
+ * under, because `FieldEncryptor` derives its key per tenant. When a read
+ * happens BEFORE that context is known — a lookup whose whole purpose is to
+ * discover which organisation a row belongs to — hydrating these columns cannot
+ * succeed, and fails with "ciphertext is corrupted or the wrong key was used".
+ *
+ * The remedy at such a call site is a partial select that omits these keys, so
+ * hydration never touches them. This type is what lets that be checked rather
+ * than remembered.
+ */
+export type EncryptedKeysOf<TProperties> = {
+  [K in keyof TProperties]: TProperties[K] extends {
+    '~options': { readonly '~c': infer L };
+  }
+    ? L extends EncryptedComplianceLevel
+      ? K
+      : never
+    : never;
+}[keyof TProperties];
+
+/**
+ * True when reading `TProperties` in full would decrypt something, and so
+ * requires an encryption context to already be established.
+ */
+export type RequiresEncryptionContext<TProperties> = [
+  EncryptedKeysOf<TProperties>
+] extends [never]
+  ? false
+  : true;
+
+/**
+ * True when `TFields` is a selection that provably avoids every encrypted
+ * column of `TProperties` — the shape that makes a context-free read safe.
+ */
+export type SelectionAvoidsEncryptedColumns<
+  TProperties,
+  TFields extends readonly PropertyKey[]
+> = [Extract<TFields[number], EncryptedKeysOf<TProperties>>] extends [never]
+  ? true
+  : false;

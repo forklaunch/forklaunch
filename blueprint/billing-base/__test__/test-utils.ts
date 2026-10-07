@@ -6,7 +6,7 @@ import {
   TEST_TOKENS,
   TestSetupResult
 } from '@forklaunch/testing';
-import { EntityManager, MikroORM } from '@mikro-orm/core';
+import { EntityManager } from '@mikro-orm/core';
 import dotenv from 'dotenv';
 import Redis from 'ioredis';
 import * as path from 'path';
@@ -21,7 +21,13 @@ export const setupTestDatabase = async (): Promise<TestSetupResult> => {
   harness = new BlueprintTestHarness({
     getConfig: async () => {
       const { default: config } = await import('../mikro-orm.config');
-      return config;
+      // MikroORM.init() mutates options.discovery.skipSyncDiscovery = true on
+      // the object it receives. mikro-orm.config exports a single shared object
+      // that the app's own DI container also builds a MikroORM from, so letting
+      // the harness mutate it leaves the app's `new MikroORM(config)` with an
+      // undefined `.em` (every route then crashes on `Orm.em.fork`). Hand the
+      // harness its own discovery object so the mutation can't leak.
+      return { ...config, discovery: { ...config.discovery } };
     },
     databaseType: getEnvVar('DATABASE_TYPE') as DatabaseType,
     useMigrations: false,
@@ -38,7 +44,7 @@ export const cleanupTestDatabase = async (): Promise<void> => {
 };
 
 export const clearDatabase = async (options?: {
-  orm?: MikroORM;
+  orm?: TestSetupResult['orm'];
   redis?: Redis;
 }): Promise<void> => {
   await clearTestDatabase(options);

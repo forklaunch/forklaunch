@@ -1,5 +1,6 @@
 {
   "name": "@forklaunch/monorepo",
+  "private": true,
   "version": "0.1.0",
   "description": "",
   "keywords": [],
@@ -15,7 +16,7 @@
     "lint:fix": "eslint . -c eslint.config.mjs --fix",
     "publish:packages": "pnpm -r run publish:package",
     "test": "pnpm vitest --passWithNoTests",
-    "up:packages": "pnpm -r update --latest"
+    "up:packages": "pnpm -r update --latest \"!uWebSockets.js\""
   },
   "lint-staged": {
     "**/*.ts": [
@@ -25,21 +26,21 @@
     "!**/*package.json": ""
   },
   "devDependencies": {
-    "@changesets/cli": "^2.30.0",
+    "@changesets/cli": "^3.0.3",
     "@types/jest": "^30.0.0",
-    "@types/node": "^25.5.0",
-    "eslint": "^10.1.0",
-    "globals": "^17.4.0",
-    "jest": "^30.3.0",
-    "lint-staged": "^16.4.0",
-    "prettier": "^3.8.1",
-    "sort-package-json": "^3.6.1",
-    "ts-jest": "^29.4.6",
-    "tsx": "^4.21.0",
-    "typedoc": "^0.28.18",
-    "typescript": "^6.0.2",
-    "typescript-eslint": "^8.57.2",
-    "vitest": "^4.1.2"
+    "@types/node": "^26.6.3",
+    "eslint": "^10.11.0",
+    "globals": "^17.12.0",
+    "jest": "^30.5.2",
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.9.9",
+    "sort-package-json": "^4.0.0",
+    "ts-jest": "^29.4.14",
+    "tsx": "^4.23.15",
+    "typedoc": "^0.28.20",
+    "typescript": "^7.0.2",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^5.0.3"
   },
   "dependencies": {
     "@eslint/js": "^10.0.1"

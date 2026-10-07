@@ -16,10 +16,13 @@ export type CreatePlanDto<PlanCadenceEnum, CurrencyEnum, BillingProviderEnum> =
 export type UpdatePlanDto<PlanCadenceEnum, CurrencyEnum, BillingProviderEnum> =
   Partial<CreatePlanDto<PlanCadenceEnum, CurrencyEnum, BillingProviderEnum>> &
     IdDto;
-export type PlanDto<PlanCadenceEnum, CurrencyEnum, BillingProviderEnum> =
-  CreatePlanDto<PlanCadenceEnum, CurrencyEnum, BillingProviderEnum> &
-    IdDto &
-    Partial<RecordTimingDto>;
+export type PlanDto<PlanCadenceEnum, CurrencyEnum, BillingProviderEnum> = Omit<
+  CreatePlanDto<PlanCadenceEnum, CurrencyEnum, BillingProviderEnum>,
+  'billingProvider'
+> & {
+  billingProvider?: BillingProviderEnum[keyof BillingProviderEnum];
+} & IdDto &
+  Partial<RecordTimingDto>;
 
 export type PlanServiceParameters<
   PlanCadenceEnum,

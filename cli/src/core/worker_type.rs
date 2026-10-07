@@ -69,46 +69,55 @@ fn get_database_worker_consumer_factory(pascal_case_name: &str) -> String {
         pascal_case_name, pascal_case_name, pascal_case_name
     )
 }
-fn get_bullmq_worker_consumer_factory(_pascal_case_name: &str) -> String {
-    "({ QUEUE_NAME, WorkerOptions }) =>
+fn get_bullmq_worker_consumer_factory(pascal_case_name: &str) -> String {
+    format!(
+        "({{ QUEUE_NAME, WorkerOptions, EventEncryptor }}) =>
   (
-    processEventsFunction: WorkerProcessFunction<EncryptedEventEnvelope>,
-    failureHandler: WorkerFailureHandler<EncryptedEventEnvelope>
+    processEventsFunction: WorkerProcessFunction<{}EventRecord>,
+    failureHandler: WorkerFailureHandler<{}EventRecord>
   ) =>
     new BullMqWorkerConsumer(
       QUEUE_NAME,
       WorkerOptions,
-      processEventsFunction,
-      failureHandler
-    )".to_string()
+      withDecryption<{}EventRecord>(processEventsFunction, EventEncryptor),
+      withDecryptionFailureHandler<{}EventRecord>(failureHandler, EventEncryptor)
+    )",
+        pascal_case_name, pascal_case_name, pascal_case_name, pascal_case_name
+    )
 }
-fn get_kafka_worker_consumer_factory(_pascal_case_name: &str) -> String {
-    "({ QUEUE_NAME, WorkerOptions, OtelCollector }) =>
+fn get_kafka_worker_consumer_factory(pascal_case_name: &str) -> String {
+    format!(
+        "({{ QUEUE_NAME, WorkerOptions, OtelCollector, EventEncryptor }}) =>
   (
-    processEventsFunction: WorkerProcessFunction<EncryptedEventEnvelope>,
-    failureHandler: WorkerFailureHandler<EncryptedEventEnvelope>
+    processEventsFunction: WorkerProcessFunction<{}EventRecord>,
+    failureHandler: WorkerFailureHandler<{}EventRecord>
   ) =>
     new KafkaWorkerConsumer(
       QUEUE_NAME,
       WorkerOptions,
-      processEventsFunction,
-      failureHandler,
+      withDecryption<{}EventRecord>(processEventsFunction, EventEncryptor),
+      withDecryptionFailureHandler<{}EventRecord>(failureHandler, EventEncryptor),
       OtelCollector
-    )".to_string()
+    )",
+        pascal_case_name, pascal_case_name, pascal_case_name, pascal_case_name
+    )
 }
-fn get_redis_worker_consumer_factory(_pascal_case_name: &str) -> String {
-    "({ TtlCache, QUEUE_NAME, WorkerOptions }) =>
+fn get_redis_worker_consumer_factory(pascal_case_name: &str) -> String {
+    format!(
+        "({{ TtlCache, QUEUE_NAME, WorkerOptions, EventEncryptor }}) =>
   (
-    processEventsFunction: WorkerProcessFunction<EncryptedEventEnvelope>,
-    failureHandler: WorkerFailureHandler<EncryptedEventEnvelope>
+    processEventsFunction: WorkerProcessFunction<{}EventRecord>,
+    failureHandler: WorkerFailureHandler<{}EventRecord>
   ) =>
     new RedisWorkerConsumer(
       QUEUE_NAME,
       TtlCache,
       WorkerOptions,
-      processEventsFunction,
-      failureHandler
-    )".to_string()
+      withDecryption<{}EventRecord>(processEventsFunction, EventEncryptor),
+      withDecryptionFailureHandler<{}EventRecord>(failureHandler, EventEncryptor)
+    )",
+        pascal_case_name, pascal_case_name, pascal_case_name, pascal_case_name
+    )
 }
 
 pub(crate) fn get_worker_consumer_factory(r#type: &WorkerType, pascal_case_name: &str) -> String {
@@ -120,23 +129,38 @@ pub(crate) fn get_worker_consumer_factory(r#type: &WorkerType, pascal_case_name:
     }
 }
 
-const BULLMQ_WORKER_PRODUCER_FACTORY: &str = "({ QUEUE_NAME, WorkerOptions }) =>
-   new BullMqWorkerProducer(QUEUE_NAME, WorkerOptions)";
+const BULLMQ_WORKER_PRODUCER_FACTORY: &str =
+    "({ QUEUE_NAME, WorkerOptions, EventEncryptor }, context) =>
+   new EncryptingWorkerProducer(
+    new BullMqWorkerProducer(QUEUE_NAME, WorkerOptions),
+    EventEncryptor,
+    (context?.tenantId as string) ?? ''
+  )";
 const DATABASE_WORKER_PRODUCER_FACTORY: &str = "({ EntityMgr, WorkerOptions }) =>
   new DatabaseWorkerProducer(
     EntityMgr,
     WorkerOptions
   )";
-const KAFKA_WORKER_PRODUCER_FACTORY: &str = "({ QUEUE_NAME, WorkerOptions }) =>
-  new KafkaWorkerProducer(
-    QUEUE_NAME,
-    WorkerOptions
+const KAFKA_WORKER_PRODUCER_FACTORY: &str =
+    "({ QUEUE_NAME, WorkerOptions, EventEncryptor }, context) =>
+  new EncryptingWorkerProducer(
+    new KafkaWorkerProducer(
+      QUEUE_NAME,
+      WorkerOptions
+    ),
+    EventEncryptor,
+    (context?.tenantId as string) ?? ''
   )";
-const REDIS_WORKER_PRODUCER_FACTORY: &str = "({ TtlCache, QUEUE_NAME, WorkerOptions }) =>
-  new RedisWorkerProducer(
-    QUEUE_NAME,
-    TtlCache,
-    WorkerOptions
+const REDIS_WORKER_PRODUCER_FACTORY: &str =
+    "({ TtlCache, QUEUE_NAME, WorkerOptions, EventEncryptor }, context) =>
+  new EncryptingWorkerProducer(
+    new RedisWorkerProducer(
+      QUEUE_NAME,
+      TtlCache,
+      WorkerOptions
+    ),
+    EventEncryptor,
+    (context?.tenantId as string) ?? ''
   )";
 
 pub(crate) fn get_worker_producer_factory(r#type: &WorkerType) -> String {

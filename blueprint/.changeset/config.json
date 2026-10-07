@@ -8,12 +8,17 @@
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
   "ignore": [
-    "@forklaunch/blueprint-sample-worker",
     "@forklaunch/blueprint-billing-base",
     "@forklaunch/blueprint-billing-stripe",
+    "@forklaunch/blueprint-cac-base",
+    "@forklaunch/blueprint-client-sdk",
+    "@forklaunch/blueprint-core",
+    "@forklaunch/blueprint-ecommerce-stripe",
     "@forklaunch/blueprint-iam-base",
     "@forklaunch/blueprint-iam-better-auth",
-    "@forklaunch/blueprint-core",
-    "@forklaunch/blueprint-monitoring"
+    "@forklaunch/blueprint-messaging-base",
+    "@forklaunch/blueprint-messaging-twilio",
+    "@forklaunch/blueprint-monitoring",
+    "@forklaunch/blueprint-sample-worker"
   ]
 }

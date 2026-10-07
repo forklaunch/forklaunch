@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { Platform } from '@mikro-orm/core';
 import { fp } from '../src/persistence/compliancePropertyBuilder';
 import { defineComplianceEntity } from '../src/persistence/defineComplianceEntity';
 import {
@@ -7,6 +8,16 @@ import {
   entityHasEncryptedFields,
   COMPLIANCE_KEY
 } from '../src/persistence/complianceTypes';
+import {
+  CompliantField,
+  CompliantType,
+  type CompliantIndexType
+} from '../src/persistence/compliantField';
+import {
+  registerEncryptor,
+  withEncryptionContext
+} from '../src/persistence/encryptedType';
+import { FieldEncryptor } from '../src/persistence/fieldEncryptor';
 
 /** Read a property from an object by key, avoiding type casts. */
 function readKey(obj: unknown, key: string): unknown {
@@ -151,5 +162,250 @@ describe('defineComplianceEntity', () => {
     });
 
     expect(schema.meta.className).toBe('ValidEntity');
+  });
+});
+
+describe('fp encrypted type resolution', () => {
+  registerEncryptor(new FieldEncryptor('compliance-test-master-key'));
+
+  /**
+   * The compliant column type a classified builder carries, seen through the
+   * surface these tests were written against: the runtime type it hydrates,
+   * and a write/read round trip (sealed, then read back through `.deanon`).
+   */
+  function getEncryptedType(builder: unknown):
+    | {
+        runtimeType: string;
+        convertToDatabaseValue(value: unknown, platform: Platform): unknown;
+        convertToJSValue(value: unknown, platform: Platform): unknown;
+      }
+    | undefined {
+    const opts = (builder as Record<string | symbol, unknown>)['~options'] as
+      Record<string, unknown> | undefined;
+    const type = opts?.type as CompliantType | CompliantIndexType | undefined;
+    if (!(type instanceof CompliantType)) return undefined;
+    return {
+      runtimeType: type.spec.isArray ? 'object' : type.spec.elementRuntimeType,
+      convertToDatabaseValue: (value, platform) =>
+        withEncryptionContext('compliance-test', () =>
+          type.convertToDatabaseValue(value, platform)
+        ),
+      convertToJSValue: (value, platform) =>
+        withEncryptionContext(
+          'compliance-test',
+          () =>
+            (type.convertToJSValue(value as string) as CompliantField).deanon
+        )
+    };
+  }
+
+  it('resolves datetime to Date runtimeType', () => {
+    const builder = fp.datetime().compliance('pii');
+    const et = getEncryptedType(builder);
+    expect(et).toBeDefined();
+    expect(et!.runtimeType).toBe('Date');
+  });
+
+  it('resolves integer to number runtimeType', () => {
+    const builder = fp.integer().compliance('pii');
+    const et = getEncryptedType(builder);
+    expect(et!.runtimeType).toBe('number');
+  });
+
+  it('resolves double to number runtimeType', () => {
+    const builder = fp.double().compliance('pii');
+    const et = getEncryptedType(builder);
+    expect(et!.runtimeType).toBe('number');
+  });
+
+  it('resolves float to number runtimeType', () => {
+    const builder = fp.float().compliance('pii');
+    const et = getEncryptedType(builder);
+    expect(et!.runtimeType).toBe('number');
+  });
+
+  it('resolves smallint to number runtimeType', () => {
+    const builder = fp.smallint().compliance('pii');
+    const et = getEncryptedType(builder);
+    expect(et!.runtimeType).toBe('number');
+  });
+
+  it('resolves mediumint to number runtimeType', () => {
+    const builder = fp.mediumint().compliance('pii');
+    const et = getEncryptedType(builder);
+    expect(et!.runtimeType).toBe('number');
+  });
+
+  it('resolves tinyint to number runtimeType', () => {
+    const builder = fp.tinyint().compliance('pii');
+    const et = getEncryptedType(builder);
+    expect(et!.runtimeType).toBe('number');
+  });
+
+  it('resolves bigint to bigint runtimeType', () => {
+    const builder = fp.bigint().compliance('pii');
+    const et = getEncryptedType(builder);
+    expect(et!.runtimeType).toBe('bigint');
+  });
+
+  it('resolves boolean to boolean runtimeType', () => {
+    const builder = fp.boolean().compliance('pii');
+    const et = getEncryptedType(builder);
+    expect(et!.runtimeType).toBe('boolean');
+  });
+
+  it('resolves string to string runtimeType', () => {
+    const builder = fp.string().compliance('pii');
+    const et = getEncryptedType(builder);
+    expect(et!.runtimeType).toBe('string');
+  });
+
+  it('resolves uuid to string runtimeType', () => {
+    const builder = fp.uuid().compliance('pii');
+    const et = getEncryptedType(builder);
+    expect(et!.runtimeType).toBe('string');
+  });
+
+  it('resolves json to any runtimeType (object)', () => {
+    const builder = fp.json().compliance('pii');
+    const et = getEncryptedType(builder);
+    // json runtimeType is 'any', EncryptedType returns 'any'
+    expect(et!.runtimeType).toBe('any');
+  });
+
+  it('resolves decimal to string runtimeType', () => {
+    const builder = fp.decimal().compliance('pii');
+    const et = getEncryptedType(builder);
+    expect(et!.runtimeType).toBe('string');
+  });
+
+  it('resolves blob to Buffer runtimeType', () => {
+    const builder = fp.blob().compliance('pii');
+    const et = getEncryptedType(builder);
+    expect(et!.runtimeType).toBe('Buffer');
+  });
+
+  it('resolves uint8array to Buffer runtimeType', () => {
+    const builder = fp.uint8array().compliance('pii');
+    const et = getEncryptedType(builder);
+    expect(et!.runtimeType).toBe('Buffer');
+  });
+
+  it('resolves p.array() as array container', () => {
+    const builder = fp.array().compliance('pii');
+    const et = getEncryptedType(builder);
+    expect(et).toBeDefined();
+    // array container — runtimeType is 'object'
+    expect(et!.runtimeType).toBe('object');
+  });
+
+  it('resolves integer().array() as array of numbers', () => {
+    const builder = fp.integer().array().compliance('pii');
+    const et = getEncryptedType(builder);
+    expect(et!.runtimeType).toBe('object');
+    // Verify it actually hydrates numbers via a roundtrip
+    const platform = {} as Platform;
+    const encrypted = et!.convertToDatabaseValue([1, 2, 3], platform);
+    const decrypted = et!.convertToJSValue(encrypted, platform);
+    expect(decrypted).toEqual([1, 2, 3]);
+  });
+
+  it('resolves datetime().array() as array of Dates', () => {
+    const builder = fp.datetime().array().compliance('pii');
+    const et = getEncryptedType(builder);
+    const platform = {} as Platform;
+    const dates = [new Date('2024-01-01'), new Date('2024-06-15')];
+    const encrypted = et!.convertToDatabaseValue(dates, platform);
+    const decrypted = et!.convertToJSValue(encrypted, platform) as Date[];
+    expect(decrypted).toHaveLength(2);
+    expect(decrypted[0]).toBeInstanceOf(Date);
+    expect(decrypted[0].toISOString()).toBe(dates[0].toISOString());
+  });
+
+  it('resolves enum().array() as array of strings', () => {
+    const builder = fp
+      .enum(['a', 'b', 'c'] as const)
+      .array()
+      .compliance('pii');
+    const et = getEncryptedType(builder);
+    const platform = {} as Platform;
+    const encrypted = et!.convertToDatabaseValue(['a', 'b'], platform);
+    const decrypted = et!.convertToJSValue(encrypted, platform);
+    expect(decrypted).toEqual(['a', 'b']);
+  });
+
+  it('does not make a compliant field for none compliance', () => {
+    const builder = fp.string().compliance('none');
+    const et = getEncryptedType(builder);
+    expect(et).toBeUndefined();
+  });
+
+  it('resolves lazy enum factory with encrypted compliance', () => {
+    const Gender = { Male: 'male', Female: 'female', Other: 'other' } as const;
+    const builder = fp
+      .enum(() => Gender)
+      .nullable()
+      .compliance('pii');
+    const et = getEncryptedType(builder);
+    expect(et).toBeDefined();
+
+    // Validate that allowed values were extracted from the lazy factory
+    const platform = {} as Platform;
+    const encrypted = et!.convertToDatabaseValue('female', platform);
+    expect(typeof encrypted).toBe('string');
+    const decrypted = et!.convertToJSValue(encrypted, platform);
+    expect(decrypted).toBe('female');
+  });
+
+  it('rejects invalid values for lazy enum factory with encrypted compliance', () => {
+    const Gender = { Male: 'male', Female: 'female', Other: 'other' } as const;
+    const builder = fp.enum(() => Gender).compliance('pii');
+    const et = getEncryptedType(builder);
+    const platform = {} as Platform;
+    expect(() => et!.convertToDatabaseValue('invalid', platform)).toThrow(
+      /Invalid enum value: invalid/
+    );
+  });
+
+  it('strips enum metadata for encrypted compliance (no DB check constraint)', () => {
+    const Status = { Active: 'active', Inactive: 'inactive' } as const;
+    const builder = fp.enum(() => Status).compliance('pii');
+    const opts = (builder as Record<string | symbol, unknown>)['~options'] as
+      Record<string, unknown> | undefined;
+    // enum metadata should be removed so MikroORM won't generate check constraints
+    expect(opts?.items).toBeUndefined();
+    expect(opts?.enum).toBeUndefined();
+    expect(opts?.nativeEnumName).toBeUndefined();
+    // column type should be text (encrypted ciphertext)
+    expect(opts?.columnType).toBe('text');
+  });
+
+  it('resolves enum with direct items and encrypted compliance', () => {
+    const builder = fp
+      .enum(['red', 'green', 'blue'] as const)
+      .compliance('pii');
+    const et = getEncryptedType(builder);
+    const platform = {} as Platform;
+
+    // Valid value works
+    const encrypted = et!.convertToDatabaseValue('red', platform);
+    const decrypted = et!.convertToJSValue(encrypted, platform);
+    expect(decrypted).toBe('red');
+
+    // Invalid value throws
+    expect(() => et!.convertToDatabaseValue('purple', platform)).toThrow(
+      /Invalid enum value: purple/
+    );
+  });
+
+  it('resolves bare enum() with encrypted compliance (no items)', () => {
+    const builder = fp.enum().compliance('pii');
+    const et = getEncryptedType(builder);
+    expect(et).toBeDefined();
+    // No items → no enum validation, but encryption still works
+    const platform = {} as Platform;
+    const encrypted = et!.convertToDatabaseValue('anything', platform);
+    const decrypted = et!.convertToJSValue(encrypted, platform);
+    expect(decrypted).toBe('anything');
   });
 });

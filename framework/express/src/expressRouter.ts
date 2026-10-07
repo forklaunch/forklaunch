@@ -74,6 +74,9 @@ export class Router<
       express.Router(),
       [
         contentParse<SV>(options),
+        // Express' `RequestHandler` fixes its own generic parameters; the framework's
+        // transmission handler is typed against the schema-resolved shapes instead, so
+        // neither signature is assignable to the other.
         enrichResponseTransmission as unknown as ExpressRequestHandler
       ],
       openTelemetryCollector,
@@ -109,6 +112,9 @@ export class Router<
   ): this {
     this.internal.param(name, (req, res, next, value, name) => {
       handler(
+        // `req`/`res` carry Express' declared generics; the controller is typed
+        // against the schema-resolved request and response, which the validator has
+        // just checked at runtime. The two shapes share no declared member.
         req as unknown as SchemaResolve<Types['req']>,
         res as unknown as SchemaResolve<Types['res']>,
         next,

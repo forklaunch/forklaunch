@@ -471,8 +471,7 @@ export function validateContractDetails<
 
   // Validate access field and auth narrowing (runtime safety net for JS users)
   const access = (contractDetails as Record<string, unknown>)['access'] as
-    | string
-    | undefined;
+    string | undefined;
   const auth = (contractDetails as Record<string, unknown>)['auth'];
 
   if (access != null) {
@@ -565,7 +564,7 @@ export function processContractDetailsIO<
     requestSchema: schemaValidator.compile(
       schemaValidator.schemify({
         ...(routeParams != null
-          ? { params: routeParams as unknown as ParamsDictionary }
+          ? { params: routeParams as ParamsDictionary }
           : { params: schemaValidator.unknown as ParamsObject<SV> }),
         ...(contractDetailsIO.requestHeaders != null
           ? { headers: contractDetailsIO.requestHeaders }
@@ -642,8 +641,7 @@ export function compileRouteSchemas<
   const validator = schemaValidator as SV & SchemaValidator;
   let requestSchema: unknown | Record<string, unknown>;
   let responseSchemas:
-    | ResponseCompiledSchema
-    | Record<string, ResponseCompiledSchema>;
+    ResponseCompiledSchema | Record<string, ResponseCompiledSchema>;
 
   if (hasVersionedSchema(contractDetails)) {
     requestSchema = {};
@@ -657,7 +655,7 @@ export function compileRouteSchemas<
         } = processContractDetailsIO(
           validator,
           versionedContractDetails,
-          contractDetails.params as unknown as P
+          contractDetails.params as P
         );
 
         if (isRecord(requestSchema)) {
@@ -711,7 +709,7 @@ export function compileRouteSchemas<
             ? contractDetails.responses
             : (validator.unknown as ResponsesObject<SV>)
       },
-      contractDetails.params as unknown as P
+      contractDetails.params as P
     );
 
     requestSchema = unversionedRequestSchema;
@@ -768,8 +766,7 @@ export function resolveRouteMiddlewares<
   >;
   requestSchema: unknown;
   responseSchemas:
-    | ResponseCompiledSchema
-    | Record<string, ResponseCompiledSchema>;
+    ResponseCompiledSchema | Record<string, ResponseCompiledSchema>;
   openTelemetryCollector?: OpenTelemetryCollector<MetricsDefinition>;
   routerOptions?: ExpressLikeRouterOptions<SV, RouterSession>;
   postEnrichMiddleware?: RouterHandler[];
@@ -856,7 +853,7 @@ export function resolveRouteMiddlewares<
       RouterSession
     >,
     ...handlersCopy
-  ] as unknown as RouterHandler[];
+  ] as RouterHandler[];
 
   return {
     middlewares,

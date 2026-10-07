@@ -24,23 +24,21 @@ import { StripePaymentLinkEntities } from '../domain/types/stripe.entity.types';
 export class StripePaymentLinkService<
   SchemaValidator extends AnySchemaValidator,
   StatusEnum,
-  Entities extends StripePaymentLinkEntities<StatusEnum>,
-  Dto extends
-    StripePaymentLinkDtos<StatusEnum> = StripePaymentLinkDtos<StatusEnum>
-> implements
-    PaymentLinkService<
-      PaymentMethodEnum,
-      typeof CurrencyEnum,
-      StatusEnum,
-      {
-        CreatePaymentLinkDto: StripeCreatePaymentLinkDto<StatusEnum>;
-        UpdatePaymentLinkDto: StripeUpdatePaymentLinkDto<StatusEnum>;
-        PaymentLinkDto: StripePaymentLinkDto<StatusEnum>;
-        IdDto: IdDto;
-        IdsDto: IdsDto;
-      }
-    >
-{
+  Entities extends StripePaymentLinkEntities,
+  Dto extends StripePaymentLinkDtos<StatusEnum> =
+    StripePaymentLinkDtos<StatusEnum>
+> implements PaymentLinkService<
+  PaymentMethodEnum,
+  typeof CurrencyEnum,
+  StatusEnum,
+  {
+    CreatePaymentLinkDto: StripeCreatePaymentLinkDto<StatusEnum>;
+    UpdatePaymentLinkDto: StripeUpdatePaymentLinkDto<StatusEnum>;
+    PaymentLinkDto: StripePaymentLinkDto<StatusEnum>;
+    IdDto: IdDto;
+    IdsDto: IdsDto;
+  }
+> {
   basePaymentLinkService: BasePaymentLinkService<
     SchemaValidator,
     PaymentMethodEnum,

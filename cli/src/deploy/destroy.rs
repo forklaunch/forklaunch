@@ -137,6 +137,8 @@ impl CliCommand for DestroyCommand {
                 stream_deployment_status(
                     &auth_mode,
                     &deployment.id,
+                    None,
+                    None,
                     &mut stdout,
                 )?;
                 writeln!(stdout)?;

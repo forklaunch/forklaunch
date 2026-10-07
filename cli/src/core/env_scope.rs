@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 
 use crate::core::{
-    ast::infrastructure::env::EnvVarUsage,
+    ast::infrastructure::env::{EnvVarUsage, fold_optionality},
     manifest::{ProjectType, application::ApplicationManifestData},
 };
 
@@ -21,6 +21,9 @@ pub(crate) struct ScopedEnvVar {
     pub scope_id: Option<String>, // service/worker name if scoped
     pub used_by: Vec<String>,     // List of projects using this variable
     pub value: Option<String>,    // Captured value from docker-compose (if available)
+    /// Declared optionality folded across every project that uses this
+    /// variable. `None` means no project declared a type for it.
+    pub optional: Option<bool>,
 }
 
 impl EnvironmentVariableScope {
@@ -40,6 +43,10 @@ pub(crate) fn determine_env_var_scopes(
     manifest: &ApplicationManifestData,
 ) -> Result<Vec<ScopedEnvVar>> {
     let mut var_usage: HashMap<String, Vec<String>> = HashMap::new();
+    // Optionality is folded a second time here: a variable promoted to
+    // application scope is one variable, so a project declaring it required
+    // must win over another declaring it optional.
+    let mut var_optionality: HashMap<String, Vec<Option<bool>>> = HashMap::new();
 
     for (project_name, env_vars) in project_env_vars {
         for env_var in env_vars {
@@ -47,6 +54,10 @@ pub(crate) fn determine_env_var_scopes(
                 .entry(env_var.var_name.clone())
                 .or_insert_with(Vec::new)
                 .push(project_name.clone());
+            var_optionality
+                .entry(env_var.var_name.clone())
+                .or_insert_with(Vec::new)
+                .push(env_var.optional);
         }
     }
 
@@ -87,12 +98,20 @@ pub(crate) fn determine_env_var_scopes(
             (EnvironmentVariableScope::Application, None)
         };
 
+        let optional = fold_optionality(
+            var_optionality
+                .get(&var_name)
+                .map(|v| v.as_slice())
+                .unwrap_or(&[]),
+        );
+
         scoped_vars.push(ScopedEnvVar {
             name: var_name,
             scope,
             scope_id,
             used_by: unique_projects,
             value: None,
+            optional,
         });
     }
 
@@ -204,6 +223,9 @@ fn is_observability_var(var_name: &str) -> bool {
     upper.starts_with("OTEL_")
         || upper.starts_with("LOKI_")
         || upper.starts_with("TEMPO_")
+        || upper.starts_with("MIMIR_")
+        // Retained for back-compat: projects scaffolded before the Mimir
+        // migration may still carry PROMETHEUS_* vars.
         || upper.starts_with("PROMETHEUS_")
 }
 
@@ -337,9 +359,11 @@ mod tests {
                         queue: None,
                         object_store: None,
                         redis_partition: None,
+                        capabilities: None,
                     }),
                     routers: None,
                     metadata: None,
+                    serves: None,
                 })
                 .collect(),
             project_peer_topology: HashMap::new(),
@@ -379,9 +403,11 @@ mod tests {
             vec![
                 EnvVarUsage {
                     var_name: "OTEL_EXPORTER_OTLP_ENDPOINT".to_string(),
+                    optional: None,
                 },
                 EnvVarUsage {
                     var_name: "PORT".to_string(),
+                    optional: None,
                 },
             ],
         );
@@ -404,6 +430,7 @@ mod tests {
     fn test_loki_tempo_prometheus_promoted() {
         assert!(is_observability_var("LOKI_URL"));
         assert!(is_observability_var("TEMPO_ENDPOINT"));
+        assert!(is_observability_var("MIMIR_URL"));
         assert!(is_observability_var("PROMETHEUS_PUSH_GATEWAY"));
         assert!(is_observability_var("OTEL_EXPORTER_OTLP_ENDPOINT"));
         assert!(!is_observability_var("DB_HOST"));
@@ -419,6 +446,7 @@ mod tests {
             "billing".to_string(),
             vec![EnvVarUsage {
                 var_name: "PLATFORM_MANAGEMENT_URL".to_string(),
+                optional: None,
             }],
         );
 

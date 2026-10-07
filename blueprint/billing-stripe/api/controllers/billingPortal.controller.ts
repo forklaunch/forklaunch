@@ -12,7 +12,7 @@ import {
   UpdateBillingPortalMapper
 } from '../../domain/mappers/billingPortal.mappers';
 
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 const serviceFactory = ci.scopedResolver(tokens.BillingPortalService);
 const JWKS_PUBLIC_KEY_URL = ci.resolve(tokens.JWKS_PUBLIC_KEY_URL);
 

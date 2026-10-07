@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# The CLI binary. CI builds it once and exports FORKLAUNCH_CLI so the 43
+# scripts share one compile instead of each re-checking a release build.
+FL="${FORKLAUNCH_CLI:-cargo run --release}"
 
 # Integration test for sync command - complete add/remove flow
 # Tests that sync correctly detects and synchronizes changes
@@ -15,7 +18,7 @@ cd output/sync-add-remove-flow
 echo "[TEST] Sync Complete Add/Remove Flow"
 
 # Create test application
-RUST_BACKTRACE=1 cargo run --release init application test-app \
+RUST_BACKTRACE=1 $FL init application test-app \
     -p test-app \
     -o src/modules \
     -d postgresql \
@@ -32,13 +35,13 @@ RUST_BACKTRACE=1 cargo run --release init application test-app \
 
 cd test-app
 
-RUST_BACKTRACE=1 cargo run --release init service users \
+RUST_BACKTRACE=1 $FL init service users \
     -p src/modules \
     -d postgresql \
     -D "Users service"
 
 echo "[INFO] Test 1: Sync with no changes"
-if RUST_BACKTRACE=1 cargo run --release sync all -p . -c; then
+if RUST_BACKTRACE=1 $FL sync all -p . -c; then
     echo "[PASS] Sync with no changes"
 else
     echo "[FAIL] Sync failed with no changes"
@@ -55,7 +58,7 @@ rm -f src/modules/products/package.json.bak
 echo "[INFO] Test 3: Syncing new service"
 PROMPTS_JSON='{"products": {"category": "service", "database": "postgresql", "infrastructure": "none", "description": "Products service"}}'
 
-if RUST_BACKTRACE=1 cargo run --release sync all -p . -c -P "$PROMPTS_JSON"; then
+if RUST_BACKTRACE=1 $FL sync all -p . -c -P "$PROMPTS_JSON"; then
     echo "[PASS] Sync added new service"
 else
     echo "[FAIL] Sync failed to add service"
@@ -80,7 +83,7 @@ echo "[INFO] Test 6: Removing service directory"
 rm -rf src/modules/products
 
 echo "[INFO] Test 7: Syncing removal"
-if RUST_BACKTRACE=1 cargo run --release sync all -p . -c; then
+if RUST_BACKTRACE=1 $FL sync all -p . -c; then
     echo "[PASS] Sync removed service"
 else
     echo "[FAIL] Sync failed to remove"

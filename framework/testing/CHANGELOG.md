@@ -1,5 +1,224 @@
 # @forklaunch/testing
 
+## 1.2.35
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions, including @mikro-orm 7.2.3, so apps resolve a single copy of MikroORM with core.
+
+## 1.2.34
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions (`pnpm up:packages`).
+
+## 1.2.33
+
+### Patch Changes
+
+- Refresh every framework dependency to its current release.
+
+  A routine sweep (`pnpm run up:packages`), taken as one wave rather than a
+  package at a time. `workspace:^` is frozen into a concrete range at publish,
+  so a package published ahead of its siblings pins the PREVIOUS version of
+  them and consumers resolve two copies — which is the whole class of bug
+  #311 and #331 existed to clear. Releasing the set together is what keeps
+  that from coming back.
+
+  `@mikro-orm/*` is deliberately NOT moved: framework and blueprint are both
+  on 7.2.1 exactly, and they only stay that way if they move together.
+
+## 1.2.32
+
+### Patch Changes
+
+- Refresh dependencies to their latest published versions.
+
+  `@mikro-orm/*` moves from 7.1.15 to 7.2.1 in every package that pins it,
+  as one step: the framework, the blueprint and the CLI's scaffold constants
+  all agree on a single MikroORM version, so a freshly generated app resolves
+  exactly one copy (the duplicate-package type errors from mixed pins are the
+  reason it is pinned exactly). `@aws-sdk/client-s3` 3.1131 → 3.1136 in
+  infrastructure-s3. The rest is devDependency movement; `@types/node` 26.6
+  added `Socket.server`, which the Bun socket shim in express now declares.
+
+  Packages with only devDependency changes release too, so the whole
+  framework carries one MikroORM version on npm.
+
+## 1.2.31
+
+### Patch Changes
+
+- Pin `@mikro-orm/*` to an exact version instead of a caret range.
+
+  These three packages ranged on `^7.1.14` while `@forklaunch/interfaces-*` and
+  `@forklaunch/implementation-*-base` pinned `7.1.14` exactly. When MikroORM
+  published 7.1.15 the carets took it and the exact pins did not, so every
+  consumer resolved **two copies of `@mikro-orm/core`**.
+
+  That is not a harmless duplication. `EntityManager` and `EntitySchema` carry a
+  `#private` field, which TypeScript treats as a per-class brand, so the same
+  class coming from two copies is structurally incompatible and every generated
+  app stops compiling:
+
+      error TS2741: Property '#private' is missing in type
+        'PostgreSqlEntityManager<PostgreSqlDriver>' but required in 'EntityManager'
+      error TS2883: The inferred type of 'ci' cannot be named without a reference
+        to 'Connection' from '.bun/@mikro-orm+core@7.1.14/node_modules/@mikro-orm/core'
+
+  7.1.15 itself is not a breaking change — `EntityName` and `EntitySchema` are
+  byte-identical to 7.1.14. Only the duplication broke.
+
+  An exact pin here matches what the rest of the family already does, so a future
+  MikroORM patch cannot split the tree again by moving one half of it.
+
+## 1.2.30
+
+### Patch Changes
+
+- Release the rest of the workspace alongside the dependency refresh, so every
+  published package moves together on this pass.
+
+  `up:packages` reached these differently than the five that changed runtime
+  dependencies: `universal-sdk`, `ws` and `infrastructure-redis` picked up
+  devDependency movement only (`jest` 30.4.2 → 30.5.0), and `bunrun`, `common`,
+  `internal` and `testing` saw no manifest change at all. Their emitted output is
+  therefore unchanged.
+
+  They are released regardless to keep the whole set on one refresh, rather than
+  leaving consumers to work out which packages a given update did and did not
+  touch.
+
+## 1.2.29
+
+### Patch Changes
+
+- Update internal package versions
+
+## 1.2.28
+
+### Patch Changes
+
+- 9334446: Fix BlueprintTestHarness so generated app E2E tests can actually run.
+
+  `clearTestDatabase` now reads the entity list from `orm.config.get('entities')`
+  (MikroORM v7's `getMetadata().getAll()` returns an empty object, so the old
+  code cleared nothing and re-seeds hit duplicate-key errors), and clears in a
+  foreign-key-safe retry-until-stable order instead of a single reverse pass.
+
+  Pairs with the blueprint test-utils change that hands the harness its own
+  `discovery` object, so `MikroORM.init()` can't mutate the app's shared config
+  and leave the app container's `new MikroORM(config)` with an undefined `.em`.
+
+## 1.2.23
+
+### Patch Changes
+
+- restrict wildcard subpath exports to the types condition
+- setupTestORM returns AnyMikroORM to match the relaxed harness contract
+
+## 1.2.22
+
+### Patch Changes
+
+- add wildcard subpath exports for per-file declaration output
+
+## 1.2.21
+
+### Patch Changes
+
+- relax harness ORM types to AnyMikroORM (MikroORM v7 readonly entities arrays)
+
+## 1.2.19
+
+### Patch Changes
+
+- TypeScript 7 build pipeline: tsgo declaration emit replaces tsup --dts
+
+## 1.2.20
+
+### Patch Changes
+
+- update packages
+
+## 1.2.19
+
+### Patch Changes
+
+- 92c06f9: dep upgrades
+
+## 1.2.18
+
+### Patch Changes
+
+- update dependency versions
+
+## 1.2.17
+
+### Patch Changes
+
+- Update internal versions and allow ZodType early release
+
+## 1.2.16
+
+### Patch Changes
+
+- Export wrapEmWithTenantContext for tenant based filtering
+
+## 1.2.15
+
+### Patch Changes
+
+- chore: update internal package versions
+
+## 1.2.14
+
+### Patch Changes
+
+- update enum logic
+
+## 1.2.13
+
+### Patch Changes
+
+- Update packages and enum constraint fix
+
+## 1.2.12
+
+### Patch Changes
+
+- sync changes across packages
+
+## 1.2.11
+
+### Patch Changes
+
+- Align package vers
+
+## 1.2.10
+
+### Patch Changes
+
+- fix nested app and router
+
+## 1.2.9
+
+### Patch Changes
+
+- Perf improvement
+
+## 1.2.8
+
+### Patch Changes
+
+- bump package versions
+
+## 1.2.7
+
+### Patch Changes
+
+- export consolidated retention logic
+
 ## 1.2.6
 
 ### Patch Changes

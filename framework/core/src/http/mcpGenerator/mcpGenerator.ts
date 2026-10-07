@@ -37,8 +37,7 @@ function generateInputSchema(
   >
 ) {
   let discriminatedBody:
-    | ReturnType<typeof discriminateBody<ZodSchemaValidator>>
-    | undefined;
+    ReturnType<typeof discriminateBody<ZodSchemaValidator>> | undefined;
 
   if (body) {
     discriminatedBody = discriminateBody(schemaValidator, body);
@@ -87,8 +86,7 @@ function generateInputSchema(
  */
 export function generateMcpServer<
   T extends Record<string, unknown> | undefined =
-    | Record<string, unknown>
-    | undefined
+    Record<string, unknown> | undefined
 >(
   schemaValidator: ZodSchemaValidator,
   protocol: 'http' | 'https',
@@ -129,13 +127,11 @@ export function generateMcpServer<
     ])
   ].forEach(({ fullPath, router }) => {
     router.routes.forEach((route) => {
-      if (
-        !(
-          route.contractDetails.options?.mcp ??
-          router.routerOptions?.mcp ??
-          appOptions !== false
-        )
-      ) {
+      if (!(
+        route.contractDetails.options?.mcp ??
+        router.routerOptions?.mcp ??
+        appOptions !== false
+      )) {
         return;
       }
 

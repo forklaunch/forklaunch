@@ -7,6 +7,10 @@ export const Team = defineComplianceEntity({
   properties: {
     ...sqlBaseProperties,
     name: fp.string().compliance('none'),
+    // better-auth >= 1.7.0 organization plugin tracks and increments a required
+    // memberCount on each team (created at 0); without it the mikro-orm adapter
+    // throws "Can't find property memberCount on entity Team" on org creation.
+    memberCount: fp.integer().default(0).compliance('none'),
     organizationId: fp.string().compliance('none')
   }
 });

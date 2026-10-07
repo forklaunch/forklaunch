@@ -32,6 +32,8 @@ fn categorize_env_var(var_name: &str) -> &'static str {
         "Observability (OpenTelemetry)"
     } else if var_name.starts_with("STRIPE_") {
         "Billing (Stripe)"
+    } else if var_name.starts_with("TWILIO_") {
+        "Messaging (Twilio)"
     } else if var_name.starts_with("BETTER_AUTH_")
         || var_name.starts_with("PASSWORD_ENCRYPTION_")
         || var_name.starts_with("HMAC_")
@@ -384,6 +386,10 @@ mod tests {
             "Observability (OpenTelemetry)"
         );
         assert_eq!(categorize_env_var("STRIPE_API_KEY"), "Billing (Stripe)");
+        assert_eq!(
+            categorize_env_var("TWILIO_ACCOUNT_SID"),
+            "Messaging (Twilio)"
+        );
         assert_eq!(
             categorize_env_var("BETTER_AUTH_BASE_PATH"),
             "Authentication"

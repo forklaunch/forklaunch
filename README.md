@@ -157,6 +157,33 @@ app.listen(8000, () => {
 
 ## Documentation
 
+### Custom Metrics
+
+Generated applications share a metrics definition in `blueprint/monitoring/metricsDefinitions.ts`. The standard HTTP metrics use the same names that are emitted to OpenTelemetry and exposed through Prometheus:
+
+| Metric | Type | Labels | What it tracks |
+|:-------|:-----|:-------|:---------------|
+| `http_requests_total` | counter | `service.name`, `application.id`, `api.name`, `http.request.method`, `http.route`, `http.response.status_code` | Total number of HTTP requests received |
+| `http_request_duration_ms` | histogram | `service.name`, `application.id`, `api.name`, `http.request.method`, `http.route`, `http.response.status_code` | Distribution of request durations in milliseconds |
+| `http_errors_total` | counter | `service.name`, `application.id`, `api.name`, `http.request.method`, `http.route`, `http.response.status_code` | Total number of HTTP requests that returned an error (4xx/5xx) |
+| `http_requests_in_flight` | upDownCounter | `service.name` | Number of HTTP requests currently being processed |
+
+To add a custom metric, add an entry to the `metricsDefinitions` object:
+
+```ts
+export const metrics = metricsDefinitions({
+  http_requests_total: 'counter',
+  http_request_duration_ms: 'histogram',
+  http_errors_total: 'counter',
+  http_requests_in_flight: 'upDownCounter',
+
+  // Custom: count successful deployments.
+  deployments_completed: 'counter'
+});
+```
+
+Use counters for totals and event counts, histograms for distributions such as latency or payload size, gauges for directly observed current values, and up-down counters for values that change through increments and decrements such as in-flight requests.
+
 ### Guides
 | Guide | Description |
 |:------|:------------|

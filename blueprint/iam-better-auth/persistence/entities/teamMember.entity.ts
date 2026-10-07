@@ -7,7 +7,9 @@ export const TeamMember = defineComplianceEntity({
   properties: {
     ...sqlBaseProperties,
     teamId: fp.string().compliance('none'),
-    userId: fp.string().compliance('none')
+    userId: fp.string().compliance('none'),
+    // better-auth >= 1.7.0 stores an optional membershipKey on team members.
+    membershipKey: fp.string().nullable().compliance('none')
   }
 });
 

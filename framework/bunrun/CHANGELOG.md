@@ -1,5 +1,163 @@
 # @forklaunch/bunrun
 
+## 1.2.26
+
+### Patch Changes
+
+- Refresh every framework dependency to its current release.
+
+  A routine sweep (`pnpm run up:packages`), taken as one wave rather than a
+  package at a time. `workspace:^` is frozen into a concrete range at publish,
+  so a package published ahead of its siblings pins the PREVIOUS version of
+  them and consumers resolve two copies — which is the whole class of bug
+  #311 and #331 existed to clear. Releasing the set together is what keeps
+  that from coming back.
+
+  `@mikro-orm/*` is deliberately NOT moved: framework and blueprint are both
+  on 7.2.1 exactly, and they only stay that way if they move together.
+
+## 1.2.25
+
+### Patch Changes
+
+- Refresh dependencies to their latest published versions.
+
+  `@mikro-orm/*` moves from 7.1.15 to 7.2.1 in every package that pins it,
+  as one step: the framework, the blueprint and the CLI's scaffold constants
+  all agree on a single MikroORM version, so a freshly generated app resolves
+  exactly one copy (the duplicate-package type errors from mixed pins are the
+  reason it is pinned exactly). `@aws-sdk/client-s3` 3.1131 → 3.1136 in
+  infrastructure-s3. The rest is devDependency movement; `@types/node` 26.6
+  added `Socket.server`, which the Bun socket shim in express now declares.
+
+  Packages with only devDependency changes release too, so the whole
+  framework carries one MikroORM version on npm.
+
+## 1.2.24
+
+### Patch Changes
+
+- Release the framework set together so every package depends on the same
+  `@forklaunch/core`.
+
+  `core` was bumped to pin `@mikro-orm/*` exactly, but `express`, `hyper-express`,
+  `ws` and the `infrastructure-*` packages were still published against the
+  previous `core`. A consumer therefore resolved two copies of
+  `@forklaunch/core`, and through them two copies of `@mikro-orm/core` — which is
+  the duplication the `core` bump exists to remove. `EntityManager` and
+  `EntitySchema` carry a `#private` brand, so two copies are structurally
+  incompatible and the consumer stops compiling.
+
+  No source changes here; these packages move so the set stays internally
+  consistent.
+
+## 1.2.23
+
+### Patch Changes
+
+- Release the rest of the workspace alongside the dependency refresh, so every
+  published package moves together on this pass.
+
+  `up:packages` reached these differently than the five that changed runtime
+  dependencies: `universal-sdk`, `ws` and `infrastructure-redis` picked up
+  devDependency movement only (`jest` 30.4.2 → 30.5.0), and `bunrun`, `common`,
+  `internal` and `testing` saw no manifest change at all. Their emitted output is
+  therefore unchanged.
+
+  They are released regardless to keep the whole set on one refresh, rather than
+  leaving consumers to work out which packages a given update did and did not
+  touch.
+
+## 1.2.22
+
+### Patch Changes
+
+- Update internal package versions
+
+## 1.2.20
+
+### Patch Changes
+
+- update packages
+
+## 1.2.19
+
+### Patch Changes
+
+- 92c06f9: dep upgrades
+
+## 1.2.18
+
+### Patch Changes
+
+- update dependency versions
+
+## 1.2.17
+
+### Patch Changes
+
+- Update internal versions and allow ZodType early release
+
+## 1.2.16
+
+### Patch Changes
+
+- Export wrapEmWithTenantContext for tenant based filtering
+
+## 1.2.15
+
+### Patch Changes
+
+- chore: update internal package versions
+
+## 1.2.14
+
+### Patch Changes
+
+- update enum logic
+
+## 1.2.13
+
+### Patch Changes
+
+- Update packages and enum constraint fix
+
+## 1.2.12
+
+### Patch Changes
+
+- sync changes across packages
+
+## 1.2.11
+
+### Patch Changes
+
+- Align package vers
+
+## 1.2.10
+
+### Patch Changes
+
+- fix nested app and router
+
+## 1.2.9
+
+### Patch Changes
+
+- Perf improvement
+
+## 1.2.8
+
+### Patch Changes
+
+- bump package versions
+
+## 1.2.7
+
+### Patch Changes
+
+- export consolidated retention logic
+
 ## 1.2.6
 
 ### Patch Changes

@@ -29,7 +29,7 @@ use crate::{
     },
     core::{
         base_path::{RequiredLocation, find_app_root_path, prompt_base_path},
-        client_sdk::add_project_to_client_sdk,
+        client_sdk::{add_project_to_client_sdk, regenerate_client_sdk_compliance},
         command::command,
         database::{
             add_base_entity_to_core, get_database_port, get_db_driver, is_in_memory_database,
@@ -50,9 +50,13 @@ use crate::{
                 AJV_VERSION, APP_BILLING_VERSION, APP_CORE_VERSION, APP_IAM_VERSION,
                 APP_MONITORING_VERSION, BETTER_AUTH_MIKRO_ORM_VERSION, BETTER_AUTH_VERSION,
                 BETTER_SQLITE3_VERSION, BILLING_BASE_VERSION, BILLING_INTERFACES_VERSION,
-                BILLING_STRIPE_VERSION, BIOME_VERSION, COMMON_VERSION, CORE_VERSION,
+                BILLING_STRIPE_VERSION, BIOME_VERSION, CAC_BASE_VERSION,
+                CAC_INTERFACES_VERSION, COMMON_VERSION, CORE_VERSION, ECOMMERCE_BASE_VERSION,
+                ECOMMERCE_INTERFACES_VERSION, ECOMMERCE_PAYPAL_VERSION,
+                ECOMMERCE_STRIPE_VERSION, WORKER_INTERFACES_VERSION, WORKER_REDIS_VERSION,
                 DOTENV_VERSION, ESLINT_VERSION, EXPRESS_VERSION, HYPER_EXPRESS_VERSION,
                 IAM_BASE_VERSION, IAM_INTERFACES_VERSION, INFRASTRUCTURE_REDIS_VERSION,
+                MESSAGING_BASE_VERSION, MESSAGING_INTERFACES_VERSION, MESSAGING_TWILIO_VERSION,
                 INFRASTRUCTURE_S3_VERSION, INTERNAL_VERSION, IOREDIS_VERSION, JOSE_VERSION,
                 MIKRO_ORM_CLI_VERSION, MIKRO_ORM_CORE_VERSION, MIKRO_ORM_DATABASE_VERSION,
                 MIKRO_ORM_MIGRATIONS_VERSION,
@@ -61,11 +65,14 @@ use crate::{
                 SQLITE3_VERSION, STRIPE_VERSION, TESTING_VERSION, TSX_VERSION, TYPEBOX_VERSION,
                 TYPEDOC_VERSION, TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION, TYPES_EXPRESS_VERSION,
                 TYPES_JEST_VERSION, TYPES_QS_VERSION, TYPES_UUID_VERSION,
-                TYPESCRIPT_ESLINT_VERSION, UNIVERSAL_SDK_VERSION, UUID_VERSION, VALIDATOR_VERSION,
+                TYPESCRIPT_ESLINT_VERSION, UNIVERSAL_SDK_VERSION, UWEBSOCKETS_VERSION, UUID_VERSION,
+                VALIDATOR_VERSION,
                 ZOD_VERSION, project_clean_script, project_dev_local_script,
                 project_dev_server_script, project_format_script, project_lint_fix_script,
                 project_lint_script, project_migrate_script, project_retention_enforce_script,
-                project_start_server_script, project_test_script, project_up_latest_script,
+                project_dev_local_worker_script, project_dev_worker_client_script,
+                project_start_server_script, project_start_worker_script, project_test_script,
+                project_up_latest_script,
             },
             project_package_json::{
                 MIKRO_ORM_CONFIG_PATHS, ProjectDependencies, ProjectDevDependencies,
@@ -105,9 +112,11 @@ fn generate_basic_service(
 
     let mut ignore_files = vec![];
     if !manifest_data.is_database_enabled {
+        ignore_files.push("enforce-retention.ts".to_string());
+    }
+    if !manifest_data.is_database_enabled || !manifest_data.is_iam_configured {
         ignore_files.push("compliance.controller.ts".to_string());
         ignore_files.push("compliance.routes.ts".to_string());
-        ignore_files.push("enforce-retention.ts".to_string());
     }
     let ignore_dirs = if !manifest_data.with_mappers {
         vec!["mappers".to_string()]
@@ -179,6 +188,12 @@ fn generate_basic_service(
         None,
     )?;
 
+    regenerate_client_sdk_compliance(
+        &mut rendered_templates_cache,
+        &base_path,
+        &manifest_data.projects,
+    )?;
+
     let tsconfig_template = add_project_to_modules_tsconfig(base_path, &manifest_data.service_name)
         .with_context(|| "Failed to add service to modules tsconfig.json")?;
     rendered_templates_cache.insert(
@@ -224,6 +239,7 @@ fn add_service_to_artifacts(
             queue: None,
             object_store: None,
             redis_partition: None,
+            capabilities: None,
         }),
         Some(vec![manifest_data.service_name.clone()]),
         None,
@@ -317,12 +333,12 @@ pub(crate) fn generate_service_package_json(
         keywords: Some(vec![]),
         license: Some(manifest_data.license.to_string()),
         author: Some(manifest_data.author.to_string()),
-        main: main_override.or_else(|| if manifest_data.is_iam || manifest_data.is_billing {
+        main: main_override.or_else(|| if manifest_data.is_iam || manifest_data.is_billing || manifest_data.is_messaging || manifest_data.is_cac {
             Some("./dist/index.js".to_string())
         } else {
             None
         }),
-        types: types_override.unwrap_or(if manifest_data.is_iam || manifest_data.is_billing {
+        types: types_override.unwrap_or(if manifest_data.is_iam || manifest_data.is_billing || manifest_data.is_messaging || manifest_data.is_cac {
             Some("./dist/index.d.ts".to_string())
         } else {
             None
@@ -339,10 +355,17 @@ pub(crate) fn generate_service_package_json(
                     &manifest_data.runtime.parse()?,
                     manifest_data.database.parse::<Database>().ok(),
                 )),
-                dev_local: Some(project_dev_local_script(
-                    &manifest_data.runtime.parse()?,
-                    manifest_data.database.parse::<Database>().ok(),
-                )),
+                dev_local: Some(if manifest_data.ships_worker {
+                    project_dev_local_worker_script(
+                        &manifest_data.runtime.parse()?,
+                        manifest_data.database.parse::<Database>().ok(),
+                    )
+                } else {
+                    project_dev_local_script(
+                        &manifest_data.runtime.parse()?,
+                        manifest_data.database.parse::<Database>().ok(),
+                    )
+                }),
                 test: project_test_script(&manifest_data.runtime.parse()?, &test_framework),
                 docs: Some(PROJECT_DOCS_SCRIPT.to_string()),
                 format: Some(project_format_script(&manifest_data.formatter.parse()?)),
@@ -368,6 +391,24 @@ pub(crate) fn generate_service_package_json(
                 up_latest: project_up_latest_script(&manifest_data.runtime.parse()?),
                 retention_enforce: if manifest_data.is_database_enabled {
                     Some(project_retention_enforce_script(&manifest_data.runtime.parse()?))
+                } else {
+                    None
+                },
+                // A module that ships worker.ts needs a way to run it. Without
+                // these the file scaffolds and nothing ever starts it: order
+                // events never drain, stock never moves, and nothing errors.
+                dev_worker: if manifest_data.ships_worker {
+                    Some(project_dev_worker_client_script(
+                        &manifest_data.runtime.parse()?,
+                    ))
+                } else {
+                    None
+                },
+                start_worker: if manifest_data.ships_worker {
+                    Some(project_start_worker_script(
+                        &manifest_data.runtime.parse()?,
+                        manifest_data.database.parse::<Database>().ok(),
+                    ))
                 } else {
                     None
                 },
@@ -410,6 +451,11 @@ pub(crate) fn generate_service_package_json(
                 } else {
                     None
                 },
+                uwebsockets_js: if manifest_data.is_hyper_express {
+                    Some(UWEBSOCKETS_VERSION.to_string())
+                } else {
+                    None
+                },
                 forklaunch_implementation_billing_base: if manifest_data.is_billing {
                     Some(BILLING_BASE_VERSION.to_string())
                 } else {
@@ -417,6 +463,26 @@ pub(crate) fn generate_service_package_json(
                 },
                 forklaunch_implementation_billing_stripe: if manifest_data.is_stripe {
                     Some(BILLING_STRIPE_VERSION.to_string())
+                } else {
+                    None
+                },
+                forklaunch_implementation_ecommerce_base: if manifest_data.is_ecommerce {
+                    Some(ECOMMERCE_BASE_VERSION.to_string())
+                } else {
+                    None
+                },
+                forklaunch_implementation_ecommerce_stripe: if manifest_data.is_ecommerce {
+                    Some(ECOMMERCE_STRIPE_VERSION.to_string())
+                } else {
+                    None
+                },
+                forklaunch_implementation_ecommerce_paypal: if manifest_data.is_ecommerce {
+                    Some(ECOMMERCE_PAYPAL_VERSION.to_string())
+                } else {
+                    None
+                },
+                forklaunch_interfaces_ecommerce: if manifest_data.is_ecommerce {
+                    Some(ECOMMERCE_INTERFACES_VERSION.to_string())
                 } else {
                     None
                 },
@@ -449,11 +515,50 @@ pub(crate) fn generate_service_package_json(
                 } else {
                     None
                 },
+                // Always a direct dependency for messaging modules: the twilio
+                // implementation's schema types reference base's SmsMappers, and
+                // declaration emit (TS2883) needs it nameable from the app.
+                forklaunch_implementation_messaging_base: if manifest_data.is_messaging {
+                    Some(MESSAGING_BASE_VERSION.to_string())
+                } else {
+                    None
+                },
+                forklaunch_implementation_messaging_twilio: if manifest_data.is_twilio {
+                    Some(MESSAGING_TWILIO_VERSION.to_string())
+                } else {
+                    None
+                },
+                forklaunch_interfaces_messaging: if manifest_data.is_messaging {
+                    Some(MESSAGING_INTERFACES_VERSION.to_string())
+                } else {
+                    None
+                },
+                forklaunch_implementation_cac_base: if manifest_data.is_cac {
+                    Some(CAC_BASE_VERSION.to_string())
+                } else {
+                    None
+                },
+                forklaunch_interfaces_cac: if manifest_data.is_cac {
+                    Some(CAC_INTERFACES_VERSION.to_string())
+                } else {
+                    None
+                },
                 forklaunch_implementation_worker_bullmq: None,
                 forklaunch_implementation_worker_database: None,
                 forklaunch_implementation_worker_kafka: None,
-                forklaunch_implementation_worker_redis: None,
-                forklaunch_interfaces_worker: None,
+                // The ecommerce module ships an order-event worker (worker.ts)
+                // that consumes a Redis-backed queue, so it needs the worker
+                // packages even though it is a service, not a worker project.
+                forklaunch_implementation_worker_redis: if manifest_data.is_ecommerce {
+                    Some(WORKER_REDIS_VERSION.to_string())
+                } else {
+                    None
+                },
+                forklaunch_interfaces_worker: if manifest_data.is_ecommerce {
+                    Some(WORKER_INTERFACES_VERSION.to_string())
+                } else {
+                    None
+                },
                 forklaunch_internal: Some(INTERNAL_VERSION.to_string()),
                 forklaunch_universal_sdk: Some(UNIVERSAL_SDK_VERSION.to_string()),
                 forklaunch_validator: Some(VALIDATOR_VERSION.to_string()),
@@ -506,7 +611,7 @@ pub(crate) fn generate_service_package_json(
                 } else {
                     None
                 },
-                stripe: if manifest_data.is_stripe {
+                stripe: if manifest_data.is_stripe || manifest_data.is_ecommerce {
                     Some(STRIPE_VERSION.to_string())
                 } else {
                     None
@@ -762,6 +867,7 @@ impl CliCommand for ServiceCommand {
             service_name: service_name.clone(),
             service_path: service_name.clone(),
             camel_case_name: service_name.to_case(Case::Camel),
+            snake_case_name: service_name.to_case(Case::Snake),
             pascal_case_name: service_name.to_case(Case::Pascal),
             kebab_case_name: service_name.to_case(Case::Kebab),
             title_case_name: service_name.to_case(Case::Title),
@@ -782,6 +888,8 @@ impl CliCommand for ServiceCommand {
 
             is_iam: false,
             is_billing: false,
+            is_messaging: false,
+            is_cac: false,
             is_cache_enabled: infrastructure.contains(&Infrastructure::Redis),
             platform_application_id: manifest_data.platform_application_id.clone(),
             platform_organization_id: manifest_data.platform_organization_id.clone(),
@@ -791,6 +899,9 @@ impl CliCommand for ServiceCommand {
 
             is_better_auth: false,
             is_stripe: false,
+            is_twilio: false,
+            is_ecommerce: false,
+            ships_worker: false,
 
             is_iam_configured: manifest_data.projects.iter().any(|project_entry| {
                 if project_entry.name == "iam" {
@@ -822,6 +933,11 @@ impl CliCommand for ServiceCommand {
             // These will be properly generated when initialized
             generated_better_auth_secret: String::new(),
             generated_hmac_secret: String::new(),
+            generated_encryption_key:
+                crate::core::env_defaults::find_existing_encryption_key(&base_path)
+                    .unwrap_or_else(|| {
+                        crate::core::manifest::service::generate_random_secret(32)
+                    }),
             otel_token: "OtelCollector".to_string(),
         };
 

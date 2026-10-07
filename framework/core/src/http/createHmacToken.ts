@@ -27,7 +27,20 @@ export function createHmacToken({
   secretKey: string;
 }) {
   const hmac = createHmac('sha256', secretKey);
-  const bodyString = body ? `${safeStringify(body)}\n` : undefined;
+  // Buffers and strings are treated as the verbatim request bytes (the
+  // content parser captures them on req._rawBody); anything else is signed
+  // over its canonical stringification. A client that signs an object and
+  // sends its stringification as the wire body therefore verifies cleanly
+  // against the server's captured raw bytes.
+  const bodyString = body
+    ? `${
+        Buffer.isBuffer(body)
+          ? body.toString('utf8')
+          : typeof body === 'string'
+            ? body
+            : safeStringify(body)
+      }\n`
+    : undefined;
   hmac.update(
     `${method}\n${path}\n${bodyString}${timestamp.toISOString()}\n${nonce}`
   );

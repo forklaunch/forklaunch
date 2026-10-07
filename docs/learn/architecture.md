@@ -10,7 +10,7 @@ description: The directory structure and module layout of a ForkLaunch applicati
 .
 │
 ├── docker-compose.yaml
-│   # Services: tempo, loki, prometheus, grafana, otel-collector
+│   # Services: tempo, loki, mimir, memcached, minio, grafana, otel-collector
 │   # LGTM Stack (Loki, Grafana, Tempo, Mimir) for observability
 │
 └── src/modules/ #modules/
@@ -52,7 +52,7 @@ description: The directory structure and module layout of a ForkLaunch applicati
     │   ├── index.ts # Main entry point
     │   ├── metricsDefinitions.ts # Custom metrics
     │   ├── otel-collector-config.yaml # OpenTelemetry config
-    │   ├── prometheus.yaml # Prometheus config
+    │   ├── mimir.yaml # Mimir metrics config
     │   ├── tempo.yaml # Tempo tracing config
     │   ├── tsconfig.json
     │   ├── vitest.config.ts

@@ -1,8 +1,17 @@
 import { SchemaValidator } from '@forklaunch/blueprint-core';
 import { MapToSdk } from '@forklaunch/core/http';
-import { surfacePermissions, surfaceRoles } from './api/controllers';
+import {
+  eraseUserData,
+  exportUserData,
+  surfacePermissions,
+  surfaceRoles
+} from './api/controllers';
 
 export type IamSdk = {
+  compliance: {
+    eraseUserData: typeof eraseUserData;
+    exportUserData: typeof exportUserData;
+  };
   user: {
     surfaceRoles: typeof surfaceRoles;
     surfacePermissions: typeof surfacePermissions;
@@ -10,6 +19,10 @@ export type IamSdk = {
 };
 
 export const iamSdkClient = {
+  compliance: {
+    eraseUserData,
+    exportUserData
+  },
   user: {
     surfaceRoles,
     surfacePermissions

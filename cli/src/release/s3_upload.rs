@@ -58,6 +58,20 @@ pub(crate) fn create_app_tarball(
             continue;
         }
 
+        // Never ship any .env* file. Deployed containers must receive
+        // configuration ONLY from injected env vars; a stray .env in the
+        // release artifact (a tracked .env.template/.env.test, or a local
+        // .env.local) can shadow the real environment once baked into the
+        // image. .gitignore already drops .env.local, but this covers the
+        // tracked placeholders and anything .gitignore misses.
+        if path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map_or(false, |n| n.starts_with(".env"))
+        {
+            continue;
+        }
+
         if path == output_path {
             continue;
         }
@@ -91,15 +105,29 @@ pub(crate) fn get_presigned_upload_url(
 ) -> Result<UploadUrlResponse> {
     use crate::core::http_client;
 
-    let url = format!("{}/releases/upload-url", get_platform_management_api_url());
+    let (url, sign_path) = if auth_mode.is_hmac() {
+        (
+            format!(
+                "{}/releases/internal/upload-url",
+                get_platform_management_api_url()
+            ),
+            "/internal/upload-url",
+        )
+    } else {
+        (
+            format!("{}/releases/upload-url", get_platform_management_api_url()),
+            "/upload-url",
+        )
+    };
 
     let request_body = serde_json::json!({
         "applicationId": application_id,
         "version": version
     });
 
-    let response = http_client::post_with_auth(auth_mode, &url, request_body)
-        .with_context(|| "Failed to request upload URL from platform")?;
+    let response =
+        http_client::post_with_auth_and_sign_path(auth_mode, &url, sign_path, request_body)
+            .with_context(|| "Failed to request upload URL from platform")?;
 
     let status = response.status();
     if !status.is_success() {
@@ -172,10 +200,23 @@ pub(crate) fn get_openapi_upload_urls(
 ) -> Result<HashMap<String, OpenApiUploadUrlEntry>> {
     use crate::core::http_client;
 
-    let url = format!(
-        "{}/releases/openapi-upload-urls",
-        get_platform_management_api_url()
-    );
+    let (url, sign_path) = if auth_mode.is_hmac() {
+        (
+            format!(
+                "{}/releases/internal/openapi-upload-urls",
+                get_platform_management_api_url()
+            ),
+            "/internal/openapi-upload-urls",
+        )
+    } else {
+        (
+            format!(
+                "{}/releases/openapi-upload-urls",
+                get_platform_management_api_url()
+            ),
+            "/openapi-upload-urls",
+        )
+    };
 
     let request_body = serde_json::json!({
         "applicationId": application_id,
@@ -183,8 +224,9 @@ pub(crate) fn get_openapi_upload_urls(
         "serviceNames": service_names
     });
 
-    let response = http_client::post_with_auth(auth_mode, &url, request_body)
-        .with_context(|| "Failed to request OpenAPI upload URLs from platform")?;
+    let response =
+        http_client::post_with_auth_and_sign_path(auth_mode, &url, sign_path, request_body)
+            .with_context(|| "Failed to request OpenAPI upload URLs from platform")?;
 
     let status = response.status();
     if !status.is_success() {

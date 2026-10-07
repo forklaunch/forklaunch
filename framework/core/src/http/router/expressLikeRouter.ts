@@ -13,6 +13,9 @@ import {
   toRecord,
   TypeSafeFunction
 } from '@forklaunch/common';
+import { hasPermissionChecks } from '../guards/hasPermissionChecks';
+import { hasRoleChecks } from '../guards/hasRoleChecks';
+import { hasScopeChecks } from '../guards/hasScopeChecks';
 import { isConstrainedForklaunchRouter } from '../guards/isConstrainedForklaunchRouter';
 import { isExpressLikeSchemaHandler } from '../guards/isExpressLikeSchemaHandler';
 import { isForklaunchExpressLikeRouter } from '../guards/isForklaunchExpressLikeRouter';
@@ -273,6 +276,61 @@ export function extractRouteHandlers<
 /**
  * A class that represents an Express-like router.
  */
+/**
+ * Process-level signal handlers belong to the process, not to each router.
+ *
+ * These used to be registered inside the router constructor, so every router an
+ * application created added four more listeners to `process`. A service with
+ * eleven routers therefore tripped Node's warning at startup:
+ *
+ *   MaxListenersExceededWarning: Possible EventEmitter memory leak detected.
+ *   11 unhandledRejection listeners added to [process].
+ *
+ * The warning was the visible half. The rest: the listener array grew with
+ * router count, and on a single unhandled rejection EVERY registered handler
+ * ran — logging the same error once per router and each calling
+ * `process.exit(1)`.
+ *
+ * Installing once keeps the behaviour identical from the outside: the first
+ * router to be constructed provides the collector, and there is exactly one
+ * handler per signal no matter how many routers follow.
+ */
+let processHandlersInstalled = false;
+
+function installProcessHandlers(
+  openTelemetryCollector: OpenTelemetryCollector<MetricsDefinition>
+): void {
+  if (processHandlersInstalled) {
+    return;
+  }
+  processHandlersInstalled = true;
+
+  process.on('uncaughtException', (err) => {
+    openTelemetryCollector.error(`Uncaught exception: ${err}`);
+    process.exit(1);
+  });
+  process.on('unhandledRejection', (reason) => {
+    openTelemetryCollector.error(`Unhandled rejection: ${reason}`);
+    process.exit(1);
+  });
+
+  process.on('exit', () => {
+    openTelemetryCollector.info('Shutting down application');
+  });
+  process.on('SIGINT', () => {
+    openTelemetryCollector.info('Shutting down application');
+    process.exit(0);
+  });
+}
+
+/**
+ * Test-only. Lets a suite assert the handlers install exactly once across many
+ * routers without leaking state into the next test.
+ */
+export function resetProcessHandlersForTesting(): void {
+  processHandlersInstalled = false;
+}
+
 export class ForklaunchExpressLikeRouter<
   SV extends AnySchemaValidator,
   BasePath extends `/${string}`,
@@ -307,22 +365,7 @@ export class ForklaunchExpressLikeRouter<
       !process.env.VITEST &&
       process.env.FORKLAUNCH_MODE !== 'openapi'
     ) {
-      process.on('uncaughtException', (err) => {
-        this.openTelemetryCollector.error(`Uncaught exception: ${err}`);
-        process.exit(1);
-      });
-      process.on('unhandledRejection', (reason) => {
-        this.openTelemetryCollector.error(`Unhandled rejection: ${reason}`);
-        process.exit(1);
-      });
-
-      process.on('exit', () => {
-        this.openTelemetryCollector.info('Shutting down application');
-      });
-      process.on('SIGINT', () => {
-        this.openTelemetryCollector.info('Shutting down application');
-        process.exit(0);
-      });
+      installProcessHandlers(this.openTelemetryCollector);
     }
 
     this.internal.use(createContext(this.schemaValidator) as RouterHandler);
@@ -616,7 +659,7 @@ export class ForklaunchExpressLikeRouter<
 
       if (executeMiddlewares && middlewares.length > 0) {
         const allHandlers = [...middlewares];
-        let cursor = allHandlers.shift() as unknown as (
+        let cursor = allHandlers.shift() as (
           req_: typeof req,
           resp_: typeof res,
           next: (err?: Error) => Promise<void> | void
@@ -628,7 +671,7 @@ export class ForklaunchExpressLikeRouter<
               if (err) {
                 throw err;
               }
-              cursor = fn as unknown as (
+              cursor = fn as (
                 req_: typeof req,
                 resp_: typeof res,
                 next: (err?: Error) => Promise<void> | void
@@ -643,7 +686,7 @@ export class ForklaunchExpressLikeRouter<
         }
       }
 
-      const cHandler = controllerHandler as unknown as (
+      const cHandler = controllerHandler as (
         req_: typeof req,
         resp_: typeof res,
         next: (err?: Error) => Promise<void> | void
@@ -1983,11 +2026,75 @@ export class ForklaunchExpressLikeRouter<
       ...(this.routerOptions ?? {}),
       ...(router.routerOptions ?? {})
     } as typeof this.routerOptions;
+
     router.routers.forEach((subRouter) => {
       this.addRouterOptions(
         subRouter as ConstrainedForklaunchRouter<SV, RouterHandler>
       );
     });
+  }
+
+  /**
+   * Validates that all protected routes have the required surfacing functions
+   * available (from the route, router, or application level).
+   * Call this at listen() time when the full option chain is assembled.
+   */
+  validateSurfacingFunctions(
+    router: ForklaunchRouter<SV> = this,
+    parentAuth?: Record<string, unknown>
+  ) {
+    const routerAuth =
+      router.routerOptions?.auth &&
+      typeof router.routerOptions.auth === 'object'
+        ? router.routerOptions.auth
+        : undefined;
+    const globalAuth =
+      routerAuth && parentAuth
+        ? { ...parentAuth, ...routerAuth }
+        : (routerAuth ?? parentAuth);
+
+    for (const route of router.routes) {
+      const auth = route.contractDetails.auth;
+      const access = route.contractDetails.access;
+      if (!auth || access !== 'protected') continue;
+
+      const routeAuth = auth as Record<string, unknown>;
+      const routeName = route.contractDetails.name;
+
+      if (hasPermissionChecks(auth)) {
+        if (
+          !routeAuth['surfacePermissions'] &&
+          !globalAuth?.surfacePermissions
+        ) {
+          throw new Error(
+            `Route '${routeName}': declares allowedPermissions or forbiddenPermissions ` +
+              `but no surfacePermissions function was provided on the route, router, or application`
+          );
+        }
+      }
+
+      if (hasRoleChecks(auth)) {
+        if (!routeAuth['surfaceRoles'] && !globalAuth?.surfaceRoles) {
+          throw new Error(
+            `Route '${routeName}': declares allowedRoles or forbiddenRoles ` +
+              `but no surfaceRoles function was provided on the route, router, or application`
+          );
+        }
+      }
+
+      if (hasScopeChecks(auth)) {
+        if (!routeAuth['surfaceScopes'] && !globalAuth?.surfaceScopes) {
+          throw new Error(
+            `Route '${routeName}': declares requiredScope ` +
+              `but no surfaceScopes function was provided on the route, router, or application`
+          );
+        }
+      }
+    }
+
+    for (const subRouter of router.routers) {
+      this.validateSurfacingFunctions(subRouter, globalAuth);
+    }
   }
 
   use: TypedNestableMiddlewareDefinition<
@@ -2012,9 +2119,9 @@ export class ForklaunchExpressLikeRouter<
     Router extends ConstrainedForklaunchRouter<SV, RouterHandler>,
     VersionedApi extends VersionSchema<SV, 'middleware'>,
     SessionSchema extends SessionObject<SV>,
-    ResolvedSchema extends SessionObject<SV> extends SessionSchema
+    ResolvedSchema extends (SessionObject<SV> extends SessionSchema
       ? RouterSession
-      : SessionSchema,
+      : SessionSchema),
     Auth extends SchemaAuthMethods<
       SV,
       P,
@@ -2124,18 +2231,22 @@ export class ForklaunchExpressLikeRouter<
       ...middlewareOrMiddlewareWithTypedHandler
     ) as this & {
       _fetchMap: FetchMap & {
-        [Key in keyof Router['_fetchMap'] as Key extends string
-          ? SanitizePathSlashes<`${BasePath}${Key}`>
-          : never]: Router['_fetchMap'][Key];
+        [
+          Key in keyof Router['_fetchMap'] as Key extends string
+            ? SanitizePathSlashes<`${BasePath}${Key}`>
+            : never
+        ]: Router['_fetchMap'][Key];
       };
       sdk: Sdk & {
-        [Key in PrettyCamelCase<
-          Router extends { sdkName?: string; basePath: string }
-            ? string extends Router['sdkName']
-              ? Router['basePath']
-              : Router['sdkName']
-            : never
-        >]: Router['sdk'];
+        [
+          Key in PrettyCamelCase<
+            Router extends { sdkName?: string; basePath: string }
+              ? string extends Router['sdkName']
+                ? Router['basePath']
+                : Router['sdkName']
+              : never
+          >
+        ]: Router['sdk'];
       };
     };
   };

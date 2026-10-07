@@ -32,7 +32,7 @@ forklaunch init application [OPTIONS] [name]
 | `-F, --http-framework` | HTTP framework | `express`, `hyper-express` |
 | `-r, --runtime` | Runtime environment | `node`, `bun` |
 | `-t, --test-framework` | Testing framework | `vitest`, `jest` |
-| `-m, --modules` | Additional modules | `billing-base`, `billing-stripe`, `iam-base`, `iam-better-auth` |
+| `-m, --modules` | Additional modules | `billing-base`, `billing-stripe`, `iam-base`, `iam-better-auth`, `messaging-base`, `messaging-twilio` |
 | `-D, --description` | Application description | _string_ |
 | `-A, --author` | Application author | _string_ |
 | `-L, --license` | License type | `AGPL-3.0`, `GPL-3.0`, `LGPL-3.0`, `Apache-2.0`, `MIT`, `Mozilla-2.0`, `Boost-1.0`, `Unlicense`, `none` |
@@ -47,7 +47,7 @@ forklaunch init module [OPTIONS] [name]
 | Option | Description | Values |
 | :----- | :---------- | :------ |
 | `-p, --path` | Application path | _string_ |
-| `-m, --module` | Module to initialize | `billing-base`, `billing-stripe`, `iam-base`, `iam-better-auth` |
+| `-m, --module` | Module to initialize | `billing-base`, `billing-stripe`, `iam-base`, `iam-better-auth`, `messaging-base`, `messaging-twilio` |
 | `-d, --database` | Database type | `postgresql`, `mysql`, `mariadb`, `mssql`, `mongodb`, `libsql`, `sqlite`, `better-sqlite` |
 | `-n, --dryrun` | Dry run the command | Flag |
 

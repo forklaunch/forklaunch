@@ -65,6 +65,7 @@ export const SubscriptionMapper = responseMapper({
         ...entity,
         description: entity.description ?? undefined,
         endDate: entity.endDate ?? undefined,
+        billingProvider: entity.billingProvider ?? undefined,
         stripeFields: entity.providerFields
       };
     }

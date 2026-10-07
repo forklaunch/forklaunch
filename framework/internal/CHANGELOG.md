@@ -1,5 +1,261 @@
 # @forklaunch/internal
 
+## 1.2.33
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions, including @mikro-orm 7.2.3, so apps resolve a single copy of MikroORM with core.
+- Updated dependencies
+  - @forklaunch/common@1.2.30
+  - @forklaunch/validator@1.2.31
+
+## 1.2.32
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions (`pnpm up:packages`).
+- Updated dependencies
+  - @forklaunch/common@1.2.29
+  - @forklaunch/validator@1.2.30
+
+## 1.2.31
+
+### Patch Changes
+
+- Refresh every framework dependency to its current release.
+
+  A routine sweep (`pnpm run up:packages`), taken as one wave rather than a
+  package at a time. `workspace:^` is frozen into a concrete range at publish,
+  so a package published ahead of its siblings pins the PREVIOUS version of
+  them and consumers resolve two copies — which is the whole class of bug
+  #311 and #331 existed to clear. Releasing the set together is what keeps
+  that from coming back.
+
+  `@mikro-orm/*` is deliberately NOT moved: framework and blueprint are both
+  on 7.2.1 exactly, and they only stay that way if they move together.
+
+- Updated dependencies
+  - @forklaunch/common@1.2.28
+  - @forklaunch/validator@1.2.29
+
+## 1.2.30
+
+### Patch Changes
+
+- Refresh dependencies to their latest published versions.
+
+  `@mikro-orm/*` moves from 7.1.15 to 7.2.1 in every package that pins it,
+  as one step: the framework, the blueprint and the CLI's scaffold constants
+  all agree on a single MikroORM version, so a freshly generated app resolves
+  exactly one copy (the duplicate-package type errors from mixed pins are the
+  reason it is pinned exactly). `@aws-sdk/client-s3` 3.1131 → 3.1136 in
+  infrastructure-s3. The rest is devDependency movement; `@types/node` 26.6
+  added `Socket.server`, which the Bun socket shim in express now declares.
+
+  Packages with only devDependency changes release too, so the whole
+  framework carries one MikroORM version on npm.
+
+- Updated dependencies
+  - @forklaunch/validator@1.2.28
+  - @forklaunch/common@1.2.27
+
+## 1.2.29
+
+### Patch Changes
+
+- Re-emit the intra-framework dependency ranges so `core` and `internal` track
+  the rest of the set.
+
+  Both declare `@forklaunch/common` and `@forklaunch/validator` as `workspace:^`,
+  which is frozen into a concrete range at publish time. They were published one
+  wave ahead of `common` and `validator`, so they went out pinned to the previous
+  pair. A consumer then resolved two copies of each — and duplicated packages are
+  the whole class of bug this release exists to remove.
+
+  No source changes; this republishes them against the current set.
+
+## 1.2.28
+
+### Patch Changes
+
+- Pin `@mikro-orm/*` to an exact version instead of a caret range.
+
+  These three packages ranged on `^7.1.14` while `@forklaunch/interfaces-*` and
+  `@forklaunch/implementation-*-base` pinned `7.1.14` exactly. When MikroORM
+  published 7.1.15 the carets took it and the exact pins did not, so every
+  consumer resolved **two copies of `@mikro-orm/core`**.
+
+  That is not a harmless duplication. `EntityManager` and `EntitySchema` carry a
+  `#private` field, which TypeScript treats as a per-class brand, so the same
+  class coming from two copies is structurally incompatible and every generated
+  app stops compiling:
+
+      error TS2741: Property '#private' is missing in type
+        'PostgreSqlEntityManager<PostgreSqlDriver>' but required in 'EntityManager'
+      error TS2883: The inferred type of 'ci' cannot be named without a reference
+        to 'Connection' from '.bun/@mikro-orm+core@7.1.14/node_modules/@mikro-orm/core'
+
+  7.1.15 itself is not a breaking change — `EntityName` and `EntitySchema` are
+  byte-identical to 7.1.14. Only the duplication broke.
+
+  An exact pin here matches what the rest of the family already does, so a future
+  MikroORM patch cannot split the tree again by moving one half of it.
+
+## 1.2.27
+
+### Patch Changes
+
+- Release the rest of the workspace alongside the dependency refresh, so every
+  published package moves together on this pass.
+
+  `up:packages` reached these differently than the five that changed runtime
+  dependencies: `universal-sdk`, `ws` and `infrastructure-redis` picked up
+  devDependency movement only (`jest` 30.4.2 → 30.5.0), and `bunrun`, `common`,
+  `internal` and `testing` saw no manifest change at all. Their emitted output is
+  therefore unchanged.
+
+  They are released regardless to keep the whole set on one refresh, rather than
+  leaving consumers to work out which packages a given update did and did not
+  touch.
+
+- Updated dependencies
+  - @forklaunch/common@1.2.25
+
+## 1.2.26
+
+### Patch Changes
+
+- Update internal package versions
+- Updated dependencies
+  - @forklaunch/common@1.2.24
+  - @forklaunch/validator@1.2.25
+
+## 1.2.20
+
+### Patch Changes
+
+- update packages
+- Updated dependencies
+  - @forklaunch/validator@1.2.20
+  - @forklaunch/common@1.2.20
+
+## 1.2.19
+
+### Patch Changes
+
+- 92c06f9: dep upgrades
+- Updated dependencies [92c06f9]
+  - @forklaunch/validator@1.2.19
+  - @forklaunch/common@1.2.19
+
+## 1.2.18
+
+### Patch Changes
+
+- update dependency versions
+- Updated dependencies
+  - @forklaunch/validator@1.2.18
+  - @forklaunch/common@1.2.18
+
+## 1.2.17
+
+### Patch Changes
+
+- Update internal versions and allow ZodType early release
+- Updated dependencies
+  - @forklaunch/validator@1.2.17
+  - @forklaunch/common@1.2.17
+
+## 1.2.16
+
+### Patch Changes
+
+- Export wrapEmWithTenantContext for tenant based filtering
+- Updated dependencies
+  - @forklaunch/validator@1.2.16
+  - @forklaunch/common@1.2.16
+
+## 1.2.15
+
+### Patch Changes
+
+- chore: update internal package versions
+- Updated dependencies
+  - @forklaunch/validator@1.2.15
+  - @forklaunch/common@1.2.15
+
+## 1.2.14
+
+### Patch Changes
+
+- update enum logic
+- Updated dependencies
+  - @forklaunch/validator@1.2.14
+  - @forklaunch/common@1.2.14
+
+## 1.2.13
+
+### Patch Changes
+
+- Update packages and enum constraint fix
+- Updated dependencies
+  - @forklaunch/validator@1.2.13
+  - @forklaunch/common@1.2.13
+
+## 1.2.12
+
+### Patch Changes
+
+- sync changes across packages
+- Updated dependencies
+  - @forklaunch/validator@1.2.12
+  - @forklaunch/common@1.2.12
+
+## 1.2.11
+
+### Patch Changes
+
+- Align package vers
+- Updated dependencies
+  - @forklaunch/validator@1.2.11
+  - @forklaunch/common@1.2.11
+
+## 1.2.10
+
+### Patch Changes
+
+- fix nested app and router
+- Updated dependencies
+  - @forklaunch/validator@1.2.10
+  - @forklaunch/common@1.2.10
+
+## 1.2.9
+
+### Patch Changes
+
+- Perf improvement
+- Updated dependencies
+  - @forklaunch/validator@1.2.9
+  - @forklaunch/common@1.2.9
+
+## 1.2.8
+
+### Patch Changes
+
+- bump package versions
+- Updated dependencies
+  - @forklaunch/validator@1.2.8
+  - @forklaunch/common@1.2.8
+
+## 1.2.7
+
+### Patch Changes
+
+- export consolidated retention logic
+- Updated dependencies
+  - @forklaunch/validator@1.2.7
+  - @forklaunch/common@1.2.7
+
 ## 1.2.6
 
 ### Patch Changes

@@ -20,7 +20,18 @@ This creates a new project with the basic structure including:
 - Development environment setup
 - Pre-configured linter, formatter, and Husky
 
-On first run, you'll need to run the following commands:
+### Two directories, and they are not the same one
+
+This file sits in the **workspace root** — the directory holding `package.json`,
+where every `{{#is_node}}pnpm{{/is_node}}{{#is_bun}}bun{{/is_bun}}` command below runs.
+
+The **application root** is above it: the directory holding
+`.forklaunch/manifest.toml`, where every `forklaunch` command runs.
+
+Running `{{#is_node}}pnpm{{/is_node}}{{#is_bun}}bun{{/is_bun}} install` from the application root fails with a
+"no package.json" error. That is the wrong directory, not a broken project.
+
+On first run, from **this** directory:
 
 ```bash
 {{#is_node}}pnpm{{/is_node}}{{#is_bun}}bun{{/is_bun}} install
@@ -37,6 +48,9 @@ Now, you can run the project with:
 ## Core Commands
 
 ### Adding Components
+
+> Every `forklaunch` command in this section runs from the **application root**
+> (the directory holding `.forklaunch/manifest.toml`), not from here.
 
 #### Add a Service
 

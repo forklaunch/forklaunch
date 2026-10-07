@@ -136,6 +136,9 @@ export function swagger(
     customfavIcon,
     swaggerUrl,
     customSiteTitle
+    // swagger-ui-express is typed for Express' `RequestHandler`. hyper-express
+    // calls handlers with its own request/response classes, so the signatures do
+    // not overlap even though the handler runs unchanged under both.
   ) as unknown as MiddlewareHandler;
 
   return [serve, staticAssets, ui];

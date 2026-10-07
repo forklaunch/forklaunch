@@ -1,9 +1,10 @@
 import { mikroOrmAdapter } from '@forklaunch/better-auth-mikro-orm-fork';
+import { logBetterAuthApiError } from './domain/utils/betterAuthErrorLogging.util';
 import { PERMISSIONS, ROLES } from '@forklaunch/blueprint-core';
 import { Metrics } from '@forklaunch/blueprint-monitoring';
 import { getEnvVar } from '@forklaunch/common';
 import { OpenTelemetryCollector } from '@forklaunch/core/http';
-import { MikroORM } from '@mikro-orm/core';
+import type { AnyMikroORM } from '@forklaunch/core/persistence';
 import { betterAuth, BetterAuthOptions } from 'better-auth';
 import { createAccessControl } from 'better-auth/plugins/access';
 import { jwt, openAPI, organization } from 'better-auth/plugins';
@@ -114,7 +115,10 @@ export const betterAuthConfig = ({
 }: {
   BETTER_AUTH_BASE_PATH: string;
   CORS_ORIGINS: string[];
-  orm: MikroORM;
+  // AnyMikroORM is derived from MikroORM.init's own return type, which is what
+  // makes it accept the readonly entities array a bare `MikroORM` annotation
+  // rejects — without the three `any`s that used to stand in for it.
+  orm: AnyMikroORM;
   openTelemetryCollector: OpenTelemetryCollector<Metrics>;
 }) => {
   const baseURL =
@@ -167,6 +171,17 @@ export const betterAuthConfig = ({
     advanced: {
       database: {
         generateId: false
+      }
+    },
+    // Better Auth owns /api/auth/* and handles its own failures, so nothing it
+    // throws passes through the middleware that logs everything else. Without
+    // this hook a 500 from sign-up, sign-in or callback reaches the caller and
+    // leaves NO trace — `logger` below is for Better Auth's own diagnostics,
+    // not for API errors. That combination cost a full day of production
+    // debugging before the hook existed.
+    onAPIError: {
+      onError: (error, ctx) => {
+        logBetterAuthApiError(openTelemetryCollector, error, ctx);
       }
     },
     logger: openTelemetryCollector

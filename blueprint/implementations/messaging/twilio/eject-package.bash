@@ -1,0 +1,1 @@
+../../../../scripts/eject-implementation-package.bash

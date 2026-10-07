@@ -829,18 +829,22 @@ export interface TypedNestableMiddlewareDefinition<
   ): ChainableRouter & {
     _fetchMap: Prettify<
       ChainableRouter['_fetchMap'] & {
-        [Key in keyof Router['_fetchMap'] as Key extends string
-          ? SanitizePathSlashes<`${ChainableRouter['basePath']}${Key}`>
-          : never]: Router['_fetchMap'][Key];
+        [
+          Key in keyof Router['_fetchMap'] as Key extends string
+            ? SanitizePathSlashes<`${ChainableRouter['basePath']}${Key}`>
+            : never
+        ]: Router['_fetchMap'][Key];
       }
     >;
     sdk: Prettify<
       ChainableRouter['sdk'] & {
-        [K in PrettyCamelCase<
-          Router['sdkName'] extends string
-            ? Router['sdkName']
-            : Router['basePath']
-        >]: Prettify<Router['sdk']>;
+        [
+          K in PrettyCamelCase<
+            Router['sdkName'] extends string
+              ? Router['sdkName']
+              : Router['basePath']
+          >
+        ]: Prettify<Router['sdk']>;
       }
     >;
   };
@@ -851,18 +855,22 @@ export interface TypedNestableMiddlewareDefinition<
   ): ChainableRouter & {
     _fetchMap: Prettify<
       ChainableRouter['_fetchMap'] & {
-        [Key in keyof Router['_fetchMap'] as Key extends string
-          ? SanitizePathSlashes<`${ChainableRouter['basePath']}${Key}`>
-          : never]: Router['_fetchMap'][Key];
+        [
+          Key in keyof Router['_fetchMap'] as Key extends string
+            ? SanitizePathSlashes<`${ChainableRouter['basePath']}${Key}`>
+            : never
+        ]: Router['_fetchMap'][Key];
       }
     >;
     sdk: Prettify<
       ChainableRouter['sdk'] & {
-        [K in PrettyCamelCase<
-          Router['sdkName'] extends string
-            ? Router['sdkName']
-            : Router['basePath']
-        >]: Prettify<Router['sdk']>;
+        [
+          K in PrettyCamelCase<
+            Router['sdkName'] extends string
+              ? Router['sdkName']
+              : Router['basePath']
+          >
+        ]: Prettify<Router['sdk']>;
       }
     >;
   };
@@ -873,18 +881,22 @@ export interface TypedNestableMiddlewareDefinition<
   ): ChainableRouter & {
     _fetchMap: Prettify<
       ChainableRouter['_fetchMap'] & {
-        [Key in keyof Router['_fetchMap'] as Key extends string
-          ? SanitizePathSlashes<`${ChainableRouter['basePath']}${Key}`>
-          : never]: Router['_fetchMap'][Key];
+        [
+          Key in keyof Router['_fetchMap'] as Key extends string
+            ? SanitizePathSlashes<`${ChainableRouter['basePath']}${Key}`>
+            : never
+        ]: Router['_fetchMap'][Key];
       }
     >;
     sdk: Prettify<
       ChainableRouter['sdk'] & {
-        [K in PrettyCamelCase<
-          Router['sdkName'] extends string
-            ? Router['sdkName']
-            : Router['basePath']
-        >]: Prettify<Router['sdk']>;
+        [
+          K in PrettyCamelCase<
+            Router['sdkName'] extends string
+              ? Router['sdkName']
+              : Router['basePath']
+          >
+        ]: Prettify<Router['sdk']>;
       }
     >;
   };
@@ -964,18 +976,22 @@ export interface TypedNestableMiddlewareDefinition<
   ): ChainableRouter & {
     _fetchMap: Prettify<
       ChainableRouter['_fetchMap'] & {
-        [Key in keyof Router['_fetchMap'] as Key extends string
-          ? SanitizePathSlashes<`${ChainableRouter['basePath']}${Key}`>
-          : never]: Router['_fetchMap'][Key];
+        [
+          Key in keyof Router['_fetchMap'] as Key extends string
+            ? SanitizePathSlashes<`${ChainableRouter['basePath']}${Key}`>
+            : never
+        ]: Router['_fetchMap'][Key];
       }
     >;
     sdk: Prettify<
       ChainableRouter['sdk'] & {
-        [K in PrettyCamelCase<
-          Router['sdkName'] extends string
-            ? Router['sdkName']
-            : Router['basePath']
-        >]: Prettify<Router['sdk']>;
+        [
+          K in PrettyCamelCase<
+            Router['sdkName'] extends string
+              ? Router['sdkName']
+              : Router['basePath']
+          >
+        ]: Prettify<Router['sdk']>;
       }
     >;
   };
@@ -1060,18 +1076,22 @@ export interface TypedNestableMiddlewareDefinition<
   ): ChainableRouter & {
     _fetchMap: Prettify<
       ChainableRouter['_fetchMap'] & {
-        [Key in keyof Router['_fetchMap'] as Key extends string
-          ? SanitizePathSlashes<`${ChainableRouter['basePath']}${Key}`>
-          : never]: Router['_fetchMap'][Key];
+        [
+          Key in keyof Router['_fetchMap'] as Key extends string
+            ? SanitizePathSlashes<`${ChainableRouter['basePath']}${Key}`>
+            : never
+        ]: Router['_fetchMap'][Key];
       }
     >;
     sdk: Prettify<
       ChainableRouter['sdk'] & {
-        [K in PrettyCamelCase<
-          Router['sdkName'] extends string
-            ? Router['sdkName']
-            : Router['basePath']
-        >]: Prettify<Router['sdk']>;
+        [
+          K in PrettyCamelCase<
+            Router['sdkName'] extends string
+              ? Router['sdkName']
+              : Router['basePath']
+          >
+        ]: Prettify<Router['sdk']>;
       }
     >;
   };
@@ -1154,18 +1174,22 @@ export interface TypedNestableMiddlewareDefinition<
   ): ChainableRouter & {
     _fetchMap: Prettify<
       ChainableRouter['_fetchMap'] & {
-        [Key in keyof Router['_fetchMap'] as Key extends string
-          ? SanitizePathSlashes<`${ChainableRouter['basePath']}${Key}`>
-          : never]: Router['_fetchMap'][Key];
+        [
+          Key in keyof Router['_fetchMap'] as Key extends string
+            ? SanitizePathSlashes<`${ChainableRouter['basePath']}${Key}`>
+            : never
+        ]: Router['_fetchMap'][Key];
       }
     >;
     sdk: Prettify<
       ChainableRouter['sdk'] & {
-        [K in PrettyCamelCase<
-          Router['sdkName'] extends string
-            ? Router['sdkName']
-            : Router['basePath']
-        >]: Prettify<Router['sdk']>;
+        [
+          K in PrettyCamelCase<
+            Router['sdkName'] extends string
+              ? Router['sdkName']
+              : Router['basePath']
+          >
+        ]: Prettify<Router['sdk']>;
       }
     >;
   };
@@ -1245,18 +1269,22 @@ export interface TypedNestableMiddlewareDefinition<
   ): ChainableRouter & {
     _fetchMap: Prettify<
       ChainableRouter['_fetchMap'] & {
-        [Key in keyof Router['_fetchMap'] as Key extends string
-          ? SanitizePathSlashes<`${ChainableRouter['basePath']}${Key}`>
-          : never]: Router['_fetchMap'][Key];
+        [
+          Key in keyof Router['_fetchMap'] as Key extends string
+            ? SanitizePathSlashes<`${ChainableRouter['basePath']}${Key}`>
+            : never
+        ]: Router['_fetchMap'][Key];
       }
     >;
     sdk: Prettify<
       ChainableRouter['sdk'] & {
-        [K in PrettyCamelCase<
-          Router['sdkName'] extends string
-            ? Router['sdkName']
-            : Router['basePath']
-        >]: Prettify<Router['sdk']>;
+        [
+          K in PrettyCamelCase<
+            Router['sdkName'] extends string
+              ? Router['sdkName']
+              : Router['basePath']
+          >
+        ]: Prettify<Router['sdk']>;
       }
     >;
   };
@@ -1307,18 +1335,22 @@ export interface TypedNestableMiddlewareDefinition<
   ): ChainableRouter & {
     _fetchMap: Prettify<
       ChainableRouter['_fetchMap'] & {
-        [Key in keyof Router['_fetchMap'] as Key extends string
-          ? SanitizePathSlashes<`${ChainableRouter['basePath']}${Key}`>
-          : never]: Router['_fetchMap'][Key];
+        [
+          Key in keyof Router['_fetchMap'] as Key extends string
+            ? SanitizePathSlashes<`${ChainableRouter['basePath']}${Key}`>
+            : never
+        ]: Router['_fetchMap'][Key];
       }
     >;
     sdk: Prettify<
       ChainableRouter['sdk'] & {
-        [K in PrettyCamelCase<
-          Router['sdkName'] extends string
-            ? Router['sdkName']
-            : Router['basePath']
-        >]: Prettify<Router['sdk']>;
+        [
+          K in PrettyCamelCase<
+            Router['sdkName'] extends string
+              ? Router['sdkName']
+              : Router['basePath']
+          >
+        ]: Prettify<Router['sdk']>;
       }
     >;
   };
@@ -1366,18 +1398,22 @@ export interface TypedNestableMiddlewareDefinition<
   ): ChainableRouter & {
     _fetchMap: Prettify<
       ChainableRouter['_fetchMap'] & {
-        [Key in keyof Router['_fetchMap'] as Key extends string
-          ? SanitizePathSlashes<`${ChainableRouter['basePath']}${Key}`>
-          : never]: Router['_fetchMap'][Key];
+        [
+          Key in keyof Router['_fetchMap'] as Key extends string
+            ? SanitizePathSlashes<`${ChainableRouter['basePath']}${Key}`>
+            : never
+        ]: Router['_fetchMap'][Key];
       }
     >;
     sdk: Prettify<
       ChainableRouter['sdk'] & {
-        [K in PrettyCamelCase<
-          Router['sdkName'] extends string
-            ? Router['sdkName']
-            : Router['basePath']
-        >]: Prettify<Router['sdk']>;
+        [
+          K in PrettyCamelCase<
+            Router['sdkName'] extends string
+              ? Router['sdkName']
+              : Router['basePath']
+          >
+        ]: Prettify<Router['sdk']>;
       }
     >;
   };

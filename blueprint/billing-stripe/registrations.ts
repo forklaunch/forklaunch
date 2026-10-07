@@ -6,8 +6,15 @@ import {
   string
 } from '@forklaunch/blueprint-core';
 import { Metrics, metrics } from '@forklaunch/blueprint-monitoring';
-import { OpenTelemetryCollector } from '@forklaunch/core/http';
-import { FieldEncryptor } from '@forklaunch/core/persistence';
+import {
+  createStripeClient,
+  isManagedInstance,
+  OpenTelemetryCollector
+} from '@forklaunch/core/http';
+import {
+  FieldEncryptor,
+  wrapEmWithTenantContext
+} from '@forklaunch/core/persistence';
 import {
   ComplianceDataService,
   createConfigInjector,
@@ -67,6 +74,8 @@ import {
   SubscriptionMapperTypes
 } from './domain/types/billingMappers.types';
 import mikroOrmOptionsConfig from './mikro-orm.config';
+import { InferEntity } from '@mikro-orm/core';
+import { StripeWebhookEvent } from './persistence/entities';
 
 //! defines the configuration schema for the application
 const configInjector = createConfigInjector(schemaValidator, {
@@ -125,9 +134,11 @@ const environmentConfig = configInjector.chain({
     type: string,
     value: getEnvVar('OTEL_EXPORTER_OTLP_ENDPOINT')
   },
+  // Optional: a managed instance reaches Stripe through the platform's
+  // Stripe Connect gateway and holds no Stripe key or webhook secret.
   STRIPE_API_KEY: {
     lifetime: Lifetime.Singleton,
-    type: string,
+    type: optional(string),
     value: getEnvVar('STRIPE_API_KEY')
   },
   HMAC_SECRET_KEY: {
@@ -140,9 +151,11 @@ const environmentConfig = configInjector.chain({
     type: string,
     value: getEnvVar('JWKS_PUBLIC_KEY_URL')
   },
+  // Optional: a managed instance reaches Stripe through the platform's
+  // Stripe Connect gateway and holds no Stripe key or webhook secret.
   STRIPE_WEBHOOK_SECRET: {
     lifetime: Lifetime.Singleton,
-    type: string,
+    type: optional(string),
     value: getEnvVar('STRIPE_WEBHOOK_SECRET')
   },
   IAM_URL: {
@@ -162,14 +175,25 @@ const runtimeDependencies = environmentConfig.chain({
   StripeClient: {
     lifetime: Lifetime.Singleton,
     type: Stripe,
-    factory: ({ STRIPE_API_KEY }) => new Stripe(STRIPE_API_KEY)
+    // Managed instances: the real Stripe SDK pointed at the platform's
+    // gateway (their own connected account, no key here). Anywhere else: the
+    // service's own key.
+    factory: ({ STRIPE_API_KEY }) => {
+      if (isManagedInstance()) return createStripeClient({ Stripe });
+      if (!STRIPE_API_KEY) {
+        throw new Error(
+          'STRIPE_API_KEY is required unless the service runs as a managed instance'
+        );
+      }
+      return new Stripe(STRIPE_API_KEY);
+    }
   },
-  MikroORM: {
+  Orm: {
     lifetime: Lifetime.Singleton,
     type: MikroORM,
     factory: () => new MikroORM(mikroOrmOptionsConfig)
   },
-  OpenTelemetryCollector: {
+  OtelCollector: {
     lifetime: Lifetime.Singleton,
     type: OpenTelemetryCollector<Metrics>,
     factory: ({ OTEL_SERVICE_NAME, OTEL_LEVEL }) =>
@@ -182,15 +206,10 @@ const runtimeDependencies = environmentConfig.chain({
   TtlCache: {
     lifetime: Lifetime.Singleton,
     type: RedisTtlCache,
-    factory: ({
-      REDIS_URL,
-      OpenTelemetryCollector,
-      OTEL_LEVEL,
-      ENCRYPTION_KEY
-    }) =>
+    factory: ({ REDIS_URL, OtelCollector, OTEL_LEVEL, ENCRYPTION_KEY }) =>
       new RedisTtlCache(
         60 * 60 * 1000,
-        OpenTelemetryCollector,
+        OtelCollector,
         {
           url: REDIS_URL
         },
@@ -207,15 +226,13 @@ const runtimeDependencies = environmentConfig.chain({
     lifetime: Lifetime.Scoped,
     type: EntityManager,
     factory: (
-      { MikroORM },
+      { Orm },
       context: { entityManagerOptions?: ForkOptions; tenantId?: string }
-    ) => {
-      const em = MikroORM.em.fork(context.entityManagerOptions);
-      if (context.tenantId) {
-        em.setFilterParams('tenant', { tenantId: context.tenantId });
-      }
-      return em;
-    }
+    ) =>
+      wrapEmWithTenantContext(
+        Orm.em.fork(context?.entityManagerOptions),
+        context?.tenantId
+      ) as EntityManager
   }
 });
 
@@ -229,7 +246,7 @@ const serviceDependencies = runtimeDependencies.chain({
       BillingPortalDtoTypes
     >,
     factory: (
-      { StripeClient, EntityManager, TtlCache, OpenTelemetryCollector },
+      { StripeClient, EntityManager, TtlCache, OtelCollector },
       context,
       resolve
     ) =>
@@ -239,7 +256,7 @@ const serviceDependencies = runtimeDependencies.chain({
           ? resolve('EntityManager', context)
           : EntityManager,
         TtlCache,
-        OpenTelemetryCollector,
+        OtelCollector,
         schemaValidator,
         {
           BillingPortalMapper,
@@ -257,7 +274,7 @@ const serviceDependencies = runtimeDependencies.chain({
       CheckoutSessionDtoTypes
     >,
     factory: (
-      { StripeClient, EntityManager, TtlCache, OpenTelemetryCollector },
+      { StripeClient, EntityManager, TtlCache, OtelCollector },
       context,
       resolve
     ) =>
@@ -267,7 +284,7 @@ const serviceDependencies = runtimeDependencies.chain({
           ? resolve('EntityManager', context)
           : EntityManager,
         TtlCache,
-        OpenTelemetryCollector,
+        OtelCollector,
         schemaValidator,
         {
           CheckoutSessionMapper,
@@ -285,7 +302,7 @@ const serviceDependencies = runtimeDependencies.chain({
       PaymentLinkDtoTypes
     >,
     factory: (
-      { StripeClient, EntityManager, TtlCache, OpenTelemetryCollector },
+      { StripeClient, EntityManager, TtlCache, OtelCollector },
       context,
       resolve
     ) =>
@@ -295,7 +312,7 @@ const serviceDependencies = runtimeDependencies.chain({
           ? resolve('EntityManager', context)
           : EntityManager,
         TtlCache,
-        OpenTelemetryCollector,
+        OtelCollector,
         schemaValidator,
         {
           PaymentLinkMapper,
@@ -308,7 +325,7 @@ const serviceDependencies = runtimeDependencies.chain({
     lifetime: Lifetime.Scoped,
     type: StripePlanService<SchemaValidator, PlanMapperTypes, PlanDtoTypes>,
     factory: (
-      { StripeClient, EntityManager, OpenTelemetryCollector },
+      { StripeClient, EntityManager, OtelCollector },
       context,
       resolve
     ) =>
@@ -317,7 +334,7 @@ const serviceDependencies = runtimeDependencies.chain({
         context.entityManagerOptions
           ? resolve('EntityManager', context)
           : EntityManager,
-        OpenTelemetryCollector,
+        OtelCollector,
         schemaValidator,
         {
           PlanMapper,
@@ -335,7 +352,7 @@ const serviceDependencies = runtimeDependencies.chain({
       SubscriptionDtoTypes
     >,
     factory: (
-      { StripeClient, EntityManager, OpenTelemetryCollector },
+      { StripeClient, EntityManager, OtelCollector },
       context,
       resolve
     ) =>
@@ -344,7 +361,7 @@ const serviceDependencies = runtimeDependencies.chain({
         context.entityManagerOptions
           ? resolve('EntityManager', context)
           : EntityManager,
-        OpenTelemetryCollector,
+        OtelCollector,
         schemaValidator,
         {
           SubscriptionMapper,
@@ -363,13 +380,14 @@ const serviceDependencies = runtimeDependencies.chain({
       CheckoutSessionMapperTypes,
       PaymentLinkMapperTypes,
       PlanMapperTypes,
-      SubscriptionMapperTypes
+      SubscriptionMapperTypes,
+      InferEntity<typeof StripeWebhookEvent>
     >,
     factory: (
       {
         StripeClient,
         EntityManager,
-        OpenTelemetryCollector,
+        OtelCollector,
         BillingPortalService,
         CheckoutSessionService,
         PaymentLinkService,
@@ -385,20 +403,23 @@ const serviceDependencies = runtimeDependencies.chain({
           ? resolve('EntityManager', context)
           : EntityManager,
         schemaValidator,
-        OpenTelemetryCollector,
+        OtelCollector,
         BillingPortalService,
         CheckoutSessionService,
         PaymentLinkService,
         PlanService,
         SubscriptionService,
-        PartyEnum
+        PartyEnum,
+        // entity-first: inject this app's discovered webhook event entity
+        // (mapper-style) rather than relying on name resolution
+        StripeWebhookEvent
       )
   },
   ComplianceDataService: {
     lifetime: Lifetime.Singleton,
     type: ComplianceDataService,
-    factory: ({ MikroORM, OpenTelemetryCollector }) =>
-      new ComplianceDataService(MikroORM, OpenTelemetryCollector, {
+    factory: ({ Orm, OtelCollector }) =>
+      new ComplianceDataService(Orm, OtelCollector, {
         Subscription: 'partyId',
         CheckoutSession: 'customerId',
         PaymentLink: 'customerId',
@@ -408,8 +429,8 @@ const serviceDependencies = runtimeDependencies.chain({
   RetentionService: {
     lifetime: Lifetime.Singleton,
     type: RetentionService,
-    factory: ({ MikroORM, OpenTelemetryCollector }) =>
-      new RetentionService(MikroORM, OpenTelemetryCollector)
+    factory: ({ Orm, OtelCollector }) =>
+      new RetentionService(Orm, OtelCollector)
   }
 });
 

@@ -1,4 +1,12 @@
 volumes:
+  forklaunch-minio-data:
+    driver: local
+  forklaunch-mimir-data:
+    driver: local
+  forklaunch-loki-data:
+    driver: local
+  forklaunch-tempo-data:
+    driver: local
   forklaunch-postgres-data:
     driver: local
   forklaunch-mysql-data:
@@ -20,53 +28,128 @@ networks:
     driver: bridge
 
 services:
+  # ---------------------------------------------------------------------------
+  # Monitoring stack.
+  #
+  # These images are PINNED, and pinned to the same versions the ForkLaunch
+  # deployment agent runs in production. Floating `:latest` is what let this
+  # stack drift away from production in the first place: production replaced
+  # Prometheus with Mimir while local kept scraping Prometheus, so no local test
+  # could reproduce production behaviour. Bump these deliberately, together with
+  # the production template.
+  # ---------------------------------------------------------------------------
+
+  # S3-compatible object store backing Loki, Tempo and Mimir. Production uses
+  # real S3; this is the local stand-in, so the storage config shape stays the
+  # same in both places.
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: forklaunch-minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    command: 'server /data --console-address :9001'
+    networks:
+      - forklaunch-network
+    volumes:
+      - forklaunch-minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    networks:
+      - forklaunch-network
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: /bin/sh -c "mc alias set local http://minio:9000 minioadmin minioadmin && mc mb --ignore-existing local/forklaunch-telemetry"
+
   tempo:
-    image: grafana/tempo:latest
+    image: grafana/tempo:3.0.0
+    # Host port 4317 is deliberately NOT published here. The OTel collector is
+    # the only front door for OTLP; it reaches Tempo over the compose network.
     ports:
       - '3200:3200'
-      - '4317:4317'
     networks:
       - forklaunch-network
     volumes:
       - './monitoring/tempo.yaml:/etc/tempo.yaml'
+      - forklaunch-tempo-data:/var/tempo
     command: '-config.file=/etc/tempo.yaml'
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3200/ready"]
-      interval: 30s
+      interval: 10s
       timeout: 10s
-      retries: 3
-      start_period: 60s
+      retries: 12
+      start_period: 30s
 
   loki:
-    image: grafana/loki:latest
+    image: grafana/loki:3.7.7
     ports:
       - '3100:3100'
     networks:
       - forklaunch-network
+    volumes:
+      - './monitoring/loki.yaml:/etc/loki/local-config.yaml'
+      - forklaunch-loki-data:/loki
+    command: '-config.file=/etc/loki/local-config.yaml'
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
-      interval: 30s
+      interval: 10s
       timeout: 10s
-      retries: 3
+      retries: 12
       start_period: 30s
 
-  prometheus:
-    image: prom/prometheus:latest
+  # Metrics. Replaces Prometheus + the Thanos sidecar, matching production.
+  # Health path is /ready. Mimir returns 404 for Prometheus's /-/healthy — that
+  # exact mismatch took production down, so it is asserted here on purpose.
+  mimir:
+    image: grafana/mimir:3.2.0
     ports:
       - '9090:9090'
     networks:
       - forklaunch-network
     volumes:
-      - './monitoring/prometheus.yaml:/etc/prometheus/prometheus.yml'
+      - './monitoring/mimir.yaml:/etc/mimir/mimir.yaml'
+      - forklaunch-mimir-data:/data
+    command: '-config.file=/etc/mimir/mimir.yaml'
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+      memcached:
+        condition: service_started
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
-      interval: 30s
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/ready"]
+      interval: 10s
       timeout: 10s
-      retries: 3
+      retries: 12
       start_period: 30s
 
+  # Query cache for Mimir's bucket store. Present in production too.
+  memcached:
+    image: memcached:1.6-alpine
+    command: '-m 64'
+    networks:
+      - forklaunch-network
+
+  # Grafana is LOCAL ONLY. Production has no Grafana — the ForkLaunch dashboard
+  # queries the backends directly.
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:12.3.1
     ports:
       - '3000:3000'
     networks:
@@ -81,16 +164,32 @@ services:
       retries: 3
       start_period: 40s
 
+  # Must be the `-contrib` distribution: the core image has no
+  # `prometheus_remote_write` exporter, which is how metrics reach Mimir.
   otel-collector:
-    image: otel/opentelemetry-collector:latest
+    image: otel/opentelemetry-collector-contrib:0.159.0
     ports:
+      - '4317:4317'
       - '4318:4318'
-      - '8889:8889'
+      - '13133:13133'
     networks:
       - forklaunch-network
     volumes:
       - './monitoring/otel-collector-config.yaml:/etc/otel-collector-config.yaml'
     command: '--config=/etc/otel-collector-config.yaml'
+    depends_on:
+      mimir:
+        condition: service_started
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:13133/"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
 
   postgres:
     image: postgres:latest

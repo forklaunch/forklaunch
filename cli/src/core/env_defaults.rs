@@ -52,6 +52,10 @@ const MAJORITY_ELIGIBLE_VARS: &[&str] = &[
     "BETTER_AUTH_BASE_PATH",
     "STRIPE_API_KEY",
     "STRIPE_WEBHOOK_SECRET",
+    "TWILIO_ACCOUNT_SID",
+    "TWILIO_AUTH_TOKEN",
+    "TWILIO_FROM_NUMBER",
+    "ENCRYPTION_KEY",
 ];
 
 /// Check if a var is eligible for majority-value resolution.
@@ -171,6 +175,12 @@ pub(crate) fn resolve_env_var_default(
         if let Some(majority) = existing_values.majority_value(var_name) {
             return Some(majority);
         }
+    }
+
+    // ENCRYPTION_KEY: consistent random b64 string (majority above wins when
+    // the workspace already has one; an empty key breaks FieldEncryptor)
+    if upper == "ENCRYPTION_KEY" {
+        return Some(generate_random_b64_secret(32));
     }
 
     // REDIS_URL: per-service with partition
@@ -357,8 +367,46 @@ pub(crate) fn resolve_env_var_default(
         }
         "STRIPE_API_KEY" => Some("replace-with-stripe-api-key".to_string()),
         "STRIPE_WEBHOOK_SECRET" => Some("replace-with-stripe-webhook-secret".to_string()),
+        "TWILIO_ACCOUNT_SID" => Some("replace-with-twilio-account-sid".to_string()),
+        "TWILIO_AUTH_TOKEN" => Some("replace-with-twilio-auth-token".to_string()),
+        "TWILIO_FROM_NUMBER" => Some("replace-with-twilio-from-number".to_string()),
         _ => None,
     }
+}
+
+/// Find an existing ENCRYPTION_KEY value from any .env file in the workspace,
+/// so services added later share the app's field-encryption key.
+pub(crate) fn find_existing_encryption_key(modules_path: &Path) -> Option<String> {
+    find_existing_env_value(modules_path, "ENCRYPTION_KEY")
+}
+
+fn find_existing_env_value(modules_path: &Path, key: &str) -> Option<String> {
+    if let Some(app_root) = modules_path.parent() {
+        for file in [".env.local", ".env"] {
+            if let Ok(vars) = load_env_file(&app_root.join(file)) {
+                if let Some(val) = vars.get(key) {
+                    if !val.is_empty() {
+                        return Some(val.clone());
+                    }
+                }
+            }
+        }
+    }
+    if let Ok(entries) = std::fs::read_dir(modules_path) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if let Ok(vars) = load_env_file(&path.join(".env.local")) {
+                    if let Some(val) = vars.get(key) {
+                        if !val.is_empty() {
+                            return Some(val.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Find an existing HMAC_SECRET_KEY value from any .env file in the workspace.
@@ -474,9 +522,11 @@ mod tests {
                         queue: None,
                         object_store: None,
                         redis_partition: None,
+                        capabilities: None,
                     })),
                     routers: None,
                     metadata: None,
+                    serves: None,
                 })
                 .collect(),
             project_peer_topology: HashMap::new(),
@@ -520,6 +570,7 @@ mod tests {
                     queue: None,
                     object_store: None,
                     redis_partition: Some(0),
+                    capabilities: None,
                 }), None),
                 ("notifications", ProjectType::Worker, Some(ResourceInventory {
                     database: None,
@@ -527,6 +578,7 @@ mod tests {
                     queue: None,
                     object_store: None,
                     redis_partition: Some(1),
+                    capabilities: None,
                 }), None),
             ],
         )

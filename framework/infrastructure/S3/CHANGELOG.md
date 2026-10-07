@@ -1,5 +1,351 @@
 # @forklaunch/infrastructure-s3
 
+## 1.5.1
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions, including @mikro-orm 7.2.3, so apps resolve a single copy of MikroORM with core.
+- Updated dependencies
+  - @forklaunch/common@1.2.30
+  - @forklaunch/core@3.0.1
+
+## 1.5.0
+
+### Minor Changes
+
+- f2b6357: Object store: real files, browser uploads and download links, keyless on ForkLaunch.
+
+  - `ObjectStore` gains `putFile(key, body, { contentType, filename?, metadata? })`,
+    `presignUpload(key, { contentType, maxBytes, expiresIn? })` (a presigned POST that
+    enforces size and content type) and `presignDownload(key, { expiresIn?, filename? })`.
+    Custom `ObjectStore` implementations must add them.
+  - `S3ObjectStore` takes `prefix` (confines every key), `presignLimits` (lifetime caps,
+    from `S3_PRESIGN_MAX_UPLOAD_SECONDS` / `S3_PRESIGN_MAX_DOWNLOAD_SECONDS`) and
+    `createBucketIfMissing`, which now defaults to true only when a custom endpoint
+    (MinIO) is configured: deployed buckets are provisioned by the platform.
+  - `s3ClientConfig({ url, region, accessKeyId, secretAccessKey })` passes keys only when
+    both are set, so deployed services use their task role.
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies [f2b6357]
+  - @forklaunch/core@3.0.0
+  - @forklaunch/common@1.2.29
+
+## 1.4.17
+
+### Patch Changes
+
+- Refresh every framework dependency to its current release.
+
+  A routine sweep (`pnpm run up:packages`), taken as one wave rather than a
+  package at a time. `workspace:^` is frozen into a concrete range at publish,
+  so a package published ahead of its siblings pins the PREVIOUS version of
+  them and consumers resolve two copies — which is the whole class of bug
+  #311 and #331 existed to clear. Releasing the set together is what keeps
+  that from coming back.
+
+  `@mikro-orm/*` is deliberately NOT moved: framework and blueprint are both
+  on 7.2.1 exactly, and they only stay that way if they move together.
+
+- Updated dependencies
+  - @forklaunch/common@1.2.28
+  - @forklaunch/core@2.1.1
+
+## 1.4.15
+
+### Patch Changes
+
+- Refresh dependencies to their latest published versions.
+
+  `@mikro-orm/*` moves from 7.1.15 to 7.2.1 in every package that pins it,
+  as one step: the framework, the blueprint and the CLI's scaffold constants
+  all agree on a single MikroORM version, so a freshly generated app resolves
+  exactly one copy (the duplicate-package type errors from mixed pins are the
+  reason it is pinned exactly). `@aws-sdk/client-s3` 3.1131 → 3.1136 in
+  infrastructure-s3. The rest is devDependency movement; `@types/node` 26.6
+  added `Socket.server`, which the Bun socket shim in express now declares.
+
+  Packages with only devDependency changes release too, so the whole
+  framework carries one MikroORM version on npm.
+
+- Updated dependencies
+  - @forklaunch/core@1.6.2
+  - @forklaunch/common@1.2.27
+
+## 1.4.14
+
+### Patch Changes
+
+- **Encryption key ring and rotation sweep.**
+
+  `FieldEncryptor` now holds a ring: the current key plus any number of
+  previous keys (`new FieldEncryptor(key, { previousKeys })`, or
+  `FieldEncryptor.fromEnv()` reading `ENCRYPTION_KEY` and
+  `LEGACY_ENCRYPTION_KEYS`). Writes use the current key; reads try the current
+  key and then each previous key, so `ENCRYPTION_KEY` can change without a
+  downtime window. Single-key behaviour and the on-disk `v2:` format are
+  unchanged.
+
+  - `open()` reports which key opened a value (by fingerprint) and whether a
+    rewrite would change it; `needsRotation()`, `rotate()`, `keyIds`,
+    `withPreviousKeys()`, `withFormat()`.
+  - New `v3:{keyId}:{iv}:{tag}:{data}` envelope, opt-in via
+    `ENCRYPTION_FORMAT=v3`: reads resolve the key directly, a missing key fails
+    by name, and `countValuesByKeyId()` answers "can this key be dropped?"
+    without decrypting. Every reader (`EncryptedType`, the redis cache, the S3
+    store) accepts all three envelopes.
+  - `reencryptEncryptedColumns()` is the rotation sweep for migrations: walks
+    every entity with `pii`/`phi`/`pci` fields, rewrites what is still under a
+    previous key with the same tenant it was written with, tries every known
+    organization as a fallback tenant, and reports per table.
+
+  See `docs/compliance/key-rotation.md` for the three-step rotation.
+
+- Updated dependencies
+  - @forklaunch/core@1.6.0
+
+## 1.4.13
+
+### Patch Changes
+
+- Release the framework set together so every package depends on the same
+  `@forklaunch/core`.
+
+  `core` was bumped to pin `@mikro-orm/*` exactly, but `express`, `hyper-express`,
+  `ws` and the `infrastructure-*` packages were still published against the
+  previous `core`. A consumer therefore resolved two copies of
+  `@forklaunch/core`, and through them two copies of `@mikro-orm/core` — which is
+  the duplication the `core` bump exists to remove. `EntityManager` and
+  `EntitySchema` carry a `#private` brand, so two copies are structurally
+  incompatible and the consumer stops compiling.
+
+  No source changes here; these packages move so the set stays internally
+  consistent.
+
+- Updated dependencies
+  - @forklaunch/common@1.2.26
+
+## 1.4.12
+
+### Patch Changes
+
+- Refresh dependencies to their latest published versions.
+
+  Runtime dependency changes, which is why these five packages release rather
+  than the whole workspace: `zod` 4.4.3 → 4.5.4 (core, validator), `fastmcp`
+  4.16.10 → 4.17.1 (core, express), `qs` 6.15.3 → 6.16.0 and
+  `@scalar/express-api-reference` 0.10.16 → 0.10.17 (express, hyper-express),
+  `multer` 2.2.0 → 2.3.0 (express), and `@aws-sdk/client-s3` 3.1120.0 → 3.1121.0
+  (infrastructure-s3). All are patch or minor upstream releases with no API
+  change on our side; the build and test suites pass unmodified.
+
+  The remaining packages only saw devDependency movement (`jest` 30.4.2 → 30.5.0,
+  `tsx` 4.23.12 → 4.23.13), which no consumer installs, so they are not released.
+
+  `jest` 30.5.0 pulls in `@parcel/watcher` as a new transitive dependency, and
+  pnpm requires an explicit build decision for it. It is set to `false` in
+  `pnpm-workspace.yaml`: it arrives only through `jest-haste-map`, so it is
+  dev-only and never reaches a published package, and the platform prebuilt
+  binary is already resolved, so the native build script has nothing to add.
+  Without that entry `pnpm install` fails outright — pnpm writes a literal
+  `set this to true or false` placeholder into the file, which is not valid
+  configuration.
+
+- Updated dependencies
+  - @forklaunch/core@1.5.17
+
+## 1.4.11
+
+### Patch Changes
+
+- Update internal package versions
+- Updated dependencies
+  - @forklaunch/common@1.2.24
+  - @forklaunch/core@1.5.16
+
+## 1.4.6
+
+### Patch Changes
+
+- update packages
+- Updated dependencies
+  - @forklaunch/common@1.2.20
+  - @forklaunch/core@1.5.4
+
+## 1.4.5
+
+### Patch Changes
+
+- 92c06f9: dep upgrades
+- Updated dependencies [92c06f9]
+  - @forklaunch/common@1.2.19
+  - @forklaunch/core@1.5.3
+
+## 1.4.4
+
+### Patch Changes
+
+- update dependency versions
+- Updated dependencies
+  - @forklaunch/common@1.2.18
+  - @forklaunch/core@1.5.2
+
+## 1.4.3
+
+### Patch Changes
+
+- Update internal versions and allow ZodType early release
+- Updated dependencies
+  - @forklaunch/common@1.2.17
+  - @forklaunch/core@1.5.1
+
+## 1.4.2
+
+### Patch Changes
+
+- Export wrapEmWithTenantContext for tenant based filtering
+- Updated dependencies
+  - @forklaunch/core@1.5.0
+  - @forklaunch/common@1.2.16
+
+## 1.4.1
+
+### Patch Changes
+
+- chore: update internal package versions
+- Updated dependencies
+  - @forklaunch/common@1.2.15
+  - @forklaunch/core@1.4.1
+
+## 1.4.0
+
+### Minor Changes
+
+- Encryption and decryption now take tenant id as a first party compliance input
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.4.0
+
+## 1.3.15
+
+### Patch Changes
+
+- update enum logic
+- Updated dependencies
+  - @forklaunch/common@1.2.14
+  - @forklaunch/core@1.3.17
+
+## 1.3.14
+
+### Patch Changes
+
+- Update packages and enum constraint fix
+- Updated dependencies
+  - @forklaunch/common@1.2.13
+  - @forklaunch/core@1.3.16
+
+## 1.3.13
+
+### Patch Changes
+
+- sync changes across packages
+- Updated dependencies
+  - @forklaunch/common@1.2.12
+  - @forklaunch/core@1.3.15
+
+## 1.3.12
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.14
+
+## 1.3.11
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.13
+
+## 1.3.10
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.12
+
+## 1.3.9
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.11
+
+## 1.3.8
+
+### Patch Changes
+
+- Align package vers
+- Updated dependencies
+  - @forklaunch/common@1.2.11
+  - @forklaunch/core@1.3.10
+
+## 1.3.7
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.9
+
+## 1.3.6
+
+### Patch Changes
+
+- fix nested app and router
+- Updated dependencies
+  - @forklaunch/common@1.2.10
+  - @forklaunch/core@1.3.8
+
+## 1.3.5
+
+### Patch Changes
+
+- Perf improvement
+- Updated dependencies
+  - @forklaunch/common@1.2.9
+  - @forklaunch/core@1.3.7
+
+## 1.3.4
+
+### Patch Changes
+
+- bump package versions
+- Updated dependencies
+  - @forklaunch/common@1.2.8
+  - @forklaunch/core@1.3.6
+
+## 1.3.3
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/core@1.3.5
+
+## 1.3.2
+
+### Patch Changes
+
+- export consolidated retention logic
+- Updated dependencies
+  - @forklaunch/common@1.2.7
+  - @forklaunch/core@1.3.4
+
 ## 1.3.1
 
 ### Patch Changes

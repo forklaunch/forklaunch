@@ -1,15 +1,13 @@
+#[cfg(not(unix))]
+use std::fs::create_dir_all;
+#[cfg(unix)]
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::{
     fs::OpenOptions,
-    io::Write,
+    io::{IsTerminal, Write},
     thread::sleep,
     time::Duration,
 };
-
-#[cfg(unix)]
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
-
-#[cfg(not(unix))]
-use std::fs::create_dir_all;
 
 use anyhow::{Result, bail};
 use clap::{Arg, ArgMatches, Command};
@@ -19,7 +17,10 @@ use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 use crate::{
     CliCommand,
     constants::get_iam_api_url,
-    core::{command::command, token::get_token_path},
+    core::{
+        command::command,
+        token::{API_KEY_PREFIX, exchange_api_key, get_token_path},
+    },
 };
 
 pub(super) struct LoginCommand;
@@ -57,20 +58,43 @@ struct TokenData {
     expires_at: i64,
 }
 
-/// Login with API token (for automation/CI)
-/// This accepts a long-lived API token that users generate from the platform UI
+/// Login with a credential rather than a browser — the path for CI, a
+/// container, and an agent operating the platform unattended.
+///
+/// Two kinds of value arrive here. An **API key** (`flk_…`, issued by
+/// `POST /service-account` on the IAM host, e.g.
+/// `https://iam.forklaunch.com/service-account`) is a long-lived machine
+/// credential: it is exchanged for a JWT now and kept, so the session renews
+/// itself when that JWT runs out. That renewal is what makes unattended
+/// operation actually unattended — a device-flow session eventually needs a
+/// person at a browser, and a bare JWT simply stops working. A **raw JWT** is
+/// still accepted, for the case where something upstream already minted one.
 pub fn login_with_token(api_token: &str) -> Result<()> {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
+    let is_api_key = api_token.starts_with(API_KEY_PREFIX);
 
     log_info!(stdout, "Forklaunch CLI Login (API Token)");
-    log_info!(stdout, "Validating API token...");
 
-    // The API token is already a JWT that can be used directly
-    // We just need to validate it and save it
-    let token_storage = TokenData {
-        access_token: api_token.to_string(),
-        refresh_token: String::new(), // API tokens don't have refresh tokens
-        expires_at: i64::MAX, // API tokens are long-lived
+    let token_storage = if is_api_key {
+        log_info!(stdout, "Exchanging API key for a session...");
+        let (access_token, expires_at) = exchange_api_key(api_token)?;
+        TokenData {
+            access_token,
+            // The key is what renews the session, so it is stored where the
+            // refresh path already looks.
+            refresh_token: api_token.to_string(),
+            expires_at,
+        }
+    } else {
+        log_info!(stdout, "Validating API token...");
+        TokenData {
+            access_token: api_token.to_string(),
+            refresh_token: String::new(),
+            // Read the real expiry from the token when it has one. Recording
+            // "never" meant the CLI kept presenting an expired token until the
+            // server's 401 wiped the login file.
+            expires_at: crate::core::token::jwt_expiry(api_token).unwrap_or(i64::MAX),
+        }
     };
 
     let token_path = get_token_path()?;
@@ -116,19 +140,62 @@ pub fn login_with_token(api_token: &str) -> Result<()> {
     }
 
     writeln!(stdout)?;
-    log_header!(stdout, Color::Green, "Successfully logged in with API token!");
-    writeln!(
+    log_header!(
         stdout,
-        "Note: API tokens are long-lived. Revoke them from the platform UI if compromised."
-    )?;
+        Color::Green,
+        "Successfully logged in with API token!"
+    );
+    if is_api_key {
+        writeln!(
+            stdout,
+            "This session renews itself from the key, so unattended runs keep working. \
+             Revoke the key from the platform if it leaks."
+        )?;
+    } else {
+        writeln!(
+            stdout,
+            "This is a raw token and cannot be renewed; when it expires, log in again. \
+             An API key (flk_...) from a service account renews itself instead."
+        )?;
+    }
 
     Ok(())
+}
+
+/// Is there a human at this terminal to read a code and open a browser?
+///
+/// The device flow asks the user to visit a URL and type a code, then polls
+/// until they do or the code expires ten minutes later. With nobody there —
+/// CI, an agent, a container — that ten minutes is pure waiting, and the run
+/// ends with "The device code has expired" instead of saying what was
+/// actually wrong. `FORKLAUNCH_FORCE_DEVICE_LOGIN=1` overrides, for the rare
+/// case of a browser but no tty.
+fn device_login_decision(forced: bool, stdin_tty: bool, stdout_tty: bool) -> bool {
+    forced || (stdin_tty && stdout_tty)
+}
+
+fn device_login_is_usable() -> bool {
+    device_login_decision(
+        std::env::var("FORKLAUNCH_FORCE_DEVICE_LOGIN").is_ok_and(|v| !v.is_empty()),
+        std::io::stdin().is_terminal(),
+        std::io::stdout().is_terminal(),
+    )
 }
 
 /// Interactive device flow login (default)
 pub fn login() -> Result<()> {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
     let api_url = get_iam_api_url();
+
+    if !device_login_is_usable() {
+        bail!(
+            "`forklaunch login` needs a terminal: it prints a code for you to enter in a browser, \
+             and with nobody there it polls for ten minutes and then fails. For CI, an agent or a \
+             container, authenticate headlessly instead:\n  \
+             forklaunch login --token <api-token>   (or set FORKLAUNCH_API_TOKEN)\n\
+             Set FORKLAUNCH_FORCE_DEVICE_LOGIN=1 to run the device flow anyway."
+        );
+    }
 
     // Step 1: Request device code
     log_info!(stdout, "Forklaunch CLI Login");
@@ -154,8 +221,18 @@ pub fn login() -> Result<()> {
 
     // Step 2: Display user code and open browser
     writeln!(stdout)?;
-    log_header!(stdout, Color::Yellow, "Please visit: {}", device_data.verification_uri);
-    log_header!(stdout, Color::Yellow, "Enter code: {}", device_data.user_code);
+    log_header!(
+        stdout,
+        Color::Yellow,
+        "Please visit: {}",
+        device_data.verification_uri
+    );
+    log_header!(
+        stdout,
+        Color::Yellow,
+        "Enter code: {}",
+        device_data.user_code
+    );
     writeln!(stdout)?;
 
     // Try to open browser
@@ -281,27 +358,29 @@ pub fn login() -> Result<()> {
             let error_data: Result<TokenErrorResponse, _> = token_response.json();
 
             match error_data {
-                Ok(error) => {
-                    match error.error.as_str() {
-                        "authorization_pending" => {
-                            continue;
-                        }
-                        "slow_down" => {
-                            polling_interval += Duration::from_secs(5);
-                            log_warn!(stdout, "Slowing down polling to {}s", polling_interval.as_secs());
-                            continue;
-                        }
-                        "access_denied" => {
-                            bail!("Access was denied by the user");
-                        }
-                        "expired_token" => {
-                            bail!("The device code has expired. Please try again.");
-                        }
-                        _ => {
-                            bail!("Error: {}", error.error_description.unwrap_or(error.error));
-                        }
+                Ok(error) => match error.error.as_str() {
+                    "authorization_pending" => {
+                        continue;
                     }
-                }
+                    "slow_down" => {
+                        polling_interval += Duration::from_secs(5);
+                        log_warn!(
+                            stdout,
+                            "Slowing down polling to {}s",
+                            polling_interval.as_secs()
+                        );
+                        continue;
+                    }
+                    "access_denied" => {
+                        bail!("Access was denied by the user");
+                    }
+                    "expired_token" => {
+                        bail!("The device code has expired. Please try again.");
+                    }
+                    _ => {
+                        bail!("Error: {}", error.error_description.unwrap_or(error.error));
+                    }
+                },
                 Err(_) => {
                     bail!("Failed to authenticate: unexpected response");
                 }
@@ -320,17 +399,55 @@ impl CliCommand for LoginCommand {
                     .value_name("API_TOKEN")
                     .help("API token for headless authentication (for CI/CD). Can also be set via FORKLAUNCH_API_TOKEN environment variable"),
             )
+            .after_help(
+                "With --account <name>, the login is stored in the keyring under that name \
+                 and leaves every other login on this machine alone. See `forklaunch account`.",
+            )
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         if let Some(token) = matches.get_one::<String>("token") {
-            return login_with_token(token);
+            login_with_token(token)?;
+        } else if let Ok(token) = std::env::var("FORKLAUNCH_API_TOKEN") {
+            login_with_token(&token)?;
+        } else {
+            login()?;
         }
 
-        if let Ok(token) = std::env::var("FORKLAUNCH_API_TOKEN") {
-            return login_with_token(&token);
+        // `--account <name>` (or FORKLAUNCH_ACCOUNT, or the application's
+        // binding) sent the login to that account's slot in the keyring.
+        if let Some(saved) = crate::core::accounts::after_login()? {
+            let mut stdout = StandardStream::stdout(ColorChoice::Always);
+            log_info!(stdout, "{}", saved);
         }
+        Ok(())
+    }
+}
 
-        login()
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The decision itself, without touching process-wide state: a terminal
+    /// on both ends, or the explicit override.
+    #[test]
+    fn the_device_flow_needs_a_terminal_or_the_override() {
+        assert!(device_login_decision(false, true, true));
+        assert!(!device_login_decision(false, false, true));
+        assert!(!device_login_decision(false, true, false));
+        assert!(device_login_decision(true, false, false));
+    }
+
+    /// Under `cargo test` stdin is not a terminal — the CI shape — so `login`
+    /// refuses immediately and names the headless route instead of polling
+    /// for ten minutes.
+    #[test]
+    fn login_without_a_terminal_fails_fast_and_says_what_to_do() {
+        if device_login_is_usable() {
+            return; // a developer running the suite from a real terminal
+        }
+        let err = login().unwrap_err().to_string();
+        assert!(err.contains("--token"), "{err}");
+        assert!(err.contains("FORKLAUNCH_API_TOKEN"), "{err}");
     }
 }

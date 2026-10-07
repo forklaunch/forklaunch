@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "."
+  },
+  "include": [
+    "domain/schemas/index.ts",
+    "services/index.ts",
+    "domain/types/index.ts"
+  ]
+}

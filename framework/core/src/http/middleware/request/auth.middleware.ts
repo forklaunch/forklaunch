@@ -14,6 +14,7 @@ import { hasScopeChecks } from '../../guards/hasScopeChecks';
 import { hasSubscriptionChecks } from '../../guards/hasSubscriptionChecks';
 import { isHmacMethod } from '../../guards/isHmacMethod';
 import { meta } from '../../telemetry/pinoLogger';
+import { authLogContext, jwtFailureReason } from './authLogContext';
 import {
   ForklaunchNextFunction,
   ForklaunchRequest,
@@ -142,7 +143,8 @@ async function checkAuthorizationToken<
     BaseRequest
   >,
   authorizationToken?: string,
-  globalOptions?: ExpressLikeGlobalAuthOptions<SV, SessionSchema>
+  globalOptions?: ExpressLikeGlobalAuthOptions<SV, SessionSchema>,
+  access?: 'public' | 'authenticated' | 'protected' | 'internal'
 ): Promise<readonly [400 | 401 | 403 | 500, string] | undefined> {
   if (authorizationMethod == null) {
     return undefined;
@@ -151,7 +153,16 @@ async function checkAuthorizationToken<
   const collapsedAuthorizationMethod = {
     ...globalOptions,
     ...authorizationMethod
-  };
+  } as AuthMethods<
+    SV,
+    P,
+    ReqBody,
+    ReqQuery,
+    ReqHeaders,
+    VersionedReqs,
+    BaseRequest
+  > &
+    Exclude<ExpressLikeGlobalAuthOptions<SV, SessionSchema>, false | undefined>;
 
   if (authorizationToken == null) {
     return authorizationTokenRequired;
@@ -258,13 +269,14 @@ async function checkAuthorizationToken<
             Extract<keyof VersionedReqs, string>,
             SessionSchema
           >
-        )?.openTelemetryCollector?.error(
+        )?.openTelemetryCollector?.warn(
           'JWT Verification Failed',
           meta({
-            error,
+            reason: jwtFailureReason(error),
+            error: error instanceof Error ? error.message : String(error),
             method: req.method,
             path: req.path,
-            token
+            ...authLogContext(token)
           })
         );
         return invalidAuthorizationToken;
@@ -350,10 +362,10 @@ async function checkAuthorizationToken<
         if (collapsedAuthorizationMethod.requiredScope) {
           if (
             !resourceScopes.has(collapsedAuthorizationMethod.requiredScope) ||
-            Array.from(resourceScopes).every(
+            !Array.from(resourceScopes).every(
               (scope) =>
-                collapsedAuthorizationMethod.scopeHeirarchy?.indexOf(scope) ??
-                -1 > -1
+                (collapsedAuthorizationMethod.scopeHeirarchy?.indexOf(scope) ??
+                  -1) > -1
             )
           ) {
             return invalidScope;
@@ -363,7 +375,12 @@ async function checkAuthorizationToken<
     }
   }
 
-  if (hasPermissionChecks(collapsedAuthorizationMethod)) {
+  // 'authenticated' routes only need a valid token (already verified above).
+  // 'internal' routes use HMAC (already verified above, no RBAC).
+  // Only 'protected' routes require RBAC checks.
+  if (access === 'authenticated' || access === 'internal') {
+    // Token/HMAC already validated — skip RBAC, proceed to subscription/feature checks
+  } else if (hasPermissionChecks(collapsedAuthorizationMethod)) {
     if (!collapsedAuthorizationMethod.surfacePermissions) {
       return [500, 'No permission surfacing function provided.'];
     }
@@ -450,7 +467,7 @@ async function checkAuthorizationToken<
         return invalidAuthorizationTokenRoles;
       }
     }
-  } else {
+  } else if (access === 'protected') {
     return invalidAuthorizationMethod;
   }
 
@@ -552,6 +569,15 @@ export async function parseRequestAuth<
   >,
   next?: ForklaunchNextFunction
 ) {
+  const access = req.contractDetails.access as
+    'public' | 'authenticated' | 'protected' | 'internal' | undefined;
+
+  // Public routes skip auth entirely
+  if (access === 'public') {
+    next?.();
+    return;
+  }
+
   const auth = req.contractDetails.auth as
     | AuthMethods<
         SV,
@@ -578,15 +604,17 @@ export async function parseRequestAuth<
       MapVersionedReqsSchema<SV, VersionedApi>,
       MapSessionSchema<SV, SessionSchema>,
       unknown
-    >(req, auth, token, req._globalOptions?.()?.auth)) ?? [];
+    >(req, auth, token, req._globalOptions?.()?.auth, access)) ?? [];
   if (error != null) {
-    req.openTelemetryCollector?.error(
+    // Warn, not error: an expired or missing token is normal traffic. The
+    // credential itself is never logged; see authLogContext.
+    req.openTelemetryCollector?.warn(
       message || 'Authorization Failed',
       meta({
         statusCode: error,
         method: req.method,
         path: req.path,
-        token
+        ...authLogContext(token)
       })
     );
     res.type('text/plain');

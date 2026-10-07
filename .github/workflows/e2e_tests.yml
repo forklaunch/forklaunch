@@ -1,6 +1,7 @@
 name: E2E Tests
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -10,64 +11,119 @@ on:
     paths:
       - "cli/**"
 
+permissions:
+  contents: read
+
 jobs:
-  test:
+  # The CLI is compiled once and shared. Previously all six test jobs ran
+  # `cargo build --release` themselves — around four minutes each, roughly
+  # twenty-five minutes of duplicated compute per run — and every one of the
+  # 207 `cargo run --release` calls inside the scripts re-checked that build.
+  build-cli:
+    name: Build CLI
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        group: [1, 2, 3, 4, 5, 6]
-        include:
-          - group: 1
-            name: "Init Tests (heavy modules)"
-            pattern: "init_@(application|billing|iam)*.sh"
-          - group: 2
-            name: "Init Tests (components)"
-            pattern: "init_@(compile|library|module|router|service|worker)*.sh"
-          - group: 3
-            name: "Sync Tests"
-            pattern: "sync*.sh"
-          - group: 4
-            name: "Change Tests"
-            pattern: "change*.sh"
-          - group: 5
-            name: "Delete Tests"
-            pattern: "delete*.sh"
-          - group: 6
-            name: "Other Tests"
-            pattern: "!(init*|sync*|change*|delete*).sh"
-
-    name: ${{ matrix.name }}
-
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      # Replaces a hand-rolled actions/cache whose path was `target` while
+      # cargo builds into `cli/target`, so build artifacts were never cached
+      # and every job paid a full rebuild.
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: cli
+
+      - name: Build CLI
+        working-directory: ./cli
+        # Not --locked: cli/Cargo.lock is gitignored, so there is no committed
+        # lock file to honour. That is also why the previous cache key,
+        # hashFiles('**/Cargo.lock'), hashed nothing.
+        run: cargo build --release
+
+      - name: Upload CLI binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: forklaunch-cli
+          path: cli/target/release/forklaunch
+          retention-days: 1
+          if-no-files-found: error
+
+  test:
+    needs: build-cli
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: 1
+            name: "Init Tests (heavy modules)"
+            scripts: "change_router_add_mappers.sh dryrun.sh existing_docker_compose.sh init_module_src_path.sh release_non_tty.sh sync_service_subcommand.sh"
+          - group: 2
+            name: "Init Tests (components)"
+            scripts: "change_library.sh delete_worker.sh environment_validate.sh init_application.sh init_compile.sh init_messaging_twilio.sh sync_worker_subcommand.sh"
+          - group: 3
+            name: "Sync Tests"
+            scripts: "change_sdk_mode.sh change_worker.sh delete_library.sh delete_service.sh depcheck.sh init_service_mappers.sh precheck_version_mismatch_decline_fails.sh sync_add_remove_flow.sh"
+          - group: 4
+            name: "Change Tests"
+            scripts: "change_router.sh change_service.sh change_service_worker_migration.sh eject.sh init_worker.sh precheck_version_match_allows_run.sh sync_application_remove.sh"
+          - group: 5
+            name: "Delete Tests"
+            scripts: "change_application.sh init_application_custom_path.sh init_module.sh init_service.sh init_worker_mappers.sh init_worker_workspace_and_typecheck.sh sync_application_add.sh"
+          - group: 6
+            name: "Other Tests"
+            scripts: "delete_router.sh environment_sync.sh init_billing_stripe.sh init_cac.sh init_iam_better_auth.sh init_library.sh init_relay.sh init_relay_drift.sh init_router.sh sync_library_subcommand.sh"
+
+    name: ${{ matrix.name }}
+
+    steps:
+      - uses: actions/checkout@v7
+
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Install Bun
-        uses: oven-sh/setup-bun@v1
+        uses: oven-sh/setup-bun@v2
 
       - name: Install pnpm
         uses: pnpm/action-setup@v2
         with:
           version: 10
 
-      - name: Cache Rust dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      # The scaffolded applications install the same dependency trees over and
+      # over. Nothing cached them before, so every install refetched everything
+      # from the registry — the single largest cost in these jobs.
+      # Pinned rather than read back from `pnpm store path`, which reported a
+      # directory that pnpm had not created yet — the save step then refused it
+      # with "Path(s) specified in the action for caching do(es) not exist".
+      # Creating it up front also guarantees every generated application shares
+      # one store instead of each resolving its own.
+      - name: Configure pnpm store
+        run: |
+          mkdir -p ~/.pnpm-store
+          pnpm config set store-dir ~/.pnpm-store --global
 
-      - name: Build project
-        working-directory: ./cli
-        run: cargo build --release
+      # Split restore/save rather than plain actions/cache, which skips its
+      # post-save step whenever the job fails. That is the wrong way round
+      # here: a red run still populates the store, and it is precisely while
+      # CI is failing that the next attempt most wants a warm cache.
+      - name: Restore pnpm store
+        id: pnpm-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('cli/src/core/package_json/package_json_constants.rs') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Download CLI binary
+        uses: actions/download-artifact@v4
+        with:
+          name: forklaunch-cli
+          path: cli-bin
 
       - name: Create .forklaunch directory
         run: mkdir -p ~/.forklaunch
@@ -82,21 +138,38 @@ jobs:
 
       - name: Run ${{ matrix.name }}
         working-directory: ./cli/tests
+        env:
+          # Scripts fall back to `cargo run --release` when this is unset, so
+          # they still work unchanged for anyone running them locally.
+          FORKLAUNCH_CLI: ${{ github.workspace }}/cli-bin/forklaunch
+          # With a warm store there is no reason to go to the network first.
+          NPM_CONFIG_PREFER_OFFLINE: "true"
         run: |
           set -e
-          shopt -s extglob nullglob
+          chmod +x "$FORKLAUNCH_CLI"
           test_count=0
-          failed_test=""
-          for test_script in ${{ matrix.pattern }}; do
+          for test_script in ${{ matrix.scripts }}; do
             if [ -f "$test_script" ]; then
               echo "[INFO] Running test: $test_script"
               test_count=$((test_count + 1))
               if ! ./"$test_script"; then
-                failed_test="$test_script"
                 echo "[ERROR] Test failed: $test_script"
                 exit 1
               fi
               echo "[OK] Test passed: $test_script"
+            else
+              echo "[ERROR] Missing test script: $test_script"
+              exit 1
             fi
           done
           echo "[SUCCESS] All $test_count tests passed in group: ${{ matrix.name }}"
+
+      # A content-addressed store, so saving a partially populated one is safe:
+      # entries are immutable and keyed by hash, and the next run reuses
+      # whatever made it in.
+      - name: Save pnpm store
+        if: always() && steps.pnpm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('cli/src/core/package_json/package_json_constants.rs') }}

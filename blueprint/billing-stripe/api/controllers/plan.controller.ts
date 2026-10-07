@@ -14,7 +14,7 @@ import {
 } from '../../domain/mappers/plan.mappers';
 import { PlanSchemas } from '../../domain/schemas';
 
-const openTelemetryCollector = ci.resolve(tokens.OpenTelemetryCollector);
+const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 const serviceFactory = ci.scopedResolver(tokens.PlanService);
 const HMAC_SECRET_KEY = ci.resolve(tokens.HMAC_SECRET_KEY);
 

@@ -43,11 +43,20 @@ import {
 extendZodWithOpenApi(z);
 
 /**
+ * Function type for creating a typed Zod schema.
+ *
+ * Named (rather than written inline as the first type argument) so declaration
+ * emit does not produce `SV<<T>...`, which the TypeScript 7 native compiler
+ * fails to re-parse.
+ */
+type ZodTypeFunction = <T>() => ZodType<T>;
+
+/**
  * Class representing a Zod schema definition.
  * @implements {StaticSchemaValidator}
  */
 export class ZodSchemaValidator implements SV<
-  <T>() => ZodType<T>,
+  ZodTypeFunction,
   <T extends ZodObject<ZodRawShape>>(schema: T) => ZodResolve<T>,
   <T extends ZodIdiomaticSchema>(schema: T) => ZodResolve<T>,
   <T extends ZodIdiomaticSchema>(schema: T) => ZodOptional<ZodResolve<T>>,
@@ -90,8 +99,7 @@ export class ZodSchemaValidator implements SV<
   _Type = 'Zod' as const;
   _SchemaCatchall!: ZodType;
   _ValidSchemaObject!:
-    | ZodObject<ZodRawShape>
-    | ZodArray<ZodObject<ZodRawShape>>;
+    ZodObject<ZodRawShape> | ZodArray<ZodObject<ZodRawShape>>;
 
   string = z.string().openapi({
     title: 'String',
@@ -366,6 +374,11 @@ export class ZodSchemaValidator implements SV<
       }[keyof T]
     ]
   > {
+    // The hop through unknown is load-bearing. `union()` is typed for a fixed
+    // tuple, and mapping an enum's values produces an array whose length is not
+    // known statically, so the two union shapes never overlap enough for a
+    // direct assertion. The runtime value is correct — one literal per enum
+    // member — but that correspondence is not expressible here.
     return this.union(
       Object.values(schemaEnum) as unknown as ZodUnionContainer
     ) as unknown as ZodUnion<

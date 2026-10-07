@@ -27,3 +27,6 @@ forklaunch-*.tgz
 bin/
 
 .DS_Store
+# docker build caches
+.docker-cargo/
+.docker-target/

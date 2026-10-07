@@ -31,8 +31,7 @@ export class UniversalSdk {
     private ajv: Ajv,
     private registryOptions: RegistryOptions,
     private contentTypeParserMap:
-      | Record<string, ResponseContentParserType>
-      | undefined
+      Record<string, ResponseContentParserType> | undefined
   ) {}
 
   /**

@@ -3,7 +3,10 @@ use oxc_allocator::Allocator;
 use oxc_ast::ast::{Program, SourceType};
 
 use crate::core::ast::{
-    injections::inject_into_registrations_ts::inject_into_registrations_config_injector,
+    injections::{
+        inject_into_import_statement::inject_specifier_into_import_statement,
+        inject_into_registrations_ts::inject_into_registrations_config_injector,
+    },
     parse_ast_program::parse_ast_program,
 };
 
@@ -26,14 +29,12 @@ pub(crate) fn database_entity_manager_runtime_dependency<'a>(
                   type: EntityManager,
                   factory: (
                     {{ {orm_token} }},
-                    context: {{ entityManagerOptions?: ForkOptions; tenantId?: string }}
-                  ) => {{
-                    const em = {orm_token}.em.fork(context.entityManagerOptions);
-                    if (context.tenantId) {{
-                      em.setFilterParams('tenant', {{ tenantId: context.tenantId }});
-                    }}
-                    return em;
-                  }},
+                    context?: {{ entityManagerOptions?: ForkOptions; tenantId?: string }}
+                  ) =>
+                    wrapEmWithTenantContext(
+                      {orm_token}.em.fork(context?.entityManagerOptions),
+                      context?.tenantId
+                    ),
                 }},
             }})"
         )
@@ -52,6 +53,17 @@ pub(crate) fn database_entity_manager_runtime_dependency<'a>(
         &mut entity_manager_registration_program,
         "runtimeDependencies",
     )?;
+
+    // Ensure `wrapEmWithTenantContext` is imported. The factory body above
+    // calls it; without this the registrations file won't compile after
+    // the database infra is added.
+    inject_specifier_into_import_statement(
+        allocator,
+        registrations_program,
+        "wrapEmWithTenantContext",
+        "@forklaunch/core/persistence",
+    )
+    .ok();
 
     Ok(())
 }

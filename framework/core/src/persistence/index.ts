@@ -16,8 +16,50 @@ export {
   getEntityRetention,
   getAllRetentionPolicies,
   getEntityUserIdField,
-  getAllUserIdFields
+  getAllUserIdFields,
+  type CompliantValue,
+  type EncryptedComplianceLevel,
+  type EncryptedKeysOf,
+  type RequiresEncryptionContext,
+  type SelectionAvoidsEncryptedColumns
 } from './complianceTypes';
+export {
+  wrapEmWithForgivingDecryption,
+  type ForgivingDecryptionLogger
+} from './forgivingDecryptionEm';
+export {
+  asEncryptionSafe,
+  type ContextFreeKeysOfSchema,
+  type ContextFreeReadOptions,
+  type DecryptingReadOptions,
+  type EncryptedKeysOfSchema,
+  type EncryptionAwareReadOptions,
+  type EncryptionSafeEntityManager,
+  type HydratingReadMethod,
+  type PropertiesOfSchema,
+  type SchemaRequiresEncryptionContext
+} from './encryptionSafeEm';
+
+// Compliant fields: pii/phi/pci properties load as CompliantField, readable
+// only through .anon (de-identified) and .deanon (plaintext, audited)
+export {
+  Anon,
+  CompliantField,
+  CompliantIndexType,
+  CompliantQueryError,
+  CompliantType,
+  LegacyCiphertextError,
+  deanon,
+  isAnon,
+  isCompliantField,
+  onComplianceAccess,
+  type AnonStrategy,
+  type ComplianceAccessEvent,
+  type ComplianceAccessListener,
+  type ComplianceOptions,
+  type Deanon,
+  type Deanonymized
+} from './compliantField';
 
 // Compliance-aware property builder (drop-in replacement for MikroORM's p)
 export { fp } from './compliancePropertyBuilder';
@@ -32,9 +74,13 @@ export { wrapEmWithNativeQueryBlocking } from './complianceEventSubscriber';
 export {
   EncryptedType,
   registerEncryptor,
-  withEncryptionContext,
   setEncryptionTenantId,
-  getCurrentTenantId
+  withEncryptionContext,
+  getCurrentTenantId,
+  getBoundTenantId,
+  assertBindableTenantId,
+  EmptyTenantError,
+  UnboundTenantError
 } from './encryptedType';
 
 // Field encryption
@@ -42,8 +88,40 @@ export {
   FieldEncryptor,
   MissingEncryptionKeyError,
   DecryptionError,
-  EncryptionRequiredError
+  EncryptionRequiredError,
+  parseEncryptionKeyList,
+  encryptionKeyId,
+  stampedKeyId,
+  stampedPrefix,
+  isEncryptedCiphertext,
+  sealedAnon,
+  BLIND_INDEX_PREFIX,
+  ENCRYPTED_PREFIXES,
+  ENCRYPTION_FORMAT_ENV,
+  ENCRYPTION_KEY_ENV,
+  LEGACY_ENCRYPTION_KEYS_ENV,
+  LEGACY_ENCRYPTION_KEY_ENV,
+  type FieldEncryptorOptions,
+  type OpenedCiphertext,
+  type CiphertextFormat
 } from './fieldEncryptor';
+
+// Key rotation sweep (rewrite values still under a previous key)
+export {
+  reencryptEncryptedColumns,
+  classifyEncryptedValue,
+  collectFallbackTenantIds,
+  defaultTenantIdsFor,
+  entityMetadataList,
+  rotationTotals,
+  countValuesByKeyId,
+  isEncryptedValue,
+  type ReencryptOptions,
+  type RotationOutcome,
+  type RotationTableReport,
+  type SqlExecute,
+  type EntityMetadataLike
+} from './keyRotation';
 
 // Tenant isolation filter
 export {
@@ -55,3 +133,13 @@ export {
 
 // PostgreSQL Row-Level Security
 export { setupRls, RlsEventSubscriber, type RlsConfig } from './rls';
+
+export type {
+  AnyMikroORM,
+  ResolvedEntity,
+  ResolvedRelation
+} from './mikroOrm.types';
+
+// Tenant-scoped EM proxy (wraps every operation in withEncryptionContext to
+// survive AsyncLocalStorage propagation through pg connection pool callbacks)
+export { wrapEmWithTenantContext } from './tenantEm';

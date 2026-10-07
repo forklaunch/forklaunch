@@ -63,14 +63,11 @@ export class Application<
 > {
   private docsConfiguration: DocsConfiguration | undefined;
   private mcpConfiguration:
-    | ExpressLikeApplicationOptions<SV, SessionSchema>['mcp']
-    | undefined;
+    ExpressLikeApplicationOptions<SV, SessionSchema>['mcp'] | undefined;
   private openapiConfiguration:
-    | ExpressLikeApplicationOptions<SV, SessionSchema>['openapi']
-    | undefined;
+    ExpressLikeApplicationOptions<SV, SessionSchema>['openapi'] | undefined;
   private hostingConfiguration:
-    | ExpressLikeApplicationOptions<SV, SessionSchema>['hosting']
-    | undefined;
+    ExpressLikeApplicationOptions<SV, SessionSchema>['hosting'] | undefined;
   /**
    * Creates an instance of Application.
    *
@@ -86,10 +83,19 @@ export class Application<
     super(
       schemaValidator,
       express(),
-      [
-        contentParse<SV>(options),
-        enrichResponseTransmission as unknown as RequestHandler
-      ],
+      // In OpenAPI export mode the app never serves requests — `listen` just
+      // generates the spec and exits — so request body parsers are unnecessary.
+      // Constructing them eagerly can hard-crash the export when runtime config
+      // is unset/empty (e.g. body-parser@2 rejects an empty `limit` string that
+      // can materialize from empty-string env under `FORKLAUNCH_MODE=openapi`).
+      // Skip them in openapi mode so spec generation is resilient to missing
+      // runtime configuration.
+      process.env.FORKLAUNCH_MODE === 'openapi'
+        ? [enrichResponseTransmission as unknown as RequestHandler]
+        : [
+            contentParse<SV>(options),
+            enrichResponseTransmission as unknown as RequestHandler
+          ],
       openTelemetryCollector,
       options
     );
@@ -168,6 +174,8 @@ export class Application<
       process.exit(0);
     }
 
+    this.validateAllRoutes();
+
     const port =
       typeof args[0] === 'number' ? args[0] : Number(process.env.PORT);
     const host =
@@ -196,7 +204,7 @@ export class Application<
         host,
         port,
         version ?? '1.0.0',
-        this as unknown as ForklaunchRouter<ZodSchemaValidator>,
+        this as ForklaunchRouter<ZodSchemaValidator>,
         this.mcpConfiguration,
         options,
         contentTypeMapping,

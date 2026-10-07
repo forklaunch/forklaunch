@@ -1,3 +1,8 @@
+# The CLI binary. CI builds it once and exports FORKLAUNCH_CLI so the 43
+# scripts share one compile instead of each re-checking a release build.
+FL="${FORKLAUNCH_CLI:-cargo run --release}"
+set -e
+
 echo "Testing environment sync command..."
 
 if [ -d "output/environment-sync" ]; then
@@ -8,7 +13,7 @@ mkdir -p output/environment-sync
 cd output/environment-sync
 
 echo "Creating test application..."
-RUST_BACKTRACE=1 cargo run --release init application env-sync-app \
+RUST_BACKTRACE=1 $FL init application env-sync-app \
     -p env-sync-app \
     -o src/modules \
     -d postgresql \
@@ -28,11 +33,11 @@ cd env-sync-app
 
 # Test dry run first
 echo "Testing environment sync --dry-run..."
-RUST_BACKTRACE=1 cargo run --release environment sync --dry-run
+RUST_BACKTRACE=1 $FL environment sync --dry-run
 
 # Test actual sync
 echo "Testing environment sync (creating missing variables)..."
-RUST_BACKTRACE=1 cargo run --release environment sync
+RUST_BACKTRACE=1 $FL environment sync
 
 echo "Checking created .env files..."
 if [ -f ".env.local" ]; then
@@ -59,6 +64,6 @@ for module in src/modules/*/; do
 done
 
 echo "Testing environment validate after sync (expecting no missing variables)..."
-RUST_BACKTRACE=1 cargo run --release environment validate
+RUST_BACKTRACE=1 $FL environment validate
 
 echo "Environment sync test completed!"

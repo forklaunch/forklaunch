@@ -1,0 +1,888 @@
+---
+name: compliance
+description: "Compliance: fp property builder, defineComplianceEntity, access levels, audit CLI, encryption, tenant isolation, DPIA."
+user-invokable: true
+---
+
+# ForkLaunch Compliance Framework
+
+## When to Use This Skill
+
+Use when the user asks about:
+
+- Compliance field classification (PII, PHI, PCI)
+- Entity property builders (`fp` vs `p`)
+- `defineComplianceEntity` vs `defineEntity`
+- Access levels on routes (public, authenticated, protected, internal)
+- Field encryption (AES-256-GCM)
+- Tenant isolation (MikroORM filters, PostgreSQL RLS)
+- Audit logging
+- The `forklaunch compliance audit` CLI command
+- Compliance reports in the portal
+- GDPR erasure/export endpoints
+- Data residency enforcement
+- Secrets management
+
+## Architecture Overview
+
+The compliance framework is enforced at the framework level — architecturally impossible to skip:
+
+1. **`fp` property builder** — Proxy over MikroORM's `p` that requires `.compliance()` classification on every scalar field
+2. **`defineComplianceEntity`** — Validates all properties have compliance classification at **compile time** via `ValidateProperties<T>` generic
+3. **Access levels** — Required on every route handler (`public`, `authenticated`, `protected`, `internal`)
+4. **Field encryption** — AES-256-GCM with per-tenant HKDF key derivation for PII/PHI/PCI fields where configured
+5. **Tenant isolation** — MikroORM global filter (mandatory) + optional PostgreSQL RLS
+6. **Audit logging** — Automatic for every HTTP/WS request via OpenTelemetry
+7. **Rate limiting** — Per-tenant, per-route, per-user Redis-backed
+8. **Secrets management** — Boot-time validation with typed `getSecret()`
+
+## Entity Compliance Classification
+
+### The `fp` Property Builder
+
+Every entity must use `fp` (not `p`) and call `.compliance()` on every scalar property:
+
+```typescript
+import { defineComplianceEntity, fp } from "@forklaunch/core/persistence";
+
+export const UserEntity = defineComplianceEntity({
+  name: "User",
+  tableName: "users",
+  properties: {
+    id: fp.uuid().primary().compliance("none"),
+    email: fp.string().unique().compliance("pii"),
+    name: fp.string().compliance("pii"),
+    ssn: fp.string().nullable().compliance("phi"),
+    cardNumber: fp.string().nullable().compliance("pci"),
+    loginCount: fp.integer().default(0).compliance("none"),
+    riskScore: fp.double().nullable().compliance("none"),
+    role: fp.enum(() => RoleEnum).compliance("none"),
+    metadata: fp.json<Metadata>().nullable().compliance("none"),
+
+    // Relations are auto-classified — do NOT call .compliance() on them
+    organization: fp.manyToOne(() => OrganizationEntity),
+    posts: fp.oneToMany(() => PostEntity, { mappedBy: "author" }),
+  },
+});
+```
+
+### Classification Levels
+
+| Level  | Meaning                             | Encryption     | Examples             |
+| ------ | ----------------------------------- | -------------- | -------------------- |
+| `none` | No sensitive data                   | No             | IDs, slugs, statuses |
+| `pii`  | Personally Identifiable Information | Tenant field encryption where configured | Email, name, address |
+| `phi`  | Protected Health Information        | AES-256-GCM    | SSN, medical records |
+| `pci`  | Payment Card Industry               | AES-256-GCM    | Card numbers, CVVs   |
+
+### Key Rules
+
+- **`.compliance()` must be last** in the chain: `fp.string().nullable().compliance('pii')` (not `fp.string().compliance('pii').nullable()`)
+- **Relations skip `.compliance()`** — they are auto-classified as `'none'`
+- **Nullable FK relations** — Use `fp.manyToOne(Entity).nullable()` for nullable foreign keys. The chaining works correctly. The standard non-nullable relation pattern is `() => fp.manyToOne(Entity)`.
+- **Base properties** (`createdAt`, `updatedAt`, etc.) in `defineBaseProperties` must also use `fp` with `.compliance('none')`
+- Omitting `.compliance()` on a scalar is a **compile-time error**
+
+### Numeric Builder Rules
+
+Do not write `fp.number()` unless the generated persistence package actually exports it. In current generated ForkLaunch entities:
+
+- Use `fp.integer()` for whole-number fields: counts, limits, retries, priorities, CPU/memory sizes, concurrency, age-like integer values.
+- Use `fp.double()` for decimal fields: currency amounts, percentages, scores, measurements, ratios.
+- Validator schemas still use the `number` primitive from `@<app-name>/core`; that does not imply an `fp.number()` entity builder exists.
+- If a numeric field's shape is ambiguous, copy the nearest generated entity pattern rather than inventing a builder.
+
+### `defineComplianceEntity` vs `defineEntity`
+
+- `defineComplianceEntity` — Validates all properties have compliance classification. **Use this for all entities.**
+- `defineEntity` — No compliance validation. Only for framework internals or third-party entities. Do not import `defineEntity` from `@forklaunch/core/persistence` in Studio-generated services; recent generated persistence packages do not export it there.
+- For catalog/reference data with no sensitive fields, still use `defineComplianceEntity` and classify scalar fields as `"none"`.
+
+The return type of `defineComplianceEntity` matches `defineEntity`, except that every `pii`, `phi` and `pci` property is typed `CompliantField<T, level>` (see below).
+
+## Compliant Fields (pii / phi / pci)
+
+A `pii`, `phi` or `pci` property is **not its value**. It loads as a `CompliantField`, and the only ways to the value are:
+
+| Read | Returns | Use it for |
+| --- | --- | --- |
+| `user.email.deanon` | the plaintext (`string`, `Date`, …) | business logic, your own API responses, BAA-covered providers. Every read is reported to `onComplianceAccess` listeners |
+| `user.email.anon` | an `Anon` (`.value` is a de-identified string) | logs, analytics, non-BAA providers, anything that must not carry protected data |
+
+There are no `toString` / `toJSON` / inspect overloads: `` `${user.email}` `` prints `[object Object]` and `JSON.stringify(user)` prints `"email":{}`. Always write `.deanon` or `.anon` explicitly.
+
+```typescript
+const User = defineComplianceEntity({
+  name: 'User',
+  properties: {
+    id: fp.uuid().primary().compliance('none'),
+    // queryable: allows where / $in / $ne / $nin via a blind index (email_idx)
+    email: fp.string().unique().compliance('pii', { queryable: true, normalize: 'lowercase' }),
+    name: fp.string().compliance('pii'),                  // anon: random token
+    dob: fp.datetime().compliance('phi'),                 // anon: year
+    zip: fp.string().compliance('pii', { anon: 'zip3' }), // anon: 3-digit ZIP (000 if sparse)
+  },
+});
+
+// Writing takes plain values: em.create and em.assign wrap them.
+const user = em.create(User, { id, email: 'Ada@Example.com', name: 'Ada', dob, zip: '94110' });
+em.assign(user, { name: 'Ada Lovelace' });
+
+// Reading is explicit.
+const dto = { email: user.email.deanon, name: user.name.deanon };
+logger.info('signed up', { user: user.name.anon.value }); // tok_...
+
+// Querying takes plain values, for queryable fields only (equality only).
+await em.findOne(User, { email: 'ada@example.com' });
+await em.find(User, { email: { $in: emails } });
+```
+
+Rules:
+
+- **Read with `.deanon` / `.anon`**, never the bare property. A bare property in a string, comparison or DTO is a type error.
+- **Spreading an entity drops compliant fields** (they live on the prototype). In a `toDto` mapper write `({ ...deanon(entity), ... })` — `deanon` from `@forklaunch/core/persistence` copies the entity with every compliant field revealed (and reported).
+- **Write with plain values through `em.create` / `em.assign`.** Direct assignment (`user.name = 'x'`) works at runtime but is a type error; use `em.assign`.
+- **`where` needs `{ queryable: true }`** on the property. It adds a `<column>_idx` column (keyed HMAC, per tenant); only `$eq`, `$ne`, `$in`, `$nin` work. `$like`, ranges and sorting on protected fields are refused: they would need the plaintext. `.unique()` on a queryable field applies to the index.
+- **`anon` strategies**: `token` (default for strings; random, stored with the value), `year` (default for dates), `zip3`, `last4`, `redact` (default for numbers, json, enums, arrays).
+- **Decryption is lazy**: loading an entity never decrypts. `.deanon` decrypts on first read, under the bound tenant (`withEncryptionContext` / `wrapEmWithTenantContext`).
+- **No encryptor, no write**: writing a compliant field without `registerEncryptor()` throws; values are never stored in plaintext.
+- **Better Auth**: `@forklaunch/better-auth-mikro-orm-fork` >= 0.5.10 hands Better Auth `.deanon` values; older adapters return `{}` for `pci` account columns and break sign-in.
+
+### Upgrading an existing app
+
+1. `npx -y -p typescript@5 -p @forklaunch/core forklaunch-migrate-compliant-fields` rewrites bare reads to `.deanon`, entity spreads to `...deanon(entity)`, and lists `where` clauses on fields that need `{ queryable: true }`. Hand-written types that restate an entity's field types (shape entities, DTO interfaces) must use the same classification as the real entity.
+2. Add `{ queryable: true }` where listed, then generate a migration (it adds `<column>_idx` columns and moves unique constraints onto them).
+3. Deploy, then run `reencryptEncryptedColumns()` once: it seals existing values into the `v4` envelope (random IV, anon token) and writes the blind indexes. Until then legacy rows still read with `.deanon`, but token `.anon` throws `LegacyCiphertextError` and `where` lookups miss them.
+
+## Route Access Levels
+
+Every handler requires an `access` field:
+
+```typescript
+export const getUser = handlers.get(
+  schemaValidator,
+  '/users/:id',
+  {
+    name: 'Get User',
+    summary: 'Get user by ID',
+    access: 'protected',     // <-- REQUIRED
+    params: { id: string },
+    auth: {
+      sessionSchema: SHARED_SESSION_SCHEMA,
+      jwt: { jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL },
+      allowedRoles: PLATFORM_VIEWER_ROLES,
+    },
+    responses: {
+      200: UserSchemas.UserResponseSchema,
+      404: string,
+    },
+  },
+  async (req, res) => { ... }
+);
+```
+
+### Access Level Matrix
+
+| Level           | Auth Required | Session                 | Use Case                            |
+| --------------- | ------------- | ----------------------- | ----------------------------------- |
+| `public`        | No            | None                    | Health checks, docs, public APIs    |
+| `authenticated` | Yes           | Basic session           | Any logged-in user                  |
+| `protected`     | Yes           | Full session with roles | Role-gated endpoints                |
+| `internal`      | HMAC only     | None                    | Service-to-service, CLI-to-platform |
+
+The `access` field is type-narrowed: setting `access: 'public'` makes `auth` optional; `access: 'protected'` requires `auth` with `allowedRoles`.
+
+## Field Encryption
+
+PII/PHI/PCI fields are compliant fields (above); encryption happens in their
+column type on flush:
+
+- **Algorithm**: AES-256-GCM, a fresh random IV per write
+- **Key derivation**: HKDF-SHA256, per tenant, from `ENCRYPTION_KEY`
+- **Format**: `v4:{keyId}:{anon}:{iv}:{tag}:{ciphertext}` (legacy `v1`–`v3` still read)
+- **Lookups**: a separate blind index, `bi1:{keyId}:{hmac}`, in `<column>_idx` for queryable fields
+- **Triggered automatically** on flush — no manual encryption needed; decryption happens on `.deanon`
+- **Blocks `nativeInsert`** to prevent bypassing encryption
+
+Configuration:
+
+```typescript
+// In registrations.ts
+EncryptionService: {
+  lifetime: Lifetime.Singleton,
+  type: EncryptionService,
+  factory: ({ ENCRYPTION_KEY }) => new EncryptionService(ENCRYPTION_KEY),
+},
+```
+
+### Reclassifying an existing field (MUST migrate existing data)
+
+Changing a field's classification (e.g. `.compliance("none")` →
+`.compliance("pii")`) or otherwise enabling encryption on it only affects rows
+written **after** the change — rows already in the database stay plaintext, and
+reads through `EncryptedType` will either return them as-is or fail to decrypt.
+
+**MUST**: ship a data migration in the same change that rewrites existing rows
+through the same encryption path the entity now uses (`FieldEncryptor` /
+`EncryptionService`, under the correct per-tenant context — see the symmetry
+rule below). The migration must be idempotent: a `v1:`/`v2:` prefix alone is
+not proof a value is already (validly) encrypted — a malformed or
+wrong-tenant-key value can carry the same prefix. Under the correct tenant
+context, attempt `FieldEncryptor.decrypt`/`EncryptionService` decryption first;
+skip the row only if that decryption authenticates and parses successfully,
+and encrypt it (even if prefixed) if decryption fails. Cover this with tests
+for plaintext values, well-formed `v1:`/`v2:` values, and malformed values
+carrying either prefix. A schema-only migration that alters the column but
+leaves old plaintext values in place is not acceptable.
+
+## Tenant Isolation
+
+### EntityMgr Factory Pattern
+
+Two different things have to be bound before a tenant-scoped read is safe, and
+they are easy to confuse:
+
+| | what it does | what it does NOT do |
+|---|---|---|
+| `setFilterParams('tenant', …)` | filters **which rows** a query returns | anything to encryption |
+| `wrapEmWithTenantContext(em, tenantId)` | filter params **plus** the encryption key context, plus a proxy that keeps it alive across the connection pool | — |
+
+`setFilterParams` alone is the single most damaging mistake in this whole
+system, because it *looks* correct. Rows come back correctly scoped, so the
+service appears tenant-aware and every test that does not read an encrypted
+column passes. Encrypted columns keep deriving the **no-tenant** key, and the
+failure only appears once a real tenant id exists — in production. Three
+endpoints (sign-up, onboarding `/me`, an invitation lookup) went down in one
+week from exactly this, in services whose factories had drifted this way.
+
+**Always use the helper. In registrations.ts:**
+
+```typescript
+import { wrapEmWithTenantContext } from '@forklaunch/core/persistence';
+
+EntityMgr: {
+  lifetime: Lifetime.Scoped,
+  type: EntityManager,
+  factory: (
+    { Orm },
+    context?: { entityManagerOptions?: ForkOptions; tenantId?: string }
+  ) =>
+    wrapEmWithTenantContext(
+      Orm.em.fork(context?.entityManagerOptions),
+      context?.tenantId
+    )
+},
+```
+
+**Never this:**
+
+```typescript
+// WRONG. Rows are filtered; encrypted columns still use the no-tenant key.
+const em = Orm.em.fork(context?.entityManagerOptions);
+if (context?.tenantId) {
+  em.setFilterParams('tenant', { tenantId: context.tenantId });
+}
+return em;
+```
+
+`forklaunch audit` flags this as `tenant-context-half-wired`. If you are adding
+a guard of your own, assert that any `registrations.ts` containing
+`setFilterParams('tenant'` also contains `wrapEmWithTenantContext` — that one
+check catches the whole class.
+
+### `fork()` drops the encryption context
+
+`wrapEmWithTenantContext` returns a **proxy**. Forking off it — directly, or via
+`getSuperAdminContext(em)`, which is `em.fork()` with the tenant filter disabled
+— produces a plain EntityManager that no longer carries the tenant, because the
+proxy is what was carrying it.
+
+```typescript
+// WRONG: the fork drops the tenant, so encrypted columns decrypt with '' and throw.
+const admins = await getSuperAdminContext(em).find(UserEntity, { … });
+```
+
+Decide what you actually need:
+
+- **Cross-tenant rows, one known key** — the common case. Disable the row filter
+  but re-bind the tenant you already know:
+
+  ```typescript
+  const crossTenantEm = wrapEmWithTenantContext(
+    getSuperAdminContext(em),
+    organizationId
+  );
+  ```
+
+- **Genuinely cross-tenant encrypted data** — there is no single key that
+  decrypts rows belonging to different tenants, so this is not a thing you can
+  do in one query. Either resolve each row's tenant and read it under
+  `withEncryptionContext(thatTenant, …)`, or select around the encrypted
+  columns entirely with `fields: [...]`.
+
+**In controllers** — create the tenant-scoped EM via DI context:
+
+```typescript
+// Authenticated handlers (have req.session)
+const em = emFactory({ context: { tenantId: req.session.organizationId } });
+```
+
+**In internal HMAC handlers (NO session, but reading encrypted columns)** —
+**DO NOT** call `emFactory()` with no context. There is no JWT, so
+`getCurrentTenantId()` returns `''`, MikroORM's `EncryptedType` decrypts with
+the wrong key, fails _silently_ in the published framework versions, and
+returns the raw `v2:` ciphertext. That ciphertext propagates into ECS task
+definitions, deployment manifests, S3 log objects, etc. — extremely hard to
+diagnose because the failure is invisible at the read site.
+
+Always resolve the tenant from an entity ID first, then fork a tenant-scoped
+EM. Use the helpers in `domain/utils/tenant-em.util.ts`:
+
+```typescript
+import {
+  getApplicationScopedEm,
+  getDeploymentScopedEm,
+  getReleaseScopedEm,
+  getResourceScopedEm
+} from '../../domain/utils/tenant-em.util';
+
+// In an internal handler keyed by application
+const scoped = await getApplicationScopedEm(req.params.id);
+if (!scoped) {
+  res.status(404).send('Application not found');
+  return;
+}
+const { em, application } = scoped;
+
+// All subsequent reads/writes via `em` use the correct tenant key
+const envVars = await em.find(EnvironmentVariableEntity, { ... });
+```
+
+The helper does an unscoped lookup just to read the unencrypted FK column
+(`organizationId`), then forks an EM with that as the tenant context. All
+subsequent reads through that EM auto-decrypt encrypted columns correctly,
+and all writes encrypt with the same key (so future reads stay symmetric).
+
+**The only valid uses of `emFactory()` with no context** are operations that:
+
+1. Don't touch entities with encrypted columns (no PII/PCI/PHI), AND
+2. Don't write to a global filter–scoped table without bypassing the filter via `getSuperAdminContext`.
+
+### Decrypt-Safe Lookup Pattern
+
+When the tenant is not known yet, never hydrate an encrypted entity just to
+learn who owns it. This is the failure mode that causes errors like:
+
+- `Failed to decrypt encrypted column value`
+- `ciphertext is corrupted or the wrong key was used`
+
+Typical bad pattern:
+
+```typescript
+// Wrong: invitation.email / invitation.token may decrypt before authorization
+const invitation = await em.findOne(InvitationEntity, { id: invitationId });
+```
+
+Preferred pattern:
+
+```typescript
+const rows = (await em.getConnection().execute(
+  `
+    select organization_id as "organizationId"
+    from invitation
+    where id = ?
+    limit 1
+  `,
+  [invitationId]
+)) as Array<{ organizationId: string }>;
+
+const organizationId = rows[0]?.organizationId;
+if (!organizationId) return null;
+
+const scopedEm = emFactory({ context: { tenantId: organizationId } });
+const invitation = await withEncryptionContext(organizationId, () =>
+  scopedEm.findOne(InvitationEntity, { id: invitationId })
+);
+```
+
+Apply the same rule to `UserEntity`, `OrganizationEntity`, GitHub
+installation-like records, and any other entity that mixes:
+
+- unencrypted ownership columns (`organization_id`, `application_id`)
+- encrypted payload columns (`email`, `token`, `accountLogin`, etc.)
+
+If the read is only needed for authorization or routing, prefer raw FK lookup or
+lookup-hash columns over entity hydration.
+
+If in doubt, scope it.
+
+### Tenant-Encrypted IAM/Auth Surface Pattern
+
+IAM is the easiest place to accidentally hydrate encrypted PII too early:
+login, invite, resend, `/me`, organization switching, and internal HMAC
+endpoints all start with only a user ID, email, token, or invitation ID. In
+these flows, treat encrypted entities as **two-phase loads**:
+
+1. Resolve ownership using only unencrypted columns or lookup hashes.
+2. Create an EM with the resolved tenant context.
+3. Hydrate encrypted entities only inside that tenant context, or return a
+   narrow raw snapshot if hydration is not needed.
+
+Do not do this:
+
+```typescript
+// Wrong: hydration decrypts email/token/name before tenant context is known.
+const user = await em.findOne(UserEntity, { id: userId }, {
+  populate: ['organization', 'roles', 'roles.permissions']
+});
+const invitation = await em.findOne(InvitationEntity, { email });
+```
+
+Do this instead:
+
+```typescript
+// 1. Raw ownership lookup: select only unencrypted FK/status columns.
+const rows = (await em.getConnection().execute(
+  `
+    select organization_id as "organizationId"
+    from "user"
+    where id = ?
+    limit 1
+  `,
+  [userId]
+)) as Array<{ organizationId: string | null }>;
+
+const organizationId = rows[0]?.organizationId;
+if (!organizationId) return null;
+
+// 2. Scope both tenant filter and encryption context before hydration.
+const scopedEm = emFactory({ context: { tenantId: organizationId } });
+const user = await withEncryptionContext(organizationId, () =>
+  scopedEm.findOne(UserEntity, { id: userId })
+);
+```
+
+For lookup by encrypted value (`email`, `token`, account login, invite token),
+do **not** query the encrypted column. Store and query a parallel
+`.compliance('none')` lookup column, usually a normalized hash:
+
+```typescript
+const normalizedEmail = normalizeInvitationEmail(email);
+const rows = await em.getConnection().execute(
+  `
+    select id, organization_id as "organizationId"
+    from "invitation"
+    where email_lookup_hash = ?
+      and organization_id = ?
+      and status in (?, ?)
+  `,
+  [
+    invitationEmailLookupHash(normalizedEmail),
+    organizationId,
+    InvitationStatus.PENDING,
+    InvitationStatus.ACCEPTED
+  ]
+);
+```
+
+When implementing `/me`, JWT payload construction, organization switching, or
+other auth-surface reads, prefer helper functions that return a narrow snapshot
+or authorization surface (`roles`, `permissions`, `organizationId`) without
+hydrating unrelated encrypted fields. In IAM, that means using helpers like:
+
+- `resolveUserOrganizationIdById` for raw user → organization lookup
+- `findUserByIdWithTenantContext` when full user hydration is required
+- `getUserAuthorizationSurfaceWithTenantContext` for roles/permissions
+- `findOrganizationByIdWithTenantContext` for encrypted organization fields
+
+Behavior flags must not depend solely on legacy encrypted or metadata state. For
+example, invited-user onboarding should derive `wasInvited` from multiple
+non-PII signals:
+
+- `user.metadata.wasInvited === true`
+- active `OrganizationUser.invitedBy`
+- pending/accepted `Invitation` matched by `email_lookup_hash` + organization
+
+This prevents legacy users and accepted invites from being treated as brand-new
+organizations just because one metadata write was missed.
+
+For legacy mixed-encryption data, repair in a dedicated helper or migration:
+try explicit candidate tenant contexts (`organizationId`, legacy `''`) with
+`FieldEncryptor`, then rewrite under the canonical tenant context. Do not
+scatter "try any key and continue" logic through controllers, and never return
+raw `v1:`/`v2:` ciphertext to clients as a fallback.
+
+**Symmetry rule for encryption**: Whatever tenant ID was used at write time
+must be used at read time. Asymmetric tenants → silent decryption failure →
+ciphertext returned as-is → corrupted data downstream. This applies to:
+
+- DB columns (`EncryptedType` via `getCurrentTenantId()`)
+- Redis cache values (`TtlCache` `compliance` arg)
+- S3 object bodies (`ObjectStore` `compliance` arg)
+
+### Raw SQL (Kysely) bypasses `EncryptedType`
+
+`EncryptedType.convertToJSValue` is wired up by MikroORM's entity hydration
+pipeline. **It does not run when you reach past MikroORM to query via raw
+SQL** — e.g. `(em as unknown as SqlEntityManager).getKysely<Database>()`.
+A Kysely query that selects a `.compliance('pii' | 'phi' | 'pci')` column
+returns the raw `v2:` ciphertext straight through to the caller, and the
+failure is completely silent: the frontend will render `v2:<iv>:<tag>:…`
+instead of the plaintext.
+
+The same bypass applies to **WHERE clauses**: `LOWER(email) = 'alice@x.com'`
+compares the plaintext to ciphertext, never matches, and silently returns
+zero rows. This quietly breaks rate-limiting, duplicate checks, search, etc.
+built against encrypted columns.
+
+**Rule**: anywhere you call `.getKysely()` and touch an encrypted column,
+either:
+
+1. **Decrypt after SELECT** — apply a helper to each PII column in the
+   row-mapping step:
+
+   ```typescript
+   // services/internal/kyselyEncryption.ts
+   import { FieldEncryptor } from '@forklaunch/core/persistence';
+
+   const encryptor = new FieldEncryptor(
+     process.env.ENCRYPTION_KEY
+   );
+
+   export function decryptEncryptedColumn(
+     value: string | null | undefined,
+     tenantId: string
+   ): string | null {
+     if (value == null) return null;
+     if (!/^v[12]:/.test(value)) return value;
+     try { return encryptor.decrypt(value, tenantId); }
+     catch { return value; }
+   }
+
+   // In the service: always thread the request's tenant ID through —
+   // ciphertext was produced under HKDF(masterKey, info=tenantId), so reads
+   // must use the same tenantId or decryption silently no-ops.
+   const tenantId = req.session.organizationId;
+   const rows = await db.selectFrom('policies').select([...]).execute();
+   return rows.map(r => ({
+     ...r,
+     namedInsured: decryptEncryptedColumn(r.named_insured, tenantId),
+     insuredPropertyAddress: decryptEncryptedColumn(r.insured_property_address, tenantId),
+   }));
+   ```
+
+2. **Encrypt before WHERE** — for equality lookups (`FieldEncryptor` uses a
+   deterministic IV, so same plaintext → same ciphertext):
+
+   ```typescript
+   const tenantId = req.session.organizationId;
+   const encEmail = encryptor.encrypt(email, tenantId);
+   db.selectFrom('external_analysis_requests')
+     .where('email', '=', encEmail)
+     .select(...)
+   ```
+
+3. **Don't filter on encrypted columns with `ILIKE` / `LIKE` / `LOWER()`** —
+   ciphertext is opaque. If you need partial-match search or case-insensitive
+   equality, store a parallel `.compliance('none')` token (hashed prefix,
+   domain extract, canonical lowercased copy) alongside the encrypted column
+   and query that instead. Backfill the token in a migration.
+
+**Tenant ID must match writes.** The helper above takes `tenantId` as a
+required parameter — never default it to `''`. Ciphertext is produced under
+HKDF(masterKey, info=tenantId); reading with the wrong (or empty) tenant
+silently fails the AES-GCM auth-tag check, the `catch` branch returns the
+raw ciphertext, and the caller hands PII-shaped strings back to the client.
+Always thread the request's `organizationId` through to every
+`decryptEncryptedColumn` and `encryptor.encrypt` call in the same code path
+that the EM-scoped writes used.
+
+The framework cannot statically detect Kysely access to encrypted columns —
+this is a manual-vigilance rule. When adding `.compliance('pii')` to a
+field, grep for `.getKysely()` and `selectFrom('<table>')` to find call
+sites that need updating.
+
+**In service DI factories** — services receive plain `EntityManager`:
+
+```typescript
+MyService: {
+  factory: ({ EntityMgr, OtelCollector }) =>
+    new MyService(EntityMgr, OtelCollector)
+},
+```
+
+**Services receive plain `EntityManager`** — no factories, no tenant awareness. The tenant context is set on the EM by the DI framework when `scopedResolver` is called with `{ context: { tenantId } }`. For service methods that need a tenant-scoped EM passed from the controller, take it as a method parameter.
+
+**In server.ts** — register the tenant filter at bootstrap:
+
+```typescript
+import { setupTenantFilter } from "@forklaunch/core/persistence";
+const orm = ci.resolve(tokens.Orm);
+setupTenantFilter(orm);
+```
+
+**In seeders:**
+
+In seeders, write `organizationId` directly into each entity. The tenant filter is only registered in `server.ts` and does not run during seeding. Do NOT call `em.setFilterParams('tenant', ...)` in seeder contexts.
+
+### MikroORM Global Filter
+
+The `setupTenantFilter(orm)` call registers a global filter that adds `WHERE organizationId = :tenantId` to all queries on entities that have an `organizationId` property. The filter is set per-request via `em.setFilterParams('tenant', { tenantId })`.
+
+To bypass for super-admin operations:
+
+```typescript
+import { getSuperAdminContext } from "@forklaunch/core/persistence";
+const em = getSuperAdminContext(baseEm);
+```
+
+### PostgreSQL RLS (optional, configurable)
+
+```typescript
+// At bootstrap after setupTenantFilter:
+import { setupRls } from "@forklaunch/core/persistence";
+setupRls(orm); // Sets SET LOCAL app.tenant_id per transaction
+```
+
+Opt out by passing `{ enabled: false }` to `setupRls`.
+
+## Data Retention (Framework)
+
+Declare a retention policy on any compliance entity:
+
+```typescript
+export const Account = defineComplianceEntity({
+  name: 'Account',
+  retention: {
+    duration: RetentionDuration.years(7), // ISO 8601 → 'P7Y'
+    action: 'anonymize'                    // or 'delete'
+  },
+  properties: { ... },
+});
+```
+
+### Duration Helpers
+
+- `RetentionDuration.years(3)` → `'P3Y'`
+- `RetentionDuration.months(6)` → `'P6M'`
+- `RetentionDuration.days(90)` → `'P90D'`
+
+Minimum duration is 1 day. Invalid or sub-day durations are rejected at boot.
+
+### Actions
+
+- `'delete'` — hard-deletes expired records
+- `'anonymize'` — nulls PII/PHI/PCI fields, keeps 'none' fields, sets `retentionAnonymizedAt`
+
+### Enforcement
+
+`RetentionService` runs as a daily scheduled ECS RunTask via `scripts/enforce-retention.ts`:
+
+- Batches of 1000 with fresh EM per batch
+- Calendar-aware cutoff computation (handles leap years, month-ends)
+- Idempotent — skips already-anonymized records
+- Checks field nullability before anonymizing — skips non-nullable PII fields with warning
+- Per-entity error isolation
+- Dry-run mode: `pnpm retention:enforce -- --dry-run`
+- Registered in DI as Singleton: `new RetentionService(Orm, OtelCollector)`
+
+### Audit
+
+Entities with PII but no retention policy are flagged as medium-severity findings in the CLI audit and platform risk scoring.
+
+## CLI Audit Command
+
+Generate a compliance audit report:
+
+```bash
+# Local-only (pretty terminal output)
+forklaunch compliance audit
+
+# Upload to platform for risk scoring, data flow diagrams, and DPIA
+forklaunch compliance audit -e production
+
+# Save to file
+forklaunch compliance audit -e production -o report.json
+
+# Selective output
+forklaunch compliance audit -e staging --risk-score
+forklaunch compliance audit -e staging --data-flow
+forklaunch compliance audit -e staging --dpia
+
+# Raw JSON
+forklaunch compliance audit --json
+```
+
+### Requirements for Platform Upload
+
+1. `platform_application_id` must be set in `manifest.toml`
+2. `FORKLAUNCH_HMAC_SECRET` environment variable must be set
+3. `--environment` / `-e` flag must specify the target environment
+
+### What the Audit Collects
+
+- **Entities**: Field names, compliance classifications, encryption status (from `manifest.toml [compliance]` section)
+- **Routes**: Paths, methods, access levels (from OpenAPI specs)
+- **Secrets**: Declared secret names and count
+- **Data residency**: Allowed deployment regions
+
+### Platform Processing
+
+When uploaded, the platform computes:
+
+- **Risk score** (0-100, normalized over total items)
+- **Findings** (severity: critical/high/medium/low with point values)
+- **PCI Data Flow Diagram** (Mermaid format)
+- **DPIA** (GDPR Data Protection Impact Assessment with data inventory, mitigations, cross-border analysis)
+
+## Portal Compliance Page
+
+The compliance reports page is at `/dashboard/applications/:id/compliance`:
+
+- Environment selector
+- Risk score overview (score, level, findings count)
+- Findings table (sorted by severity)
+- Data Flow tab (Mermaid diagram for PCI fields)
+- DPIA tab (data inventory, risk assessment, active mitigations, cross-border transfers)
+- History tab (previous reports with scores)
+
+Requires the `COMPLIANCE` feature flag (gated by billing plan).
+
+## GDPR Erasure and Export
+
+### ComplianceDataService (Framework)
+
+Every service with a database gets a `ComplianceDataService` that walks all compliance-registered entities and erases or exports PII data for a user:
+
+```typescript
+// In registrations.ts
+ComplianceDataService: {
+  lifetime: Lifetime.Singleton,
+  type: ComplianceDataService,
+  factory: ({ Orm, OtelCollector }) =>
+    new ComplianceDataService(Orm, OtelCollector, {
+      // Optional: override userIdField per entity
+      User: 'id',              // User entity links via primary key
+      Subscription: 'partyId', // billing uses partyId
+    })
+},
+```
+
+### userIdField Resolution
+
+When no override is specified for an entity, the service **optimistically searches** the entity's properties for common user-linking field names in order:
+
+1. **Constructor override** — `{ Subscription: 'partyId' }` — exact, skips search
+2. **Entity declaration** — `defineComplianceEntity({ userIdField: 'id' })` — exact
+3. **Optimistic search** — tries: `userId`, `user`, `id`, `partyId`, `customerId`, `ownerId`, `createdBy`, `email` — first match wins
+4. **Skip** — no candidate found, entity is skipped with a warning
+
+If you pass overrides in the constructor, those entities use the exact field. Entities NOT in the overrides map still fall through to optimistic search.
+
+### Per-Service Compliance Endpoints
+
+Every service with a database gets HMAC-authenticated compliance endpoints:
+
+```typescript
+DELETE /compliance/erase/:userId  // erases PII from this service's entities
+GET    /compliance/export/:userId // exports PII from this service's entities
+```
+
+These are auto-generated by the CLI template. Each service handles only its own entities — no cross-service coupling.
+
+### Client-SDK Fan-Out
+
+The `client-sdk` provides `createComplianceClient` that fans out to all services in parallel:
+
+```typescript
+import { createComplianceClient } from "@myapp/client-sdk";
+
+const compliance = createComplianceClient({
+  hmacSecretKey: HMAC_SECRET_KEY,
+  services: {
+    iam: iamSdk,
+    billing: billingSdk,
+    myService: myServiceSdk,
+  },
+});
+
+// From frontend or CLI:
+const result = await compliance.erase("user-123");
+// {
+//   iam: { status: 'fulfilled', result: { entitiesAffected: ['User'], recordsDeleted: 1 } },
+//   billing: { status: 'fulfilled', result: { entitiesAffected: ['Subscription'], recordsDeleted: 2 } },
+//   myService: { status: 'rejected', error: 'Connection refused' }
+// }
+
+const exported = await compliance.export("user-123");
+```
+
+- Uses `Promise.allSettled` — partial failures don't block other services
+- Per-service status: `'fulfilled'` with result or `'rejected'` with error
+- Any SDK with `compliance.eraseUserData` / `compliance.exportUserData` qualifies
+- Lives in **client-sdk** (not framework) because it knows what services exist
+
+## Secrets Management
+
+```typescript
+// In forklaunch.manifest.toml
+[compliance];
+secrets = ["DATABASE_URL", "ENCRYPTION_KEY", "STRIPE_SECRET_KEY"];
+
+// In code — boot-time validated, typed access
+import { getSecret } from "@forklaunch/core/secrets";
+const dbUrl = getSecret("DATABASE_URL"); // throws at boot if missing
+```
+
+## Data Residency
+
+```toml
+# In forklaunch.manifest.toml
+[compliance]
+data_residency = ["us-east-1", "eu-west-1"]
+```
+
+Enforced at deploy time by the platform — deployments to unauthorized regions are rejected.
+
+## Platform API Endpoints
+
+All under the `/compliance` router prefix:
+
+| Method | Path                                                        | Auth | Description                          |
+| ------ | ----------------------------------------------------------- | ---- | ------------------------------------ |
+| GET    | `/features`                                                 | JWT  | List compliance features             |
+| GET    | `/standards`                                                | JWT  | List compliance standards            |
+| GET    | `/applications/:appId/environments/:envName`                | JWT  | Get environment compliance config    |
+| PUT    | `/applications/:appId/environments/:envName`                | JWT  | Update environment compliance config |
+| GET    | `/applications/:appId/environments/:envName/audit/internal` | JWT  | Get internal audit logs              |
+| GET    | `/applications/:appId/environments/:envName/audit/aws`      | JWT  | Get AWS CloudTrail logs              |
+| POST   | `/applications/:appId/environments/:envName/audit/report`   | HMAC | Submit audit report from CLI         |
+| GET    | `/applications/:appId/environments/:envName/audit/reports`  | JWT  | List historical audit reports        |
+| POST   | `/retention/enforce`                                        | HMAC | Trigger retention enforcement        |
+
+### Per-Service Compliance Endpoints (generated on every service)
+
+| Method | Path                         | Auth | Description                             |
+| ------ | ---------------------------- | ---- | --------------------------------------- |
+| DELETE | `/compliance/erase/:userId`  | HMAC | Erase PII for a user from this service  |
+| GET    | `/compliance/export/:userId` | HMAC | Export PII for a user from this service |
+
+## Supply Chain Monitoring
+
+The CLI generates Dependabot configuration in the user's target repo:
+
+```bash
+forklaunch init myapp  # generates .github/dependabot.yml
+```
+
+This is a warning-only default. The configuration is also updated by any CLI command that touches GitHub configuration paths (sync, change).
+
+## Change Management
+
+The CLI generates GitHub branch protection documentation and CI workflows:
+
+```bash
+forklaunch init myapp  # generates .github/workflows/ci.yml and .github/BRANCH_PROTECTION.md
+```
+
+The CI workflow runs lint, type-check, and tests on PRs. Branch protection rules must be configured manually via the setup guide.
