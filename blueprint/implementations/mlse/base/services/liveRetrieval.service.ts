@@ -101,8 +101,12 @@ export class LiveRetrievalService {
     }
 
     try {
-      const documents = await this.withTimeout(
-        this.fetchers.get(sourceKey)!.fetchDocuments({ term, limit: this.documentsPerSource })
+      const fetcher = this.fetchers.get(sourceKey)!;
+      const documents = await this.withTimeout((signal) =>
+        fetcher.fetchDocuments(
+          { term, limit: this.documentsPerSource },
+          { signal }
+        )
       );
       if (this.cache) {
         await this.cache
@@ -148,11 +152,20 @@ export class LiveRetrievalService {
       });
   }
 
-  private withTimeout<T>(promise: Promise<T>): Promise<T> {
+  // Cancels the fetch when the budget runs out, so a slow source stops using
+  // the connection and its rate-limit slots instead of finishing unseen. The
+  // race still ends the wait for a fetcher that ignores the signal.
+  private withTimeout<T>(run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new TimeoutError()), this.timeoutMs);
+      timer = setTimeout(() => {
+        controller.abort(new TimeoutError());
+        reject(new TimeoutError());
+      }, this.timeoutMs);
     });
-    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+    return Promise.race([run(controller.signal), timeout]).finally(() =>
+      clearTimeout(timer)
+    );
   }
 }
