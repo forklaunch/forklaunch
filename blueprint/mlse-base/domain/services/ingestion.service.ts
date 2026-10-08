@@ -256,7 +256,8 @@ export class IngestionService {
       let model: string | null = null;
       try {
         ({ embeddings, model } = await this.llmProvider.embed({
-          texts: batch.map((p) => `${p.sectionPath}: ${p.text}`)
+          texts: batch.map((p) => `${p.sectionPath}: ${p.text}`),
+          purpose: 'document'
         }));
       } catch (error) {
         this.openTelemetryCollector.error('Passage embedding failed; stored without vectors', {

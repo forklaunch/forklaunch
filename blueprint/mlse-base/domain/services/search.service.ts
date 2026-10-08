@@ -271,7 +271,7 @@ export class SearchService {
     let embedding: number[] | undefined;
     let model: string;
     try {
-      const response = await this.llmProvider.embed({ texts: [query] });
+      const response = await this.llmProvider.embed({ texts: [query], purpose: 'query' });
       embedding = response.embeddings[0];
       model = response.model;
     } catch (error) {
