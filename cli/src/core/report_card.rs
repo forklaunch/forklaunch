@@ -523,7 +523,13 @@ pub(crate) fn build_local_report_card(
         let mut card_findings = Vec::new();
         for finding in &rail_findings {
             let severity = severity_for(finding);
-            score -= penalty_for(severity);
+            // A review finding waits for a person; it costs no points.
+            if !matches!(
+                criterion_for_check(&finding.check).map(|(_, on)| on),
+                Some(OnFinding::Review)
+            ) {
+                score -= penalty_for(severity);
+            }
             card_findings.push(CardFinding {
                 severity: severity.to_string(),
                 title: format!("{} ({})", item_label(&finding.check), finding.project),
@@ -882,6 +888,31 @@ mod tests {
             .unwrap();
         assert_eq!(item.status, "pending");
         assert_eq!(item.checks[0].status, "review");
+    }
+
+    /// An unreadable file leaves sign-in for review and costs no points.
+    #[test]
+    fn an_incomplete_route_scan_is_reviewed_without_a_deduction() {
+        let card = build_local_report_card(
+            "demo",
+            1,
+            &[finding("route-scan-incomplete", Severity::Warning)],
+            at(),
+        );
+        let security = &card.dimensions["security"];
+        assert_eq!(security.score, 100);
+        let item = security
+            .items
+            .iter()
+            .find(|i| i.criterion.as_deref() == Some("sec-authn"))
+            .unwrap();
+        assert_eq!(item.status, "pending");
+        let scan = item
+            .checks
+            .iter()
+            .find(|c| c.id == "route-scan-incomplete")
+            .unwrap();
+        assert_eq!(scan.status, "review");
     }
 
     #[test]
