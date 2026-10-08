@@ -249,6 +249,20 @@ impl CliCommand for CreateCommand {
                     .help("Skip automatic sync of projects with manifest before creating release"),
             )
             .arg(
+                Arg::new("prebuilt-openapi")
+                    .long("prebuilt-openapi")
+                    .requires_all(["local", "skip-sync", "dry-run", "yes", "application-id"])
+                    .conflicts_with("git")
+                    .help("Read previously built API specifications; do not install, build, sync, or execute application code"),
+            )
+            .arg(
+                Arg::new("application-id")
+                    .long("application-id")
+                    .requires("prebuilt-openapi")
+                    .value_parser(clap::value_parser!(uuid::Uuid))
+                    .help("Verify the target application with the signed-in account before preparing its release"),
+            )
+            .arg(
                 Arg::new("yes")
                     .long("yes")
                     .short('y')
@@ -263,7 +277,25 @@ impl CliCommand for CreateCommand {
         let auth_mode = resolve_auth()?;
         require_active_account(&auth_mode)?;
         let (app_root, manifest) = require_manifest(matches)?;
-        let application_id = require_integration(&manifest)?;
+        let application_id = if let Some(id) = matches.get_one::<uuid::Uuid>("application-id") {
+            let token = crate::core::validate::require_auth()?;
+            let id = id.to_string();
+            if manifest
+                .platform_application_id
+                .as_ref()
+                .is_some_and(|saved| saved != &id)
+            {
+                bail!("The selected application differs from the integrated application");
+            }
+            super::prebuilt::verify_application(&id, &token)?;
+            id
+        } else {
+            require_integration(&manifest)?
+        };
+        let prebuilt = matches.get_one::<String>("prebuilt-openapi");
+        if prebuilt.is_some() {
+            super::prebuilt::validate_paths(&app_root, &manifest)?;
+        }
 
         let version = matches
             .get_one::<String>("release_version")
@@ -444,8 +476,8 @@ impl CliCommand for CreateCommand {
         let workspace_root = find_workspace_root(&app_root)?;
         let modules_path = get_modules_path(&workspace_root)?;
 
-        // Step 0.5: Install dependencies and build in modules path
-        {
+        // A prebuilt release reads data only; generated code ran in a separate worker.
+        if prebuilt.is_none() {
             let runtime_cmd = if manifest.runtime == "bun" {
                 "bun"
             } else {
@@ -587,11 +619,18 @@ impl CliCommand for CreateCommand {
         }
 
         // Step 2: Export OpenAPI specs
-        let openapi_path = app_root.join(".forklaunch").join("openapi");
+        let openapi_path = if let Some(path) = prebuilt {
+            super::prebuilt::spec_directory(&app_root, path)?
+        } else {
+            app_root.join(".forklaunch").join("openapi")
+        };
         create_dir_all(&openapi_path).with_context(|| "Failed to create openapi directory")?;
-        let _openapi_guard = RemoveDirGuard::new(openapi_path.clone());
-
-        let exported_services = export_all_services(&app_root, &manifest, &openapi_path)?;
+        let _openapi_guard = prebuilt.is_none().then(|| RemoveDirGuard::new(openapi_path.clone()));
+        let exported_services = if prebuilt.is_some() {
+            super::prebuilt::validate_specs(&openapi_path, &manifest)?
+        } else {
+            export_all_services(&app_root, &manifest, &openapi_path)?
+        };
 
         log_ok!(
             stdout,

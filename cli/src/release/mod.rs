@@ -61,3 +61,5 @@ impl CliCommand for ReleaseCommand {
         }
     }
 }
+
+mod prebuilt;
