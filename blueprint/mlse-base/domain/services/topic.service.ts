@@ -90,7 +90,8 @@ export class TopicService {
 
     const evidence: { itemKey: string; itemKind: string; result: SearchResultDto; rank: number }[] = [];
     const insufficientEvidence: string[] = [];
-    for (const item of frameworkItems(framework)) {
+    const items = frameworkItems(framework, topic.searchHints ?? {});
+    for (const item of items) {
       const { results } = await this.searchService.search({
         query: `${topic.title} ${item.searchHints.join(' ')}`,
         limit: SEARCH_DEPTH,
@@ -100,7 +101,8 @@ export class TopicService {
         results
           .filter((r) => r.origin === 'corpus')
           .map((r) => ({ ...r, documentKey: `${r.sourceKey}:${r.externalId}` })),
-        { hints: item.searchHints, topicTerms: topic.searchTerms, limit: EVIDENCE_PER_ITEM }
+        // the document must name this topic, not share one word with it
+        { hints: item.searchHints, topicTerms: topic.searchTerms, limit: EVIDENCE_PER_ITEM, wholeTerm: true }
       );
       if (kept.length === 0) {
         insufficientEvidence.push(item.key);
@@ -112,7 +114,7 @@ export class TopicService {
     // sentence mentions one ("median blood loss was 20 mL" for blood, not
     // "60% of patients were female")
     const quantitativeHints = new Map(
-      frameworkItems(framework)
+      items
         .filter((item) => item.quantitative)
         .map((item) => [item.key, new Set(item.searchHints.flatMap((hint) => queryTerms(hint)))])
     );
