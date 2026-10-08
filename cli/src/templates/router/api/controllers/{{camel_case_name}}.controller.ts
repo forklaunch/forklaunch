@@ -1,4 +1,4 @@
-import { handlers, {{#is_iam_configured}}APPLICATION_ADMIN_ROLES, {{/is_iam_configured}}schemaValidator } from '@{{app_name}}/core';
+import { handlers, {{#is_iam_configured}}ROLES, {{/is_iam_configured}}schemaValidator } from '@{{app_name}}/core';
 {{#with_mappers}}
 import { {{pascal_case_name}}RequestMapper, {{pascal_case_name}}ResponseMapper } from '../../domain/mappers/{{camel_case_name}}.mappers';
 {{/with_mappers}}
@@ -29,7 +29,7 @@ export const {{camel_case_name}}Get = handlers.get(
       jwt: {
         jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL
       },
-      allowedRoles: APPLICATION_ADMIN_ROLES
+      allowedRoles: new Set([ROLES.ADMIN])
     },{{/is_iam_configured}}{{^is_iam_configured}}access: 'public',{{/is_iam_configured}}
     responses: {
       {{#with_mappers}}
@@ -63,7 +63,7 @@ export const {{camel_case_name}}Post = handlers.post(
       jwt: {
         jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL
       },
-      allowedRoles: APPLICATION_ADMIN_ROLES
+      allowedRoles: new Set([ROLES.ADMIN])
     },{{/is_iam_configured}}{{^is_iam_configured}}access: 'public',{{/is_iam_configured}}
     {{#with_mappers}}
     // specifies the request body schema using Mapper constructs

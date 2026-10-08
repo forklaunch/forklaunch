@@ -30,11 +30,7 @@ export const setupTestDatabase = async (): Promise<TestSetupResult> => {
     },
     databaseType: getEnvVar('DATABASE_TYPE') as DatabaseType,
     useMigrations: true,
-    migrationsPath: path.join(
-      __dirname,
-      '..',
-      `migrations-${getEnvVar('DATABASE_TYPE')}`
-    ),
+    migrationsPath: path.join(__dirname, '../migrations'),
     customEnvVars: {
       CORS_ORIGINS: getEnvVar('CORS_ORIGINS')
     }
@@ -58,11 +54,13 @@ export async function clearDatabase(options?: {
 
 export const setupTestData = async (em: EntityManager) => {
   const { User } = await import('../persistence/entities/user.entity');
-  const { Organization } =
-    await import('../persistence/entities/organization.entity');
+  const { Organization } = await import(
+    '../persistence/entities/organization.entity'
+  );
   const { Member } = await import('../persistence/entities/member.entity');
-  const { OrganizationRole } =
-    await import('../persistence/entities/organizationRole.entity');
+  const { OrganizationRole } = await import(
+    '../persistence/entities/organizationRole.entity'
+  );
   const { Session } = await import('../persistence/entities/session.entity');
 
   // Create test organization

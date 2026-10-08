@@ -22,7 +22,7 @@ import { wrapEmWithTenantContext } from '@forklaunch/core/persistence';
 import { ForkOptions } from '@mikro-orm/core';
 import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
 import { betterAuth } from 'better-auth';
-import { createAuthEncryptionOrm } from './domain/utils/authEncryptionPolicy.util';
+import { createEncryptionAwareOrm } from './domain/utils/encryptionContext.util';
 import { BetterAuth, betterAuthConfig } from './auth';
 import { SurfacingService } from './domain/services/surfacing.service';
 import mikroOrmOptionsConfig from './mikro-orm.config';
@@ -151,9 +151,11 @@ const expressApplicationOptions = serviceDependencies.chain({
         betterAuthConfig({
           BETTER_AUTH_BASE_PATH,
           CORS_ORIGINS,
-          // Fresh IAM identities span organizations and use the explicitly
-          // versioned service encryption policy, not a business tenant fallback.
-          orm: createAuthEncryptionOrm(Orm),
+          // Wrapped so Better Auth's reads decrypt with the same key the rest
+          // of the service writes with. `EntityManager` above goes through
+          // `wrapEmWithTenantContext`; handing Better Auth the raw ORM meant
+          // its reads ran under no tenant and could not decrypt `account`.
+          orm: createEncryptionAwareOrm(Orm),
           openTelemetryCollector: OtelCollector
         })
       ) as BetterAuth
@@ -183,39 +185,21 @@ const expressApplicationOptions = serviceDependencies.chain({
         SessionObject<SchemaValidator>
       > = {
         auth: {
-          surfacePermissions: async (payload: {
-            sub?: string;
-            activeOrganizationId?: string;
-          }) => {
-            if (
-              typeof payload.sub !== 'string' ||
-              !payload.sub ||
-              typeof payload.activeOrganizationId !== 'string' ||
-              !payload.activeOrganizationId
-            ) {
+          surfacePermissions: async (payload: { sub?: string }) => {
+            if (!payload.sub) {
               return new Set();
             }
             const permissions = await SurfacingService.surfacePermissions(
-              payload.sub as string,
-              payload.activeOrganizationId as string
+              payload.sub as string
             );
             return new Set(permissions);
           },
-          surfaceRoles: async (payload: {
-            sub?: string;
-            activeOrganizationId?: string;
-          }) => {
-            if (
-              typeof payload.sub !== 'string' ||
-              !payload.sub ||
-              typeof payload.activeOrganizationId !== 'string' ||
-              !payload.activeOrganizationId
-            ) {
+          surfaceRoles: async (payload: { sub?: string }) => {
+            if (!payload.sub) {
               return new Set();
             }
             const role = await SurfacingService.surfaceRole(
-              payload.sub as string,
-              payload.activeOrganizationId as string
+              payload.sub as string
             );
             return role ? new Set([role]) : new Set();
           }

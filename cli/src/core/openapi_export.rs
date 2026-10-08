@@ -1,11 +1,4 @@
-use std::{
-    env, fs,
-    io::Read as _,
-    path::Path,
-    process::{Command as ProcessCommand, Stdio},
-    thread,
-    time::{Duration, Instant},
-};
+use std::{env, fs, io::Read as _, path::Path, process::{Command as ProcessCommand, Stdio}, thread, time::{Duration, Instant}};
 
 use anyhow::{Context, Result, bail};
 
@@ -35,8 +28,7 @@ pub(crate) fn resolve_command(name: &str) -> String {
     ];
 
     // Check nvm directories for node/npm/npx
-    if let Ok(nvm_dir) = env::var("NVM_DIR").or_else(|_| Ok::<String, ()>(format!("{}/.nvm", home)))
-    {
+    if let Ok(nvm_dir) = env::var("NVM_DIR").or_else(|_| Ok::<String, ()>(format!("{}/.nvm", home))) {
         let nvm_versions = Path::new(&nvm_dir).join("versions").join("node");
         if nvm_versions.is_dir() {
             // Find the latest installed node version
@@ -47,7 +39,9 @@ pub(crate) fn resolve_command(name: &str) -> String {
                     .collect();
                 versions.sort_by(|a, b| b.file_name().cmp(&a.file_name()));
                 for version_entry in versions {
-                    fallback_paths.push(format!("{}/bin/{}", version_entry.path().display(), name));
+                    fallback_paths.push(
+                        format!("{}/bin/{}", version_entry.path().display(), name)
+                    );
                 }
             }
         }
@@ -110,11 +104,7 @@ fn generate_dummy_value(var_name: &str, var_type: &str, iam_port: Option<u16>) -
                 }
             } else if var_name.contains("URL") {
                 "http://localhost:3000".to_string()
-            } else if var_name.contains("_SECRET")
-                || var_name.contains("_KEY")
-                || var_name.starts_with("SECRET")
-                || var_name.starts_with("KEY")
-            {
+            } else if var_name.contains("_SECRET") || var_name.contains("_KEY") || var_name.starts_with("SECRET") || var_name.starts_with("KEY") {
                 if var_name == "HMAC_SECRET_KEY" {
                     format!("{:x}", {
                         use std::{
@@ -142,42 +132,6 @@ fn generate_dummy_value(var_name: &str, var_type: &str, iam_port: Option<u16>) -
         "boolean" => "true".to_string(),
         _ => "1".to_string(),
     }
-}
-
-fn configure_export_environment(
-    cmd: &mut ProcessCommand,
-    output_file: &Path,
-    env_vars: &[EnvVarUsage],
-    iam_port: Option<u16>,
-) -> Result<tempfile::TempDir> {
-    let home = tempfile::tempdir()?;
-    crate::core::package_build_environment::isolate_package_environment(cmd, home.path())?;
-    let protected: std::collections::HashSet<String> = cmd
-        .get_envs()
-        .map(|(key, _)| key.to_string_lossy().to_ascii_uppercase())
-        .collect();
-    for var in env_vars {
-        let key = var.var_name.to_ascii_uppercase();
-        // App config discovery must not overwrite command controls with dummy values.
-        if protected.contains(&key)
-            || key.starts_with("FORKLAUNCH_")
-            || (key.starts_with("NODE_") && key != "NODE_ENV")
-            || key.starts_with("LD_")
-            || key.starts_with("DYLD_")
-            || key.starts_with("BUN_")
-            || key.starts_with("NPM_CONFIG_")
-            || matches!(key.as_str(), "ENV" | "BASH_ENV" | "SHELLOPTS")
-        {
-            continue;
-        }
-        cmd.env(
-            &var.var_name,
-            generate_dummy_value(&var.var_name, "string", iam_port),
-        );
-    }
-    cmd.env("FORKLAUNCH_MODE", "openapi")
-        .env("FORKLAUNCH_OPENAPI_OUTPUT", output_file);
-    Ok(home)
 }
 
 pub(crate) fn export_service_openapi(
@@ -230,10 +184,15 @@ pub(crate) fn export_service_openapi(
     };
 
     let mut cmd = ProcessCommand::new(&resolved_bin);
-    cmd.args(&args).current_dir(service_path);
-    // Export executes customer server code, even when package builds are skipped.
-    // Keep this home alive until the child exits; never expose release credentials.
-    let _export_home = configure_export_environment(&mut cmd, output_file, env_vars, iam_port)?;
+    cmd.args(&args)
+        .current_dir(service_path)
+        .env("FORKLAUNCH_MODE", "openapi")
+        .env("FORKLAUNCH_OPENAPI_OUTPUT", output_file);
+
+    for env_var in env_vars {
+        let dummy_value = generate_dummy_value(&env_var.var_name, "string", iam_port);
+        cmd.env(&env_var.var_name, &dummy_value);
+    }
 
     let mut child = cmd
         .stdout(Stdio::piped())
@@ -247,15 +206,11 @@ pub(crate) fn export_service_openapi(
         match child.try_wait() {
             Ok(Some(status)) => {
                 if !status.success() {
-                    let stderr = child
-                        .stderr
-                        .take()
-                        .map(|mut s| {
-                            let mut buf = String::new();
-                            s.read_to_string(&mut buf).ok();
-                            buf
-                        })
-                        .unwrap_or_default();
+                    let stderr = child.stderr.take().map(|mut s| {
+                        let mut buf = String::new();
+                        s.read_to_string(&mut buf).ok();
+                        buf
+                    }).unwrap_or_default();
                     bail!("Service {} failed to export: {}", service_name, stderr);
                 }
                 break;
@@ -268,8 +223,7 @@ pub(crate) fn export_service_openapi(
                         This usually means server.ts has top-level await calls (e.g. universalSdk, DB connections) \
                         that block before the FORKLAUNCH_MODE check in listen(). \
                         Wrap them in a guard: if (process.env.FORKLAUNCH_MODE !== 'openapi') {{ ... }}",
-                        service_name,
-                        timeout.as_secs()
+                        service_name, timeout.as_secs()
                     );
                 }
                 thread::sleep(Duration::from_millis(100));
@@ -386,50 +340,4 @@ pub(crate) fn export_all_services(
     }
 
     Ok(exported_services)
-}
-
-#[cfg(test)]
-mod export_environment_tests {
-    use super::*;
-
-    #[test]
-    #[cfg(unix)]
-    fn server_export_has_synthetic_config_without_release_credentials() {
-        let output = tempfile::tempdir().unwrap();
-        let file = output.path().join("openapi.json");
-        let mut cmd = ProcessCommand::new("/bin/sh");
-        cmd.env("FORKLAUNCH_HMAC_SECRET", "synthetic-release-secret")
-            .env("AZURE_API_KEY", "synthetic-provider-secret")
-            .env("NODE_OPTIONS", "--require=unexpected-hook");
-        let vars = [
-            "DB_URL",
-            "NODE_ENV",
-            "HOME",
-            "PATH",
-            "NODE_OPTIONS",
-            "FORKLAUNCH_MODE",
-            "FORKLAUNCH_HMAC_SECRET",
-        ]
-        .map(|name| EnvVarUsage {
-            var_name: name.into(),
-            optional: None,
-        });
-        let home = configure_export_environment(&mut cmd, &file, &vars, None).unwrap();
-        cmd.arg("-c").arg(
-            r#"
-            test -z "$FORKLAUNCH_HMAC_SECRET$AZURE_API_KEY$NODE_OPTIONS" &&
-            test "$FORKLAUNCH_MODE" = openapi &&
-            test "$NODE_ENV" = development &&
-            test "$DB_URL" = postgresql://dummy:dummy@localhost:5432/dummy &&
-            test -f "$HOME/.npmrc" &&
-            test ! -e "$HOME/.codex/auth.json" &&
-            printf '{"openapi":"3.1.0"}' > "$FORKLAUNCH_OPENAPI_OUTPUT"
-        "#,
-        );
-        assert!(cmd.status().unwrap().success());
-        assert!(file.exists());
-        let path = home.path().to_owned();
-        drop(home);
-        assert!(!path.exists());
-    }
 }

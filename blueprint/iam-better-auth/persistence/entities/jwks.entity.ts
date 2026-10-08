@@ -6,8 +6,6 @@ export const Jwks = defineComplianceEntity({
   name: 'Jwks',
   properties: {
     ...sqlBaseProperties,
-    // Null marks legacy ciphertext; never guess a new owner key for old rows.
-    encryptionPolicy: fp.string().nullable().compliance('none'),
     publicKey: fp.string().compliance('none'),
     privateKey: fp.string().compliance('pci'),
     // better-auth >= 1.7.0 JWKS fields (key expiry + algorithm/curve metadata).

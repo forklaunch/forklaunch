@@ -106,7 +106,7 @@ jobs:
       
       - name: Build CLI
         working-directory: cli
-        run: cargo build --locked --release --target ${{ matrix.target }}
+        run: cargo build --release --target ${{ matrix.target }}
       
       - name: Prepare artifact (Unix)
         if: matrix.os != 'windows-latest'
@@ -190,6 +190,6 @@ jobs:
         working-directory: cli
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_TOKEN }}
-        run: cargo publish --locked --allow-dirty
+        run: cargo publish --allow-dirty
 
         

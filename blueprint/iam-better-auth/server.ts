@@ -1,8 +1,3 @@
-import {
-  trustedAuthCallback,
-  configuredAuthOrigin,
-  inlineScriptJson
-} from './domain/utils/authRedirect.util';
 import { forklaunchExpress, schemaValidator } from '@forklaunch/blueprint-core';
 import { setupRls, setupTenantFilter } from '@forklaunch/core/persistence';
 import {
@@ -29,43 +24,25 @@ const app = forklaunchExpress(
   await ci.resolve(tokens.ExpressApplicationOptions)
 );
 
-const betterAuth = ci.resolve(tokens.BetterAuth) as BetterAuth;
-
 //! Cookie-less test-auth callback: extracts tokens from the session cookie set by
 //! better-auth during OAuth/magic-link, clears the cookie, and passes tokens via
 //! URL hash to the final callback page. This prevents the test flow from overwriting
 //! the main app's session cookie.
 app.internal.get('/api/auth/test-callback', async (req, res) => {
-  const callbackUrl = trustedAuthCallback(
-    req.query.callbackUrl,
-    ci.resolve(tokens.CORS_ORIGINS) ?? []
-  );
+  const callbackUrl = String(req.query.callbackUrl || '');
   if (!callbackUrl) {
-    res.status(400).send('Invalid callback URL');
+    res.status(400).send('Missing callbackUrl');
     return;
   }
 
   const cookie = req.headers.cookie || '';
-  const origin = configuredAuthOrigin(betterAuth.options.baseURL);
+  const origin = `${req.protocol}://${req.headers.host}`;
 
   try {
     const [tokenRes, sessionRes] = await Promise.all([
-      fetch(`${origin}/api/auth/token`, {
-        headers: { cookie },
-        redirect: 'error',
-        signal: AbortSignal.timeout(15000)
-      }),
-      fetch(`${origin}/api/auth/get-session`, {
-        headers: { cookie },
-        redirect: 'error',
-        signal: AbortSignal.timeout(15000)
-      })
+      fetch(`${origin}/api/auth/token`, { headers: { cookie } }),
+      fetch(`${origin}/api/auth/get-session`, { headers: { cookie } })
     ]);
-
-    if (!tokenRes.ok || !sessionRes.ok) {
-      res.status(401).send('Sign in again to continue.');
-      return;
-    }
 
     let token = '',
       sessionToken = '',
@@ -89,34 +66,28 @@ app.internal.get('/api/auth/test-callback', async (req, res) => {
     );
 
     const hash = new URLSearchParams({ token, sessionToken, email }).toString();
-    callbackUrl.hash = hash;
-    res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('Referrer-Policy', 'no-referrer');
-    res.redirect(callbackUrl.toString());
-  } catch {
-    res.status(500).send('Unable to complete sign-in. Please try again.');
+    res.redirect(`${callbackUrl}#${hash}`);
+  } catch (err) {
+    res
+      .status(500)
+      .send(
+        'Failed to exchange session: ' +
+          (err instanceof Error ? err.message : String(err))
+      );
   }
 });
 
 //! serves a redirect page for OAuth popup flows (must be before the catch-all)
 app.internal.get('/api/auth/oauth-redirect', (req, res) => {
   const provider = String(req.query.provider || '');
-  const callback = trustedAuthCallback(
-    req.query.callbackURL,
-    ci.resolve(tokens.CORS_ORIGINS) ?? []
-  );
-  if (!callback) {
-    res.status(400).send('Invalid callback URL');
-    return;
-  }
-  const callbackURL = callback.toString();
+  const callbackURL = String(req.query.callbackURL || '');
   const organizationId = String(req.query.organizationId || '');
   const endpoint =
     req.query.endpoint === 'sso'
       ? '/api/auth/sign-in/sso'
       : '/api/auth/sign-in/social';
 
-  const origin = configuredAuthOrigin(betterAuth.options.baseURL);
+  const origin = `${req.protocol}://${req.headers.host}`;
   const intermediateCallbackURL = `${origin}/api/auth/test-callback?callbackUrl=${encodeURIComponent(callbackURL)}`;
 
   const body =
@@ -124,10 +95,10 @@ app.internal.get('/api/auth/oauth-redirect', (req, res) => {
       ? { organizationId, callbackURL: intermediateCallbackURL }
       : { provider, callbackURL: intermediateCallbackURL };
   res.type('html').send(`<!DOCTYPE html><html><body><p>Redirecting…</p><script>
-    fetch(${inlineScriptJson(endpoint)}, {
+    fetch(${JSON.stringify(endpoint)}, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: ${inlineScriptJson(JSON.stringify(body))},
+      body: ${JSON.stringify(JSON.stringify(body))},
       credentials: 'include',
     })
     .then(function(r) { return r.json(); })

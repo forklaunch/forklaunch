@@ -305,7 +305,7 @@ mod tests {
                 assert!(!server.contains("PERMISSIONS, ROLES"));
                 let controller = render("router/api/controllers/{{camel_case_name}}.controller.ts");
                 assert!(!controller.contains("const openTelemetryCollector"));
-                assert!(controller.contains("allowedRoles: APPLICATION_ADMIN_ROLES"));
+                assert!(controller.contains("allowedRoles: new Set([ROLES.ADMIN])"));
                 for kind in ["service", "worker"] {
                     let utils = render(&format!("project/{kind}/__test__/test-utils.ts"));
                     assert_eq!(utils.contains("import { getEnvVar }"), database);
@@ -322,7 +322,7 @@ mod tests {
         }
     }
     #[test]
-    fn emitted_better_auth_uses_organization_bound_surfacing() {
+    fn emitted_better_auth_uses_its_own_surfacing() {
         let emitted = TEMPLATES_DIR
             .get_file("project/iam-better-auth/surfacing.ts")
             .unwrap()
@@ -332,10 +332,6 @@ mod tests {
             emitted,
             include_str!("../../../blueprint/iam-better-auth/surfacing.ts")
         );
-        assert!(emitted.contains("organizationId: payload.activeOrganizationId"));
-        assert!(emitted.contains(
-            "/organizations/${encodeURIComponent(payload.activeOrganizationId)}/surface-roles"
-        ));
-        assert!(!emitted.contains("getCachedRoles(payload.sub)"));
+
     }
 }

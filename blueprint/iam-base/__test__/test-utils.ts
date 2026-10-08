@@ -30,11 +30,7 @@ export const setupTestDatabase = async (): Promise<TestSetupResult> => {
     },
     databaseType: getEnvVar('DATABASE_TYPE') as DatabaseType,
     useMigrations: true,
-    migrationsPath: path.join(
-      __dirname,
-      '..',
-      `migrations-${getEnvVar('DATABASE_TYPE')}`
-    )
+    migrationsPath: path.join(__dirname, '../migrations')
   });
 
   return await harness.setup();
@@ -54,14 +50,17 @@ export async function clearDatabase(options?: {
 }
 
 export const setupTestData = async (em: EntityManager) => {
-  const { Permission } =
-    await import('../persistence/entities/permission.entity');
+  const { Permission } = await import(
+    '../persistence/entities/permission.entity'
+  );
   const { Role } = await import('../persistence/entities/role.entity');
   const { User } = await import('../persistence/entities/user.entity');
-  const { Organization } =
-    await import('../persistence/entities/organization.entity');
-  const { OrganizationStatus } =
-    await import('../domain/enum/organizationStatus.enum');
+  const { Organization } = await import(
+    '../persistence/entities/organization.entity'
+  );
+  const { OrganizationStatus } = await import(
+    '../domain/enum/organizationStatus.enum'
+  );
 
   // Create test organization
   const createdOrganization = em.create(Organization, {

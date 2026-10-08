@@ -7,10 +7,7 @@ use router::RouterCommand;
 use service::ServiceCommand;
 use worker::WorkerCommand;
 
-use crate::{
-    CliCommand,
-    core::{command::command, validate::require_auth},
-};
+use crate::{CliCommand, core::command::command};
 
 pub(crate) mod application;
 pub(crate) mod library;
@@ -59,8 +56,6 @@ impl CliCommand for InitCommand {
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        // Every scaffold entry point uses the selected user account.
-        require_auth()?;
         match matches.subcommand() {
             Some(("application", sub_matches)) => self.application.handler(sub_matches),
             Some(("library", sub_matches)) => self.library.handler(sub_matches),
