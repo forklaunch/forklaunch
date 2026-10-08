@@ -61,7 +61,7 @@
     "ajv": "^8.20.0",
     "dotenv": "^18.0.5",
     "jose": "^6.2.12",
-    "pino": "^10.3.1",
+    "pino": "^10.4.0",
     "stripe": "^22.6.2",
     "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.52.0",
     "uuid": "^14.0.2",

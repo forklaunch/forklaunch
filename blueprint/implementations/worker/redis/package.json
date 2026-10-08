@@ -75,7 +75,7 @@
   },
   "devDependencies": {
     "depcheck": "^1.4.7",
-    "eslint": "^10.11.0",
+    "eslint": "^10.12.0",
     "prettier": "^3.9.9",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2",

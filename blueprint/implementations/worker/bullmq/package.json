@@ -71,12 +71,12 @@
     "@forklaunch/internal": "^1.2.33",
     "@forklaunch/validator": "^1.2.31",
     "@sinclair/typebox": "^0.34.52",
-    "bullmq": "^6.3.10",
+    "bullmq": "^6.3.11",
     "zod": "^4.6.5"
   },
   "devDependencies": {
     "depcheck": "^1.4.7",
-    "eslint": "^10.11.0",
+    "eslint": "^10.12.0",
     "prettier": "^3.9.9",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2",
