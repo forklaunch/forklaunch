@@ -106,6 +106,14 @@ Build a topic page after the corpus has content:
 `POST /topic/laparoscopic-cholecystectomy/assemble`, then
 `GET /topic/laparoscopic-cholecystectomy`.
 
+Procedure pages seeded as drafts: `laparoscopic-cholecystectomy`,
+`appendectomy`, `inguinal-hernia-repair`, `cesarean-section`,
+`total-knee-arthroplasty` and `coronary-artery-bypass-grafting`. All use one
+procedure framework; each topic adds its own search words per item
+(`topic.search_hints`), such as "mesoappendix" for the core steps of an
+appendectomy. Ingest papers on a procedure (`CORPUS_TOPICS`) before
+assembling its page.
+
 ## API
 
 Every route is also in the generated SDK (`sdk.ts`).

@@ -17,8 +17,11 @@ export const Topic = defineComplianceEntity({
     title: fp.string().compliance('none'),
     frameworkKey: fp.string().compliance('none'),
     meshDescriptorUi: fp.string().nullable().compliance('none'),
-    // names the topic goes by; evidence must mention at least one
+    // names the topic goes by; evidence must name one in full
     searchTerms: fp.string().array().compliance('none'),
+    // the topic's own hint words per framework item (a procedure's anatomy,
+    // instruments, complications), added to the framework's
+    searchHints: fp.json<Record<string, string[]>>().nullable().compliance('none'),
     // 'draft' | 'approved'
     status: fp.string().compliance('none'),
     approvedBy: fp.string().nullable().compliance('none'),

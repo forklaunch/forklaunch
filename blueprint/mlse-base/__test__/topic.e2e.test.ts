@@ -89,6 +89,19 @@ beforeAll(async () => {
         { path: 'Results', text: 'After laparoscopic cholecystectomy the median blood loss was 20 mL and no transfusion was needed. Of the patients, 60% were female.' },
         { path: 'Complications', text: 'Bile leak after laparoscopic cholecystectomy occurred in 2% of patients.' }
       ]
+    },
+    {
+      // shares "laparoscopic" with the cholecystectomy topic, nothing more
+      sourceKey: 'pmc_oa',
+      externalId: 'PMC2',
+      title: 'Laparoscopic appendectomy for acute appendicitis',
+      url: 'https://pmc.ncbi.nlm.nih.gov/articles/PMC2/',
+      publishedAt: '2026-05-11',
+      license: 'CC BY 4.0',
+      sections: [
+        { path: 'Methods › Operative technique', text: 'In laparoscopic appendectomy the mesoappendix was divided and the appendiceal stump was secured with endoloops.' },
+        { path: 'Results', text: 'After laparoscopic appendectomy the median blood loss was 10 mL.' }
+      ]
     }
   ]);
   await ingest('pubmed', [
@@ -154,16 +167,18 @@ afterAll(async () => {
 }, 60_000);
 
 describe('topic pages on pgvector', () => {
-  it('seeds laparoscopic cholecystectomy as a draft topic', async () => {
+  it('seeds the procedure pages as drafts', async () => {
     const { topics } = await services();
-    expect(await topics.listTopics()).toEqual([
-      {
-        slug: 'laparoscopic-cholecystectomy',
-        title: 'Laparoscopic cholecystectomy',
-        topicType: 'procedure',
-        status: 'draft'
-      }
+    const list = await topics.listTopics();
+    expect(list.map((topic) => topic.slug)).toEqual([
+      'appendectomy',
+      'cesarean-section',
+      'coronary-artery-bypass-grafting',
+      'inguinal-hernia-repair',
+      'laparoscopic-cholecystectomy',
+      'total-knee-arthroplasty'
     ]);
+    expect(list.every((topic) => topic.topicType === 'procedure' && topic.status === 'draft')).toBe(true);
   });
 
   it('assembles an evidence map and reports the gaps', async () => {
@@ -226,6 +241,22 @@ describe('topic pages on pgvector', () => {
     expect(all).not.toContain('CASE-UNRELATED');
     expect(all).not.toContain('CASE-RETRACTED');
     expect(page.caseStudies.every((g) => g.evidenceLevel === 'case report (low)')).toBe(true);
+  });
+
+  it("builds each procedure from its own papers and its own words", async () => {
+    const { topics } = await services();
+    await topics.assemble('appendectomy');
+    const appendectomy = await topics.getPage('appendectomy');
+    // "mesoappendix" and "stump" are the appendectomy's words, not the framework's
+    const core = appendectomy.phases.find((p) => p.key === 'core')!;
+    expect(core.evidence.map((e: { externalId: string }) => e.externalId)).toEqual(['PMC2']);
+
+    // the appendectomy paper never reaches the cholecystectomy page
+    const cholecystectomy = await topics.getPage('laparoscopic-cholecystectomy');
+    const cited = [...cholecystectomy.questions, ...cholecystectomy.phases].flatMap((item) =>
+      item.evidence.map((e: { externalId: string }) => e.externalId)
+    );
+    expect(cited).not.toContain('PMC2');
   });
 
   it('returns a single phase for jumping straight to it', async () => {
