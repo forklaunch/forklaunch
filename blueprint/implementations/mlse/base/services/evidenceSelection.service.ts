@@ -23,7 +23,9 @@ export type SelectedEvidence<T extends EvidenceCandidate> = T & {
  *   topic's names must appear: for topic pages, so a "laparoscopic
  *   appendectomy" paper is not evidence for laparoscopic cholecystectomy.
  *   Overview answers keep word matching, since their names include the
- *   doctor's own wording.
+ *   doctor's own wording. With `wholeTerm`, a hint that is a word of the
+ *   topic's name does not count either: every passage on a cesarean
+ *   delivery says "delivery", whichever item it answers.
  * - A passage whose own heading names the item ("What is the treatment
  *   for a heart attack?" for Treatment) ranks first; then passages covering
  *   more hint words; the search score breaks ties.
@@ -35,8 +37,10 @@ export function selectEvidence<T extends EvidenceCandidate>(
   // perDocument: passages one document may contribute (default 1)
   options: { hints: string[]; topicTerms: string[]; limit: number; perDocument?: number; wholeTerm?: boolean }
 ): SelectedEvidence<T>[] {
-  const hints = new Set(options.hints.flatMap((hint) => queryTerms(hint)));
   const topicWords = new Set(options.topicTerms.flatMap((term) => queryTerms(term)));
+  const hints = new Set(
+    options.hints.flatMap((hint) => queryTerms(hint)).filter((h) => !options.wholeTerm || !topicWords.has(h))
+  );
   const topicNames = options.topicTerms.map((term) => queryTerms(term)).filter((words) => words.length > 0);
   const concernsTopic = (text: string) => {
     const words = queryTerms(text);
@@ -72,4 +76,41 @@ export function selectEvidence<T extends EvidenceCandidate>(
     }
   }
   return selected;
+}
+
+/**
+ * Where an item ranks among a page's items for one passage, by how close the
+ * passage's embedding is to each item's question (1 = the item it fits
+ * best). A passage counts as evidence for an item only if the item ranks
+ * near the top: an introduction ("Cesarean delivery is the most common major
+ * operation…") is about as close to every question and answers none, so it
+ * rarely ranks any one item first. Similarity alone cannot tell: on real
+ * papers, passages that answer their item and passages that do not were
+ * equally similar to it (median cosine 0.70 for both).
+ */
+export function itemFitRank(passage: number[], questions: Map<string, number[]>, itemKey: string): number {
+  const own = questions.get(itemKey);
+  if (!own) {
+    return 1;
+  }
+  const similarity = cosine(passage, own);
+  let rank = 1;
+  for (const [key, question] of questions) {
+    if (key !== itemKey && cosine(passage, question) > similarity) {
+      rank++;
+    }
+  }
+  return rank;
+}
+
+function cosine(a: number[], b: number[]): number {
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * (b[i] ?? 0);
+    normA += a[i] * a[i];
+    normB += (b[i] ?? 0) * (b[i] ?? 0);
+  }
+  return normA && normB ? dot / Math.sqrt(normA * normB) : 0;
 }
