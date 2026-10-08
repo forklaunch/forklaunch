@@ -85,6 +85,11 @@ const CRITERIA: &[Criterion] = &[
         label: "One customer cannot see or change another customer\u{2019}s data",
     },
     Criterion {
+        id: "sec-authn",
+        rail: "security",
+        label: "Every endpoint requires sign-in unless it is explicitly public",
+    },
+    Criterion {
         id: "sec-input-validation",
         rail: "security",
         label: "Incoming data is validated before it is trusted",
@@ -178,6 +183,12 @@ fn criterion_for_check(check: &str) -> Option<(&'static str, OnFinding)> {
         "stripe-webhook-unverified" => ("sec-input-validation", OnFinding::Fail),
         // Protected data sent to a vendor with no BAA.
         "payments-protected-data" => ("cmp-data-classification", OnFinding::Fail),
+        // A non-public route contract with no auth method lets callers in
+        // without a credential.
+        "route-auth-missing" => ("sec-authn", OnFinding::Fail),
+        // Routes the framework never sees, and files whose routes could not be
+        // read: a person confirms them; neither proves nor disproves sign-in.
+        "route-outside-framework" | "route-scan-incomplete" => ("sec-authn", OnFinding::Review),
         _ => return None,
     })
 }
@@ -235,6 +246,8 @@ fn severity_for(finding: &LocalFinding) -> &'static str {
         (Severity::Warning, "payments-protected-data") if finding.subject.starts_with("phi") => {
             "critical"
         }
+        // An endpoint anyone can call without signing in.
+        (Severity::Warning, "route-auth-missing") => "critical",
         (Severity::Warning, _) => "high",
         (Severity::Info, _) => "info",
     }
@@ -338,24 +351,37 @@ fn item_label(check: &str) -> &'static str {
         "tenant-em-wiring" => "An encryption tenant is bound",
         "tenant-context-half-wired" => "Tenant filter and encryption context agree",
         "ai-provider-direct" => "Health data reaches AI models only through BAA-covered paths",
-        "managed-provider-credentials" => "Managed templates use the platform gateways, not their own credentials",
+        "managed-provider-credentials" => {
+            "Managed templates use the platform gateways, not their own credentials"
+        }
         "object-store-wiring" => "Object storage is declared and wired",
-        "object-store-static-credentials" => "Object storage uses the service's role, not stored keys",
+        "object-store-static-credentials" => {
+            "Object storage uses the service's role, not stored keys"
+        }
         "object-store-public-access" => "Stored files are private",
         "object-store-bucket-managed-in-app" => "The platform, not app code, configures the bucket",
         "presigned-upload-unbounded" => "Browser uploads are limited in size and type",
         "capability-wiring" => "Platform capabilities are declared and wired",
         "email-provider-direct-in-managed" => "Managed services send email through the platform",
         "email-protected-data" => "Email subjects carry no protected data",
-        "sms-provider-direct-in-managed" => "Managed services text through the platform, not an SMS vendor SDK",
+        "sms-provider-direct-in-managed" => {
+            "Managed services text through the platform, not an SMS vendor SDK"
+        }
         "sms-protected-data" => "Protected data is never sent in a text message",
-        "whatsapp-provider-direct-in-managed" => "Managed services send WhatsApp through the platform",
+        "whatsapp-provider-direct-in-managed" => {
+            "Managed services send WhatsApp through the platform"
+        }
         "whatsapp-protected-data" => "Protected data is never sent over WhatsApp",
         "voice-provider-direct-in-managed" => "Managed services place calls through the platform",
         "voice-protected-data" => "Call attributes carry no protected data",
-        "payments-stripe-keys-in-managed" => "Managed payments go through the platform, with no Stripe key in the app",
+        "payments-stripe-keys-in-managed" => {
+            "Managed payments go through the platform, with no Stripe key in the app"
+        }
         "stripe-webhook-unverified" => "Stripe webhooks are verified by signature",
         "payments-protected-data" => "Protected data is not sent to Stripe",
+        "route-auth-missing" => "Every non-public route declares how callers sign in",
+        "route-outside-framework" => "Routes outside the framework are confirmed open on purpose",
+        "route-scan-incomplete" => "Every source file's routes could be read",
         _ => "Deterministic check",
     }
 }
@@ -456,6 +482,18 @@ fn remedy(check: &str) -> Option<String> {
             "Send Stripe an opaque reference (the record id) in metadata and descriptions, never a \
              .deanon value; look the record up in the app when the event comes back."
         }
+        "route-auth-missing" => {
+            "Add an auth block to the route's contract (e.g. auth: jwtAuth(ROLES)), or declare it \
+             access: 'public' if it is meant to be open."
+        }
+        "route-outside-framework" => {
+            "Declare the route with handlers.* and a contract so the framework applies its access \
+             level, auth and validation, or confirm it is meant to be open (health checks, auth \
+             library callbacks)."
+        }
+        "route-scan-incomplete" => {
+            "Fix the file's syntax error so its routes can be read, or check them by hand."
+        }
         _ => return None,
     };
     Some(text.to_string())
@@ -485,7 +523,13 @@ pub(crate) fn build_local_report_card(
         let mut card_findings = Vec::new();
         for finding in &rail_findings {
             let severity = severity_for(finding);
-            score -= penalty_for(severity);
+            // A review finding waits for a person; it costs no points.
+            if !matches!(
+                criterion_for_check(&finding.check).map(|(_, on)| on),
+                Some(OnFinding::Review)
+            ) {
+                score -= penalty_for(severity);
+            }
             card_findings.push(CardFinding {
                 severity: severity.to_string(),
                 title: format!("{} ({})", item_label(&finding.check), finding.project),
@@ -702,6 +746,11 @@ mod tests {
             ),
             (
                 "security",
+                "sec-authn",
+                "Every endpoint requires sign-in unless it is explicitly public",
+            ),
+            (
+                "security",
                 "sec-input-validation",
                 "Incoming data is validated before it is trusted",
             ),
@@ -746,6 +795,20 @@ mod tests {
     }
 
     #[test]
+    fn an_endpoint_without_sign_in_is_critical_and_outside_routes_are_for_review() {
+        let missing = finding("route-auth-missing", Severity::Warning);
+        assert_eq!(severity_for(&missing), "critical");
+        assert!(matches!(
+            criterion_for_check("route-outside-framework"),
+            Some(("sec-authn", OnFinding::Review))
+        ));
+        assert!(
+            remedy("route-auth-missing").is_some() && remedy("route-outside-framework").is_some()
+        );
+        assert_eq!(rail_for_check("route-auth-missing"), "security");
+    }
+
+    #[test]
     fn every_local_check_maps_to_its_platform_criterion() {
         for (check, id) in [
             ("tenant-isolation-wiring", "sec-tenant-isolation"),
@@ -759,6 +822,9 @@ mod tests {
             ("payments-stripe-keys-in-managed", "gov-construction"),
             ("stripe-webhook-unverified", "sec-input-validation"),
             ("payments-protected-data", "cmp-data-classification"),
+            ("route-auth-missing", "sec-authn"),
+            ("route-outside-framework", "sec-authn"),
+            ("route-scan-incomplete", "sec-authn"),
         ] {
             assert_eq!(
                 criterion_for_check(check).map(|(c, _)| c),
@@ -822,6 +888,31 @@ mod tests {
             .unwrap();
         assert_eq!(item.status, "pending");
         assert_eq!(item.checks[0].status, "review");
+    }
+
+    /// An unreadable file leaves sign-in for review and costs no points.
+    #[test]
+    fn an_incomplete_route_scan_is_reviewed_without_a_deduction() {
+        let card = build_local_report_card(
+            "demo",
+            1,
+            &[finding("route-scan-incomplete", Severity::Warning)],
+            at(),
+        );
+        let security = &card.dimensions["security"];
+        assert_eq!(security.score, 100);
+        let item = security
+            .items
+            .iter()
+            .find(|i| i.criterion.as_deref() == Some("sec-authn"))
+            .unwrap();
+        assert_eq!(item.status, "pending");
+        let scan = item
+            .checks
+            .iter()
+            .find(|c| c.id == "route-scan-incomplete")
+            .unwrap();
+        assert_eq!(scan.status, "review");
     }
 
     #[test]
@@ -1012,18 +1103,18 @@ mod wiring_score_tests {
         pii.subject = "customers.create".to_string();
         assert_eq!(severity_for(&pii), "high");
         assert_eq!(severity_for(&finding("stripe-webhook-unverified")), "high");
-        assert!(remedy("payments-stripe-keys-in-managed").unwrap().contains("infra add"));
+        assert!(
+            remedy("payments-stripe-keys-in-managed")
+                .unwrap()
+                .contains("infra add")
+        );
     }
 
     #[test]
     fn a_direct_ai_provider_on_phi_costs_critical_points_on_compliance() {
         let clean = build_local_report_card("app", 1, &[], "t".to_string());
-        let card = build_local_report_card(
-            "app",
-            1,
-            &[finding("ai-provider-direct")],
-            "t".to_string(),
-        );
+        let card =
+            build_local_report_card("app", 1, &[finding("ai-provider-direct")], "t".to_string());
         let before = clean.dimensions["compliance"].score;
         let after = card.dimensions["compliance"].score;
         assert_eq!(before - after, 30, "critical = 30 points");
@@ -1042,7 +1133,10 @@ mod wiring_score_tests {
         phi.message = "health data (phi): an email subject carries …".to_string();
         assert_eq!(severity_for(&phi), "critical");
         assert_eq!(severity_for(&finding("email-protected-data")), "high");
-        assert_eq!(severity_for(&finding("email-provider-direct-in-managed")), "high");
+        assert_eq!(
+            severity_for(&finding("email-provider-direct-in-managed")),
+            "high"
+        );
         let card = build_local_report_card(
             "app",
             1,
@@ -1058,7 +1152,10 @@ mod wiring_score_tests {
             .unwrap();
         assert_eq!(item.status, "unmet");
         assert!(remedy("email-protected-data").is_some());
-        assert_ne!(item_label("email-provider-direct-in-managed"), "Deterministic check");
+        assert_ne!(
+            item_label("email-provider-direct-in-managed"),
+            "Deterministic check"
+        );
     }
 
     #[test]
@@ -1070,7 +1167,10 @@ mod wiring_score_tests {
         );
         assert_eq!(severity_for(&phi), "critical");
         assert_eq!(severity_for(&finding("whatsapp-protected-data")), "high");
-        assert_eq!(severity_for(&finding("whatsapp-provider-direct-in-managed")), "high");
+        assert_eq!(
+            severity_for(&finding("whatsapp-provider-direct-in-managed")),
+            "high"
+        );
         let card = build_local_report_card("app", 1, &[phi], "t".to_string());
         let item = card.dimensions["compliance"]
             .items
@@ -1078,7 +1178,10 @@ mod wiring_score_tests {
             .find(|i| i.criterion.as_deref() == Some("cmp-data-classification"))
             .unwrap();
         assert_eq!(item.status, "unmet");
-        assert_eq!(card.dimensions["compliance"].score, 70, "critical = 30 points");
+        assert_eq!(
+            card.dimensions["compliance"].score, 70,
+            "critical = 30 points"
+        );
         let card = build_local_report_card(
             "app",
             1,
@@ -1123,7 +1226,10 @@ mod voice_tests {
 
     #[test]
     fn voice_checks_score_high_and_critical_with_phi() {
-        assert_eq!(severity_for(&finding("voice-protected-data", "attributes")), "high");
+        assert_eq!(
+            severity_for(&finding("voice-protected-data", "attributes")),
+            "high"
+        );
         assert_eq!(
             severity_for(&finding(
                 "voice-protected-data",
@@ -1131,10 +1237,16 @@ mod voice_tests {
             )),
             "critical"
         );
-        assert_eq!(severity_for(&finding("voice-provider-direct-in-managed", "x")), "high");
+        assert_eq!(
+            severity_for(&finding("voice-provider-direct-in-managed", "x")),
+            "high"
+        );
         for check in ["voice-protected-data", "voice-provider-direct-in-managed"] {
             let (criterion_id, _) = criterion_for_check(check).expect("mapped");
-            assert!(criterion(criterion_id).is_some(), "{check} -> {criterion_id}");
+            assert!(
+                criterion(criterion_id).is_some(),
+                "{check} -> {criterion_id}"
+            );
             assert_ne!(item_label(check), "Deterministic check");
             assert!(remedy(check).is_some());
         }
