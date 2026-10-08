@@ -12,3 +12,5 @@ Embedding requests can say whether the texts are search queries or passages (`pu
 The procedure question framework now holds only hint words that fit any procedure; `frameworkItems(framework, topicHints)` adds a topic's own words. `selectEvidence` takes `wholeTerm` so topic pages count a document only when it names the topic in full.
 
 PMC searches now rank by relevance, as PubMed searches did, and PMC articles drop declaration sections (funding, ethics, consent, competing interests, AI use) by heading as well as by type.
+
+`itemFitRank` ranks a page's items for a passage by embedding similarity to each item's question, and on topic pages (`wholeTerm`) a word of the topic's name no longer counts as a hint.
