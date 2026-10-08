@@ -193,6 +193,27 @@ describe('selectEvidence', () => {
     const offTopic = { ...candidate('x', 'doc-a', 'Blood transfusion in cardiac surgery.'), title: 'Cardiac surgery' };
     expect(selectEvidence([offTopic], options)).toEqual([]);
   });
+
+  it('for a topic page, requires a whole name of the topic, not one shared word', () => {
+    const otherProcedure = {
+      ...candidate('x', 'doc-a', 'Bleeding was rare.'),
+      title: 'Laparoscopic appendectomy outcomes'
+    };
+    const sameProcedure = candidate('y', 'doc-b', 'Bleeding was rare.');
+    expect(selectEvidence([otherProcedure, sameProcedure], options).map((s) => s.passageId)).toEqual(['x', 'y']);
+    expect(
+      selectEvidence([otherProcedure, sameProcedure], { ...options, wholeTerm: true }).map((s) => s.passageId)
+    ).toEqual(['y']);
+  });
+});
+
+describe('frameworkItems', () => {
+  it("adds a topic's own hint words after the framework's", () => {
+    const items = frameworkItems(PROCEDURE_FRAMEWORK, { core: ['cystic', 'dissection'] });
+    const core = items.find((item) => item.key === 'core');
+    expect(core?.searchHints).toEqual([...(PROCEDURE_FRAMEWORK.phases?.find((p) => p.key === 'core')?.searchHints ?? []), 'cystic']);
+    expect(items.find((item) => item.key === 'what')?.searchHints).toEqual(PROCEDURE_FRAMEWORK.questions[0].searchHints);
+  });
 });
 
 describe('diagnosisGroup', () => {
