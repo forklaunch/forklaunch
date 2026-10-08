@@ -22,6 +22,8 @@ export const Topic = defineComplianceEntity({
     // the topic's own hint words per framework item (a procedure's anatomy,
     // instruments, complications), added to the framework's
     searchHints: fp.json<Record<string, string[]>>().nullable().compliance('none'),
+    // the PubMed/PMC search for the papers the page is built from
+    corpusQuery: fp.string().nullable().compliance('none'),
     // 'draft' | 'approved'
     status: fp.string().compliance('none'),
     approvedBy: fp.string().nullable().compliance('none'),
