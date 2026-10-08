@@ -50,7 +50,7 @@
     "ajv-formats": "^3.0.1"
   },
   "devDependencies": {
-    "@types/node": "^26.6.3",
+    "@types/node": "^26.6.4",
     "fetch-mock": "^12.6.0",
     "jest": "^30.5.2",
     "openapi3-ts": "^4.6.1",

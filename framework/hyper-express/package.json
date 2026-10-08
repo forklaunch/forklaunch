@@ -44,12 +44,12 @@
     "@forklaunch/hyper-express-fork": "^6.18.1",
     "@forklaunch/validator": "workspace:^",
     "@forklaunch/ws": "workspace:^",
-    "@scalar/express-api-reference": "^0.10.25",
+    "@scalar/express-api-reference": "^0.10.26",
     "cors": "^2.8.6",
     "live-directory": "^3.0.3",
     "openapi3-ts": "^4.6.1",
     "qs": "^6.16.0",
-    "swagger-ui-dist": "^5.33.0",
+    "swagger-ui-dist": "^5.33.1",
     "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
