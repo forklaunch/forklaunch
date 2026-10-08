@@ -161,7 +161,9 @@ use crate::{
         manifest::{ProjectType, application::ApplicationManifestData},
         openapi_export::{export_all_services, resolve_command},
         rendered_template::RenderedTemplatesCache,
-        validate::{require_active_account, require_integration, require_manifest, resolve_auth},
+        validate::{
+            require_active_account, require_auth, require_integration, require_manifest, resolve_auth,
+        },
     },
     sync::all::sync_all_projects,
 };
@@ -232,14 +234,14 @@ impl CliCommand for CreateCommand {
                     .action(clap::ArgAction::SetTrue)
                     .requires_all(["application-id", "local", "skip-sync", "skip-package-build", "yes"])
                     .conflicts_with("git")
-                    .help("Prepare a local release manifest and inline API specifications without login or publication; run only in an isolated worker"),
+                    .help("Prepare a local release manifest and inline API specifications using the signed-in account, without publishing"),
             )
             .arg(
                 Arg::new("application-id")
                     .long("application-id")
                     .requires("prepare-only")
                     .value_parser(clap::value_parser!(uuid::Uuid))
-                    .help("Reviewed application identity for offline preparation; grants no publication authority"),
+                    .help("Application identity for authenticated local preparation; grants no publication authority"),
             )
             .arg(
                 Arg::new("dry-run")
@@ -289,27 +291,21 @@ impl CliCommand for CreateCommand {
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-        // Offline preparation runs beside customer code and must never need an
-        // account token, HMAC key, or a network call. Publication remains a
-        // separate authenticated operation; an application ID is not authority.
+        // Local preparation is authenticated too. Never pass the user's credentials
+        // to generated code; package execution retains its isolated environment.
         let prepare_only = matches.get_flag("prepare-only");
         let auth_mode = if prepare_only {
-            None
+            require_auth()?;
+            AuthMode::Jwt
         } else {
-            let auth = resolve_auth()?;
-            require_active_account(&auth)?;
-            Some(auth)
+            resolve_auth()?
         };
-        let publication_auth = || {
-            auth_mode
-                .as_ref()
-                .context("Offline preparation cannot publish or contact the platform")
-        };
+        require_active_account(&auth_mode)?;
         let (app_root, manifest) = require_manifest(matches)?;
         let application_id = if prepare_only {
             matches
                 .get_one::<uuid::Uuid>("application-id")
-                .context("Offline preparation requires --application-id")?
+                .context("Local preparation requires --application-id")?
                 .to_string()
         } else {
             require_integration(&manifest)?
@@ -326,8 +322,8 @@ impl CliCommand for CreateCommand {
         let skip_package_build = matches.get_flag("skip-package-build");
         let isolate_packages = prepare_only
             || matches.get_flag("sanitize-build-environment")
-            || auth_mode.as_ref().is_some_and(AuthMode::is_hmac);
-        let auto_yes = matches.get_flag("yes") || auth_mode.as_ref().is_some_and(AuthMode::is_hmac);
+            || auth_mode.is_hmac();
+        let auto_yes = matches.get_flag("yes") || auth_mode.is_hmac();
 
         if flag_local && flag_git {
             bail!("Cannot specify both --local and --git flags");
@@ -341,13 +337,13 @@ impl CliCommand for CreateCommand {
             // duplicate version was only caught by the create itself, several
             // minutes of syncing and uploading later. There is no internal list
             // route, so under HMAC the create remains the only check.
-            if !publication_auth()?.is_hmac() {
+            if !auth_mode.is_hmac() {
                 let check_url = format!(
                     "{}/releases?applicationId={}",
                     get_platform_management_api_url(),
                     urlencoding::encode(&application_id)
                 );
-                if let Ok(response) = http_client::get_with_auth(publication_auth()?, &check_url) {
+                if let Ok(response) = http_client::get_with_auth(&auth_mode, &check_url) {
                     if response.status().is_success() {
                         if let Ok(list) = response.json::<ExistingReleaseList>() {
                             if list.releases.iter().any(|r| r.version == *version) {
@@ -438,7 +434,7 @@ impl CliCommand for CreateCommand {
             // Git mode: connect GitHub repository if not in a git repo
             if !is_git_repo() {
                 let git_repo =
-                    poll_for_git_repository(publication_auth()?, &application_id, &mut stdout)?;
+                    poll_for_git_repository(&auth_mode, &application_id, &mut stdout)?;
 
                 manifest.git_repository = Some(git_repo);
 
@@ -1188,7 +1184,7 @@ impl CliCommand for CreateCommand {
             let upload_response = super::s3_upload::get_presigned_upload_url(
                 &application_id,
                 version,
-                publication_auth()?,
+                &auth_mode,
             )?;
 
             log_ok!(stdout, "Got upload URL from platform");
@@ -1212,7 +1208,7 @@ impl CliCommand for CreateCommand {
                 &application_id,
                 version,
                 &service_names,
-                publication_auth()?,
+                &auth_mode,
             )?;
 
             let mut s3_keys = HashMap::new();
@@ -1298,7 +1294,7 @@ impl CliCommand for CreateCommand {
                 manifest_json.len()
             );
 
-            upload_release(&application_id, release_manifest, publication_auth()?)?;
+            upload_release(&application_id, release_manifest, &auth_mode)?;
 
             log_ok!(stdout, "Uploaded release to platform");
         }
@@ -2556,7 +2552,7 @@ mod tests {
     };
 
     #[test]
-    fn offline_preparation_requires_explicit_safe_options() {
+    fn local_preparation_requires_explicit_safe_options() {
         let args = [
             "create",
             "--version",
@@ -2599,7 +2595,7 @@ mod tests {
     }
 
     #[test]
-    fn offline_identity_cannot_override_publication_identity() {
+    fn preparation_identity_cannot_override_publication_identity() {
         assert!(
             CreateCommand::new()
                 .command()

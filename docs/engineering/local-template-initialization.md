@@ -1,7 +1,9 @@
-# Local template initialization
+# Authenticated local generation and release preparation
 
-Creating a ForkLaunch scaffold writes public framework templates on the user's computer. It does not read an account or create, change, or deploy a platform application. For example, creating a booking app's empty project folder should work before logging in to the deployment platform.
+Every `forklaunch init` / `add` command requires the selected user's login before prompting or creating files. `release create --prepare-only` also requires user login; it only prepares files and never publishes them. It cannot substitute an HMAC environment variable for the user's login. Normal release publication retains its existing authenticated server checks.
 
-`init application` previously called `get_token()` and discarded its result. That unused credential-presence check prevented the desktop's network-isolated local scaffolder from running, while `init service` and `init worker` already worked without it. Local application initialization now follows the same rule. Authentication on account, release, deployment, and other protected API operations is unchanged.
+These commands use the CLI's existing account selection, expiration and refresh handling. A cached token is not independently revalidated with the server on every local command. Server operations still enforce authorization.
 
-Run `cli/tests/init_application_offline.sh` against a built CLI. The strongest acceptance run uses a clean container with `--network none`, a private empty HOME, no mounted credentials, and a read-only source/toolchain. The test initializes an application and service and verifies no login file was created. It skips the optional formatter because formatting and functional checks run separately in the desktop's restricted build worker.
+Local execution and network isolation remain supported. The desktop must authorize work as its logged-in user while keeping credentials outside generated code and package scripts. Its previous credential-free preparation invocation must be replaced before shipping this CLI with the desktop. Do not mount the user's account directory into the generated-code worker.
+
+Run `cli/tests/local_commands_require_auth.sh` against the newly built CLI to verify missing and expired logins reject initialization and release preparation before creating project or release files.

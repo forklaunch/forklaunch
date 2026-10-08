@@ -440,9 +440,6 @@ impl CliCommand for ApplicationCommand {
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        // Initializing local templates does not access an account or platform resource.
-        // Cloud operations retain their own authenticated API boundaries.
-
         let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
