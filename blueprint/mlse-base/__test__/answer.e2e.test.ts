@@ -75,7 +75,8 @@ const answerService = async (llm: FakeLlmProvider) => {
     new LiveRetrievalService(new SourceFetcherRegistry([]), []),
     otel
   );
-  const topics = new TopicService(em, search, otel);
+  // the fake embeddings carry no meaning to fit questions by
+  const topics = new TopicService(em, search, otel, { itemFit: false });
   return { answers: new AnswerService(em, search, topics, llm, otel), topics };
 };
 
