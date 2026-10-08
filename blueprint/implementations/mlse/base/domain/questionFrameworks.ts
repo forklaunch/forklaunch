@@ -1,7 +1,9 @@
 // Question frameworks: the fixed set of questions every topic page answers,
 // so completeness is decided by clinicians, not by the AI. Each item carries
 // search hints: the words a passage must address to count as evidence for
-// it.
+// it. The hints here fit any topic of the type; a topic adds the words of its
+// own field (a procedure's anatomy, instruments and complications), so one
+// framework serves every procedure.
 //
 // STATUS: DRAFT. Written by engineering from the approved product plan to
 // exercise the pipeline. Every framework must be reviewed and approved by a
@@ -36,10 +38,10 @@ export const PROCEDURE_FRAMEWORK: QuestionFramework = {
   status: 'draft',
   questions: [
     { key: 'what', label: 'What is it?', searchHints: ['removal', 'defined', 'definition', 'consists', 'involves'] },
-    { key: 'why', label: 'Why is it done?', searchHints: ['indication', 'indicated', 'symptomatic', 'cholelithiasis', 'cholecystitis'] },
+    { key: 'why', label: 'Why is it done?', searchHints: ['indication', 'indicated', 'indications', 'symptomatic', 'recommended'] },
     { key: 'who', label: 'Who is it for, and who should not have it?', searchHints: ['selection', 'eligible', 'contraindication', 'contraindicated', 'candidate'] },
     { key: 'when', label: 'When is it done?', searchHints: ['timing', 'delayed', 'emergency', 'elective', 'interval'] },
-    { key: 'how', label: 'How is it done?', searchHints: ['trocar', 'dissection', 'retraction', 'clipped', 'pneumoperitoneum'] },
+    { key: 'how', label: 'How is it done?', searchHints: ['technique', 'approach', 'performed', 'dissection', 'retraction'] },
     { key: 'risks', label: 'What are the risks?', searchHints: ['complication', 'injury', 'leak', 'bleeding', 'conversion'] },
     { key: 'after', label: 'What happens after?', searchHints: ['postoperative', 'discharge', 'readmission', 'analgesia', 'recovery'] },
     { key: 'outcomes', label: 'What are the outcomes?', searchHints: ['outcome', 'mortality', 'morbidity', 'success', 'efficacy'], quantitative: true }
@@ -48,8 +50,8 @@ export const PROCEDURE_FRAMEWORK: QuestionFramework = {
     { number: 1, key: 'preop', label: 'Pre-operative preparation', searchHints: ['preoperative', 'prophylaxis', 'antibiotic', 'fasting', 'crossmatch', 'investigation'] },
     { number: 2, key: 'anesthesia', label: 'Anesthesia', searchHints: ['anesthesia', 'anaesthesia', 'induction', 'intubation', 'propofol', 'mg/kg'], quantitative: true },
     { number: 3, key: 'positioning', label: 'Positioning and preparation', searchHints: ['position', 'supine', 'trendelenburg', 'drape'] },
-    { number: 4, key: 'access', label: 'Access: how it starts', searchHints: ['incision', 'port', 'trocar', 'pneumoperitoneum', 'insufflation', 'umbilical'], quantitative: true },
-    { number: 5, key: 'core', label: 'Core operative steps', searchHints: ['dissection', 'critical', 'cystic', 'clip', 'divided', 'triangle'] },
+    { number: 4, key: 'access', label: 'Access: how it starts', searchHints: ['incision', 'port', 'approach', 'exposure', 'entry'], quantitative: true },
+    { number: 5, key: 'core', label: 'Core operative steps', searchHints: ['dissection', 'divided', 'identified', 'resected', 'ligated'] },
     { number: 6, key: 'blood', label: 'Blood management', searchHints: ['blood', 'bleeding', 'hemorrhage', 'haemorrhage', 'transfusion'], quantitative: true },
     { number: 7, key: 'closure', label: 'Closure: how it ends', searchHints: ['closure', 'drain', 'fascia', 'suture', 'hemostasis'] },
     { number: 8, key: 'emergence', label: 'Emergence and immediate post-op', searchHints: ['extubation', 'emergence', 'recovery', 'nausea', 'analgesia'] },
@@ -98,10 +100,21 @@ export const QUESTION_FRAMEWORKS: Record<string, QuestionFramework> = {
   [MEDICATION_FRAMEWORK.key]: MEDICATION_FRAMEWORK
 };
 
-// Every question and phase of a framework, phases after questions.
-export function frameworkItems(framework: QuestionFramework): (FrameworkItem & { kind: 'question' | 'phase'; number?: number })[] {
+// A topic's own hint words, by framework item key.
+export type TopicSearchHints = Record<string, string[]>;
+
+// Every question and phase of a framework, phases after questions, each with
+// the topic's own hint words after the framework's.
+export function frameworkItems(
+  framework: QuestionFramework,
+  topicHints: TopicSearchHints = {}
+): (FrameworkItem & { kind: 'question' | 'phase'; number?: number })[] {
+  const withTopicHints = <T extends FrameworkItem>(item: T): T => ({
+    ...item,
+    searchHints: [...new Set([...item.searchHints, ...(topicHints[item.key] ?? [])])]
+  });
   return [
-    ...framework.questions.map((q) => ({ ...q, kind: 'question' as const })),
-    ...(framework.phases ?? []).map((p) => ({ ...p, kind: 'phase' as const }))
+    ...framework.questions.map((q) => ({ ...withTopicHints(q), kind: 'question' as const })),
+    ...(framework.phases ?? []).map((p) => ({ ...withTopicHints(p), kind: 'phase' as const }))
   ];
 }
