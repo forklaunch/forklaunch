@@ -249,6 +249,11 @@ ollama pull qwen2.5:3b        # answer drafting (about 2 GB)
 ollama pull nomic-embed-text  # search embeddings (about 270 MB, 768 dimensions)
 ```
 
+Queries and passages are embedded with the task instructions
+`nomic-embed-text` was trained with (`search_query: `, `search_document: `).
+Passages stored before that need a corpus refresh to be found by vector
+search as well as they could be.
+
 Small models write weaker answers than Claude. Every sentence still goes
 through the same citation and number checks, so a weaker model gives shorter
 answers or "insufficient evidence", not wrong ones. On a laptop an answer
