@@ -18,6 +18,11 @@ const SKIPPED_SECTION_TYPES = new Set([
   'author-contributions'
 ]);
 
+// Declarations most journals tag only by heading. They say nothing clinical
+// and, being in every paper, crowd out the sections that do.
+const SKIPPED_SECTION_HEADINGS =
+  /^(declarations?|funding|financial (support|disclosure)|acknowledge?ments?|(conflicts? of interests?|competing interests?)|ethic(s|al)|consent|author(s'?)? contributions?|data (availability|sharing)|availability of data|use of (ai|artificial intelligence|generative)|abbreviations)/i;
+
 /**
  * Full-text articles from the PubMed Central Open Access Subset. The search
  * is restricted to open-access articles, and each article's own license
@@ -135,10 +140,13 @@ export class PmcOaFetcher implements SourceFetcher {
     out: DocumentSectionDto[]
   ): void {
     for (const sec of secs) {
-      if (SKIPPED_SECTION_TYPES.has(String(sec['@_sec-type'] ?? ''))) {
+      const heading = textOf(sec.title);
+      if (
+        SKIPPED_SECTION_TYPES.has(String(sec['@_sec-type'] ?? '')) ||
+        SKIPPED_SECTION_HEADINGS.test(heading.trim())
+      ) {
         continue;
       }
-      const heading = textOf(sec.title);
       const path = heading ? [...trail, heading] : trail;
       const text = asArray(sec.p as unknown[]).map(textOf).filter(Boolean).join(' ');
       if (text) {

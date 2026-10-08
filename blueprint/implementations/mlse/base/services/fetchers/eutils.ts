@@ -74,10 +74,10 @@ export class EutilsClient {
     limit: number,
     options: RequestOptions = {}
   ): Promise<string[]> {
-    // PubMed ranks by Best Match only when asked; otherwise the newest
-    // papers come first, which answers a general question with niche work
-    const sort = db === 'pubmed' ? '&sort=relevance' : '';
-    const url = `${this.baseUrl}/esearch.fcgi?db=${db}&term=${encodeURIComponent(term)}&retmax=${Math.min(Math.max(limit, 1), 200)}${sort}&retmode=json&${this.identity()}`;
+    // Both rank by relevance only when asked; otherwise the newest papers
+    // come first, which answers a general question with niche work (PMC's
+    // newest "cesarean section" papers include microbiome modelling)
+    const url = `${this.baseUrl}/esearch.fcgi?db=${db}&term=${encodeURIComponent(term)}&retmax=${Math.min(Math.max(limit, 1), 200)}&sort=relevance&retmode=json&${this.identity()}`;
     const response = await this.client.getJson<EsearchResponse>(url, options);
     return response.esearchresult?.idlist ?? [];
   }
