@@ -131,6 +131,7 @@ fn read_production_sources(project_path: &Path) -> String {
 pub(crate) const LOCAL_CHECK_IDS: &[&str] = &[
     "route-auth-missing",
     "route-outside-framework",
+    "route-scan-incomplete",
     "encryptor-registration",
     "tenant-em-wiring",
     "better-auth-encryption-context",
@@ -1185,7 +1186,17 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
         // 0. Route protection, read from each route's contract. A non-public contract with no
         //    auth method lets callers in without a credential; a route registered on the raw
         //    application with an inline handler gets none of the framework's auth or validation.
-        for route in route_analyzer::scan_routes(&project_path) {
+        let route_scan = route_analyzer::scan_routes(&project_path);
+        for file in &route_scan.unreadable {
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.clone(),
+                check: "route-scan-incomplete".to_string(),
+                subject: file.clone(),
+                message: "Could not be fully parsed, so routes declared in it may be missing from the route list. Fix the syntax error, or check this file's routes by hand.".to_string(),
+            });
+        }
+        for route in route_scan.routes {
             let at = format!("{} {} ({}:{})", route.method, route.path, route.file, route.line);
             if route.missing_auth() {
                 findings.push(LocalFinding {

@@ -97,6 +97,13 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
     entries.sort();
     for path in entries {
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        // A symlink can point back up the tree; follow none, so the walk always ends.
+        if fs::symlink_metadata(&path)
+            .map(|m| m.file_type().is_symlink())
+            .unwrap_or(true)
+        {
+            continue;
+        }
         if path.is_dir() {
             if !SKIP_DIRS.contains(&name) && !name.starts_with('.') {
                 walk(&path, out);
@@ -107,27 +114,46 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
+/// The routes found under a root, and the files the parser could not fully read (their routes
+/// may be missing, so a scan with any is incomplete).
+#[derive(Debug, Default)]
+pub struct RouteScan {
+    pub routes: Vec<StaticRoute>,
+    pub unreadable: Vec<String>,
+}
+
 /// Every route under `root`, sorted by file and line.
-pub fn scan_routes(root: &Path) -> Vec<StaticRoute> {
+pub fn scan_routes(root: &Path) -> RouteScan {
     let mut files = Vec::new();
     walk(root, &mut files);
-    let mut routes = Vec::new();
+    let mut scan = RouteScan::default();
     for file in files {
-        let Ok(source) = fs::read_to_string(&file) else {
-            continue;
-        };
         let rel = file
             .strip_prefix(root)
             .unwrap_or(&file)
             .to_string_lossy()
             .replace('\\', "/");
-        routes.extend(routes_in_source(&source, &rel));
+        let Ok(source) = fs::read_to_string(&file) else {
+            scan.unreadable.push(rel);
+            continue;
+        };
+        let (routes, complete) = parse_routes(&source, &rel);
+        scan.routes.extend(routes);
+        if !complete {
+            scan.unreadable.push(rel);
+        }
     }
-    routes
+    scan
 }
 
 /// The routes registered in one TypeScript source file.
+#[cfg(test)]
 pub fn routes_in_source(source: &str, rel_path: &str) -> Vec<StaticRoute> {
+    parse_routes(source, rel_path).0
+}
+
+/// The routes in one file, and whether the parser read all of it.
+fn parse_routes(source: &str, rel_path: &str) -> (Vec<StaticRoute>, bool) {
     let allocator = Allocator::default();
     let parsed = Parser::new(
         &allocator,
@@ -135,13 +161,14 @@ pub fn routes_in_source(source: &str, rel_path: &str) -> Vec<StaticRoute> {
         SourceType::default().with_typescript(true),
     )
     .parse();
+    let complete = !parsed.panicked && parsed.errors.is_empty();
     let mut v = RouteVisitor {
         source,
         file: rel_path,
         routes: Vec::new(),
     };
     v.visit_program(&parsed.program);
-    v.routes
+    (v.routes, complete)
 }
 
 struct RouteVisitor<'s> {
@@ -354,12 +381,42 @@ const m = new Map(); m.get('key');
             fs::create_dir_all(f.parent().unwrap()).unwrap();
             fs::write(f, body).unwrap();
         }
-        let routes = scan_routes(&dir);
-        assert_eq!(routes.len(), 5);
+        let scan = scan_routes(&dir);
+        assert_eq!(scan.routes.len(), 5);
         assert!(
-            routes
+            scan.routes
                 .iter()
                 .all(|r| r.file == "svc/api/controllers/a.controller.ts")
+        );
+        assert!(scan.unreadable.is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn reports_files_the_parser_cannot_read_and_ignores_symlinks() {
+        let dir = std::env::temp_dir().join("fl-route-scan-broken");
+        let _ = fs::remove_dir_all(&dir);
+        let svc = dir.join("svc");
+        fs::create_dir_all(svc.join("api")).unwrap();
+        fs::write(svc.join("api/ok.controller.ts"), CONTROLLER).unwrap();
+        fs::write(
+            svc.join("api/broken.controller.ts"),
+            "export const x = handlers.get(schemaValidator, '/x', { access: 'protected' ",
+        )
+        .unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&dir, svc.join("loop")).unwrap();
+        let scan = scan_routes(&dir);
+        assert_eq!(
+            scan.unreadable,
+            vec!["svc/api/broken.controller.ts".to_string()]
+        );
+        assert_eq!(
+            scan.routes
+                .iter()
+                .filter(|r| r.file == "svc/api/ok.controller.ts")
+                .count(),
+            5
         );
         let _ = fs::remove_dir_all(&dir);
     }

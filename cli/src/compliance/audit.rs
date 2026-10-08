@@ -166,7 +166,18 @@ impl CliCommand for AuditCommand {
         // Every route, read from the source: each contract's access level and auth, plus routes
         // registered outside the framework. Exported OpenAPI specs are the fallback for apps
         // whose routes the scan cannot read (the specs carry no access level, only the auth scheme).
-        let mut routes: Vec<RouteReport> = route_analyzer::scan_routes(&modules_path_buf)
+        let route_scan = route_analyzer::scan_routes(&modules_path_buf);
+        if !route_scan.unreadable.is_empty() {
+            let mut stderr = StandardStream::stderr(ColorChoice::Always);
+            log_warn!(
+                stderr,
+                "{} file(s) could not be fully parsed; their routes may be missing: {}",
+                route_scan.unreadable.len(),
+                route_scan.unreadable.join(", ")
+            );
+        }
+        let mut routes: Vec<RouteReport> = route_scan
+            .routes
             .into_iter()
             .map(|r| RouteReport {
                 path: r.path,
@@ -178,7 +189,7 @@ impl CliCommand for AuditCommand {
                 line: Some(r.line),
             })
             .collect();
-        let mut routes_audited = !routes.is_empty();
+        let mut routes_audited = !routes.is_empty() && route_scan.unreadable.is_empty();
         if routes.is_empty() {
             let (spec_routes, specs_found) = collect_routes_from_openapi(&app_root, modules_path);
             routes = spec_routes;
@@ -800,7 +811,9 @@ fn print_routes(out: &mut StandardStream, report: &ComplianceReport) -> Result<(
         } else {
             route.access.as_deref().unwrap_or("NONE")
         };
-        let missing_auth = !outside && access != "public" && route.auth.is_none();
+        // Only a contract states an access level, so only a contract can be missing its auth.
+        let from_contract = route.source == Some(route_analyzer::RouteSource::Contract);
+        let missing_auth = from_contract && access != "public" && route.auth.is_none();
         let access_color = match access {
             _ if missing_auth => Color::Red,
             "public" | "outside framework" => Color::Yellow,
@@ -1263,11 +1276,18 @@ fn parse_openapi_routes(path: &Path) -> Result<Vec<RouteReport>> {
                         .and_then(|v| v.as_str())
                         .map(String::from);
 
+                    // An operation's own `security` overrides the document's; an empty list
+                    // (`security: []`) turns authentication off for that operation.
+                    let security = operation.get("security").or_else(|| spec.get("security"));
+                    let auth = security
+                        .and_then(|s| s.as_array())
+                        .filter(|a| !a.is_empty())
+                        .map(|a| serde_json::Value::Array(a.clone()).to_string());
                     routes.push(RouteReport {
                         path: path_str.clone(),
                         method: method.to_uppercase(),
                         access,
-                        auth: operation.get("security").map(|s| s.to_string()),
+                        auth,
                         source: None,
                         file: None,
                         line: None,
