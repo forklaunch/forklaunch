@@ -22,6 +22,9 @@ export type GenerateResponseDto = {
 
 export type EmbedRequestDto = {
   texts: string[];
+  // what the texts are for: some embedding models are trained with a
+  // different instruction for search queries and for the passages searched
+  purpose?: 'query' | 'document';
 };
 
 export type EmbedResponseDto = {

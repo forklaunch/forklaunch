@@ -55,6 +55,27 @@ describe('OllamaLlmProvider', () => {
     );
   });
 
+  it("adds nomic-embed-text's task instruction for queries and passages", async () => {
+    const { post, calls } = recordingPost((_path, body) => ({
+      embeddings: (body.input as string[]).map(() => [1])
+    }));
+    const nomic = new OllamaLlmProvider({ embeddingModel: 'nomic-embed-text:v1.5', embeddingDimensions: 1, post });
+    await nomic.embed({ texts: ['cefazolin timing'], purpose: 'query' });
+    await nomic.embed({ texts: ['Give within 60 minutes.'], purpose: 'document' });
+    await nomic.embed({ texts: ['no purpose'] });
+    await new OllamaLlmProvider({ embeddingModel: 'other-model', embeddingDimensions: 1, post }).embed({
+      texts: ['unknown model'],
+      purpose: 'query'
+    });
+
+    expect(calls.map((call) => call.body.input)).toEqual([
+      ['search_query: cefazolin timing'],
+      ['search_document: Give within 60 minutes.'],
+      ['no purpose'],
+      ['unknown model']
+    ]);
+  });
+
   it('reports server errors without hiding them', async () => {
     const { post } = recordingPost(() => ({ error: 'model "qwen2.5:3b" not found, try pulling it first' }), 404);
     await expect(
