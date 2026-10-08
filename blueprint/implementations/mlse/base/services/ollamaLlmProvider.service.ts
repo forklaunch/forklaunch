@@ -14,6 +14,12 @@ export const DEFAULT_OLLAMA_EMBEDDING_MODEL = 'nomic-embed-text';
 // nomic-embed-text produces 768-dimensional vectors
 export const DEFAULT_OLLAMA_EMBEDDING_DIMENSIONS = 768;
 
+// Models trained with a task instruction in front of each text. Without it
+// they still embed, but rank less well. Ollama does not add it.
+const EMBEDDING_TASK_PREFIXES: Record<string, { query: string; document: string }> = {
+  'nomic-embed-text': { query: 'search_query: ', document: 'search_document: ' }
+};
+
 // The subset of fetch the provider uses, injected so tests never need a
 // running Ollama.
 export type PostLike = (
@@ -117,13 +123,16 @@ export class OllamaLlmProvider extends LlmProviderBase {
     return { text: response.message?.content ?? '', model: response.model ?? this.model };
   }
 
-  override async embed({ texts }: EmbedRequestDto): Promise<EmbedResponseDto> {
+  override async embed({ texts, purpose }: EmbedRequestDto): Promise<EmbedResponseDto> {
     if (texts.length === 0) {
       return { embeddings: [], model: this.embeddingModel, dimensions: this.embeddingDimensions };
     }
+    // 'nomic-embed-text:v1.5' is still nomic-embed-text
+    const prefixes = EMBEDDING_TASK_PREFIXES[this.embeddingModel.split(':')[0]];
+    const prefix = purpose && prefixes ? prefixes[purpose] : '';
     const response = await this.request<{ embeddings?: number[][] }>('/api/embed', {
       model: this.embeddingModel,
-      input: texts
+      input: texts.map((text) => prefix + text)
     });
     const embeddings = response.embeddings ?? [];
     if (embeddings.length !== texts.length) {
