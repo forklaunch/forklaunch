@@ -10,7 +10,7 @@ import {
   diagnosisGroup,
   extractCaseStudyFields
 } from '../services/caseStudy.service';
-import { selectEvidence } from '../services/evidenceSelection.service';
+import { itemFitRank, selectEvidence } from '../services/evidenceSelection.service';
 import { extractQuantities } from '../services/quantityExtractor.service';
 
 describe('extractQuantities', () => {
@@ -204,6 +204,40 @@ describe('selectEvidence', () => {
     expect(
       selectEvidence([otherProcedure, sameProcedure], { ...options, wholeTerm: true }).map((s) => s.passageId)
     ).toEqual(['y']);
+  });
+});
+
+describe('selectEvidence on a topic page', () => {
+  it("does not count a word of the topic's name as a hint", () => {
+    const passage = {
+      passageId: 'x',
+      documentKey: 'doc-a',
+      title: 'Cesarean delivery outcomes',
+      sectionPath: 'Introduction',
+      text: 'Cesarean delivery rates are rising worldwide.',
+      score: 0.5
+    };
+    const options = { hints: ['delivery', 'uterotomy'], topicTerms: ['cesarean delivery'], limit: 3 };
+    expect(selectEvidence([passage], options)).toHaveLength(1);
+    expect(selectEvidence([passage], { ...options, wholeTerm: true })).toEqual([]);
+  });
+});
+
+describe('itemFitRank', () => {
+  const questions = new Map([
+    ['anesthesia', [1, 0, 0]],
+    ['closure', [0, 1, 0]],
+    ['risks', [0, 0, 1]]
+  ]);
+
+  it('ranks the item whose question a passage is closest to first', () => {
+    expect(itemFitRank([0.9, 0.1, 0.2], questions, 'anesthesia')).toBe(1);
+    expect(itemFitRank([0.9, 0.1, 0.2], questions, 'risks')).toBe(2);
+    expect(itemFitRank([0.9, 0.1, 0.2], questions, 'closure')).toBe(3);
+  });
+
+  it('cannot judge an item it has no question for', () => {
+    expect(itemFitRank([1, 0, 0], questions, 'positioning')).toBe(1);
   });
 });
 
