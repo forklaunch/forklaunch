@@ -36,7 +36,7 @@
     "test": "NODE_OPTIONS='--import=tsx' vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/better-auth-mikro-orm-fork": "^0.5.9",
+    "@forklaunch/better-auth-mikro-orm-fork": "^0.5.10",
     "@forklaunch/blueprint-core": "workspace:^",
     "@forklaunch/blueprint-iam-base": "workspace:^",
     "@forklaunch/blueprint-monitoring": "workspace:^",
@@ -52,10 +52,10 @@
     "@mikro-orm/sqlite": "7.2.3",
     "@opentelemetry/api": "^1.9.1",
     "@sinclair/typebox": "^0.34.52",
-    "better-auth": "^1.7.6",
+    "better-auth": "^1.7.7",
     "dotenv": "^18.0.5",
     "jose": "^6.2.12",
-    "pino": "^10.3.1",
+    "pino": "^10.4.0",
     "uuid": "^14.0.2",
     "zod": "^4.6.5"
   },
