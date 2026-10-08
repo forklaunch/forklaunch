@@ -321,17 +321,4 @@ mod tests {
             }
         }
     }
-    #[test]
-    fn emitted_better_auth_uses_its_own_surfacing() {
-        let emitted = TEMPLATES_DIR
-            .get_file("project/iam-better-auth/surfacing.ts")
-            .unwrap()
-            .contents_utf8()
-            .unwrap();
-        assert_eq!(
-            emitted,
-            include_str!("../../../blueprint/iam-better-auth/surfacing.ts")
-        );
-
-    }
 }
