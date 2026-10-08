@@ -97,6 +97,7 @@ Each deployment uses its own API keys. Never share one key between clients.
 pnpm dev             # migrations, then the HTTP service
 pnpm dev:worker      # ingestion worker (registers sources, drains the queue)
 pnpm corpus:refresh  # queue ingestion of CORPUS_TOPICS from every source
+pnpm topic:refresh   # queue each topic page's papers (its corpus query) from PMC and PubMed
 pnpm mesh:load path/to/desc2026.xml      # load NLM MeSH descriptors (synonyms, tree numbers)
 pnpm eval:run eval/gold-set.json         # retrieval evaluation against a clinician gold set
 pnpm retention:enforce                   # run daily: history retention
@@ -111,8 +112,9 @@ Procedure pages seeded as drafts: `laparoscopic-cholecystectomy`,
 `total-knee-arthroplasty` and `coronary-artery-bypass-grafting`. All use one
 procedure framework; each topic adds its own search words per item
 (`topic.search_hints`), such as "mesoappendix" for the core steps of an
-appendectomy. Ingest papers on a procedure (`CORPUS_TOPICS`) before
-assembling its page.
+appendectomy. Each also has a corpus query (`topic.corpus_query`): PubMed
+and PMC papers whose major subject is the procedure. Run `pnpm topic:refresh`
+and let the worker store them before assembling a page.
 
 ## API
 

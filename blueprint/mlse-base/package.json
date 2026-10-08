@@ -39,7 +39,8 @@
     "start": "DOTENV_FILE_PATH=.env.local node --import=tsx dist/server.js",
     "start:bun": "bun run migrate:up && bun dist/server.js",
     "start:worker": "DOTENV_FILE_PATH=.env.local node --import=tsx dist/worker.js",
-    "test": "vitest --passWithNoTests"
+    "test": "vitest --passWithNoTests",
+    "topic:refresh": "DOTENV_FILE_PATH=.env.local pnpm tsx scripts/refresh-topics.ts"
   },
   "dependencies": {
     "@forklaunch/blueprint-core": "workspace:^",
