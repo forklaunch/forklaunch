@@ -8,3 +8,5 @@ Add the mlse (medical literature search) module: `ContentSourceProvider` and `Ll
 The safety classifier reads its phrase lists from `DEFAULT_SAFETY_RULES` (versioned, marked draft until a clinician review), which a deployment can extend with `parseSafetyRuleAdditions` and `useSafetyRuleAdditions` but never weaken. It also catches self-harm, first-person and third-party ingestion with an amount or a poison, and clinicians' shorthand ("pt is 67M").
 
 Embedding requests can say whether the texts are search queries or passages (`purpose`); the Ollama provider then adds the task instruction `nomic-embed-text` was trained with.
+
+The procedure question framework now holds only hint words that fit any procedure; `frameworkItems(framework, topicHints)` adds a topic's own words. `selectEvidence` takes `wholeTerm` so topic pages count a document only when it names the topic in full.
