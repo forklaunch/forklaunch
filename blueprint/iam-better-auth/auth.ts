@@ -8,26 +8,37 @@ import type { AnyMikroORM } from '@forklaunch/core/persistence';
 import { betterAuth, BetterAuthOptions } from 'better-auth';
 import { createAccessControl } from 'better-auth/plugins/access';
 import { jwt, openAPI, organization } from 'better-auth/plugins';
+import {
+  defaultStatements,
+  ownerAc,
+  adminAc,
+  memberAc
+} from 'better-auth/plugins/organization/access';
 
 const statement = {
+  ...defaultStatements,
   platform: [PERMISSIONS.PLATFORM_READ, PERMISSIONS.PLATFORM_WRITE]
 } as const;
 
 const ac = createAccessControl(statement);
 
 const ownerRole = ac.newRole({
+  ...ownerAc.statements,
   platform: [PERMISSIONS.PLATFORM_READ, PERMISSIONS.PLATFORM_WRITE]
 });
 
 const adminRole = ac.newRole({
+  ...adminAc.statements,
   platform: [PERMISSIONS.PLATFORM_READ, PERMISSIONS.PLATFORM_WRITE]
 });
 
 const editorRole = ac.newRole({
+  ...memberAc.statements,
   platform: [PERMISSIONS.PLATFORM_READ, PERMISSIONS.PLATFORM_WRITE]
 });
 
 const viewerRole = ac.newRole({
+  ...memberAc.statements,
   platform: [PERMISSIONS.PLATFORM_READ]
 });
 
@@ -56,14 +67,14 @@ const plugins = [
   }),
   organization({
     allowUserToCreateOrganization: true,
-    creatorRole: 'owner',
+    creatorRole: ROLES.OWNER,
     membershipLimit: 100,
     invitationExpiresIn: 48 * 60 * 60 * 1000,
     teams: { enabled: true },
     dynamicAccessControl: { enabled: true },
     ac,
     roles: {
-      owner: ownerRole,
+      [ROLES.OWNER]: ownerRole,
       [ROLES.ADMIN]: adminRole,
       [ROLES.EDITOR]: editorRole,
       [ROLES.VIEWER]: viewerRole,

@@ -9,7 +9,7 @@ use super::{
     manifest::ManifestData,
     rendered_template::{RenderedTemplate, TEMPLATES_DIR},
 };
-use crate::constants::{Module, error_failed_to_create_dir};
+use crate::constants::{error_failed_to_create_dir, Module};
 
 #[derive(Debug, Clone)]
 pub(crate) struct PathIO {
@@ -204,9 +204,7 @@ pub(crate) fn get_routers_from_standard_package(package: Module) -> Option<Vec<S
             String::from("user"),
         ]),
         Module::BaseMessaging => Some(vec![String::from("sms")]),
-        Module::TwilioMessaging => {
-            Some(vec![String::from("sms"), String::from("webhook")])
-        }
+        Module::TwilioMessaging => Some(vec![String::from("sms"), String::from("webhook")]),
         Module::StripeEcommerce => Some(vec![
             String::from("product"),
             String::from("variant"),
@@ -264,5 +262,80 @@ mod tests {
             get_routers_from_standard_package(Module::StripeEcommerce).unwrap_or_default();
         declared.sort();
         assert_eq!(declared, routers_in_template("ecommerce-stripe"));
+    }
+    #[test]
+    fn emitted_service_and_worker_templates_keep_only_used_dependencies() {
+        #[derive(ramhorns::Content)]
+        struct Flags {
+            is_worker: bool,
+            is_database_enabled: bool,
+            is_iam_configured: bool,
+        }
+        for worker in [false, true] {
+            for database in [false, true] {
+                let flags = Flags {
+                    is_worker: worker,
+                    is_database_enabled: database,
+                    is_iam_configured: true,
+                };
+                let render = |path: &str| {
+                    ramhorns::Template::new(
+                        TEMPLATES_DIR
+                            .get_file(path)
+                            .unwrap()
+                            .contents_utf8()
+                            .unwrap(),
+                    )
+                    .unwrap()
+                    .render(&flags)
+                };
+                let registration = render("project/service/registrations.ts");
+                for name in [
+                    "ComplianceDataService",
+                    "RetentionService",
+                    "wrapEmWithTenantContext",
+                ] {
+                    assert_eq!(
+                        registration.contains(name),
+                        database,
+                        "{name}: worker={worker}, database={database}"
+                    );
+                }
+                let server = render("project/service/server.ts");
+                assert!(!server.contains("PERMISSIONS, ROLES"));
+                let controller = render("router/api/controllers/{{camel_case_name}}.controller.ts");
+                assert!(!controller.contains("const openTelemetryCollector"));
+                assert!(controller.contains("allowedRoles: APPLICATION_ADMIN_ROLES"));
+                for kind in ["service", "worker"] {
+                    let utils = render(&format!("project/{kind}/__test__/test-utils.ts"));
+                    assert_eq!(utils.contains("import { getEnvVar }"), database);
+                }
+                let event = render("router/domain/types/{{camel_case_name}}EventRecord.types.ts");
+                assert_eq!(event.contains("export {};"), !worker);
+                if worker {
+                    assert!(
+                        render("router/domain/services/{{camel_case_name}}.service.ts")
+                            .contains("id: _id, createdAt: _createdAt, updatedAt: _updatedAt")
+                    );
+                }
+            }
+        }
+    }
+    #[test]
+    fn emitted_better_auth_uses_organization_bound_surfacing() {
+        let emitted = TEMPLATES_DIR
+            .get_file("project/iam-better-auth/surfacing.ts")
+            .unwrap()
+            .contents_utf8()
+            .unwrap();
+        assert_eq!(
+            emitted,
+            include_str!("../../../blueprint/iam-better-auth/surfacing.ts")
+        );
+        assert!(emitted.contains("organizationId: payload.activeOrganizationId"));
+        assert!(emitted.contains(
+            "/organizations/${encodeURIComponent(payload.activeOrganizationId)}/surface-roles"
+        ));
+        assert!(!emitted.contains("getCachedRoles(payload.sub)"));
     }
 }

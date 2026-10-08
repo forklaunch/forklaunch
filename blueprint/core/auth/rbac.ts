@@ -13,12 +13,16 @@ export const PLATFORM_WRITE_PERMISSIONS = new Set([
 
 // Role definitions with associated permissions
 export const ROLES = {
+  OWNER: 'owner',
   VIEWER: 'viewer',
   EDITOR: 'editor',
   ADMIN: 'admin',
   SYSTEM: 'system'
 } as const;
 export type ROLES = (typeof ROLES)[keyof typeof ROLES];
+
+// App owners administer their own organization; this does not grant platform/system authority.
+export const APPLICATION_ADMIN_ROLES = new Set([ROLES.OWNER, ROLES.ADMIN]);
 
 export const PLATFORM_SYSTEM_ROLES = new Set([ROLES.SYSTEM]);
 export const PLATFORM_ADMIN_ROLES = new Set([
@@ -36,6 +40,7 @@ export const PLATFORM_VIEWER_ROLES = new Set([
 
 // Permission mappings for each role
 export const ROLE_PERMISSIONS: Record<ROLES, PERMISSIONS[]> = {
+  [ROLES.OWNER]: [PERMISSIONS.PLATFORM_READ, PERMISSIONS.PLATFORM_WRITE],
   [ROLES.VIEWER]: [PERMISSIONS.PLATFORM_READ],
   [ROLES.EDITOR]: [PERMISSIONS.PLATFORM_READ, PERMISSIONS.PLATFORM_WRITE],
   [ROLES.ADMIN]: [PERMISSIONS.PLATFORM_READ, PERMISSIONS.PLATFORM_WRITE],

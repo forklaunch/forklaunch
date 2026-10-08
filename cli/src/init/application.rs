@@ -82,7 +82,6 @@ use crate::{
         rendered_template::{RenderedTemplate, create_forklaunch_dir, write_rendered_templates},
         symlinks::generate_symlinks,
         template::{PathIO, generate_with_template, get_routers_from_standard_package},
-        token::get_token,
         tsconfig::generate_modules_tsconfig,
         client_sdk::get_client_sdk_additional_deps,
         vscode::generate_vscode_settings,
@@ -441,8 +440,8 @@ impl CliCommand for ApplicationCommand {
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        // TODO: Include basic token checks (expiration, permissions mapping) in this method, but retrieve token from parent command
-        let _token = get_token()?;
+        // Initializing local templates does not access an account or platform resource.
+        // Cloud operations retain their own authenticated API boundaries.
 
         let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
         let mut stdout = StandardStream::stdout(ColorChoice::Always);

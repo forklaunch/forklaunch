@@ -14,10 +14,10 @@ export const userRouter = forklaunchRouter(
 );
 
 export const surfaceRolesRoute = userRouter.get(
-  '/:id/surface-roles',
+  '/:id/organizations/:organizationId/surface-roles',
   surfaceRoles
 );
 export const surfacePermissionsRoute = userRouter.get(
-  '/:id/surface-permissions',
+  '/:id/organizations/:organizationId/surface-permissions',
   surfacePermissions
 );

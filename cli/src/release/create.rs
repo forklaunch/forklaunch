@@ -6,6 +6,8 @@ use std::{
     process::Command as ProcessCommand,
 };
 
+use crate::core::package_build_environment::isolate_package_environment;
+
 /// Scope guard that removes a directory when dropped, warning on failure.
 struct RemoveDirGuard {
     path: Option<PathBuf>,
@@ -225,6 +227,21 @@ impl CliCommand for CreateCommand {
                     .help("Path to application root (optional)"),
             )
             .arg(
+                Arg::new("prepare-only")
+                    .long("prepare-only")
+                    .action(clap::ArgAction::SetTrue)
+                    .requires_all(["application-id", "local", "skip-sync", "skip-package-build", "yes"])
+                    .conflicts_with("git")
+                    .help("Prepare a local release manifest and inline API specifications without login or publication; run only in an isolated worker"),
+            )
+            .arg(
+                Arg::new("application-id")
+                    .long("application-id")
+                    .requires("prepare-only")
+                    .value_parser(clap::value_parser!(uuid::Uuid))
+                    .help("Reviewed application identity for offline preparation; grants no publication authority"),
+            )
+            .arg(
                 Arg::new("dry-run")
                     .long("dry-run")
                     .action(clap::ArgAction::SetTrue)
@@ -249,6 +266,18 @@ impl CliCommand for CreateCommand {
                     .help("Skip automatic sync of projects with manifest before creating release"),
             )
             .arg(
+                Arg::new("sanitize-build-environment")
+                    .long("sanitize-build-environment")
+                    .action(clap::ArgAction::SetTrue)
+                    .help("Run package installation and build with a fresh home and no inherited credentials"),
+            )
+            .arg(
+                Arg::new("skip-package-build")
+                    .long("skip-package-build")
+                    .action(clap::ArgAction::SetTrue)
+                    .help("Reuse an already successful package build; do not run install or build scripts again"),
+            )
+            .arg(
                 Arg::new("yes")
                     .long("yes")
                     .short('y')
@@ -260,20 +289,45 @@ impl CliCommand for CreateCommand {
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-        let auth_mode = resolve_auth()?;
-        require_active_account(&auth_mode)?;
+        // Offline preparation runs beside customer code and must never need an
+        // account token, HMAC key, or a network call. Publication remains a
+        // separate authenticated operation; an application ID is not authority.
+        let prepare_only = matches.get_flag("prepare-only");
+        let auth_mode = if prepare_only {
+            None
+        } else {
+            let auth = resolve_auth()?;
+            require_active_account(&auth)?;
+            Some(auth)
+        };
+        let publication_auth = || {
+            auth_mode
+                .as_ref()
+                .context("Offline preparation cannot publish or contact the platform")
+        };
         let (app_root, manifest) = require_manifest(matches)?;
-        let application_id = require_integration(&manifest)?;
+        let application_id = if prepare_only {
+            matches
+                .get_one::<uuid::Uuid>("application-id")
+                .context("Offline preparation requires --application-id")?
+                .to_string()
+        } else {
+            require_integration(&manifest)?
+        };
 
         let version = matches
             .get_one::<String>("release_version")
             .ok_or_else(|| anyhow::anyhow!("Release version is required. Use --version <VERSION> or -v <VERSION> (e.g., --version 1.0.0)"))?;
 
-        let dry_run = matches.get_flag("dry-run");
+        let dry_run = prepare_only || matches.get_flag("dry-run");
         let flag_local = matches.get_flag("local");
         let flag_git = matches.get_flag("git");
         let skip_sync = matches.get_flag("skip-sync");
-        let auto_yes = matches.get_flag("yes") || auth_mode.is_hmac();
+        let skip_package_build = matches.get_flag("skip-package-build");
+        let isolate_packages = prepare_only
+            || matches.get_flag("sanitize-build-environment")
+            || auth_mode.as_ref().is_some_and(AuthMode::is_hmac);
+        let auto_yes = matches.get_flag("yes") || auth_mode.as_ref().is_some_and(AuthMode::is_hmac);
 
         if flag_local && flag_git {
             bail!("Cannot specify both --local and --git flags");
@@ -287,13 +341,13 @@ impl CliCommand for CreateCommand {
             // duplicate version was only caught by the create itself, several
             // minutes of syncing and uploading later. There is no internal list
             // route, so under HMAC the create remains the only check.
-            if !auth_mode.is_hmac() {
+            if !publication_auth()?.is_hmac() {
                 let check_url = format!(
                     "{}/releases?applicationId={}",
                     get_platform_management_api_url(),
                     urlencoding::encode(&application_id)
                 );
-                if let Ok(response) = http_client::get_with_auth(&auth_mode, &check_url) {
+                if let Ok(response) = http_client::get_with_auth(publication_auth()?, &check_url) {
                     if response.status().is_success() {
                         if let Ok(list) = response.json::<ExistingReleaseList>() {
                             if list.releases.iter().any(|r| r.version == *version) {
@@ -383,7 +437,8 @@ impl CliCommand for CreateCommand {
         if !local_mode {
             // Git mode: connect GitHub repository if not in a git repo
             if !is_git_repo() {
-                let git_repo = poll_for_git_repository(&auth_mode, &application_id, &mut stdout)?;
+                let git_repo =
+                    poll_for_git_repository(publication_auth()?, &application_id, &mut stdout)?;
 
                 manifest.git_repository = Some(git_repo);
 
@@ -444,8 +499,9 @@ impl CliCommand for CreateCommand {
         let workspace_root = find_workspace_root(&app_root)?;
         let modules_path = get_modules_path(&workspace_root)?;
 
-        // Step 0.5: Install dependencies and build in modules path
-        {
+        // Workers perform these untrusted commands before starting this authenticated CLI.
+        // Reusing their completed build avoids running package code alongside release credentials.
+        if !skip_package_build {
             let runtime_cmd = if manifest.runtime == "bun" {
                 "bun"
             } else {
@@ -477,6 +533,14 @@ impl CliCommand for CreateCommand {
             install_command
                 .args(&install_args)
                 .current_dir(&modules_path);
+            let install_home = if isolate_packages {
+                Some(tempfile::tempdir()?)
+            } else {
+                None
+            };
+            if let Some(home) = &install_home {
+                isolate_package_environment(&mut install_command, home.path())?;
+            }
             // Bun's installer can be blocked by its temporary-directory
             // sandbox in restricted environments; point it at a project-local
             // temp dir that is always writable.
@@ -503,9 +567,17 @@ impl CliCommand for CreateCommand {
             } else {
                 vec!["build"]
             };
-            let build_status = ProcessCommand::new(&resolved)
-                .args(&build_args)
-                .current_dir(&modules_path)
+            let mut build_command = ProcessCommand::new(&resolved);
+            build_command.args(&build_args).current_dir(&modules_path);
+            let build_home = if isolate_packages {
+                Some(tempfile::tempdir()?)
+            } else {
+                None
+            };
+            if let Some(home) = &build_home {
+                isolate_package_environment(&mut build_command, home.path())?;
+            }
+            let build_status = build_command
                 .status()
                 .with_context(|| format!("Failed to run {} build", runtime_cmd))?;
 
@@ -1102,14 +1174,22 @@ impl CliCommand for CreateCommand {
         let code_source_url = if local_mode && !dry_run {
             log_info!(stdout, "Packaging local code...");
 
-            let tarball_path = app_root.join(".forklaunch").join("release-code.tar.gz");
+            // An owned temporary directory removes the archive on every error path,
+            // including upload URL and upload failures.
+            let archive_dir = tempfile::Builder::new()
+                .prefix("release-code-")
+                .tempdir_in(app_root.join(".forklaunch"))?;
+            let tarball_path = archive_dir.path().join("release-code.tar.gz");
             super::s3_upload::create_app_tarball(&app_root, &modules_path, &tarball_path)?;
 
             log_ok!(stdout, "Tarball created");
 
             // Get presigned upload URL from platform
-            let upload_response =
-                super::s3_upload::get_presigned_upload_url(&application_id, version, &auth_mode)?;
+            let upload_response = super::s3_upload::get_presigned_upload_url(
+                &application_id,
+                version,
+                publication_auth()?,
+            )?;
 
             log_ok!(stdout, "Got upload URL from platform");
 
@@ -1132,12 +1212,15 @@ impl CliCommand for CreateCommand {
                 &application_id,
                 version,
                 &service_names,
-                &auth_mode,
+                publication_auth()?,
             )?;
 
             let mut s3_keys = HashMap::new();
             for (service_name, spec_value) in &openapi_specs {
-                if let Some(entry) = upload_urls.get(service_name) {
+                let entry = upload_urls.get(service_name).ok_or_else(|| {
+                    anyhow::anyhow!("No upload URL returned for service {}", service_name)
+                })?;
+                {
                     // Wrap the spec as { "v1": specObject } to match the expected Record<string, OpenAPIObject> shape
                     let wrapped_spec = serde_json::json!({ "v1": spec_value });
                     super::s3_upload::upload_json_to_s3(&wrapped_spec, &entry.upload_url)?;
@@ -1215,7 +1298,7 @@ impl CliCommand for CreateCommand {
                 manifest_json.len()
             );
 
-            upload_release(&application_id, release_manifest, &auth_mode)?;
+            upload_release(&application_id, release_manifest, publication_auth()?)?;
 
             log_ok!(stdout, "Uploaded release to platform");
         }
@@ -1224,8 +1307,13 @@ impl CliCommand for CreateCommand {
         log_header!(
             stdout,
             Color::Green,
-            "Release {} created successfully!",
-            version
+            "Release {} {} successfully!",
+            version,
+            if dry_run {
+                "prepared locally (not published)"
+            } else {
+                "created"
+            }
         );
 
         if !dry_run {
@@ -2466,6 +2554,105 @@ mod tests {
     use crate::core::manifest::{
         ProjectEntry, ResourceInventory, application::ApplicationManifestData,
     };
+
+    #[test]
+    fn offline_preparation_requires_explicit_safe_options() {
+        let args = [
+            "create",
+            "--version",
+            "1.0.0",
+            "--prepare-only",
+            "--application-id",
+            "11111111-1111-4111-8111-111111111111",
+            "--local",
+            "--skip-sync",
+            "--skip-package-build",
+            "--yes",
+        ];
+        assert!(
+            CreateCommand::new()
+                .command()
+                .version("0.0.0-test")
+                .try_get_matches_from(args)
+                .is_ok()
+        );
+        for omitted in ["--local", "--skip-sync", "--skip-package-build", "--yes"] {
+            let missing: Vec<_> = args.iter().copied().filter(|arg| *arg != omitted).collect();
+            assert!(
+                CreateCommand::new()
+                    .command()
+                    .version("0.0.0-test")
+                    .try_get_matches_from(missing)
+                    .is_err(),
+                "{omitted}"
+            );
+        }
+        let mut git_args = args.to_vec();
+        git_args.push("--git");
+        assert!(
+            CreateCommand::new()
+                .command()
+                .version("0.0.0-test")
+                .try_get_matches_from(git_args)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn offline_identity_cannot_override_publication_identity() {
+        assert!(
+            CreateCommand::new()
+                .command()
+                .version("0.0.0-test")
+                .try_get_matches_from([
+                    "create",
+                    "--version",
+                    "1.0.0",
+                    "--application-id",
+                    "11111111-1111-4111-8111-111111111111",
+                    "--local",
+                    "--yes"
+                ])
+                .is_err()
+        );
+        assert!(
+            CreateCommand::new()
+                .command()
+                .version("0.0.0-test")
+                .try_get_matches_from([
+                    "create",
+                    "--version",
+                    "1.0.0",
+                    "--prepare-only",
+                    "--application-id",
+                    "not-an-id",
+                    "--local",
+                    "--skip-sync",
+                    "--skip-package-build",
+                    "--yes"
+                ])
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn release_accepts_package_build_capabilities() {
+        let args = CreateCommand::new()
+            .command()
+            .version("0.0.0-test")
+            .try_get_matches_from([
+                "create",
+                "--version",
+                "1.0.0",
+                "--yes",
+                "--skip-sync",
+                "--sanitize-build-environment",
+                "--skip-package-build",
+            ])
+            .unwrap();
+        assert!(args.get_flag("sanitize-build-environment"));
+        assert!(args.get_flag("skip-package-build"));
+    }
 
     fn create_test_manifest(projects: Vec<(&str, ProjectType)>) -> ApplicationManifestData {
         ApplicationManifestData {

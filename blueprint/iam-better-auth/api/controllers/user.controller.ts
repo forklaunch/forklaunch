@@ -13,12 +13,12 @@ const serviceFactory = ci.scopedResolver(tokens.SurfacingService);
 
 export const surfaceRoles = handlers.get(
   schemaValidator,
-  '/:id/surface-roles',
+  '/:id/organizations/:organizationId/surface-roles',
   {
     name: 'Surface User Roles',
     access: 'internal',
     summary:
-      'Surfaces the org-scoped roles for a user in their active organization',
+      'Surfaces the org-scoped roles for a user in the organization bound to their verified token',
     auth: {
       hmac: {
         secretKeys: {
@@ -30,13 +30,13 @@ export const surfaceRoles = handlers.get(
       200: array({ name: string }),
       500: string
     },
-    params: IdSchema
+    params: { ...IdSchema, organizationId: IdSchema.id }
   },
   async (req, res) => {
     openTelemetryCollector.debug('Surfacing user roles', req.params);
-    const { id } = req.params;
+    const { id, organizationId } = req.params;
 
-    const role = await serviceFactory().surfaceRole(id);
+    const role = await serviceFactory().surfaceRole(id, organizationId);
 
     if (!role) {
       res.status(200).json([]);
@@ -49,12 +49,12 @@ export const surfaceRoles = handlers.get(
 
 export const surfacePermissions = handlers.get(
   schemaValidator,
-  '/:id/surface-permissions',
+  '/:id/organizations/:organizationId/surface-permissions',
   {
     name: 'Surface User Permissions',
     access: 'internal',
     summary:
-      'Surfaces the org-scoped permissions for a user in their active organization',
+      'Surfaces the org-scoped permissions for a user in the organization bound to their verified token',
     auth: {
       hmac: {
         secretKeys: {
@@ -66,13 +66,16 @@ export const surfacePermissions = handlers.get(
       200: array({ slug: string }),
       500: string
     },
-    params: IdSchema
+    params: { ...IdSchema, organizationId: IdSchema.id }
   },
   async (req, res) => {
     openTelemetryCollector.debug('Surfacing user permissions', req.params);
-    const { id } = req.params;
+    const { id, organizationId } = req.params;
 
-    const permissions = await serviceFactory().surfacePermissions(id);
+    const permissions = await serviceFactory().surfacePermissions(
+      id,
+      organizationId
+    );
 
     res.status(200).json(permissions.map((slug) => ({ slug })));
   }

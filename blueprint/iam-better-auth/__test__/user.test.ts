@@ -28,11 +28,14 @@ describe('User Surfacing Routes E2E Tests with PostgreSQL Container', () => {
     await cleanupTestDatabase();
   }, 30000);
 
-  describe('GET /user/:id/surface-roles - surfaceRoles', () => {
-    it('should get user roles from active org successfully', async () => {
+  describe('GET /user/:id/organizations/:organizationId/surface-roles - surfaceRoles', () => {
+    it('should get user roles from the requested org successfully', async () => {
       const { surfaceRolesRoute } = await import('../api/routes/user.routes');
       const response = await surfaceRolesRoute.sdk.surfaceUserRoles({
-        params: { id: '123e4567-e89b-12d3-a456-426614174000' },
+        params: {
+          id: '123e4567-e89b-12d3-a456-426614174000',
+          organizationId: '123e4567-e89b-12d3-a456-426614174001'
+        },
         headers: {
           authorization: TEST_TOKENS.HMAC
         }
@@ -42,10 +45,13 @@ describe('User Surfacing Routes E2E Tests with PostgreSQL Container', () => {
       expect(response.response).toEqual(mockRoleResponse);
     });
 
-    it('should return empty array for user with no active session', async () => {
+    it('should return empty array for user with no membership in the requested organization', async () => {
       const { surfaceRolesRoute } = await import('../api/routes/user.routes');
       const response = await surfaceRolesRoute.sdk.surfaceUserRoles({
-        params: { id: '00000000-0000-0000-0000-000000000000' },
+        params: {
+          id: '00000000-0000-0000-0000-000000000000',
+          organizationId: '123e4567-e89b-12d3-a456-426614174001'
+        },
         headers: {
           authorization: TEST_TOKENS.HMAC
         }
@@ -56,14 +62,16 @@ describe('User Surfacing Routes E2E Tests with PostgreSQL Container', () => {
     });
   });
 
-  describe('GET /user/:id/surface-permissions - surfacePermissions', () => {
-    it('should get user permissions from active org successfully', async () => {
-      const { surfacePermissionsRoute } = await import(
-        '../api/routes/user.routes'
-      );
+  describe('GET /user/:id/organizations/:organizationId/surface-permissions - surfacePermissions', () => {
+    it('should get user permissions from the requested org successfully', async () => {
+      const { surfacePermissionsRoute } =
+        await import('../api/routes/user.routes');
       const response = await surfacePermissionsRoute.sdk.surfaceUserPermissions(
         {
-          params: { id: '123e4567-e89b-12d3-a456-426614174000' },
+          params: {
+            id: '123e4567-e89b-12d3-a456-426614174000',
+            organizationId: '123e4567-e89b-12d3-a456-426614174001'
+          },
           headers: {
             authorization: TEST_TOKENS.HMAC
           }
@@ -76,13 +84,15 @@ describe('User Surfacing Routes E2E Tests with PostgreSQL Container', () => {
       );
     });
 
-    it('should return empty array for user with no active session', async () => {
-      const { surfacePermissionsRoute } = await import(
-        '../api/routes/user.routes'
-      );
+    it('should return empty array for user with no membership in the requested organization', async () => {
+      const { surfacePermissionsRoute } =
+        await import('../api/routes/user.routes');
       const response = await surfacePermissionsRoute.sdk.surfaceUserPermissions(
         {
-          params: { id: '00000000-0000-0000-0000-000000000000' },
+          params: {
+            id: '00000000-0000-0000-0000-000000000000',
+            organizationId: '123e4567-e89b-12d3-a456-426614174001'
+          },
           headers: {
             authorization: TEST_TOKENS.HMAC
           }

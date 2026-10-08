@@ -50,4 +50,4 @@ jobs:
 
       - name: Run CLI tests
         working-directory: ./cli
-        run: cargo test --verbose
+        run: cargo test --locked --verbose

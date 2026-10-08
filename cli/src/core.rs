@@ -49,3 +49,5 @@ pub(crate) mod version_check;
 pub(crate) mod vscode;
 pub(crate) mod watermark;
 pub(crate) mod worker_type;
+
+pub(crate) mod package_build_environment;

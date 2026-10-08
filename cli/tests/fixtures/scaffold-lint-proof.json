@@ -1,0 +1,24 @@
+{
+  "scope": "Fresh CLI application + service + worker emission; actual bounded Linux frozen offline install and lint",
+  "frameworkBase": "bf2af6030",
+  "cliSha256": "c198b134a3f45a3137f506a21af3e2496dd5ec6dd4a07d6ed58c30618a356366",
+  "sourceCommit": "c3015b947f5488423506ea51ed45dd3d6a9ba09c",
+  "image": "sha256:f4bbebe63ad63cee899492fa21095f337a94a2bc517db255a3af47f6e1d719ee",
+  "sourceCodeManuallyEdited": false,
+  "normalizations": [
+    "Materialized18 reviewed shared configuration symlinks into equivalent regular files",
+    "Copied previously reviewed frozen lock after dependency selectors matched",
+    "Excluded generated local/test environment files from release archive"
+  ],
+  "localScaffoldLoginStub": true,
+  "cloudCalls": 0,
+  "providerCredentials": false,
+  "installPassed": true,
+  "lintPassed": true,
+  "lintErrors": 0,
+  "lintWarnings": 0,
+  "lintFiles": 116,
+  "compilePassed": false,
+  "compileBlocker": "The emitted Better Auth surfacing symlink pointed at the older IAM-base template, causing session and organizationId type errors; corrected in the subsequent scaffold-owner-policy-proof.json run.",
+  "cleanupConfirmed": true
+}
