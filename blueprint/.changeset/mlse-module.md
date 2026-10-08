@@ -10,3 +10,5 @@ The safety classifier reads its phrase lists from `DEFAULT_SAFETY_RULES` (versio
 Embedding requests can say whether the texts are search queries or passages (`purpose`); the Ollama provider then adds the task instruction `nomic-embed-text` was trained with.
 
 The procedure question framework now holds only hint words that fit any procedure; `frameworkItems(framework, topicHints)` adds a topic's own words. `selectEvidence` takes `wholeTerm` so topic pages count a document only when it names the topic in full.
+
+PMC searches now rank by relevance, as PubMed searches did, and PMC articles drop declaration sections (funding, ethics, consent, competing interests, AI use) by heading as well as by type.

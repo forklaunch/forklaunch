@@ -176,11 +176,13 @@ describe('PmcOaFetcher', () => {
     return { docs, requests };
   };
 
-  it('restricts the search to the open-access subset', async () => {
+  it('restricts the search to the open-access subset, most relevant first', async () => {
     const { requests } = await run();
     expect(decodeURIComponent(requests[0])).toContain('(cholecystectomy) AND open access[filter]');
+    expect(requests[0]).toContain('sort=relevance');
   });
 
+  // declarations, funding and AI-use statements are left out, nested or not
   it('keeps nested and structured sections with their headings', async () => {
     const { docs } = await run();
     const article = docs[0];
