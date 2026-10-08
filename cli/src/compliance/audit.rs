@@ -17,6 +17,7 @@ use crate::{
         ast::infrastructure::compliance::{scan_all_compliance, scan_entity_compliance},
         command::command,
         hmac::AuthMode,
+        static_analysis::route_analyzer,
         http_client::post_with_auth,
         validate::require_manifest,
     },
@@ -162,19 +163,31 @@ impl CliCommand for AuditCommand {
             })
             .collect();
 
-        // Collect route data from OpenAPI spec (if available)
-        let (routes, specs_found) = collect_routes_from_openapi(&app_root, modules_path);
-        if !specs_found {
-            // Write to stderr so stdout stays parseable for --json / --output
-            let mut stderr = StandardStream::stderr(ColorChoice::Always);
-            log_warn!(
-                stderr,
-                "No OpenAPI specs found — route access levels were NOT audited."
-            );
-            log_info!(
-                stderr,
-                "Run `forklaunch openapi export` and re-run the audit to include routes."
-            );
+        // Every route, read from the source: each contract's access level and auth, plus routes
+        // registered outside the framework. Exported OpenAPI specs are the fallback for apps
+        // whose routes the scan cannot read (the specs carry no access level, only the auth scheme).
+        let mut routes: Vec<RouteReport> = route_analyzer::scan_routes(&modules_path_buf)
+            .into_iter()
+            .map(|r| RouteReport {
+                path: r.path,
+                method: r.method,
+                access: r.access,
+                auth: r.auth,
+                source: Some(r.source),
+                file: Some(r.file),
+                line: Some(r.line),
+            })
+            .collect();
+        let mut routes_audited = !routes.is_empty();
+        if routes.is_empty() {
+            let (spec_routes, specs_found) = collect_routes_from_openapi(&app_root, modules_path);
+            routes = spec_routes;
+            routes_audited = specs_found;
+            if !specs_found {
+                // Write to stderr so stdout stays parseable for --json / --output
+                let mut stderr = StandardStream::stderr(ColorChoice::Always);
+                log_warn!(stderr, "No routes found in the source or in exported OpenAPI specs.");
+            }
         }
 
         // Run offline wiring + sensitive-field checks
@@ -270,7 +283,7 @@ impl CliCommand for AuditCommand {
 
         // Pretty terminal output
         print_header(&mut stdout)?;
-        print_summary(&mut stdout, &report, specs_found)?;
+        print_summary(&mut stdout, &report, routes_audited)?;
 
         match &platform_response {
             Ok(resp) => {
@@ -413,7 +426,7 @@ fn print_summary(
         out.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
         writeln!(
             out,
-            " (no OpenAPI specs found — run `forklaunch openapi export`)"
+            " (none found in the source or in exported OpenAPI specs)"
         )?;
         out.reset()?;
     }
@@ -777,28 +790,40 @@ fn print_routes(out: &mut StandardStream, report: &ComplianceReport) -> Result<(
     writeln!(out, "  ── Route Access Levels ──")?;
     out.reset()?;
 
-    writeln!(
-        out,
-        "  {:<8} {:<40} {}",
-        "METHOD", "PATH", "ACCESS"
-    )?;
-    writeln!(out, "  {}", "─".repeat(64))?;
+    writeln!(out, "  {:<8} {:<40} {:<18} {}", "METHOD", "PATH", "ACCESS", "AUTH")?;
+    writeln!(out, "  {}", "─".repeat(88))?;
 
     for route in &report.routes {
-        let access = route.access.as_deref().unwrap_or("NONE");
+        let outside = route.source == Some(route_analyzer::RouteSource::OutsideFramework);
+        let access = if outside {
+            "outside framework"
+        } else {
+            route.access.as_deref().unwrap_or("NONE")
+        };
+        let missing_auth = !outside && access != "public" && route.auth.is_none();
         let access_color = match access {
-            "public" => Color::Yellow,
+            _ if missing_auth => Color::Red,
+            "public" | "outside framework" => Color::Yellow,
             "authenticated" => Color::Cyan,
             "protected" => Color::Green,
             "internal" => Color::Blue,
-            "NONE" => Color::Red,
             _ => Color::White,
         };
 
         write!(out, "  {:<8} {:<40} ", route.method, route.path)?;
         out.set_color(ColorSpec::new().set_fg(Some(access_color)))?;
-        writeln!(out, "{}", access.to_uppercase())?;
+        write!(out, "{:<18} ", access.to_uppercase())?;
         out.reset()?;
+        let auth = match (&route.auth, missing_auth) {
+            (Some(a), _) => a.split_whitespace().collect::<Vec<_>>().join(" "),
+            (None, true) => "MISSING".to_string(),
+            (None, false) => "-".to_string(),
+        };
+        let at = match (&route.file, route.line) {
+            (Some(f), Some(l)) => format!("  {}:{}", f, l),
+            _ => String::new(),
+        };
+        writeln!(out, "{}{}", auth.chars().take(36).collect::<String>(), at)?;
     }
 
     Ok(())
@@ -976,6 +1001,16 @@ struct RouteReport {
     method: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     access: Option<String>,
+    /// The contract's auth expression as written, e.g. `jwtAuth(MEMBER_ROLES)`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    auth: Option<String>,
+    /// `contract` or `outside-framework`; absent for routes read from an OpenAPI spec.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source: Option<route_analyzer::RouteSource>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    line: Option<usize>,
 }
 
 /// Whether a classification level causes the framework to encrypt the column.
@@ -1232,6 +1267,10 @@ fn parse_openapi_routes(path: &Path) -> Result<Vec<RouteReport>> {
                         path: path_str.clone(),
                         method: method.to_uppercase(),
                         access,
+                        auth: operation.get("security").map(|s| s.to_string()),
+                        source: None,
+                        file: None,
+                        line: None,
                     });
                 }
             }

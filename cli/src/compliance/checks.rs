@@ -15,6 +15,7 @@ use anyhow::Result;
 use serde::Serialize;
 
 use crate::core::ast::infrastructure::compliance::scan_entity_compliance;
+use crate::core::static_analysis::route_analyzer;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -128,6 +129,8 @@ fn read_production_sources(project_path: &Path) -> String {
 /// `localChecks`, so a consumer can tell a check that ran and found nothing
 /// (a pass) from one this CLI version does not have.
 pub(crate) const LOCAL_CHECK_IDS: &[&str] = &[
+    "route-auth-missing",
+    "route-outside-framework",
     "encryptor-registration",
     "tenant-em-wiring",
     "better-auth-encryption-context",
@@ -1178,6 +1181,33 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
         let project = entry.file_name().to_string_lossy().to_string();
 
         let owns_persistence = project_path.join("persistence").is_dir();
+
+        // 0. Route protection, read from each route's contract. A non-public contract with no
+        //    auth method lets callers in without a credential; a route registered on the raw
+        //    application with an inline handler gets none of the framework's auth or validation.
+        for route in route_analyzer::scan_routes(&project_path) {
+            let at = format!("{} {} ({}:{})", route.method, route.path, route.file, route.line);
+            if route.missing_auth() {
+                findings.push(LocalFinding {
+                    severity: Severity::Warning,
+                    project: project.clone(),
+                    check: "route-auth-missing".to_string(),
+                    subject: at,
+                    message: format!(
+                        "Declares access '{}' but no auth method, so the framework lets callers in without a credential. Add an auth block (e.g. auth: jwtAuth(ROLES)) or mark the route access: 'public' if it is meant to be open.",
+                        route.access.as_deref().unwrap_or("(none)")
+                    ),
+                });
+            } else if route.source == route_analyzer::RouteSource::OutsideFramework {
+                findings.push(LocalFinding {
+                    severity: Severity::Info,
+                    project: project.clone(),
+                    check: "route-outside-framework".to_string(),
+                    subject: at,
+                    message: "Registered on the raw application with an inline handler, so ForkLaunch's access levels, auth and validation do not apply. Confirm it is meant to be open, or declare it with handlers.* and a contract.".to_string(),
+                });
+            }
+        }
 
         // 1. Tenant-isolation wiring in every runtime entrypoint
         if owns_persistence {
