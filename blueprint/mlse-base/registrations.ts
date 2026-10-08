@@ -484,8 +484,10 @@ const serviceDependencies = runtimeDependencies.chain({
   TopicService: {
     lifetime: Lifetime.Scoped,
     type: TopicService,
-    factory: ({ EntityManager, SearchService, OtelCollector }) =>
-      new TopicService(EntityManager, SearchService, OtelCollector)
+    factory: ({ EntityManager, SearchService, OtelCollector, EMBEDDING_PROVIDER }) =>
+      new TopicService(EntityManager, SearchService, OtelCollector, {
+        itemFit: EMBEDDING_PROVIDER !== 'fake'
+      })
   },
   AnswerService: {
     lifetime: Lifetime.Scoped,

@@ -264,6 +264,19 @@ export class SearchService {
     return rows.map(toPassage);
   }
 
+  // Embeds texts as search queries; undefined when embeddings are unavailable.
+  async embedQueries(texts: string[]): Promise<{ vectors: number[][]; model: string } | undefined> {
+    try {
+      const response = await this.llmProvider.embed({ texts, purpose: 'query' });
+      return response.embeddings.length === texts.length
+        ? { vectors: response.embeddings, model: response.model }
+        : undefined;
+    } catch (error) {
+      this.openTelemetryCollector.error('Query embedding failed', error);
+      return undefined;
+    }
+  }
+
   private async vectorSearch(
     query: string,
     request: SearchRequestDto

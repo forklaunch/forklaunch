@@ -49,7 +49,8 @@ const services = async () => {
     new LiveRetrievalService(new SourceFetcherRegistry([]), []),
     otel
   );
-  return { topics: new TopicService(em, search, otel) };
+  // the fake embeddings carry no meaning to fit questions by
+  return { topics: new TopicService(em, search, otel, { itemFit: false }) };
 };
 
 const ingest = async (sourceKey: keyof typeof fetchers, documents: FetchedDocumentDto[]) => {
