@@ -80,12 +80,27 @@ type OpenIItem = {
 // About a third of Open-i's figures carry a license that allows reuse, so a
 // page asks for more than it shows.
 const FETCH_FACTOR = 4;
-const MAX_FETCH = 60;
+const MAX_FETCH = 90;
 // Open-i sends each figure's abstract too and sends slowly: 60 figures took
 // 3 to 14 s, so they are asked for in pages fetched together
 const PAGE_SIZE = 30;
 
 const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+
+// Charts and diagrams, judged by caption since Open-i labels many of them
+// photos: words that always mean one, and words that do unless the caption
+// says it shows an image (a "model" of a knee implant is a photo).
+const CHART_WORDS =
+  /\b(flow ?charts?|flow diagrams?|diagnostic flow|alluvial|sankey|plots?|graphs?|curves?|bar charts?|histograms?|scatter\w*|kaplan|heat ?maps?|pie charts?|nomograms?|tables?)\b/i;
+const CHART_LIKE_WORDS =
+  /\b(distributions?|frequenc\w+|prevalence|incidence|proportions?|percentages?|surveys?|questionnaires?|apps?|mobile application|posters?|dataset|cohort|study (population|area|design)|admissions|concentrations?|kinetics|models?|design|schem\w*|illustrat\w+|representation|overview|role of|mechanisms?|pathways?|benefits|framework|algorithm|timeline|networks?|maps?|counts?|trends?|agreement|interpretations?|clusters?|clustering|needs)\b/i;
+const IMAGE_WORDS =
+  /\b(photo\w*|images?|radiograph\w*|x-?rays?|cxr|ct|computed tomograph\w*|mri|magnetic resonance|ultraso\w*|sonograph\w*|scans?|ecg|electrocardiogra\w*|angiogra\w*|endoscop\w*|intra-?operative|specimens?|micrograph\w*|stain\w*|histolog\w*|macroscopic|gross|view|lesions?|findings)\b/i;
+
+/** Whether a caption describes a chart or diagram rather than an image. */
+export function isChart(caption: string): boolean {
+  return CHART_WORDS.test(caption) || (CHART_LIKE_WORDS.test(caption) && !IMAGE_WORDS.test(caption));
+}
 
 // "infarct" and "infarction", "appendix" and "appendices" count as one word
 function sameWord(a: string, b: string): boolean {
@@ -166,10 +181,12 @@ export class ImageSearchService {
 
   // `about`: the words a figure must be about, when the query adds others to
   // help the search find it ("appendectomy" for "appendectomy surgical technique")
-  // `orTitle`: also keep figures whose article title, not caption, names it
+  // `orTitle`: also keep figures whose article title, not caption, names it.
+  // `charts`: also keep charts and diagrams; by default only when diagrams
+  // are what was asked for.
   async search(
     query: string,
-    options: { limit?: number; type?: ImageType; about?: string; orTitle?: boolean } = {}
+    options: { limit?: number; type?: ImageType; about?: string; orTitle?: boolean; charts?: boolean } = {}
   ): Promise<ImageSearchResult> {
     const text = query.trim();
     const limit = options.limit ?? 24;
@@ -178,7 +195,8 @@ export class ImageSearchService {
     if (!text || (queryClass !== 'literature_lookup' && queryClass !== 'dosage_question')) {
       return { images: [], status: 'skipped' };
     }
-    const key = `${options.type ?? ''}:${limit}:${options.about ?? ''}:${options.orTitle ? 't' : ''}:${text.toLowerCase()}`;
+    const charts = options.charts ?? options.type === 'diagram';
+    const key = `${options.type ?? ''}:${limit}:${options.about ?? ''}:${options.orTitle ? 't' : ''}:${charts ? 'c' : ''}:${text.toLowerCase()}`;
     const hit = this.cache.get(key);
     if (hit && Date.now() - hit.at < this.cacheMs) return { images: hit.value, status: 'ok' };
 
@@ -203,7 +221,9 @@ export class ImageSearchService {
     const found = new Map<string, MedicalImage>();
     for (const item of answered.flat()) {
       const image = this.toImage(item);
-      if (image && !found.has(image.id)) found.set(image.id, image);
+      if (!image || found.has(image.id)) continue;
+      if (!charts && (image.modality === 'diagram' || isChart(image.caption))) continue;
+      found.set(image.id, image);
     }
     const images = rankByCaption(
       [...found.values()],

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { FetchLike } from '../domain/http';
-import { ImageSearchService, rankByCaption } from '../services/imageSearch.service';
+import { ImageSearchService, isChart, rankByCaption } from '../services/imageSearch.service';
 
 const OPENI = readFileSync(join(__dirname, 'fixtures', 'openi-search.json'), 'utf8');
 
@@ -14,7 +14,7 @@ function fakeFetch(body: string, requests: string[] = [], status = 200): FetchLi
 
 describe('ImageSearchService', () => {
   it('returns only figures licensed for commercial reuse, with their article and license', async () => {
-    const { images, status } = await new ImageSearchService(fakeFetch(OPENI)).search('appendectomy');
+    const { images, status } = await new ImageSearchService(fakeFetch(OPENI)).search('appendectomy', { charts: true });
 
     expect(status).toBe('ok');
     // of 12 figures: 5 unlicensed, 3 NonCommercial or NoDerivatives
@@ -67,8 +67,8 @@ describe('ImageSearchService', () => {
     const result = await new ImageSearchService(fakeFetch('', requests, 503)).search('appendectomy');
 
     expect(result).toEqual({ images: [], status: 'unavailable' });
-    // two pages, each asked twice
-    expect(requests).toHaveLength(4);
+    // three pages, each asked twice
+    expect(requests).toHaveLength(6);
   });
 
   it('asks again once when Open-i fails a request', async () => {
@@ -132,5 +132,46 @@ describe('rankByCaption', () => {
       'myocardial infarction'
     );
     expect(only).toBeDefined();
+  });
+});
+
+describe('charts', () => {
+  it('tells charts and diagrams from images by caption', () => {
+    for (const caption of [
+      'Flow diagram (alluvial plot) illustrating the frequency of cause of death',
+      'Kinetics of high-sensitivity cardiac troponin I concentration from symptom onset',
+      'Study population and classification of stroke subtypes',
+      'Overview of the method and its potential therapeutic approach'
+    ]) {
+      expect(isChart(caption)).toBe(true);
+    }
+    for (const caption of [
+      'An example of 1 mm elevation of ST segment in II, III, aVF leads',
+      'Case of spontaneous myocardial infarction (A) on MRI',
+      'Sigma High Performance unicompartmental knee replacement and patello-femoral joint implants',
+      'Appendectomy specimen'
+    ]) {
+      expect(isChart(caption)).toBe(false);
+    }
+  });
+
+  it('leaves charts out unless asked for them or for diagrams', async () => {
+    const body = JSON.stringify({
+      list: ['Appendectomy specimen', 'Flowchart of appendectomy patients'].map((caption, i) => ({
+        uid: `PMC${300 + i}`,
+        pmcid: String(300 + i),
+        title: 'Appendectomy in adults',
+        licenseURL: 'https://creativecommons.org/licenses/by/4.0/',
+        imgLarge: `/imgs/512/1/${300 + i}.png`,
+        image: { id: 'F1', caption, modalityMajor: 'ph' }
+      }))
+    });
+    const service = new ImageSearchService(fakeFetch(body));
+    const captions = async (options: { type?: 'diagram'; charts?: boolean }) =>
+      (await service.search('appendectomy', options)).images.map((i) => i.caption);
+
+    expect(await captions({})).toEqual(['Appendectomy specimen']);
+    expect(await captions({ type: 'diagram' })).toEqual(['Appendectomy specimen', 'Flowchart of appendectomy patients']);
+    expect(await captions({ charts: true })).toHaveLength(2);
   });
 });
