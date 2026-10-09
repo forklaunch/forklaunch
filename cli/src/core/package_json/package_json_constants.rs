@@ -218,7 +218,7 @@ pub(crate) fn project_up_latest_script(runtime: &Runtime) -> Option<String> {
 
 // Project package.json dependencies constants
 // @forklaunch/better-auth-mikro-orm-fork
-pub(crate) const BETTER_AUTH_MIKRO_ORM_VERSION: &str = "~0.5.9";
+pub(crate) const BETTER_AUTH_MIKRO_ORM_VERSION: &str = "~0.5.11";
 // @forklaunch/blueprint-core
 pub(crate) const APP_CORE_VERSION: &str = "workspace:*";
 // @forklaunch/blueprint-billing

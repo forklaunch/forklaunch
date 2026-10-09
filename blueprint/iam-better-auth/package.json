@@ -36,7 +36,7 @@
     "test": "NODE_OPTIONS='--import=tsx' vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/better-auth-mikro-orm-fork": "^0.5.9",
+    "@forklaunch/better-auth-mikro-orm-fork": "~0.5.11",
     "@forklaunch/blueprint-core": "workspace:^",
     "@forklaunch/blueprint-iam-base": "workspace:^",
     "@forklaunch/blueprint-monitoring": "workspace:^",
