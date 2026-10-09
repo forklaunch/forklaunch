@@ -353,6 +353,16 @@ pub(crate) const PROJECT_DOCS_SCRIPT: &str = "typedoc --out docs *";
 // as nothing to seed.
 pub(crate) const PROJECT_SEED_SCRIPT: &str = "if ls persistence/entities/*.entity.ts >/dev/null 2>&1; then [ -z \"$DOTENV_FILE_PATH\" ] && [ -f .env.local ] && export DOTENV_FILE_PATH=.env.local; NODE_OPTIONS='--import=tsx' mikro-orm seeder:run; fi";
 
+// The cac module's code-set loader (ICD-10-CM, HCPCS, an organization's own
+// CPT feed): without it a scaffolded cac app has empty reference tables and
+// every diagnosis is denied as unrecognized.
+pub(crate) fn project_cac_refresh_code_sets_script(runtime: &Runtime) -> String {
+    String::from(match runtime {
+        Runtime::Bun => "bun run scripts/refresh-code-sets.ts",
+        Runtime::Node => "pnpm tsx scripts/refresh-code-sets.ts",
+    })
+}
+
 pub(crate) fn project_retention_enforce_script(runtime: &Runtime) -> String {
     String::from(match runtime {
         Runtime::Bun => "bun run scripts/enforce-retention.ts",

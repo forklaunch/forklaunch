@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/implementation-cac-base",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "Computer-assisted coding basic implementation for forklaunch",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -15,9 +15,9 @@
   "exports": {
     "./services": {
       "types": "./lib/services/index.d.ts",
-      "import": "./lib/services/index.mjs",
-      "require": "./lib/services/index.js",
-      "default": "./lib/services/index.js"
+      "import": "./lib/index.mjs",
+      "require": "./lib/index.js",
+      "default": "./lib/index.js"
     },
     "./services/*": {
       "types": "./lib/services/*.d.ts"
