@@ -1,4 +1,4 @@
-import { collapseWhitespace, FetchLike, RateLimitedClient } from '../domain/http';
+import { collapseWhitespace, FetchLike, RateLimitedClient, SourceTimeoutError } from '../domain/http';
 import { literatureSearchTerm } from './layTerms.service';
 import { licenseScopeFor } from './licenseGate.service';
 import { queryTerms } from './ranking.service';
@@ -181,13 +181,20 @@ export class ImageSearchService {
       coll: 'pmc'
     });
     if (options.type) params.set('it', IMAGE_TYPES[options.type]);
-    let items: OpenIItem[];
-    try {
-      const response = await this.client.getJson<{ list?: OpenIItem[] }>(`${this.baseUrl}/api/search?${params}`);
-      items = Array.isArray(response.list) ? response.list : [];
-    } catch {
-      return { images: [], status: 'unavailable' };
+    let items: OpenIItem[] | undefined;
+    // Open-i now and then fails a request it answers a moment later; one
+    // that timed out is not asked again
+    for (let attempt = 0; attempt < 2 && !items; attempt++) {
+      try {
+        const response = await this.client.getJson<{ list?: OpenIItem[] }>(`${this.baseUrl}/api/search?${params}`);
+        items = Array.isArray(response.list) ? response.list : [];
+      } catch (error) {
+        if (attempt === 1 || error instanceof SourceTimeoutError) {
+          return { images: [], status: 'unavailable' };
+        }
+      }
     }
+    if (!items) return { images: [], status: 'unavailable' };
 
     const images = rankByCaption(
       items.map((item) => this.toImage(item)).filter((image): image is MedicalImage => image !== undefined),
