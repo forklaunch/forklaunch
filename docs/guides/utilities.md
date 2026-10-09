@@ -364,7 +364,10 @@ function safeStringify(arg: unknown): string
 
 Converts a value to the plain string a header, form field or query parameter
 expects: strings are returned as-is, numbers, booleans, `null` and `undefined`
-go through `String()`, and objects and arrays are JSON-encoded.
+go through `String()`, and everything else is handed to `safeStringify`, so
+`Error`, `BigInt`, `Map`, `Set`, `RegExp`, `Date`, typed arrays, functions,
+symbols and circular references keep the representation they have always had
+on the wire.
 
 ```typescript
 import { toPlainString } from '@forklaunch/common';
@@ -372,7 +375,11 @@ import { toPlainString } from '@forklaunch/common';
 toPlainString('hello');              // 'hello' (no quotes)
 toPlainString(30);                   // '30'
 toPlainString({ status: 'active' }); // '{"status":"active"}'
+toPlainString(new Map([['a', 1]]));  // '{"__type":"Map","value":[["a",1]]}'
 ```
+
+`NaN` and `Infinity` are the one place it differs from `safeStringify`: a
+header wants `NaN`, not `"NaN"`.
 
 **Type Signature:**
 ```typescript

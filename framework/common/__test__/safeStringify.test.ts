@@ -190,11 +190,6 @@ describe('toPlainString', () => {
     const circularResult = toPlainString(circular);
     expect(circularResult).toMatch(/\[Unserializable:/);
 
-    // BigInt
-    const bigIntValue = BigInt(123);
-    const bigIntResult = toPlainString(bigIntValue);
-    expect(bigIntResult).toMatch(/\[Unserializable:/);
-
     // Object with toJSON that throws
     const throwingObject = {
       toJSON() {
@@ -207,9 +202,57 @@ describe('toPlainString', () => {
   });
 
   it('always returns a string, even for a function or a symbol', () => {
-    // JSON.stringify returns undefined for these
-    expect(toPlainString(Symbol('tag'))).toBe('Symbol(tag)');
+    // JSON.stringify returns undefined for these; safeStringify's replacer
+    // renders them instead, so a function's source never reaches the wire
+    expect(toPlainString(Symbol('tag'))).toBe('"Symbol(tag)"');
+    expect(toPlainString(function foo() {})).toBe('"[Function: foo]"');
     expect(typeof toPlainString(() => 1)).toBe('string');
+  });
+
+  it('keeps safeStringify behaviour for every non-primitive value', () => {
+    // these callers used safeStringify before it started quoting strings.
+    // toPlainString must stay identical to it for everything that is not a
+    // top-level string, or header, form, query and MCP body values change on
+    // the wire: a Map would flatten to '{}', a BigInt to an error string, and
+    // a function to its own source text.
+    const values: unknown[] = [
+      BigInt(123),
+      new Map([['a', 1]]),
+      new Set([1, 2]),
+      new Error('boom'),
+      /a/g,
+      new Date(0),
+      new Uint8Array([1, 2]),
+      Symbol('tag'),
+      function foo() {},
+      { a: 1, nested: { b: [1, 2] } },
+      [1, 'two', { three: 3 }]
+    ];
+
+    for (const value of values) {
+      expect(toPlainString(value)).toBe(safeStringify(value));
+    }
+
+    // and the structure survives rather than collapsing to '{}'
+    expect(toPlainString(new Map([['a', 1]]))).toBe(
+      '{"__type":"Map","value":[["a",1]]}'
+    );
+    expect(toPlainString(new Set([1, 2]))).toBe(
+      '{"__type":"Set","value":[1,2]}'
+    );
+    expect(toPlainString(/a/g)).toBe('"/a/g"');
+    expect(toPlainString(new Uint8Array([1, 2]))).toBe(
+      '{"__type":"Uint8Array","value":[1,2]}'
+    );
+    expect(toPlainString(new Error('boom'))).toContain('"message":"boom"');
+  });
+
+  it('leaves NaN and Infinity unquoted for header and query values', () => {
+    // the one intentional difference from safeStringify: a plain-string
+    // context wants 'NaN', not '"NaN"'
+    expect(toPlainString(NaN)).toBe('NaN');
+    expect(toPlainString(Infinity)).toBe('Infinity');
+    expect(toPlainString(-Infinity)).toBe('-Infinity');
   });
 
   it('round-trips a string through safeStringify and safeParse', async () => {

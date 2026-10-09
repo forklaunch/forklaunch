@@ -1,7 +1,14 @@
 /**
- * Converts a value to a plain string representation without JSON encoding.
- * Used for form data, query parameters, and HTTP headers where primitives
- * should be converted directly rather than JSON-serialized.
+ * Converts a value to the plain string a header, form field or query parameter
+ * expects: a string is returned as-is, numbers, booleans, `null` and
+ * `undefined` go through `String()`, and anything else is handed to
+ * `safeStringify`.
+ *
+ * Delegating the non-primitive case keeps the special-type handling
+ * `safeStringify` already has (Error, BigInt, Map, Set, RegExp, Date, typed
+ * arrays, functions, symbols, circular references). This is exactly what
+ * these callers did before `safeStringify` started quoting strings, so the
+ * values that go over the wire are unchanged.
  *
  * @param value - The value to convert
  * @returns A plain string representation
@@ -26,15 +33,7 @@ export function toPlainString(value: unknown): string {
   if (value == null) {
     return String(value);
   }
-  try {
-    // JSON.stringify returns undefined for a function or a symbol
-    return JSON.stringify(value) ?? String(value);
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      return `[Unserializable: ${error.message}]`;
-    }
-    return '[Unserializable: Unknown error]';
-  }
+  return safeStringify(value);
 }
 
 /**
