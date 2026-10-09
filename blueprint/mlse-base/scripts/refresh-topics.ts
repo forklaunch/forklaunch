@@ -5,15 +5,15 @@ import { Topic } from '../persistence/entities/topic.entity';
 /**
  * Queues ingestion of the papers each topic page is built from: its corpus
  * queries (papers whose major subject is the topic, and those on its
- * technique) against PubMed Central and PubMed. Assemble the page once the
- * worker has stored them.
+ * technique) against PubMed Central, PubMed and PubMed's guidelines.
+ * Assemble the page once the worker has stored them.
  *
  *   pnpm topic:refresh                    every topic with corpus queries
  *   pnpm topic:refresh appendectomy ...   only these
  *
  *   CORPUS_LIMIT  papers per source and query (default: 25)
  */
-const NCBI_SOURCES = ['pmc_oa', 'pubmed'];
+const NCBI_SOURCES = ['pmc_oa', 'pubmed', 'guidelines'];
 
 const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 const sourceFetchers = ci.resolve(tokens.SourceFetchers);

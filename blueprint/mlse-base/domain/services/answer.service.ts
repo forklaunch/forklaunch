@@ -93,6 +93,8 @@ const OVERVIEW_SEARCH_WIDTH = 40;
 const PASSAGES_PER_SECTION = 5;
 // passages each overview section's own search returns
 const FOCUSED_SEARCH_WIDTH = 15;
+// guidelines asked for once per answer, by the topic
+const GUIDELINE_SEARCH_WIDTH = 10;
 const PASSAGES_PER_DOCUMENT = 2;
 const LABEL_PASSAGES = 2;
 // candidate drug words looked up, one label search each
@@ -377,7 +379,9 @@ export class AnswerService {
       request.mode === 'overview' || (request.mode !== 'direct' && isOverviewQuery(query, clinical.length > 0));
 
     // search wide, then keep only passages about the question, at most two
-    // per document so one paper cannot fill the answer
+    // per document so one paper cannot fill the answer. Guidelines are asked
+    // for alongside: their source is too slow for every search.
+    const guidelineSearch = this.guidelinesFor(request.followUpOf ?? query, request);
     const { results, expandedTerms } = await this.searchService.search({
       query,
       limit: overview ? OVERVIEW_SEARCH_WIDTH : SEARCH_WIDTH,
@@ -385,6 +389,7 @@ export class AnswerService {
       preferReviews: overview,
       ...(request.organizationId ? { organizationId: request.organizationId } : {})
     });
+    const guidelines = await guidelineSearch;
     // relevance is judged against the topic, not the follow-up wording: the
     // "Heart Attack" page answers "heart attack: how is it treated?"
     const concepts = queryConcepts(request.followUpOf ?? query, expandedTerms);
@@ -393,7 +398,7 @@ export class AnswerService {
     );
 
     if (overview) {
-      return this.overviewSections(query, clinical, expandedTerms, results, about, concepts, request);
+      return this.overviewSections(query, clinical, expandedTerms, results, about, concepts, request, guidelines);
     }
     // A follow-up that asks about one part of the topic ("how is it
     // treated?") is answered like that overview section, with its own
@@ -402,11 +407,15 @@ export class AnswerService {
       const topicType = detectTopicType(request.followUpOf, about);
       const section = sectionForQuestion(OVERVIEW_SECTIONS[topicType], request.query);
       if (section) {
-        return this.overviewSections(query, clinical, expandedTerms, results, about, concepts, request, section.key);
+        return this.overviewSections(query, clinical, expandedTerms, results, about, concepts, request, guidelines, section.key);
       }
     }
+    // a guideline that answers the question comes before studies of it
+    const guidelinesAbout = guidelines.filter(
+      (r) => r.licenseScope !== 'metadata_only' && r.text.trim().length > 0 && passageIsAbout(r, concepts)
+    );
     const perDocument = new Map<string, number>();
-    const usable = about.filter((r) => {
+    const usable = [...new Map([...guidelinesAbout, ...about].map((r) => [r.passageId, r])).values()].filter((r) => {
       const key = `${r.sourceKey}:${r.externalId}`;
       const count = perDocument.get(key) ?? 0;
       perDocument.set(key, count + 1);
@@ -435,6 +444,25 @@ export class AnswerService {
 
   // Sections for a topic query. Each section gets up to four passages that
   // address it (they contain one of its hint words), one per document.
+  // Clinical practice guidelines on the topic, from the corpus and, when the
+  // answer may use live sources, from PubMed; none when the search fails,
+  // since the answer stands on the rest of its sources.
+  private async guidelinesFor(topic: string, request: AnswerRequestDto): Promise<SearchResultDto[]> {
+    try {
+      const { results } = await this.searchService.search({
+        query: topic,
+        limit: GUIDELINE_SEARCH_WIDTH,
+        live: request.live ?? true,
+        sourceKeys: ['guidelines'],
+        ...(request.organizationId ? { organizationId: request.organizationId } : {})
+      });
+      return results.filter((r) => r.sourceKey === 'guidelines');
+    } catch (error) {
+      this.openTelemetryCollector.error('Guideline search failed', error);
+      return [];
+    }
+  }
+
   private async overviewSections(
     query: string,
     clinical: string[],
@@ -443,6 +471,7 @@ export class AnswerService {
     about: SearchResultDto[],
     concepts: QueryConcepts,
     request: AnswerRequestDto,
+    guidelines: SearchResultDto[],
     // answer only this section (a follow-up question)
     onlySection?: string
   ) {
@@ -471,8 +500,9 @@ export class AnswerService {
         sourceKeys: ['medlineplus'],
         ...(request.organizationId ? { organizationId: request.organizationId } : {})
       });
-      for (const r of referenceResults) found.set(r.passageId, r);
-      reference = referenceResults.filter(isUsable);
+      for (const r of [...guidelines, ...referenceResults]) found.set(r.passageId, r);
+      // guidelines first: they say what to do, for doctors
+      reference = [...guidelines, ...referenceResults].filter(isUsable);
     }
     for (const section of sections) {
       if (!section.focus || !searchesSections) continue;
@@ -798,7 +828,13 @@ export class AnswerService {
 }
 
 function passageLabel(passage: CitablePassageDto): string {
-  const kind = passage.isCaseReport ? 'case report' : passage.sourceKey === 'openfda' || passage.sourceKey === 'dailymed' ? 'drug label' : 'article';
+  const kind = passage.isCaseReport
+    ? 'case report'
+    : passage.sourceKey === 'openfda' || passage.sourceKey === 'dailymed'
+      ? 'drug label'
+      : passage.sourceKey === 'guidelines'
+        ? 'clinical practice guideline'
+        : 'article';
   return `${passage.sourceKey} ${kind}: ${passage.title} - ${passage.sectionPath}`;
 }
 
