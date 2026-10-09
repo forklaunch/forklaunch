@@ -22,6 +22,8 @@ export type FetchedDocumentDto = {
   retracted?: boolean;
   // MeSH descriptor UIs the source tagged the document with
   meshDescriptorUis?: string[];
+  // the PubMed Central copy of a PubMed record, when it has one
+  pmcid?: string;
   sections: DocumentSectionDto[];
 };
 

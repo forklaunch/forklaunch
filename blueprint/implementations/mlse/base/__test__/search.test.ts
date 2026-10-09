@@ -106,6 +106,21 @@ describe('LiveRetrievalService', () => {
     });
   });
 
+  it('queries a slow source only when named, with its own budget', async () => {
+    const pubmed = new StubFetcher('pubmed', async () => [doc({})]);
+    const guidelines = new StubFetcher('guidelines', () => new Promise((r) => setTimeout(() => r([doc({ externalId: 'g' })]), 80)));
+    const service = new LiveRetrievalService(new SourceFetcherRegistry([pubmed, guidelines]), ['pubmed', 'guidelines'], undefined, {
+      timeoutMs: 20,
+      sourceTimeoutsMs: { guidelines: 500 },
+      onRequestOnly: ['guidelines']
+    });
+
+    expect(service.keys()).toEqual(['pubmed']);
+    expect((await service.retrieve('appendicitis')).sources.map((s) => s.sourceKey)).toEqual(['pubmed']);
+    const named = await service.retrieve('appendicitis', ['guidelines']);
+    expect(named.sources).toEqual([{ sourceKey: 'guidelines', status: 'ok', documents: 1 }]);
+  });
+
   it('cancels a source that runs past the budget, rather than leaving it running', async () => {
     let signal: AbortSignal | undefined;
     const slow: SourceFetcher = {

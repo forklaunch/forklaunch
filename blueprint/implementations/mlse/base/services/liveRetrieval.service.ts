@@ -19,6 +19,11 @@ export type LiveResultCache = {
 export type LiveRetrievalOptions = {
   // budget for all live sources together, inside the 10-second answer target
   timeoutMs?: number;
+  // a longer budget for a slow source, by source key
+  sourceTimeoutsMs?: Record<string, number>;
+  // sources queried only when a caller names them: too slow for every
+  // search (guidelines), so asked for once per answer
+  onRequestOnly?: string[];
   documentsPerSource?: number;
   cacheTtlMs?: number;
   excerptChars?: number;
@@ -41,6 +46,8 @@ class TimeoutError extends Error {}
  */
 export class LiveRetrievalService {
   private readonly timeoutMs: number;
+  private readonly sourceTimeoutsMs: Record<string, number>;
+  private readonly onRequestOnly: Set<string>;
   private readonly documentsPerSource: number;
   private readonly cacheTtlMs: number;
   private readonly excerptChars: number;
@@ -53,20 +60,24 @@ export class LiveRetrievalService {
     options: LiveRetrievalOptions = {}
   ) {
     this.timeoutMs = options.timeoutMs ?? 4000;
+    this.sourceTimeoutsMs = options.sourceTimeoutsMs ?? {};
+    this.onRequestOnly = new Set(options.onRequestOnly ?? []);
     this.documentsPerSource = options.documentsPerSource ?? 5;
     this.cacheTtlMs = options.cacheTtlMs ?? 6 * 60 * 60 * 1000;
     this.excerptChars = options.excerptChars ?? 500;
     this.maxPassageChars = options.maxPassageChars ?? 1200;
   }
 
-  // the sources queried live, in order
+  // the sources queried live, in order, when a search names none
   keys(): string[] {
-    return this.liveSourceKeys.filter((key) => this.fetchers.has(key));
+    return this.liveSourceKeys.filter((key) => this.fetchers.has(key) && !this.onRequestOnly.has(key));
   }
 
   async retrieve(term: string, sourceKeys?: string[]): Promise<LiveRetrievalResult> {
     const keys = this.liveSourceKeys.filter(
-      (key) => this.fetchers.has(key) && (!sourceKeys || sourceKeys.includes(key))
+      (key) =>
+        this.fetchers.has(key) &&
+        (sourceKeys ? sourceKeys.includes(key) : !this.onRequestOnly.has(key))
     );
     const outcomes = await Promise.all(keys.map((key) => this.fromSource(key, term)));
     return {
@@ -102,7 +113,7 @@ export class LiveRetrievalService {
 
     try {
       const fetcher = this.fetchers.get(sourceKey)!;
-      const documents = await this.withTimeout((signal) =>
+      const documents = await this.withTimeout(this.sourceTimeoutsMs[sourceKey] ?? this.timeoutMs, (signal) =>
         fetcher.fetchDocuments(
           { term, limit: this.documentsPerSource },
           { signal }
@@ -155,14 +166,14 @@ export class LiveRetrievalService {
   // Cancels the fetch when the budget runs out, so a slow source stops using
   // the connection and its rate-limit slots instead of finishing unseen. The
   // race still ends the wait for a fetcher that ignores the signal.
-  private withTimeout<T>(run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  private withTimeout<T>(ms: number, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
         controller.abort(new TimeoutError());
         reject(new TimeoutError());
-      }, this.timeoutMs);
+      }, ms);
     });
     return Promise.race([run(controller.signal), timeout]).finally(() =>
       clearTimeout(timer)

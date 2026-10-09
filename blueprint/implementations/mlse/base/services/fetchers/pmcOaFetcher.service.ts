@@ -56,6 +56,29 @@ export class PmcOaFetcher implements SourceFetcher {
     );
   }
 
+  /**
+   * The open-access articles among these PMCIDs ("PMC1234567"). PMC holds
+   * many copyrighted articles too, some very long (a society guideline can
+   * run to hundreds of sections), so which are open access is asked first
+   * and only those are downloaded.
+   */
+  async fetchOpenAccess(pmcids: string[], { signal }: { signal?: AbortSignal } = {}): Promise<FetchedDocumentDto[]> {
+    const ids = pmcids.map((id) => id.replace(/^PMC/i, '')).filter((id) => /^\d+$/.test(id));
+    if (ids.length === 0) {
+      return [];
+    }
+    const open = await this.eutils.search(
+      'pmc',
+      `(${ids.map((id) => `${id}[uid]`).join(' OR ')}) AND open access[filter]`,
+      ids.length,
+      { signal }
+    );
+    if (open.length === 0) {
+      return [];
+    }
+    return this.parseArticles(await this.eutils.fetchXml('pmc', open, { signal }));
+  }
+
   parseArticles(xml: string): FetchedDocumentDto[] {
     const root = this.parser.parse(xml) as XmlNode;
     const set = (root['pmc-articleset'] ?? {}) as XmlNode;

@@ -6,7 +6,8 @@ export type PublicSourceId =
   | 'clinicaltrials'
   | 'mesh'
   | 'pubmed'
-  | 'pmc_oa';
+  | 'pmc_oa'
+  | 'guidelines';
 
 // How authoritative a source is, used when ranking evidence.
 export type SourceTier =

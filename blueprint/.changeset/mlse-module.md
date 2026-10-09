@@ -22,3 +22,5 @@ PMC searches now rank by relevance, as PubMed searches did, and PMC articles dro
 `findStepFigures` finds openly licensed figures that show one step of a procedure (an incision, a cut, an anastomosis), judged by caption: photos and drawings of the operation, not imaging, histology, animal studies, charts or the healed wound. `MedicalImage.panels` says what a multi-panel figure shows.
 
 Image search leaves charts and diagrams out unless asked for (`charts`, or `type: diagram`), judged by caption since Open-i labels many of them photos; `isChart` makes that call.
+
+`GuidelineFetcher` (source `guidelines`) finds clinical practice guidelines from the last ten years through PubMed, storing a guideline in full when its PubMed Central copy is openly licensed for commercial reuse and as an abstract excerpt otherwise (most society guidelines). PubMed records carry their `pmcid`, and `PmcOaFetcher.fetchOpenAccess` downloads only the open-access articles among a list. Live retrieval can give a slow source its own budget (`sourceTimeoutsMs`) and query it only when named (`onRequestOnly`).
