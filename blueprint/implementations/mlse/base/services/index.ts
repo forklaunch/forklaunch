@@ -8,6 +8,7 @@ export * from './evidenceSelection.service';
 export * from './fakeLlmProvider.service';
 export * from './fetchers/clinicalTrialsFetcher.service';
 export * from './followUp.service';
+export * from './imageSearch.service';
 export * from './fetchers/dailyMedFetcher.service';
 export * from './fetchers/medlinePlusFetcher.service';
 export * from './fetchers/openFdaFetcher.service';
