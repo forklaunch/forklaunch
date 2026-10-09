@@ -1,3 +1,4 @@
+import { withAuthEncryptionPolicy } from './domain/utils/authEncryptionPolicy.util';
 import { mikroOrmAdapter } from '@forklaunch/better-auth-mikro-orm-fork';
 import { logBetterAuthApiError } from './domain/utils/betterAuthErrorLogging.util';
 import { PERMISSIONS, ROLES } from '@forklaunch/blueprint-core';
@@ -146,6 +147,7 @@ export const betterAuthConfig = ({
       }
     },
     database: mikroOrmAdapter(orm, {
+      operationContext: withAuthEncryptionPolicy,
       options: {
         advanced: {
           database: {

@@ -785,8 +785,8 @@ importers:
   iam-better-auth:
     dependencies:
       '@forklaunch/better-auth-mikro-orm-fork':
-        specifier: ^0.5.9
-        version: 0.5.9(@mikro-orm/core@7.2.3)(better-auth@1.7.6(@opentelemetry/api@1.9.1)(mongodb@7.7.0)(mysql2@3.24.4(@types/node@26.6.3))(pg@8.23.0)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@26.6.3)(vite@8.2.2(@types/node@26.6.3)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))))
+        specifier: ~0.5.11
+        version: 0.5.11(@mikro-orm/core@7.2.3)(better-auth@1.7.6(@opentelemetry/api@1.9.1)(mongodb@7.7.0)(mysql2@3.24.4(@types/node@26.6.3))(pg@8.23.0)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@26.6.3)(vite@8.2.2(@types/node@26.6.3)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))))
       '@forklaunch/blueprint-core':
         specifier: workspace:^
         version: link:../core
@@ -2920,8 +2920,8 @@ packages:
     resolution: {integrity: sha512-IkO+/KEUvwbVpiURZg+P7zF74z5Jxe0UgJxVni+RtoHQ6IZieXaO02kmadomap/q+l6bc/jdPGGqTjhuZnuz1Q==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
 
-  '@forklaunch/better-auth-mikro-orm-fork@0.5.9':
-    resolution: {integrity: sha512-ruti9Fj5IkGUmmrI7j7dLRG+UCD8ggQl08CYH2mMkzgBO5Feg0xLq8Vu1/sQeTljAWtzuN4ZQNZkEQpk7H9rgA==}
+  '@forklaunch/better-auth-mikro-orm-fork@0.5.11':
+    resolution: {integrity: sha512-Vcxie8TQu/J973nfZL+8kMlSrqBTvKvOqHWUagchIouRRU/tpuI2eo0h1/i8MfefuQGgZvwbkhZSauhXfV/8ow==}
     engines: {node: '>= 22'}
     peerDependencies:
       '@mikro-orm/core': ^7.0.0
@@ -8268,7 +8268,7 @@ packages:
     hasBin: true
 
   uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3:
-    resolution: {gitHosted: true, tarball: https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3}
+    resolution: {gitHosted: true, integrity: sha512-1eSUhK/WLig+fbq6dB18hsmkoaC+6YGVkAp2r0tQ6PGBxsOPpLUmMsKN/7ANoYtWiou+lU46+Bnf8JBYES9EsA==, tarball: https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3}
     version: 20.52.0
 
   uc.micro@2.1.0:
@@ -9639,7 +9639,7 @@ snapshots:
       '@eslint/core': 1.2.1
       levn: 0.4.1
 
-  '@forklaunch/better-auth-mikro-orm-fork@0.5.9(@mikro-orm/core@7.2.3)(better-auth@1.7.6(@opentelemetry/api@1.9.1)(mongodb@7.7.0)(mysql2@3.24.4(@types/node@26.6.3))(pg@8.23.0)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@26.6.3)(vite@8.2.2(@types/node@26.6.3)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))))':
+  '@forklaunch/better-auth-mikro-orm-fork@0.5.11(@mikro-orm/core@7.2.3)(better-auth@1.7.6(@opentelemetry/api@1.9.1)(mongodb@7.7.0)(mysql2@3.24.4(@types/node@26.6.3))(pg@8.23.0)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@26.6.3)(vite@8.2.2(@types/node@26.6.3)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))))':
     dependencies:
       '@mikro-orm/core': 7.2.3
       better-auth: 1.7.6(@opentelemetry/api@1.9.1)(mongodb@7.7.0)(mysql2@3.24.4(@types/node@26.6.3))(pg@8.23.0)(vitest@5.0.3(@opentelemetry/api@1.9.1)(@types/node@26.6.3)(vite@8.2.2(@types/node@26.6.3)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))

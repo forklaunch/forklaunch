@@ -15,6 +15,8 @@ export const Account = defineComplianceEntity({
   },
   properties: {
     ...sqlBaseProperties,
+    // Null marks legacy ciphertext; never guess a new owner key for old rows.
+    encryptionPolicy: fp.string().nullable().compliance('none'),
     user: () => fp.manyToOne(User),
     accountId: fp.string().compliance('none'),
     providerId: fp.string().compliance('none'),

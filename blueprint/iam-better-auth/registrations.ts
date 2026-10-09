@@ -22,7 +22,7 @@ import { wrapEmWithTenantContext } from '@forklaunch/core/persistence';
 import { ForkOptions } from '@mikro-orm/core';
 import { EntityManager, MikroORM } from '@mikro-orm/postgresql';
 import { betterAuth } from 'better-auth';
-import { createEncryptionAwareOrm } from './domain/utils/encryptionContext.util';
+import { createAuthEncryptionOrm } from './domain/utils/authEncryptionPolicy.util';
 import { BetterAuth, betterAuthConfig } from './auth';
 import { SurfacingService } from './domain/services/surfacing.service';
 import mikroOrmOptionsConfig from './mikro-orm.config';
@@ -151,11 +151,9 @@ const expressApplicationOptions = serviceDependencies.chain({
         betterAuthConfig({
           BETTER_AUTH_BASE_PATH,
           CORS_ORIGINS,
-          // Wrapped so Better Auth's reads decrypt with the same key the rest
-          // of the service writes with. `EntityManager` above goes through
-          // `wrapEmWithTenantContext`; handing Better Auth the raw ORM meant
-          // its reads ran under no tenant and could not decrypt `account`.
-          orm: createEncryptionAwareOrm(Orm),
+          // Fresh IAM identities span organizations and use the explicitly
+          // versioned service encryption policy, not a business tenant fallback.
+          orm: createAuthEncryptionOrm(Orm),
           openTelemetryCollector: OtelCollector
         })
       ) as BetterAuth
