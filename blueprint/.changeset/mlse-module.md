@@ -14,3 +14,5 @@ The procedure question framework now holds only hint words that fit any procedur
 PMC searches now rank by relevance, as PubMed searches did, and PMC articles drop declaration sections (funding, ethics, consent, competing interests, AI use) by heading as well as by type.
 
 `itemFitRank` ranks a page's items for a passage by embedding similarity to each item's question, and on topic pages (`wholeTerm`) a word of the topic's name no longer counts as a hint.
+
+`splitAspectQuery` separates a question about one part of a topic ("procedure for heart attack") into the topic and the aspect asked about.

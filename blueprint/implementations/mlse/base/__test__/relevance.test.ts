@@ -1,7 +1,7 @@
 import { FOLLOW_UP_QUESTIONS, suggestFollowUps } from '../domain/followUpQuestions';
 import { detectTopicType, isOverviewQuery, OVERVIEW_SECTIONS, sectionForQuestion } from '../domain/overviewSections';
 import { classifyQuery } from '../services/queryClassifier.service';
-import { followUpQuery } from '../services/followUp.service';
+import { followUpQuery, splitAspectQuery } from '../services/followUp.service';
 import { clinicalTermsFor, literatureSearchTerm } from '../services/layTerms.service';
 import { keySentences, passageIsAbout, queryConcepts } from '../services/relevance.service';
 
@@ -166,6 +166,22 @@ describe('followUpQuery', () => {
 
   it('keeps a follow-up that already names the topic', () => {
     expect(followUpQuery('Is heart attack more common in women?', 'heart attack')).toBe('Is heart attack more common in women?');
+  });
+});
+
+describe('splitAspectQuery', () => {
+  it('separates the topic from the part of it asked about', () => {
+    expect(splitAspectQuery('procedure for heart attack')).toEqual({ topic: 'heart attack', aspect: 'procedure' });
+    expect(splitAspectQuery('heart attack procedure')).toEqual({ topic: 'heart attack', aspect: 'procedure' });
+    expect(splitAspectQuery('What is the treatment of stroke?')).toEqual({ topic: 'stroke', aspect: 'treatment' });
+    expect(splitAspectQuery('cefazolin side effects')).toEqual({ topic: 'cefazolin', aspect: 'side effects' });
+  });
+
+  it('leaves a query that only names a topic', () => {
+    expect(splitAspectQuery('heart attack')).toBeUndefined();
+    // "pain" names topics as well as asking about them
+    expect(splitAspectQuery('chest pain')).toBeUndefined();
+    expect(splitAspectQuery('treatment')).toBeUndefined();
   });
 });
 
