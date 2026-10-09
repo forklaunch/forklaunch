@@ -11,6 +11,7 @@ export * from './followUp.service';
 export * from './imageSearch.service';
 export * from './stepFigures.service';
 export * from './fetchers/dailyMedFetcher.service';
+export * from './fetchers/guidelineFetcher.service';
 export * from './fetchers/medlinePlusFetcher.service';
 export * from './fetchers/openFdaFetcher.service';
 export * from './fetchers/pmcOaFetcher.service';

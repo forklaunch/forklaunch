@@ -56,6 +56,15 @@ export const PUBLIC_SOURCES: readonly SourceDescriptorDto[] = [
     liveQuery: true
   },
   {
+    id: 'guidelines',
+    name: 'Clinical practice guidelines (PubMed, PubMed Central)',
+    tier: 'guideline',
+    licenseTerms:
+      'Guidelines indexed in PubMed from the last ten years; stored in full only when the PubMed Central copy is CC0, CC BY or CC BY-SA, otherwise shown as a short excerpt of the abstract with a link',
+    commercialUse: true,
+    liveQuery: true
+  },
+  {
     id: 'pmc_oa',
     name: 'PubMed Central Open Access Subset',
     tier: 'literature_full_text',

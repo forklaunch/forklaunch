@@ -94,6 +94,13 @@ export class PubMedFetcher implements SourceFetcher {
       .map((descriptor) => (descriptor ? String(descriptor['@_UI'] ?? '') : ''))
       .filter((ui) => ui.length > 0);
 
+    const pmcid = asArray(
+      ((((article.PubmedData ?? {}) as XmlNode).ArticleIdList ?? {}) as XmlNode).ArticleId as unknown[]
+    )
+      .filter((id) => id && typeof id === 'object' && (id as XmlNode)['@_IdType'] === 'pmc')
+      .map((id) => textOf(id))
+      .find((id) => /^PMC\d+$/.test(id));
+
     return {
       sourceKey: this.sourceKey,
       externalId: pmid,
@@ -106,6 +113,7 @@ export class PubMedFetcher implements SourceFetcher {
         publicationTypes.includes('retracted publication') ||
         corrections.includes('RetractionIn'),
       meshDescriptorUis,
+      ...(pmcid ? { pmcid } : {}),
       sections
     };
   }

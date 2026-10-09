@@ -6,6 +6,7 @@ import {
   DailyMedFetcher,
   dailyMedDateToIso
 } from '../services/fetchers/dailyMedFetcher.service';
+import { GuidelineFetcher } from '../services/fetchers/guidelineFetcher.service';
 import { OpenFdaFetcher } from '../services/fetchers/openFdaFetcher.service';
 import { PmcOaFetcher } from '../services/fetchers/pmcOaFetcher.service';
 import { PubMedFetcher } from '../services/fetchers/pubmedFetcher.service';
@@ -228,5 +229,57 @@ describe('DailyMedFetcher', () => {
     expect(dailyMedDateToIso('Sep 18, 2026')).toBe('2026-09-18');
     expect(dailyMedDateToIso('January 5, 2025')).toBe('2025-01-05');
     expect(dailyMedDateToIso('not a date')).toBeUndefined();
+  });
+});
+
+describe('GuidelineFetcher', () => {
+  const record = (pmid: string, title: string, options: { pmcid?: string; abstract?: boolean } = {}) =>
+    `<PubmedArticle><MedlineCitation><PMID>${pmid}</PMID><Article><Journal><JournalIssue><PubDate><Year>2025</Year></PubDate></JournalIssue></Journal>` +
+    `<ArticleTitle>${title}</ArticleTitle>` +
+    (options.abstract === false ? '' : `<Abstract><AbstractText>Recommendations for ${title.toLowerCase()}</AbstractText></Abstract>`) +
+    `<PublicationTypeList><PublicationType>Practice Guideline</PublicationType></PublicationTypeList></Article>` +
+    `<MeshHeadingList><MeshHeading><DescriptorName UI="D001064">Appendicitis</DescriptorName></MeshHeading></MeshHeadingList></MedlineCitation>` +
+    `<PubmedData><ArticleIdList><ArticleId IdType="pubmed">${pmid}</ArticleId>${options.pmcid ? `<ArticleId IdType="pmc">${options.pmcid}</ArticleId>` : ''}</ArticleIdList>` +
+    // a reference's PMC id is not the guideline's own
+    `<ReferenceList><Reference><ArticleIdList><ArticleId IdType="pmc">PMC999</ArticleId></ArticleIdList></Reference></ReferenceList></PubmedData></PubmedArticle>`;
+  const pubmed =
+    '<PubmedArticleSet>' +
+    record('101', 'Open appendicitis guideline', { pmcid: 'PMC1' }) +
+    record('102', 'Society appendicitis guideline', { pmcid: 'PMC2' }) +
+    record('103', 'Appendicitis consensus statement') +
+    record('104', 'Appendicitis guideline without abstract', { abstract: false }) +
+    '</PubmedArticleSet>';
+  const pmc =
+    '<pmc-articleset><article article-type="research-article"><front><article-meta>' +
+    '<article-id pub-id-type="pmcid">PMC1</article-id><title-group><article-title>Open appendicitis guideline</article-title></title-group>' +
+    '<permissions><license><ali:license_ref xmlns:ali="http://www.niso.org/schemas/ali/1.0/">https://creativecommons.org/licenses/by/4.0/</ali:license_ref></license></permissions>' +
+    '</article-meta></front><body><sec><title>Recommendations</title><p>Laparoscopic appendectomy is recommended.</p></sec></body></article></pmc-articleset>';
+
+  it('finds recent guidelines in PubMed, in full where PMC holds an openly licensed copy', async () => {
+    const { fetchImpl, requests } = recordedFetch([
+      ['esearch.fcgi?db=pubmed', JSON.stringify({ esearchresult: { idlist: ['101', '102', '103', '104'] } })],
+      ['efetch.fcgi?db=pubmed', pubmed],
+      // PMC2 is a copyrighted copy: not open access, so never downloaded
+      ['esearch.fcgi?db=pmc', JSON.stringify({ esearchresult: { idlist: ['1'] } })],
+      ['efetch.fcgi?db=pmc', pmc]
+    ]);
+    const docs = await new GuidelineFetcher(fetchImpl, ncbi, { now: () => new Date('2026-10-09') }).fetchDocuments({
+      term: 'appendicitis',
+      limit: 5
+    });
+
+    const search = decodeURIComponent(requests.find((url) => url.includes('esearch.fcgi?db=pubmed'))!);
+    expect(search).toContain('(appendicitis) AND (guideline[pt] OR practice guideline[pt]) AND 2016:3000[dp]');
+    const openAccess = decodeURIComponent(requests.find((url) => url.includes('esearch.fcgi?db=pmc'))!);
+    expect(openAccess).toContain('(1[uid] OR 2[uid]) AND open access[filter]');
+    expect(requests.find((url) => url.includes('efetch.fcgi?db=pmc'))).toContain('id=1&');
+
+    expect(docs.map((d) => [d.sourceKey, d.externalId, licenseScopeFor(d.license)])).toEqual([
+      ['guidelines', 'PMC1', 'full_text'],
+      ['guidelines', '102', 'excerpt_only'],
+      ['guidelines', '103', 'excerpt_only']
+    ]);
+    expect(docs[0].sections.map((s) => s.text)).toContain('Laparoscopic appendectomy is recommended.');
+    expect(docs[0].meshDescriptorUis).toEqual(['D001064']);
   });
 });

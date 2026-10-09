@@ -5,7 +5,7 @@ const openTelemetryCollector = new OpenTelemetryCollector('test', 'info', {});
 const provider = new PublicCorpusProvider(openTelemetryCollector);
 
 describe('PublicCorpusProvider', () => {
-  it('serves the seven version 1 sources', () => {
+  it('serves the eight version 1 sources', () => {
     expect(provider.describe().map((source) => source.id)).toEqual([
       'openfda',
       'dailymed',
@@ -13,6 +13,7 @@ describe('PublicCorpusProvider', () => {
       'mesh',
       'pubmed',
       'medlineplus',
+      'guidelines',
       'pmc_oa'
     ]);
   });
@@ -28,7 +29,7 @@ describe('PublicCorpusProvider', () => {
       .describe()
       .filter((source) => source.liveQuery)
       .map((source) => source.id);
-    expect(live).toEqual(['openfda', 'clinicaltrials', 'pubmed', 'medlineplus', 'pmc_oa']);
+    expect(live).toEqual(['openfda', 'clinicaltrials', 'pubmed', 'medlineplus', 'guidelines', 'pmc_oa']);
   });
 
   it('returns copies, so callers cannot change the shared list', () => {
