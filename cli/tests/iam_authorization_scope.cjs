@@ -299,6 +299,11 @@ test("actual HMAC signature changes for every authorization scope component", ()
   ])
     assert.notEqual(sign(changed), signature);
 });
+test("CLI BetterAuth authorization helper uses the reviewed BetterAuth source", () => {
+  const template = path.resolve(root, "../../cli/src/templates/project/iam-better-auth/surfacing.ts");
+  assert.equal(fs.realpathSync(template), fs.realpathSync(path.join(root, "surfacing.ts")));
+  assert.equal(fs.readFileSync(template, "utf8"), fs.readFileSync(path.join(root, "surfacing.ts"), "utf8"));
+});
 (async () => {
   for (const { name, run } of cases) {
     await run();
