@@ -4,6 +4,7 @@ import {
   RateLimitedClient,
   RequestSchedule,
   SourceBusyError,
+  SourceRequestError,
   SourceTimeoutError
 } from '../domain/http';
 
@@ -43,6 +44,30 @@ describe('RateLimitedClient', () => {
     });
     const error = await client.getText('https://x.test/?api_key=secret').catch((e: Error) => e);
     expect(String(error)).not.toContain('secret');
+  });
+
+  it('asks once more, a moment later, when the source says too many requests', async () => {
+    const statuses = [429, 200];
+    const waits: number[] = [];
+    const busyThenOk: FetchLike = async () => {
+      const status = statuses.shift() ?? 429;
+      return { ok: status === 200, status, text: async () => 'answer' };
+    };
+    const client = new RateLimitedClient('pubmed', busyThenOk, 0, async (ms) => {
+      waits.push(ms);
+    });
+
+    await expect(client.getText('https://x.test/')).resolves.toBe('answer');
+    expect(waits).toContain(1000);
+  });
+
+  it('gives up after a second "too many requests"', async () => {
+    const alwaysBusy: FetchLike = async () => ({ ok: false, status: 429, text: async () => '' });
+    const client = new RateLimitedClient('pubmed', alwaysBusy, 0, async () => undefined);
+
+    const error = await client.getText('https://x.test/').catch((e: SourceRequestError) => e);
+    expect(error).toBeInstanceOf(SourceRequestError);
+    expect((error as SourceRequestError).status).toBe(429);
   });
 
   it('cancels a body that stalls after the headers arrive', async () => {
