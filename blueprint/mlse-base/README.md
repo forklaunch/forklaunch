@@ -125,6 +125,7 @@ Every route is also in the generated SDK (`sdk.ts`).
 | `GET /search?q=` | Hybrid search; returns citable passages and per-source live status |
 | `GET /search/suggestions?q=` | Condition, procedure and medicine names that complete a query as it is typed (NLM Clinical Tables and the built-in term list) |
 | `GET /search/spelling?q=` | "Did you mean": a corrected query (built-in term list, then MedlinePlus, then NCBI ESpell), or none |
+| `GET /search/images?q=` | Figures from open-access articles (NLM Open-i), each with its caption, article and license; only CC0, CC BY and CC BY-SA figures; `type` filters to photo, xray, ct, mri, ultrasound, microscopy or diagram |
 | `POST /answer` | Answer, streamed as server-sent events: `start`, one `section` per verified section, `done` |
 | `POST /answer/complete` | The same answer as one JSON response |
 | `GET /topic`, `GET /topic/:slug`, `GET /topic/:slug/phase/:n` | Topic pages and single procedure phases |
