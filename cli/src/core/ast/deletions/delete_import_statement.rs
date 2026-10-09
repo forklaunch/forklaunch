@@ -47,7 +47,12 @@ pub(crate) fn delete_import_statements_with_prefix<'a>(
             }
         };
 
-        if !import.source.value.as_str().starts_with(import_source_prefix) {
+        if !import
+            .source
+            .value
+            .as_str()
+            .starts_with(import_source_prefix)
+        {
             new_body.push(stmt.clone_in(allocator));
         }
     });

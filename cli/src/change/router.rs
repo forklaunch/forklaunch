@@ -1,4 +1,4 @@
-use std::{io::Write, path::Path, fs};
+use std::{fs, io::Write, path::Path};
 
 use anyhow::{Context, Result, bail};
 use clap::{Arg, ArgAction, Command};
@@ -22,7 +22,7 @@ use crate::{
         name::validate_name,
         removal_template::{RemovalTemplate, remove_template_files},
         rendered_template::{RenderedTemplate, RenderedTemplatesCache, write_rendered_templates},
-        static_analysis::{SchemaAnalyzer, EntityAnalyzer, MapperGenerator},
+        static_analysis::{EntityAnalyzer, MapperGenerator, SchemaAnalyzer},
     },
     prompt::{ArrayCompleter, prompt_field_from_selections_with_validation},
 };
@@ -124,13 +124,19 @@ fn add_mappers_to_router(
         bail!("No entities found in: {}", entity_file.display());
     }
 
-    let request_schema = schemas.iter()
+    let request_schema = schemas
+        .iter()
         .find(|s| s.name.ends_with("RequestSchema"))
         .with_context(|| "No RequestSchema found in schema file")?;
 
     let entity = &entities[0];
 
-    log_info!(stdout, "Generating mappers for {} -> {}", request_schema.name, entity.name);
+    log_info!(
+        stdout,
+        "Generating mappers for {} -> {}",
+        request_schema.name,
+        entity.name
+    );
 
     let generator = MapperGenerator::new(
         request_schema.clone(),
@@ -145,8 +151,15 @@ fn add_mappers_to_router(
     let mapper_file = mappers_dir.join(format!("{}.mappers.ts", camel_case_name));
 
     if mapper_file.exists() {
-        log_warn!(stdout, "⚠ Mapper file already exists: {}", mapper_file.display());
-        log_warn!(stdout, "⚠ Skipping mapper generation to preserve custom logic");
+        log_warn!(
+            stdout,
+            "⚠ Mapper file already exists: {}",
+            mapper_file.display()
+        );
+        log_warn!(
+            stdout,
+            "⚠ Skipping mapper generation to preserve custom logic"
+        );
         bail!("Mapper file already exists. Remove it manually if you want to regenerate.");
     }
 
@@ -165,8 +178,21 @@ fn add_mappers_to_router(
 
     log_ok!(stdout, "✓ Generated mapper file: {}", mapper_file.display());
 
-    update_controller_imports(router_base_path, &pascal_case_name, &camel_case_name, rendered_templates_cache, stdout)?;
-    update_service_and_interface_files(router_base_path, &pascal_case_name, &camel_case_name, &manifest_data.app_name, rendered_templates_cache, stdout)?;
+    update_controller_imports(
+        router_base_path,
+        &pascal_case_name,
+        &camel_case_name,
+        rendered_templates_cache,
+        stdout,
+    )?;
+    update_service_and_interface_files(
+        router_base_path,
+        &pascal_case_name,
+        &camel_case_name,
+        &manifest_data.app_name,
+        rendered_templates_cache,
+        stdout,
+    )?;
 
     Ok(())
 }
@@ -185,12 +211,20 @@ fn update_service_and_interface_files(
         .join(format!("{}.interface.ts", camel_case_name));
 
     if interface_file.exists() {
-        log_info!(stdout, "Updating interface file: {}", interface_file.display());
+        log_info!(
+            stdout,
+            "Updating interface file: {}",
+            interface_file.display()
+        );
 
         let content = match rendered_templates_cache.get(&interface_file)? {
             Some(template) => template.content.clone(),
-            None => fs::read_to_string(&interface_file)
-                .with_context(|| format!("Failed to read interface file: {}", interface_file.display()))?,
+            None => fs::read_to_string(&interface_file).with_context(|| {
+                format!(
+                    "Failed to read interface file: {}",
+                    interface_file.display()
+                )
+            })?,
         };
 
         let mut updated_content = content;
@@ -208,14 +242,23 @@ fn update_service_and_interface_files(
                     new_lines.push("// ============================================================================".to_string());
                     new_lines.push("// MAPPERS GENERATED!".to_string());
                     new_lines.push("// ============================================================================".to_string());
-                    new_lines.push(format!("// Mapper files have been generated in domain/mappers/{}.mappers.ts", camel_case_name));
+                    new_lines.push(format!(
+                        "// Mapper files have been generated in domain/mappers/{}.mappers.ts",
+                        camel_case_name
+                    ));
                     new_lines.push("//".to_string());
                     new_lines.push("// To use mappers with type safety, update this interface to use DTO types:".to_string());
                     new_lines.push("//".to_string());
-                    new_lines.push(format!("//   import {{ {}RequestDto, {}ResponseDto }} from '../types/{}.types';", pascal_case_name, pascal_case_name, camel_case_name));
+                    new_lines.push(format!(
+                        "//   import {{ {}RequestDto, {}ResponseDto }} from '../types/{}.types';",
+                        pascal_case_name, pascal_case_name, camel_case_name
+                    ));
                     new_lines.push("//".to_string());
                     new_lines.push("//   Then update the method signature to:".to_string());
-                    new_lines.push(format!("//     {}Post: (dto: {}RequestDto) => Promise<{}ResponseDto>;", camel_case_name, pascal_case_name, pascal_case_name));
+                    new_lines.push(format!(
+                        "//     {}Post: (dto: {}RequestDto) => Promise<{}ResponseDto>;",
+                        camel_case_name, pascal_case_name, pascal_case_name
+                    ));
                     new_lines.push("//".to_string());
                     new_lines.push("// The current schema-based interface is preserved to avoid breaking changes.".to_string());
                     new_lines.push("// ============================================================================".to_string());
@@ -251,8 +294,9 @@ fn update_service_and_interface_files(
 
         let content = match rendered_templates_cache.get(&service_file)? {
             Some(template) => template.content.clone(),
-            None => fs::read_to_string(&service_file)
-                .with_context(|| format!("Failed to read service file: {}", service_file.display()))?,
+            None => fs::read_to_string(&service_file).with_context(|| {
+                format!("Failed to read service file: {}", service_file.display())
+            })?,
         };
 
         let mut updated_content = content;
@@ -267,25 +311,48 @@ fn update_service_and_interface_files(
 
             for line in lines {
                 // Skip the old inline mapping header comment block (lines 60-72 in the example)
-                if line.trim() == "// ============================================================================" && !added_mapper_comment {
+                if line.trim()
+                    == "// ============================================================================"
+                    && !added_mapper_comment
+                {
                     in_old_comment_block = true;
 
                     // Replace with new comment
                     new_lines.push("    // ============================================================================".to_string());
                     new_lines.push("    // MAPPERS GENERATED!".to_string());
                     new_lines.push("    // ============================================================================".to_string());
-                    new_lines.push(format!("    // Mapper files have been generated in domain/mappers/{}.mappers.ts", camel_case_name));
+                    new_lines.push(format!(
+                        "    // Mapper files have been generated in domain/mappers/{}.mappers.ts",
+                        camel_case_name
+                    ));
                     new_lines.push("    //".to_string());
-                    new_lines.push("    // To use the mappers, replace the inline mapping code below with:".to_string());
+                    new_lines.push(
+                        "    // To use the mappers, replace the inline mapping code below with:"
+                            .to_string(),
+                    );
                     new_lines.push("    //".to_string());
                     new_lines.push(format!("    //   const entity = await {}RequestMapper.toEntity(data, this.entityManager);", pascal_case_name));
-                    new_lines.push("    //   await this.entityManager.persistAndFlush(entity);".to_string());
-                    new_lines.push(format!("    //   return {}ResponseMapper.toDto(entity);", pascal_case_name));
+                    new_lines.push(
+                        "    //   await this.entityManager.persistAndFlush(entity);".to_string(),
+                    );
+                    new_lines.push(format!(
+                        "    //   return {}ResponseMapper.toDto(entity);",
+                        pascal_case_name
+                    ));
                     new_lines.push("    //".to_string());
                     new_lines.push("    // You'll also need to:".to_string());
-                    new_lines.push("    //   1. Update imports to use DTO types from '../types/*.types'".to_string());
-                    new_lines.push(format!("    //   2. Import mappers from '../mappers/{}.mappers'", camel_case_name));
-                    new_lines.push("    //   3. Change method signature to use DTOs instead of schema types".to_string());
+                    new_lines.push(
+                        "    //   1. Update imports to use DTO types from '../types/*.types'"
+                            .to_string(),
+                    );
+                    new_lines.push(format!(
+                        "    //   2. Import mappers from '../mappers/{}.mappers'",
+                        camel_case_name
+                    ));
+                    new_lines.push(
+                        "    //   3. Change method signature to use DTOs instead of schema types"
+                            .to_string(),
+                    );
                     new_lines.push("    //".to_string());
                     new_lines.push("    // The inline code below is preserved to avoid breaking your custom logic.".to_string());
                     added_mapper_comment = true;
@@ -336,14 +403,20 @@ fn update_controller_imports(
         bail!("Controller file not found: {}", controller_file.display());
     }
 
-    log_info!(stdout, "Updating controller imports: {}", controller_file.display());
+    log_info!(
+        stdout,
+        "Updating controller imports: {}",
+        controller_file.display()
+    );
 
     let content = match rendered_templates_cache.get(&controller_file)? {
         Some(template) => template.content.clone(),
-        None => {
-            fs::read_to_string(&controller_file)
-                .with_context(|| format!("Failed to read controller file: {}", controller_file.display()))?
-        }
+        None => fs::read_to_string(&controller_file).with_context(|| {
+            format!(
+                "Failed to read controller file: {}",
+                controller_file.display()
+            )
+        })?,
     };
 
     let old_import = format!(
@@ -439,11 +512,13 @@ impl CliCommand for RouterCommand {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
         let mut rendered_templates_cache = RenderedTemplatesCache::new();
 
-        let (app_root_path, project_name_opt) = find_app_root_path(matches, RequiredLocation::Project)?;
+        let (app_root_path, project_name_opt) =
+            find_app_root_path(matches, RequiredLocation::Project)?;
         let manifest_path = app_root_path.join(".forklaunch").join("manifest.toml");
 
         // RequiredLocation::Project guarantees project_name is present
-        let project_name = project_name_opt.expect("Project name should be present when RequiredLocation::Project is used");
+        let project_name = project_name_opt
+            .expect("Project name should be present when RequiredLocation::Project is used");
 
         let existing_name = matches.get_one::<String>("existing-name");
         let new_name = matches.get_one::<String>("new-name");
@@ -485,7 +560,14 @@ impl CliCommand for RouterCommand {
         );
 
         if add_mappers {
-            add_mappers_to_router(&router_base_path, &project_name, &manifest_data, &mut rendered_templates_cache, dryrun, &mut stdout)?;
+            add_mappers_to_router(
+                &router_base_path,
+                &project_name,
+                &manifest_data,
+                &mut rendered_templates_cache,
+                dryrun,
+                &mut stdout,
+            )?;
 
             // Write the generated files to disk
             let rendered_templates: Vec<RenderedTemplate> = rendered_templates_cache

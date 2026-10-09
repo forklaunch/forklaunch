@@ -164,11 +164,7 @@ fn print_summary(summary: &ManagedModeSummary) -> Result<()> {
             writeln!(stdout, "      {}", cfg.callback_url)?;
             stdout.reset()?;
             writeln!(stdout, "      state    {}", cfg.state_format)?;
-            writeln!(
-                stdout,
-                "      expires  {} min",
-                cfg.state_ttl_seconds / 60
-            )?;
+            writeln!(stdout, "      expires  {} min", cfg.state_ttl_seconds / 60)?;
             writeln!(
                 stdout,
                 "      routed   while {}",

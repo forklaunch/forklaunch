@@ -297,8 +297,7 @@ impl EntityAnalyzer {
             }
             "manyToMany" => {
                 result.relation_type = Some(RelationType::ManyToMany);
-                result.type_name =
-                    format!("Collection<{}>", Self::extract_relation_target(call));
+                result.type_name = format!("Collection<{}>", Self::extract_relation_target(call));
                 result.is_collection = true;
             }
             "oneToOne" => {

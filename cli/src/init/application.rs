@@ -22,14 +22,14 @@ use crate::{
         Database, ERROR_FAILED_TO_CREATE_DATABASE_EXPORT_INDEX_TS,
         ERROR_FAILED_TO_CREATE_GITIGNORE, ERROR_FAILED_TO_CREATE_LICENSE,
         ERROR_FAILED_TO_GENERATE_BUNFIG, ERROR_FAILED_TO_GENERATE_PNPM_WORKSPACE,
-        ERROR_FAILED_TO_PARSE_DOCKER_COMPOSE,
-        Formatter, HttpFramework, License, Linter, Module, ModulesPath,
-        Runtime, TestFramework, Validator, get_core_module_description,
-        get_monitoring_module_description, get_service_module_cache,
+        ERROR_FAILED_TO_PARSE_DOCKER_COMPOSE, Formatter, HttpFramework, License, Linter, Module,
+        ModulesPath, Runtime, TestFramework, Validator, get_client_sdk_module_description,
+        get_core_module_description, get_monitoring_module_description, get_service_module_cache,
         get_service_module_description, get_service_module_name,
-        get_client_sdk_module_description,
     },
     core::{
+        bunfig::generate_bunfig,
+        client_sdk::get_client_sdk_additional_deps,
         command::command,
         database::{
             generate_index_ts_database_export, get_database_port, get_database_variants,
@@ -58,33 +58,31 @@ use crate::{
                 AJV_VERSION, APP_DEV_BUILD_SCRIPT, APP_DEV_SCRIPT, APP_PREPARE_SCRIPT,
                 BETTER_AUTH_VERSION, BETTER_SQLITE3_VERSION, BIOME_VERSION, BUNRUN_VERSION,
                 COMMON_VERSION, CORE_VERSION, DOTENV_VERSION, ESLINT_VERSION, EXPRESS_VERSION,
-                GLOBALS_VERSION, HUSKY_VERSION, HYPER_EXPRESS_VERSION, UWEBSOCKETS_VERSION, JEST_TYPES_VERSION,
+                GLOBALS_VERSION, HUSKY_VERSION, HYPER_EXPRESS_VERSION, JEST_TYPES_VERSION,
                 JEST_VERSION, LINT_STAGED_VERSION, MIKRO_ORM_CORE_VERSION,
-                MIKRO_ORM_DATABASE_VERSION, MIKRO_ORM_MIGRATIONS_VERSION,
-                NODE_GYP_VERSION, OXLINT_VERSION, PRETTIER_VERSION,
-                PROJECT_BUILD_SCRIPT, PROJECT_DOCS_SCRIPT, SORT_PACKAGE_JSON_VERSION,
-                SQLITE3_VERSION, TS_JEST_VERSION, TS_NODE_VERSION, TSX_VERSION, TYPEBOX_VERSION,
-                TYPES_BUILD_SCRIPT, TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION, TYPES_EXPRESS_VERSION,
-                TYPES_NODE_VERSION, TYPES_QS_VERSION, TYPES_UUID_VERSION, TYPES_WATCH_SCRIPT,
+                MIKRO_ORM_DATABASE_VERSION, MIKRO_ORM_MIGRATIONS_VERSION, NODE_GYP_VERSION,
+                OXLINT_VERSION, PRETTIER_VERSION, PROJECT_BUILD_SCRIPT, PROJECT_DOCS_SCRIPT,
+                SORT_PACKAGE_JSON_VERSION, SQLITE3_VERSION, TS_JEST_VERSION, TS_NODE_VERSION,
+                TSX_VERSION, TYPEBOX_VERSION, TYPES_BUILD_SCRIPT,
+                TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION, TYPES_EXPRESS_VERSION, TYPES_NODE_VERSION,
+                TYPES_QS_VERSION, TYPES_UUID_VERSION, TYPES_WATCH_SCRIPT,
                 TYPESCRIPT_ESLINT_VERSION, TYPESCRIPT_VERSION, UNIVERSAL_SDK_VERSION, UUID_VERSION,
-                VALIDATOR_VERSION, VITEST_VERSION, ZOD_VERSION, application_build_script,
-                application_clean_purge_script, application_clean_script, application_docs_script,
-                application_format_script, application_lint_fix_script, application_lint_script,
-                application_migrate_script, application_seed_script, application_setup_script,
-                application_test_script, application_up_packages_script, project_clean_script,
-                project_format_script, project_lint_fix_script, project_lint_script,
-                project_test_script,
+                UWEBSOCKETS_VERSION, VALIDATOR_VERSION, VITEST_VERSION, ZOD_VERSION,
+                application_build_script, application_clean_purge_script, application_clean_script,
+                application_docs_script, application_format_script, application_lint_fix_script,
+                application_lint_script, application_migrate_script, application_seed_script,
+                application_setup_script, application_test_script, application_up_packages_script,
+                project_clean_script, project_format_script, project_lint_fix_script,
+                project_lint_script, project_test_script,
             },
             project_package_json::{ProjectDependencies, ProjectDevDependencies, ProjectScripts},
         },
-        bunfig::generate_bunfig,
         pnpm_workspace::generate_pnpm_workspace,
         rendered_template::{RenderedTemplate, create_forklaunch_dir, write_rendered_templates},
         symlinks::generate_symlinks,
         template::{PathIO, generate_with_template, get_routers_from_standard_package},
         token::get_token,
         tsconfig::generate_modules_tsconfig,
-        client_sdk::get_client_sdk_additional_deps,
         vscode::generate_vscode_settings,
     },
     prompt::{
@@ -98,8 +96,9 @@ fn use_generated_sdk_mode_for_init(
     manifest_data: &ApplicationManifestData,
     rendered_templates: &mut Vec<RenderedTemplate>,
 ) -> Result<()> {
-    use crate::core::rendered_template::RenderedTemplatesCache;
-    use crate::sdk::mode::apply_generated_sdk_mode_setup;
+    use crate::{
+        core::rendered_template::RenderedTemplatesCache, sdk::mode::apply_generated_sdk_mode_setup,
+    };
 
     let mut cache = RenderedTemplatesCache::new();
     for template in rendered_templates.drain(..) {
@@ -609,18 +608,18 @@ impl CliCommand for ApplicationCommand {
         };
 
         let test_framework: Option<TestFramework> = Some(
-                prompt_with_validation(
-                    &mut line_editor,
-                    &mut stdout,
-                    "test-framework",
-                    matches,
-                    "test framework",
-                    Some(&TestFramework::VARIANTS),
-                    |input| TestFramework::VARIANTS.contains(&input),
-                    |_| "Invalid test framework. Please try again".to_string(),
-                )?
-                .parse()?,
-            );
+            prompt_with_validation(
+                &mut line_editor,
+                &mut stdout,
+                "test-framework",
+                matches,
+                "test framework",
+                Some(&TestFramework::VARIANTS),
+                |input| TestFramework::VARIANTS.contains(&input),
+                |_| "Invalid test framework. Please try again".to_string(),
+            )?
+            .parse()?,
+        );
 
         let mut global_module_config = ModuleConfig {
             iam: None,
@@ -629,51 +628,50 @@ impl CliCommand for ApplicationCommand {
             messaging: None,
             cac: None,
             relay: None,
-            };
-        let mut modules: Vec<Module> = if matches.get_many::<String>("modules").is_none()
-            && std::io::stdin().is_terminal()
-        {
-            let mut modules_to_test;
-            loop {
-                global_module_config = ModuleConfig {
-                    iam: None,
-                    billing: None,
-                    ecommerce: None,
-                    messaging: None,
-                    cac: None,
-                    relay: None,
-                    };
-                modules_to_test = prompt_comma_separated_list(
-                    &mut line_editor,
-                    "modules",
-                    matches,
-                    &Module::VARIANTS,
-                    None,
-                    "modules",
-                    false,
-                )?
-                .iter()
-                .map(|module| module.parse().unwrap())
-                .collect();
-
-                if validate_modules(&modules_to_test, &mut global_module_config).is_ok() {
-                    break;
-                } else {
-                    log_warn!(stdout, "Invalid modules combination. Please try again.");
-                }
-            }
-            modules_to_test
-        } else if matches.get_many::<String>("modules").is_none() {
-            // Non-interactive mode with no --modules flag: default to empty
-            vec![]
-        } else {
-            let modules_to_test = match matches.get_many::<String>("modules") {
-                Some(values) => values.map(|module| module.parse().unwrap()).collect(),
-                None => vec![],
-            };
-            validate_modules(&modules_to_test, &mut global_module_config)?;
-            modules_to_test
         };
+        let mut modules: Vec<Module> =
+            if matches.get_many::<String>("modules").is_none() && std::io::stdin().is_terminal() {
+                let mut modules_to_test;
+                loop {
+                    global_module_config = ModuleConfig {
+                        iam: None,
+                        billing: None,
+                        ecommerce: None,
+                        messaging: None,
+                        cac: None,
+                        relay: None,
+                    };
+                    modules_to_test = prompt_comma_separated_list(
+                        &mut line_editor,
+                        "modules",
+                        matches,
+                        &Module::VARIANTS,
+                        None,
+                        "modules",
+                        false,
+                    )?
+                    .iter()
+                    .map(|module| module.parse().unwrap())
+                    .collect();
+
+                    if validate_modules(&modules_to_test, &mut global_module_config).is_ok() {
+                        break;
+                    } else {
+                        log_warn!(stdout, "Invalid modules combination. Please try again.");
+                    }
+                }
+                modules_to_test
+            } else if matches.get_many::<String>("modules").is_none() {
+                // Non-interactive mode with no --modules flag: default to empty
+                vec![]
+            } else {
+                let modules_to_test = match matches.get_many::<String>("modules") {
+                    Some(values) => values.map(|module| module.parse().unwrap()).collect(),
+                    None => vec![],
+                };
+                validate_modules(&modules_to_test, &mut global_module_config)?;
+                modules_to_test
+            };
 
         // Relay is not a standalone service - it injects into an existing iam
         // service and so cannot be part of a fresh application scaffold. Point
@@ -687,18 +685,14 @@ impl CliCommand for ApplicationCommand {
             );
         }
 
-        modules.sort_by_key(|module| {
-            match module {
-                Module::BaseIam | Module::BetterAuthIam => 0,
-                Module::BaseBilling | Module::StripeBilling => 1,
-                Module::StripeEcommerce => 2,
-                Module::BaseMessaging | Module::TwilioMessaging => 3,
-                Module::BaseCac => 4,
-                Module::Relay => 5,
-            }
+        modules.sort_by_key(|module| match module {
+            Module::BaseIam | Module::BetterAuthIam => 0,
+            Module::BaseBilling | Module::StripeBilling => 1,
+            Module::StripeEcommerce => 2,
+            Module::BaseMessaging | Module::TwilioMessaging => 3,
+            Module::BaseCac => 4,
+            Module::Relay => 5,
         });
-
-        
 
         let description = prompt_without_validation(
             &mut line_editor,
@@ -943,8 +937,7 @@ impl CliCommand for ApplicationCommand {
 
         // One field-encryption key for the whole app: services share encrypted
         // cache records, so per-service keys would fail cross-service decrypts.
-        let generated_encryption_key =
-            crate::core::manifest::service::generate_random_secret(32);
+        let generated_encryption_key = crate::core::manifest::service::generate_random_secret(32);
 
         for template_dir in template_dirs {
             let mut service_data = ServiceManifestData {
@@ -1057,8 +1050,12 @@ impl CliCommand for ApplicationCommand {
                     .module_id
                     .as_ref()
                     .is_some_and(|module| get_service_module_cache(module).is_some())
-                    || data.projects.iter().any(|project_entry| project_entry.name == "iam" || project_entry.name == "billing"),
-                is_type_needed: data.projects.iter().any(|project_entry| project_entry.name == "iam" || project_entry.name == "billing"),
+                    || data.projects.iter().any(|project_entry| {
+                        project_entry.name == "iam" || project_entry.name == "billing"
+                    }),
+                is_type_needed: data.projects.iter().any(|project_entry| {
+                    project_entry.name == "iam" || project_entry.name == "billing"
+                }),
 
                 // Default to false for application initialization, will be set by CLI flag
                 with_mappers: false,
@@ -1259,7 +1256,6 @@ impl CliCommand for ApplicationCommand {
                     _ => None,
                 },
             )?);
-
         }
 
         let docker_compose_path = if let Some(docker_compose_path) = &data.docker_compose_path {
@@ -1322,8 +1318,6 @@ impl CliCommand for ApplicationCommand {
             );
         }
 
-
-
         create_forklaunch_dir(
             &Path::new(&origin_path).to_string_lossy().to_string(),
             dryrun,
@@ -1351,11 +1345,7 @@ impl CliCommand for ApplicationCommand {
             dryrun,
         )?);
 
-        use_generated_sdk_mode_for_init(
-            &origin_path,
-            &data,
-            &mut rendered_templates,
-        )?;
+        use_generated_sdk_mode_for_init(&origin_path, &data, &mut rendered_templates)?;
 
         rendered_templates.extend(
             ensure_github_configs(&origin_path, &ManifestData::Application(&data))
@@ -1415,7 +1405,9 @@ mod tests {
     #[test]
     fn modules_prompt_needed_when_name_provided_without_modules_flag() {
         let cmd = build_command();
-        let matches = cmd.try_get_matches_from(vec!["application", "my-app"]).unwrap();
+        let matches = cmd
+            .try_get_matches_from(vec!["application", "my-app"])
+            .unwrap();
         // With only a positional name arg, modules should not be present — prompt is needed
         assert!(matches.get_many::<String>("modules").is_none());
     }
@@ -1444,13 +1436,21 @@ mod tests {
         // This test documents the bug: the old condition `matches.ids().all(|id| id == "dryrun")`
         // returned false when a positional "name" arg was provided, skipping the module prompt.
         let cmd = build_command();
-        let matches = cmd.try_get_matches_from(vec!["application", "my-app"]).unwrap();
+        let matches = cmd
+            .try_get_matches_from(vec!["application", "my-app"])
+            .unwrap();
         // Old condition would have been false (because "name" id is present), incorrectly
         // skipping the prompt. The new condition correctly checks for modules absence.
         let old_condition = matches.ids().all(|id| id == "dryrun");
         let new_condition = matches.get_many::<String>("modules").is_none();
-        assert!(!old_condition, "old condition incorrectly returns false with name arg");
-        assert!(new_condition, "new condition correctly identifies modules prompt is needed");
+        assert!(
+            !old_condition,
+            "old condition incorrectly returns false with name arg"
+        );
+        assert!(
+            new_condition,
+            "new condition correctly identifies modules prompt is needed"
+        );
     }
 }
 
@@ -1476,11 +1476,7 @@ mod next_steps_tests {
 
     #[test]
     fn names_the_runtimes_own_package_manager() {
-        let bun = next_steps(
-            Path::new("/tmp/a"),
-            Path::new("/tmp/a/modules"),
-            "bun",
-        );
+        let bun = next_steps(Path::new("/tmp/a"), Path::new("/tmp/a/modules"), "bun");
         assert!(bun.contains("bun install"), "{bun}");
         assert!(!bun.contains("pnpm"), "{bun}");
     }

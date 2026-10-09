@@ -25,13 +25,18 @@ impl RouteCommand {
 
 impl CliCommand for RouteCommand {
     fn command(&self) -> Command {
-        command("route", "Get route details by id, including its controller and service")
-            .arg(Arg::new("id").required(true).help("The route id"))
+        command(
+            "route",
+            "Get route details by id, including its controller and service",
+        )
+        .arg(Arg::new("id").required(true).help("The route id"))
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let _token = require_auth()?;
-        let id = matches.get_one::<String>("id").context("route id is required")?;
+        let id = matches
+            .get_one::<String>("id")
+            .context("route id is required")?;
 
         let url = format!(
             "{}/routes/{}",
@@ -58,8 +63,19 @@ impl CliCommand for RouteCommand {
         writeln!(stdout)?;
         writeln!(stdout, "  {} {}", route.method, route.path)?;
         writeln!(stdout, "  id:          {}", route.id)?;
-        writeln!(stdout, "  controller:  {}", route.controller_name.as_deref().unwrap_or(&route.controller_id))?;
-        writeln!(stdout, "  service:     {}", route.service_name.as_deref().unwrap_or(&route.service_id))?;
+        writeln!(
+            stdout,
+            "  controller:  {}",
+            route
+                .controller_name
+                .as_deref()
+                .unwrap_or(&route.controller_id)
+        )?;
+        writeln!(
+            stdout,
+            "  service:     {}",
+            route.service_name.as_deref().unwrap_or(&route.service_id)
+        )?;
         if let Some(d) = &route.description {
             writeln!(stdout, "  description: {}", d)?;
         }
@@ -101,7 +117,11 @@ mod tests {
     #[test]
     fn requires_id() {
         assert!(route_cmd().try_get_matches_from(["route"]).is_err());
-        assert!(route_cmd().try_get_matches_from(["route", "route-1"]).is_ok());
+        assert!(
+            route_cmd()
+                .try_get_matches_from(["route", "route-1"])
+                .is_ok()
+        );
     }
 
     #[test]

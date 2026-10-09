@@ -8,13 +8,11 @@ use crate::{
     constants::RELEASE_MANIFEST_SCHEMA_VERSION,
     core::{
         ast::infrastructure::{
-            compliance::scan_all_compliance,
-            integrations::Integration,
+            compliance::scan_all_compliance, integrations::Integration,
             worker_config::WorkerConfig as AstWorkerConfig,
         },
         library_scanner::{
-            Topology, ImportScanner, LibraryDefinition, parse_route_file,
-            scan_project_libraries,
+            ImportScanner, LibraryDefinition, Topology, parse_route_file, scan_project_libraries,
         },
         manifest::{ProjectType, ResourceInventory, application::ApplicationManifestData},
         sync::detection::detect_routers_from_service,
@@ -447,7 +445,12 @@ pub(crate) fn generate_release_manifest(
     // persists across services/workers so shared imports are scanned only once.
     let modules_root = app_root.join(&manifest.modules_path);
     let package_json_path = app_root.join("package.json");
-    let mut import_scanner = ImportScanner::with_app_root(&modules_root, &package_json_path, &manifest.app_name, app_root);
+    let mut import_scanner = ImportScanner::with_app_root(
+        &modules_root,
+        &package_json_path,
+        &manifest.app_name,
+        app_root,
+    );
 
     let mut services = Vec::new();
     for project in &manifest.projects {
@@ -488,16 +491,15 @@ pub(crate) fn generate_release_manifest(
                             routers
                                 .into_iter()
                                 .map(|router_name| {
-                                    let route_file = service_path.join("api").join("routes").join(format!(
-                                        "{}.routes.ts",
-                                        router_name
-                                    ));
+                                    let route_file = service_path
+                                        .join("api")
+                                        .join("routes")
+                                        .join(format!("{}.routes.ts", router_name));
 
                                     // Parse route file to extract routes and handler→source mappings
-                                    let (parsed_routes, handler_sources) = parse_route_file(
-                                        &route_file,
-                                        &modules_root,
-                                    ).unwrap_or_default();
+                                    let (parsed_routes, handler_sources) =
+                                        parse_route_file(&route_file, &modules_root)
+                                            .unwrap_or_default();
 
                                     // Build RouteDefinitions with per-route topology
                                     let routes: Vec<RouteDefinition> = parsed_routes
@@ -511,7 +513,15 @@ pub(crate) fn generate_release_manifest(
                                                 });
 
                                             RouteDefinition {
-                                                id: format!("{}-{}", parsed.method.to_lowercase(), parsed.path.replace('/', "-").trim_matches('-').to_string()),
+                                                id: format!(
+                                                    "{}-{}",
+                                                    parsed.method.to_lowercase(),
+                                                    parsed
+                                                        .path
+                                                        .replace('/', "-")
+                                                        .trim_matches('-')
+                                                        .to_string()
+                                                ),
                                                 method: parsed.method,
                                                 path: parsed.path,
                                                 handler: parsed.handler,
@@ -524,7 +534,12 @@ pub(crate) fn generate_release_manifest(
                                         .collect();
 
                                     ControllerDefinition {
-                                        id: format!("{}-controller", router_name.to_lowercase().trim_end_matches("controller")),
+                                        id: format!(
+                                            "{}-controller",
+                                            router_name
+                                                .to_lowercase()
+                                                .trim_end_matches("controller")
+                                        ),
                                         name: router_name.clone(),
                                         path: format!("/{}", router_name),
                                         routes,
@@ -619,15 +634,14 @@ pub(crate) fn generate_release_manifest(
                             routers
                                 .into_iter()
                                 .map(|router_name| {
-                                    let route_file = worker_path.join("api").join("routes").join(format!(
-                                        "{}.routes.ts",
-                                        router_name
-                                    ));
+                                    let route_file = worker_path
+                                        .join("api")
+                                        .join("routes")
+                                        .join(format!("{}.routes.ts", router_name));
 
-                                    let (parsed_routes, handler_sources) = parse_route_file(
-                                        &route_file,
-                                        &modules_root,
-                                    ).unwrap_or_default();
+                                    let (parsed_routes, handler_sources) =
+                                        parse_route_file(&route_file, &modules_root)
+                                            .unwrap_or_default();
 
                                     let routes: Vec<RouteDefinition> = parsed_routes
                                         .into_iter()
@@ -639,7 +653,15 @@ pub(crate) fn generate_release_manifest(
                                                 });
 
                                             RouteDefinition {
-                                                id: format!("{}-{}", parsed.method.to_lowercase(), parsed.path.replace('/', "-").trim_matches('-').to_string()),
+                                                id: format!(
+                                                    "{}-{}",
+                                                    parsed.method.to_lowercase(),
+                                                    parsed
+                                                        .path
+                                                        .replace('/', "-")
+                                                        .trim_matches('-')
+                                                        .to_string()
+                                                ),
                                                 method: parsed.method,
                                                 path: parsed.path,
                                                 handler: parsed.handler,
@@ -652,7 +674,12 @@ pub(crate) fn generate_release_manifest(
                                         .collect();
 
                                     ControllerDefinition {
-                                        id: format!("{}-controller", router_name.to_lowercase().trim_end_matches("controller")),
+                                        id: format!(
+                                            "{}-controller",
+                                            router_name
+                                                .to_lowercase()
+                                                .trim_end_matches("controller")
+                                        ),
                                         name: router_name.clone(),
                                         path: format!("/{}", router_name),
                                         routes,
@@ -798,7 +825,12 @@ pub(crate) fn generate_release_manifest(
                 if user_managed_db {
                     // When DB is user-managed, emit a single detached DB resource (no service_name)
                     // to avoid duplicates, then add non-DB resources for each component
-                    add_resources_from_inventory(&project.name, project_resources, &mut resources, true);
+                    add_resources_from_inventory(
+                        &project.name,
+                        project_resources,
+                        &mut resources,
+                        true,
+                    );
 
                     // Add non-DB resources for service and worker components
                     let service_name = format!("{}-service", project.name);
@@ -809,15 +841,30 @@ pub(crate) fn generate_release_manifest(
                 } else {
                     // Create resources for the worker-service component
                     let service_name = format!("{}-service", project.name);
-                    add_resources_from_inventory(&service_name, project_resources, &mut resources, false);
+                    add_resources_from_inventory(
+                        &service_name,
+                        project_resources,
+                        &mut resources,
+                        false,
+                    );
 
                     // Create resources for the worker-worker component
                     let worker_name = format!("{}-worker", project.name);
-                    add_resources_from_inventory(&worker_name, project_resources, &mut resources, false);
+                    add_resources_from_inventory(
+                        &worker_name,
+                        project_resources,
+                        &mut resources,
+                        false,
+                    );
                 }
             } else {
                 // For regular service projects, create resources with the project name
-                add_resources_from_inventory(&project.name, project_resources, &mut resources, user_managed_db);
+                add_resources_from_inventory(
+                    &project.name,
+                    project_resources,
+                    &mut resources,
+                    user_managed_db,
+                );
             }
         }
     }
@@ -865,12 +912,12 @@ pub(crate) fn generate_release_manifest(
                         .get(&name)
                         .cloned()
                         .unwrap_or_default();
-                    let retention = retention_policies.get(&name).map(|r| {
-                        ReleaseRetentionConfig {
+                    let retention = retention_policies
+                        .get(&name)
+                        .map(|r| ReleaseRetentionConfig {
                             duration: r.duration.clone(),
                             action: r.action.clone(),
-                        }
-                    });
+                        });
                     ReleaseEntityCompliance {
                         name,
                         fields,
@@ -1185,18 +1232,14 @@ mod tests {
                         dep_type: "npm".to_string(),
                         version: Some("^17.7.0".to_string()),
                         target_service: None,
-                        source_files: vec![
-                            "domain/services/user.service.ts".to_string(),
-                        ],
+                        source_files: vec!["domain/services/user.service.ts".to_string()],
                     },
                     Dependency {
                         name: "@mikro-orm/core".to_string(),
                         dep_type: "npm".to_string(),
                         version: Some("^6.5.0".to_string()),
                         target_service: None,
-                        source_files: vec![
-                            "domain/services/user.service.ts".to_string(),
-                        ],
+                        source_files: vec!["domain/services/user.service.ts".to_string()],
                     },
                 ],
             }),
@@ -1208,22 +1251,49 @@ mod tests {
         let json_str = json.unwrap();
 
         // Verify flat topology structure
-        assert!(json_str.contains("\"topology\""), "JSON should contain topology field");
+        assert!(
+            json_str.contains("\"topology\""),
+            "JSON should contain topology field"
+        );
         assert!(json_str.contains("\"deps\""), "JSON should have deps array");
-        assert!(json_str.contains("\"sourceFiles\""), "JSON should have per-dep sourceFiles");
+        assert!(
+            json_str.contains("\"sourceFiles\""),
+            "JSON should have per-dep sourceFiles"
+        );
 
         // Verify npm dependencies have versions
-        assert!(json_str.contains("\"@forklaunch/core\""), "Should contain npm dependency");
-        assert!(json_str.contains("\"^0.6.5\""), "Should contain version for @forklaunch/core");
-        assert!(json_str.contains("\"stripe\""), "Should contain stripe dependency");
-        assert!(json_str.contains("\"^17.7.0\""), "Should contain version for stripe");
+        assert!(
+            json_str.contains("\"@forklaunch/core\""),
+            "Should contain npm dependency"
+        );
+        assert!(
+            json_str.contains("\"^0.6.5\""),
+            "Should contain version for @forklaunch/core"
+        );
+        assert!(
+            json_str.contains("\"stripe\""),
+            "Should contain stripe dependency"
+        );
+        assert!(
+            json_str.contains("\"^17.7.0\""),
+            "Should contain version for stripe"
+        );
 
         // Verify nested deps are flattened
-        assert!(json_str.contains("\"@mikro-orm/core\""), "Should contain nested npm dep");
+        assert!(
+            json_str.contains("\"@mikro-orm/core\""),
+            "Should contain nested npm dep"
+        );
 
         // Verify source files
-        assert!(json_str.contains("\"domain/services/user.service.ts\""), "Should have local path");
-        assert!(json_str.contains("\"api/controllers/user.controller.ts\""), "Should have controller path");
+        assert!(
+            json_str.contains("\"domain/services/user.service.ts\""),
+            "Should have local path"
+        );
+        assert!(
+            json_str.contains("\"api/controllers/user.controller.ts\""),
+            "Should have controller path"
+        );
     }
 
     #[test]
@@ -1241,9 +1311,7 @@ mod tests {
                 middleware: None,
                 schema: None,
                 auth: None,
-                topology: Some(Topology {
-                    deps: vec![],
-                }),
+                topology: Some(Topology { deps: vec![] }),
             }],
         };
 
@@ -1256,13 +1324,19 @@ mod tests {
         // Parse as JSON and check the top-level keys
         let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
         let obj = parsed.as_object().unwrap();
-        assert!(!obj.contains_key("topology"), "Controller should not have top-level topology");
+        assert!(
+            !obj.contains_key("topology"),
+            "Controller should not have top-level topology"
+        );
         assert!(obj.contains_key("routes"), "Controller should have routes");
 
         // But routes inside should still have topology
         let routes = obj.get("routes").unwrap().as_array().unwrap();
         let first_route = routes[0].as_object().unwrap();
-        assert!(first_route.contains_key("topology"), "Route should have topology");
+        assert!(
+            first_route.contains_key("topology"),
+            "Route should have topology"
+        );
     }
 
     #[test]
@@ -1441,8 +1515,7 @@ health_path = "/health"
         let rewritten = toml::to_string(&project).unwrap();
         assert!(rewritten.contains("port_env = \"WS_PORT\""), "{rewritten}");
         let bare: crate::core::manifest::ProjectEntry =
-            toml::from_str("type = \"Service\"\nname = \"iam\"\ndescription = \"\"\n")
-                .unwrap();
+            toml::from_str("type = \"Service\"\nname = \"iam\"\ndescription = \"\"\n").unwrap();
         assert!(serving_ports(&bare).is_none());
         assert!(!toml::to_string(&bare).unwrap().contains("serves"));
     }

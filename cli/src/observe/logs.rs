@@ -272,12 +272,8 @@ fn stream_logs(
             );
         }
         AuthMode::Hmac { secret_key } => {
-            let auth_header = crate::core::hmac::generate_hmac_auth_header(
-                secret_key,
-                "GET",
-                "/ws",
-                None,
-            )?;
+            let auth_header =
+                crate::core::hmac::generate_hmac_auth_header(secret_key, "GET", "/ws", None)?;
             request.headers_mut().insert(
                 "Authorization",
                 auth_header
@@ -301,16 +297,18 @@ fn stream_logs(
         "level": filters.level,
     });
     socket
-        .send(tungstenite::Message::Text(
-            subscribe_msg.to_string().into(),
-        ))
+        .send(tungstenite::Message::Text(subscribe_msg.to_string().into()))
         .with_context(|| "Failed to send subscribe message")?;
 
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
     if !json_output {
         stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)).set_bold(true))?;
-        writeln!(stdout, "Streaming logs for {} ({})…  Ctrl+C to stop", application_id, filters.environment)?;
+        writeln!(
+            stdout,
+            "Streaming logs for {} ({})…  Ctrl+C to stop",
+            application_id, filters.environment
+        )?;
         stdout.reset()?;
         writeln!(stdout)?;
     }
@@ -382,7 +380,11 @@ fn print_logs(logs: &[LogEntry]) -> Result<()> {
         let color = level_color(&level);
 
         stdout.set_color(ColorSpec::new().set_fg(Some(Color::White)))?;
-        let ts_display = entry.timestamp.get(..19).unwrap_or(&entry.timestamp).replace('T', " ");
+        let ts_display = entry
+            .timestamp
+            .get(..19)
+            .unwrap_or(&entry.timestamp)
+            .replace('T', " ");
         write!(stdout, "{} ", ts_display)?;
 
         stdout.set_color(ColorSpec::new().set_fg(Some(color)).set_bold(true))?;

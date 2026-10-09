@@ -39,8 +39,9 @@ use crate::{
         manifest::{
             ApplicationInitializationMetadata, InitializableManifestConfig,
             InitializableManifestConfigMetadata, ManifestData, ProjectMetadata, ProjectType,
-            ResourceInventory, add_project_definition_to_manifest, next_available_redis_partition,
-            application::ApplicationManifestData, worker::WorkerManifestData,
+            ResourceInventory, add_project_definition_to_manifest,
+            application::ApplicationManifestData, next_available_redis_partition,
+            worker::WorkerManifestData,
         },
         name::validate_name,
         package_json::{
@@ -49,15 +50,15 @@ use crate::{
                 AJV_VERSION, APP_BILLING_VERSION, APP_CORE_VERSION, APP_IAM_VERSION,
                 APP_MONITORING_VERSION, BETTER_SQLITE3_VERSION, BIOME_VERSION, BULLMQ_VERSION,
                 COMMON_VERSION, CORE_VERSION, DOTENV_VERSION, ESLINT_VERSION, EXPRESS_VERSION,
-                HYPER_EXPRESS_VERSION, UWEBSOCKETS_VERSION, INFRASTRUCTURE_REDIS_VERSION, INTERNAL_VERSION,
+                HYPER_EXPRESS_VERSION, INFRASTRUCTURE_REDIS_VERSION, INTERNAL_VERSION,
                 IOREDIS_VERSION, MIKRO_ORM_CLI_VERSION, MIKRO_ORM_CORE_VERSION,
-                MIKRO_ORM_DATABASE_VERSION, MIKRO_ORM_MIGRATIONS_VERSION,
-                MIKRO_ORM_SEEDER_VERSION, OXLINT_VERSION,
-                PINO_VERSION, PRETTIER_VERSION, PROJECT_BUILD_SCRIPT, PROJECT_DOCS_SCRIPT,
-                PROJECT_SEED_SCRIPT, SQLITE3_VERSION, TESTING_VERSION, TSX_VERSION,
-                TYPEBOX_VERSION, TYPEDOC_VERSION, TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION,
-                TYPES_EXPRESS_VERSION, TYPES_JEST_VERSION, TYPES_QS_VERSION, TYPES_UUID_VERSION,
-                TYPESCRIPT_ESLINT_VERSION, UNIVERSAL_SDK_VERSION, UUID_VERSION, VALIDATOR_VERSION,
+                MIKRO_ORM_DATABASE_VERSION, MIKRO_ORM_MIGRATIONS_VERSION, MIKRO_ORM_SEEDER_VERSION,
+                OXLINT_VERSION, PINO_VERSION, PRETTIER_VERSION, PROJECT_BUILD_SCRIPT,
+                PROJECT_DOCS_SCRIPT, PROJECT_SEED_SCRIPT, SQLITE3_VERSION, TESTING_VERSION,
+                TSX_VERSION, TYPEBOX_VERSION, TYPEDOC_VERSION,
+                TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION, TYPES_EXPRESS_VERSION, TYPES_JEST_VERSION,
+                TYPES_QS_VERSION, TYPES_UUID_VERSION, TYPESCRIPT_ESLINT_VERSION,
+                UNIVERSAL_SDK_VERSION, UUID_VERSION, UWEBSOCKETS_VERSION, VALIDATOR_VERSION,
                 WORKER_BULLMQ_VERSION, WORKER_DATABASE_VERSION, WORKER_INTERFACES_VERSION,
                 WORKER_KAFKA_VERSION, WORKER_REDIS_VERSION, ZOD_VERSION, project_clean_script,
                 project_dev_local_worker_script, project_dev_server_script,
@@ -164,7 +165,8 @@ fn generate_basic_worker(
         None,
     )?);
     rendered_templates.extend(
-        generate_project_tsconfig(&output_path, Some(&["express", "qs"])).with_context(|| ERROR_FAILED_TO_CREATE_TSCONFIG)?,
+        generate_project_tsconfig(&output_path, Some(&["express", "qs"]))
+            .with_context(|| ERROR_FAILED_TO_CREATE_TSCONFIG)?,
     );
     rendered_templates.extend(
         generate_gitignore(&output_path).with_context(|| ERROR_FAILED_TO_CREATE_GITIGNORE)?,
@@ -947,7 +949,9 @@ impl CliCommand for WorkerCommand {
             is_type_needed: true,
             with_mappers: matches.get_flag("mappers"),
 
-            redis_partition: if r#type == WorkerType::BullMQCache || r#type == WorkerType::RedisCache {
+            redis_partition: if r#type == WorkerType::BullMQCache
+                || r#type == WorkerType::RedisCache
+            {
                 next_available_redis_partition(&manifest_data.projects)
             } else {
                 0
@@ -958,9 +962,10 @@ impl CliCommand for WorkerCommand {
             generated_hmac_secret: String::new(),
             // Reuse the app's field-encryption key (services and workers share
             // encrypted cache records); mint one only for key-less apps.
-            generated_encryption_key:
-                crate::core::env_defaults::find_existing_encryption_key(&base_path)
-                    .unwrap_or_else(|| crate::core::manifest::service::generate_random_secret(32)),
+            generated_encryption_key: crate::core::env_defaults::find_existing_encryption_key(
+                &base_path,
+            )
+            .unwrap_or_else(|| crate::core::manifest::service::generate_random_secret(32)),
             otel_token: "OtelCollector".to_string(),
         };
 

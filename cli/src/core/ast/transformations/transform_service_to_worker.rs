@@ -7,7 +7,7 @@ use oxc_ast::ast::SourceType;
 use oxc_codegen::{Codegen, CodegenOptions};
 
 use crate::{
-    constants::{error_failed_to_read_file, WorkerType},
+    constants::{WorkerType, error_failed_to_read_file},
     core::{
         ast::{
             infrastructure::{

@@ -31,7 +31,11 @@ pub(crate) static PAYMENTS: Capability = Capability {
 /// The version the blueprints use.
 const STRIPE_VERSION: &str = "^22.6.2";
 const CORE_HTTP: &str = "@forklaunch/core/http";
-const KEYS: &[&str] = &["STRIPE_API_KEY", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"];
+const KEYS: &[&str] = &[
+    "STRIPE_API_KEY",
+    "STRIPE_SECRET_KEY",
+    "STRIPE_WEBHOOK_SECRET",
+];
 
 /// The registration a service without a Stripe client gets.
 const RUNTIME_BLOCK: &str = "const configInjector = createConfigInjector(SchemaValidator(), {
@@ -109,7 +113,8 @@ fn add(edit: &mut CapabilityEdit) -> Result<()> {
     // The billing-stripe blueprint's own registration already picks
     // createStripeClient in managed mode; it needs no switching (and `infra
     // remove` leaves it as it is).
-    let native = existing && text.contains("isManagedInstance()") && text.contains("createStripeClient(");
+    let native =
+        existing && text.contains("isManagedInstance()") && text.contains("createStripeClient(");
     if native {
         // Already managed-ready.
     } else if existing {
@@ -137,7 +142,9 @@ fn add(edit: &mut CapabilityEdit) -> Result<()> {
         // The key-verified /webhook route keeps working outside managed mode;
         // with the secret optional, it refuses every delivery in managed mode
         // (where Stripe's events arrive as platform events instead).
-        let controller = edit.service_path.join("api/controllers/webhook.controller.ts");
+        let controller = edit
+            .service_path
+            .join("api/controllers/webhook.controller.ts");
         if let Some(source) = edit.read(&controller)? {
             let resolved = "ci.resolve(tokens.STRIPE_WEBHOOK_SECRET);";
             if source.contains(resolved) {
@@ -193,13 +200,18 @@ fn remove(edit: &mut CapabilityEdit) -> Result<()> {
     };
     if switched_factory().is_match(&before) {
         let mut text = switched_factory()
-            .replace(&before, "factory: ({ STRIPE_API_KEY }) => new Stripe(STRIPE_API_KEY)")
+            .replace(
+                &before,
+                "factory: ({ STRIPE_API_KEY }) => new Stripe(STRIPE_API_KEY)",
+            )
             .into_owned();
         text = retype_keys(&text, "optional(string)", "string");
         // createStripeClient goes with the switched factory.
         text = in_place::drop_orphaned_imports(&before, &text, &["createStripeClient"]);
         edit.write(path, text);
-        let controller = edit.service_path.join("api/controllers/webhook.controller.ts");
+        let controller = edit
+            .service_path
+            .join("api/controllers/webhook.controller.ts");
         if let Some(source) = edit.read(&controller)? {
             let switched = "ci.resolve(tokens.STRIPE_WEBHOOK_SECRET) ?? '';";
             if source.contains(switched) {
@@ -325,8 +337,9 @@ export async function handle(event: PlatformEvent): Promise<void> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::path::Path;
+
+    use super::*;
 
     const BILLING: &str = "import {\n  number,\n  optional,\n  schemaValidator,\n  SchemaValidator,\n  string\n} from '@demo/core';\nimport { OpenTelemetryCollector } from '@forklaunch/core/http';\nimport { createConfigInjector, getEnvVar, Lifetime } from '@forklaunch/core/services';\nimport Stripe from 'stripe';\n\nconst configInjector = createConfigInjector(SchemaValidator(), {\n  STRIPE_API_KEY: {\n    lifetime: Lifetime.Singleton,\n    type: string,\n    value: getEnvVar('STRIPE_API_KEY')\n  },\n  STRIPE_WEBHOOK_SECRET: {\n    lifetime: Lifetime.Singleton,\n    type: string,\n    value: getEnvVar('STRIPE_WEBHOOK_SECRET')\n  }\n});\nexport const environmentConfig = configInjector.chain({});\nconst runtimeDependencies = environmentConfig.chain({\n  StripeClient: {\n    lifetime: Lifetime.Singleton,\n    type: Stripe,\n    factory: ({ STRIPE_API_KEY }) => new Stripe(STRIPE_API_KEY)\n  }\n});\n";
 
@@ -343,13 +356,23 @@ mod tests {
 
     #[test]
     fn named_imports_are_merged_and_dropped_without_losing_others() {
-        let text = "import { OpenTelemetryCollector } from '@forklaunch/core/http';\nconst a = 1;\n";
+        let text =
+            "import { OpenTelemetryCollector } from '@forklaunch/core/http';\nconst a = 1;\n";
         let added = ensure_named_import(text, "createStripeClient", CORE_HTTP);
-        assert!(added.contains("import { OpenTelemetryCollector, createStripeClient } from '@forklaunch/core/http';"));
-        assert_eq!(ensure_named_import(&added, "createStripeClient", CORE_HTTP), added);
+        assert!(added.contains(
+            "import { OpenTelemetryCollector, createStripeClient } from '@forklaunch/core/http';"
+        ));
+        assert_eq!(
+            ensure_named_import(&added, "createStripeClient", CORE_HTTP),
+            added
+        );
         let removed = in_place::remove_named_imports(&added, CORE_HTTP, &["createStripeClient"]);
         assert_eq!(removed, text);
-        let fresh = ensure_named_import("import x from 'y';\nconst a = 1;\n", "createStripeClient", CORE_HTTP);
+        let fresh = ensure_named_import(
+            "import x from 'y';\nconst a = 1;\n",
+            "createStripeClient",
+            CORE_HTTP,
+        );
         assert_eq!(
             fresh,
             "import { createStripeClient } from '@forklaunch/core/http';\nimport x from 'y';\nconst a = 1;\n"
@@ -368,14 +391,20 @@ mod tests {
             added,
             "import {\n  createConfigInjector,\n  getEnvVar\n} from \"@forklaunch/core/services\";\nimport Stripe from \"stripe\";\nimport { a } from \"./a\";\n"
         );
-        assert_eq!(in_place::add_default_import(&added, "Stripe", "stripe"), added);
+        assert_eq!(
+            in_place::add_default_import(&added, "Stripe", "stripe"),
+            added
+        );
     }
 
     #[test]
     fn keys_are_made_optional_and_back() {
         let optional = retype_keys(BILLING, "string", "optional(string)");
         assert_eq!(optional.matches("type: optional(string)").count(), 2);
-        assert_eq!(retype_keys(&optional, "optional(string)", "string"), BILLING);
+        assert_eq!(
+            retype_keys(&optional, "optional(string)", "string"),
+            BILLING
+        );
     }
 
     #[test]
@@ -401,10 +430,13 @@ mod tests {
         let text = std::fs::read_to_string(dir.join("billing/registrations.ts")).unwrap();
         assert_eq!(text.matches("StripeClient:").count(), 1);
         assert!(text.contains(SWITCHED_FACTORY));
-        assert!(text.contains("import { OpenTelemetryCollector, createStripeClient } from '@forklaunch/core/http';"));
+        assert!(text.contains(
+            "import { OpenTelemetryCollector, createStripeClient } from '@forklaunch/core/http';"
+        ));
         assert_eq!(text.matches("type: optional(string)").count(), 2);
         let controller =
-            std::fs::read_to_string(dir.join("billing/api/controllers/webhook.controller.ts")).unwrap();
+            std::fs::read_to_string(dir.join("billing/api/controllers/webhook.controller.ts"))
+                .unwrap();
         assert!(controller.contains("?? ''"));
         let handler =
             std::fs::read_to_string(dir.join("billing/api/platformEvents/payments.ts")).unwrap();
@@ -415,7 +447,10 @@ mod tests {
         edit.service_capabilities.clear();
         remove(&mut edit).unwrap();
         edit.commit().unwrap();
-        assert_eq!(std::fs::read_to_string(dir.join("billing/registrations.ts")).unwrap(), BILLING);
+        assert_eq!(
+            std::fs::read_to_string(dir.join("billing/registrations.ts")).unwrap(),
+            BILLING
+        );
         assert!(
             std::fs::read_to_string(dir.join("billing/api/controllers/webhook.controller.ts"))
                 .unwrap()
@@ -434,15 +469,25 @@ mod tests {
             "factory: ({ STRIPE_API_KEY }) => { if (isManagedInstance()) return createStripeClient({ Stripe }); return new Stripe(STRIPE_API_KEY!); }",
         );
         std::fs::write(dir.join("billing/registrations.ts"), &native).unwrap();
-        std::fs::write(dir.join("billing/server.ts"), "const app = f();\napp.use(a);\n").unwrap();
+        std::fs::write(
+            dir.join("billing/server.ts"),
+            "const app = f();\napp.use(a);\n",
+        )
+        .unwrap();
         let mut edit = edit_for(&dir);
         add(&mut edit).unwrap();
         edit.commit().unwrap();
-        assert_eq!(std::fs::read_to_string(dir.join("billing/registrations.ts")).unwrap(), native);
+        assert_eq!(
+            std::fs::read_to_string(dir.join("billing/registrations.ts")).unwrap(),
+            native
+        );
         let mut edit = edit_for(&dir);
         remove(&mut edit).unwrap();
         edit.commit().unwrap();
-        assert_eq!(std::fs::read_to_string(dir.join("billing/registrations.ts")).unwrap(), native);
+        assert_eq!(
+            std::fs::read_to_string(dir.join("billing/registrations.ts")).unwrap(),
+            native
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -453,7 +498,10 @@ mod tests {
         std::fs::create_dir_all(dir.join("billing")).unwrap();
         std::fs::write(
             dir.join("billing/registrations.ts"),
-            BILLING.replace("new Stripe(STRIPE_API_KEY)", "new Stripe(STRIPE_API_KEY, { apiVersion })"),
+            BILLING.replace(
+                "new Stripe(STRIPE_API_KEY)",
+                "new Stripe(STRIPE_API_KEY, { apiVersion })",
+            ),
         )
         .unwrap();
         let mut edit = edit_for(&dir);

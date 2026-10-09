@@ -22,7 +22,8 @@ pub(crate) static VOICE: Capability = Capability {
 const IMPORT_SOURCE: &str = "@forklaunch/core/http";
 #[cfg(test)]
 const IMPORT_NAMES: &[&str] = &["createVoiceClient", "VoiceClient"];
-const IMPORT_LINE: &str = "import { createVoiceClient, VoiceClient } from \"@forklaunch/core/http\";";
+const IMPORT_LINE: &str =
+    "import { createVoiceClient, VoiceClient } from \"@forklaunch/core/http\";";
 
 const RUNTIME_BLOCK: &str = "const configInjector = createConfigInjector(SchemaValidator(), {
     VoiceClient: {
@@ -151,16 +152,26 @@ const runtimeDependencies = environmentConfig.chain({
     #[test]
     fn imports_merge_into_the_existing_source_and_come_back_out() {
         use super::super::{add_named_imports, remove_named_imports};
-        let text = "import { OpenTelemetryCollector } from \"@forklaunch/core/http\";\nconst a = 1;\n";
+        let text =
+            "import { OpenTelemetryCollector } from \"@forklaunch/core/http\";\nconst a = 1;\n";
         let added = add_named_imports(text, IMPORT_SOURCE, IMPORT_NAMES);
         assert!(added.contains(
             "import { OpenTelemetryCollector, VoiceClient, createVoiceClient } from \"@forklaunch/core/http\";"
         ));
-        assert_eq!(add_named_imports(&added, IMPORT_SOURCE, IMPORT_NAMES), added);
-        assert_eq!(remove_named_imports(&added, IMPORT_SOURCE, IMPORT_NAMES), text);
+        assert_eq!(
+            add_named_imports(&added, IMPORT_SOURCE, IMPORT_NAMES),
+            added
+        );
+        assert_eq!(
+            remove_named_imports(&added, IMPORT_SOURCE, IMPORT_NAMES),
+            text
+        );
         // Only ours: the whole import goes.
         let alone = add_named_imports("const a = 1;\n", IMPORT_SOURCE, IMPORT_NAMES);
-        assert_eq!(remove_named_imports(&alone, IMPORT_SOURCE, IMPORT_NAMES), "const a = 1;\n");
+        assert_eq!(
+            remove_named_imports(&alone, IMPORT_SOURCE, IMPORT_NAMES),
+            "const a = 1;\n"
+        );
     }
 
     #[test]
@@ -172,8 +183,16 @@ const runtimeDependencies = environmentConfig.chain({
         assert!(registrations.contains("createVoiceClient("));
         assert!(registrations.contains("import { OpenTelemetryCollector, VoiceClient, createVoiceClient } from \"@forklaunch/core/http\";"));
         assert!(registrations.contains("hmacKey: INSTANCE_HMAC_KEY"));
-        for forbidden in ["AWS_ACCESS_KEY_ID", "CONNECT_INSTANCE_ID", "client-connect", "TWILIO"] {
-            assert!(!registrations.contains(forbidden), "{forbidden} in registrations");
+        for forbidden in [
+            "AWS_ACCESS_KEY_ID",
+            "CONNECT_INSTANCE_ID",
+            "client-connect",
+            "TWILIO",
+        ] {
+            assert!(
+                !registrations.contains(forbidden),
+                "{forbidden} in registrations"
+            );
         }
         let handler = edit
             .read(&edit.service_path.join("api/platformEvents/voice.ts"))
@@ -186,7 +205,10 @@ const runtimeDependencies = environmentConfig.chain({
             .unwrap()
             .unwrap();
         assert!(index.contains("voice: voiceEvents"));
-        let server = edit.read(&edit.service_path.join("server.ts")).unwrap().unwrap();
+        let server = edit
+            .read(&edit.service_path.join("server.ts"))
+            .unwrap()
+            .unwrap();
         assert!(server.contains("platformEventsRouter"));
     }
 
@@ -211,13 +233,19 @@ const runtimeDependencies = environmentConfig.chain({
         edit.app_capabilities.clear();
         remove(&mut edit).unwrap();
         edit.remove_platform_events("voice").unwrap();
-        let server = edit.read(&edit.service_path.join("server.ts")).unwrap().unwrap();
+        let server = edit
+            .read(&edit.service_path.join("server.ts"))
+            .unwrap()
+            .unwrap();
         assert_eq!(server, SERVER, "server.ts back to what it was");
         let registrations = edit.read(&edit.registrations_path()).unwrap().unwrap();
         assert!(!registrations.contains("VoiceClient"));
         assert!(!registrations.contains("createVoiceClient"));
         assert!(registrations.contains("OpenTelemetryCollector"));
-        assert_eq!(registrations, REGISTRATIONS, "registrations.ts back to what it was");
+        assert_eq!(
+            registrations, REGISTRATIONS,
+            "registrations.ts back to what it was"
+        );
     }
 
     #[test]

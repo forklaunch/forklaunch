@@ -2,9 +2,7 @@ use std::{fs::exists, path::Path};
 
 use anyhow::{Context, Result};
 use oxc_allocator::{Allocator, CloneIn, HashMap, Vec};
-use oxc_ast::ast::{
-    Declaration, ObjectPropertyKind, PropertyKey, SourceType, Statement,
-};
+use oxc_ast::ast::{Declaration, ObjectPropertyKind, PropertyKey, SourceType, Statement};
 use oxc_codegen::{Codegen, CodegenOptions};
 
 use crate::{
@@ -17,18 +15,20 @@ use crate::{
 
 /// Default property names that are part of the base properties templates
 /// and should not be copied as user-defined properties.
-const BASE_PROPERTY_NAMES: &[&str] = &["id", "_id", "createdAt", "updatedAt", "retentionAnonymizedAt"];
+const BASE_PROPERTY_NAMES: &[&str] = &[
+    "id",
+    "_id",
+    "createdAt",
+    "updatedAt",
+    "retentionAnonymizedAt",
+];
 
 /// Default import sources that are part of the base properties templates
 /// and should not be copied as user-defined imports.
 /// Note: @forklaunch/core/persistence is NOT excluded here because users may
 /// add extra specifiers (e.g., RetentionDuration). Duplicate `fp` specifiers
 /// are handled by BASE_IMPORT_SPECIFIERS below.
-const BASE_IMPORT_SOURCES: &[&str] = &[
-    "@mikro-orm/core",
-    "@mikro-orm/mongodb",
-    "uuid",
-];
+const BASE_IMPORT_SOURCES: &[&str] = &["@mikro-orm/core", "@mikro-orm/mongodb", "uuid"];
 
 /// Import specifiers from @forklaunch/core/persistence that already exist
 /// in the base properties templates. If the user's source has ONLY these
@@ -98,13 +98,11 @@ pub(crate) fn transform_base_entity_ts(
         // (e.g., `RetentionDuration`), keep the import so those aren't lost.
         if source == FORKLAUNCH_PERSISTENCE_SOURCE {
             if let Some(specifiers) = &import.specifiers {
-                let all_base = specifiers.iter().all(|s| {
-                    match s {
-                        oxc_ast::ast::ImportDeclarationSpecifier::ImportSpecifier(spec) => {
-                            BASE_PERSISTENCE_SPECIFIERS.contains(&spec.local.name.as_str())
-                        }
-                        _ => false,
+                let all_base = specifiers.iter().all(|s| match s {
+                    oxc_ast::ast::ImportDeclarationSpecifier::ImportSpecifier(spec) => {
+                        BASE_PERSISTENCE_SPECIFIERS.contains(&spec.local.name.as_str())
                     }
+                    _ => false,
                 });
                 if all_base {
                     continue;
@@ -220,18 +218,12 @@ mod tests {
         let persistence_dir = temp_dir.path().join("core").join("persistence");
         create_dir_all(&persistence_dir).expect("Failed to create persistence directory");
 
-        write(
-            persistence_dir.join("sql.base.properties.ts"),
-            sql_content,
-        )
-        .expect("Failed to write sql.base.properties.ts");
+        write(persistence_dir.join("sql.base.properties.ts"), sql_content)
+            .expect("Failed to write sql.base.properties.ts");
 
         if let Some(nosql) = nosql_content {
-            write(
-                persistence_dir.join("nosql.base.properties.ts"),
-                nosql,
-            )
-            .expect("Failed to write nosql.base.properties.ts");
+            write(persistence_dir.join("nosql.base.properties.ts"), nosql)
+                .expect("Failed to write nosql.base.properties.ts");
         }
 
         temp_dir
@@ -250,8 +242,7 @@ export const sqlBaseProperties = {
         let temp_dir = create_temp_structure(sql_content, Some("existing"));
         let cache = RenderedTemplatesCache::new();
 
-        let result =
-            transform_base_entity_ts(&cache, temp_dir.path(), &Database::MongoDB);
+        let result = transform_base_entity_ts(&cache, temp_dir.path(), &Database::MongoDB);
 
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -271,8 +262,7 @@ export const sqlBaseProperties = {
         let temp_dir = create_temp_structure(sql_content, None);
         let cache = RenderedTemplatesCache::new();
 
-        let result =
-            transform_base_entity_ts(&cache, temp_dir.path(), &Database::MongoDB);
+        let result = transform_base_entity_ts(&cache, temp_dir.path(), &Database::MongoDB);
 
         assert!(result.is_ok());
         let code = result.unwrap().unwrap();
@@ -300,8 +290,7 @@ export const sqlBaseProperties = {
         let temp_dir = create_temp_structure(sql_content, None);
         let cache = RenderedTemplatesCache::new();
 
-        let result =
-            transform_base_entity_ts(&cache, temp_dir.path(), &Database::MongoDB);
+        let result = transform_base_entity_ts(&cache, temp_dir.path(), &Database::MongoDB);
 
         assert!(result.is_ok());
         let code = result.unwrap().unwrap();
@@ -330,8 +319,7 @@ export const sqlBaseProperties = {
         let temp_dir = create_temp_structure(sql_content, None);
         let cache = RenderedTemplatesCache::new();
 
-        let result =
-            transform_base_entity_ts(&cache, temp_dir.path(), &Database::MongoDB);
+        let result = transform_base_entity_ts(&cache, temp_dir.path(), &Database::MongoDB);
 
         assert!(result.is_ok());
         let code = result.unwrap().unwrap();
@@ -368,8 +356,7 @@ export const nosqlBaseProperties = {
 
         let cache = RenderedTemplatesCache::new();
 
-        let result =
-            transform_base_entity_ts(&cache, temp_dir.path(), &Database::PostgreSQL);
+        let result = transform_base_entity_ts(&cache, temp_dir.path(), &Database::PostgreSQL);
 
         assert!(result.is_ok());
         let code = result.unwrap().unwrap();

@@ -108,7 +108,11 @@ fn print_rows(rows: &[DriftRow], plan_name: Option<&str>) -> Result<()> {
         writeln!(
             stdout,
             "  {:<20}  {:<12}  {:<20}  {:<20}  {}",
-            row.component_name, row.component_type, row.application_name, row.current_hosting_type, row.reason
+            row.component_name,
+            row.component_type,
+            row.application_name,
+            row.current_hosting_type,
+            row.reason
         )?;
     }
     writeln!(stdout)?;

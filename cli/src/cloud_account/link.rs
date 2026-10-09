@@ -45,7 +45,11 @@ impl CliCommand for LinkCommand {
             .get_one::<String>("role_arn")
             .context("--role-arn is required")?;
 
-        let url = format!("{}/cloud-accounts/{}", get_platform_management_api_url(), urlencoding::encode(id));
+        let url = format!(
+            "{}/cloud-accounts/{}",
+            get_platform_management_api_url(),
+            urlencoding::encode(id)
+        );
         let body = serde_json::json!({ "roleArn": role_arn });
         let response =
             http_client::put(&url, body).with_context(|| ERROR_FAILED_TO_SEND_REQUEST)?;

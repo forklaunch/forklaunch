@@ -54,7 +54,10 @@ pub(crate) fn sync_service_with_cache(
             .iter()
             .find(|p| p.name == service_name)
         {
-            log_warn!(stdout, "Service directory not found, but exists in manifest");
+            log_warn!(
+                stdout,
+                "Service directory not found, but exists in manifest"
+            );
 
             let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
             let should_cleanup = prompt_for_confirmation(
@@ -95,7 +98,11 @@ pub(crate) fn sync_service_with_cache(
             log_ok!(stdout, "Removed orphaned service '{}'", service_name);
             return Ok(());
         } else {
-            log_error!(stdout, "Service directory not found: {}", service_path.display());
+            log_error!(
+                stdout,
+                "Service directory not found: {}",
+                service_path.display()
+            );
             bail!("Service directory not found: {}", service_path.display());
         }
     }
@@ -103,11 +110,20 @@ pub(crate) fn sync_service_with_cache(
     let detected = detect_service_config(&service_path)?;
 
     // If project already exists in manifest, update resources if detection found new ones
-    if let Some(existing) = manifest_data.projects.iter_mut().find(|p| p.name == service_name) {
+    if let Some(existing) = manifest_data
+        .projects
+        .iter_mut()
+        .find(|p| p.name == service_name)
+    {
         let mut updated = false;
 
         // Re-detect database and update if found and not already set
-        if existing.resources.as_ref().and_then(|r| r.database.as_ref()).is_none() {
+        if existing
+            .resources
+            .as_ref()
+            .and_then(|r| r.database.as_ref())
+            .is_none()
+        {
             if let Some(db) = &detected.database {
                 let resources = existing.resources.get_or_insert_with(|| {
                     crate::core::manifest::ResourceInventory {
@@ -128,7 +144,12 @@ pub(crate) fn sync_service_with_cache(
         for infra in &detected.infrastructure {
             match infra {
                 crate::constants::Infrastructure::Redis => {
-                    if existing.resources.as_ref().and_then(|r| r.cache.as_ref()).is_none() {
+                    if existing
+                        .resources
+                        .as_ref()
+                        .and_then(|r| r.cache.as_ref())
+                        .is_none()
+                    {
                         let resources = existing.resources.get_or_insert_with(|| {
                             crate::core::manifest::ResourceInventory {
                                 database: None,
@@ -144,7 +165,12 @@ pub(crate) fn sync_service_with_cache(
                     }
                 }
                 crate::constants::Infrastructure::S3 => {
-                    if existing.resources.as_ref().and_then(|r| r.object_store.as_ref()).is_none() {
+                    if existing
+                        .resources
+                        .as_ref()
+                        .and_then(|r| r.object_store.as_ref())
+                        .is_none()
+                    {
                         let resources = existing.resources.get_or_insert_with(|| {
                             crate::core::manifest::ResourceInventory {
                                 database: None,
@@ -221,7 +247,11 @@ pub(crate) fn sync_service_with_cache(
 impl CliCommand for ServiceSyncCommand {
     fn command(&self) -> clap::Command {
         use clap::Arg;
-        command("service", "Sync a specific service to application artifacts").arg(
+        command(
+            "service",
+            "Sync a specific service to application artifacts",
+        )
+        .arg(
             Arg::new("name")
                 .help("The name of the service")
                 .required(true),

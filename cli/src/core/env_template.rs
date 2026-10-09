@@ -11,7 +11,9 @@ use termcolor::{StandardStream, WriteColor};
 use crate::core::{
     ast::infrastructure::env::find_all_env_vars,
     env::{add_env_vars_to_file, is_env_var_defined},
-    env_defaults::{EnvContext, ExistingEnvValues, find_existing_hmac_secret, resolve_env_var_default},
+    env_defaults::{
+        EnvContext, ExistingEnvValues, find_existing_hmac_secret, resolve_env_var_default,
+    },
     env_scope::{EnvironmentVariableScope, determine_env_var_scopes, is_pulumi_injected},
     manifest::{ProjectType, application::ApplicationManifestData},
     rendered_template::{RenderedTemplate, RenderedTemplatesCache},
@@ -135,7 +137,11 @@ pub fn generate_env_templates(
 
     // Determine scopes to identify application-level vars
     let scoped_vars = determine_env_var_scopes(&project_env_vars, manifest_data)?;
-    let project_names: Vec<String> = manifest_data.projects.iter().map(|p| p.name.clone()).collect();
+    let project_names: Vec<String> = manifest_data
+        .projects
+        .iter()
+        .map(|p| p.name.clone())
+        .collect();
     let application_var_names: std::collections::HashSet<String> = scoped_vars
         .iter()
         .filter(|v| v.scope == EnvironmentVariableScope::Application)
@@ -257,7 +263,11 @@ pub fn sync_env_local_files(
 
     // Determine scopes to identify application-level vars
     let scoped_vars = determine_env_var_scopes(&project_env_vars, manifest_data)?;
-    let project_names: Vec<String> = manifest_data.projects.iter().map(|p| p.name.clone()).collect();
+    let project_names: Vec<String> = manifest_data
+        .projects
+        .iter()
+        .map(|p| p.name.clone())
+        .collect();
     let application_var_names: std::collections::HashSet<String> = scoped_vars
         .iter()
         .filter(|v| v.scope == EnvironmentVariableScope::Application)
@@ -286,7 +296,9 @@ pub fn sync_env_local_files(
 
         let mut missing_root_vars: HashMap<String, String> = HashMap::new();
         // Use a generic context for application-scoped vars
-        let context = EnvContext::EnvLocal { project_name: "app" };
+        let context = EnvContext::EnvLocal {
+            project_name: "app",
+        };
         for var_name in &application_var_names {
             if is_pulumi_injected(var_name, &project_names) {
                 continue;
@@ -311,7 +323,17 @@ pub fn sync_env_local_files(
             let mut var_names: Vec<&String> = missing_root_vars.keys().collect();
             var_names.sort();
 
-            log_info!(stdout, "Added {} missing application env var(s) to {}: {}", missing_root_vars.len(), root_env_local.display(), var_names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
+            log_info!(
+                stdout,
+                "Added {} missing application env var(s) to {}: {}",
+                missing_root_vars.len(),
+                root_env_local.display(),
+                var_names
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
         }
     }
 
@@ -363,7 +385,17 @@ pub fn sync_env_local_files(
             let mut var_names: Vec<&String> = missing_vars.keys().collect();
             var_names.sort();
 
-            log_info!(stdout, "Added {} missing env var(s) to {}: {}", missing_vars.len(), env_local_path.display(), var_names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
+            log_info!(
+                stdout,
+                "Added {} missing env var(s) to {}: {}",
+                missing_vars.len(),
+                env_local_path.display(),
+                var_names
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
         }
     }
 

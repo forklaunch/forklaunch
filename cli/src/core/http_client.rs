@@ -1,15 +1,17 @@
+use std::io::{IsTerminal, Write};
+
 use anyhow::Result;
 use reqwest::{
     Method,
     blocking::{Client, Response},
 };
 use serde_json::Value;
-use std::io::{IsTerminal, Write};
-
 use termcolor::{ColorChoice, StandardStream, WriteColor};
 
-use super::hmac::{AuthMode, generate_hmac_auth_header};
-use super::token::{force_refresh_token, get_token, get_token_path};
+use super::{
+    hmac::{AuthMode, generate_hmac_auth_header},
+    token::{force_refresh_token, get_token, get_token_path},
+};
 
 /// Makes an authenticated HTTP request with automatic token refresh and retry logic
 ///
@@ -191,12 +193,8 @@ fn make_hmac_request_with_sign_path(
     sign_path: &str,
     body: Option<Value>,
 ) -> Result<Response> {
-    let auth_header = generate_hmac_auth_header(
-        secret_key,
-        method.as_str(),
-        sign_path,
-        body.as_ref(),
-    )?;
+    let auth_header =
+        generate_hmac_auth_header(secret_key, method.as_str(), sign_path, body.as_ref())?;
 
     let client = Client::new();
     let mut request = client
@@ -232,13 +230,9 @@ pub fn post_with_auth_and_sign_path(
 ) -> Result<Response> {
     match auth_mode {
         AuthMode::Jwt => post(url, body),
-        AuthMode::Hmac { secret_key } => make_hmac_request_with_sign_path(
-            secret_key,
-            Method::POST,
-            url,
-            sign_path,
-            Some(body),
-        ),
+        AuthMode::Hmac { secret_key } => {
+            make_hmac_request_with_sign_path(secret_key, Method::POST, url, sign_path, Some(body))
+        }
     }
 }
 
@@ -290,17 +284,11 @@ mod tests {
 
     #[test]
     fn test_extract_url_path_no_path() {
-        assert_eq!(
-            extract_url_path("https://api.example.com").unwrap(),
-            "/"
-        );
+        assert_eq!(extract_url_path("https://api.example.com").unwrap(), "/");
     }
 
     #[test]
     fn test_extract_url_path_root() {
-        assert_eq!(
-            extract_url_path("https://api.example.com/").unwrap(),
-            "/"
-        );
+        assert_eq!(extract_url_path("https://api.example.com/").unwrap(), "/");
     }
 }

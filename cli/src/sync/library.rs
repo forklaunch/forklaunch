@@ -51,7 +51,10 @@ pub(crate) fn sync_library_with_cache(
             .iter()
             .find(|p| p.name == library_name)
         {
-            log_warn!(stdout, "Library directory not found, but exists in manifest");
+            log_warn!(
+                stdout,
+                "Library directory not found, but exists in manifest"
+            );
 
             let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
             let should_cleanup = prompt_for_confirmation(
@@ -87,7 +90,11 @@ pub(crate) fn sync_library_with_cache(
             log_ok!(stdout, "Removed orphaned library '{}'", library_name);
             return Ok(());
         } else {
-            log_error!(stdout, "Library directory not found: {}", library_path.display());
+            log_error!(
+                stdout,
+                "Library directory not found: {}",
+                library_path.display()
+            );
             bail!("Library directory not found: {}", library_path.display());
         }
     }
@@ -135,7 +142,11 @@ pub(crate) fn sync_library_with_cache(
 impl CliCommand for LibrarySyncCommand {
     fn command(&self) -> clap::Command {
         use clap::Arg;
-        command("library", "Sync a specific library to application artifacts").arg(
+        command(
+            "library",
+            "Sync a specific library to application artifacts",
+        )
+        .arg(
             Arg::new("name")
                 .help("The name of the library")
                 .required(true),

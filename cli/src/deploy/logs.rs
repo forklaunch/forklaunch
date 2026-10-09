@@ -369,8 +369,9 @@ impl CliCommand for LogsCommand {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json::json;
+
+    use super::*;
 
     fn logs_cmd() -> Command {
         LogsCommand::new().command().version("0.0.0-test")
@@ -399,8 +400,18 @@ mod tests {
     fn accepts_the_filter_and_window_flags() {
         let matches = logs_cmd()
             .try_get_matches_from([
-                "logs", "-e", "staging", "-r", "us-west-2", "-n", "50", "-l", "error", "-s",
-                "KMS", "--all",
+                "logs",
+                "-e",
+                "staging",
+                "-r",
+                "us-west-2",
+                "-n",
+                "50",
+                "-l",
+                "error",
+                "-s",
+                "KMS",
+                "--all",
             ])
             .unwrap();
         assert_eq!(

@@ -174,8 +174,7 @@ impl CliCommand for CreateCommand {
                     body["clusterType"] = serde_json::json!(cluster_type);
                 }
                 if !compliance_frameworks.is_empty() {
-                    body["complianceFrameworks"] =
-                        serde_json::json!(compliance_frameworks);
+                    body["complianceFrameworks"] = serde_json::json!(compliance_frameworks);
                 }
                 if managed {
                     body["managedMode"] = serde_json::json!(true);
@@ -198,7 +197,12 @@ impl CliCommand for CreateCommand {
         let app: CreatedApplication = create_response
             .json()
             .with_context(|| "Failed to parse created application response")?;
-        log_ok!(stdout, "Created platform application: {} ({})", app.name, app.id);
+        log_ok!(
+            stdout,
+            "Created platform application: {} ({})",
+            app.name,
+            app.id
+        );
 
         if skip_integrate {
             log_info!(
@@ -238,7 +242,11 @@ impl CliCommand for CreateCommand {
         write(&manifest_path, updated_manifest)
             .with_context(|| format!("Failed to write manifest at {:?}", manifest_path))?;
 
-        log_header!(stdout, Color::Green, "\nApplication created and integrated!");
+        log_header!(
+            stdout,
+            Color::Green,
+            "\nApplication created and integrated!"
+        );
         log_info!(stdout, "Platform App ID: {}", app.id);
         log_info!(stdout, "\nYou can now use:");
         writeln!(stdout, "  forklaunch release create --version <version>")?;

@@ -18,7 +18,9 @@ use super::core::{
 };
 use crate::{
     CliCommand,
-    change::core::change_database::{change_database_retention_script, change_database_seed_script},
+    change::core::change_database::{
+        change_database_retention_script, change_database_seed_script,
+    },
     constants::{
         Database, ERROR_FAILED_TO_PARSE_MANIFEST, ERROR_FAILED_TO_READ_DOCKER_COMPOSE,
         ERROR_FAILED_TO_READ_MANIFEST, ERROR_FAILED_TO_READ_PACKAGE_JSON, Infrastructure,
@@ -64,7 +66,9 @@ use crate::{
         name::validate_name,
         package_json::{
             application_package_json::ApplicationPackageJson,
-            package_json_constants::{INFRASTRUCTURE_REDIS_VERSION, INFRASTRUCTURE_S3_VERSION, IOREDIS_VERSION},
+            package_json_constants::{
+                INFRASTRUCTURE_REDIS_VERSION, INFRASTRUCTURE_S3_VERSION, IOREDIS_VERSION,
+            },
             project_package_json::ProjectPackageJson,
         },
         removal_template::{RemovalTemplate, remove_template_files},
@@ -217,10 +221,7 @@ fn change_database(
             "@mikro-orm/{}",
             existing_database.to_string().to_lowercase()
         );
-        let new_source = format!(
-            "@mikro-orm/{}",
-            database.to_string().to_lowercase()
-        );
+        let new_source = format!("@mikro-orm/{}", database.to_string().to_lowercase());
         let new_content = template.content.replace(&old_source, &new_source);
         rendered_templates_cache.insert(
             registrations_path.to_string_lossy(),
@@ -386,11 +387,8 @@ fn change_infrastructure(
                     .forklaunch_infrastructure_redis =
                     Some(INFRASTRUCTURE_REDIS_VERSION.to_string());
 
-                project_package_json
-                    .dependencies
-                    .as_mut()
-                    .unwrap()
-                    .ioredis = Some(IOREDIS_VERSION.to_string());
+                project_package_json.dependencies.as_mut().unwrap().ioredis =
+                    Some(IOREDIS_VERSION.to_string());
 
                 manifest_data.projects.iter_mut().for_each(|project| {
                     if project.name == manifest_data.service_name {
@@ -570,11 +568,7 @@ fn change_infrastructure(
                     .unwrap()
                     .forklaunch_infrastructure_redis = None;
 
-                project_package_json
-                    .dependencies
-                    .as_mut()
-                    .unwrap()
-                    .ioredis = None;
+                project_package_json.dependencies.as_mut().unwrap().ioredis = None;
 
                 manifest_data.projects.iter_mut().for_each(|project| {
                     if project.name == manifest_data.service_name {
@@ -910,7 +904,7 @@ export interface {pascal_case_name}EventRecord extends WorkerEventEntity {{
 
     let env_local_path = base_path.join(".env.local");
     let mut env_local_content =
-                    read_env_local_or_default(rendered_templates_cache, &env_local_path)?;
+        read_env_local_or_default(rendered_templates_cache, &env_local_path)?;
     env_local_content.queue_name =
         Some(format!("{}-{}-queue", manifest_data.app_name, project_name));
     rendered_templates_cache.insert(
@@ -923,9 +917,9 @@ export interface {pascal_case_name}EventRecord extends WorkerEventEntity {{
     );
 
     use crate::core::package_json::package_json_constants::{
-        project_start_server_script, project_start_worker_script, WORKER_BULLMQ_VERSION,
-        WORKER_DATABASE_VERSION, WORKER_INTERFACES_VERSION, WORKER_KAFKA_VERSION,
-        WORKER_REDIS_VERSION,
+        WORKER_BULLMQ_VERSION, WORKER_DATABASE_VERSION, WORKER_INTERFACES_VERSION,
+        WORKER_KAFKA_VERSION, WORKER_REDIS_VERSION, project_start_server_script,
+        project_start_worker_script,
     };
 
     let database = manifest_data.database.parse::<Database>().ok();
@@ -934,9 +928,7 @@ export interface {pascal_case_name}EventRecord extends WorkerEventEntity {{
         crate::constants::Runtime::Node => {
             "tsx watch --clear-screen=false ./worker.ts | pino-pretty".to_string()
         }
-        crate::constants::Runtime::Bun => {
-            "bun --watch ./worker.ts | pino-pretty".to_string()
-        }
+        crate::constants::Runtime::Bun => "bun --watch ./worker.ts | pino-pretty".to_string(),
     });
     scripts.start_server = Some(project_start_server_script(runtime, database));
     scripts.start_worker = Some(project_start_worker_script(runtime, database));
@@ -1055,7 +1047,10 @@ This service has been converted to a worker of type `{worker_type}`.
         },
     );
 
-    log_warn!(stdout, "Service converted to worker. See README-MIGRATION.md for next steps.");
+    log_warn!(
+        stdout,
+        "Service converted to worker. See README-MIGRATION.md for next steps."
+    );
 
     Ok(())
 }
@@ -1515,7 +1510,11 @@ impl CliCommand for ServiceCommand {
         move_template_files(&move_templates, dryrun, &mut stdout)?;
 
         if !dryrun {
-            log_ok!(stdout, "{} changed successfully!", &manifest_data.service_name);
+            log_ok!(
+                stdout,
+                "{} changed successfully!",
+                &manifest_data.service_name
+            );
             format_code(&service_base_path, &manifest_data.runtime.parse()?);
         }
 
@@ -1636,16 +1635,15 @@ database = "postgresql"
         write(base.join(".env.local"), "").unwrap();
 
         let raw: ServiceManifestData = toml::from_str(MANIFEST_TOML).unwrap();
-        let manifest =
-            raw.initialize(InitializableManifestConfigMetadata::Project(
-                ProjectInitializationMetadata {
-                    project_name: "test-svc".to_string(),
-                    database: None,
-                    infrastructure: None,
-                    description: None,
-                    worker_type: None,
-                },
-            ));
+        let manifest = raw.initialize(InitializableManifestConfigMetadata::Project(
+            ProjectInitializationMetadata {
+                project_name: "test-svc".to_string(),
+                database: None,
+                infrastructure: None,
+                description: None,
+                worker_type: None,
+            },
+        ));
 
         let mut docker_compose = DockerCompose::default();
         docker_compose.services.insert(
@@ -1691,8 +1689,14 @@ database = "postgresql"
 
         // 2. service environment must have S3 env vars injected
         let env = docker.services["test-svc"].environment.as_ref().unwrap();
-        assert!(env.contains_key("S3_URL"), "Expected S3_URL in service environment");
-        assert!(env.contains_key("S3_BUCKET"), "Expected S3_BUCKET in service environment");
+        assert!(
+            env.contains_key("S3_URL"),
+            "Expected S3_URL in service environment"
+        );
+        assert!(
+            env.contains_key("S3_BUCKET"),
+            "Expected S3_BUCKET in service environment"
+        );
 
         // 3. manifest object_store must be recorded as "s3"
         let project = manifest
@@ -1717,10 +1721,7 @@ database = "postgresql"
         );
 
         // 5. registrations.ts in cache must have S3 content injected
-        let reg = cache
-            .get(base.join("registrations.ts"))
-            .unwrap()
-            .unwrap();
+        let reg = cache.get(base.join("registrations.ts")).unwrap().unwrap();
         assert!(
             reg.content.contains("S3ObjectStore") || reg.content.contains("s3Url"),
             "Expected S3 import/usage in registrations.ts cache"
@@ -1860,7 +1861,11 @@ database = "postgresql"
         )
         .unwrap();
 
-        write(base.join("mikro-orm.config.ts"), POSTGRESQL_MIKRO_ORM_CONFIG).unwrap();
+        write(
+            base.join("mikro-orm.config.ts"),
+            POSTGRESQL_MIKRO_ORM_CONFIG,
+        )
+        .unwrap();
         write(base.join(".env.local"), "").unwrap();
         write(
             base.join("registrations.ts"),
@@ -1905,8 +1910,7 @@ database = "postgresql"
 
     #[test]
     fn test_change_database_postgresql_to_mysql_updates_manifest_and_mikroorm_config() {
-        let (tmp, mut manifest, mut docker, mut app_pkg, mut project_pkg) =
-            setup_change_database();
+        let (tmp, mut manifest, mut docker, mut app_pkg, mut project_pkg) = setup_change_database();
         let base = tmp.path().join("test-svc");
         let mut removal_templates = Vec::new();
         let mut cache = RenderedTemplatesCache::new();
@@ -1925,7 +1929,11 @@ database = "postgresql"
 
         // 1. manifest database must be updated
         assert_eq!(manifest.database, "mysql");
-        let project = manifest.projects.iter().find(|p| p.name == "test-svc").unwrap();
+        let project = manifest
+            .projects
+            .iter()
+            .find(|p| p.name == "test-svc")
+            .unwrap();
         assert_eq!(
             project.resources.as_ref().unwrap().database,
             Some("mysql".to_string())
@@ -1948,10 +1956,7 @@ database = "postgresql"
         );
 
         // 3. registrations.ts import source must be updated
-        let reg = cache
-            .get(base.join("registrations.ts"))
-            .unwrap()
-            .unwrap();
+        let reg = cache.get(base.join("registrations.ts")).unwrap().unwrap();
         assert!(
             reg.content.contains("@mikro-orm/mysql"),
             "Expected @mikro-orm/mysql in registrations.ts: {}",

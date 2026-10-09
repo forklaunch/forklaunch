@@ -279,10 +279,7 @@ const runtimeDependencies = environmentConfig.chain({
             deps.iter()
                 .any(|d| d.name == "MikroORM" && d.resource_type == ResourceType::Database)
         );
-        assert!(
-            !deps.iter()
-                .any(|d| d.name == "EntityManager")
-        );
+        assert!(!deps.iter().any(|d| d.name == "EntityManager"));
     }
 
     #[test]

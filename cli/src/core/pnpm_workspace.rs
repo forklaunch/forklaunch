@@ -86,8 +86,7 @@ fn sanitize_allow_builds(pnpm_workspace: &mut PnpmWorkspace) {
 /// gate, so strip version suffixes down to bare package names on every
 /// rewrite.
 fn sanitize_minimum_release_age_exclude(pnpm_workspace: &mut PnpmWorkspace) {
-    let Some(Value::Sequence(entries)) =
-        pnpm_workspace.other.get_mut("minimumReleaseAgeExclude")
+    let Some(Value::Sequence(entries)) = pnpm_workspace.other.get_mut("minimumReleaseAgeExclude")
     else {
         return;
     };
@@ -145,9 +144,9 @@ fn ensure_minimum_release_age_exclude(pnpm_workspace: &mut PnpmWorkspace) {
     let Value::Sequence(entries) = entry else {
         return;
     };
-    let already_covered = entries.iter().any(|value| {
-        matches!(value, Value::String(spec) if spec == FORKLAUNCH_RELEASE_AGE_EXCLUDE)
-    });
+    let already_covered = entries.iter().any(
+        |value| matches!(value, Value::String(spec) if spec == FORKLAUNCH_RELEASE_AGE_EXCLUDE),
+    );
     if !already_covered {
         entries.push(Value::String(FORKLAUNCH_RELEASE_AGE_EXCLUDE.to_string()));
     }
@@ -235,8 +234,7 @@ pub(crate) fn render_pnpm_workspace_with_packages(
     sanitize_minimum_release_age_exclude(&mut pnpm_workspace);
     ensure_minimum_release_age_exclude(&mut pnpm_workspace);
     ensure_minimum_release_age(&mut pnpm_workspace);
-    Ok(to_string(&pnpm_workspace)
-        .with_context(|| ERROR_FAILED_TO_GENERATE_PNPM_WORKSPACE)?)
+    Ok(to_string(&pnpm_workspace).with_context(|| ERROR_FAILED_TO_GENERATE_PNPM_WORKSPACE)?)
 }
 
 pub(crate) fn add_project_definition_to_pnpm_workspace<
@@ -355,8 +353,7 @@ mod tests {
     #[test]
     fn test_forklaunch_scope_is_not_duplicated() {
         let mut ws: PnpmWorkspace =
-            from_str("packages:\n- core\nminimumReleaseAgeExclude:\n- '@forklaunch/*'\n")
-                .unwrap();
+            from_str("packages:\n- core\nminimumReleaseAgeExclude:\n- '@forklaunch/*'\n").unwrap();
         ensure_minimum_release_age_exclude(&mut ws);
         ensure_minimum_release_age_exclude(&mut ws);
 
@@ -415,8 +412,7 @@ mod tests {
 
     #[test]
     fn test_ensure_minimum_release_age_preserves_existing_value() {
-        let mut ws: PnpmWorkspace =
-            from_str("packages:\n- core\nminimumReleaseAge: 0\n").unwrap();
+        let mut ws: PnpmWorkspace = from_str("packages:\n- core\nminimumReleaseAge: 0\n").unwrap();
         ensure_minimum_release_age(&mut ws);
         assert!(to_string(&ws).unwrap().contains("minimumReleaseAge: 0"));
     }

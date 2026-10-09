@@ -625,7 +625,9 @@ impl CliCommand for CreateCommand {
             app_root.join(".forklaunch").join("openapi")
         };
         create_dir_all(&openapi_path).with_context(|| "Failed to create openapi directory")?;
-        let _openapi_guard = prebuilt.is_none().then(|| RemoveDirGuard::new(openapi_path.clone()));
+        let _openapi_guard = prebuilt
+            .is_none()
+            .then(|| RemoveDirGuard::new(openapi_path.clone()));
         let exported_services = if prebuilt.is_some() {
             super::prebuilt::validate_specs(&openapi_path, &manifest)?
         } else {

@@ -393,7 +393,10 @@ const mikroOrmOptionsConfig = defineConfig({
 });
 "#;
 
-    fn make_cache_with_config(dir: &TempDir, content: &str) -> (RenderedTemplatesCache, std::path::PathBuf) {
+    fn make_cache_with_config(
+        dir: &TempDir,
+        content: &str,
+    ) -> (RenderedTemplatesCache, std::path::PathBuf) {
         let config_path = dir.path().join("mikro-orm.config.ts");
         write(&config_path, content).unwrap();
         (RenderedTemplatesCache::new(), dir.path().to_path_buf())

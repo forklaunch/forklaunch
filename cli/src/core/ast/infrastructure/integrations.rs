@@ -48,9 +48,7 @@ impl IntegrationsVisitor {
             "RedisClient" | "Redis" | "RedisCache" | "TtlCache" => Some("cache".to_string()),
 
             // Object Store (ObjectStore is the new token name, S3ObjectStore is legacy)
-            "ObjectStore" | "S3ObjectStore" | "S3Client" | "S3" => {
-                Some("objectstore".to_string())
-            }
+            "ObjectStore" | "S3ObjectStore" | "S3Client" | "S3" => Some("objectstore".to_string()),
 
             // Message Queue
             "KafkaClient" | "Kafka" | "QueueClient" => Some("messagequeue".to_string()),

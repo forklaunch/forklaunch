@@ -18,7 +18,9 @@ use super::core::{
 };
 use crate::{
     CliCommand,
-    change::core::change_database::{change_database_retention_script, change_database_seed_script},
+    change::core::change_database::{
+        change_database_retention_script, change_database_seed_script,
+    },
     constants::{
         Database, ERROR_FAILED_TO_PARSE_MANIFEST, ERROR_FAILED_TO_READ_DOCKER_COMPOSE,
         ERROR_FAILED_TO_READ_MANIFEST, ERROR_FAILED_TO_READ_PACKAGE_JSON, Infrastructure,
@@ -56,8 +58,8 @@ use crate::{
             package_json_constants::{
                 BULLMQ_VERSION, INFRASTRUCTURE_REDIS_VERSION, IOREDIS_VERSION,
                 MIKRO_ORM_CORE_VERSION, MIKRO_ORM_DATABASE_VERSION, MIKRO_ORM_MIGRATIONS_VERSION,
-                WORKER_BULLMQ_VERSION, WORKER_DATABASE_VERSION,
-                WORKER_KAFKA_VERSION, WORKER_REDIS_VERSION,
+                WORKER_BULLMQ_VERSION, WORKER_DATABASE_VERSION, WORKER_KAFKA_VERSION,
+                WORKER_REDIS_VERSION,
             },
             project_package_json::ProjectPackageJson,
         },
@@ -127,7 +129,8 @@ fn change_type(
     rendered_templates_cache: &mut RenderedTemplatesCache,
     removal_templates: &mut Vec<RemovalTemplate>,
 ) -> Result<()> {
-    let next_redis_partition = crate::core::manifest::next_available_redis_partition(&manifest_data.projects);
+    let next_redis_partition =
+        crate::core::manifest::next_available_redis_partition(&manifest_data.projects);
 
     let project_entry = manifest_data
         .projects
@@ -202,11 +205,8 @@ fn change_type(
                 Some(WORKER_BULLMQ_VERSION.to_string());
             dependencies.forklaunch_infrastructure_redis =
                 Some(INFRASTRUCTURE_REDIS_VERSION.to_string());
-            project_package_json
-                .dependencies
-                .as_mut()
-                .unwrap()
-                .ioredis = Some(IOREDIS_VERSION.to_string());
+            project_package_json.dependencies.as_mut().unwrap().ioredis =
+                Some(IOREDIS_VERSION.to_string());
             resources.cache = Some(WorkerType::RedisCache.to_string());
             resources.redis_partition = Some(next_redis_partition);
             let _ = add_redis_to_docker_compose(
@@ -215,7 +215,8 @@ fn change_type(
                 &mut environment,
                 next_redis_partition,
             );
-            env_local_content.redis_url = Some(format!("redis://localhost:6379/{}", next_redis_partition));
+            env_local_content.redis_url =
+                Some(format!("redis://localhost:6379/{}", next_redis_partition));
         }
         WorkerType::Database => {
             let db = database.unwrap();
@@ -333,11 +334,8 @@ fn change_type(
                 Some(WORKER_REDIS_VERSION.to_string());
             dependencies.forklaunch_infrastructure_redis =
                 Some(INFRASTRUCTURE_REDIS_VERSION.to_string());
-            project_package_json
-                .dependencies
-                .as_mut()
-                .unwrap()
-                .ioredis = Some(IOREDIS_VERSION.to_string());
+            project_package_json.dependencies.as_mut().unwrap().ioredis =
+                Some(IOREDIS_VERSION.to_string());
             resources.cache = Some(WorkerType::RedisCache.to_string());
             resources.redis_partition = Some(next_redis_partition);
             let _ = add_redis_to_docker_compose(
@@ -346,7 +344,8 @@ fn change_type(
                 &mut environment,
                 next_redis_partition,
             );
-            env_local_content.redis_url = Some(format!("redis://localhost:6379/{}", next_redis_partition));
+            env_local_content.redis_url =
+                Some(format!("redis://localhost:6379/{}", next_redis_partition));
         }
         WorkerType::Kafka => {
             dependencies.forklaunch_implementation_worker_kafka =
@@ -458,14 +457,26 @@ fn change_type(
         if is_database_worker {
             // Switch import from types file to entities
             content = content.replace(
-                &format!("import type {{ {}EventRecord }} from './domain/types/{}EventRecord.types';", pascal_case_name, camel_case_name),
-                &format!("import type {{ {}EventRecord }} from './persistence/entities';", pascal_case_name),
+                &format!(
+                    "import type {{ {}EventRecord }} from './domain/types/{}EventRecord.types';",
+                    pascal_case_name, camel_case_name
+                ),
+                &format!(
+                    "import type {{ {}EventRecord }} from './persistence/entities';",
+                    pascal_case_name
+                ),
             );
         } else {
             // Switch import from entities to types file
             content = content.replace(
-                &format!("import type {{ {}EventRecord }} from './persistence/entities';", pascal_case_name),
-                &format!("import type {{ {}EventRecord }} from './domain/types/{}EventRecord.types';", pascal_case_name, camel_case_name),
+                &format!(
+                    "import type {{ {}EventRecord }} from './persistence/entities';",
+                    pascal_case_name
+                ),
+                &format!(
+                    "import type {{ {}EventRecord }} from './domain/types/{}EventRecord.types';",
+                    pascal_case_name, camel_case_name
+                ),
             );
         }
 
@@ -607,7 +618,10 @@ This worker has been converted back to a service.
         },
     );
 
-    log_warn!(stdout, "Worker converted to service. See README-MIGRATION.md.");
+    log_warn!(
+        stdout,
+        "Worker converted to service. See README-MIGRATION.md."
+    );
 
     Ok(())
 }
@@ -1120,7 +1134,11 @@ type = "bullmq"
         let tmp = TempDir::new().unwrap();
         let base = tmp.path();
 
-        write(base.join("registrations.ts"), BULLMQ_WORKER_REGISTRATIONS_TS).unwrap();
+        write(
+            base.join("registrations.ts"),
+            BULLMQ_WORKER_REGISTRATIONS_TS,
+        )
+        .unwrap();
         write(base.join(".env.local"), "").unwrap();
 
         let raw: WorkerManifestData = toml::from_str(BULLMQ_WORKER_MANIFEST_TOML).unwrap();

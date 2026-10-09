@@ -91,34 +91,46 @@ impl<'de> Deserialize<'de> for DockerCompose {
                                 for (k, v) in map {
                                     let child_key = yaml_value_to_string(k);
                                     match from_value::<DockerVolume>(v.clone()) {
-                                        Ok(vol) => { compose.volumes.insert(child_key, vol); }
-                                        Err(_) => { compose.additional_entries
-                                            .entry("volumes".to_string())
-                                            .or_insert_with(|| Value::Mapping(Default::default()))
-                                            .as_mapping_mut()
-                                            .map(|m| m.insert(Value::String(child_key), v));
+                                        Ok(vol) => {
+                                            compose.volumes.insert(child_key, vol);
+                                        }
+                                        Err(_) => {
+                                            compose
+                                                .additional_entries
+                                                .entry("volumes".to_string())
+                                                .or_insert_with(|| {
+                                                    Value::Mapping(Default::default())
+                                                })
+                                                .as_mapping_mut()
+                                                .map(|m| m.insert(Value::String(child_key), v));
                                         }
                                     }
                                 }
                             }
                             // ignore non-mapping volumes (shouldn't happen)
-                        },
+                        }
                         "networks" => {
                             if let Value::Mapping(map) = value {
                                 for (k, v) in map {
                                     let child_key = yaml_value_to_string(k);
                                     match from_value::<DockerNetwork>(v.clone()) {
-                                        Ok(net) => { compose.networks.insert(child_key, net); }
-                                        Err(_) => { compose.additional_entries
-                                            .entry("networks".to_string())
-                                            .or_insert_with(|| Value::Mapping(Default::default()))
-                                            .as_mapping_mut()
-                                            .map(|m| m.insert(Value::String(child_key), v));
+                                        Ok(net) => {
+                                            compose.networks.insert(child_key, net);
+                                        }
+                                        Err(_) => {
+                                            compose
+                                                .additional_entries
+                                                .entry("networks".to_string())
+                                                .or_insert_with(|| {
+                                                    Value::Mapping(Default::default())
+                                                })
+                                                .as_mapping_mut()
+                                                .map(|m| m.insert(Value::String(child_key), v));
                                         }
                                     }
                                 }
                             }
-                        },
+                        }
                         "services" => {
                             compose.services =
                                 from_value(value).map_err(serde::de::Error::custom)?;
@@ -455,31 +467,45 @@ impl<'de> Deserialize<'de> for DockerService {
                         // Lenient fields — store raw value on parse failure
                         "restart" => match from_value(value.clone()) {
                             Ok(v) => service.restart = v,
-                            Err(_) => { additional_properties.insert(key, value); }
+                            Err(_) => {
+                                additional_properties.insert(key, value);
+                            }
                         },
                         "build" => match from_value(value.clone()) {
                             Ok(v) => service.build = v,
-                            Err(_) => { additional_properties.insert(key, value); }
+                            Err(_) => {
+                                additional_properties.insert(key, value);
+                            }
                         },
                         "depends_on" => match from_value(value.clone()) {
                             Ok(v) => service.depends_on = v,
-                            Err(_) => { additional_properties.insert(key, value); }
+                            Err(_) => {
+                                additional_properties.insert(key, value);
+                            }
                         },
                         "working_dir" => match from_value(value.clone()) {
                             Ok(v) => service.working_dir = v,
-                            Err(_) => { additional_properties.insert(key, value); }
+                            Err(_) => {
+                                additional_properties.insert(key, value);
+                            }
                         },
                         "entrypoint" => match from_value(value.clone()) {
                             Ok(v) => service.entrypoint = v,
-                            Err(_) => { additional_properties.insert(key, value); }
+                            Err(_) => {
+                                additional_properties.insert(key, value);
+                            }
                         },
                         "command" => match from_value(value.clone()) {
                             Ok(v) => service.command = v,
-                            Err(_) => { additional_properties.insert(key, value); }
+                            Err(_) => {
+                                additional_properties.insert(key, value);
+                            }
                         },
                         "healthcheck" => match from_value(value.clone()) {
                             Ok(v) => service.healthcheck = v,
-                            Err(_) => { additional_properties.insert(key, value); }
+                            Err(_) => {
+                                additional_properties.insert(key, value);
+                            }
                         },
                         _ => {
                             additional_properties.insert(key, value);
@@ -690,7 +716,9 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
         "tempo".to_string(),
         DockerService {
             image: Some("grafana/tempo:3.0.0".to_string()),
-            command: Some(Command::Simple("-target=all -config.file=/etc/tempo.yaml".to_string())),
+            command: Some(Command::Simple(
+                "-target=all -config.file=/etc/tempo.yaml".to_string(),
+            )),
             // Host port 4317 is deliberately not published: the OTel collector
             // is the only front door for OTLP and reaches Tempo over the
             // compose network.
@@ -733,7 +761,9 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
         "loki".to_string(),
         DockerService {
             image: Some("grafana/loki:3.7.7".to_string()),
-            command: Some(Command::Simple("-config.file=/etc/loki/local-config.yaml".to_string())),
+            command: Some(Command::Simple(
+                "-config.file=/etc/loki/local-config.yaml".to_string(),
+            )),
             ports: Some(vec!["3100:3100".to_string()]),
             volumes: Some(vec![
                 format!(
@@ -2526,7 +2556,9 @@ pub(crate) fn sync_docker_compose_env_vars(
     modules_path: &std::path::Path,
     stdout: &mut StandardStream,
 ) -> Result<bool> {
-    use crate::core::env_defaults::{EnvContext, ExistingEnvValues, find_existing_hmac_secret, resolve_env_var_default};
+    use crate::core::env_defaults::{
+        EnvContext, ExistingEnvValues, find_existing_hmac_secret, resolve_env_var_default,
+    };
 
     let mut changes_made = false;
 
@@ -2603,7 +2635,13 @@ pub(crate) fn sync_docker_compose_env_vars(
         if !added_vars.is_empty() {
             added_vars.sort();
             changes_made = true;
-            log_info!(stdout, "Added {} env var(s) to docker-compose service '{}': {}", added_vars.len(), service_key, added_vars.join(", "));
+            log_info!(
+                stdout,
+                "Added {} env var(s) to docker-compose service '{}': {}",
+                added_vars.len(),
+                service_key,
+                added_vars.join(", ")
+            );
         }
     }
 
@@ -2613,8 +2651,10 @@ pub(crate) fn sync_docker_compose_env_vars(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::constants::Runtime;
-    use crate::core::manifest::{ProjectEntry, ProjectType, application::ApplicationManifestData};
+    use crate::{
+        constants::Runtime,
+        core::manifest::{ProjectEntry, ProjectType, application::ApplicationManifestData},
+    };
 
     #[test]
     fn test_add_iam_environment_variables_skips_gracefully_when_iam_project_has_no_variant() {

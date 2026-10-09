@@ -72,7 +72,8 @@ const FORKLAUNCH_PACKAGES: &[&str] = &[
 ///     error: No version matching "@forklaunch/core" found for specifier
 ///     "~1.5.17" (blocked by minimum-release-age: 86400 seconds)
 fn bunfig_toml() -> String {
-    let mut out = String::from("[install]\nminimumReleaseAge = 86400\nminimumReleaseAgeExcludes = [\n");
+    let mut out =
+        String::from("[install]\nminimumReleaseAge = 86400\nminimumReleaseAgeExcludes = [\n");
     for package in FORKLAUNCH_PACKAGES {
         out.push_str(&format!("  \"{package}\",\n"));
     }

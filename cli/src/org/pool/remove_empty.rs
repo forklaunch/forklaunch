@@ -4,8 +4,10 @@
 //! monitoring stack, and possibly shared Postgres/Redis) after the last
 //! application leaves it. This asks the platform to remove it. The platform
 //! refuses with 409 and the list of components still placed there if the
-//! pool is not empty, and decides itself whether the shared databases are
-//! safe to delete; `--keep-data` keeps them regardless.
+//! pool is not empty. The pool's shared Redis always goes; its shared
+//! Postgres goes only if every app that used the pool was destroyed with its
+//! data (`auto`), never with `--keep-data`, and regardless with
+//! `--delete-data` (which needs the stronger confirmation).
 
 use std::io::{IsTerminal, Write};
 
@@ -55,26 +57,72 @@ struct PlacedComponent {
     kind: String,
 }
 
-fn build_remove_body(environment: &str, region: &str, keep_data: bool) -> serde_json::Value {
+/// What happens to the pool's shared Postgres.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DataAction {
+    /// Delete it only if no app kept its data (the platform decides).
+    Auto,
+    /// Keep it.
+    Keep,
+    /// Delete it even if an app kept data.
+    Delete,
+}
+
+impl DataAction {
+    fn as_str(self) -> &'static str {
+        match self {
+            DataAction::Auto => "auto",
+            DataAction::Keep => "keep",
+            DataAction::Delete => "delete",
+        }
+    }
+}
+
+fn confirm_token(environment: &str, region: &str, data_action: DataAction) -> String {
+    match data_action {
+        DataAction::Delete => format!("{}:{}:delete-data", environment, region),
+        _ => format!("{}:{}", environment, region),
+    }
+}
+
+fn build_remove_body(
+    environment: &str,
+    region: &str,
+    data_action: DataAction,
+) -> serde_json::Value {
     serde_json::json!({
         "environment": environment,
         "region": region,
-        "keepData": keep_data,
-        "confirm": format!("{}:{}", environment, region),
+        "dataAction": data_action.as_str(),
+        "confirm": confirm_token(environment, region, data_action),
     })
 }
 
-fn confirmation_prompt(environment: &str, region: &str, keep_data: bool) -> String {
-    format!(
-        "Remove the {}/{} org pool? This deletes its hosts, load balancers and monitoring{}. Type the region to confirm",
-        environment,
-        region,
-        if keep_data {
-            ""
-        } else {
-            " and its shared databases"
+fn confirmation_prompt(environment: &str, region: &str, data_action: DataAction) -> String {
+    let data = match data_action {
+        DataAction::Auto => {
+            " and shared Redis, and its shared Postgres unless an app kept its data there"
         }
+        DataAction::Keep => " and shared Redis, keeping its shared Postgres",
+        DataAction::Delete => {
+            " and shared Redis AND its shared Postgres, including data apps kept there"
+        }
+    };
+    let expected = match data_action {
+        DataAction::Delete => "the region followed by :delete-data",
+        _ => "the region",
+    };
+    format!(
+        "Remove the {}/{} org pool? This deletes its hosts, load balancers, monitoring{}. Type {} to confirm",
+        environment, region, data, expected
     )
+}
+
+fn expected_typed(region: &str, data_action: DataAction) -> String {
+    match data_action {
+        DataAction::Delete => format!("{}:delete-data", region),
+        _ => region.to_string(),
+    }
 }
 
 fn format_not_empty(body: &PoolNotEmpty) -> String {
@@ -90,9 +138,9 @@ fn format_not_empty(body: &PoolNotEmpty) -> String {
 
 fn data_action_text(data_action: &str) -> &'static str {
     match data_action {
-        "deleted" => "Shared databases: deleted",
-        "kept" => "Shared databases: kept",
-        _ => "Shared databases: unchanged",
+        "deleted" => "Shared Postgres: deleted",
+        "kept" => "Shared Postgres: kept",
+        _ => "Shared Postgres: unchanged",
     }
 }
 
@@ -120,9 +168,19 @@ impl CliCommand for RemoveEmptyCommand {
             Arg::new("keep_data")
                 .long("keep-data")
                 .action(ArgAction::SetTrue)
+                .conflicts_with("delete_data")
                 .help(
-                    "Keep the pool's shared Postgres/Redis (default: delete them when the \
-                     platform says it is safe)",
+                    "Keep the pool's shared Postgres (default: delete it only if every app \
+                     that used the pool was destroyed with its data)",
+                ),
+        )
+        .arg(
+            Arg::new("delete_data")
+                .long("delete-data")
+                .action(ArgAction::SetTrue)
+                .help(
+                    "Delete the pool's shared Postgres even if an app kept its data there \
+                     (asks you to type <region>:delete-data)",
                 ),
         )
         .arg(
@@ -147,7 +205,13 @@ impl CliCommand for RemoveEmptyCommand {
         let region = matches
             .get_one::<String>("region")
             .context("--region is required")?;
-        let keep_data = matches.get_flag("keep_data");
+        let data_action = if matches.get_flag("delete_data") {
+            DataAction::Delete
+        } else if matches.get_flag("keep_data") {
+            DataAction::Keep
+        } else {
+            DataAction::Auto
+        };
         let json_output = matches.get_flag("json");
 
         if !matches.get_flag("yes") {
@@ -159,11 +223,11 @@ impl CliCommand for RemoveEmptyCommand {
                 );
             }
             let typed: String = Input::with_theme(&ColorfulTheme::default())
-                .with_prompt(confirmation_prompt(environment, region, keep_data))
+                .with_prompt(confirmation_prompt(environment, region, data_action))
                 .allow_empty(true)
                 .interact_text()?;
-            if typed.trim() != region {
-                bail!("aborted — the region did not match, nothing was removed");
+            if typed.trim() != expected_typed(region, data_action) {
+                bail!("aborted — the confirmation did not match, nothing was removed");
             }
         }
 
@@ -172,7 +236,7 @@ impl CliCommand for RemoveEmptyCommand {
                 "{}/compute-pools/remove-empty",
                 get_platform_management_api_url()
             ),
-            build_remove_body(environment, region, keep_data),
+            build_remove_body(environment, region, data_action),
         )
         .with_context(|| ERROR_FAILED_TO_SEND_REQUEST)?;
 
@@ -206,7 +270,7 @@ impl CliCommand for RemoveEmptyCommand {
         writeln!(stdout, "  {}", data_action_text(&result.data_action))?;
         writeln!(
             stdout,
-            "  Follow it: forklaunch deploy info --deployment {}",
+            "  Removal {} runs in the background and usually takes 10-20 minutes.",
             result.deployment_id
         )?;
         Ok(())
@@ -243,6 +307,7 @@ mod tests {
             .try_get_matches_from(["remove-empty", "-e", "prod", "-r", "us-east-1"])
             .unwrap();
         assert!(!m.get_flag("keep_data"));
+        assert!(!m.get_flag("delete_data"));
         assert!(!m.get_flag("yes"));
     }
 
@@ -264,32 +329,57 @@ mod tests {
     }
 
     #[test]
-    fn body_carries_confirm_token_and_keep_data() {
-        assert_eq!(
-            build_remove_body("prod", "us-east-1", false),
-            serde_json::json!({
-                "environment": "prod",
-                "region": "us-east-1",
-                "keepData": false,
-                "confirm": "prod:us-east-1",
-            })
-        );
-        assert_eq!(
-            build_remove_body("dev", "eu-west-1", true)["keepData"],
-            true
+    fn keep_and_delete_data_are_mutually_exclusive() {
+        assert!(
+            cmd()
+                .try_get_matches_from([
+                    "remove-empty",
+                    "-e",
+                    "prod",
+                    "-r",
+                    "us-east-1",
+                    "--keep-data",
+                    "--delete-data",
+                ])
+                .is_err()
         );
     }
 
     #[test]
-    fn prompt_mentions_databases_only_when_deleting_them() {
-        let deleting = confirmation_prompt("prod", "us-east-1", false);
+    fn body_carries_data_action_and_matching_confirm_token() {
         assert_eq!(
-            deleting,
-            "Remove the prod/us-east-1 org pool? This deletes its hosts, load balancers and monitoring and its shared databases. Type the region to confirm"
+            build_remove_body("prod", "us-east-1", DataAction::Auto),
+            serde_json::json!({
+                "environment": "prod",
+                "region": "us-east-1",
+                "dataAction": "auto",
+                "confirm": "prod:us-east-1",
+            })
         );
-        let keeping = confirmation_prompt("prod", "us-east-1", true);
-        assert!(!keeping.contains("databases"), "{keeping}");
-        assert!(keeping.ends_with("monitoring. Type the region to confirm"));
+        assert_eq!(
+            build_remove_body("dev", "eu-west-1", DataAction::Keep)["dataAction"],
+            "keep"
+        );
+        let delete = build_remove_body("dev", "eu-west-1", DataAction::Delete);
+        assert_eq!(delete["dataAction"], "delete");
+        assert_eq!(delete["confirm"], "dev:eu-west-1:delete-data");
+    }
+
+    #[test]
+    fn prompt_and_typed_confirmation_follow_the_data_action() {
+        assert!(
+            confirmation_prompt("prod", "us-east-1", DataAction::Keep)
+                .contains("keeping its shared Postgres")
+        );
+        assert!(
+            confirmation_prompt("prod", "us-east-1", DataAction::Delete)
+                .contains("including data apps kept there")
+        );
+        assert_eq!(expected_typed("us-east-1", DataAction::Auto), "us-east-1");
+        assert_eq!(
+            expected_typed("us-east-1", DataAction::Delete),
+            "us-east-1:delete-data"
+        );
     }
 
     #[test]
@@ -299,8 +389,8 @@ mod tests {
         )
         .unwrap();
         assert_eq!(r.deployment_id, "dep-1");
-        assert_eq!(data_action_text(&r.data_action), "Shared databases: kept");
-        assert_eq!(data_action_text("deleted"), "Shared databases: deleted");
+        assert_eq!(data_action_text(&r.data_action), "Shared Postgres: kept");
+        assert_eq!(data_action_text("deleted"), "Shared Postgres: deleted");
     }
 
     #[test]

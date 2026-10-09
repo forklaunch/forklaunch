@@ -47,17 +47,18 @@ use crate::{
                 ApplicationDevDependencies, ApplicationPackageJson, ApplicationScripts,
             },
             package_json_constants::{
-                BIOME_VERSION, ESLINT_VERSION, EXPRESS_VERSION, HYPER_EXPRESS_VERSION, UWEBSOCKETS_VERSION,
+                BIOME_VERSION, ESLINT_VERSION, EXPRESS_VERSION, HYPER_EXPRESS_VERSION,
                 JEST_TYPES_VERSION, JEST_VERSION, OXLINT_VERSION, PRETTIER_VERSION,
-                TS_JEST_VERSION, TYPEBOX_VERSION, TYPESCRIPT_ESLINT_VERSION, VITEST_VERSION,
-                ZOD_VERSION, application_build_script, application_clean_purge_script,
-                application_clean_script, application_docs_script, application_format_script,
-                application_lint_fix_script, application_lint_script, application_migrate_script,
-                application_seed_script, application_setup_script, application_test_script,
-                application_up_packages_script, project_clean_script, project_dev_local_script,
-                project_dev_server_script, project_dev_worker_client_script, project_format_script,
-                project_lint_fix_script, project_lint_script, project_start_server_script,
-                project_start_worker_script, project_test_script, project_up_latest_script,
+                TS_JEST_VERSION, TYPEBOX_VERSION, TYPESCRIPT_ESLINT_VERSION, UWEBSOCKETS_VERSION,
+                VITEST_VERSION, ZOD_VERSION, application_build_script,
+                application_clean_purge_script, application_clean_script, application_docs_script,
+                application_format_script, application_lint_fix_script, application_lint_script,
+                application_migrate_script, application_seed_script, application_setup_script,
+                application_test_script, application_up_packages_script, project_clean_script,
+                project_dev_local_script, project_dev_server_script,
+                project_dev_worker_client_script, project_format_script, project_lint_fix_script,
+                project_lint_script, project_start_server_script, project_start_worker_script,
+                project_test_script, project_up_latest_script,
             },
             project_package_json::{
                 ProjectDependencies, ProjectDevDependencies, ProjectPackageJson, ProjectScripts,
@@ -388,9 +389,7 @@ fn update_config_files(
                         path: base_path.join(project).join(file),
                     });
                 }
-                removal_templates.push(RemovalTemplate {
-                    path: file_path,
-                });
+                removal_templates.push(RemovalTemplate { path: file_path });
             } else {
                 preserved_files.push(file_path.to_string_lossy().to_string());
             }
@@ -1212,7 +1211,11 @@ fn change_runtime(
     })?;
 
     if existing_dockerfile_contents.trim() != watermarked_dockerfile_contents.trim() {
-        log_warn!(stdout, "Warning: Dockerfile is generating from template, you may need to manually migrate changes from Dockerfile.{}", runtime.to_string());
+        log_warn!(
+            stdout,
+            "Warning: Dockerfile is generating from template, you may need to manually migrate changes from Dockerfile.{}",
+            runtime.to_string()
+        );
         rendered_templates_cache.insert(
             base_path
                 .join(format!("Dockerfile.{}", runtime.to_string()))
@@ -1488,11 +1491,8 @@ fn change_test_framework(
         .iter()
         .map(|p| p.name.as_str())
         .collect();
-    let tsconfig_templates = update_tsconfig_test_framework_types(
-        base_path,
-        Some(test_framework),
-        &project_names,
-    )?;
+    let tsconfig_templates =
+        update_tsconfig_test_framework_types(base_path, Some(test_framework), &project_names)?;
     for template in tsconfig_templates {
         let key = template.path.to_string_lossy().to_string();
         rendered_templates_cache.insert(key, template);

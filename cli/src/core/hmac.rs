@@ -44,8 +44,7 @@ pub(crate) fn generate_hmac_auth_header(
     path: &str,
     body: Option<&Value>,
 ) -> Result<String> {
-    let timestamp = Utc::now()
-        .to_rfc3339_opts(SecondsFormat::Millis, true);
+    let timestamp = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
     let nonce = Uuid::new_v4().to_string();
 
     let body_string = match body {
@@ -74,8 +73,9 @@ pub(crate) fn generate_hmac_auth_header(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json::json;
+
+    use super::*;
 
     #[test]
     fn test_auth_mode_is_hmac() {
@@ -115,10 +115,8 @@ mod tests {
         // We can't fully test determinism since timestamp changes,
         // but we can verify the format is correct and consistent.
         let body = json!({"key": "value"});
-        let header1 =
-            generate_hmac_auth_header("secret", "POST", "/path", Some(&body)).unwrap();
-        let header2 =
-            generate_hmac_auth_header("secret", "POST", "/path", Some(&body)).unwrap();
+        let header1 = generate_hmac_auth_header("secret", "POST", "/path", Some(&body)).unwrap();
+        let header2 = generate_hmac_auth_header("secret", "POST", "/path", Some(&body)).unwrap();
 
         // Both should be valid HMAC headers (different due to timestamp/nonce)
         assert!(header1.starts_with("HMAC keyId=default ts="));
@@ -131,8 +129,7 @@ mod tests {
         // The message for no-body should contain "undefined" (not empty string).
         // We verify this indirectly by checking that GET and POST with empty body
         // produce different signatures.
-        let header_get =
-            generate_hmac_auth_header("secret", "GET", "/path", None).unwrap();
+        let header_get = generate_hmac_auth_header("secret", "GET", "/path", None).unwrap();
         let header_post =
             generate_hmac_auth_header("secret", "POST", "/path", Some(&json!({}))).unwrap();
 

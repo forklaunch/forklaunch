@@ -17,8 +17,8 @@ use crate::{
         ast::infrastructure::compliance::{scan_all_compliance, scan_entity_compliance},
         command::command,
         hmac::AuthMode,
-        static_analysis::route_analyzer,
         http_client::post_with_auth,
+        static_analysis::route_analyzer,
         validate::require_manifest,
     },
 };
@@ -34,52 +34,48 @@ impl AuditCommand {
 
 impl CliCommand for AuditCommand {
     fn command(&self) -> Command {
-        command(
-            "audit",
-            "Generate a point-in-time compliance audit report",
-        )
-        .arg(
-            Arg::new("base_path")
-                .short('p')
-                .long("path")
-                .help("The application path"),
-        )
-        .arg(
-            Arg::new("output")
-                .short('o')
-                .long("output")
-                .help("Output file path (JSON). If omitted, prints to terminal."),
-        )
-        .arg(
-            Arg::new("environment")
-                .short('e')
-                .long("environment")
-                .help("Environment name to associate with the report (e.g. production, staging)"),
-        )
-        .arg(
-            Arg::new("data_flow")
-                .long("data-flow")
-                .help("Show PCI cardholder data flow diagram (Mermaid)")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("risk_score")
-                .long("risk-score")
-                .help("Show risk score and findings")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("dpia")
-                .long("dpia")
-                .help("Show GDPR Data Protection Impact Assessment")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("json")
-                .long("json")
-                .help("Output raw JSON instead of formatted terminal output")
-                .action(ArgAction::SetTrue),
-        )
+        command("audit", "Generate a point-in-time compliance audit report")
+            .arg(
+                Arg::new("base_path")
+                    .short('p')
+                    .long("path")
+                    .help("The application path"),
+            )
+            .arg(
+                Arg::new("output")
+                    .short('o')
+                    .long("output")
+                    .help("Output file path (JSON). If omitted, prints to terminal."),
+            )
+            .arg(
+                Arg::new("environment").short('e').long("environment").help(
+                    "Environment name to associate with the report (e.g. production, staging)",
+                ),
+            )
+            .arg(
+                Arg::new("data_flow")
+                    .long("data-flow")
+                    .help("Show PCI cardholder data flow diagram (Mermaid)")
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new("risk_score")
+                    .long("risk-score")
+                    .help("Show risk score and findings")
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new("dpia")
+                    .long("dpia")
+                    .help("Show GDPR Data Protection Impact Assessment")
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new("json")
+                    .long("json")
+                    .help("Output raw JSON instead of formatted terminal output")
+                    .action(ArgAction::SetTrue),
+            )
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
@@ -99,16 +95,15 @@ impl CliCommand for AuditCommand {
         // Scan entity compliance data directly from source code
         let modules_path = &manifest.modules_path;
         let modules_path_buf = app_root.join(modules_path);
-        let (field_classifications, retention_policies) =
-            scan_all_compliance(&modules_path_buf)
-                .unwrap_or_else(|e| {
-                    let _ = writeln!(
-                        stdout,
-                        "[WARN] Failed to scan entity compliance metadata: {}",
-                        e
-                    );
-                    (Default::default(), Default::default())
-                });
+        let (field_classifications, retention_policies) = scan_all_compliance(&modules_path_buf)
+            .unwrap_or_else(|e| {
+                let _ = writeln!(
+                    stdout,
+                    "[WARN] Failed to scan entity compliance metadata: {}",
+                    e
+                );
+                (Default::default(), Default::default())
+            });
 
         // Which module owns each entity, and whether that module actually wires a
         // FieldEncryptor. Encryption at rest is NOT implied by the classification
@@ -117,7 +112,8 @@ impl CliCommand for AuditCommand {
         // tag it was given.
         let module_ctx = scan_module_encryption_context(&modules_path_buf);
 
-        let mut entity_names: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        let mut entity_names: std::collections::BTreeSet<String> =
+            std::collections::BTreeSet::new();
         entity_names.extend(field_classifications.keys().cloned());
         entity_names.extend(retention_policies.keys().cloned());
 
@@ -135,8 +131,7 @@ impl CliCommand for AuditCommand {
                                 // alike) — but only if the owning module registered an
                                 // encryptor.
                                 let encrypts = classification_encrypts(classification);
-                                let protected = encrypts
-                                    && module_ctx.entity_is_protected(&name);
+                                let protected = encrypts && module_ctx.entity_is_protected(&name);
                                 FieldReport {
                                     name: field_name.clone(),
                                     compliance: classification.clone(),
@@ -149,11 +144,10 @@ impl CliCommand for AuditCommand {
                 // `field_classifications` is a HashMap, so its fields iterate in a non-deterministic
                 // order — sort by name so the report (and `--json`) is byte-stable for the same code.
                 field_reports.sort_by(|a, b| a.name.cmp(&b.name));
-                let retention =
-                    retention_policies.get(&name).map(|r| RetentionReport {
-                        duration: r.duration.clone(),
-                        action: r.action.clone(),
-                    });
+                let retention = retention_policies.get(&name).map(|r| RetentionReport {
+                    duration: r.duration.clone(),
+                    action: r.action.clone(),
+                });
                 EntityReport {
                     module: module_ctx.entity_module.get(&name).cloned(),
                     name,
@@ -197,14 +191,21 @@ impl CliCommand for AuditCommand {
             if !specs_found {
                 // Write to stderr so stdout stays parseable for --json / --output
                 let mut stderr = StandardStream::stderr(ColorChoice::Always);
-                log_warn!(stderr, "No routes found in the source or in exported OpenAPI specs.");
+                log_warn!(
+                    stderr,
+                    "No routes found in the source or in exported OpenAPI specs."
+                );
             }
         }
 
         // Run offline wiring + sensitive-field checks
-        let local_findings = super::checks::run_local_checks(&modules_path_buf)
-            .unwrap_or_else(|e| {
-                let _ = writeln!(stdout, "[WARN] Failed to run local compliance checks: {}", e);
+        let local_findings =
+            super::checks::run_local_checks(&modules_path_buf).unwrap_or_else(|e| {
+                let _ = writeln!(
+                    stdout,
+                    "[WARN] Failed to run local compliance checks: {}",
+                    e
+                );
                 Vec::new()
             });
 
@@ -317,11 +318,7 @@ impl CliCommand for AuditCommand {
                 }
 
                 writeln!(stdout)?;
-                log_ok!(
-                    stdout,
-                    "Report saved to platform (id: {})",
-                    resp.id
-                );
+                log_ok!(stdout, "Report saved to platform (id: {})", resp.id);
             }
             Err(e) => {
                 // Fallback: local-only display
@@ -404,9 +401,18 @@ fn upload_to_platform(
 fn print_header(out: &mut StandardStream) -> Result<()> {
     writeln!(out)?;
     out.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)).set_bold(true))?;
-    writeln!(out, "╔══════════════════════════════════════════════════════════╗")?;
-    writeln!(out, "║             COMPLIANCE AUDIT REPORT                     ║")?;
-    writeln!(out, "╚══════════════════════════════════════════════════════════╝")?;
+    writeln!(
+        out,
+        "╔══════════════════════════════════════════════════════════╗"
+    )?;
+    writeln!(
+        out,
+        "║             COMPLIANCE AUDIT REPORT                     ║"
+    )?;
+    writeln!(
+        out,
+        "╚══════════════════════════════════════════════════════════╝"
+    )?;
     out.reset()?;
     Ok(())
 }
@@ -638,11 +644,7 @@ fn print_findings(out: &mut StandardStream, resp: &PlatformAuditResponse) -> Res
 
     writeln!(out)?;
     out.set_color(ColorSpec::new().set_fg(Some(Color::White)).set_bold(true))?;
-    writeln!(
-        out,
-        "  ── Findings ({}) ──",
-        resp.findings.len()
-    )?;
+    writeln!(out, "  ── Findings ({}) ──", resp.findings.len())?;
     out.reset()?;
 
     for finding in &resp.findings {
@@ -701,7 +703,11 @@ fn print_local_checks(out: &mut StandardStream, report: &ComplianceReport) -> Re
         out.reset()?;
 
         out.set_color(ColorSpec::new().set_fg(Some(Color::White)))?;
-        write!(out, " [{}] {}:{}", finding.check, finding.project, finding.subject)?;
+        write!(
+            out,
+            " [{}] {}:{}",
+            finding.check, finding.project, finding.subject
+        )?;
         out.reset()?;
 
         writeln!(out, " — {}", finding.message)?;
@@ -740,12 +746,19 @@ fn print_entities(out: &mut StandardStream, report: &ComplianceReport) -> Result
     writeln!(
         out,
         "  {:<field_col$} {:<class_col$} {:<enc_col$} {}",
-        "ENTITY.FIELD", "CLASSIFICATION", "ENCRYPTED", "STATUS",
+        "ENTITY.FIELD",
+        "CLASSIFICATION",
+        "ENCRYPTED",
+        "STATUS",
         field_col = field_col,
         class_col = class_col,
         enc_col = enc_col,
     )?;
-    writeln!(out, "  {}", "─".repeat(field_col + class_col + enc_col + 10))?;
+    writeln!(
+        out,
+        "  {}",
+        "─".repeat(field_col + class_col + enc_col + 10)
+    )?;
 
     for entity in &report.entities {
         for field in &entity.fields {
@@ -777,10 +790,20 @@ fn print_entities(out: &mut StandardStream, report: &ComplianceReport) -> Result
             )?;
 
             out.set_color(ColorSpec::new().set_fg(Some(classification_color)))?;
-            write!(out, "{:<width$} ", field.compliance.to_uppercase(), width = class_col)?;
+            write!(
+                out,
+                "{:<width$} ",
+                field.compliance.to_uppercase(),
+                width = class_col
+            )?;
             out.reset()?;
 
-            write!(out, "{:<width$} ", if field.encrypted { "yes" } else { "no" }, width = enc_col)?;
+            write!(
+                out,
+                "{:<width$} ",
+                if field.encrypted { "yes" } else { "no" },
+                width = enc_col
+            )?;
 
             out.set_color(ColorSpec::new().set_fg(Some(status.1)))?;
             writeln!(out, "{}", status.0)?;
@@ -801,7 +824,11 @@ fn print_routes(out: &mut StandardStream, report: &ComplianceReport) -> Result<(
     writeln!(out, "  ── Route Access Levels ──")?;
     out.reset()?;
 
-    writeln!(out, "  {:<8} {:<40} {:<18} {}", "METHOD", "PATH", "ACCESS", "AUTH")?;
+    writeln!(
+        out,
+        "  {:<8} {:<40} {:<18} {}",
+        "METHOD", "PATH", "ACCESS", "AUTH"
+    )?;
     writeln!(out, "  {}", "─".repeat(88))?;
 
     for route in &report.routes {
@@ -1076,7 +1103,6 @@ impl ModuleEncryptionContext {
         out.sort_by(|a, b| a.name.cmp(&b.name));
         out
     }
-
 }
 
 /// Detect, per module, which entities it owns and whether it registers a
@@ -1263,9 +1289,7 @@ fn parse_openapi_routes(path: &Path) -> Result<Vec<RouteReport>> {
             if let Some(methods_obj) = methods.as_object() {
                 for (method, operation) in methods_obj {
                     // Skip non-HTTP methods (e.g., "parameters")
-                    let http_methods = [
-                        "get", "post", "put", "patch", "delete", "head", "options",
-                    ];
+                    let http_methods = ["get", "post", "put", "patch", "delete", "head", "options"];
                     if !http_methods.contains(&method.as_str()) {
                         continue;
                     }

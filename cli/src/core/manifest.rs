@@ -126,7 +126,12 @@ pub(crate) struct ProjectMetadata {
     pub(crate) r#type: Option<String>,
     /// Backend hosting type. Optional — defaults to "ecs-fargate" on the platform
     /// when absent. Allowed: "ecs-fargate" | "ecs-ec2".
-    #[serde(rename = "hostingType", alias = "hosting_type", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "hostingType",
+        alias = "hosting_type",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub(crate) hosting_type: Option<String>,
     /// Run the component's container in privileged mode. Required for nsjail's
     /// namespace clone in the deploy sandbox; only valid with hostingType

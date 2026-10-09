@@ -288,7 +288,11 @@ impl CliCommand for LibraryCommand {
         move_template_files(&move_templates, dryrun, &mut stdout)?;
 
         if !dryrun {
-            log_ok!(stdout, "{} changed successfully!", &manifest_data.library_name);
+            log_ok!(
+                stdout,
+                "{} changed successfully!",
+                &manifest_data.library_name
+            );
             format_code(&library_base_path, &manifest_data.runtime.parse()?);
         }
 

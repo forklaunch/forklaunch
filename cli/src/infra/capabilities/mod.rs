@@ -22,10 +22,10 @@ use std::{
 use anyhow::{Context, Result, bail};
 
 pub(crate) mod email;
-pub(crate) mod sms;
-pub(crate) mod whatsapp;
-pub(crate) mod voice;
 pub(crate) mod payments;
+pub(crate) mod sms;
+pub(crate) mod voice;
+pub(crate) mod whatsapp;
 
 use super::in_place;
 use crate::core::docker::{DependencyCondition, DependsOn, DockerCompose, DockerService};
@@ -50,13 +50,23 @@ pub(crate) struct Capability {
 }
 
 /// Every capability `infra add` knows. Each feature adds its entry.
-pub(crate) static CAPABILITIES: &[&Capability] = &[&email::EMAIL, &sms::SMS, &whatsapp::WHATSAPP, &voice::VOICE, &payments::PAYMENTS];
+pub(crate) static CAPABILITIES: &[&Capability] = &[
+    &email::EMAIL,
+    &sms::SMS,
+    &whatsapp::WHATSAPP,
+    &voice::VOICE,
+    &payments::PAYMENTS,
+];
 
 /// The code edits of `infra add|remove <service> <capability>`: the
 /// capability's own, then the shared gateway wiring (on remove in reverse,
 /// so remove takes back exactly what add wrote). `edit` carries the
 /// capabilities as they are after the change.
-pub(crate) fn apply(edit: &mut CapabilityEdit, capability: &Capability, adding: bool) -> Result<()> {
+pub(crate) fn apply(
+    edit: &mut CapabilityEdit,
+    capability: &Capability,
+    adding: bool,
+) -> Result<()> {
     if adding {
         (capability.add)(edit)?;
         edit.ensure_gateway_wiring(capability.id)
@@ -495,15 +505,18 @@ impl CapabilityEdit {
             .filter(|l| l.starts_with("import ") || l.starts_with("} from "))
             .filter(|l| l.contains(" from "))
             .collect();
-        let semi = if import_ends.is_empty() || import_ends.iter().any(|l| l.trim_end().ends_with(';')) {
-            ";"
-        } else {
-            ""
-        };
+        let semi =
+            if import_ends.is_empty() || import_ends.iter().any(|l| l.trim_end().ends_with(';')) {
+                ";"
+            } else {
+                ""
+            };
         let last_import = lines
             .iter()
             .rposition(|l| l.starts_with("import ") || l.starts_with("} from "));
-        let import = format!("import {{ platformEventsRouter }} from {q}./api/routes/platformEvents.routes{q}{semi}\n");
+        let import = format!(
+            "import {{ platformEventsRouter }} from {q}./api/routes/platformEvents.routes{q}{semi}\n"
+        );
         let mut out = String::new();
         if last_import.is_none() {
             out.push_str(&import);
@@ -515,7 +528,10 @@ impl CapabilityEdit {
                 Some(import.clone())
             } else if !used && line.trim_start().starts_with("app.use(") {
                 used = true;
-                let indent: String = line.chars().take_while(|c| *c == ' ' || *c == '\t').collect();
+                let indent: String = line
+                    .chars()
+                    .take_while(|c| *c == ' ' || *c == '\t')
+                    .collect();
                 Some(format!("{indent}app.use(platformEventsRouter){semi}\n"))
             } else {
                 None
@@ -675,10 +691,15 @@ pub(crate) fn ensure_gateway_mock(
             ),
             ..Default::default()
         });
-    mock.environment.get_or_insert_with(Default::default).insert(
-        format!("MOCK_EVENTS_URL_{}", feature.to_uppercase().replace('-', "_")),
-        format!("http://{service_key}:{port}"),
-    );
+    mock.environment
+        .get_or_insert_with(Default::default)
+        .insert(
+            format!(
+                "MOCK_EVENTS_URL_{}",
+                feature.to_uppercase().replace('-', "_")
+            ),
+            format!("http://{service_key}:{port}"),
+        );
 
     let target = compose.services.get_mut(service_key).unwrap();
     let env = target.environment.get_or_insert_with(Default::default);
@@ -788,7 +809,8 @@ const GATEWAY_ENV_BLOCK: &str = "const configInjector = createConfigInjector(Sch
     }
 });";
 
-const PLATFORM_EVENTS_ROUTES: &str = "import { forklaunchRouter, schemaValidator } from '@{{app_name}}/core';
+const PLATFORM_EVENTS_ROUTES: &str =
+    "import { forklaunchRouter, schemaValidator } from '@{{app_name}}/core';
 import { ci, tokens } from '../../bootstrapper';
 import { receivePlatformEvent } from '../controllers/platformEvents.controller';
 
@@ -807,7 +829,8 @@ export const receivePlatformEventRoute = platformEventsRouter.post(
 );
 ";
 
-const PLATFORM_EVENTS_CONTROLLER: &str = "import { handlers, schemaValidator, string } from '@{{app_name}}/core';
+const PLATFORM_EVENTS_CONTROLLER: &str =
+    "import { handlers, schemaValidator, string } from '@{{app_name}}/core';
 import {
   PlatformEventVerificationError,
   verifyPlatformEvent
@@ -885,10 +908,22 @@ mod tests {
 
         release_gateway_mock(&mut c, "billing", "email", false, false);
         assert!(c.services.contains_key(GATEWAY_MOCK_SERVICE));
-        assert!(c.services["billing"].environment.as_ref().unwrap().contains_key("INSTANCE_ID"));
+        assert!(
+            c.services["billing"]
+                .environment
+                .as_ref()
+                .unwrap()
+                .contains_key("INSTANCE_ID")
+        );
         release_gateway_mock(&mut c, "billing", "payments", true, true);
         assert!(!c.services.contains_key(GATEWAY_MOCK_SERVICE));
-        assert!(!c.services["billing"].environment.as_ref().unwrap().contains_key("INSTANCE_ID"));
+        assert!(
+            !c.services["billing"]
+                .environment
+                .as_ref()
+                .unwrap()
+                .contains_key("INSTANCE_ID")
+        );
         assert!(c.services["billing"].depends_on.is_none());
     }
 
@@ -1064,8 +1099,7 @@ app.listen(ci.resolve(tokens.PORT), () => {
     /// Every line of `before` is still in `after`, in the same order; a
     /// one-line named import may have gained names (it keeps its own).
     fn assert_lines_kept(before: &str, after: &str, what: &str) {
-        let one_line_import =
-            regex::Regex::new(r"^import \{ ([^}]*) \} from ('[^']+');$").unwrap();
+        let one_line_import = regex::Regex::new(r"^import \{ ([^}]*) \} from ('[^']+');$").unwrap();
         let mut rest = after;
         for line in before.lines() {
             if let Some(c) = one_line_import.captures(line) {
@@ -1121,20 +1155,31 @@ app.listen(ci.resolve(tokens.PORT), () => {
             assert_lines_kept(CUSTOM_REGISTRATIONS, &registrations, id);
             // What the capability-wiring check looks for.
             assert!(
-                registrations.contains(&format!("  {}: {{\n    lifetime:", capability.registration_key)),
+                registrations.contains(&format!(
+                    "  {}: {{\n    lifetime:",
+                    capability.registration_key
+                )),
                 "{id}: registration not in the file's indent\n{registrations}"
             );
             assert!(registrations.contains("  PLATFORM_GATEWAY_URL: {\n    lifetime: Lifetime.Singleton,\n    type: optional(string),\n    value: getEnvVar('PLATFORM_GATEWAY_URL')\n  },"), "{id}\n{registrations}");
-            assert!(!registrations.contains('"'), "{id}: switched quote style\n{registrations}");
+            assert!(
+                !registrations.contains('"'),
+                "{id}: switched quote style\n{registrations}"
+            );
             assert!(!registrations.contains('\t'), "{id}: switched indentation");
             assert!(
-                !regex::Regex::new(r",\s*\n\s*[}\])]").unwrap().is_match(&registrations),
+                !regex::Regex::new(r",\s*\n\s*[}\])]")
+                    .unwrap()
+                    .is_match(&registrations),
                 "{id}: added a trailing comma\n{registrations}"
             );
             let server = fs::read_to_string(service.join("server.ts")).unwrap();
             assert_lines_kept(CUSTOM_SERVER, &server, id);
             assert!(server.contains("import { ci, tokens } from './bootstrapper';\nimport { platformEventsRouter } from './api/routes/platformEvents.routes';\n"), "{id}\n{server}");
-            assert!(server.contains("app.use(factsRouter);\napp.use(platformEventsRouter);\n"), "{id}\n{server}");
+            assert!(
+                server.contains("app.use(factsRouter);\napp.use(platformEventsRouter);\n"),
+                "{id}\n{server}"
+            );
             assert_eq!(server.lines().count(), CUSTOM_SERVER.lines().count() + 2);
             let package_json = fs::read_to_string(service.join("package.json")).unwrap();
             assert_lines_kept(CUSTOM_PACKAGE_JSON, &package_json, id);
@@ -1142,7 +1187,9 @@ app.listen(ci.resolve(tokens.PORT), () => {
             let env_local = fs::read_to_string(service.join(".env.local")).unwrap();
             assert!(env_local.starts_with(CUSTOM_ENV_LOCAL));
             let compose = fs::read_to_string(dir.path().join("docker-compose.yaml")).unwrap();
-            assert!(compose.starts_with("# Generated by ForkLaunch\n# File: docker-compose.yaml\n\n"));
+            assert!(
+                compose.starts_with("# Generated by ForkLaunch\n# File: docker-compose.yaml\n\n")
+            );
             // The developer's own value is kept.
             assert!(compose.contains("INSTANCE_ID: ''"), "{compose}");
 
@@ -1170,11 +1217,21 @@ app.listen(ci.resolve(tokens.PORT), () => {
             let before = snapshot(dir.path());
             run(dir.path(), &service, capability, &[capability.id], true);
             let added = fs::read_to_string(service.join("registrations.ts")).unwrap();
-            assert_eq!(added.matches("PLATFORM_GATEWAY_URL: {").count(), 1, "{}", capability.id);
+            assert_eq!(
+                added.matches("PLATFORM_GATEWAY_URL: {").count(),
+                1,
+                "{}",
+                capability.id
+            );
             run(dir.path(), &service, capability, &[], false);
             let after = snapshot(dir.path());
             for (path, content) in &before {
-                assert_eq!(after.get(path), Some(content), "{}: {path:?} changed", capability.id);
+                assert_eq!(
+                    after.get(path),
+                    Some(content),
+                    "{}: {path:?} changed",
+                    capability.id
+                );
             }
         }
     }
@@ -1207,7 +1264,8 @@ app.listen(ci.resolve(tokens.PORT), () => {
         let (dir, service) = custom_service(CUSTOM_REGISTRATIONS);
         let before = snapshot(dir.path());
         let caps = vec!["email".to_string()];
-        let mut edit = CapabilityEdit::new(dir.path(), "clinic", "clinic", &service, caps.clone(), caps);
+        let mut edit =
+            CapabilityEdit::new(dir.path(), "clinic", "clinic", &service, caps.clone(), caps);
         apply(&mut edit, &email::EMAIL, true).unwrap();
         let changed: Vec<PathBuf> = edit.changed_paths().into_iter().map(|(p, _)| p).collect();
         assert!(changed.contains(&service.join("registrations.ts")));

@@ -110,10 +110,7 @@ pub(crate) fn plan_replace_unsets(
         let Some(current_keys) = current_by_section.get(&section) else {
             continue;
         };
-        let pushed_keys = pushed_by_section
-            .get(&section)
-            .cloned()
-            .unwrap_or_default();
+        let pushed_keys = pushed_by_section.get(&section).cloned().unwrap_or_default();
         for key in current_keys.difference(&pushed_keys) {
             out.push(PlannedUnset {
                 section: section.clone(),
@@ -211,16 +208,17 @@ impl CliCommand for PushCommand {
         let input = format!("{}.env", environment);
         let input = matches.get_one::<String>("input").unwrap_or(&input);
 
-        let url = format!(
-            "{}/config/push",
-            get_platform_management_api_url()
-        );
+        let url = format!("{}/config/push", get_platform_management_api_url());
 
         let replace = matches.get_flag("replace");
         let skip_confirm = matches.get_flag("yes");
 
-        let items = parse_env_file_items(std::path::Path::new(input))
-            .with_context(|| format!("Failed to parse file {}. Please check file permissions.", input))?;
+        let items = parse_env_file_items(std::path::Path::new(input)).with_context(|| {
+            format!(
+                "Failed to parse file {}. Please check file permissions.",
+                input
+            )
+        })?;
 
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
@@ -243,10 +241,15 @@ impl CliCommand for PushCommand {
 
         match response.status() {
             reqwest::StatusCode::OK => {
-                log_ok!(stdout, "Config pushed successfully for {} ({})", environment, region);
-                let parsed: PushResponse = response
-                    .json()
-                    .unwrap_or(PushResponse { unset_keys: Vec::new() });
+                log_ok!(
+                    stdout,
+                    "Config pushed successfully for {} ({})",
+                    environment,
+                    region
+                );
+                let parsed: PushResponse = response.json().unwrap_or(PushResponse {
+                    unset_keys: Vec::new(),
+                });
                 if !parsed.unset_keys.is_empty() {
                     log_warn!(stdout, "Unset {} key(s):", parsed.unset_keys.len());
                     for u in parsed.unset_keys {
@@ -287,7 +290,10 @@ fn confirm_replace(
     let response = http_client::get(&pull_url).with_context(|| ERROR_FAILED_TO_SEND_REQUEST)?;
     if response.status() != reqwest::StatusCode::OK {
         let err_text = response.text()?;
-        bail!("Failed to pull current config before --replace: {}", err_text);
+        bail!(
+            "Failed to pull current config before --replace: {}",
+            err_text
+        );
     }
     let current = parse_env_items_from_str(&response.text()?);
     let planned = plan_replace_unsets(&current, items);
@@ -456,7 +462,11 @@ mod tests {
         assert!(content.contains("SIMPLE=hello\n"));
 
         // Multiline value: must be double-quoted in reconstructed output
-        assert!(content.contains("CERT=\"-----BEGIN CERTIFICATE-----\nabc123\n-----END CERTIFICATE-----\"\n"));
+        assert!(
+            content.contains(
+                "CERT=\"-----BEGIN CERTIFICATE-----\nabc123\n-----END CERTIFICATE-----\"\n"
+            )
+        );
     }
 
     #[test]
@@ -482,32 +492,20 @@ mod tests {
         let path = temp_dir.path().join("production.env");
 
         // Step 1: file with 3 vars
-        fs::write(
-            &path,
-            "# application\nA=1\nB=2\nC=3\n",
-        )
-        .unwrap();
+        fs::write(&path, "# application\nA=1\nB=2\nC=3\n").unwrap();
 
         let keys = extract_keys(&parse_and_reconstruct(&path));
         assert_eq!(keys.len(), 3);
 
         // Step 2: user removes B
-        fs::write(
-            &path,
-            "# application\nA=1\nC=3\n",
-        )
-        .unwrap();
+        fs::write(&path, "# application\nA=1\nC=3\n").unwrap();
 
         let keys = extract_keys(&parse_and_reconstruct(&path));
         assert_eq!(keys.len(), 2);
         assert!(!keys.contains(&"B".to_string()));
 
         // Step 3: user explicitly re-adds B (this is an intentional restore)
-        fs::write(
-            &path,
-            "# application\nA=1\nB=new_value\nC=3\n",
-        )
-        .unwrap();
+        fs::write(&path, "# application\nA=1\nB=new_value\nC=3\n").unwrap();
 
         let keys = extract_keys(&parse_and_reconstruct(&path));
         assert_eq!(keys.len(), 3);
@@ -522,11 +520,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let path = temp_dir.path().join("production.env");
 
-        fs::write(
-            &path,
-            "# application\nDB_HOST=localhost\n",
-        )
-        .unwrap();
+        fs::write(&path, "# application\nDB_HOST=localhost\n").unwrap();
 
         let items = parse_env_file_items(&path).unwrap();
         let content = reconstruct_env_content(items);

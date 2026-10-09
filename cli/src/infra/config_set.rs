@@ -1,18 +1,17 @@
 use anyhow::{Result, bail};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
+use super::{
+    mutation::{MutationRequest, nothing_to_change, run_mutation},
+    resource_resolver::{fetch_resource_detail, resolve},
+    types::ResourceConfig,
+};
 use crate::{
     CliCommand,
     core::{
         command::command,
         validate::{require_auth, require_integration, require_manifest},
     },
-};
-
-use super::{
-    mutation::{MutationRequest, nothing_to_change, run_mutation},
-    resource_resolver::{fetch_resource_detail, resolve},
-    types::ResourceConfig,
 };
 
 #[derive(Debug)]
@@ -122,7 +121,11 @@ impl CliCommand for ConfigSetCommand {
 
         let requested_config = ResourceConfig {
             engine: matches.get_one::<String>("engine").cloned(),
-            multi_az: if matches.get_flag("multi_az") { Some(true) } else { None },
+            multi_az: if matches.get_flag("multi_az") {
+                Some(true)
+            } else {
+                None
+            },
             queue_type: matches.get_one::<String>("queue_type").cloned(),
             visibility_timeout: matches.get_one::<u32>("visibility_timeout").copied(),
             message_retention_seconds: matches.get_one::<u32>("message_retention_seconds").copied(),

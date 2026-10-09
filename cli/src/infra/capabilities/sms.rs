@@ -105,7 +105,8 @@ mod tests {
 
     use super::*;
 
-    const REGISTRATIONS: &str = "import { number, optional, schemaValidator, SchemaValidator, string } from '@demo/core';
+    const REGISTRATIONS: &str =
+        "import { number, optional, schemaValidator, SchemaValidator, string } from '@demo/core';
 import { OpenTelemetryCollector } from '@forklaunch/core/http';
 import { createConfigInjector, getEnvVar, Lifetime } from '@forklaunch/core/services';
 
@@ -177,7 +178,9 @@ app.use(billingRouter);
     }
 
     fn staged(edit: &CapabilityEdit, rel: &str) -> String {
-        edit.read(&edit.service_path.join(rel)).unwrap().unwrap_or_default()
+        edit.read(&edit.service_path.join(rel))
+            .unwrap()
+            .unwrap_or_default()
     }
 
     #[test]
@@ -218,9 +221,10 @@ app.use(billingRouter);
         let registrations = staged(&edit, "registrations.ts");
         assert!(!registrations.contains("SmsClient"), "{registrations}");
         assert!(!registrations.contains("createSmsClient"));
-        assert!(registrations.contains(
-            "import { OpenTelemetryCollector } from '@forklaunch/core/http';"
-        ));
+        assert!(
+            registrations
+                .contains("import { OpenTelemetryCollector } from '@forklaunch/core/http';")
+        );
         assert_eq!(registrations, REGISTRATIONS);
     }
 }
