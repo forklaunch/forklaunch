@@ -99,6 +99,8 @@ export type RateLimitedClientOptions = {
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_MAX_WAIT_MS = 10_000;
+// how long to wait before asking again after a source's "too many requests"
+const RATE_LIMITED_RETRY_MS = 1_000;
 
 /**
  * Spaces requests to one source at least `minIntervalMs` apart, so a batch of
@@ -125,7 +127,21 @@ export class RateLimitedClient {
   }
 
   async getText(url: string, options: RequestOptions = {}): Promise<string> {
-    const { signal } = options;
+    try {
+      return await this.request(url, options.signal);
+    } catch (error) {
+      // A source shared by several clients (NCBI's limit covers PubMed, PMC
+      // and every process using one key) can still answer "too many
+      // requests"; it is asked once more, a moment later.
+      if (!(error instanceof SourceRequestError) || error.status !== 429) {
+        throw error;
+      }
+      await abortable(this.sleep(RATE_LIMITED_RETRY_MS), options.signal);
+      return this.request(url, options.signal);
+    }
+  }
+
+  private async request(url: string, signal?: AbortSignal): Promise<string> {
     signal?.throwIfAborted();
 
     const wait = await this.schedule.reserve(
