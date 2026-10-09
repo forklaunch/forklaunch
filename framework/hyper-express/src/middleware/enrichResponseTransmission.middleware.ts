@@ -1,4 +1,4 @@
-import { safeStringify } from '@forklaunch/common';
+import { toPlainString } from '@forklaunch/common';
 import {
   enrichExpressLikeSend,
   ForklaunchNextFunction,
@@ -153,9 +153,9 @@ export function enrichResponseTransmission<SV extends AnySchemaValidator>(
   res.setHeader = function (name: string, value: unknown | unknown[]) {
     let stringifiedValue;
     if (Array.isArray(value)) {
-      stringifiedValue = value.map((v) => safeStringify(v)).join('\n');
+      stringifiedValue = value.map((v) => toPlainString(v)).join('\n');
     } else {
-      stringifiedValue = safeStringify(value);
+      stringifiedValue = toPlainString(value);
     }
     return originalSetHeader.call(this, name, stringifiedValue);
   };

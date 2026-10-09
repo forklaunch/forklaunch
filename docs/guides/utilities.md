@@ -343,9 +343,47 @@ safeStringify(new Map([["key", "value"]]));
 // '{"__type":"Map","value":[["key","value"]]}'
 ```
 
+A string is JSON-encoded like any other value, so it round-trips through
+`safeParse` as a string:
+
+```typescript
+safeStringify('123');                // '"123"'
+safeParse(safeStringify('123'));     // '123' (a string, not the number 123)
+```
+
+Before 1.3.0 a string was returned as-is, so `safeParse` turned `'123'` into a
+number and `'{"a":1}'` into an object. For headers, form fields and query
+values, where a string should stay unquoted, use `toPlainString`.
+
 **Type Signature:**
 ```typescript
 function safeStringify(arg: unknown): string
+```
+
+#### `toPlainString(value: unknown)`
+
+Converts a value to the plain string a header, form field or query parameter
+expects: strings are returned as-is, numbers, booleans, `null` and `undefined`
+go through `String()`, and everything else is handed to `safeStringify`, so
+`Error`, `BigInt`, `Map`, `Set`, `RegExp`, `Date`, typed arrays, functions,
+symbols and circular references keep the representation they have always had
+on the wire.
+
+```typescript
+import { toPlainString } from '@forklaunch/common';
+
+toPlainString('hello');              // 'hello' (no quotes)
+toPlainString(30);                   // '30'
+toPlainString({ status: 'active' }); // '{"status":"active"}'
+toPlainString(new Map([['a', 1]]));  // '{"__type":"Map","value":[["a",1]]}'
+```
+
+`NaN` and `Infinity` are the one place it differs from `safeStringify`: a
+header wants `NaN`, not `"NaN"`.
+
+**Type Signature:**
+```typescript
+function toPlainString(value: unknown): string
 ```
 
 ### Environment Variables

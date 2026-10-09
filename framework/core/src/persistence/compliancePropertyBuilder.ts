@@ -1,4 +1,4 @@
-import { safeParse, safeStringify } from '@forklaunch/common';
+import { safeParse, toPlainString } from '@forklaunch/common';
 import { p, Type, type PropertyBuilders } from '@mikro-orm/core';
 import { COMPLIANCE_KEY, type ComplianceLevel } from './complianceTypes';
 import {
@@ -220,12 +220,16 @@ function extractEnumValues(items: unknown): unknown[] {
 }
 
 /**
- * MikroORM custom Type that stores mixed-type enum values as text
- * using safeStringify/safeParse for round-trip fidelity.
+ * MikroORM custom Type that stores mixed-type enum values as text: a number
+ * as its digits, a string as-is, read back with safeParse.
  */
 class EnumTextType extends Type<unknown, string> {
   override convertToDatabaseValue(value: unknown): string {
-    return safeStringify(value);
+    // Strings are stored unquoted, as they always have been. safeStringify
+    // now quotes them, and rows already written hold the bare value; query
+    // parameters go through this same conversion, so quoting here would stop
+    // `where` clauses from matching existing rows.
+    return toPlainString(value);
   }
 
   override convertToJSValue(value: unknown): unknown {
@@ -246,7 +250,7 @@ class EnumTextType extends Type<unknown, string> {
  *
  * - All items are strings → 'text'
  * - All items are numbers → 'integer'
- * - Mixed types → EnumTextType (safeStringify/safeParse round-trip)
+ * - Mixed types → EnumTextType (text, read back with safeParse)
  * - No items → 'text'
  */
 function inferEnumType(items: unknown): string | EnumTextType {
