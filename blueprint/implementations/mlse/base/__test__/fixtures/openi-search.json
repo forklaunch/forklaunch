@@ -15,13 +15,13 @@
    },
    "pmc_url": "http://www.ncbi.nlm.nih.gov/pmc/articles/PMC9871441",
    "imgLarge": "/imgs/512/24/9871441/PMC9871441_gr10.png",
-   "imgThumbLarge": "/imgs/137/24/9871441/PMC9871441_gr10.png",
    "image": {
     "caption": "<b>Appendectomy</b> significantly alters intratumor T-cell immunity in human CAC. Tumors from patients with ulcerative colitis who underwent surgical resection for CAC were analyzed. All paraffin blocks embedding the colorectal tumors were collected to perform immunohistochemistry (CD3 and CD8). Of the 24 tumors analyzed, 6 tumors were from patients with history of <b>appendectomy</b>, and 18 tumors were from patients without history of <b>appendectomy</b> (control group). (A) Representative expression of CD3 in human colonic tumors from patients who underwent or not (control) <b>appendectomy</b>. (B) Quantification of intratumor CD3+ T-cell density in <b>appendectomy</b> and control human tumors. (C) Representative expression of CD8 in human colonic tumors from patients who underwent or not (control) <b>appendectomy</b>. (D) Quantification of intratumor CD8+ T-cell density in <b>appendectomy</b> and control groups. In all dot plots, the error bars represent the 25th, 50th (median), and 75th interquartile ranges. Comparisons of 2 groups were performed using Mann-Whitney test with 2-tailed P value. P value <.05 was considered statistically significant.",
     "id": "fig10",
     "modalityMajor": "mp",
     "modalityMinor": "mc"
-   }
+   },
+   "imgGrid150": "/imgs/150/24/9871441/PMC9871441_gr10.png"
   },
   {
    "uid": "PMC9630036",
@@ -36,12 +36,12 @@
    },
    "pmc_url": "http://www.ncbi.nlm.nih.gov/pmc/articles/PMC9630036",
    "imgLarge": "/imgs/512/21/9630036/PMC9630036_CMMI2022-5915670.001.png",
-   "imgThumbLarge": "/imgs/137/21/9630036/PMC9630036_CMMI2022-5915670.001.png",
    "image": {
     "caption": "Conventional laparoscopic appendectomy (CLA) in the operation.",
     "id": "fig1",
     "modalityMajor": "ph"
-   }
+   },
+   "imgGrid150": "/imgs/150/21/9630036/PMC9630036_CMMI2022-5915670.001.png"
   },
   {
    "uid": "PMC11169428",
@@ -58,12 +58,12 @@
    "ccLicense": "by",
    "licenseURL": "https://creativecommons.org/licenses/by/4.0/",
    "imgLarge": "/imgs/512/375/11169428/PMC11169428_40792_2024_1936_Fig1_HTML.png",
-   "imgThumbLarge": "/imgs/137/375/11169428/PMC11169428_40792_2024_1936_Fig1_HTML.png",
    "image": {
     "caption": "Retrospective review of the changes over time in the appendiceal tumor on CT images (Case 1). a The appendiceal tip could be identified just before <b>appendectomy</b>. b An appendiceal tip remnant was suspected one month after <b>appendectomy</b> (19 × 19 mm). c The tip remnant had shrunk six years after <b>appendectomy</b> (15 × 10 mm). d The tip remnant had enlarged and formed a cyst seven years after <b>appendectomy</b> (35 × 25 mm). e The cystic lesion had grown more 12 years after <b>appendectomy</b> (92 × 45 mm)",
     "id": "Fig1",
     "modalityMajor": "c"
-   }
+   },
+   "imgGrid150": "/imgs/150/375/11169428/PMC11169428_40792_2024_1936_Fig1_HTML.png"
   },
   {
    "uid": "PMC7486639",
@@ -80,12 +80,12 @@
    "ccLicense": "by",
    "licenseURL": "https://creativecommons.org/licenses/by/4.0/",
    "imgLarge": "/imgs/512/370/7486639/PMC7486639_EMI2020-4030527.004.png",
-   "imgThumbLarge": "/imgs/137/370/7486639/PMC7486639_EMI2020-4030527.004.png",
    "image": {
     "caption": "Marked area with suspicion of a mass in the appendectomy material.",
     "id": "fig4",
     "modalityMajor": "ph"
-   }
+   },
+   "imgGrid150": "/imgs/150/370/7486639/PMC7486639_EMI2020-4030527.004.png"
   },
   {
    "uid": "PMC10625278",
@@ -102,12 +102,12 @@
    "ccLicense": "by",
    "licenseURL": "https://creativecommons.org/licenses/by/4.0/",
    "imgLarge": "/imgs/512/382/10625278/PMC10625278_12876_2023_3025_Fig4_HTML.png",
-   "imgThumbLarge": "/imgs/137/382/10625278/PMC10625278_12876_2023_3025_Fig4_HTML.png",
    "image": {
     "caption": "Post-<b>appendectomy</b> bleeding: (a) Fresh blood was found at the post-<b>appendectomy</b> wound. (b) Three clips were used to close the appendiceal foramen",
     "id": "Fig4",
     "modalityMajor": "ph"
-   }
+   },
+   "imgGrid150": "/imgs/150/382/10625278/PMC10625278_12876_2023_3025_Fig4_HTML.png"
   },
   {
    "uid": "PMC12685434",
@@ -122,13 +122,13 @@
    },
    "pmc_url": "http://www.ncbi.nlm.nih.gov/pmc/articles/PMC12685434",
    "imgLarge": "/imgs/512/200/12685434/PMC12685434_CRIS2025-6025864.003.png",
-   "imgThumbLarge": "/imgs/137/200/12685434/PMC12685434_CRIS2025-6025864.003.png",
    "image": {
     "caption": "Abdominal CT findings on POD 15. (a–d) Abdominal CT showed no fluid collection around the appendectomy site (arrows), but significant fecal retention in the ileocecal region, including the appendectomy site (arrowheads).",
     "id": "fig3",
     "modalityMajor": "mp",
     "modalityMinor": "c"
-   }
+   },
+   "imgGrid150": "/imgs/150/200/12685434/PMC12685434_CRIS2025-6025864.003.png"
   },
   {
    "uid": "PMC6040921",
@@ -145,12 +145,12 @@
    "ccLicense": "bync",
    "licenseURL": "https://creativecommons.org/licenses/by-nc/4.0/",
    "imgLarge": "/imgs/512/257/6040921/PMC6040921_mejdd-10-114-g002.png",
-   "imgThumbLarge": "/imgs/137/257/6040921/PMC6040921_mejdd-10-114-g002.png",
    "image": {
     "caption": "Gross examination of <b>appendectomy</b> scar endometriosis.",
     "id": "F2",
     "modalityMajor": "ph"
-   }
+   },
+   "imgGrid150": "/imgs/150/257/6040921/PMC6040921_mejdd-10-114-g002.png"
   },
   {
    "uid": "PMC6040921",
@@ -167,12 +167,12 @@
    "ccLicense": "bync",
    "licenseURL": "https://creativecommons.org/licenses/by-nc/4.0/",
    "imgLarge": "/imgs/512/257/6040921/PMC6040921_mejdd-10-114-g003.png",
-   "imgThumbLarge": "/imgs/137/257/6040921/PMC6040921_mejdd-10-114-g003.png",
    "image": {
     "caption": "Microscopic examination of <b>appendectomy</b> scar endometriosis.",
     "id": "F3",
     "modalityMajor": "mc"
-   }
+   },
+   "imgGrid150": "/imgs/150/257/6040921/PMC6040921_mejdd-10-114-g003.png"
   },
   {
    "uid": "PMC11367569",
@@ -187,12 +187,12 @@
    },
    "pmc_url": "http://www.ncbi.nlm.nih.gov/pmc/articles/PMC11367569",
    "imgLarge": "/imgs/512/21/11367569/PMC11367569_gr4.png",
-   "imgThumbLarge": "/imgs/137/21/11367569/PMC11367569_gr4.png",
    "image": {
     "caption": "Depletion of M1 macrophage cells in cancer tissue contributes to a poor prognosis for CRC with <b>appendectomy</b>(A) Representative pictures of CT26-luci cecum orthotopic mice with (APD-CRC) or without <b>appendectomy</b> (CON-CRC).(B)The growth of orthotopic tumors in mice with <b>appendectomy</b> and controls was observed by a small animal live imaging instrument.(C) Images for CT26-Luci cecum orthotopic tumors from mice with <b>appendectomy</b> and controls in the endpoint.(D)Tumor volumes and tumor weights were compared between APD-CRC and CON-CRC.(E) Frequencies of M1 macrophage cells in orthotopic tumors from ADP-mice (n = 5) and control-mice (n = 5) were measured by flow cytometry.(F) The flow chart of clodronate liposomes inducing the depletion of macrophages in CT26-Luci cecum orthotopic tumors mice with/without <b>appendectomy</b>.(G and H) Representative images of CT26-Luci cecum orthotopic tumors in CON-CRC and APD-CRC groups from mice treated by PBS/clodronate liposomes. Similar levels of tumor size and tumor weight were detected in macrophage-depleted mice with or without <b>appendectomy</b>. Data are means ± SEM. The difference between the two groups was determined by a two-tailed Student’s t test.",
     "id": "fig4",
     "modalityMajor": "mc"
-   }
+   },
+   "imgGrid150": "/imgs/150/21/11367569/PMC11367569_gr4.png"
   },
   {
    "uid": "PMC12263465",
@@ -209,13 +209,13 @@
    "ccLicense": "by",
    "licenseURL": "https://creativecommons.org/licenses/by/4.0/",
    "imgLarge": "/imgs/512/83/12263465/PMC12263465_13304_2025_2127_Fig1_HTML.png",
-   "imgThumbLarge": "/imgs/137/83/12263465/PMC12263465_13304_2025_2127_Fig1_HTML.png",
    "image": {
     "caption": "A Trainee with an individual training platform during the simulation; B <b>Appendectomy</b> model before use",
     "id": "Fig1",
     "modalityMajor": "mp",
     "modalityMinor": "ph"
-   }
+   },
+   "imgGrid150": "/imgs/150/83/12263465/PMC12263465_13304_2025_2127_Fig1_HTML.png"
   },
   {
    "uid": "PMC11873070",
@@ -230,12 +230,12 @@
    },
    "pmc_url": "http://www.ncbi.nlm.nih.gov/pmc/articles/PMC11873070",
    "imgLarge": "/imgs/512/262/11873070/PMC11873070_fped-13-1537897-g001.png",
-   "imgThumbLarge": "/imgs/137/262/11873070/PMC11873070_fped-13-1537897-g001.png",
    "image": {
     "caption": "<b>Appendectomy</b> by extra-TUSILA.",
     "id": "F1",
     "modalityMajor": "ph"
-   }
+   },
+   "imgGrid150": "/imgs/150/262/11873070/PMC11873070_fped-13-1537897-g001.png"
   },
   {
    "uid": "PMC6139482",
@@ -252,12 +252,12 @@
    "ccLicense": "byncnd",
    "licenseURL": "http://creativecommons.org/licenses/by-nc-nd/4.0/",
    "imgLarge": "/imgs/512/172/6139482/PMC6139482_gr2.png",
-   "imgThumbLarge": "/imgs/137/172/6139482/PMC6139482_gr2.png",
    "image": {
     "caption": "Appendix isolation before <b>appendectomy</b>.",
     "id": "fig0010",
     "modalityMajor": "ph"
-   }
+   },
+   "imgGrid150": "/imgs/150/172/6139482/PMC6139482_gr2.png"
   }
  ]
 }
