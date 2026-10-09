@@ -430,4 +430,34 @@ describe('answers on pgvector', () => {
     expect(llm.requests.length).toBe(done.answer.sections.filter((s) => s.status !== 'insufficient_evidence').length);
     expect(done.answer.notice).toContain('Draft');
   });
+
+  // last: it adds a guideline to the shared corpus
+  it('gives a guideline on the question to the AI first, labelled as one', async () => {
+    const { IngestionService } = await import('../domain/services/ingestion.service');
+    const guidelines = new StubFetcher('guidelines');
+    guidelines.documents = [
+      {
+        sourceKey: 'guidelines',
+        externalId: '40000001',
+        title: 'SAGES guideline for laparoscopic cholecystectomy',
+        url: 'https://pubmed.ncbi.nlm.nih.gov/40000001/',
+        publishedAt: '2025-01-10',
+        license: 'publisher-copyright-abstract',
+        sections: [{ path: 'Abstract', text: 'A bile leak after laparoscopic cholecystectomy should be managed with endoscopic stenting.' }]
+      }
+    ];
+    await new IngestionService(orm.em.fork(), new SourceFetcherRegistry([guidelines]), embeddings, otel).ingest({
+      sourceKey: 'guidelines',
+      term: 'x',
+      limit: 10
+    });
+    const llm = new ScriptedLlmProvider([(r) => `A bile leak should be managed with endoscopic stenting. [${idOf(r, 'stenting')}]`]);
+    const { answers } = await answerService(llm);
+
+    await answers.answer({ query: 'bile leak after laparoscopic cholecystectomy', mode: 'direct', live: false });
+
+    const [first] = llm.requests[0].evidence;
+    expect(first.text).toContain('endoscopic stenting');
+    expect(first.label).toContain('clinical practice guideline');
+  });
 });

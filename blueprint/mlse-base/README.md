@@ -50,6 +50,12 @@ query ─► classify (fixed rules) ─┬─► emergency / prescription / one 
 - **Sources** are public medical APIs with licenses that allow use in a
   commercial product. Each document is license-checked before anything is
   stored: full text, excerpt only, or metadata only.
+- **Guidelines** (source `guidelines`) are PubMed's clinical practice
+  guidelines from the last ten years, in full when their PubMed Central copy
+  is CC0, CC BY or CC BY-SA, otherwise as an abstract excerpt with a link
+  (most society guidelines). Their records are slow to fetch, so an answer
+  asks for them once, with its own 15 s budget, and offers them to every
+  section first; searches find them once they are in the corpus.
 - **Topic pages** (`/topic`) answer a fixed list of questions per topic type,
   plus nine operative phases for procedures, with evidence per item or an
   explicit "insufficient evidence".

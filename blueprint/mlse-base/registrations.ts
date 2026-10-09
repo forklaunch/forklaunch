@@ -24,6 +24,7 @@ import {
   DailyMedFetcher,
   FakeLlmProvider,
   FetchLike,
+  GuidelineFetcher,
   ImageSearchService,
   LexicalReranker,
   LlmProviderBase,
@@ -69,6 +70,9 @@ const RedisWorkerOptionsSchema = RedisWorkerSchemas({
 // fixes its own dimension, which also fixes the vector column size, so it is
 // configured explicitly rather than guessed.
 const DEFAULT_EMBEDDING_DIMENSIONS = 8;
+
+// The guideline source's budget when an answer asks for it.
+const GUIDELINE_RETRIEVAL_TIMEOUT_MS = 15_000;
 
 const LLM_EFFORTS: ClaudeEffort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 
@@ -413,7 +417,8 @@ const serviceDependencies = runtimeDependencies.chain({
         new MedlinePlusFetcher(fetchImpl),
         new ClinicalTrialsFetcher(fetchImpl),
         new PubMedFetcher(fetchImpl, ncbi),
-        new PmcOaFetcher(fetchImpl, ncbi)
+        new PmcOaFetcher(fetchImpl, ncbi),
+        new GuidelineFetcher(fetchImpl, ncbi)
       ]);
     }
   },
@@ -462,7 +467,13 @@ const serviceDependencies = runtimeDependencies.chain({
           .filter((source) => source.liveQuery)
           .map((source) => source.id),
         TtlCache,
-        { timeoutMs: LIVE_RETRIEVAL_TIMEOUT_MS }
+        {
+          timeoutMs: LIVE_RETRIEVAL_TIMEOUT_MS,
+          // guideline records come with long reference lists (3 to 11 s), so
+          // answers ask for them once, by name, rather than every search
+          sourceTimeoutsMs: { guidelines: GUIDELINE_RETRIEVAL_TIMEOUT_MS },
+          onRequestOnly: ['guidelines']
+        }
       )
   },
   Reranker: {
