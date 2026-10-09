@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { FetchLike } from '../domain/http';
-import { ImageSearchService } from '../services/imageSearch.service';
+import { ImageSearchService, rankByCaption } from '../services/imageSearch.service';
 
 const OPENI = readFileSync(join(__dirname, 'fixtures', 'openi-search.json'), 'utf8');
 
@@ -77,5 +77,34 @@ describe('ImageSearchService', () => {
     await service.search('Appendectomy ');
 
     expect(requests).toHaveLength(1);
+  });
+});
+
+describe('rankByCaption', () => {
+  it('puts figures whose caption names the topic first and drops those about something else', () => {
+    const ranked = rankByCaption(
+      [
+        { caption: 'Immunofluorescent staining of hippocampal microglia', title: 'Neuroinflammation in aged mice' },
+        { caption: 'Mice 4 weeks after the operation', title: 'Appendectomy and colitis in mice' },
+        { caption: 'The appendix delivered through the incision', title: 'Open appendectomy in children' },
+        { caption: 'Appendectomy specimen', title: 'A rare tumour' }
+      ],
+      'appendectomy'
+    );
+
+    // "appendix" is a form of "appendectomy"'s word; ties keep Open-i's order
+    expect(ranked.map((r) => r.caption)).toEqual([
+      'The appendix delivered through the incision',
+      'Appendectomy specimen',
+      'Mice 4 weeks after the operation'
+    ]);
+  });
+
+  it('counts word forms as one word', () => {
+    const [only] = rankByCaption(
+      [{ caption: 'ECG of an acute anterior myocardial infarct', title: 'Case report' }],
+      'myocardial infarction'
+    );
+    expect(only).toBeDefined();
   });
 });
