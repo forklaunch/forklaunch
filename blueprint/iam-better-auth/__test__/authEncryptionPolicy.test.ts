@@ -4,6 +4,7 @@ import {
   withEncryptionContext
 } from '@forklaunch/core/persistence';
 import { describe, expect, it } from 'vitest';
+import { defineEntity, MikroORM, p } from '@mikro-orm/sqlite';
 import {
   AUTH_ENCRYPTION_POLICY,
   AUTH_ENCRYPTION_CONTEXT,
@@ -13,10 +14,14 @@ import {
 function fixture() {
   const seen: string[] = [];
   const rows: { id: string; encryptionPolicy?: string }[] = [];
+  const forkOptions: unknown[] = [];
   const orm = {
     getMetadata: () => ({ find: (name: unknown) => ({ className: name }) }),
     em: {
-      fork: () => ({ find: async () => rows }),
+      fork: (options: unknown) => {
+        forkOptions.push(options);
+        return { find: async () => rows };
+      },
       create: (_model: unknown, data: unknown) => data,
       findOne: async () => {
         seen.push(getCurrentTenantId());
@@ -32,9 +37,50 @@ function fixture() {
       }
     }
   };
-  return { orm: createAuthEncryptionOrm(orm), seen, rows };
+  return { orm: createAuthEncryptionOrm(orm), seen, rows, forkOptions };
 }
 describe('fresh iam-service-v1 policy', () => {
+  it('checks policy metadata in the active database transaction', async () => {
+    const account = defineEntity({
+      name: 'Account',
+      properties: {
+        id: p.integer().primary(),
+        encryptionPolicy: p.string().nullable()
+      }
+    });
+    class Account extends account.class {}
+    account.setClass(Account);
+    const raw = await MikroORM.init({
+      entities: [Account],
+      dbName: ':memory:'
+    });
+    try {
+      await raw.schema.refresh();
+      const orm = createAuthEncryptionOrm(raw);
+      await withAuthEncryptionPolicy(() =>
+        orm.em.transactional(async () => {
+          // Simulate a legacy row encountered before this transaction commits.
+          await raw.em.getConnection().execute(
+            'insert into account (id, encryption_policy) values (?, ?)',
+            [1, 'legacy'],
+            'run',
+            raw.em.getContext().getTransactionContext()
+          );
+          const transaction = raw.em.getContext().getTransactionContext();
+          expect(transaction).toBeDefined();
+          expect(raw.em.fork().getTransactionContext()).toBeUndefined();
+          expect(
+            raw.em.fork({ keepTransactionContext: true }).getTransactionContext()
+          ).toBe(transaction);
+          await expect(orm.em.findOne(Account, { id: 1 })).rejects.toThrow(
+            'migration'
+          );
+        })
+      );
+    } finally {
+      await raw.close(true);
+    }
+  });
   it('keeps app keys and business namespaces cryptographically separate', () => {
     const appA = new FieldEncryptor('synthetic-app-a-master-key-long-enough');
     const appB = new FieldEncryptor('synthetic-app-b-master-key-long-enough');
@@ -70,6 +116,7 @@ describe('fresh iam-service-v1 policy', () => {
       })
     );
     expect(f.seen).toEqual(Array(4).fill(AUTH_ENCRYPTION_CONTEXT));
+    expect(f.forkOptions).toEqual([{ keepTransactionContext: true }]);
     expect(getCurrentTenantId()).toBe('');
   });
   it('refuses legacy ciphertext before hydration', async () => {

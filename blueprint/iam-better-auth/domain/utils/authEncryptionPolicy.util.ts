@@ -34,7 +34,9 @@ export function createAuthEncryptionOrm<
     assertScope();
     // Inspect only plaintext metadata before any secret is hydrated. No legacy key guessing.
     const rows = await em
-      .fork()
+      // Inspect the same transaction snapshot as the subsequent secret read.
+      // A fresh identity map avoids hydrating cached secrets during this check.
+      .fork({ keepTransactionContext: true })
       .find(entity, criteria ?? {}, {
         ...options,
         fields: ['id', 'encryptionPolicy'],
