@@ -65,9 +65,25 @@ describe('ImageSearchService', () => {
   });
 
   it('says Open-i is unavailable instead of failing', async () => {
-    const result = await new ImageSearchService(fakeFetch('', [], 503)).search('appendectomy');
+    const requests: string[] = [];
+    const result = await new ImageSearchService(fakeFetch('', requests, 503)).search('appendectomy');
 
     expect(result).toEqual({ images: [], status: 'unavailable' });
+    expect(requests).toHaveLength(2);
+  });
+
+  it('asks again once when Open-i fails a request', async () => {
+    let calls = 0;
+    const flaky: FetchLike = async () => {
+      calls++;
+      return calls === 1
+        ? { ok: false, status: 502, text: async () => '' }
+        : { ok: true, status: 200, text: async () => OPENI };
+    };
+    const result = await new ImageSearchService(flaky).search('appendectomy');
+
+    expect(result.status).toBe('ok');
+    expect(result.images.length).toBeGreaterThan(0);
   });
 
   it('answers a repeated search from its cache', async () => {
