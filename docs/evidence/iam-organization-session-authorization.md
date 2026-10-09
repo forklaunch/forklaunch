@@ -29,10 +29,11 @@ an installed esbuild transformer and bounded in-memory ORM/SDK fakes:
 node cli/tests/iam_authorization_scope.cjs /absolute/path/esbuild/lib/main.js
 ```
 
-Eight cases cover concurrent organizations, user/session mismatches, expiry,
+Eleven cases cover concurrent organizations, user/session mismatches, expiry,
 membership removal, custom permissions, missing/legacy claims, onboarding after an
 empty result, role changes, absence of decision-cache calls, signed-path scope,
-local legacy refusal, and actual framework HMAC signature changes. These are not
+local legacy refusal, actual framework HMAC signature changes, CLI template binding,
+malformed UUID refusal before any database call, and propagation of real database failures. These are not
 real database, HTTP middleware or emitted-scaffold compilation evidence.
 
 Before integration, emit a fresh candidate scaffold without overlays, normally
@@ -44,3 +45,8 @@ remint tokens, test scoped HMAC endpoints with correct and tampered components,
 expired/revoked sessions and current membership. Use public BetterAuth flows;
 do not seed verification flags or roles, loosen authorization, or call a provider.
 The existing twelve-auth-probe baseline does not validate these new routes.
+
+All three SQL identity entities inherit UUID primary keys; BetterAuth has database
+ID generation disabled and uses these entity defaults. The scoped boundary now
+validates that actual format before database lookup. This does not constrain
+legacy IAM-base or change the shared ID schema.

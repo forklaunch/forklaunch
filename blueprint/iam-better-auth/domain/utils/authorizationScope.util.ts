@@ -1,3 +1,5 @@
+// SQL User, Organization and Session IDs use sqlBaseProperties UUIDs.
+// Validate before database lookup; malformed internal inputs must not cause SQL errors.
 /** Authorization context comes only from the already verified JWT/session payload. */
 export interface AuthorizationScope {
   userId: string;
@@ -18,7 +20,9 @@ export function getAuthorizationScope(
   const values = [payload.sub, payload.activeOrganizationId, payload.sessionId];
   if (
     !values.every(
-      (value) => typeof value === 'string' && /^[A-Za-z0-9_-]+$/.test(value)
+      (value) =>
+        typeof value === 'string' &&
+        /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value)
     )
   ) {
     return null;
