@@ -22,7 +22,7 @@ describe('ImageSearchService', () => {
     expect(images.every((i) => i.license === 'CC BY 4.0')).toBe(true);
     const [first] = images;
     expect(first.imageUrl).toMatch(/^https:\/\/openi\.nlm\.nih\.gov\/imgs\/512\//);
-    expect(first.thumbnailUrl).toMatch(/^https:\/\/openi\.nlm\.nih\.gov\/imgs\/137\//);
+    expect(first.thumbnailUrl).toMatch(/^https:\/\/openi\.nlm\.nih\.gov\/imgs\/150\//);
     expect(first.articleUrl).toBe('https://pmc.ncbi.nlm.nih.gov/articles/PMC11169428/');
     expect(first.modality).toBe('CT');
     expect(first.title.length).toBeGreaterThan(0);
