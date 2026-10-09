@@ -6,12 +6,14 @@ use crate::{CliCommand, core::command::command};
 mod domain;
 mod invitations;
 mod members;
+mod pool;
 mod shared;
 mod show;
 
 use domain::DomainCommand;
 use invitations::InvitationsCommand;
 use members::MembersCommand;
+use pool::PoolCommand;
 use show::ShowCommand;
 
 /// `org` — organization administration, which was dashboard-only in full.
@@ -27,6 +29,7 @@ pub(crate) struct OrgCommand {
     members: MembersCommand,
     invitations: InvitationsCommand,
     domain: DomainCommand,
+    pool: PoolCommand,
 }
 
 impl OrgCommand {
@@ -36,6 +39,7 @@ impl OrgCommand {
             members: MembersCommand::new(),
             invitations: InvitationsCommand::new(),
             domain: DomainCommand::new(),
+            pool: PoolCommand::new(),
         }
     }
 }
@@ -44,12 +48,13 @@ impl CliCommand for OrgCommand {
     fn command(&self) -> Command {
         command(
             "org",
-            "Show and administer your organization: members, invitations, domain",
+            "Show and administer your organization: members, invitations, domain, compute pool",
         )
         .subcommand(self.show.command())
         .subcommand(self.members.command())
         .subcommand(self.invitations.command())
         .subcommand(self.domain.command())
+        .subcommand(self.pool.command())
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
@@ -58,6 +63,7 @@ impl CliCommand for OrgCommand {
             Some(("members", m)) => self.members.handler(m),
             Some(("invitations", m)) => self.invitations.handler(m),
             Some(("domain", m)) => self.domain.handler(m),
+            Some(("pool", m)) => self.pool.handler(m),
             _ => self.show.handler(matches),
         }
     }
