@@ -71,7 +71,8 @@ type OpenIItem = {
   ccLicense?: string;
   licenseURL?: string;
   imgLarge?: string;
-  imgThumbLarge?: string;
+  // the 137 px size Open-i lists is not served; the 150 px grid size is
+  imgGrid150?: string;
   image?: { id?: string; caption?: string; modalityMajor?: string; modalityMinor?: string };
 };
 
@@ -174,7 +175,7 @@ export class ImageSearchService {
     return {
       id: `${item.uid ?? pmcid}:${item.image?.id ?? item.imgLarge}`,
       caption: plainText(item.image?.caption),
-      thumbnailUrl: `${this.baseUrl}${item.imgThumbLarge ?? item.imgLarge}`,
+      thumbnailUrl: `${this.baseUrl}${item.imgGrid150 ?? item.imgLarge}`,
       imageUrl: `${this.baseUrl}${item.imgLarge}`,
       title: plainText(item.title),
       articleUrl: `https://pmc.ncbi.nlm.nih.gov/articles/${pmcid}/`,
