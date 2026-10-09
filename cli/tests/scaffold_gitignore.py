@@ -18,7 +18,7 @@ class ScaffoldIgnoreTests(unittest.TestCase):
         for template in SOURCES:
             with self.subTest(template=template), tempfile.TemporaryDirectory(prefix='fl-ignore-proof-') as td:
                 root = pathlib.Path(td)
-                env = {'PATH': os.environ['PATH'], 'HOME': td, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null'}
+                env = {'PATH': os.environ['PATH'], 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null'}
                 def git(*args):
                     return subprocess.run(['git','-c','core.hooksPath=/dev/null',*args],cwd=root,env=env,capture_output=True,text=True,timeout=10,check=True).stdout
                 git('init','--quiet')
