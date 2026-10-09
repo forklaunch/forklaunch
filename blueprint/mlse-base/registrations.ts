@@ -24,6 +24,7 @@ import {
   DailyMedFetcher,
   FakeLlmProvider,
   FetchLike,
+  ImageSearchService,
   LexicalReranker,
   LlmProviderBase,
   MedlinePlusFetcher,
@@ -439,6 +440,12 @@ const serviceDependencies = runtimeDependencies.chain({
         apiKey: NCBI_API_KEY || undefined,
         schedule: ncbiSchedule(TtlCache, OtelCollector, NCBI_API_KEY)
       })
+  },
+  // figures from open-access articles for image search, from NLM's Open-i
+  ImageSearchService: {
+    lifetime: Lifetime.Singleton,
+    type: ImageSearchService,
+    factory: () => new ImageSearchService((url, init) => fetch(url, init))
   },
   LiveRetrievalService: {
     lifetime: Lifetime.Singleton,

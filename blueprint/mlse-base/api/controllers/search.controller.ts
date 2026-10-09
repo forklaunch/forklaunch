@@ -6,7 +6,7 @@ import {
   schemaValidator,
   string
 } from '@forklaunch/blueprint-core';
-import { classifyQuery } from '@forklaunch/implementation-mlse-base/services';
+import { classifyQuery, IMAGE_TYPES, ImageType } from '@forklaunch/implementation-mlse-base/services';
 import { createHash } from 'node:crypto';
 import { v4 } from 'uuid';
 import { ci, tokens } from '../../bootstrapper';
@@ -15,6 +15,7 @@ const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 const searchServiceFactory = ci.scopedResolver(tokens.SearchService);
 const savedSearchServiceFactory = ci.scopedResolver(tokens.SavedSearchService);
 const querySuggestionService = ci.resolve(tokens.QuerySuggestionService);
+const imageSearchService = ci.resolve(tokens.ImageSearchService);
 const ingestionJobProducerFactory = ci.scopedResolver(tokens.IngestionJobProducer);
 const ttlCache = ci.resolve(tokens.TtlCache);
 const HMAC_SECRET_KEY = ci.resolve(tokens.HMAC_SECRET_KEY);
@@ -221,6 +222,70 @@ export const spelling = handlers.get(
     }
     const correction = await querySuggestionService.correct(query.text);
     res.status(200).json(correction ? { correction } : {});
+  }
+);
+
+export const images = handlers.get(
+  schemaValidator,
+  '/images',
+  {
+    name: 'Search Images',
+    access: 'internal',
+    summary:
+      'Figures from open-access articles for a query (NLM Open-i), each with its caption, article and license; only licenses that allow commercial reuse',
+    auth: {
+      hmac: {
+        secretKeys: {
+          default: HMAC_SECRET_KEY
+        }
+      }
+    },
+    query: {
+      q: string,
+      type: optional(string),
+      limit: optional(string)
+    },
+    responses: {
+      200: {
+        status: string,
+        images: array({
+          id: string,
+          caption: string,
+          thumbnailUrl: string,
+          imageUrl: string,
+          title: string,
+          articleUrl: string,
+          pmcid: string,
+          journal: optional(string),
+          year: optional(string),
+          authors: optional(string),
+          modality: optional(string),
+          license: string,
+          licenseUrl: string
+        })
+      },
+      400: string
+    }
+  },
+  async (req, res) => {
+    const query = textQuery(req.query.q);
+    if (query.error !== undefined) {
+      res.status(400).send(query.error);
+      return;
+    }
+    const type = req.query.type;
+    if (type !== undefined && !(type in IMAGE_TYPES)) {
+      res.status(400).send(`type must be one of ${Object.keys(IMAGE_TYPES).join(', ')}`);
+      return;
+    }
+    const limit = req.query.limit ? Number(req.query.limit) : 24;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 48) {
+      res.status(400).send('limit must be an integer from 1 to 48');
+      return;
+    }
+    res.status(200).json(
+      await imageSearchService.search(query.text, { limit, ...(type ? { type: type as ImageType } : {}) })
+    );
   }
 );
 
