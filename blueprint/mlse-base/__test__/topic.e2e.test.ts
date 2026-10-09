@@ -1,6 +1,8 @@
 import { OpenTelemetryCollector } from '@forklaunch/core/http';
 import {
   FakeLlmProvider,
+  FetchLike,
+  ImageSearchService,
   LexicalReranker,
   LiveRetrievalService,
   SourceFetcher,
@@ -38,7 +40,7 @@ const llm = new FakeLlmProvider(8);
 const otel = new OpenTelemetryCollector('test', 'error', {});
 const fetchers = { pmc_oa: new StubFetcher('pmc_oa'), pubmed: new StubFetcher('pubmed') };
 
-const services = async () => {
+const services = async (options: { images?: ImageSearchService } = {}) => {
   const { SearchService } = await import('../domain/services/search.service');
   const { TopicService } = await import('../domain/services/topic.service');
   const em = orm.em.fork();
@@ -50,7 +52,7 @@ const services = async () => {
     otel
   );
   // the fake embeddings carry no meaning to fit questions by
-  return { topics: new TopicService(em, search, otel, { itemFit: false }) };
+  return { topics: new TopicService(em, search, otel, { itemFit: false, ...options }) };
 };
 
 const ingest = async (sourceKey: keyof typeof fetchers, documents: FetchedDocumentDto[]) => {
@@ -258,6 +260,43 @@ describe('topic pages on pgvector', () => {
       item.evidence.map((e: { externalId: string }) => e.externalId)
     );
     expect(cited).not.toContain('PMC2');
+  });
+
+  it("shows figures of a procedure's steps, each under one step", async () => {
+    // Open-i answers every query with the same figures
+    const figure = (pmcid: number, caption: string, license = 'https://creativecommons.org/licenses/by/4.0/') => ({
+      uid: `PMC${pmcid}`,
+      pmcid: String(pmcid),
+      title: 'Two-port laparoscopic appendectomy',
+      licenseURL: license,
+      imgLarge: `/imgs/512/1/${pmcid}.png`,
+      image: { id: 'F1', caption, modalityMajor: 'ph' }
+    });
+    const openI: FetchLike = async () => ({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          list: [
+            figure(11, 'First umbilical port placed for the camera'),
+            figure(12, 'Endoloop placed on the appendiceal stump'),
+            figure(13, 'Umbilical incision closed', 'https://creativecommons.org/licenses/by-nc/4.0/'),
+            figure(14, 'Ultrasound of the inflamed appendix')
+          ]
+        })
+    });
+    const { topics } = await services({ images: new ImageSearchService(openI) });
+
+    const result = await topics.assemble('appendectomy');
+    const page = await topics.getPage('appendectomy');
+    const shown = (key: string) =>
+      [...page.questions, ...page.phases].find((item) => item.key === key)!.figures.map((f: { pmcid: string }) => f.pmcid);
+
+    expect(shown('access')).toEqual(['PMC11']);
+    expect(shown('core')).toEqual(['PMC12']);
+    // already shown under a phase; the NonCommercial and ultrasound figures never
+    expect(shown('how')).toEqual([]);
+    expect(result.figures).toBe(2);
   });
 
   it('returns a single phase for jumping straight to it', async () => {
