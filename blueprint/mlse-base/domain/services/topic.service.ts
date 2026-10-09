@@ -7,7 +7,9 @@ import {
   diagnosisGroup,
   extractCaseStudyFields,
   extractQuantities,
+  findStepFigures,
   frameworkItems,
+  ImageSearchService,
   itemFitRank,
   QUESTION_FRAMEWORKS,
   queryTerms,
@@ -20,7 +22,7 @@ import { Document } from '../../persistence/entities/document.entity';
 import { DocumentChunk } from '../../persistence/entities/documentChunk.entity';
 import { MedicalConcept } from '../../persistence/entities/medicalConcept.entity';
 import { QuantitativeFact } from '../../persistence/entities/quantitativeFact.entity';
-import { Topic } from '../../persistence/entities/topic.entity';
+import { StepFigure, Topic } from '../../persistence/entities/topic.entity';
 import { TopicEvidence } from '../../persistence/entities/topicEvidence.entity';
 import {
   LICENSED_SOURCE_ACCESS_SQL,
@@ -43,6 +45,7 @@ export type AssemblyResult = {
   facts: number;
   caseStudies: number;
   casesExcluded: number;
+  figures: number;
 };
 
 const EVIDENCE_PER_ITEM = 3;
@@ -54,10 +57,17 @@ const SEARCH_DEPTH = 15;
 // did not.
 const ITEM_FIT_RANK = 3;
 
+// The procedure items a photo can show: how it is done, how it starts, the
+// core steps and how it ends
+const STEP_FIGURE_ITEMS = new Set(['how', 'access', 'core', 'closure']);
+const FIGURES_PER_ITEM = 3;
+
 export type TopicServiceOptions = {
   // check passages against the item's question by embedding; off for
   // embeddings that do not carry meaning (the development provider's)
   itemFit?: boolean;
+  // finds figures of a procedure's steps; without it pages have none
+  images?: ImageSearchService;
 };
 
 /**
@@ -70,7 +80,8 @@ export type TopicServiceOptions = {
  * item with no such passage is recorded as insufficient evidence rather
  * than filled in.
  * Numbers in the evidence of quantitative items are extracted for review,
- * and related case reports are attached, grouped by diagnosis.
+ * and related case reports are attached, grouped by diagnosis. Procedure
+ * steps get openly licensed figures whose captions describe them.
  *
  * Assembly draws on the stored corpus only, so every citation is a durable
  * passage id. Live results reach the corpus through ingestion.
@@ -137,6 +148,7 @@ export class TopicService {
     );
 
     const cases = await this.findCaseStudies(topic);
+    const figures = await this.findFigures(topic, items);
 
     await this.em.transactional(async (em) => {
       await em.nativeDelete(TopicEvidence, { topic: topic.id });
@@ -196,6 +208,7 @@ export class TopicService {
 
       const managed = await em.findOneOrFail(Topic, { id: topic.id });
       managed.assembledAt = new Date();
+      managed.figures = figures;
     });
 
     const facts = await this.em.count(QuantitativeFact, { topic: topic.id });
@@ -206,7 +219,8 @@ export class TopicService {
       insufficientEvidence,
       facts,
       caseStudies: cases.relevant.length,
-      casesExcluded: cases.excluded
+      casesExcluded: cases.excluded,
+      figures: Object.values(figures ?? {}).flat().length
     };
     this.openTelemetryCollector.info('Topic assembled', result);
     return result;
@@ -280,6 +294,50 @@ export class TopicService {
       });
     }
     return { relevant, excluded };
+  }
+
+  // Figures for the procedure's steps, each shown under one item only, the
+  // phases (the most specific) first. Kept as they were when the image
+  // library does not answer.
+  private async findFigures(
+    topic: Topic,
+    items: { key: string; kind: 'question' | 'phase'; searchHints: string[] }[]
+  ): Promise<Record<string, StepFigure[]> | null> {
+    if (!this.options.images || topic.topicType !== 'procedure') {
+      return topic.figures ?? null;
+    }
+    const used = new Set<string>();
+    const figures: Record<string, StepFigure[]> = {};
+    const stepItems = items
+      .filter((i) => STEP_FIGURE_ITEMS.has(i.key))
+      .sort((a, b) => Number(a.kind === 'question') - Number(b.kind === 'question'));
+    for (const item of stepItems) {
+      const found = await findStepFigures(
+        this.options.images,
+        { title: topic.title, names: topic.searchTerms },
+        { hints: item.searchHints, topicHints: topic.searchHints?.[item.key] ?? [] },
+        FIGURES_PER_ITEM * 2
+      );
+      const kept = found.filter((image) => !used.has(image.id)).slice(0, FIGURES_PER_ITEM);
+      kept.forEach((image) => used.add(image.id));
+      if (kept.length > 0) {
+        figures[item.key] = kept.map((image) => ({
+          id: image.id,
+          caption: image.caption,
+          thumbnailUrl: image.thumbnailUrl,
+          imageUrl: image.imageUrl,
+          title: image.title,
+          articleUrl: image.articleUrl,
+          pmcid: image.pmcid,
+          ...(image.journal ? { journal: image.journal } : {}),
+          ...(image.year ? { year: image.year } : {}),
+          ...(image.authors ? { authors: image.authors } : {}),
+          license: image.license,
+          licenseUrl: image.licenseUrl
+        }));
+      }
+    }
+    return Object.keys(figures).length > 0 ? figures : (topic.figures ?? null);
   }
 
   // Each item's question, as a doctor would ask it, embedded once per page.
@@ -391,6 +449,7 @@ export class TopicService {
         ...(item.number !== undefined ? { number: item.number } : {}),
         status: evidence.length > 0 ? 'evidence_found' : 'insufficient_evidence',
         evidence,
+        figures: topic.figures?.[item.key] ?? [],
         facts: facts
           .filter((fact) => fact.itemKey === item.key)
           .filter((fact) => !flagged.has((fact.document as unknown as { id: string }).id))

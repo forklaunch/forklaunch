@@ -118,6 +118,13 @@ surgical technique, since outcome studies rarely say how an operation is
 done. Run `pnpm topic:refresh` and let the worker store them before
 assembling a page.
 
+Assembly also gives a procedure's steps (how it is done, access, core
+steps, closure) up to three figures each from open-access articles (NLM
+Open-i), kept in `topic.figures`: photos and drawings whose caption
+describes that step, licensed CC0, CC BY or CC BY-SA, each credited to its
+article. They are matched by caption only, so like the evidence they wait
+for a clinician's review.
+
 ## API
 
 Every route is also in the generated SDK (`sdk.ts`).

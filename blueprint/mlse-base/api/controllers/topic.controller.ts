@@ -45,13 +45,30 @@ const FactSchema = {
   passageId: string
 };
 
+// an openly licensed figure showing the step, credited to its article
+const FigureSchema = {
+  id: string,
+  caption: string,
+  thumbnailUrl: string,
+  imageUrl: string,
+  title: string,
+  articleUrl: string,
+  pmcid: string,
+  journal: optional(string),
+  year: optional(string),
+  authors: optional(string),
+  license: string,
+  licenseUrl: string
+};
+
 const ItemSchema = {
   key: string,
   label: string,
   number: optional(number),
   status: string,
   evidence: array(EvidenceSchema),
-  facts: array(FactSchema)
+  facts: array(FactSchema),
+  figures: array(FigureSchema)
 };
 
 const TopicPageSchema = {
@@ -191,7 +208,8 @@ export const assembleTopic = handlers.post(
         insufficientEvidence: array(string),
         facts: number,
         caseStudies: number,
-        casesExcluded: number
+        casesExcluded: number,
+        figures: number
       },
       404: string
     }

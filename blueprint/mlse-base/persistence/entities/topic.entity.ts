@@ -2,6 +2,21 @@ import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
 import type { InferEntity } from '@mikro-orm/core';
 
+export type StepFigure = {
+  id: string;
+  caption: string;
+  thumbnailUrl: string;
+  imageUrl: string;
+  title: string;
+  articleUrl: string;
+  pmcid: string;
+  journal?: string;
+  year?: string;
+  authors?: string;
+  license: string;
+  licenseUrl: string;
+};
+
 /**
  * A topic page: a procedure, condition or medication, answered through a
  * question framework. Pages start as 'draft' and are only shown to doctors
@@ -24,6 +39,9 @@ export const Topic = defineComplianceEntity({
     searchHints: fp.json<Record<string, string[]>>().nullable().compliance('none'),
     // the PubMed/PMC searches for the papers the page is built from
     corpusQueries: fp.string().array().compliance('none'),
+    // openly licensed figures showing the procedure's steps, by framework
+    // item, found at assembly
+    figures: fp.json<Record<string, StepFigure[]>>().nullable().compliance('none'),
     // 'draft' | 'approved'
     status: fp.string().compliance('none'),
     approvedBy: fp.string().nullable().compliance('none'),
