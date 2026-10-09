@@ -377,6 +377,7 @@ test("malformed UUID scope refuses before any database call", async () => {
       "",
       "../other",
       "11111111111141118111111111111111",
+        scopes.a.userId + "\n",
     ]) {
       const invalid = { ...scopes.a, [field]: malformed };
       assert.equal(getAuthorizationScope(payload(invalid)), null);
