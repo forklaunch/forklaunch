@@ -41,6 +41,8 @@ export type MedicalImage = {
   year?: string;
   authors?: string;
   modality?: string;
+  // what the panels of a multi-panel figure show
+  panels?: string[];
   license: string;
   licenseUrl: string;
 };
@@ -165,6 +167,10 @@ export class ImageSearchService {
     if (!item.imgLarge || !item.pmcid || !/^\d+$/.test(item.pmcid)) return undefined;
     const pmcid = `PMC${item.pmcid}`;
     const modality = item.image?.modalityMajor;
+    const panels = (item.image?.modalityMinor ?? '')
+      .split(',')
+      .map((code) => MODALITY_NAMES[code.trim()])
+      .filter(Boolean);
     return {
       id: `${item.uid ?? pmcid}:${item.image?.id ?? item.imgLarge}`,
       caption: plainText(item.image?.caption),
@@ -177,6 +183,7 @@ export class ImageSearchService {
       ...(item.journal_date?.year ? { year: item.journal_date.year } : {}),
       ...(item.authors ? { authors: item.authors } : {}),
       ...(modality && MODALITY_NAMES[modality] ? { modality: MODALITY_NAMES[modality] } : {}),
+      ...(panels.length > 0 ? { panels } : {}),
       license: licenseLabel(licenseUrl),
       licenseUrl
     };
