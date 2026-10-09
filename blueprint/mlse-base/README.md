@@ -112,9 +112,11 @@ Procedure pages seeded as drafts: `laparoscopic-cholecystectomy`,
 `total-knee-arthroplasty` and `coronary-artery-bypass-grafting`. All use one
 procedure framework; each topic adds its own search words per item
 (`topic.search_hints`), such as "mesoappendix" for the core steps of an
-appendectomy. Each also has a corpus query (`topic.corpus_query`): PubMed
-and PMC papers whose major subject is the procedure. Run `pnpm topic:refresh`
-and let the worker store them before assembling a page.
+appendectomy. Each also has corpus queries (`topic.corpus_queries`): PubMed
+and PMC papers whose major subject is the procedure, and those of them on
+surgical technique, since outcome studies rarely say how an operation is
+done. Run `pnpm topic:refresh` and let the worker store them before
+assembling a page.
 
 ## API
 
