@@ -80,8 +80,10 @@ type OpenIItem = {
 // About a third of Open-i's figures carry a license that allows reuse, so a
 // page asks for more than it shows.
 const FETCH_FACTOR = 4;
-// Open-i sends each figure's abstract too: 100 figures can take 30 s, 60 about 5
 const MAX_FETCH = 60;
+// Open-i sends each figure's abstract too and sends slowly: 60 figures took
+// 3 to 14 s, so they are asked for in pages fetched together
+const PAGE_SIZE = 30;
 
 const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
 
@@ -100,11 +102,16 @@ function share(terms: string[], text: string): number {
 
 /**
  * Open-i matches a query anywhere in the article, abstract included, so a
- * figure of hippocampal staining comes back for "appendectomy". A figure is
- * kept when its caption and article title together carry at least half the
- * query's words, and figures whose caption names them come first.
+ * figure of hippocampal staining comes back for "appendectomy" from a paper
+ * with appendectomy in its title. A figure is kept when its caption carries
+ * at least half the query's words; with `orTitle`, when its caption and
+ * article title together do, those whose caption names them first.
  */
-export function rankByCaption<T extends { caption: string; title: string }>(images: T[], query: string): T[] {
+export function rankByCaption<T extends { caption: string; title: string }>(
+  images: T[],
+  query: string,
+  options: { orTitle?: boolean } = {}
+): T[] {
   const terms = queryTerms(query);
   return images
     .map((image, order) => ({
@@ -113,7 +120,7 @@ export function rankByCaption<T extends { caption: string; title: string }>(imag
       caption: share(terms, image.caption),
       either: share(terms, `${image.caption} ${image.title}`)
     }))
-    .filter((r) => terms.length === 0 || r.either >= 0.5)
+    .filter((r) => terms.length === 0 || (options.orTitle ? r.either : r.caption) >= 0.5)
     .sort((a, b) => b.caption - a.caption || a.order - b.order)
     .map((r) => r.image);
 }
@@ -159,7 +166,11 @@ export class ImageSearchService {
 
   // `about`: the words a figure must be about, when the query adds others to
   // help the search find it ("appendectomy" for "appendectomy surgical technique")
-  async search(query: string, options: { limit?: number; type?: ImageType; about?: string } = {}): Promise<ImageSearchResult> {
+  // `orTitle`: also keep figures whose article title, not caption, names it
+  async search(
+    query: string,
+    options: { limit?: number; type?: ImageType; about?: string; orTitle?: boolean } = {}
+  ): Promise<ImageSearchResult> {
     const text = query.trim();
     const limit = options.limit ?? 24;
     // only literature questions leave the service, as with live search
@@ -167,44 +178,58 @@ export class ImageSearchService {
     if (!text || (queryClass !== 'literature_lookup' && queryClass !== 'dosage_question')) {
       return { images: [], status: 'skipped' };
     }
-    const key = `${options.type ?? ''}:${limit}:${options.about ?? ''}:${text.toLowerCase()}`;
+    const key = `${options.type ?? ''}:${limit}:${options.about ?? ''}:${options.orTitle ? 't' : ''}:${text.toLowerCase()}`;
     const hit = this.cache.get(key);
     if (hit && Date.now() - hit.at < this.cacheMs) return { images: hit.value, status: 'ok' };
 
     // Open-i matches words: "heart attack" finds block diagrams, "myocardial
     // infarction" finds ECGs
     const term = literatureSearchTerm(text);
-    const params = new URLSearchParams({
-      query: term,
-      m: '1',
-      n: String(Math.min(limit * FETCH_FACTOR, MAX_FETCH)),
-      coll: 'pmc'
-    });
-    if (options.type) params.set('it', IMAGE_TYPES[options.type]);
-    let items: OpenIItem[] | undefined;
-    // Open-i now and then fails a request it answers a moment later; one
-    // that timed out is not asked again
-    for (let attempt = 0; attempt < 2 && !items; attempt++) {
-      try {
-        const response = await this.client.getJson<{ list?: OpenIItem[] }>(`${this.baseUrl}/api/search?${params}`);
-        items = Array.isArray(response.list) ? response.list : [];
-      } catch (error) {
-        if (attempt === 1 || error instanceof SourceTimeoutError) {
-          return { images: [], status: 'unavailable' };
-        }
-      }
+    const wanted = Math.min(limit * FETCH_FACTOR, MAX_FETCH);
+    const pages: Promise<OpenIItem[] | undefined>[] = [];
+    for (let first = 1; first <= wanted; first += PAGE_SIZE) {
+      const params = new URLSearchParams({
+        query: term,
+        m: String(first),
+        n: String(Math.min(first + PAGE_SIZE - 1, wanted)),
+        coll: 'pmc'
+      });
+      if (options.type) params.set('it', IMAGE_TYPES[options.type]);
+      pages.push(this.page(params));
     }
-    if (!items) return { images: [], status: 'unavailable' };
+    const answered = (await Promise.all(pages)).filter((page): page is OpenIItem[] => page !== undefined);
+    if (answered.length === 0) return { images: [], status: 'unavailable' };
 
+    const found = new Map<string, MedicalImage>();
+    for (const item of answered.flat()) {
+      const image = this.toImage(item);
+      if (image && !found.has(image.id)) found.set(image.id, image);
+    }
     const images = rankByCaption(
-      items.map((item) => this.toImage(item)).filter((image): image is MedicalImage => image !== undefined),
-      options.about ? literatureSearchTerm(options.about) : term
+      [...found.values()],
+      options.about ? literatureSearchTerm(options.about) : term,
+      { orTitle: options.orTitle }
     ).slice(0, limit);
     if (this.cache.size >= this.cacheEntries) {
       this.cache.delete(this.cache.keys().next().value as string);
     }
     this.cache.set(key, { at: Date.now(), value: images });
     return { images, status: 'ok' };
+  }
+
+  // One page of results, or undefined when Open-i did not answer. It now and
+  // then fails a request it answers a moment later, so a failed one is asked
+  // again once; one that timed out is not.
+  private async page(params: URLSearchParams): Promise<OpenIItem[] | undefined> {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const response = await this.client.getJson<{ list?: OpenIItem[] }>(`${this.baseUrl}/api/search?${params}`);
+        return Array.isArray(response.list) ? response.list : [];
+      } catch (error) {
+        if (error instanceof SourceTimeoutError) return undefined;
+      }
+    }
+    return undefined;
   }
 
   private toImage(item: OpenIItem): MedicalImage | undefined {

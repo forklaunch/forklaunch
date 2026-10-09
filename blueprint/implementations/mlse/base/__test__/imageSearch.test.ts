@@ -40,11 +40,9 @@ describe('ImageSearchService', () => {
     const requests: string[] = [];
     await new ImageSearchService(fakeFetch(OPENI, requests)).search('knee arthroplasty', { type: 'xray', limit: 10 });
 
-    const params = new URL(requests[0]).searchParams;
-    expect(params.get('query')).toBe('knee arthroplasty');
-    expect(params.get('it')).toBe('x');
-    expect(params.get('n')).toBe('40');
-    expect(params.get('coll')).toBe('pmc');
+    const pages = requests.map((url) => new URL(url).searchParams);
+    expect(pages.map((p) => [p.get('m'), p.get('n')])).toEqual([['1', '30'], ['31', '40']]);
+    expect(pages.every((p) => p.get('query') === 'knee arthroplasty' && p.get('it') === 'x' && p.get('coll') === 'pmc')).toBe(true);
   });
 
   it('searches for the clinical term of an everyday one', async () => {
@@ -69,14 +67,15 @@ describe('ImageSearchService', () => {
     const result = await new ImageSearchService(fakeFetch('', requests, 503)).search('appendectomy');
 
     expect(result).toEqual({ images: [], status: 'unavailable' });
-    expect(requests).toHaveLength(2);
+    // two pages, each asked twice
+    expect(requests).toHaveLength(4);
   });
 
   it('asks again once when Open-i fails a request', async () => {
     let calls = 0;
     const flaky: FetchLike = async () => {
       calls++;
-      return calls === 1
+      return calls <= 2
         ? { ok: false, status: 502, text: async () => '' }
         : { ok: true, status: 200, text: async () => OPENI };
     };
@@ -90,14 +89,15 @@ describe('ImageSearchService', () => {
     const requests: string[] = [];
     const service = new ImageSearchService(fakeFetch(OPENI, requests));
     await service.search('appendectomy');
+    const asked = requests.length;
     await service.search('Appendectomy ');
 
-    expect(requests).toHaveLength(1);
+    expect(requests).toHaveLength(asked);
   });
 });
 
 describe('rankByCaption', () => {
-  it('puts figures whose caption names the topic first and drops those about something else', () => {
+  it('keeps only figures whose caption names the topic', () => {
     const ranked = rankByCaption(
       [
         { caption: 'Immunofluorescent staining of hippocampal microglia', title: 'Neuroinflammation in aged mice' },
@@ -109,11 +109,21 @@ describe('rankByCaption', () => {
     );
 
     // "appendix" is a form of "appendectomy"'s word; ties keep Open-i's order
-    expect(ranked.map((r) => r.caption)).toEqual([
-      'The appendix delivered through the incision',
-      'Appendectomy specimen',
-      'Mice 4 weeks after the operation'
-    ]);
+    expect(ranked.map((r) => r.caption)).toEqual(['The appendix delivered through the incision', 'Appendectomy specimen']);
+  });
+
+  it('with orTitle, also keeps figures whose article title names the topic, after the rest', () => {
+    const ranked = rankByCaption(
+      [
+        { caption: 'Mice 4 weeks after the operation', title: 'Appendectomy and colitis in mice' },
+        { caption: 'Appendectomy specimen', title: 'A rare tumour' },
+        { caption: 'Immunofluorescent staining of hippocampal microglia', title: 'Neuroinflammation in aged mice' }
+      ],
+      'appendectomy',
+      { orTitle: true }
+    );
+
+    expect(ranked.map((r) => r.caption)).toEqual(['Appendectomy specimen', 'Mice 4 weeks after the operation']);
   });
 
   it('counts word forms as one word', () => {

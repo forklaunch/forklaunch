@@ -64,10 +64,12 @@ export async function findStepFigures(
 ): Promise<MedicalImage[]> {
   const own = step.topicHints && step.topicHints.length > 0 ? step.topicHints : step.hints;
   const hints = [...new Set([...step.hints, ...(step.topicHints ?? [])])];
+  // a step's caption rarely names the procedure ("Off-pump anastomosis of
+  // LITA to LAD"), so its article title may
   const queries = [`${procedure.title} ${own.slice(0, 2).join(' ')} technique`, `${procedure.title} surgical technique`];
   const found = new Map<string, { image: MedicalImage; score: number }>();
   for (const query of queries) {
-    const { images: results } = await images.search(query, { type: 'photo', limit: 15, about: procedure.title });
+    const { images: results } = await images.search(query, { type: 'photo', limit: 15, about: procedure.title, orTitle: true });
     for (const image of results) {
       const score = stepFigureScore(image, { names: procedure.names, hints });
       if (score !== undefined && !found.has(image.id)) found.set(image.id, { image, score });

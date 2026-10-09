@@ -84,7 +84,7 @@ describe('findStepFigures', () => {
       { hints: ['incision', 'port'], topicHints: ['umbilical', 'mcburney'] }
     );
 
-    expect(requests.map((url) => new URL(url).searchParams.get('query'))).toEqual([
+    expect([...new Set(requests.map((url) => new URL(url).searchParams.get('query')))]).toEqual([
       'appendectomy umbilical mcburney technique',
       'appendectomy surgical technique'
     ]);
