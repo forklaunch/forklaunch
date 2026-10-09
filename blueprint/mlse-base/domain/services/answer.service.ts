@@ -12,6 +12,7 @@ import {
   OVERVIEW_SECTIONS,
   sectionForQuestion,
   selectEvidence,
+  splitAspectQuery,
   suggestFollowUps,
   DOSAGE_NO_CONTEXT_MESSAGE,
   DOSAGE_QUESTION_MESSAGE,
@@ -143,6 +144,15 @@ export class AnswerService {
 
   async *stream(request: AnswerRequestDto): AsyncGenerator<AnswerStreamEventDto> {
     const started = Date.now();
+    // "procedure for heart attack" asks about one part of a topic. It is
+    // answered as that part of the topic's overview, as if asked after
+    // "heart attack", not as an overview of the whole question.
+    if (!request.followUpOf && !request.mode) {
+      const aspect = splitAspectQuery(request.query);
+      if (aspect && isOverviewQuery(aspect.topic, clinicalTermsFor(aspect.topic).length > 0)) {
+        request = { ...request, followUpOf: aspect.topic };
+      }
+    }
     // A follow-up is answered in the context of its topic, and directly.
     // The safety rules apply to the follow-up's own words as well: "how
     // much should I give my patient?" after "cefazolin" is still about one
