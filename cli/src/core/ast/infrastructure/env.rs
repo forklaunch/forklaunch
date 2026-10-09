@@ -213,9 +213,7 @@ fn supplies_a_value(expr: &Expression<'_>) -> bool {
         Expression::Identifier(ident) => ident.name != "undefined",
         Expression::ParenthesizedExpression(inner) => supplies_a_value(&inner.expression),
         // `void 0` is `undefined` written the long way.
-        Expression::UnaryExpression(unary) => {
-            unary.operator != oxc_ast::ast::UnaryOperator::Void
-        }
+        Expression::UnaryExpression(unary) => unary.operator != oxc_ast::ast::UnaryOperator::Void,
         _ => true,
     }
 }

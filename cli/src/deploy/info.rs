@@ -85,7 +85,9 @@ pub(crate) fn parse_blocked_components(error_message: &str) -> Vec<BlockedCompon
         };
         // `<type> '<name>'` — the name is quoted, which is what makes this
         // parseable at all; a component name may contain spaces or hyphens.
-        let Some(open) = head.find('\'') else { continue };
+        let Some(open) = head.find('\'') else {
+            continue;
+        };
         let Some(close) = head[open + 1..].find('\'') else {
             continue;
         };
@@ -255,7 +257,10 @@ fn print_field(out: &mut StandardStream, label: &str, value: &Option<String>) ->
 /// stack outputs onto `deployment.metadata.outputs` on completion. Surface
 /// them here so a service's URL can be looked up after the fact, not just
 /// during the one foreground `deploy create` run that happened to produce it.
-fn print_service_urls(out: &mut StandardStream, metadata: &Option<serde_json::Value>) -> Result<()> {
+fn print_service_urls(
+    out: &mut StandardStream,
+    metadata: &Option<serde_json::Value>,
+) -> Result<()> {
     let Some(outputs) = metadata.as_ref().and_then(|m| m.get("outputs")) else {
         return Ok(());
     };
@@ -347,11 +352,7 @@ impl CliCommand for InfoCommand {
         // never miss deployments that fall outside a capped list page.
         let owned: Vec<DeploymentSummary> = match matches.get_one::<String>("deployment") {
             Some(id) => {
-                let url = format!(
-                    "{}/deployments/{}",
-                    get_platform_management_api_url(),
-                    id
-                );
+                let url = format!("{}/deployments/{}", get_platform_management_api_url(), id);
                 let response =
                     http_client::get(&url).with_context(|| ERROR_FAILED_TO_SEND_REQUEST)?;
                 if response.status().as_u16() == 404 {
@@ -472,8 +473,9 @@ impl CliCommand for InfoCommand {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json::json;
+
+    use super::*;
 
     /// The exact message behind a real production "Deploy failed" notification.
     /// The email's only call to action is a dashboard button, so this string is
@@ -646,8 +648,9 @@ mod tests {
 
 #[cfg(test)]
 mod render_preview {
-    use super::*;
     use termcolor::{ColorChoice, StandardStream};
+
+    use super::*;
 
     /// Not an assertion — prints the block so its shape can be reviewed with
     /// `cargo test render_the_block -- --nocapture`. The value of this output is

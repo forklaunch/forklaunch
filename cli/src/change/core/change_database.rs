@@ -14,8 +14,7 @@ use crate::{
         package_json::{
             application_package_json::ApplicationPackageJson,
             package_json_constants::{
-                MIKRO_ORM_DATABASE_VERSION, PROJECT_SEED_SCRIPT,
-                project_retention_enforce_script,
+                MIKRO_ORM_DATABASE_VERSION, PROJECT_SEED_SCRIPT, project_retention_enforce_script,
             },
             project_package_json::ProjectPackageJson,
         },

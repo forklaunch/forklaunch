@@ -4,9 +4,9 @@ use anyhow::{Context, Result, bail};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use create::CreateCommand;
 use delete::DeleteCommand;
-use update::UpdateCommand;
 use serde::{Deserialize, Serialize};
 use termcolor::{ColorChoice, ColorSpec, StandardStream, WriteColor};
+use update::UpdateCommand;
 
 use crate::{
     CliCommand,
@@ -43,22 +43,22 @@ impl CliCommand for NotifiersCommand {
             "notifiers",
             "List, create, update, or delete notifier configs",
         )
-            .arg(
-                Arg::new("service")
-                    .long("service")
-                    .help("Filter to a service name")
-                    .global(true),
-            )
-            .arg(
-                Arg::new("json")
-                    .long("json")
-                    .help("Output raw JSON instead of formatted terminal output")
-                    .action(ArgAction::SetTrue)
-                    .global(true),
-            )
-            .subcommand(self.create.command())
-            .subcommand(self.update.command())
-            .subcommand(self.delete.command())
+        .arg(
+            Arg::new("service")
+                .long("service")
+                .help("Filter to a service name")
+                .global(true),
+        )
+        .arg(
+            Arg::new("json")
+                .long("json")
+                .help("Output raw JSON instead of formatted terminal output")
+                .action(ArgAction::SetTrue)
+                .global(true),
+        )
+        .subcommand(self.create.command())
+        .subcommand(self.update.command())
+        .subcommand(self.delete.command())
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {

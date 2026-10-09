@@ -4,6 +4,7 @@ use anyhow::Result;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 
+use super::resource_resolver::fetch_application_resources;
 use crate::{
     CliCommand,
     core::{
@@ -11,8 +12,6 @@ use crate::{
         validate::{require_auth, require_integration, require_manifest},
     },
 };
-
-use super::resource_resolver::fetch_application_resources;
 
 #[derive(Debug)]
 pub(super) struct ListCommand;
@@ -25,26 +24,29 @@ impl ListCommand {
 
 impl CliCommand for ListCommand {
     fn command(&self) -> Command {
-        command("list", "List provisioned infrastructure resources for an application")
-            .arg(
-                Arg::new("base_path")
-                    .short('p')
-                    .long("path")
-                    .help("The application path"),
-            )
-            .arg(
-                Arg::new("environment")
-                    .short('e')
-                    .long("environment")
-                    .required(true)
-                    .help("Environment to inspect (for example: dev, staging, production)"),
-            )
-            .arg(
-                Arg::new("json")
-                    .long("json")
-                    .help("Output raw JSON instead of formatted terminal output")
-                    .action(ArgAction::SetTrue),
-            )
+        command(
+            "list",
+            "List provisioned infrastructure resources for an application",
+        )
+        .arg(
+            Arg::new("base_path")
+                .short('p')
+                .long("path")
+                .help("The application path"),
+        )
+        .arg(
+            Arg::new("environment")
+                .short('e')
+                .long("environment")
+                .required(true)
+                .help("Environment to inspect (for example: dev, staging, production)"),
+        )
+        .arg(
+            Arg::new("json")
+                .long("json")
+                .help("Output raw JSON instead of formatted terminal output")
+                .action(ArgAction::SetTrue),
+        )
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
@@ -60,22 +62,34 @@ impl CliCommand for ListCommand {
         let resources = fetch_application_resources(&application_id, &environment)?;
 
         if json_output {
-            println!("{}", serde_json::to_string_pretty(&resources.iter().map(|r| {
-                serde_json::json!({
-                    "id": r.id,
-                    "type": r.r#type,
-                    "serviceName": r.service_name,
-                    "environment": r.environment,
-                    "region": r.region,
-                    "status": r.status,
-                })
-            }).collect::<Vec<_>>())?);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(
+                    &resources
+                        .iter()
+                        .map(|r| {
+                            serde_json::json!({
+                                "id": r.id,
+                                "type": r.r#type,
+                                "serviceName": r.service_name,
+                                "environment": r.environment,
+                                "region": r.region,
+                                "status": r.status,
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                )?
+            );
             return Ok(());
         }
 
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
         writeln!(stdout)?;
-        stdout.set_color(termcolor::ColorSpec::new().set_fg(Some(Color::Cyan)).set_bold(true))?;
+        stdout.set_color(
+            termcolor::ColorSpec::new()
+                .set_fg(Some(Color::Cyan))
+                .set_bold(true),
+        )?;
         writeln!(stdout, "Infrastructure resources for {}", environment)?;
         stdout.reset()?;
         writeln!(stdout)?;

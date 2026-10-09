@@ -1,20 +1,16 @@
-use std::collections::HashMap;
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 use crate::core::{
-    env::load_env_file,
-    env_scope::parse_inter_service_url_var,
+    env::load_env_file, env_scope::parse_inter_service_url_var,
     manifest::application::ApplicationManifestData,
 };
 
 /// Context for resolving env var defaults.
 pub(crate) enum EnvContext<'a> {
     /// .env.local context: services are on localhost
-    EnvLocal {
-        project_name: &'a str,
-    },
+    EnvLocal { project_name: &'a str },
     /// docker-compose context: services are referenced by container name
     #[allow(dead_code)]
     DockerCompose {
@@ -198,12 +194,8 @@ pub(crate) fn resolve_env_var_default(
             .unwrap_or(0);
 
         return match context {
-            EnvContext::EnvLocal { .. } => {
-                Some(format!("redis://localhost:6379/{}", partition))
-            }
-            EnvContext::DockerCompose { .. } => {
-                Some(format!("redis://redis:6379/{}", partition))
-            }
+            EnvContext::EnvLocal { .. } => Some(format!("redis://localhost:6379/{}", partition)),
+            EnvContext::DockerCompose { .. } => Some(format!("redis://redis:6379/{}", partition)),
         };
     }
 
@@ -411,9 +403,7 @@ fn find_existing_env_value(modules_path: &Path, key: &str) -> Option<String> {
 
 /// Find an existing HMAC_SECRET_KEY value from any .env file in the workspace.
 /// This ensures consistency across all services.
-pub(crate) fn find_existing_hmac_secret(
-    modules_path: &Path,
-) -> Option<String> {
+pub(crate) fn find_existing_hmac_secret(modules_path: &Path) -> Option<String> {
     // Check root .env.local first
     if let Some(app_root) = modules_path.parent() {
         if let Ok(vars) = load_env_file(&app_root.join(".env.local")) {
@@ -469,8 +459,14 @@ pub(crate) fn resolve_env_var_defaults(
 ) -> HashMap<String, String> {
     let mut result = HashMap::new();
     for var_name in missing_vars {
-        let value = resolve_env_var_default(var_name, manifest, context, existing_hmac_secret, existing_values)
-            .unwrap_or_default();
+        let value = resolve_env_var_default(
+            var_name,
+            manifest,
+            context,
+            existing_hmac_secret,
+            existing_values,
+        )
+        .unwrap_or_default();
         result.insert(var_name.clone(), value);
     }
     result
@@ -563,43 +559,70 @@ mod tests {
             "myapp",
             "postgresql",
             vec![
-                ("iam", ProjectType::Service, None, Some("better-auth".to_string())),
-                ("billing", ProjectType::Service, Some(ResourceInventory {
-                    database: Some("postgresql".to_string()),
-                    cache: Some("redis".to_string()),
-                    queue: None,
-                    object_store: None,
-                    redis_partition: Some(0),
-                    capabilities: None,
-                }), None),
-                ("notifications", ProjectType::Worker, Some(ResourceInventory {
-                    database: None,
-                    cache: Some("redis".to_string()),
-                    queue: None,
-                    object_store: None,
-                    redis_partition: Some(1),
-                    capabilities: None,
-                }), None),
+                (
+                    "iam",
+                    ProjectType::Service,
+                    None,
+                    Some("better-auth".to_string()),
+                ),
+                (
+                    "billing",
+                    ProjectType::Service,
+                    Some(ResourceInventory {
+                        database: Some("postgresql".to_string()),
+                        cache: Some("redis".to_string()),
+                        queue: None,
+                        object_store: None,
+                        redis_partition: Some(0),
+                        capabilities: None,
+                    }),
+                    None,
+                ),
+                (
+                    "notifications",
+                    ProjectType::Worker,
+                    Some(ResourceInventory {
+                        database: None,
+                        cache: Some("redis".to_string()),
+                        queue: None,
+                        object_store: None,
+                        redis_partition: Some(1),
+                        capabilities: None,
+                    }),
+                    None,
+                ),
             ],
         )
     }
 
-    fn ev() -> ExistingEnvValues { ExistingEnvValues::empty() }
+    fn ev() -> ExistingEnvValues {
+        ExistingEnvValues::empty()
+    }
 
     // --- HMAC_SECRET_KEY ---
 
     #[test]
     fn test_hmac_secret_key_uses_existing() {
         let manifest = simple_manifest();
-        let ctx = EnvContext::EnvLocal { project_name: "billing" };
-        let result = resolve_env_var_default("HMAC_SECRET_KEY", &manifest, &ctx, Some("existing-secret"), &ev());
+        let ctx = EnvContext::EnvLocal {
+            project_name: "billing",
+        };
+        let result = resolve_env_var_default(
+            "HMAC_SECRET_KEY",
+            &manifest,
+            &ctx,
+            Some("existing-secret"),
+            &ev(),
+        );
         assert_eq!(result, Some("existing-secret".to_string()));
     }
 
     #[test]
     fn test_hmac_secret_key_generates_when_none() {
         let manifest = simple_manifest();
-        let ctx = EnvContext::EnvLocal { project_name: "billing" };
+        let ctx = EnvContext::EnvLocal {
+            project_name: "billing",
+        };
         let result = resolve_env_var_default("HMAC_SECRET_KEY", &manifest, &ctx, None, &ev());
         assert!(result.is_some());
         let secret = result.unwrap();
@@ -610,10 +633,27 @@ mod tests {
     #[test]
     fn test_hmac_secret_key_consistent_across_contexts() {
         let manifest = simple_manifest();
-        let ctx1 = EnvContext::EnvLocal { project_name: "billing" };
-        let ctx2 = EnvContext::DockerCompose { service_key: "billing", project_name: "billing" };
-        let r1 = resolve_env_var_default("HMAC_SECRET_KEY", &manifest, &ctx1, Some("shared-secret"), &ev());
-        let r2 = resolve_env_var_default("HMAC_SECRET_KEY", &manifest, &ctx2, Some("shared-secret"), &ev());
+        let ctx1 = EnvContext::EnvLocal {
+            project_name: "billing",
+        };
+        let ctx2 = EnvContext::DockerCompose {
+            service_key: "billing",
+            project_name: "billing",
+        };
+        let r1 = resolve_env_var_default(
+            "HMAC_SECRET_KEY",
+            &manifest,
+            &ctx1,
+            Some("shared-secret"),
+            &ev(),
+        );
+        let r2 = resolve_env_var_default(
+            "HMAC_SECRET_KEY",
+            &manifest,
+            &ctx2,
+            Some("shared-secret"),
+            &ev(),
+        );
         assert_eq!(r1, r2);
     }
 
@@ -622,22 +662,38 @@ mod tests {
     #[test]
     fn test_redis_url_env_local_with_partition() {
         let manifest = simple_manifest();
-        let ctx = EnvContext::EnvLocal { project_name: "billing" };
-        assert_eq!(resolve_env_var_default("REDIS_URL", &manifest, &ctx, None, &ev()), Some("redis://localhost:6379/0".to_string()));
+        let ctx = EnvContext::EnvLocal {
+            project_name: "billing",
+        };
+        assert_eq!(
+            resolve_env_var_default("REDIS_URL", &manifest, &ctx, None, &ev()),
+            Some("redis://localhost:6379/0".to_string())
+        );
     }
 
     #[test]
     fn test_redis_url_env_local_partition_1() {
         let manifest = simple_manifest();
-        let ctx = EnvContext::EnvLocal { project_name: "notifications" };
-        assert_eq!(resolve_env_var_default("REDIS_URL", &manifest, &ctx, None, &ev()), Some("redis://localhost:6379/1".to_string()));
+        let ctx = EnvContext::EnvLocal {
+            project_name: "notifications",
+        };
+        assert_eq!(
+            resolve_env_var_default("REDIS_URL", &manifest, &ctx, None, &ev()),
+            Some("redis://localhost:6379/1".to_string())
+        );
     }
 
     #[test]
     fn test_redis_url_docker_compose() {
         let manifest = simple_manifest();
-        let ctx = EnvContext::DockerCompose { service_key: "billing", project_name: "billing" };
-        assert_eq!(resolve_env_var_default("REDIS_URL", &manifest, &ctx, None, &ev()), Some("redis://redis:6379/0".to_string()));
+        let ctx = EnvContext::DockerCompose {
+            service_key: "billing",
+            project_name: "billing",
+        };
+        assert_eq!(
+            resolve_env_var_default("REDIS_URL", &manifest, &ctx, None, &ev()),
+            Some("redis://redis:6379/0".to_string())
+        );
     }
 
     // --- Inter-service URLs ---
@@ -645,22 +701,38 @@ mod tests {
     #[test]
     fn test_inter_service_url_env_local() {
         let manifest = simple_manifest();
-        let ctx = EnvContext::EnvLocal { project_name: "billing" };
-        assert_eq!(resolve_env_var_default("IAM_URL", &manifest, &ctx, None, &ev()), Some("http://localhost:8000".to_string()));
+        let ctx = EnvContext::EnvLocal {
+            project_name: "billing",
+        };
+        assert_eq!(
+            resolve_env_var_default("IAM_URL", &manifest, &ctx, None, &ev()),
+            Some("http://localhost:8000".to_string())
+        );
     }
 
     #[test]
     fn test_inter_service_url_docker_compose() {
         let manifest = simple_manifest();
-        let ctx = EnvContext::DockerCompose { service_key: "billing", project_name: "billing" };
-        assert_eq!(resolve_env_var_default("IAM_URL", &manifest, &ctx, None, &ev()), Some("http://iam:8000".to_string()));
+        let ctx = EnvContext::DockerCompose {
+            service_key: "billing",
+            project_name: "billing",
+        };
+        assert_eq!(
+            resolve_env_var_default("IAM_URL", &manifest, &ctx, None, &ev()),
+            Some("http://iam:8000".to_string())
+        );
     }
 
     #[test]
     fn test_inter_service_ws_url() {
         let manifest = simple_manifest();
-        let ctx = EnvContext::EnvLocal { project_name: "billing" };
-        assert_eq!(resolve_env_var_default("IAM_WS_URL", &manifest, &ctx, None, &ev()), Some("ws://localhost:11000".to_string()));
+        let ctx = EnvContext::EnvLocal {
+            project_name: "billing",
+        };
+        assert_eq!(
+            resolve_env_var_default("IAM_WS_URL", &manifest, &ctx, None, &ev()),
+            Some("ws://localhost:11000".to_string())
+        );
     }
 
     // --- Common application vars ---
@@ -668,19 +740,41 @@ mod tests {
     #[test]
     fn test_node_env() {
         let manifest = simple_manifest();
-        let ctx = EnvContext::EnvLocal { project_name: "billing" };
-        assert_eq!(resolve_env_var_default("NODE_ENV", &manifest, &ctx, None, &ev()), Some("development".to_string()));
+        let ctx = EnvContext::EnvLocal {
+            project_name: "billing",
+        };
+        assert_eq!(
+            resolve_env_var_default("NODE_ENV", &manifest, &ctx, None, &ev()),
+            Some("development".to_string())
+        );
     }
 
     #[test]
     fn test_host_env_local_vs_docker() {
         let manifest = simple_manifest();
         assert_eq!(
-            resolve_env_var_default("HOST", &manifest, &EnvContext::EnvLocal { project_name: "billing" }, None, &ev()),
+            resolve_env_var_default(
+                "HOST",
+                &manifest,
+                &EnvContext::EnvLocal {
+                    project_name: "billing"
+                },
+                None,
+                &ev()
+            ),
             Some("localhost".to_string())
         );
         assert_eq!(
-            resolve_env_var_default("HOST", &manifest, &EnvContext::DockerCompose { service_key: "billing", project_name: "billing" }, None, &ev()),
+            resolve_env_var_default(
+                "HOST",
+                &manifest,
+                &EnvContext::DockerCompose {
+                    service_key: "billing",
+                    project_name: "billing"
+                },
+                None,
+                &ev()
+            ),
             Some("0.0.0.0".to_string())
         );
     }
@@ -688,23 +782,41 @@ mod tests {
     #[test]
     fn test_port_and_ws_port() {
         let manifest = simple_manifest();
-        let ctx = EnvContext::EnvLocal { project_name: "billing" };
-        assert_eq!(resolve_env_var_default("PORT", &manifest, &ctx, None, &ev()), Some("8000".to_string()));
-        assert_eq!(resolve_env_var_default("WS_PORT", &manifest, &ctx, None, &ev()), Some("11000".to_string()));
+        let ctx = EnvContext::EnvLocal {
+            project_name: "billing",
+        };
+        assert_eq!(
+            resolve_env_var_default("PORT", &manifest, &ctx, None, &ev()),
+            Some("8000".to_string())
+        );
+        assert_eq!(
+            resolve_env_var_default("WS_PORT", &manifest, &ctx, None, &ev()),
+            Some("11000".to_string())
+        );
     }
 
     #[test]
     fn test_otel_service_name() {
         let manifest = simple_manifest();
-        let ctx = EnvContext::EnvLocal { project_name: "billing" };
-        assert_eq!(resolve_env_var_default("OTEL_SERVICE_NAME", &manifest, &ctx, None, &ev()), Some("myapp-billing-dev".to_string()));
+        let ctx = EnvContext::EnvLocal {
+            project_name: "billing",
+        };
+        assert_eq!(
+            resolve_env_var_default("OTEL_SERVICE_NAME", &manifest, &ctx, None, &ev()),
+            Some("myapp-billing-dev".to_string())
+        );
     }
 
     #[test]
     fn test_queue_name() {
         let manifest = simple_manifest();
-        let ctx = EnvContext::EnvLocal { project_name: "notifications" };
-        assert_eq!(resolve_env_var_default("QUEUE_NAME", &manifest, &ctx, None, &ev()), Some("myapp-notifications-queue".to_string()));
+        let ctx = EnvContext::EnvLocal {
+            project_name: "notifications",
+        };
+        assert_eq!(
+            resolve_env_var_default("QUEUE_NAME", &manifest, &ctx, None, &ev()),
+            Some("myapp-notifications-queue".to_string())
+        );
     }
 
     // --- Database vars ---
@@ -713,11 +825,28 @@ mod tests {
     fn test_db_host_env_local_vs_docker() {
         let manifest = simple_manifest();
         assert_eq!(
-            resolve_env_var_default("DB_HOST", &manifest, &EnvContext::EnvLocal { project_name: "billing" }, None, &ev()),
+            resolve_env_var_default(
+                "DB_HOST",
+                &manifest,
+                &EnvContext::EnvLocal {
+                    project_name: "billing"
+                },
+                None,
+                &ev()
+            ),
             Some("localhost".to_string())
         );
         assert_eq!(
-            resolve_env_var_default("DB_HOST", &manifest, &EnvContext::DockerCompose { service_key: "billing", project_name: "billing" }, None, &ev()),
+            resolve_env_var_default(
+                "DB_HOST",
+                &manifest,
+                &EnvContext::DockerCompose {
+                    service_key: "billing",
+                    project_name: "billing"
+                },
+                None,
+                &ev()
+            ),
             Some("postgres".to_string())
         );
     }
@@ -725,15 +854,25 @@ mod tests {
     #[test]
     fn test_db_port_postgresql() {
         let manifest = simple_manifest();
-        let ctx = EnvContext::EnvLocal { project_name: "billing" };
-        assert_eq!(resolve_env_var_default("DB_PORT", &manifest, &ctx, None, &ev()), Some("5432".to_string()));
+        let ctx = EnvContext::EnvLocal {
+            project_name: "billing",
+        };
+        assert_eq!(
+            resolve_env_var_default("DB_PORT", &manifest, &ctx, None, &ev()),
+            Some("5432".to_string())
+        );
     }
 
     #[test]
     fn test_db_name() {
         let manifest = simple_manifest();
-        let ctx = EnvContext::EnvLocal { project_name: "billing" };
-        assert_eq!(resolve_env_var_default("DB_NAME", &manifest, &ctx, None, &ev()), Some("myapp-billing-dev".to_string()));
+        let ctx = EnvContext::EnvLocal {
+            project_name: "billing",
+        };
+        assert_eq!(
+            resolve_env_var_default("DB_NAME", &manifest, &ctx, None, &ev()),
+            Some("myapp-billing-dev".to_string())
+        );
     }
 
     // --- S3 vars ---
@@ -742,11 +881,28 @@ mod tests {
     fn test_s3_url_env_local_vs_docker() {
         let manifest = simple_manifest();
         assert_eq!(
-            resolve_env_var_default("S3_URL", &manifest, &EnvContext::EnvLocal { project_name: "billing" }, None, &ev()),
+            resolve_env_var_default(
+                "S3_URL",
+                &manifest,
+                &EnvContext::EnvLocal {
+                    project_name: "billing"
+                },
+                None,
+                &ev()
+            ),
             Some("http://localhost:9000".to_string())
         );
         assert_eq!(
-            resolve_env_var_default("S3_URL", &manifest, &EnvContext::DockerCompose { service_key: "billing", project_name: "billing" }, None, &ev()),
+            resolve_env_var_default(
+                "S3_URL",
+                &manifest,
+                &EnvContext::DockerCompose {
+                    service_key: "billing",
+                    project_name: "billing"
+                },
+                None,
+                &ev()
+            ),
             Some("http://minio:9000".to_string())
         );
     }
@@ -757,11 +913,28 @@ mod tests {
     fn test_kafka_brokers_env_local_vs_docker() {
         let manifest = simple_manifest();
         assert_eq!(
-            resolve_env_var_default("KAFKA_BROKERS", &manifest, &EnvContext::EnvLocal { project_name: "billing" }, None, &ev()),
+            resolve_env_var_default(
+                "KAFKA_BROKERS",
+                &manifest,
+                &EnvContext::EnvLocal {
+                    project_name: "billing"
+                },
+                None,
+                &ev()
+            ),
             Some("localhost:9092".to_string())
         );
         assert_eq!(
-            resolve_env_var_default("KAFKA_BROKERS", &manifest, &EnvContext::DockerCompose { service_key: "billing", project_name: "billing" }, None, &ev()),
+            resolve_env_var_default(
+                "KAFKA_BROKERS",
+                &manifest,
+                &EnvContext::DockerCompose {
+                    service_key: "billing",
+                    project_name: "billing"
+                },
+                None,
+                &ev()
+            ),
             Some("kafka:9092".to_string())
         );
     }
@@ -772,11 +945,28 @@ mod tests {
     fn test_jwks_public_key_url_with_better_auth() {
         let manifest = simple_manifest();
         assert_eq!(
-            resolve_env_var_default("JWKS_PUBLIC_KEY_URL", &manifest, &EnvContext::EnvLocal { project_name: "billing" }, None, &ev()),
+            resolve_env_var_default(
+                "JWKS_PUBLIC_KEY_URL",
+                &manifest,
+                &EnvContext::EnvLocal {
+                    project_name: "billing"
+                },
+                None,
+                &ev()
+            ),
             Some("http://localhost:8000/api/auth/jwks".to_string())
         );
         assert_eq!(
-            resolve_env_var_default("JWKS_PUBLIC_KEY_URL", &manifest, &EnvContext::DockerCompose { service_key: "billing", project_name: "billing" }, None, &ev()),
+            resolve_env_var_default(
+                "JWKS_PUBLIC_KEY_URL",
+                &manifest,
+                &EnvContext::DockerCompose {
+                    service_key: "billing",
+                    project_name: "billing"
+                },
+                None,
+                &ev()
+            ),
             Some("http://iam:8000/api/auth/jwks".to_string())
         );
     }
@@ -786,8 +976,13 @@ mod tests {
     #[test]
     fn test_unknown_var_returns_none() {
         let manifest = simple_manifest();
-        let ctx = EnvContext::EnvLocal { project_name: "billing" };
-        assert_eq!(resolve_env_var_default("CUSTOM_UNKNOWN_VAR", &manifest, &ctx, None, &ev()), None);
+        let ctx = EnvContext::EnvLocal {
+            project_name: "billing",
+        };
+        assert_eq!(
+            resolve_env_var_default("CUSTOM_UNKNOWN_VAR", &manifest, &ctx, None, &ev()),
+            None
+        );
     }
 
     // --- Majority value tests ---
@@ -795,10 +990,13 @@ mod tests {
     #[test]
     fn test_majority_value_overrides_default_for_port() {
         let manifest = simple_manifest();
-        let ctx = EnvContext::EnvLocal { project_name: "billing" };
-        let existing = ExistingEnvValues::from_map(HashMap::from([
-            ("PORT".to_string(), vec!["8001".to_string(), "8001".to_string(), "8000".to_string()]),
-        ]));
+        let ctx = EnvContext::EnvLocal {
+            project_name: "billing",
+        };
+        let existing = ExistingEnvValues::from_map(HashMap::from([(
+            "PORT".to_string(),
+            vec!["8001".to_string(), "8001".to_string(), "8000".to_string()],
+        )]));
         assert_eq!(
             resolve_env_var_default("PORT", &manifest, &ctx, None, &existing),
             Some("8001".to_string())
@@ -808,10 +1006,13 @@ mod tests {
     #[test]
     fn test_majority_value_overrides_default_for_version() {
         let manifest = simple_manifest();
-        let ctx = EnvContext::EnvLocal { project_name: "billing" };
-        let existing = ExistingEnvValues::from_map(HashMap::from([
-            ("VERSION".to_string(), vec!["v2".to_string(), "v2".to_string()]),
-        ]));
+        let ctx = EnvContext::EnvLocal {
+            project_name: "billing",
+        };
+        let existing = ExistingEnvValues::from_map(HashMap::from([(
+            "VERSION".to_string(),
+            vec!["v2".to_string(), "v2".to_string()],
+        )]));
         assert_eq!(
             resolve_env_var_default("VERSION", &manifest, &ctx, None, &existing),
             Some("v2".to_string())
@@ -821,10 +1022,13 @@ mod tests {
     #[test]
     fn test_majority_value_for_db_host() {
         let manifest = simple_manifest();
-        let ctx = EnvContext::EnvLocal { project_name: "billing" };
-        let existing = ExistingEnvValues::from_map(HashMap::from([
-            ("DB_HOST".to_string(), vec!["db.example.com".to_string(), "db.example.com".to_string()]),
-        ]));
+        let ctx = EnvContext::EnvLocal {
+            project_name: "billing",
+        };
+        let existing = ExistingEnvValues::from_map(HashMap::from([(
+            "DB_HOST".to_string(),
+            vec!["db.example.com".to_string(), "db.example.com".to_string()],
+        )]));
         assert_eq!(
             resolve_env_var_default("DB_HOST", &manifest, &ctx, None, &existing),
             Some("db.example.com".to_string())
@@ -834,11 +1038,14 @@ mod tests {
     #[test]
     fn test_majority_value_does_not_apply_to_per_service_vars() {
         let manifest = simple_manifest();
-        let ctx = EnvContext::EnvLocal { project_name: "billing" };
+        let ctx = EnvContext::EnvLocal {
+            project_name: "billing",
+        };
         // DB_NAME is per-service, not majority-eligible
-        let existing = ExistingEnvValues::from_map(HashMap::from([
-            ("DB_NAME".to_string(), vec!["other-db".to_string(), "other-db".to_string()]),
-        ]));
+        let existing = ExistingEnvValues::from_map(HashMap::from([(
+            "DB_NAME".to_string(),
+            vec!["other-db".to_string(), "other-db".to_string()],
+        )]));
         assert_eq!(
             resolve_env_var_default("DB_NAME", &manifest, &ctx, None, &existing),
             Some("myapp-billing-dev".to_string())
@@ -848,11 +1055,14 @@ mod tests {
     #[test]
     fn test_majority_value_does_not_apply_to_redis_url() {
         let manifest = simple_manifest();
-        let ctx = EnvContext::EnvLocal { project_name: "billing" };
+        let ctx = EnvContext::EnvLocal {
+            project_name: "billing",
+        };
         // REDIS_URL is per-service (never application scoped), not majority-eligible
-        let existing = ExistingEnvValues::from_map(HashMap::from([
-            ("REDIS_URL".to_string(), vec!["redis://custom:6379/0".to_string()]),
-        ]));
+        let existing = ExistingEnvValues::from_map(HashMap::from([(
+            "REDIS_URL".to_string(),
+            vec!["redis://custom:6379/0".to_string()],
+        )]));
         assert_eq!(
             resolve_env_var_default("REDIS_URL", &manifest, &ctx, None, &existing),
             Some("redis://localhost:6379/0".to_string())
@@ -862,7 +1072,9 @@ mod tests {
     #[test]
     fn test_majority_value_empty_falls_back_to_default() {
         let manifest = simple_manifest();
-        let ctx = EnvContext::EnvLocal { project_name: "billing" };
+        let ctx = EnvContext::EnvLocal {
+            project_name: "billing",
+        };
         // No existing values -> fall back to hardcoded default
         assert_eq!(
             resolve_env_var_default("PORT", &manifest, &ctx, None, &ev()),
@@ -873,10 +1085,13 @@ mod tests {
     #[test]
     fn test_majority_value_single_value() {
         let manifest = simple_manifest();
-        let ctx = EnvContext::EnvLocal { project_name: "billing" };
-        let existing = ExistingEnvValues::from_map(HashMap::from([
-            ("PORT".to_string(), vec!["9000".to_string()]),
-        ]));
+        let ctx = EnvContext::EnvLocal {
+            project_name: "billing",
+        };
+        let existing = ExistingEnvValues::from_map(HashMap::from([(
+            "PORT".to_string(),
+            vec!["9000".to_string()],
+        )]));
         assert_eq!(
             resolve_env_var_default("PORT", &manifest, &ctx, None, &existing),
             Some("9000".to_string())
@@ -886,7 +1101,10 @@ mod tests {
     #[test]
     fn test_majority_value_struct_methods() {
         let existing = ExistingEnvValues::from_map(HashMap::from([
-            ("A".to_string(), vec!["x".to_string(), "y".to_string(), "x".to_string()]),
+            (
+                "A".to_string(),
+                vec!["x".to_string(), "y".to_string(), "x".to_string()],
+            ),
             ("B".to_string(), vec!["z".to_string()]),
         ]));
         assert_eq!(existing.majority_value("A"), Some("x".to_string()));
@@ -897,7 +1115,9 @@ mod tests {
     #[test]
     fn test_resolve_env_var_defaults_batch() {
         let manifest = simple_manifest();
-        let ctx = EnvContext::EnvLocal { project_name: "billing" };
+        let ctx = EnvContext::EnvLocal {
+            project_name: "billing",
+        };
         let vars = vec![
             "NODE_ENV".to_string(),
             "PORT".to_string(),
@@ -912,10 +1132,13 @@ mod tests {
     #[test]
     fn test_resolve_env_var_defaults_batch_with_majority() {
         let manifest = simple_manifest();
-        let ctx = EnvContext::EnvLocal { project_name: "billing" };
-        let existing = ExistingEnvValues::from_map(HashMap::from([
-            ("PORT".to_string(), vec!["9090".to_string(), "9090".to_string()]),
-        ]));
+        let ctx = EnvContext::EnvLocal {
+            project_name: "billing",
+        };
+        let existing = ExistingEnvValues::from_map(HashMap::from([(
+            "PORT".to_string(),
+            vec!["9090".to_string(), "9090".to_string()],
+        )]));
         let vars = vec!["PORT".to_string(), "VERSION".to_string()];
         let result = resolve_env_var_defaults(&vars, &manifest, &ctx, None, &existing);
         assert_eq!(result.get("PORT"), Some(&"9090".to_string()));

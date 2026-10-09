@@ -8,8 +8,7 @@ use termcolor::{ColorChoice, StandardStream, WriteColor};
 use crate::{
     CliCommand,
     constants::{
-        ERROR_FAILED_TO_PARSE_PACKAGE_JSON,
-        ERROR_FAILED_TO_READ_PACKAGE_JSON, SdkModeType,
+        ERROR_FAILED_TO_PARSE_PACKAGE_JSON, ERROR_FAILED_TO_READ_PACKAGE_JSON, SdkModeType,
     },
     core::{
         command::command,
@@ -163,7 +162,8 @@ impl CliCommand for ModeCommand {
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-        let (app_root_path, existing_manifest_data) = crate::core::validate::require_manifest(matches)?;
+        let (app_root_path, existing_manifest_data) =
+            crate::core::validate::require_manifest(matches)?;
 
         let mode_type = matches.get_one::<String>("type");
         let dryrun = matches.get_flag("dryrun");

@@ -6,7 +6,7 @@ use convert_case::{Case, Casing};
 use rustyline::{Editor, history::DefaultHistory};
 use termcolor::{ColorChoice, StandardStream, WriteColor};
 
-use super::service::generate_service_package_json;
+use super::{service::generate_service_package_json, storefront::StorefrontCommand};
 use crate::{
     CliCommand,
     constants::{
@@ -40,8 +40,6 @@ use crate::{
     },
     prompt::{ArrayCompleter, prompt_with_validation},
 };
-
-use super::storefront::StorefrontCommand;
 
 #[derive(Debug)]
 pub(super) struct ModuleCommand {
@@ -186,9 +184,7 @@ impl CliCommand for ModuleCommand {
         // shared cache records; mint one only for key-less apps.
         let generated_encryption_key =
             crate::core::env_defaults::find_existing_encryption_key(&base_path)
-                .unwrap_or_else(|| {
-                    crate::core::manifest::service::generate_random_secret(32)
-                });
+                .unwrap_or_else(|| crate::core::manifest::service::generate_random_secret(32));
 
         let mut service_data = ServiceManifestData {
             id: manifest_data.id.clone(),

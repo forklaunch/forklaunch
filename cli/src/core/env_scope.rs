@@ -89,9 +89,10 @@ pub(crate) fn determine_env_var_scopes(
                     EnvironmentVariableScope::Service,
                     Some(project_name.clone()),
                 ),
-                Some(ProjectType::Worker) => {
-                    (EnvironmentVariableScope::Worker, Some(format!("{}-worker", project_name)))
-                }
+                Some(ProjectType::Worker) => (
+                    EnvironmentVariableScope::Worker,
+                    Some(format!("{}-worker", project_name)),
+                ),
                 _ => (EnvironmentVariableScope::Application, None),
             }
         } else {
@@ -230,10 +231,7 @@ fn is_observability_var(var_name: &str) -> bool {
 }
 
 /// Auth/infrastructure URL vars that Pulumi computes at deploy time.
-const PULUMI_INJECTED_URL_VARS: &[&str] = &[
-    "JWKS_PUBLIC_KEY_URL",
-    "BETTER_AUTH_BASE_URL",
-];
+const PULUMI_INJECTED_URL_VARS: &[&str] = &["JWKS_PUBLIC_KEY_URL", "BETTER_AUTH_BASE_URL"];
 
 /// Check if a var is a Pulumi-injected URL var (auth/infrastructure URLs).
 pub(crate) fn is_pulumi_injected_url(var_name: &str) -> bool {
@@ -474,7 +472,10 @@ mod tests {
         ];
 
         assert!(is_inter_service_url_var("BILLING_URL", &projects));
-        assert!(is_inter_service_url_var("PLATFORM_MANAGEMENT_URL", &projects));
+        assert!(is_inter_service_url_var(
+            "PLATFORM_MANAGEMENT_URL",
+            &projects
+        ));
         assert!(is_inter_service_url_var("AUTH_URI", &projects));
         assert!(is_inter_service_url_var("BILLING_FQDN", &projects));
         assert!(is_inter_service_url_var("AUTH_HOST", &projects));
@@ -482,7 +483,10 @@ mod tests {
         assert!(is_inter_service_url_var("BILLING_SERVICE_URL", &projects));
         assert!(is_inter_service_url_var("BILLING_API_URL", &projects));
         assert!(is_inter_service_url_var("AUTH_SERVICE_URI", &projects));
-        assert!(is_inter_service_url_var("PLATFORM_MANAGEMENT_API_URL", &projects));
+        assert!(is_inter_service_url_var(
+            "PLATFORM_MANAGEMENT_API_URL",
+            &projects
+        ));
         // Non-matches
         assert!(!is_inter_service_url_var("UNKNOWN_URL", &projects));
         assert!(!is_inter_service_url_var("BILLING_PORT", &projects));

@@ -9,8 +9,10 @@
 //! that cannot be scoped to an organization, both resolve to `Inconclusive` so the
 //! caller proceeds as a single-app deploy.
 
-use super::client::{extract_list, managed_url};
-use super::types::AppTemplate;
+use super::{
+    client::{extract_list, managed_url},
+    types::AppTemplate,
+};
 use crate::core::{hmac::AuthMode, http_client::get_with_auth};
 
 /// Outcome of asking the control plane whether the app being deployed is a managed

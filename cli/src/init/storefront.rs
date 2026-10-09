@@ -398,7 +398,6 @@ impl CliCommand for StorefrontCommand {
         write_rendered_templates(&rendered_templates, dryrun, &mut stdout)
             .with_context(|| "Failed to write storefront project metadata to manifest")?;
 
-
         print_summary(
             &mut stdout,
             &project_name,
@@ -484,7 +483,10 @@ mod tests {
             "captures/shop",
             "manifest.json",
         ] {
-            assert!(!looks_like_url(value), "{value} should be treated as a path");
+            assert!(
+                !looks_like_url(value),
+                "{value} should be treated as a path"
+            );
         }
     }
 

@@ -58,11 +58,7 @@ impl CliCommand for ValidateCommand {
             writeln!(stdout, "  - {}", project_name)?;
         }
 
-        let project_names: Vec<String> = manifest
-            .projects
-            .iter()
-            .map(|p| p.name.clone())
-            .collect();
+        let project_names: Vec<String> = manifest.projects.iter().map(|p| p.name.clone()).collect();
 
         // Filter out Pulumi-injected vars (inter-service URLs, auth URLs) — these are
         // injected at deploy time and should not be flagged as missing locally.
@@ -209,7 +205,12 @@ fn display_validation_results(
     }
 
     if !worker_vars.is_empty() {
-        log_header!(stdout, Color::Cyan, "\nWorker-Level Variables ({}):", worker_vars.len());
+        log_header!(
+            stdout,
+            Color::Cyan,
+            "\nWorker-Level Variables ({}):",
+            worker_vars.len()
+        );
         for var in &worker_vars {
             display_scoped_var_status(var, results, stdout, &mut has_any_missing)?;
         }
@@ -228,11 +229,29 @@ fn display_validation_results(
 
     writeln!(stdout, "Projects scanned: {}", total_projects)?;
 
-    let issues_color = if projects_with_issues > 0 { Color::Red } else { Color::Green };
-    log_write!(stdout, issues_color, "Projects with missing vars: {}\n", projects_with_issues);
+    let issues_color = if projects_with_issues > 0 {
+        Color::Red
+    } else {
+        Color::Green
+    };
+    log_write!(
+        stdout,
+        issues_color,
+        "Projects with missing vars: {}\n",
+        projects_with_issues
+    );
 
-    let missing_color = if total_missing > 0 { Color::Red } else { Color::Green };
-    log_write!(stdout, missing_color, "Total missing variables: {}\n", total_missing);
+    let missing_color = if total_missing > 0 {
+        Color::Red
+    } else {
+        Color::Green
+    };
+    log_write!(
+        stdout,
+        missing_color,
+        "Total missing variables: {}\n",
+        total_missing
+    );
 
     if has_any_missing {
         log_info!(

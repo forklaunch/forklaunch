@@ -1,4 +1,9 @@
-use std::{collections::{HashMap, HashSet}, env, fs, io::Write, path::{Path, PathBuf}};
+use std::{
+    collections::{HashMap, HashSet},
+    env, fs,
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result};
 use clap::{ArgMatches, Command};
@@ -64,8 +69,7 @@ impl CliCommand for SyncCommand {
         let manifest_content = fs::read_to_string(&manifest_path)
             .with_context(|| format!("Failed to read manifest: {}", manifest_path.display()))?;
         let manifest_data: ApplicationManifestData =
-            toml::from_str(&manifest_content)
-                .with_context(|| ERROR_FAILED_TO_PARSE_MANIFEST)?;
+            toml::from_str(&manifest_content).with_context(|| ERROR_FAILED_TO_PARSE_MANIFEST)?;
         let project_names: Vec<String> = manifest_data
             .projects
             .iter()

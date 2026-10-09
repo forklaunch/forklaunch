@@ -43,7 +43,10 @@ pub fn resolve_database_config(
         }
     }
 
-    log_warn!(stdout, "Could not detect database configuration. Please specify:");
+    log_warn!(
+        stdout,
+        "Could not detect database configuration. Please specify:"
+    );
 
     let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
     let mut database_options = vec!["none"];
@@ -205,7 +208,16 @@ pub fn display_detection_results(
     }
 
     if !detected.infrastructure.is_empty() {
-        log_ok!(stdout, "Detected infrastructure: {}", detected.infrastructure.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", "));
+        log_ok!(
+            stdout,
+            "Detected infrastructure: {}",
+            detected
+                .infrastructure
+                .iter()
+                .map(|i| i.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
     }
 
     if let Some(ref desc) = detected.description {
@@ -237,7 +249,11 @@ pub fn resolve_worker_type(
     }
 
     if let Some(detected_type) = &detected.worker_type {
-        log_ok!(stdout, "Detected worker type: {}", detected_type.to_string());
+        log_ok!(
+            stdout,
+            "Detected worker type: {}",
+            detected_type.to_string()
+        );
 
         let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
         let override_choice = prompt_with_validation_with_answers(

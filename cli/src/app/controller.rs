@@ -24,8 +24,11 @@ impl ControllerCommand {
 
 impl CliCommand for ControllerCommand {
     fn command(&self) -> Command {
-        command("controller", "Get controller details by id, including its routes")
-            .arg(Arg::new("id").required(true).help("The controller id"))
+        command(
+            "controller",
+            "Get controller details by id, including its routes",
+        )
+        .arg(Arg::new("id").required(true).help("The controller id"))
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
@@ -118,7 +121,11 @@ mod tests {
 
     #[test]
     fn requires_id() {
-        assert!(controller_cmd().try_get_matches_from(["controller"]).is_err());
+        assert!(
+            controller_cmd()
+                .try_get_matches_from(["controller"])
+                .is_err()
+        );
         assert!(
             controller_cmd()
                 .try_get_matches_from(["controller", "ctrl-1"])

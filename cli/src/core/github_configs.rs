@@ -3,9 +3,9 @@ use std::path::Path;
 use anyhow::Result;
 use ramhorns::Template;
 
-use super::manifest::ManifestData;
-use super::rendered_template::RenderedTemplate;
-use super::template::get_file_contents;
+use super::{
+    manifest::ManifestData, rendered_template::RenderedTemplate, template::get_file_contents,
+};
 
 /// Generates GitHub configuration files (.github/workflows/ci.yml, .github/dependabot.yml,
 /// and .github/BRANCH_PROTECTION.md) for a project.
@@ -24,8 +24,7 @@ pub(crate) fn ensure_github_configs(
     // CI workflow
     let ci_path = workflows_dir.join("ci.yml");
     if !ci_path.exists() {
-        let ci_template_content =
-            get_file_contents(Path::new("github/ci.yml"))?;
+        let ci_template_content = get_file_contents(Path::new("github/ci.yml"))?;
         let tpl = Template::new(ci_template_content)?;
         let rendered = match manifest_data {
             ManifestData::Application(data) => tpl.render(data),
@@ -44,8 +43,7 @@ pub(crate) fn ensure_github_configs(
     // Dependabot config
     let dependabot_path = github_dir.join("dependabot.yml");
     if !dependabot_path.exists() {
-        let dependabot_content =
-            get_file_contents(Path::new("github/dependabot.yml"))?;
+        let dependabot_content = get_file_contents(Path::new("github/dependabot.yml"))?;
         rendered_templates.push(RenderedTemplate {
             path: dependabot_path,
             content: dependabot_content,

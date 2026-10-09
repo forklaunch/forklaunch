@@ -192,9 +192,7 @@ impl<'a> Visit<'a> for WorkerConfigVisitor {
                 }
             } else {
                 // Check if this is WorkerOptions or a variant (BullMqWorkerOptions, KafkaWorkerOptions, etc.)
-                if prop_name == "WorkerOptions"
-                    || prop_name.ends_with("WorkerOptions")
-                {
+                if prop_name == "WorkerOptions" || prop_name.ends_with("WorkerOptions") {
                     self.in_worker_options = true;
                     self.depth = 0;
 
@@ -210,10 +208,7 @@ impl<'a> Visit<'a> for WorkerConfigVisitor {
         oxc_ast_visit::walk::walk_object_property(self, prop);
     }
 
-    fn visit_arrow_function_expression(
-        &mut self,
-        expr: &ArrowFunctionExpression<'a>,
-    ) {
+    fn visit_arrow_function_expression(&mut self, expr: &ArrowFunctionExpression<'a>) {
         if self.in_factory {
             // The factory is an arrow function, visit its body to find the return object
             // For block statements, look for return statements
@@ -238,8 +233,9 @@ impl<'a> Visit<'a> for WorkerConfigVisitor {
 pub fn extract_worker_config_from_source(source: &str) -> Result<Option<WorkerConfig>> {
     let allocator = Allocator::default();
     let source_type = SourceType::from_path("registrations.ts").unwrap_or_default();
-    let ParserReturn { program, errors, .. } =
-        Parser::new(&allocator, source, source_type).parse();
+    let ParserReturn {
+        program, errors, ..
+    } = Parser::new(&allocator, source, source_type).parse();
 
     if !errors.is_empty() {
         return Ok(None);
@@ -275,13 +271,12 @@ pub fn find_all_worker_configs(
                     .to_string();
 
                 // Try to get from cache first, then fall back to reading file
-                let content = if let Ok(Some(cached)) =
-                    rendered_templates_cache.get(&registrations_path)
-                {
-                    cached.content
-                } else {
-                    fs::read_to_string(&registrations_path)?
-                };
+                let content =
+                    if let Ok(Some(cached)) = rendered_templates_cache.get(&registrations_path) {
+                        cached.content
+                    } else {
+                        fs::read_to_string(&registrations_path)?
+                    };
 
                 if let Some(config) = extract_worker_config_from_source(&content)? {
                     configs.insert(project_name, config);
@@ -379,4 +374,3 @@ const runtimeDependencies = environmentConfig.chain({
         assert_eq!(config.concurrency, None);
     }
 }
-

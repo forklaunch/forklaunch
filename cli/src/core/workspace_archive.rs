@@ -22,8 +22,10 @@
 //! The archive is held in memory because it then has to be base64'd into a JSON
 //! body anyway. `MAX_ARCHIVE_BYTES` is what stops that being unbounded.
 
-use std::io::{Cursor, Read, Write};
-use std::path::Path;
+use std::{
+    io::{Cursor, Read, Write},
+    path::Path,
+};
 
 use anyhow::{Context, Result};
 use ignore::WalkBuilder;
@@ -160,8 +162,9 @@ pub(crate) fn pack_workspace(root: &Path) -> Result<(Vec<u8>, ArchiveSummary)> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::fs;
+
+    use super::*;
 
     fn workspace() -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
@@ -172,7 +175,11 @@ mod tests {
         fs::create_dir_all(root.join("secrets")).unwrap();
         fs::write(root.join("secrets/key.pem"), "-----BEGIN PRIVATE KEY-----").unwrap();
         fs::create_dir_all(root.join("node_modules/left-pad")).unwrap();
-        fs::write(root.join("node_modules/left-pad/index.js"), "module.exports=1").unwrap();
+        fs::write(
+            root.join("node_modules/left-pad/index.js"),
+            "module.exports=1",
+        )
+        .unwrap();
         fs::create_dir_all(root.join(".git")).unwrap();
         fs::write(root.join(".git/config"), "[remote]").unwrap();
         dir
@@ -227,7 +234,11 @@ mod tests {
     fn skips_oversized_files_and_reports_how_many() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("small.ts"), "export const a = 1;").unwrap();
-        fs::write(dir.path().join("huge.bin"), vec![0u8; (MAX_FILE_BYTES + 1) as usize]).unwrap();
+        fs::write(
+            dir.path().join("huge.bin"),
+            vec![0u8; (MAX_FILE_BYTES + 1) as usize],
+        )
+        .unwrap();
 
         let (bytes, summary) = pack_workspace(dir.path()).unwrap();
         assert_eq!(summary.skipped_large, 1);

@@ -79,8 +79,7 @@ fn get_json(url: &str) -> Result<serde_json::Value> {
 }
 
 fn post_json(url: &str, body: serde_json::Value) -> Result<serde_json::Value> {
-    let response = post(url, body)
-        .with_context(|| "Failed to reach observability API")?;
+    let response = post(url, body).with_context(|| "Failed to reach observability API")?;
     if !response.status().is_success() {
         bail!(
             "Request failed ({}): {}",
@@ -108,7 +107,9 @@ impl CliCommand for TablesCommand {
         command("tables", "List tables in the database").arg(resource_arg())
     }
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        let resource = matches.get_one::<String>("resource").context("--resource is required")?;
+        let resource = matches
+            .get_one::<String>("resource")
+            .context("--resource is required")?;
         print_pretty(&get_json(&explorer_url(resource, "/tables"))?)
     }
 }
@@ -127,8 +128,12 @@ impl CliCommand for SchemaCommand {
             .arg(Arg::new("table").required(true).help("Table name"))
     }
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        let resource = matches.get_one::<String>("resource").context("--resource is required")?;
-        let table = matches.get_one::<String>("table").context("table is required")?;
+        let resource = matches
+            .get_one::<String>("resource")
+            .context("--resource is required")?;
+        let table = matches
+            .get_one::<String>("table")
+            .context("table is required")?;
         print_pretty(&get_json(&explorer_url(
             resource,
             &format!("/tables/{}/schema", urlencoding::encode(table)),
@@ -149,14 +154,33 @@ impl CliCommand for RowsCommand {
             .arg(resource_arg())
             .arg(Arg::new("table").required(true).help("Table name"))
             .arg(Arg::new("page").long("page").help("Page number"))
-            .arg(Arg::new("page_size").long("page-size").help("Rows per page"))
-            .arg(Arg::new("sort_column").long("sort-column").help("Column to sort by"))
-            .arg(Arg::new("sort_direction").long("sort-direction").help("asc or desc"))
+            .arg(
+                Arg::new("page_size")
+                    .long("page-size")
+                    .help("Rows per page"),
+            )
+            .arg(
+                Arg::new("sort_column")
+                    .long("sort-column")
+                    .help("Column to sort by"),
+            )
+            .arg(
+                Arg::new("sort_direction")
+                    .long("sort-direction")
+                    .help("asc or desc"),
+            )
     }
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        let resource = matches.get_one::<String>("resource").context("--resource is required")?;
-        let table = matches.get_one::<String>("table").context("table is required")?;
-        let mut url = explorer_url(resource, &format!("/tables/{}/rows", urlencoding::encode(table)));
+        let resource = matches
+            .get_one::<String>("resource")
+            .context("--resource is required")?;
+        let table = matches
+            .get_one::<String>("table")
+            .context("table is required")?;
+        let mut url = explorer_url(
+            resource,
+            &format!("/tables/{}/rows", urlencoding::encode(table)),
+        );
         let mut params = Vec::new();
         if let Some(v) = matches.get_one::<String>("page") {
             params.push(format!("page={}", urlencoding::encode(v)));
@@ -192,8 +216,12 @@ impl CliCommand for QueryCommand {
             .arg(Arg::new("sql").required(true).help("The SQL to execute"))
     }
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        let resource = matches.get_one::<String>("resource").context("--resource is required")?;
-        let sql = matches.get_one::<String>("sql").context("sql is required")?;
+        let resource = matches
+            .get_one::<String>("resource")
+            .context("--resource is required")?;
+        let sql = matches
+            .get_one::<String>("sql")
+            .context("sql is required")?;
         let body = serde_json::json!({ "sql": sql });
         print_pretty(&post_json(&explorer_url(resource, "/query"), body)?)
     }

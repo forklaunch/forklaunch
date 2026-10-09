@@ -12,7 +12,6 @@ use crate::{
         ERROR_FAILED_TO_PARSE_PACKAGE_JSON, ERROR_FAILED_TO_READ_PACKAGE_JSON,
         error_failed_to_read_file,
     },
-    core::package_json::package_json_constants::CORE_VERSION,
     core::{
         ast::{
             injections::inject_into_client_sdk::{ClientSdkSpecialCase, inject_into_client_sdk},
@@ -23,7 +22,9 @@ use crate::{
             },
         },
         manifest::{ProjectEntry, ProjectType},
-        package_json::project_package_json::ProjectPackageJson,
+        package_json::{
+            package_json_constants::CORE_VERSION, project_package_json::ProjectPackageJson,
+        },
         rendered_template::{RenderedTemplate, RenderedTemplatesCache},
     },
 };
@@ -52,18 +53,19 @@ pub(crate) fn regenerate_client_sdk_compliance(
 ) -> Result<()> {
     let path = base_path.join("client-sdk").join("compliance.ts");
 
-    let stub = || RenderedTemplate {
+    let stub = || {
+        RenderedTemplate {
         path: path.clone(),
         content: "// This file is regenerated automatically when services are added, removed,\n// or renamed. Do not edit by hand — your changes will be overwritten.\n//\n// When at least one db-backed service exists alongside an iam project, this\n// file will export `createComplianceClient` with hardcoded calls to each\n// service's `compliance.eraseUserData` / `exportUserData` SDK method.\n\nexport {};\n".to_string(),
         context: Some("Failed to write client-sdk compliance.ts".to_string()),
+    }
     };
 
     // Compliance controllers depend on JWKS_PUBLIC_KEY_URL, which only exists
     // when an iam project is configured. Without iam, no service exposes a
     // working `compliance.eraseUserData`/`exportUserData` SDK method.
     if !projects.iter().any(|p| p.name == "iam") {
-        rendered_templates_cache
-            .insert(path.to_string_lossy().to_string(), stub());
+        rendered_templates_cache.insert(path.to_string_lossy().to_string(), stub());
         return Ok(());
     }
 
@@ -80,8 +82,7 @@ pub(crate) fn regenerate_client_sdk_compliance(
     compliant.sort_by(|a, b| a.name.cmp(&b.name));
 
     if compliant.is_empty() {
-        rendered_templates_cache
-            .insert(path.to_string_lossy().to_string(), stub());
+        rendered_templates_cache.insert(path.to_string_lossy().to_string(), stub());
         return Ok(());
     }
 
@@ -101,8 +102,8 @@ pub(crate) fn regenerate_client_sdk_compliance(
 
         // `clientIamSdkClient` is emitted as a wrapped `{ core, betterAuth }`
         // factory when the iam project uses the better-auth variant.
-        let is_better_auth = project.name == "iam"
-            && project.variant.as_deref() == Some("iam-better-auth");
+        let is_better_auth =
+            project.name == "iam" && project.variant.as_deref() == Some("iam-better-auth");
         let access = if is_better_auth {
             format!("config.{}.core.compliance", camel)
         } else {

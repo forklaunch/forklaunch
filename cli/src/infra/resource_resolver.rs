@@ -1,12 +1,11 @@
 use anyhow::{Context, Result, anyhow, bail};
 use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
 
+use super::types::{ApplicationResourcesResponse, ResourceDetailResponse, ResourceListItem};
 use crate::{
     constants::get_resource_management_api_url,
     core::{http_client::get, manifest::application::ApplicationManifestData},
 };
-
-use super::types::{ApplicationResourcesResponse, ResourceDetailResponse, ResourceListItem};
 
 /// Characters that must be escaped in a URL path segment. Letters, digits, and the
 /// unreserved punctuation used by UUIDs (`-`, `_`, `.`, `~`) are left untouched, so
@@ -112,9 +111,7 @@ pub(crate) fn fetch_resource_detail(resource_id: &str) -> Result<ResourceDetailR
 
 /// Fetches CloudWatch utilization metrics (CPU%, memory%, connection count) for a
 /// resolved resource id — the series backing `fl infra status --metrics`.
-pub(crate) fn fetch_resource_metrics(
-    resource_id: &str,
-) -> Result<Vec<super::types::MetricSeries>> {
+pub(crate) fn fetch_resource_metrics(resource_id: &str) -> Result<Vec<super::types::MetricSeries>> {
     let url = format!(
         "{}/platform-resources/{}/metrics",
         get_resource_management_api_url(),
@@ -155,9 +152,9 @@ pub(crate) fn resolve(
     resource_arg: &str,
     resource_id_override: Option<&str>,
 ) -> Result<ResolvedResource> {
-    let (project_name, resource_type) = resource_arg
-        .split_once(':')
-        .ok_or_else(|| anyhow!("expected '<project-name>:<resource-type>', got '{resource_arg}'"))?;
+    let (project_name, resource_type) = resource_arg.split_once(':').ok_or_else(|| {
+        anyhow!("expected '<project-name>:<resource-type>', got '{resource_arg}'")
+    })?;
 
     let mapped_type = resource_type_to_integration_type(resource_type)?;
 
@@ -171,13 +168,16 @@ pub(crate) fn resolve(
         .find(|p| p.name == project_name)
         .ok_or_else(|| anyhow!("project '{project_name}' not found in manifest.toml"))?;
 
-    let configured = project.resources.as_ref().map_or(false, |r| match resource_type {
-        "database" => r.database.is_some(),
-        "cache" => r.cache.is_some(),
-        "queue" => r.queue.is_some(),
-        "object-store" => r.object_store.is_some(),
-        _ => false,
-    });
+    let configured = project
+        .resources
+        .as_ref()
+        .map_or(false, |r| match resource_type {
+            "database" => r.database.is_some(),
+            "cache" => r.cache.is_some(),
+            "queue" => r.queue.is_some(),
+            "object-store" => r.object_store.is_some(),
+            _ => false,
+        });
 
     if !configured {
         bail!(
@@ -188,9 +188,7 @@ pub(crate) fn resolve(
     let resources = fetch_application_resources(application_id, environment)?;
     let matches: Vec<&ResourceListItem> = resources
         .iter()
-        .filter(|r| {
-            r.service_name.as_deref() == Some(project_name) && r.r#type == mapped_type
-        })
+        .filter(|r| r.service_name.as_deref() == Some(project_name) && r.r#type == mapped_type)
         .collect();
 
     match matches.len() {
@@ -203,7 +201,11 @@ pub(crate) fn resolve(
             bail!(
                 "no '{resource_type}' resource found for project '{project_name}' in environment '{environment}'. \
                  Available resources: {}",
-                if available.is_empty() { "none".to_string() } else { available }
+                if available.is_empty() {
+                    "none".to_string()
+                } else {
+                    available
+                }
             );
         }
         1 => Ok(ResolvedResource {
@@ -237,9 +239,15 @@ mod tests {
 
     #[test]
     fn resource_type_maps_all_known_tokens() {
-        assert_eq!(resource_type_to_integration_type("database").unwrap(), "database");
+        assert_eq!(
+            resource_type_to_integration_type("database").unwrap(),
+            "database"
+        );
         assert_eq!(resource_type_to_integration_type("cache").unwrap(), "cache");
-        assert_eq!(resource_type_to_integration_type("queue").unwrap(), "messagequeue");
+        assert_eq!(
+            resource_type_to_integration_type("queue").unwrap(),
+            "messagequeue"
+        );
         assert_eq!(
             resource_type_to_integration_type("object-store").unwrap(),
             "objectstore"

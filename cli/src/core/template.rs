@@ -9,7 +9,7 @@ use super::{
     manifest::ManifestData,
     rendered_template::{RenderedTemplate, TEMPLATES_DIR},
 };
-use crate::constants::{error_failed_to_create_dir, Module};
+use crate::constants::{Module, error_failed_to_create_dir};
 
 #[derive(Debug, Clone)]
 pub(crate) struct PathIO {

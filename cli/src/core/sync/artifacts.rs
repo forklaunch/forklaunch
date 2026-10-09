@@ -194,7 +194,12 @@ fn detect_routers_for_project(
             let detected_routers = detect_routers_from_service(&project_path)?;
 
             if !detected_routers.is_empty() {
-                log_ok!(stdout, "Detected {} router(s): {}", detected_routers.len(), detected_routers.join(", "));
+                log_ok!(
+                    stdout,
+                    "Detected {} router(s): {}",
+                    detected_routers.len(),
+                    detected_routers.join(", ")
+                );
                 Some(detected_routers)
             } else {
                 None
@@ -242,7 +247,11 @@ fn sync_to_docker_compose(
         yaml_from_str(&docker_compose_content).context(ERROR_FAILED_TO_PARSE_DOCKER_COMPOSE)?;
 
     if docker_compose.services.contains_key(&metadata.project_name) {
-        log_info!(stdout, "Already in docker-compose: {}", metadata.project_name);
+        log_info!(
+            stdout,
+            "Already in docker-compose: {}",
+            metadata.project_name
+        );
         return Ok(());
     }
 
@@ -424,7 +433,11 @@ fn sync_to_modules_tsconfig(
         rendered_template,
     );
 
-    log_ok!(stdout, "Added to modules/tsconfig.json: {}", metadata.project_name);
+    log_ok!(
+        stdout,
+        "Added to modules/tsconfig.json: {}",
+        metadata.project_name
+    );
 
     Ok(())
 }
@@ -445,7 +458,11 @@ fn sync_to_pnpm_workspace(
         yaml_from_str(&template.content).context("Failed to parse pnpm-workspace.yaml")?;
 
     if workspace.packages.contains(&metadata.project_name) {
-        log_info!(stdout, "Already in pnpm-workspace: {}", metadata.project_name);
+        log_info!(
+            stdout,
+            "Already in pnpm-workspace: {}",
+            metadata.project_name
+        );
         return Ok(());
     }
 

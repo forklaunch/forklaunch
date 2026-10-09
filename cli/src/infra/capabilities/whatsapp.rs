@@ -116,7 +116,8 @@ mod tests {
 
     use super::*;
 
-    const REGISTRATIONS: &str = "import { number, optional, schemaValidator, SchemaValidator, string } from '@demo/core';
+    const REGISTRATIONS: &str =
+        "import { number, optional, schemaValidator, SchemaValidator, string } from '@demo/core';
 import { OpenTelemetryCollector } from '@forklaunch/core/http';
 import { createConfigInjector, getEnvVar, Lifetime } from '@forklaunch/core/services';
 
@@ -185,9 +186,11 @@ app.use(billingRouter);
         // Both framework imports kept; the factory merged into the http one.
         assert!(registrations.contains("OpenTelemetryCollector"));
         assert!(
-            regex::Regex::new(r#"import \{[^}]*createConfigInjector[^}]*\} from '@forklaunch/core/services'"#)
-                .unwrap()
-                .is_match(&registrations),
+            regex::Regex::new(
+                r#"import \{[^}]*createConfigInjector[^}]*\} from '@forklaunch/core/services'"#
+            )
+            .unwrap()
+            .is_match(&registrations),
             "{registrations}"
         );
         assert!(registrations.contains("PLATFORM_GATEWAY_URL:"));
@@ -197,7 +200,11 @@ app.use(billingRouter);
                 .is_match(&registrations),
             "{registrations}"
         );
-        assert!(regex::Regex::new(r#"\btype\b[^}]*\} from '@demo/core'"#).unwrap().is_match(&registrations));
+        assert!(
+            regex::Regex::new(r#"\btype\b[^}]*\} from '@demo/core'"#)
+                .unwrap()
+                .is_match(&registrations)
+        );
         // No vendor credential anywhere.
         assert!(!registrations.contains("WHATSAPP_TOKEN"));
         assert!(!registrations.contains("META_"));
@@ -223,7 +230,12 @@ app.use(billingRouter);
         assert!(!registrations.contains("WhatsAppClient"), "{registrations}");
         assert!(!registrations.contains("createWhatsAppClient"));
         assert!(registrations.contains("OpenTelemetryCollector"));
-        assert!(!regex::Regex::new(r"\btype,").unwrap().is_match(&registrations), "{registrations}");
+        assert!(
+            !regex::Regex::new(r"\btype,")
+                .unwrap()
+                .is_match(&registrations),
+            "{registrations}"
+        );
     }
 
     #[test]
@@ -237,7 +249,10 @@ app.use(billingRouter);
         edit.remove_platform_events("whatsapp").unwrap();
         edit.release_gateway_wiring("whatsapp").unwrap();
         edit.commit().unwrap();
-        assert_eq!(fs::read_to_string(service.join("server.ts")).unwrap(), SERVER);
+        assert_eq!(
+            fs::read_to_string(service.join("server.ts")).unwrap(),
+            SERVER
+        );
         // The registration, its imports and the gateway settings add wrote
         // are gone: byte for byte the file it was.
         assert_eq!(
@@ -250,7 +265,8 @@ app.use(billingRouter);
 
     #[test]
     fn type_import_is_kept_while_something_else_uses_it() {
-        let text = "import { type, string } from '@demo/core';\nconst x = { t: type<unknown>() };\n";
+        let text =
+            "import { type, string } from '@demo/core';\nconst x = { t: type<unknown>() };\n";
         use crate::infra::in_place::binding_used as name_used_outside_imports;
         assert!(name_used_outside_imports(text, "type"));
         let text = "import {\n  type,\n  string\n} from '@demo/core';\nconst x = { t: string };\n";

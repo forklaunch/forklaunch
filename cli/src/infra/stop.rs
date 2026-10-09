@@ -2,17 +2,16 @@ use anyhow::{Context, Result};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use dialoguer::{Confirm, theme::ColorfulTheme};
 
+use super::{
+    lifecycle::call_lifecycle_action,
+    resource_resolver::{fetch_resource_detail, resolve},
+};
 use crate::{
     CliCommand,
     core::{
         command::command,
         validate::{require_auth, require_integration, require_manifest},
     },
-};
-
-use super::{
-    lifecycle::call_lifecycle_action,
-    resource_resolver::{fetch_resource_detail, resolve},
 };
 
 #[derive(Debug)]

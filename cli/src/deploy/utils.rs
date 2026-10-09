@@ -136,9 +136,7 @@ pub(crate) fn stream_deployment_status_for(
                     // which component wanted which key — and then work out what
                     // to do about it alone — is where the session dies. Show the
                     // fix and a prompt they can hand to an agent, here.
-                    crate::deploy::info::print_remediation(
-                        stdout, error, environment, region,
-                    )?;
+                    crate::deploy::info::print_remediation(stdout, error, environment, region)?;
                 }
 
                 // Carry the reason into the error itself. `bail!("Operation
@@ -151,7 +149,11 @@ pub(crate) fn stream_deployment_status_for(
                 }
             }
             "cancelled" => {
-                log_header!(stdout, Color::Yellow, "\n[CANCELLED] Deployment was cancelled");
+                log_header!(
+                    stdout,
+                    Color::Yellow,
+                    "\n[CANCELLED] Deployment was cancelled"
+                );
                 if let Some(error) = status.error {
                     log_info!(stdout, "{}", error);
                 }
@@ -178,7 +180,10 @@ pub(crate) fn stream_deployment_status_for(
                     stdout,
                     "An organization admin can release it with: forklaunch deploy approvals approve <approval-id>"
                 );
-                log_info!(stdout, "List pending approvals: forklaunch deploy approvals list");
+                log_info!(
+                    stdout,
+                    "List pending approvals: forklaunch deploy approvals list"
+                );
                 log_info!(
                     stdout,
                     "Follow this deployment: forklaunch deploy info --deployment {}",
@@ -276,7 +281,13 @@ mod tests {
         // `pending`, `provisioning` and `deploying` are the in-flight states the
         // poll keeps waiting on; everything else must end the wait, or a script
         // hangs on a parked or rolled-back deploy (Main Street, Sept 2026).
-        for s in ["completed", "failed", "cancelled", "rolled_back", "awaiting_approval"] {
+        for s in [
+            "completed",
+            "failed",
+            "cancelled",
+            "rolled_back",
+            "awaiting_approval",
+        ] {
             assert!(is_terminal_status(s), "{s} must end the wait");
         }
         for s in ["queued", "pending", "provisioning", "deploying"] {

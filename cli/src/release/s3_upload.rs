@@ -1,6 +1,4 @@
-use std::collections::HashMap;
-use std::io::Write;
-use std::{fs::File, path::Path};
+use std::{collections::HashMap, fs::File, io::Write, path::Path};
 
 use anyhow::{Context, Result, bail};
 use flate2::{Compression, write::GzEncoder};
@@ -257,8 +255,8 @@ pub(crate) fn get_openapi_upload_urls(
 pub(crate) fn upload_json_to_s3(json_value: &Value, presigned_url: &str) -> Result<()> {
     let client = Client::new();
 
-    let json_bytes = serde_json::to_vec(json_value)
-        .with_context(|| "Failed to serialize JSON for S3 upload")?;
+    let json_bytes =
+        serde_json::to_vec(json_value).with_context(|| "Failed to serialize JSON for S3 upload")?;
 
     let response = client
         .put(presigned_url)

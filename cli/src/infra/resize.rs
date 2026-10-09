@@ -1,18 +1,17 @@
 use anyhow::{Result, bail};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
+use super::{
+    mutation::{MutationRequest, nothing_to_change, run_mutation},
+    resource_resolver::{fetch_resource_detail, resolve},
+    types::ResourceConfig,
+};
 use crate::{
     CliCommand,
     core::{
         command::command,
         validate::{require_auth, require_integration, require_manifest},
     },
-};
-
-use super::{
-    mutation::{MutationRequest, nothing_to_change, run_mutation},
-    resource_resolver::{fetch_resource_detail, resolve},
-    types::ResourceConfig,
 };
 
 #[derive(Debug)]

@@ -50,27 +50,25 @@ use crate::{
                 AJV_VERSION, APP_BILLING_VERSION, APP_CORE_VERSION, APP_IAM_VERSION,
                 APP_MONITORING_VERSION, BETTER_AUTH_MIKRO_ORM_VERSION, BETTER_AUTH_VERSION,
                 BETTER_SQLITE3_VERSION, BILLING_BASE_VERSION, BILLING_INTERFACES_VERSION,
-                BILLING_STRIPE_VERSION, BIOME_VERSION, CAC_BASE_VERSION,
-                CAC_INTERFACES_VERSION, COMMON_VERSION, CORE_VERSION, ECOMMERCE_BASE_VERSION,
-                ECOMMERCE_INTERFACES_VERSION, ECOMMERCE_PAYPAL_VERSION,
-                ECOMMERCE_STRIPE_VERSION, WORKER_INTERFACES_VERSION, WORKER_REDIS_VERSION,
-                DOTENV_VERSION, ESLINT_VERSION, EXPRESS_VERSION, HYPER_EXPRESS_VERSION,
-                IAM_BASE_VERSION, IAM_INTERFACES_VERSION, INFRASTRUCTURE_REDIS_VERSION,
-                MESSAGING_BASE_VERSION, MESSAGING_INTERFACES_VERSION, MESSAGING_TWILIO_VERSION,
-                INFRASTRUCTURE_S3_VERSION, INTERNAL_VERSION, IOREDIS_VERSION, JOSE_VERSION,
-                MIKRO_ORM_CLI_VERSION, MIKRO_ORM_CORE_VERSION, MIKRO_ORM_DATABASE_VERSION,
-                MIKRO_ORM_MIGRATIONS_VERSION,
+                BILLING_STRIPE_VERSION, BIOME_VERSION, CAC_BASE_VERSION, CAC_INTERFACES_VERSION,
+                COMMON_VERSION, CORE_VERSION, DOTENV_VERSION, ECOMMERCE_BASE_VERSION,
+                ECOMMERCE_INTERFACES_VERSION, ECOMMERCE_PAYPAL_VERSION, ECOMMERCE_STRIPE_VERSION,
+                ESLINT_VERSION, EXPRESS_VERSION, HYPER_EXPRESS_VERSION, IAM_BASE_VERSION,
+                IAM_INTERFACES_VERSION, INFRASTRUCTURE_REDIS_VERSION, INFRASTRUCTURE_S3_VERSION,
+                INTERNAL_VERSION, IOREDIS_VERSION, JOSE_VERSION, MESSAGING_BASE_VERSION,
+                MESSAGING_INTERFACES_VERSION, MESSAGING_TWILIO_VERSION, MIKRO_ORM_CLI_VERSION,
+                MIKRO_ORM_CORE_VERSION, MIKRO_ORM_DATABASE_VERSION, MIKRO_ORM_MIGRATIONS_VERSION,
                 MIKRO_ORM_SEEDER_VERSION, OPENTELEMETRY_API_VERSION, OXLINT_VERSION, PINO_VERSION,
                 PRETTIER_VERSION, PROJECT_BUILD_SCRIPT, PROJECT_DOCS_SCRIPT, PROJECT_SEED_SCRIPT,
                 SQLITE3_VERSION, STRIPE_VERSION, TESTING_VERSION, TSX_VERSION, TYPEBOX_VERSION,
                 TYPEDOC_VERSION, TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION, TYPES_EXPRESS_VERSION,
                 TYPES_JEST_VERSION, TYPES_QS_VERSION, TYPES_UUID_VERSION,
-                TYPESCRIPT_ESLINT_VERSION, UNIVERSAL_SDK_VERSION, UWEBSOCKETS_VERSION, UUID_VERSION,
-                VALIDATOR_VERSION,
-                ZOD_VERSION, project_clean_script, project_dev_local_script,
-                project_dev_server_script, project_format_script, project_lint_fix_script,
+                TYPESCRIPT_ESLINT_VERSION, UNIVERSAL_SDK_VERSION, UUID_VERSION,
+                UWEBSOCKETS_VERSION, VALIDATOR_VERSION, WORKER_INTERFACES_VERSION,
+                WORKER_REDIS_VERSION, ZOD_VERSION, project_clean_script, project_dev_local_script,
+                project_dev_local_worker_script, project_dev_server_script,
+                project_dev_worker_client_script, project_format_script, project_lint_fix_script,
                 project_lint_script, project_migrate_script, project_retention_enforce_script,
-                project_dev_local_worker_script, project_dev_worker_client_script,
                 project_start_server_script, project_start_worker_script, project_test_script,
                 project_up_latest_script,
             },
@@ -146,7 +144,8 @@ fn generate_basic_service(
     )?);
 
     rendered_templates.extend(
-        generate_project_tsconfig(&output_path, Some(&["express", "qs"])).with_context(|| ERROR_FAILED_TO_CREATE_TSCONFIG)?,
+        generate_project_tsconfig(&output_path, Some(&["express", "qs"]))
+            .with_context(|| ERROR_FAILED_TO_CREATE_TSCONFIG)?,
     );
 
     rendered_templates.extend(
@@ -333,16 +332,28 @@ pub(crate) fn generate_service_package_json(
         keywords: Some(vec![]),
         license: Some(manifest_data.license.to_string()),
         author: Some(manifest_data.author.to_string()),
-        main: main_override.or_else(|| if manifest_data.is_iam || manifest_data.is_billing || manifest_data.is_messaging || manifest_data.is_cac {
-            Some("./dist/index.js".to_string())
-        } else {
-            None
+        main: main_override.or_else(|| {
+            if manifest_data.is_iam
+                || manifest_data.is_billing
+                || manifest_data.is_messaging
+                || manifest_data.is_cac
+            {
+                Some("./dist/index.js".to_string())
+            } else {
+                None
+            }
         }),
-        types: types_override.unwrap_or(if manifest_data.is_iam || manifest_data.is_billing || manifest_data.is_messaging || manifest_data.is_cac {
-            Some("./dist/index.d.ts".to_string())
-        } else {
-            None
-        }),
+        types: types_override.unwrap_or(
+            if manifest_data.is_iam
+                || manifest_data.is_billing
+                || manifest_data.is_messaging
+                || manifest_data.is_cac
+            {
+                Some("./dist/index.d.ts".to_string())
+            } else {
+                None
+            },
+        ),
         types_versions: None,
         exports: None,
         scripts: Some(if let Some(scripts) = scripts_override {
@@ -390,7 +401,9 @@ pub(crate) fn generate_service_package_json(
                 )),
                 up_latest: project_up_latest_script(&manifest_data.runtime.parse()?),
                 retention_enforce: if manifest_data.is_database_enabled {
-                    Some(project_retention_enforce_script(&manifest_data.runtime.parse()?))
+                    Some(project_retention_enforce_script(
+                        &manifest_data.runtime.parse()?,
+                    ))
                 } else {
                     None
                 },
@@ -933,11 +946,10 @@ impl CliCommand for ServiceCommand {
             // These will be properly generated when initialized
             generated_better_auth_secret: String::new(),
             generated_hmac_secret: String::new(),
-            generated_encryption_key:
-                crate::core::env_defaults::find_existing_encryption_key(&base_path)
-                    .unwrap_or_else(|| {
-                        crate::core::manifest::service::generate_random_secret(32)
-                    }),
+            generated_encryption_key: crate::core::env_defaults::find_existing_encryption_key(
+                &base_path,
+            )
+            .unwrap_or_else(|| crate::core::manifest::service::generate_random_secret(32)),
             otel_token: "OtelCollector".to_string(),
         };
 

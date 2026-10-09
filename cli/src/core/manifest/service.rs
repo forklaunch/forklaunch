@@ -1,7 +1,7 @@
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use convert_case::{Case, Casing};
 use ramhorns::Content;
 use serde::{Deserialize, Serialize};
-use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 use super::{
     InitializableManifestConfig, InitializableManifestConfigMetadata, ProjectManifestConfig,

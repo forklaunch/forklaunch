@@ -63,7 +63,11 @@ impl CliCommand for CreateCommand {
         writeln!(stdout, "  Cloud account created ({})", result.account.id)?;
         stdout.reset()?;
         writeln!(stdout)?;
-        writeln!(stdout, "  CloudFormation: {}", result.setup_instructions.cloud_formation_url)?;
+        writeln!(
+            stdout,
+            "  CloudFormation: {}",
+            result.setup_instructions.cloud_formation_url
+        )?;
         writeln!(stdout)?;
         writeln!(stdout, "  Terraform:")?;
         writeln!(stdout, "{}", result.setup_instructions.terraform_snippet)?;

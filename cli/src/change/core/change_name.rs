@@ -13,8 +13,7 @@ use crate::{
     core::{
         client_sdk::{change_project_in_client_sdk, regenerate_client_sdk_compliance},
         docker::{
-            Command, DependsOn, DockerBuild, DockerCompose, DockerService, HealthTest,
-            Healthcheck,
+            Command, DependsOn, DockerBuild, DockerCompose, DockerService, HealthTest, Healthcheck,
         },
         manifest::{MutableManifestData, ProjectEntry, ProjectType},
         move_template::MoveTemplate,
@@ -282,32 +281,29 @@ pub(crate) fn change_name(
                                         .collect(),
                                 ),
                             }),
-                            entrypoint: value.entrypoint.as_ref().map(|entrypoint| match entrypoint {
-                                Command::Simple(s) => {
-                                    Command::Simple(s.replace(&existing_name, &name))
-                                }
-                                Command::Multiple(args) => Command::Multiple(
-                                    args
-                                        .iter()
-                                        .map(|arg| arg.replace(&existing_name, &name))
-                                        .collect(),
-                                ),
-                            }),
+                            entrypoint: value.entrypoint.as_ref().map(
+                                |entrypoint| match entrypoint {
+                                    Command::Simple(s) => {
+                                        Command::Simple(s.replace(&existing_name, &name))
+                                    }
+                                    Command::Multiple(args) => Command::Multiple(
+                                        args.iter()
+                                            .map(|arg| arg.replace(&existing_name, &name))
+                                            .collect(),
+                                    ),
+                                },
+                            ),
                             healthcheck: value.healthcheck.as_ref().map(|healthcheck| {
                                 Healthcheck {
                                     test: match &healthcheck.test {
                                         HealthTest::String(s) => {
-                                            HealthTest::String(
-                                                s.replace(&existing_name, &name),
-                                            )
+                                            HealthTest::String(s.replace(&existing_name, &name))
                                         }
-                                        HealthTest::List(list) => {
-                                            HealthTest::List(
-                                                list.iter()
-                                                    .map(|item| item.replace(&existing_name, &name))
-                                                    .collect(),
-                                            )
-                                        }
+                                        HealthTest::List(list) => HealthTest::List(
+                                            list.iter()
+                                                .map(|item| item.replace(&existing_name, &name))
+                                                .collect(),
+                                        ),
                                     },
                                     interval: healthcheck.interval.replace(&existing_name, &name),
                                     timeout: healthcheck.timeout.replace(&existing_name, &name),
@@ -370,9 +366,7 @@ pub(crate) fn change_name(
     )?);
 
     let project_changed_type = project_entry.r#type.clone();
-    if project_changed_type == ProjectType::Service
-        || project_changed_type == ProjectType::Worker
-    {
+    if project_changed_type == ProjectType::Service || project_changed_type == ProjectType::Worker {
         change_project_in_client_sdk(
             rendered_templates_cache,
             base_path.parent().unwrap(),

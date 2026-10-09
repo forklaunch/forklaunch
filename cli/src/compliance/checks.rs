@@ -14,8 +14,9 @@ use std::{fs, path::Path};
 use anyhow::Result;
 use serde::Serialize;
 
-use crate::core::ast::infrastructure::compliance::scan_entity_compliance;
-use crate::core::static_analysis::route_analyzer;
+use crate::core::{
+    ast::infrastructure::compliance::scan_entity_compliance, static_analysis::route_analyzer,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -471,15 +472,17 @@ pub(crate) fn is_email_credential(key: &str) -> bool {
 pub(crate) fn direct_email_providers(sources: &str) -> Vec<String> {
     static KEYS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
     let keys = KEYS.get_or_init(|| {
-        regex::Regex::new(r"\b(?:SMTP_[A-Z0-9_]+|SENDGRID_API_KEY|POSTMARK_[A-Z0-9_]+|MAILGUN_[A-Z0-9_]+)\b")
-            .expect("email credential pattern")
+        regex::Regex::new(
+            r"\b(?:SMTP_[A-Z0-9_]+|SENDGRID_API_KEY|POSTMARK_[A-Z0-9_]+|MAILGUN_[A-Z0-9_]+)\b",
+        )
+        .expect("email credential pattern")
     });
     let mut found: Vec<String> = imported_modules(sources)
         .into_iter()
         .filter(|module| {
-            EMAIL_PROVIDER_PACKAGES.iter().any(|p| {
-                module == p || module.starts_with(&format!("{p}/"))
-            })
+            EMAIL_PROVIDER_PACKAGES
+                .iter()
+                .any(|p| module == p || module.starts_with(&format!("{p}/")))
         })
         .collect();
     found.extend(keys.find_iter(sources).map(|m| m.as_str().to_string()));
@@ -611,7 +614,11 @@ pub(crate) fn is_managed_instance(project_path: &Path, sources: &str) -> bool {
 }
 
 /// Stripe credentials a service might read.
-const STRIPE_KEYS: &[&str] = &["STRIPE_API_KEY", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"];
+const STRIPE_KEYS: &[&str] = &[
+    "STRIPE_API_KEY",
+    "STRIPE_SECRET_KEY",
+    "STRIPE_WEBHOOK_SECRET",
+];
 
 /// Stripe credentials a service depends on: a key declared as a REQUIRED
 /// config value or read straight from `process.env`, and a Stripe client built
@@ -659,9 +666,13 @@ const STRIPE_WEBHOOK_MARKERS: &[&str] = &[
 /// (`verifyPlatformEvent`, for events the platform relays) is checked.
 pub(crate) fn stripe_webhook_unverified(sources: &str) -> bool {
     STRIPE_WEBHOOK_MARKERS.iter().any(|m| sources.contains(m))
-        && !["constructEvent(", "constructEventAsync(", "verifyPlatformEvent("]
-            .iter()
-            .any(|v| sources.contains(v))
+        && ![
+            "constructEvent(",
+            "constructEventAsync(",
+            "verifyPlatformEvent(",
+        ]
+        .iter()
+        .any(|v| sources.contains(v))
 }
 
 /// Index of the bracket that closes a group opened just before `from`.
@@ -741,9 +752,9 @@ pub(crate) fn stripe_calls_with_protected_data(sources: &str) -> Vec<String> {
     for c in call.captures_iter(sources) {
         let open = c.get(0).unwrap().end();
         let args = &sources[open..closing_bracket(sources, open)];
-        let leaks = field.captures_iter(args).any(|f| {
-            stripe_property_value(&args[f.get(0).unwrap().end()..]).contains(".deanon")
-        });
+        let leaks = field
+            .captures_iter(args)
+            .any(|f| stripe_property_value(&args[f.get(0).unwrap().end()..]).contains(".deanon"));
         if leaks {
             let name = format!("{}.{}", c[1].split_whitespace().collect::<String>(), &c[2]);
             if !found.contains(&name) {
@@ -787,7 +798,9 @@ fn declared_object_stores(modules_path: &Path) -> Option<std::collections::HashM
 
 /// Platform-held capabilities (payments, email, …) the manifest declares, per
 /// project name. None when no manifest is found above the modules directory.
-fn declared_capabilities(modules_path: &Path) -> Option<std::collections::HashMap<String, Vec<String>>> {
+fn declared_capabilities(
+    modules_path: &Path,
+) -> Option<std::collections::HashMap<String, Vec<String>>> {
     let mut dir = modules_path.canonicalize().ok()?;
     loop {
         let manifest = dir.join(".forklaunch").join("manifest.toml");
@@ -1070,7 +1083,10 @@ pub(crate) fn direct_whatsapp_access(sources: &str) -> Vec<String> {
     found.extend(imported_modules(sources).into_iter().filter(|m| {
         matches!(
             m.as_str(),
-            "whatsapp" | "whatsapp-cloud-api" | "whatsapp-api-js" | "@aws-sdk/client-socialmessaging"
+            "whatsapp"
+                | "whatsapp-cloud-api"
+                | "whatsapp-api-js"
+                | "@aws-sdk/client-socialmessaging"
         )
     }));
     found.sort();
@@ -1197,7 +1213,10 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
             });
         }
         for route in route_scan.routes {
-            let at = format!("{} {} ({}:{})", route.method, route.path, route.file, route.line);
+            let at = format!(
+                "{} {} ({}:{})",
+                route.method, route.path, route.file, route.line
+            );
             if route.missing_auth() {
                 findings.push(LocalFinding {
                     severity: Severity::Warning,
@@ -1632,8 +1651,7 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
                 // A registration only counts as the capability in a service that
                 // reads the gateway contract: billing-stripe's own keyed
                 // `StripeClient` is ordinary Stripe, not undeclared payments.
-                let is_wired = registrations
-                    .contains(&format!("{}:", capability.registration_key))
+                let is_wired = registrations.contains(&format!("{}:", capability.registration_key))
                     && (is_declared || is_managed_instance(&project_path, &sources));
                 let message = match (is_declared, is_wired) {
                     (true, false) => Some(format!(
@@ -1760,7 +1778,9 @@ pub(crate) fn direct_voice_providers(sources: &str) -> Vec<String> {
         .cloned()
         .collect();
     if modules.iter().any(|m| m == "twilio")
-        && TWILIO_VOICE_MARKERS.iter().any(|marker| sources.contains(marker))
+        && TWILIO_VOICE_MARKERS
+            .iter()
+            .any(|marker| sources.contains(marker))
     {
         found.push("twilio (voice)".to_string());
     }
@@ -2023,7 +2043,11 @@ mod voice_tests {
         assert_eq!(f.len(), 1);
         assert_eq!(f[0].check, "voice-protected-data");
         assert!(f[0].message.contains("(phi)"));
-        assert!(!voice_findings("clinic", false, false, sources)[0].message.contains("(phi)"));
+        assert!(
+            !voice_findings("clinic", false, false, sources)[0]
+                .message
+                .contains("(phi)")
+        );
     }
 
     #[test]
@@ -2466,8 +2490,10 @@ mod wiring_tests {
             ]
         );
         assert!(
-            direct_ai_providers("import { createModelGatewayClient } from '@forklaunch/core/http';")
-                .is_empty(),
+            direct_ai_providers(
+                "import { createModelGatewayClient } from '@forklaunch/core/http';"
+            )
+            .is_empty(),
             "the gateway is not a direct provider"
         );
     }
@@ -2512,7 +2538,11 @@ mod wiring_tests {
         )
         .unwrap();
         std::fs::write(proj.join("mikro-orm.config.ts"), "export default {};").unwrap();
-        std::fs::write(proj.join("domain/services/summary.service.ts"), service_source).unwrap();
+        std::fs::write(
+            proj.join("domain/services/summary.service.ts"),
+            service_source,
+        )
+        .unwrap();
     }
 
     #[test]
@@ -2562,7 +2592,11 @@ mod wiring_tests {
             "export const N = defineComplianceEntity({ name: 'N', properties: { body: fp.text().compliance('pii') } });",
         )
         .unwrap();
-        std::fs::write(proj.join("registrations.ts"), "import OpenAI from 'openai';").unwrap();
+        std::fs::write(
+            proj.join("registrations.ts"),
+            "import OpenAI from 'openai';",
+        )
+        .unwrap();
         let findings = run_local_checks(&dir).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
         assert!(!findings.iter().any(|f| f.check == "ai-provider-direct"));
@@ -2594,10 +2628,18 @@ mod wiring_tests {
         let proj = dir.join("messaging");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&proj).unwrap();
-        std::fs::write(proj.join("registrations.ts"), "getEnvVar('TWILIO_AUTH_TOKEN')").unwrap();
+        std::fs::write(
+            proj.join("registrations.ts"),
+            "getEnvVar('TWILIO_AUTH_TOKEN')",
+        )
+        .unwrap();
         let findings = run_local_checks(&dir).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
-        assert!(!findings.iter().any(|f| f.check == "managed-provider-credentials"));
+        assert!(
+            !findings
+                .iter()
+                .any(|f| f.check == "managed-provider-credentials")
+        );
     }
 }
 
@@ -2616,10 +2658,12 @@ mod payments_tests {
             vec!["STRIPE_SECRET_KEY", "new Stripe("]
         );
         // The blueprint's managed branch.
-        assert!(managed_stripe_credentials(
-            "isManagedInstance() ? createStripeClient({ Stripe }) : new Stripe(STRIPE_API_KEY!)"
-        )
-        .is_empty());
+        assert!(
+            managed_stripe_credentials(
+                "isManagedInstance() ? createStripeClient({ Stripe }) : new Stripe(STRIPE_API_KEY!)"
+            )
+            .is_empty()
+        );
     }
 
     #[test]
@@ -2633,19 +2677,29 @@ mod payments_tests {
         assert!(!stripe_webhook_unverified(
             "case 'checkout.session.completed': …; verifyPlatformEvent({ method, path, headers, body })"
         ));
-        assert!(!stripe_webhook_unverified("await stripe.customers.create({ email })"));
+        assert!(!stripe_webhook_unverified(
+            "await stripe.customers.create({ email })"
+        ));
     }
 
     #[test]
     fn deanon_values_inside_stripe_calls_are_found() {
         let leak = "await this.stripeClient.checkout.sessions.create({\n  mode: 'payment',\n  metadata: { patient: patient.fullName.deanon, visit: visit.id },\n  line_items\n});";
-        assert_eq!(stripe_calls_with_protected_data(leak), vec!["checkout.sessions.create"]);
+        assert_eq!(
+            stripe_calls_with_protected_data(leak),
+            vec!["checkout.sessions.create"]
+        );
         let description = "stripe.paymentIntents.create({ amount, description: `Visit for ${p.diagnosis.deanon}`, currency })";
-        assert_eq!(stripe_calls_with_protected_data(description), vec!["paymentIntents.create"]);
+        assert_eq!(
+            stripe_calls_with_protected_data(description),
+            vec!["paymentIntents.create"]
+        );
         // An opaque id is fine, and .deanon elsewhere in the call is not metadata.
-        let fine = "stripe.customers.create({ email: user.email.deanon, metadata: { userId: user.id } })";
+        let fine =
+            "stripe.customers.create({ email: user.email.deanon, metadata: { userId: user.id } })";
         assert!(stripe_calls_with_protected_data(fine).is_empty());
-        let outside = "const n = p.name.deanon;\nstripe.customers.create({ metadata: { ref: p.id } });";
+        let outside =
+            "const n = p.name.deanon;\nstripe.customers.create({ metadata: { ref: p.id } });";
         assert!(stripe_calls_with_protected_data(outside).is_empty());
     }
 
@@ -2675,14 +2729,29 @@ mod payments_tests {
     fn a_managed_service_with_a_required_stripe_key_is_flagged() {
         let dir = project(
             "library-events",
-            &[("services/webhook.service.ts", "handle(event: Stripe.Event) { switch (event.type) { case 'checkout.session.completed': } }")],
+            &[(
+                "services/webhook.service.ts",
+                "handle(event: Stripe.Event) { switch (event.type) { case 'checkout.session.completed': } }",
+            )],
         );
-        assert!(found(&dir).is_empty(), "a library is not the webhook receiver");
+        assert!(
+            found(&dir).is_empty(),
+            "a library is not the webhook receiver"
+        );
         let dir = project(
             "unverified-route",
-            &[("api/controllers/webhook.controller.ts", "const event = req.body as Stripe.Event; await service.handle(event);")],
+            &[(
+                "api/controllers/webhook.controller.ts",
+                "const event = req.body as Stripe.Event; await service.handle(event);",
+            )],
         );
-        assert_eq!(found(&dir), vec![("stripe-webhook-unverified".to_string(), "webhook".to_string())]);
+        assert_eq!(
+            found(&dir),
+            vec![(
+                "stripe-webhook-unverified".to_string(),
+                "webhook".to_string()
+            )]
+        );
         let dir = project(
             "managed-key",
             &[(
@@ -2692,7 +2761,10 @@ mod payments_tests {
         );
         assert_eq!(
             found(&dir),
-            vec![("payments-stripe-keys-in-managed".to_string(), "STRIPE_API_KEY".to_string())]
+            vec![(
+                "payments-stripe-keys-in-managed".to_string(),
+                "STRIPE_API_KEY".to_string()
+            )]
         );
         // Not managed: a key is how Stripe is reached.
         let dir = project(
@@ -2720,12 +2792,18 @@ mod payments_tests {
         );
         assert_eq!(
             found(&phi),
-            vec![("payments-protected-data".to_string(), "phi: customers.create".to_string())]
+            vec![(
+                "payments-protected-data".to_string(),
+                "phi: customers.create".to_string()
+            )]
         );
         let pii = project("pii", &[("domain/services/pay.service.ts", service)]);
         assert_eq!(
             found(&pii),
-            vec![("payments-protected-data".to_string(), "customers.create".to_string())]
+            vec![(
+                "payments-protected-data".to_string(),
+                "customers.create".to_string()
+            )]
         );
     }
 
@@ -2741,7 +2819,11 @@ mod payments_tests {
                 "app_name = \"demo\"\n\n[[projects]]\nname = \"billing\"\n[projects.resources]\ncache = \"redis\"\n",
             )
             .unwrap();
-            std::fs::write(root.join("src/modules/billing/registrations.ts"), registrations).unwrap();
+            std::fs::write(
+                root.join("src/modules/billing/registrations.ts"),
+                registrations,
+            )
+            .unwrap();
             let checks: Vec<String> = run_local_checks(&root.join("src/modules"))
                 .unwrap()
                 .into_iter()
@@ -2751,7 +2833,13 @@ mod payments_tests {
             let _ = std::fs::remove_dir_all(&root);
             checks
         };
-        assert!(write("plain", "StripeClient: { factory: ({ STRIPE_API_KEY }) => new Stripe(STRIPE_API_KEY) }").is_empty());
+        assert!(
+            write(
+                "plain",
+                "StripeClient: { factory: ({ STRIPE_API_KEY }) => new Stripe(STRIPE_API_KEY) }"
+            )
+            .is_empty()
+        );
         assert_eq!(
             write(
                 "managed",
@@ -2768,7 +2856,10 @@ mod payments_tests {
             "stripe-webhook-unverified",
             "payments-protected-data",
         ] {
-            assert!(LOCAL_CHECK_IDS.contains(&id), "{id} missing from LOCAL_CHECK_IDS");
+            assert!(
+                LOCAL_CHECK_IDS.contains(&id),
+                "{id} missing from LOCAL_CHECK_IDS"
+            );
         }
     }
 }
@@ -2777,7 +2868,12 @@ mod payments_tests {
 mod object_store_tests {
     use super::*;
 
-    fn app(name: &str, manifest_object_store: bool, registrations: &str, extra: &str) -> std::path::PathBuf {
+    fn app(
+        name: &str,
+        manifest_object_store: bool,
+        registrations: &str,
+        extra: &str,
+    ) -> std::path::PathBuf {
         let root = std::env::temp_dir().join(format!("fl-object-store-{name}"));
         let _ = std::fs::remove_dir_all(&root);
         let modules = root.join("src/modules");
@@ -2806,14 +2902,21 @@ mod object_store_tests {
         run_local_checks(modules)
             .unwrap()
             .into_iter()
-            .filter(|f| f.check.starts_with("object-store") || f.check == "presigned-upload-unbounded")
+            .filter(|f| {
+                f.check.starts_with("object-store") || f.check == "presigned-upload-unbounded"
+            })
             .map(|f| f.check)
             .collect()
     }
 
     #[test]
     fn keyless_declared_and_wired_store_is_clean() {
-        let modules = app("clean", true, KEYLESS, "await store.presignUpload(key, { contentType, maxBytes: 1000 });");
+        let modules = app(
+            "clean",
+            true,
+            KEYLESS,
+            "await store.presignUpload(key, { contentType, maxBytes: 1000 });",
+        );
         assert!(checks(&modules).is_empty(), "{:?}", checks(&modules));
     }
 
@@ -2832,7 +2935,9 @@ mod object_store_tests {
         let modules = app("static", true, old, "");
         assert_eq!(checks(&modules), vec!["object-store-static-credentials"]);
         assert_eq!(
-            static_storage_credentials("import '@aws-sdk/client-s3'; process.env.AWS_SECRET_ACCESS_KEY"),
+            static_storage_credentials(
+                "import '@aws-sdk/client-s3'; process.env.AWS_SECRET_ACCESS_KEY"
+            ),
             vec!["AWS_SECRET_ACCESS_KEY"]
         );
     }
@@ -2862,10 +2967,12 @@ mod object_store_tests {
             unbounded_presigned_uploads("createPresignedPost(s3, { Bucket, Key })"),
             vec!["createPresignedPost without content-length-range"]
         );
-        assert!(unbounded_presigned_uploads(
-            "createPresignedPost(s3, { Conditions: [['content-length-range', 1, 10]] })"
-        )
-        .is_empty());
+        assert!(
+            unbounded_presigned_uploads(
+                "createPresignedPost(s3, { Conditions: [['content-length-range', 1, 10]] })"
+            )
+            .is_empty()
+        );
     }
 
     #[test]
@@ -2877,7 +2984,10 @@ mod object_store_tests {
             "object-store-bucket-managed-in-app",
             "presigned-upload-unbounded",
         ] {
-            assert!(LOCAL_CHECK_IDS.contains(&id), "{id} missing from LOCAL_CHECK_IDS");
+            assert!(
+                LOCAL_CHECK_IDS.contains(&id),
+                "{id} missing from LOCAL_CHECK_IDS"
+            );
         }
     }
 }
@@ -2902,9 +3012,7 @@ mod email_tests {
         let _ = std::fs::remove_dir_all(dir);
         findings
             .into_iter()
-            .filter(|f| {
-                f.check.starts_with("email-") || f.check == "managed-provider-credentials"
-            })
+            .filter(|f| f.check.starts_with("email-") || f.check == "managed-provider-credentials")
             .map(|f| (f.check, f.subject))
             .collect()
     }
@@ -2938,7 +3046,9 @@ mod email_tests {
             "mixed",
             &[(
                 "registrations.ts",
-                &format!("{MANAGED}getEnvVar('TWILIO_AUTH_TOKEN'); getEnvVar('POSTMARK_SERVER_TOKEN');"),
+                &format!(
+                    "{MANAGED}getEnvVar('TWILIO_AUTH_TOKEN'); getEnvVar('POSTMARK_SERVER_TOKEN');"
+                ),
             )],
         );
         let mut f = found(&dir);
@@ -2946,8 +3056,14 @@ mod email_tests {
         assert_eq!(
             f,
             vec![
-                ("email-provider-direct-in-managed".to_string(), "POSTMARK_SERVER_TOKEN".to_string()),
-                ("managed-provider-credentials".to_string(), "TWILIO_AUTH_TOKEN".to_string()),
+                (
+                    "email-provider-direct-in-managed".to_string(),
+                    "POSTMARK_SERVER_TOKEN".to_string()
+                ),
+                (
+                    "managed-provider-credentials".to_string(),
+                    "TWILIO_AUTH_TOKEN".to_string()
+                ),
             ]
         );
     }
@@ -2956,14 +3072,19 @@ mod email_tests {
     fn an_unmanaged_app_or_the_platform_client_is_not_flagged() {
         let dir = project(
             "unmanaged",
-            &[("registrations.ts", "import nodemailer from 'nodemailer'; getEnvVar('SMTP_HOST');")],
+            &[(
+                "registrations.ts",
+                "import nodemailer from 'nodemailer'; getEnvVar('SMTP_HOST');",
+            )],
         );
         assert!(found(&dir).is_empty());
         let dir = project(
             "gateway",
             &[(
                 "registrations.ts",
-                &format!("{MANAGED}import {{ createEmailClient }} from '@forklaunch/core/http'; const smtpish = 'SMTP';"),
+                &format!(
+                    "{MANAGED}import {{ createEmailClient }} from '@forklaunch/core/http'; const smtpish = 'SMTP';"
+                ),
             )],
         );
         assert!(found(&dir).is_empty());
@@ -2995,10 +3116,12 @@ mod email_tests {
     #[test]
     fn subject_detection_is_conservative() {
         // Recipient and body may hold the recipient's own data.
-        assert!(protected_data_in_email_subjects(
-            "EmailClient.send({ to: user.email.deanon, subject: 'Welcome', html: body.deanon })"
-        )
-        .is_empty());
+        assert!(
+            protected_data_in_email_subjects(
+                "EmailClient.send({ to: user.email.deanon, subject: 'Welcome', html: body.deanon })"
+            )
+            .is_empty()
+        );
         // Not an email send.
         assert!(protected_data_in_email_subjects(
             "res.status(200).send({ subject: row.subject.deanon }); queue.send({ subject: x.deanon })"
@@ -3006,7 +3129,9 @@ mod email_tests {
         .is_empty());
         // nodemailer and SES shapes.
         assert_eq!(
-            protected_data_in_email_subjects("transporter.sendMail({ from, to, subject: p.ssn.deanon })"),
+            protected_data_in_email_subjects(
+                "transporter.sendMail({ from, to, subject: p.ssn.deanon })"
+            ),
             vec!["p.ssn.deanon"]
         );
         assert_eq!(
@@ -3020,7 +3145,10 @@ mod email_tests {
     #[test]
     fn email_checks_score_through_the_report_card() {
         for id in ["email-provider-direct-in-managed", "email-protected-data"] {
-            assert!(LOCAL_CHECK_IDS.contains(&id), "{id} missing from LOCAL_CHECK_IDS");
+            assert!(
+                LOCAL_CHECK_IDS.contains(&id),
+                "{id} missing from LOCAL_CHECK_IDS"
+            );
         }
     }
 }
@@ -3078,14 +3206,26 @@ mod sms_tests {
 
     #[test]
     fn sdk_imports_outside_managed_mode_and_sns_without_phones_are_fine() {
-        let unmanaged = run("unmanaged", &[("registrations.ts", "import twilio from 'twilio';")], false);
-        assert!(!unmanaged.iter().any(|f| f.check == "sms-provider-direct-in-managed"));
-        assert!(direct_sms_providers(
-            "import { SNSClient } from '@aws-sdk/client-sns'; publish({ TopicArn })"
-        )
-        .is_empty());
+        let unmanaged = run(
+            "unmanaged",
+            &[("registrations.ts", "import twilio from 'twilio';")],
+            false,
+        );
+        assert!(
+            !unmanaged
+                .iter()
+                .any(|f| f.check == "sms-provider-direct-in-managed")
+        );
+        assert!(
+            direct_sms_providers(
+                "import { SNSClient } from '@aws-sdk/client-sns'; publish({ TopicArn })"
+            )
+            .is_empty()
+        );
         assert_eq!(
-            direct_sms_providers("import { SNSClient } from '@aws-sdk/client-sns'; ({ PhoneNumber })"),
+            direct_sms_providers(
+                "import { SNSClient } from '@aws-sdk/client-sns'; ({ PhoneNumber })"
+            ),
             vec!["@aws-sdk/client-sns"]
         );
         assert_eq!(
@@ -3097,32 +3237,50 @@ mod sms_tests {
     #[test]
     fn deanon_in_an_sms_body_is_flagged_critical_with_phi() {
         let source = "export async function remind(p: Patient) {\n  const note = `Your result: ${p.diagnosis.deanon}`;\n  await this.smsClient.send({ to: p.phone.deanon, body: note });\n}\n";
-        let findings = run("phi", &[("domain/services/remind.service.ts", source)], true);
+        let findings = run(
+            "phi",
+            &[("domain/services/remind.service.ts", source)],
+            true,
+        );
         let f = findings
             .iter()
             .find(|f| f.check == "sms-protected-data")
             .unwrap_or_else(|| panic!("{findings:?}"));
-        assert_eq!(f.subject, "domain/services/remind.service.ts: smsClient.send (line 3)");
+        assert_eq!(
+            f.subject,
+            "domain/services/remind.service.ts: smsClient.send (line 3)"
+        );
         assert!(f.message.starts_with("health data"));
-        let card = crate::core::report_card::build_local_report_card("app", 1, &findings, "t".into());
+        let card =
+            crate::core::report_card::build_local_report_card("app", 1, &findings, "t".into());
         let json = serde_json::to_string(&card).unwrap();
         assert!(json.contains("\"severity\":\"critical\""), "{json}");
 
-        let no_phi = run("nophi", &[("domain/services/remind.service.ts", source)], false);
-        let f = no_phi.iter().find(|f| f.check == "sms-protected-data").unwrap();
+        let no_phi = run(
+            "nophi",
+            &[("domain/services/remind.service.ts", source)],
+            false,
+        );
+        let f = no_phi
+            .iter()
+            .find(|f| f.check == "sms-protected-data")
+            .unwrap();
         assert!(!f.message.starts_with("health data"));
     }
 
     #[test]
     fn protected_data_detection_follows_the_body_only() {
         // The number is rightly plaintext; the text is neutral.
-        assert!(sms_sends_with_protected_data(
-            "await sms.send({ to: user.phone.deanon, body: 'Your visit is confirmed' });"
-        )
-        .is_empty());
+        assert!(
+            sms_sends_with_protected_data(
+                "await sms.send({ to: user.phone.deanon, body: 'Your visit is confirmed' });"
+            )
+            .is_empty()
+        );
         // Direct, shorthand and vendor forms.
         assert_eq!(
-            sms_sends_with_protected_data("sms.send({ to, body: `Hi ${user.name.deanon}` });").len(),
+            sms_sends_with_protected_data("sms.send({ to, body: `Hi ${user.name.deanon}` });")
+                .len(),
             1
         );
         assert_eq!(
@@ -3146,14 +3304,26 @@ mod sms_tests {
             1
         );
         // Not an SMS: email, or messages.create without twilio.
-        assert!(sms_sends_with_protected_data("mailer.send({ to, body: r.notes.deanon });").is_empty());
-        assert!(sms_sends_with_protected_data("openai.messages.create({ body: r.notes.deanon });").is_empty());
-        assert!(sms_sends_with_protected_data("new PublishCommand({ TopicArn, Message: r.notes.deanon })").is_empty());
+        assert!(
+            sms_sends_with_protected_data("mailer.send({ to, body: r.notes.deanon });").is_empty()
+        );
+        assert!(
+            sms_sends_with_protected_data("openai.messages.create({ body: r.notes.deanon });")
+                .is_empty()
+        );
+        assert!(
+            sms_sends_with_protected_data(
+                "new PublishCommand({ TopicArn, Message: r.notes.deanon })"
+            )
+            .is_empty()
+        );
         // A variable named like a tainted one is not it.
-        assert!(sms_sends_with_protected_data(
-            "const secret = r.notes.deanon; sms.send({ to, body: secretary });"
-        )
-        .is_empty());
+        assert!(
+            sms_sends_with_protected_data(
+                "const secret = r.notes.deanon; sms.send({ to, body: secretary });"
+            )
+            .is_empty()
+        );
     }
 
     #[test]
@@ -3179,7 +3349,8 @@ mod whatsapp_tests {
         dir
     }
 
-    const MANAGED: &str = "const g = getEnvVar('PLATFORM_GATEWAY_URL'); const k = getEnvVar('INSTANCE_HMAC_KEY');";
+    const MANAGED: &str =
+        "const g = getEnvVar('PLATFORM_GATEWAY_URL'); const k = getEnvVar('INSTANCE_HMAC_KEY');";
 
     #[test]
     fn direct_meta_access_is_flagged_in_a_managed_service() {
@@ -3190,15 +3361,25 @@ mod whatsapp_tests {
             vec!["WHATSAPP_TOKEN", "graph.facebook.com"]
         );
         assert_eq!(
-            direct_whatsapp_access("import { SocialMessagingClient } from '@aws-sdk/client-socialmessaging'; const s = getEnvVar('META_ACCESS_TOKEN');"),
+            direct_whatsapp_access(
+                "import { SocialMessagingClient } from '@aws-sdk/client-socialmessaging'; const s = getEnvVar('META_ACCESS_TOKEN');"
+            ),
             vec!["@aws-sdk/client-socialmessaging", "META_ACCESS_TOKEN"]
         );
         // The gateway client, and unrelated META_ names, are fine.
-        assert!(direct_whatsapp_access("createWhatsAppClient(); const m = META_TITLE; const d = SERVICE_METADATA;").is_empty());
+        assert!(
+            direct_whatsapp_access(
+                "createWhatsAppClient(); const m = META_TITLE; const d = SERVICE_METADATA;"
+            )
+            .is_empty()
+        );
 
         let dir = service(
             "direct",
-            &[("registrations.ts", &format!("{MANAGED} const t = getEnvVar('WHATSAPP_ACCESS_TOKEN');"))],
+            &[(
+                "registrations.ts",
+                &format!("{MANAGED} const t = getEnvVar('WHATSAPP_ACCESS_TOKEN');"),
+            )],
         );
         let findings = run_local_checks(&dir).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
@@ -3211,16 +3392,26 @@ mod whatsapp_tests {
 
     #[test]
     fn an_unmanaged_service_calling_meta_is_not_a_managed_finding() {
-        let dir = service("unmanaged", &[("registrations.ts", "getEnvVar('WHATSAPP_TOKEN')")]);
+        let dir = service(
+            "unmanaged",
+            &[("registrations.ts", "getEnvVar('WHATSAPP_TOKEN')")],
+        );
         let findings = run_local_checks(&dir).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
-        assert!(!findings.iter().any(|f| f.check == "whatsapp-provider-direct-in-managed"));
+        assert!(
+            !findings
+                .iter()
+                .any(|f| f.check == "whatsapp-provider-direct-in-managed")
+        );
     }
 
     #[test]
     fn deanon_values_reaching_a_whatsapp_send_are_found() {
         let direct = "const whatsapp = ci.resolve(tokens.WhatsAppClient);\nawait whatsapp.sendText({ to: patient.phone.deanon, body: 'hi' });";
-        assert_eq!(whatsapp_protected_sends(direct), vec!["2: whatsapp.sendText"]);
+        assert_eq!(
+            whatsapp_protected_sends(direct),
+            vec!["2: whatsapp.sendText"]
+        );
 
         let through_variables = "import { createWhatsAppClient } from '@forklaunch/core/http';
 const diagnosis = record.diagnosis.deanon;
@@ -3231,10 +3422,16 @@ await this.whatsappClient.sendTemplate({
   language: 'en_US',
   components: [{ type: 'body', parameters: [{ type: 'text', text: note }] }]
 });";
-        assert_eq!(whatsapp_protected_sends(through_variables), vec!["4: whatsappClient.sendTemplate"]);
+        assert_eq!(
+            whatsapp_protected_sends(through_variables),
+            vec!["4: whatsappClient.sendTemplate"]
+        );
 
         let sdk = "await client.send(new SendWhatsAppMessageCommand({ originationPhoneNumberId, message: encode(p.name.deanon), metaApiVersion: 'v20.0' }));";
-        assert_eq!(whatsapp_protected_sends(sdk), vec!["1: SendWhatsAppMessageCommand"]);
+        assert_eq!(
+            whatsapp_protected_sends(sdk),
+            vec!["1: SendWhatsAppMessageCommand"]
+        );
     }
 
     #[test]
@@ -3246,7 +3443,8 @@ await this.whatsappClient.sendTemplate({
         let sms = "// whatsapp later\nawait sms.sendText({ to: p.phone.deanon, body: 'x' });";
         assert!(whatsapp_protected_sends(sms).is_empty());
         // `.name` on another object is not the tainted `name` variable.
-        let property = "const name = p.name.deanon;\nawait whatsapp.sendText({ to, body: user.name });";
+        let property =
+            "const name = p.name.deanon;\nawait whatsapp.sendText({ to, body: user.name });";
         assert!(whatsapp_protected_sends(property).is_empty());
     }
 
@@ -3273,20 +3471,35 @@ export const PatientEntity = defineComplianceEntity({
             .iter()
             .find(|f| f.check == "whatsapp-protected-data")
             .unwrap_or_else(|| panic!("expected the finding, got {findings:?}"));
-        assert_eq!(f.subject, "api/controllers/notify.controller.ts:1: whatsapp.sendText");
+        assert_eq!(
+            f.subject,
+            "api/controllers/notify.controller.ts:1: whatsapp.sendText"
+        );
         assert!(f.message.starts_with(WHATSAPP_PHI_MARKER), "{}", f.message);
 
-        let dir = service("nophi", &[("api/controllers/notify.controller.ts", controller)]);
+        let dir = service(
+            "nophi",
+            &[("api/controllers/notify.controller.ts", controller)],
+        );
         let findings = run_local_checks(&dir).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
-        let f = findings.iter().find(|f| f.check == "whatsapp-protected-data").unwrap();
+        let f = findings
+            .iter()
+            .find(|f| f.check == "whatsapp-protected-data")
+            .unwrap();
         assert!(!f.message.contains(WHATSAPP_PHI_MARKER));
     }
 
     #[test]
     fn whatsapp_checks_are_listed() {
-        for id in ["whatsapp-provider-direct-in-managed", "whatsapp-protected-data"] {
-            assert!(LOCAL_CHECK_IDS.contains(&id), "{id} missing from LOCAL_CHECK_IDS");
+        for id in [
+            "whatsapp-provider-direct-in-managed",
+            "whatsapp-protected-data",
+        ] {
+            assert!(
+                LOCAL_CHECK_IDS.contains(&id),
+                "{id} missing from LOCAL_CHECK_IDS"
+            );
         }
     }
 }

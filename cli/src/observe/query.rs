@@ -90,8 +90,7 @@ impl CliCommand for QueryCommand {
         }
 
         let url = format!("{}/monitoring/promql", get_observability_api_url());
-        let response = post(&url, body)
-            .with_context(|| "Failed to reach observability API")?;
+        let response = post(&url, body).with_context(|| "Failed to reach observability API")?;
 
         let status = response.status();
         if !status.is_success() {

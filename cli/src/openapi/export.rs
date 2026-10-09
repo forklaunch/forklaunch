@@ -6,10 +6,7 @@ use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 
 use crate::{
     CliCommand,
-    core::{
-        command::command,
-        openapi_export::export_all_services,
-    },
+    core::{command::command, openapi_export::export_all_services},
 };
 
 #[derive(Debug)]
@@ -59,7 +56,12 @@ impl CliCommand for ExportCommand {
 
         match result {
             Ok(exported_services) => {
-                log_header!(stdout, Color::Green, "Successfully exported {} OpenAPI specification(s)", exported_services.len());
+                log_header!(
+                    stdout,
+                    Color::Green,
+                    "Successfully exported {} OpenAPI specification(s)",
+                    exported_services.len()
+                );
                 writeln!(stdout, "  Output: {}", output_path.display())?;
 
                 for service_name in &exported_services {

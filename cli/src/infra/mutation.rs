@@ -4,6 +4,13 @@ use anyhow::{Context, Result, bail};
 use dialoguer::{Confirm, theme::ColorfulTheme};
 use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 
+use super::{
+    resource_resolver::encode_resource_id_for_url,
+    types::{
+        DeployResourceRequest, DeployResourceResponse, PatchResourceRequest, ResourceConfig,
+        ResourceDetailResponse,
+    },
+};
 use crate::{
     constants::{get_platform_ui_url, get_resource_management_api_url},
     core::{
@@ -11,14 +18,6 @@ use crate::{
         http_client::{patch, post},
     },
     deploy::utils::stream_deployment_status,
-};
-
-use super::{
-    resource_resolver::encode_resource_id_for_url,
-    types::{
-        DeployResourceRequest, DeployResourceResponse, PatchResourceRequest, ResourceConfig,
-        ResourceDetailResponse,
-    },
 };
 
 /// Everything a mutating `fl infra` subcommand (`resize`, `config-set`) needs to
@@ -85,7 +84,11 @@ fn is_metadata_only(config: &ResourceConfig) -> bool {
 }
 
 /// Prints every field that would change: `current value -> requested value`.
-fn print_config_diff(stdout: &mut StandardStream, current: &ResourceConfig, requested: &ResourceConfig) -> Result<()> {
+fn print_config_diff(
+    stdout: &mut StandardStream,
+    current: &ResourceConfig,
+    requested: &ResourceConfig,
+) -> Result<()> {
     writeln!(stdout, "  The following will change:")?;
     macro_rules! diff_field {
         ($label:expr, $cur:expr, $req:expr) => {
@@ -97,26 +100,60 @@ fn print_config_diff(stdout: &mut StandardStream, current: &ResourceConfig, requ
                 writeln!(
                     stdout,
                     "    {:<24} {} -> {:?}",
-                    $label,
-                    cur_display,
-                    new_value
+                    $label, cur_display, new_value
                 )?;
             }
         };
     }
-    diff_field!("instance_class:", current.instance_class, requested.instance_class);
+    diff_field!(
+        "instance_class:",
+        current.instance_class,
+        requested.instance_class
+    );
     diff_field!("engine:", current.engine, requested.engine);
-    diff_field!("allocated_storage:", current.allocated_storage, requested.allocated_storage);
-    diff_field!("num_cache_nodes:", current.num_cache_nodes, requested.num_cache_nodes);
-    diff_field!("number_of_broker_nodes:", current.number_of_broker_nodes, requested.number_of_broker_nodes);
-    diff_field!("ebs_storage_size:", current.ebs_storage_size, requested.ebs_storage_size);
-    diff_field!("visibility_timeout:", current.visibility_timeout, requested.visibility_timeout);
-    diff_field!("message_retention_seconds:", current.message_retention_seconds, requested.message_retention_seconds);
+    diff_field!(
+        "allocated_storage:",
+        current.allocated_storage,
+        requested.allocated_storage
+    );
+    diff_field!(
+        "num_cache_nodes:",
+        current.num_cache_nodes,
+        requested.num_cache_nodes
+    );
+    diff_field!(
+        "number_of_broker_nodes:",
+        current.number_of_broker_nodes,
+        requested.number_of_broker_nodes
+    );
+    diff_field!(
+        "ebs_storage_size:",
+        current.ebs_storage_size,
+        requested.ebs_storage_size
+    );
+    diff_field!(
+        "visibility_timeout:",
+        current.visibility_timeout,
+        requested.visibility_timeout
+    );
+    diff_field!(
+        "message_retention_seconds:",
+        current.message_retention_seconds,
+        requested.message_retention_seconds
+    );
     diff_field!("port:", current.port, requested.port);
     diff_field!("multi_az:", current.multi_az, requested.multi_az);
     diff_field!("node_type:", current.node_type, requested.node_type);
-    diff_field!("broker_node_type:", current.broker_node_type, requested.broker_node_type);
-    diff_field!("kafka_version:", current.kafka_version, requested.kafka_version);
+    diff_field!(
+        "broker_node_type:",
+        current.broker_node_type,
+        requested.broker_node_type
+    );
+    diff_field!(
+        "kafka_version:",
+        current.kafka_version,
+        requested.kafka_version
+    );
     diff_field!("queue_type:", current.queue_type, requested.queue_type);
     diff_field!("encryption:", current.encryption, requested.encryption);
     Ok(())
@@ -135,7 +172,10 @@ pub(crate) fn run_mutation(req: MutationRequest) -> Result<()> {
             bail!("nothing to change — no fields were set");
         }
         if req.dry_run {
-            writeln!(stdout, "Dry run: would PATCH distributionStrategy/primaryRegion. No changes applied.")?;
+            writeln!(
+                stdout,
+                "Dry run: would PATCH distributionStrategy/primaryRegion. No changes applied."
+            )?;
             return Ok(());
         }
         let updated = patch_resource(
@@ -143,12 +183,20 @@ pub(crate) fn run_mutation(req: MutationRequest) -> Result<()> {
             req.distribution_strategy,
             req.primary_region,
         )?;
-        writeln!(stdout, "Updated {} (status: {})", updated.name, updated.status)?;
+        writeln!(
+            stdout,
+            "Updated {} (status: {})",
+            updated.name, updated.status
+        )?;
         return Ok(());
     }
 
     writeln!(stdout)?;
-    print_config_diff(&mut stdout, &req.current.manifest_config, &req.requested_config)?;
+    print_config_diff(
+        &mut stdout,
+        &req.current.manifest_config,
+        &req.requested_config,
+    )?;
     writeln!(stdout)?;
 
     if req.dry_run {
@@ -185,13 +233,22 @@ pub(crate) fn run_mutation(req: MutationRequest) -> Result<()> {
     stdout.set_color(termcolor::ColorSpec::new().set_fg(Some(Color::Green)))?;
     writeln!(stdout, "Change submitted: {}", dashboard_url)?;
     stdout.reset()?;
-    writeln!(stdout, "(Check this URL if the live status stream below is interrupted.)")?;
+    writeln!(
+        stdout,
+        "(Check this URL if the live status stream below is interrupted.)"
+    )?;
     writeln!(stdout)?;
 
     // `fl infra` is JWT/session-only (resource-management has no HMAC support on
     // these routes); `stream_deployment_status` is shared with `deploy create`,
     // which still supports HMAC, so it takes an AuthMode — always JWT from here.
-    stream_deployment_status(&AuthMode::Jwt, &response.deployment_id, None, None, &mut stdout)?;
+    stream_deployment_status(
+        &AuthMode::Jwt,
+        &response.deployment_id,
+        None,
+        None,
+        &mut stdout,
+    )?;
 
     Ok(())
 }
@@ -234,7 +291,11 @@ fn deploy_resource(
         let body_text = response
             .text()
             .unwrap_or_else(|_| "unknown error".to_string());
-        bail!("resource-management API returned {} — {}", status, body_text);
+        bail!(
+            "resource-management API returned {} — {}",
+            status,
+            body_text
+        );
     }
 
     response
@@ -269,7 +330,11 @@ fn patch_resource(
         let body_text = response
             .text()
             .unwrap_or_else(|_| "unknown error".to_string());
-        bail!("resource-management API returned {} — {}", status, body_text);
+        bail!(
+            "resource-management API returned {} — {}",
+            status,
+            body_text
+        );
     }
 
     response

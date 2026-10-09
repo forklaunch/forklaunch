@@ -1,4 +1,9 @@
-use std::{collections::{HashMap, HashSet}, fs, io::Write, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    io::Write,
+    path::Path,
+};
 
 use anyhow::{Context, Result};
 use clap::{Arg, ArgAction, ArgMatches, Command};
@@ -20,9 +25,7 @@ use crate::{
         command::command,
         docker::{DockerCompose, sync_docker_compose_env_vars},
         env_template::{generate_env_templates, sync_env_local_files},
-        manifest::{
-            ProjectType, application::ApplicationManifestData,
-        },
+        manifest::{ProjectType, application::ApplicationManifestData},
         rendered_template::{RenderedTemplate, RenderedTemplatesCache, write_rendered_templates},
         sync::{
             artifacts::{ArtifactType, remove_project_from_artifacts},
@@ -57,11 +60,19 @@ pub fn sync_all_projects(
     let mut changes_made = false;
 
     if !modules_path.exists() {
-        log_warn!(stdout, "Modules path does not exist: {}", modules_path.display());
+        log_warn!(
+            stdout,
+            "Modules path does not exist: {}",
+            modules_path.display()
+        );
         return Ok(false);
     }
 
-    log_info!(stdout, "Scanning modules directory: {}", modules_path.display());
+    log_info!(
+        stdout,
+        "Scanning modules directory: {}",
+        modules_path.display()
+    );
 
     let existing_folders: HashSet<String> = fs::read_dir(&modules_path)?
         .filter_map(|entry| {
@@ -85,7 +96,11 @@ pub fn sync_all_projects(
 
     if !orphaned_projects.is_empty() {
         writeln!(stdout)?;
-        log_warn!(stdout, "Found {} orphaned project(s) in manifest:", orphaned_projects.len());
+        log_warn!(
+            stdout,
+            "Found {} orphaned project(s) in manifest:",
+            orphaned_projects.len()
+        );
         for project_name in &orphaned_projects {
             writeln!(stdout, "  - {}", project_name)?;
         }
@@ -130,7 +145,11 @@ pub fn sync_all_projects(
                 changes_made = true;
             }
 
-            log_ok!(stdout, "Cleaned up {} orphaned project(s)", orphaned_projects.len());
+            log_ok!(
+                stdout,
+                "Cleaned up {} orphaned project(s)",
+                orphaned_projects.len()
+            );
             writeln!(stdout)?;
         } else {
             log_warn!(stdout, "Skipping cleanup of orphaned projects");
@@ -183,7 +202,11 @@ pub fn sync_all_projects(
                 log_warn!(stdout, "Could not auto-detect project type");
 
                 if confirm_all {
-                    log_warn!(stdout, "Skipping '{}' (cannot auto-detect and no interaction allowed)", project_name);
+                    log_warn!(
+                        stdout,
+                        "Skipping '{}' (cannot auto-detect and no interaction allowed)",
+                        project_name
+                    );
                     continue;
                 }
 
@@ -197,10 +220,7 @@ pub fn sync_all_projects(
                     stdout,
                     "category",
                     &ArgMatches::default(),
-                    &format!(
-                        "Project type for '{}' (or 'skip' to ignore)",
-                        project_name
-                    ),
+                    &format!("Project type for '{}' (or 'skip' to ignore)", project_name),
                     Some(SYNC_TYPE_OPTIONS),
                     |input| SYNC_TYPE_OPTIONS.contains(&input),
                     |_| "Invalid option. Please try again.".to_string(),
@@ -209,7 +229,11 @@ pub fn sync_all_projects(
                 )?;
 
                 if type_str == "skip" {
-                    log_info!(stdout, "Skipping '{}' (not a forklaunch project)", project_name);
+                    log_info!(
+                        stdout,
+                        "Skipping '{}' (not a forklaunch project)",
+                        project_name
+                    );
                     continue;
                 }
 

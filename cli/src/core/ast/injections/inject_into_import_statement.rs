@@ -34,7 +34,9 @@ pub(crate) fn inject_into_import_statement<'a>(
         }
         if let Some(specs) = &import.specifiers {
             let existing_names: Vec<Cow<'_, str>> = specs.iter().map(|s| s.name()).collect();
-            injection_specifiers.iter().all(|name| existing_names.contains(name))
+            injection_specifiers
+                .iter()
+                .all(|name| existing_names.contains(name))
         } else {
             false
         }

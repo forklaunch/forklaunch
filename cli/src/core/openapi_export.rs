@@ -1,4 +1,11 @@
-use std::{env, fs, io::Read as _, path::Path, process::{Command as ProcessCommand, Stdio}, thread, time::{Duration, Instant}};
+use std::{
+    env, fs,
+    io::Read as _,
+    path::Path,
+    process::{Command as ProcessCommand, Stdio},
+    thread,
+    time::{Duration, Instant},
+};
 
 use anyhow::{Context, Result, bail};
 
@@ -28,7 +35,8 @@ pub(crate) fn resolve_command(name: &str) -> String {
     ];
 
     // Check nvm directories for node/npm/npx
-    if let Ok(nvm_dir) = env::var("NVM_DIR").or_else(|_| Ok::<String, ()>(format!("{}/.nvm", home))) {
+    if let Ok(nvm_dir) = env::var("NVM_DIR").or_else(|_| Ok::<String, ()>(format!("{}/.nvm", home)))
+    {
         let nvm_versions = Path::new(&nvm_dir).join("versions").join("node");
         if nvm_versions.is_dir() {
             // Find the latest installed node version
@@ -39,9 +47,7 @@ pub(crate) fn resolve_command(name: &str) -> String {
                     .collect();
                 versions.sort_by(|a, b| b.file_name().cmp(&a.file_name()));
                 for version_entry in versions {
-                    fallback_paths.push(
-                        format!("{}/bin/{}", version_entry.path().display(), name)
-                    );
+                    fallback_paths.push(format!("{}/bin/{}", version_entry.path().display(), name));
                 }
             }
         }
@@ -104,7 +110,11 @@ fn generate_dummy_value(var_name: &str, var_type: &str, iam_port: Option<u16>) -
                 }
             } else if var_name.contains("URL") {
                 "http://localhost:3000".to_string()
-            } else if var_name.contains("_SECRET") || var_name.contains("_KEY") || var_name.starts_with("SECRET") || var_name.starts_with("KEY") {
+            } else if var_name.contains("_SECRET")
+                || var_name.contains("_KEY")
+                || var_name.starts_with("SECRET")
+                || var_name.starts_with("KEY")
+            {
                 if var_name == "HMAC_SECRET_KEY" {
                     format!("{:x}", {
                         use std::{
@@ -206,11 +216,15 @@ pub(crate) fn export_service_openapi(
         match child.try_wait() {
             Ok(Some(status)) => {
                 if !status.success() {
-                    let stderr = child.stderr.take().map(|mut s| {
-                        let mut buf = String::new();
-                        s.read_to_string(&mut buf).ok();
-                        buf
-                    }).unwrap_or_default();
+                    let stderr = child
+                        .stderr
+                        .take()
+                        .map(|mut s| {
+                            let mut buf = String::new();
+                            s.read_to_string(&mut buf).ok();
+                            buf
+                        })
+                        .unwrap_or_default();
                     bail!("Service {} failed to export: {}", service_name, stderr);
                 }
                 break;
@@ -223,7 +237,8 @@ pub(crate) fn export_service_openapi(
                         This usually means server.ts has top-level await calls (e.g. universalSdk, DB connections) \
                         that block before the FORKLAUNCH_MODE check in listen(). \
                         Wrap them in a guard: if (process.env.FORKLAUNCH_MODE !== 'openapi') {{ ... }}",
-                        service_name, timeout.as_secs()
+                        service_name,
+                        timeout.as_secs()
                     );
                 }
                 thread::sleep(Duration::from_millis(100));

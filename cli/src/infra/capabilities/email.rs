@@ -39,7 +39,8 @@ const RUNTIME_BLOCK: &str = "const configInjector = createConfigInjector(SchemaV
     }
 });";
 
-pub(crate) const EVENTS_HANDLER: &str = "import type { EmailEventData, PlatformEvent } from '@forklaunch/core/http';
+pub(crate) const EVENTS_HANDLER: &str =
+    "import type { EmailEventData, PlatformEvent } from '@forklaunch/core/http';
 
 /**
  * Email delivery events from the ForkLaunch platform (Amazon SES), verified
@@ -102,8 +103,9 @@ fn remove(edit: &mut CapabilityEdit) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::fs;
+
+    use super::*;
 
     const REGISTRATIONS: &str = r#"import { SchemaValidator, number, string } from "@demo/core";
 import { OpenTelemetryCollector } from "@forklaunch/core/http";
@@ -158,11 +160,17 @@ const serviceDependencies = runtimeDependencies.chain({});
 
         let registrations = fs::read_to_string(service.join("registrations.ts")).unwrap();
         assert!(registrations.contains("EmailClient:"), "{registrations}");
-        assert!(registrations.contains("createEmailClient({"), "{registrations}");
+        assert!(
+            registrations.contains("createEmailClient({"),
+            "{registrations}"
+        );
         assert!(registrations.contains("Lifetime.Scoped"));
         // Merged into the file's imports at their sorted place, in its quotes.
         assert!(registrations.contains("import { type EmailClient, OpenTelemetryCollector, createEmailClient } from \"@forklaunch/core/http\";"), "{registrations}");
-        assert!(registrations.contains("SchemaValidator, number, string, type } from \"@demo/core\""), "{registrations}");
+        assert!(
+            registrations.contains("SchemaValidator, number, string, type } from \"@demo/core\""),
+            "{registrations}"
+        );
         assert!(!registrations.contains("SES"), "no vendor SDK or key");
         assert!(!registrations.contains("API_KEY"));
 
@@ -171,7 +179,11 @@ const serviceDependencies = runtimeDependencies.chain({});
         assert!(handler.contains("TODO: mark data.recipients undeliverable"));
         let index = fs::read_to_string(service.join("api/platformEvents/index.ts")).unwrap();
         assert!(index.contains("email: emailEvents"));
-        assert!(fs::read_to_string(service.join("server.ts")).unwrap().contains("platformEventsRouter"));
+        assert!(
+            fs::read_to_string(service.join("server.ts"))
+                .unwrap()
+                .contains("platformEventsRouter")
+        );
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -191,13 +203,25 @@ const serviceDependencies = runtimeDependencies.chain({});
         // Byte for byte what it was.
         assert_eq!(registrations, REGISTRATIONS);
         assert!(!registrations.contains("createEmailClient"));
-        assert!(registrations.contains("import { OpenTelemetryCollector } from \"@forklaunch/core/http\";"));
+        assert!(
+            registrations
+                .contains("import { OpenTelemetryCollector } from \"@forklaunch/core/http\";")
+        );
         // `type` goes with the last `type<…>()` that used it.
-        assert!(registrations.contains("import { SchemaValidator, number, string } from \"@demo/core\";"), "{registrations}");
+        assert!(
+            registrations
+                .contains("import { SchemaValidator, number, string } from \"@demo/core\";"),
+            "{registrations}"
+        );
         assert!(!service.join("api/platformEvents/email.ts").exists());
         assert!(!service.join("api/routes/platformEvents.routes.ts").exists());
         // The unindented mount goes too, and nothing else in server.ts moves.
-        assert_eq!(fs::read_to_string(service.join("server.ts")).unwrap().trim_end(), SERVER);
+        assert_eq!(
+            fs::read_to_string(service.join("server.ts"))
+                .unwrap()
+                .trim_end(),
+            SERVER
+        );
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -207,10 +231,21 @@ const serviceDependencies = runtimeDependencies.chain({});
         let text = "import { a } from '@x/y';\nimport {\n  b,\n  c\n} from \"@forklaunch/core/http\";\nconst z = 1;\n";
         let added = add_named_imports(text, HTTP_SOURCE, HTTP_IMPORTS);
         assert!(added.contains("import {\n  type EmailClient,\n  b,\n  c,\n  createEmailClient\n} from \"@forklaunch/core/http\";"), "{added}");
-        assert_eq!(add_named_imports(&added, HTTP_SOURCE, HTTP_IMPORTS), added, "idempotent");
-        assert_eq!(remove_named_imports(&added, HTTP_SOURCE, HTTP_IMPORTS), text);
+        assert_eq!(
+            add_named_imports(&added, HTTP_SOURCE, HTTP_IMPORTS),
+            added,
+            "idempotent"
+        );
+        assert_eq!(
+            remove_named_imports(&added, HTTP_SOURCE, HTTP_IMPORTS),
+            text
+        );
 
-        let fresh = add_named_imports("import { a } from 'x';\nconst z = 1;\n", HTTP_SOURCE, &["createEmailClient"]);
+        let fresh = add_named_imports(
+            "import { a } from 'x';\nconst z = 1;\n",
+            HTTP_SOURCE,
+            &["createEmailClient"],
+        );
         assert_eq!(
             fresh,
             "import { createEmailClient } from '@forklaunch/core/http';\nimport { a } from 'x';\nconst z = 1;\n"

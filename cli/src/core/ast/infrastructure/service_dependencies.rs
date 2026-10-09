@@ -192,8 +192,14 @@ mod tests {
         let deps = extract_sdk_dependencies_from_source(source).unwrap();
 
         assert_eq!(deps.len(), 2);
-        assert!(deps.iter().any(|d| d.service_name == "billing" && d.dependency_type == "network"));
-        assert!(deps.iter().any(|d| d.service_name == "iam" && d.dependency_type == "network"));
+        assert!(
+            deps.iter()
+                .any(|d| d.service_name == "billing" && d.dependency_type == "network")
+        );
+        assert!(
+            deps.iter()
+                .any(|d| d.service_name == "iam" && d.dependency_type == "network")
+        );
     }
 
     #[test]
