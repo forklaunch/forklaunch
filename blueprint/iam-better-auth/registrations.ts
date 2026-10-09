@@ -1,4 +1,8 @@
 import {
+  getAuthorizationScope,
+  type AuthorizationPayload
+} from './domain/utils/authorizationScope.util';
+import {
   array,
   ExpressApplicationOptions,
   number,
@@ -183,22 +187,21 @@ const expressApplicationOptions = serviceDependencies.chain({
         SessionObject<SchemaValidator>
       > = {
         auth: {
-          surfacePermissions: async (payload: { sub?: string }) => {
-            if (!payload.sub) {
+          surfacePermissions: async (payload: AuthorizationPayload) => {
+            const scope = getAuthorizationScope(payload);
+            if (!scope) {
               return new Set();
             }
-            const permissions = await SurfacingService.surfacePermissions(
-              payload.sub as string
-            );
+            const permissions =
+              await SurfacingService.surfacePermissions(scope);
             return new Set(permissions);
           },
-          surfaceRoles: async (payload: { sub?: string }) => {
-            if (!payload.sub) {
+          surfaceRoles: async (payload: AuthorizationPayload) => {
+            const scope = getAuthorizationScope(payload);
+            if (!scope) {
               return new Set();
             }
-            const role = await SurfacingService.surfaceRole(
-              payload.sub as string
-            );
+            const role = await SurfacingService.surfaceRole(scope);
             return role ? new Set([role]) : new Set();
           }
         },

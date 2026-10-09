@@ -1,3 +1,4 @@
+import { organizationRoleStatements } from './domain/utils/organizationRoleStatements.util';
 import { withAuthEncryptionPolicy } from './domain/utils/authEncryptionPolicy.util';
 import { mikroOrmAdapter } from '@forklaunch/better-auth-mikro-orm-fork';
 import { logBetterAuthApiError } from './domain/utils/betterAuthErrorLogging.util';
@@ -16,25 +17,11 @@ const statement = {
 
 const ac = createAccessControl(statement);
 
-const ownerRole = ac.newRole({
-  platform: [PERMISSIONS.PLATFORM_READ, PERMISSIONS.PLATFORM_WRITE]
-});
-
-const adminRole = ac.newRole({
-  platform: [PERMISSIONS.PLATFORM_READ, PERMISSIONS.PLATFORM_WRITE]
-});
-
-const editorRole = ac.newRole({
-  platform: [PERMISSIONS.PLATFORM_READ, PERMISSIONS.PLATFORM_WRITE]
-});
-
-const viewerRole = ac.newRole({
-  platform: [PERMISSIONS.PLATFORM_READ]
-});
-
-const systemRole = ac.newRole({
-  platform: [PERMISSIONS.PLATFORM_READ, PERMISSIONS.PLATFORM_WRITE]
-});
+const ownerRole = ac.newRole(organizationRoleStatements.owner);
+const adminRole = ac.newRole(organizationRoleStatements[ROLES.ADMIN]);
+const editorRole = ac.newRole(organizationRoleStatements[ROLES.EDITOR]);
+const viewerRole = ac.newRole(organizationRoleStatements[ROLES.VIEWER]);
+const systemRole = ac.newRole(organizationRoleStatements[ROLES.SYSTEM]);
 
 const plugins = [
   jwt({
@@ -47,6 +34,7 @@ const plugins = [
         session: Record<string, unknown>;
       }) => ({
         sub: user.id,
+        sessionId: session.id,
         email: user.email,
         activeOrganizationId: (session.activeOrganizationId as string) ?? null
       })
