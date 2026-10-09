@@ -67,7 +67,7 @@ export async function findStepFigures(
   const queries = [`${procedure.title} ${own.slice(0, 2).join(' ')} technique`, `${procedure.title} surgical technique`];
   const found = new Map<string, { image: MedicalImage; score: number }>();
   for (const query of queries) {
-    const { images: results } = await images.search(query, { type: 'photo', limit: 15 });
+    const { images: results } = await images.search(query, { type: 'photo', limit: 15, about: procedure.title });
     for (const image of results) {
       const score = stepFigureScore(image, { names: procedure.names, hints });
       if (score !== undefined && !found.has(image.id)) found.set(image.id, { image, score });
