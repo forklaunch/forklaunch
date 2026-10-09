@@ -16,10 +16,10 @@ export function createAuthEncryptionOrm<
   T extends { em: object; getMetadata: (...args: any[]) => any }
 >(orm: T): T {
   const em = orm.em as AnyEm;
+  const modelName = (entity: unknown) =>
+    String(orm.getMetadata().find(entity)?.className ?? '').toLowerCase();
   const protectedModel = (entity: unknown) =>
-    ['account', 'jwks'].includes(
-      String(orm.getMetadata().find(entity)?.className ?? '').toLowerCase()
-    );
+    ['account', 'jwks'].includes(modelName(entity));
   const assertScope = () => {
     if (getCurrentTenantId() !== AUTH_ENCRYPTION_CONTEXT)
       throw new Error(
@@ -32,16 +32,34 @@ export function createAuthEncryptionOrm<
     options?: Record<string, unknown>
   ) => {
     assertScope();
-    // Inspect only plaintext metadata before any secret is hydrated. No legacy key guessing.
-    const rows = await em
-      // Inspect the same transaction snapshot as the subsequent secret read.
-      // A fresh identity map avoids hydrating cached secrets during this check.
-      .fork({ keepTransactionContext: true })
-      .find(entity, criteria ?? {}, {
-        ...options,
-        fields: ['id', 'encryptionPolicy'],
-        limit: 1001
+    // Inspect the same transaction snapshot without hydrating cached secrets.
+    const inspection = em.fork({ keepTransactionContext: true });
+    const unscoped =
+      criteria == null ||
+      (typeof criteria === 'object' &&
+        !Array.isArray(criteria) &&
+        Object.keys(criteria).length === 0);
+    if (modelName(entity) === 'jwks' && unscoped) {
+      // Better Auth reads the complete key history after rotations. Count invalid
+      // plaintext markers across that history instead of imposing a key-count cap.
+      const invalid = await inspection.count(entity, {
+        $or: [
+          { encryptionPolicy: { $ne: AUTH_ENCRYPTION_POLICY } },
+          { encryptionPolicy: null }
+        ]
       });
+      if (invalid !== 0)
+        throw new Error(
+          'Legacy auth encryption policy requires an explicit ciphertext migration.'
+        );
+      return;
+    }
+    // Bounded matching reads retain their existing fail-closed metadata limit.
+    const rows = await inspection.find(entity, criteria ?? {}, {
+      ...options,
+      fields: ['id', 'encryptionPolicy'],
+      limit: 1001
+    });
     if (rows.length > 1000)
       throw new Error('Auth encryption policy check exceeds its row limit.');
     for (const row of rows)

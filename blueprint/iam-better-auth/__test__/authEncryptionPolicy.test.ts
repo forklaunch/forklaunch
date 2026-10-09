@@ -19,9 +19,23 @@ function fixture() {
     em: {
       fork: (options: unknown) => {
         forkOptions.push(options);
-        return { find: async () => rows };
+        return {
+          find: async (
+            _model: unknown,
+            _criteria: unknown,
+            _options: unknown
+          ) => rows,
+          count: async (_model: unknown, _criteria: unknown) =>
+            rows.filter(
+              (row) => row.encryptionPolicy !== AUTH_ENCRYPTION_POLICY
+            ).length
+        };
       },
       create: (_model: unknown, data: unknown) => data,
+      find: async (_model: unknown, _criteria: unknown) => {
+        seen.push(getCurrentTenantId());
+        return rows;
+      },
       findOne: async (_model: unknown, _criteria: unknown) => {
         seen.push(getCurrentTenantId());
         return null;
@@ -84,6 +98,23 @@ describe('fresh iam-service-v1 policy', () => {
       withAuthEncryptionPolicy(() => f.orm.em.findOne('Account', { id: 'old' }))
     ).rejects.toThrow('migration');
     expect(f.seen).toEqual([]);
+  });
+  it('permits complete valid signing-key history and rejects invalid markers beyond a page', async () => {
+    const f = fixture();
+    f.rows.push(
+      ...Array.from({ length: 1001 }, (_, i) => ({
+        id: String(i),
+        encryptionPolicy: AUTH_ENCRYPTION_POLICY
+      }))
+    );
+    await expect(
+      withAuthEncryptionPolicy(() => f.orm.em.find('Jwks', {}))
+    ).resolves.toHaveLength(1001);
+    f.rows.push({ id: 'legacy-after-first-page' });
+    await expect(
+      withAuthEncryptionPolicy(() => f.orm.em.find('Jwks', {}))
+    ).rejects.toThrow('migration');
+    expect(f.seen).toEqual([AUTH_ENCRYPTION_CONTEXT]);
   });
   it('refuses metadata rewrites on auth rows without restricting unrelated model fields', async () => {
     const f = fixture();
