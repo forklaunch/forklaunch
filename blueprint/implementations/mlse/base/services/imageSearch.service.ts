@@ -1,6 +1,7 @@
 import { collapseWhitespace, FetchLike, RateLimitedClient } from '../domain/http';
 import { literatureSearchTerm } from './layTerms.service';
 import { licenseScopeFor } from './licenseGate.service';
+import { queryTerms } from './ranking.service';
 import { classifyQuery } from './queryClassifier.service';
 
 // Open-i's image types, by the name a caller filters on
@@ -79,9 +80,43 @@ type OpenIItem = {
 // About a third of Open-i's figures carry a license that allows reuse, so a
 // page asks for more than it shows.
 const FETCH_FACTOR = 4;
-const MAX_FETCH = 100;
+// Open-i sends each figure's abstract too: 100 figures can take 30 s, 60 about 5
+const MAX_FETCH = 60;
 
 const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+
+// "infarct" and "infarction", "appendix" and "appendices" count as one word
+function sameWord(a: string, b: string): boolean {
+  if (a === b) return true;
+  const [short, long] = a.length < b.length ? [a, b] : [b, a];
+  return short.length >= 5 && long.startsWith(short.slice(0, Math.max(5, short.length - 2)));
+}
+
+function share(terms: string[], text: string): number {
+  if (terms.length === 0) return 0;
+  const words = queryTerms(text);
+  return terms.filter((term) => words.some((word) => sameWord(term, word))).length / terms.length;
+}
+
+/**
+ * Open-i matches a query anywhere in the article, abstract included, so a
+ * figure of hippocampal staining comes back for "appendectomy". A figure is
+ * kept when its caption and article title together carry at least half the
+ * query's words, and figures whose caption names them come first.
+ */
+export function rankByCaption<T extends { caption: string; title: string }>(images: T[], query: string): T[] {
+  const terms = queryTerms(query);
+  return images
+    .map((image, order) => ({
+      image,
+      order,
+      caption: share(terms, image.caption),
+      either: share(terms, `${image.caption} ${image.title}`)
+    }))
+    .filter((r) => terms.length === 0 || r.either >= 0.5)
+    .sort((a, b) => b.caption - a.caption || a.order - b.order)
+    .map((r) => r.image);
+}
 
 function plainText(html: string | undefined): string {
   return collapseWhitespace(
@@ -116,13 +151,15 @@ export class ImageSearchService {
   constructor(fetchImpl: FetchLike, options: ImageSearchOptions = {}) {
     this.baseUrl = options.baseUrl ?? 'https://openi.nlm.nih.gov';
     this.client = new RateLimitedClient('openi', fetchImpl, 200, undefined, undefined, {
-      timeoutMs: options.timeoutMs ?? 12_000
+      timeoutMs: options.timeoutMs ?? 15_000
     });
     this.cacheMs = options.cacheMs ?? 60 * 60 * 1000;
     this.cacheEntries = options.cacheEntries ?? 500;
   }
 
-  async search(query: string, options: { limit?: number; type?: ImageType } = {}): Promise<ImageSearchResult> {
+  // `about`: the words a figure must be about, when the query adds others to
+  // help the search find it ("appendectomy" for "appendectomy surgical technique")
+  async search(query: string, options: { limit?: number; type?: ImageType; about?: string } = {}): Promise<ImageSearchResult> {
     const text = query.trim();
     const limit = options.limit ?? 24;
     // only literature questions leave the service, as with live search
@@ -130,14 +167,15 @@ export class ImageSearchService {
     if (!text || (queryClass !== 'literature_lookup' && queryClass !== 'dosage_question')) {
       return { images: [], status: 'skipped' };
     }
-    const key = `${options.type ?? ''}:${limit}:${text.toLowerCase()}`;
+    const key = `${options.type ?? ''}:${limit}:${options.about ?? ''}:${text.toLowerCase()}`;
     const hit = this.cache.get(key);
     if (hit && Date.now() - hit.at < this.cacheMs) return { images: hit.value, status: 'ok' };
 
     // Open-i matches words: "heart attack" finds block diagrams, "myocardial
     // infarction" finds ECGs
+    const term = literatureSearchTerm(text);
     const params = new URLSearchParams({
-      query: literatureSearchTerm(text),
+      query: term,
       m: '1',
       n: String(Math.min(limit * FETCH_FACTOR, MAX_FETCH)),
       coll: 'pmc'
@@ -151,10 +189,10 @@ export class ImageSearchService {
       return { images: [], status: 'unavailable' };
     }
 
-    const images = items
-      .map((item) => this.toImage(item))
-      .filter((image): image is MedicalImage => image !== undefined)
-      .slice(0, limit);
+    const images = rankByCaption(
+      items.map((item) => this.toImage(item)).filter((image): image is MedicalImage => image !== undefined),
+      options.about ? literatureSearchTerm(options.about) : term
+    ).slice(0, limit);
     if (this.cache.size >= this.cacheEntries) {
       this.cache.delete(this.cache.keys().next().value as string);
     }
