@@ -5,6 +5,7 @@ use crate::{CliCommand, core::command::command};
 
 mod audit;
 pub(crate) mod checks;
+pub(crate) mod deps;
 mod tenancy;
 
 use audit::AuditCommand;

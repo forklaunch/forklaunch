@@ -90,6 +90,11 @@ const CRITERIA: &[Criterion] = &[
         label: "Every endpoint requires sign-in unless it is explicitly public",
     },
     Criterion {
+        id: "sec-dependencies",
+        rail: "security",
+        label: "No installed dependency has a known vulnerability or is malicious",
+    },
+    Criterion {
         id: "sec-input-validation",
         rail: "security",
         label: "Incoming data is validated before it is trusted",
@@ -189,6 +194,13 @@ fn criterion_for_check(check: &str) -> Option<(&'static str, OnFinding)> {
         // Routes the framework never sees, and files whose routes could not be
         // read: a person confirms them; neither proves nor disproves sign-in.
         "route-outside-framework" | "route-scan-incomplete" => ("sec-authn", OnFinding::Review),
+        // A pinned version the advisory database lists as vulnerable or
+        // malicious, or no lockfile to pin versions at all.
+        "dependency-vulnerable" | "dependency-malicious" | "dependency-lockfile-missing" => {
+            ("sec-dependencies", OnFinding::Fail)
+        }
+        // The versions could not be looked up: not checked, so a person looks.
+        "dependency-scan-incomplete" => ("sec-dependencies", OnFinding::Review),
         _ => return None,
     })
 }
@@ -248,6 +260,14 @@ fn severity_for(finding: &LocalFinding) -> &'static str {
         }
         // An endpoint anyone can call without signing in.
         (Severity::Warning, "route-auth-missing") => "critical",
+        // A malicious release runs its install scripts on every machine that installs it.
+        (Severity::Warning, "dependency-malicious") => "critical",
+        (Severity::Warning, "dependency-vulnerable") if finding.message.starts_with("CRITICAL") => {
+            "critical"
+        }
+        // The advisory's own rating, as the platform reads it.
+        (Severity::Info, "dependency-vulnerable") if finding.message.starts_with("LOW") => "low",
+        (Severity::Info, "dependency-vulnerable") => "medium",
         (Severity::Warning, _) => "high",
         (Severity::Info, _) => "info",
     }
@@ -382,6 +402,10 @@ fn item_label(check: &str) -> &'static str {
         "route-auth-missing" => "Every non-public route declares how callers sign in",
         "route-outside-framework" => "Routes outside the framework are confirmed open on purpose",
         "route-scan-incomplete" => "Every source file's routes could be read",
+        "dependency-vulnerable" => "No pinned package version has a known vulnerability",
+        "dependency-malicious" => "No pinned package release is malicious",
+        "dependency-lockfile-missing" => "A lockfile pins every dependency version",
+        "dependency-scan-incomplete" => "Every pinned version was checked for advisories",
         _ => "Deterministic check",
     }
 }
@@ -494,6 +518,23 @@ fn remedy(check: &str) -> Option<String> {
         "route-scan-incomplete" => {
             "Fix the file's syntax error so its routes can be read, or check them by hand."
         }
+        "dependency-vulnerable" => {
+            "Upgrade each listed package to its fixed version (or later) and regenerate the \
+             lockfile; where no fix exists, replace the package or confirm the vulnerable code \
+             path is never reached."
+        }
+        "dependency-malicious" => {
+            "Remove the package, reinstall from a clean lockfile, and rotate any credentials \
+             the machines that installed it could reach (developer laptops, CI, build hosts)."
+        }
+        "dependency-lockfile-missing" => {
+            "Commit the package manager's lockfile (pnpm-lock.yaml, bun.lock, package-lock.json, \
+             yarn.lock, poetry.lock or uv.lock) so every install gets the same, checkable versions."
+        }
+        "dependency-scan-incomplete" => {
+            "Run `forklaunch compliance audit` with network access so pinned versions can be \
+             looked up in the advisory database."
+        }
         _ => return None,
     };
     Some(text.to_string())
@@ -521,14 +562,21 @@ pub(crate) fn build_local_report_card(
 
         let mut score = 100.0;
         let mut card_findings = Vec::new();
+        // Dependency findings cost points once per check, at the worst rating: one app can
+        // pin hundreds of affected versions, and the platform caps the item the same way.
+        let mut dependency_penalty: std::collections::BTreeMap<&str, f64> = Default::default();
         for finding in &rail_findings {
             let severity = severity_for(finding);
-            // A review finding waits for a person; it costs no points.
-            if !matches!(
-                criterion_for_check(&finding.check).map(|(_, on)| on),
-                Some(OnFinding::Review)
-            ) {
-                score -= penalty_for(severity);
+            // A review finding waits for a person and costs nothing.
+            match criterion_for_check(&finding.check).map(|(_, on)| on) {
+                Some(OnFinding::Review) => {}
+                _ if finding.check.starts_with("dependency-") => {
+                    let worst = dependency_penalty
+                        .entry(finding.check.as_str())
+                        .or_default();
+                    *worst = worst.max(penalty_for(severity));
+                }
+                _ => score -= penalty_for(severity),
             }
             card_findings.push(CardFinding {
                 severity: severity.to_string(),
@@ -539,7 +587,7 @@ pub(crate) fn build_local_report_card(
                 criterion: criterion_for_check(&finding.check).map(|(id, _)| id.to_string()),
             });
         }
-        let score = score.max(0.0);
+        let score = (score - dependency_penalty.values().sum::<f64>()).max(0.0);
 
         // One item per criterion on this rail. A check that fired failed (or,
         // for a review check, asks for review); one that never fired passed
@@ -755,6 +803,11 @@ mod tests {
                 "Incoming data is validated before it is trusted",
             ),
             (
+                "security",
+                "sec-dependencies",
+                "No installed dependency has a known vulnerability or is malicious",
+            ),
+            (
                 "governance",
                 "gov-data-retention",
                 "How long data is kept, and how it is deleted, is defined",
@@ -825,6 +878,10 @@ mod tests {
             ("route-auth-missing", "sec-authn"),
             ("route-outside-framework", "sec-authn"),
             ("route-scan-incomplete", "sec-authn"),
+            ("dependency-vulnerable", "sec-dependencies"),
+            ("dependency-malicious", "sec-dependencies"),
+            ("dependency-lockfile-missing", "sec-dependencies"),
+            ("dependency-scan-incomplete", "sec-dependencies"),
         ] {
             assert_eq!(
                 criterion_for_check(check).map(|(c, _)| c),
@@ -888,6 +945,53 @@ mod tests {
             .unwrap();
         assert_eq!(item.status, "pending");
         assert_eq!(item.checks[0].status, "review");
+    }
+
+    #[test]
+    fn malicious_and_critical_dependencies_are_critical() {
+        assert_eq!(
+            severity_for(&finding("dependency-malicious", Severity::Warning)),
+            "critical"
+        );
+        let mut critical = finding("dependency-vulnerable", Severity::Warning);
+        critical.message = "CRITICAL GHSA-xxxx: prototype pollution".to_string();
+        assert_eq!(severity_for(&critical), "critical");
+        let mut high = finding("dependency-vulnerable", Severity::Warning);
+        high.message = "HIGH GHSA-yyyy: ReDoS".to_string();
+        assert_eq!(severity_for(&high), "high");
+        let mut moderate = finding("dependency-vulnerable", Severity::Info);
+        moderate.message = "MODERATE GHSA-zzzz: open redirect".to_string();
+        assert_eq!(severity_for(&moderate), "medium");
+        moderate.message = "LOW GHSA-zzzz: info leak".to_string();
+        assert_eq!(severity_for(&moderate), "low");
+        let card = build_local_report_card(
+            "demo",
+            1,
+            &[finding("dependency-scan-incomplete", Severity::Warning)],
+            at(),
+        );
+        let item = card.dimensions["security"]
+            .items
+            .iter()
+            .find(|i| i.criterion.as_deref() == Some("sec-dependencies"))
+            .unwrap();
+        assert_eq!(item.status, "pending");
+        assert_eq!(card.dimensions["security"].score, 100);
+    }
+
+    #[test]
+    fn many_vulnerable_versions_cost_the_worst_rating_once() {
+        let mut findings = Vec::new();
+        for i in 0..20 {
+            let mut f = finding("dependency-vulnerable", Severity::Warning);
+            f.message = format!("HIGH GHSA-{i}: x");
+            findings.push(f);
+        }
+        let mut critical = finding("dependency-vulnerable", Severity::Warning);
+        critical.message = "CRITICAL GHSA-c: y".to_string();
+        findings.push(critical);
+        let card = build_local_report_card("demo", 1, &findings, at());
+        assert_eq!(card.dimensions["security"].score, 70);
     }
 
     /// An unreadable file leaves sign-in for review and costs no points.
