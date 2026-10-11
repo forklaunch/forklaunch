@@ -532,8 +532,9 @@ fn remedy(check: &str) -> Option<String> {
              yarn.lock, poetry.lock or uv.lock) so every install gets the same, checkable versions."
         }
         "dependency-scan-incomplete" => {
-            "Run `forklaunch compliance audit` with network access so pinned versions can be \
-             looked up in the advisory database."
+            "Fix any lockfile the finding names, unset FORKLAUNCH_NO_ADVISORY_LOOKUP if it is \
+             set, and run `forklaunch compliance audit` with network access so pinned versions \
+             can be looked up in the advisory database."
         }
         _ => return None,
     };

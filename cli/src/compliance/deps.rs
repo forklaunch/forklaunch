@@ -66,6 +66,8 @@ pub(crate) struct Inventory {
     pub(crate) lockfiles: Vec<String>,
     /// A `package.json` or `pyproject.toml` at the app root with no lockfile beside it.
     pub(crate) unpinned_manifest: Option<String>,
+    /// Lockfiles found but not readable or parseable: their versions were never checked.
+    pub(crate) unreadable: Vec<String>,
 }
 
 fn walk(root: &Path, names: &[&str]) -> Vec<PathBuf> {
@@ -120,8 +122,11 @@ fn pypi_name(n: &str) -> String {
     out
 }
 
-/// `@scope/name@1.2.3(peer@x)` / `/name@1.2.3` / `/name/1.2.3` (pnpm v5) → (name, version).
-fn pnpm_key(line: &str) -> Option<(String, String)> {
+/// A pnpm lockfile package key → (name, version).
+/// v6+: `name@1.2.3`, `'@scope/name@1.2.3(peer@x)'`, `/name@1.2.3`.
+/// v5 (`v5 = true`): `/name/1.2.3`, `/@scope/name/1.2.3`, with peers after `_`:
+/// `/name/1.2.3_peer@2.0.0`.
+fn pnpm_key(line: &str, v5: bool) -> Option<(String, String)> {
     if !line.starts_with("  ") || line.starts_with("   ") || !line.trim_end().ends_with(':') {
         return None;
     }
@@ -130,24 +135,29 @@ fn pnpm_key(line: &str) -> Option<(String, String)> {
         .trim_end_matches(':')
         .trim_matches(|c| c == '\'' || c == '"');
     let key = key.strip_prefix('/').unwrap_or(key);
-    let key = key.split('(').next()?;
-    let scoped = key.starts_with('@');
-    let body = if scoped { &key[1..] } else { key };
-    // v6+: name@version; v5: name/version
-    let (name, version) = match body.rfind('@') {
-        Some(i) => (&body[..i], &body[i + 1..]),
-        None => {
-            let i = body.rfind('/')?;
-            (&body[..i], &body[i + 1..])
-        }
+    let (name, version) = if v5 {
+        let segs: Vec<&str> = key.split('/').collect();
+        let (name, at) = if key.starts_with('@') {
+            (segs.get(..2)?.join("/"), 2)
+        } else {
+            (segs.first()?.to_string(), 1)
+        };
+        let version = segs.get(at)?.split('_').next()?.to_string();
+        (name, version)
+    } else {
+        let key = key.split('(').next()?;
+        let scoped = key.starts_with('@');
+        let body = if scoped { &key[1..] } else { key };
+        let i = body.rfind('@')?;
+        (
+            format!("{}{}", if scoped { "@" } else { "" }, &body[..i]),
+            body[i + 1..].to_string(),
+        )
     };
-    if !is_version(version) || name.is_empty() {
+    if !is_version(&version) || name.is_empty() || name == "@" {
         return None;
     }
-    Some((
-        format!("{}{}", if scoped { "@" } else { "" }, name),
-        version.to_string(),
-    ))
+    Some((name, version))
 }
 
 /// The yarn.lock entry header's package name: `"@scope/a@^1", "@scope/a@^2":` → `@scope/a`.
@@ -170,6 +180,7 @@ fn yarn_name(header: &str) -> Option<String> {
 pub(crate) fn inventory(root: &Path) -> Inventory {
     let mut packages = Vec::new();
     let mut lockfiles = BTreeSet::new();
+    let mut unreadable = Vec::new();
     let mut add = |eco: &'static str, name: String, version: String, file: &Path| {
         if !name.is_empty() && is_version(&version) {
             packages.push(Package {
@@ -183,16 +194,20 @@ pub(crate) fn inventory(root: &Path) -> Inventory {
 
     for f in walk(root, &["package-lock.json", "npm-shrinkwrap.json"]) {
         lockfiles.insert(rel(root, &f));
-        let Ok(d) = fs::read_to_string(&f)
-            .ok()
-            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
-            .ok_or(())
-        else {
+        let Ok(text) = fs::read_to_string(&f) else {
+            unreadable.push(rel(root, &f));
+            continue;
+        };
+        let Ok(d) = serde_json::from_str::<Value>(&text) else {
+            unreadable.push(rel(root, &f));
             continue;
         };
         if let Some(pkgs) = d.get("packages").and_then(Value::as_object) {
             for (path, v) in pkgs {
-                if path.is_empty() || v.get("link").and_then(Value::as_bool) == Some(true) {
+                // Only installed packages: workspace members and links are the app's own code.
+                if !path.contains("node_modules/")
+                    || v.get("link").and_then(Value::as_bool) == Some(true)
+                {
                     continue;
                 }
                 let name = v
@@ -229,7 +244,15 @@ pub(crate) fn inventory(root: &Path) -> Inventory {
 
     for f in walk(root, &["pnpm-lock.yaml"]) {
         lockfiles.insert(rel(root, &f));
-        let text = fs::read_to_string(&f).unwrap_or_default();
+        let Ok(text) = fs::read_to_string(&f) else {
+            unreadable.push(rel(root, &f));
+            continue;
+        };
+        let v5 = text
+            .lines()
+            .find_map(|l| l.strip_prefix("lockfileVersion:"))
+            .map(|v| v.trim().trim_matches(|c| c == '\'' || c == '"'))
+            .is_some_and(|v| v.starts_with('5') || v.starts_with('4') || v.starts_with('3'));
         // Only the `packages:` (and v9 `snapshots:`) sections name resolved versions.
         let mut in_packages = false;
         for line in text.lines() {
@@ -237,7 +260,7 @@ pub(crate) fn inventory(root: &Path) -> Inventory {
                 in_packages = line.starts_with("packages:") || line.starts_with("snapshots:");
                 continue;
             }
-            if in_packages && let Some((n, v)) = pnpm_key(line) {
+            if in_packages && let Some((n, v)) = pnpm_key(line, v5) {
                 add("npm", n, v, &f);
             }
         }
@@ -245,7 +268,10 @@ pub(crate) fn inventory(root: &Path) -> Inventory {
 
     for f in walk(root, &["yarn.lock"]) {
         lockfiles.insert(rel(root, &f));
-        let text = fs::read_to_string(&f).unwrap_or_default();
+        let Ok(text) = fs::read_to_string(&f) else {
+            unreadable.push(rel(root, &f));
+            continue;
+        };
         let mut name: Option<String> = None;
         for line in text.lines() {
             if !line.is_empty() && !line.starts_with(' ') && !line.starts_with('#') {
@@ -272,7 +298,10 @@ pub(crate) fn inventory(root: &Path) -> Inventory {
 
     for f in walk(root, &["bun.lock"]) {
         lockfiles.insert(rel(root, &f));
-        let text = fs::read_to_string(&f).unwrap_or_default();
+        let Ok(text) = fs::read_to_string(&f) else {
+            unreadable.push(rel(root, &f));
+            continue;
+        };
         // "key": ["name@1.2.3", ...]
         for line in text.lines() {
             let t = line.trim_start();
@@ -301,7 +330,11 @@ pub(crate) fn inventory(root: &Path) -> Inventory {
 
     for f in walk(root, &["requirements*"]) {
         lockfiles.insert(rel(root, &f));
-        for line in fs::read_to_string(&f).unwrap_or_default().lines() {
+        let Ok(text) = fs::read_to_string(&f) else {
+            unreadable.push(rel(root, &f));
+            continue;
+        };
+        for line in text.lines() {
             let line = line
                 .split('#')
                 .next()
@@ -324,25 +357,55 @@ pub(crate) fn inventory(root: &Path) -> Inventory {
 
     for f in walk(root, &["poetry.lock", "uv.lock"]) {
         lockfiles.insert(rel(root, &f));
-        let mut name: Option<String> = None;
-        for line in fs::read_to_string(&f).unwrap_or_default().lines() {
-            let quoted = |l: &str| l.split('"').nth(1).map(str::to_string);
-            if line.starts_with("name = ") {
-                name = quoted(line).map(|n| pypi_name(&n));
-            } else if line.starts_with("version = ")
-                && let (Some(n), Some(v)) = (name.take(), quoted(line))
+        let Ok(text) = fs::read_to_string(&f) else {
+            unreadable.push(rel(root, &f));
+            continue;
+        };
+        // One `[[package]]` block at a time; a package installed from the app's own tree
+        // (poetry `type = "directory"`/`develop = true`, uv editable/virtual/directory/path
+        // sources) is the app's code, not a published release.
+        let quoted = |l: &str| l.split('"').nth(1).map(str::to_string);
+        let mut block: Option<(Option<String>, Option<String>, bool)> = None;
+        let mut flush = |b: Option<(Option<String>, Option<String>, bool)>| {
+            if let Some((Some(n), Some(v), false)) = b {
+                add("PyPI", pypi_name(&n), v, &f);
+            }
+        };
+        for line in text.lines() {
+            if line.starts_with("[[package]]") {
+                flush(block.take());
+                block = Some((None, None, false));
+                continue;
+            }
+            let Some((name, version, local)) = block.as_mut() else {
+                continue;
+            };
+            if line.starts_with("name = ") && name.is_none() {
+                *name = quoted(line);
+            } else if line.starts_with("version = ") && version.is_none() {
+                *version = quoted(line);
+            } else if line.starts_with("develop = true")
+                || (line.starts_with("type = ")
+                    && matches!(quoted(line).as_deref(), Some("directory" | "file")))
+                || (line.starts_with("source = {")
+                    && ["editable", "virtual", "directory", "path"]
+                        .iter()
+                        .any(|k| line.contains(&format!("{k} ="))))
             {
-                add("PyPI", n, v, &f);
+                *local = true;
             }
         }
+        flush(block.take());
     }
 
     for f in walk(root, &["Pipfile.lock"]) {
         lockfiles.insert(rel(root, &f));
-        let Some(d) = fs::read_to_string(&f)
-            .ok()
-            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
-        else {
+        let Ok(text) = fs::read_to_string(&f) else {
+            unreadable.push(rel(root, &f));
+            continue;
+        };
+        let Ok(d) = serde_json::from_str::<Value>(&text) else {
+            unreadable.push(rel(root, &f));
             continue;
         };
         for sec in ["default", "develop"] {
@@ -376,6 +439,7 @@ pub(crate) fn inventory(root: &Path) -> Inventory {
         packages,
         lockfiles: lockfiles.into_iter().collect(),
         unpinned_manifest,
+        unreadable,
     }
 }
 
@@ -605,6 +669,14 @@ fn scan_with(
             "No lockfile is committed beside it, so installs resolve whatever versions are newest that day and known-vulnerable versions cannot be ruled out. Commit the package manager's lockfile.".to_string(),
         ));
     }
+    if !inv.unreadable.is_empty() {
+        findings.push(finding(
+            Severity::Warning,
+            "dependency-scan-incomplete",
+            inv.unreadable.join(", "),
+            "Could not be read or parsed, so the versions it pins were not checked against the vulnerability database. Fix or regenerate the lockfile.".to_string(),
+        ));
+    }
     if inv.packages.is_empty() {
         return findings;
     }
@@ -738,7 +810,7 @@ mod tests {
     fn reads_pnpm_v9_and_v6_keys_with_scopes_and_peers() {
         let dir = app(&[(
             "pnpm-lock.yaml",
-            "lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      lodash:\n        specifier: ^4.17.20\n        version: 4.17.20\n\npackages:\n\n  lodash@4.17.20:\n    resolution: {integrity: sha512-x}\n\n  '@types/node@20.1.0':\n    resolution: {integrity: sha512-y}\n\n  /express/4.17.1:\n    resolution: {integrity: sha512-z}\n\nsnapshots:\n\n  '@mikro-orm/core@6.4.0(pg@8.11.0)':\n    dependencies:\n      pg: 8.11.0\n",
+            "lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      lodash:\n        specifier: ^4.17.20\n        version: 4.17.20\n\npackages:\n\n  lodash@4.17.20:\n    resolution: {integrity: sha512-x}\n\n  '@types/node@20.1.0':\n    resolution: {integrity: sha512-y}\n\nsnapshots:\n\n  '@mikro-orm/core@6.4.0(pg@8.11.0)':\n    dependencies:\n      pg: 8.11.0\n",
         )]);
         let inv = inventory(dir.path());
         assert_eq!(
@@ -746,7 +818,6 @@ mod tests {
             vec![
                 "npm:@mikro-orm/core@6.4.0",
                 "npm:@types/node@20.1.0",
-                "npm:express@4.17.1",
                 "npm:lodash@4.17.20",
             ]
         );
@@ -792,6 +863,63 @@ mod tests {
                 "npm:zod@3.22.0",
             ]
         );
+    }
+
+    #[test]
+    fn reads_pnpm_v5_keys_with_peer_suffixes() {
+        let dir = app(&[(
+            "pnpm-lock.yaml",
+            "lockfileVersion: 5.4\n\npackages:\n\n  /foo/1.0.0_bar@2.0.0:\n    resolution: {integrity: x}\n\n  /@scope/pkg/3.1.0_@types+node@20.1.0:\n    resolution: {integrity: y}\n\n  /string_decoder/1.3.0:\n    resolution: {integrity: z}\n",
+        )]);
+        assert_eq!(
+            names(&inventory(dir.path())),
+            vec![
+                "npm:@scope/pkg@3.1.0",
+                "npm:foo@1.0.0",
+                "npm:string_decoder@1.3.0"
+            ]
+        );
+    }
+
+    #[test]
+    fn skips_the_apps_own_packages() {
+        let dir = app(&[
+            (
+                "package-lock.json",
+                r#"{"lockfileVersion":3,"packages":{"":{"name":"app"},"packages/api":{"name":"api","version":"1.0.0"},"node_modules/api":{"resolved":"packages/api","link":true},"node_modules/ms":{"version":"2.0.0"}}}"#,
+            ),
+            (
+                "uv.lock",
+                "[[package]]\nname = \"myapp\"\nversion = \"0.1.0\"\nsource = { editable = \".\" }\n\n[[package]]\nname = \"urllib3\"\nversion = \"1.26.0\"\nsource = { registry = \"https://pypi.org/simple\" }\n",
+            ),
+            (
+                "py2/poetry.lock",
+                "[[package]]\nname = \"lib\"\nversion = \"0.0.1\"\ndevelop = true\n\n[[package]]\nname = \"requests\"\nversion = \"2.19.0\"\n",
+            ),
+        ]);
+        assert_eq!(
+            names(&inventory(dir.path())),
+            vec![
+                "PyPI:requests@2.19.0",
+                "PyPI:urllib3@1.26.0",
+                "npm:ms@2.0.0"
+            ]
+        );
+    }
+
+    #[test]
+    fn an_unparseable_lockfile_is_incomplete_not_clean() {
+        let cache = tempfile::tempdir().unwrap();
+        let dir = app(&[("package.json", "{}"), ("package-lock.json", "{not json")]);
+        let findings = scan_with(
+            dir.path(),
+            "app",
+            Lookup::CacheOnly,
+            Some(cache.path().to_path_buf()),
+        );
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].check, "dependency-scan-incomplete");
+        assert_eq!(findings[0].subject, "package-lock.json");
     }
 
     #[test]
