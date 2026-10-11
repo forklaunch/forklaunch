@@ -177,6 +177,58 @@ fn yarn_name(header: &str) -> Option<String> {
     (!name.is_empty()).then(|| name.to_string())
 }
 
+/// Whether a text lockfile parses as its format. The line scanners below would read a
+/// malformed file as "no packages", which must be an incomplete scan, never a clean one.
+fn well_formed(kind: &str, text: &str) -> bool {
+    match kind {
+        "pnpm" => serde_yml::from_str::<serde_yml::Value>(text)
+            .ok()
+            .is_some_and(|v| v.get("lockfileVersion").is_some()),
+        // Berry is YAML with a __metadata block; classic is yarn's own format with a header.
+        "yarn" => {
+            text.contains("# yarn lockfile v1")
+                || serde_yml::from_str::<serde_yml::Value>(text)
+                    .ok()
+                    .is_some_and(|v| v.get("__metadata").is_some())
+        }
+        // JSONC: drop trailing commas, then it is JSON.
+        "bun" => serde_json::from_str::<Value>(&strip_trailing_commas(text))
+            .ok()
+            .is_some_and(|v| v.get("lockfileVersion").is_some()),
+        "toml" => text.parse::<toml::Table>().is_ok(),
+        _ => true,
+    }
+}
+
+/// Removes commas that precede `}` or `]` outside strings (bun.lock is JSON with them).
+fn strip_trailing_commas(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    let (mut in_str, mut escaped) = (false, false);
+    for (i, &c) in chars.iter().enumerate() {
+        if in_str {
+            out.push(c);
+            match c {
+                _ if escaped => escaped = false,
+                '\\' => escaped = true,
+                '"' => in_str = false,
+                _ => {}
+            }
+            continue;
+        }
+        if c == '"' {
+            in_str = true;
+        } else if c == ',' {
+            let next = chars[i + 1..].iter().find(|c| !c.is_whitespace());
+            if matches!(next, Some('}' | ']')) {
+                continue;
+            }
+        }
+        out.push(c);
+    }
+    out
+}
+
 pub(crate) fn inventory(root: &Path) -> Inventory {
     let mut packages = Vec::new();
     let mut lockfiles = BTreeSet::new();
@@ -248,6 +300,10 @@ pub(crate) fn inventory(root: &Path) -> Inventory {
             unreadable.push(rel(root, &f));
             continue;
         };
+        if !well_formed("pnpm", &text) {
+            unreadable.push(rel(root, &f));
+            continue;
+        }
         let v5 = text
             .lines()
             .find_map(|l| l.strip_prefix("lockfileVersion:"))
@@ -272,6 +328,10 @@ pub(crate) fn inventory(root: &Path) -> Inventory {
             unreadable.push(rel(root, &f));
             continue;
         };
+        if !well_formed("yarn", &text) {
+            unreadable.push(rel(root, &f));
+            continue;
+        }
         let mut name: Option<String> = None;
         for line in text.lines() {
             if !line.is_empty() && !line.starts_with(' ') && !line.starts_with('#') {
@@ -302,6 +362,10 @@ pub(crate) fn inventory(root: &Path) -> Inventory {
             unreadable.push(rel(root, &f));
             continue;
         };
+        if !well_formed("bun", &text) {
+            unreadable.push(rel(root, &f));
+            continue;
+        }
         // "key": ["name@1.2.3", ...]
         for line in text.lines() {
             let t = line.trim_start();
@@ -361,6 +425,10 @@ pub(crate) fn inventory(root: &Path) -> Inventory {
             unreadable.push(rel(root, &f));
             continue;
         };
+        if !well_formed("toml", &text) {
+            unreadable.push(rel(root, &f));
+            continue;
+        }
         // One `[[package]]` block at a time; a package installed from the app's own tree
         // (poetry `type = "directory"`/`develop = true`, uv editable/virtual/directory/path
         // sources) is the app's code, not a published release.
@@ -837,7 +905,7 @@ mod tests {
             ),
             (
                 "svc/bun.lock",
-                "{\n  \"packages\": {\n    \"zod\": [\"zod@3.22.0\", \"\", {}, \"sha512-x\"],\n    \"@hono/node-server\": [\"@hono/node-server@1.2.0\", \"\", {}, \"sha512-y\"],\n  }\n}\n",
+                "{\n  \"lockfileVersion\": 1,\n  \"packages\": {\n    \"zod\": [\"zod@3.22.0\", \"\", {}, \"sha512-x\"],\n    \"@hono/node-server\": [\"@hono/node-server@1.2.0\", \"\", {}, \"sha512-y\"],\n  }\n}\n",
             ),
             (
                 "py/requirements.txt",
@@ -920,6 +988,24 @@ mod tests {
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].check, "dependency-scan-incomplete");
         assert_eq!(findings[0].subject, "package-lock.json");
+    }
+
+    #[test]
+    fn malformed_text_lockfiles_are_incomplete_not_clean() {
+        for (file, body) in [
+            ("pnpm-lock.yaml", "packages: [broken"),
+            ("yarn.lock", "not a lockfile at all"),
+            ("bun.lock", "{ \"packages\": { "),
+            ("uv.lock", "[[package]\nname = "),
+        ] {
+            let dir = app(&[(file, body)]);
+            let inv = inventory(dir.path());
+            assert_eq!(inv.unreadable, vec![file.to_string()], "{file}");
+        }
+        assert_eq!(
+            strip_trailing_commas("{\"a\": [1, 2,], \"b,\": \"x,]\",}"),
+            "{\"a\": [1, 2], \"b,\": \"x,]\"}"
+        );
     }
 
     #[test]
