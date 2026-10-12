@@ -81,13 +81,13 @@
     "@forklaunch/interfaces-messaging": "workspace:^",
     "@forklaunch/internal": "^1.2.33",
     "@forklaunch/validator": "^1.2.31",
-    "@mikro-orm/core": "7.2.3",
+    "@mikro-orm/core": "7.2.5",
     "@sinclair/typebox": "^0.34.52",
     "ajv": "^8.20.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@mikro-orm/sqlite": "7.2.3",
+    "@mikro-orm/sqlite": "7.2.5",
     "depcheck": "^1.4.7",
     "prettier": "^3.9.9",
     "typedoc": "^0.28.20",
