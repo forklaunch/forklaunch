@@ -43,6 +43,14 @@ describe('stepFigureScore', () => {
     expect(stepFigureScore(photo('The mesoappendix was dissected'), APPENDECTOMY)).toBeUndefined();
   });
 
+  it('scores a hostile caption quickly', () => {
+    // the shape CodeQL flagged: "A A" then many "(a)"
+    const caption = `Umbilical port placed. A A${'(a)'.repeat(50_000)}`;
+    const started = Date.now();
+    stepFigureScore(photo(caption), APPENDECTOMY);
+    expect(Date.now() - started).toBeLessThan(500);
+  });
+
   it('ranks a figure in steps above a single view', () => {
     const single = stepFigureScore(photo('Umbilical port placed'), APPENDECTOMY) ?? 0;
     const steps = stepFigureScore(photo('(A) Umbilical port placed. (B) Second port inserted under vision.'), APPENDECTOMY) ?? 0;

@@ -18,8 +18,16 @@ const GENERIC_NAME_WORDS = new Set([
   'section', 'delivery', 'laparoscopic', 'open', 'total', 'replacement', 'repair', 'artery', 'surgery', 'surgical', 'grafting'
 ]);
 
-// "(A) ..." or "A The first cut. B ...": a figure in steps
-const PANEL_SEQUENCE = /(\(\s*[a-dA-D]\s*\)|(^|[.:]\s+)[A-D]\s+[A-Z]).*(\(\s*[b-eB-E]\s*\)|[.:]\s+[B-E]\s+[A-Z])/s;
+// "(A) ..." or "A The first cut. B ...": a figure in steps. The first panel
+// and a later one are looked for separately: one pattern with `.*` between
+// them backtracks polynomially on captions from Open-i.
+const FIRST_PANEL = /\(\s{0,3}[a-dA-D]\s{0,3}\)|(?:^|[.:]\s{1,3})[A-D]\s{1,3}[A-Z]/;
+const LATER_PANEL = /\(\s{0,3}[b-eB-E]\s{0,3}\)|[.:]\s{1,3}[B-E]\s{1,3}[A-Z]/;
+
+function inSteps(caption: string): boolean {
+  const first = FIRST_PANEL.exec(caption);
+  return first !== null && LATER_PANEL.test(caption.slice(first.index + first[0].length));
+}
 
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 
@@ -45,7 +53,7 @@ export function stepFigureScore(
   if (!nameWords.some((word) => new RegExp(`\\b${escape(word)}`).test(text))) return undefined;
   const hints = step.hints.filter((hint) => new RegExp(`\\b${escape(hint.toLowerCase())}`).test(caption.toLowerCase()));
   if (hints.length === 0) return undefined;
-  return hints.length + (PANEL_SEQUENCE.test(caption) ? 1 : 0) + (/\b(intra-?operative|step)/i.test(caption) ? 1 : 0);
+  return hints.length + (inSteps(caption) ? 1 : 0) + (/\b(intra-?operative|step)/i.test(caption) ? 1 : 0);
 }
 
 /**
