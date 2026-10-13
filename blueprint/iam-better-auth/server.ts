@@ -28,15 +28,36 @@ const app = forklaunchExpress(
 //! better-auth during OAuth/magic-link, clears the cookie, and passes tokens via
 //! URL hash to the final callback page. This prevents the test flow from overwriting
 //! the main app's session cookie.
+//! Tokens go only to this app's own pages: a callbackUrl on any other origin is refused,
+//! or a crafted link could send a signed-in user's tokens to someone else's site.
+const allowedCallback = (raw: string, origin: string): string | null => {
+  if (!raw) return null;
+  try {
+    const url = new URL(raw, origin);
+    const trusted = [origin, ...(ci.resolve(tokens.CORS_ORIGINS) ?? [])].map(
+      (o) => new URL(o).origin
+    );
+    return (url.protocol === 'https:' || url.protocol === 'http:') &&
+      trusted.includes(url.origin)
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+};
+
 app.internal.get('/api/auth/test-callback', async (req, res) => {
-  const callbackUrl = String(req.query.callbackUrl || '');
+  const origin = `${req.protocol}://${req.headers.host}`;
+  const callbackUrl = allowedCallback(
+    String(req.query.callbackUrl || ''),
+    origin
+  );
   if (!callbackUrl) {
-    res.status(400).send('Missing callbackUrl');
+    res.status(400).send('Missing or untrusted callbackUrl');
     return;
   }
 
   const cookie = req.headers.cookie || '';
-  const origin = `${req.protocol}://${req.headers.host}`;
 
   try {
     const [tokenRes, sessionRes] = await Promise.all([
@@ -80,14 +101,21 @@ app.internal.get('/api/auth/test-callback', async (req, res) => {
 //! serves a redirect page for OAuth popup flows (must be before the catch-all)
 app.internal.get('/api/auth/oauth-redirect', (req, res) => {
   const provider = String(req.query.provider || '');
-  const callbackURL = String(req.query.callbackURL || '');
+  const origin = `${req.protocol}://${req.headers.host}`;
+  const callbackURL = allowedCallback(
+    String(req.query.callbackURL || ''),
+    origin
+  );
+  if (!callbackURL) {
+    res.status(400).send('Missing or untrusted callbackURL');
+    return;
+  }
   const organizationId = String(req.query.organizationId || '');
   const endpoint =
     req.query.endpoint === 'sso'
       ? '/api/auth/sign-in/sso'
       : '/api/auth/sign-in/social';
 
-  const origin = `${req.protocol}://${req.headers.host}`;
   const intermediateCallbackURL = `${origin}/api/auth/test-callback?callbackUrl=${encodeURIComponent(callbackURL)}`;
 
   const body =
