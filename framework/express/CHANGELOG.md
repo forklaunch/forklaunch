@@ -1,5 +1,11 @@
 # @forklaunch/express
 
+## 1.2.49
+
+### Patch Changes
+
+- Preserve HTTP client-error statuses from request parsing. Invalid JSON, oversized bodies, and unsupported encodings now return their intended 4xx responses instead of HTTP 500, without exposing request bodies or internal error details.
+
 ## 1.2.48
 
 ### Patch Changes
