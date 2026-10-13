@@ -86,11 +86,7 @@ pub(super) fn validate_specs(
             bail!("Invalid prebuilt API specification path or size");
         }
         let spec: serde_json::Value = serde_json::from_slice(&std::fs::read(canonical)?)?;
-        if !spec["openapi"]
-            .as_str()
-            .is_some_and(|v| v.starts_with("3."))
-            || !spec["paths"].is_object()
-        {
+        if !valid_exported_specs(&spec) {
             bail!(
                 "Invalid prebuilt OpenAPI specification for {}",
                 project.name
@@ -100,9 +96,42 @@ pub(super) fn validate_specs(
     }
     Ok(services)
 }
+// The framework exports either a document or a map keyed by API version.
+// Validate every mapped document; an empty or partly malformed map is not valid.
+fn valid_exported_specs(spec: &serde_json::Value) -> bool {
+    fn document(value: &serde_json::Value) -> bool {
+        value["openapi"]
+            .as_str()
+            .is_some_and(|v| v.starts_with("3."))
+            && value["paths"].is_object()
+    }
+    document(spec)
+        || (spec.get("openapi").is_none()
+            && spec
+                .as_object()
+                .is_some_and(|versions| !versions.is_empty() && versions.values().all(document)))
+}
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn accepts_framework_version_maps_and_refuses_malformed_exports() {
+        let doc = serde_json::json!({"openapi":"3.1.0","paths":{}});
+        assert!(valid_exported_specs(&doc));
+        assert!(valid_exported_specs(&serde_json::json!({"":doc.clone()})));
+        assert!(valid_exported_specs(
+            &serde_json::json!({"v1":doc.clone(),"v2":doc.clone()})
+        ));
+        for bad in [
+            serde_json::json!({}),
+            serde_json::json!([]),
+            serde_json::json!({"v1":doc,"v2":{}}),
+            serde_json::json!({"openapi":"2.0","paths":{}}),
+            serde_json::json!({"openapi":"3.1.0","paths":[]}),
+        ] {
+            assert!(!valid_exported_specs(&bad));
+        }
+    }
     #[test]
     fn rejects_external_or_missing_spec_directory() {
         let root = tempfile::tempdir().unwrap();
