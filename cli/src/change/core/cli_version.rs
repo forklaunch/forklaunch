@@ -158,6 +158,7 @@ mod tests {
         let command = ChangeCommand::new();
         let matches = command
             .command()
+            .version(env!("CARGO_PKG_VERSION"))
             .try_get_matches_from([
                 "change",
                 "application",
@@ -186,6 +187,7 @@ mod tests {
         .unwrap();
         let ordinary = command
             .command()
+            .version(env!("CARGO_PKG_VERSION"))
             .try_get_matches_from([
                 "change",
                 "application",
@@ -208,6 +210,7 @@ mod tests {
         assert!(
             command
                 .command()
+                .version(env!("CARGO_PKG_VERSION"))
                 .try_get_matches_from([
                     "change",
                     "application",
@@ -221,6 +224,7 @@ mod tests {
         assert!(
             command
                 .command()
+                .version(env!("CARGO_PKG_VERSION"))
                 .try_get_matches_from(["change", "application", "--cli-version", "0.0.0"])
                 .is_err()
         );
@@ -228,6 +232,7 @@ mod tests {
         let missing = temp.path().join("does-not-exist");
         let matches = command
             .command()
+            .version(env!("CARGO_PKG_VERSION"))
             .try_get_matches_from([
                 "change",
                 "application",
