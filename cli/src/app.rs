@@ -8,6 +8,7 @@ use readiness::ReadinessCommand;
 use resize::ResizeCommand;
 use route::RouteCommand;
 use services::ServicesCommand;
+use website::WebsiteCommand;
 
 use crate::{CliCommand, core::command::command};
 
@@ -19,6 +20,7 @@ mod readiness;
 mod resize;
 mod route;
 mod services;
+mod website;
 
 #[derive(Debug)]
 pub(crate) struct AppCommand {
@@ -30,6 +32,7 @@ pub(crate) struct AppCommand {
     resize: ResizeCommand,
     route: RouteCommand,
     controller: ControllerCommand,
+    website: WebsiteCommand,
 }
 
 impl AppCommand {
@@ -43,6 +46,7 @@ impl AppCommand {
             resize: ResizeCommand::new(),
             route: RouteCommand::new(),
             controller: ControllerCommand::new(),
+            website: WebsiteCommand::new(),
         }
     }
 }
@@ -59,6 +63,7 @@ impl CliCommand for AppCommand {
             .subcommand(self.resize.command())
             .subcommand(self.route.command())
             .subcommand(self.controller.command())
+            .subcommand(self.website.command())
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
@@ -71,6 +76,7 @@ impl CliCommand for AppCommand {
             Some(("resize", matches)) => self.resize.handler(matches),
             Some(("route", matches)) => self.route.handler(matches),
             Some(("controller", matches)) => self.controller.handler(matches),
+            Some(("website", matches)) => self.website.handler(matches),
             _ => unreachable!(),
         }
     }
