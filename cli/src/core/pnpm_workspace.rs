@@ -49,31 +49,34 @@ pub(crate) struct PnpmWorkspace {
     pub(crate) other: BTreeMap<String, Value>,
 }
 
+// Biome resolves its optional platform binary when invoked. Its postinstall
+// only warns if the binary is missing, so no install-time execution is needed.
+const BIOME_BUILD_DEPENDENCY: &str = "@biomejs/biome";
+
 fn default_allow_builds() -> BTreeMap<String, Value> {
     ALLOWED_BUILD_DEPENDENCIES
         .iter()
         .map(|dep| ((*dep).to_string(), Value::Bool(true)))
+        .chain([(BIOME_BUILD_DEPENDENCY.to_string(), Value::Bool(false))])
         .collect()
 }
 
 /// pnpm writes string placeholders ("set this to true or false") for
-/// unapproved build deps. Coerce any non-boolean entries to `true` and make
-/// sure the scaffold's known build deps are present, healing workspaces that
-/// picked up placeholders before this fix.
+/// unapproved build deps. Apply the scaffold's reviewed decision for Biome;
+/// retain the existing approval behavior for other placeholders and preserve
+/// every explicit boolean decision. Backfill missing scaffold dependencies.
 fn sanitize_allow_builds(pnpm_workspace: &mut PnpmWorkspace) {
     let mut allow_builds = pnpm_workspace
         .allow_builds
         .take()
         .unwrap_or_else(default_allow_builds);
-    for value in allow_builds.values_mut() {
+    for (dependency, value) in &mut allow_builds {
         if !matches!(value, Value::Bool(_)) {
-            *value = Value::Bool(true);
+            *value = Value::Bool(dependency != BIOME_BUILD_DEPENDENCY);
         }
     }
-    for dep in ALLOWED_BUILD_DEPENDENCIES {
-        allow_builds
-            .entry((*dep).to_string())
-            .or_insert(Value::Bool(true));
+    for (dependency, decision) in default_allow_builds() {
+        allow_builds.entry(dependency).or_insert(decision);
     }
     pnpm_workspace.allow_builds = Some(allow_builds);
 }
@@ -86,8 +89,7 @@ fn sanitize_allow_builds(pnpm_workspace: &mut PnpmWorkspace) {
 /// gate, so strip version suffixes down to bare package names on every
 /// rewrite.
 fn sanitize_minimum_release_age_exclude(pnpm_workspace: &mut PnpmWorkspace) {
-    let Some(Value::Sequence(entries)) =
-        pnpm_workspace.other.get_mut("minimumReleaseAgeExclude")
+    let Some(Value::Sequence(entries)) = pnpm_workspace.other.get_mut("minimumReleaseAgeExclude")
     else {
         return;
     };
@@ -145,9 +147,9 @@ fn ensure_minimum_release_age_exclude(pnpm_workspace: &mut PnpmWorkspace) {
     let Value::Sequence(entries) = entry else {
         return;
     };
-    let already_covered = entries.iter().any(|value| {
-        matches!(value, Value::String(spec) if spec == FORKLAUNCH_RELEASE_AGE_EXCLUDE)
-    });
+    let already_covered = entries.iter().any(
+        |value| matches!(value, Value::String(spec) if spec == FORKLAUNCH_RELEASE_AGE_EXCLUDE),
+    );
     if !already_covered {
         entries.push(Value::String(FORKLAUNCH_RELEASE_AGE_EXCLUDE.to_string()));
     }
@@ -235,8 +237,7 @@ pub(crate) fn render_pnpm_workspace_with_packages(
     sanitize_minimum_release_age_exclude(&mut pnpm_workspace);
     ensure_minimum_release_age_exclude(&mut pnpm_workspace);
     ensure_minimum_release_age(&mut pnpm_workspace);
-    Ok(to_string(&pnpm_workspace)
-        .with_context(|| ERROR_FAILED_TO_GENERATE_PNPM_WORKSPACE)?)
+    Ok(to_string(&pnpm_workspace).with_context(|| ERROR_FAILED_TO_GENERATE_PNPM_WORKSPACE)?)
 }
 
 pub(crate) fn add_project_definition_to_pnpm_workspace<
@@ -291,6 +292,68 @@ pub(crate) fn remove_project_definition_to_pnpm_workspace(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn generated_workspace_explicitly_skips_biome_postinstall() {
+        let dir = tempfile::tempdir().unwrap();
+        let rendered = generate_pnpm_workspace(dir.path().to_str().unwrap(), &Vec::new())
+            .unwrap()
+            .unwrap();
+        let workspace: PnpmWorkspace = from_str(&rendered.content).unwrap();
+        let decisions = workspace.allow_builds.unwrap();
+        assert_eq!(decisions[BIOME_BUILD_DEPENDENCY], Value::Bool(false));
+        assert_eq!(decisions["esbuild"], Value::Bool(true));
+    }
+
+    #[test]
+    fn rewriting_workspace_backfills_biome_and_preserves_other_policy() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("pnpm-workspace.yaml"),
+            "packages: [core]\nallowBuilds:\n  esbuild: false\nminimumReleaseAge: 1440\n",
+        )
+        .unwrap();
+        let rendered =
+            render_pnpm_workspace_with_packages(dir.path(), vec!["core".into(), "iam".into()])
+                .unwrap();
+        let workspace: PnpmWorkspace = from_str(&rendered).unwrap();
+        let decisions = workspace.allow_builds.unwrap();
+        assert_eq!(decisions[BIOME_BUILD_DEPENDENCY], Value::Bool(false));
+        assert_eq!(decisions["esbuild"], Value::Bool(false));
+        assert_eq!(
+            workspace.other["minimumReleaseAge"],
+            Value::Number(1440.into())
+        );
+    }
+
+    #[test]
+    fn biome_placeholder_is_skipped_but_explicit_user_decisions_are_preserved() {
+        for (input, expected) in [
+            ("set this to true or false", false),
+            ("false", false),
+            ("true", true),
+        ] {
+            let mut workspace: PnpmWorkspace = from_str(&format!(
+                "packages: [core]\nallowBuilds:\n  '@biomejs/biome': {input}\n"
+            ))
+            .unwrap();
+            sanitize_allow_builds(&mut workspace);
+            assert_eq!(
+                workspace.allow_builds.unwrap()[BIOME_BUILD_DEPENDENCY],
+                Value::Bool(expected)
+            );
+        }
+    }
+
+    #[test]
+    fn blueprint_skips_the_same_optional_biome_postinstall() {
+        let workspace: PnpmWorkspace =
+            from_str(include_str!("../../../blueprint/pnpm-workspace.yaml")).unwrap();
+        assert_eq!(
+            workspace.allow_builds.unwrap()[BIOME_BUILD_DEPENDENCY],
+            Value::Bool(false)
+        );
+    }
 
     #[test]
     fn test_minimum_release_age_exclude_strips_forklaunch_versions() {
@@ -355,8 +418,7 @@ mod tests {
     #[test]
     fn test_forklaunch_scope_is_not_duplicated() {
         let mut ws: PnpmWorkspace =
-            from_str("packages:\n- core\nminimumReleaseAgeExclude:\n- '@forklaunch/*'\n")
-                .unwrap();
+            from_str("packages:\n- core\nminimumReleaseAgeExclude:\n- '@forklaunch/*'\n").unwrap();
         ensure_minimum_release_age_exclude(&mut ws);
         ensure_minimum_release_age_exclude(&mut ws);
 
@@ -415,8 +477,7 @@ mod tests {
 
     #[test]
     fn test_ensure_minimum_release_age_preserves_existing_value() {
-        let mut ws: PnpmWorkspace =
-            from_str("packages:\n- core\nminimumReleaseAge: 0\n").unwrap();
+        let mut ws: PnpmWorkspace = from_str("packages:\n- core\nminimumReleaseAge: 0\n").unwrap();
         ensure_minimum_release_age(&mut ws);
         assert!(to_string(&ws).unwrap().contains("minimumReleaseAge: 0"));
     }
