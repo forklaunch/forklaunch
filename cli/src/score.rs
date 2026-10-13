@@ -195,7 +195,14 @@ impl CliCommand for ScoreCommand {
 /// Deterministic-only card, built locally. No network, no auth, no cost.
 fn offline_card(app_root: &Path, app_name: &str, modules_path: &str) -> Result<Value> {
     let modules_root = app_root.join(modules_path);
-    let findings = run_local_checks(&modules_root)?;
+    let mut findings = run_local_checks(&modules_root)?;
+    // Cached advisory lookups only: the offline card makes no network calls, so an
+    // uncached lockfile shows up as not checked rather than clean.
+    findings.extend(crate::compliance::deps::scan(
+        app_root,
+        app_name,
+        crate::compliance::deps::Lookup::CacheOnly,
+    ));
     let module_count = std::fs::read_dir(&modules_root)
         .map(|entries| {
             entries

@@ -201,12 +201,27 @@ impl CliCommand for AuditCommand {
             }
         }
 
-        // Run offline wiring + sensitive-field checks
-        let local_findings = super::checks::run_local_checks(&modules_path_buf)
-            .unwrap_or_else(|e| {
-                let _ = writeln!(stdout, "[WARN] Failed to run local compliance checks: {}", e);
-                Vec::new()
-            });
+        // Run offline wiring + sensitive-field checks. When they fail, none of them is listed
+        // as run: an empty findings list beside a full check list would read as all passed.
+        let (mut local_findings, local_checks) =
+            match super::checks::run_local_checks(&modules_path_buf) {
+                Ok(findings) => (findings, super::checks::LOCAL_CHECK_IDS.to_vec()),
+                Err(e) => {
+                    let _ = writeln!(stdout, "[WARN] Failed to run local compliance checks: {}", e);
+                    let deps_only: Vec<&'static str> = super::checks::LOCAL_CHECK_IDS
+                        .iter()
+                        .copied()
+                        .filter(|id| id.starts_with("dependency-"))
+                        .collect();
+                    (Vec::new(), deps_only)
+                }
+            };
+        // Known-vulnerable and malicious packages pinned by the app's lockfiles (OSV).
+        local_findings.extend(super::deps::scan(
+            &app_root,
+            &manifest.app_name,
+            super::deps::Lookup::Network,
+        ));
 
         // The same deterministic scan `compliance audit-tenancy` runs. Best
         // effort: a report that cannot scan is still worth sending, it just
@@ -248,7 +263,7 @@ impl CliCommand for AuditCommand {
             modules: module_ctx.module_reports(),
             entities,
             local_findings,
-            local_checks: super::checks::LOCAL_CHECK_IDS.to_vec(),
+            local_checks,
             tenancy,
             secrets: SecretsReport {
                 declared: compliance.secrets.clone(),

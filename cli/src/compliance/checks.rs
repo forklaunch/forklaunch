@@ -129,6 +129,11 @@ fn read_production_sources(project_path: &Path) -> String {
 /// `localChecks`, so a consumer can tell a check that ran and found nothing
 /// (a pass) from one this CLI version does not have.
 pub(crate) const LOCAL_CHECK_IDS: &[&str] = &[
+    // From `deps::scan` over the app's lockfiles (run beside these, not by run_local_checks).
+    "dependency-vulnerable",
+    "dependency-malicious",
+    "dependency-lockfile-missing",
+    "dependency-scan-incomplete",
     "route-auth-missing",
     "route-outside-framework",
     "route-scan-incomplete",
