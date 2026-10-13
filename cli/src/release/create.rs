@@ -625,7 +625,9 @@ impl CliCommand for CreateCommand {
             app_root.join(".forklaunch").join("openapi")
         };
         create_dir_all(&openapi_path).with_context(|| "Failed to create openapi directory")?;
-        let _openapi_guard = prebuilt.is_none().then(|| RemoveDirGuard::new(openapi_path.clone()));
+        let _openapi_guard = prebuilt
+            .is_none()
+            .then(|| RemoveDirGuard::new(openapi_path.clone()));
         let exported_services = if prebuilt.is_some() {
             super::prebuilt::validate_specs(&openapi_path, &manifest)?
         } else {
@@ -990,7 +992,13 @@ impl CliCommand for CreateCommand {
         const EXCLUDED_VARS: &[&str] = &["DOTENV_FILE_PATH"];
         scoped_env_vars.retain(|v| !EXCLUDED_VARS.contains(&v.name.as_str()));
 
-        // Only keep application-level variables if they match the allowed criteria
+        // A source-declared requirement must survive promotion to application
+        // scope. The allowlist below only filters incidental local configuration.
+        let source_declared_vars: HashSet<String> = project_env_vars
+            .values()
+            .flatten()
+            .map(|usage| usage.var_name.clone())
+            .collect();
         let project_names_for_retain: Vec<String> =
             manifest.projects.iter().map(|p| p.name.clone()).collect();
         scoped_env_vars.retain(|v| {
@@ -998,7 +1006,12 @@ impl CliCommand for CreateCommand {
                 return true;
             }
 
-            is_allowed_application_var(&v.name, &env_var_components, &project_names_for_retain)
+            is_allowed_application_var(
+                &v.name,
+                &env_var_components,
+                &project_names_for_retain,
+                &source_declared_vars,
+            )
         });
 
         // Cross-scope deduplication: remove service/worker copies when an application-scope copy exists
@@ -2105,7 +2118,14 @@ fn is_allowed_application_var(
         ),
     >,
     project_names: &[String],
+    source_declared_vars: &HashSet<String>,
 ) -> bool {
+    // Shared custom variables (including ENCRYPTION_KEY) are requirements too,
+    // even when they are absent from the platform's built-in name registry.
+    if source_declared_vars.contains(var_name) {
+        return true;
+    }
+
     // Allow all vars that are inherently application-scoped (observability, shared keys, inter-service URLs)
     if is_application_scoped_var(var_name, project_names) {
         return true;
@@ -2575,6 +2595,57 @@ mod tests {
             platform_organization_id: None,
             compliance: None,
         }
+    }
+
+    #[test]
+    fn shared_source_requirements_survive_application_scope_filter() {
+        let dir = TempDir::new().unwrap();
+        for project in ["iam", "records"] {
+            let path = dir.path().join(project);
+            fs::create_dir_all(&path).unwrap();
+            fs::write(path.join("registrations.ts"), r#"
+                const config = {
+                    ENCRYPTION_KEY: { type: string, value: getEnvVar('ENCRYPTION_KEY') },
+                    SHARED_VENDOR_TOKEN: { type: optional(string), value: getEnvVar('SHARED_VENDOR_TOKEN') }
+                };
+            "#).unwrap();
+        }
+        // A required read outside registrations must win over an optional declaration.
+        fs::write(dir.path().join("records/mikro-orm.config.ts"),
+            "const key = getEnvVar('ENCRYPTION_KEY'); const token = getEnvVar('SHARED_VENDOR_TOKEN');"
+        ).unwrap();
+        let sightings = find_all_env_vars(dir.path(), &RenderedTemplatesCache::new()).unwrap();
+        let names: HashSet<String> = sightings
+            .values()
+            .flatten()
+            .map(|v| v.var_name.clone())
+            .collect();
+        let manifest = create_test_manifest(vec![
+            ("iam", ProjectType::Service),
+            ("records", ProjectType::Service),
+        ]);
+        let scoped = determine_env_var_scopes(&sightings, &manifest).unwrap();
+        let projects = vec!["iam".into(), "records".into()];
+        for name in ["ENCRYPTION_KEY", "SHARED_VENDOR_TOKEN"] {
+            let requirement = scoped.iter().find(|v| v.name == name).unwrap();
+            assert_eq!(requirement.scope, EnvScope::Application);
+            assert_eq!(requirement.used_by, projects);
+            assert_eq!(requirement.optional, Some(false));
+            assert!(is_allowed_application_var(
+                name,
+                &HashMap::new(),
+                &projects,
+                &names
+            ));
+            assert!(!is_platform_managed_var(name));
+        }
+        // Unused local configuration is not promoted into deployment requirements.
+        assert!(!is_allowed_application_var(
+            "UNUSED_LOCAL_TOKEN",
+            &HashMap::new(),
+            &projects,
+            &names
+        ));
     }
 
     fn create_test_docker_compose(services: Vec<(&str, Vec<(&str, &str)>)>) -> String {
