@@ -200,6 +200,16 @@ pub(crate) fn precheck_version(
         return Ok(VersionCheckOutcome::SkipWhitelisted);
     }
 
+    // Adopting this binary is the explicit escape from a project pin.
+    // All ordinary project commands continue to enforce the pinned version.
+    if subcommand == "change"
+        && matches
+            .subcommand()
+            .is_some_and(|(name, _)| name == "cli-version")
+    {
+        return Ok(VersionCheckOutcome::SkipWhitelisted);
+    }
+
     let manifest_root = invocation_manifest_root(matches);
     let Some(manifest_root) = manifest_root else {
         return Ok(VersionCheckOutcome::SkipNoManifest);
@@ -310,6 +320,16 @@ pub(crate) fn precheck_version(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn explicit_pin_upgrade_does_not_invoke_the_old_cli() {
+        let cmd = clap::Command::new("change").subcommand(clap::Command::new("cli-version"));
+        let matches = cmd.try_get_matches_from(["change", "cli-version"]).unwrap();
+        assert!(matches!(
+            precheck_version(&matches, "change").unwrap(),
+            VersionCheckOutcome::SkipWhitelisted
+        ));
+    }
 
     fn strip(list: &[&str]) -> Vec<String> {
         without_account_flag(list.iter().map(|s| s.to_string()))

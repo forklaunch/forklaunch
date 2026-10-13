@@ -1,6 +1,7 @@
 use anyhow::Result;
 use application::ApplicationCommand;
 use clap::{ArgMatches, Command};
+use cli_version::CliVersionCommand;
 use library::LibraryCommand;
 use router::RouterCommand;
 use service::ServiceCommand;
@@ -9,6 +10,7 @@ use worker::WorkerCommand;
 use crate::{CliCommand, core::command::command};
 
 pub(crate) mod application;
+pub(crate) mod cli_version;
 pub(crate) mod core;
 pub(crate) mod library;
 pub(crate) mod router;
@@ -43,6 +45,7 @@ impl CliCommand for ChangeCommand {
             .alias("modify")
             .alias("alter")
             .subcommand_required(true)
+            .subcommand(CliVersionCommand.command())
             .subcommand(self.application.command())
             .subcommand(self.library.command())
             .subcommand(self.service.command())
@@ -52,6 +55,7 @@ impl CliCommand for ChangeCommand {
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         match matches.subcommand() {
+            Some(("cli-version", sub_matches)) => CliVersionCommand.handler(sub_matches),
             Some(("application", sub_matches)) => self.application.handler(sub_matches),
             Some(("library", sub_matches)) => self.library.handler(sub_matches),
             Some(("service", sub_matches)) => self.service.handler(sub_matches),
