@@ -119,6 +119,11 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let manifest = temp.path().join("manifest.toml");
         fs::write(&manifest, MANIFEST).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&manifest, fs::Permissions::from_mode(0o640)).unwrap();
+        }
         assert_eq!(
             update_manifest_pin(&manifest, "1.30.0", false).unwrap(),
             "0.0.0"
@@ -127,6 +132,14 @@ mod tests {
             fs::read_to_string(&manifest).unwrap(),
             MANIFEST.replace("'0.0.0'", "\"1.30.0\"")
         );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                fs::metadata(&manifest).unwrap().permissions().mode() & 0o777,
+                0o640
+            );
+        }
         update_manifest_pin(&manifest, "1.30.0", false).unwrap();
         assert_eq!(
             fs::read_to_string(&manifest).unwrap(),
