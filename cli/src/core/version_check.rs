@@ -200,6 +200,19 @@ pub(crate) fn precheck_version(
         return Ok(VersionCheckOutcome::SkipWhitelisted);
     }
 
+    // Changing the pin must run in the explicitly invoked CLI, not the old
+    // pinned binary that the user is replacing. Other changes remain pinned.
+    if subcommand == "change"
+        && let Some(("application", application)) = matches.subcommand()
+        && application
+            .try_get_one::<String>("cli-version")
+            .ok()
+            .flatten()
+            .is_some()
+    {
+        return Ok(VersionCheckOutcome::SkipWhitelisted);
+    }
+
     let manifest_root = invocation_manifest_root(matches);
     let Some(manifest_root) = manifest_root else {
         return Ok(VersionCheckOutcome::SkipNoManifest);
