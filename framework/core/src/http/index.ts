@@ -6,6 +6,7 @@ export * from './createHmacToken';
 export * from './generateHmacAuthHeaders';
 export * from './instanceGateway';
 export * from './modelGatewayClient';
+export * from './previewModelGatewayClient';
 export * from './emailClient';
 export * from './smsClient';
 export * from './whatsappClient';
