@@ -112,6 +112,32 @@ export class CompliantQueryError extends Error {
   readonly name = 'CompliantQueryError' as const;
 }
 
+/**
+ * Thrown when a compliant field is read or written while a tenant other than
+ * the one that owns it is bound.
+ *
+ * A field belongs to the tenant it was loaded under (or, for a value assigned
+ * in-process, the tenant bound when it was assigned), and `.deanon` decrypts
+ * with that tenant's key whatever context is bound at read time. A different
+ * bound tenant means the value is about to cross into another tenant's
+ * request, so it is refused rather than revealed or re-sealed.
+ */
+export class TenantMismatchError extends Error {
+  readonly name = 'TenantMismatchError' as const;
+  constructor(
+    readonly path: string,
+    readonly operation: string,
+    readonly ownerTenantId: string,
+    readonly boundTenantId: string
+  ) {
+    super(
+      `Cannot ${operation} ${path || 'a compliant field'} under tenant '${boundTenantId}': ` +
+        `it belongs to tenant '${ownerTenantId}', the tenant it was loaded or assigned under. ` +
+        `Read it outside any encryption context, or inside the owning tenant's.`
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Anon
 // ---------------------------------------------------------------------------
@@ -220,6 +246,12 @@ interface FieldState {
   /** Plaintext is known (created in-process, or decrypted already). */
   hasPlain: boolean;
   plain?: unknown;
+  /**
+   * The tenant this value belongs to: the tenant bound when it was loaded,
+   * or when its plaintext was assigned. `undefined` when none was bound;
+   * reads and writes then need one bound at the time.
+   */
+  tenant?: string;
   /** Stored envelope, as loaded or as last sealed. */
   sealed?: string;
   /** Tenant the cached `sealed` was written under. */
@@ -251,8 +283,12 @@ function stateOf(field: object): FieldState {
  * `[object Object]` and serializing it prints `{}`, so nothing leaks by
  * accident and every read is explicit.
  *
- * Plaintext is decrypted lazily, on the first `.deanon`, in the caller's
- * encryption context.
+ * Plaintext is decrypted lazily, on the first `.deanon`, with the key of the
+ * tenant the field was loaded (or assigned) under. That tenant is captured
+ * when the row is hydrated, so `.deanon` works after the call that loaded it
+ * has returned (building a DTO outside the tenant-bound entity manager) and
+ * can never decrypt under a different tenant: if another tenant is bound at
+ * read time it throws {@link TenantMismatchError}.
  *
  * Assigning a plain value to the property (directly, through `em.create` or
  * through `em.assign`) wraps it; `where: { property: value }` works for
@@ -283,10 +319,15 @@ export class CompliantField<
   }
 
   /**
-   * @internal Wrap a plaintext value for `spec`. Applications assign plain
-   * values to the entity property instead.
+   * @internal Wrap a plaintext value for `spec`, owned by `tenant` (the one
+   * bound where it was assigned, if any). Applications assign plain values to
+   * the entity property instead.
    */
-  static fromPlain<V>(value: V, spec: CompliantFieldSpec): CompliantField<V> {
+  static fromPlain<V>(
+    value: V,
+    spec: CompliantFieldSpec,
+    tenant: string | undefined
+  ): CompliantField<V> {
     if (spec.enumValues) {
       const values = spec.isArray && Array.isArray(value) ? value : [value];
       for (const v of values) {
@@ -299,23 +340,30 @@ export class CompliantField<
     }
     return new CompliantField<V>({
       spec,
+      tenant,
       hasPlain: true,
       plain: value,
       anon: computeAnon(spec.anon, value)
     });
   }
 
-  /** @internal Wrap a stored value (any envelope, or legacy plaintext). */
+  /**
+   * @internal Wrap a stored value (any envelope, or legacy plaintext) loaded
+   * under `tenant`: the tenant bound during hydration, which is the loading
+   * entity manager's.
+   */
   static fromStored<V>(
     stored: string,
     spec: CompliantFieldSpec,
-    index?: string | null
+    index: string | null | undefined,
+    tenant: string | undefined
   ): CompliantField<V> {
     if (!isEncryptedCiphertext(stored)) {
       // Written before encryption was switched on: the column holds the
       // serialized plaintext. It is sealed on the next write.
       return new CompliantField<V>({
         spec,
+        tenant,
         hasPlain: true,
         plain: deserializeFromEncryption(
           stored,
@@ -327,6 +375,7 @@ export class CompliantField<
     }
     return new CompliantField<V>({
       spec,
+      tenant,
       hasPlain: false,
       sealed: stored,
       anon: sealedAnon(stored) ?? undefined,
@@ -367,11 +416,30 @@ export class CompliantField<
   }
 }
 
+/**
+ * The tenant a field is read or written under: the one it belongs to, and
+ * otherwise the one bound now ({@link UnboundTenantError} when none is). A
+ * bound tenant that is not the owner is refused.
+ */
+function tenantOf(state: FieldState, operation: string): string {
+  const bound = getBoundTenantId();
+  if (state.tenant === undefined) return requireBoundTenantId(operation);
+  if (bound !== undefined && bound !== state.tenant) {
+    throw new TenantMismatchError(
+      state.spec.path,
+      operation,
+      state.tenant,
+      bound
+    );
+  }
+  return state.tenant;
+}
+
 function readPlaintext(field: CompliantField, report: boolean): unknown {
   const state = stateOf(field);
   let tenantId = '';
   if (!state.hasPlain) {
-    tenantId = requireBoundTenantId('read');
+    tenantId = tenantOf(state, 'read');
     if (state.sealed === undefined) {
       throw new Error(
         `${state.spec.path} was not loaded: its ciphertext column was left out of the selection`
@@ -390,6 +458,10 @@ function readPlaintext(field: CompliantField, report: boolean): unknown {
       state.spec.isArray
     );
     state.hasPlain = true;
+  } else if (state.tenant !== undefined) {
+    // Plaintext already in memory is held to the same rule: a value that
+    // belongs to one tenant is not handed to another tenant's request.
+    tenantId = tenantOf(state, 'read');
   }
   if (report) {
     tenantId ||= getBoundTenantId() ?? '';
@@ -427,17 +499,23 @@ function requireEncryptor(path: string) {
 export function sealedValueOf(field: CompliantField): string | undefined {
   const state = stateOf(field);
   // Loaded values (sealedTenant unset) keep their stored bytes; values sealed
-  // in-process are reused while the tenant is unchanged. Reusing the bytes is
-  // what keeps dirty checking quiet: a fresh random IV would differ on every
-  // flush.
+  // in-process are reused while they are sealed under the tenant they belong
+  // to. Reusing the bytes is what keeps dirty checking quiet: a fresh random
+  // IV would differ on every flush. Neither path seals anything, so neither
+  // depends on the tenant bound now.
   if (state.sealed !== undefined && state.sealedTenant === undefined) {
     return state.sealed;
   }
   if (!state.hasPlain) return state.sealed;
-  const tenantId = requireBoundTenantId('write');
-  if (state.sealed !== undefined && state.sealedTenant === tenantId) {
+  if (state.sealed !== undefined && state.sealedTenant === state.tenant) {
     return state.sealed;
   }
+  // Sealed under the tenant the value belongs to. A value assigned with no
+  // tenant bound takes the one bound at flush (and still fails unbound), and
+  // belongs to that tenant from then on: a later flush under another tenant
+  // must not re-seal it under the wrong key.
+  const tenantId = tenantOf(state, 'write');
+  state.tenant = tenantId;
   if (state.anon === undefined) {
     state.anon = computeAnon(state.spec.anon, state.plain);
   }
@@ -464,14 +542,22 @@ function normalizedForIndex(value: unknown, spec: CompliantFieldSpec): string {
   return normalizeSerializedForIndex(serializeForEncryption(value), spec);
 }
 
-/** @internal Blind index of a raw query value. */
+/** @internal Blind index of a raw query value, under the bound tenant. */
 export function blindIndexOfValue(
   value: unknown,
   spec: CompliantFieldSpec
 ): string {
+  return blindIndexUnder(value, spec, requireBoundTenantId('query'));
+}
+
+function blindIndexUnder(
+  value: unknown,
+  spec: CompliantFieldSpec,
+  tenantId: string
+): string {
   return requireEncryptor(spec.path).blindIndex(
     normalizedForIndex(value, spec),
-    requireBoundTenantId('query')
+    tenantId
   );
 }
 
@@ -484,7 +570,7 @@ export function blindIndexOf(field: CompliantField): string | null {
   // it, so the next flush backfills the column.
   try {
     const plain = state.hasPlain ? state.plain : readPlaintext(field, false);
-    state.index = blindIndexOfValue(plain, state.spec);
+    state.index = blindIndexUnder(plain, state.spec, tenantOf(state, 'index'));
   } catch {
     return state.index ?? null;
   }
@@ -510,6 +596,13 @@ export function pendingIndexValue(value: PendingIndex): string | null {
   return value[PENDING];
 }
 
+/**
+ * @internal The `runtimeType` of a compliant property: what it holds in
+ * memory. Deliberately not one of MikroORM's scalar names, which it checks
+ * assigned values against.
+ */
+export const COMPLIANT_RUNTIME_TYPE = 'CompliantField';
+
 abstract class CompliantTypeBase extends Type<unknown, string | null> {
   constructor(readonly spec: CompliantFieldSpec) {
     super();
@@ -520,7 +613,7 @@ abstract class CompliantTypeBase extends Type<unknown, string | null> {
   }
 
   override get runtimeType(): string {
-    return 'string';
+    return COMPLIANT_RUNTIME_TYPE;
   }
 
   override ensureComparable(): boolean {
@@ -550,13 +643,24 @@ export class CompliantType extends CompliantTypeBase {
     if (value === null || value === undefined) return null;
     if (isCompliantField(value)) return sealedValueOf(value) ?? null;
     if (isEncryptedCiphertext(value)) return value;
-    return sealedValueOf(CompliantField.fromPlain(value, this.spec)) ?? null;
+    return (
+      sealedValueOf(
+        CompliantField.fromPlain(value, this.spec, getBoundTenantId())
+      ) ?? null
+    );
   }
 
   override convertToJSValue(value: string | null): unknown {
     if (value === null || value === undefined) return value;
     if (isCompliantField(value)) return value;
-    return CompliantField.fromStored(String(value), this.spec);
+    // Hydration runs inside the loading entity manager's tenant context:
+    // the field keeps that tenant, and decrypts under it later.
+    return CompliantField.fromStored(
+      String(value),
+      this.spec,
+      undefined,
+      getBoundTenantId()
+    );
   }
 }
 
@@ -622,6 +726,36 @@ const SLOTS: WeakMap<object, Slots> = ((globalThis as Record<symbol, unknown>)[
   Symbol.for('forklaunch.compliance.slots')
 ] ??= new WeakMap()) as WeakMap<object, Slots>;
 
+/**
+ * The tenant bound when each queryable field's envelope was hydrated, keyed
+ * by property. The field itself is built lazily, on first access (it needs
+ * both the index and the envelope column), which can be long after the
+ * loading entity manager returned; the tenant is recorded at hydration.
+ */
+const LOADED_TENANTS: WeakMap<object, Record<string, string | undefined>> = ((
+  globalThis as Record<symbol, unknown>
+)[Symbol.for('forklaunch.compliance.loadedTenants')] ??=
+  new WeakMap()) as WeakMap<object, Record<string, string | undefined>>;
+
+function loadedTenantOf(
+  entity: object,
+  binding: CompliantPropertyBinding
+): string | undefined {
+  return LOADED_TENANTS.get(entity)?.[binding.property];
+}
+
+function recordLoadedTenant(
+  entity: object,
+  binding: CompliantPropertyBinding
+): void {
+  let tenants = LOADED_TENANTS.get(entity);
+  if (!tenants) {
+    tenants = {};
+    LOADED_TENANTS.set(entity, tenants);
+  }
+  tenants[binding.property] = getBoundTenantId();
+}
+
 function slotsOf(entity: object): Slots {
   let slots = SLOTS.get(entity);
   if (!slots) {
@@ -643,7 +777,12 @@ function readProperty(
       const index = pendingIndexValue(value);
       const field =
         typeof stored === 'string'
-          ? CompliantField.fromStored(stored, binding.spec, index)
+          ? CompliantField.fromStored(
+              stored,
+              binding.spec,
+              index,
+              loadedTenantOf(entity, binding)
+            )
           : CompliantField.fromIndexOnly(index, binding.spec);
       slots[binding.property] = field;
       return field;
@@ -652,7 +791,12 @@ function readProperty(
     // index column hydrates as null); the envelope alone is enough to load
     // it, and the next flush backfills the index.
     if (value == null && typeof stored === 'string') {
-      const field = CompliantField.fromStored(stored, binding.spec, null);
+      const field = CompliantField.fromStored(
+        stored,
+        binding.spec,
+        null,
+        loadedTenantOf(entity, binding)
+      );
       slots[binding.property] = field;
       return field;
     }
@@ -694,10 +838,18 @@ function writeProperty(
     // (anon strategy, index normalization): re-wrap its plaintext.
     slots[binding.property] = sameRules(stateOf(value).spec, binding.spec)
       ? value
-      : CompliantField.fromPlain(readPlaintext(value, false), binding.spec);
+      : CompliantField.fromPlain(
+          readPlaintext(value, false),
+          binding.spec,
+          stateOf(value).tenant ?? getBoundTenantId()
+        );
     return;
   }
-  slots[binding.property] = CompliantField.fromPlain(value, binding.spec);
+  slots[binding.property] = CompliantField.fromPlain(
+    value,
+    binding.spec,
+    getBoundTenantId()
+  );
 }
 
 /**
@@ -733,6 +885,8 @@ export function installCompliantAccessors(
           return sealedValueOf(field) ?? stored;
         },
         set(this: object, value: unknown) {
+          // Only hydration writes the hidden envelope property.
+          recordLoadedTenant(this, binding);
           slotsOf(this)[sibling] = value;
         }
       });
