@@ -47,6 +47,7 @@ export {
   CompliantField,
   CompliantIndexType,
   CompliantQueryError,
+  TenantMismatchError,
   CompliantType,
   LegacyCiphertextError,
   deanon,
