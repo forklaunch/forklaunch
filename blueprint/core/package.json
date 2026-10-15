@@ -22,17 +22,17 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "^1.2.30",
-    "@forklaunch/core": "^3.0.1",
-    "@forklaunch/express": "^1.2.48",
-    "@forklaunch/hyper-express": "^1.2.48",
-    "@forklaunch/validator": "^1.2.31",
-    "@mikro-orm/core": "7.2.3",
-    "@mikro-orm/mongodb": "7.2.3",
+    "@forklaunch/common": "^1.2.31",
+    "@forklaunch/core": "^3.1.0",
+    "@forklaunch/express": "^1.2.50",
+    "@forklaunch/hyper-express": "^1.2.49",
+    "@forklaunch/validator": "^1.2.32",
+    "@mikro-orm/core": "7.2.5",
+    "@mikro-orm/mongodb": "7.2.5",
     "@sinclair/typebox": "^0.34.52",
     "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.52.0",
-    "uuid": "^14.0.2",
-    "zod": "^4.6.5"
+    "uuid": "^14.0.3",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",

@@ -1,5 +1,11 @@
 # @forklaunch/interfaces-iam
 
+## 1.0.38
+
+### Patch Changes
+
+- Dependency refresh: @forklaunch/core 3.1.0 (explicit Stripe apiKey wins over a detected managed contract; managed email for regular apps), MikroORM 7.2.5, and other minor updates. Stripe stays on 22.x.
+
 ## 1.0.37
 
 ### Patch Changes
