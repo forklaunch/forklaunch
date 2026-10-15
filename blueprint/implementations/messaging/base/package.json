@@ -80,14 +80,14 @@
     "@forklaunch/interfaces-messaging": "workspace:^",
     "@forklaunch/internal": "^1.2.33",
     "@forklaunch/validator": "^1.2.31",
-    "@mikro-orm/core": "7.2.3",
+    "@mikro-orm/core": "7.2.5",
     "@sinclair/typebox": "^0.34.52",
     "ajv": "^8.20.0",
-    "zod": "^4.6.5"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "depcheck": "^1.4.7",
-    "prettier": "^3.9.9",
+    "prettier": "^3.9.10",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2"
   },

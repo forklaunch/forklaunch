@@ -19,7 +19,7 @@
   "dependencies": {
     "@forklaunch/common": "^1.2.30",
     "@forklaunch/universal-sdk": "^1.2.29",
-    "better-auth": "^1.7.6"
+    "better-auth": "^1.7.7"
   },
   "devDependencies": {
     "@forklaunch/blueprint-billing-base": "workspace:^",
