@@ -250,6 +250,37 @@ instance's sending identity while the instance launches (for a regular
 deployment, while the environment deploys), so DKIM usually verifies before
 the first send; the 503 remains possible right after the first deploy.
 
+#### One-click unsubscribe (bulk mail)
+
+Gmail and Yahoo require bulk senders to offer one-click unsubscribe. Pass
+`listUnsubscribe` (never raw headers; there is no headers option) and the
+platform adds `List-Unsubscribe` and, with `oneClick`,
+`List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 2369 / RFC 8058):
+
+```ts
+await email.send({
+  to: member.email.deanon,
+  subject: 'Your weekly recap',
+  html,
+  listUnsubscribe: {
+    url: `https://app.example.com/unsubscribe?token=${token}`, // https only
+    mailto: 'unsubscribe@example.com',                         // optional
+    oneClick: true                                             // needs url
+  }
+});
+```
+
+With `oneClick`, the mailbox provider POSTs `List-Unsubscribe=One-Click`
+(form-encoded, no cookies) to `url`: that request alone must unsubscribe, with
+no confirmation page, so the token in the URL has to identify the person. The
+headers go to every address in `to`; for per-person links send one message per
+recipient. Rules (client, gateway and mock alike; 400 otherwise): at least one
+of `url`/`mailto`; `url` https, printable ASCII up to 512 characters, no
+`< > , " \` (percent-encode them); `mailto` a plain mailbox. Needs
+`@forklaunch/core` 3.1+ (the first release with `listUnsubscribe`) and a
+platform gateway that accepts it; the mock shows it on
+`GET /__mock/email/messages` as `listUnsubscribe` and `headers`.
+
 ### 3. Events
 
 Delivered signed to `/platform-events/email`, each with the SES `messageId`:
