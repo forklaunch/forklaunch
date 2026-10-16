@@ -45,18 +45,18 @@
   "dependencies": {
     "@forklaunch/common": "workspace:^",
     "@forklaunch/validator": "workspace:^",
-    "@mikro-orm/core": "7.2.3"
+    "@mikro-orm/core": "7.2.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^26.6.3",
+    "@types/node": "^26.6.5",
     "depcheck": "^1.4.7",
-    "eslint": "^10.11.0",
-    "globals": "^17.12.0",
+    "eslint": "^10.12.0",
+    "globals": "^17.13.0",
     "tsup": "^8.5.1",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2",
-    "typescript-eslint": "^8.71.0",
+    "typescript-eslint": "^8.71.1",
     "vitest": "^5.0.3"
   }
 }
