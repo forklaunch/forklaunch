@@ -1,3 +1,4 @@
+import { readModelStream } from './modelStream';
 import {
   createInstanceGatewayTransport,
   InstanceGatewayRequestError
@@ -128,7 +129,10 @@ export interface ModelGatewayClient {
 export function createModelGatewayClient(
   options: ModelGatewayClientOptions = {}
 ): ModelGatewayClient {
-  const transport = createInstanceGatewayTransport(options, 'The model gateway');
+  const transport = createInstanceGatewayTransport(
+    options,
+    'The model gateway'
+  );
 
   async function send(
     method: 'GET' | 'POST',
@@ -171,48 +175,9 @@ export function createModelGatewayClient(
             request as unknown as Record<string, unknown>,
             streamOptions.signal
           );
-          if (!response.body) return;
-          for await (const data of sseData(response.body)) {
-            if (data === '[DONE]') return;
-            try {
-              yield JSON.parse(data) as GatewayChatChunk;
-            } catch {
-              // not a chunk; skip it
-            }
-          }
+          yield* readModelStream(response);
         }
       }
     }
   };
-}
-
-/** The `data:` payloads of a server-sent-event stream, in order. */
-async function* sseData(
-  stream: ReadableStream<Uint8Array>
-): AsyncGenerator<string> {
-  const decoder = new TextDecoder();
-  let buffer = '';
-  const reader = stream.getReader();
-  try {
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let boundary: number;
-      while ((boundary = buffer.search(/\r?\n\r?\n/)) !== -1) {
-        const event = buffer.slice(0, boundary);
-        buffer = buffer.slice(boundary).replace(/^\r?\n\r?\n/, '');
-        const data = event
-          .split(/\r?\n/)
-          .filter((line) => line.startsWith('data:'))
-          .map((line) => line.slice(5).trimStart())
-          .join('\n');
-        if (data) yield data;
-      }
-    }
-    const tail = buffer.trim();
-    if (tail.startsWith('data:')) yield tail.slice(5).trimStart();
-  } finally {
-    reader.releaseLock();
-  }
 }

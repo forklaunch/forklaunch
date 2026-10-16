@@ -52,3 +52,5 @@ export * from './rateLimit/index';
 export * from './types/sdk.types';
 export { MapToSdk } from './types/sdk.types';
 export * from './types/typedHandler.types';
+
+export * from './localModelGatewayClient';
