@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<!DOCTYPE DescriptorRecordSet SYSTEM "https://nlmpubs.nlm.nih.gov/projects/mesh/2026/xmlmesh/desc2026.dtd">
+<!-- Synthetic test fixture in the descYYYY.xml format; records abbreviated. -->
+<DescriptorRecordSet LanguageCode="eng">
+<DescriptorRecord DescriptorClass="1">
+  <DescriptorUI>D017081</DescriptorUI>
+  <DescriptorName><String>Cholecystectomy, Laparoscopic</String></DescriptorName>
+  <DateCreated><Year>1996</Year><Month>01</Month><Day>01</Day></DateCreated>
+  <TreeNumberList>
+    <TreeNumber>E04.210.240.130.500</TreeNumber>
+    <TreeNumber>E04.502.250.500</TreeNumber>
+  </TreeNumberList>
+  <ConceptList>
+    <Concept PreferredConceptYN="Y">
+      <ConceptUI>M0026349</ConceptUI>
+      <ConceptName><String>Cholecystectomy, Laparoscopic</String></ConceptName>
+      <TermList>
+        <Term ConceptPreferredTermYN="Y" IsPermutedTermYN="N" LexicalTag="NON" RecordPreferredTermYN="Y"><TermUI>T037213</TermUI><String>Cholecystectomy, Laparoscopic</String></Term>
+        <Term ConceptPreferredTermYN="N" IsPermutedTermYN="N" LexicalTag="NON" RecordPreferredTermYN="N"><TermUI>T037214</TermUI><String>Laparoscopic Cholecystectomy</String></Term>
+        <Term ConceptPreferredTermYN="N" IsPermutedTermYN="N" LexicalTag="NON" RecordPreferredTermYN="N"><TermUI>T037215</TermUI><String>Celioscopic Cholecystectomy</String></Term>
+      </TermList>
+    </Concept>
+  </ConceptList>
+</DescriptorRecord>
+<DescriptorRecord DescriptorClass="1">
+  <DescriptorUI>D018380</DescriptorUI>
+  <DescriptorName><String>Hematopoietic Stem Cell Transplantation</String></DescriptorName>
+  <TreeNumberList><TreeNumber>E02.095.147.500.500</TreeNumber></TreeNumberList>
+  <ConceptList>
+    <Concept PreferredConceptYN="Y">
+      <ConceptUI>M0028440</ConceptUI>
+      <ConceptName><String>Hematopoietic Stem Cell Transplantation</String></ConceptName>
+      <TermList>
+        <Term ConceptPreferredTermYN="Y"><TermUI>T000001</TermUI><String>Hematopoietic Stem Cell Transplantation</String></Term>
+        <Term ConceptPreferredTermYN="N"><TermUI>T000002</TermUI><String>Stem Cell Transplantation, Hematopoietic</String></Term>
+        <Term ConceptPreferredTermYN="N"><TermUI>T000003</TermUI><String>Transplantation, Hematopoietic Stem Cell</String></Term>
+      </TermList>
+    </Concept>
+  </ConceptList>
+</DescriptorRecord>
+</DescriptorRecordSet>
