@@ -1,7 +1,8 @@
 import {
   openApiCompliantPath,
   safeParse,
-  safeStringify
+  safeStringify,
+  toPlainString
 } from '@forklaunch/common';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
@@ -201,11 +202,11 @@ export class UniversalSdk {
                   key,
                   item instanceof Blob || item instanceof File
                     ? item
-                    : safeStringify(item)
+                    : toPlainString(item)
                 );
               }
             } else {
-              formData.append(key, safeStringify(value));
+              formData.append(key, toPlainString(value));
             }
           }
         }
@@ -215,7 +216,7 @@ export class UniversalSdk {
         parsedBody = new URLSearchParams(
           Object.entries(body.urlEncodedForm).map(([key, value]) => [
             key,
-            safeStringify(value)
+            toPlainString(value)
           ])
         );
       } else {
@@ -225,7 +226,7 @@ export class UniversalSdk {
 
     if (query) {
       const queryString = new URLSearchParams(
-        Object.entries(query).map(([key, value]) => [key, safeStringify(value)])
+        Object.entries(query).map(([key, value]) => [key, toPlainString(value)])
       ).toString();
       url += queryString ? `?${queryString}` : '';
     }
