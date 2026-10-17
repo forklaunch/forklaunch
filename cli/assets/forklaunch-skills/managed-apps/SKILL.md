@@ -111,21 +111,12 @@ forklaunch managed template publish \
   --git-ref v1.4.0        # tag, branch, or commit sha
 ```
 
-A newly added version starts **`pending`**: the platform builds the image from
-`--git-ref` before any instance can launch from it (statuses: `pending →
-building → published`, or `build_failed`; about 30 s when it works). There is
-no way to supply a prebuilt image — the version API takes a semver and a git
-ref and nothing else. Three rules, each the cause of a real `build_failed`:
-
-- **`--git-ref` is a full SHA, a branch, or a tag** — the builder clones by
-  ref name, so a short SHA fails with "Could not find remote branch". Use
-  `git rev-parse HEAD`.
-- **Publish as the org whose GitHub App installation can read the repo.** The
-  clone uses the *publishing* org's installation token
-  (`forklaunch github status` shows which account it is on). A template can
-  be visible from another org that cannot build it.
-- **A failed semver is burned** — republishing the same semver is a 409;
-  bump it.
+A Git-only publication starts `pending` and requires verified source-build
+isolation. For a locally built release, pass `--prepared-release-id` with the
+matching version and full Git commit SHA; see "Publish a locally prepared
+template release" below. A failed or pending version can recover at the same
+semver and commit. Published versions are immutable and require a new version
+for different artifacts.
 
 ### publish-template (the TEMPLATE itself)
 
@@ -914,3 +905,19 @@ give an instance back to the pool, reset it (never re-claim it).
   the app) mints its link with an operator script; minting it from the
   platform at claim time is the intended end state.
 - Recording a rollout item's result by hand is managed-apps-direct (no CLI).
+
+## Publish a locally prepared template release
+
+CLI 1.30+: build and test the exact commit, then run `release create --local
+--version <semver> --yes --skip-sync` and use the returned release UUID in
+`managed template publish --slug <slug> --semver <semver> --git-ref <full-sha>
+--prepared-release-id <release-uuid>`. `release create --local --application-id
+<owned-app-uuid>` selects the build application without editing the integration.
+The release must belong to the template organization and match its repository,
+version and full commit. Prepared publication bypasses cloud source execution,
+pins the uploaded bundle, and applies the managed-app acceptance gate.
+A failed/pending version can recover at the same semver and commit; published
+versions are immutable. Publication alone does not roll out existing instances.
+Older CLIs can POST the same fields to the public
+`/managed-mode/templates/<slug>/versions` endpoint with an organization admin
+bearer token. Do not disable isolation guards to work around source builds.

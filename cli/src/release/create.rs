@@ -258,9 +258,9 @@ impl CliCommand for CreateCommand {
             .arg(
                 Arg::new("application-id")
                     .long("application-id")
-                    .requires("prebuilt-openapi")
+                    .requires("local")
                     .value_parser(clap::value_parser!(uuid::Uuid))
-                    .help("Verify the target application with the signed-in account before preparing its release"),
+                    .help("Target application for a local release; verified with the signed-in account"),
             )
             .arg(
                 Arg::new("yes")
@@ -280,7 +280,7 @@ impl CliCommand for CreateCommand {
         let application_id = if let Some(id) = matches.get_one::<uuid::Uuid>("application-id") {
             let token = crate::core::validate::require_auth()?;
             let id = id.to_string();
-            if manifest
+            if matches.get_one::<String>("prebuilt-openapi").is_some() && manifest
                 .platform_application_id
                 .as_ref()
                 .is_some_and(|saved| saved != &id)
@@ -1347,6 +1347,11 @@ fn upload_release(
             parsed_response,
             status
         );
+    }
+
+    if let Some(id) = parsed_response.get("id").and_then(serde_json::Value::as_str) {
+        let mut stdout = StandardStream::stdout(ColorChoice::Always);
+        log_info!(stdout, "Release ID: {}", id);
     }
 
     if let Some(warnings) = parsed_response.get("warnings") {
@@ -2525,6 +2530,18 @@ mod tests {
     use crate::core::manifest::{
         ProjectEntry, ResourceInventory, application::ApplicationManifestData,
     };
+
+    #[test]
+    fn explicit_application_is_supported_for_local_uploads() {
+        let args = ["create", "--local", "--version", "1.0.0", "--application-id", "00000000-0000-4000-8000-000000000001", "--yes"];
+        assert!(CreateCommand::new().command().version("test").try_get_matches_from(args).is_ok());
+    }
+
+    #[test]
+    fn explicit_application_requires_local_mode() {
+        let args = ["create", "--git", "--version", "1.0.0", "--application-id", "00000000-0000-4000-8000-000000000001", "--yes"];
+        assert!(CreateCommand::new().command().version("test").try_get_matches_from(args).is_err());
+    }
 
     fn create_test_manifest(projects: Vec<(&str, ProjectType)>) -> ApplicationManifestData {
         ApplicationManifestData {
