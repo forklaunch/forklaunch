@@ -1,5 +1,14 @@
 # @forklaunch/implementation-messaging-twilio
 
+## 1.1.9
+
+### Patch Changes
+
+- Built on @forklaunch/core 3.2.0 (default audit trail, listUnsubscribe, compliant fields decrypt under their loading tenant) and a dependency refresh; Stripe stays on 22.x.
+- Updated dependencies
+  - @forklaunch/implementation-messaging-base@1.1.9
+  - @forklaunch/interfaces-messaging@1.1.8
+
 ## 1.1.8
 
 ### Patch Changes
