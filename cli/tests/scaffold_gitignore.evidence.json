@@ -1,0 +1,33 @@
+{
+  "base": "703a3d11a",
+  "before": "Actual Git add stages synthetic.env.test under unchanged application template",
+  "after": "2 tests passed, all3ignoretemplates exercised across root/IAM/records/frontend:28privatefilenames pertemplateexcluded;12publictemplatespertemplate retained",
+  "runtime": "Git/Python only; noCLI compile/emission orCargo/Docker/provider",
+  "existingCustomerFiles": "generate_gitignore still returnsNone for existing.gitignore; existingrepos require a separate reviewedupdate",
+  "originalSecretClassification": [
+    {
+      "path": "src/modules/iam/.env.test",
+      "available": true,
+      "nonemptyCredentialFieldNames": [
+        "BETTER_AUTH_SECRET"
+      ],
+      "valuesRetained": false
+    },
+    {
+      "path": "src/modules/records/.env.local",
+      "available": true,
+      "nonemptyCredentialFieldNames": [
+        "DB_PASSWORD",
+        "ENCRYPTION_KEY"
+      ],
+      "valuesRetained": false
+    },
+    {
+      "path": "src/modules/records/.env.test",
+      "available": true,
+      "nonemptyCredentialFieldNames": [],
+      "valuesRetained": false
+    }
+  ],
+  "originalFilesMutated": false
+}

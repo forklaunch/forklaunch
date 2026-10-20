@@ -4,6 +4,7 @@ import { SmsStatusEnum } from '@forklaunch/implementation-messaging-base/enum';
 import { EntityManager } from '@mikro-orm/core';
 import { SmsRecord } from '../../persistence/entities/smsRecord.entity';
 import { SmsSchemas } from '../schemas';
+import { deanon } from '@forklaunch/core/persistence';
 
 export const SendSmsMapper = requestMapper({
   schemaValidator,
@@ -30,7 +31,7 @@ export const SmsRecordMapper = responseMapper({
   mapperDefinition: {
     toDto: async (entity) => {
       return {
-        ...entity,
+        ...deanon(entity),
         providerMessageId: entity.providerMessageId ?? undefined,
         error: entity.error ?? undefined,
         metadata:

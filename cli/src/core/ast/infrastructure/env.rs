@@ -294,8 +294,8 @@ impl<'a> Visit<'a> for ProcessEnvVisitor {
 /// The whole-tree sweep uses this rather than [`extract_env_vars_from_source`]:
 /// outside a config-injector chain there is no `type:` to read, so every
 /// sighting it produces is untyped by construction. Declared optionality is
-/// read only from a project's `registrations.ts`, which is the declaration
-/// surface this step is scoped to.
+/// read from a project's `registrations.ts` and root `mikro-orm.config.ts`;
+/// ordinary source files retain this conservative untyped extraction.
 pub fn extract_untyped_env_vars_from_source(source_code: &str) -> Result<Vec<EnvVarUsage>> {
     let allocator = Allocator::default();
 
@@ -513,8 +513,8 @@ pub fn find_all_env_vars(
     let mut sightings: std::collections::HashMap<String, Vec<EnvVarUsage>> =
         std::collections::HashMap::new();
 
-    // Step 1: registrations.ts files — config-injector chains, and the only
-    // place a declared `optional(...)` type is visible to the scanner.
+    // Step 1: registrations.ts files — the main config-injector declarations.
+    // Root mikro-orm.config.ts declarations are read in the source pass below.
     let registrations_files = find_registrations_files(modules_path)?;
 
     for file_path in &registrations_files {
@@ -554,7 +554,30 @@ pub fn find_all_env_vars(
                         if let Ok(vars) = extract_process_env_vars_from_source(&source_code) {
                             extra_env_vars.extend(vars);
                         }
-                        if let Ok(vars) = extract_untyped_env_vars_from_source(&source_code) {
+                        // The generated ORM config owns its own typed injector
+                        // (including optional legacy encryption keys). Treating
+                        // those declarations as bare reads invents requirements.
+                        // Other files still use the conservative untyped scan.
+                        let vars = if source_file == &path.join("mikro-orm.config.ts") {
+                            let defaulted = defaulted_env_names(&source_code);
+                            extract_env_vars_from_source(&source_code).map(|vars| {
+                                vars.into_iter()
+                                    .map(|mut usage| {
+                                        // Preserve existing fallback handling for
+                                        // untyped reads; never override a required type.
+                                        if usage.optional.is_none()
+                                            && defaulted.contains(&usage.var_name)
+                                        {
+                                            usage.optional = Some(true);
+                                        }
+                                        usage
+                                    })
+                                    .collect()
+                            })
+                        } else {
+                            extract_untyped_env_vars_from_source(&source_code)
+                        };
+                        if let Ok(vars) = vars {
                             extra_env_vars.extend(vars);
                         }
                     }
@@ -816,10 +839,91 @@ mod tests {
     }
 
     #[test]
+    fn test_root_orm_declarations_preserve_optional_keys_without_hiding_required_readers() {
+        let root = tempfile::tempdir().unwrap();
+        let modules = root.path().join("modules");
+        let iam = modules.join("iam");
+        let records = modules.join("records");
+        fs::create_dir_all(&iam).unwrap();
+        fs::create_dir_all(&records).unwrap();
+        // This is the injector shape emitted by the generated IAM/records ORM
+        // configs. The records service also declares these in registrations.ts.
+        let declarations = r#"
+            const injector = createConfigInjector(schemaValidator, {
+              ENCRYPTION_KEY: { type: string, value: getEnvVar('ENCRYPTION_KEY') },
+              LEGACY_ENCRYPTION_KEYS: { type: optional(string), value: getEnvVar('LEGACY_ENCRYPTION_KEYS') }
+            });
+        "#;
+        fs::write(iam.join("mikro-orm.config.ts"), declarations).unwrap();
+        fs::write(records.join("mikro-orm.config.ts"), declarations).unwrap();
+        fs::write(records.join("registrations.ts"), declarations).unwrap();
+        let scan = || find_all_env_vars(&modules, &RenderedTemplatesCache::new()).unwrap();
+        for project in ["iam", "records"] {
+            let result = scan();
+            assert_eq!(
+                optionality(&result[project], "LEGACY_ENCRYPTION_KEYS"),
+                Some(true)
+            );
+            assert_eq!(optionality(&result[project], "ENCRYPTION_KEY"), Some(false));
+        }
+
+        // A required declaration, a bare read elsewhere, and a process.env
+        // reader inside the ORM file must EACH override the optional declaration.
+        for extra in [
+            "const keys = getEnvVar('LEGACY_ENCRYPTION_KEYS');",
+            "const keys = process.env.LEGACY_ENCRYPTION_KEYS;",
+            "const required = { KEYS: { type: string, value: getEnvVar('LEGACY_ENCRYPTION_KEYS') } };",
+        ] {
+            fs::write(
+                iam.join("mikro-orm.config.ts"),
+                format!("{declarations}\n{extra}"),
+            )
+            .unwrap();
+            assert_eq!(
+                optionality(&scan()["iam"], "LEGACY_ENCRYPTION_KEYS"),
+                Some(false)
+            );
+        }
+        fs::write(iam.join("mikro-orm.config.ts"), declarations).unwrap();
+        fs::write(
+            iam.join("reader.ts"),
+            "const keys = getEnvVar('LEGACY_ENCRYPTION_KEYS');",
+        )
+        .unwrap();
+        assert_eq!(
+            optionality(&scan()["iam"], "LEGACY_ENCRYPTION_KEYS"),
+            Some(false)
+        );
+        // A similarly named file in an arbitrary nested folder is not a new
+        // trusted declaration surface.
+        fs::remove_file(iam.join("reader.ts")).unwrap();
+        fs::create_dir(iam.join("other")).unwrap();
+        fs::write(iam.join("other/mikro-orm.config.ts"), declarations).unwrap();
+        assert_eq!(
+            optionality(&scan()["iam"], "LEGACY_ENCRYPTION_KEYS"),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn test_orm_untyped_literal_fallback_remains_optional() {
+        let root = tempfile::tempdir().unwrap();
+        let service = root.path().join("iam");
+        fs::create_dir(&service).unwrap();
+        fs::write(
+            service.join("mikro-orm.config.ts"),
+            "const mode = getEnvVar('ORM_MODE') ?? 'safe';",
+        )
+        .unwrap();
+        let result = find_all_env_vars(root.path(), &RenderedTemplatesCache::new()).unwrap();
+        assert_eq!(optionality(&result["iam"], "ORM_MODE"), Some(true));
+    }
+
+    #[test]
     fn test_sweep_extraction_carries_no_type() {
-        // Declared optionality is read only from registrations.ts. The
-        // whole-tree sweep reports names alone, even where the source happens to
-        // contain a config injector of its own, so nothing outside the
+        // Declared optionality is read only from recognized configuration
+        // files. The ordinary source sweep reports names alone, even if it
+        // contains a config injector of its own, so nothing outside the
         // declaration surface can claim a variable is optional.
         let source = r#"
         const configInjector = createConfigInjector(schemaValidator, {

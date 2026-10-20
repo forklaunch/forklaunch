@@ -261,6 +261,7 @@ fn add_worker_to_artifacts(
             } else {
                 None
             },
+            capabilities: None,
         }),
         Some(vec![manifest_data.worker_name.clone()]),
         Some(ProjectMetadata {

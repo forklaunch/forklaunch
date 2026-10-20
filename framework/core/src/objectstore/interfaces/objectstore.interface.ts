@@ -1,6 +1,44 @@
 import { Readable } from 'stream';
 import type { ComplianceContext } from '../../cache/types/ttlCacheRecord.types';
 
+/** A file body: bytes, text or a stream. */
+export type ObjectStoreFileBody = Buffer | Uint8Array | string | Readable;
+
+export interface PutFileOptions {
+  contentType: string;
+  /** Sets Content-Disposition, so a download saves under this name. */
+  filename?: string;
+  metadata?: Record<string, string>;
+}
+
+export interface PresignUploadOptions {
+  /** The only content type the upload may carry. */
+  contentType: string;
+  /** Largest accepted upload, in bytes; the store rejects anything bigger. */
+  maxBytes: number;
+  /** Link lifetime in seconds. Default and ceiling: the store's upload cap. */
+  expiresIn?: number;
+}
+
+/**
+ * A browser upload grant: a form POST of `fields`, then the file as the last
+ * field (named `file`), to `url`.
+ */
+export interface PresignedUpload {
+  url: string;
+  fields: Record<string, string>;
+  /** The key the object will be stored under, relative to the store. */
+  key: string;
+  expiresAt: Date;
+}
+
+export interface PresignDownloadOptions {
+  /** Link lifetime in seconds. Default and ceiling: the store's download cap. */
+  expiresIn?: number;
+  /** Serve as an attachment saved under this name. */
+  filename?: string;
+}
+
 /**
  * Interface representing an object store.
  *
@@ -72,6 +110,31 @@ export interface ObjectStore<Client> {
    * Note: Streaming bypasses application-level encryption/decryption.
    */
   streamDownloadBatchObjects(objectKeys: string[]): Promise<Readable[]>;
+
+  /**
+   * Stores a file as-is (not JSON-encoded, not encrypted by the app; the
+   * store's own at-rest encryption applies).
+   */
+  putFile(
+    objectKey: string,
+    body: ObjectStoreFileBody,
+    options: PutFileOptions
+  ): Promise<void>;
+
+  /**
+   * A short-lived grant for a browser to upload one file directly, with the
+   * size limit and content type enforced by the store.
+   */
+  presignUpload(
+    objectKey: string,
+    options: PresignUploadOptions
+  ): Promise<PresignedUpload>;
+
+  /** A short-lived link to download one object. */
+  presignDownload(
+    objectKey: string,
+    options?: PresignDownloadOptions
+  ): Promise<string>;
 
   /**
    * Gets the underlying objectstore client instance.

@@ -176,6 +176,13 @@ pub(super) struct AppTemplate {
     pub(super) default_instance_size: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) supports_key_rotation: Option<bool>,
+    /// Launches skip the managed first-deploy approval gate, and who last changed it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) auto_approve_launches: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) auto_approve_launches_updated_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) auto_approve_launches_updated_at: Option<String>,
 }
 
 /// Where every instance of a template runs. Decided once by the publisher; a

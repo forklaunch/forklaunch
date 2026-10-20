@@ -7,9 +7,21 @@ on:
       - main
     paths:
       - 'blueprint/**'
+      - 'cli/tests/iam_authorization_scope.cjs'
+      - 'cli/tests/scaffold_gitignore.py'
+      - 'cli/src/core/gitignore.rs'
+      - 'cli/src/templates/application/.gitignore'
+      - 'cli/src/templates/project/iam-better-auth/**'
+      - '.github/workflows/build_blueprint.yml'
   pull_request:
     paths:
       - 'blueprint/**'
+      - 'cli/tests/iam_authorization_scope.cjs'
+      - 'cli/tests/scaffold_gitignore.py'
+      - 'cli/src/core/gitignore.rs'
+      - 'cli/src/templates/application/.gitignore'
+      - 'cli/src/templates/project/iam-better-auth/**'
+      - '.github/workflows/build_blueprint.yml'
 
 jobs:
   build:
@@ -31,6 +43,31 @@ jobs:
       - name: Install dependencies
         working-directory: ./blueprint
         run: pnpm install
+
+      - name: Check authorization and scaffold Git regressions
+        run: |
+          node <<'NODE'
+          const { createRequire } = require('node:module');
+          const { resolve } = require('node:path');
+          const { spawnSync } = require('node:child_process');
+          // tsup already installs esbuild; resolve its declared dependency without installing anything.
+          const blueprintRequire = createRequire(resolve('blueprint/package.json'));
+          const tsupRequire = createRequire(blueprintRequire.resolve('tsup'));
+          const checks = [
+            ['Authorization', process.execPath, ['cli/tests/iam_authorization_scope.cjs', tsupRequire.resolve('esbuild')], /^(\d+) authorization regressions passed$/m, 11],
+            ['Scaffold Git', 'python3', ['cli/tests/scaffold_gitignore.py'], /Ran (\d+) tests?/, 2]
+          ];
+          for (const [name, command, args, summary, minimum] of checks) {
+            const result = spawnSync(command, args, { encoding: 'utf8', timeout: 30000 });
+            const count = ((result.stdout ?? '') + (result.stderr ?? '')).match(summary)?.[1];
+            if (result.error || result.status !== 0 || Number(count) < minimum || !count) {
+              console.error(`${name} regression check failed`);
+              process.exit(1);
+            }
+            // Retain counts only; never publish fixture output or captured child errors.
+            console.log(`${name}: ${count} tests passed`);
+          }
+          NODE
 
       - name: Build blueprint
         working-directory: ./blueprint

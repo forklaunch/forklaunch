@@ -148,7 +148,8 @@ forklaunch managed template update --slug acme-books \
   --base-domain buildbespoke.app \      # the zone instances are hosted under
   --frontend-domain app.example.com \   # instance UIs become <hostPrefix>.<domain>; --clear-frontend-domain removes it
   --default-instance-size pico \        # tier new instances launch with; --clear-default-instance-size resets
-  --supports-key-rotation               # allow `instance rotate-keys` (services re-encrypt on boot); --no-supports-key-rotation
+  --supports-key-rotation \             # allow `instance rotate-keys` (services re-encrypt on boot); --no-supports-key-rotation
+  --auto-approve-launches true          # launches skip the managed first-deploy approval gate (admin only); false restores it
 ```
 
 Only the fields you pass change. An empty update is refused (it would report
@@ -305,6 +306,117 @@ Messages are rate-limited per phone (5/hr) and per instance (20/hr, 100/day),
 and every send is audited via `SmsDispatchEntity`. (A `log-sms` provider prints
 the code in dev when no Twilio creds are configured.)
 
+**Do not ship your own model provider keys in a template either.** Managed mode
+has a **platform model gateway**: an instance calls platform-hosted AI models
+(Azure AI Foundry) with no provider key, signing each request with the same
+per-instance HMAC key.
+
+```typescript
+import { createModelGatewayClient } from '@forklaunch/core/http';
+
+// Reads PLATFORM_GATEWAY_URL, INSTANCE_ID and INSTANCE_HMAC_KEY, which the
+// platform injects into every hosted instance. Throws outside managed mode.
+const models = createModelGatewayClient();
+
+const reply = await models.chat.completions.create({
+  model: 'terra', // a catalog alias, not a deployment name
+  messages: [{ role: 'user', content: 'Summarize this intake form: …' }]
+});
+
+for await (const chunk of models.chat.completions.stream({ model: 'luna', messages })) {
+  process.stdout.write(chunk.choices[0]?.delta?.content ?? '');
+}
+```
+
+- **The product decides what is allowed**: `forklaunch managed template update
+  --slug <slug> --gateway-models terra,luna --gateway-monthly-tokens 2000000
+  --gateway-rpm 60`. `--disable-model-gateway` turns it off. One instance can
+  differ: `forklaunch managed instance model-gateway --id <id> --monthly-tokens
+  5000000` (`--clear` removes the override).
+- **Budgets and limits are per instance**: a spent monthly budget answers 429
+  with `retry-after` until the month turns (UTC), and the completion is capped to
+  what is left. `models.models()` reports the allowed models and tokens used.
+- **HIPAA**: a product whose compliance controls include `hipaa` is only offered
+  models the platform marks BAA-covered, whatever `--gateway-models` lists; send
+  PHI only through the gateway. `withheldForHipaa` names the models held back.
+- **Usage**: `forklaunch managed instance model-usage --id <id> [--month
+  YYYY-MM]` shows calls, tokens and cost per model. Prompts and completions are
+  never stored.
+- **Local development**: there is no platform locally, so run the mock that
+  ships with `@forklaunch/core` (`forklaunch-model-gateway-mock`). It speaks the
+  same contract, verifies your signatures exactly as the platform does, and
+  answers deterministically (`[mock <model>] <your last message>`). Add to the
+  app's `docker-compose.yaml`:
+
+  ```yaml
+  model-gateway-mock:
+    image: node:24-alpine
+    command: ['node', '/app/node_modules/@forklaunch/core/bin/model-gateway-mock.mjs']
+    working_dir: /app
+    environment:
+      MOCK_INSTANCE_HMAC_KEY: local-dev-key   # must match INSTANCE_HMAC_KEY
+      MOCK_MODELS: terra,luna                 # what the product will enable
+    volumes:
+      - ./:/app:ro
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:8080/health']
+  ```
+
+  and give the service that calls models `PLATFORM_GATEWAY_URL:
+  http://model-gateway-mock:8080`, `INSTANCE_ID: local-instance`,
+  `INSTANCE_HMAC_KEY: local-dev-key`. `MOCK_MONTHLY_TOKENS` and
+  `MOCK_FAIL_EVERY=N` let you exercise the budget (429) and outage (503) paths.
+
+### Settings for the platform-held features (SMS, WhatsApp, voice, email, payments)
+
+Say you sell a clinic app. Most clinics are fine with 500 texts a month, but one
+large practice needs 5,000, and the product as a whole should take a 2% fee on
+every payment. Those are **settings**, and they work exactly like the model
+gateway's: the **product** (template) sets them for every instance, **one
+instance** can override them, and anything neither sets falls back to the
+platform's defaults (env). The gateways read them on every call, so a change
+applies at once, with no redeploy.
+
+```bash
+# The product's settings. Each feature's setting is REPLACED AS A WHOLE:
+# pass every field you want the product to keep.
+forklaunch managed template update --slug clinic \
+  --sms-pool-id pool-abc --sms-monthly-segments 500 --sms-per-minute 10 \
+  --whatsapp-number-id phone-number-id-0123 --whatsapp-rpm 20 \
+  --voice-flow appointment_reminder=<contact-flow-id> --voice-monthly-minutes 900 \
+  --email-daily-quota 1000 --email-per-minute 30 \
+  --payments-fee-percent 2 --payments-fee-amount 30 --payments-rpm 120
+forklaunch managed template gateway-settings --slug clinic   # what is set + defaults
+
+# One instance differs. Fields left out come from the template; --clear removes it.
+forklaunch managed instance sms-gateway --id <id> --monthly-segments 5000
+forklaunch managed instance email-gateway --id <id> --daily-quota 5000
+forklaunch managed instance payments-gateway --id <id> --fee-percent 1
+forklaunch managed instance voice --id <id> --max-concurrent 6
+forklaunch managed instance whatsapp --id <id> --number-id phone-number-id-4567
+forklaunch managed instance gateway-settings --id <id>       # what is in force
+```
+
+| feature | product (`template update`) | one instance | notes |
+|---|---|---|---|
+| SMS | `--sms-pool-id`, `--sms-monthly-segments`, `--sms-per-minute`, `--sms-allow-promotional`, `--sms-disabled`; `--clear-sms` | `instance sms-gateway`: `--monthly-segments`, `--per-minute`, a dedicated number (`--number-id` + E.164 `--number`) | defaults: `SMS_POOL_ID`, `SMS_GATEWAY_DEFAULT_*` |
+| WhatsApp | `--whatsapp-number-id`, `--whatsapp-rpm`, `--whatsapp-disabled`; `--unlink-whatsapp` | `instance whatsapp`: its own `--number-id`, `--rpm`, `--disabled`; `--clear` unlinks | the instance's number wins; its unset rate falls through to the product's, then `WHATSAPP_DEFAULT_RPM`. Linking the WhatsApp Business Account itself is still the manual Meta signup in the AWS console |
+| Voice | `--voice-flow name=contact-flow-id` (repeat), `--voice-max-concurrent`, `--voice-monthly-minutes`; `--disable-voice` | `instance voice`: `--max-concurrent`, `--monthly-minutes` | the flow catalog is the product's only; no flows = voice off |
+| Email | `--email-daily-quota`, `--email-per-minute`; `--clear-email` | `instance email-gateway`: `--daily-quota`, `--per-minute` | defaults: `EMAIL_GATEWAY_DEFAULT_*` |
+| Payments | `--payments-fee-percent`, `--payments-fee-amount` (cents), `--payments-rpm`; `--clear-payments` | `instance payments-gateway`: `--fee-percent`, `--fee-amount`, `--rpm` | an instance's fee replaces the product's whole. `PAYMENTS_APPLICATION_FEES` / `PAYMENTS_RPM` remain the fallback |
+
+- **Validated:** a bad value (a zero cap, a 100% fee, a flow name the gateway
+  would refuse, a rate without a WhatsApp number) is a 400 naming the field, and
+  one bad field refuses the whole template update.
+- **Who may change them:** the same roles as the model gateway. Product settings
+  ride on the admin-only template update; an instance override needs an editor;
+  `gateway-settings` needs a viewer.
+- **HTTP** (under `/managed-mode`): `PATCH /templates/:slug` with `smsGateway`,
+  `whatsapp`, `voice`, `emailGateway`, `paymentsGateway`;
+  `PUT /instances/:id/{sms-gateway,whatsapp,voice,email-gateway,payments-gateway}`
+  (`clear: true` removes); `GET /templates/:slug/gateway-settings` and
+  `GET /instances/:id/gateway-settings`.
+
 ## 3. Instance lifecycle
 
 ### create → provisioning
@@ -343,7 +455,11 @@ Watch it with `forklaunch managed instance get --id <id>` (or `instance list
   the launch deployment is parked `awaiting_approval` (`requestedBy: system`,
   so any admin can approve). `forklaunch deploy approvals list --status
   pending` → `deploy approvals approve --id <id>`; the launch resumes at once.
-  Or turn the gate off for production (`/deployment-approvals`).
+  Or turn the gate off for production (`/deployment-approvals`). On a
+  platform where every managed launch is gated, the template's
+  `--auto-approve-launches true` (admin only, recorded) skips that
+  managed-launch gate and nothing else: an environment that explicitly
+  requires approval still parks the launch.
 - **`awaiting_claim` before the app answers** — until #861 is everywhere,
   the state can flip when the claim link is minted, with the deployment still
   `deploying`. Confirm `instance deployments --id <id> --limit 1` says
@@ -457,6 +573,36 @@ instance GET and the claim response all return them; the claim page shows the
 customer their `frontendUrl`. How to build the Vercel side (edge middleware per
 instance, why a subdomain per instance and not a shared origin) and the prompt
 to hand a coding agent: `docs/managed-instance-frontend.md`.
+
+### claim-next (a signup backend takes one from the pool, unattended)
+
+```bash
+forklaunch managed instance claim-next --template acme-books --reference cust_42 [--email owner@example.com] [--json]
+# POST /managed-mode/templates/acme-books/claim-next  { reference?, email? }   (EDITOR)
+# 200 { instanceId, host, claimUrl, expiresAt, reference?, emailed? }
+# 409 { code: "POOL_EMPTY", message, poolSize, reserved, provisioning }
+```
+
+Say Meridian signs up on your website at 2 a.m. Your signup backend (signed
+in with an API key) calls this: it gets the **oldest** `awaiting_claim`
+instance of the template in your org that has no live link out, and a
+fresh one-time claim link for it. The pick is one transaction with
+`FOR UPDATE SKIP LOCKED`, so two sign-ups in the same second never get the
+same instance. `--email` also mails the link (the link is still returned;
+`emailed: false` means the mail failed). `--reference` is your own customer
+id, stored on the instance (`reference` on the row; it survives the claim,
+a reset clears it).
+
+The **reservation is the link**: the instance stays `awaiting_claim` (so
+claim, relay, gateways, rollouts, reset and destroy treat it like any
+other), with `reservedAt` set and its stored URL purged. It lapses with the
+link (72 h): an abandoned signup's instance returns to the pool on its own,
+and the next claim-next rotates its token. An instance whose link an
+operator revealed or emailed by hand also counts as "out" until that link
+expires, so claim-next never kills a link someone holds. On `POOL_EMPTY`,
+launch more (`instance create`) and retry; `provisioning` says how many are
+already on the way. To keep launches unattended too, set the template's
+`--auto-approve-launches true`.
 
 ### claim (customer consumes — no login)
 

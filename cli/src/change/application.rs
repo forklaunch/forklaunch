@@ -1547,6 +1547,17 @@ impl CliCommand for ApplicationCommand {
                     .help("The application root path"),
             )
             .arg(
+                Arg::new("cli-version")
+                    .long("cli-version")
+                    .value_name("X.Y.Z")
+                    .value_parser(super::core::cli_version::parse_cli_version)
+                    .conflicts_with_all([
+                        "name", "validator", "formatter", "linter", "http-framework",
+                        "runtime", "test-framework", "description", "author", "license",
+                    ])
+                    .help("Explicitly change only this project's CLI version pin (noninteractive)"),
+            )
+            .arg(
                 Arg::new("name")
                     .short('N')
                     .help("The name of the application"),
@@ -1629,6 +1640,9 @@ impl CliCommand for ApplicationCommand {
     }
 
     fn handler(&self, matches: &clap::ArgMatches) -> Result<()> {
+        if let Some(version) = matches.get_one::<String>("cli-version") {
+            return super::core::cli_version::change_cli_version(matches, version);
+        }
         let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
         let mut rendered_templates_cache = RenderedTemplatesCache::new();

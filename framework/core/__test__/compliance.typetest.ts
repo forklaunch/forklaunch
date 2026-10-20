@@ -2,7 +2,13 @@
  * Compile-time type tests for fp + defineComplianceEntity.
  */
 
-import type { Collection, InferEntity } from '@mikro-orm/core';
+import type {
+  Collection,
+  FilterQuery,
+  InferEntity,
+  RequiredEntityData
+} from '@mikro-orm/core';
+import type { Anon, CompliantField } from '../src/persistence/compliantField';
 import { p } from '@mikro-orm/core';
 import { fp } from '../src/persistence/compliancePropertyBuilder';
 import { defineComplianceEntity } from '../src/persistence/defineComplianceEntity';
@@ -25,7 +31,8 @@ const User = defineComplianceEntity({
 });
 
 type UserType = InferEntity<typeof User>;
-const user: UserType = {
+// ✅ Plain values are accepted wherever MikroORM takes entity data
+const user: RequiredEntityData<UserType> = {
   id: 'uuid',
   email: 'test@test.com',
   medicalRecord: null,
@@ -37,12 +44,19 @@ const user: UserType = {
   metadata: { theme: 'dark' },
   tags: ['admin']
 };
-const _id: string = user.id;
-const _email: string = user.email;
-const _card: string = user.cardNumber;
-const _age: number = user.age;
-const _active: boolean = user.active;
-const _status: 'active' | 'inactive' = user.status;
+const loaded = {} as UserType;
+const _id: string = loaded.id;
+// ✅ pii/phi/pci properties are compliant fields: .deanon for the value,
+// .anon for the de-identified value, nothing else
+const _email: string = loaded.email.deanon;
+const _emailAnon: Anon = loaded.email.anon;
+const _card: string = loaded.cardNumber.deanon;
+const _medical: string | undefined = loaded.medicalRecord?.deanon;
+// @ts-expect-error -- a compliant field is not its value
+const _emailRaw: string = loaded.email;
+const _age: number = loaded.age;
+const _active: boolean = loaded.active;
+const _status: 'active' | 'inactive' = loaded.status;
 
 // ✅ Relation auto-classified (no .compliance() needed)
 const Organization = defineComplianceEntity({
@@ -136,7 +150,10 @@ type AssertExact<T, U> = [T] extends [U]
 type _CheckId = AssertExact<UserType['id'], string>;
 const _checkId: _CheckId = true;
 
-type _CheckEmail = AssertExact<UserType['email'], string>;
+type _CheckEmail = AssertExact<
+  UserType['email'],
+  CompliantField<string, 'pii', false>
+>;
 const _checkEmail: _CheckEmail = true;
 
 type _CheckAge = AssertExact<UserType['age'], number>;
@@ -148,7 +165,7 @@ const _checkActive: _CheckActive = true;
 // nullable fields may include undefined depending on MikroORM's inference
 type _CheckMedical = AssertExact<
   UserType['medicalRecord'],
-  string | null | undefined
+  CompliantField<string, 'phi', false> | null | undefined
 >;
 const _checkMedical: _CheckMedical = true;
 
@@ -158,9 +175,30 @@ const _checkStatus: _CheckStatus = true;
 type _CheckTags = AssertExact<UserType['tags'], string[]>;
 const _checkTags: _CheckTags = true;
 
-// ✅ Entity types are assignable to plain object shapes (em.create / em.find result)
-const plainUser: { id: string; email: string; age: number; active: boolean } =
-  {} as UserType;
+// ✅ Entity types are assignable to plain object shapes for unclassified fields
+const plainUser: { id: string; age: number; active: boolean } = {} as UserType;
+
+// ✅ Queryable fields accept plain values in `where`; others do not
+const Lookup = defineComplianceEntity({
+  name: 'Lookup',
+  properties: {
+    id: fp.uuid().primary().compliance('none'),
+    email: fp.string().compliance('pii', { queryable: true }),
+    name: fp.string().compliance('phi')
+  }
+});
+type LookupType = InferEntity<typeof Lookup>;
+type _CheckQueryable = AssertExact<
+  LookupType['email'],
+  CompliantField<string, 'pii', true>
+>;
+const _checkQueryable: _CheckQueryable = true;
+const byEmail: FilterQuery<LookupType> = { email: 'a@b.c' };
+const byEmails: FilterQuery<LookupType> = { email: { $in: ['a@b.c'] } };
+// @ts-expect-error -- `name` is not queryable
+const byName: FilterQuery<LookupType> = { name: 'Ada' };
+// @ts-expect-error -- options are only for pii, phi and pci
+fp.string().compliance('none', { queryable: true });
 
 // ✅ __classified does NOT appear as a key on the inferred entity
 type UserKeys = keyof UserType;

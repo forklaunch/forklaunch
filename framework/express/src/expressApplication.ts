@@ -366,14 +366,21 @@ export class Application<
     });
 
     const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
-      const statusCode = Number(res.statusCode);
+      // Body parsers attach their HTTP status to the error before a response
+      // status has been set. Preserve valid HTTP errors without exposing their
+      // messages or request bodies to the client.
+      const statusCode =
+        [res.statusCode, err?.status, err?.statusCode].find(
+          (status): status is number =>
+            Number.isInteger(status) && status >= 400 && status <= 599
+        ) ?? 500;
       res.locals.errorMessage = err.message;
       console.error(err);
       res.type('text/plain');
       res
-        .status(statusCode >= 400 ? statusCode : 500)
+        .status(statusCode)
         .send(
-          `Internal server error:\n\nCorrelation id: ${
+          `${statusCode >= 500 ? 'Internal server error' : 'Request could not be processed'}:\n\nCorrelation id: ${
             isForklaunchRequest(req)
               ? req.context.correlationId
               : 'No correlation ID'
