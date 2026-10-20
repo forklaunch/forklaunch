@@ -75,7 +75,12 @@ registerEncryptor(
 
 //! Define the mikro-orm options config
 const mikroOrmOptionsConfig = defineConfig({ {{#is_mongo}}
-  clientUrl: `mongodb://${validConfigInjector.resolve(
+  // Deployed, the platform sets DB_URL (Amazon DocumentDB needs tls=true,
+  // replicaSet=rs0 and retryWrites=false); locally, without it, the URL is
+  // built from DB_HOST/DB_PORT for the docker-compose replica set.
+  clientUrl:
+    getEnvVar('DB_URL') ||
+    `mongodb://${validConfigInjector.resolve(
     tokens.DB_USER
   )}:${validConfigInjector.resolve(
     tokens.DB_PASSWORD
@@ -85,7 +90,11 @@ const mikroOrmOptionsConfig = defineConfig({ {{#is_mongo}}
     tokens.DB_PORT
   )}/${validConfigInjector.resolve(
     tokens.DB_NAME
-  )}?authSource=admin&directConnection=true&replicaSet=rs0`,{{/is_mongo}}{{^is_mongo}}
+  )}?authSource=admin&directConnection=true&replicaSet=rs0`,
+  // DB_URL names no database: the database always comes from DB_NAME.
+  dbName: validConfigInjector.resolve(
+    tokens.DB_NAME
+  ),{{/is_mongo}}{{^is_mongo}}
   dbName: validConfigInjector.resolve(
     tokens.DB_NAME
   ),{{^is_in_memory_database}}
