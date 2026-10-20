@@ -1,1 +1,1 @@
-../../../../../blueprint/iam-base/surfacing.ts
+../../../../../blueprint/iam-better-auth/surfacing.ts

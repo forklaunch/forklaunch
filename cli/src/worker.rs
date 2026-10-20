@@ -1,10 +1,12 @@
 use action::ActionCommand;
+use events::EventsCommand;
 use anyhow::Result;
 use clap::{ArgMatches, Command};
 
 use crate::{CliCommand, core::command::command};
 
 mod action;
+mod events;
 
 // ── Top-level command ─────────────────────────────────────────────────────────
 
@@ -13,6 +15,7 @@ pub(crate) struct WorkerCommand {
     pause: ActionCommand,
     resume: ActionCommand,
     restart: ActionCommand,
+    events: EventsCommand,
 }
 
 impl WorkerCommand {
@@ -26,6 +29,7 @@ impl WorkerCommand {
                 "restart",
                 "restarted",
             ),
+            events: EventsCommand::new(),
         }
     }
 }
@@ -37,6 +41,7 @@ impl CliCommand for WorkerCommand {
             .subcommand(self.pause.command())
             .subcommand(self.resume.command())
             .subcommand(self.restart.command())
+            .subcommand(self.events.command())
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
@@ -44,6 +49,7 @@ impl CliCommand for WorkerCommand {
             Some(("pause", sub_matches)) => self.pause.handler(sub_matches),
             Some(("resume", sub_matches)) => self.resume.handler(sub_matches),
             Some(("restart", sub_matches)) => self.restart.handler(sub_matches),
+            Some(("events", sub_matches)) => self.events.handler(sub_matches),
             _ => unreachable!(),
         }
     }

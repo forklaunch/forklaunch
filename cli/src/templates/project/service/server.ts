@@ -1,4 +1,4 @@
-import { forklaunchExpress, {{#is_iam_configured}}PERMISSIONS, ROLES, {{/is_iam_configured}}SchemaValidator } from '@{{app_name}}/core';
+import { forklaunchExpress, SchemaValidator } from '@{{app_name}}/core';
 {{#is_iam_configured}}import { createSurfacePermissions, createSurfaceRoles } from '@{{app_name}}/iam';
 {{/is_iam_configured}}{{#is_billing_configured}}import { createSurfaceFeatures, createSurfaceSubscription } from '@{{app_name}}/billing';
 {{/is_billing_configured}}import { {{camel_case_name}}Router } from './api/routes/{{camel_case_name}}.routes';{{#is_database_enabled}}{{#is_iam_configured}}

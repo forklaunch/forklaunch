@@ -48,7 +48,7 @@ impl CliCommand for DisconnectCommand {
         };
 
         let url = format!(
-            "{}/applications/{}/github/disconnect",
+            "{}/github-app/applications/{}/github/disconnect",
             get_platform_management_api_url(),
             app_id
         );

@@ -164,6 +164,18 @@ use crate::{
     sync::all::sync_all_projects,
 };
 
+/// Shape of `GET /releases?applicationId=` — `{ releases: [...] }`.
+#[derive(Debug, Deserialize)]
+struct ExistingReleaseList {
+    #[serde(default)]
+    releases: Vec<ExistingRelease>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ExistingRelease {
+    version: String,
+}
+
 #[derive(Debug, Serialize)]
 struct CreateReleaseRequest {
     #[serde(rename = "applicationId")]
@@ -237,6 +249,20 @@ impl CliCommand for CreateCommand {
                     .help("Skip automatic sync of projects with manifest before creating release"),
             )
             .arg(
+                Arg::new("prebuilt-openapi")
+                    .long("prebuilt-openapi")
+                    .requires_all(["local", "skip-sync", "dry-run", "yes", "application-id"])
+                    .conflicts_with("git")
+                    .help("Read previously built API specifications; do not install, build, sync, or execute application code"),
+            )
+            .arg(
+                Arg::new("application-id")
+                    .long("application-id")
+                    .requires("prebuilt-openapi")
+                    .value_parser(clap::value_parser!(uuid::Uuid))
+                    .help("Verify the target application with the signed-in account before preparing its release"),
+            )
+            .arg(
                 Arg::new("yes")
                     .long("yes")
                     .short('y')
@@ -251,7 +277,25 @@ impl CliCommand for CreateCommand {
         let auth_mode = resolve_auth()?;
         require_active_account(&auth_mode)?;
         let (app_root, manifest) = require_manifest(matches)?;
-        let application_id = require_integration(&manifest)?;
+        let application_id = if let Some(id) = matches.get_one::<uuid::Uuid>("application-id") {
+            let token = crate::core::validate::require_auth()?;
+            let id = id.to_string();
+            if manifest
+                .platform_application_id
+                .as_ref()
+                .is_some_and(|saved| saved != &id)
+            {
+                bail!("The selected application differs from the integrated application");
+            }
+            super::prebuilt::verify_application(&id, &token)?;
+            id
+        } else {
+            require_integration(&manifest)?
+        };
+        let prebuilt = matches.get_one::<String>("prebuilt-openapi");
+        if prebuilt.is_some() {
+            super::prebuilt::validate_paths(&app_root, &manifest)?;
+        }
 
         let version = matches
             .get_one::<String>("release_version")
@@ -269,28 +313,29 @@ impl CliCommand for CreateCommand {
 
         // Early version conflict check (skip for dry runs)
         if !dry_run {
-            let check_url = if auth_mode.is_hmac() {
-                format!(
-                    "{}/releases/internal/{}/{}",
+            // `/releases/{app}/{version}` was never a route — the platform mounts
+            // `/releases/:id` and `/releases?applicationId=`. The 404 landed in the
+            // `is_success()` check below, so this guard silently never fired and a
+            // duplicate version was only caught by the create itself, several
+            // minutes of syncing and uploading later. There is no internal list
+            // route, so under HMAC the create remains the only check.
+            if !auth_mode.is_hmac() {
+                let check_url = format!(
+                    "{}/releases?applicationId={}",
                     get_platform_management_api_url(),
-                    application_id,
-                    version
-                )
-            } else {
-                format!(
-                    "{}/releases/{}/{}",
-                    get_platform_management_api_url(),
-                    application_id,
-                    version
-                )
-            };
-
-            if let Ok(response) = http_client::get_with_auth(&auth_mode, &check_url) {
-                if response.status().is_success() {
-                    bail!(
-                        "Release version '{}' already exists. Bump the version in your manifest and try again.",
-                        version
-                    );
+                    urlencoding::encode(&application_id)
+                );
+                if let Ok(response) = http_client::get_with_auth(&auth_mode, &check_url) {
+                    if response.status().is_success() {
+                        if let Ok(list) = response.json::<ExistingReleaseList>() {
+                            if list.releases.iter().any(|r| r.version == *version) {
+                                bail!(
+                                    "Release version '{}' already exists. Bump the version in your manifest and try again.",
+                                    version
+                                );
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -431,8 +476,8 @@ impl CliCommand for CreateCommand {
         let workspace_root = find_workspace_root(&app_root)?;
         let modules_path = get_modules_path(&workspace_root)?;
 
-        // Step 0.5: Install dependencies and build in modules path
-        {
+        // A prebuilt release reads data only; generated code ran in a separate worker.
+        if prebuilt.is_none() {
             let runtime_cmd = if manifest.runtime == "bun" {
                 "bun"
             } else {
@@ -574,11 +619,20 @@ impl CliCommand for CreateCommand {
         }
 
         // Step 2: Export OpenAPI specs
-        let openapi_path = app_root.join(".forklaunch").join("openapi");
+        let openapi_path = if let Some(path) = prebuilt {
+            super::prebuilt::spec_directory(&app_root, path)?
+        } else {
+            app_root.join(".forklaunch").join("openapi")
+        };
         create_dir_all(&openapi_path).with_context(|| "Failed to create openapi directory")?;
-        let _openapi_guard = RemoveDirGuard::new(openapi_path.clone());
-
-        let exported_services = export_all_services(&app_root, &manifest, &openapi_path)?;
+        let _openapi_guard = prebuilt
+            .is_none()
+            .then(|| RemoveDirGuard::new(openapi_path.clone()));
+        let exported_services = if prebuilt.is_some() {
+            super::prebuilt::validate_specs(&openapi_path, &manifest)?
+        } else {
+            export_all_services(&app_root, &manifest, &openapi_path)?
+        };
 
         log_ok!(
             stdout,
@@ -938,7 +992,13 @@ impl CliCommand for CreateCommand {
         const EXCLUDED_VARS: &[&str] = &["DOTENV_FILE_PATH"];
         scoped_env_vars.retain(|v| !EXCLUDED_VARS.contains(&v.name.as_str()));
 
-        // Only keep application-level variables if they match the allowed criteria
+        // A source-declared requirement must survive promotion to application
+        // scope. The allowlist below only filters incidental local configuration.
+        let source_declared_vars: HashSet<String> = project_env_vars
+            .values()
+            .flatten()
+            .map(|usage| usage.var_name.clone())
+            .collect();
         let project_names_for_retain: Vec<String> =
             manifest.projects.iter().map(|p| p.name.clone()).collect();
         scoped_env_vars.retain(|v| {
@@ -946,7 +1006,12 @@ impl CliCommand for CreateCommand {
                 return true;
             }
 
-            is_allowed_application_var(&v.name, &env_var_components, &project_names_for_retain)
+            is_allowed_application_var(
+                &v.name,
+                &env_var_components,
+                &project_names_for_retain,
+                &source_declared_vars,
+            )
         });
 
         // Cross-scope deduplication: remove service/worker copies when an application-scope copy exists
@@ -1023,6 +1088,12 @@ impl CliCommand for CreateCommand {
                 },
                 scope_id: v.scope_id.clone(),
                 optional: v.optional,
+                used_by: {
+                    let mut used_by = v.used_by.clone();
+                    used_by.sort();
+                    used_by.dedup();
+                    used_by
+                },
                 component: env_var_components.get(&v.name).map(
                     |(component_type, property, target, path, passthrough)| {
                         EnvironmentVariableComponent {
@@ -2047,7 +2118,14 @@ fn is_allowed_application_var(
         ),
     >,
     project_names: &[String],
+    source_declared_vars: &HashSet<String>,
 ) -> bool {
+    // Shared custom variables (including ENCRYPTION_KEY) are requirements too,
+    // even when they are absent from the platform's built-in name registry.
+    if source_declared_vars.contains(var_name) {
+        return true;
+    }
+
     // Allow all vars that are inherently application-scoped (observability, shared keys, inter-service URLs)
     if is_application_scoped_var(var_name, project_names) {
         return true;
@@ -2483,6 +2561,7 @@ mod tests {
                         queue: None,
                         object_store: None,
                         redis_partition: None,
+                        capabilities: None,
                     }),
                     routers: None,
                     metadata: None,
@@ -2516,6 +2595,57 @@ mod tests {
             platform_organization_id: None,
             compliance: None,
         }
+    }
+
+    #[test]
+    fn shared_source_requirements_survive_application_scope_filter() {
+        let dir = TempDir::new().unwrap();
+        for project in ["iam", "records"] {
+            let path = dir.path().join(project);
+            fs::create_dir_all(&path).unwrap();
+            fs::write(path.join("registrations.ts"), r#"
+                const config = {
+                    ENCRYPTION_KEY: { type: string, value: getEnvVar('ENCRYPTION_KEY') },
+                    SHARED_VENDOR_TOKEN: { type: optional(string), value: getEnvVar('SHARED_VENDOR_TOKEN') }
+                };
+            "#).unwrap();
+        }
+        // A required read outside registrations must win over an optional declaration.
+        fs::write(dir.path().join("records/mikro-orm.config.ts"),
+            "const key = getEnvVar('ENCRYPTION_KEY'); const token = getEnvVar('SHARED_VENDOR_TOKEN');"
+        ).unwrap();
+        let sightings = find_all_env_vars(dir.path(), &RenderedTemplatesCache::new()).unwrap();
+        let names: HashSet<String> = sightings
+            .values()
+            .flatten()
+            .map(|v| v.var_name.clone())
+            .collect();
+        let manifest = create_test_manifest(vec![
+            ("iam", ProjectType::Service),
+            ("records", ProjectType::Service),
+        ]);
+        let scoped = determine_env_var_scopes(&sightings, &manifest).unwrap();
+        let projects = vec!["iam".into(), "records".into()];
+        for name in ["ENCRYPTION_KEY", "SHARED_VENDOR_TOKEN"] {
+            let requirement = scoped.iter().find(|v| v.name == name).unwrap();
+            assert_eq!(requirement.scope, EnvScope::Application);
+            assert_eq!(requirement.used_by, projects);
+            assert_eq!(requirement.optional, Some(false));
+            assert!(is_allowed_application_var(
+                name,
+                &HashMap::new(),
+                &projects,
+                &names
+            ));
+            assert!(!is_platform_managed_var(name));
+        }
+        // Unused local configuration is not promoted into deployment requirements.
+        assert!(!is_allowed_application_var(
+            "UNUSED_LOCAL_TOKEN",
+            &HashMap::new(),
+            &projects,
+            &names
+        ));
     }
 
     fn create_test_docker_compose(services: Vec<(&str, Vec<(&str, &str)>)>) -> String {

@@ -1,4 +1,4 @@
-import { getEnvVar } from '@forklaunch/common';
+{{#is_database_enabled}}import { getEnvVar } from '@forklaunch/common';{{/is_database_enabled}}
 import {
   {{#is_database_enabled}}AnyMikroORM,
   {{/is_database_enabled}}BlueprintTestHarness,

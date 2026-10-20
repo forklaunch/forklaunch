@@ -24,10 +24,21 @@ export const handleWebhookEvent = handlers.post(
       'stripe-signature': string
     },
     responses: {
-      200: string
+      200: string,
+      400: string
     }
   },
   async (req, res) => {
+    // A managed instance holds no webhook secret: Stripe's events for its
+    // connected account arrive from the platform at /platform-events/payments,
+    // verified with verifyPlatformEvent (api/platformEvents/payments.ts).
+    if (!STRIPE_WEBHOOK_SECRET) {
+      return res
+        .status(400)
+        .send(
+          'Stripe webhooks are not received here without STRIPE_WEBHOOK_SECRET; a managed instance receives them as platform events'
+        );
+    }
     const signature = req.headers['stripe-signature'];
     let event: Stripe.Event;
     try {

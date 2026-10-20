@@ -17,6 +17,7 @@ use crate::{
         ast::infrastructure::compliance::{scan_all_compliance, scan_entity_compliance},
         command::command,
         hmac::AuthMode,
+        static_analysis::route_analyzer,
         http_client::post_with_auth,
         validate::require_manifest,
     },
@@ -162,27 +163,65 @@ impl CliCommand for AuditCommand {
             })
             .collect();
 
-        // Collect route data from OpenAPI spec (if available)
-        let (routes, specs_found) = collect_routes_from_openapi(&app_root, modules_path);
-        if !specs_found {
-            // Write to stderr so stdout stays parseable for --json / --output
+        // Every route, read from the source: each contract's access level and auth, plus routes
+        // registered outside the framework. Exported OpenAPI specs are the fallback for apps
+        // whose routes the scan cannot read (the specs carry no access level, only the auth scheme).
+        let route_scan = route_analyzer::scan_routes(&modules_path_buf);
+        if !route_scan.unreadable.is_empty() {
             let mut stderr = StandardStream::stderr(ColorChoice::Always);
             log_warn!(
                 stderr,
-                "No OpenAPI specs found — route access levels were NOT audited."
-            );
-            log_info!(
-                stderr,
-                "Run `forklaunch openapi export` and re-run the audit to include routes."
+                "{} file(s) could not be fully parsed; their routes may be missing: {}",
+                route_scan.unreadable.len(),
+                route_scan.unreadable.join(", ")
             );
         }
+        let mut routes: Vec<RouteReport> = route_scan
+            .routes
+            .into_iter()
+            .map(|r| RouteReport {
+                path: r.path,
+                method: r.method,
+                access: r.access,
+                auth: r.auth,
+                source: Some(r.source),
+                file: Some(r.file),
+                line: Some(r.line),
+            })
+            .collect();
+        let mut routes_audited = !routes.is_empty() && route_scan.unreadable.is_empty();
+        if routes.is_empty() {
+            let (spec_routes, specs_found) = collect_routes_from_openapi(&app_root, modules_path);
+            routes = spec_routes;
+            routes_audited = specs_found;
+            if !specs_found {
+                // Write to stderr so stdout stays parseable for --json / --output
+                let mut stderr = StandardStream::stderr(ColorChoice::Always);
+                log_warn!(stderr, "No routes found in the source or in exported OpenAPI specs.");
+            }
+        }
 
-        // Run offline wiring + sensitive-field checks
-        let local_findings = super::checks::run_local_checks(&modules_path_buf)
-            .unwrap_or_else(|e| {
-                let _ = writeln!(stdout, "[WARN] Failed to run local compliance checks: {}", e);
-                Vec::new()
-            });
+        // Run offline wiring + sensitive-field checks. When they fail, none of them is listed
+        // as run: an empty findings list beside a full check list would read as all passed.
+        let (mut local_findings, local_checks) =
+            match super::checks::run_local_checks(&modules_path_buf) {
+                Ok(findings) => (findings, super::checks::LOCAL_CHECK_IDS.to_vec()),
+                Err(e) => {
+                    let _ = writeln!(stdout, "[WARN] Failed to run local compliance checks: {}", e);
+                    let deps_only: Vec<&'static str> = super::checks::LOCAL_CHECK_IDS
+                        .iter()
+                        .copied()
+                        .filter(|id| id.starts_with("dependency-"))
+                        .collect();
+                    (Vec::new(), deps_only)
+                }
+            };
+        // Known-vulnerable and malicious packages pinned by the app's lockfiles (OSV).
+        local_findings.extend(super::deps::scan(
+            &app_root,
+            &manifest.app_name,
+            super::deps::Lookup::Network,
+        ));
 
         // The same deterministic scan `compliance audit-tenancy` runs. Best
         // effort: a report that cannot scan is still worth sending, it just
@@ -224,6 +263,7 @@ impl CliCommand for AuditCommand {
             modules: module_ctx.module_reports(),
             entities,
             local_findings,
+            local_checks,
             tenancy,
             secrets: SecretsReport {
                 declared: compliance.secrets.clone(),
@@ -269,7 +309,7 @@ impl CliCommand for AuditCommand {
 
         // Pretty terminal output
         print_header(&mut stdout)?;
-        print_summary(&mut stdout, &report, specs_found)?;
+        print_summary(&mut stdout, &report, routes_audited)?;
 
         match &platform_response {
             Ok(resp) => {
@@ -412,7 +452,7 @@ fn print_summary(
         out.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
         writeln!(
             out,
-            " (no OpenAPI specs found — run `forklaunch openapi export`)"
+            " (none found in the source or in exported OpenAPI specs)"
         )?;
         out.reset()?;
     }
@@ -452,32 +492,70 @@ struct DimensionCoverage {
     unscored: Vec<String>,
 }
 
-/// Client-side fallback for platforms that predate server-computed
-/// dimension scores: derive the scorecard from finding categories using
-/// the same mapping the platform uses.
-fn derive_dimension_scores(findings: &[PlatformFinding]) -> DimensionScores {
-    fn dims_for(category: &str) -> &'static [&'static str] {
-        match category {
-            "encryption" => &["security", "compliance"],
-            "access-control" => &["security", "governance"],
-            "tenant-isolation" => &["security", "compliance"],
-            "data-retention" => &["compliance", "governance"],
-            "multi-az" | "capacity" => &["scale"],
-            "alerting" => &["observability"],
-            "logging" => &["observability", "governance"],
-            "audit" => &["governance", "compliance"],
-            _ => &["compliance"],
-        }
+/// Category -> dimensions mapping. Mirrors the platform's
+/// `CATEGORY_DIMENSIONS` (the source of truth); unknown categories count
+/// against compliance.
+fn dims_for_category(category: &str) -> &'static [&'static str] {
+    match category {
+        "encryption" => &["security", "compliance"],
+        "access-control" => &["security", "governance"],
+        "tenant-isolation" => &["security", "compliance"],
+        "data-retention" => &["compliance", "governance"],
+        "multi-az" | "capacity" => &["scale"],
+        "alerting" => &["observability"],
+        "logging" => &["observability", "governance"],
+        "audit" => &["governance", "compliance"],
+        "construction" => &["governance"],
+        _ => &["compliance"],
     }
-    let mut totals: std::collections::HashMap<&str, f64> = Default::default();
+}
+
+/// Lowest score a rail can reach from findings alone. A construction
+/// failure is an ordinary (critical) governance finding, not a zero.
+const MIN_RAIL_SCORE: f64 = 5.0;
+
+/// JavaScript `Math.round`: halves round toward +infinity.
+fn js_round(x: f64) -> f64 {
+    (x + 0.5).floor()
+}
+
+/// `retained` fraction -> 0..100 score with one decimal, floored at
+/// `MIN_RAIL_SCORE`. Matches the platform's `clamp`.
+fn clamp_rail(retained: f64) -> f64 {
+    MIN_RAIL_SCORE.max(js_round(retained * 100.0 * 10.0) / 10.0)
+}
+
+/// Client-side port of the platform's `computeDimensionScores` (the shared
+/// formula), used when the platform response carries no server-computed
+/// dimension scores and by `score --offline`. Findings compound
+/// multiplicatively: each finding retains `1 - points/100` of the rail.
+fn derive_dimension_scores(findings: &[PlatformFinding]) -> DimensionScores {
+    compute_dimension_scores(findings.iter().map(|f| (f.category.as_str(), f.points)))
+}
+
+fn compute_dimension_scores<'a>(
+    findings: impl IntoIterator<Item = (&'a str, f64)>,
+) -> DimensionScores {
+    let mut retained: std::collections::HashMap<&str, f64> = [
+        ("compliance", 1.0),
+        ("security", 1.0),
+        ("scale", 1.0),
+        ("observability", 1.0),
+        ("governance", 1.0),
+    ]
+    .into_iter()
+    .collect();
     let mut touched: std::collections::HashSet<&str> = Default::default();
-    for finding in findings {
-        for dim in dims_for(&finding.category) {
-            *totals.entry(dim).or_insert(0.0) += finding.points;
+    for (category, points) in findings {
+        let severity = points.clamp(0.0, 100.0) / 100.0;
+        for dim in dims_for_category(category) {
+            if let Some(r) = retained.get_mut(dim) {
+                *r *= 1.0 - severity;
+            }
             touched.insert(dim);
         }
     }
-    let score = |dim: &str| ((100.0 - totals.get(dim).copied().unwrap_or(0.0)).max(0.0) * 10.0).round() / 10.0;
+    let score = |dim: &str| clamp_rail(retained[dim]);
     DimensionScores {
         compliance: score("compliance"),
         security: score("security"),
@@ -485,7 +563,7 @@ fn derive_dimension_scores(findings: &[PlatformFinding]) -> DimensionScores {
         observability: score("observability"),
         governance: score("governance"),
         coverage: Some(DimensionCoverage {
-            unscored: ["scale", "observability", "compliance", "security", "governance"]
+            unscored: ["scale", "observability"]
                 .iter()
                 .filter(|d| !touched.contains(**d))
                 .map(|d| d.to_string())
@@ -738,28 +816,42 @@ fn print_routes(out: &mut StandardStream, report: &ComplianceReport) -> Result<(
     writeln!(out, "  ── Route Access Levels ──")?;
     out.reset()?;
 
-    writeln!(
-        out,
-        "  {:<8} {:<40} {}",
-        "METHOD", "PATH", "ACCESS"
-    )?;
-    writeln!(out, "  {}", "─".repeat(64))?;
+    writeln!(out, "  {:<8} {:<40} {:<18} {}", "METHOD", "PATH", "ACCESS", "AUTH")?;
+    writeln!(out, "  {}", "─".repeat(88))?;
 
     for route in &report.routes {
-        let access = route.access.as_deref().unwrap_or("NONE");
+        let outside = route.source == Some(route_analyzer::RouteSource::OutsideFramework);
+        let access = if outside {
+            "outside framework"
+        } else {
+            route.access.as_deref().unwrap_or("NONE")
+        };
+        // Only a contract states an access level, so only a contract can be missing its auth.
+        let from_contract = route.source == Some(route_analyzer::RouteSource::Contract);
+        let missing_auth = from_contract && access != "public" && route.auth.is_none();
         let access_color = match access {
-            "public" => Color::Yellow,
+            _ if missing_auth => Color::Red,
+            "public" | "outside framework" => Color::Yellow,
             "authenticated" => Color::Cyan,
             "protected" => Color::Green,
             "internal" => Color::Blue,
-            "NONE" => Color::Red,
             _ => Color::White,
         };
 
         write!(out, "  {:<8} {:<40} ", route.method, route.path)?;
         out.set_color(ColorSpec::new().set_fg(Some(access_color)))?;
-        writeln!(out, "{}", access.to_uppercase())?;
+        write!(out, "{:<18} ", access.to_uppercase())?;
         out.reset()?;
+        let auth = match (&route.auth, missing_auth) {
+            (Some(a), _) => a.split_whitespace().collect::<Vec<_>>().join(" "),
+            (None, true) => "MISSING".to_string(),
+            (None, false) => "-".to_string(),
+        };
+        let at = match (&route.file, route.line) {
+            (Some(f), Some(l)) => format!("  {}:{}", f, l),
+            _ => String::new(),
+        };
+        writeln!(out, "{}{}", auth.chars().take(36).collect::<String>(), at)?;
     }
 
     Ok(())
@@ -890,6 +982,8 @@ struct ComplianceReport {
     modules: Vec<ModuleReport>,
     entities: Vec<EntityReport>,
     local_findings: Vec<super::checks::LocalFinding>,
+    /// Every local check this CLI ran; a listed check with no finding passed.
+    local_checks: Vec<&'static str>,
     /// Tenant-binding discipline, from the same deterministic scan as
     /// `compliance audit-tenancy`.
     ///
@@ -935,6 +1029,16 @@ struct RouteReport {
     method: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     access: Option<String>,
+    /// The contract's auth expression as written, e.g. `jwtAuth(MEMBER_ROLES)`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    auth: Option<String>,
+    /// `contract` or `outside-framework`; absent for routes read from an OpenAPI spec.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source: Option<route_analyzer::RouteSource>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    line: Option<usize>,
 }
 
 /// Whether a classification level causes the framework to encrypt the column.
@@ -1187,10 +1291,21 @@ fn parse_openapi_routes(path: &Path) -> Result<Vec<RouteReport>> {
                         .and_then(|v| v.as_str())
                         .map(String::from);
 
+                    // An operation's own `security` overrides the document's; an empty list
+                    // (`security: []`) turns authentication off for that operation.
+                    let security = operation.get("security").or_else(|| spec.get("security"));
+                    let auth = security
+                        .and_then(|s| s.as_array())
+                        .filter(|a| !a.is_empty())
+                        .map(|a| serde_json::Value::Array(a.clone()).to_string());
                     routes.push(RouteReport {
                         path: path_str.clone(),
                         method: method.to_uppercase(),
                         access,
+                        auth,
+                        source: None,
+                        file: None,
+                        line: None,
                     });
                 }
             }
@@ -1198,4 +1313,78 @@ fn parse_openapi_routes(path: &Path) -> Result<Vec<RouteReport>> {
     }
 
     Ok(routes)
+}
+
+#[cfg(test)]
+mod dimension_score_tests {
+    use super::*;
+
+    #[derive(Deserialize)]
+    struct Vectors {
+        cases: Vec<Case>,
+    }
+    #[derive(Deserialize)]
+    struct Case {
+        name: String,
+        findings: Vec<VectorFinding>,
+        expect: Expect,
+    }
+    #[derive(Deserialize)]
+    struct VectorFinding {
+        category: String,
+        points: f64,
+    }
+    #[derive(Deserialize)]
+    struct Expect {
+        compliance: f64,
+        security: f64,
+        scale: f64,
+        observability: f64,
+        governance: f64,
+        unscored: Vec<String>,
+    }
+
+    #[test]
+    fn dimension_scores_match_platform_golden_vectors() {
+        let vectors: Vectors =
+            serde_json::from_str(include_str!("dimension-scores.vectors.json")).unwrap();
+        assert!(!vectors.cases.is_empty());
+        for case in vectors.cases {
+            let findings: Vec<PlatformFinding> = case
+                .findings
+                .iter()
+                .map(|f| PlatformFinding {
+                    severity: "medium".into(),
+                    category: f.category.clone(),
+                    description: String::new(),
+                    points: f.points,
+                })
+                .collect();
+            let got = derive_dimension_scores(&findings);
+            let e = &case.expect;
+            for (dim, g, want) in [
+                ("compliance", got.compliance, e.compliance),
+                ("security", got.security, e.security),
+                ("scale", got.scale, e.scale),
+                ("observability", got.observability, e.observability),
+                ("governance", got.governance, e.governance),
+            ] {
+                assert_eq!(g, want, "case {:?}: {}", case.name, dim);
+            }
+            assert_eq!(
+                got.coverage.map(|c| c.unscored).unwrap_or_default(),
+                e.unscored,
+                "case {:?}: unscored",
+                case.name
+            );
+        }
+    }
+
+    #[test]
+    fn js_round_rounds_halves_up() {
+        assert_eq!(js_round(0.5), 1.0);
+        assert_eq!(js_round(-0.5), 0.0);
+        assert_eq!(js_round(2.5), 3.0);
+        assert_eq!(js_round(-2.5), -2.0);
+    }
 }

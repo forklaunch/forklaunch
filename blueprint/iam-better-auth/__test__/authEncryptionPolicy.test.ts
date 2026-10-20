@@ -1,0 +1,144 @@
+import {
+  FieldEncryptor,
+  getCurrentTenantId,
+  withEncryptionContext
+} from '@forklaunch/core/persistence';
+import { describe, expect, it } from 'vitest';
+import {
+  AUTH_ENCRYPTION_POLICY,
+  AUTH_ENCRYPTION_CONTEXT,
+  createAuthEncryptionOrm,
+  withAuthEncryptionPolicy
+} from '../domain/utils/authEncryptionPolicy.util';
+function fixture() {
+  const seen: string[] = [];
+  const rows: { id: string; encryptionPolicy?: string }[] = [];
+  const forkOptions: unknown[] = [];
+  const orm = {
+    getMetadata: () => ({ find: (name: unknown) => ({ className: name }) }),
+    em: {
+      fork: (options: unknown) => {
+        forkOptions.push(options);
+        return {
+          find: async (
+            _model: unknown,
+            _criteria: unknown,
+            _options: unknown
+          ) => rows,
+          count: async (_model: unknown, _criteria: unknown) =>
+            rows.filter(
+              (row) => row.encryptionPolicy !== AUTH_ENCRYPTION_POLICY
+            ).length
+        };
+      },
+      create: (_model: unknown, data: unknown) => data,
+      find: async (_model: unknown, _criteria: unknown) => {
+        seen.push(getCurrentTenantId());
+        return rows;
+      },
+      findOne: async (_model: unknown, _criteria: unknown) => {
+        seen.push(getCurrentTenantId());
+        return null;
+      },
+      nativeUpdate: async (_model: unknown, _criteria: unknown, _update: unknown) => 1,
+      flush: async () => {
+        seen.push(getCurrentTenantId());
+      },
+      transactional: async (callback: () => Promise<void>) => {
+        await callback();
+        seen.push(getCurrentTenantId());
+      }
+    }
+  };
+  return { orm: createAuthEncryptionOrm(orm), seen, rows, forkOptions };
+}
+describe('fresh iam-service-v1 policy', () => {
+  it('keeps app keys and business namespaces cryptographically separate', () => {
+    const appA = new FieldEncryptor('synthetic-app-a-master-key-long-enough');
+    const appB = new FieldEncryptor('synthetic-app-b-master-key-long-enough');
+    const encrypted = appA.encrypt(
+      'synthetic-secret',
+      AUTH_ENCRYPTION_CONTEXT
+    )!;
+    expect(encrypted).not.toContain('synthetic-secret');
+    expect(appA.decrypt(encrypted, AUTH_ENCRYPTION_CONTEXT)).toBe(
+      'synthetic-secret'
+    );
+    expect(() => appA.decrypt(encrypted, 'organization-a')).toThrow();
+    expect(() => appB.decrypt(encrypted, AUTH_ENCRYPTION_CONTEXT)).toThrow();
+  });
+  it('marks ciphertext and requires explicit scope', () => {
+    const f = fixture();
+    expect(AUTH_ENCRYPTION_POLICY).toBe('iam-service-v1');
+    expect(() => f.orm.em.create('Account', {})).toThrow('scope');
+    expect(
+      withAuthEncryptionPolicy(() => f.orm.em.create('Account', { user: 'a' }))
+    ).toEqual({ user: 'a', encryptionPolicy: AUTH_ENCRYPTION_POLICY });
+  });
+  it('covers account, session flush and signing key operations through transaction commit', async () => {
+    const f = fixture();
+    f.rows.push({ id: 'a', encryptionPolicy: AUTH_ENCRYPTION_POLICY });
+    await withAuthEncryptionPolicy(() =>
+      f.orm.em.transactional(async () => {
+        await f.orm.em.findOne('Account', { id: 'a' });
+        f.orm.em.create('Session', {});
+        await f.orm.em.flush();
+        f.orm.em.create('Jwks', {});
+        await f.orm.em.flush();
+      })
+    );
+    expect(f.seen).toEqual(Array(4).fill(AUTH_ENCRYPTION_CONTEXT));
+    expect(f.forkOptions).toEqual([{ keepTransactionContext: true }]);
+    expect(getCurrentTenantId()).toBe('');
+  });
+  it('refuses legacy ciphertext before hydration', async () => {
+    const f = fixture();
+    f.rows.push({ id: 'old' });
+    await expect(
+      withAuthEncryptionPolicy(() => f.orm.em.findOne('Account', { id: 'old' }))
+    ).rejects.toThrow('migration');
+    expect(f.seen).toEqual([]);
+  });
+  it('permits complete valid signing-key history and rejects invalid markers beyond a page', async () => {
+    const f = fixture();
+    f.rows.push(
+      ...Array.from({ length: 1001 }, (_, i) => ({
+        id: String(i),
+        encryptionPolicy: AUTH_ENCRYPTION_POLICY
+      }))
+    );
+    await expect(
+      withAuthEncryptionPolicy(() => f.orm.em.find('Jwks', {}))
+    ).resolves.toHaveLength(1001);
+    f.rows.push({ id: 'legacy-after-first-page' });
+    await expect(
+      withAuthEncryptionPolicy(() => f.orm.em.find('Jwks', {}))
+    ).rejects.toThrow('migration');
+    expect(f.seen).toEqual([AUTH_ENCRYPTION_CONTEXT]);
+  });
+  it('refuses metadata rewrites on auth rows without restricting unrelated model fields', async () => {
+    const f = fixture();
+    await expect(
+      withAuthEncryptionPolicy(() =>
+        f.orm.em.nativeUpdate('Account', {}, { encryptionPolicy: 'legacy' })
+      )
+    ).rejects.toThrow('migration');
+    await expect(
+      f.orm.em.nativeUpdate('OtherModel', {}, { encryptionPolicy: 'unrelated' })
+    ).resolves.toBe(1);
+  });
+  it('does not replace business tenant contexts or leak into concurrent work', async () => {
+    const f = fixture();
+    await Promise.all([
+      withAuthEncryptionPolicy(async () => {
+        await Promise.resolve();
+        expect(getCurrentTenantId()).toBe(AUTH_ENCRYPTION_CONTEXT);
+      }),
+      withEncryptionContext('organization-a', async () => {
+        await Promise.resolve();
+        expect(getCurrentTenantId()).toBe('organization-a');
+        expect(() => f.orm.em.create('Account', {})).toThrow('incompatible');
+      })
+    ]);
+  });
+});

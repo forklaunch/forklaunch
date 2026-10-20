@@ -4,9 +4,11 @@ use controller::ControllerCommand;
 use create::CreateCommand;
 use domain::DomainCommand;
 use hosting::HostingCommand;
+use readiness::ReadinessCommand;
 use resize::ResizeCommand;
 use route::RouteCommand;
 use services::ServicesCommand;
+use website::WebsiteCommand;
 
 use crate::{CliCommand, core::command::command};
 
@@ -14,9 +16,11 @@ mod controller;
 mod create;
 mod domain;
 mod hosting;
+mod readiness;
 mod resize;
 mod route;
 mod services;
+mod website;
 
 #[derive(Debug)]
 pub(crate) struct AppCommand {
@@ -24,9 +28,11 @@ pub(crate) struct AppCommand {
     services: ServicesCommand,
     domain: DomainCommand,
     hosting: HostingCommand,
+    readiness: ReadinessCommand,
     resize: ResizeCommand,
     route: RouteCommand,
     controller: ControllerCommand,
+    website: WebsiteCommand,
 }
 
 impl AppCommand {
@@ -36,9 +42,11 @@ impl AppCommand {
             services: ServicesCommand::new(),
             domain: DomainCommand::new(),
             hosting: HostingCommand::new(),
+            readiness: ReadinessCommand::new(),
             resize: ResizeCommand::new(),
             route: RouteCommand::new(),
             controller: ControllerCommand::new(),
+            website: WebsiteCommand::new(),
         }
     }
 }
@@ -51,9 +59,11 @@ impl CliCommand for AppCommand {
             .subcommand(self.services.command())
             .subcommand(self.domain.command())
             .subcommand(self.hosting.command())
+            .subcommand(self.readiness.command())
             .subcommand(self.resize.command())
             .subcommand(self.route.command())
             .subcommand(self.controller.command())
+            .subcommand(self.website.command())
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
@@ -62,9 +72,11 @@ impl CliCommand for AppCommand {
             Some(("services", matches)) => self.services.handler(matches),
             Some(("domain", matches)) => self.domain.handler(matches),
             Some(("hosting", matches)) => self.hosting.handler(matches),
+            Some(("readiness", matches)) => self.readiness.handler(matches),
             Some(("resize", matches)) => self.resize.handler(matches),
             Some(("route", matches)) => self.route.handler(matches),
             Some(("controller", matches)) => self.controller.handler(matches),
+            Some(("website", matches)) => self.website.handler(matches),
             _ => unreachable!(),
         }
     }

@@ -88,14 +88,33 @@ impl CliCommand for StatusCommand {
             return Ok(());
         };
         let settings_url = format!(
-            "{}/applications/{}/github/settings",
+            "{}/github-app/applications/{}/github/settings",
             get_platform_management_api_url(),
             app_id
         );
-        let Ok(resp) = http_client::get(&settings_url) else {
-            return Ok(());
+        // Silence here is indistinguishable from "no repository connected".
+        // These two arms returned Ok(()) without a word, and while the URL
+        // above was missing its /github-app prefix every call 404'd — so a
+        // connected repository and a broken one printed exactly the same
+        // thing: nothing. The command that would have exposed the breakage
+        // was the one hiding it.
+        let resp = match http_client::get(&settings_url) {
+            Ok(resp) => resp,
+            Err(error) => {
+                log_warn!(
+                    stdout,
+                    "Could not read this application's repository settings: {}",
+                    error
+                );
+                return Ok(());
+            }
         };
         if !resp.status().is_success() {
+            log_warn!(
+                stdout,
+                "Could not read this application's repository settings (status {}).",
+                resp.status()
+            );
             return Ok(());
         }
         let body: serde_json::Value = resp

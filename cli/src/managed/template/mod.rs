@@ -5,6 +5,7 @@ use crate::{CliCommand, core::command::command};
 
 mod clear_app_claim_hook;
 mod create;
+mod feature_settings;
 mod list;
 mod promote;
 mod publish;
@@ -15,6 +16,7 @@ mod vars;
 
 use clear_app_claim_hook::ClearAppClaimHookCommand;
 use create::CreateCommand;
+use feature_settings::GatewaySettingsCommand;
 use list::ListCommand;
 use promote::PromoteCommand;
 use publish::PublishCommand;
@@ -34,6 +36,7 @@ pub(super) struct TemplateCommand {
     vars: VarsCommand,
     relay: RelayCommand,
     promote: PromoteCommand,
+    gateway_settings: GatewaySettingsCommand,
 }
 
 impl TemplateCommand {
@@ -48,6 +51,7 @@ impl TemplateCommand {
             vars: VarsCommand::new(),
             relay: RelayCommand::new(),
             promote: PromoteCommand::new(),
+            gateway_settings: GatewaySettingsCommand::new(),
         }
     }
 }
@@ -77,7 +81,10 @@ impl CliCommand for TemplateCommand {
              `forklaunch managed template vars --help`.\n\n\
              `relay` declares where a provider's callback (Epic, Google, a webhook) is handed\n\
              on each instance, and prints the one callback URL to register with the\n\
-             provider. See `forklaunch managed template relay --help`.",
+             provider. See `forklaunch managed template relay --help`.\n\n\
+             `gateway-settings` shows the product's SMS, WhatsApp, voice, email and payments\n\
+             settings (set with `update --sms-* / --whatsapp-* / --voice-* / --email-* /\n\
+             --payments-*`) and the platform defaults under them.",
         )
         .subcommand(self.list.command())
         .subcommand(self.create.command())
@@ -88,6 +95,7 @@ impl CliCommand for TemplateCommand {
         .subcommand(self.vars.command())
         .subcommand(self.promote.command())
         .subcommand(self.relay.command())
+        .subcommand(self.gateway_settings.command())
         .subcommand_required(true)
     }
 
@@ -104,6 +112,7 @@ impl CliCommand for TemplateCommand {
             Some(("vars", sub_matches)) => self.vars.handler(sub_matches),
             Some(("promote", sub_matches)) => self.promote.handler(sub_matches),
             Some(("relay", sub_matches)) => self.relay.handler(sub_matches),
+            Some(("gateway-settings", sub_matches)) => self.gateway_settings.handler(sub_matches),
             _ => unreachable!(),
         }
     }

@@ -194,12 +194,39 @@ impl DefaultedEnvCollector {
     }
 }
 
+/// Whether a fallback actually hands the reader a value.
+///
+/// `?? undefined` and `|| undefined` are not defaults. They are the shape you
+/// write to normalise an absent-or-empty variable into an explicit `undefined`
+/// for a caller that treats it as unset — `process.env.S3_URL || undefined`
+/// exists so an empty env var is not passed to the S3 client as an endpoint.
+/// `?? null` is the same. Counting those as defaults reported a variable the
+/// code genuinely needs as optional, which is the worse direction to be wrong
+/// in: the platform's config gate passes and the service fails at runtime.
+///
+/// Anything that does yield a value still counts, `?? DEFAULT_PATH` included.
+/// Only the two spellings of "no value" are excluded.
+fn supplies_a_value(expr: &Expression<'_>) -> bool {
+    match expr {
+        Expression::NullLiteral(_) => false,
+        // `undefined` is a global identifier in oxc, not a literal.
+        Expression::Identifier(ident) => ident.name != "undefined",
+        Expression::ParenthesizedExpression(inner) => supplies_a_value(&inner.expression),
+        // `void 0` is `undefined` written the long way.
+        Expression::UnaryExpression(unary) => {
+            unary.operator != oxc_ast::ast::UnaryOperator::Void
+        }
+        _ => true,
+    }
+}
+
 impl<'a> Visit<'a> for DefaultedEnvCollector {
     fn visit_logical_expression(&mut self, expr: &oxc_ast::ast::LogicalExpression<'a>) {
         if matches!(
             expr.operator,
             oxc_ast::ast::LogicalOperator::Coalesce | oxc_ast::ast::LogicalOperator::Or
-        ) {
+        ) && supplies_a_value(&expr.right)
+        {
             self.record(&expr.left);
         }
 
@@ -267,8 +294,8 @@ impl<'a> Visit<'a> for ProcessEnvVisitor {
 /// The whole-tree sweep uses this rather than [`extract_env_vars_from_source`]:
 /// outside a config-injector chain there is no `type:` to read, so every
 /// sighting it produces is untyped by construction. Declared optionality is
-/// read only from a project's `registrations.ts`, which is the declaration
-/// surface this step is scoped to.
+/// read from a project's `registrations.ts` and root `mikro-orm.config.ts`;
+/// ordinary source files retain this conservative untyped extraction.
 pub fn extract_untyped_env_vars_from_source(source_code: &str) -> Result<Vec<EnvVarUsage>> {
     let allocator = Allocator::default();
 
@@ -486,8 +513,8 @@ pub fn find_all_env_vars(
     let mut sightings: std::collections::HashMap<String, Vec<EnvVarUsage>> =
         std::collections::HashMap::new();
 
-    // Step 1: registrations.ts files — config-injector chains, and the only
-    // place a declared `optional(...)` type is visible to the scanner.
+    // Step 1: registrations.ts files — the main config-injector declarations.
+    // Root mikro-orm.config.ts declarations are read in the source pass below.
     let registrations_files = find_registrations_files(modules_path)?;
 
     for file_path in &registrations_files {
@@ -527,7 +554,30 @@ pub fn find_all_env_vars(
                         if let Ok(vars) = extract_process_env_vars_from_source(&source_code) {
                             extra_env_vars.extend(vars);
                         }
-                        if let Ok(vars) = extract_untyped_env_vars_from_source(&source_code) {
+                        // The generated ORM config owns its own typed injector
+                        // (including optional legacy encryption keys). Treating
+                        // those declarations as bare reads invents requirements.
+                        // Other files still use the conservative untyped scan.
+                        let vars = if source_file == &path.join("mikro-orm.config.ts") {
+                            let defaulted = defaulted_env_names(&source_code);
+                            extract_env_vars_from_source(&source_code).map(|vars| {
+                                vars.into_iter()
+                                    .map(|mut usage| {
+                                        // Preserve existing fallback handling for
+                                        // untyped reads; never override a required type.
+                                        if usage.optional.is_none()
+                                            && defaulted.contains(&usage.var_name)
+                                        {
+                                            usage.optional = Some(true);
+                                        }
+                                        usage
+                                    })
+                                    .collect()
+                            })
+                        } else {
+                            extract_untyped_env_vars_from_source(&source_code)
+                        };
+                        if let Ok(vars) = vars {
                             extra_env_vars.extend(vars);
                         }
                     }
@@ -789,10 +839,91 @@ mod tests {
     }
 
     #[test]
+    fn test_root_orm_declarations_preserve_optional_keys_without_hiding_required_readers() {
+        let root = tempfile::tempdir().unwrap();
+        let modules = root.path().join("modules");
+        let iam = modules.join("iam");
+        let records = modules.join("records");
+        fs::create_dir_all(&iam).unwrap();
+        fs::create_dir_all(&records).unwrap();
+        // This is the injector shape emitted by the generated IAM/records ORM
+        // configs. The records service also declares these in registrations.ts.
+        let declarations = r#"
+            const injector = createConfigInjector(schemaValidator, {
+              ENCRYPTION_KEY: { type: string, value: getEnvVar('ENCRYPTION_KEY') },
+              LEGACY_ENCRYPTION_KEYS: { type: optional(string), value: getEnvVar('LEGACY_ENCRYPTION_KEYS') }
+            });
+        "#;
+        fs::write(iam.join("mikro-orm.config.ts"), declarations).unwrap();
+        fs::write(records.join("mikro-orm.config.ts"), declarations).unwrap();
+        fs::write(records.join("registrations.ts"), declarations).unwrap();
+        let scan = || find_all_env_vars(&modules, &RenderedTemplatesCache::new()).unwrap();
+        for project in ["iam", "records"] {
+            let result = scan();
+            assert_eq!(
+                optionality(&result[project], "LEGACY_ENCRYPTION_KEYS"),
+                Some(true)
+            );
+            assert_eq!(optionality(&result[project], "ENCRYPTION_KEY"), Some(false));
+        }
+
+        // A required declaration, a bare read elsewhere, and a process.env
+        // reader inside the ORM file must EACH override the optional declaration.
+        for extra in [
+            "const keys = getEnvVar('LEGACY_ENCRYPTION_KEYS');",
+            "const keys = process.env.LEGACY_ENCRYPTION_KEYS;",
+            "const required = { KEYS: { type: string, value: getEnvVar('LEGACY_ENCRYPTION_KEYS') } };",
+        ] {
+            fs::write(
+                iam.join("mikro-orm.config.ts"),
+                format!("{declarations}\n{extra}"),
+            )
+            .unwrap();
+            assert_eq!(
+                optionality(&scan()["iam"], "LEGACY_ENCRYPTION_KEYS"),
+                Some(false)
+            );
+        }
+        fs::write(iam.join("mikro-orm.config.ts"), declarations).unwrap();
+        fs::write(
+            iam.join("reader.ts"),
+            "const keys = getEnvVar('LEGACY_ENCRYPTION_KEYS');",
+        )
+        .unwrap();
+        assert_eq!(
+            optionality(&scan()["iam"], "LEGACY_ENCRYPTION_KEYS"),
+            Some(false)
+        );
+        // A similarly named file in an arbitrary nested folder is not a new
+        // trusted declaration surface.
+        fs::remove_file(iam.join("reader.ts")).unwrap();
+        fs::create_dir(iam.join("other")).unwrap();
+        fs::write(iam.join("other/mikro-orm.config.ts"), declarations).unwrap();
+        assert_eq!(
+            optionality(&scan()["iam"], "LEGACY_ENCRYPTION_KEYS"),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn test_orm_untyped_literal_fallback_remains_optional() {
+        let root = tempfile::tempdir().unwrap();
+        let service = root.path().join("iam");
+        fs::create_dir(&service).unwrap();
+        fs::write(
+            service.join("mikro-orm.config.ts"),
+            "const mode = getEnvVar('ORM_MODE') ?? 'safe';",
+        )
+        .unwrap();
+        let result = find_all_env_vars(root.path(), &RenderedTemplatesCache::new()).unwrap();
+        assert_eq!(optionality(&result["iam"], "ORM_MODE"), Some(true));
+    }
+
+    #[test]
     fn test_sweep_extraction_carries_no_type() {
-        // Declared optionality is read only from registrations.ts. The
-        // whole-tree sweep reports names alone, even where the source happens to
-        // contain a config injector of its own, so nothing outside the
+        // Declared optionality is read only from recognized configuration
+        // files. The ordinary source sweep reports names alone, even if it
+        // contains a config injector of its own, so nothing outside the
         // declaration surface can claim a variable is optional.
         let source = r#"
         const configInjector = createConfigInjector(schemaValidator, {
@@ -959,5 +1090,40 @@ const value = configured ?? process.env.FALLBACK_ONLY;
         assert_eq!(optionality(&forwards, "A"), Some(false));
         assert_eq!(optionality(&backwards, "A"), Some(false));
         assert_eq!(optionality(&forwards, "B"), Some(false));
+    }
+
+    #[test]
+    fn test_a_fallback_that_supplies_no_value_is_not_a_default() {
+        // `?? undefined` and `|| undefined` are not defaults. They are the shape
+        // you write to turn an absent variable into an explicit `undefined` for
+        // a caller that treats it as "unset" — `process.env.S3_URL || undefined`
+        // maps '' to undefined so an empty env var is not passed as an endpoint.
+        //
+        // Reading the left side and ignoring the right marked those optional, so
+        // a variable the code genuinely needs sailed through the platform's
+        // config gate and failed at runtime instead. Only a fallback that
+        // supplies a value makes a read optional.
+        let defaulted = defaulted_env_names(
+            r#"
+            const a = process.env.NO_VALUE_COALESCE ?? undefined;
+            const b = process.env.NO_VALUE_OR || undefined;
+            const c = process.env.NULL_FALLBACK ?? null;
+            const d = process.env.STRING_FALLBACK || 'ffmpeg';
+            const e = process.env.NUMBER_FALLBACK ?? 8;
+            const f = process.env.BOOL_FALLBACK ?? false;
+            const g = process.env.CONST_FALLBACK ?? DEFAULT_PATH;
+            "#,
+        );
+
+        assert!(!defaulted.contains("NO_VALUE_COALESCE"));
+        assert!(!defaulted.contains("NO_VALUE_OR"));
+        assert!(!defaulted.contains("NULL_FALLBACK"));
+
+        // Everything that does supply a value keeps counting, including a
+        // non-literal fallback — `?? DEFAULT_PATH` is a real default.
+        assert!(defaulted.contains("STRING_FALLBACK"));
+        assert!(defaulted.contains("NUMBER_FALLBACK"));
+        assert!(defaulted.contains("BOOL_FALLBACK"));
+        assert!(defaulted.contains("CONST_FALLBACK"));
     }
 }

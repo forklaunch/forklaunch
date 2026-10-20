@@ -84,6 +84,51 @@ Not currently logged in to ForkLaunch
 Run 'forklaunch login' to authenticate
 ```
 
+### Multiple accounts
+
+One machine can hold several logins, one per organization you work in. Each is stored under a name in `~/.forklaunch/accounts/`, and every command picks one:
+
+1. `--account <name>` on the command
+2. the `FORKLAUNCH_ACCOUNT` environment variable
+3. the account bound to the application the command runs in
+4. the default login
+
+Only the default is machine-wide. The first three are per command, so two terminals (or two agents) can release for two organizations at the same time.
+
+```bash
+# Add a login without disturbing the ones already here
+forklaunch login --account acme
+forklaunch login --account acme --token <api-key>   # headless
+
+# Keep the login you already had, under a name
+forklaunch account save personal
+
+# See what is on this machine
+forklaunch account list
+
+# Always use an account for one application, from any clone or worktree of it
+cd ~/code/acme-api
+forklaunch account bind acme
+
+# Which login would a command run here use, and why?
+forklaunch account current
+forklaunch account current --json
+
+# One-off
+forklaunch release create --version 1.4.0 --account acme
+FORKLAUNCH_ACCOUNT=acme forklaunch deploy create --release 1.4.0 --environment staging --region us-east-1
+
+# Change the default, or forget an account
+forklaunch account use acme
+forklaunch account remove acme
+```
+
+A binding is keyed by the application id in `.forklaunch/manifest.toml` and stored on your machine only, so it is never committed and each teammate chooses their own account names.
+
+**Projects that pin an older CLI.** When `cli_version` in the manifest names a release from before accounts existed, the CLI still runs that release as the account the command resolved to. That release can only read `~/.forklaunch/token`, so the CLI points that path at the account while the command runs and puts it back afterwards. The one cost: for such projects, commands for *different* accounts run one at a time (the second waits and says so); commands for the same account, and everything in projects on a current `cli_version`, run concurrently.
+
+Each pinned version is cached at `~/.forklaunch/bin/forklaunch-<version>` and no longer replaces the `forklaunch` you installed.
+
 ## Workflow
 
 ```bash

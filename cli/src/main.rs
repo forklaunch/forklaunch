@@ -4,6 +4,7 @@ use score::ScoreCommand;
 use anyhow::Result;
 use change::ChangeCommand;
 use clap::{ArgMatches, Command, command};
+use account::AccountCommand;
 use cloud_account::CloudAccountCommand;
 use compliance::ComplianceCommand;
 use data::DataCommand;
@@ -27,6 +28,7 @@ use managed::ManagedCommand;
 use notifiers::NotifiersCommand;
 use observe::ObserveCommand;
 use openapi::OpenApiCommand;
+use org::OrgCommand;
 use release::ReleaseCommand;
 use sync::SyncCommand;
 use version::VersionCommand;
@@ -43,6 +45,7 @@ mod constants;
 mod core;
 mod app;
 mod change;
+mod account;
 mod cloud_account;
 mod compliance;
 mod config;
@@ -65,6 +68,7 @@ mod managed;
 mod notifiers;
 mod observe;
 mod openapi;
+mod org;
 mod prompt;
 mod release;
 mod sdk;
@@ -85,6 +89,7 @@ fn main() -> Result<()> {
     let analyze = AnalyzeCommand::new();
     let score = ScoreCommand::new();
     let change = ChangeCommand::new();
+    let account = AccountCommand::new();
     let cloud_account = CloudAccountCommand::new();
     let compliance = ComplianceCommand::new();
     let data = DataCommand::new();
@@ -107,6 +112,7 @@ fn main() -> Result<()> {
     let notifiers = NotifiersCommand::new();
     let observe = ObserveCommand::new();
     let openapi = OpenApiCommand::new();
+    let org = OrgCommand::new();
     let release = ReleaseCommand::new();
     let sdk = SdkCommand::new();
     let whoami = WhoAmICommand::new();
@@ -118,6 +124,17 @@ fn main() -> Result<()> {
         .propagate_version(true)
         .arg_required_else_help(true)
         .subcommand_required(true)
+        .arg(
+            clap::Arg::new(crate::core::accounts::ACCOUNT_FLAG)
+                .long("account")
+                .global(true)
+                .value_name("NAME")
+                .help(
+                    "Run as this account from the keyring (see `forklaunch account`). \
+                     Also settable with FORKLAUNCH_ACCOUNT",
+                ),
+        )
+        .subcommand(account.command())
         .subcommand(alerts.command())
         .subcommand(app.command())
         .subcommand(init.command())
@@ -140,6 +157,7 @@ fn main() -> Result<()> {
         .subcommand(github.command())
         .subcommand(integrate.command())
         .subcommand(openapi.command())
+        .subcommand(org.command())
         .subcommand(release.command())
         .subcommand(login.command())
         .subcommand(logout.command())
@@ -154,10 +172,14 @@ fn main() -> Result<()> {
         .get_matches();
 
     if let Some((cmd, sub_matches)) = matches.subcommand() {
+        // Before anything reads a token, and before a pinned binary is
+        // re-executed with the account this invocation resolved.
+        crate::core::accounts::init_selection(&matches, sub_matches)?;
         crate::core::version_check::precheck_version(sub_matches, cmd)?;
     }
 
     let result = match matches.subcommand() {
+        Some(("account", sub_matches)) => account.handler(sub_matches),
         Some(("alerts", sub_matches)) => alerts.handler(sub_matches),
         Some(("app", sub_matches)) => app.handler(sub_matches),
         Some(("init", sub_matches)) => init.handler(sub_matches),
@@ -180,6 +202,7 @@ fn main() -> Result<()> {
         Some(("github", sub_matches)) => github.handler(sub_matches),
         Some(("integrate", sub_matches)) => integrate.handler(sub_matches),
         Some(("openapi", sub_matches)) => openapi.handler(sub_matches),
+        Some(("org", sub_matches)) => org.handler(sub_matches),
         Some(("release", sub_matches)) => release.handler(sub_matches),
         Some(("login", sub_matches)) => login.handler(sub_matches),
         Some(("logout", sub_matches)) => logout.handler(sub_matches),

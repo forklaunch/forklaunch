@@ -4,7 +4,9 @@ import {
   eraseUserData,
   exportUserData,
   surfacePermissions,
-  surfaceRoles
+  surfaceRoles,
+  surfaceScopedPermissions,
+  surfaceScopedRoles
 } from './api/controllers';
 
 export type IamSdk = {
@@ -15,6 +17,8 @@ export type IamSdk = {
   user: {
     surfaceRoles: typeof surfaceRoles;
     surfacePermissions: typeof surfacePermissions;
+    surfaceScopedRoles: typeof surfaceScopedRoles;
+    surfaceScopedPermissions: typeof surfaceScopedPermissions;
   };
 };
 
@@ -25,7 +29,9 @@ export const iamSdkClient = {
   },
   user: {
     surfaceRoles,
-    surfacePermissions
+    surfacePermissions,
+    surfaceScopedRoles,
+    surfaceScopedPermissions
   }
 } satisfies IamSdk;
 

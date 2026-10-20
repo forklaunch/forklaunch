@@ -6,7 +6,11 @@ import {
   string
 } from '@forklaunch/blueprint-core';
 import { Metrics, metrics } from '@forklaunch/blueprint-monitoring';
-import { OpenTelemetryCollector } from '@forklaunch/core/http';
+import {
+  createStripeClient,
+  isManagedInstance,
+  OpenTelemetryCollector
+} from '@forklaunch/core/http';
 import {
   FieldEncryptor,
   wrapEmWithTenantContext
@@ -130,9 +134,11 @@ const environmentConfig = configInjector.chain({
     type: string,
     value: getEnvVar('OTEL_EXPORTER_OTLP_ENDPOINT')
   },
+  // Optional: a managed instance reaches Stripe through the platform's
+  // Stripe Connect gateway and holds no Stripe key or webhook secret.
   STRIPE_API_KEY: {
     lifetime: Lifetime.Singleton,
-    type: string,
+    type: optional(string),
     value: getEnvVar('STRIPE_API_KEY')
   },
   HMAC_SECRET_KEY: {
@@ -145,9 +151,11 @@ const environmentConfig = configInjector.chain({
     type: string,
     value: getEnvVar('JWKS_PUBLIC_KEY_URL')
   },
+  // Optional: a managed instance reaches Stripe through the platform's
+  // Stripe Connect gateway and holds no Stripe key or webhook secret.
   STRIPE_WEBHOOK_SECRET: {
     lifetime: Lifetime.Singleton,
-    type: string,
+    type: optional(string),
     value: getEnvVar('STRIPE_WEBHOOK_SECRET')
   },
   IAM_URL: {
@@ -167,7 +175,19 @@ const runtimeDependencies = environmentConfig.chain({
   StripeClient: {
     lifetime: Lifetime.Singleton,
     type: Stripe,
-    factory: ({ STRIPE_API_KEY }) => new Stripe(STRIPE_API_KEY)
+    // The service's own key wins when it has one. Without one, a managed
+    // instance gets the real Stripe SDK pointed at the platform's gateway
+    // (its own connected account, no key here). The key must win: the
+    // managed contract (PLATFORM_GATEWAY_URL, INSTANCE_ID, INSTANCE_HMAC_KEY)
+    // can also reach a regular app's component that uses another platform
+    // feature such as email, and that must not reroute its billing.
+    factory: ({ STRIPE_API_KEY }) => {
+      if (STRIPE_API_KEY) return new Stripe(STRIPE_API_KEY);
+      if (isManagedInstance()) return createStripeClient({ Stripe });
+      throw new Error(
+        'STRIPE_API_KEY is required unless the service runs as a managed instance'
+      );
+    }
   },
   Orm: {
     lifetime: Lifetime.Singleton,

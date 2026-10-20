@@ -184,6 +184,13 @@ pub(super) struct AppTemplate {
     /// wrong thing was investigated on the strength of that assumption.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) app_claim_hook: Option<AppClaimHook>,
+    /// Launches skip the managed first-deploy approval gate, and who last changed it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) auto_approve_launches: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) auto_approve_launches_updated_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) auto_approve_launches_updated_at: Option<String>,
 }
 
 /// The component that serves a product's claim-mint endpoint, and its path within that
@@ -555,13 +562,15 @@ mod tests {
 
     #[test]
     fn each_missing_half_says_which_half_is_missing() {
-        assert!(
-            parse_app_claim_hook("/internal/claim/mint")
-                .unwrap_err()
-                .contains("<component>:<path>")
-        );
-        assert!(parse_app_claim_hook(":/mint").unwrap_err().contains("no component"));
-        assert!(parse_app_claim_hook("iam:").unwrap_err().contains("no path"));
+        assert!(parse_app_claim_hook("/internal/claim/mint")
+            .unwrap_err()
+            .contains("<component>:<path>"));
+        assert!(parse_app_claim_hook(":/mint")
+            .unwrap_err()
+            .contains("no component"));
+        assert!(parse_app_claim_hook("iam:")
+            .unwrap_err()
+            .contains("no path"));
     }
 
     #[test]

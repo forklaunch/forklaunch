@@ -81,6 +81,7 @@ impl ProjectSyncMetadata {
                 queue,
                 object_store,
                 redis_partition: None,
+                capabilities: None,
             })
         } else {
             None

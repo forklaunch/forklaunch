@@ -37,12 +37,19 @@ your own admin tool) can drive it without reading the source.
 | `provisioning` | the backing application is being created and the pinned version deployed; a launch that needs deployment approval parks here (`launchApprovalState: pending`) | operator |
 | `provisioning_failed` | a launch or a reset ran and failed; `lastError` says why; nothing was torn down | operator |
 | `awaiting_claim` | running, empty, one-time claim link exists (or can be minted); nobody owns it yet | operator |
-| `awaiting_claim_blocked` | declared in the map (a hold on an unclaimed instance) but **nothing writes it today**; treat as reserved | operator |
+| `awaiting_claim_blocked` | declared in the map (a hold on an unclaimed instance) but **nothing writes it today**; treat as reserved. A claim-next reservation deliberately does NOT use it (see below) | operator |
 | `active` | claimed; the customer's passphrase-derived backup key is on file; serving | operator + customer |
 | `suspended` | claimed but taken down (billing, abuse); comes back to `active` | operator |
 | `resetting` | being wiped and returned to the pool: data erased, key rotated, identity cleared, redeployed empty | operator |
 | `destroying` | the backing application is being torn down | operator |
 | `destroyed` | terminal; the row stays for audit | operator |
+
+A **claim-next reservation** is not a state: the instance stays
+`awaiting_claim` with `reservedAt` set and its claim link out (stored URL
+purged, link unexpired). It lapses with the link. A separate state would
+have taken a reserved instance out of the claim lookup, the relay and
+gateway allowlists, rollouts and the reset edge, all of which must keep
+treating it as an ordinary unclaimed instance.
 
 `launchApprovalState` (`not_required` / `pending` / `approved`) is a mirror of
 the platform's deployment-approval gate, only meaningful while `provisioning`.
@@ -175,6 +182,7 @@ platform's deployment callback picks the one whose latest deployment it is.
 | `POST /instances/:id/claim-link` | EDITOR | | reveal the one-time link (purged on reveal), 404 once revealed or claimed |
 | `POST /instances/:id/claim-link/reissue` | EDITOR | | new link, old token dead |
 | `POST /instances/:id/claim-link/send` | EDITOR | | send by email/SMS without the operator seeing it |
+| `POST /instances/claim-next` | EDITOR | stays `awaiting_claim` (reserved) | body `{templateSlug, email?, reference?}`; the oldest unreserved instance of the template in the org, picked with `FOR UPDATE SKIP LOCKED`, token rotated; 200 `{instanceId, host, claimUrl, expiresAt, reference?, emailed?}`, 409 `{code: 'POOL_EMPTY', poolSize, reserved, provisioning}`. Proxied as `POST /managed-mode/templates/:slug/claim-next` |
 | `PATCH /instances/:id` | EDITOR | stays `awaiting_claim`/`active`/`suspended` | body `{instanceSize?, updatePolicy?, updateDeferredUntil?}`; 200 if only policy changed, 202 `{state}` when size changed (`pendingUpdate: 'size'`, an `update` deploy is queued) |
 | `POST /instances/:id/apply-variables` | EDITOR | stays | after variables were written, redeploy the same version so the tasks see them (`pendingUpdate: 'variables'`), 202 |
 | `GET /instances/:id/deployments?limit=` | VIEWER | | the platform's deployment list for the backing application; follow an update/reset/rollout deploy here |
@@ -236,6 +244,7 @@ row changes when they land, not when the operator route returns.
 | `POST /internal/instances/:id/provision-result` | launch outcome: `provisioning` → `awaiting_claim` / `provisioning_failed` |
 | `POST /internal/managed-instances/deployment-result` | the platform's deployment callback: finishes launches, resets and destroys by evidence, clears `pendingUpdate`, records rollout item results |
 | `POST /internal/managed-instances/resume-provisioning` | the approval gate releasing a parked launch |
+| `POST /internal/managed-instances/launch-policy` | the approval gate asking whether an application's template has `autoApproveLaunches` (and who set it) |
 | `POST /internal/template-versions/:id/build-result` | build-once outcome for a version |
 
 ## How each edge actually completes
@@ -258,6 +267,11 @@ with `requestedBy: system`, the instance holds in `provisioning` with
 `launchApprovalState: pending`, and nothing advances until an approver
 releases it (`POST /deployment-approvals/:id/approve` on platform-management,
 the dashboard's Deployments page, or `forklaunch deploy approvals approve`).
+A template's `autoApproveLaunches` (admin-only PATCH, who set it is
+recorded) skips the platform's managed first-deploy gate for its launches
+and nothing else: an environment that explicitly requires approval still
+parks them. The decision asks managed-apps
+(`/internal/managed-instances/launch-policy`) and fails closed.
 Resets and updates deploy the same way and can park the same way. A client
 that polls for `awaiting_claim` must watch `launchApprovalState` too, or it
 waits forever on a gated org.
@@ -369,6 +383,8 @@ delete cancels and reschedules). No application, or no teardown scheduled:
 | Template and instance variables | ✅ | ✅ | ✅ | ✅ templates page / instance page |
 | Launch, list, get, destroy | ✅ | ✅ | ✅ | ✅ fleet page / instance page |
 | Reveal / reissue / send claim link | ✅ | ✅ | ✅ | ✅ (reveal) |
+| Take the next instance from the pool (`claim-next`) | `instance claim-next` | ✅ | ✅ | ❌ (a backend call) |
+| Auto-approve a template's launches | `template update --auto-approve-launches` | ✅ | ✅ | ✅ templates page, admin, with a confirm |
 | Resume a parked launch | ✅ | ✅ | ✅ | ✅ instance page |
 | Reset (wipe, return to pool) | `instance reset` | ✅ | ✅ | ✅ instance page, admin, typed host |
 | Rotate keys (new generation, app re-encrypts) | `instance rotate-keys` | ✅ | ✅ | ✅ instance page, admin, typed host |

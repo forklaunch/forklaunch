@@ -17,6 +17,7 @@ export {
   getAllRetentionPolicies,
   getEntityUserIdField,
   getAllUserIdFields,
+  type CompliantValue,
   type EncryptedComplianceLevel,
   type EncryptedKeysOf,
   type RequiresEncryptionContext,
@@ -39,6 +40,27 @@ export {
   type SchemaRequiresEncryptionContext
 } from './encryptionSafeEm';
 
+// Compliant fields: pii/phi/pci properties load as CompliantField, readable
+// only through .anon (de-identified) and .deanon (plaintext, audited)
+export {
+  Anon,
+  CompliantField,
+  CompliantIndexType,
+  CompliantQueryError,
+  CompliantType,
+  LegacyCiphertextError,
+  deanon,
+  isAnon,
+  isCompliantField,
+  onComplianceAccess,
+  type AnonStrategy,
+  type ComplianceAccessEvent,
+  type ComplianceAccessListener,
+  type ComplianceOptions,
+  type Deanon,
+  type Deanonymized
+} from './compliantField';
+
 // Compliance-aware property builder (drop-in replacement for MikroORM's p)
 export { fp } from './compliancePropertyBuilder';
 
@@ -47,6 +69,11 @@ export { defineComplianceEntity } from './defineComplianceEntity';
 
 // Native query blocking (prevents bypassing EncryptedType via raw queries)
 export { wrapEmWithNativeQueryBlocking } from './complianceEventSubscriber';
+export {
+  onComplianceChange,
+  type ComplianceChangeEvent,
+  type ComplianceChangeListener
+} from './complianceChanges';
 
 // Encrypted custom type (transparent field encryption at the MikroORM data layer)
 export {
@@ -72,6 +99,8 @@ export {
   stampedKeyId,
   stampedPrefix,
   isEncryptedCiphertext,
+  sealedAnon,
+  BLIND_INDEX_PREFIX,
   ENCRYPTED_PREFIXES,
   ENCRYPTION_FORMAT_ENV,
   ENCRYPTION_KEY_ENV,

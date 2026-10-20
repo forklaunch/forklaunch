@@ -72,3 +72,4 @@ ForkLaunch provides the infrastructure and application framework. You are respon
 - [SOC 2](/docs/compliance/soc2.md): Trust service criteria mapping
 - [HIPAA](/docs/compliance/hipaa.md): Healthcare data safeguards
 - [PCI DSS](/docs/compliance/pci.md): Payment card data requirements
+- [Report Card Default Criteria](/docs/compliance/report-card-criteria.md): The requirements every report card checks on every analysis

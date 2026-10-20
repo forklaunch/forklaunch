@@ -810,11 +810,8 @@ mod tests {
         // The REAL blueprint sdk.ts, not a hand-written stand-in. A toy
         // fixture is exactly what let a missing comma through: it had a
         // one-name import list, where the bug is invisible.
-        write(
-            iam.join("sdk.ts"),
-            embedded("project/iam-better-auth/sdk.ts"),
-        )
-        .unwrap();
+        let sdk_source = embedded("project/iam-better-auth/sdk.ts");
+        write(iam.join("sdk.ts"), &sdk_source).unwrap();
 
         // sdk.ts imports through the barrel, so the handler has to be
         // exported there too — an omission the compiler only reports from
@@ -852,10 +849,21 @@ mod tests {
         // was — in `surfaceRoles\n  mintClaimToken`, which parses as far as
         // a string search is concerned and is a TS1005 to a compiler. So
         // check separation, not presence, in all three blocks.
+        let existing_last_import = sdk_source
+            .split("\n} from './api/controllers';")
+            .next()
+            .unwrap()
+            .lines()
+            .last()
+            .unwrap()
+            .trim()
+            .trim_end_matches(',');
+        assert!(!existing_last_import.is_empty());
         assert!(
-            rendered.content.contains("surfaceRoles,\n  mintClaimToken"),
-            "import list must separate the new name: {}",
-            rendered.content
+            rendered
+                .content
+                .contains(&format!("{existing_last_import},\n  mintClaimToken")),
+            "import list must separate the new name from its actual last member"
         );
         // The value block's previous entry needs the same separator.
         assert!(
