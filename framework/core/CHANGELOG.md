@@ -1,11 +1,21 @@
 # @forklaunch/core
 
-## Unreleased
+## 3.1.0
+
+### Minor Changes
+
+- e36cfd2: Add `createPreviewModelGatewayClient` for the desktop's isolated local model relay. Its validated `GatewayPreviewModels` catalog contains model IDs and short-lived preview ceilings, without inventing managed monthly usage or BAA metadata. The existing managed `createModelGatewayClient` and `GatewayModels` contract are unchanged.
+
+  The additive `GatewayPreviewChatCompletion` type makes a provider timestamp optional; managed completion types retain their existing required `created` field.
+
+- `createStripeClient`: an explicit `apiKey` now wins over a managed contract detected in the environment (`PLATFORM_GATEWAY_URL`, `INSTANCE_ID`, `INSTANCE_HMAC_KEY`). Only explicit gateway options outrank it. Before, a service that held both its own Stripe key and the gateway variables (for example, a regular app that added managed email) silently sent Stripe calls to the platform gateway. Behaviour fix: a managed service that passes `apiKey` now uses that key.
 
 ### Patch Changes
 
-- **Behaviour fix:** `createStripeClient({ apiKey })` now uses that key directly even when `PLATFORM_GATEWAY_URL`, `INSTANCE_ID` and `INSTANCE_HMAC_KEY` are set. Before, the environment won and Stripe calls went through the platform gateway, ignoring the key. Only explicit gateway options (`gatewayUrl`/`instanceId`/`hmacKey`) now outrank an explicit key. Managed instances that pass no key are unaffected. This matters because regular deployments now receive those three variables on components that use platform email. The billing-stripe blueprint follows the same rule (`STRIPE_API_KEY`, when set, wins).
-- `createEmailClient`'s missing-settings error no longer says email is only for managed instances.
+- Managed email is available to regular app deployments as well as managed instances: `createEmailClient`'s error no longer says it is managed-instance only. The local gateway mock (`forklaunch-gateway-mock`) delivers each event to every address in `MOCK_EVENTS_URL_<FEATURE>` (comma-separated), so a service and a worker that both hold email each receive their events.
+- Updated dependencies
+  - @forklaunch/common@1.2.31
+  - @forklaunch/validator@1.2.32
 
 ## 3.0.1
 

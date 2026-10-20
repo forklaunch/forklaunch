@@ -1,5 +1,13 @@
 # @forklaunch/implementation-ecommerce-base
 
+## 1.0.14
+
+### Patch Changes
+
+- Dependency refresh: @forklaunch/core 3.1.0 (explicit Stripe apiKey wins over a detected managed contract; managed email for regular apps), MikroORM 7.2.5, and other minor updates. Stripe stays on 22.x.
+- Updated dependencies
+  - @forklaunch/interfaces-ecommerce@1.0.13
+
 ## 1.0.13
 
 ### Patch Changes
