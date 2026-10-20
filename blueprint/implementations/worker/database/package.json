@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/implementation-worker-database",
-  "version": "1.0.40",
+  "version": "1.0.41",
   "description": "Database implementation for forklaunch workers",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -66,21 +66,21 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/core": "^3.0.1",
+    "@forklaunch/core": "^3.1.0",
     "@forklaunch/interfaces-worker": "workspace:^",
-    "@forklaunch/internal": "^1.2.33",
-    "@forklaunch/validator": "^1.2.31",
-    "@mikro-orm/core": "7.2.3",
+    "@forklaunch/internal": "^1.2.34",
+    "@forklaunch/validator": "^1.2.32",
+    "@mikro-orm/core": "7.2.5",
     "@sinclair/typebox": "^0.34.52",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "depcheck": "^1.4.7",
-    "eslint": "^10.11.0",
-    "prettier": "^3.9.9",
+    "eslint": "^10.12.0",
+    "prettier": "^3.9.10",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2",
-    "typescript-eslint": "^8.71.0"
+    "typescript-eslint": "^8.71.2"
   },
   "publishConfig": {
     "access": "public"

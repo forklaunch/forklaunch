@@ -15,6 +15,7 @@ import {
   type ComplianceLevel,
   type RetentionPolicy
 } from './complianceTypes';
+import { installComplianceChangeHooks } from './complianceChanges';
 import {
   CompliantIndexType,
   installCompliantAccessors,
@@ -191,6 +192,13 @@ export function defineComplianceEntity<
     TRepository,
     TForceObject
   >);
+
+  // Changes to records holding pii/phi/pci are reported for the audit trail.
+  installComplianceChangeHooks(
+    schema as unknown as Parameters<typeof installComplianceChangeHooks>[0],
+    entityName,
+    complianceFields
+  );
 
   if (wired.bindings.length > 0) {
     const entityClass = schema.meta.class as { prototype: object } | undefined;

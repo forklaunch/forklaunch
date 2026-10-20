@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/implementation-cac-base",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "Computer-assisted coding basic implementation for forklaunch",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -39,16 +39,16 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "^1.2.30",
-    "@forklaunch/core": "^3.0.1",
+    "@forklaunch/common": "^1.2.31",
+    "@forklaunch/core": "^3.1.0",
     "@forklaunch/interfaces-cac": "workspace:^",
-    "@forklaunch/internal": "^1.2.33",
-    "@forklaunch/validator": "^1.2.31",
-    "@mikro-orm/core": "7.2.3"
+    "@forklaunch/internal": "^1.2.34",
+    "@forklaunch/validator": "^1.2.32",
+    "@mikro-orm/core": "7.2.5"
   },
   "devDependencies": {
     "depcheck": "^1.4.7",
-    "prettier": "^3.9.9",
+    "prettier": "^3.9.10",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2"
   },
