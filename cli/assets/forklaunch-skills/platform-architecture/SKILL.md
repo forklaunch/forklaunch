@@ -345,7 +345,8 @@ A version set on the resource is used as given (its family derived from it
 whole); the app-level `config.database.engineVersion` applies only to its own
 engine. SQL Server gets no `DBName` (RDS rejects it); each component creates
 its database on connect (MikroORM `ensureDatabase`). SQL Server Express has no
-Multi-AZ on RDS. DocumentDB: TLS enforced by its parameter group, KMS storage,
+Multi-AZ on RDS: `rdsMultiAzFor` forces it off and logs a `[Compliance]` note
+when Multi-AZ was asked for. DocumentDB: TLS enforced by its parameter group, KMS storage,
 `db.t4g.medium` minimum, Multi-AZ = a second instance.
 
 On a shared compute pool only Postgres lives in the pool's partition. Any
