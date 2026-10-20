@@ -439,7 +439,7 @@ impl CliCommand for EmailSetCommand {
             .arg(
                 Arg::new("from")
                     .long("from")
-                    .help("Local part of the address, before the @ (e.g. billing; platform default if omitted)"),
+                    .help("Local part of the address, before the @ (e.g. billing; default no-reply)"),
             )
             .arg(
                 Arg::new("name")
@@ -449,7 +449,7 @@ impl CliCommand for EmailSetCommand {
             .arg(
                 Arg::new("subdomain")
                     .long("subdomain")
-                    .help("Send from a subdomain of the custom domain (e.g. mail -> billing@mail.acme.com)"),
+                    .help("Send from one to three labels in front of the custom domain (e.g. mail -> billing@mail.acme.com)"),
             )
             .arg(base_path_arg())
     }
@@ -468,7 +468,7 @@ impl CliCommand for EmailSetCommand {
             body["displayName"] = serde_json::Value::String(name.clone());
         }
         if let Some(subdomain) = matches.get_one::<String>("subdomain") {
-            email_sender::validate_dns_name("--subdomain", subdomain)?;
+            email_sender::validate_subdomain(subdomain)?;
             body["subdomain"] = serde_json::Value::String(subdomain.clone());
         }
 
@@ -586,10 +586,17 @@ impl CliCommand for EmailStatusCommand {
             .with_context(|| "Failed to parse email sender response")?
             .into_vec();
         if senders.is_empty() {
-            writeln!(
-                stdout,
-                "No custom email sender configured: every environment sends from the default platform sender."
-            )?;
+            match environment {
+                Some(env) => writeln!(
+                    stdout,
+                    "No custom email sender for {}: it sends from the default platform sender.",
+                    env
+                )?,
+                None => writeln!(
+                    stdout,
+                    "No custom email sender configured (or the application has no custom domain):\nevery environment sends from the default platform sender."
+                )?,
+            }
             return Ok(());
         }
         for sender in &senders {
@@ -659,6 +666,22 @@ impl CliCommand for EmailRemoveCommand {
         let response = make_authenticated_request(Method::DELETE, &url, None)
             .with_context(|| ERROR_FAILED_TO_SEND_REQUEST)?;
         let status = response.status();
+        if status == StatusCode::NOT_FOUND {
+            let text = response.text().unwrap_or_default();
+            // An unmounted route ("Cannot DELETE /...") is an older platform, not "none set".
+            if text.trim_start().starts_with("Cannot DELETE") {
+                bail!(
+                    "This platform does not support custom email senders yet ({}).",
+                    text.trim()
+                );
+            }
+            writeln!(
+                stdout,
+                "No custom email sender is set for {}; it already sends from the default platform sender.",
+                environment
+            )?;
+            return Ok(());
+        }
         if !status.is_success() {
             let text = response.text().unwrap_or_default();
             return Err(email_sender::request_error(

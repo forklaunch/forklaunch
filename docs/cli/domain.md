@@ -53,24 +53,25 @@ forklaunch app domain email remove -e staging      # asks first; -y to skip
 | Option | Description |
 | :----- | :---------- |
 | `-e, --environment <env>` | Required. The environment whose email uses the custom domain |
-| `--from <local-part>` | The part before the `@`. Lowercase letters, digits and `. _ + -`, not starting or ending with a dot. Platform default if omitted |
+| `--from <local-part>` | The part before the `@`. Lowercase letters, digits and `. _ + -`, not starting or ending with a dot, at most 64 characters. Default `no-reply` |
 | `--name <display name>` | Shown to recipients. One line, at most 64 characters, no `<`, `>` or `"` |
-| `--subdomain <sub>` | Send from a subdomain of the custom domain (dot-separated DNS labels) |
+| `--subdomain <sub>` | Send from a subdomain of the custom domain: one to three DNS labels (`mail` sends from `mail.<custom domain>`) |
 
-It prints the from address (`Acme Billing <billing@acme.com>`), the verification status and, unless the platform wrote them for you, the DNS records to publish.
+It prints the from address (`Acme Billing <billing@acme.com>`), the verification status and, unless the platform wrote them for you, the DNS records to publish. If the environment has not been deployed with email yet, the sender is saved as `pending_verification` with a message saying so and no DNS records; its next deploy sets it up.
 
 ### `email status`
 
-`-e, --environment <env>` shows one environment; without it every environment that has a sender is listed. `--json` prints the platform's response unchanged (`null` / `[]` when none is configured).
+`-e, --environment <env>` shows one environment; without it every environment that has a sender is listed. `--json` prints the platform's response unchanged: always an array, `[]` when nothing is set or the application has no custom domain. Reading is not plan-gated; a sender whose plan lapsed shows `status: failed` with the plan message.
 
 ### `email remove`
 
-`-e, --environment <env>` is required. Asks for confirmation unless `-y, --yes` is passed, and refuses without a terminal so a script cannot hang on the prompt. The environment goes back to the default platform sender.
+`-e, --environment <env>` is required. Asks for confirmation unless `-y, --yes` is passed, and refuses without a terminal so a script cannot hang on the prompt. The environment goes back to the default platform sender. If no sender is set (the platform answers 404) it says so and exits successfully.
 
 ### Verification and DNS
 
-- **Nothing breaks while you wait.** Until Amazon SES verifies the domain (`status: pending_verification`), mail keeps going from the default `no-reply@<app label>.<platform sending domain>` address. Sends never fail because of a sender that is still verifying or that `failed`.
-- **Delegated domain**: the DKIM records are written for you (`dnsRecordsWritten: true`); there is nothing to publish.
+- **Nothing breaks while you wait.** Until Amazon SES verifies the domain (`status: pending_verification`), whenever it refuses it, and while the plan lacks custom domains, mail keeps going from the default `no-reply@<app label>.<platform sending domain>` address. Sends never fail because of a sender that is still verifying or that `failed`.
+- **Gave up**: SES stops checking after 72 hours (`status: failed`). Fix the records and run `set` again.
+- **Delegated domain**: the three DKIM CNAMEs are written for you (`dnsRecordsWritten: true`); there is nothing required to publish.
 - **Manual domain**: publish the printed CNAME records at your DNS provider, then run `forklaunch app domain email status` until it says `verified`.
 - A `_dmarc` TXT record is included as **advisory**. Verification does not wait on it, but mailbox providers deliver better when you publish one.
 
@@ -80,6 +81,8 @@ It prints the from address (`Acme Billing <billing@acme.com>`), the verification
 | :----- | :------ |
 | 403 | `Custom email senders require a Pro or Enterprise plan`. Upgrade the organization's plan |
 | 400 | Validation, for example the application has no custom domain yet (`forklaunch app domain set` first) |
+| 404 | `remove` only: no sender is set for that environment |
+| 502 / 503 | The mail provider is unavailable; try again |
 
 ## Managed instances
 
@@ -90,6 +93,8 @@ forklaunch managed instance email set --id <instance-id> --domain clinic.com --f
 forklaunch managed instance email status --id <instance-id> [--json]
 forklaunch managed instance email remove --id <instance-id> [-y]
 ```
+
+Editors set and remove, viewers read. `status` adds `in use` (`active`): whether mail goes out from the sender right now. 400 = invalid domain, not under a public suffix, or the platform's own sending domain; 409 = another organization sends from or holds the domain; 502/503 = the mail provider or the ownership check is unavailable.
 
 ## Related
 

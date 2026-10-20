@@ -107,9 +107,11 @@ impl CliCommand for EmailSetCommand {
                     .required(true)
                     .help("Domain to send from (e.g. clinic.com)"),
             )
-            .arg(Arg::new("from").long("from").help(
-                "Local part of the address, before the @ (e.g. care; platform default if omitted)",
-            ))
+            .arg(
+                Arg::new("from")
+                    .long("from")
+                    .help("Local part of the address, before the @ (e.g. care; default no-reply)"),
+            )
             .arg(
                 Arg::new("name")
                     .long("name")

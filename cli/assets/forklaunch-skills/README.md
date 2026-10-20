@@ -74,7 +74,7 @@ Full version in `AGENTS.md` and `CLAUDE.md`.
 - `/cli` — All CLI commands: init, change, delete, deploy, environment, release, org, sync, sdk, openapi. Also what only the dashboard can do, and the `deploy create` exit codes. **Supply ALL flags or CLI hangs.**
 - `/quick-reference` — Cheat sheet: imports, patterns, templates, commands at a glance.
 - `/prereqs` — Bare machine to buildable: Node, pnpm, git, OrbStack, the CLI, login. Agent-executed, confirms before installing.
-- `/integrations` — GitHub (App install, repo connect, autodeploy), provider keys via `config set`, and the managed gateway capabilities any app can add (`infra add <service> email|sms|whatsapp|voice|payments|models`). **There is no `integrate <service>`.**
+- `/integrations` — GitHub (App install, repo connect, autodeploy), provider keys via `config set`, and the managed gateway capabilities any app can add (`infra add <service> email|sms|whatsapp|voice|payments|models`), including sending email from your own domain (Pro, `app domain email set`). **There is no `integrate <service>`.**
 - `/managed-provisioning` — Managed apps: templates, provisioning, the claim handover, and where each surface stops.
 - `/managed-apps` — Managed mode runbook: the `forklaunch managed` CLI end to end (template publish vs publish-template, the three variable kinds, instance create → claim → destroy) plus failure modes (DLQ, the custom-var decrypt bug, the OAuth relay).
 - `/managed-app-repo` — Prepare an application REPO to run as a managed app: the platform/instance trust boundary (a signing secret never reaches a browser), which secret signs which direction, the hosted-gateway variable contract, and the two-half handover ceremony. Read before publishing a template.

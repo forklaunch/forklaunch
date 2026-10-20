@@ -41,15 +41,22 @@ pub(crate) fn request_error(action: &str, status: StatusCode, body: &str) -> any
     match status.as_u16() {
         403 => anyhow!("{}\n{}", text, UPGRADE_HINT),
         400 | 409 => anyhow!("{}", text),
+        502 | 503 => anyhow!(
+            "{}\nThe platform could not reach the mail provider or the domain ownership check; try again shortly.",
+            text
+        ),
         _ => anyhow!("Failed to {} ({}): {}", action, status, text),
     }
 }
 
-/// Local part rules shared with the platform: lowercase `[a-z0-9._+-]`, not
-/// starting or ending with a dot.
+/// Local part rules shared with the platform: lowercase `[a-z0-9._+-]`, at
+/// most 64 characters, not starting or ending with a dot.
 pub(crate) fn validate_local_part(value: &str) -> Result<()> {
     if value.is_empty() {
         bail!("--from must not be empty");
+    }
+    if value.len() > 64 {
+        bail!("--from must be at most 64 characters");
     }
     if let Some(bad) = value
         .chars()
@@ -109,6 +116,18 @@ pub(crate) fn validate_dns_name(flag: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
+/// The platform accepts one to three labels in front of the custom domain.
+pub(crate) fn validate_subdomain(value: &str) -> Result<()> {
+    validate_dns_name("--subdomain", value)?;
+    if value.split('.').count() > 3 {
+        bail!(
+            "--subdomain \"{}\" has more than three labels (e.g. mail or eu.mail)",
+            value
+        );
+    }
+    Ok(())
+}
+
 /// A domain to send from must have at least two labels (`acme.com`, not `acme`).
 pub(crate) fn validate_domain(value: &str) -> Result<()> {
     validate_dns_name("--domain", value)?;
@@ -130,11 +149,17 @@ pub(crate) struct DnsRecord {
     pub(crate) name: Option<String>,
     #[serde(default)]
     pub(crate) value: Option<String>,
+    /// `false` for the advisory DMARC TXT. Older responses omit it.
+    #[serde(default)]
+    pub(crate) required: Option<bool>,
 }
 
 impl DnsRecord {
     /// The `_dmarc` TXT is a recommendation, not something verification waits on.
     pub(crate) fn is_advisory(&self) -> bool {
+        if let Some(required) = self.required {
+            return !required;
+        }
         self.name
             .as_deref()
             .is_some_and(|n| n == "_dmarc" || n.starts_with("_dmarc."))
@@ -159,6 +184,9 @@ pub(crate) struct EmailSender {
     pub(crate) dns_records_written: bool,
     #[serde(default)]
     pub(crate) error_message: Option<String>,
+    /// Instance senders only: whether mail goes out from it right now.
+    #[serde(default)]
+    pub(crate) active: Option<bool>,
 }
 
 impl EmailSender {
@@ -251,6 +279,17 @@ pub(crate) fn write_sender(
     stdout.set_color(ColorSpec::new().set_fg(Some(status_color)))?;
     writeln!(stdout, "{}", sender.status)?;
     stdout.reset()?;
+    if let Some(active) = sender.active {
+        writeln!(
+            stdout,
+            "  in use:   {}",
+            if active {
+                "yes"
+            } else {
+                "no, the default sender is used until this verifies"
+            }
+        )?;
+    }
     if let Some(err) = &sender.error_message {
         writeln!(stdout, "  error:    {}", err)?;
     }
@@ -276,8 +315,21 @@ pub(crate) fn write_sender(
         let mut all = required;
         all.extend(advisory);
         write_dns_records(stdout, &all)?;
+    } else if sender.status != "verified" {
+        writeln!(stdout)?;
+        writeln!(
+            stdout,
+            "  No DNS records yet: they appear once the platform has registered the domain\n  (for an app environment, on its next deploy with email)."
+        )?;
     }
 
+    if sender.status == "failed" {
+        writeln!(stdout)?;
+        writeln!(
+            stdout,
+            "  Verification failed (the mail provider stops checking after 72 hours, or the plan\n  no longer includes custom domains). Fix the cause, then run `set` again."
+        )?;
+    }
     if sender.status != "verified" {
         writeln!(stdout)?;
         writeln!(
@@ -334,6 +386,7 @@ mod tests {
             .unwrap()
             .into_vec();
         assert_eq!(senders.len(), 2);
+        assert!(senders[0].active.is_none());
         assert_eq!(senders[0].formatted_from(), "no-reply@acme.com");
         assert!(senders[0].dns_records_written);
         assert!(senders[0].display_name.is_none());
@@ -347,11 +400,29 @@ mod tests {
     }
 
     #[test]
+    fn advisory_uses_required_when_present() {
+        let json = r#"[
+            {"type": "TXT", "name": "_dmarc.acme.com", "value": "v=DMARC1; p=none;", "required": false},
+            {"type": "CNAME", "name": "a._domainkey.acme.com", "value": "a.dkim.amazonses.com", "required": true},
+            {"type": "TXT", "name": "_dmarc.acme.com", "value": "v=DMARC1; p=none;", "required": true},
+            {"type": "CNAME", "name": "b._domainkey.acme.com", "value": "b.dkim.amazonses.com", "required": false},
+            {"type": "TXT", "name": "_dmarc.acme.com", "value": "v=DMARC1; p=none;"},
+            {"type": "CNAME", "name": "c._domainkey.acme.com", "value": "c.dkim.amazonses.com"}
+        ]"#;
+        let records: Vec<DnsRecord> = serde_json::from_str(json).unwrap();
+        let advisory: Vec<bool> = records.iter().map(DnsRecord::is_advisory).collect();
+        // `required` wins when present; the `_dmarc` name decides when it is absent.
+        assert_eq!(advisory, [true, false, false, true, true, false]);
+    }
+
+    #[test]
     fn instance_sender_has_no_environment() {
         let json = r#"{"domain": "clinic.com", "fromAddress": "care@clinic.com",
-            "status": "pending_verification", "dnsRecords": [], "dnsRecordsWritten": false}"#;
+            "status": "pending_verification", "dnsRecords": [], "dnsRecordsWritten": false,
+            "active": false}"#;
         let sender: EmailSender = serde_json::from_str(json).unwrap();
         assert!(sender.environment.is_none());
+        assert_eq!(sender.active, Some(false));
         assert_eq!(sender.formatted_from(), "care@clinic.com");
     }
 
@@ -400,6 +471,16 @@ mod tests {
     }
 
     #[test]
+    fn local_part_length_and_subdomain_label_count() {
+        assert!(validate_local_part(&"a".repeat(64)).is_ok());
+        assert!(validate_local_part(&"a".repeat(65)).is_err());
+        assert!(validate_subdomain("mail").is_ok());
+        assert!(validate_subdomain("a.b.c").is_ok());
+        assert!(validate_subdomain("a.b.c.d").is_err());
+        assert!(validate_subdomain("Mail").is_err());
+    }
+
+    #[test]
     fn domain_validation() {
         assert!(validate_domain("acme.com").is_ok());
         assert!(validate_domain("mail.acme.co.uk").is_ok());
@@ -427,6 +508,9 @@ mod tests {
         )
         .to_string();
         assert_eq!(err, "clinic.com is claimed by another organization");
+        let err =
+            request_error("set", StatusCode::SERVICE_UNAVAILABLE, "SES unavailable").to_string();
+        assert!(err.starts_with("SES unavailable") && err.contains("try again"));
         let err = request_error("set", StatusCode::INTERNAL_SERVER_ERROR, "boom").to_string();
         assert!(err.contains("500") && err.contains("boom"));
     }
