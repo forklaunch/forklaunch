@@ -191,6 +191,15 @@ Same `--dry-run` safety guarantee as `resize` — read-only resolve + fetch + di
 
 **Not yet live-verified this session:** same caveat as `resize` — dry-run and unit tests only, no real AWS config change exercised yet.
 
+**Database engines.** A `database` resource runs the component's MikroORM
+engine: RDS for postgresql, mysql, mariadb and mssql (SQL Server Express:
+`--multi-az` is not available for it on RDS), Amazon DocumentDB for mongodb,
+and nothing at all for sqlite/libsql (so `infra list` shows no database). On a
+shared pool only Postgres lives in the pool's partition; a non-Postgres
+database is the app's own instance in the pool VPC, with its own resource
+outputs like a dedicated database, and its cost is the app's alone. Per-engine table and env vars:
+`/platform-architecture` (*Database engines*).
+
 ### 5. `fl infra stop` — stop a resource
 
 ```bash
