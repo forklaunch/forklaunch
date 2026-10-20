@@ -193,6 +193,35 @@ provisioner). A worker can call any of them; events are delivered over HTTP to
 HTTP service if the app needs them (`infra add <worker>` says so when none
 holds it).
 
+Say Fit Momma is deployed once, to its own `production` environment, and binds
+`sms` to its notify worker and `models` to its coach service. Neither is a
+managed instance, yet both work: the first deploy mints one gateway principal
+for Fit Momma × production (its id is `INSTANCE_ID`, its key
+`INSTANCE_HMAC_KEY`), and every feature keys its state by that id — its own
+SMS opt-out list and limits, its own token budget, its own Stripe connected
+account, its own Connect number, its own WhatsApp link. Nothing is shared with
+a managed instance or another environment.
+
+What a regular deployment gets, per feature (the platform side; the code is
+`src/modules/managed-apps/domain/services/app-principal-*.ts`):
+
+| feature | limits (platform default, env) | set up on deploy | notes |
+|---|---|---|---|
+| email | `EMAIL_GATEWAY_APP_*` (200/day, 30/min) | SES identity | see *Email* below |
+| sms | `SMS_GATEWAY_APP_*` (100 segments/month, 10/min), the platform pool | configuration set | transactional only; no dedicated number |
+| whatsapp | `WHATSAPP_APP_RPM` (20/min) | the environment's channel, from an operator-set link | no link: sends answer 409 with what to do; HIPAA apps: 403 |
+| voice | `VOICE_APP_*` (1 call at once, 100 min/month); flows from `VOICE_APP_FLOWS` or the environment's override | a Connect number, only once flows exist | no flows: calls answer 403; recordings are not copied (no object store) |
+| payments | `PAYMENTS_APP_RPM` (100/min); fee from `PAYMENTS_APPLICATION_FEES` (`<application id>` or `*`) | nothing: the connected account is created on the first onboarding link | |
+| models | `MODEL_GATEWAY_APP_MODELS` (`luna,terra`), `_MONTHLY_TOKENS` (500k), `_RPM` (20) | nothing | HIPAA (the application's `complianceFrameworks` or the environment's compliance standards): BAA-covered models only |
+
+An operator can override any of these for one environment in the principal's
+`settingsOverrides.<feature>` (same fields as the product setting; an invalid
+override is ignored). A call for a feature the release does not declare
+answers **403** (`… does not declare <feature>; add it with forklaunch infra
+add …`). Deleting the application or the environment gives the number back,
+deletes the SES identity, unlinks WhatsApp and stops the key working; a
+Stripe connected account belongs to the business and is kept.
+
 ## Email (managed instances and regular deployments)
 
 Neither a managed instance nor an app deployed to its own environment
@@ -204,17 +233,19 @@ its own suppression list (hard bounces and complaints).
 | | managed instance | regular deployment (per application × environment) |
 |---|---|---|
 | sends from | `no-reply@<instance>.<sending domain>` | `no-reply@<app>-<6 hex>.<sending domain>` in `production`/`prod`/`main`; `no-reply@<app>-<env>-<6 hex>.<sending domain>` elsewhere |
-| `INSTANCE_ID` / `INSTANCE_HMAC_KEY` | the instance's, from its provisioner | the environment's gateway principal, minted on its first deploy that declares email, the same on every redeploy |
+| `INSTANCE_ID` / `INSTANCE_HMAC_KEY` | the instance's, from its provisioner | the environment's gateway principal, minted on its first deploy that declares any gateway capability, the same on every redeploy |
 | limits | the product's (template), then the instance's override | the platform's application defaults (`EMAIL_GATEWAY_APP_*`), then the environment's override |
 | events | the service that declared email | the HTTP service that declared email, at `https://<service>.<app DNS subzone>/platform-events/email`; for a worker, its server component receives them there through `api/platformEvents/email.ts` (the worker process does not). With no public DNS for the app they are recorded (suppression still applies) but not relayed |
 
 For a regular deployment the deploy stores `PLATFORM_GATEWAY_URL`,
 `INSTANCE_ID` and `INSTANCE_HMAC_KEY` as platform-owned variables of the
-environment × region **only on the services and workers the release binds
-email to** (component scope). Other components never get them: the framework
-reads those three variables as "this is a managed instance", and a billing
-service that saw them would route Stripe through the gateway. Run
-`infra remove <component> email` and the next deploy removes them again.
+environment × region **only on the services and workers the release binds a
+gateway capability to** (component scope). Other components never get them:
+the framework reads those three variables as "this is a managed instance", and
+a billing service that holds its own Stripe key and did not declare `payments`
+would otherwise route Stripe through the gateway and be refused. Run
+`infra remove <component> <capability>` and the next deploy removes them
+again.
 Nobody is asked for them; a value a person set on a component is left alone
 (that component then cannot send). An application that backs a managed
 instance is skipped: its instance's own values stay.
@@ -289,7 +320,7 @@ gives a 429 past it.
 | `email-provider-direct-in-managed` | high | a managed service imports nodemailer, `@aws-sdk/client-ses(v2)`, `@sendgrid/mail`, postmark or mailgun, or reads `SMTP_*`/`SENDGRID_API_KEY`/`POSTMARK_*`/`MAILGUN_*`: run `infra add <service> email`, send with `EmailClient`, drop the SDK and keys |
 | `email-protected-data` | high; critical with phi entities | a `.deanon` value in the `subject` of an email send: subjects show in notification previews and mail logs — use a generic subject and keep the detail in the body or behind a link |
 
-## SMS (platform-held): `forklaunch infra add <service> sms`
+## SMS (managed gateway): `forklaunch infra add <service> sms`
 
 Texts go through the platform's AWS End User Messaging SMS gateway. The
 service holds **no AWS credential, no Twilio key and no phone number**: it
@@ -305,8 +336,8 @@ forklaunch infra add <service> sms        # infra remove <service> sms undoes it
 
 - `registrations.ts`: an `SmsClient` built with `createSmsClient()` from the
   gateway settings (`PLATFORM_GATEWAY_URL`, `INSTANCE_ID`, `INSTANCE_HMAC_KEY`,
-  all optional; outside managed mode the client refuses on the first send, so
-  the service still boots).
+  all optional; without them the client refuses on the first send, so the
+  service still boots).
 - `api/platformEvents/sms.ts`: the handler stub for SMS events, plus the
   `/platform-events/:feature` route that verifies them (`verifyPlatformEvent`).
 - docker-compose: the `gateway-mock` service, with the service's gateway env.
@@ -370,7 +401,7 @@ An app sends WhatsApp through the platform's managed gateway (AWS End User Messa
 Social). It never holds a Meta token or an AWS credential.
 
 **Add it:** `forklaunch infra add <service> whatsapp`. It writes:
-- a `WhatsAppClient` registration built with `createWhatsAppClient()` from the gateway settings (`PLATFORM_GATEWAY_URL`, `INSTANCE_ID`, `INSTANCE_HMAC_KEY`, all optional, absent outside managed mode);
+- a `WhatsAppClient` registration built with `createWhatsAppClient()` from the gateway settings (`PLATFORM_GATEWAY_URL`, `INSTANCE_ID`, `INSTANCE_HMAC_KEY`, all optional, set by the platform only where `whatsapp` is declared);
 - a `/platform-events/:feature` route and the handler stub `api/platformEvents/whatsapp.ts`;
 - the local gateway mock in docker-compose, and the manifest capability `whatsapp` (release resource type `whatsapp`).
 
@@ -534,7 +565,8 @@ forklaunch infra remove <service> payments
   its factory **switched**, never duplicated:
   `createStripeClient({ Stripe, apiKey: STRIPE_API_KEY })`, with
   `STRIPE_API_KEY` / `STRIPE_WEBHOOK_SECRET` made `optional(...)` (used only
-  outside managed mode). A factory it does not recognise is refused, not guessed.
+  when the gateway settings are absent). A factory it does not recognise is
+  refused, not guessed.
 - The gateway contract (`PLATFORM_GATEWAY_URL`, `INSTANCE_ID`,
   `INSTANCE_HMAC_KEY`, all optional), the local gateway mock in docker-compose,
   and the manifest capability (release resource type `payment`).
@@ -647,11 +679,46 @@ const reply = await models.chat.completions.create({
 });
 ```
 
-Locally the mock answers `[mock <model>] <your last message>`; `MOCK_MODELS`,
-`MOCK_MONTHLY_TOKENS` and `MOCK_FAIL_EVERY` set the catalog, budget (429) and
-outages (503). Checks: `ai-provider-direct` (a phi service calls a provider
-directly; fix: this capability) and `capability-wiring` (manifest and
-`registrations.ts` disagree about `ModelGatewayClient`).
+`models.chat.completions.stream(...)` yields OpenAI-shaped chunks;
+`models.models()` returns the allowed aliases, `monthlyTokenBudget`,
+`tokensUsedThisMonth` and `withheldForHipaa`. Refusals are
+`ModelGatewayRequestError` with `status`: 400 (no messages, or the model
+rejected the prompt), 401 (wrong key), 403 (the alias is not allowed, no model
+is enabled, a HIPAA app asked for a non-BAA model, or the environment's release
+does not declare `models`), 429 (per-minute limit or the month's token budget;
+`retryAfterSeconds`), 502/503 (the provider did not answer / the gateway is not
+configured). A regular deployment starts on the platform's application defaults
+(`MODEL_GATEWAY_APP_*`, see the table above).
+
+Locally the mock answers `[mock <model>] <your last message>`; `MOCK_MODELS`
+(default `sol,terra,luna`), `MOCK_MONTHLY_TOKENS` and `MOCK_FAIL_EVERY` set the
+catalog, budget (429) and outages (503). `.env.local` points at it on
+`http://localhost:18088` (`INSTANCE_ID=local-instance`,
+`INSTANCE_HMAC_KEY=local-dev-instance-key`). Checks: `ai-provider-direct` (a phi
+service calls a provider directly; fix: this capability) and
+`capability-wiring` (manifest and `registrations.ts` disagree about
+`ModelGatewayClient`).
+
+### Moving off a direct OpenAI or Anthropic client
+
+1. `forklaunch infra add <service> models`. The existing client, its key and its
+   dependency stay, so calls can move one at a time.
+2. Swap each call to the gateway client; the request is OpenAI's chat
+   completions shape with a catalog alias as `model`:
+   ```ts
+   // before: ci.resolve(tokens.OpenAIClient).chat.completions.create({ model: 'gpt-4o-mini', messages })
+   const reply = await ci
+     .resolve(tokens.ModelGatewayClient)
+     .chat.completions.create({ model: 'terra', messages });
+   ```
+   An Anthropic `messages.create({ system, messages, max_tokens })` becomes
+   `chat.completions.create` with `{ role: 'system', content: system }` first
+   and the text in `reply.choices[0].message.content`.
+3. When nothing uses it, delete the old registration, `OPENAI_API_KEY` /
+   `ANTHROPIC_API_KEY` (in code and in each environment), and the `openai` /
+   `@anthropic-ai/sdk` dependency.
+4. `forklaunch score --offline`: `ai-provider-direct` and `capability-wiring`
+   should be clean.
 
 ## Everything else
 

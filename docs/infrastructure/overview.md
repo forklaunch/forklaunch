@@ -18,6 +18,7 @@ When you initialize a new project or service, the CLI sets up the infrastructure
 | **Cache** | Redis in Docker | Amazon ElastiCache | `@forklaunch/infrastructure-redis` |
 | **Queue** | BullMQ (Redis) or Kafka in Docker | Amazon SQS / MSK | `@forklaunch/infrastructure-bullmq` |
 | **Object Storage** | MinIO in Docker | Amazon S3 | `@forklaunch/infrastructure-s3` |
+| **Managed gateway** (email, SMS, WhatsApp, voice, payments, models) | `gateway-mock` in Docker | the ForkLaunch platform (SES, End User Messaging, Connect, Stripe Connect, Azure AI Foundry) | `@forklaunch/core/http` |
 
 ## How Infrastructure Is Provisioned
 
@@ -110,5 +111,6 @@ See the [Testing guide](/docs/guides/testing.md) for full details.
 - [Caches](/docs/infrastructure/caches.md): Redis TTL cache system
 - [Queues](/docs/infrastructure/queues.md): BullMQ and Kafka message queues
 - [Storage](/docs/infrastructure/storage.md): S3 object storage
+- [Managed Gateway](/docs/infrastructure/managed-gateway.md): email, SMS, WhatsApp, voice, payments and AI models through the platform (`forklaunch infra add <service> <capability>`)
 - [Cache Guide](/docs/guides/cache.md): Detailed cache API reference
 - [Testing Guide](/docs/guides/testing.md): Infrastructure testing with TestContainers

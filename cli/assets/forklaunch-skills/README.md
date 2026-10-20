@@ -74,7 +74,7 @@ Full version in `AGENTS.md` and `CLAUDE.md`.
 - `/cli` — All CLI commands: init, change, delete, deploy, environment, release, org, sync, sdk, openapi. Also what only the dashboard can do, and the `deploy create` exit codes. **Supply ALL flags or CLI hangs.**
 - `/quick-reference` — Cheat sheet: imports, patterns, templates, commands at a glance.
 - `/prereqs` — Bare machine to buildable: Node, pnpm, git, OrbStack, the CLI, login. Agent-executed, confirms before installing.
-- `/integrations` — GitHub (App install, repo connect, autodeploy) and provider keys via `config set`. **There is no `integrate <service>`.**
+- `/integrations` — GitHub (App install, repo connect, autodeploy), provider keys via `config set`, and the managed gateway capabilities any app can add (`infra add <service> email|sms|whatsapp|voice|payments|models`). **There is no `integrate <service>`.**
 - `/managed-provisioning` — Managed apps: templates, provisioning, the claim handover, and where each surface stops.
 - `/managed-apps` — Managed mode runbook: the `forklaunch managed` CLI end to end (template publish vs publish-template, the three variable kinds, instance create → claim → destroy) plus failure modes (DLQ, the custom-var decrypt bug, the OAuth relay).
 - `/managed-app-repo` — Prepare an application REPO to run as a managed app: the platform/instance trust boundary (a signing secret never reaches a browser), which secret signs which direction, the hosted-gateway variable contract, and the two-half handover ceremony. Read before publishing a template.
@@ -103,7 +103,7 @@ Full version in `AGENTS.md` and `CLAUDE.md`.
 
 ### Infrastructure
 - `/investigator` — Diagnose a deployed app: is it up, why did a release or deploy fail, why isn't a change showing, where are the errors. **Start here when something is wrong.**
-- `/infra` — `fl infra` commands: list, status, resize, config-set, stop, delete provisioned resources. JWT-only, no CI mode.
+- `/infra` — `fl infra` commands: add/remove a capability in a service's code (object store, cache, email, sms, whatsapp, voice, payments, models); list, status, resize, config-set, stop, delete provisioned resources. JWT-only, no CI mode.
 - `/infrastructure-and-utilities` — Redis cache, S3 object store, TestContainers, utilities.
 - `/platform-architecture` — Modules, DDD, deployment workflow, Pulumi, multi-tenancy, worker queues.
 - `/development-guidelines` — Toolchain: runtimes (node/bun), validators (zod/typebox), databases, formatters, linters, tests, workers.

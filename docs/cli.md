@@ -17,6 +17,7 @@ The ForkLaunch CLI provides commands for managing your application development.
 | `forklaunch change` | Modify existing project components | - |
 | `forklaunch delete` | Delete project components | `del` |
 | `forklaunch sync` | Sync existing project components with artifacts | - |
+| `forklaunch infra add\|remove` | Add or remove a capability (object store, cache, email, sms, whatsapp, voice, payments, models) in a service's code | - |
 
 ## Development Commands
 
@@ -58,6 +59,8 @@ For detailed information about specific commands:
 - [Changing Projects](/docs/changing-projects.md) - Modify existing components
 - [delete](/docs/cli/delete.md) - Delete project components
 - [Deleting Projects](/docs/deleting-projects.md) - Comprehensive deletion guide, clean up project artifacts
+- [infra](/docs/cli/infra.md) - Add or remove a capability in a service or worker
+- [Managed Gateway](/docs/infrastructure/managed-gateway.md) - Email, SMS, WhatsApp, voice, payments and AI models with no vendor keys
 
 ### Development Tools
 - [depcheck](/docs/cli/depcheck.md) - Dependency management

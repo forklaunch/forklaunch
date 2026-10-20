@@ -346,7 +346,11 @@ for await (const chunk of models.chat.completions.stream({ model: 'luna', messag
 - **Usage**: `forklaunch managed instance model-usage --id <id> [--month
   YYYY-MM]` shows calls, tokens and cost per model. Prompts and completions are
   never stored.
-- **Local development**: there is no platform locally, so run the mock that
+- **Local development**: `forklaunch infra add <service> models` writes this
+  for you: the all-features `gateway-mock` (`forklaunch-gateway-mock`, host port
+  18088) in docker-compose and the local settings (`INSTANCE_ID=local-instance`,
+  `INSTANCE_HMAC_KEY=local-dev-instance-key`). For a client built by hand
+  without the capability, there is no platform locally, so run the mock that
   ships with `@forklaunch/core` (`forklaunch-model-gateway-mock`). It speaks the
   same contract, verifies your signatures exactly as the platform does, and
   answers deterministically (`[mock <model>] <your last message>`). Add to the
