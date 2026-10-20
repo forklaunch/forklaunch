@@ -199,7 +199,8 @@ const mikroOrmOptionsConfig = defineConfig({
   )}/${validConfigInjector.resolve(
     tokens.DB_NAME
   )}?authSource=admin&directConnection=true&replicaSet=rs0`,
-  // DB_URL names no database: the database always comes from DB_NAME.
+  // The platform's DB_URL names the database in its path; dbName from DB_NAME
+  // is set anyway, so a DB_URL without a path still selects the right one.
   dbName: validConfigInjector.resolve(
     tokens.DB_NAME
   ),
@@ -215,7 +216,7 @@ If you point a MongoDB service at your own database, set `DB_URL` to a full conn
 
 ### Upgrading an existing MongoDB service
 
-A MongoDB service created before this change builds its URL from the separate settings only, so deployed on DocumentDB it connects without TLS and with retryable writes, and fails. Make one edit in each MongoDB service's (and worker's) `mikro-orm.config.ts`.
+A MongoDB service created before this change builds its URL from the separate settings only, so deployed on DocumentDB it connects without TLS and with retryable writes, and fails. The required fix is one line in each MongoDB service's (and worker's) `mikro-orm.config.ts`.
 
 Before:
 
@@ -229,7 +230,7 @@ After:
   clientUrl: getEnvVar('DB_URL') || `mongodb://${validConfigInjector.resolve(
 ```
 
-A service switched to MongoDB with `forklaunch change` may resolve `'DB_USER'` rather than `tokens.DB_USER` on the next line; the edit is the same: put `getEnvVar('DB_URL') ||` in front of the template string. `getEnvVar` is already imported from `@forklaunch/core/services` at the top of the file. To match newly generated services, also add `dbName` right after the `clientUrl` property (after the line ending in `?authSource=admin&directConnection=true&replicaSet=rs0`,`), so the database always comes from `DB_NAME` whatever the URL names:
+A service switched to MongoDB with `forklaunch change` may resolve `'DB_USER'` rather than `tokens.DB_USER` on the next line; the edit is the same: put `getEnvVar('DB_URL') ||` in front of the template string. `getEnvVar` is already imported from `@forklaunch/core/services` at the top of the file. That line is all that is required: the platform's `DB_URL` names the service's database in its path. Optionally, to match newly generated services, also add `dbName` right after the `clientUrl` property (after the line ending in ``?authSource=admin&directConnection=true&replicaSet=rs0`,``). It selects `DB_NAME` even for a `DB_URL` without a database path:
 
 ```ts
   dbName: validConfigInjector.resolve(

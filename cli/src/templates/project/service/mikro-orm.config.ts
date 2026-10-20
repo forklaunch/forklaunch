@@ -91,7 +91,8 @@ const mikroOrmOptionsConfig = defineConfig({ {{#is_mongo}}
   )}/${validConfigInjector.resolve(
     tokens.DB_NAME
   )}?authSource=admin&directConnection=true&replicaSet=rs0`,
-  // DB_URL names no database: the database always comes from DB_NAME.
+  // The platform's DB_URL names the database in its path; dbName from DB_NAME
+  // is set anyway, so a DB_URL without a path still selects the right one.
   dbName: validConfigInjector.resolve(
     tokens.DB_NAME
   ),{{/is_mongo}}{{^is_mongo}}

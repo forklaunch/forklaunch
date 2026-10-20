@@ -320,7 +320,8 @@ pub(crate) fn transform_mikroorm_config_ts(
                         // DB_URL (set by the platform for DocumentDB: tls,
                         // replicaSet, retryWrites=false) wins; the URL built
                         // from DB_HOST/DB_PORT is for local development.
-                        // DB_URL names no database, so dbName is DB_NAME.
+                        // DB_URL names the database in its path; dbName (DB_NAME)
+                        // is set too, for a DB_URL without one.
                         let mut additional_object_props = String::new();
                         if !visited_properties.contains("clientUrl") {
                             additional_object_props.push_str(

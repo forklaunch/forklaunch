@@ -656,8 +656,9 @@ string (generated before the `DB_URL` change), make it prefer `DB_URL`:
   clientUrl: getEnvVar('DB_URL') || `mongodb://${validConfigInjector.resolve(
 ```
 
-Also add `dbName: validConfigInjector.resolve(tokens.DB_NAME),` after
-`clientUrl`, as new services have. Locally nothing changes (no `DB_URL`, so the
+That line is the required fix (the platform's `DB_URL` names the database in
+its path). Optionally add `dbName: validConfigInjector.resolve(tokens.DB_NAME),`
+after `clientUrl`, as new services have. Locally nothing changes (no `DB_URL`, so the
 docker-compose URL is built as before). SQL engines are unaffected: they use
 `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_PASSWORD`/`DB_NAME`. See
 `/development-guidelines` (*How each engine connects*).

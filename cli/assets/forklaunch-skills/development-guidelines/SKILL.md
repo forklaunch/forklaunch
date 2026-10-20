@@ -196,8 +196,10 @@ Fix it by hand in each mongodb service's and worker's `mikro-orm.config.ts`:
   clientUrl: getEnvVar('DB_URL') || `mongodb://${validConfigInjector.resolve(
 ```
 
-and, to match new services, add `dbName: validConfigInjector.resolve(tokens.DB_NAME),`
-after `clientUrl`. `getEnvVar` is already imported. Never hand-set `DB_URL` (or
+That one line is the required edit (the platform's `DB_URL` names the
+database in its path). Optional, to match new services: add
+`dbName: validConfigInjector.resolve(tokens.DB_NAME),` after `clientUrl`, which
+also covers a `DB_URL` without a path. `getEnvVar` is already imported. Never hand-set `DB_URL` (or
 any `DB_*`) as a user-supplied variable on a deployed environment: it would
 override the platform's value forever.
 
