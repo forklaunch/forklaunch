@@ -1,5 +1,25 @@
 # @forklaunch/core
 
+## 3.2.0
+
+### Minor Changes
+
+- de09443: **Behaviour change:** a compliant field (pii/phi/pci) now decrypts under the tenant it was loaded under, not whatever tenant is bound when `.deanon` runs. The field records the tenant bound when the row was hydrated (with `wrapEmWithTenantContext`, the entity manager's tenant), or when a plain value was assigned to it, and uses that key for every later read and write. So `.deanon` works after `await em.find(...)` returns, with nothing bound, and you can remove `withEncryptionContext(tenantId, …)` wrappers that exist only to build DTOs from loaded entities. A read with a _different_ tenant bound now throws the new `TenantMismatchError` instead of decrypting, as does flushing a value assigned under one tenant through another tenant's entity manager. Rows loaded with no tenant bound (a raw `orm.em.fork()`) behave as before: reading them needs a tenant bound at read time. A write with no tenant anywhere still throws `UnboundTenantError`.
+
+  Also fixed: `em.assign(entity, { week: 29 })` (and `wrap(entity).assign`) on an existing row threw MikroORM's "Trying to set X.week of type 'string' to 29 of type 'number'" for every encrypted field that is not a string (integer, number, boolean, date, json, array). Compliant properties now report their in-memory type (`CompliantField`) to MikroORM instead of `string`, so assigned values reach the property setter and are wrapped as with `em.create`.
+
+- ec6f0f5: - **Default audit trail.** Every request handled through ForkLaunch appends one audit record (`log.type: audit`) when its response finishes: user, tenant, method, route, status, duration and a SHA-256 of the body (never the body itself). Refused requests are recorded as `auth_failure` (401), `rbac_deny` (403) or `rate_limit` (429). Every `.deanon` read of a compliant field adds a `data_access` record (field, level, tenant), and every create, update or delete of a record holding pii, phi or pci fields adds a `data_change` record (entity and id, action, sensitive field names, tenant). Entities defined with `defineComplianceEntity` get the change hooks automatically. Set `FORKLAUNCH_AUDIT=off` to turn it off.
+  - `onComplianceChange(listener)` reports changes to sensitive records, for apps that want their own audit sink.
+- 7c27cfb: `createEmailClient().send` takes an optional `listUnsubscribe: { url?, mailto?, oneClick? }`. The platform adds `List-Unsubscribe` (RFC 2369) and, with `oneClick`, `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 8058) to the message, which Gmail and Yahoo require of bulk senders. These are targets, not header text: `url` must be https (printable ASCII, up to 512 characters, no `< > , " \`), `mailto` a plain mailbox, at least one is required, and `oneClick` needs `url` (also enforced by the `EmailListUnsubscribe` type). The client, the platform gateway and the local gateway mock apply the same rules; the mock records the option and the headers it implies on `GET /__mock/email/messages`. `validateListUnsubscribe` and `EMAIL_LIMITS.maxUnsubscribeUrlLength` are exported.
+
+  Needs a platform whose email gateway accepts `listUnsubscribe`; an older gateway ignores the field.
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/common@1.2.32
+  - @forklaunch/validator@1.2.33
+
 ## 3.1.0
 
 ### Minor Changes

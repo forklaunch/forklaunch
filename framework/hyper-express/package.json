@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/hyper-express",
-  "version": "1.2.49",
+  "version": "1.2.50",
   "description": "Forklaunch framework for hyper-express.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -44,12 +44,12 @@
     "@forklaunch/hyper-express-fork": "^6.18.1",
     "@forklaunch/validator": "workspace:^",
     "@forklaunch/ws": "workspace:^",
-    "@scalar/express-api-reference": "^0.10.29",
+    "@scalar/express-api-reference": "^0.10.30",
     "cors": "^2.8.6",
     "live-directory": "^3.0.3",
-    "openapi3-ts": "^4.6.1",
-    "qs": "^6.16.0",
-    "swagger-ui-dist": "^5.33.2",
+    "openapi3-ts": "^4.6.2",
+    "qs": "^6.16.1",
+    "swagger-ui-dist": "^5.34.0",
     "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
@@ -63,13 +63,13 @@
     "jest": "^30.5.2",
     "kill-port-process": "^5.0.0",
     "prettier": "^3.9.10",
-    "ts-jest": "^29.4.14",
+    "ts-jest": "^29.4.15",
     "ts-node": "^10.9.2",
     "tsup": "^9.0.0",
     "tsx": "^4.23.15",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2",
-    "typescript-eslint": "^8.71.2",
+    "typescript-eslint": "^8.72.0",
     "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.52.0"
   },
   "peerDependencies": {

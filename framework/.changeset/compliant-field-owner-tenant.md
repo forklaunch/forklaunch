@@ -1,7 +1,0 @@
----
-'@forklaunch/core': minor
----
-
-**Behaviour change:** a compliant field (pii/phi/pci) now decrypts under the tenant it was loaded under, not whatever tenant is bound when `.deanon` runs. The field records the tenant bound when the row was hydrated (with `wrapEmWithTenantContext`, the entity manager's tenant), or when a plain value was assigned to it, and uses that key for every later read and write. So `.deanon` works after `await em.find(...)` returns, with nothing bound, and you can remove `withEncryptionContext(tenantId, …)` wrappers that exist only to build DTOs from loaded entities. A read with a *different* tenant bound now throws the new `TenantMismatchError` instead of decrypting, as does flushing a value assigned under one tenant through another tenant's entity manager. Rows loaded with no tenant bound (a raw `orm.em.fork()`) behave as before: reading them needs a tenant bound at read time. A write with no tenant anywhere still throws `UnboundTenantError`.
-
-Also fixed: `em.assign(entity, { week: 29 })` (and `wrap(entity).assign`) on an existing row threw MikroORM's "Trying to set X.week of type 'string' to 29 of type 'number'" for every encrypted field that is not a string (integer, number, boolean, date, json, array). Compliant properties now report their in-memory type (`CompliantField`) to MikroORM instead of `string`, so assigned values reach the property setter and are wrapped as with `em.create`.
