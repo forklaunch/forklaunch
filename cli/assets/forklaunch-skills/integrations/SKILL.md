@@ -358,6 +358,39 @@ suppressed: a later send answers 422), `complaint@…` is delivered then
 complained, anything else is delivered. `MOCK_EMAIL_DAILY_QUOTA` (default 200)
 gives a 429 past it.
 
+### Sending from the customer's own domain (Pro)
+
+The default from address above can be replaced with the customer's own domain
+on the Pro and Enterprise plans. Code does not change; the platform picks the
+from address.
+
+```bash
+# regular deployment: per environment, on the app's custom domain
+forklaunch app domain set acme.com                         # custom domain first
+forklaunch app domain email set -e production --from billing --name "Acme Billing" [--subdomain mail]
+forklaunch app domain email status [-e production] [--json]
+forklaunch app domain email remove -e production [-y]
+# managed instance: no app custom domain, so the domain is named
+forklaunch managed instance email set --id <id> --domain clinic.com --from care --name "Clinic Care"
+forklaunch managed instance email status --id <id> [--json]
+forklaunch managed instance email remove --id <id> [-y]
+```
+
+- Until SES verifies the domain (`pending_verification` / `failed`) mail keeps
+  going from the default `no-reply@...` sender. Sends never fail because of it.
+- Delegated domain: DKIM records written automatically (`dnsRecordsWritten:
+  true`). Otherwise the CLI prints the CNAMEs to publish. The `_dmarc` TXT it
+  prints is advisory.
+- Local checks before the request: `--from` lowercase `[a-z0-9._+-]`, not
+  starting/ending with a dot; `--name` one line, <= 64 chars, no `<` `>` `"`;
+  `--subdomain`/`--domain` dot-separated DNS labels.
+- 403 `Custom email senders require a Pro or Enterprise plan` (upgrade); 400
+  validation (e.g. the app has no custom domain); 409 (instance) the domain is
+  claimed by another organization.
+- HTTP: `PUT|GET|DELETE /applications/:id/custom-domain/email-sender`
+  (`?environment=`; GET without it returns an array) and, under
+  `/managed-mode`, `PUT|GET|DELETE /instances/:id/email-sender`.
+
 ### 5. Checks and fixes (`forklaunch score`)
 
 | check | severity | fix |

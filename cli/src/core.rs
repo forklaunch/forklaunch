@@ -10,6 +10,7 @@ pub(crate) mod client_sdk;
 pub(crate) mod command;
 pub(crate) mod database;
 pub(crate) mod docker;
+pub(crate) mod email_sender;
 pub(crate) mod env;
 pub(crate) mod env_defaults;
 pub(crate) mod env_scope;

@@ -12,6 +12,7 @@ mod claim_next;
 mod create;
 mod deployments;
 mod destroy;
+mod email;
 mod feature_override;
 mod get;
 mod list;
@@ -33,6 +34,7 @@ use claim_next::ClaimNextCommand;
 use create::CreateCommand;
 use deployments::DeploymentsCommand;
 use destroy::DestroyCommand;
+use email::EmailCommand;
 use feature_override::{Feature, FeatureOverrideCommand, GatewaySettingsCommand};
 use get::GetCommand;
 use list::ListCommand;
@@ -54,6 +56,7 @@ pub(super) struct InstanceCommand {
     app_claim_link: AppClaimLinkCommand,
     app_claim_hook: AppClaimHookCommand,
     sms: SmsCommand,
+    email: EmailCommand,
     claim: ClaimCommand,
     destroy: DestroyCommand,
     vars: VarsCommand,
@@ -84,6 +87,7 @@ impl InstanceCommand {
             app_claim_link: AppClaimLinkCommand::new(),
             app_claim_hook: AppClaimHookCommand::new(),
             sms: SmsCommand::new(),
+            email: EmailCommand::new(),
             claim: ClaimCommand::new(),
             destroy: DestroyCommand::new(),
             vars: VarsCommand::new(),
@@ -151,7 +155,9 @@ impl CliCommand for InstanceCommand {
              \x20 `voice`             concurrent calls, monthly minutes\n\
              \x20 `email-gateway`     recipients per day, messages per minute\n\
              \x20 `payments-gateway`  application fee, Stripe calls per minute\n\
-             \x20 `gateway-settings`  what is in force for each, and which is overridden",
+             \x20 `gateway-settings`  what is in force for each, and which is overridden\n\n\
+             CUSTOM EMAIL SENDER (Pro): `email set|status|remove` sends the instance's mail\n\
+             from your own domain instead of no-reply@<host prefix>.<platform sending domain>.",
         )
         .subcommand(self.list.command())
         .subcommand(self.create.command())
@@ -160,6 +166,7 @@ impl CliCommand for InstanceCommand {
         .subcommand(self.app_claim_link.command())
         .subcommand(self.app_claim_hook.command())
         .subcommand(self.sms.command())
+        .subcommand(self.email.command())
         .subcommand(self.claim.command())
         .subcommand(self.destroy.command())
         .subcommand(self.vars.command())
@@ -190,6 +197,7 @@ impl CliCommand for InstanceCommand {
             Some(("app-claim-link", sub_matches)) => self.app_claim_link.handler(sub_matches),
             Some(("app-claim-hook", sub_matches)) => self.app_claim_hook.handler(sub_matches),
             Some(("sms", sub_matches)) => self.sms.handler(sub_matches),
+            Some(("email", sub_matches)) => self.email.handler(sub_matches),
             Some(("claim", sub_matches)) => self.claim.handler(sub_matches),
             Some(("destroy", sub_matches)) => self.destroy.handler(sub_matches),
             Some(("vars", sub_matches)) => self.vars.handler(sub_matches),

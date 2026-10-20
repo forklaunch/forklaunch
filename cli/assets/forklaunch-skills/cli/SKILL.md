@@ -1012,6 +1012,8 @@ forklaunch app services             # list services and workers
 forklaunch app domain status        # inspect the custom domain
 forklaunch app domain set app.example.com        # attach one
 forklaunch app domain subdomain add shop -s <service-id>
+forklaunch app domain email set -e production --from billing --name "Acme Billing"  # send from the custom domain (Pro)
+forklaunch app domain email status          # verification + DNS records (--json)
 forklaunch app readiness show       # readiness schedule + latest run
 forklaunch app readiness run        # start a report now
 forklaunch app resize ...           # resize components (cuts a release + deploys)

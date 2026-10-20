@@ -69,6 +69,7 @@ For detailed information about specific commands:
 
 ### Authentication & Platform
 - [authentication](/docs/cli/authentication.md) - Login, logout, and user management
+- [domain](/docs/cli/domain.md) - Custom domain, subdomain routes and custom email sender (`app domain`)
 
 
 
@@ -149,6 +150,7 @@ For detailed information about specific commands:
 
 ### Authentication & Platform
 - [authentication](/docs/cli/authentication.md) - Login, logout, and user management
+- [domain](/docs/cli/domain.md) - Custom domain, subdomain routes and custom email sender (`app domain`)
 - [integrate](/docs/cli/integrate.md) - Link local app with platform
 - [release](/docs/cli/release.md) - Create and manage releases
 - [deploy](/docs/cli/deploy.md) - Deploy releases to environments

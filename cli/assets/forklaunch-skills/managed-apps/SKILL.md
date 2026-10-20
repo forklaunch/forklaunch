@@ -416,6 +416,24 @@ forklaunch managed instance gateway-settings --id <id>       # what is in force
   (`clear: true` removes); `GET /templates/:slug/gateway-settings` and
   `GET /instances/:id/gateway-settings`.
 
+### An instance's own from address (Pro)
+
+`email-gateway` sets limits; `email` sets WHO the mail is from. By default an
+instance sends from `no-reply@<host prefix>.<platform sending domain>`; on Pro
+and Enterprise it can send from a domain the operator owns:
+
+```bash
+forklaunch managed instance email set --id <id> --domain clinic.com [--from care] [--name "Clinic Care"]
+forklaunch managed instance email status --id <id> [--json]   # status + DNS records to publish
+forklaunch managed instance email remove --id <id> [-y]       # back to the default sender
+```
+
+Until SES verifies the domain, mail keeps going from the default sender (sends
+never fail). A domain delegated to ForkLaunch gets its DKIM records written
+automatically; otherwise publish the printed CNAMEs (`_dmarc` TXT is advisory).
+403 = plan gate, 409 = the domain belongs to another organization.
+HTTP: `PUT|GET|DELETE /managed-mode/instances/:id/email-sender`.
+
 ## 3. Instance lifecycle
 
 ### create → provisioning

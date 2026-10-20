@@ -140,6 +140,27 @@ const { models: allowed, tokensUsedThisMonth, monthlyTokenBudget } = await model
 
 The request and response follow the OpenAI chat completions shape. `models()` lists the models you may call and where the monthly budget stands.
 
+## Send from Your Own Domain (Pro)
+
+On the Pro and Enterprise plans, managed-gateway email can go from your own domain instead of the platform's default sender. Your code does not change: `email.send(...)` is the same call, and the platform picks the from address.
+
+| | regular deployment (per application × environment) | managed instance |
+|---|---|---|
+| default sender | `no-reply@<app label>.<platform sending domain>` | `no-reply@<host prefix>.<platform sending domain>` |
+| domain | the application's custom domain (`forklaunch app domain set` first), optionally a subdomain of it | any domain you own, named on the command; one organization per domain |
+| set | `forklaunch app domain email set -e <env> [--from <local-part>] [--name "<display name>"] [--subdomain <sub>]` | `forklaunch managed instance email set --id <id> --domain <domain> [--from <local-part>] [--name "<display name>"]` |
+| check | `forklaunch app domain email status [-e <env>] [--json]` | `forklaunch managed instance email status --id <id> [--json]` |
+| undo | `forklaunch app domain email remove -e <env> [-y]` | `forklaunch managed instance email remove --id <id> [-y]` |
+
+How it behaves:
+
+- **Sends never fail because of it.** Until Amazon SES verifies the domain (`pending_verification`, or `failed`), mail keeps going from the default sender. Once it is `verified`, mail goes from the new address.
+- **DNS.** If the domain is delegated to ForkLaunch, the DKIM records are written for you (`dnsRecordsWritten: true`). Otherwise `set` and `status` print the CNAME records to publish at your DNS provider. A `_dmarc` TXT record is included as advisory: verification does not wait on it.
+- **Rules checked before the request**: the local part (`--from`) is lowercase `a-z 0-9 . _ + -`, not starting or ending with a dot; the display name (`--name`) is one line, at most 64 characters, without `<`, `>` or `"`; a subdomain or domain is dot-separated DNS labels.
+- **Errors**: 403 `Custom email senders require a Pro or Enterprise plan` (upgrade the organization); 400 a validation message, such as an application with no custom domain; 409 (instances) the domain belongs to another organization.
+
+Removing the sender returns the environment or instance to the default sender. See the [domain command](/docs/cli/domain.md).
+
 ## Local Development
 
 There is no platform on your machine, so `infra add` puts the gateway mock in `docker-compose.yaml`. It ships with `@forklaunch/core` (`forklaunch-gateway-mock`), serves every capability's routes, checks your signatures the way the platform does, and sends signed events back to your service.
@@ -251,5 +272,6 @@ For a HIPAA app (the application's or environment's compliance standards include
 ## Related
 
 - [Infra command](/docs/cli/infra.md)
+- [Domain command](/docs/cli/domain.md)
 - [Deploy command](/docs/cli/deploy.md)
 - [Infrastructure overview](/docs/infrastructure/overview.md)
