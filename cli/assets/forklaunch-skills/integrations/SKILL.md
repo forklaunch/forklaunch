@@ -216,11 +216,25 @@ What a regular deployment gets, per feature (the platform side; the code is
 
 An operator can override any of these for one environment in the principal's
 `settingsOverrides.<feature>` (same fields as the product setting; an invalid
-override is ignored). A call for a feature the release does not declare
-answers **403** (`… does not declare <feature>; add it with forklaunch infra
-add …`). Deleting the application or the environment gives the number back,
-deletes the SES identity, unlinks WhatsApp and stops the key working; a
-Stripe connected account belongs to the business and is kept.
+override is ignored). There is no CLI or API for it yet: it is a database edit
+of `app_gateway_principal.settings_overrides` in managed-apps. Limits apply on
+the next call; a `whatsapp` link or `voice` flows also need a redeploy of the
+environment, which writes the channel row or claims the number. A call for a
+feature the release does not declare answers **403** (`… does not declare
+<feature>; add it with forklaunch infra add …`). Deleting the application or
+the environment (or removing its last region) gives the number back, deletes
+the SES identity, unlinks WhatsApp and marks the principal deleted, so its key
+answers **401**; a Stripe connected account belongs to the business and is
+kept. A re-created environment of the same name gets a new key on its next
+deploy.
+
+If `INSTANCE_GATEWAY_PUBLIC_URL` is unset on managed-apps there is no
+fallback: managed-apps answers the ensure call with 503, the deploy finishes
+(platform-management logs an `[AppGatewayPrincipal]` warning), a first deploy
+leaves the components without gateway settings (the client throws where it is
+used), and a later deploy keeps the settings it had.
+Operator setup (env vars, overrides, linking WhatsApp, teardown, deploy
+order): the ForkLaunch platform docs (Managed gateway page).
 
 ## Email (managed instances and regular deployments)
 
@@ -421,7 +435,7 @@ await whatsapp.sendText({ to: '+14155550123', body: 'Which day works?' }); // on
 - **Business-initiated messages must use a Meta-approved template.** An unknown, untranslated or unapproved template is 400.
 - **Free text is allowed only within 24 hours of the person's last message** to the business number. Outside that window it is 422; send a template instead.
 - **Per-instance rate limit:** 429, with `retryAfterSeconds`.
-- **No phone number linked** for the product or instance: 409. Linking a WhatsApp Business Account is a manual Meta embedded signup in the AWS console; the operator then records the phone number id with `forklaunch managed template update --slug <slug> --whatsapp-number-id <phone-number-id-…>` (or `managed instance whatsapp --id <id> --number-id …` for one instance's own number).
+- **No phone number linked** for the product or instance: 409. Linking a WhatsApp Business Account is a manual Meta embedded signup in the AWS console; the operator then records the phone number id with `forklaunch managed template update --slug <slug> --whatsapp-number-id <phone-number-id-…>` (or `managed instance whatsapp --id <id> --number-id …` for one instance's own number). For a regular app environment the operator sets `settingsOverrides.whatsapp.originationPhoneNumberId` on its gateway principal and redeploys the environment (the ForkLaunch platform docs, Managed gateway page).
 - **HIPAA products cannot send WhatsApp at all:** 403. WhatsApp is not covered by the AWS BAA, and Meta signs none.
 
 **Events** arrive at `api/platformEvents/whatsapp.ts`, already verified. Dedupe on `event.id`.
@@ -487,8 +501,10 @@ await voice.endCall(callId); // hang up (reason `api`)
 
 Refusals arrive as `VoiceRequestError` with `status`: 400 (bad number, unknown
 flow, an ARN, bad or `fl_`-prefixed attributes), 403 (the product has no voice
-flows), 404 (not this instance's call), 409 (no number claimed yet, or the call
-already ended), 429 (too many calls at once or the month's minutes spent;
+flows; for a regular app environment, no flows in `VOICE_APP_FLOWS` or its
+override), 404 (not this instance's call), 409 (no number claimed yet, or the
+call already ended; an app environment claims its number on the deploy after
+flows exist), 429 (too many calls at once or the month's minutes spent;
 `retryAfterSeconds`), 502/503 (Connect unavailable / not configured).
 
 ### 3. Events
