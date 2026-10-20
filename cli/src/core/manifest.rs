@@ -100,8 +100,8 @@ pub(crate) struct ResourceInventory {
     pub(crate) queue: Option<String>,
     pub(crate) object_store: Option<String>,
     pub(crate) redis_partition: Option<u32>,
-    /// Platform-held capabilities this service uses through the instance
-    /// gateway (payments, email, sms, whatsapp, voice), added with
+    /// Platform-held capabilities this project uses through the managed
+    /// gateway (payments, email, sms, whatsapp, voice, models), added with
     /// `forklaunch infra add`. Each becomes a release-manifest resource of the
     /// matching platform type, bound to this service.
     #[serde(default, skip_serializing_if = "Option::is_none")]

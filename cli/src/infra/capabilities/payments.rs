@@ -24,7 +24,7 @@ pub(crate) static PAYMENTS: Capability = Capability {
     summary: "Stripe Connect through the platform: the instance's own connected account, no Stripe key in the app",
     registration_key: "StripeClient",
     receives_events: true,
-    workers: false,
+    workers: true,
     add,
     remove,
 };

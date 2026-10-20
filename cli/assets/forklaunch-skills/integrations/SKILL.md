@@ -1,6 +1,6 @@
 ---
 name: integrations
-description: "Wire third-party services into a ForkLaunch app: GitHub (repo + autodeploy), Stripe (billing/ecommerce keys), voice calls for managed apps (forklaunch infra add <service> voice), and any other provider whose credentials are environment variables. There is no `forklaunch integrate <service>` — this skill is the real path."
+description: "Wire third-party services into a ForkLaunch app: GitHub (repo + autodeploy), Stripe (billing/ecommerce keys), managed gateway capabilities for any app (forklaunch infra add <service> email|sms|whatsapp|voice|payments|models), and any other provider whose credentials are environment variables. There is no `forklaunch integrate <service>` — this skill is the real path."
 user-invokable: true
 ---
 
@@ -16,8 +16,10 @@ user-invokable: true
   `forklaunch infra add <service> email`
   (below); no SMTP or SendGrid key
 - A deploy is blocked complaining about a missing environment variable
-- "Call patients to remind them" / outbound phone calls in a managed app
-  (see *Voice calls*)
+- "Call patients to remind them" / outbound phone calls (see *Voice calls*)
+- "Add AI" / "summarize this with an LLM" without a provider key, or a
+  `ai-provider-direct` finding: `forklaunch infra add <service> models` (see
+  *Models*)
 
 ## Read this first: there is no `integrate <service>` command
 
@@ -178,6 +180,19 @@ a placeholder key fails **locally too**, with `Invalid API Key provided`. There
 is no offline mode. Use a real test key in local `.env` files, or expect that
 code path to fail on a developer machine.
 
+## Managed gateway capabilities, on any app
+
+Email, SMS, WhatsApp, voice, payments and models are **managed gateway**
+capabilities: the platform holds the vendor account and the app holds no
+credential. They are not limited to managed instances. `forklaunch infra add
+<service|worker> <capability>` declares one; on deploy the platform sets
+`PLATFORM_GATEWAY_URL`, `INSTANCE_ID` and `INSTANCE_HMAC_KEY` on the
+components the release binds it to (a managed instance gets them from its
+provisioner). A worker can call any of them; events are delivered over HTTP to
+`/platform-events/<capability>`, so a capability with events also belongs on an
+HTTP service if the app needs them (`infra add <worker>` says so when none
+holds it).
+
 ## Email (managed instances and regular deployments)
 
 Neither a managed instance nor an app deployed to its own environment
@@ -208,7 +223,7 @@ instance is skipped: its instance's own values stay.
 
 ```bash
 forklaunch infra add <service> email
-forklaunch infra add <worker> email         # a worker that sends (CLI with worker support)
+forklaunch infra add <worker> email         # a worker that sends
 forklaunch infra remove <service> email     # undoes it
 ```
 
@@ -349,9 +364,9 @@ fail; `MOCK_SMS_MONTHLY_CAP` (segments, default 100) and `MOCK_SMS_PER_MINUTE`
 - `sms-protected-data` (critical when the app holds phi, else high): a
   `.deanon` value reaches an SMS body. Fix: text a link, not the value.
 
-## WhatsApp (managed instances)
+## WhatsApp (managed gateway)
 
-A managed instance sends WhatsApp through the platform (AWS End User Messaging
+An app sends WhatsApp through the platform's managed gateway (AWS End User Messaging
 Social). It never holds a Meta token or an AWS credential.
 
 **Add it:** `forklaunch infra add <service> whatsapp`. It writes:
@@ -395,10 +410,10 @@ await whatsapp.sendText({ to: '+14155550123', body: 'Which day works?' }); // on
 
 **Other conversational channels.** The client is channel-neutral (`ConversationChannelClient`: `sendTemplate`, `sendText`, `templates`). Apple Messages for Business is not offered: it has no server API without Apple's approval and a messaging service provider.
 
-## Voice calls (managed instances)
+## Voice calls (managed gateway)
 
-Outbound phone calls for a **managed** app (one the platform hosts per
-customer) go through the platform's Amazon Connect instance. The app holds no
+Outbound phone calls go through the platform's Amazon Connect instance, from a
+managed instance or any app deployed on ForkLaunch. The app holds no
 AWS key, no Connect instance id and no contact-flow ARN: it asks the platform
 to place a call with a **flow name** from its product's catalog, and the
 platform dials from the phone number claimed for that instance, inside the
@@ -493,7 +508,7 @@ and every other managed feature's topics and IAM grants are created by
 default, `--apply` to write, never deletes); the order of operations and the
 manual vendor steps are in `docs/managed-integrations-setup.md`.
 
-## Payments in a managed instance (Stripe Connect)
+## Payments through the managed gateway (Stripe Connect)
 
 The section above is for an app with its **own** Stripe account. A product sold
 as managed instances works differently: say you sell a booking app to dental
@@ -600,6 +615,43 @@ forwards to the official `stripe/stripe-mock` docker image instead.
 The platform's metadata policy checks key names only, because it cannot see
 where a value came from. The CLI check reads the code, so it is the real guard.
 Stripe signs no BAA, so health data must never reach it.
+
+## Models (managed gateway): `forklaunch infra add <service> models`
+
+AI models hosted by the platform (Azure AI Foundry), called with no provider
+key. The platform enforces the model allowlist, the monthly token budget and
+the rate limit, and offers a HIPAA product only BAA-covered models. Model calls
+have no events.
+
+```bash
+forklaunch infra add <service> models     # or <worker>; infra remove undoes it
+```
+
+- `registrations.ts`: a `ModelGatewayClient` built with
+  `createModelGatewayClient()` from `@forklaunch/core/http`, fed by the gateway
+  settings (all optional). It is `Lifetime.Scoped`: the client refuses to be
+  created without the settings, so a service started without them boots and
+  fails only where models are called.
+- docker-compose: the local `gateway-mock` (`forklaunch-gateway-mock`), which
+  serves the model routes; `.env.local`: the local settings.
+- The manifest: `resources.capabilities = ["models"]`; the release manifest
+  carries a `models` resource (type `models`) bound to the component.
+- An existing direct client (`new OpenAI(...)`, `new Anthropic(...)`, its key,
+  its dependency) is **left as it is**: move calls over, then delete it.
+
+```ts
+const models = ci.resolve(tokens.ModelGatewayClient);
+const reply = await models.chat.completions.create({
+  model: 'terra', // a catalog alias
+  messages: [{ role: 'user', content: 'Summarize this intake form: …' }]
+});
+```
+
+Locally the mock answers `[mock <model>] <your last message>`; `MOCK_MODELS`,
+`MOCK_MONTHLY_TOKENS` and `MOCK_FAIL_EVERY` set the catalog, budget (429) and
+outages (503). Checks: `ai-provider-direct` (a phi service calls a provider
+directly; fix: this capability) and `capability-wiring` (manifest and
+`registrations.ts` disagree about `ModelGatewayClient`).
 
 ## Everything else
 

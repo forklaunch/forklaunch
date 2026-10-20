@@ -293,14 +293,14 @@ const serviceDependencies = runtimeDependencies.chain({});
     }
 
     #[test]
-    fn only_email_may_be_added_to_a_worker() {
+    fn every_capability_may_be_added_to_a_worker() {
         assert!(EMAIL.workers);
         let on_workers: Vec<&str> = super::super::CAPABILITIES
             .iter()
             .filter(|c| c.workers)
             .map(|c| c.id)
             .collect();
-        assert_eq!(on_workers, vec!["email"]);
+        assert_eq!(on_workers, vec!["email", "sms", "whatsapp", "voice", "payments", "models"]);
     }
 
     #[test]

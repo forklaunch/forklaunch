@@ -58,19 +58,95 @@ fn parse_type(name: &str) -> Result<Infrastructure> {
     })
 }
 
+/// `--help` for the type: the infrastructure, then every managed gateway
+/// capability (from `CAPABILITIES`, so a new one is listed by itself).
+fn type_help() -> String {
+    let capabilities = super::capabilities::CAPABILITIES;
+    let ids: Vec<&str> = capabilities.iter().map(|c| c.id).collect();
+    let on_workers: Vec<&str> = capabilities
+        .iter()
+        .filter(|c| c.workers)
+        .map(|c| c.id)
+        .collect();
+    let workers = if on_workers.len() == ids.len() {
+        "any of them also on a worker".to_string()
+    } else {
+        format!("{} also on a worker", on_workers.join(", "))
+    };
+    format!(
+        "What to add: object-store (s3), cache (redis), or a managed gateway capability \
+         (any ForkLaunch app, managed instance or not): {} ({workers})",
+        ids.join(", ")
+    )
+}
+
+/// Whether `infra add|remove` may change this capability on a project of
+/// this type: services hold every capability; a worker those marked
+/// `workers`; a library none.
+fn check_project_type(
+    name: &str,
+    project_type: &ProjectType,
+    capability: &super::capabilities::Capability,
+) -> Result<()> {
+    let allowed = match project_type {
+        ProjectType::Service => true,
+        ProjectType::Worker => capability.workers,
+        ProjectType::Library => false,
+    };
+    if allowed {
+        return Ok(());
+    }
+    let on_workers: Vec<&str> = super::capabilities::CAPABILITIES
+        .iter()
+        .filter(|c| c.workers)
+        .map(|c| c.id)
+        .collect();
+    bail!(
+        "'{name}' is not a service; {} is added to services (a worker can have: {})",
+        capability.id,
+        on_workers.join(", ")
+    )
+}
+
+/// The note `infra add <worker> <capability>` prints when no HTTP service
+/// holds a capability the platform sends events for: the worker can call the
+/// gateway, but events are delivered over HTTP.
+fn worker_events_note(
+    projects: &[crate::core::manifest::ProjectEntry],
+    worker: &str,
+    capability: &super::capabilities::Capability,
+) -> Option<String> {
+    if !capability.receives_events {
+        return None;
+    }
+    let a_service_holds_it = projects.iter().any(|p| {
+        p.name != worker
+            && p.r#type == ProjectType::Service
+            && p.resources
+                .as_ref()
+                .and_then(|r| r.capabilities.as_ref())
+                .is_some_and(|c| c.iter().any(|c| c == capability.id))
+    });
+    if a_service_holds_it {
+        return None;
+    }
+    let id = capability.id;
+    Some(format!(
+        "note: '{worker}' can call the {id} gateway, but {id} events are delivered over HTTP \
+         to /platform-events/{id}, never to the worker process. The handler is in its server \
+         component (api/platformEvents/{id}.ts); if that is not reachable over HTTP where it is \
+         deployed, also run `forklaunch infra add <service> {id}` on an HTTP service so the events \
+         have somewhere to go."
+    ))
+}
+
 fn args(cmd: Command) -> Command {
     cmd.arg(
-        Arg::new("service")
-            .required(true)
-            .help("The service (or, for email, the worker) to change, by name"),
+        Arg::new("service").required(true).help(
+            "The service (or, for a managed gateway capability, the worker) to change, by name",
+        ),
     )
-    .arg(
-        Arg::new("type")
-            .required(true)
-            .help(
-                "What to add: object-store (s3), cache (redis), or a platform capability: email, sms, whatsapp, voice, payments (email also on a worker)",
-            ),
-    )
+    .arg(Arg::new("type").required(true).help(type_help()))
     .arg(
         Arg::new("base_path")
             .short('p')
@@ -328,18 +404,7 @@ fn change_capability(
         .find(|p| p.name == service)
         .with_context(|| format!("no project named '{service}' in the manifest"))?;
     let is_worker = project.r#type == ProjectType::Worker;
-    if project.r#type != ProjectType::Service && !(is_worker && capability.workers) {
-        let allowed: Vec<&str> = super::capabilities::CAPABILITIES
-            .iter()
-            .filter(|c| c.workers)
-            .map(|c| c.id)
-            .collect();
-        bail!(
-            "'{service}' is not a service; {} is added to services (a worker can have: {})",
-            capability.id,
-            allowed.join(", ")
-        );
-    }
+    check_project_type(&service, &project.r#type, capability)?;
     let mut service_capabilities: Vec<String> = project
         .resources
         .as_ref()
@@ -407,6 +472,11 @@ fn change_capability(
         capability.id,
         capability.summary
     );
+    if adding && is_worker {
+        if let Some(note) = worker_events_note(&manifest.projects, &service, capability) {
+            eprintln!("{note}");
+        }
+    }
     Ok(())
 }
 
@@ -417,7 +487,7 @@ impl CliCommand for AddCommand {
     fn command(&self) -> Command {
         args(command(
             "add",
-            "Add a capability to a service (email also to a worker): writes its setup code, local stand-in and manifest resource",
+            "Add a capability to a service (a managed gateway capability also to a worker): writes its setup code, local stand-in and manifest resource",
         ))
     }
 
@@ -454,8 +524,71 @@ impl CliCommand for RemoveCommand {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_type;
-    use crate::constants::Infrastructure;
+    use super::{check_project_type, parse_type, type_help, worker_events_note};
+    use crate::{
+        constants::Infrastructure,
+        core::manifest::{ProjectEntry, ProjectType},
+        infra::capabilities::{CAPABILITIES, find},
+    };
+
+    #[test]
+    fn workers_may_hold_every_capability_and_libraries_none() {
+        for capability in CAPABILITIES {
+            assert!(check_project_type("api", &ProjectType::Service, capability).is_ok());
+            assert!(
+                check_project_type("jobs", &ProjectType::Worker, capability).is_ok(),
+                "{} refused on a worker",
+                capability.id
+            );
+            let error = check_project_type("shared", &ProjectType::Library, capability)
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("'shared' is not a service"), "{error}");
+            assert!(error.contains("models"), "{error}");
+        }
+    }
+
+    fn project(name: &str, project_type: &str, capabilities: &[&str]) -> ProjectEntry {
+        let capabilities: Vec<String> = capabilities.iter().map(|c| format!("{c:?}")).collect();
+        toml::from_str(&format!(
+            "type = {project_type:?}\nname = {name:?}\ndescription = \"\"\n[resources]\ncapabilities = [{}]\n",
+            capabilities.join(", ")
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_worker_only_event_capability_says_events_need_an_http_service() {
+        let worker_only = vec![
+            project("jobs", "Worker", &["sms", "models"]),
+            project("api", "Service", &["email"]),
+        ];
+        let note = worker_events_note(&worker_only, "jobs", find("sms").unwrap()).unwrap();
+        assert!(note.contains("delivered over HTTP"), "{note}");
+        assert!(
+            note.contains("forklaunch infra add <service> sms"),
+            "{note}"
+        );
+        // Models have no events: nothing to say.
+        assert!(worker_events_note(&worker_only, "jobs", find("models").unwrap()).is_none());
+
+        let with_service = vec![
+            project("jobs", "Worker", &["sms"]),
+            project("api", "Service", &["sms"]),
+        ];
+        assert!(worker_events_note(&with_service, "jobs", find("sms").unwrap()).is_none());
+    }
+
+    #[test]
+    fn help_names_every_capability_as_a_managed_gateway_one() {
+        let help = type_help();
+        assert!(help.contains("managed gateway capability"), "{help}");
+        assert!(!help.contains("managed instance only"));
+        for capability in CAPABILITIES {
+            assert!(help.contains(capability.id), "{help}");
+        }
+        assert!(help.contains("any of them also on a worker"), "{help}");
+    }
 
     #[test]
     fn aliases_resolve_to_infrastructure_ids() {

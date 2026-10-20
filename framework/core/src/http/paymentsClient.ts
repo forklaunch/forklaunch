@@ -272,7 +272,7 @@ export function createStripeClient(options: StripeClientOptions = {}): Stripe {
   if (!explicitGateway && !isManagedInstance()) {
     if (!options.apiKey) {
       throw new Error(
-        'createStripeClient: not a managed instance (PLATFORM_GATEWAY_URL, INSTANCE_ID and ' +
+        'createStripeClient: no managed gateway (PLATFORM_GATEWAY_URL, INSTANCE_ID and ' +
           'INSTANCE_HMAC_KEY are unset) and no apiKey was given — pass { apiKey } for local ' +
           'development, or run the gateway mock (forklaunch-gateway-mock) with the managed env'
       );

@@ -70,7 +70,7 @@ describe('model gateway client', () => {
     delete process.env.INSTANCE_ID;
     delete process.env.INSTANCE_HMAC_KEY;
     try {
-      expect(() => createModelGatewayClient()).toThrow(/managed mode/);
+      expect(() => createModelGatewayClient()).toThrow(/managed gateway/);
     } finally {
       process.env = saved;
     }

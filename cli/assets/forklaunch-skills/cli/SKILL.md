@@ -509,8 +509,10 @@ forklaunch change application --runtime bun --formatter biome
 
 #### Add or remove a capability: `forklaunch infra add|remove`
 
-The way to give a service object storage, a cache or a platform-held
-capability (email, sms, whatsapp, voice, payments). It writes the registration
+The way to give a service object storage, a cache or a managed gateway
+capability (email, sms, whatsapp, voice, payments, models). Managed gateway
+capabilities work in any ForkLaunch app, a managed instance or an app deployed
+with `forklaunch deploy create`. It writes the registration
 in `registrations.ts`, the local stand-in in docker-compose, `.env.local`,
 `package.json`, the manifest resource and the test utilities (for a
 capability: its `/platform-events` handler and the router mount in
@@ -526,12 +528,13 @@ reformats a customized service; prefer `infra add|remove`.) It takes one change:
 ```bash
 forklaunch infra add <service> object-store   # or: s3
 forklaunch infra add <service> cache          # or: redis
-forklaunch infra add <service> email          # platform-held email (SES); see /integrations
-forklaunch infra add <worker> email           # email is the one capability a worker can hold
-forklaunch infra add <service> sms            # texts via the platform; see /integrations
-forklaunch infra add <service> whatsapp       # WhatsApp through the platform (see /integrations)
-forklaunch infra add <service> voice          # managed apps: outbound calls via the platform (Amazon Connect)
-forklaunch infra add <service> payments       # Stripe Connect through the platform (managed instances)
+forklaunch infra add <service> email          # managed gateway: email (SES); see /integrations
+forklaunch infra add <service> sms            # managed gateway: texts; see /integrations
+forklaunch infra add <service> whatsapp       # managed gateway: WhatsApp (see /integrations)
+forklaunch infra add <service> voice          # managed gateway: outbound calls (Amazon Connect)
+forklaunch infra add <service> payments       # managed gateway: Stripe Connect, no Stripe key
+forklaunch infra add <service> models         # managed gateway: AI models, no provider key
+forklaunch infra add <worker> sms             # any managed gateway capability may go on a worker
 forklaunch infra remove <service> object-store
 forklaunch infra add <service> object-store --dryrun
 forklaunch score --offline                    # afterwards: the wiring checks should pass
@@ -539,10 +542,20 @@ forklaunch score --offline                    # afterwards: the wiring checks sh
 
 Run it from the app root (or pass `-p <app-root>`). It refuses a type the
 project already has, a type it lacks on remove, and projects that aren't
-services — except `email`, which a worker may also hold (its worker and server
-containers both get the gateway settings; the server receives the events).
+services — except the managed gateway capabilities, which a worker may also
+hold (its worker and server containers both get the gateway settings). A
+worker can send, call or charge; events (delivery receipts, replies, call and
+payment events) are delivered over HTTP to `/platform-events/<capability>`,
+never to the worker process. When no HTTP service holds the capability, `infra
+add <worker>` prints a note saying so: add it to an HTTP service as well if the
+app needs the events. `models` has no events.
 
-`voice` is a platform-held capability: it registers `VoiceClient`
+`models` registers `ModelGatewayClient` (`createModelGatewayClient()`, keyless)
+and the gateway settings; an existing OpenAI or Anthropic client, its key and
+its dependency are left as they are, so calls move over one at a time. See
+`/integrations` (*Models*).
+
+`voice` is a managed gateway capability: it registers `VoiceClient`
 (`createVoiceClient()`, keyless), writes `api/platformEvents/voice.ts` for call
 events, and adds the local `gateway-mock` to docker-compose. See
 `/integrations` (*Voice calls*).

@@ -1,5 +1,7 @@
-//! Platform-held capabilities a service reaches through the instance gateway:
-//! payments, email, sms, whatsapp, voice.
+//! Platform-held capabilities a service reaches through the managed gateway
+//! (the instance gateway): payments, email, sms, whatsapp, voice, models. Any
+//! ForkLaunch app can hold them, a managed instance or an app deployed to its
+//! own environment.
 //!
 //! `forklaunch infra add <service> <capability>` records the capability in the
 //! manifest (`resources.capabilities`, which the release manifest turns into a
@@ -26,6 +28,7 @@ pub(crate) mod sms;
 pub(crate) mod whatsapp;
 pub(crate) mod voice;
 pub(crate) mod payments;
+pub(crate) mod models;
 
 use super::in_place;
 use crate::core::docker::{DependencyCondition, DependsOn, DockerCompose, DockerService};
@@ -43,10 +46,10 @@ pub(crate) struct Capability {
     pub(crate) registration_key: &'static str,
     /// Whether the platform delivers events for it (adds `/platform-events`).
     pub(crate) receives_events: bool,
-    /// Whether a worker may hold it (`infra add <worker> <capability>`). The
-    /// platform side must serve a caller that is not tied to one service:
-    /// email is sent from the app environment's identity, so a worker can
-    /// send; the others still assume a service.
+    /// Whether a worker may hold it (`infra add <worker> <capability>`). A
+    /// worker can call the gateway (send, place a call, charge, call a
+    /// model); events are still delivered over HTTP to `/platform-events`,
+    /// which the worker process does not serve.
     pub(crate) workers: bool,
     /// Capability-specific edits on add; the shared ones are applied around it.
     pub(crate) add: fn(&mut CapabilityEdit) -> Result<()>,
@@ -55,7 +58,14 @@ pub(crate) struct Capability {
 }
 
 /// Every capability `infra add` knows. Each feature adds its entry.
-pub(crate) static CAPABILITIES: &[&Capability] = &[&email::EMAIL, &sms::SMS, &whatsapp::WHATSAPP, &voice::VOICE, &payments::PAYMENTS];
+pub(crate) static CAPABILITIES: &[&Capability] = &[
+    &email::EMAIL,
+    &sms::SMS,
+    &whatsapp::WHATSAPP,
+    &voice::VOICE,
+    &payments::PAYMENTS,
+    &models::MODELS,
+];
 
 /// The code edits of `infra add|remove <service> <capability>`: the
 /// capability's own, then the shared gateway wiring (on remove in reverse,
@@ -307,9 +317,11 @@ impl CapabilityEdit {
                     keys.join(", ")
                 );
             }
-            // The last one (a worker's server) mounts /platform-events.
+            // The last one (a worker's server) mounts /platform-events, for a
+            // capability the platform sends events for.
+            let events = find(feature).is_none_or(|c| c.receives_events);
             for (i, key) in keys.iter().enumerate() {
-                ensure_gateway_mock(compose, key, feature, i + 1 == keys.len())?;
+                ensure_gateway_mock(compose, key, feature, events && i + 1 == keys.len())?;
             }
             Ok(())
         })
@@ -366,13 +378,14 @@ impl CapabilityEdit {
         let keys = self.compose_keys.clone();
         let service_has_none_left = self.service_capabilities.is_empty();
         let app_has_none_left = self.app_capabilities.is_empty();
+        let events = find(feature).is_none_or(|c| c.receives_events);
         self.update_compose(|compose| {
             for (i, key) in keys.iter().enumerate() {
                 release_gateway_mock(
                     compose,
                     key,
                     feature,
-                    i + 1 == keys.len(),
+                    events && i + 1 == keys.len(),
                     service_has_none_left,
                     app_has_none_left,
                 );
@@ -855,6 +868,8 @@ pub(crate) const ADDED_IMPORTS: &[&str] = &[
     "VoiceClient",
     "createStripeClient",
     "Stripe",
+    "createModelGatewayClient",
+    "ModelGatewayClient",
 ];
 
 /// The gateway settings a service gets in docker-compose.
@@ -1231,10 +1246,16 @@ app.listen(ci.resolve(tokens.PORT), () => {
                 "{id}: added a trailing comma\n{registrations}"
             );
             let server = fs::read_to_string(service.join("server.ts")).unwrap();
-            assert_lines_kept(CUSTOM_SERVER, &server, id);
-            assert!(server.contains("import { ci, tokens } from './bootstrapper';\nimport { platformEventsRouter } from './api/routes/platformEvents.routes';\n"), "{id}\n{server}");
-            assert!(server.contains("app.use(factsRouter);\napp.use(platformEventsRouter);\n"), "{id}\n{server}");
-            assert_eq!(server.lines().count(), CUSTOM_SERVER.lines().count() + 2);
+            if capability.receives_events {
+                assert_lines_kept(CUSTOM_SERVER, &server, id);
+                assert!(server.contains("import { ci, tokens } from './bootstrapper';\nimport { platformEventsRouter } from './api/routes/platformEvents.routes';\n"), "{id}\n{server}");
+                assert!(server.contains("app.use(factsRouter);\napp.use(platformEventsRouter);\n"), "{id}\n{server}");
+                assert_eq!(server.lines().count(), CUSTOM_SERVER.lines().count() + 2);
+            } else {
+                // No events: no route to mount.
+                assert_eq!(server, CUSTOM_SERVER, "{id}");
+                assert!(!service.join("api/platformEvents").exists(), "{id}");
+            }
             let package_json = fs::read_to_string(service.join("package.json")).unwrap();
             assert_lines_kept(CUSTOM_PACKAGE_JSON, &package_json, id);
             assert!(package_json.lines().count() <= CUSTOM_PACKAGE_JSON.lines().count() + 1);
@@ -1290,7 +1311,7 @@ app.listen(ci.resolve(tokens.PORT), () => {
         assert_lines_kept(CUSTOM_REGISTRATIONS, &registrations, "all");
         // Removed in a different order than added.
         let mut left: Vec<&str> = ids.clone();
-        for id in ["voice", "email", "payments", "sms", "whatsapp"] {
+        for id in ["voice", "models", "email", "payments", "sms", "whatsapp"] {
             left.retain(|c| *c != id);
             run(dir.path(), &service, find(id).unwrap(), &left, false);
         }

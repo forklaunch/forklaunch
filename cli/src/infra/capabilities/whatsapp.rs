@@ -14,7 +14,7 @@ pub(crate) static WHATSAPP: Capability = Capability {
     summary: "WhatsApp template and session messages through the platform (no Meta token in the app)",
     registration_key: "WhatsAppClient",
     receives_events: true,
-    workers: false,
+    workers: true,
     add,
     remove,
 };

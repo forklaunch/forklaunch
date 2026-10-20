@@ -243,7 +243,7 @@ describe('whatsapp (e2e)', () => {
         instanceId: undefined,
         hmacKey: undefined
       })
-    ).toThrow(/managed mode/);
+    ).toThrow(/managed gateway/);
   });
 });
 

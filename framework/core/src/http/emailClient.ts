@@ -5,7 +5,8 @@ import {
 } from './instanceGateway';
 
 /**
- * Client for platform-held email, used from inside a managed instance.
+ * Client for platform-held email through the managed gateway, from a managed
+ * instance or any app deployed on ForkLaunch.
  *
  * The instance never holds a mail credential. It signs each request with its
  * own HMAC key; the platform sends through Amazon SES from the instance's own

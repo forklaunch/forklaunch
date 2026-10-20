@@ -430,8 +430,9 @@ fn remedy(check: &str) -> Option<String> {
             "Wrap Better Auth's EntityManager so its reads carry the tenant."
         }
         "ai-provider-direct" => {
-            "Call models through createModelGatewayClient() (the platform offers HIPAA products \
-             only BAA-covered models), or confirm the provider has signed a BAA for this use."
+            "Run `forklaunch infra add <service> models` and call models through the injected \
+             ModelGatewayClient (createModelGatewayClient(); the managed gateway offers HIPAA \
+             products only BAA-covered models), or confirm the provider has signed a BAA for this use."
         }
         "managed-provider-credentials" => {
             "Send one-time codes through the platform's instance gateway and call models with \

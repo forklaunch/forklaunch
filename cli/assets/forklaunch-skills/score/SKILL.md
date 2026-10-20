@@ -149,8 +149,10 @@ Three checks are `critical`:
 - **`ai-provider-direct`**: a service whose entities hold `phi` imports an AI
   provider SDK (`openai`, `@anthropic-ai/sdk`, `@ai-sdk/*`, Bedrock, Gemini, …)
   or reads a provider key. Health data may be reaching a vendor with no BAA.
-  Fix: call models through `createModelGatewayClient()` (the platform offers
-  HIPAA products only BAA-covered models), or confirm the provider's BAA.
+  Fix: `forklaunch infra add <service> models` and call models through the
+  injected `ModelGatewayClient` (`createModelGatewayClient()`; the managed
+  gateway offers HIPAA products only BAA-covered models), or confirm the
+  provider's BAA.
 - **`object-store-public-access`**: code makes stored files public (`public-read`,
   a removed public access block, or CORS `AllowedOrigins: ['*']`). Fix: keep the
   bucket private and share files with `presignDownload` links.

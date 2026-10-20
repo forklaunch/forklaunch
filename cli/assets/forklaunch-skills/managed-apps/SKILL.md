@@ -306,16 +306,20 @@ Messages are rate-limited per phone (5/hr) and per instance (20/hr, 100/day),
 and every send is audited via `SmsDispatchEntity`. (A `log-sms` provider prints
 the code in dev when no Twilio creds are configured.)
 
-**Do not ship your own model provider keys in a template either.** Managed mode
-has a **platform model gateway**: an instance calls platform-hosted AI models
-(Azure AI Foundry) with no provider key, signing each request with the same
-per-instance HMAC key.
+**Do not ship your own model provider keys in a template either.** The
+managed gateway has a **platform model gateway**: an instance calls
+platform-hosted AI models (Azure AI Foundry) with no provider key, signing each
+request with the same per-instance HMAC key. It is not limited to managed
+instances: `forklaunch infra add <service> models` declares it for any app
+(release resource type `models`) and writes the registration and local mock;
+see `/integrations` (*Models*).
 
 ```typescript
 import { createModelGatewayClient } from '@forklaunch/core/http';
 
 // Reads PLATFORM_GATEWAY_URL, INSTANCE_ID and INSTANCE_HMAC_KEY, which the
-// platform injects into every hosted instance. Throws outside managed mode.
+// platform injects into every hosted instance (and, at deploy, into a component
+// that declares models). Throws without them.
 const models = createModelGatewayClient();
 
 const reply = await models.chat.completions.create({

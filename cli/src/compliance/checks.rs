@@ -1385,7 +1385,7 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
                         check: "ai-provider-direct".to_string(),
                         subject: providers.join(", "),
                         message: format!(
-                            "entities hold health data (phi) and this service calls an AI provider directly ({}) — route model calls through the ForkLaunch model gateway (createModelGatewayClient, BAA-covered models only) or confirm the provider has signed a BAA covering this use",
+                            "entities hold health data (phi) and this service calls an AI provider directly ({}) — run `forklaunch infra add <service> models` and call models through the injected ModelGatewayClient (the managed gateway offers HIPAA products only BAA-covered models), or confirm the provider has signed a BAA covering this use",
                             providers.join(", ")
                         ),
                     });
@@ -1640,7 +1640,14 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
                 let is_wired = registrations
                     .contains(&format!("{}:", capability.registration_key))
                     && (is_declared || is_managed_instance(&project_path, &sources));
-                let message = match (is_declared, is_wired) {
+                // A managed template may enable the model gateway for the whole
+                // product (`managed template update --gateway-*`) and build the
+                // client by hand: the platform serves it without a manifest
+                // resource, so an undeclared one there is not a gap.
+                let template_models = capability.id == "models"
+                    && !is_declared
+                    && is_managed_instance(&project_path, &sources);
+                let message = match (is_declared, is_wired && !template_models) {
                     (true, false) => Some(format!(
                         "the manifest declares {} but registrations.ts registers no {} — the service has nothing to call it with",
                         capability.id, capability.registration_key
@@ -2536,7 +2543,13 @@ mod wiring_tests {
             .unwrap_or_else(|| panic!("expected ai-provider-direct, got {:?}", findings));
         assert!(matches!(f.severity, Severity::Warning));
         assert_eq!(f.subject, "OPENAI_API_KEY, openai");
-        assert!(f.message.contains("createModelGatewayClient"));
+        // The fix is the models capability.
+        assert!(
+            f.message.contains("forklaunch infra add <service> models"),
+            "{}",
+            f.message
+        );
+        assert!(f.message.contains("ModelGatewayClient"));
     }
 
     #[test]
@@ -2763,6 +2776,54 @@ mod payments_tests {
                 "getEnvVar('INSTANCE_HMAC_KEY'); StripeClient: { factory: () => createStripeClient({ Stripe }) }"
             ),
             vec!["payments"]
+        );
+    }
+
+    #[test]
+    fn capability_wiring_covers_models() {
+        let write = |name: &str, capabilities: &str, registrations: &str| {
+            let root = std::env::temp_dir().join(format!("fl-models-wiring-{name}"));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(root.join(".forklaunch")).unwrap();
+            std::fs::create_dir_all(root.join("src/modules/intake")).unwrap();
+            std::fs::write(
+                root.join(".forklaunch/manifest.toml"),
+                format!("app_name = \"demo\"\n\n[[projects]]\nname = \"intake\"\n[projects.resources]\n{capabilities}"),
+            )
+            .unwrap();
+            std::fs::write(root.join("src/modules/intake/registrations.ts"), registrations).unwrap();
+            let checks: Vec<String> = run_local_checks(&root.join("src/modules"))
+                .unwrap()
+                .into_iter()
+                .filter(|f| f.check == "capability-wiring")
+                .map(|f| f.subject)
+                .collect();
+            let _ = std::fs::remove_dir_all(&root);
+            checks
+        };
+        let wired = "getEnvVar('INSTANCE_HMAC_KEY'); ModelGatewayClient: { factory: () => createModelGatewayClient() }";
+        // Declared and wired: nothing to say.
+        assert!(write("ok", "capabilities = [\"models\"]\n", wired).is_empty());
+        // Declared, not wired.
+        assert_eq!(
+            write(
+                "unwired",
+                "capabilities = [\"models\"]\n",
+                "getEnvVar('PORT');"
+            ),
+            vec!["models"]
+        );
+        // A managed template that builds the client by hand is served by the
+        // template's model gateway settings, not a manifest resource.
+        assert!(write("template", "cache = \"redis\"\n", wired).is_empty());
+        // Outside managed mode an undeclared client is not a capability.
+        assert!(
+            write(
+                "plain",
+                "cache = \"redis\"\n",
+                "ModelGatewayClient: { factory: () => createModelGatewayClient() }"
+            )
+            .is_empty()
         );
     }
 
