@@ -34,9 +34,18 @@ const allowedCallback = (raw: string, origin: string): string | null => {
   if (!raw) return null;
   try {
     const url = new URL(raw, origin);
-    const trusted = [origin, ...(ci.resolve(tokens.CORS_ORIGINS) ?? [])].map(
-      (o) => new URL(o).origin
-    );
+    // An entry that is not a URL (`*`, an empty one from a trailing comma) is
+    // skipped rather than refusing every callback.
+    const trusted = [
+      origin,
+      ...(ci.resolve(tokens.CORS_ORIGINS) ?? [])
+    ].flatMap((o) => {
+      try {
+        return [new URL(o).origin];
+      } catch {
+        return [];
+      }
+    });
     return (url.protocol === 'https:' || url.protocol === 'http:') &&
       trusted.includes(url.origin)
       ? url.toString()
