@@ -36,7 +36,7 @@ npm whoami            # must print the publishing account
 cd framework
 pnpm install --frozen-lockfile
 pnpm cache delete '*'                            # fresh registry metadata (see Traps)
-pnpm up:packages                                 # every dependency to its latest *mature* version
+pnpm up:packages --config.fetch-full-metadata=true   # latest *mature* versions; full metadata carries publish times (see Traps)
 pnpm build && npx vitest run                     # compare failures with main
 ```
 
@@ -72,7 +72,14 @@ done
 cd blueprint
 pnpm install --frozen-lockfile
 pnpm cache delete '*'                             # see "Traps"
-pnpm up:packages '--config.minimum-release-age-exclude=@forklaunch/*'   # our own packages are minutes old
+# Two passes. The blueprint has no window of its own, and in pnpm 11.1 setting
+# minimum-release-age-exclude switches the window off for every package, so
+# third-party packages go first with the window on and @forklaunch/* after.
+# Stripe stays on its current major unless the release is about Stripe.
+pnpm -r update --latest '!uWebSockets.js' '!stripe' '!@forklaunch/*' \
+  --config.minimum-release-age=1440 --config.fetch-full-metadata=true
+pnpm -r update --latest '@forklaunch/*' --config.minimum-release-age=1440 \
+  '--config.minimum-release-age-exclude=@forklaunch/*' --config.fetch-full-metadata=true
 grep -h '"@forklaunch/core"' */package.json implementations/*/*/package.json | sort | uniq -c   # all on the new version?
 pnpm build
 ```
@@ -122,7 +129,9 @@ version from the tag; `Cargo.toml` stays `0.0.0`).
   - Exempt only our own scope in the blueprint: `'--config.minimum-release-age-exclude=@forklaunch/*'`.
   - The window is skipped for packages whose cached metadata lacks a `time` field, which is how the framework and blueprint once resolved different `@mikro-orm` versions. Clear the cache first (`pnpm cache delete '*'`) in both workspaces, so the window applies the same way in each.
   - Our own freshly published packages are also inside the window for generated apps. **Cut the CLI release, and expect the CLI e2e jobs to pass, only a day after publishing.** A PR that bumps the CLI constants shows red e2e until then; re-run it the next day.
-- **pnpm's metadata cache.** It can miss a version published minutes ago, or lack publish times. `pnpm cache delete '*'` before each `up:packages` fixes both.
+- **pnpm's metadata cache.** It can miss a version published minutes ago, or lack publish times. `pnpm cache delete '*'` is not enough: pnpm refills the cache with abbreviated metadata that has no `time`, warns "missing the time field; skipping the minimumReleaseAge check", and installs versions hours old (2026-10-20: jose 13h, fastmcp 3h). Pass `--config.fetch-full-metadata=true` to every `update`, and treat any such warning as a failed run.
+- **Check ages after every update.** Diff the manifests and `npm view <pkg> time` each changed version; anything under 24h means restore and rerun. The lockfile can still pick up young indirect versions in the `@forklaunch/*` pass; a young `@opentelemetry/api` there gave vitest two copies and every test failed with "Cannot read properties of undefined (reading 'config')". Restore the lockfile from git and `pnpm install --no-frozen-lockfile --config.optimistic-repeat-install=false` with the window on, so locked versions are reused.
+- **Stale vitest cache.** The same "reading 'config'" error can outlive the fix, tied to a test's path (an identical copy of the file passes). Move `node_modules/.vitest-cache` and each package's `node_modules/.vite` aside and rerun.
 - **`update` never lowers a specifier.** If an `up:packages` run wrote the wrong version, restore the manifests and lockfile (`git checkout -- '*package.json' pnpm-lock.yaml`), `pnpm install --frozen-lockfile`, and run again with the right flags.
 - **Quote globs in flags.** zsh expands `@forklaunch/*` before pnpm sees it.
 - **Publish command.** It is `pnpm publish:packages --no-git-checks`, never with `--` in front of the flag: the `--` is forwarded literally to `pnpm publish`. npm answers E409 "previously staged version" while it catches up. Re-running until every package reports "skipping" is the check.
