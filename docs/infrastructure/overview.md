@@ -36,8 +36,12 @@ Available database options: PostgreSQL, MySQL, MariaDB, MongoDB, Microsoft SQL S
 Infrastructure runs in Docker containers managed by your development environment. Environment variables are configured automatically:
 
 ```bash
-# Database
-DATABASE_URL=postgresql://user:password@localhost:5432/myapp
+# Database (see Databases: Connection Settings; deployed MongoDB uses DB_URL)
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgresql
+DB_PASSWORD=postgresql
+DB_NAME=myapp-billing-dev
 
 # Redis (cache + queues)
 REDIS_URL=redis://localhost:6379
