@@ -30,27 +30,19 @@ impl LogBudgetCommand {
     }
 }
 
-/// The fields of `GET /compute-pools` this command reads.
+/// Response of `GET /compute-pools/log-budget?region=`.
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct PoolConfig {
+struct BudgetView {
     #[serde(default)]
     region: Option<String>,
     #[serde(default)]
-    enabled: Option<bool>,
-    #[serde(default)]
-    host_instance_type: Option<String>,
-    #[serde(default)]
-    min_hosts: Option<u64>,
-    #[serde(default)]
-    desired_hosts: Option<u64>,
-    #[serde(default)]
-    max_hosts: Option<u64>,
+    pool_exists: bool,
     #[serde(default)]
     log_lines_per_second_per_host: Option<u64>,
 }
 
-impl PoolConfig {
+impl BudgetView {
     fn effective_budget(&self) -> u64 {
         self.log_lines_per_second_per_host
             .unwrap_or(DEFAULT_LINES_PER_SECOND_PER_HOST)
@@ -80,19 +72,12 @@ fn budget_text(lines_per_second_per_host: u64) -> String {
     )
 }
 
-fn hosts_text(pool: &PoolConfig) -> String {
-    let n = |v: Option<u64>| v.map(|v| v.to_string()).unwrap_or_else(|| "-".to_string());
-    format!(
-        "{} x {} (min {}, max {}){}",
-        n(pool.desired_hosts),
-        pool.host_instance_type.as_deref().unwrap_or("-"),
-        n(pool.min_hosts),
-        n(pool.max_hosts),
-        match pool.enabled {
-            Some(false) => ", pool disabled",
-            _ => "",
-        }
-    )
+fn pool_text(view: &BudgetView) -> &'static str {
+    if view.pool_exists {
+        "this organization has a pool in this region"
+    } else {
+        "no pool in this region yet (the budget applies once one is created)"
+    }
 }
 
 /// 400/403/404 carry a reason meant for a human; relay it as the error.
@@ -180,7 +165,7 @@ impl CliCommand for LogBudgetCommand {
         }
 
         let url = format!(
-            "{}/compute-pools?poolType=organization&region={}",
+            "{}/compute-pools/log-budget?region={}",
             api_url,
             urlencoding::encode(region)
         );
@@ -195,13 +180,13 @@ impl CliCommand for LogBudgetCommand {
         }
         let raw: serde_json::Value = response
             .json()
-            .with_context(|| "Failed to parse compute pool response")?;
+            .with_context(|| "Failed to parse log budget response")?;
         if json_output {
             println!("{}", serde_json::to_string_pretty(&raw)?);
             return Ok(());
         }
-        let pool: PoolConfig =
-            serde_json::from_value(raw).with_context(|| "Failed to parse compute pool response")?;
+        let view: BudgetView =
+            serde_json::from_value(raw).with_context(|| "Failed to parse log budget response")?;
 
         writeln!(stdout)?;
         log_header!(stdout, Color::Cyan, "Org pool log budget");
@@ -209,14 +194,14 @@ impl CliCommand for LogBudgetCommand {
         writeln!(
             stdout,
             "  Region   {}",
-            pool.region.as_deref().unwrap_or(region)
+            view.region.as_deref().unwrap_or(region)
         )?;
         writeln!(
             stdout,
             "  Budget   {}",
-            budget_text(pool.effective_budget())
+            budget_text(view.effective_budget())
         )?;
-        writeln!(stdout, "  Hosts    {}", hosts_text(&pool))?;
+        writeln!(stdout, "  Pool     {}", pool_text(&view))?;
         writeln!(stdout)?;
         Ok(())
     }
@@ -274,28 +259,24 @@ mod tests {
     }
 
     #[test]
-    fn pool_without_budget_defaults_to_1000() {
-        let pool: PoolConfig = serde_json::from_str(
-            r#"{"poolType":"organization","ownerKey":"org-1","region":"us-east-1",
-                "enabled":true,"hostInstanceType":"t4g.large","minHosts":1,
-                "desiredHosts":2,"maxHosts":10,"memoryTargetPercent":85,
-                "cpuOvercommitRatio":4,"monitoringEnabled":false,
-                "estimate":{"hostMonthlyCost":49.06}}"#,
-        )
-        .unwrap();
-        assert_eq!(pool.effective_budget(), 1000);
-        assert_eq!(hosts_text(&pool), "2 x t4g.large (min 1, max 10)");
+    fn view_without_budget_defaults_to_1000() {
+        let view: BudgetView =
+            serde_json::from_str(r#"{"region":"us-east-1","poolExists":true}"#).unwrap();
+        assert_eq!(view.effective_budget(), 1000);
+        assert_eq!(
+            pool_text(&view),
+            "this organization has a pool in this region"
+        );
     }
 
     #[test]
-    fn pool_with_budget_uses_it() {
-        let pool: PoolConfig = serde_json::from_str(
-            r#"{"region":"us-east-1","enabled":false,"hostInstanceType":"t4g.xlarge",
-                "minHosts":0,"desiredHosts":0,"maxHosts":3,"logLinesPerSecondPerHost":4000}"#,
+    fn view_with_budget_uses_it() {
+        let view: BudgetView = serde_json::from_str(
+            r#"{"region":"us-east-1","poolExists":false,"logLinesPerSecondPerHost":4000}"#,
         )
         .unwrap();
-        assert_eq!(pool.effective_budget(), 4000);
-        assert!(hosts_text(&pool).ends_with(", pool disabled"));
+        assert_eq!(view.effective_budget(), 4000);
+        assert!(pool_text(&view).starts_with("no pool in this region yet"));
         assert_eq!(
             budget_text(4000),
             "4000 lines/s per host, shared by every container on the host"
@@ -303,10 +284,10 @@ mod tests {
     }
 
     #[test]
-    fn empty_pool_body_still_parses() {
-        let pool: PoolConfig = serde_json::from_str("{}").unwrap();
-        assert_eq!(pool.effective_budget(), DEFAULT_LINES_PER_SECOND_PER_HOST);
-        assert_eq!(hosts_text(&pool), "- x - (min -, max -)");
+    fn empty_view_still_parses() {
+        let view: BudgetView = serde_json::from_str("{}").unwrap();
+        assert_eq!(view.effective_budget(), DEFAULT_LINES_PER_SECOND_PER_HOST);
+        assert!(!view.pool_exists);
     }
 
     #[test]
