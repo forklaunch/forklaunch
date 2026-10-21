@@ -1,5 +1,14 @@
 # @forklaunch/implementation-ecommerce-stripe
 
+## 1.0.10
+
+### Patch Changes
+
+- Built on @forklaunch/core 3.2.0 (default audit trail, listUnsubscribe, compliant fields decrypt under their loading tenant) and a dependency refresh; Stripe stays on 22.x.
+- Updated dependencies
+  - @forklaunch/implementation-ecommerce-base@1.0.15
+  - @forklaunch/interfaces-ecommerce@1.0.14
+
 ## 1.0.9
 
 ### Patch Changes

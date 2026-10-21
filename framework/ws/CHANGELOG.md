@@ -1,5 +1,18 @@
 # @forklaunch/ws
 
+## 1.2.47
+
+### Patch Changes
+
+- Dependency refresh: every third-party dependency moved to its latest version at least a day old.
+- Updated dependencies [de09443]
+- Updated dependencies [ec6f0f5]
+- Updated dependencies
+- Updated dependencies [7c27cfb]
+  - @forklaunch/core@3.2.0
+  - @forklaunch/common@1.2.32
+  - @forklaunch/validator@1.2.33
+
 ## 1.2.46
 
 ### Patch Changes

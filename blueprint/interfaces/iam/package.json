@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/interfaces-iam",
-  "version": "1.0.38",
+  "version": "1.0.39",
   "description": "IAM interfaces for forklaunch",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -48,7 +48,7 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "^1.2.31",
+    "@forklaunch/common": "^1.2.32",
     "@mikro-orm/core": "7.2.5"
   },
   "devDependencies": {

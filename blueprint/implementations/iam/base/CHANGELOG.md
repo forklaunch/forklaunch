@@ -1,5 +1,13 @@
 # @forklaunch/implementation-iam-base
 
+## 1.0.42
+
+### Patch Changes
+
+- Built on @forklaunch/core 3.2.0 (default audit trail, listUnsubscribe, compliant fields decrypt under their loading tenant) and a dependency refresh; Stripe stays on 22.x.
+- Updated dependencies
+  - @forklaunch/interfaces-iam@1.0.39
+
 ## 1.0.41
 
 ### Patch Changes

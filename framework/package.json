@@ -29,18 +29,18 @@
     "@changesets/cli": "^3.0.3",
     "@types/jest": "^30.0.0",
     "@types/node": "^26.6.5",
-    "eslint": "^10.12.0",
+    "eslint": "^10.13.0",
     "globals": "^17.13.0",
     "jest": "^30.5.2",
     "lint-staged": "^17.6.0",
     "prettier": "^3.9.10",
-    "sort-package-json": "^4.0.0",
-    "ts-jest": "^29.4.14",
+    "sort-package-json": "^4.1.0",
+    "ts-jest": "^29.4.15",
     "tsx": "^4.23.15",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2",
-    "typescript-eslint": "^8.71.2",
-    "vitest": "^5.0.4"
+    "typescript-eslint": "^8.72.0",
+    "vitest": "^5.0.5"
   },
   "dependencies": {
     "@eslint/js": "^10.0.1"

@@ -1,5 +1,13 @@
 # @forklaunch/implementation-worker-kafka
 
+## 1.0.40
+
+### Patch Changes
+
+- Built on @forklaunch/core 3.2.0 (default audit trail, listUnsubscribe, compliant fields decrypt under their loading tenant) and a dependency refresh; Stripe stays on 22.x.
+- Updated dependencies
+  - @forklaunch/interfaces-worker@1.0.37
+
 ## 1.0.39
 
 ### Patch Changes
