@@ -132,21 +132,113 @@ pnpm migrate:down
 3. **Test migrations** in your integration tests using `BlueprintTestHarness` with `useMigrations: true`
 4. **Keep migrations small**, one logical change per migration
 
-## Environment Variables
+## Connection Settings
 
-Database connections are configured via environment variables:
+Each service's `mikro-orm.config.ts` reads its connection from environment variables. Which ones depends on the engine.
+
+| Engine | Connection | Deployed on ForkLaunch |
+|--------|------------|------------------------|
+| PostgreSQL, MySQL, MariaDB, SQL Server | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` (separate settings) | Amazon RDS |
+| MongoDB | `DB_URL` when it is set; otherwise a URL built from `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`. The database is always `DB_NAME` | Amazon DocumentDB |
+| SQLite, better-sqlite3, libSQL | `DB_NAME` (the file) | nothing is provisioned |
+
+### Locally
+
+`forklaunch init` writes the separate settings into the service's `.env.local`, pointing at the database container in `docker-compose.yaml`:
 
 ```bash
-# Connection URL (preferred)
-DATABASE_URL=postgresql://user:password@localhost:5432/myapp
-
-# Or individual components
+DB_NAME=my-app-billing-dev
 DB_HOST=localhost
+DB_USER=postgresql
+DB_PASSWORD=postgresql
 DB_PORT=5432
-DB_USER=user
-DB_PASSWORD=password
-DB_NAME=myapp
 ```
+
+There is no `DB_URL` locally. A MongoDB service builds its URL from those values for the single-node replica set in docker-compose:
+
+```
+mongodb://<DB_USER>:<DB_PASSWORD>@<DB_HOST>:<DB_PORT>/<DB_NAME>?authSource=admin&directConnection=true&replicaSet=rs0
+```
+
+### Deployed
+
+The platform sets `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` and `DB_NAME` for every engine, and `DB_URL` in the scheme of the engine's driver:
+
+| Engine | `DB_URL` |
+|--------|----------|
+| PostgreSQL | `postgresql://...` |
+| MySQL, MariaDB | `mysql://...` |
+| SQL Server | `mssql://...` |
+| MongoDB | `mongodb://...?tls=true&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false&authSource=admin` |
+
+The SQL engines connect with the separate settings, as locally. `DB_SSL` (default: on outside `development`) turns on TLS with full certificate verification, and on PostgreSQL `DB_SCHEMA` (default `public`) selects the schema on shared tiers.
+
+MongoDB runs on Amazon DocumentDB, which a hand-built URL cannot reach. DocumentDB needs:
+
+- `tls=true`. The certificate is signed by the Amazon RDS CA, which the generated `Dockerfile` adds to Node's trust store (`NODE_EXTRA_CA_CERTS=/etc/ssl/certs/aws-rds-global-bundle.pem`).
+- `retryWrites=false`. DocumentDB does not support retryable writes, and the driver turns them on by default.
+- `replicaSet=rs0` and `authSource=admin`. The master user lives in `admin`, and the cluster is a replica set named `rs0`.
+
+The platform's `DB_URL` already carries all of these, so the config uses it as is:
+
+```ts
+const mikroOrmOptionsConfig = defineConfig({
+  // Deployed, the platform sets DB_URL (Amazon DocumentDB needs tls=true,
+  // replicaSet=rs0 and retryWrites=false); locally, without it, the URL is
+  // built from DB_HOST/DB_PORT for the docker-compose replica set.
+  clientUrl:
+    getEnvVar('DB_URL') ||
+    `mongodb://${validConfigInjector.resolve(
+    tokens.DB_USER
+  )}:${validConfigInjector.resolve(
+    tokens.DB_PASSWORD
+  )}@${validConfigInjector.resolve(
+    tokens.DB_HOST
+  )}:${validConfigInjector.resolve(
+    tokens.DB_PORT
+  )}/${validConfigInjector.resolve(
+    tokens.DB_NAME
+  )}?authSource=admin&directConnection=true&replicaSet=rs0`,
+  // The platform's DB_URL names the database in its path; dbName from DB_NAME
+  // is set anyway, so a DB_URL without a path still selects the right one.
+  dbName: validConfigInjector.resolve(
+    tokens.DB_NAME
+  ),
+  // ...
+});
+```
+
+If you point a MongoDB service at your own database, set `DB_URL` to a full connection string; it wins over the separate settings.
+
+### Switching engines
+
+`forklaunch change service --database <engine>` (and `change worker`) rewrites `mikro-orm.config.ts` for you. Switching to `mongodb` writes the `clientUrl` with the `DB_URL` fallback and `dbName`; switching away from `mongodb` removes `clientUrl` and writes back `dbName`, `host`, `user`, `password` and `port`.
+
+### Upgrading an existing MongoDB service
+
+A MongoDB service created before this change builds its URL from the separate settings only, so deployed on DocumentDB it connects without TLS and with retryable writes, and fails. The required fix is one line in each MongoDB service's (and worker's) `mikro-orm.config.ts`.
+
+Before:
+
+```ts
+  clientUrl: `mongodb://${validConfigInjector.resolve(
+```
+
+After:
+
+```ts
+  clientUrl: getEnvVar('DB_URL') || `mongodb://${validConfigInjector.resolve(
+```
+
+A service switched to MongoDB with `forklaunch change` may resolve `'DB_USER'` rather than `tokens.DB_USER` on the next line; the edit is the same: put `getEnvVar('DB_URL') ||` in front of the template string. `getEnvVar` is already imported from `@forklaunch/core/services` at the top of the file. That line is all that is required: the platform's `DB_URL` names the service's database in its path. Optionally, to match newly generated services, also add `dbName` right after the `clientUrl` property (after the line ending in ``?authSource=admin&directConnection=true&replicaSet=rs0`,``). It selects `DB_NAME` even for a `DB_URL` without a database path:
+
+```ts
+  dbName: validConfigInjector.resolve(
+    tokens.DB_NAME
+  ),
+```
+
+Locally nothing changes: without `DB_URL` the service builds the same URL as before.
 
 ## Entity Relationships
 

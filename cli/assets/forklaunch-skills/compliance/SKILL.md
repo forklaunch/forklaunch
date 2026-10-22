@@ -144,7 +144,7 @@ Rules:
 - **Write with plain values through `em.create` / `em.assign`.** Direct assignment (`user.name = 'x'`) works at runtime but is a type error; use `em.assign`.
 - **`where` needs `{ queryable: true }`** on the property. It adds a `<column>_idx` column (keyed HMAC, per tenant); only `$eq`, `$ne`, `$in`, `$nin` work. `$like`, ranges and sorting on protected fields are refused: they would need the plaintext. `.unique()` on a queryable field applies to the index.
 - **`anon` strategies**: `token` (default for strings; random, stored with the value), `year` (default for dates), `zip3`, `last4`, `redact` (default for numbers, json, enums, arrays).
-- **Decryption is lazy**: loading an entity never decrypts. `.deanon` decrypts on first read, under the bound tenant (`withEncryptionContext` / `wrapEmWithTenantContext`).
+- **Decryption is lazy, under the loading tenant**: loading an entity never decrypts. `.deanon` decrypts on first read with the key of the tenant bound when the row was loaded (the `wrapEmWithTenantContext` entity manager's tenant), or when the value was assigned. It works after the query returns, with nothing bound, so DTO mappers need no `withEncryptionContext` wrapper. Do not bind the tenant from a request argument to read a row: with a different tenant bound, `.deanon` throws `TenantMismatchError`. A row loaded with no tenant bound (a raw `orm.em.fork()`) still needs one bound at read time.
 - **No encryptor, no write**: writing a compliant field without `registerEncryptor()` throws; values are never stored in plaintext.
 - **Better Auth**: `@forklaunch/better-auth-mikro-orm-fork` >= 0.5.10 hands Better Auth `.deanon` values; older adapters return `{}` for `pci` account columns and break sign-in.
 

@@ -2,7 +2,9 @@ import { forklaunchRouter, schemaValidator } from '@forklaunch/blueprint-core';
 import { ci, tokens } from '../../bootstrapper';
 import {
   surfacePermissions,
-  surfaceRoles
+  surfaceRoles,
+  surfaceScopedPermissions,
+  surfaceScopedRoles
 } from '../controllers/user.controller';
 
 const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
@@ -20,4 +22,13 @@ export const surfaceRolesRoute = userRouter.get(
 export const surfacePermissionsRoute = userRouter.get(
   '/:id/surface-permissions',
   surfacePermissions
+);
+
+export const surfaceScopedRolesRoute = userRouter.get(
+  '/:id/organizations/:organizationId/sessions/:sessionId/surface-roles',
+  surfaceScopedRoles
+);
+export const surfaceScopedPermissionsRoute = userRouter.get(
+  '/:id/organizations/:organizationId/sessions/:sessionId/surface-permissions',
+  surfaceScopedPermissions
 );

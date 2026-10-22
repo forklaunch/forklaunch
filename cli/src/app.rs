@@ -4,10 +4,12 @@ use controller::ControllerCommand;
 use create::CreateCommand;
 use domain::DomainCommand;
 use hosting::HostingCommand;
+use log_limit::LogLimitCommand;
 use readiness::ReadinessCommand;
 use resize::ResizeCommand;
 use route::RouteCommand;
 use services::ServicesCommand;
+use website::WebsiteCommand;
 
 use crate::{CliCommand, core::command::command};
 
@@ -15,10 +17,12 @@ mod controller;
 mod create;
 mod domain;
 mod hosting;
+mod log_limit;
 mod readiness;
 mod resize;
 mod route;
 mod services;
+mod website;
 
 #[derive(Debug)]
 pub(crate) struct AppCommand {
@@ -26,10 +30,12 @@ pub(crate) struct AppCommand {
     services: ServicesCommand,
     domain: DomainCommand,
     hosting: HostingCommand,
+    log_limit: LogLimitCommand,
     readiness: ReadinessCommand,
     resize: ResizeCommand,
     route: RouteCommand,
     controller: ControllerCommand,
+    website: WebsiteCommand,
 }
 
 impl AppCommand {
@@ -39,10 +45,12 @@ impl AppCommand {
             services: ServicesCommand::new(),
             domain: DomainCommand::new(),
             hosting: HostingCommand::new(),
+            log_limit: LogLimitCommand::new(),
             readiness: ReadinessCommand::new(),
             resize: ResizeCommand::new(),
             route: RouteCommand::new(),
             controller: ControllerCommand::new(),
+            website: WebsiteCommand::new(),
         }
     }
 }
@@ -55,10 +63,12 @@ impl CliCommand for AppCommand {
             .subcommand(self.services.command())
             .subcommand(self.domain.command())
             .subcommand(self.hosting.command())
+            .subcommand(self.log_limit.command())
             .subcommand(self.readiness.command())
             .subcommand(self.resize.command())
             .subcommand(self.route.command())
             .subcommand(self.controller.command())
+            .subcommand(self.website.command())
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
@@ -67,10 +77,12 @@ impl CliCommand for AppCommand {
             Some(("services", matches)) => self.services.handler(matches),
             Some(("domain", matches)) => self.domain.handler(matches),
             Some(("hosting", matches)) => self.hosting.handler(matches),
+            Some(("log-limit", matches)) => self.log_limit.handler(matches),
             Some(("readiness", matches)) => self.readiness.handler(matches),
             Some(("resize", matches)) => self.resize.handler(matches),
             Some(("route", matches)) => self.route.handler(matches),
             Some(("controller", matches)) => self.controller.handler(matches),
+            Some(("website", matches)) => self.website.handler(matches),
             _ => unreachable!(),
         }
     }

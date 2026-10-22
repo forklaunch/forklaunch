@@ -40,6 +40,7 @@ packages:
 blockExoticSubdeps: false
 
 allowBuilds:
+  '@biomejs/biome': false
   '@parcel/watcher': false
   "@scarf/scarf": true
   better-sqlite3: true

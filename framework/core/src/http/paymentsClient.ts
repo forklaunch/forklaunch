@@ -124,9 +124,11 @@ type StripeConstructor = typeof Stripe;
 
 export interface StripeClientOptions extends InstanceGatewayOptions {
   /**
-   * A Stripe secret key, for a service NOT running in managed mode (local
-   * development against your own test account, a self-hosted deployment).
-   * Ignored in managed mode, where the platform holds the key.
+   * A Stripe secret key: the service talks to Stripe directly with it (local
+   * development against your own test account, a self-hosted or regular
+   * deployment). It wins over a managed contract found in the environment;
+   * only explicit gateway options (`gatewayUrl`/`instanceId`/`hmacKey`)
+   * outrank it. A managed instance passes none and the platform holds the key.
    */
   apiKey?: string;
   /**
@@ -235,11 +237,20 @@ export function stripeGatewayFetch(
 /**
  * The Stripe SDK for this service.
  *
- * In managed mode (gateway options given, or `PLATFORM_GATEWAY_URL`,
- * `INSTANCE_ID` and `INSTANCE_HMAC_KEY` set) it is a real `Stripe` whose
- * requests go to the platform's instance gateway, signed with the instance
- * key; there is no Stripe key in the app. Otherwise it is `new
- * Stripe(apiKey)`.
+ * Which Stripe it talks to, in order:
+ *   1. explicit gateway options (`gatewayUrl`/`instanceId`/`hmacKey`): the
+ *      platform's instance gateway;
+ *   2. an explicit `apiKey`: `new Stripe(apiKey)`, directly — even when the
+ *      environment carries the managed contract. Those three variables also
+ *      reach a regular app's components that use another platform feature
+ *      (email), and an app that passes its own key means its own key;
+ *   3. the managed contract in the environment (`PLATFORM_GATEWAY_URL`,
+ *      `INSTANCE_ID`, `INSTANCE_HMAC_KEY`): the gateway, signed with the
+ *      instance key; there is no Stripe key in the app.
+ * Otherwise it throws.
+ *
+ * (Through @forklaunch/core 3.0.1 an explicit `apiKey` lost to the
+ * environment in step 3.)
  *
  * Mechanism (stripe-node 22): `host`/`port`/`protocol` point the SDK at the
  * gateway, `httpClient: Stripe.createFetchHttpClient(signedFetch)` rewrites
@@ -253,10 +264,15 @@ export function createStripeClient(options: StripeClientOptions = {}): Stripe {
   const explicitGateway = Boolean(
     options.gatewayUrl || options.instanceId || options.hmacKey
   );
+  // An explicit key wins over a managed contract detected in the
+  // environment; only explicit gateway options outrank it.
+  if (!explicitGateway && options.apiKey) {
+    return new StripeClass(options.apiKey, options.config);
+  }
   if (!explicitGateway && !isManagedInstance()) {
     if (!options.apiKey) {
       throw new Error(
-        'createStripeClient: not a managed instance (PLATFORM_GATEWAY_URL, INSTANCE_ID and ' +
+        'createStripeClient: no managed gateway (PLATFORM_GATEWAY_URL, INSTANCE_ID and ' +
           'INSTANCE_HMAC_KEY are unset) and no apiKey was given — pass { apiKey } for local ' +
           'development, or run the gateway mock (forklaunch-gateway-mock) with the managed env'
       );

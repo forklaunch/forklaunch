@@ -2,6 +2,7 @@ import { safeParse, safeStringify } from '@forklaunch/common';
 import { p, Type, type PropertyBuilders } from '@mikro-orm/core';
 import { COMPLIANCE_KEY, type ComplianceLevel } from './complianceTypes';
 import {
+  COMPLIANT_RUNTIME_TYPE,
   CompliantIndexType,
   CompliantType,
   defaultAnonStrategy,
@@ -143,7 +144,11 @@ function wrapClassified(
         : new CompliantType(spec);
       // Stored values are always text: the envelope, or the blind index.
       options.columnType = 'text';
-      options.runtimeType = 'string';
+      // In memory the property holds a CompliantField, never a string. A
+      // scalar runtimeType here makes MikroORM's em.assign validate the plain
+      // value being assigned against it (a number, boolean, Date or object
+      // is rejected as "not a string") before the setter can wrap it.
+      options.runtimeType = COMPLIANT_RUNTIME_TYPE;
       // The property is a getter/setter pair installed by
       // defineComplianceEntity (it wraps plain values on assignment).
       options.accessor = true;

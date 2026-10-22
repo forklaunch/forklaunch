@@ -157,7 +157,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: main
+          # Publish the same triggering commit used by the binary build jobs.
+          # main may advance while the release matrix is still compiling.
+          ref: ${{ github.sha }}
           fetch-depth: 0
       
       - name: Setup Node.js

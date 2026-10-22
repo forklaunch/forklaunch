@@ -104,6 +104,8 @@ forklaunch change service --path ./my-app/src/modules/email --to worker --type b
 forklaunch change service --path ./my-app/src/modules/email --to worker --type bullmq
 ```
 
+Changing the database rewrites `mikro-orm.config.ts`. A MongoDB service connects with `DB_URL` when it is set (the platform sets it for Amazon DocumentDB) and builds a local URL from `DB_HOST`/`DB_PORT` otherwise; the SQL engines use `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` and `DB_NAME`. See [Databases: Connection Settings](/docs/infrastructure/databases.md#connection-settings).
+
 ---
 
 ### Worker

@@ -18,7 +18,9 @@
  * The quota counts recipients, as SES does.
  *
  * Vendor route (unauthenticated): GET /__mock/email/messages[?to=address]
- * lists what was "sent", with its from address and configuration set.
+ * lists what was "sent", with its from address and configuration set; a
+ * message sent with `listUnsubscribe` also shows it and the `headers` the
+ * platform would add (List-Unsubscribe, List-Unsubscribe-Post).
  *
  *   MOCK_EMAIL_DAILY_QUOTA     recipients per UTC day, default 200
  *   MOCK_EMAIL_SENDING_DOMAIN  default mail.forklaunch.test; the from address
@@ -36,11 +38,18 @@ const LIMITS = {
   maxRecipients: 50,
   maxSubjectLength: 998,
   maxBodyBytes: 512 * 1024,
-  maxTags: 10
+  maxTags: 10,
+  maxUnsubscribeUrlLength: 512
 };
 const ADDRESS =
   /^[^\s@<>()[\]\\,;:"]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/;
 const TAG_PART = /^[A-Za-z0-9_-]{1,256}$/;
+// List-Unsubscribe: the platform's rules (list-unsubscribe.util.ts there).
+const HEADER_SAFE = /^[\x21-\x7e]+$/;
+const URL_DELIMITERS = /[<>,"\\]/;
+const MAILBOX =
+  /^[A-Za-z0-9._+-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/;
+const UNSUBSCRIBE_FIELDS = new Set(['url', 'mailto', 'oneClick']);
 
 const isAddress = (a) =>
   typeof a === 'string' && a.length <= 254 && ADDRESS.test(a);
@@ -72,6 +81,76 @@ function init(state) {
     state.sent = 0;
   }
   return state;
+}
+
+function unsubscribeUrlProblem(url) {
+  if (typeof url !== 'string' || url === '') return 'url must be a string';
+  if (url.length > LIMITS.maxUnsubscribeUrlLength)
+    return `url is longer than ${LIMITS.maxUnsubscribeUrlLength} characters`;
+  if (!HEADER_SAFE.test(url))
+    return 'url must be printable ASCII with no spaces or line breaks; percent-encode anything else';
+  if (URL_DELIMITERS.test(url))
+    return 'url must not contain < > , " or \\; percent-encode them';
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return 'url is not a URL';
+  }
+  if (parsed.protocol !== 'https:') return 'url must be https';
+  if (parsed.username || parsed.password)
+    return 'url must not carry a user name or password';
+  return null;
+}
+
+/** `listUnsubscribe`: `{ value }` (undefined when absent) or `{ error }`. */
+function checkListUnsubscribe(value) {
+  if (value === undefined || value === null) return { value: undefined };
+  const fail = (problem) => ({ error: `listUnsubscribe: ${problem}` });
+  if (typeof value !== 'object' || Array.isArray(value))
+    return fail('must be an object');
+  const unknown = Object.keys(value).filter((k) => !UNSUBSCRIBE_FIELDS.has(k));
+  if (unknown.length)
+    return fail(`unknown field ${unknown.map((k) => `'${k}'`).join(', ')}`);
+  const { url, mailto, oneClick } = value;
+  if (url === undefined && mailto === undefined)
+    return fail('needs a url or a mailto');
+  if (url !== undefined) {
+    const problem = unsubscribeUrlProblem(url);
+    if (problem) return fail(problem);
+  }
+  if (
+    mailto !== undefined &&
+    (typeof mailto !== 'string' || mailto.length > 254 || !MAILBOX.test(mailto))
+  )
+    return fail(
+      `mailto: '${String(mailto).slice(0, 80)}' is not a plain mailbox (letters, digits, . _ + - before the @)`
+    );
+  if (oneClick !== undefined && typeof oneClick !== 'boolean')
+    return fail('oneClick must be true or false');
+  if (oneClick === true && url === undefined)
+    return fail('oneClick needs a url (RFC 8058 posts to it)');
+  return {
+    value: {
+      ...(url !== undefined ? { url } : {}),
+      ...(mailto !== undefined ? { mailto } : {}),
+      ...(oneClick === true ? { oneClick: true } : {})
+    }
+  };
+}
+
+/** The headers the platform adds to the SES message for it. */
+function listUnsubscribeHeaders({ url, mailto, oneClick }) {
+  const targets = [
+    ...(url ? [`<${url}>`] : []),
+    ...(mailto ? [`<mailto:${mailto}>`] : [])
+  ];
+  return {
+    'List-Unsubscribe': targets.join(', '),
+    ...(oneClick
+      ? { 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
+      : {})
+  };
 }
 
 /** The gateway's validation: a message, or the reason it is refused. */
@@ -109,7 +188,9 @@ function validate(body) {
     if (name.startsWith('fl-') || name.startsWith('ses:'))
       return `tag '${name}' is reserved`;
   }
-  return { to, replyTo, tags };
+  const unsubscribe = checkListUnsubscribe(body.listUnsubscribe);
+  if (unsubscribe.error) return unsubscribe.error;
+  return { to, replyTo, tags, listUnsubscribe: unsubscribe.value };
 }
 
 export default {
@@ -122,7 +203,7 @@ export default {
         const state = init(ctx.state);
         const checked = validate(ctx.body);
         if (typeof checked === 'string') return ctx.send(400, checked);
-        const { to, replyTo, tags } = checked;
+        const { to, replyTo, tags, listUnsubscribe } = checked;
         const refused = to.filter((a) => state.suppressed.has(a.toLowerCase()));
         if (refused.length) {
           return ctx.send(
@@ -151,6 +232,12 @@ export default {
           text: ctx.body.text,
           html: ctx.body.html,
           tags,
+          ...(listUnsubscribe
+            ? {
+                listUnsubscribe,
+                headers: listUnsubscribeHeaders(listUnsubscribe)
+              }
+            : {}),
           at: new Date().toISOString()
         });
 

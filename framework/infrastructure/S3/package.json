@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/infrastructure-s3",
-  "version": "1.5.1",
+  "version": "1.5.3",
   "description": "S3 infrastructure for ForkLaunch components.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -43,24 +43,24 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1144.0",
-    "@aws-sdk/lib-storage": "^3.1144.0",
-    "@aws-sdk/s3-presigned-post": "^3.1144.0",
-    "@aws-sdk/s3-request-presigner": "^3.1144.0",
+    "@aws-sdk/client-s3": "^3.1153.0",
+    "@aws-sdk/lib-storage": "^3.1153.0",
+    "@aws-sdk/s3-presigned-post": "^3.1153.0",
+    "@aws-sdk/s3-request-presigner": "^3.1153.0",
     "@forklaunch/common": "workspace:^",
     "@forklaunch/core": "workspace:^"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
-    "globals": "^17.12.0",
+    "globals": "^17.13.0",
     "jest": "^30.5.2",
-    "prettier": "^3.9.9",
-    "ts-jest": "^29.4.14",
+    "prettier": "^3.9.10",
+    "ts-jest": "^29.4.15",
     "ts-node": "^10.9.2",
-    "tsup": "^8.5.1",
+    "tsup": "^9.0.0",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2",
-    "typescript-eslint": "^8.71.0"
+    "typescript-eslint": "^8.72.0"
   }
 }

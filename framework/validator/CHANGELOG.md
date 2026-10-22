@@ -1,5 +1,21 @@
 # @forklaunch/validator
 
+## 1.2.33
+
+### Patch Changes
+
+- Dependency refresh: every third-party dependency moved to its latest version at least a day old.
+- Updated dependencies
+  - @forklaunch/common@1.2.32
+
+## 1.2.32
+
+### Patch Changes
+
+- Dependency refresh: MikroORM 7.2.5, OpenTelemetry 0.223 / 2.12, AWS SDK 3.1152 and other minor updates.
+- Updated dependencies
+  - @forklaunch/common@1.2.31
+
 ## 1.2.31
 
 ### Patch Changes

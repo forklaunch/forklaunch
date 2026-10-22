@@ -1,5 +1,23 @@
 # @forklaunch/implementation-billing-stripe
 
+## 1.2.13
+
+### Patch Changes
+
+- Built on @forklaunch/core 3.2.0 (default audit trail, listUnsubscribe, compliant fields decrypt under their loading tenant) and a dependency refresh; Stripe stays on 22.x.
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.43
+  - @forklaunch/interfaces-billing@1.0.40
+
+## 1.2.12
+
+### Patch Changes
+
+- Dependency refresh: @forklaunch/core 3.1.0 (explicit Stripe apiKey wins over a detected managed contract; managed email for regular apps), MikroORM 7.2.5, and other minor updates. Stripe stays on 22.x.
+- Updated dependencies
+  - @forklaunch/implementation-billing-base@1.0.42
+  - @forklaunch/interfaces-billing@1.0.39
+
 ## 1.2.11
 
 ### Patch Changes

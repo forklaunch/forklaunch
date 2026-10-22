@@ -165,6 +165,44 @@ Both use the same natural object notation (`{ name: string }`). Switching change
 | `sqlite`        | SQL   | Embedded, zero-config. Good for dev/testing.  |
 | `better-sqlite` | SQL   | Synchronous SQLite. Not supported with Bun.   |
 
+#### How each engine connects
+
+`mikro-orm.config.ts` reads the connection from env:
+
+- **SQL engines** (postgresql, mysql, mariadb, mssql): separate settings,
+  `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` (plus `DB_SSL`, and
+  `DB_SCHEMA` on postgresql). Locally they come from `.env.local`; deployed, the
+  platform sets them (RDS). The platform also sets a `DB_URL` per engine
+  (`postgresql://`, `mysql://`, `mssql://`), which the SQL configs do not read.
+- **mongodb**: `clientUrl: getEnvVar('DB_URL') || <local URL>`, and `dbName`
+  from `DB_NAME`. Locally there is no `DB_URL`, so the URL is built from the
+  `DB_*` settings for the docker-compose replica set
+  (`?authSource=admin&directConnection=true&replicaSet=rs0`). Deployed, MongoDB
+  runs on **Amazon DocumentDB** and the platform's `DB_URL` carries what it
+  needs: `tls=true` (the RDS CA is in the image via `NODE_EXTRA_CA_CERTS`),
+  `retryWrites=false` (DocumentDB has no retryable writes), `replicaSet=rs0`,
+  `authSource=admin`. A URL built from the separate settings cannot reach it.
+- **sqlite, better-sqlite, libsql**: `DB_NAME` only; nothing is provisioned.
+
+`forklaunch change service|worker --database <engine>` writes and removes the
+mongodb `clientUrl`/`dbName` for you. **A mongodb service generated before
+this** still builds its URL from the separate settings and fails on DocumentDB.
+Fix it by hand in each mongodb service's and worker's `mikro-orm.config.ts`:
+
+```ts
+// before
+  clientUrl: `mongodb://${validConfigInjector.resolve(
+// after
+  clientUrl: getEnvVar('DB_URL') || `mongodb://${validConfigInjector.resolve(
+```
+
+That one line is the required edit (the platform's `DB_URL` names the
+database in its path). Optional, to match new services: add
+`dbName: validConfigInjector.resolve(tokens.DB_NAME),` after `clientUrl`, which
+also covers a `DB_URL` without a path. `getEnvVar` is already imported. Never hand-set `DB_URL` (or
+any `DB_*`) as a user-supplied variable on a deployed environment: it would
+override the platform's value forever.
+
 ### Formatters
 
 | Formatter  | Notes                                  |

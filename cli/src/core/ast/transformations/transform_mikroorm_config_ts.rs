@@ -317,22 +317,37 @@ pub(crate) fn transform_mikroorm_config_ts(
                         )
                     }
                     Database::MongoDB => {
+                        // DB_URL (set by the platform for DocumentDB: tls,
+                        // replicaSet, retryWrites=false) wins; the URL built
+                        // from DB_HOST/DB_PORT is for local development.
+                        // DB_URL names the database in its path; dbName (DB_NAME)
+                        // is set too, for a DB_URL without one.
+                        let mut additional_object_props = String::new();
                         if !visited_properties.contains("clientUrl") {
-                            parse_ast_expression(
-                                &allocator,
-                                &"const n = {
-                                    clientUrl: `mongodb://${validConfigInjector.resolve(
+                            additional_object_props.push_str(
+                                "clientUrl: getEnvVar('DB_URL') || `mongodb://${validConfigInjector.resolve(
                                         'DB_USER'
                                     )}:${validConfigInjector.resolve('DB_PASSWORD')}@${validConfigInjector.resolve(
                                         'DB_HOST'
                                     )}:${validConfigInjector.resolve('DB_PORT')}/${validConfigInjector.resolve(
                                         'DB_NAME'
-                                    )}?authSource=admin&directConnection=true&replicaSet=rs0`
-                                };",
-                            SourceType::ts(),
-                        )
-                        } else {
+                                    )}?authSource=admin&directConnection=true&replicaSet=rs0`,\n",
+                            );
+                        }
+                        if !visited_properties.contains("dbName") {
+                            additional_object_props
+                                .push_str("dbName: validConfigInjector.resolve('DB_NAME'),\n");
+                        }
+                        if additional_object_props.is_empty() {
                             None
+                        } else {
+                            let additional_object_props =
+                                format!("const n = {{\n{additional_object_props}}};");
+                            parse_ast_expression(
+                                &allocator,
+                                allocator.alloc_str(&additional_object_props),
+                                SourceType::ts(),
+                            )
                         }
                     }
                     _ => None,
@@ -393,7 +408,10 @@ const mikroOrmOptionsConfig = defineConfig({
 });
 "#;
 
-    fn make_cache_with_config(dir: &TempDir, content: &str) -> (RenderedTemplatesCache, std::path::PathBuf) {
+    fn make_cache_with_config(
+        dir: &TempDir,
+        content: &str,
+    ) -> (RenderedTemplatesCache, std::path::PathBuf) {
         let config_path = dir.path().join("mikro-orm.config.ts");
         write(&config_path, content).unwrap();
         (RenderedTemplatesCache::new(), dir.path().to_path_buf())
@@ -487,6 +505,123 @@ const mikroOrmOptionsConfig = defineConfig({
             !define_config_section.contains("password:"),
             "Expected password removed from defineConfig for mongodb: {result}"
         );
+        // The platform's DB_URL (DocumentDB: tls, retryWrites=false) wins over
+        // the local URL, and the database still comes from DB_NAME.
+        assert!(
+            define_config_section.contains("getEnvVar(\"DB_URL\") ||")
+                || define_config_section.contains("getEnvVar('DB_URL') ||"),
+            "Expected clientUrl to prefer DB_URL: {result}"
+        );
+        assert!(
+            define_config_section.contains("directConnection=true&replicaSet=rs0"),
+            "Expected the local URL as the fallback: {result}"
+        );
+        assert_eq!(
+            define_config_section.matches("dbName:").count(),
+            1,
+            "Expected exactly one dbName: {result}"
+        );
+    }
+
+    #[test]
+    fn test_transform_mongodb_to_postgresql_drops_client_url() {
+        let tmp = TempDir::new().unwrap();
+        let (cache, base) = make_cache_with_config(&tmp, POSTGRESQL_MIKRO_ORM_CONFIG);
+        let mongo = transform_mikroorm_config_ts(
+            &cache,
+            &base,
+            &Some(Database::PostgreSQL),
+            &Database::MongoDB,
+        )
+        .unwrap();
+        let (cache, base) = make_cache_with_config(&tmp, &mongo);
+        let result = transform_mikroorm_config_ts(
+            &cache,
+            &base,
+            &Some(Database::MongoDB),
+            &Database::PostgreSQL,
+        )
+        .unwrap();
+        let define_config_section = &result[result.find("defineConfig").unwrap()..];
+        assert!(!define_config_section.contains("clientUrl"), "{result}");
+        assert!(!define_config_section.contains("DB_URL"), "{result}");
+        for key in ["dbName:", "host:", "user:", "password:", "port:"] {
+            assert!(
+                define_config_section.contains(key),
+                "missing {key}: {result}"
+            );
+        }
+    }
+
+    /// The template every service, worker and blueprint module renders its
+    /// mikro-orm.config.ts from (the others are symlinks to it).
+    fn render_template(database: &str) -> String {
+        #[derive(ramhorns::Content)]
+        struct Data {
+            app_name: String,
+            database: String,
+            snake_case_name: String,
+            is_mongo: bool,
+            is_postgres: bool,
+            is_in_memory_database: bool,
+            is_better_auth: bool,
+        }
+        let source = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/templates/project/service/mikro-orm.config.ts"
+        ))
+        .unwrap();
+        ramhorns::Template::new(source.as_str())
+            .unwrap()
+            .render(&Data {
+                app_name: "demo".to_string(),
+                database: database.to_string(),
+                snake_case_name: "svc".to_string(),
+                is_mongo: database == "mongodb",
+                is_postgres: database == "postgresql",
+                is_in_memory_database: false,
+                is_better_auth: false,
+            })
+    }
+
+    #[test]
+    fn test_template_mongodb_prefers_db_url_and_keeps_db_name() {
+        let rendered = render_template("mongodb");
+        let config = &rendered[rendered.find("defineConfig({").unwrap()..];
+        assert!(
+            config.contains("clientUrl:\n    getEnvVar('DB_URL') ||\n    `mongodb://"),
+            "{config}"
+        );
+        // Local fallback for the docker-compose replica set.
+        assert!(
+            config.contains("?authSource=admin&directConnection=true&replicaSet=rs0`,"),
+            "{config}"
+        );
+        assert!(
+            config.contains("dbName: validConfigInjector.resolve(\n    tokens.DB_NAME\n  ),"),
+            "{config}"
+        );
+        assert!(!config.contains("host:"), "{config}");
+    }
+
+    #[test]
+    fn test_template_sql_engines_use_the_discrete_settings_not_db_url() {
+        // MySQL, MariaDB and MSSQL (and Postgres) connect with DB_HOST, DB_PORT,
+        // DB_USER, DB_PASSWORD and DB_NAME, which the platform injects for every
+        // engine; DB_URL's scheme does not reach the driver.
+        for database in ["postgresql", "mysql", "mariadb", "mssql"] {
+            let rendered = render_template(database);
+            let config = &rendered[rendered.find("defineConfig({").unwrap()..];
+            assert!(!rendered.contains("DB_URL"), "{database}: {rendered}");
+            assert!(!config.contains("clientUrl"), "{database}");
+            for key in ["dbName:", "host:", "user:", "password:", "port:"] {
+                assert!(config.contains(key), "{database}: missing {key}");
+            }
+            assert!(
+                rendered.contains(&format!("from '@mikro-orm/{database}'")),
+                "{database}"
+            );
+        }
     }
 
     #[test]

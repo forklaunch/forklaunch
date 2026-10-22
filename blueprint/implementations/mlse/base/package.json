@@ -40,17 +40,17 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
-    "@forklaunch/common": "^1.2.30",
-    "@forklaunch/core": "^3.0.1",
+    "@forklaunch/common": "^1.2.32",
+    "@forklaunch/core": "^3.2.0",
     "@forklaunch/interfaces-mlse": "workspace:^",
-    "@forklaunch/internal": "^1.2.33",
-    "@forklaunch/validator": "^1.2.31",
-    "@mikro-orm/core": "7.2.3",
+    "@forklaunch/internal": "^1.2.35",
+    "@forklaunch/validator": "^1.2.33",
+    "@mikro-orm/core": "7.2.5",
     "fast-xml-parser": "^5.11.1"
   },
   "devDependencies": {
     "depcheck": "^1.4.7",
-    "prettier": "^3.9.9",
+    "prettier": "^3.9.10",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2"
   },
