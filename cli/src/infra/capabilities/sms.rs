@@ -14,6 +14,7 @@ pub(crate) static SMS: Capability = Capability {
     summary: "text messages through the platform (AWS End User Messaging SMS), with delivery and reply events",
     registration_key: "SmsClient",
     receives_events: true,
+    workers: true,
     add,
     remove,
 };

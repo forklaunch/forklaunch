@@ -15,6 +15,7 @@ pub(crate) static VOICE: Capability = Capability {
     summary: "outbound phone calls (Amazon Connect, held by the platform)",
     registration_key: "VoiceClient",
     receives_events: true,
+    workers: true,
     add,
     remove,
 };

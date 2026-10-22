@@ -5,8 +5,8 @@ import {
 } from './instanceGateway';
 
 /**
- * Client for WhatsApp through the ForkLaunch instance gateway, used from
- * inside a managed instance.
+ * Client for WhatsApp through the ForkLaunch managed gateway, from a managed
+ * instance or any app deployed on ForkLaunch.
  *
  * The platform holds the WhatsApp Business Account link (AWS End User
  * Messaging Social) and sends on the instance's behalf from the phone number
@@ -202,9 +202,9 @@ function createConversationChannelClient(
 }
 
 /**
- * A WhatsApp client for this managed instance. Throws when the service is
- * not running in managed mode (`PLATFORM_GATEWAY_URL`, `INSTANCE_ID`,
- * `INSTANCE_HMAC_KEY` unset); run the local gateway mock to develop.
+ * A WhatsApp client through the managed gateway. Throws without its settings
+ * (`PLATFORM_GATEWAY_URL`, `INSTANCE_ID`, `INSTANCE_HMAC_KEY` unset); run the
+ * local gateway mock to develop.
  */
 export function createWhatsAppClient(
   options: WhatsAppClientOptions = {}

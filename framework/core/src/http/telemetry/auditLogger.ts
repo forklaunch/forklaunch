@@ -18,7 +18,11 @@ export type AuditEntry = {
     | 'auth_failure'
     | 'rate_limit'
     | 'rbac_deny'
-    | 'super_admin_bypass';
+    | 'super_admin_bypass'
+    /** A compliant field's plaintext was read (.deanon). */
+    | 'data_access'
+    /** A record holding sensitive fields was created, updated or deleted. */
+    | 'data_change';
 };
 
 export class AuditLogger {

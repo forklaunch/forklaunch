@@ -509,8 +509,10 @@ forklaunch change application --runtime bun --formatter biome
 
 #### Add or remove a capability: `forklaunch infra add|remove`
 
-The way to give a service object storage, a cache or a platform-held
-capability (email, sms, whatsapp, voice, payments). It writes the registration
+The way to give a service object storage, a cache or a managed gateway
+capability (email, sms, whatsapp, voice, payments, models). Managed gateway
+capabilities work in any ForkLaunch app, a managed instance or an app deployed
+with `forklaunch deploy create`. It writes the registration
 in `registrations.ts`, the local stand-in in docker-compose, `.env.local`,
 `package.json`, the manifest resource and the test utilities (for a
 capability: its `/platform-events` handler and the router mount in
@@ -526,20 +528,34 @@ reformats a customized service; prefer `infra add|remove`.) It takes one change:
 ```bash
 forklaunch infra add <service> object-store   # or: s3
 forklaunch infra add <service> cache          # or: redis
-forklaunch infra add <service> email          # platform-held email (SES); see /integrations
-forklaunch infra add <service> sms            # texts via the platform; see /integrations
-forklaunch infra add <service> whatsapp       # WhatsApp through the platform (see /integrations)
-forklaunch infra add <service> voice          # managed apps: outbound calls via the platform (Amazon Connect)
-forklaunch infra add <service> payments       # Stripe Connect through the platform (managed instances)
+forklaunch infra add <service> email          # managed gateway: email (SES); see /integrations
+forklaunch infra add <service> sms            # managed gateway: texts; see /integrations
+forklaunch infra add <service> whatsapp       # managed gateway: WhatsApp (see /integrations)
+forklaunch infra add <service> voice          # managed gateway: outbound calls (Amazon Connect)
+forklaunch infra add <service> payments       # managed gateway: Stripe Connect, no Stripe key
+forklaunch infra add <service> models         # managed gateway: AI models, no provider key
+forklaunch infra add <worker> sms             # any managed gateway capability may go on a worker
 forklaunch infra remove <service> object-store
 forklaunch infra add <service> object-store --dryrun
 forklaunch score --offline                    # afterwards: the wiring checks should pass
 ```
 
 Run it from the app root (or pass `-p <app-root>`). It refuses a type the
-service already has, a type it lacks on remove, and projects that aren't services.
+project already has, a type it lacks on remove, and projects that aren't
+services — except the managed gateway capabilities, which a worker may also
+hold (its worker and server containers both get the gateway settings). A
+worker can send, call or charge; events (delivery receipts, replies, call and
+payment events) are delivered over HTTP to `/platform-events/<capability>`,
+never to the worker process. When no HTTP service holds the capability, `infra
+add <worker>` prints a note saying so: add it to an HTTP service as well if the
+app needs the events. `models` has no events.
 
-`voice` is a platform-held capability: it registers `VoiceClient`
+`models` registers `ModelGatewayClient` (`createModelGatewayClient()`, keyless)
+and the gateway settings; an existing OpenAI or Anthropic client, its key and
+its dependency are left as they are, so calls move over one at a time. See
+`/integrations` (*Models*).
+
+`voice` is a managed gateway capability: it registers `VoiceClient`
 (`createVoiceClient()`, keyless), writes `api/platformEvents/voice.ts` for call
 events, and adds the local `gateway-mock` to docker-compose. See
 `/integrations` (*Voice calls*).
@@ -564,6 +580,13 @@ forklaunch change service [--path <service_directory>]
 forklaunch change service --path ./src/modules/my-service --database postgresql --dryrun
 forklaunch change service --path ./src/modules/email --to worker --type bullmq --dryrun
 ```
+
+`--database` rewrites `mikro-orm.config.ts`: to `mongodb` it writes
+`clientUrl: getEnvVar('DB_URL') || <local URL>` and `dbName` from `DB_NAME`
+(deployed, the platform's `DB_URL` reaches DocumentDB with `tls=true` and
+`retryWrites=false`); away from `mongodb` it removes them and writes back the
+separate `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_PASSWORD`/`DB_NAME` settings. See
+`/development-guidelines` (*How each engine connects*).
 
 ##### `--to worker` ADDS a worker. It does not remove the HTTP surface.
 
@@ -989,6 +1012,9 @@ forklaunch app services             # list services and workers
 forklaunch app domain status        # inspect the custom domain
 forklaunch app domain set app.example.com        # attach one
 forklaunch app domain subdomain add shop -s <service-id>
+forklaunch app domain email set -e production --from hello --name "Acme" [--subdomain mail]   # Pro: send from the custom domain
+forklaunch app domain email status [-e production] [--json]   # status + DNS records to publish
+forklaunch app domain email remove -e production [-y]         # back to no-reply@<platform domain>
 forklaunch app readiness show       # readiness schedule + latest run
 forklaunch app readiness run        # start a report now
 forklaunch app resize ...           # resize components (cuts a release + deploys)
@@ -2172,7 +2198,7 @@ Still present in v1.3.3 — apply these workarounds:
 - **One platform app links ONE local app** — `integrate` refuses a second local app ("already integrated with another local app"); there is no CLI unlink and no CLI command to create a platform app (dashboard-only).
 - **`deploy create` can drop into a real interactive prompt that no flag or piped input can skip.** If required env vars (e.g. `ENCRYPTION_KEY`) aren't already stored for the target environment, it writes a template file to a deterministic path (`/var/folders/.../forklaunch-env-<env>-<region>.env` on macOS) and blocks waiting for an actual keypress on a real TTY — piping `\n` via stdin fails with `Error: IO error: not a terminal` because it checks for a genuine terminal, not just readable input. The file is regenerated from scratch on every invocation (edits made before starting a new run are wiped), so there is no way to pre-fill it. If running non-interactively, ask the user to run the command themselves in a real terminal, or use the dashboard's environment-variables "Save & Deploy" flow instead. Note: `FORKLAUNCH_MODE` can show up in this template as a variable that "needs configuration" — this is a false positive from the variable scanner picking up `process.env.FORKLAUNCH_MODE` references in generated code; leave it as `NONE`/unset, since a real deployed service must never have it set (setting it to `openapi` makes the live server write a spec file and exit instead of serving traffic).
 
-- **"User Supplied" env vars permanently override "Platform Injected" ones — never hand-supply a placeholder for an infra-derived var, on the CLI or the dashboard.** Both the CLI's env-var template file (from the interactive prompt above) and the dashboard's Manage → Environment Variables panel write to the same underlying config store, and that store treats anything you set as authoritative forever — it is never overwritten by the real Pulumi-provisioned value, even after the resource exists and reports healthy. This bites hardest on vars that only make sense once real infra exists: `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_SSL`, `PGSSLMODE`, `REDIS_URL`, `CORS_ORIGINS`, `NODE_ENV`, `JWKS_PUBLIC_KEY_URL`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `BETTER_AUTH_URL`. Typing a placeholder for one of these (e.g. `DB_HOST=placeholder`) unblocks whichever gate is asking for it, but Pulumi will go on to provision the real RDS/ElastiCache/ALB endpoints successfully (confirm under the app's Resources page, status "Running") while the ECS task keeps launching with the literal placeholder string — the service crash-loops forever (0/1 replicas, "Degraded") with zero logs ever reaching the OTel/Loki pipeline, since it dies before the app can log anything. (Exception: on the shared data plane the partition's generated `DB_*`/`REDIS_*` connection-var set is authoritative over user-supplied values at deploy time, so stale dedicated-era placeholders for those keys no longer reach the running task even if the store still lists them as "User Supplied".) Verified against a healthy sibling app: once fully deployed, all such vars should show as "Platform Injected" with real masked values and zero "User Supplied" entries for them — that's the target state, regardless of which tool you deployed with. Fix: in Manage → Environment Variables, delete the placeholder entries for the infra-derived keys above (they move to an "Unset" bucket, which is expected and fine pre-deploy) and redeploy; a second deploy against existing infra only updates the ECS task definition and finishes in a couple of minutes rather than the ~10 the first one takes. Keep as genuine "User Supplied" only the vars with no platform-managed equivalent: app secrets (`ENCRYPTION_KEY`, `BETTER_AUTH_SECRET`), anything with no default in code, and `FORKLAUNCH_MODE=NONE` (see the false-positive note above — never anything else). Optional integrations with a safe code fallback (e.g. `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` behind `?? ''`) still need *some* non-empty value to pass a "missing vars" gate even though the app treats them as disabled when unset — an obvious placeholder string is fine there since the app never uses it unless the feature is actually enabled.
+- **"User Supplied" env vars permanently override "Platform Injected" ones — never hand-supply a placeholder for an infra-derived var, on the CLI or the dashboard.** Both the CLI's env-var template file (from the interactive prompt above) and the dashboard's Manage → Environment Variables panel write to the same underlying config store, and that store treats anything you set as authoritative forever — it is never overwritten by the real Pulumi-provisioned value, even after the resource exists and reports healthy. This bites hardest on vars that only make sense once real infra exists: `DB_URL`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_SSL`, `PGSSLMODE`, `REDIS_URL`, `CORS_ORIGINS`, `NODE_ENV`, `JWKS_PUBLIC_KEY_URL`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `BETTER_AUTH_URL`. Typing a placeholder for one of these (e.g. `DB_HOST=placeholder`) unblocks whichever gate is asking for it, but Pulumi will go on to provision the real RDS/ElastiCache/ALB endpoints successfully (confirm under the app's Resources page, status "Running") while the ECS task keeps launching with the literal placeholder string — the service crash-loops forever (0/1 replicas, "Degraded") with zero logs ever reaching the OTel/Loki pipeline, since it dies before the app can log anything. (Exception: on the shared data plane the partition's generated `DB_*`/`REDIS_*` connection-var set is authoritative over user-supplied values at deploy time, so stale dedicated-era placeholders for those keys no longer reach the running task even if the store still lists them as "User Supplied".) Verified against a healthy sibling app: once fully deployed, all such vars should show as "Platform Injected" with real masked values and zero "User Supplied" entries for them — that's the target state, regardless of which tool you deployed with. Fix: in Manage → Environment Variables, delete the placeholder entries for the infra-derived keys above (they move to an "Unset" bucket, which is expected and fine pre-deploy) and redeploy; a second deploy against existing infra only updates the ECS task definition and finishes in a couple of minutes rather than the ~10 the first one takes. Keep as genuine "User Supplied" only the vars with no platform-managed equivalent: app secrets (`ENCRYPTION_KEY`, `BETTER_AUTH_SECRET`), anything with no default in code, and `FORKLAUNCH_MODE=NONE` (see the false-positive note above — never anything else). Optional integrations with a safe code fallback (e.g. `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` behind `?? ''`) still need *some* non-empty value to pass a "missing vars" gate even though the app treats them as disabled when unset — an obvious placeholder string is fine there since the app never uses it unless the feature is actually enabled.
 
 - **Generated `mikro-orm.config.ts` derives `ssl` from `NODE_ENV` instead of the platform's injected `DB_SSL`/`PGSSLMODE`, breaking real deploys made with `--node-env development`** (verified on a real deploy, CLI v1.3.3). The scaffold ships `driverOptions: { ssl: NODE_ENV !== 'development' }` — so `ssl` is only `false` when `NODE_ENV` is literally `'development'`, `true` for anything else including `production`. That's fine if you deploy with `--node-env production`, but the CLI's own `deploy create` example (`--node-env development`) sets `NODE_ENV=development` on a real ECS task talking to a real RDS instance that requires SSL, and the connection fails: `DriverException: no pg_hba.conf entry for host "...", user "...", no encryption`. This surfaces specifically on better-auth's JWT plugin (`/api/auth/jwks`) because MikroORM only opens its connection (and runs the one-time `ensureDatabase` check) lazily on the first real query — in this scaffold that's whichever request touches the DB first, not app boot, so `/health` and the boot logs look clean while auth endpoints 500. Fix in `src/modules/<iam|billing>/mikro-orm.config.ts`, keyed off the platform's real value instead of the environment name:
   ```typescript

@@ -4,20 +4,21 @@ import {
 } from './instanceGateway';
 
 /**
- * Client for the ForkLaunch model gateway, used from inside a managed
- * instance.
+ * Client for the ForkLaunch model gateway (part of the managed gateway), for
+ * a managed instance or any app deployed on ForkLaunch.
  *
- * A managed instance calls platform-hosted AI models (Azure AI Foundry)
- * without holding a provider key: each request is signed with the
- * instance's own HMAC key, and the platform enforces the product's model
- * allowlist, monthly token budget and rate limit. For a HIPAA product the
- * platform only offers models covered by its BAA.
+ * The service calls platform-hosted AI models (Azure AI Foundry) without
+ * holding a provider key: each request is signed with its own HMAC key, and
+ * the platform enforces the model allowlist, monthly token budget and rate
+ * limit. For a HIPAA product the platform only offers models covered by its
+ * BAA.
  *
- * The platform injects everything this needs into a hosted instance:
- * `PLATFORM_GATEWAY_URL` (the platform's public base), `INSTANCE_ID` and
- * `INSTANCE_HMAC_KEY`. Their absence means the instance is not hosted in
- * managed mode, and the client refuses to be created rather than failing on
- * the first call.
+ * The platform injects everything this needs: `PLATFORM_GATEWAY_URL` (the
+ * platform's public base), `INSTANCE_ID` and `INSTANCE_HMAC_KEY`, into a
+ * managed instance and, at deploy, into a component that declares models
+ * (`forklaunch infra add <service> models`, which also points them at the
+ * local gateway mock). Without them the client refuses to be created rather
+ * than failing on the first call.
  *
  * @example
  * const models = createModelGatewayClient();

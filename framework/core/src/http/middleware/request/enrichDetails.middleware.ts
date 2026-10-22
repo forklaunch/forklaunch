@@ -29,6 +29,10 @@ import {
   SessionObject,
   VersionSchema
 } from '../../types/contractDetails.types';
+import {
+  auditComplianceAccess,
+  recordRequestAudit
+} from '../../telemetry/requestAudit';
 import { ExpressLikeRouterOptions } from '../../types/expressLikeOptions';
 import { MetricsDefinition } from '../../types/openTelemetryCollector.types';
 
@@ -87,8 +91,17 @@ export function enrichDetails<
 
     req.context?.span?.setAttribute(ATTR_API_NAME, req.contractDetails?.name);
     const startTime = process.hrtime();
+    if (openTelemetryCollector) auditComplianceAccess(openTelemetryCollector);
 
     res.on('finish', () => {
+      // The default audit trail: one record per request, including refused ones.
+      const [auditSeconds, auditNanoseconds] = process.hrtime(startTime);
+      recordRequestAudit(
+        openTelemetryCollector,
+        req,
+        Number(res.statusCode),
+        auditSeconds * 1000 + auditNanoseconds / 1_000_000
+      );
       const [seconds, nanoseconds] = process.hrtime(startTime);
       const durationMs = seconds + nanoseconds / 1000000000;
 

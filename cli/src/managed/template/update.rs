@@ -1,18 +1,18 @@
 use std::io::Write;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use super::feature_settings;
 use crate::{
-    CliCommand,
     core::command::command,
     managed::{
-        client::{Missing, patch_json, print_dryrun, require_managed_mode, resolve_managed_auth},
-        types::{AppTemplate, CLUSTER_TYPES, TEMPLATE_STATUSES},
+        client::{patch_json, print_dryrun, require_managed_mode, resolve_managed_auth, Missing},
+        types::{parse_app_claim_hook, AppTemplate, CLUSTER_TYPES, TEMPLATE_STATUSES},
     },
+    CliCommand,
 };
 
 /// The fields `PATCH /managed-mode/templates/:slug` accepts, plus the two output flags.
@@ -41,6 +41,8 @@ pub(super) struct TemplateUpdate<'a> {
     pub(super) auto_approve_launches: Option<bool>,
     /// The repository the platform builds versions from (https URL).
     pub(super) source_repo: Option<&'a String>,
+    /// `<component>:<path>` — where this product mints its own claim link.
+    pub(super) app_claim_hook: Option<&'a String>,
     /// The model gateway setting, replaced as a whole (see `model_gateway_body`).
     pub(super) model_gateway: Option<Value>,
     /// The SMS / WhatsApp / voice / email / payments settings the flags produced,
@@ -102,6 +104,17 @@ impl CliCommand for UpdateCommand {
              \x20 --source-repo            the repository versions are built from. Re-point it\n\
              \x20                          when the code moves (e.g. to the customer's account);\n\
              \x20                          the org's GitHub App installation must read it.\n\n\
+             --app-claim-hook tells the platform where this product mints its OWN sign-up\n\
+             link, as <component>:<path> — for example `iam:/internal/claim/mint`. With it\n\
+             set, the moment a customer claims an instance the platform calls that endpoint\n\
+             over the service mesh and holds what comes back, so the customer gets a second\n\
+             link that creates their first account INSIDE the app. The component must be a\n\
+             service the built app contains and the path one it serves; a version whose\n\
+             build does not match is refused at publish time rather than discovered by the\n\
+             first customer who claims.\n\n\
+             To stop asking the product for a link, use `template clear-app-claim-hook`. It\n\
+             is a separate command rather than an empty --app-claim-hook because \"set it to\n\
+             nothing\" and \"do not change it\" are the same empty string on a command line.\n\n\
              Platform-held features, for every instance of the product (read on each call,\n\
              so a change applies at once). Each feature's setting is REPLACED AS A WHOLE:\n\
              pass every field you want it to keep. One instance can differ (`managed\n\
@@ -204,6 +217,12 @@ impl CliCommand for UpdateCommand {
                 .help("https URL of the repository versions are built from, e.g. https://github.com/org/repo"),
         )
         .arg(
+            Arg::new("app_claim_hook")
+                .long("app-claim-hook")
+                .value_name("COMPONENT:PATH")
+                .help("Where this product mints its own sign-up link, e.g. iam:/internal/claim/mint"),
+        )
+        .arg(
             Arg::new("gateway_models")
                 .long("gateway-models")
                 .help("Model gateway: comma-separated catalog aliases instances may call (e.g. terra,luna)"),
@@ -300,6 +319,7 @@ impl CliCommand for UpdateCommand {
                 supports_key_rotation,
                 auto_approve_launches: matches.get_one::<bool>("auto_approve_launches").copied(),
                 source_repo: matches.get_one::<String>("source_repo"),
+                app_claim_hook: matches.get_one::<String>("app_claim_hook"),
                 model_gateway,
                 feature_settings,
                 dryrun: matches.get_flag("dryrun"),
@@ -400,6 +420,12 @@ pub(super) fn update_template(slug: &str, update: TemplateUpdate<'_>) -> Result<
     if let Some(source_repo) = update.source_repo {
         body.insert("sourceRepo".to_string(), json!(source_repo));
     }
+    if let Some(raw) = update.app_claim_hook {
+        // Parsed before anything is sent, so a malformed pair is a local error naming the
+        // form rather than a 400 whose body has to be read back through two services.
+        let hook = parse_app_claim_hook(raw).map_err(|message| anyhow::anyhow!(message))?;
+        body.insert("appClaimHook".to_string(), json!(hook));
+    }
     if let Some(model_gateway) = update.model_gateway.clone() {
         body.insert("modelGateway".to_string(), model_gateway);
     }
@@ -416,7 +442,7 @@ pub(super) fn update_template(slug: &str, update: TemplateUpdate<'_>) -> Result<
             "nothing to update — pass at least one of --name, --description, --status, \
              --stripe-product, --cluster-type, --base-domain, --frontend-domain, \
              --default-instance-size, --supports-key-rotation, --auto-approve-launches, \
-             --source-repo, or the \
+             --source-repo, --app-claim-hook, or the \
              --gateway-* / --sms-* / --whatsapp-* / --voice-* / --email-* / --payments-* \
              flags (to publish a template, `forklaunch managed template \
              publish-template --slug {}` is the shorthand)",
@@ -471,6 +497,26 @@ pub(super) fn update_template(slug: &str, update: TemplateUpdate<'_>) -> Result<
         );
     }
 
+    // Echoed back from the server's own response rather than from what was asked for.
+    // Confirming the round trip is the whole reason the control plane was changed to
+    // return this field.
+    if update.app_claim_hook.is_some() {
+        match template.app_claim_hook.as_ref() {
+            Some(hook) => log_ok!(
+                stdout,
+                "App claim hook: {}{} — on claim, the platform will ask that endpoint for the customer's sign-up link.",
+                hook.component,
+                hook.path
+            ),
+            // A 200 that does not echo the field means an older control plane, not a
+            // failed write; say which, so nobody re-runs the PATCH chasing a ghost.
+            None => log_warn!(
+                stdout,
+                "This control plane did not echo the app claim hook back, so it could not be confirmed here. Read it with `template list --json`."
+            ),
+        }
+    }
+
     match update.auto_approve_launches {
         Some(true) => log_warn!(
             stdout,
@@ -514,6 +560,31 @@ mod tests {
         let message = error.to_string();
         assert!(message.contains("nothing to update"), "{}", message);
         assert!(message.contains("publish-template"), "{}", message);
+        // Every settable field belongs in the list, or someone is told a flag they just
+        // used does not exist.
+        assert!(message.contains("--app-claim-hook"), "{}", message);
+    }
+
+    #[test]
+    fn a_malformed_app_claim_hook_fails_before_any_request_is_made() {
+        // `dryrun` would short-circuit the network anyway; what this pins is that the
+        // parse happens FIRST, so the error names the form rather than arriving as a 400
+        // relayed through two services.
+        let raw = "iam".to_string();
+        let error = update_template(
+            "clinic",
+            TemplateUpdate {
+                app_claim_hook: Some(&raw),
+                dryrun: true,
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+        assert!(
+            error.to_string().contains("<component>:<path>"),
+            "{}",
+            error
+        );
     }
 
     #[test]

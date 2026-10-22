@@ -36,10 +36,11 @@ impl CliCommand for PublishCommand {
              To move the TEMPLATE itself from `draft` to `published`, which is what\n\
              `instance create` requires, use `template publish-template`. Both steps are\n\
              needed, and doing only this one leaves the template still unlaunchable.\n\n\
-             A newly added version starts pending: the platform builds the image from\n\
-             --git-ref before instances can launch from it. There is no way to supply a\n\
-             prebuilt image — the control plane's version API takes a semver and a git ref\n\
-             and nothing else.",
+             Supply --prepared-release-id from `release create --local` to publish an\n\
+             uploaded release without a cloud source build. Its version, full Git commit\n\
+             and organization must match this template. Failed versions can be recovered\n\
+             at the same semver and commit; published artifacts are immutable. Without\n\
+             a prepared release, cloud source builds require verified isolation.",
         )
         .arg(
             Arg::new("slug")
@@ -58,6 +59,11 @@ impl CliCommand for PublishCommand {
                 .long("git-ref")
                 .required(true)
                 .help("Git ref (tag, branch, or commit sha) this version is built from"),
+        )
+        .arg(
+            Arg::new("prepared_release_id")
+                .long("prepared-release-id")
+                .help("ID of an uploaded local release matching this version and full Git commit"),
         )
         .arg(
             Arg::new("dryrun")
@@ -89,6 +95,9 @@ impl CliCommand for PublishCommand {
         let mut body = Map::new();
         body.insert("semver".to_string(), json!(semver));
         body.insert("gitRef".to_string(), json!(git_ref));
+        if let Some(release_id) = matches.get_one::<String>("prepared_release_id") {
+            body.insert("preparedReleaseId".to_string(), json!(release_id));
+        }
         let body = Value::Object(body);
 
         // Slugs are organization-authored identifiers, not free-form user input, but they
@@ -142,5 +151,33 @@ impl CliCommand for PublishCommand {
         );
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn prepared_release_flag_accepts_an_uploaded_release() {
+        let matches = PublishCommand::new()
+            .command()
+            .version("test")
+            .try_get_matches_from([
+                "publish",
+                "--slug",
+                "books",
+                "--semver",
+                "1.0.0",
+                "--git-ref",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "--prepared-release-id",
+                "release-id",
+                "--dryrun",
+            ])
+            .unwrap();
+        assert_eq!(
+            matches.get_one::<String>("prepared_release_id").unwrap(),
+            "release-id"
+        );
     }
 }

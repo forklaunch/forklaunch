@@ -111,21 +111,12 @@ forklaunch managed template publish \
   --git-ref v1.4.0        # tag, branch, or commit sha
 ```
 
-A newly added version starts **`pending`**: the platform builds the image from
-`--git-ref` before any instance can launch from it (statuses: `pending →
-building → published`, or `build_failed`; about 30 s when it works). There is
-no way to supply a prebuilt image — the version API takes a semver and a git
-ref and nothing else. Three rules, each the cause of a real `build_failed`:
-
-- **`--git-ref` is a full SHA, a branch, or a tag** — the builder clones by
-  ref name, so a short SHA fails with "Could not find remote branch". Use
-  `git rev-parse HEAD`.
-- **Publish as the org whose GitHub App installation can read the repo.** The
-  clone uses the *publishing* org's installation token
-  (`forklaunch github status` shows which account it is on). A template can
-  be visible from another org that cannot build it.
-- **A failed semver is burned** — republishing the same semver is a 409;
-  bump it.
+A Git-only publication starts `pending` and requires verified source-build
+isolation. For a locally built release, pass `--prepared-release-id` with the
+matching version and full Git commit SHA; see "Publish a locally prepared
+template release" below. A failed or pending version can recover at the same
+semver and commit. Published versions are immutable and require a new version
+for different artifacts.
 
 ### publish-template (the TEMPLATE itself)
 
@@ -306,16 +297,20 @@ Messages are rate-limited per phone (5/hr) and per instance (20/hr, 100/day),
 and every send is audited via `SmsDispatchEntity`. (A `log-sms` provider prints
 the code in dev when no Twilio creds are configured.)
 
-**Do not ship your own model provider keys in a template either.** Managed mode
-has a **platform model gateway**: an instance calls platform-hosted AI models
-(Azure AI Foundry) with no provider key, signing each request with the same
-per-instance HMAC key.
+**Do not ship your own model provider keys in a template either.** The
+managed gateway has a **platform model gateway**: an instance calls
+platform-hosted AI models (Azure AI Foundry) with no provider key, signing each
+request with the same per-instance HMAC key. It is not limited to managed
+instances: `forklaunch infra add <service> models` declares it for any app
+(release resource type `models`) and writes the registration and local mock;
+see `/integrations` (*Models*).
 
 ```typescript
 import { createModelGatewayClient } from '@forklaunch/core/http';
 
 // Reads PLATFORM_GATEWAY_URL, INSTANCE_ID and INSTANCE_HMAC_KEY, which the
-// platform injects into every hosted instance. Throws outside managed mode.
+// platform injects into every hosted instance (and, at deploy, into a component
+// that declares models). Throws without them.
 const models = createModelGatewayClient();
 
 const reply = await models.chat.completions.create({
@@ -342,7 +337,11 @@ for await (const chunk of models.chat.completions.stream({ model: 'luna', messag
 - **Usage**: `forklaunch managed instance model-usage --id <id> [--month
   YYYY-MM]` shows calls, tokens and cost per model. Prompts and completions are
   never stored.
-- **Local development**: there is no platform locally, so run the mock that
+- **Local development**: `forklaunch infra add <service> models` writes this
+  for you: the all-features `gateway-mock` (`forklaunch-gateway-mock`, host port
+  18088) in docker-compose and the local settings (`INSTANCE_ID=local-instance`,
+  `INSTANCE_HMAC_KEY=local-dev-instance-key`). For a client built by hand
+  without the capability, there is no platform locally, so run the mock that
   ships with `@forklaunch/core` (`forklaunch-model-gateway-mock`). It speaks the
   same contract, verifies your signatures exactly as the platform does, and
   answers deterministically (`[mock <model>] <your last message>`). Add to the
@@ -416,6 +415,25 @@ forklaunch managed instance gateway-settings --id <id>       # what is in force
   `PUT /instances/:id/{sms-gateway,whatsapp,voice,email-gateway,payments-gateway}`
   (`clear: true` removes); `GET /templates/:slug/gateway-settings` and
   `GET /instances/:id/gateway-settings`.
+- **The instance's own sending domain (Pro):** `email-gateway` sets limits;
+  `email` sets who the mail is from.
+  ```bash
+  forklaunch managed instance email set --id <id> --domain clinic.com [--from care] [--name "Clinic Care"]
+  forklaunch managed instance email status --id <id> [--json]   # status, in use, DNS records to publish
+  forklaunch managed instance email remove --id <id> [-y]       # back to the default sender
+  ```
+  `PUT /managed-mode/instances/:id/email-sender` `{ domain, localPart?,
+  displayName? }` (editor), `GET` (viewer; 204 when none), `DELETE` (editor).
+  Mail goes from `"displayName" <localPart@domain>` once SES verifies the
+  domain, and from `no-reply@<host prefix>.<sending domain>` until then, on
+  any SES refusal, and while the organization's plan lacks `custom_domains`
+  (the answer's `active` says which is in use now).
+  403 without the plan; 400 for the platform's own domain, a domain not under
+  a public suffix, or bad input; 409 for a domain another organization uses;
+  502/503 when SES or the ownership check is unavailable. The answer lists the
+  DKIM CNAMEs to publish (written automatically only into this organization's
+  delegated custom-domain zone) and an advisory DMARC TXT. Destroying the
+  instance releases it. See `/integrations` → *Sending from your own domain*.
 
 ## 3. Instance lifecycle
 
@@ -914,3 +932,19 @@ give an instance back to the pool, reset it (never re-claim it).
   the app) mints its link with an operator script; minting it from the
   platform at claim time is the intended end state.
 - Recording a rollout item's result by hand is managed-apps-direct (no CLI).
+
+## Publish a locally prepared template release
+
+CLI 1.30+: build and test the exact commit, then run `release create --local
+--version <semver> --yes --skip-sync` and use the returned release UUID in
+`managed template publish --slug <slug> --semver <semver> --git-ref <full-sha>
+--prepared-release-id <release-uuid>`. `release create --local --application-id
+<owned-app-uuid>` selects the build application without editing the integration.
+The release must belong to the template organization and match its repository,
+version and full commit. Prepared publication bypasses cloud source execution,
+pins the uploaded bundle, and applies the managed-app acceptance gate.
+A failed/pending version can recover at the same semver and commit; published
+versions are immutable. Publication alone does not roll out existing instances.
+Older CLIs can POST the same fields to the public
+`/managed-mode/templates/<slug>/versions` endpoint with an organization admin
+bearer token. Do not disable isolation guards to work around source builds.
