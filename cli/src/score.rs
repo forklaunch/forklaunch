@@ -135,6 +135,7 @@ impl CliCommand for ScoreCommand {
             score_via_api(
                 &app_root,
                 &manifest.app_name,
+                manifest.platform_application_id.as_deref(),
                 !matches.get_flag("no_share"),
                 json_out || prompt_out,
             )?
@@ -229,6 +230,9 @@ fn studio_url(path: &str) -> String {
 fn score_via_api(
     app_root: &Path,
     app_name: &str,
+    // The platform application this project is bound to: its deployed instance
+    // counts decide the card's hosting criteria (read server-side as the caller).
+    application_id: Option<&str>,
     want_share: bool,
     quiet: bool,
 ) -> Result<(Value, Option<String>, Option<String>)> {
@@ -254,7 +258,10 @@ fn score_via_api(
     }
 
     let zip_base64 = base64::engine::general_purpose::STANDARD.encode(&archive);
-    let body = json!({ "appId": app_name, "zipBase64": zip_base64 });
+    let mut body = json!({ "appId": app_name, "zipBase64": zip_base64 });
+    if let Some(id) = application_id {
+        body["applicationId"] = Value::String(id.to_string());
+    }
 
     if !quiet {
         println!("  {} uploading for analysis…", dim("→"));
