@@ -1,0 +1,59 @@
+name: MLSE Tests
+
+# The mlse module's unit tests and its service suite (Postgres with pgvector
+# through testcontainers, which use the runner's Docker). Unit tests run first
+# so a logic failure shows before the slower service suite starts.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'blueprint/mlse-base/**'
+      - 'blueprint/implementations/mlse/**'
+      - 'blueprint/interfaces/mlse/**'
+      - '.github/workflows/mlse_tests.yml'
+  pull_request:
+    paths:
+      - 'blueprint/mlse-base/**'
+      - 'blueprint/implementations/mlse/**'
+      - 'blueprint/interfaces/mlse/**'
+      - '.github/workflows/mlse_tests.yml'
+
+# the tests only read the repository
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.0
+
+      - name: Install dependencies
+        working-directory: ./blueprint
+        run: pnpm install --frozen-lockfile
+
+      - name: Build mlse packages
+        working-directory: ./blueprint
+        run: pnpm --filter '@forklaunch/blueprint-mlse-base...' run build
+
+      - name: Unit tests (implementation-mlse-base)
+        working-directory: ./blueprint/implementations/mlse/base
+        run: pnpm exec vitest run
+
+      - name: Service tests (mlse-base, pgvector)
+        working-directory: ./blueprint/mlse-base
+        run: pnpm exec vitest run --testTimeout 60000
