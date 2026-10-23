@@ -20,8 +20,10 @@ fn valid_tool_prefix(name: &str) -> bool {
         && name.len() <= 32
 }
 
+/// `records2` → `RECORDS2_URL`: the same rule as the runtime's
+/// `service_url_setting` (UpperSnake would split it into `RECORDS_2`).
 pub(super) fn setting(name: &str, suffix: &str) -> String {
-    format!("{}_{suffix}", name.to_case(Case::UpperSnake))
+    format!("{}_{suffix}", name.replace('-', "_").to_ascii_uppercase())
 }
 
 pub(super) fn mcp_servers(matches: &ArgMatches) -> Result<Vec<McpServer>> {
@@ -344,6 +346,8 @@ mod tests {
     fn settings_and_prefixes_follow_the_shared_contract() {
         assert_eq!(setting("records", "URL"), "RECORDS_URL");
         assert_eq!(setting("linear", "MCP_TOKEN"), "LINEAR_MCP_TOKEN");
+        assert_eq!(setting("records2", "URL"), "RECORDS2_URL");
+        assert_eq!(setting("case_notes", "URL"), "CASE_NOTES_URL");
         assert!(valid_tool_prefix("records"));
         assert!(!valid_tool_prefix("Records"));
         assert!(!valid_tool_prefix("my-server"));

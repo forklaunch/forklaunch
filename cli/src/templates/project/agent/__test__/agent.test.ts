@@ -26,9 +26,10 @@ describe('{{service_name}} agent tools', () => {
       continuationSecret: 'test-secret'
     });
     const listing = await agent.listTools(context);
+    // Listings are sorted by tool name.
     expect(listing.tools.map((t) => [t.name, t.requiresApproval])).toEqual([
-      ['current_time', false],
-      ['change_note', true]
+      ['change_note', true],
+      ['current_time', false]
     ]);
   });
 

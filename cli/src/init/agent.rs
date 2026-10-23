@@ -68,9 +68,13 @@ pub(crate) fn parse_mcp_server(value: &str) -> Result<McpServerArg> {
         || !name.as_bytes()[0].is_ascii_lowercase()
         || !name
             .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
     {
-        bail!("MCP server name '{name}' must be lowercase letters, digits or dashes.");
+        // Underscores as well as dashes, so the same --mcp name works with
+        // --language rust, which takes ^[a-z][a-z0-9_]*$.
+        bail!(
+            "MCP server name '{name}' must start with a lowercase letter and use lowercase letters, digits, underscores or dashes."
+        );
     }
     let url = url.trim();
     if !(url.starts_with("https://") || url.starts_with("http://"))
@@ -554,7 +558,9 @@ mod tests {
                 url: "https://mcp.linear.app/mcp".into()
             }
         );
+        assert_eq!(parse_mcp_server("my_linear=https://x").unwrap().name, "my_linear");
         assert!(parse_mcp_server("linear").is_err());
+        assert!(parse_mcp_server("_linear=https://x").is_err());
         assert!(parse_mcp_server("Linear=https://x").is_err());
         assert!(parse_mcp_server("linear=ftp://x").is_err());
         assert!(parse_mcp_server("linear=https://x y").is_err());

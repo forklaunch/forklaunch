@@ -100,15 +100,15 @@ export function serviceTools(
   } = {}
 ): ToolSource {
   const doFetch = options.fetch ?? fetch;
+  const setting = `${service.replace(/-/g, '_').toUpperCase()}_URL`;
   const baseUrl = () => {
-    const url =
-      options.url ??
-      process.env[`${service.replace(/-/g, '_').toUpperCase()}_URL`];
+    const url = options.url ?? process.env[setting];
     if (!url)
-      throw new Error(
-        `Set ${service.toUpperCase()}_URL to reach the ${service} service.`
-      );
-    return url.replace(/\/+$/, '');
+      throw new Error(`Set ${setting} to reach the ${service} service.`);
+    // Trim trailing slashes without a regex: /\/+$/ backtracks on long runs.
+    let end = url.length;
+    while (end > 0 && url[end - 1] === '/') end--;
+    return url.slice(0, end);
   };
   const version = options.version ?? process.env.VERSION ?? 'v1';
   const load = cached(async () => {

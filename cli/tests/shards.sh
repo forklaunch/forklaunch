@@ -20,7 +20,7 @@ shard_scripts() {
     # TypeScript command tests: change, delete and sync on small fresh apps.
     ts-change) echo change_application.sh change_library.sh change_router.sh change_router_add_mappers.sh change_sdk_mode.sh change_service.sh change_service_worker_migration.sh change_worker.sh ts_change_round_trips.sh ;;
     ts-delete-sync) echo delete_library.sh delete_router.sh delete_service.sh delete_worker.sh sync_add_remove_flow.sh sync_application_add.sh sync_application_remove.sh sync_library_subcommand.sh sync_service_subcommand.sh sync_worker_subcommand.sh ;;
-    ts-init) echo dryrun.sh existing_docker_compose.sh init_application.sh init_application_custom_path.sh init_billing_stripe.sh init_cac.sh init_iam_better_auth.sh init_messaging_twilio.sh init_module.sh init_module_src_path.sh init_relay.sh init_relay_drift.sh init_service_mappers.sh init_worker_mappers.sh init_worker_workspace_and_typecheck.sh ;;
+    ts-init) echo dryrun.sh existing_docker_compose.sh init_agent.sh init_application.sh init_application_custom_path.sh init_billing_stripe.sh init_cac.sh init_iam_better_auth.sh init_messaging_twilio.sh init_module.sh init_module_src_path.sh init_relay.sh init_relay_drift.sh init_service_mappers.sh init_worker_mappers.sh init_worker_workspace_and_typecheck.sh ;;
     ts-env-release) echo environment_sync.sh environment_validate.sh precheck_version_match_allows_run.sh precheck_version_mismatch_decline_fails.sh release_non_tty.sh ;;
     # Rust and mixed scaffolding and code-editing commands.
     rust-commands) echo rust_init_commands.sh init_rust_projects.sh rust_sync_commands.sh rust_delete_commands.sh rust_change_commands.sh rust_conversion_preservation.sh rust_package_sources.sh rust_infrastructure_sources.sh ;;
