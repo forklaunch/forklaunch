@@ -94,6 +94,6 @@ cargo check --workspace --all-targets
 cargo test -p probe --test http
 cargo build -p probe -p jobs --bins
 "$FORKLAUNCH_CLI" sdk generate --target all --from contract --check --path .
-node "$SCRIPT_DIR/rust_mcp_service_startup.mjs" "$CARGO_TARGET_DIR/debug/probe"
-node "$SCRIPT_DIR/rust_worker_service_policy.mjs" "$CARGO_TARGET_DIR/debug/jobs"
+node "$SCRIPT_DIR/fixtures/rust_mcp_service_startup.mjs" "$CARGO_TARGET_DIR/debug/probe"
+node "$SCRIPT_DIR/fixtures/rust_worker_service_policy.mjs" "$CARGO_TARGET_DIR/debug/jobs"
 echo 'PASS packaged CLI installation outside checkout, portable scaffolding, service-local SDKs, infrastructure adapters and HTTP/MCP startup'

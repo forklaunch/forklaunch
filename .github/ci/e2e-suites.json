@@ -1,9 +1,8 @@
 {
   "_comment": [
-    "E2E suite layout, read by the `changes` job of e2e_tests.yml.",
+    "E2E suite layout, read by the `changes` job of e2e_tests.yml. The E2E suite proves that CLI scaffolding and code-editing commands produce working projects; framework and module behaviour is tested by cargo test and the TypeScript packages' own suites.",
     "tier 'fast' runs on every pull request that needs the suite; tier 'full' runs only on pushes to main, the nightly schedule and a dispatch with full=true.",
-    "Each entry is one job: `shards` names cli/tests/shards.sh shards, `scripts` names cli/tests scripts, `suite` names steps of the Rust native job. `bundles` lists the golden-app bundles (ts, rust) the job downloads.",
-    "The org's free plan shares about 20 concurrent runners across every PR, so the fast tier stays near 15 E2E jobs; fold rather than add.",
+    "Each entry is one job running cli/tests/shards.sh shards. `bundles` lists the golden-app bundles (ts, rust) the job downloads.",
     "Job names are check names; renaming one changes the check."
   ],
   "typescript": [
@@ -12,25 +11,10 @@
     {"tier": "fast", "name": "TS environment and release", "shards": "ts-env-release", "bundles": "ts"}
   ],
   "rust": [
-    {"tier": "fast", "name": "Rust golden apps", "shards": "rust-golden", "bundles": "rust"},
     {"tier": "fast", "name": "Rust commands", "shards": "rust-commands", "bundles": "rust"},
-    {"tier": "fast", "name": "Rust mixed commands", "shards": "rust-mixed-commands", "bundles": "rust"},
-    {"tier": "fast", "name": "Rust HTTP Methods", "scripts": "rust_http_methods_runtime.sh", "bundles": "rust"},
-    {"tier": "fast", "name": "Rust HTTP and Schema", "scripts": "rust_recursive_sdk_runtime.sh rust_schema_resources_runtime.sh", "bundles": "rust"},
-    {"tier": "fast", "name": "Rust SDKs, Sockets and Mixed", "scripts": "rust_component_names_runtime.sh rust_versioned_sdk_runtime.sh rust_versioned_fields_runtime.sh rust_sdk_presence_runtime.sh rust_ws_cli_runtime.sh rust_asyncapi_import_runtime.sh rust_asyncapi_cross_channel_runtime.sh rust_asyncapi_resources_runtime.sh rust_mixed_sdk_runtime.sh rust_mixed_compliance.sh rust_storefront_lifecycle.sh", "bundles": "rust"},
-    {"tier": "fast", "name": "Rust Module Lifecycle", "scripts": "rust_module_lifecycle.sh", "bundles": "rust"},
-    {"tier": "fast", "name": "Rust Modules and Auth", "scripts": "rust_iam_runtime.sh rust_cac_runtime.sh rust_billing_runtime.sh rust_ecommerce_runtime.sh", "bundles": "rust"},
-    {"tier": "fast", "name": "Rust Workers", "scripts": "rust_worker_runtime.sh rust_redis_worker_runtime.sh rust_kafka_worker_runtime.sh", "bundles": "rust"},
-    {"tier": "full", "name": "Rust Release and Containers", "scripts": "rust_release_runtime.sh rust_ecommerce_container_runtime.sh rust_kafka_container_runtime.sh", "bundles": "rust"}
-  ],
-  "native": [
-    {"tier": "fast", "suite": "scaffolding infrastructure"},
-    {"tier": "fast", "suite": "postgres-service capabilities docs socket-compilers"},
-    {"tier": "fast", "suite": "sdk-socket sdk-combined sse"},
-    {"tier": "full", "suite": "registry"},
-    {"tier": "full", "suite": "published-registry"},
-    {"tier": "full", "suite": "release-guard"},
-    {"tier": "full", "suite": "dev-node"},
-    {"tier": "full", "suite": "dev-bun"}
+    {"tier": "fast", "name": "Rust SDKs and startup", "shards": "rust-sdk", "bundles": "rust"},
+    {"tier": "fast", "name": "Mixed workspaces", "shards": "rust-mixed", "bundles": "rust"},
+    {"tier": "fast", "name": "Rust modules", "shards": "rust-modules", "bundles": "rust"},
+    {"tier": "full", "name": "Rust images and published crates", "shards": "rust-images", "bundles": "rust"}
   ]
 }

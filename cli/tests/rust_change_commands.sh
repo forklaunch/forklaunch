@@ -6,4 +6,4 @@ if [ -z "${FORKLAUNCH_CLI:-}" ]; then
     cargo build --manifest-path "$REPO_ROOT/cli/Cargo.toml" --release
     export FORKLAUNCH_CLI="$REPO_ROOT/cli/target/release/forklaunch"
 fi
-exec python3 "$SCRIPT_DIR/rust_change_preservation.py"
+exec python3 "$SCRIPT_DIR/fixtures/rust_change_preservation.py"

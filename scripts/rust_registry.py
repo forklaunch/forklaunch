@@ -267,7 +267,7 @@ def verify(directory: Path, target: Path):
         # fingerprint. Retain verification compatibility with published 0.1.0.
         core_version = resolved["forklaunch-core"]["version"]
         sdk_discovery = sdk_discovery_supported(core_version)
-        run(["node", str(ROOT / "cli/tests/rust_mcp_service_startup.mjs"), str(target / "debug/forklaunch-registry-smoke"),
+        run(["node", str(ROOT / "cli/tests/fixtures/rust_mcp_service_startup.mjs"), str(target / "debug/forklaunch-registry-smoke"),
              *(["--verify-sdk-discovery"] if sdk_discovery else [])], cwd=consumer)
     (directory / "verification.json").write_text(json.dumps({
         "schemaVersion": 1, "releaseSha256": hashlib.sha256((directory / "release.json").read_bytes()).hexdigest(),

@@ -33,5 +33,5 @@ fi
 
 NATIVE_SERVICE="${FORKLAUNCH_RUST_CONTAINER_SERVICE:-accounts}"
 cargo generate-lockfile --manifest-path "$APP_ROOT/Cargo.toml"
-node "$SCRIPT_DIR/rust_registry_container.mjs" "$APP_ROOT" "$NATIVE_SERVICE"
+node "$SCRIPT_DIR/fixtures/rust_registry_container.mjs" "$APP_ROOT" "$NATIVE_SERVICE"
 echo 'PASS relocated Rust shared image, health/OpenAPI/MCP, non-root process and SIGTERM shutdown'

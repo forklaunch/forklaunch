@@ -2,4 +2,4 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec python3 "$SCRIPT_DIR/ts_change_round_trips.py" "$@"
+exec python3 "$SCRIPT_DIR/fixtures/ts_change_round_trips.py" "$@"

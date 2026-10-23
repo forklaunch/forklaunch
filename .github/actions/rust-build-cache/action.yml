@@ -36,7 +36,7 @@ inputs:
       the job. sccache keys include the working directory, so applications
       the tests scaffold under random temporary directories never matched
       between runs. See stable-tmp/sitecustomize.py. For Node, the job must
-      also set NODE_OPTIONS to the loader shown in rust_parity.yml (GitHub
+      also set NODE_OPTIONS to the loader shown in e2e_tests.yml (GitHub
       does not let a step export NODE_OPTIONS). It only pays off in a job
       that saves its store: a job that only restores never keeps what it
       compiled under the stable paths.
@@ -101,7 +101,7 @@ runs:
         printf '#!/bin/sh\nunset CARGO_TARGET_DIR CARGO_BUILD_TARGET_DIR\nexec "%s" "$@"\n' "$SCCACHE_PATH" > "$wrapper"
         chmod +x "$wrapper"
         # Keep the store off the root filesystem when the runner has its
-        # separate temporary disk: with a restored store next to the parity
+        # separate temporary disk: with a restored store next to large
         # jobs' target directories, the framework job ran out of space.
         dir="$HOME/.cache/sccache-ci"
         if [ -d /mnt ] && sudo -n true 2>/dev/null && sudo mkdir -p /mnt/sccache-ci && sudo chown "$(id -u):$(id -g)" /mnt/sccache-ci; then

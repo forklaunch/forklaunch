@@ -10,8 +10,8 @@ on:
       - 'scripts/rust_registry_smoke.rs'
       - 'scripts/rust_feature_matrix.py'
       - 'scripts/test_rust_release.py'
-      - 'cli/tests/rust_mcp_service_startup.mjs'
-      - 'cli/tests/rust_mcp_probe.mjs'
+      - 'cli/tests/fixtures/rust_mcp_service_startup.mjs'
+      - 'cli/tests/fixtures/rust_mcp_probe.mjs'
       - '.github/workflows/rust_release.yml'
   workflow_dispatch:
     inputs:

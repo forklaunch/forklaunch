@@ -5,7 +5,7 @@
 #   bash cli/tests/shards.sh run SHARD [SHARD..]  # run them, report timings
 #   bash cli/tests/shards.sh check                # every CI script is in exactly one shard
 #
-# ts-golden and rust-golden consume golden apps (see README.md, "Golden apps"):
+# ts-golden and the Rust shards consume golden apps (see README.md, "Golden apps"):
 # set FORKLAUNCH_GOLDEN_APPS_DIR to an unpacked artifact, or leave it unset to
 # build them locally on demand. The other shards exercise a command on purpose
 # and scaffold their own small apps.
@@ -26,15 +26,19 @@ shard_scripts() {
     ts-delete-sync) echo delete_library.sh delete_router.sh delete_service.sh delete_worker.sh sync_add_remove_flow.sh sync_application_add.sh sync_application_remove.sh sync_library_subcommand.sh sync_service_subcommand.sh sync_worker_subcommand.sh ;;
     ts-init) echo dryrun.sh existing_docker_compose.sh init_application.sh init_application_custom_path.sh init_billing_stripe.sh init_cac.sh init_iam_better_auth.sh init_messaging_twilio.sh init_module.sh init_module_src_path.sh init_relay.sh init_relay_drift.sh init_service_mappers.sh init_worker_mappers.sh init_worker_workspace_and_typecheck.sh ;;
     ts-env-release) echo environment_sync.sh environment_validate.sh precheck_version_match_allows_run.sh precheck_version_mismatch_decline_fails.sh release_non_tty.sh ;;
-    # Rust: start from the golden rust-service / mixed apps and their target.
-    rust-golden) echo rust_http_runtime.sh rust_generated_otlp_runtime.sh rust_container_runtime.sh rust_sdk_workspace.sh ;;
-    # Rust command tests: init, sync, delete, change and conversion commands.
-    rust-commands) echo rust_init_commands.sh init_rust_projects.sh rust_sync_commands.sh rust_delete_commands.sh rust_sdk_openapi_commands.sh rust_package_sources.sh rust_change_commands.sh rust_conversion_preservation.py ;;
-    rust-mixed-commands) echo rust_mixed_sync.sh rust_typescript_attach.sh rust_mixed_attach.sh rust_mixed_lifecycle.sh ;;
+    # Rust and mixed scaffolding and code-editing commands. The Rust jobs start
+    # from the golden apps' shared Cargo target.
+    rust-commands) echo rust_init_commands.sh init_rust_projects.sh rust_sync_commands.sh rust_delete_commands.sh rust_change_commands.sh rust_conversion_preservation.sh rust_package_sources.sh rust_infrastructure_sources.sh ;;
+    rust-sdk) echo rust_sdk_openapi_commands.sh rust_sdk_workspace.sh rust_bootstrap_lifecycle.sh rust_checked_mapper.sh ;;
+    rust-mixed) echo rust_mixed_sync.sh rust_typescript_attach.sh rust_mixed_attach.sh rust_mixed_lifecycle.sh ;;
+    rust-modules) echo rust_module_lifecycle.sh ;;
+    # Slow: Docker images of generated apps, and a build against the
+    # published framework crates. Full runs only.
+    rust-images) echo rust_container_runtime.sh rust_registry_scaffold.sh ;;
     *) return 1 ;;
   esac
 }
-SHARDS="ts-golden ts-change ts-delete-sync ts-init ts-env-release rust-golden rust-commands rust-mixed-commands"
+SHARDS="ts-golden ts-change ts-delete-sync ts-init ts-env-release rust-commands rust-sdk rust-mixed rust-modules rust-images"
 
 run_one() {
   local script="$1" started status

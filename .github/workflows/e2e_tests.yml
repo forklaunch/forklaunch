@@ -44,7 +44,6 @@ jobs:
       full: ${{ steps.mode.outputs.full }}
       typescript-matrix: ${{ steps.suites.outputs.typescript }}
       rust-matrix: ${{ steps.suites.outputs.rust }}
-      native-matrix: ${{ steps.suites.outputs.native }}
     steps:
       - name: Decide between a full and a filtered run
         id: mode
@@ -76,12 +75,12 @@ jobs:
           layout = json.load(open('.github/ci/e2e-suites.json'))
           full = os.environ['FULL'] == 'true'
           with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
-              for kind in ('typescript', 'rust', 'native'):
+              for kind in ('typescript', 'rust'):
                   chosen = [{k: v for k, v in entry.items() if k != 'tier'}
                             for entry in layout[kind] if full or entry['tier'] == 'fast']
                   # Each Rust job keeps its own compiler store.
                   for entry in chosen:
-                      label = entry.get('name') or entry.get('suite')
+                      label = entry['name']
                       entry.setdefault('family', 'e2e-' + re.sub(r'[^a-z0-9]+', '-', label.lower()).strip('-'))
                   print(f'{kind}: {[e.get("name", e.get("suite")) for e in chosen]}')
                   out.write(f'{kind}={json.dumps(chosen)}\n')
@@ -393,38 +392,12 @@ jobs:
           # With a warm store there is no reason to go to the network first.
           NPM_CONFIG_PREFER_OFFLINE: "true"
           SHARDS: ${{ matrix.shards }}
+        # shards.sh runs every script of each shard, prints per-script
+        # timings and fails if any script failed.
         run: |
-          set -e
           chmod +x "$FORKLAUNCH_CLI"
-          if [ -n "$SHARDS" ]; then
-            # shards.sh runs every script, prints timings, fails if any failed.
-            # shellcheck disable=SC2086
-            exec bash shards.sh run $SHARDS
-          fi
-          test_count=0
-          failed=()
-          # Every script runs even after one fails, so a job that holds
-          # several suites reports all of them.
-          for test_script in ${{ matrix.scripts }}; do
-            if [ -f "$test_script" ]; then
-              echo "[INFO] Running test: $test_script"
-              test_count=$((test_count + 1))
-              if ! bash "$test_script"; then
-                echo "[ERROR] Test failed: $test_script"
-                failed+=("$test_script")
-                continue
-              fi
-              echo "[OK] Test passed: $test_script"
-            else
-              echo "[ERROR] Missing test script: $test_script"
-              failed+=("$test_script")
-            fi
-          done
-          if [ "${#failed[@]}" -gt 0 ]; then
-            echo "[ERROR] ${#failed[@]} of $test_count failed in group ${{ matrix.name }}: ${failed[*]}"
-            exit 1
-          fi
-          echo "[SUCCESS] All $test_count tests passed in group: ${{ matrix.name }}"
+          # shellcheck disable=SC2086
+          bash shards.sh run $SHARDS
 
       # A content-addressed store, so saving a partially populated one is safe:
       # entries are immutable and keyed by hash, and the next run reuses
@@ -549,9 +522,8 @@ jobs:
       - name: Unpack golden apps
         if: matrix.bundles != ''
         run: bash cli/tests/golden_apps.sh unpack "$RUNNER_TEMP"/golden-dl/golden-apps-*.tar.*
-      # The shards hold the former Rust native suites, which ran with it.
-      - name: Skip formatting in shard suites
-        if: matrix.shards != ''
+      # The Rust scripts ran with it in their former native-suite job.
+      - name: Skip formatting
         run: echo "FORKLAUNCH_SKIP_FORMAT=1" >> "$GITHUB_ENV"
 
       - name: Create .forklaunch directory
@@ -578,38 +550,12 @@ jobs:
           # With a warm store there is no reason to go to the network first.
           NPM_CONFIG_PREFER_OFFLINE: "true"
           SHARDS: ${{ matrix.shards }}
+        # shards.sh runs every script of each shard, prints per-script
+        # timings and fails if any script failed.
         run: |
-          set -e
           chmod +x "$FORKLAUNCH_CLI"
-          if [ -n "$SHARDS" ]; then
-            # shards.sh runs every script, prints timings, fails if any failed.
-            # shellcheck disable=SC2086
-            exec bash shards.sh run $SHARDS
-          fi
-          test_count=0
-          failed=()
-          # Every script runs even after one fails, so a job that holds
-          # several suites reports all of them.
-          for test_script in ${{ matrix.scripts }}; do
-            if [ -f "$test_script" ]; then
-              echo "[INFO] Running test: $test_script"
-              test_count=$((test_count + 1))
-              if ! bash "$test_script"; then
-                echo "[ERROR] Test failed: $test_script"
-                failed+=("$test_script")
-                continue
-              fi
-              echo "[OK] Test passed: $test_script"
-            else
-              echo "[ERROR] Missing test script: $test_script"
-              failed+=("$test_script")
-            fi
-          done
-          if [ "${#failed[@]}" -gt 0 ]; then
-            echo "[ERROR] ${#failed[@]} of $test_count failed in group ${{ matrix.name }}: ${failed[*]}"
-            exit 1
-          fi
-          echo "[SUCCESS] All $test_count tests passed in group: ${{ matrix.name }}"
+          # shellcheck disable=SC2086
+          bash shards.sh run $SHARDS
 
       # A content-addressed store, so saving a partially populated one is safe:
       # entries are immutable and keyed by hash, and the next run reuses
@@ -625,169 +571,12 @@ jobs:
         if: always()
         uses: ./.github/actions/rust-build-cache/save
 
-  rust-native-lifecycle:
-    name: Rust native ${{ matrix.suite }}
-    needs: [changes, build-cli, golden-apps]
-    if: ${{ !cancelled() && needs.build-cli.result == 'success' && needs.golden-apps.result == 'success' && needs.changes.outputs.rust == 'true' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        # Suites that take a few minutes share a job (space-separated), so
-        # fewer jobs wait for a runner and repeat the setup; every suite in a
-        # job runs even when an earlier one fails. Layout and tiers:
-        # .github/ci/e2e-suites.json.
-        include: ${{ fromJSON(needs.changes.outputs.native-matrix) }}
-    env:
-      CARGO_INCREMENTAL: '0'
-      CARGO_BUILD_JOBS: '2'
-      FORKLAUNCH_CLI: ${{ github.workspace }}/cli-bin/forklaunch
-      FORKLAUNCH_SKIP_FORMAT: '1'
-      # Must match the golden-apps job: it is part of each Cargo fingerprint.
-      CARGO_PROFILE_DEV_DEBUG: line-tables-only
-      # Loads .github/actions/rust-build-cache/stable-tmp/preload.cjs once the
-      # cache step has set FORKLAUNCH_STABLE_TMP_PRELOAD; a no-op before that.
-      # Set here because GitHub refuses NODE_OPTIONS through GITHUB_ENV.
-      NODE_OPTIONS: --import=data:text/javascript,if(process.env.FORKLAUNCH_STABLE_TMP_PRELOAD){(await(import(%22node:module%22))).createRequire(process.env.FORKLAUNCH_STABLE_TMP_PRELOAD)(process.env.FORKLAUNCH_STABLE_TMP_PRELOAD)}
-    steps:
-      - uses: actions/checkout@v7
-      # The runner context is not available in job-level env.
-      - name: Golden apps location
-        run: |
-          echo "FORKLAUNCH_GOLDEN_APPS_DIR=$RUNNER_TEMP/golden-apps" >> "$GITHUB_ENV"
-          echo "CARGO_TARGET_DIR=$RUNNER_TEMP/golden-apps/target" >> "$GITHUB_ENV"
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Rust build cache
-        uses: ./.github/actions/rust-build-cache
-        with:
-          family: ${{ matrix.family }}
-          fallback-family: generated
-          stable-tmp: 'true'
-          size: 2G
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - uses: pnpm/action-setup@v2
-        with:
-          version: 10
-      # Must equal BUN_VERSION in cli/src/constants.rs: generated Bun images build
-      # with oven/bun:<BUN_VERSION> and run a frozen install of the bun.lock the
-      # suite wrote, which another release may not be able to read.
-      - uses: oven-sh/setup-bun@v2
-        if: contains(matrix.suite, 'sdk-') || startsWith(matrix.suite, 'dev-')
-        with:
-          bun-version: 1.4.2
-      - uses: actions/download-artifact@v4
-        with:
-          name: forklaunch-cli
-          path: cli-bin
-      - uses: actions/download-artifact@v4
-        with:
-          name: golden-apps-rust
-          path: ${{ runner.temp }}/golden-dl
-      - run: bash cli/tests/golden_apps.sh unpack "$RUNNER_TEMP"/golden-dl/golden-apps-*.tar.*
-      - run: chmod +x "$FORKLAUNCH_CLI"
-      - name: Raw scaffolding, generated mappers and HTTP/MCP startup
-        if: ${{ !cancelled() && contains(format(' {0} ', matrix.suite), ' scaffolding ') }}
-        run: |
-          python3 cli/tests/rust_bootstrap_lifecycle.py
-          python3 cli/tests/rust_checked_mapper.py
-      - name: Raw init, custom module paths, sync discovery, deletion and local SDKs
-        if: ${{ !cancelled() && contains(format(' {0} ', matrix.suite), ' projects ') }}
-        run: |
-          bash cli/tests/rust_init_commands.sh
-          bash cli/tests/init_rust_projects.sh
-          bash cli/tests/rust_sync_commands.sh
-          bash cli/tests/rust_delete_commands.sh
-          bash cli/tests/rust_sdk_openapi_commands.sh
-          bash cli/tests/rust_package_sources.sh
-      - name: Change commands preserve and compile application code
-        if: ${{ !cancelled() && contains(format(' {0} ', matrix.suite), ' changes ') }}
-        run: |
-          bash cli/tests/rust_change_commands.sh
-          python3 cli/tests/rust_conversion_preservation.py
-      - name: Mixed workspace discovery, package membership and both HTTP/MCP surfaces
-        if: ${{ !cancelled() && contains(format(' {0} ', matrix.suite), ' mixed ') }}
-        run: |
-          bash cli/tests/rust_mixed_sync.sh
-          bash cli/tests/rust_typescript_attach.sh
-      - name: Service-local SDK workspace repair with real Node and Bun installs and builds
-        if: ${{ !cancelled() && contains(format(' {0} ', matrix.suite), ' sdk-http ') }}
-        run: bash cli/tests/rust_sdk_workspace.sh
-      - name: Current and legacy HTTP SDKs, wire validation and public transport
-        if: ${{ !cancelled() && contains(format(' {0} ', matrix.suite), ' http ') }}
-        run: bash cli/tests/rust_http_runtime.sh
-      - name: Current and legacy SSE SDKs, authentication, cancellation and cleanup
-        if: ${{ !cancelled() && contains(format(' {0} ', matrix.suite), ' sse ') }}
-        run: bash cli/tests/rust_sse_runtime.sh
-      - name: Registry socket compilation and optional schema compiler settings
-        if: ${{ !cancelled() && contains(format(' {0} ', matrix.suite), ' socket-compilers ') }}
-        run: python3 cli/tests/rust_socket_compiler_sources.py
-      - name: Native documentation HTML and pinned framework compatibility
-        if: ${{ !cancelled() && contains(format(' {0} ', matrix.suite), ' docs ') }}
-        run: python3 cli/tests/rust_native_docs_runtime.py
-      - name: WebSocket SDK workspace ownership and real Node and Bun builds
-        if: ${{ !cancelled() && contains(format(' {0} ', matrix.suite), ' sdk-socket ') }}
-        run: bash cli/tests/rust_socket_workspace.sh
-      - name: Combined HTTP and WebSocket SDK workspace ownership
-        if: ${{ !cancelled() && contains(format(' {0} ', matrix.suite), ' sdk-combined ') }}
-        env:
-          FORKLAUNCH_TEST_COMBINED_SDK: '1'
-        run: bash cli/tests/rust_socket_workspace.sh
-      - name: Mixed Docker development, contract reloads and graceful shutdown
-        if: startsWith(matrix.suite, 'dev-')
-        env:
-          FORKLAUNCH_TEST_DEV_RUNTIME: ${{ matrix.suite == 'dev-bun' && 'bun' || 'node' }}
-        run: bash cli/tests/rust_mixed_dev.sh
-      - name: Generated telemetry propagation, export and shutdown
-        if: ${{ !cancelled() && contains(format(' {0} ', matrix.suite), ' observability ') }}
-        run: bash cli/tests/rust_generated_otlp_runtime.sh
-      - name: Relocated source-snapshot shared Docker image
-        if: ${{ !cancelled() && contains(format(' {0} ', matrix.suite), ' containers ') }}
-        run: bash cli/tests/rust_container_runtime.sh
-      - name: Infrastructure ownership, dependency modes and actual encrypted stores
-        if: ${{ !cancelled() && contains(format(' {0} ', matrix.suite), ' infrastructure ') }}
-        run: |
-          bash cli/tests/rust_infrastructure_sources.sh
-          bash cli/tests/rust_infrastructure_runtime.sh
-      - name: PostgreSQL routers, restricted-role tenant isolation and audited protected fields
-        if: ${{ !cancelled() && contains(format(' {0} ', matrix.suite), ' postgres-service ') }}
-        run: bash cli/tests/rust_postgres_service_runtime.sh
-      - name: Generated optimized builds and shared-image release manifests
-        if: ${{ !cancelled() && contains(format(' {0} ', matrix.suite), ' release-guard ') }}
-        run: bash cli/tests/rust_generated_release_runtime.sh
-      - name: Install TypeScript compiler for real signature interoperability
-        if: ${{ !cancelled() && contains(format(' {0} ', matrix.suite), ' capabilities ') }}
-        run: |
-          npm install --before="$(date -u -d '2 days ago' +%Y-%m-%dT%H:%M:%SZ)" --prefix "$RUNNER_TEMP/capabilities-ts" --no-save --package-lock=false --ignore-scripts typescript@5.9.3
-          echo "TSC_BIN=$RUNNER_TEMP/capabilities-ts/node_modules/.bin/tsc" >> "$GITHUB_ENV"
-      - name: Signed managed callbacks and ownership preservation
-        if: ${{ !cancelled() && contains(format(' {0} ', matrix.suite), ' capabilities ') }}
-        run: bash cli/tests/rust_capabilities_runtime.sh
-      - name: Generate against packaged framework registry dependencies
-        if: ${{ !cancelled() && contains(format(' {0} ', matrix.suite), ' registry ') }}
-        run: |
-          python3 scripts/rust_release.py prepare --scope framework --allow-dirty --output "$RUNNER_TEMP/framework-packages"
-          python3 cli/tests/rust_registry_scaffold.py --staging --default-source --release "$RUNNER_TEMP/framework-packages"
-      - name: Public framework default, mixed build hooks and Docker HTTP/MCP startup
-        if: ${{ !cancelled() && contains(format(' {0} ', matrix.suite), ' published-registry ') }}
-        run: |
-          python3 scripts/rust_release.py prepare --scope framework --allow-dirty --output "$RUNNER_TEMP/framework-packages"
-          python3 cli/tests/rust_registry_scaffold.py --default-source --mixed --docker --release "$RUNNER_TEMP/framework-packages"
-      - name: Save compiler cache
-        if: always()
-        uses: ./.github/actions/rust-build-cache/save
-
   # The one status to require. It passes when every suite this change needed
   # passed, and when a suite was skipped only because `changes` ruled it out;
   # a suite skipped because something it depends on failed fails it.
   e2e-ok:
     name: E2E Tests
-    needs: [changes, build-cli, verify-packaged-cli, golden-apps, test, test-rust, rust-native-lifecycle]
+    needs: [changes, build-cli, verify-packaged-cli, golden-apps, test, test-rust]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -806,7 +595,6 @@ jobs:
               'golden-apps': outputs.get('rust') == 'true' or outputs.get('typescript') == 'true',
               'test': outputs.get('typescript') == 'true',
               'test-rust': outputs.get('rust') == 'true',
-              'rust-native-lifecycle': outputs.get('rust') == 'true',
           }
           failed = False
           for job, need in needs.items():

@@ -1,8 +1,12 @@
 # CLI end-to-end tests
 
-Scripts in this directory drive the CLI under test (`FORKLAUNCH_CLI`, or a
-`cargo run` of `cli/` when unset) against generated applications. CI runs them
-from `.github/workflows/e2e_tests.yml` and `rust_parity.yml`.
+Shell scripts in this directory drive the CLI under test (`FORKLAUNCH_CLI`, or
+a `cargo run` of `cli/` when unset) and prove that scaffolding and the
+code-editing commands produce projects that install, build and lint, for
+TypeScript, Rust and mixed applications. Framework and module behaviour is
+tested by `cargo test` in framework-rs and blueprint-rs and by the TypeScript
+packages' own suites, not here. Helpers the scripts need live in `fixtures/`.
+CI runs them from `.github/workflows/e2e_tests.yml`.
 
 ## Golden apps
 
@@ -58,25 +62,12 @@ features do not vary.
     SHA-256 is in `golden.json`). `FORKLAUNCH_GOLDEN_ALLOW_CLI_MISMATCH=1`
     overrides the check.
 * **Shard entrypoints:** `bash cli/tests/shards.sh run SHARD...` (`list`,
-  `check`). Shards: `ts-golden`, `ts-change`, `ts-delete-sync`, `ts-init`,
-  `ts-env-release` (between them, all 46 TypeScript scripts of the e2e `test`
-  matrix), `rust-golden`, `rust-commands`, `rust-mixed-commands`. Each shard runs
-  every script, prints per-script timings and fails if any script failed
+  `check`). TypeScript shards: `ts-golden`, `ts-change`, `ts-delete-sync`,
+  `ts-init`, `ts-env-release`. Rust and mixed shards: `rust-commands`,
+  `rust-sdk`, `rust-mixed`, `rust-modules`, and the slow `rust-images` (full
+  CI runs only). The CI layout is `.github/ci/e2e-suites.json`. Each shard
+  runs every script, prints per-script timings and fails if any script failed
   (`FORKLAUNCH_SHARD_FAIL_FAST=1` stops at the first).
-  `ts-golden` needs the ts bundle; `rust-golden` needs the rust bundle.
-* **Parity families:** `node cli/tests/parity_suite.mjs FAMILY [--shard I/N]`
-  replays the single-script steps of `rust_parity.yml`, each with its exact
-  step environment (`parity_suites.json`), in one process. `--only REGEX`
-  filters, `--keep-going` runs past failures, `--prebuild` compiles the
-  family's Cargo targets in one invocation first (off by default; it was not
-  faster locally). The runner inherits the job environment, so run a family
-  in the job it came from (`job` in the table). Families: `zod` (34 steps, Node 22), `zod-node24`
-  (26 steps, Node 24.2.0), `billing` (59 steps, Node 22), `billing-node24` (1).
-  `--list` prints a shard's scripts. `${FL_RUST_TS}` / `${FL_CANONICAL_HTTP}`
-  resolve to `$RUNNER_TEMP/fl-rust-ts` / `$RUNNER_TEMP/fl-canonical-http`
-  (override with `FORKLAUNCH_PARITY_RUST_TS` / `FORKLAUNCH_PARITY_CANONICAL_HTTP`).
-  Each family still needs the npm fixtures and services its job installs today
-  (`requires` in the table).
 
 ### Writing a consumer
 
