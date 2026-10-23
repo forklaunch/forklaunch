@@ -2,7 +2,10 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$REPO_ROOT/cli/target}"
+# The CLI default stays the checkout's build; Cargo output defaults to the
+# target the golden apps compiled their dependencies into.
+export FORKLAUNCH_CLI="${FORKLAUNCH_CLI:-${FORKLAUNCH_TEST_CLI:-${CARGO_TARGET_DIR:-$REPO_ROOT/cli/target}/debug/forklaunch}}"
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$(python3 "$SCRIPT_DIR/fixtures/golden.py" target)}"
 export CARGO_INCREMENTAL=0
 export FORKLAUNCH_SKIP_FORMAT=1
 export RUSTUP_TOOLCHAIN="${RUSTUP_TOOLCHAIN:-stable}"

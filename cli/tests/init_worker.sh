@@ -2,6 +2,9 @@
 # scripts share one compile instead of each re-checking a release build.
 FL="${FORKLAUNCH_CLI:-cargo run --release}"
 set -e
+# Golden apps: the canonical application this script starts from is scaffolded,
+# installed and built once (fixtures/golden.py); see "Golden apps" in README.md.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fixtures/golden.sh"
 
 if [ -d "output/init-worker" ]; then
     rm -rf output/init-worker
@@ -10,7 +13,7 @@ fi
 mkdir -p output/init-worker
 cd output/init-worker
 
-RUST_BACKTRACE=1 $FL init application worker-test-node-application -p worker-test-node-application -o src/modules -d postgresql -f prettier -l oxlint -v zod -F express -r node -t vitest -m billing-base -m iam-base -D "Test worker" -A "Rohin Bhargava" -L 'AGPL-3.0'
+golden_app ts-node worker-test-node-application
 RUST_BACKTRACE=1 $FL init worker wrk-test -t database -d postgresql -p worker-test-node-application/src/modules -D "Test worker"
 RUST_BACKTRACE=1 $FL init worker wrk-test-redis -t redis -p worker-test-node-application/src/modules -D "Test worker"
 RUST_BACKTRACE=1 $FL init worker wrk-test-bullmq -t bullmq -p worker-test-node-application/src/modules -D "Test worker"
@@ -28,7 +31,7 @@ pnpm build
 
 cd ../../..
 
-RUST_BACKTRACE=1 $FL init application worker-test-bun-application -p worker-test-bun-application -o src/modules -d postgresql -f biome -l oxlint -v zod -F express -r bun -t vitest -m billing-base -m iam-base -D "Test worker" -A "Rohin Bhargava" -L "MIT"
+golden_app ts-bun worker-test-bun-application
 RUST_BACKTRACE=1 $FL init worker wrk-test -t database -d postgresql -p worker-test-bun-application/src/modules -D "Test worker"
 RUST_BACKTRACE=1 $FL init worker wrk-test-redis -t redis -p worker-test-bun-application/src/modules -D "Test worker"
 RUST_BACKTRACE=1 $FL init worker wrk-test-bullmq -t bullmq -p worker-test-bun-application/src/modules -D "Test worker"

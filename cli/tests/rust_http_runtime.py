@@ -5,6 +5,7 @@ The wire cases are shared unchanged with the historical gate. Programmatic
 fixture routes deliberately serve malformed responses to test SDK rejection;
 ordinary health/users controllers and process/security composition are generated.
 """
+from fixtures import golden
 from fixtures.legacy_sdk_manifest import write_legacy_sdk_manifest
 import hashlib
 import json
@@ -67,12 +68,11 @@ def client_example(directory, source, name):
 
 
 try:
-    command('init', 'application', 'runtime-app', '--database', 'postgresql', '--validator', 'zod',
-            '--formatter', 'prettier', '--linter', 'oxlint', '--http-framework', 'express', '--runtime', 'node',
-            '--test-framework', 'vitest', '-D', 'HTTP runtime', '-A', 'ForkLaunch', '-L', 'MIT')
-    # This protocol fixture uses the generated in-memory service. PostgreSQL
-    # persistence/encryption is exercised by dedicated database/runtime gates.
-    command('init', 'service', 'accounts', '--language', 'rust', '-D', 'Accounts')
+    # TypeScript shell plus the in-memory Rust service `accounts`: the golden
+    # 'rust-service' scaffold (fixtures/golden.py). This protocol fixture uses
+    # the generated in-memory service. PostgreSQL persistence/encryption is
+    # exercised by dedicated database/runtime gates.
+    golden.app('rust-service', app, built=False)
     command('init', 'router', 'users', '--language', 'rust', path=app / 'src/accounts')
     relocated = root / 'relocated'
     shutil.copytree(app, relocated)
