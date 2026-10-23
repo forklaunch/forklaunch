@@ -137,7 +137,8 @@ runs:
     # are workflow artifacts rather than Actions cache entries: the cache is
     # capped at 10 GB per repository, which did not hold one store per job,
     # and artifacts on a public repository are not.
-    - name: Restore compiler cache
+    - name: Find compiler cache
+      id: find
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
@@ -146,32 +147,44 @@ runs:
         DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       run: |
         branch="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
-        found=''
         for name in "$FAMILY" $FALLBACK; do
           for from in "$branch" "$DEFAULT_BRANCH"; do
-            id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=sccache-$name&per_page=100" --jq \
+            run=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=sccache-$name&per_page=100" --jq \
               "[.artifacts[] | select(.expired == false
                 and .workflow_run.repository_id == $GITHUB_REPOSITORY_ID
                 and .workflow_run.head_repository_id == $GITHUB_REPOSITORY_ID
-                and .workflow_run.head_branch == \"$from\")] | sort_by(.created_at) | last | .id // empty" 2>/dev/null) || id=''
-            if [ -n "$id" ]; then found="$name@$from ($id)"; break 2; fi
+                and .workflow_run.head_branch == \"$from\")] | sort_by(.created_at) | last | .workflow_run.id // empty" 2>/dev/null) || run=''
+            if [ -n "$run" ]; then
+              echo "Restoring compiler cache $name from run $run on $from"
+              { echo "name=sccache-$name"; echo "run=$run"; } >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
           done
         done
-        if [ -z "$found" ]; then
-          echo "No compiler cache for $FAMILY yet; starting cold"
-          exit 0
-        fi
-        echo "Restoring compiler cache $found"
-        work="$RUNNER_TEMP/sccache-restore"
-        mkdir -p "$work"
-        if gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/${id}/zip" > "$work/store.zip" &&
-           unzip -q -o "$work/store.zip" -d "$work" && tar -xf "$work/store.tar" -C "$SCCACHE_DIR"; then
+        echo "No compiler cache for $FAMILY yet; starting cold"
+    # The download action fetches in parallel chunks; `gh api .../zip` streamed
+    # a 1.9 GB store at about 4 MB/s, eight minutes per job.
+    - name: Download compiler cache
+      id: download
+      if: steps.find.outputs.run != ''
+      continue-on-error: true
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      with:
+        name: ${{ steps.find.outputs.name }}
+        run-id: ${{ steps.find.outputs.run }}
+        github-token: ${{ inputs.token }}
+        path: ${{ runner.temp }}/sccache-restore
+    - name: Unpack compiler cache
+      if: steps.download.outcome == 'success'
+      shell: bash
+      run: |
+        if tar -xf "$RUNNER_TEMP/sccache-restore/store.tar" -C "$SCCACHE_DIR"; then
           du -sh "$SCCACHE_DIR"
         else
-          echo "::warning::Could not restore compiler cache $found; starting cold"
+          echo "::warning::Could not unpack the compiler cache; starting cold"
           find "$SCCACHE_DIR" -mindepth 1 -delete || true
         fi
-        rm -rf "$work"
+        rm -rf "$RUNNER_TEMP/sccache-restore"
     - name: Cache Cargo registry
       if: inputs.registry-cache != 'off'
       uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
