@@ -85,7 +85,14 @@ golden_app --scaffold rust-service "$RUN/app"  # pristine scaffold
 ```
 
 Copies keep symlinks and modification times, so pnpm links and Cargo
-fingerprints survive. Use the pristine scaffold when the script's own first
+fingerprints survive. Built copies have their `pnpm-lock.yaml` / `bun.lock`
+removed: a fresh scaffold has none, and a copied one would be outdated once the
+test adds a component, which pnpm rejects under `CI=true` (frozen lockfile).
+The next install resolves as on a fresh scaffold and reuses `node_modules`.
+Because `node_modules` is present, pnpm runs the CLI starts can install and
+write a lockfile mid-test, so built copies also get `frozenLockfile: false`
+(`pnpm-workspace.yaml`) and `frozen-lockfile=false` (`.npmrc`), scoped to the
+copy; nothing is set job-wide. Use the pristine scaffold when the script's own first
 build is under test (build.rs output, lockfile creation). Use the built copy when
 the script only needs a working, installed app. Never modify a golden app in
 place.

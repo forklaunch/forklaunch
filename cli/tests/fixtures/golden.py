@@ -359,8 +359,56 @@ def app(name: str, destination: Path | str, built: bool = True) -> Path:
     """
     destination = Path(destination).resolve()
     copy_tree(ensure(name, built), destination)
+    if built:
+        drop_lockfiles(destination)
+        unfreeze_pnpm(destination)
     log(f'{name} -> {destination}')
     return destination
+
+
+LOCKFILES = ('pnpm-lock.yaml', 'bun.lock', 'bun.lockb')
+
+
+def drop_lockfiles(root: Path) -> None:
+    """Remove the package-manager lockfiles the golden build wrote.
+
+    A fresh scaffold has no lockfile, so the first install a test runs (often
+    the CLI's own, after it adds a component) resolves and writes one. A
+    copied lockfile would instead be outdated after that change, and pnpm
+    under CI=true installs with --frozen-lockfile and refuses it. Without the
+    lockfile the install resolves as on a fresh scaffold while reusing the
+    copied node_modules, which stay valid.
+    """
+    for directory, subdirectories, files in os.walk(root):
+        subdirectories[:] = [d for d in subdirectories if d != 'node_modules']
+        for lockfile in LOCKFILES:
+            if lockfile in files:
+                (Path(directory) / lockfile).unlink()
+
+
+def unfreeze_pnpm(root: Path) -> None:
+    """Let pnpm update this copy's lockfile under CI=true.
+
+    With node_modules already installed, pnpm runs that the CLI starts while
+    generating code (verify-deps-before-run) install and write a lockfile, which
+    the test's next component then makes outdated; CI=true implies
+    --frozen-lockfile, so the test's own install would refuse it. A fresh
+    scaffold never gets that far. The setting is scoped to this copy:
+    pnpm-workspace.yaml for pnpm 11, .npmrc for pnpm 10.
+    """
+    for directory, subdirectories, files in os.walk(root):
+        subdirectories[:] = [d for d in subdirectories if d != 'node_modules']
+        if 'pnpm-workspace.yaml' not in files:
+            continue
+        workspace = Path(directory) / 'pnpm-workspace.yaml'
+        text = workspace.read_text()
+        if 'frozenLockfile:' not in text:
+            workspace.write_text(text.rstrip('\n') + '\n# golden copy (fixtures/golden.py)\nfrozenLockfile: false\n')
+        npmrc = Path(directory) / '.npmrc'
+        existing = npmrc.read_text() if npmrc.is_file() else ''
+        if 'frozen-lockfile' not in existing:
+            npmrc.write_text(existing + ('' if existing.endswith('\n') or not existing else '\n')
+                             + 'frozen-lockfile=false\n')
 
 
 def package(bundle: str, output: Path, base: Path | None = None) -> Path:
