@@ -6,15 +6,57 @@
     "Job names are check names; renaming one changes the check."
   ],
   "typescript": [
-    {"tier": "fast", "name": "TS build and change", "shards": "ts-build ts-change"},
-    {"tier": "fast", "name": "TS init, delete and sync", "shards": "ts-delete-sync ts-init"},
-    {"tier": "fast", "name": "TS environment and release", "shards": "ts-env-release"}
+    {
+      "tier": "fast",
+      "name": "TS build and change",
+      "shards": "ts-build ts-change"
+    },
+    {
+      "tier": "fast",
+      "name": "TS init, delete and sync",
+      "shards": "ts-delete-sync ts-init"
+    },
+    {
+      "tier": "fast",
+      "name": "TS environment and release",
+      "shards": "ts-env-release"
+    }
   ],
   "rust": [
-    {"tier": "fast", "name": "Rust commands", "shards": "rust-commands"},
-    {"tier": "fast", "name": "Rust SDKs and startup", "shards": "rust-sdk"},
-    {"tier": "fast", "name": "Mixed workspaces", "shards": "rust-mixed"},
-    {"tier": "fast", "name": "Rust modules", "shards": "rust-modules"},
-    {"tier": "full", "name": "Rust images and published crates", "shards": "rust-images"}
+    {
+      "tier": "fast",
+      "name": "Rust commands",
+      "shards": "rust-commands"
+    },
+    {
+      "tier": "fast",
+      "name": "Rust SDKs and startup",
+      "shards": "rust-sdk"
+    },
+    {
+      "tier": "fast",
+      "name": "Rust command sweep and generated projects",
+      "shards": "rust-sweep"
+    },
+    {
+      "tier": "fast",
+      "name": "Mixed workspaces",
+      "shards": "rust-mixed"
+    },
+    {
+      "tier": "fast",
+      "name": "Mixed tooling",
+      "shards": "mixed-tooling"
+    },
+    {
+      "tier": "fast",
+      "name": "Rust modules",
+      "shards": "rust-modules"
+    },
+    {
+      "tier": "full",
+      "name": "Rust images and published crates",
+      "shards": "rust-images"
+    }
   ]
 }

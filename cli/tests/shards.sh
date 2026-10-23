@@ -26,7 +26,9 @@ shard_scripts() {
     ts-env-release) echo environment_sync.sh environment_validate.sh precheck_version_match_allows_run.sh precheck_version_mismatch_decline_fails.sh release_non_tty.sh ;;
     # Rust and mixed scaffolding and code-editing commands.
     rust-commands) echo rust_init_commands.sh init_rust_projects.sh rust_sync_commands.sh rust_delete_commands.sh rust_change_commands.sh rust_conversion_preservation.sh rust_package_sources.sh rust_infrastructure_sources.sh ;;
-    rust-sdk) echo rust_sdk_openapi_commands.sh rust_sdk_workspace.sh rust_bootstrap_lifecycle.sh rust_checked_mapper.sh ;;
+    rust-sdk) echo rust_sdk_openapi_commands.sh rust_sdk_workspace.sh rust_bootstrap_lifecycle.sh rust_checked_mapper.sh rust_local_sdk.sh rust_static_router_lifecycle.sh ;;
+    rust-sweep) echo rust_command_sweep.sh rust_generated_projects.sh rust_name_prompt.sh ;;
+    mixed-tooling) echo mixed_application_tooling.sh mixed_runtime_migration.sh neutral_framework_dependencies.sh raw_mixed_workspace.sh ;;
     rust-mixed) echo rust_mixed_sync.sh rust_typescript_attach.sh rust_mixed_attach.sh rust_mixed_lifecycle.sh ;;
     rust-modules) echo rust_module_lifecycle.sh ;;
     # Slow: Docker images of generated apps, and a build against the
@@ -35,7 +37,7 @@ shard_scripts() {
     *) return 1 ;;
   esac
 }
-SHARDS="ts-build ts-change ts-delete-sync ts-init ts-env-release rust-commands rust-sdk rust-mixed rust-modules rust-images"
+SHARDS="ts-build ts-change ts-delete-sync ts-init ts-env-release rust-commands rust-sdk rust-sweep rust-mixed mixed-tooling rust-modules rust-images"
 
 run_one() {
   local script="$1" started status

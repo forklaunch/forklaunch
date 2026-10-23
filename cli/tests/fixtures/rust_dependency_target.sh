@@ -3,8 +3,9 @@
 # Cargo target directory FORKLAUNCH_RUST_TARGET, so the Rust E2E jobs start
 # from it instead of each compiling the same crates cold.
 #
-# It scaffolds one throwaway Rust application with every component kind and
-# builds its workspace; only the target directory is kept. The tests still
+# It scaffolds one throwaway Rust application with every component kind,
+# checks its docker-compose.yaml and builds its workspace; only the target
+# directory is kept. The tests still
 # scaffold fresh applications, which is what they test: Cargo reuses the
 # registry crates (same versions, features and profile) and rebuilds each
 # application's own crates. Consumers must use the same absolute
@@ -41,6 +42,10 @@ case "${1:-}" in
     run init module payments --path "$app" --language rust -m billing-stripe
     run init module cac --path "$app" --language rust -m cac-base
     run init module ecommerce --path "$app" --language rust -m ecommerce-stripe
+    # Every worker type (database/apalis, redis, kafka, consumer-only) and
+    # module is scaffolded here, so check the generated Compose file too.
+    docker compose -f "$app/docker-compose.yaml" config --quiet
+    echo "PASS: docker compose config for every Rust component kind"
     (cd "$app" && cargo build --workspace)
     du -sh "$target"
     ;;
