@@ -62,7 +62,7 @@
     "dotenv": "^18.0.8",
     "jose": "^6.2.12",
     "pino": "^10.4.0",
-    "stripe": "^22.6.2",
+    "stripe": "^23.0.0",
     "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.52.0",
     "uuid": "^14.0.3",
     "zod": "^4.6.7"

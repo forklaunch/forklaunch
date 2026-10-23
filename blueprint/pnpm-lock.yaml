@@ -228,19 +228,19 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^3.3.0
-        version: 3.3.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.5))(supports-color@8.1.1)
+        version: 3.3.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@23.0.0(@types/node@26.6.5))(supports-color@8.1.1)
       '@forklaunch/express':
         specifier: ^1.2.53
-        version: 1.2.53(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.12)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.5))(supports-color@8.1.1)(zod@4.6.7)
+        version: 1.2.53(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.12)(openapi-types@12.1.3)(stripe@23.0.0(@types/node@26.6.5))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
         specifier: ^1.2.51
-        version: 1.2.51(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.5))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        version: 1.2.51(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@23.0.0(@types/node@26.6.5))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/implementation-billing-stripe':
         specifier: workspace:^
         version: link:../implementations/billing/stripe
       '@forklaunch/infrastructure-redis':
         specifier: ^1.4.22
-        version: 1.4.22(@opentelemetry/api@1.9.1)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.5))(supports-color@8.1.1)
+        version: 1.4.22(@opentelemetry/api@1.9.1)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@23.0.0(@types/node@26.6.5))(supports-color@8.1.1)
       '@forklaunch/interfaces-billing':
         specifier: workspace:^
         version: link:../interfaces/billing
@@ -284,8 +284,8 @@ importers:
         specifier: ^10.4.0
         version: 10.4.0
       stripe:
-        specifier: ^22.6.2
-        version: 22.6.2(@types/node@26.6.5)
+        specifier: ^23.0.0
+        version: 23.0.0(@types/node@26.6.5)
       uWebSockets.js:
         specifier: github:uNetworking/uWebSockets.js#v20.52.0
         version: https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3
@@ -556,13 +556,13 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^3.3.0
-        version: 3.3.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.5))(supports-color@8.1.1)
+        version: 3.3.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@23.0.0(@types/node@26.6.5))(supports-color@8.1.1)
       '@forklaunch/express':
         specifier: ^1.2.53
-        version: 1.2.53(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.12)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.5))(supports-color@8.1.1)(zod@4.6.7)
+        version: 1.2.53(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.12)(openapi-types@12.1.3)(stripe@23.0.0(@types/node@26.6.5))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
         specifier: ^1.2.51
-        version: 1.2.51(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.5))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        version: 1.2.51(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@23.0.0(@types/node@26.6.5))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/implementation-ecommerce-base':
         specifier: workspace:^
         version: link:../implementations/ecommerce/base
@@ -577,7 +577,7 @@ importers:
         version: link:../implementations/worker/redis
       '@forklaunch/infrastructure-redis':
         specifier: ^1.4.22
-        version: 1.4.22(@opentelemetry/api@1.9.1)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.5))(supports-color@8.1.1)
+        version: 1.4.22(@opentelemetry/api@1.9.1)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@23.0.0(@types/node@26.6.5))(supports-color@8.1.1)
       '@forklaunch/interfaces-ecommerce':
         specifier: workspace:^
         version: link:../interfaces/ecommerce
@@ -624,8 +624,8 @@ importers:
         specifier: ^10.4.0
         version: 10.4.0
       stripe:
-        specifier: ^22.6.2
-        version: 22.6.2(@types/node@26.6.5)
+        specifier: ^23.0.0
+        version: 23.0.0(@types/node@26.6.5)
       uWebSockets.js:
         specifier: github:uNetworking/uWebSockets.js#v20.52.0
         version: https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3
@@ -941,7 +941,7 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^3.3.0
-        version: 3.3.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.5))(supports-color@8.1.1)
+        version: 3.3.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@23.0.0(@types/node@26.6.5))(supports-color@8.1.1)
       '@forklaunch/implementation-billing-base':
         specifier: workspace:^
         version: link:../base
@@ -964,8 +964,8 @@ importers:
         specifier: ^8.20.0
         version: 8.20.0
       stripe:
-        specifier: ^22.6.2
-        version: 22.6.2(@types/node@26.6.5)
+        specifier: ^23.0.0
+        version: 23.0.0(@types/node@26.6.5)
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -1119,7 +1119,7 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^3.3.0
-        version: 3.3.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.5))(supports-color@8.1.1)
+        version: 3.3.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@23.0.0(@types/node@26.6.5))(supports-color@8.1.1)
       '@forklaunch/implementation-ecommerce-base':
         specifier: workspace:^
         version: link:../base
@@ -1142,8 +1142,8 @@ importers:
         specifier: ^8.20.0
         version: 8.20.0
       stripe:
-        specifier: ^22.6.2
-        version: 22.6.2(@types/node@26.6.5)
+        specifier: ^23.0.0
+        version: 23.0.0(@types/node@26.6.5)
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -7854,6 +7854,15 @@ packages:
       '@types/node':
         optional: true
 
+  stripe@23.0.0:
+    resolution: {integrity: sha512-MDE2A5ZVVluYURORaZEVghSmnLJc3w6aHAlZSxDQMsOjOb3V0O6ro/CiaeFlJS4N7uIVmsg98ocRsPmUK6YfyA==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@types/node': '>=20'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
   strtok3@10.6.2:
     resolution: {integrity: sha512-BkdixFFUt7r7LsX6aGNPVyYMLjW+M1USLlKPNbZsrZEmLFh5tGqhdfckKo6xgsZIJqdDD0CZGkeCJJwNWQIKQA==}
     engines: {node: '>=18'}
@@ -9502,10 +9511,107 @@ snapshots:
       - supports-color
       - sury
 
+  '@forklaunch/core@3.3.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@23.0.0(@types/node@26.6.5))(supports-color@8.1.1)':
+    dependencies:
+      '@asyncapi/parser': 3.6.6
+      '@forklaunch/common': 1.2.32
+      '@forklaunch/opentelemetry-instrumentation-hyper-express': 0.0.5(@opentelemetry/api@1.10.0)(supports-color@8.1.1)
+      '@forklaunch/validator': 1.3.0
+      '@mikro-orm/core': 7.2.5
+      '@mikro-orm/mongodb': 7.2.5(@mikro-orm/core@7.2.5)
+      '@opentelemetry/api': 1.10.0
+      '@opentelemetry/api-logs': 0.223.0
+      '@opentelemetry/exporter-logs-otlp-http': 0.223.0(@opentelemetry/api@1.10.0)
+      '@opentelemetry/exporter-metrics-otlp-http': 0.223.0(@opentelemetry/api@1.10.0)
+      '@opentelemetry/exporter-prometheus': 0.223.0(@opentelemetry/api@1.10.0)
+      '@opentelemetry/exporter-trace-otlp-http': 0.223.0(@opentelemetry/api@1.10.0)
+      '@opentelemetry/instrumentation-express': 0.71.1(@opentelemetry/api@1.10.0)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation-http': 0.223.0(@opentelemetry/api@1.10.0)(supports-color@8.1.1)
+      '@opentelemetry/resources': 2.12.0(@opentelemetry/api@1.10.0)
+      '@opentelemetry/sdk-logs': 0.223.0(@opentelemetry/api@1.10.0)
+      '@opentelemetry/sdk-metrics': 2.12.0(@opentelemetry/api@1.10.0)
+      '@opentelemetry/sdk-node': 0.223.0(@opentelemetry/api@1.10.0)(supports-color@8.1.1)
+      '@opentelemetry/sdk-trace-node': 2.12.0(@opentelemetry/api@1.10.0)
+      '@opentelemetry/semantic-conventions': 1.43.0
+      cors: 2.8.6
+      dotenv: 18.0.8
+      fastmcp: 4.23.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.12)(openapi-types@12.1.3)(supports-color@8.1.1)
+      jose: 6.2.12
+      openapi3-ts: 4.6.2
+      pino: 10.4.0
+      pino-http: 11.0.0
+      pino-pretty: 13.2.0
+      redis: 6.3.0(@opentelemetry/api@1.10.0)
+      uuid: 14.0.3
+      zod: 4.6.7
+    optionalDependencies:
+      stripe: 23.0.0(@types/node@26.6.5)
+    transitivePeerDependencies:
+      - '@aws-sdk/credential-providers'
+      - '@cfworker/json-schema'
+      - '@mongodb-js/zstd'
+      - '@node-rs/xxhash'
+      - '@valibot/to-json-schema'
+      - ajv
+      - ajv-formats
+      - arktype
+      - dataloader
+      - effect
+      - encoding
+      - gcp-metadata
+      - kerberos
+      - mongodb-client-encryption
+      - openapi-types
+      - snappy
+      - socks
+      - supports-color
+      - sury
+
   '@forklaunch/express@1.2.53(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.12)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.5))(supports-color@8.1.1)(zod@4.6.7)':
     dependencies:
       '@forklaunch/common': 1.2.32
       '@forklaunch/core': 3.3.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.5))(supports-color@8.1.1)
+      '@forklaunch/validator': 1.3.0
+      '@modelcontextprotocol/sdk': 1.32.1(supports-color@8.1.1)(zod@4.6.7)
+      '@scalar/express-api-reference': 0.10.30
+      '@types/multer': 2.3.0
+      body-parser: 2.3.0(supports-color@8.1.1)
+      busboy: 1.6.0
+      cors: 2.8.6
+      express: 5.3.0(supports-color@8.1.1)
+      fastmcp: 4.23.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.12)(openapi-types@12.1.3)(supports-color@8.1.1)
+      multer: 2.4.0
+      qs: 6.16.1
+      range-parser: 1.3.0
+      swagger-ui-express: 5.0.1(express@5.3.0(supports-color@8.1.1))
+    transitivePeerDependencies:
+      - '@aws-sdk/credential-providers'
+      - '@cfworker/json-schema'
+      - '@mongodb-js/zstd'
+      - '@node-rs/xxhash'
+      - '@valibot/to-json-schema'
+      - ajv
+      - ajv-formats
+      - arktype
+      - dataloader
+      - effect
+      - encoding
+      - gcp-metadata
+      - jose
+      - kerberos
+      - mongodb-client-encryption
+      - openapi-types
+      - snappy
+      - socks
+      - stripe
+      - supports-color
+      - sury
+      - zod
+
+  '@forklaunch/express@1.2.53(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.12)(openapi-types@12.1.3)(stripe@23.0.0(@types/node@26.6.5))(supports-color@8.1.1)(zod@4.6.7)':
+    dependencies:
+      '@forklaunch/common': 1.2.32
+      '@forklaunch/core': 3.3.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@23.0.0(@types/node@26.6.5))(supports-color@8.1.1)
       '@forklaunch/validator': 1.3.0
       '@modelcontextprotocol/sdk': 1.32.1(supports-color@8.1.1)(zod@4.6.7)
       '@scalar/express-api-reference': 0.10.30
@@ -9596,10 +9702,78 @@ snapshots:
       - sury
       - utf-8-validate
 
+  '@forklaunch/hyper-express@1.2.51(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@23.0.0(@types/node@26.6.5))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)':
+    dependencies:
+      '@forklaunch/common': 1.2.32
+      '@forklaunch/core': 3.3.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@23.0.0(@types/node@26.6.5))(supports-color@8.1.1)
+      '@forklaunch/hyper-express-fork': 6.18.1(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+      '@forklaunch/validator': 1.3.0
+      '@forklaunch/ws': 1.3.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@23.0.0(@types/node@26.6.5))(supports-color@8.1.1)
+      '@scalar/express-api-reference': 0.10.30
+      cors: 2.8.6
+      live-directory: 3.0.3
+      openapi3-ts: 4.6.2
+      qs: 6.16.1
+      swagger-ui-dist: 5.34.0
+      swagger-ui-express: 5.0.1(express@5.3.0(supports-color@8.1.1))
+      uWebSockets.js: https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3
+    transitivePeerDependencies:
+      - '@aws-sdk/credential-providers'
+      - '@cfworker/json-schema'
+      - '@mongodb-js/zstd'
+      - '@node-rs/xxhash'
+      - '@valibot/to-json-schema'
+      - ajv
+      - ajv-formats
+      - arktype
+      - bufferutil
+      - dataloader
+      - effect
+      - encoding
+      - express
+      - gcp-metadata
+      - kerberos
+      - mongodb-client-encryption
+      - openapi-types
+      - snappy
+      - socks
+      - stripe
+      - supports-color
+      - sury
+      - utf-8-validate
+
   '@forklaunch/infrastructure-redis@1.4.22(@opentelemetry/api@1.9.1)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.5))(supports-color@8.1.1)':
     dependencies:
       '@forklaunch/common': 1.2.32
       '@forklaunch/core': 3.3.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.5))(supports-color@8.1.1)
+      redis: 6.3.0(@opentelemetry/api@1.9.1)
+    transitivePeerDependencies:
+      - '@aws-sdk/credential-providers'
+      - '@cfworker/json-schema'
+      - '@mongodb-js/zstd'
+      - '@node-rs/xxhash'
+      - '@opentelemetry/api'
+      - '@valibot/to-json-schema'
+      - ajv
+      - ajv-formats
+      - arktype
+      - dataloader
+      - effect
+      - encoding
+      - gcp-metadata
+      - kerberos
+      - mongodb-client-encryption
+      - openapi-types
+      - snappy
+      - socks
+      - stripe
+      - supports-color
+      - sury
+
+  '@forklaunch/infrastructure-redis@1.4.22(@opentelemetry/api@1.9.1)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@23.0.0(@types/node@26.6.5))(supports-color@8.1.1)':
+    dependencies:
+      '@forklaunch/common': 1.2.32
+      '@forklaunch/core': 3.3.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@23.0.0(@types/node@26.6.5))(supports-color@8.1.1)
       redis: 6.3.0(@opentelemetry/api@1.9.1)
     transitivePeerDependencies:
       - '@aws-sdk/credential-providers'
@@ -9707,6 +9881,38 @@ snapshots:
       '@asyncapi/parser': 3.6.6
       '@forklaunch/common': 1.2.32
       '@forklaunch/core': 3.3.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.5))(supports-color@8.1.1)
+      '@forklaunch/validator': 1.3.0
+      '@types/ws': 8.18.2
+      ws: 8.22.0
+    transitivePeerDependencies:
+      - '@aws-sdk/credential-providers'
+      - '@cfworker/json-schema'
+      - '@mongodb-js/zstd'
+      - '@node-rs/xxhash'
+      - '@valibot/to-json-schema'
+      - ajv
+      - ajv-formats
+      - arktype
+      - bufferutil
+      - dataloader
+      - effect
+      - encoding
+      - gcp-metadata
+      - kerberos
+      - mongodb-client-encryption
+      - openapi-types
+      - snappy
+      - socks
+      - stripe
+      - supports-color
+      - sury
+      - utf-8-validate
+
+  '@forklaunch/ws@1.3.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@23.0.0(@types/node@26.6.5))(supports-color@8.1.1)':
+    dependencies:
+      '@asyncapi/parser': 3.6.6
+      '@forklaunch/common': 1.2.32
+      '@forklaunch/core': 3.3.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@23.0.0(@types/node@26.6.5))(supports-color@8.1.1)
       '@forklaunch/validator': 1.3.0
       '@types/ws': 8.18.2
       ws: 8.22.0
@@ -15131,6 +15337,11 @@ snapshots:
   strip-json-comments@5.0.3: {}
 
   stripe@22.6.2(@types/node@26.6.5):
+    optionalDependencies:
+      '@types/node': 26.6.5
+    optional: true
+
+  stripe@23.0.0(@types/node@26.6.5):
     optionalDependencies:
       '@types/node': 26.6.5
 
