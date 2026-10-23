@@ -194,15 +194,15 @@ jobs:
         if: always()
         run: '"$SCCACHE_PATH" --show-stats'
 
-  # The dependency graph of generated Rust applications, built once per run
-  # (with the compiler cache) and shipped as an artifact; every Rust job
-  # starts from it instead of compiling the same crates cold. The tests
-  # still scaffold fresh applications: only the Cargo target is shared.
-  # Artifacts do not count against the repository's 10 GB Actions cache.
+  # Full runs only: scaffolds one application with every Rust component
+  # kind, checks its docker-compose.yaml and builds it, refreshing the
+  # `generated` compiler store that each Rust job starts from when it has no
+  # store of its own yet. Pull-request Rust jobs do not wait for it: it took
+  # 12 minutes, and they restore their own stores from earlier runs instead.
   rust-target:
-    name: Rust dependency target
+    name: Rust dependency cache
     needs: [changes, build-cli]
-    if: needs.changes.outputs.rust == 'true'
+    if: needs.changes.outputs.rust == 'true' && needs.changes.outputs.full == 'true'
     runs-on: ubuntu-latest
     env:
       CARGO_BUILD_JOBS: '2'
@@ -230,16 +230,6 @@ jobs:
       - run: chmod +x "$FORKLAUNCH_CLI"
       - name: Build the dependency target
         run: bash cli/tests/fixtures/rust_dependency_target.sh build
-      - name: Pack the dependency target
-        run: bash cli/tests/fixtures/rust_dependency_target.sh pack "$RUNNER_TEMP/rust-dependency-target.tar.zst"
-      # Already zstd-compressed: no second compression pass.
-      - uses: actions/upload-artifact@v4
-        with:
-          name: rust-dependency-target
-          path: ${{ runner.temp }}/rust-dependency-target.tar.zst
-          retention-days: 1
-          compression-level: 0
-          if-no-files-found: error
       - name: Save compiler cache
         if: always()
         uses: ./.github/actions/rust-build-cache/save
@@ -347,11 +337,11 @@ jobs:
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('cli/src/core/package_json/package_json_constants.rs') }}
 
   test-rust:
-    needs: [changes, build-cli, rust-target]
+    needs: [changes, build-cli]
     if: ${{ !cancelled() && needs.build-cli.result == 'success' && needs.changes.outputs.rust == 'true' }}
     runs-on: ubuntu-latest
     env:
-      # Must match the rust-target job: it is part of each Cargo fingerprint.
+      # Matches the rust-target job, whose store this job falls back to.
       CARGO_PROFILE_DEV_DEBUG: line-tables-only
       # Loads .github/actions/rust-build-cache/stable-tmp/preload.cjs once the
       # cache step has set FORKLAUNCH_STABLE_TMP_PRELOAD; a no-op before that.
@@ -384,11 +374,9 @@ jobs:
       - name: Install native build dependencies for generated workers
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev libsasl2-dev
 
-      # The pre-built dependency target; same absolute path as where it was built.
-      - name: Dependency target location
-        run: |
-          echo "FORKLAUNCH_RUST_TARGET=$RUNNER_TEMP/rust-target" >> "$GITHUB_ENV"
-          echo "CARGO_TARGET_DIR=$RUNNER_TEMP/rust-target" >> "$GITHUB_ENV"
+      # One target for every script in the job: they share third-party crates.
+      - name: Reuse Cargo artifacts across generated Rust workspaces
+        run: echo "CARGO_TARGET_DIR=$RUNNER_TEMP/forklaunch-generated-target" >> "$GITHUB_ENV"
 
       - name: Install TypeScript compiler for SDK checks
         run: npm install --before="$(date -u -d '2 days ago' +%Y-%m-%dT%H:%M:%SZ)" --prefix "$RUNNER_TEMP/fl-rust-ts" --no-save --package-lock=false --ignore-scripts typescript@5.9.3 qs@6.16.0 @types/qs@6.15.1 @types/node@22 @types/ws@8.18.1 ws@8.22.0 ajv@8.20.0 ajv-draft-04@1.0.0 ajv-formats@3.0.1 @asyncapi/parser@3.6.3 stripe@22.6.2 bullmq@6.3.10 ioredis@6.0.0 zod@4.6.5 ts-deepmerge@8.0.0 cross-fetch@4.1.0 better-auth@1.7.6 esbuild@0.28.2
@@ -444,17 +432,6 @@ jobs:
         with:
           name: forklaunch-cli
           path: cli-bin
-      # Optional: without it (the target job failed) the suites build cold.
-      - name: Download the dependency target
-        id: target
-        if: needs.rust-target.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          name: rust-dependency-target
-          path: ${{ runner.temp }}/rust-target-dl
-      - name: Unpack the dependency target
-        if: steps.target.outcome == 'success'
-        run: bash cli/tests/fixtures/rust_dependency_target.sh unpack "$RUNNER_TEMP/rust-target-dl/rust-dependency-target.tar.zst"
       # The Rust scripts ran with it in their former native-suite job.
       - name: Skip formatting
         run: echo "FORKLAUNCH_SKIP_FORMAT=1" >> "$GITHUB_ENV"
@@ -525,7 +502,7 @@ jobs:
               'changes': True,
               'build-cli': outputs.get('rust') == 'true' or outputs.get('typescript') == 'true',
               'verify-packaged-cli': outputs.get('rust') == 'true',
-              'rust-target': outputs.get('rust') == 'true',
+              'rust-target': outputs.get('rust') == 'true' and outputs.get('full') == 'true',
               'test': outputs.get('typescript') == 'true',
               'test-rust': outputs.get('rust') == 'true',
           }

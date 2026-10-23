@@ -21,12 +21,11 @@ CI's layout (which shards form which job, and which run on pull requests) is
 generated apps, and a build against the framework crates as packaged for
 release) runs on full runs only.
 
-Every script scaffolds the applications it tests. To keep the Rust jobs from
-compiling the same dependency graph cold, CI builds it once per run with
-`fixtures/rust_dependency_target.sh build`, packs the Cargo target and points
-every Rust job's `CARGO_TARGET_DIR` at the unpacked copy. Keep
-`CARGO_INCREMENTAL=0`, the toolchain and `CARGO_PROFILE_DEV_DEBUG` identical
-between that job and its consumers: they are part of every fingerprint.
+Every script scaffolds the applications it tests. CI keeps the Rust jobs warm
+with sccache: each job restores its own compiler store from an earlier run
+(deterministic temporary directory names make its scaffolds hash the same),
+falling back to the store that `fixtures/rust_dependency_target.sh build`
+refreshes on full runs from an application with every Rust component kind.
 
 The TypeScript/Rust parity suites are not here: they live in
 `framework-rs/parity` and run nightly from `.github/workflows/rust_parity.yml`.
