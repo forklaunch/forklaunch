@@ -38,8 +38,8 @@ SHARDS = {
         {'shard': 'core', 'start': r''},
         {'shard': 'http', 'start': r'rust_redis_queue_parity\.mjs'},
         {'shard': 'zod', 'start': r'rust_zod_string_parity\.mjs'},
-        {'shard': 'zod-checks', 'start': r'Exact numeric bounds in default mode'},
-        {'shard': 'wire', 'start': r'rust_versioned_wire_parity\.mjs'},
+        {'shard': 'zod', 'start': r'Exact numeric bounds in default mode'},
+        {'shard': 'http', 'start': r'rust_versioned_wire_parity\.mjs'},
     ],
     'blueprint': [
         {'shard': 'billing', 'start': r''},
@@ -53,8 +53,6 @@ SHARDS = {
     ],
 }
 FULL_ONLY = {'timing'}
-# The shard whose compilations are saved as the job's compiler cache family.
-SAVE_SHARD = {'framework': 'core', 'blueprint': 'core'}
 
 SETUP = re.compile(
     r'^(npm |mkdir |sudo |docker |echo |cp |# shellcheck)'
@@ -120,7 +118,7 @@ def rewrite(source):
             shard, current = shard_of(job, block, current)
             if shard == 'save':
                 block = [line for line in block if not line.startswith('        if:')]
-                block.append(f"        if: always() && matrix.shard == '{SAVE_SHARD[job]}' {MARK}")
+                block.append(f"        if: always() {MARK}")
             elif shard:
                 if any(line.startswith('        if:') for line in block):
                     raise SystemExit(f'{job}: test step at line {a + 1} already has an if:; combine it by hand')
@@ -148,8 +146,6 @@ def problems(source):
         listed = {a or b for a, b in listed}
         if listed and listed != declared:
             found.append(f'{job}: matrix shards {sorted(listed)} differ from SHARDS {sorted(declared)}')
-        if SAVE_SHARD[job] not in declared:
-            found.append(f'{job}: SAVE_SHARD {SAVE_SHARD[job]!r} is not a shard')
     return found
 
 

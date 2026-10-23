@@ -17,8 +17,11 @@ on:
   schedule:
     - cron: '23 6 * * *'
 
+# actions: read lets the compiler-cache steps find and download earlier
+# runs' store artifacts.
 permissions:
   contents: read
+  actions: read
 
 # A newer push to the same pull request supersedes the run in flight.
 concurrency:
@@ -69,13 +72,17 @@ jobs:
           FULL: ${{ steps.mode.outputs.full }}
         run: |
           python3 - <<'PY'
-          import json, os
+          import json, os, re
           layout = json.load(open('.github/ci/e2e-suites.json'))
           full = os.environ['FULL'] == 'true'
           with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
               for kind in ('typescript', 'rust', 'native'):
                   chosen = [{k: v for k, v in entry.items() if k != 'tier'}
                             for entry in layout[kind] if full or entry['tier'] == 'fast']
+                  # Each Rust job keeps its own compiler store.
+                  for entry in chosen:
+                      label = entry.get('name') or entry.get('suite')
+                      entry.setdefault('family', 'e2e-' + re.sub(r'[^a-z0-9]+', '-', label.lower()).strip('-'))
                   print(f'{kind}: {[e.get("name", e.get("suite")) for e in chosen]}')
                   out.write(f'{kind}={json.dumps(chosen)}\n')
           PY
@@ -171,7 +178,6 @@ jobs:
         uses: ./.github/actions/rust-build-cache
         with:
           family: generated
-          stable-tmp: 'true'
           fallback-family: cli
           size: 2G
 
@@ -185,13 +191,104 @@ jobs:
       - name: Verify packaged CLI installation and Rust generation
         run: bash cli/tests/rust_packaged_install.sh
 
+      - name: Compiler cache statistics
+        if: always()
+        run: '"$SCCACHE_PATH" --show-stats'
+
+  # Canonical applications scaffolded with this CLI and built once
+  # (cli/tests/README.md, "Golden apps"). The Rust bundle carries the shared
+  # pre-built Cargo target, which is the real saving: a suite's copied or
+  # fresh scaffold then rebuilds only its own crates. Shipped as artifacts,
+  # which do not count against the repository's 10 GB Actions cache.
+  golden-apps:
+    name: Golden apps
+    needs: [changes, build-cli]
+    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.typescript == 'true'
+    runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_JOBS: '2'
+      # Must match every consumer: it is part of each Cargo fingerprint.
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      FORKLAUNCH_CLI: ${{ github.workspace }}/cli-bin/forklaunch
+    steps:
+      - uses: actions/checkout@v7
+      # The runner context is not available in job-level env.
+      - name: Golden apps location
+        run: echo "FORKLAUNCH_GOLDEN_APPS_DIR=$RUNNER_TEMP/golden-apps" >> "$GITHUB_ENV"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Rust build cache
+        uses: ./.github/actions/rust-build-cache
+        with:
+          family: generated
+          fallback-family: cli
+          size: 2G
+      - name: Install native build dependencies for generated workers
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev libsasl2-dev
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10
+      - name: Configure pnpm store
+        run: |
+          mkdir -p ~/.pnpm-store
+          pnpm config set store-dir ~/.pnpm-store --global
+      - name: Restore pnpm store
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('cli/src/core/package_json/package_json_constants.rs') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+      - uses: actions/download-artifact@v4
+        with:
+          name: forklaunch-cli
+          path: cli-bin
+      - run: chmod +x "$FORKLAUNCH_CLI"
+      - name: Mock platform token
+        run: |
+          mkdir -p ~/.forklaunch
+          cat > ~/.forklaunch/token << 'EOF'
+          access_token = "mock_access_token_for_e2e_tests"
+          refresh_token = "mock_refresh_token_for_e2e_tests"
+          expires_at = 9999999999
+          EOF
+      - name: Build golden apps
+        env:
+          NPM_CONFIG_PREFER_OFFLINE: "true"
+        run: bash cli/tests/golden_apps.sh build
+      - name: Package golden apps
+        run: |
+          bash cli/tests/golden_apps.sh package --out "$RUNNER_TEMP/golden-out" ts rust
+          ls -la "$RUNNER_TEMP/golden-out"
+      # Already zstd-compressed: no second compression pass.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: golden-apps-ts
+          path: ${{ runner.temp }}/golden-out/golden-apps-ts.tar.*
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: golden-apps-rust
+          path: ${{ runner.temp }}/golden-out/golden-apps-rust.tar.*
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
       - name: Save compiler cache
         if: always()
         uses: ./.github/actions/rust-build-cache/save
 
   test:
-    needs: [changes, build-cli]
-    if: needs.changes.outputs.typescript == 'true'
+    needs: [changes, build-cli, golden-apps]
+    if: ${{ !cancelled() && needs.build-cli.result == 'success' && needs.golden-apps.result == 'success' && needs.changes.outputs.typescript == 'true' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -202,6 +299,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+      - name: Golden apps location
+        run: |
+          echo "FORKLAUNCH_GOLDEN_APPS_DIR=$RUNNER_TEMP/golden-apps" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_DIR=$RUNNER_TEMP/golden-apps/target" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -249,6 +350,21 @@ jobs:
         with:
           name: forklaunch-cli
           path: cli-bin
+      - name: Download TypeScript golden apps
+        if: contains(matrix.bundles, 'ts')
+        uses: actions/download-artifact@v4
+        with:
+          name: golden-apps-ts
+          path: ${{ runner.temp }}/golden-dl
+      - name: Download Rust golden apps
+        if: contains(matrix.bundles, 'rust')
+        uses: actions/download-artifact@v4
+        with:
+          name: golden-apps-rust
+          path: ${{ runner.temp }}/golden-dl
+      - name: Unpack golden apps
+        if: matrix.bundles != ''
+        run: bash cli/tests/golden_apps.sh unpack "$RUNNER_TEMP"/golden-dl/golden-apps-*.tar.*
 
       - name: Create .forklaunch directory
         run: mkdir -p ~/.forklaunch
@@ -273,9 +389,15 @@ jobs:
           ASYNCAPI_PARSER_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/@asyncapi/parser
           # With a warm store there is no reason to go to the network first.
           NPM_CONFIG_PREFER_OFFLINE: "true"
+          SHARDS: ${{ matrix.shards }}
         run: |
           set -e
           chmod +x "$FORKLAUNCH_CLI"
+          if [ -n "$SHARDS" ]; then
+            # shards.sh runs every script, prints timings, fails if any failed.
+            # shellcheck disable=SC2086
+            exec bash shards.sh run $SHARDS
+          fi
           test_count=0
           failed=()
           # Every script runs even after one fails, so a job that holds
@@ -312,11 +434,16 @@ jobs:
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('cli/src/core/package_json/package_json_constants.rs') }}
 
   test-rust:
-    needs: [changes, build-cli, verify-packaged-cli]
-    # Waits for the pre-warm but does not depend on it passing; a failure
-    # there still fails the aggregate check.
-    if: ${{ !cancelled() && needs.build-cli.result == 'success' && needs.changes.outputs.rust == 'true' }}
+    needs: [changes, build-cli, golden-apps]
+    if: ${{ !cancelled() && needs.build-cli.result == 'success' && needs.golden-apps.result == 'success' && needs.changes.outputs.rust == 'true' }}
     runs-on: ubuntu-latest
+    env:
+      # Must match the golden-apps job: it is part of each Cargo fingerprint.
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      # Loads .github/actions/rust-build-cache/stable-tmp/preload.cjs once the
+      # cache step has set FORKLAUNCH_STABLE_TMP_PRELOAD; a no-op before that.
+      # Set here because GitHub refuses NODE_OPTIONS through GITHUB_ENV.
+      NODE_OPTIONS: --import=data:text/javascript,if(process.env.FORKLAUNCH_STABLE_TMP_PRELOAD){(await(import(%22node:module%22))).createRequire(process.env.FORKLAUNCH_STABLE_TMP_PRELOAD)(process.env.FORKLAUNCH_STABLE_TMP_PRELOAD)}
     strategy:
       fail-fast: false
       matrix:
@@ -330,19 +457,25 @@ jobs:
       - name: Install Rust for generated backend checks
         uses: dtolnay/rust-toolchain@stable
 
-      # Restore-only: Verify packaged CLI saves this registry cache.
+      # Its own store, else the golden-apps job's; stable temporary paths so
+      # the scaffolds it compiles match next time.
       - name: Rust build cache
         uses: ./.github/actions/rust-build-cache
         with:
-          family: generated
+          family: ${{ matrix.family }}
+          fallback-family: generated
+          stable-tmp: 'true'
           size: 2G
 
       # rdkafka-sys (generated Kafka workers) builds librdkafka, which needs libcurl headers.
       - name: Install native build dependencies for generated workers
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev libsasl2-dev
 
-      - name: Reuse Cargo artifacts across generated Rust workspaces
-        run: echo "CARGO_TARGET_DIR=$RUNNER_TEMP/forklaunch-generated-target" >> "$GITHUB_ENV"
+      # The golden Rust bundle carries the shared Cargo target.
+      - name: Golden apps location
+        run: |
+          echo "FORKLAUNCH_GOLDEN_APPS_DIR=$RUNNER_TEMP/golden-apps" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_DIR=$RUNNER_TEMP/golden-apps/target" >> "$GITHUB_ENV"
 
       - name: Install TypeScript compiler for SDK checks
         run: npm install --before="$(date -u -d '2 days ago' +%Y-%m-%dT%H:%M:%SZ)" --prefix "$RUNNER_TEMP/fl-rust-ts" --no-save --package-lock=false --ignore-scripts typescript@5.9.3 qs@6.16.0 @types/qs@6.15.1 @types/node@22 @types/ws@8.18.1 ws@8.22.0 ajv@8.20.0 ajv-draft-04@1.0.0 ajv-formats@3.0.1 @asyncapi/parser@3.6.3 stripe@22.6.2 bullmq@6.3.10 ioredis@6.0.0 zod@4.6.5 ts-deepmerge@8.0.0 cross-fetch@4.1.0 better-auth@1.7.6 esbuild@0.28.2
@@ -398,6 +531,25 @@ jobs:
         with:
           name: forklaunch-cli
           path: cli-bin
+      - name: Download TypeScript golden apps
+        if: contains(matrix.bundles, 'ts')
+        uses: actions/download-artifact@v4
+        with:
+          name: golden-apps-ts
+          path: ${{ runner.temp }}/golden-dl
+      - name: Download Rust golden apps
+        if: contains(matrix.bundles, 'rust')
+        uses: actions/download-artifact@v4
+        with:
+          name: golden-apps-rust
+          path: ${{ runner.temp }}/golden-dl
+      - name: Unpack golden apps
+        if: matrix.bundles != ''
+        run: bash cli/tests/golden_apps.sh unpack "$RUNNER_TEMP"/golden-dl/golden-apps-*.tar.*
+      # The shards hold the former Rust native suites, which ran with it.
+      - name: Skip formatting in shard suites
+        if: matrix.shards != ''
+        run: echo "FORKLAUNCH_SKIP_FORMAT=1" >> "$GITHUB_ENV"
 
       - name: Create .forklaunch directory
         run: mkdir -p ~/.forklaunch
@@ -422,9 +574,15 @@ jobs:
           ASYNCAPI_PARSER_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/@asyncapi/parser
           # With a warm store there is no reason to go to the network first.
           NPM_CONFIG_PREFER_OFFLINE: "true"
+          SHARDS: ${{ matrix.shards }}
         run: |
           set -e
           chmod +x "$FORKLAUNCH_CLI"
+          if [ -n "$SHARDS" ]; then
+            # shards.sh runs every script, prints timings, fails if any failed.
+            # shellcheck disable=SC2086
+            exec bash shards.sh run $SHARDS
+          fi
           test_count=0
           failed=()
           # Every script runs even after one fails, so a job that holds
@@ -460,16 +618,14 @@ jobs:
           path: ~/.pnpm-store
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('cli/src/core/package_json/package_json_constants.rs') }}
 
-      - name: Compiler cache statistics
+      - name: Save compiler cache
         if: always()
-        run: '"$SCCACHE_PATH" --show-stats'
+        uses: ./.github/actions/rust-build-cache/save
 
   rust-native-lifecycle:
     name: Rust native ${{ matrix.suite }}
-    needs: [changes, build-cli, verify-packaged-cli]
-    # Waits for the pre-warm but does not depend on it passing; a failure
-    # there still fails the aggregate check.
-    if: ${{ !cancelled() && needs.build-cli.result == 'success' && needs.changes.outputs.rust == 'true' }}
+    needs: [changes, build-cli, golden-apps]
+    if: ${{ !cancelled() && needs.build-cli.result == 'success' && needs.golden-apps.result == 'success' && needs.changes.outputs.rust == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
@@ -485,15 +641,26 @@ jobs:
       CARGO_BUILD_JOBS: '2'
       FORKLAUNCH_CLI: ${{ github.workspace }}/cli-bin/forklaunch
       FORKLAUNCH_SKIP_FORMAT: '1'
+      # Must match the golden-apps job: it is part of each Cargo fingerprint.
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      # Loads .github/actions/rust-build-cache/stable-tmp/preload.cjs once the
+      # cache step has set FORKLAUNCH_STABLE_TMP_PRELOAD; a no-op before that.
+      # Set here because GitHub refuses NODE_OPTIONS through GITHUB_ENV.
+      NODE_OPTIONS: --import=data:text/javascript,if(process.env.FORKLAUNCH_STABLE_TMP_PRELOAD){(await(import(%22node:module%22))).createRequire(process.env.FORKLAUNCH_STABLE_TMP_PRELOAD)(process.env.FORKLAUNCH_STABLE_TMP_PRELOAD)}
     steps:
       - uses: actions/checkout@v7
       # The runner context is not available in job-level env.
-      - run: echo "CARGO_TARGET_DIR=$RUNNER_TEMP/native-lifecycle-target" >> "$GITHUB_ENV"
+      - name: Golden apps location
+        run: |
+          echo "FORKLAUNCH_GOLDEN_APPS_DIR=$RUNNER_TEMP/golden-apps" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_DIR=$RUNNER_TEMP/golden-apps/target" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
       - name: Rust build cache
         uses: ./.github/actions/rust-build-cache
         with:
-          family: generated
+          family: ${{ matrix.family }}
+          fallback-family: generated
+          stable-tmp: 'true'
           size: 2G
       - uses: actions/setup-python@v5
         with:
@@ -515,6 +682,11 @@ jobs:
         with:
           name: forklaunch-cli
           path: cli-bin
+      - uses: actions/download-artifact@v4
+        with:
+          name: golden-apps-rust
+          path: ${{ runner.temp }}/golden-dl
+      - run: bash cli/tests/golden_apps.sh unpack "$RUNNER_TEMP"/golden-dl/golden-apps-*.tar.*
       - run: chmod +x "$FORKLAUNCH_CLI"
       - name: Raw scaffolding, generated mappers and HTTP/MCP startup
         if: ${{ !cancelled() && contains(format(' {0} ', matrix.suite), ' scaffolding ') }}
@@ -603,16 +775,16 @@ jobs:
         run: |
           python3 scripts/rust_release.py prepare --scope framework --allow-dirty --output "$RUNNER_TEMP/framework-packages"
           python3 cli/tests/rust_registry_scaffold.py --default-source --mixed --docker --release "$RUNNER_TEMP/framework-packages"
-      - name: Compiler cache statistics
+      - name: Save compiler cache
         if: always()
-        run: '"$SCCACHE_PATH" --show-stats'
+        uses: ./.github/actions/rust-build-cache/save
 
   # The one status to require. It passes when every suite this change needed
   # passed, and when a suite was skipped only because `changes` ruled it out;
   # a suite skipped because something it depends on failed fails it.
   e2e-ok:
     name: E2E Tests
-    needs: [changes, build-cli, verify-packaged-cli, test, test-rust, rust-native-lifecycle]
+    needs: [changes, build-cli, verify-packaged-cli, golden-apps, test, test-rust, rust-native-lifecycle]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -628,6 +800,7 @@ jobs:
               'changes': True,
               'build-cli': outputs.get('rust') == 'true' or outputs.get('typescript') == 'true',
               'verify-packaged-cli': outputs.get('rust') == 'true',
+              'golden-apps': outputs.get('rust') == 'true' or outputs.get('typescript') == 'true',
               'test': outputs.get('typescript') == 'true',
               'test-rust': outputs.get('rust') == 'true',
               'rust-native-lifecycle': outputs.get('rust') == 'true',

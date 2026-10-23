@@ -1,15 +1,16 @@
 name: Save Rust build cache
 description: >-
   Prints sccache statistics and, when this job compiled enough that the
-  restored store was missing it, saves the store as a new entry of the family
-  set up by ./.github/actions/rust-build-cache. Run it last, with
+  restored store was missing it, uploads the store as this run's
+  `sccache-<family>` artifact for ./.github/actions/rust-build-cache to
+  restore in later runs. Run it last, with
   `if: always()`: a failing job still compiled everything before the failure.
 inputs:
   min-misses:
     description: >-
       Save only when at least this many compilations missed the restored
       store. Keeps unchanged reruns from writing another copy of the same
-      store and evicting other caches under the repository's size limit.
+      store.
     default: '100'
   max-hit-rate:
     description: >-
@@ -43,9 +44,22 @@ runs:
       if: steps.stats.outputs.save == 'true'
       shell: bash
       run: '"$SCCACHE_PATH" --stop-server || true'
+    - name: Pack compiler cache
+      if: steps.stats.outputs.save == 'true'
+      shell: bash
+      run: |
+        mkdir -p "$RUNNER_TEMP/sccache-store"
+        tar -cf "$RUNNER_TEMP/sccache-store/store.tar" -C "$SCCACHE_DIR" .
+        ls -la "$RUNNER_TEMP/sccache-store"
+    # Entries are zstd-compressed already. A rerun of the same run replaces
+    # its earlier upload.
     - name: Save compiler cache
       if: steps.stats.outputs.save == 'true'
-      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
       with:
-        path: ${{ env.SCCACHE_DIR }}
-        key: sccache-v2-${{ runner.os }}-${{ env.FORKLAUNCH_SCCACHE_FAMILY }}-${{ github.run_id }}-${{ github.run_attempt }}
+        name: sccache-${{ env.FORKLAUNCH_SCCACHE_FAMILY }}
+        path: ${{ runner.temp }}/sccache-store/store.tar
+        retention-days: 7
+        compression-level: 0
+        overwrite: true
+        if-no-files-found: error

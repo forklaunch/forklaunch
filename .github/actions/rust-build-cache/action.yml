@@ -15,6 +15,9 @@ description: >-
 # trial run 1,075 of 1,334 writes in a single job were rejected, with dozens
 # of jobs writing at once.
 inputs:
+  token:
+    description: Token that can list and download this repository's artifacts (actions:read).
+    default: ${{ github.token }}
   family:
     description: >-
       Which compiler cache to restore. Jobs that compile the same workspace
@@ -44,9 +47,8 @@ inputs:
       (.NET, Android SDK, GHC, CodeQL bundle, Swift), freeing roughly 25 GB of
       the root disk for jobs whose target directories run it out of space.
     default: 'false'
-  # Every family's store is one entry against the repository's 10 GB Actions
-  # cache, shared with pnpm, CodeQL and the other branches' stores. Uncapped,
-  # the parity stores alone reached 2.4 GB and 2.7 GB, so keep these small.
+  # Every store is downloaded and uploaded once per job that uses it, so
+  # keep them to what the job needs.
   size:
     description: Upper bound sccache keeps the local store under (SCCACHE_CACHE_SIZE).
     default: 1G
@@ -115,8 +117,6 @@ runs:
           echo "CARGO_INCREMENTAL=0"
           echo "FORKLAUNCH_SCCACHE_FAMILY=$FAMILY"
         } >> "$GITHUB_ENV"
-    # Newest store of this family: this pull request's own, else the base
-    # branch's. Keys are unique per save, so the prefix picks the latest.
     - name: Deterministic temporary directories
       if: inputs.stable-tmp == 'true'
       shell: bash
@@ -132,14 +132,46 @@ runs:
           echo "FORKLAUNCH_STABLE_TMP_PRELOAD=$STABLE_TMP/preload.cjs"
         } >> "$GITHUB_ENV"
         echo "$STABLE_TMP/bin" >> "$GITHUB_PATH"
+    # The newest store of this family from a run of this repository on this
+    # branch, else on the default branch, else the fallback family's. Stores
+    # are workflow artifacts rather than Actions cache entries: the cache is
+    # capped at 10 GB per repository, which did not hold one store per job,
+    # and artifacts on a public repository are not.
     - name: Restore compiler cache
-      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: ${{ env.SCCACHE_DIR }}
-        key: sccache-v2-${{ runner.os }}-${{ inputs.family }}-${{ github.run_id }}-${{ github.run_attempt }}
-        restore-keys: |
-          sccache-v2-${{ runner.os }}-${{ inputs.family }}-
-          ${{ inputs.fallback-family && format('sccache-v2-{0}-{1}-', runner.os, inputs.fallback-family) || '' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        FAMILY: ${{ inputs.family }}
+        FALLBACK: ${{ inputs.fallback-family }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      run: |
+        branch="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+        found=''
+        for name in "$FAMILY" $FALLBACK; do
+          for from in "$branch" "$DEFAULT_BRANCH"; do
+            id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=sccache-$name&per_page=100" --jq \
+              "[.artifacts[] | select(.expired == false
+                and .workflow_run.repository_id == $GITHUB_REPOSITORY_ID
+                and .workflow_run.head_repository_id == $GITHUB_REPOSITORY_ID
+                and .workflow_run.head_branch == \"$from\")] | sort_by(.created_at) | last | .id // empty" 2>/dev/null) || id=''
+            if [ -n "$id" ]; then found="$name@$from ($id)"; break 2; fi
+          done
+        done
+        if [ -z "$found" ]; then
+          echo "No compiler cache for $FAMILY yet; starting cold"
+          exit 0
+        fi
+        echo "Restoring compiler cache $found"
+        work="$RUNNER_TEMP/sccache-restore"
+        mkdir -p "$work"
+        if gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/${id}/zip" > "$work/store.zip" &&
+           unzip -q -o "$work/store.zip" -d "$work" && tar -xf "$work/store.tar" -C "$SCCACHE_DIR"; then
+          du -sh "$SCCACHE_DIR"
+        else
+          echo "::warning::Could not restore compiler cache $found; starting cold"
+          find "$SCCACHE_DIR" -mindepth 1 -delete || true
+        fi
+        rm -rf "$work"
     - name: Cache Cargo registry
       if: inputs.registry-cache != 'off'
       uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2

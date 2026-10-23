@@ -16,8 +16,11 @@ on:
         type: boolean
         default: false
 
+# actions: read lets the compiler-cache steps find and download earlier
+# runs' store artifacts.
 permissions:
   contents: read
+  actions: read
 
 # A newer push to the same pull request supersedes the run in flight.
 concurrency:
@@ -136,7 +139,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [core, http, zod, zod-checks, wire]
+        shard: [core, http, zod]
     # The V8 date oracle reads TZ through the host zoneinfo. Ubuntu 26.04's
     # tzdata-legacy names (e.g. Eire) resolve differently in Node's ICU than the
     # pinned 2025b rules; 24.04's zoneinfo matches them.
@@ -171,7 +174,8 @@ jobs:
       - name: Rust build cache
         uses: ./.github/actions/rust-build-cache
         with:
-          family: framework-rs
+          family: framework-rs-${{ matrix.shard }}
+          fallback-family: framework-rs-core
           size: 1500M
           free-disk: 'true'
           stable-tmp: 'true'
@@ -532,7 +536,7 @@ jobs:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_NUMBER_BOUNDS_NATIVE: '1'
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - name: Exact numeric bounds in arbitrary precision mode
         run: node cli/tests/rust_zod_number_bounds_openapi.mjs
         env:
@@ -540,14 +544,14 @@ jobs:
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_NUMBER_BOUNDS_NATIVE: '1'
           FORKLAUNCH_NUMBER_BOUNDS_ARBITRARY: '1'
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - name: Extended UTF16 bounds in default mode
         run: node cli/tests/rust_zod_utf16_bounds_openapi.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_UTF16_BOUNDS_NATIVE: '1'
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - name: Extended UTF16 bounds in arbitrary precision mode
         run: node cli/tests/rust_zod_utf16_bounds_openapi.mjs
         env:
@@ -555,14 +559,14 @@ jobs:
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_UTF16_BOUNDS_NATIVE: '1'
           FORKLAUNCH_UTF16_BOUNDS_ARBITRARY: '1'
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - name: Positioned UTF16 predicates in default mode
         run: node cli/tests/rust_zod_string_predicates_openapi.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_STRING_PREDICATES_NATIVE: '1'
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - name: Positioned UTF16 predicates in arbitrary precision mode
         run: node cli/tests/rust_zod_string_predicates_openapi.mjs
         env:
@@ -570,21 +574,21 @@ jobs:
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_STRING_PREDICATES_NATIVE: '1'
           FORKLAUNCH_STRING_PREDICATES_ARBITRARY: '1'
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - name: Pure discriminator dispatch conformance
         run: node cli/tests/rust_zod_discriminator_input_openapi.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_DISCRIMINATOR_INPUT_NATIVE: '1'
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - name: Pure record key schema conformance
         run: node cli/tests/rust_zod_record_pure_openapi.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_RECORD_PURE_NATIVE: '1'
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - name: Exact array cardinalities in default JSON mode
         run: node cli/tests/rust_zod_array_cardinality_openapi.mjs
         env:
@@ -592,7 +596,7 @@ jobs:
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
           FORKLAUNCH_CARDINALITY_PROBE_NATIVE: '1'
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - name: Exact array cardinalities in arbitrary precision JSON mode
         run: node cli/tests/rust_zod_array_cardinality_openapi.mjs
         env:
@@ -601,68 +605,68 @@ jobs:
           FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
           FORKLAUNCH_CARDINALITY_PROBE_NATIVE: '1'
           FORKLAUNCH_CARDINALITY_PROBE_FEATURES: arbitrary
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_array_checks_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_string_float_length_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_case_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_discriminated_json_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_intersection_json_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_runtime_formats.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_RUNTIME_FORMATS_NATIVE: '1'
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_emoji_checks.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_ZOD_CHECKS_NATIVE: '1'
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_format_checks.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_ZOD_CHECKS_NATIVE: '1'
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_checks_consumers.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - name: Zod format profile rejects URI without its native capability
         run: cargo test --manifest-path framework-rs/Cargo.toml -p forklaunch-core --no-default-features --features zod-checks format_checks_are_ordered_bounded_and_uri_requires_its_capability
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - name: Explicit feature-off URI schema rejection
         run: cargo test --manifest-path framework-rs/Cargo.toml -p forklaunch-core --no-default-features
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - name: Live HTTP, MCP and SDK URL compatibility
         run: node cli/tests/rust_json_composition_runtime.mjs
         env:
           FORKLAUNCH_COMPOSITION_URI: '1'
           FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - name: Restore Node for remaining framework checks
         uses: actions/setup-node@v4
         with:
@@ -672,361 +676,361 @@ jobs:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_union_openapi.mjs
         env:
           FORKLAUNCH_UNCONSTRAINED_NATIVE: '1'
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_never_openapi.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_record_openapi.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_portable_model_metadata.mjs
         env:
           FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_ajv_own_properties.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_sdk_tuple_coercion.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_tuple_openapi.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_pure_input_openapi.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_checks.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_ZOD_CHECKS_NATIVE: '1'
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_jwt_checks.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_ZOD_CHECKS_NATIVE: '1'
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_ip_checks.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_ZOD_CHECKS_NATIVE: '1'
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_datetime_checks.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_ZOD_CHECKS_NATIVE: '1'
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_time_checks.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_ZOD_CHECKS_NATIVE: '1'
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_duration_checks.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_ZOD_CHECKS_NATIVE: '1'
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_date_checks.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_ZOD_CHECKS_NATIVE: '1'
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_identifier_checks.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_ZOD_CHECKS_NATIVE: '1'
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_native_enum_openapi.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_string_bounds_openapi.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_string_literals_openapi.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_STRING_LITERAL_NATIVE: '1'
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_sdk_fixed_tuple_models.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_sdk_builtin_type_names.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_sdk_reserved_type_names.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_sdk_variable_tuple_models.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_email_openapi.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_check_messages_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_number_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_multiple_of_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_float_bound_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_zod_array_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
           FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/typescript_response_status_validation.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_mcp_transport_parity.mjs
         env:
           FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_multipart_extract_parity.mjs
         env:
           FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_multipart_text_parity.mjs
         env:
           FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/fixtures/rust_multipart_limits_reference.mjs
         env:
           FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_tanstack_query_parity.mjs
         env:
           FORKLAUNCH_TEST_TANSTACK_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_native_sdk_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_sdk_body_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_ws_resources_runtime.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_schema_types_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
-        if: matrix.shard == 'zod-checks' # shard
+        if: matrix.shard == 'zod' # shard
       - run: node cli/tests/rust_versioned_wire_parity.mjs
         env:
           FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_versioned_form_parity.mjs
         env:
           FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_versioned_fields_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_versioned_api_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_schema_mixed_parity.mjs
         env:
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_schema_dynamic_parity.mjs
         env:
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_ws_payload_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_ws_jsonschema_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
           ASYNCAPI_PARSER_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/@asyncapi/parser
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_ws_metadata_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
           ASYNCAPI_PARSER_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/@asyncapi/parser
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_ws_typescript_sdk_runtime.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
           FORKLAUNCH_TEST_WS_SDK_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
           ASYNCAPI_PARSER_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/@asyncapi/parser
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_ws_binary_runtime.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_ws_binary_runtime.mjs
         env:
           FORKLAUNCH_TEST_BINARY_ASYNCAPI: '1'
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_asyncapi_dialects_runtime.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_ws_json_encoding_runtime.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_ws_sdk_runtime.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_ws_runtime.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_sse_emitter_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_sse_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_s3_post_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_typescript_rbac_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_typescript_basic_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_testing_environment_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_typescript_date_coercion.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_typescript_scalar_coercion.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_parse_errors_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_typescript_session_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_typescript_hmac_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
           FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: bash cli/tests/rust_typescript_authorization_runtime.sh
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_request_hmac_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - run: node cli/tests/rust_field_encryption_parity.mjs
         env:
           TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
-        if: matrix.shard == 'wire' # shard
+        if: matrix.shard == 'http' # shard
       - name: Save compiler cache
         uses: ./.github/actions/rust-build-cache/save
-        if: always() && matrix.shard == 'core' # shard
+        if: always() # shard
 
   blueprint:
     name: blueprint (${{ matrix.shard }})
@@ -1089,7 +1093,8 @@ jobs:
       - name: Rust build cache
         uses: ./.github/actions/rust-build-cache
         with:
-          family: blueprint-rs
+          family: blueprint-rs-${{ matrix.shard }}
+          fallback-family: blueprint-rs-core
           size: 1500M
           free-disk: 'true'
           stable-tmp: 'true'
@@ -1630,7 +1635,7 @@ jobs:
         run: docker rm -f forklaunch-rust-kafka-ci || true
       - name: Save compiler cache
         uses: ./.github/actions/rust-build-cache/save
-        if: always() && matrix.shard == 'core' # shard
+        if: always() # shard
 
   security-audit:
     needs: changes
