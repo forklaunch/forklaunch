@@ -1,0 +1,52 @@
+name: Build Framework RS
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'framework-rs/**'
+      - 'scripts/rust_format.py'
+      - 'scripts/check_rust_package_owners.py'
+      - 'framework/**/package.json'
+      - '.github/workflows/build_framework_rs.yml'
+  pull_request:
+    paths:
+      - 'framework-rs/**'
+      - 'scripts/rust_format.py'
+      - 'scripts/check_rust_package_owners.py'
+      - 'framework/**/package.json'
+      - '.github/workflows/build_framework_rs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Check TypeScript project ownership
+        run: python3 scripts/check_rust_package_owners.py
+
+      - name: Setup Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+
+      - name: Check formatting
+        run: python3 scripts/rust_format.py framework-rs/Cargo.toml
+
+      - name: Run clippy
+        working-directory: ./framework-rs
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Run tests
+        working-directory: ./framework-rs
+        run: cargo test --workspace
+
+      - name: Build docs
+        working-directory: ./framework-rs
+        run: cargo doc --workspace --no-deps

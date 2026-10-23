@@ -1,0 +1,89 @@
+use crate::{
+    compiler,
+    error::ValidationError,
+    keywords::CompilationResult,
+    node::SchemaNode,
+    paths::{LazyLocation, RefTracker},
+    validator::{Validate, ValidationContext},
+    Json, Node, SerdeJson,
+};
+use serde_json::{Map, Value};
+
+pub(crate) struct NotValidator<F: Json> {
+    // needed only for error representation
+    original: Value,
+    node: SchemaNode<F>,
+}
+
+impl NotValidator<SerdeJson> {
+    #[inline]
+    pub(crate) fn compile<'a, F: Json>(
+        ctx: &compiler::Context<F>,
+        schema: &'a Value,
+    ) -> CompilationResult<'a, F> {
+        let ctx = ctx.new_at_location("not");
+        Ok(Box::new(NotValidator {
+            original: schema.clone(),
+            node: compiler::compile(&ctx, ctx.as_resource_ref(schema))?,
+        }))
+    }
+}
+
+impl<F: Json> Validate<F> for NotValidator<F> {
+    fn is_valid(&self, instance: &F::Node<'_>, ctx: &mut ValidationContext) -> bool {
+        !self.node.is_valid(instance, ctx)
+    }
+
+    fn validate<'i>(
+        &self,
+        instance: &F::Node<'i>,
+        location: &LazyLocation,
+        tracker: Option<&RefTracker>,
+        ctx: &mut ValidationContext,
+    ) -> Result<(), ValidationError<'i>> {
+        if self.is_valid(instance, ctx) {
+            Ok(())
+        } else {
+            Err(ValidationError::not(
+                self.node.location().clone(),
+                crate::paths::capture_evaluation_path(tracker, self.node.location()),
+                location.into(),
+                instance.lazy_value(),
+                self.original.clone(),
+            ))
+        }
+    }
+}
+
+#[inline]
+pub(crate) fn compile<'a, F: Json>(
+    ctx: &compiler::Context<F>,
+    _: &'a Map<String, Value>,
+    schema: &'a Value,
+) -> Option<CompilationResult<'a, F>> {
+    Some(NotValidator::compile(ctx, schema))
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::tests_util;
+    use serde_json::json;
+
+    #[test]
+    fn location() {
+        tests_util::assert_schema_location(
+            &json!({"not": {"type": "string"}}),
+            &json!("foo"),
+            "/not",
+        );
+    }
+
+    #[test]
+    fn malformed() {
+        tests_util::assert_compile_error(
+            &json!({"not": 5}),
+            "5 is not of types \"boolean\", \"object\"",
+            "/not",
+        );
+    }
+}

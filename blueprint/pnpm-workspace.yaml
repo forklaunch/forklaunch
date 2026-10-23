@@ -37,6 +37,11 @@ packages:
 
 blockExoticSubdeps: false
 
+# First-party packages are released from this repo and consumed here right
+# after publishing; third-party packages keep the default release-age policy.
+minimumReleaseAgeExclude:
+  - '@forklaunch/*'
+
 allowBuilds:
   '@biomejs/biome': false
   '@parcel/watcher': false

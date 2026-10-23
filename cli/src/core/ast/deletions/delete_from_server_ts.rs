@@ -13,14 +13,21 @@ pub(crate) fn delete_from_server_ts<'a, F>(
 where
     F: Fn(&oxc_allocator::Vec<'a, Statement>) -> Option<usize>,
 {
-    let splice_pos = match server_ts_injection_pos(&server_program_ast.body) {
-        Some(pos) => pos,
-        None => bail!("Failed to delete from server.ts"),
-    };
-
-    server_program_ast.body.remove(splice_pos);
-
-    Ok(())
+    if let Some(pos) = server_ts_injection_pos(&server_program_ast.body) {
+        server_program_ast.body.remove(pos);
+        return Ok(());
+    }
+    // Match the generated async startup shape supported by router injection.
+    for statement in &mut server_program_ast.body {
+        if let Statement::FunctionDeclaration(function) = statement
+            && let Some(body) = function.body.as_mut()
+            && let Some(pos) = server_ts_injection_pos(&body.statements)
+        {
+            body.statements.remove(pos);
+            return Ok(());
+        }
+    }
+    bail!("Failed to delete from server.ts")
 }
 
 pub(crate) fn delete_from_server_ts_router<'a>(
@@ -53,8 +60,8 @@ pub(crate) fn delete_from_server_ts_router<'a>(
                 _ => return,
             };
 
-            let arg = match &call.arguments[0] {
-                Argument::Identifier(arg) => Some(arg),
+            let arg = match call.arguments.first() {
+                Some(Argument::Identifier(arg)) => Some(arg),
                 _ => None,
             };
 
@@ -89,6 +96,27 @@ mod tests {
 
     use super::*;
     use crate::core::ast::parse_ast_program::parse_ast_program;
+
+    #[test]
+    fn deletes_router_inside_async_startup_and_preserves_unrelated_calls() {
+        let allocator = Allocator::default();
+        let source = r#"import { profilesRouter } from './api/routes/profiles.routes';
+async function startServer() {
+  const app = createApp();
+  app.use();
+  app.use(otherRouter);
+  app.use(profilesRouter);
+  app.listen();
+}
+startServer();"#;
+        let mut program = parse_ast_program(&allocator, source, SourceType::ts());
+        let output = delete_from_server_ts_router(&allocator, &mut program, "profiles").unwrap();
+        assert!(!output.contains("profilesRouter"));
+        assert!(output.contains("app.use(otherRouter)"));
+        assert!(output.contains("app.use()"));
+        assert!(output.contains("app.listen()"));
+        assert!(output.contains("async function startServer()"));
+    }
 
     fn create_test_server_ts_with_multiple_routers() -> &'static str {
         r#"import express from 'express';

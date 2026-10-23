@@ -1,10 +1,5 @@
-import { handlers, {{#is_iam_configured}}ROLES, {{/is_iam_configured}}schemaValidator } from '@{{app_name}}/core';
-{{#with_mappers}}
-import { {{pascal_case_name}}RequestMapper, {{pascal_case_name}}ResponseMapper } from '../../domain/mappers/{{camel_case_name}}.mappers';
-{{/with_mappers}}
-{{^with_mappers}}
-import { {{pascal_case_name}}RequestSchema, {{pascal_case_name}}ResponseSchema } from '../../domain/schemas/{{camel_case_name}}.schema';
-{{/with_mappers}}
+import { handlers, {{#is_iam_configured}}bindRuntimeAuth, {{/is_iam_configured}}schemaValidator } from '@{{app_name}}/core';
+import { {{camel_case_name}}Contract } from '../contracts/{{camel_case_name}}.contract';
 import { ci, tokens } from '../../bootstrapper';
 
 //! resolve the dependencies
@@ -20,27 +15,8 @@ const JWKS_PUBLIC_KEY_URL = ci.resolve(tokens.JWKS_PUBLIC_KEY_URL);{{/is_iam_con
   // GET endpoint handler that returns a simple message
 export const {{camel_case_name}}Get = handlers.get(
   schemaValidator,
-  '/',
-  {
-    name: '{{title_case_name}} Get',
-    summary: 'Gets {{title_case_name}}',
-    {{#is_iam_configured}}access: 'protected',
-    auth: {
-      jwt: {
-        jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL
-      },
-      allowedRoles: new Set([ROLES.ADMIN])
-    },{{/is_iam_configured}}{{^is_iam_configured}}access: 'public',{{/is_iam_configured}}
-    responses: {
-      {{#with_mappers}}
-      // specifies the success response schema using Mapper constructs
-      200: {{pascal_case_name}}ResponseMapper.schema
-      {{/with_mappers}}
-      {{^with_mappers}}
-      200: {{pascal_case_name}}ResponseSchema
-      {{/with_mappers}}
-    }
-  },
+  {{camel_case_name}}Contract.get.path,
+  {{#is_iam_configured}}bindRuntimeAuth({{camel_case_name}}Contract.get.details, { jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL }){{/is_iam_configured}}{{^is_iam_configured}}{{camel_case_name}}Contract.get.details{{/is_iam_configured}},
   async (req, res) => {
     res.status(200).json({
       message: '{{pascal_case_name}}'{{#is_worker}},
@@ -54,41 +30,17 @@ export const {{camel_case_name}}Get = handlers.get(
 // POST endpoint handler that processes request body and returns response from service
 export const {{camel_case_name}}Post = handlers.post(
   schemaValidator,
-  '/',
-  {
-    name: '{{title_case_name}} Post',
-    summary: 'Posts {{title_case_name}}',
-    {{#is_iam_configured}}access: 'protected',
-    auth: {
-      jwt: {
-        jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL
-      },
-      allowedRoles: new Set([ROLES.ADMIN])
-    },{{/is_iam_configured}}{{^is_iam_configured}}access: 'public',{{/is_iam_configured}}
-    {{#with_mappers}}
-    // specifies the request body schema using Mapper constructs
-    body: {{pascal_case_name}}RequestMapper.schema,
-    {{/with_mappers}}
-    {{^with_mappers}}
-    body: {{pascal_case_name}}RequestSchema,
-    {{/with_mappers}}
-    responses: {
-      {{#with_mappers}}
-      // specifies the success response schema using Mapper constructs
-      200: {{pascal_case_name}}ResponseMapper.schema
-      {{/with_mappers}}
-      {{^with_mappers}}
-      200: {{pascal_case_name}}ResponseSchema
-      {{/with_mappers}}
-    }
-  },
+  {{camel_case_name}}Contract.post.path,
+  {{#is_iam_configured}}bindRuntimeAuth({{camel_case_name}}Contract.post.details, { jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL }){{/is_iam_configured}}{{^is_iam_configured}}{{camel_case_name}}Contract.post.details{{/is_iam_configured}},
   async (req, res) => {
     res
       .status(200)
       .json(
         // constructs a new service instance using the scopeFactory and calls the {{camel_case_name}}Post method
         await serviceFactory({{#is_worker}}
-          { tenantId: req.session?.organizationId ?? '' }{{/is_worker}}{{^is_worker}}
+          // core 3 rejects '' as a tenant; with no organization the EM stays
+          // unscoped, as it does for a service.
+          { tenantId: req.session?.organizationId }{{/is_worker}}{{^is_worker}}
           { scope: scopeFactory() }{{/is_worker}}
         ).{{camel_case_name}}Post(req.body)
       );

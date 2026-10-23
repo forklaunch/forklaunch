@@ -24,6 +24,7 @@ use crate::{
     constants::{
         Database, ERROR_FAILED_TO_PARSE_MANIFEST, ERROR_FAILED_TO_READ_MANIFEST,
         ERROR_FAILED_TO_READ_PACKAGE_JSON, Formatter, HttpFramework, License, Linter, Runtime,
+        SELECTABLE_LINTERS, ensure_selectable_linter, linter_value_parser,
         TestFramework, Validator,
     },
     core::{
@@ -48,7 +49,7 @@ use crate::{
             },
             package_json_constants::{
                 BIOME_VERSION, ESLINT_VERSION, EXPRESS_VERSION, HYPER_EXPRESS_VERSION, UWEBSOCKETS_VERSION,
-                JEST_TYPES_VERSION, JEST_VERSION, OXLINT_VERSION, PRETTIER_VERSION,
+                JEST_TYPES_VERSION, JEST_VERSION, OXLINT_TSGOLINT_VERSION, OXLINT_VERSION, PRETTIER_VERSION,
                 TS_JEST_VERSION, TYPEBOX_VERSION, TYPESCRIPT_ESLINT_VERSION, VITEST_VERSION,
                 ZOD_VERSION, application_build_script, application_clean_purge_script,
                 application_clean_script, application_docs_script, application_format_script,
@@ -57,7 +58,7 @@ use crate::{
                 application_up_packages_script, project_clean_script, project_dev_local_script,
                 project_dev_server_script, project_dev_worker_client_script, project_format_script,
                 project_lint_fix_script, project_lint_script, project_start_server_script,
-                project_start_worker_script, project_test_script, project_up_latest_script,
+                project_start_worker_script, project_test_script, project_up_latest_script, project_retention_enforce_script,
             },
             project_package_json::{
                 ProjectDependencies, ProjectDevDependencies, ProjectPackageJson, ProjectScripts,
@@ -72,6 +73,7 @@ use crate::{
         tsconfig::update_tsconfig_test_framework_types,
         watermark::apply_watermark,
     },
+    init::rust_project,
     prompt::{ArrayCompleter, prompt_field_from_selections_with_validation},
 };
 
@@ -141,6 +143,7 @@ fn change_name(
     let existing_kebab_name = manifest_data.kebab_case_app_name.clone();
 
     manifest_data.app_name = name.to_string();
+    rename_license_holder(base_path, &existing_name, name, rendered_templates_cache)?;
     manifest_data.kebab_case_app_name = name.to_case(Case::Kebab);
     manifest_data.camel_case_app_name = name.to_case(Case::Camel);
     manifest_data.pascal_case_app_name = name.to_case(Case::Pascal);
@@ -282,6 +285,35 @@ fn change_name(
     Ok(())
 }
 
+/// The MIT license names the application as its copyright holder; a rename
+/// carries over to that line (and only that line, so an edited year or a
+/// changed license text stays as written).
+fn rename_license_holder(
+    base_path: &Path,
+    existing_name: &str,
+    name: &str,
+    rendered_templates_cache: &mut RenderedTemplatesCache,
+) -> Result<()> {
+    let license_path = base_path.join("LICENSE");
+    let Some(license) = rendered_templates_cache.get(&license_path)? else {
+        return Ok(());
+    };
+    let holder = regex::Regex::new(&format!(
+        r"(?m)^(Copyright \(c\).*?)\b{}\b([ \t]*)$",
+        regex::escape(existing_name)
+    ))?;
+    let renamed = holder.replace_all(&license.content, |captures: &regex::Captures| {
+        format!("{}{name}{}", &captures[1], &captures[2])
+    });
+    if renamed != license.content {
+        rendered_templates_cache.insert(
+            license_path.to_string_lossy(),
+            RenderedTemplate { path: license_path.clone(), content: renamed.into_owned(), context: None },
+        );
+    }
+    Ok(())
+}
+
 fn change_description(
     description: &str,
     manifest_data: &mut ApplicationManifestData,
@@ -388,9 +420,7 @@ fn update_config_files(
                         path: base_path.join(project).join(file),
                     });
                 }
-                removal_templates.push(RemovalTemplate {
-                    path: file_path,
-                });
+                removal_templates.push(RemovalTemplate { path: file_path });
             } else {
                 preserved_files.push(file_path.to_string_lossy().to_string());
             }
@@ -656,6 +686,7 @@ fn change_linter(
             dev_dependencies.eslint_js = None;
             dev_dependencies.typescript_eslint = None;
             dev_dependencies.oxlint = None;
+            dev_dependencies.oxlint_tsgolint = None;
 
             for linter in rc_linters_to_preserve.borrow().iter() {
                 match linter.parse().unwrap() {
@@ -667,6 +698,8 @@ fn change_linter(
                     }
                     Linter::Oxlint => {
                         dev_dependencies.oxlint = Some(OXLINT_VERSION.to_string());
+                        dev_dependencies.oxlint_tsgolint =
+                            Some(OXLINT_TSGOLINT_VERSION.to_string());
                     }
                 }
             }
@@ -676,6 +709,7 @@ fn change_linter(
             dev_dependencies.eslint_js = None;
             dev_dependencies.typescript_eslint = None;
             dev_dependencies.oxlint = None;
+            dev_dependencies.oxlint_tsgolint = None;
 
             for linter in rc_linters_to_preserve.borrow().iter() {
                 match linter.parse().unwrap() {
@@ -687,6 +721,8 @@ fn change_linter(
                     }
                     Linter::Oxlint => {
                         dev_dependencies.oxlint = Some(OXLINT_VERSION.to_string());
+                        dev_dependencies.oxlint_tsgolint =
+                            Some(OXLINT_TSGOLINT_VERSION.to_string());
                     }
                 }
             }
@@ -694,6 +730,45 @@ fn change_linter(
     )?;
 
     Ok((removal_templates, symlink_templates))
+}
+
+/// Rewrite only static module specifiers; leave comments and application strings intact.
+fn migrate_module_imports(
+    base: &Path,
+    projects: &HashMap<String, ProjectPackageJson>,
+    from: &str,
+    to: &str,
+    cache: &mut RenderedTemplatesCache,
+) -> Result<()> {
+    use oxc_ast::ast::{SourceType, Statement};
+    for name in projects.keys() {
+        for entry in walkdir::WalkDir::new(base.join(name)).follow_links(false).into_iter()
+            .filter_entry(|e| !matches!(e.file_name().to_str(), Some("node_modules" | "dist" | "lib" | "production" | "target" | ".git"))) {
+            let entry = entry?;
+            if !entry.file_type().is_file() || entry.path().extension().is_none_or(|ext| ext != "ts" && ext != "tsx") { continue; }
+            let mut template = cache.get(entry.path())?.context("Missing TypeScript source")?;
+            if !template.content.contains(from) { continue; }
+            let allocator = oxc_allocator::Allocator::default();
+            let parsed = oxc_parser::Parser::new(&allocator, &template.content, SourceType::from_path(entry.path())?).parse();
+            anyhow::ensure!(!parsed.diagnostics.has_errors(), "Cannot migrate imports in invalid TypeScript source {}", entry.path().display());
+            let mut spans = Vec::new();
+            for statement in &parsed.program.body {
+                let source = match statement {
+                    Statement::ImportDeclaration(import) => Some(&import.source),
+                    Statement::ExportFromDeclaration(export) => Some(&export.source),
+                    Statement::ExportAllDeclaration(export) => Some(&export.source),
+                    _ => None,
+                };
+                if let Some(source) = source.filter(|source| source.value == from) { spans.push(source.span); }
+            }
+            drop(parsed);
+            for span in spans.iter().rev() {
+                template.content.replace_range(span.start as usize..span.end as usize, &serde_json::to_string(to)?);
+            }
+            if !spans.is_empty() { cache.insert(entry.path().to_string_lossy(), template); }
+        }
+    }
+    Ok(())
 }
 
 fn change_validator(
@@ -705,6 +780,10 @@ fn change_validator(
 ) -> Result<()> {
     let existing_validator = manifest_data.validator.clone().parse::<Validator>()?;
     manifest_data.validator = validator.to_string();
+
+    migrate_module_imports(base_path, project_jsons_to_write,
+        &format!("@forklaunch/validator/{}", existing_validator.to_string()),
+        &format!("@forklaunch/validator/{}", validator.to_string()), rendered_templates_cache)?;
 
     let validator_file_key = base_path.join("core").join("registrations.ts");
 
@@ -740,6 +819,26 @@ fn change_validator(
     Ok(())
 }
 
+fn preflight_http_framework(base_path: &Path, http_framework: &str, runtime: &str) -> Result<()> {
+    if http_framework == "hyper-express" && runtime == "node" {
+        let package: serde_json::Value = serde_json::from_str(&read_to_string(base_path.join("package.json"))?)?;
+        // Moving a Bun workspace to Node writes the default pnpm policy, which
+        // blocks the Git-distributed dependency.
+        anyhow::ensure!(
+            !package["packageManager"].as_str().is_some_and(|manager| manager.starts_with("bun@")),
+            "HyperExpress on Node requires Git-distributed uWebSockets.js, which the default pnpm policy blocks. Change the HTTP framework to express in the same command (-F express), or keep the Bun runtime. Existing application files are preserved");
+        let pinned_pnpm11 = package["packageManager"].as_str().is_some_and(|manager| manager.starts_with("pnpm@11."));
+        if !pinned_pnpm11 { return Ok(()); }
+        let path = base_path.join("pnpm-workspace.yaml");
+        anyhow::ensure!(path.is_file(),
+            "HyperExpress on Node requires Git-distributed uWebSockets.js, which the default pnpm policy blocks. Change the HTTP framework to express in the same command (-F express), or keep the Bun runtime. Existing application files are preserved");
+        let workspace: serde_yml::Value = serde_yml::from_str(&read_to_string(&path)?)?;
+        anyhow::ensure!(!pinned_pnpm11 || workspace["blockExoticSubdeps"].as_bool() == Some(false),
+            "HyperExpress requires Git-distributed uWebSockets.js. The current pnpm policy blocks this dependency; explicitly review its dependency policy before selecting HyperExpress. Existing application files are preserved");
+    }
+    Ok(())
+}
+
 fn change_http_framework(
     base_path: &Path,
     http_framework: &HttpFramework,
@@ -752,6 +851,10 @@ fn change_http_framework(
         .clone()
         .parse::<HttpFramework>()?;
     manifest_data.http_framework = http_framework.to_string();
+
+    migrate_module_imports(base_path, project_jsons_to_write,
+        &format!("@forklaunch/{}", existing_http_framework.to_string()),
+        &format!("@forklaunch/{}", http_framework.to_string()), rendered_templates_cache)?;
 
     let http_framework_file_key = base_path.join("core").join("registrations.ts");
 
@@ -833,42 +936,45 @@ fn change_runtime(
 
     manifest_data.runtime = runtime.to_string();
 
-    let test_framework = match runtime {
-        Runtime::Bun => {
-            manifest_data.test_framework = None;
-            None
-        }
-        Runtime::Node => {
-            if manifest_data.test_framework.is_none() {
-                let test_framework = prompt_field_from_selections_with_validation(
-                    "test-framework",
-                    None,
-                    &["test-framework"],
-                    line_editor,
-                    stdout,
-                    matches,
-                    "test framework",
-                    Some(&TestFramework::VARIANTS),
-                    |input: &str| TestFramework::VARIANTS.contains(&input),
-                    |_| "Invalid test framework. Please try again".to_string(),
-                )?
-                .unwrap()
-                .parse::<TestFramework>()?;
-
-                Some(test_framework)
-            } else {
-                Some(
-                    manifest_data
-                        .test_framework
-                        .as_ref()
-                        .unwrap()
-                        .parse::<TestFramework>()?,
-                )
-            }
-        }
+    // Both runtimes execute the selected existing test framework. Bun's native
+    // loader does not require discarding Jest/Vitest configuration or typings.
+    // A test framework requested in the same change is the one to target, so
+    // the old framework's configuration is not regenerated alongside it.
+    let test_framework = if let Some(requested) = matches.get_one::<String>("test-framework") {
+        Some(requested.parse::<TestFramework>()?)
+    } else if let Some(existing) = &manifest_data.test_framework {
+        Some(existing.parse::<TestFramework>()?)
+    } else {
+        let selected = prompt_field_from_selections_with_validation(
+            "test-framework", None, &["test-framework"], line_editor, stdout, matches,
+            "test framework", Some(&TestFramework::VARIANTS),
+            |input: &str| TestFramework::VARIANTS.contains(&input),
+            |_| "Invalid test framework. Please try again".to_string(),
+        )?.context("Test framework required")?;
+        Some(selected.parse::<TestFramework>()?)
     };
 
-    if let Some(test_framework) = test_framework {
+    if let Some(scripts) = application_json_to_write.scripts.as_mut() {
+        if scripts.test == application_test_script(&existing_runtime, &test_framework) {
+            scripts.test = application_test_script(runtime, &test_framework);
+        }
+    }
+    for project in project_jsons_to_write.values_mut() {
+        if let Some(scripts) = project.scripts.as_mut() {
+            if scripts.test == project_test_script(&existing_runtime, &test_framework) {
+                scripts.test = project_test_script(runtime, &test_framework);
+            }
+        }
+    }
+
+    // The test framework's configuration only needs regenerating when the
+    // application had none (it was just prompted for). A framework requested
+    // with -t is applied by the handler; the one already in place stays as it
+    // is: regenerating it rewrote vitest.config.ts and reordered every
+    // tsconfig's types, so bun→node did not return to the original files.
+    let needs_test_framework_setup = matches.get_one::<String>("test-framework").is_none()
+        && manifest_data.test_framework.is_none();
+    if let Some(test_framework) = test_framework.filter(|_| needs_test_framework_setup) {
         let (test_framework_removal_templates, test_framework_symlink_templates) =
             change_test_framework(
                 base_path,
@@ -881,19 +987,6 @@ fn change_runtime(
 
         removal_templates.extend(test_framework_removal_templates);
         symlink_templates.extend(test_framework_symlink_templates);
-    } else if matches!(runtime, Runtime::Bun) {
-        // Bun has no separate test framework; strip any lingering test types from tsconfig.
-        let project_names: Vec<&str> = manifest_data
-            .projects
-            .iter()
-            .map(|p| p.name.as_str())
-            .collect();
-        let tsconfig_templates =
-            update_tsconfig_test_framework_types(base_path, None, &project_names)?;
-        for template in tsconfig_templates {
-            let key = template.path.to_string_lossy().to_string();
-            rendered_templates_cache.insert(key, template);
-        }
     }
 
     let application_package_json_scripts = application_json_to_write.scripts.as_mut().unwrap();
@@ -1058,6 +1151,9 @@ fn change_runtime(
         };
 
         if let Some(project_scripts) = &mut project.scripts {
+            if project_scripts.retention_enforce == Some(project_retention_enforce_script(&existing_runtime)) {
+                project_scripts.retention_enforce = Some(project_retention_enforce_script(runtime));
+            }
             project_scripts.clean = Some(attempt_replacement(
                 &mut project_scripts.additional_scripts,
                 project_scripts.clean.clone(),
@@ -1106,6 +1202,9 @@ fn change_runtime(
                         &project_dev_local_script(runtime, database),
                         None,
                     ));
+                    if project_scripts.start_server == Some(project_start_server_script(&existing_runtime, database)) {
+                        project_scripts.start_server = Some(project_start_server_script(runtime, database));
+                    }
                     project_scripts.start = Some(attempt_replacement(
                         &mut project_scripts.additional_scripts,
                         project_scripts.start.clone(),
@@ -1169,6 +1268,12 @@ fn change_runtime(
 
     match runtime {
         Runtime::Bun => {
+            let overrides = application_json_to_write.additional_entries.entry("overrides".into()).or_insert_with(|| serde_json::json!({}));
+            let overrides = overrides.as_object_mut().context("Workspace overrides must be an object")?;
+            let defaults = serde_json::to_value(crate::core::pnpm_workspace::framework_release_overrides())?;
+            for (name, version) in defaults.as_object().context("Framework overrides must be an object")? {
+                overrides.entry(name.clone()).or_insert_with(|| version.clone());
+            }
             application_json_to_write.workspaces = Some(existing_workspaces);
             if let Some(rendered) =
                 crate::core::bunfig::generate_bunfig(&base_path.to_string_lossy())?
@@ -1177,6 +1282,17 @@ fn change_runtime(
             }
         }
         Runtime::Node => {
+            // Undo what the Bun branch adds: the package.json workspace list
+            // (pnpm-workspace.yaml holds it), the framework overrides bun reads
+            // from package.json, and the generated bunfig.toml.
+            application_json_to_write.workspaces = None;
+            remove_framework_overrides(application_json_to_write)?;
+            let bunfig_path = base_path.join("bunfig.toml");
+            if read_to_string(&bunfig_path)
+                .is_ok_and(|content| crate::core::bunfig::is_generated_bunfig(&content))
+            {
+                removal_templates.push(RemovalTemplate { path: bunfig_path });
+            }
             rendered_templates_cache.insert(
                 "pnpm-workspace.yaml".to_string(),
                 RenderedTemplate {
@@ -1184,13 +1300,31 @@ fn change_runtime(
                     content: crate::core::pnpm_workspace::render_pnpm_workspace_with_packages(
                         base_path,
                         existing_workspaces,
-                    )?,
+                    )
+                    .and_then(|content| {
+                        // The generated production image installs injected
+                        // workspace packages (see typescript_image); pnpm
+                        // keeps those settings in this file, which the Bun
+                        // runtime did not have.
+                        let managed = base_path.ancestors().any(|root| {
+                            crate::init::rust_project::managed_typescript_image(root).is_some()
+                        });
+                        if managed {
+                            crate::core::pnpm_workspace::with_injected_workspace_packages(&content)
+                        } else {
+                            Ok(content)
+                        }
+                    })?,
                     context: None,
                 },
             );
         }
     }
 
+    let managed_image = base_path.ancestors().any(|root| {
+        crate::init::rust_project::managed_typescript_image(root).is_some()
+    });
+    if !managed_image {
     let dockerfile_template_path = TEMPLATES_DIR
         .get_file(Path::new("application").join("Dockerfile"))
         .unwrap();
@@ -1212,7 +1346,11 @@ fn change_runtime(
     })?;
 
     if existing_dockerfile_contents.trim() != watermarked_dockerfile_contents.trim() {
-        log_warn!(stdout, "Warning: Dockerfile is generating from template, you may need to manually migrate changes from Dockerfile.{}", runtime.to_string());
+        log_warn!(
+            stdout,
+            "Warning: Dockerfile is generating from template, you may need to manually migrate changes from Dockerfile.{}",
+            runtime.to_string()
+        );
         rendered_templates_cache.insert(
             base_path
                 .join(format!("Dockerfile.{}", runtime.to_string()))
@@ -1313,6 +1451,8 @@ fn change_runtime(
         }
     }
 
+    }
+
     let readme = rendered_templates_cache.get(&base_path.join("README.md"))?;
     if let Some(readme) = readme {
         let bun_replacements = ["bun run build".to_string(), "bun".to_string()];
@@ -1343,6 +1483,25 @@ fn change_runtime(
     }
 
     Ok((removal_templates, symlink_templates))
+}
+
+/// Drop the `overrides` entries the Bun runtime added (each framework package
+/// at the default release pin), and the key when nothing else is left. An
+/// entry the user changed or added stays.
+fn remove_framework_overrides(application_json: &mut ApplicationPackageJson) -> Result<()> {
+    let defaults = serde_json::to_value(crate::core::pnpm_workspace::framework_release_overrides())?;
+    let defaults = defaults.as_object().context("Framework overrides must be an object")?;
+    let Some(overrides) = application_json.additional_entries.get_mut("overrides") else {
+        return Ok(());
+    };
+    let Some(entries) = overrides.as_object_mut() else {
+        return Ok(());
+    };
+    entries.retain(|name, version| defaults.get(name) != Some(version));
+    if entries.is_empty() {
+        application_json.additional_entries.remove("overrides");
+    }
+    Ok(())
 }
 
 fn change_test_framework(
@@ -1483,16 +1642,9 @@ fn change_test_framework(
     )?;
 
     // Update tsconfig types for the new test framework
-    let project_names: Vec<&str> = manifest_data
-        .projects
-        .iter()
-        .map(|p| p.name.as_str())
-        .collect();
-    let tsconfig_templates = update_tsconfig_test_framework_types(
-        base_path,
-        Some(test_framework),
-        &project_names,
-    )?;
+    let project_names: Vec<&str> = project_jsons_to_write.keys().map(String::as_str).collect();
+    let tsconfig_templates =
+        update_tsconfig_test_framework_types(base_path, Some(test_framework), &project_names)?;
     for template in tsconfig_templates {
         let key = template.path.to_string_lossy().to_string();
         rendered_templates_cache.insert(key, template);
@@ -1520,20 +1672,17 @@ fn change_license(
     manifest_data.license = license.to_string();
     let license_path = base_path.join("LICENSE");
 
-    let mut removal_template = None;
-    if exists(&license_path)? {
-        removal_template = Some(RemovalTemplate {
-            path: license_path.clone(),
-        });
-    }
-
     application_json_to_write.license = Some(license.to_string());
 
+    // A new license text replaces the file in place; the file is removed only
+    // when the new license has none. Removing a path also drops any write to
+    // it, so doing both deleted the new LICENSE.
     if let Some(license_file_contents) = generate_license(base_path, &manifest_data)? {
         rendered_templates_cache.insert(license_path.to_string_lossy(), license_file_contents);
+        return Ok(None);
     }
 
-    Ok(removal_template)
+    Ok(exists(&license_path)?.then(|| RemovalTemplate { path: license_path.clone() }))
 }
 
 impl CliCommand for ApplicationCommand {
@@ -1556,6 +1705,22 @@ impl CliCommand for ApplicationCommand {
                         "runtime", "test-framework", "description", "author", "license",
                     ])
                     .help("Explicitly change only this project's CLI version pin (noninteractive)"),
+            )
+            .arg(
+                Arg::new("framework-path")
+                    .long("framework-path")
+                    .value_name("FRAMEWORK_RS")
+                    .conflicts_with_all(["framework-version", "cli-version"])
+                    .help("Rust: build against a local framework-rs checkout in place (and its sibling blueprint-rs)"),
+            )
+            .arg(
+                Arg::new("framework-version")
+                    .long("framework-version")
+                    .value_name("X.Y.Z")
+                    .num_args(0..=1)
+                    .default_missing_value(crate::core::cargo_toml::FRAMEWORK_VERSION)
+                    .conflicts_with("cli-version")
+                    .help("Rust: use the published framework crates (this exact version, default the CLI's release)"),
             )
             .arg(
                 Arg::new("name")
@@ -1581,7 +1746,7 @@ impl CliCommand for ApplicationCommand {
                     .short('l')
                     .long("linter")
                     .help("The linter to use")
-                    .value_parser(Linter::VARIANTS),
+                    .value_parser(linter_value_parser()),
             )
             .arg(
                 Arg::new("http-framework")
@@ -1649,6 +1814,61 @@ impl CliCommand for ApplicationCommand {
 
         let (app_root_path, _) = find_app_root_path(matches, RequiredLocation::Application)?;
         let manifest_path = app_root_path.join(".forklaunch").join("manifest.toml");
+        if matches.contains_id("framework-path") || matches.contains_id("framework-version") {
+            anyhow::ensure!(!matches.get_flag("dryrun"), "--dryrun is not supported when changing the framework source");
+            let selected = crate::init::rust_project::dependencies::change(&app_root_path, matches)?;
+            log_ok!(stdout, "Rust crates now use the {}", selected);
+            return Ok(());
+        }
+        crate::init::rust_project::preflight_mixed_images(&app_root_path)?;
+
+        let current_manifest: toml::Value = toml::from_str(&read_to_string(&manifest_path)?)?;
+        let mixed = current_manifest.get("language").and_then(toml::Value::as_str) == Some("mixed");
+        let previous_app_name = current_manifest.get("app_name").and_then(toml::Value::as_str).map(str::to_owned);
+        // TypeScript tooling, and a rename while TypeScript packages carry the
+        // application scope, go through the TypeScript change first.
+        let typescript_workspace = current_manifest
+            .get("modules_path")
+            .and_then(toml::Value::as_str)
+            .is_some_and(|modules| app_root_path.join(modules).join("package.json").is_file());
+        let mixed_tooling = mixed
+            && (["formatter", "linter", "test-framework", "validator", "http-framework", "runtime"].iter().any(|key| matches.get_one::<String>(key).is_some())
+                || (typescript_workspace && ["name", "description", "author", "license"].iter().any(|key| matches.get_one::<String>(key).is_some())));
+        if rust_project::is_rust_app_root(&app_root_path)? && !mixed_tooling {
+            if matches.get_one::<String>("formatter").is_some()
+                || matches.get_one::<String>("linter").is_some()
+                || matches.get_one::<String>("validator").is_some()
+                || matches.get_one::<String>("runtime").is_some()
+                || matches.get_one::<String>("http-framework").is_some()
+                || matches.get_one::<String>("test-framework").is_some()
+            {
+                anyhow::bail!(
+                    "Rust application changes currently support name, description, author, and license"
+                );
+            }
+
+            if let Some(name) = matches.get_one::<String>("name")
+                && !validate_name(name)
+            {
+                anyhow::bail!(
+                    "Application name cannot be empty or include numbers or spaces. Please try again"
+                );
+            }
+
+            let changed_name = rust_project::change_rust_application(
+                &app_root_path,
+                matches.get_one::<String>("name").map(String::as_str),
+                matches.get_one::<String>("description").map(String::as_str),
+                matches.get_one::<String>("author").map(String::as_str),
+                matches.get_one::<String>("license").map(String::as_str),
+                None,
+                matches.get_flag("dryrun"),
+            )?;
+            if !matches.get_flag("dryrun") {
+                log_ok!(stdout, "{} changed successfully!", changed_name);
+            }
+            return Ok(());
+        }
 
         let existing_manifest_data = toml::from_str::<ApplicationManifestData>(
             &read_to_string(&manifest_path).with_context(|| ERROR_FAILED_TO_READ_MANIFEST)?,
@@ -1790,10 +2010,13 @@ impl CliCommand for ApplicationCommand {
             &mut stdout,
             matches,
             "linter",
-            Some(&Linter::VARIANTS),
+            Some(&SELECTABLE_LINTERS),
             |input| Linter::VARIANTS.contains(&input),
             |_| "Invalid linter. Please try again".to_string(),
         )?;
+        if let Some(linter) = &linter {
+            ensure_selectable_linter(linter)?;
+        }
 
         let validator = prompt_field_from_selections_with_validation(
             "validator",
@@ -1879,6 +2102,7 @@ impl CliCommand for ApplicationCommand {
         let mut project_jsons_to_write: HashMap<String, ProjectPackageJson> = manifest_data
             .projects
             .iter()
+            .filter(|project| project.metadata.as_ref().and_then(|metadata| metadata.language.as_deref()) != Some("rust"))
             .map(|project| {
                 let project_package_json_path = app_path.join(&project.name).join("package.json");
                 let project_package_json_data = read_to_string(&project_package_json_path)
@@ -1892,13 +2116,30 @@ impl CliCommand for ApplicationCommand {
             })
             .collect();
 
-        if let Some(name) = name {
+        if http_framework.is_some() || runtime.is_some() {
+        preflight_http_framework(
+            &app_path,
+            http_framework.as_deref().unwrap_or(&manifest_data.http_framework),
+            runtime.as_deref().unwrap_or(&manifest_data.runtime),
+        )?;
+        }
+
+        if runtime.is_some() {
+            rust_project::preflight_typescript_runtime_change(&app_root_path)?;
+        }
+        if validator.is_some() || http_framework.is_some() || runtime.is_some() {
+            crate::sdk::typescript_build::preflight_application(&app_root_path)?;
+        }
+
+        if let Some(name) = &name {
+            if !dryrun {
             clean_application(
                 &app_path,
                 &manifest_data.runtime.parse()?,
                 confirm,
                 &mut stdout,
             )?;
+            }
 
             change_name(
                 &mut manifest_data,
@@ -1958,12 +2199,14 @@ impl CliCommand for ApplicationCommand {
         }
 
         if let Some(runtime) = runtime {
+            if !dryrun && crate::init::rust_project::managed_typescript_image(&app_root_path).is_none() {
             clean_application(
                 &app_path,
                 &manifest_data.runtime.parse()?,
                 confirm,
                 &mut stdout,
             )?;
+            }
 
             let (runtime_removal_templates, runtime_symlink_templates) = change_runtime(
                 &mut line_editor,
@@ -2020,6 +2263,15 @@ impl CliCommand for ApplicationCommand {
                 removal_templates.push(removal_template);
             }
         }
+        // Package keys under the application's scope follow a rename.
+        let (old_scope, new_scope) = (
+            format!("@{}/", existing_manifest_data.app_name),
+            format!("@{}/", manifest_data.app_name),
+        );
+        let rename_scope = |key: &str| match key.strip_prefix(&old_scope) {
+            Some(rest) => format!("{new_scope}{rest}"),
+            None => key.to_string(),
+        };
         rendered_templates_cache.insert(
             manifest_path.to_string_lossy(),
             RenderedTemplate {
@@ -2032,37 +2284,136 @@ impl CliCommand for ApplicationCommand {
             application_package_json_path.to_string_lossy(),
             RenderedTemplate {
                 path: application_package_json_path.clone(),
-                content: serde_json::to_string_pretty(&application_json_to_write)?,
+                content: crate::core::package_json::preserve_json_layout_renamed(
+                    &application_package_json_data,
+                    &serde_json::to_string_pretty(&application_json_to_write)?,
+                    &rename_scope,
+                ),
                 context: None,
             },
         );
         project_jsons_to_write
             .iter()
             .for_each(|(project_name, project_json)| {
+                let path = app_path.join(project_name).join("package.json");
+                let rendered = serde_json::to_string_pretty(&project_json).unwrap();
+                let content = match read_to_string(&path) {
+                    Ok(original) => crate::core::package_json::preserve_json_layout_renamed(&original, &rendered, &rename_scope),
+                    Err(_) => rendered,
+                };
                 rendered_templates_cache.insert(
-                    app_path
-                        .join(project_name)
-                        .join("package.json")
-                        .to_string_lossy(),
-                    RenderedTemplate {
-                        path: app_path.join(project_name).join("package.json"),
-                        content: serde_json::to_string_pretty(&project_json).unwrap(),
-                        context: None,
-                    },
+                    path.to_string_lossy().to_string(),
+                    RenderedTemplate { path, content, context: None },
                 );
             });
+        // A file this change removes may have been read back into the cache by
+        // a later sweep over sources; writing it would resurrect it.
+        let removed: HashSet<&Path> = removal_templates.iter().map(|template| template.path.as_path()).collect();
         let rendered_templates: Vec<RenderedTemplate> = rendered_templates_cache
             .drain()
             .map(|(_, template)| template)
+            .filter(|template| !removed.contains(template.path.as_path()))
             .collect();
         remove_template_files(&removal_templates, dryrun, &mut stdout)?;
         write_rendered_templates(&rendered_templates, dryrun, &mut stdout)?;
         create_symlinks(&symlink_templates, dryrun, &mut stdout)?;
         if !dryrun {
+            if mixed_tooling {
+                rust_project::change_rust_application(&app_root_path, name.as_deref(),
+                    matches.get_one::<String>("description").map(String::as_str),
+                    matches.get_one::<String>("author").map(String::as_str),
+                    matches.get_one::<String>("license").map(String::as_str),
+                    previous_app_name.as_deref(), false)?;
+            }
+            crate::init::rust_project::refresh_mixed_images(&app_root_path)?;
             log_ok!(stdout, "{} changed successfully!", &manifest_data.app_name);
             format_code(&app_path, &manifest_data.runtime.parse()?);
+        } else if mixed_tooling {
+            // The native half: Cargo metadata, Compose and local env files.
+            rust_project::change_rust_application(&app_root_path, name.as_deref(),
+                matches.get_one::<String>("description").map(String::as_str),
+                matches.get_one::<String>("author").map(String::as_str),
+                matches.get_one::<String>("license").map(String::as_str),
+                previous_app_name.as_deref(), true)?;
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod adapter_migration_tests {
+    use super::*;
+    #[test]
+    fn hyperexpress_admission_uses_requested_runtime_without_mutation() {
+        let root = tempfile::tempdir().unwrap();
+        let package = r#"{"packageManager":"pnpm@11.28.7"}"#;
+        std::fs::write(root.path().join("package.json"), package).unwrap();
+        std::fs::write(root.path().join("pnpm-workspace.yaml"), "packages: []\n").unwrap();
+        assert!(preflight_http_framework(root.path(), "hyper-express", "node").is_err());
+        preflight_http_framework(root.path(), "hyper-express", "bun").unwrap();
+        preflight_http_framework(root.path(), "express", "node").unwrap();
+        assert_eq!(std::fs::read_to_string(root.path().join("package.json")).unwrap(), package);
+        std::fs::remove_file(root.path().join("pnpm-workspace.yaml")).unwrap();
+        std::fs::write(root.path().join("package.json"), r#"{"packageManager":"bun@1.3.14"}"#).unwrap();
+        assert!(preflight_http_framework(root.path(), "hyper-express", "node").unwrap_err().to_string().contains("-F express"));
+    }
+
+    #[test]
+    fn static_adapter_imports_preserve_application_text_and_generated_outputs() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("api/dist")).unwrap();
+        let source = "// @forklaunch/validator/zod stays documented\nimport { string } from '@forklaunch/validator/zod';\nexport { number } from '@forklaunch/validator/zod';\nexport const label = '@forklaunch/validator/zod';\n";
+        let path = root.path().join("api/schema.ts");
+        std::fs::write(&path, source).unwrap();
+        std::fs::write(root.path().join("api/dist/schema.ts"), source).unwrap();
+        let projects = HashMap::from([("api".to_owned(), ProjectPackageJson::default())]);
+        let mut cache = RenderedTemplatesCache::new();
+        migrate_module_imports(root.path(), &projects, "@forklaunch/validator/zod", "@forklaunch/validator/typebox", &mut cache).unwrap();
+        let staged = cache.get(&path).unwrap().unwrap().content;
+        assert!(staged.contains("from \"@forklaunch/validator/typebox\""));
+        assert!(staged.contains("// @forklaunch/validator/zod stays documented"));
+        assert!(staged.contains("label = '@forklaunch/validator/zod'"));
+        assert_eq!(std::fs::read_to_string(path).unwrap(), source);
+        assert_eq!(cache.get(root.path().join("api/dist/schema.ts")).unwrap().unwrap().content, source);
+    }
+}
+
+#[cfg(test)]
+mod license_tests {
+    use super::*;
+
+    #[test]
+    fn rename_carries_over_to_the_license_copyright_holder() {
+        let root = tempfile::tempdir().unwrap();
+        let text = "MIT License\n\nCopyright (c) 2026 zebra\n\nzebra is free software\n";
+        std::fs::write(root.path().join("LICENSE"), text).unwrap();
+        let mut cache = RenderedTemplatesCache::new();
+        rename_license_holder(root.path(), "zebra", "kestrel", &mut cache).unwrap();
+        let renamed = cache.get(root.path().join("LICENSE")).unwrap().unwrap().content;
+        assert_eq!(renamed, "MIT License\n\nCopyright (c) 2026 kestrel\n\nzebra is free software\n");
+        // A license that does not name the application is left alone.
+        std::fs::write(root.path().join("LICENSE"), "Apache License\n").unwrap();
+        let mut cache = RenderedTemplatesCache::new();
+        rename_license_holder(root.path(), "zebra", "kestrel", &mut cache).unwrap();
+        assert_eq!(cache.get(root.path().join("LICENSE")).unwrap().unwrap().content, "Apache License\n");
+    }
+
+    #[test]
+    fn changing_license_rewrites_license_file_instead_of_deleting_it() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("LICENSE"), "MIT License\n").unwrap();
+        let mut manifest: ApplicationManifestData = toml::from_str(
+            "id='x'\ncli_version='1.0.0'\napp_name='demo'\nmodules_path='src'\nruntime='node'\nformatter='prettier'\nlinter='oxlint'\nvalidator='zod'\nhttp_framework='express'\ntest_framework='vitest'\napp_description='d'\nauthor='a'\nlicense='MIT'\nprojects=[]\nproject_peer_topology={}\n",
+        )
+        .unwrap();
+        let mut package = ApplicationPackageJson::default();
+        let mut cache = RenderedTemplatesCache::new();
+        let removal = change_license(root.path(), &License::Apache, &mut manifest, &mut package, &mut cache).unwrap();
+        assert!(removal.is_none());
+        let rendered = cache.get(root.path().join("LICENSE")).unwrap().unwrap();
+        assert!(rendered.content.contains("Apache License"), "{}", &rendered.content[..80]);
+        let removal = change_license(root.path(), &License::None, &mut manifest, &mut package, &mut cache).unwrap();
+        assert_eq!(removal.unwrap().path, root.path().join("LICENSE"));
     }
 }

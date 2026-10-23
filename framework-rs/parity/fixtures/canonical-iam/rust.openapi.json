@@ -1,0 +1,428 @@
+{
+  "components": {
+    "schemas": {
+      "Integer": {
+        "type": "integer"
+      },
+      "String": {
+        "type": "string"
+      },
+      "User": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "disabled": {
+            "type": "boolean"
+          },
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "disabled",
+          "roles"
+        ],
+        "title": "User",
+        "type": "object"
+      },
+      "UserPage": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "items": {
+            "items": {
+              "properties": {
+                "disabled": {
+                  "type": "boolean"
+                },
+                "display_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "email": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "roles": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "id",
+                "email",
+                "disabled",
+                "roles"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "title": "iam",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/users": {
+      "get": {
+        "operationId": "listUsers",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/Integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/String"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPage"
+                }
+              }
+            },
+            "description": "Response"
+          },
+          "400": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/String"
+                }
+              }
+            },
+            "description": "Response"
+          },
+          "401": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/String"
+                }
+              }
+            },
+            "description": "Response"
+          },
+          "500": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/String"
+                }
+              }
+            },
+            "description": "Response"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List users",
+        "tags": [
+          "iam"
+        ],
+        "x-forklaunch-operation": {
+          "clientPath": [
+            "users",
+            "listUsers"
+          ],
+          "format": "forklaunch.sdk-operation.v1",
+          "method": "GET",
+          "operation": "listUsers",
+          "path": "/users",
+          "requestContentType": "application/json",
+          "requestKind": "json",
+          "requestSchema": true,
+          "responseHeaders": {},
+          "responseKinds": {
+            "200:application/json": "json",
+            "400:text/plain": "text",
+            "404:text/plain": "text",
+            "500:text/plain": "text"
+          },
+          "responseSchemas": {
+            "200:application/json": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "properties": {
+                "items": {
+                  "items": {
+                    "properties": {
+                      "disabled": {
+                        "type": "boolean"
+                      },
+                      "display_name": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "email": {
+                        "type": "string"
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "roles": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "email",
+                      "disabled",
+                      "roles"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "next_cursor": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "items"
+              ],
+              "title": "Page",
+              "type": "object"
+            },
+            "400:text/plain": {
+              "type": "string"
+            },
+            "404:text/plain": {
+              "type": "string"
+            },
+            "500:text/plain": {
+              "type": "string"
+            }
+          },
+          "router": "users",
+          "service": "iam"
+        }
+      }
+    },
+    "/users/{id}": {
+      "get": {
+        "operationId": "getUser",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/String"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            },
+            "description": "Response"
+          },
+          "400": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Response"
+          },
+          "500": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/String"
+                }
+              }
+            },
+            "description": "Response"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Get a user by id",
+        "tags": [
+          "iam"
+        ],
+        "x-forklaunch-operation": {
+          "clientPath": [
+            "users",
+            "getUser"
+          ],
+          "format": "forklaunch.sdk-operation.v1",
+          "method": "GET",
+          "operation": "getUser",
+          "path": "/users/:id",
+          "requestContentType": "application/json",
+          "requestKind": "json",
+          "requestSchema": true,
+          "responseHeaders": {},
+          "responseKinds": {
+            "200:application/json": "json",
+            "404:": "empty",
+            "500:text/plain": "text"
+          },
+          "responseSchemas": {
+            "200:application/json": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "properties": {
+                "disabled": {
+                  "type": "boolean"
+                },
+                "display_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "email": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "roles": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "id",
+                "email",
+                "disabled",
+                "roles"
+              ],
+              "title": "User",
+              "type": "object"
+            },
+            "404:": {},
+            "500:text/plain": {
+              "type": "string"
+            }
+          },
+          "router": "users",
+          "service": "iam"
+        }
+      }
+    }
+  }
+}

@@ -48,10 +48,14 @@ By default, you will not need to run any scripts to get going, but if your modul
 | `billing-stripe` | Stripe billing implementation | Complete Stripe integration with webhook handling and payment flow |
 | `iam-base` | Authorization only | Base Identity and Access Management with JWT support and custom auth methods |
 | `iam-better-auth` | Better auth implementation for IAM | BetterAuth integration for advanced authentication features |
-| `messaging-base` | Messaging hooks only | Base messaging infrastructure with an extensible delivery provider interface |
-| `messaging-twilio` | Twilio SMS implementation | Twilio-backed SMS sending with delivery-status webhook handling |
 | `cac-base` | Computer-assisted coding hooks only | Base medical claim coding/scrubbing infrastructure with an extensible procedure code-set provider interface |
 | `relay` | Managed-apps OAuth relay session-ingest endpoint | Injects the instance-side `/relay/session-ingest` endpoint into an existing better-auth iam service (HMAC verify, nonce replay guard, one-time handoff ticket, session cookie); leaves token storage as one hook |
+
+> Note: messaging is not a module. Services send email and SMS through the
+> managed gateway: `forklaunch infra add <service> email` or
+> `forklaunch infra add <service> sms`. `messaging-base` and `messaging-twilio`
+> are retired; existing messaging services keep working, but new ones are not
+> generated.
 
 > Note: `relay` is not a standalone service. Unlike the other modules it does
 > not scaffold a new project - it injects the managed-apps OAuth session-ingest
@@ -66,7 +70,7 @@ By default, you will not need to run any scripts to get going, but if your modul
 
 | Option | Short | Description | Valid Values |
 | :----- | :---- | :---------- | :----------- |
-| `--module` | `-m` | The module type to initialize | `billing-base`, `billing-stripe`, `iam-base`, `iam-better-auth`, `messaging-base`, `messaging-twilio`, `cac-base`, `relay` |
+| `--module` | `-m` | The module type to initialize | `billing-base`, `billing-stripe`, `iam-base`, `iam-better-auth`, `ecommerce-stripe`, `cac-base`, `relay` |
 | `--database` | `-d` | The database to use | `postgresql`, `mysql`, `mariadb`, `mssql`, `mongodb`, `libsql`, `sqlite`, `better-sqlite` |
 | `--path` | `-p` | The application path to initialize the module in | Any valid directory path |
 | `--dryrun` | `-n` | Dry run the command | Flag (no value) |
@@ -96,7 +100,7 @@ module-name/
 ├── server.ts          # HTTP server configuration
 ├── package.json       # Dependencies and scripts
 ├── mikro-orm.config.ts # Database ORM configuration
-└── eslint.config.mjs   # ESLint configuration
+└── .oxlint.config.json # oxlint configuration
 ```
 
 ### Module Features

@@ -143,7 +143,9 @@ use crate::{
             env::find_all_env_vars,
             integrations::find_all_integrations,
             runtime_deps::{find_all_runtime_deps, get_unique_resource_types},
-            service_dependencies::find_all_service_dependencies,
+            service_dependencies::{
+                find_all_rust_service_dependencies, find_all_service_dependencies,
+            },
             worker_config::find_all_worker_configs,
         },
         command::command,
@@ -476,76 +478,8 @@ impl CliCommand for CreateCommand {
         let workspace_root = find_workspace_root(&app_root)?;
         let modules_path = get_modules_path(&workspace_root)?;
 
-        // A prebuilt release reads data only; generated code ran in a separate worker.
         if prebuilt.is_none() {
-            let runtime_cmd = if manifest.runtime == "bun" {
-                "bun"
-            } else {
-                "pnpm"
-            };
-            let resolved = resolve_command(runtime_cmd);
-
-            log_header!(
-                stdout,
-                Color::Cyan,
-                "Installing dependencies ({})...",
-                runtime_cmd
-            );
-            writeln!(stdout)?;
-
-            let has_lockfile = if manifest.runtime == "bun" {
-                modules_path.join("bun.lock").exists() || modules_path.join("bun.lockb").exists()
-            } else {
-                modules_path.join("pnpm-lock.yaml").exists()
-            };
-
-            let install_args: Vec<&str> = if has_lockfile {
-                vec!["install", "--frozen-lockfile"]
-            } else {
-                vec!["install"]
-            };
-
-            let mut install_command = ProcessCommand::new(&resolved);
-            install_command
-                .args(&install_args)
-                .current_dir(&modules_path);
-            // Bun's installer can be blocked by its temporary-directory
-            // sandbox in restricted environments; point it at a project-local
-            // temp dir that is always writable.
-            if manifest.runtime == "bun" {
-                let bun_tmp = modules_path.join(".forklaunch-tmp");
-                std::fs::create_dir_all(&bun_tmp)
-                    .with_context(|| "Failed to create bun temp directory")?;
-                install_command.env("TMPDIR", &bun_tmp);
-            }
-            let install_status = install_command
-                .status()
-                .with_context(|| format!("Failed to run {} install", runtime_cmd))?;
-
-            if !install_status.success() {
-                bail!("{} install failed", runtime_cmd);
-            }
-            log_ok!(stdout, "Dependencies installed");
-
-            log_header!(stdout, Color::Cyan, "Building project ({})...", runtime_cmd);
-            writeln!(stdout)?;
-
-            let build_args = if manifest.runtime == "bun" {
-                vec!["run", "build"]
-            } else {
-                vec!["build"]
-            };
-            let build_status = ProcessCommand::new(&resolved)
-                .args(&build_args)
-                .current_dir(&modules_path)
-                .status()
-                .with_context(|| format!("Failed to run {} build", runtime_cmd))?;
-
-            if !build_status.success() {
-                bail!("{} build failed", runtime_cmd);
-            }
-            log_ok!(stdout, "Build completed");
-            writeln!(stdout)?;
+            install_and_build_for_release(&app_root, &modules_path, &manifest, &mut stdout)?;
         }
 
         // Step 1: Detect git metadata
@@ -631,7 +565,7 @@ impl CliCommand for CreateCommand {
         let exported_services = if prebuilt.is_some() {
             super::prebuilt::validate_specs(&openapi_path, &manifest)?
         } else {
-            export_all_services(&app_root, &manifest, &openapi_path)?
+            export_all_services(&app_root, &manifest, Some(&openapi_path))?
         };
 
         log_ok!(
@@ -858,6 +792,9 @@ impl CliCommand for CreateCommand {
                 // DB_NAME is computed from the component name (same logic as Pulumi):
                 //   strip -service/-worker suffix, replace - with _, append _database
                 // Other Pulumi-injected vars get empty values — Pulumi fills at deploy time.
+                // `${X:-default}` is optional with its default; `${X:?why}` is required.
+                let (value, optional) = compose_interpolation(&value);
+                let value = &value;
                 let effective_value = if key.eq_ignore_ascii_case("DB_NAME") {
                     if let Some(ref sid) = scope_id {
                         let base = sid
@@ -895,7 +832,7 @@ impl CliCommand for CreateCommand {
                             used_by: vec![service_name.clone()],
                             value: Some(effective_value.clone()),
                             // Read out of docker-compose, not declared in code.
-                            optional: None,
+                            optional,
                         });
                         existing_vars.insert(app_key);
                     }
@@ -915,7 +852,7 @@ impl CliCommand for CreateCommand {
                                 scope_id: scope_id.clone(),
                                 used_by: vec![service_name.clone()],
                                 value: Some(effective_value.clone()),
-                                optional: None,
+                                optional,
                             });
                             existing_vars.insert(comp_key);
                         }
@@ -934,7 +871,7 @@ impl CliCommand for CreateCommand {
                     scope_id: scope_id.clone(),
                     used_by: vec![service_name.clone()],
                     value: Some(effective_value.clone()),
-                    optional: None,
+                    optional,
                 });
 
                 existing_vars.insert((key, scope_id.clone()));
@@ -989,7 +926,14 @@ impl CliCommand for CreateCommand {
         scoped_env_vars.retain(|v| !v.name.starts_with("TEST_"));
 
         // Filter out vars that are irrelevant in deployed environments
-        const EXCLUDED_VARS: &[&str] = &["DOTENV_FILE_PATH"];
+        const EXCLUDED_VARS: &[&str] = &[
+            "DOTENV_FILE_PATH",
+            // Export controls are CLI inputs, never deployed application config.
+            "FORKLAUNCH_MODE",
+            "FORKLAUNCH_OPENAPI_OUTPUT",
+            "FORKLAUNCH_CONTRACT_OUTPUT",
+            "FORKLAUNCH_ASYNCAPI_OUTPUT",
+        ];
         scoped_env_vars.retain(|v| !EXCLUDED_VARS.contains(&v.name.as_str()));
 
         // A source-declared requirement must survive promotion to application
@@ -1064,8 +1008,19 @@ impl CliCommand for CreateCommand {
             total_worker_configs
         );
 
-        let all_service_deps =
+        let mut all_service_deps =
             find_all_service_dependencies(&modules_path, &rendered_templates_cache)?;
+        let rust_service_deps = find_all_rust_service_dependencies(&app_root)?;
+        for (project_name, dependencies) in rust_service_deps {
+            all_service_deps
+                .entry(project_name)
+                .or_insert_with(Vec::new)
+                .extend(dependencies);
+        }
+        for dependencies in all_service_deps.values_mut() {
+            dependencies.sort_by(|left, right| left.0.cmp(&right.0).then(left.1.cmp(&right.1)));
+            dependencies.dedup();
+        }
 
         let total_service_deps: usize = all_service_deps.values().map(|v| v.len()).sum();
         log_ok!(
@@ -1155,7 +1110,8 @@ impl CliCommand for CreateCommand {
             log_info!(stdout, "Packaging local code...");
 
             let tarball_path = app_root.join(".forklaunch").join("release-code.tar.gz");
-            super::s3_upload::create_app_tarball(&app_root, &modules_path, &tarball_path)?;
+            let release_source_path = release_code_source_path(&app_root, &modules_path, &manifest);
+            super::s3_upload::create_app_tarball(&app_root, &release_source_path, &tarball_path)?;
 
             log_ok!(stdout, "Tarball created");
 
@@ -1293,6 +1249,167 @@ impl CliCommand for CreateCommand {
 
         Ok(())
     }
+}
+
+fn release_uses_rust_build(manifest: &ApplicationManifestData) -> bool {
+    manifest.runtime == "tokio"
+        || manifest.language.as_deref() == Some("rust")
+        || manifest.language.as_deref() == Some("mixed")
+        || manifest.application_language.as_deref() == Some("rust")
+        || manifest.application_language.as_deref() == Some("mixed")
+        || manifest.cargo_workspace.is_some()
+        || manifest.projects.iter().any(|project| {
+            project
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.language.as_deref())
+                == Some("rust")
+        })
+}
+
+fn release_code_source_path(
+    app_root: &Path,
+    modules_path: &Path,
+    manifest: &ApplicationManifestData,
+) -> PathBuf {
+    if release_uses_rust_build(manifest) {
+        app_root.to_path_buf()
+    } else {
+        modules_path.to_path_buf()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct ReleaseBuildStep {
+    program: &'static str,
+    args: Vec<&'static str>,
+    directory: PathBuf,
+    description: &'static str,
+}
+
+fn release_build_steps(
+    app_root: &Path,
+    modules_path: &Path,
+    manifest: &ApplicationManifestData,
+) -> Result<Vec<ReleaseBuildStep>> {
+    let rust = release_uses_rust_build(manifest);
+    let mut steps = Vec::new();
+    if rust {
+        steps.push(ReleaseBuildStep {
+            program: "cargo",
+            args: vec!["build", "--workspace", "--release"],
+            directory: app_root.to_path_buf(),
+            description: "Building Rust workspace",
+        });
+    }
+    let explicit_typescript = manifest.language.as_deref() == Some("mixed")
+        || manifest.application_language.as_deref() == Some("mixed")
+        || manifest.projects.iter().any(|project| {
+            project
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.language.as_deref())
+                == Some("typescript")
+        });
+    let javascript_root = if !rust {
+        Some(modules_path)
+    } else if app_root.join("package.json").is_file() {
+        Some(app_root)
+    } else if modules_path.join("package.json").is_file() {
+        Some(modules_path)
+    } else {
+        if explicit_typescript {
+            bail!(
+                "Mixed release requires a JavaScript workspace package.json at the application or modules root"
+            );
+        }
+        None
+    };
+    let Some(directory) = javascript_root else {
+        return Ok(steps);
+    };
+    let bun = manifest.runtime == "bun";
+    let program = if bun { "bun" } else { "pnpm" };
+    let lockfile = if bun {
+        directory.join("bun.lock").is_file() || directory.join("bun.lockb").is_file()
+    } else {
+        directory.join("pnpm-lock.yaml").is_file()
+    };
+    steps.push(ReleaseBuildStep {
+        program,
+        args: if lockfile {
+            vec!["install", "--frozen-lockfile"]
+        } else {
+            vec!["install"]
+        },
+        directory: directory.to_path_buf(),
+        description: "Installing JavaScript dependencies",
+    });
+    // Rust-generated SDK workspaces have package build scripts but no root
+    // build script. Build those packages recursively without requiring one.
+    let recursive = if rust {
+        let package: Value = serde_json::from_str(&read_to_string(directory.join("package.json"))?)
+            .context("Invalid release workspace package.json")?;
+        !package
+            .get("scripts")
+            .and_then(|scripts| scripts.get("build"))
+            .and_then(Value::as_str)
+            .is_some_and(|script| !script.trim().is_empty())
+    } else {
+        false
+    };
+    steps.push(ReleaseBuildStep {
+        program,
+        args: match (bun, recursive) {
+            (false, false) => vec!["build"],
+            (true, false) => vec!["run", "build"],
+            (false, true) => vec!["--recursive", "--if-present", "run", "build"],
+            (true, true) => vec!["run", "--filter", "*", "--if-present", "build"],
+        },
+        directory: directory.to_path_buf(),
+        description: "Building TypeScript workspace",
+    });
+    Ok(steps)
+}
+
+fn execute_release_build_steps(
+    steps: &[ReleaseBuildStep],
+    stdout: &mut StandardStream,
+    mut execute: impl FnMut(&ReleaseBuildStep) -> Result<bool>,
+) -> Result<()> {
+    for step in steps {
+        log_header!(
+            stdout,
+            Color::Cyan,
+            "{} ({})...",
+            step.description,
+            step.program
+        );
+        writeln!(stdout)?;
+        if !execute(step)? {
+            bail!("{} {} failed", step.program, step.args.join(" "));
+        }
+        log_ok!(stdout, "{} completed", step.description);
+        writeln!(stdout)?;
+    }
+    Ok(())
+}
+
+fn install_and_build_for_release(
+    app_root: &Path,
+    modules_path: &Path,
+    manifest: &ApplicationManifestData,
+    stdout: &mut StandardStream,
+) -> Result<()> {
+    let steps = release_build_steps(app_root, modules_path, manifest)?;
+    execute_release_build_steps(&steps, stdout, |step| {
+        Ok(ProcessCommand::new(resolve_command(step.program))
+            .args(&step.args)
+            .current_dir(&step.directory)
+            .status()
+            .with_context(|| format!("Failed to run {} {}", step.program, step.args.join(" ")))?
+            .success())
+    })
 }
 
 fn upload_release(
@@ -1778,6 +1895,10 @@ fn infer_key_component_property(
     key_upper: &str,
     value: &str,
 ) -> Option<EnvironmentVariableComponentProperty> {
+    // Rust field encryption: 32 random bytes as lowercase hex.
+    if key_upper == "ENCRYPTION_KEY_HEX" {
+        return Some(EnvironmentVariableComponentProperty::HexKey);
+    }
     if key_upper.contains("ENCRYPTION") || key_upper.contains("PRIVATE_KEY") {
         return Some(EnvironmentVariableComponentProperty::PrivatePem);
     }
@@ -2102,7 +2223,27 @@ fn should_passthrough(key: &str, value: &str) -> bool {
     true
 }
 
-const CLI_GENERATED_KEY_VARS: &[&str] = &["HMAC_SECRET_KEY"];
+const CLI_GENERATED_KEY_VARS: &[&str] = &["HMAC_SECRET_KEY", "ENCRYPTION_KEY_HEX"];
+
+/// A whole-value Compose interpolation becomes its default and an optional flag:
+/// `${X:-d}`/`${X-d}` → (`d`, optional), `${X:?m}`/`${X?m}` → (empty, required).
+/// Any other value is a literal and carries no requirement hint.
+fn compose_interpolation(value: &str) -> (String, Option<bool>) {
+    let Some(inner) = value.strip_prefix("${").and_then(|rest| rest.strip_suffix('}')) else {
+        return (value.to_owned(), None);
+    };
+    let name_end = inner
+        .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .unwrap_or(inner.len());
+    let operator = &inner[name_end..];
+    if let Some(default) = operator.strip_prefix(":-").or_else(|| operator.strip_prefix('-')) {
+        return (default.to_owned(), Some(true));
+    }
+    if operator.starts_with(":?") || operator.starts_with('?') {
+        return (String::new(), Some(false));
+    }
+    (value.to_owned(), None)
+}
 
 fn is_cli_generated_key_var(key_upper: &str) -> bool {
     CLI_GENERATED_KEY_VARS
@@ -2463,6 +2604,7 @@ fn is_platform_managed_var(var_name: &str) -> bool {
         "OTEL_EXPORTER_OTLP_ENDPOINT",
         "OTEL_EXPORTER_OTLP_PROTOCOL",
         "BETTER_AUTH_BASE_PATH",
+        "BETTER_AUTH_TWO_FACTOR_ENABLED",
         // CLI-generated: random secrets produced during `forklaunch init`
         "HMAC_SECRET_KEY",
         "BETTER_AUTH_SECRET",
@@ -2527,6 +2669,24 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
+
+    #[test]
+    fn compose_interpolations_map_to_defaults_and_requirements() {
+        assert_eq!(compose_interpolation("${RUST_LOG:-info}"), ("info".into(), Some(true)));
+        assert_eq!(compose_interpolation("${STRIPE_API_KEY:-}"), (String::new(), Some(true)));
+        assert_eq!(compose_interpolation("${TENANT_ID:?Configure a tenant}"), (String::new(), Some(false)));
+        assert_eq!(compose_interpolation("http://iam:8002"), ("http://iam:8002".into(), None));
+        assert_eq!(compose_interpolation("prefix-${X:-y}"), ("prefix-${X:-y}".into(), None));
+    }
+
+    #[test]
+    fn rust_encryption_key_is_a_generated_hex_key() {
+        assert!(is_cli_generated_key_var("ENCRYPTION_KEY_HEX"));
+        assert!(matches!(
+            infer_key_component_property("ENCRYPTION_KEY_HEX", ""),
+            Some(EnvironmentVariableComponentProperty::HexKey)
+        ));
+    }
     use crate::core::manifest::{
         ProjectEntry, ResourceInventory, application::ApplicationManifestData,
     };
@@ -2565,6 +2725,13 @@ mod tests {
             app_description: "Test application".to_string(),
             author: "Test Author".to_string(),
             license: "MIT".to_string(),
+            language: None,
+            application_language: None,
+            sdk_targets: Vec::new(),
+            cargo_workspace: None,
+            contract_artifact_path: None,
+            openapi_path: None,
+            asyncapi_path: None,
             projects: projects
                 .into_iter()
                 .map(|(name, r#type)| ProjectEntry {
@@ -2610,6 +2777,7 @@ mod tests {
             is_jest: false,
             platform_application_id: None,
             platform_organization_id: None,
+            framework: None,
             compliance: None,
         }
     }
@@ -2678,6 +2846,147 @@ mod tests {
             }
         }
         yaml
+    }
+
+    #[test]
+    fn test_release_build_detection_keeps_typescript_on_package_manager() {
+        let manifest = create_test_manifest(vec![("my-service", ProjectType::Service)]);
+        let temp_dir = TempDir::new().unwrap();
+        let modules_path = temp_dir.path().join("src/modules");
+
+        assert!(!release_uses_rust_build(&manifest));
+        assert_eq!(
+            release_code_source_path(temp_dir.path(), &modules_path, &manifest),
+            modules_path
+        );
+    }
+
+    #[test]
+    fn test_release_build_detection_uses_cargo_for_rust() {
+        let mut manifest = create_test_manifest(vec![("my-service", ProjectType::Service)]);
+        manifest.runtime = "tokio".to_string();
+        manifest.language = Some("rust".to_string());
+        manifest.application_language = Some("rust".to_string());
+        manifest.cargo_workspace = Some("Cargo.toml".to_string());
+        let temp_dir = TempDir::new().unwrap();
+        let modules_path = temp_dir.path().join("crates");
+
+        assert!(release_uses_rust_build(&manifest));
+        assert_eq!(
+            release_code_source_path(temp_dir.path(), &modules_path, &manifest),
+            temp_dir.path()
+        );
+    }
+
+    #[test]
+    fn mixed_release_builds_both_workspaces_and_uses_root_lockfile() {
+        let root = TempDir::new().unwrap();
+        let modules = root.path().join("crates");
+        std::fs::create_dir(&modules).unwrap();
+        std::fs::write(
+            root.path().join("package.json"),
+            r#"{"scripts":{"build":"build-owned-workspaces"}}"#,
+        )
+        .unwrap();
+        std::fs::write(root.path().join("pnpm-lock.yaml"), "lockfileVersion: '9.0'").unwrap();
+        let mut manifest = create_test_manifest(vec![]);
+        manifest.language = Some("mixed".into());
+        let steps = release_build_steps(root.path(), &modules, &manifest).unwrap();
+        assert_eq!(
+            steps.iter().map(|step| step.program).collect::<Vec<_>>(),
+            ["cargo", "pnpm", "pnpm"]
+        );
+        assert!(steps.iter().all(|step| step.directory == root.path()));
+        assert_eq!(steps[1].args, ["install", "--frozen-lockfile"]);
+        assert_eq!(steps[2].args, ["build"]);
+        for fail_at in 0..steps.len() {
+            let mut calls = 0;
+            let result = execute_release_build_steps(
+                &steps,
+                &mut StandardStream::stdout(ColorChoice::Never),
+                |_| {
+                    let success = calls != fail_at;
+                    calls += 1;
+                    Ok(success)
+                },
+            );
+            assert!(result.is_err());
+            assert_eq!(
+                calls,
+                fail_at + 1,
+                "later release stages must not run after failure"
+            );
+        }
+    }
+
+    #[test]
+    fn rust_release_builds_generated_typescript_sdk_packages_without_root_build_script() {
+        let root = TempDir::new().unwrap();
+        std::fs::write(
+            root.path().join("package.json"),
+            r#"{"scripts":{"rust:build":"cargo build"}}"#,
+        )
+        .unwrap();
+        let mut manifest = create_test_manifest(vec![]);
+        manifest.runtime = "tokio".into();
+        let steps =
+            release_build_steps(root.path(), &root.path().join("crates"), &manifest).unwrap();
+        assert_eq!(steps.len(), 3);
+        assert_eq!(steps[1].args, ["install"]);
+        assert_eq!(
+            steps[2].args,
+            ["--recursive", "--if-present", "run", "build"]
+        );
+    }
+
+    #[test]
+    fn mixed_bun_release_uses_modules_workspace_and_both_lockfile_formats() {
+        let root = TempDir::new().unwrap();
+        let modules = root.path().join("src/modules");
+        std::fs::create_dir_all(&modules).unwrap();
+        std::fs::write(
+            modules.join("package.json"),
+            r#"{"scripts":{"build":"build-owned-workspaces"}}"#,
+        )
+        .unwrap();
+        let mut manifest = create_test_manifest(vec![]);
+        manifest.language = Some("mixed".into());
+        manifest.runtime = "bun".into();
+        for name in ["bun.lock", "bun.lockb"] {
+            std::fs::write(modules.join(name), "fixture").unwrap();
+            let steps = release_build_steps(root.path(), &modules, &manifest).unwrap();
+            assert_eq!(steps[0].directory, root.path());
+            assert_eq!(steps[1].directory, modules);
+            assert_eq!(steps[1].program, "bun");
+            assert_eq!(steps[1].args, ["install", "--frozen-lockfile"]);
+            assert_eq!(steps[2].args, ["run", "build"]);
+            std::fs::remove_file(modules.join(name)).unwrap();
+        }
+        std::fs::write(modules.join("package.json"), "{}").unwrap();
+        let steps = release_build_steps(root.path(), &modules, &manifest).unwrap();
+        assert_eq!(
+            steps[2].args,
+            ["run", "--filter", "*", "--if-present", "build"]
+        );
+    }
+
+    #[test]
+    fn release_rejects_missing_or_invalid_mixed_workspace_before_executing_builds() {
+        let root = TempDir::new().unwrap();
+        let modules = root.path().join("crates");
+        let mut manifest = create_test_manifest(vec![]);
+        manifest.language = Some("mixed".into());
+        assert!(release_build_steps(root.path(), &modules, &manifest).is_err());
+        std::fs::write(root.path().join("package.json"), "invalid-json").unwrap();
+        assert!(release_build_steps(root.path(), &modules, &manifest).is_err());
+        std::fs::remove_file(root.path().join("package.json")).unwrap();
+        manifest.language = Some("rust".into());
+        assert_eq!(
+            release_build_steps(root.path(), &modules, &manifest)
+                .unwrap()
+                .len(),
+            1
+        );
     }
 
     #[test]

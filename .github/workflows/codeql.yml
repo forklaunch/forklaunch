@@ -1,0 +1,40 @@
+name: CodeQL
+
+# Advanced CodeQL setup, so test-only paths can be excluded
+# (.github/codeql/codeql-config.yml). GitHub rejects advanced uploads while the
+# repository's default setup is enabled, so this runs only once the
+# CODEQL_ADVANCED_SETUP repository variable is 'true' (set it when switching
+# default setup off).
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '17 4 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    if: vars.CODEQL_ADVANCED_SETUP == 'true'
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, javascript-typescript, python, rust]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          config-file: ./.github/codeql/codeql-config.yml
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}

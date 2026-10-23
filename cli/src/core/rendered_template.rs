@@ -30,6 +30,18 @@ pub(crate) fn create_forklaunch_dir(path_dir: &String, dryrun: bool) -> Result<(
     Ok(())
 }
 
+impl RenderedTemplate {
+    /// For a package.json the CLI reserialized: keep the file's own key
+    /// order (and its bytes when nothing changed). See
+    /// [`super::package_json::preserve_json_layout`].
+    pub(crate) fn preserving_json_layout(mut self) -> Self {
+        if let Ok(original) = std::fs::read_to_string(&self.path) {
+            self.content = super::package_json::preserve_json_layout(&original, &self.content);
+        }
+        self
+    }
+}
+
 pub(crate) fn write_rendered_templates(
     rendered_templates: &Vec<RenderedTemplate>,
     dryrun: bool,
@@ -44,10 +56,14 @@ pub(crate) fn write_rendered_templates(
                 )
             })?;
 
-            write(
-                &rendered_template.path,
-                apply_watermark(&rendered_template)?,
-            )
+            let mut content = apply_watermark(&rendered_template)?;
+            if super::manifest::is_manifest_path(&rendered_template.path) {
+                content = super::manifest::strip_retired_manifest_keys(&content);
+                if let Ok(original) = std::fs::read_to_string(&rendered_template.path) {
+                    content = super::manifest::preserve_manifest_layout(&original, &content);
+                }
+            }
+            write(&rendered_template.path, content)
             .with_context(|| match &rendered_template.context {
                 Some(context) => context.clone(),
                 None => format!(
@@ -57,6 +73,18 @@ pub(crate) fn write_rendered_templates(
             })?;
         } else {
             writeln!(stdout, "Would write {}", rendered_template.path.display())?;
+        }
+    }
+    Ok(())
+}
+
+/// The dry-run plan of a native change that edits files in place: the same
+/// "Would write" lines rendered templates print.
+pub(crate) fn log_dryrun_plan<S: AsRef<str>>(stdout: &mut StandardStream, paths: &[S]) -> Result<()> {
+    for path in paths {
+        match path.as_ref().strip_suffix(" (removed)") {
+            Some(removed) => writeln!(stdout, "Would remove {removed}")?,
+            None => writeln!(stdout, "Would write {}", path.as_ref())?,
         }
     }
     Ok(())

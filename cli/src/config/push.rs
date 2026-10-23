@@ -211,10 +211,7 @@ impl CliCommand for PushCommand {
         let input = format!("{}.env", environment);
         let input = matches.get_one::<String>("input").unwrap_or(&input);
 
-        let url = format!(
-            "{}/config/push",
-            get_platform_management_api_url()
-        );
+        let url = format!("{}/config/push", get_platform_management_api_url());
 
         let replace = matches.get_flag("replace");
         let skip_confirm = matches.get_flag("yes");
@@ -456,7 +453,11 @@ mod tests {
         assert!(content.contains("SIMPLE=hello\n"));
 
         // Multiline value: must be double-quoted in reconstructed output
-        assert!(content.contains("CERT=\"-----BEGIN CERTIFICATE-----\nabc123\n-----END CERTIFICATE-----\"\n"));
+        assert!(
+            content.contains(
+                "CERT=\"-----BEGIN CERTIFICATE-----\nabc123\n-----END CERTIFICATE-----\"\n"
+            )
+        );
     }
 
     #[test]
@@ -482,32 +483,20 @@ mod tests {
         let path = temp_dir.path().join("production.env");
 
         // Step 1: file with 3 vars
-        fs::write(
-            &path,
-            "# application\nA=1\nB=2\nC=3\n",
-        )
-        .unwrap();
+        fs::write(&path, "# application\nA=1\nB=2\nC=3\n").unwrap();
 
         let keys = extract_keys(&parse_and_reconstruct(&path));
         assert_eq!(keys.len(), 3);
 
         // Step 2: user removes B
-        fs::write(
-            &path,
-            "# application\nA=1\nC=3\n",
-        )
-        .unwrap();
+        fs::write(&path, "# application\nA=1\nC=3\n").unwrap();
 
         let keys = extract_keys(&parse_and_reconstruct(&path));
         assert_eq!(keys.len(), 2);
         assert!(!keys.contains(&"B".to_string()));
 
         // Step 3: user explicitly re-adds B (this is an intentional restore)
-        fs::write(
-            &path,
-            "# application\nA=1\nB=new_value\nC=3\n",
-        )
-        .unwrap();
+        fs::write(&path, "# application\nA=1\nB=new_value\nC=3\n").unwrap();
 
         let keys = extract_keys(&parse_and_reconstruct(&path));
         assert_eq!(keys.len(), 3);
@@ -522,11 +511,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let path = temp_dir.path().join("production.env");
 
-        fs::write(
-            &path,
-            "# application\nDB_HOST=localhost\n",
-        )
-        .unwrap();
+        fs::write(&path, "# application\nDB_HOST=localhost\n").unwrap();
 
         let items = parse_env_file_items(&path).unwrap();
         let content = reconstruct_env_content(items);

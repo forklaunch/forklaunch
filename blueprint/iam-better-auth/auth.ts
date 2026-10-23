@@ -1,6 +1,7 @@
+import { resolveBetterAuthBaseUrl } from './domain/utils/betterAuthBaseUrl.util';
+import { betterAuthMikroOrmAdapter } from './domain/utils/betterAuthAdapter.util';
 import { organizationRoleStatements } from './domain/utils/organizationRoleStatements.util';
 import { withAuthEncryptionPolicy } from './domain/utils/authEncryptionPolicy.util';
-import { mikroOrmAdapter } from '@forklaunch/better-auth-mikro-orm-fork';
 import { logBetterAuthApiError } from './domain/utils/betterAuthErrorLogging.util';
 import { PERMISSIONS, ROLES } from '@forklaunch/blueprint-core';
 import { Metrics } from '@forklaunch/blueprint-monitoring';
@@ -47,7 +48,7 @@ const plugins = [
     allowUserToCreateOrganization: true,
     creatorRole: 'owner',
     membershipLimit: 100,
-    invitationExpiresIn: 48 * 60 * 60 * 1000,
+    invitationExpiresIn: 48 * 60 * 60, // Better Auth expects seconds.
     teams: { enabled: true },
     dynamicAccessControl: { enabled: true },
     ac,
@@ -128,13 +129,19 @@ export const betterAuthConfig = ({
       google: {
         clientId: getEnvVar('GOOGLE_CLIENT_ID') ?? '',
         clientSecret: getEnvVar('GOOGLE_CLIENT_SECRET') ?? '',
-        redirectURI: `${baseURL}${BETTER_AUTH_BASE_PATH}/callback/google`,
+        redirectURI: `${resolveBetterAuthBaseUrl(baseURL, BETTER_AUTH_BASE_PATH)}/callback/google`,
+        mapProfileToUser: (profile) => ({
+          firstName:
+            typeof profile.given_name === 'string' ? profile.given_name : '',
+          lastName:
+            typeof profile.family_name === 'string' ? profile.family_name : ''
+        }),
         enabled: !!(
           getEnvVar('GOOGLE_CLIENT_ID') && getEnvVar('GOOGLE_CLIENT_SECRET')
         )
       }
     },
-    database: mikroOrmAdapter(orm, {
+    database: betterAuthMikroOrmAdapter(orm, {
       operationContext: withAuthEncryptionPolicy,
       options: {
         advanced: {

@@ -1,0 +1,294 @@
+{
+  "components": {
+    "schemas": {
+      "Count": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "Item": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
+      "ItemEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "NativePayloadSseEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "String": {
+        "type": "string"
+      },
+      "bool": {
+        "type": "boolean"
+      }
+    }
+  },
+  "info": {
+    "title": "catalog",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/items": {
+      "post": {
+        "operationId": "createItem",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Item"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            },
+            "description": "Response"
+          }
+        },
+        "summary": "Create an item",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/items/events": {
+      "get": {
+        "operationId": "watchItems",
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemEvent"
+                }
+              }
+            },
+            "description": "Response"
+          }
+        },
+        "summary": "Watch typed item events",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/items/native-events": {
+      "get": {
+        "operationId": "nativeEvents",
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativePayloadSseEvent"
+                }
+              }
+            },
+            "description": "Response"
+          }
+        },
+        "summary": "Native payload SSE",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/items/{id}": {
+      "delete": {
+        "operationId": "deleteItem",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/String"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Response"
+          }
+        },
+        "summary": "Delete an item",
+        "tags": [
+          "catalog"
+        ]
+      },
+      "get": {
+        "operationId": "getItem",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/String"
+            }
+          },
+          {
+            "in": "query",
+            "name": "includeDetails",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/bool"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/String"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              },
+              "application/pdf": {
+                "schema": {
+                  "$ref": "#/components/schemas/String"
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "$ref": "#/components/schemas/String"
+                }
+              },
+              "text/html": {
+                "schema": {
+                  "$ref": "#/components/schemas/String"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/String"
+                }
+              }
+            },
+            "description": "Response",
+            "headers": {
+              "etag": {
+                "schema": {
+                  "$ref": "#/components/schemas/String"
+                }
+              },
+              "x-count": {
+                "schema": {
+                  "$ref": "#/components/schemas/Count"
+                }
+              },
+              "x-next": {
+                "schema": {
+                  "$ref": "#/components/schemas/String"
+                }
+              }
+            }
+          },
+          "302": {
+            "description": "Response"
+          },
+          "404": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/String"
+                }
+              }
+            },
+            "description": "Response"
+          }
+        },
+        "summary": "Retrieve an item",
+        "tags": [
+          "catalog"
+        ]
+      }
+    }
+  }
+}

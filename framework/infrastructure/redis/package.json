@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/infrastructure-redis",
-  "version": "1.4.21",
+  "version": "1.4.22",
   "description": "Redis infrastructure for ForkLaunch components.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {

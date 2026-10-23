@@ -1,0 +1,18 @@
+[package]
+name = "{{{name}}}"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "{{{description}}}"
+
+[dependencies]
+serde_json = {}
+axum = {}
+forklaunch-axum = { path = "../../.forklaunch/framework-rs/crates/axum", features = ["mcp", "remote-jwks"] }
+tokio = { features = ["macros", "rt-multi-thread", "net", "signal"] }
+sqlx = { default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres"] }
+forklaunch-core = {path = "../../.forklaunch/framework-rs/crates/core", features = ["openapi", "auth", "encryption", "oidc", "otlp", "postgres", "remote-jwks", "domain"] }
+forklaunch-iam-interface = { path = "../../.forklaunch/blueprint-rs/crates/interfaces/iam-interface" }
+forklaunch-iam-base = { path = "../../.forklaunch/blueprint-rs/crates/implementations/iam/iam-base", features = ["postgres", "jwt-sessions", "browser-sessions", "oidc-sessions", "http", "seed"] }
+jsonwebtoken = {}

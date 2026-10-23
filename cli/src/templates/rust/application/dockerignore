@@ -1,0 +1,6 @@
+/target/
+**/target/
+.git/
+**/node_modules/
+**/.env*
+!**/.env.example

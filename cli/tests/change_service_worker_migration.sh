@@ -17,7 +17,7 @@ RUST_BACKTRACE=1 $FL init application migration-app \
   -o src/modules \
   -d postgresql \
   -f biome \
-  -l eslint \
+  -l oxlint \
   -v zod \
   -F express \
   -r bun \

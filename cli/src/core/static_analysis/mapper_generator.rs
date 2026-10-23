@@ -1,8 +1,9 @@
+use convert_case::{Case, Casing};
+
 use super::{
     entity_analyzer::{EntityDefinition, EntityProperty, RelationType},
     schema_analyzer::{SchemaDefinition, SchemaProperty},
 };
-use convert_case::{Case, Casing};
 
 pub struct MapperGenerator {
     schema: SchemaDefinition,
@@ -27,23 +28,34 @@ impl MapperGenerator {
     }
 
     pub fn generate_mapper_file(&self) -> String {
-        let pascal_case_name = self.entity.name.replace("Record", "").replace("EventRecord", "");
+        let pascal_case_name = self
+            .entity
+            .name
+            .replace("Record", "")
+            .replace("EventRecord", "");
         let camel_case_name = pascal_case_name.to_case(Case::Camel);
         // Entity const is PascalCase (e.g., "UserRecord")
         let entity_const_name = &self.entity.name;
 
-        let imports = self.generate_imports(&pascal_case_name, &camel_case_name, &entity_const_name);
+        let imports =
+            self.generate_imports(&pascal_case_name, &camel_case_name, &entity_const_name);
         let request_mapper = self.generate_request_mapper(&pascal_case_name, &entity_const_name);
         let response_mapper = self.generate_response_mapper(&pascal_case_name, &entity_const_name);
 
-        format!(
-            "{}\n\n{}\n\n{}",
-            imports, request_mapper, response_mapper
-        )
+        format!("{}\n\n{}\n\n{}", imports, request_mapper, response_mapper)
     }
 
-    fn generate_imports(&self, pascal_case_name: &str, camel_case_name: &str, entity_const_name: &str) -> String {
-        let entity_suffix = if self.is_worker { "EventRecord" } else { "Record" };
+    fn generate_imports(
+        &self,
+        pascal_case_name: &str,
+        camel_case_name: &str,
+        entity_const_name: &str,
+    ) -> String {
+        let entity_suffix = if self.is_worker {
+            "EventRecord"
+        } else {
+            "Record"
+        };
         let extra_import = if !self.is_worker {
             format!("\nimport {{ EntityManager }} from '@mikro-orm/core';")
         } else {
@@ -93,10 +105,7 @@ export const {}RequestMapper = requestMapper({{
     }}
   }}
 }});"#,
-                pascal_case_name,
-                pascal_case_name,
-                entity_const_name,
-                to_entity_body,
+                pascal_case_name, pascal_case_name, entity_const_name, to_entity_body,
             )
         } else {
             format!(
@@ -135,9 +144,7 @@ export const {}ResponseMapper = responseMapper({{
     }}
   }}
 }});"#,
-            pascal_case_name,
-            pascal_case_name,
-            entity_const_name
+            pascal_case_name, pascal_case_name, entity_const_name
         )
     }
 
@@ -150,7 +157,10 @@ export const {}ResponseMapper = responseMapper({{
                 lines.push(format!("        {}", mapping));
             } else {
                 // Direct mapping if no entity property found (pass through to DTO)
-                lines.push(format!("        {}: dto.{},", schema_prop.name, schema_prop.name));
+                lines.push(format!(
+                    "        {}: dto.{},",
+                    schema_prop.name, schema_prop.name
+                ));
             }
         }
 
@@ -197,16 +207,29 @@ export const {}ResponseMapper = responseMapper({{
         }
     }
 
-    fn find_matching_entity_property(&self, schema_prop: &SchemaProperty) -> Option<&EntityProperty> {
+    fn find_matching_entity_property(
+        &self,
+        schema_prop: &SchemaProperty,
+    ) -> Option<&EntityProperty> {
         // First try exact name match
-        if let Some(entity_prop) = self.entity.properties.iter().find(|ep| ep.name == schema_prop.name) {
+        if let Some(entity_prop) = self
+            .entity
+            .properties
+            .iter()
+            .find(|ep| ep.name == schema_prop.name)
+        {
             return Some(entity_prop);
         }
 
         // Try matching with ID suffix removed (e.g., organizationId -> organization)
         if schema_prop.name.ends_with("Id") {
             let base_name = schema_prop.name.trim_end_matches("Id");
-            if let Some(entity_prop) = self.entity.properties.iter().find(|ep| ep.name == base_name) {
+            if let Some(entity_prop) = self
+                .entity
+                .properties
+                .iter()
+                .find(|ep| ep.name == base_name)
+            {
                 return Some(entity_prop);
             }
         }
@@ -223,13 +246,23 @@ export const {}ResponseMapper = responseMapper({{
             };
 
             // Try singular match first
-            if let Some(entity_prop) = self.entity.properties.iter().find(|ep| ep.name == singular_name) {
+            if let Some(entity_prop) = self
+                .entity
+                .properties
+                .iter()
+                .find(|ep| ep.name == singular_name)
+            {
                 return Some(entity_prop);
             }
 
             // Try plural form (e.g., roleIds -> roles)
             let plural_name = format!("{}s", singular_name);
-            if let Some(entity_prop) = self.entity.properties.iter().find(|ep| ep.name == plural_name) {
+            if let Some(entity_prop) = self
+                .entity
+                .properties
+                .iter()
+                .find(|ep| ep.name == plural_name)
+            {
                 return Some(entity_prop);
             }
         }
@@ -250,8 +283,10 @@ export const {}ResponseMapper = responseMapper({{
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::static_analysis::entity_analyzer::{EntityProperty, RelationType};
-    use crate::core::static_analysis::schema_analyzer::SchemaProperty;
+    use crate::core::static_analysis::{
+        entity_analyzer::{EntityProperty, RelationType},
+        schema_analyzer::SchemaProperty,
+    };
 
     #[test]
     fn test_generate_simple_mapper() {

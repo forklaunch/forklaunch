@@ -29,8 +29,8 @@ forklaunch infra remove <service> <capability> [options]
 
 | Capability | What the service gets | Release resource type | On a worker | Events |
 | :--------- | :-------------------- | :-------------------- | :---------- | :----- |
-| `object-store` (`s3`) | an S3 object store (MinIO locally); manifest `object_store` | - | no (use `forklaunch change worker`) | - |
-| `cache` (`redis`) | a Redis cache; manifest `cache` | - | no (use `forklaunch change worker`) | - |
+| `object-store` (`s3`) | an S3 object store (MinIO locally); manifest `object_store` | - | Rust workers; TypeScript: `forklaunch change worker` | - |
+| `cache` (`redis`) | a Redis cache; manifest `cache` | - | Rust workers; TypeScript: `forklaunch change worker` | - |
 | `email` | `EmailClient` (`createEmailClient`) | `email` | yes | delivered, bounced, complained |
 | `sms` | `SmsClient` (`createSmsClient`) | `sms` | yes | delivered, failed, received, opted out |
 | `whatsapp` | `WhatsAppClient` (`createWhatsAppClient`) | `whatsapp` | yes | received, status |
@@ -69,7 +69,7 @@ forklaunch score --offline
 ## What It Refuses
 
 - A capability the project already has (on `add`) or does not have (on `remove`).
-- `object-store` or `cache` on a worker, and any capability on a library.
+- `object-store` or `cache` on a TypeScript worker, and any capability on a library.
 - A project name that is not in the manifest.
 
 ## Workers and Events

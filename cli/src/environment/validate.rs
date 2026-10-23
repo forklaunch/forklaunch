@@ -29,7 +29,13 @@ impl CliCommand for ValidateCommand {
     fn command(&self) -> Command {
         Command::new("validate")
             .about("Check all workspace projects for missing environment variables")
-            .long_about("Validates that all environment variables referenced in registrations.ts files have corresponding entries in .env files")
+            .long_about("Validates that all environment variables referenced in registrations.ts files, and the required settings of Rust processes in docker-compose.yaml, have corresponding entries in .env files")
+            .arg(
+                clap::Arg::new("base_path")
+                    .short('p')
+                    .long("path")
+                    .help("The application path"),
+            )
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
@@ -48,8 +54,15 @@ impl CliCommand for ValidateCommand {
         let rendered_templates_cache = RenderedTemplatesCache::new();
         let project_env_vars = find_all_env_vars(&modules_path, &rendered_templates_cache)?;
 
+        // Rust processes declare required settings in Compose; `.env` holds them.
+        let native_gaps = crate::init::rust_project::native_env_gaps(&app_root)?;
+        report_native_gaps(&native_gaps, &mut stdout)?;
+
         if project_env_vars.is_empty() {
             log_warn!(stdout, "No projects with registrations.ts found");
+            if !native_gaps.is_empty() {
+                std::process::exit(1);
+            }
             return Ok(());
         }
 
@@ -58,11 +71,7 @@ impl CliCommand for ValidateCommand {
             writeln!(stdout, "  - {}", project_name)?;
         }
 
-        let project_names: Vec<String> = manifest
-            .projects
-            .iter()
-            .map(|p| p.name.clone())
-            .collect();
+        let project_names: Vec<String> = manifest.projects.iter().map(|p| p.name.clone()).collect();
 
         // Filter out Pulumi-injected vars (inter-service URLs, auth URLs) — these are
         // injected at deploy time and should not be flagged as missing locally.
@@ -96,12 +105,23 @@ impl CliCommand for ValidateCommand {
             &mut stdout,
         )?;
 
-        if validation_results.has_missing_vars() {
+        if validation_results.has_missing_vars() || !native_gaps.is_empty() {
             std::process::exit(1);
         }
 
         Ok(())
     }
+}
+
+pub(crate) fn report_native_gaps(gaps: &[(String, String)], stdout: &mut StandardStream) -> Result<()> {
+    if gaps.is_empty() {
+        return Ok(());
+    }
+    log_header!(stdout, Color::Cyan, "\nRust process settings missing from .env ({}):", gaps.len());
+    for (service, variable) in gaps {
+        writeln!(stdout, "  {variable} (required by {service})")?;
+    }
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -209,7 +229,12 @@ fn display_validation_results(
     }
 
     if !worker_vars.is_empty() {
-        log_header!(stdout, Color::Cyan, "\nWorker-Level Variables ({}):", worker_vars.len());
+        log_header!(
+            stdout,
+            Color::Cyan,
+            "\nWorker-Level Variables ({}):",
+            worker_vars.len()
+        );
         for var in &worker_vars {
             display_scoped_var_status(var, results, stdout, &mut has_any_missing)?;
         }
@@ -228,11 +253,29 @@ fn display_validation_results(
 
     writeln!(stdout, "Projects scanned: {}", total_projects)?;
 
-    let issues_color = if projects_with_issues > 0 { Color::Red } else { Color::Green };
-    log_write!(stdout, issues_color, "Projects with missing vars: {}\n", projects_with_issues);
+    let issues_color = if projects_with_issues > 0 {
+        Color::Red
+    } else {
+        Color::Green
+    };
+    log_write!(
+        stdout,
+        issues_color,
+        "Projects with missing vars: {}\n",
+        projects_with_issues
+    );
 
-    let missing_color = if total_missing > 0 { Color::Red } else { Color::Green };
-    log_write!(stdout, missing_color, "Total missing variables: {}\n", total_missing);
+    let missing_color = if total_missing > 0 {
+        Color::Red
+    } else {
+        Color::Green
+    };
+    log_write!(
+        stdout,
+        missing_color,
+        "Total missing variables: {}\n",
+        total_missing
+    );
 
     if has_any_missing {
         log_info!(

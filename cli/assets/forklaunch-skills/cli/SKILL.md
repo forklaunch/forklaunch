@@ -177,7 +177,7 @@ Use these lessons when repairing or planning generated ForkLaunch Studio apps:
 | `--validator` | Yes | `zod`, `typebox` |
 | `--http-framework` | Yes | `express`, `hyper-express` |
 | `--formatter` | Yes | `prettier`, `biome` |
-| `--linter` | Yes | `eslint`, `oxlint` |
+| `--linter` | Yes | `oxlint` (`eslint` rejected: no TypeScript 7 support) |
 | `--test-framework` | Yes | `vitest`, `jest` |
 | `--license` | Yes | `MIT`, `Apache-2.0`, `none`, etc. |
 | `--author` | Yes | Author name string |
@@ -390,9 +390,9 @@ forklaunch init app <app_name>
 --http-framework <type>  # express, hyper-express (bun forces express)
 --test-framework <type>  # vitest, jest
 --formatter <type>       # prettier, biome
---linter <type>          # eslint, oxlint
+--linter <type>          # oxlint
 --modules <module>       # billing-base, billing-stripe, iam-base, iam-better-auth,
-                         # ecommerce-stripe, messaging-base, messaging-twilio, cac-base
+                         # ecommerce-stripe, cac-base
 --path <path>            # REQUIRED in practice — see below
 --modules-path <path>    # src/modules | modules
 
@@ -494,7 +494,7 @@ forklaunch change application [--path <app_root>]
 --runtime bun|node
 --http-framework express|hyper-express
 --formatter prettier|biome
---linter eslint|oxlint
+--linter oxlint
 --test-framework vitest|jest
 --validator zod|typebox
 -N <name>                # Rename the application
@@ -1106,7 +1106,8 @@ forklaunch openapi export
 
 # Options:
 -p, --path <base_path>  # Path to application root (optional)
--o, --output <output>   # Output directory (default: .forklaunch/openapi)
+-o, --output <output>   # Also write <output>/<service>/openapi.json (default: each service's
+                        # registered artifact, e.g. src/<service>/sdk/typescript/openapi.json)
 
 # Examples:
 forklaunch openapi export
@@ -1402,7 +1403,7 @@ forklaunch change application
 --runtime bun|node
 --http-framework express|hyper-express
 --formatter prettier|biome
---linter eslint|oxlint
+--linter oxlint
 --test-framework vitest|jest
 --validator zod|typebox
 --dry-run              # Preview changes without applying
@@ -1822,8 +1823,11 @@ Forklaunch auto-generates:
 
 Specs are available at:
 
-- `.forklaunch/openapi/<module>/openapi.json`
-- `.forklaunch/openapi/<module>/asyncapi.json`
+- each service's SDK folder (`<service>/sdk/typescript/` for Rust services, `<service>/sdk/` for
+  TypeScript services with a service-owned SDK): `contract.json`, `openapi.json`, `asyncapi.json`
+- `.forklaunch/openapi/<module>/openapi.json` for TypeScript services without a service-owned SDK
+
+`.forklaunch/` itself holds only `manifest.toml`.
 
 ## Handler Contract Details & Typed req/res
 

@@ -31,7 +31,7 @@ export const setupTestDatabase = async (): Promise<TestSetupResult> => {
     },
     databaseType: getEnvVar('DATABASE_TYPE') as DatabaseType,
     useMigrations: false,
-    {{/is_database_enabled}}needsRedis: {{#is_cache_enabled}}true{{/is_cache_enabled}}{{^is_cache_enabled}}false{{/is_cache_enabled}},
+    {{/is_database_enabled}}needsRedis: {{#is_cache_enabled}}true{{/is_cache_enabled}}{{^is_cache_enabled}}{{#is_request_cache_needed}}true{{/is_request_cache_needed}}{{^is_request_cache_needed}}false{{/is_request_cache_needed}}{{/is_cache_enabled}},
     {{#is_kafka_enabled}}needsKafka: true,
     {{/is_kafka_enabled}}{{#is_s3_enabled}}needsS3: true,
     s3Bucket: 'test-bucket',
@@ -44,7 +44,9 @@ export const setupTestDatabase = async (): Promise<TestSetupResult> => {
       OTEL_SERVICE_NAME: 'test-worker',
       OTEL_LEVEL: 'info',
       OTEL_EXPORTER_OTLP_ENDPOINT: 'http://localhost:4318',
-      QUEUE_NAME: 'test-queue'
+      QUEUE_NAME: 'test-queue'{{#is_iam_configured}},
+      IAM_URL: 'http://localhost:8000'{{/is_iam_configured}}{{#is_billing_configured}},
+      BILLING_URL: 'http://localhost:8001'{{/is_billing_configured}}
     }
   });
 

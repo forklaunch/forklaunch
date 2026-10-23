@@ -1,0 +1,55 @@
+name: Rust Security Audit
+
+# RustSec advisories for the CLI, framework and blueprint lockfiles, with the
+# narrowly reviewed exceptions in scripts/rust_security_audit.py. Formerly the
+# security-audit job of the parity workflow.
+on:
+  pull_request:
+    paths:
+      - 'cli/Cargo.toml'
+      - 'framework-rs/**/Cargo.toml'
+      - 'framework-rs/Cargo.lock'
+      - 'blueprint-rs/**/Cargo.toml'
+      - 'blueprint-rs/Cargo.lock'
+      - 'scripts/rust_security_audit*.py'
+      - 'cli/tests/fixtures/rust_security_advisories.json'
+      - 'scripts/*rust_ecs_smoke_plan.py'
+      - '.github/workflows/rust_security.yml'
+      - '.github/actions/rust-build-cache/**'
+  push:
+    branches: [main]
+  # New advisories appear without any change here.
+  schedule:
+    - cron: '41 6 * * *'
+  workflow_dispatch:
+
+# actions: read lets the compiler-cache step find earlier runs' store.
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  security-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Rust build cache
+        uses: ./.github/actions/rust-build-cache
+        with:
+          family: cli
+          registry-cache: save
+          registry-key: security-audit
+          workspaces: cli
+      - run: cargo install cargo-audit --version 0.22.2 --locked
+      - run: cargo generate-lockfile --manifest-path cli/Cargo.toml
+      - run: python3 -m unittest discover -s scripts -p test_rust_ecs_smoke_plan.py -v
+      - run: python3 scripts/rust_security_audit_test.py
+      - run: python3 scripts/rust_security_audit.py
+        env:
+          FORKLAUNCH_SECURITY_REPORT: ${{ runner.temp }}/rust-security-review.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rust-security-review
+          path: ${{ runner.temp }}/rust-security-review.json

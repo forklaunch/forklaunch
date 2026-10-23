@@ -10,7 +10,7 @@ fi
 mkdir -p output/init-worker-workspace
 cd output/init-worker-workspace
 
-RUST_BACKTRACE=1 $FL init application workspace-test-app -p workspace-test-app -o src/modules -d postgresql -f prettier -l eslint -v zod -F express -r node -t vitest -D "Workspace integrity test application" -A "Forklaunch Team" -L 'MIT'
+RUST_BACKTRACE=1 $FL init application workspace-test-app -p workspace-test-app -o src/modules -d postgresql -f prettier -l oxlint -v zod -F express -r node -t vitest -D "Workspace integrity test application" -A "Forklaunch Team" -L 'MIT'
 
 WORKSPACE_YAML="workspace-test-app/src/modules/pnpm-workspace.yaml"
 

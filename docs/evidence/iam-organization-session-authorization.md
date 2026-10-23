@@ -26,7 +26,7 @@ Repository-only regressions execute the actual TypeScript scaffold code through
 an installed esbuild transformer and bounded in-memory ORM/SDK fakes:
 
 ```
-node cli/tests/iam_authorization_scope.cjs /absolute/path/esbuild/lib/main.js
+node cli/tests/fixtures/iam_authorization_scope.cjs /absolute/path/esbuild/lib/main.js
 ```
 
 Eleven cases cover concurrent organizations, user/session mismatches, expiry,

@@ -54,6 +54,7 @@ mod context;
 mod delete;
 mod depcheck;
 mod deploy;
+mod dev;
 mod dlq;
 mod drift;
 mod eject;
@@ -98,6 +99,7 @@ fn main() -> Result<()> {
     let delete = DeleteCommand::new();
     let depcheck = DepcheckCommand::new();
     let deploy = DeployCommand::new();
+    let dev = dev::DevCommand;
     let dlq = DlqCommand::new();
     let drift = DriftCommand::new();
     let eject = EjectCommand::new();
@@ -150,6 +152,7 @@ fn main() -> Result<()> {
         .subcommand(config.command())
         .subcommand(context.command())
         .subcommand(deploy.command())
+        .subcommand(dev.command())
         .subcommand(dlq.command())
         .subcommand(drift.command())
         .subcommand(environment.command())
@@ -194,6 +197,7 @@ fn main() -> Result<()> {
         Some(("delete", sub_matches)) => delete.handler(sub_matches),
         Some(("depcheck", sub_matches)) => depcheck.handler(sub_matches),
         Some(("deploy", sub_matches)) => deploy.handler(sub_matches),
+        Some(("dev", sub_matches)) => dev.handler(sub_matches),
         Some(("dlq", sub_matches)) => dlq.handler(sub_matches),
         Some(("drift", sub_matches)) => drift.handler(sub_matches),
         Some(("eject", sub_matches)) => eject.handler(sub_matches),

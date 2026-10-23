@@ -1,0 +1,38 @@
+[package]
+description = "ForkLaunch Rust ws APIs and runtime support"
+name = "forklaunch-ws"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[features]
+typed-schema = ["forklaunch-core/typed-schema"]
+zod-regex = ["forklaunch-core/zod-regex"]
+zod-checks = ["forklaunch-core/zod-checks"]
+default = []
+zod-uri = ["forklaunch-core/zod-uri"]
+json-schema = ["forklaunch-core/schema-validation"]
+transport = ["dep:tokio", "dep:tokio-tungstenite", "dep:futures-util"]
+validation = ["forklaunch-core/ws-validation"]
+
+[dependencies]
+serde_json = { version = "=1.0.151", features = ["raw_value"] }
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["net", "time"], optional = true }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"], optional = true }
+futures-util = { version = "0.3", features = ["sink"], optional = true }
+forklaunch-core = { version = "0.2.5", path = "../core", features = ["ws"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "io-util"] }
+garde = { version = "0.23", features = ["derive"] }
+schemars = "1.2"
+
+[[example]]
+name = "websocket_runtime"
+required-features = ["transport"]
+
+[lints]
+workspace = true
