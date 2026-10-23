@@ -48,7 +48,7 @@ jobs:
       - run: python3 scripts/rust_security_audit.py
         env:
           FORKLAUNCH_SECURITY_REPORT: ${{ runner.temp }}/rust-security-review.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: rust-security-review
