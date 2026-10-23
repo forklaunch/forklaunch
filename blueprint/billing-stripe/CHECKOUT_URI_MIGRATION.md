@@ -25,4 +25,4 @@ A rollback to the old required-URI schema needs an explicit decision for every e
 
 ## Repository verification
 
-`cli/tests/rust_billing_checkout_uri.mjs` exercises actual Zod and TypeBox schemas and configured mapper/service JSON-cache lifecycles. With `FORKLAUNCH_TEST_POSTGRES_URL` and `FORKLAUNCH_TEST_ORM_DEPENDENCIES`, it also tests the actual entity through MikroORM using an isolated restricted PostgreSQL role, including the old `NOT NULL` rejection and the reviewed constraint removal. It never calls a live payment provider.
+`framework-rs/parity/rust_billing_checkout_uri.mjs` exercises actual Zod and TypeBox schemas and configured mapper/service JSON-cache lifecycles. With `FORKLAUNCH_TEST_POSTGRES_URL` and `FORKLAUNCH_TEST_ORM_DEPENDENCIES`, it also tests the actual entity through MikroORM using an isolated restricted PostgreSQL role, including the old `NOT NULL` rejection and the reviewed constraint removal. It never calls a live payment provider.

@@ -2,9 +2,6 @@
 # scripts share one compile instead of each re-checking a release build.
 FL="${FORKLAUNCH_CLI:-cargo run --release}"
 set -e
-# Golden apps: the canonical application this script starts from is scaffolded,
-# installed and built once (fixtures/golden.py); see "Golden apps" in README.md.
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fixtures/golden.sh"
 
 if [ -d "output/init-service" ]; then
     rm -rf output/init-service
@@ -13,7 +10,7 @@ fi
 mkdir -p output/init-service
 cd output/init-service
 
-golden_app ts-node service-test-node-application
+RUST_BACKTRACE=1 $FL init application service-test-node-application -p service-test-node-application -o src/modules -d postgresql -f prettier -l oxlint -v zod -F express -r node -t vitest -m billing-base -m iam-base -D "Test service" -A "Rohin Bhargava" -L 'AGPL-3.0'
 RUST_BACKTRACE=1 $FL init service svc-test -d postgresql -p service-test-node-application/src/modules -D "Test service"
 RUST_BACKTRACE=1 $FL init service svc-test-mongodb -d mongodb -p service-test-node-application/src/modules -D "Test service"
 
@@ -27,7 +24,7 @@ pnpm build
 
 cd ../../..
 
-golden_app ts-bun service-test-bun-application
+RUST_BACKTRACE=1 $FL init application service-test-bun-application -p service-test-bun-application -o src/modules -d postgresql -f biome -l oxlint -v zod -F express -r bun -t vitest -m billing-base -m iam-base -D "Test service" -A "Rohin Bhargava" -L "MIT"
 RUST_BACKTRACE=1 $FL init service svc-test -d postgresql -p service-test-bun-application/src/modules -D "Test service"
 RUST_BACKTRACE=1 $FL init service svc-test-mongodb -d mongodb -p service-test-bun-application/src/modules -D "Test service"
 

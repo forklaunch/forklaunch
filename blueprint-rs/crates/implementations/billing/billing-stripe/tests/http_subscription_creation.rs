@@ -557,7 +557,7 @@ async fn sdks(f: &Harness, base: &str) {
     std::fs::write(&ts_path, ts).unwrap();
     std::fs::write(&rs_path, rs).unwrap();
     let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../../../cli/tests/rust_billing_bound_subscription_creation_route_sdks.mjs");
+        .join("../../../../../framework-rs/parity/rust_billing_bound_subscription_creation_route_sdks.mjs");
     let base = base.to_owned();
     let customer = f.customer.to_string();
     let plan = f.plan.to_string();

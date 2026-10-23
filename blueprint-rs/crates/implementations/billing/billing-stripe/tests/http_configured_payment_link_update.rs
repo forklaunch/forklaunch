@@ -371,7 +371,7 @@ async fn matrix(f: &Fixture) {
     let file = std::env::temp_dir().join(format!("fl-link-coercion-sdk-{}.ts", Uuid::new_v4()));
     std::fs::write(&file, sdk).unwrap();
     let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../../../cli/tests/rust_billing_payment_link_coercion_sdk.mjs");
+        .join("../../../../../framework-rs/parity/rust_billing_payment_link_coercion_sdk.mjs");
     let sdk_url = url.clone();
     let sdk_id = id.clone();
     let result = tokio::task::spawn_blocking(move || {

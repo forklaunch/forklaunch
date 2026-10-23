@@ -11,8 +11,6 @@ import sys
 import tempfile
 import tomllib
 
-import golden
-
 repo = Path(__file__).resolve().parents[3]
 binary = Path(os.environ.get('FORKLAUNCH_CLI', repo / 'cli/target/debug/forklaunch')).resolve()
 socket = os.environ.get('FORKLAUNCH_TEST_SOCKET_WORKSPACE') == '1'
@@ -22,8 +20,7 @@ output.mkdir(parents=True, exist_ok=True)
 root = Path(tempfile.mkdtemp(prefix='run.', dir=output)).resolve()
 env = {**os.environ, 'FORKLAUNCH_SKIP_FORMAT': '1', 'FORKLAUNCH_ACCOUNT': 'parity-offline-sdk-workspace',
        'CARGO_INCREMENTAL': '0', 'RUSTUP_TOOLCHAIN': 'stable'}
-# Default to the target the golden apps compiled their dependencies into.
-env.setdefault('CARGO_TARGET_DIR', golden.target())
+env.setdefault('CARGO_TARGET_DIR', str(repo / 'cli/target'))
 if not env.get('FORKLAUNCH_WORKER_RUNTIME_LOCKED'):
     shutil.rmtree(root)
     sys.exit(subprocess.run([sys.executable, str(repo / 'cli/tests/fixtures/worker_runtime_lock.py'),
@@ -40,16 +37,12 @@ for runtime in os.environ.get('FORKLAUNCH_TEST_WORKSPACE_RUNTIMES', 'node,bun').
     sdk_source = 'src' if modules == 'modules' else '.'
     def cli(*args):
         subprocess.run([str(binary), *args, '--path', str(app)], cwd=root, env=env, check=True, timeout=180)
-    if runtime == 'node':
-        # The golden 'mixed' app is exactly this scaffold (fixtures/golden.py).
-        golden.app('mixed', app, built=False)
-    else:
-        cli('init', 'application', runtime + '-workspace', '--modules-path', modules,
-            '--database', 'postgresql', '--validator', 'zod', '--formatter', 'prettier', '--linter', 'oxlint',
-            '--http-framework', 'express', '--runtime', runtime, '--test-framework', 'vitest',
-            '-D', 'SDK workspace fixture', '-A', 'ForkLaunch', '-L', 'MIT')
-        cli('init', 'service', 'legacy-api', '--language', 'typescript', '-d', 'postgresql', '-D', 'Legacy API')
-        cli('init', 'service', 'native-api', '--language', 'rust', '-D', 'Native API')
+    cli('init', 'application', runtime + '-workspace', '--modules-path', modules,
+        '--database', 'postgresql', '--validator', 'zod', '--formatter', 'prettier', '--linter', 'oxlint',
+        '--http-framework', 'express', '--runtime', runtime, '--test-framework', 'vitest',
+        '-D', 'SDK workspace fixture', '-A', 'ForkLaunch', '-L', 'MIT')
+    cli('init', 'service', 'legacy-api', '--language', 'typescript', '-d', 'postgresql', '-D', 'Legacy API')
+    cli('init', 'service', 'native-api', '--language', 'rust', '-D', 'Native API')
     # Ordinary compilation supplies the current service-local HTTP contract and
     # both clients. The socket fixture below is authored compiler input; wire
     # behavior is covered by the separate WebSocket runtime suites.

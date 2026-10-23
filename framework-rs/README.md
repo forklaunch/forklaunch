@@ -340,7 +340,7 @@ The bounded `typescript_coerce::zod_json` evaluator supports typed JSON scalar
 rules, strict typed literals, optional/nullable values, static defaults, ordered unions, arrays and ordered object fields
 with unknown-field stripping. Map `ZodJsonOutcome::Invalid` to validation failure
 and evaluator errors to operational failure. The [live composition example](crates/axum/examples/json_composition_runtime.rs)
-shows this mapping with `ParsedJsonBody`; its [runtime fixture](../cli/tests/rust_json_composition_runtime.mjs)
+shows this mapping with `ParsedJsonBody`; its [runtime fixture](../framework-rs/parity/rust_json_composition_runtime.mjs)
 checks HTTP, registered MCP forwarding and both generated SDKs. Define supported
 schemas explicitly; this API does not load arbitrary Zod callbacks or interpret
 OpenAPI schemas. Input/schema/evaluation budgets are enforced before projection. For request
@@ -699,7 +699,7 @@ wrap the result with TanStack's `queryOptions` when you need its tagged-key type
 inference for `getQueryData`. Streaming iterators should be consumed explicitly
 rather than cached as reusable results.
 
-The fixture `cli/tests/rust_tanstack_query_parity.mjs` checks actual Query Core and
+The fixture `framework-rs/parity/rust_tanstack_query_parity.mjs` checks actual Query Core and
 React Query **5.104.2** types, cache reuse/invalidation and scope separation,
 HTTP failures and retries, mutations, network failures, and both sources of
 cancellation against generated fetch clients. It follows the upstream
@@ -762,7 +762,7 @@ earlier total-body limit retains its existing framework validation response.
 Unlike Busboy's permissive text decoder, this extractor rejects invalid UTF-8;
 it does not implement legacy charset conversion. It preserves file bytes,
 including empty files, and does not JSON-parse text fields implicitly.
-`cli/tests/rust_multipart_extract_parity.mjs` compares seven cases against the
+`framework-rs/parity/rust_multipart_extract_parity.mjs` compares seven cases against the
 actual TypeScript discriminator/content-parser source with Busboy, including
 repeated fields/files, Unicode, binary/empty files and filename-less octet streams.
 Multipart SDK response decoding is described below; broader MCP conformance
@@ -850,7 +850,7 @@ contract names and schema annotations retain their original values.
 `rust_component_names_runtime.sh` exercises these names with both artifact
 imports, both live SDKs, native generators and HTTP/MCP startup.
 
-`cli/tests/rust_mcp_transport_parity.mjs` runs 32 calls through the real pinned
+`framework-rs/parity/rust_mcp_transport_parity.mjs` runs 32 calls through the real pinned
 FastMCP server, repository Zod validator/generator and official MCP client, then
 compares live HTTP body bytes with the native MCP encoder. Set
 `FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES` to the installed canonical-iam fixture
@@ -900,7 +900,7 @@ unions are translated to 2020-12 after resolving original resource identities.
 Draft 4 exclusive bounds and legacy tuple/tail rules retain their validation
 meaning; inactive keywords remain annotations. Unreachable definitions do not
 force translation, and unsupported reachable dialects fail explicitly.
-`cli/tests/rust_schema_mixed_parity.mjs` compares original/translated native
+`framework-rs/parity/rust_schema_mixed_parity.mjs` compares original/translated native
 validation with independent AJV engines. Its receipt records AJV's existing
 `contains`/`unevaluatedItems` discrepancy separately from resource conversion.
 Run
@@ -968,7 +968,7 @@ through normal HTTP selection and authentication. Calling an earlier tool with
 an overlapping request can therefore select a later HTTP version, matching the
 TypeScript implementation.
 
-`cli/tests/rust_versioned_api_parity.mjs` executes the actual TypeScript parser
+`framework-rs/parity/rust_versioned_api_parity.mjs` executes the actual TypeScript parser
 and compares its selections with Rust. The standard OpenAPI document shows the last declared version and retains every
 request/response in `x-forklaunch-version-contracts`. Use
 `generate_versioned_openapi_json` for a named document collection with unversioned
@@ -1238,7 +1238,7 @@ The optional `zod-uri` feature on validation (or its Axum feature forwarder) add
 Ada 3.2.4 and retains the original input string. Enable it for explicit Zod URL
 checks; it does not redefine RFC JSON Schema `format: uri`. The pinned Ada dependency
 requires a C++20 compiler; default builds exclude it. The
-[URI differential fixture](../cli/tests/rust_zod_uri_parity.mjs) checks 205,676
+[URI differential fixture](../framework-rs/parity/rust_zod_uri_parity.mjs) checks 205,676
 inputs plus ordered errors and composition against the actual TypeScript factory,
 with pinned source hashes.
 
@@ -1256,14 +1256,14 @@ other values fail. Watch/sync inherit the selection. Generated Rust socket crate
 expose their own `zod-uri` feature, which consumers must enable. C++20 is required.
 This profile targets Node24.2/Ada3.2.4; other JS engines or parser versions may
 admit different Unicode hostnames. HTTP SDK clients retain their existing typed
-transport behavior. The [schema fixture](../cli/tests/rust_zod_uri_openapi.mjs)
+transport behavior. The [schema fixture](../framework-rs/parity/rust_zod_uri_openapi.mjs)
 checks 203,261 native/AJV admissions; the
-[SDK fixture](../cli/tests/rust_zod_uri_sdk.mjs) checks both socket clients.
+[SDK fixture](../framework-rs/parity/rust_zod_uri_sdk.mjs) checks both socket clients.
 
 TypeScript OpenAPI export preserves the strongest finite numeric min/max bound,
 including exclusive ties, and the conjunction of exact/min/max array lengths.
 Explicit `.openapi` overrides remain authoritative. The
-[bounds fixture](../cli/tests/rust_zod_bounds_openapi.mjs) compares 153,972 runtime
+[bounds fixture](../framework-rs/parity/rust_zod_bounds_openapi.mjs) compares 153,972 runtime
 and schema admissions for OpenAPI 3.0 and 3.1. Nonfinite registrations, multipleOf,
 UTF-16 string length and tuple schema semantics remain separate boundaries.
 
@@ -1271,13 +1271,13 @@ Ordinary Zod union exports use `anyOf`, preserving overlapping alternatives.
 Finite homogeneous literal enums deduplicate values; mixed enums retain alternative
 types and empty unions export an always-false schema. Explicit composition annotations
 and discriminated unions retain existing behavior. The
-[union fixture](../cli/tests/rust_zod_union_openapi.mjs) checks 10,674 cases.
+[union fixture](../framework-rs/parity/rust_zod_union_openapi.mjs) checks 10,674 cases.
 Nonfinite enum and OAS3.0 nullable-union emission remain separate gaps;
 empty-union validation does not imply a generated precise `never` type.
 
 Zod Never exports an always-false schema, including required object fields.
 Optional Never properties may be omitted but reject every supplied JSON value.
-The [Never fixture](../cli/tests/rust_zod_never_openapi.mjs) checks both OpenAPI
+The [Never fixture](../framework-rs/parity/rust_zod_never_openapi.mjs) checks both OpenAPI
 versions. Generated exact static `never`/uninhabited types remain separate.
 
 Finite structural string-key records preserve key restrictions: OAS3.1 uses
@@ -1286,14 +1286,14 @@ rejected. Safe schema merging preserves own reserved property names without
 prototype mutation. UniversalSdk's owned AJV engines validate own properties;
 injected engines retain caller options. OAS3.0 AJV still filters `__proto__` schema
 properties, an explicit consumer limitation. Transform/regex/UTF-16 key grammars
-remain separate. See the [record fixture](../cli/tests/rust_zod_record_openapi.mjs).
+remain separate. See the [record fixture](../framework-rs/parity/rust_zod_record_openapi.mjs).
 
 `ZodJsonSchema::Tuple { items, rest }` validates ordered dense JSON arrays.
 Every declared slot counts toward minimum length, including optional/default
 schemas. Short arrays abort before child evaluation; surplus values without rest
 produce a length error followed by declared child errors. Rest validates trailing
 values under shared depth/work/output budgets. Sparse/undefined JS elements remain
-outside this JSON profile. The [tuple oracle](../cli/tests/rust_zod_tuple_json_parity.mjs)
+outside this JSON profile. The [tuple oracle](../framework-rs/parity/rust_zod_tuple_json_parity.mjs)
 checks 19,050 cases in each serde mode; the live composition fixture covers HTTP,
 MCP and both SDK transports. This does not add positional schema emission or
 precise generated tuple models; those require coordinated dialect/SDK changes.

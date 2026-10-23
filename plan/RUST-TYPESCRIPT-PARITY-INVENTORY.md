@@ -1734,7 +1734,7 @@ The existing TypeScript SDK suite passes 12,960 native and actual TypeScript/AJV
 codec comparisons and its authorization, cancellation, queue, control/close and
 malformed-peer checks. All 77 selected native tests, strict all-target/all-feature
 Clippy, rebuilt CLI and all 770 package entries pass. CI includes
-`cli/tests/rust_ws_binary_runtime.mjs`. Logs are
+`framework-rs/parity/rust_ws_binary_runtime.mjs`. Logs are
 `/private/tmp/fl-binary-socket-{runtime,json-regression,tests-final,clippy-final,package}.log`.
 
 Checklist: **621/682 (91.1%), 61 open**. External binary AsyncAPI imports remain
@@ -2012,7 +2012,7 @@ The live comparison resolves local schema references and normalizes schema
 annotations, set ordering and disjoint primitive unions. Operation sets,
 parameters, security requirements and successful response schemas match.
 Ten remaining error-response entries are pinned separately in
-`cli/tests/fixtures/canonical-iam/openapi-differences.json`; the comparison cannot
+`framework-rs/parity/fixtures/canonical-iam/openapi-differences.json`; the comparison cannot
 silently discard them or accept new differences. The fixture's optional nullable
 DTO fields and integer query limit now match the native sample's published types.
 Snapshot creation and a separate ordinary verification run pass alongside all
@@ -9477,7 +9477,7 @@ Custom application routes are preserved. Actual rendered base/Stripe library
 compilation/export passes legacy and opt-in contract+OpenAPI metadata, unchanged
 responses and invalid-profile zero-output checks. Temporary source tree removed.
 Proof /private/tmp/fl-billing-date-artifacts.log; permanent fixture
-cli/tests/rust_billing_date_artifacts.mjs added to CI. No new live SDK claim beyond
+framework-rs/parity/rust_billing_date_artifacts.mjs added to CI. No new live SDK claim beyond
 the preceding runtime-registry receipt; checklist remains660/682.
 
 
@@ -12778,7 +12778,7 @@ Metadata reference follow-up: five additional actual invitation-acceptance cases
 
 ### 2026-10-15 — Legacy/local date grammar reference audit
 
-The remaining HMAC date gap extends beyond the two previously identified strings. Permanent source-only oracle `cli/tests/fixtures/rust_v8_date_grammar_reference.mjs` observes 400 date strings across UTC, America/Los_Angeles, America/New_York and Asia/Kathmandu: 1,600 observations using Node24.2.0/V8 13.6.233.10-node.17/ICU77.1. Valid counts are 340/339/339/340; 136 inputs vary by timezone. Explicit Los Angeles DST controls assert gap advancement and the earlier instant during a fold. This is reference evidence only; the existing timezone-independent native ISO profile is unchanged.
+The remaining HMAC date gap extends beyond the two previously identified strings. Permanent source-only oracle `framework-rs/parity/fixtures/rust_v8_date_grammar_reference.mjs` observes 400 date strings across UTC, America/Los_Angeles, America/New_York and Asia/Kathmandu: 1,600 observations using Node24.2.0/V8 13.6.233.10-node.17/ICU77.1. Valid counts are 340/339/339/340; 136 inputs vary by timezone. Explicit Los Angeles DST controls assert gap advancement and the earlier instant during a fold. This is reference evidence only; the existing timezone-independent native ISO profile is unchanged.
 
 Pinned upstream parser and date-conversion sources were downloaded from [Node v24.2.0's V8 source](https://github.com/nodejs/node/tree/v24.2.0/deps/v8/src/date) with source URLs/hashes in `/private/tmp/fl-v8-date-parser-source/manifest.json` and BSD license retained alongside them. ISO parsing can continue into a stateful legacy parser, and local civil times require timezone conversion before TimeClip. An implementation must preserve those distinctions, named-month/timezone forms, partial-parser state, and DST behavior; adding only slash dates or assuming UTC would not close this gap. Actual oracle/log/output: `/private/tmp/fl-v8-date-grammar-audit.{mjs,log,json}`, direct exit0. No native date conformance or checklist completion is claimed.
 
@@ -12812,7 +12812,7 @@ Immutable1209c948e package/install and source-byte checks pass with3,111 archive
 
 ### 2026-10-15 — Multipart charset and stream-order audit
 
-New actual-source oracle `cli/tests/fixtures/rust_multipart_text_reference.mjs` passes49 observations through the installed Busboy and repository content-parser middleware. Default/UTF-8 fields replace malformed byte sequences; Latin1, ASCII and the parser's Windows-1252 aliases preserve byte values as U+0000–U+00FF. UTF-16LE ignores an unmatched final byte, and base64 yields encoded text. In this pinned implementation, nonempty fields using other decoder names produce an own property with undefined value; empty fields produce an empty string. Native typed and versioned multipart parsers currently require strict UTF-8 and do not reproduce these charset semantics. This is an open measured request-media gap, not native conformance.
+New actual-source oracle `framework-rs/parity/fixtures/rust_multipart_text_reference.mjs` passes49 observations through the installed Busboy and repository content-parser middleware. Default/UTF-8 fields replace malformed byte sequences; Latin1, ASCII and the parser's Windows-1252 aliases preserve byte values as U+0000–U+00FF. UTF-16LE ignores an unmatched final byte, and base64 yields encoded text. In this pinned implementation, nonempty fields using other decoder names produce an own property with undefined value; empty fields produce an empty string. Native typed and versioned multipart parsers currently require strict UTF-8 and do not reproduce these charset semantics. This is an open measured request-media gap, not native conformance.
 
 Mixed file/text collisions are also stream-schedule dependent upstream: a file followed by text returns the file when the entire body is one chunk, but the text when bytes arrive on separate event-loop turns. Text followed by file returns the file in both controls. Therefore a buffered last-part rule cannot truthfully claim complete collision parity. Oracle preserves key presence separately from undefined values and tests both schedules. Scratch observations `/private/tmp/fl-multipart-text-audit.{mjs,json,log}`; direct exit0. Next implementation is an explicit shared text-decoding profile for typed and versioned extraction, preserving the native default and recording JSON/undefined and lone-surrogate boundaries. Multipart stream scheduling remains separately open.
 
@@ -12836,13 +12836,13 @@ Frozen41-source manifest `/private/tmp/fl-org-features-freeze.json`, SHA256 `f4f
 
 `BusboyTextOptions` now wires the previously tested decoder into both bounded typed Axum extraction and versioned buffered parsing. Strict UTF-8 remains the default; trusted opt-in supports malformed UTF-8 replacement, BOM preservation, Latin-1 aliases, UTF-16LE and base64 text, including configured default charsets. Byte limits precede decoding; file bytes remain unchanged. Unsupported decoders normalize upstream own-undefined to absent JSON fields; isolated UTF-16 surrogates return an explicit safe representation error. Mixed file/text collisions remain upstream chunk-scheduling-dependent and are not certified by this profile. Registry registration binds the complete request/options/auth snapshot and resets prepared-selection identity when options change.
 
-Permanent runner `cli/tests/rust_multipart_text_parity.mjs`: **45 actual parser cases pass in each native parser**, including typed binary preservation and schema rejection; four focused native tests also cover defaults, bounds, surrogate boundaries, registry extension/staleness/duplicates and version cache identity. Strict HTTP/Axum all-features/all-targets passes11.37s; final session36901 exits0. The existing prototype's458,592 direct decoder equivalences and2,050 explicit unpaired-surrogate boundaries remain separate evidence. Three initial new-test selection API/return-shape errors were corrected without changing parser semantics; logs are retained alongside final `/private/tmp/fl-multipart-native-{parity,clippy}.log`. Source/log hash manifest `/private/tmp/fl-multipart-native-freeze.json`.
+Permanent runner `framework-rs/parity/rust_multipart_text_parity.mjs`: **45 actual parser cases pass in each native parser**, including typed binary preservation and schema rejection; four focused native tests also cover defaults, bounds, surrogate boundaries, registry extension/staleness/duplicates and version cache identity. Strict HTTP/Axum all-features/all-targets passes11.37s; final session36901 exits0. The existing prototype's458,592 direct decoder equivalences and2,050 explicit unpaired-surrogate boundaries remain separate evidence. Three initial new-test selection API/return-shape errors were corrected without changing parser semantics; logs are retained alongside final `/private/tmp/fl-multipart-native-{parity,clippy}.log`. Source/log hash manifest `/private/tmp/fl-multipart-native-freeze.json`.
 
 CI runs the permanent multipart runner and organization feature reference fixture. Workflow YAML, public inventory (44/625/1710 using pinned TS5.9.3) and16 symbol evidence pointers pass. An initial inventory invocation used the local incompatible TypeScript API; the pinned rerun passed without source changes. Generated HTTP/MCP package proof remains the earlier immutable1209 archive, which excludes these new multipart options. Broader content-type/streaming and versioning gates remain open; checklist stays **660/682 (96.8%),22 open**.
 
 ### 2026-10-15 — multipart limit semantics audited against actual middleware
 
-Permanent `cli/tests/fixtures/rust_multipart_limits_reference.mjs` passes **100 actual-source observations**: whole-buffer versus byte-per-event-loop-turn input; fields/files/parts limits including zero, negative, fractional count, NaN and infinities; integer field/file byte truncation including split UTF-8; and default1MiB field truncation versus explicit infinity. Upstream field/file count limits use strict equality; part admission uses greater-than-or-equal, so fractional and negative count settings differ by limit family. Integer byte limits truncate rather than return the native resource-limit413. The actual middleware ignores Busboy limit notifications. Native safety limits and the integrated text decoder do not yet implement these parser options; the content-type gate remains open.
+Permanent `framework-rs/parity/fixtures/rust_multipart_limits_reference.mjs` passes **100 actual-source observations**: whole-buffer versus byte-per-event-loop-turn input; fields/files/parts limits including zero, negative, fractional count, NaN and infinities; integer field/file byte truncation including split UTF-8; and default1MiB field truncation versus explicit infinity. Upstream field/file count limits use strict equality; part admission uses greater-than-or-equal, so fractional and negative count settings differ by limit family. Integer byte limits truncate rather than return the native resource-limit413. The actual middleware ignores Busboy limit notifications. Native safety limits and the integrated text decoder do not yet implement these parser options; the content-type gate remains open.
 
 An initial isolated fractional **byte**-limit audit failed with uncaught upstream `ERR_OUT_OF_RANGE` from `Buffer.concat` (length1.5) under fragmented input; log `/private/tmp/fl-multipart-limits-audit.log` is retained. This is distinct from admitted fractional count limits and is not silently modeled as truncation. The passing permanent fixture covers the stated integer-byte/count scope, is in CI, and does not claim native conformance. Final log `/private/tmp/fl-multipart-limits-reference.log`; no production behavior changed in this audit.
 

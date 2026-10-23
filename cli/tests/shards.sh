@@ -5,13 +5,11 @@
 #   bash cli/tests/shards.sh run SHARD [SHARD..]  # run them, report timings
 #   bash cli/tests/shards.sh check                # every CI script is in exactly one shard
 #
-# ts-golden and the Rust shards consume golden apps (see README.md, "Golden apps"):
-# set FORKLAUNCH_GOLDEN_APPS_DIR to an unpacked artifact, or leave it unset to
-# build them locally on demand. The other shards exercise a command on purpose
-# and scaffold their own small apps.
+# Every script scaffolds the applications it tests. The Rust shards start
+# from a shared, pre-built dependency target when CI provides one
+# (fixtures/rust_dependency_target.sh).
 #
-# .sh scripts run from cli/tests and .py scripts from the repository root, as
-# the workflows run them. Every script in a shard runs even after a failure;
+# Scripts run from cli/tests. Every script in a shard runs even after a failure;
 # the shard fails if any did. FORKLAUNCH_SHARD_FAIL_FAST=1 stops at the first.
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,15 +17,14 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 shard_scripts() {
   case "$1" in
-    # TypeScript: start from the golden ts-node / ts-bun apps.
-    ts-golden) echo init_compile.sh init_service.sh init_worker.sh init_library.sh init_router.sh depcheck.sh eject.sh ;;
+    # TypeScript: scaffold, install and build applications and their projects.
+    ts-build) echo init_compile.sh init_service.sh init_worker.sh init_library.sh init_router.sh depcheck.sh eject.sh ;;
     # TypeScript command tests: change, delete and sync on small fresh apps.
     ts-change) echo change_application.sh change_library.sh change_router.sh change_router_add_mappers.sh change_sdk_mode.sh change_service.sh change_service_worker_migration.sh change_worker.sh ts_change_round_trips.sh ;;
     ts-delete-sync) echo delete_library.sh delete_router.sh delete_service.sh delete_worker.sh sync_add_remove_flow.sh sync_application_add.sh sync_application_remove.sh sync_library_subcommand.sh sync_service_subcommand.sh sync_worker_subcommand.sh ;;
     ts-init) echo dryrun.sh existing_docker_compose.sh init_application.sh init_application_custom_path.sh init_billing_stripe.sh init_cac.sh init_iam_better_auth.sh init_messaging_twilio.sh init_module.sh init_module_src_path.sh init_relay.sh init_relay_drift.sh init_service_mappers.sh init_worker_mappers.sh init_worker_workspace_and_typecheck.sh ;;
     ts-env-release) echo environment_sync.sh environment_validate.sh precheck_version_match_allows_run.sh precheck_version_mismatch_decline_fails.sh release_non_tty.sh ;;
-    # Rust and mixed scaffolding and code-editing commands. The Rust jobs start
-    # from the golden apps' shared Cargo target.
+    # Rust and mixed scaffolding and code-editing commands.
     rust-commands) echo rust_init_commands.sh init_rust_projects.sh rust_sync_commands.sh rust_delete_commands.sh rust_change_commands.sh rust_conversion_preservation.sh rust_package_sources.sh rust_infrastructure_sources.sh ;;
     rust-sdk) echo rust_sdk_openapi_commands.sh rust_sdk_workspace.sh rust_bootstrap_lifecycle.sh rust_checked_mapper.sh ;;
     rust-mixed) echo rust_mixed_sync.sh rust_typescript_attach.sh rust_mixed_attach.sh rust_mixed_lifecycle.sh ;;
@@ -38,7 +35,7 @@ shard_scripts() {
     *) return 1 ;;
   esac
 }
-SHARDS="ts-golden ts-change ts-delete-sync ts-init ts-env-release rust-commands rust-sdk rust-mixed rust-modules rust-images"
+SHARDS="ts-build ts-change ts-delete-sync ts-init ts-env-release rust-commands rust-sdk rust-mixed rust-modules rust-images"
 
 run_one() {
   local script="$1" started status

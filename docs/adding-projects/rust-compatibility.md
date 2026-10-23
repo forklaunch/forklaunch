@@ -118,7 +118,7 @@ routes and 28 DTO schemas, plus 34 TypeScript/native AsyncAPI WebSocket document
 The tests execute repository TypeScript sources and retain their native comparisons
 before checking the snapshots. JSON normalization sorts object keys only; array
 order, literal values and schema constraints remain visible in review. Run the
-corresponding `cli/tests/rust_billing_contracts_parity.mjs` or
-`cli/tests/rust_ws_metadata_parity.mjs` fixture with its pinned test dependencies.
+corresponding `framework-rs/parity/rust_billing_contracts_parity.mjs` or
+`framework-rs/parity/rust_ws_metadata_parity.mjs` fixture with its pinned test dependencies.
 Set `FORKLAUNCH_UPDATE_SNAPSHOTS=1` only when intentionally updating baselines, then
 review the diff and rerun without the flag. CI refuses snapshot updates.

@@ -872,7 +872,7 @@ Current CLI structure to build on:
 
 ## Phase 14 - Cross-Language Conformance
 
-- [x] Build a canonical contract fixture service in TypeScript. (`cli/tests/fixtures/canonical-iam/service.ts` bundles actual repository Express/core/Zod sources; the live paired runner checks 18 HTTP outcomes and both OpenAPI endpoints, explicitly retaining three rejected-JWT status differences.)
+- [x] Build a canonical contract fixture service in TypeScript. (`framework-rs/parity/fixtures/canonical-iam/service.ts` bundles actual repository Express/core/Zod sources; the live paired runner checks 18 HTTP outcomes and both OpenAPI endpoints, explicitly retaining three rejected-JWT status differences.)
 - [x] Build the same canonical contract fixture service in Rust. (`forklaunch-blueprint-sample-service::iam_router` — runnable, contract-driven, serves OpenAPI)
 - [x] Snapshot OpenAPI outputs and compare normalized output. (`rust_canonical_http_parity.mjs` compares both actual full documents; the selected default-error profile now passes 366 HTTP outcomes with zero normalized OpenAPI differences. Broader runtime error behavior remains in the error-parity gate.)
 - [x] Snapshot AsyncAPI outputs and compare normalized output. (`rust_ws_metadata_parity.mjs` compares 34 actual TypeScript/native WebSocket documents, then checks committed key-normalized snapshots; official schema/parser and payload/reference checks also pass. Broader external AsyncAPI protocols remain separately tracked.)
@@ -1761,7 +1761,7 @@ The existing TypeScript SDK suite passes 12,960 native and actual TypeScript/AJV
 codec comparisons and its authorization, cancellation, queue, control/close and
 malformed-peer checks. All 77 selected native tests, strict all-target/all-feature
 Clippy, rebuilt CLI and all 770 package entries pass. CI includes
-`cli/tests/rust_ws_binary_runtime.mjs`. Logs are
+`framework-rs/parity/rust_ws_binary_runtime.mjs`. Logs are
 `/private/tmp/fl-binary-socket-{runtime,json-regression,tests-final,clippy-final,package}.log`.
 
 Checklist: **621/682 (91.1%), 61 open**. External binary AsyncAPI imports remain
@@ -2039,7 +2039,7 @@ The live comparison resolves local schema references and normalizes schema
 annotations, set ordering and disjoint primitive unions. Operation sets,
 parameters, security requirements and successful response schemas match.
 Ten remaining error-response entries are pinned separately in
-`cli/tests/fixtures/canonical-iam/openapi-differences.json`; the comparison cannot
+`framework-rs/parity/fixtures/canonical-iam/openapi-differences.json`; the comparison cannot
 silently discard them or accept new differences. The fixture's optional nullable
 DTO fields and integer query limit now match the native sample's published types.
 Snapshot creation and a separate ordinary verification run pass alongside all

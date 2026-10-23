@@ -586,7 +586,7 @@ async fn route_sdks(typescript: String, rust: String, base: &str, f: &Fixture) {
     std::fs::write(&ts, typescript).unwrap();
     std::fs::write(&rs, rust).unwrap();
     let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../../../cli/tests/rust_billing_bound_checkout_route_sdks.mjs");
+        .join("../../../../../framework-rs/parity/rust_billing_bound_checkout_route_sdks.mjs");
     let base = base.to_owned();
     let customer = f.customer.to_string();
     let plan = f.plan.to_string();

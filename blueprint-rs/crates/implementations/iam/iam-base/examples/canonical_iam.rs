@@ -1,4 +1,4 @@
-//! Live counterpart of cli/tests/fixtures/canonical-iam/service.ts: the IAM
+//! Live counterpart of framework-rs/parity/fixtures/canonical-iam/service.ts: the IAM
 //! module's user directory contracts served from the in-memory IAM service,
 //! plus framework error/parser/validation probes (`rust_canonical_http_parity`).
 #[path = "support/canonical_defaults.rs"]

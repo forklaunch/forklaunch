@@ -328,7 +328,7 @@ async fn matrix(pool: &PgPool) {
                     std::env::temp_dir().join(format!("fl-dates-sdk-{}.ts", uuid::Uuid::new_v4()));
                 std::fs::write(&file, sdk).unwrap();
                 let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .join("../../../../../cli/tests/rust_billing_request_dates_sdk.mjs");
+                    .join("../../../../../framework-rs/parity/rust_billing_request_dates_sdk.mjs");
                 let output = tokio::task::spawn_blocking(move || {
                     let result = std::process::Command::new("node")
                         .arg(script)

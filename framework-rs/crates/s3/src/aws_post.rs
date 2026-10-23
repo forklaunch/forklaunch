@@ -790,7 +790,7 @@ mod typescript_parity_tests {
     use aws_sdk_s3::{Client, config::Region};
 
     #[tokio::test]
-    #[ignore = "requires actual TypeScript fixtures from cli/tests/rust_s3_post_parity.mjs"]
+    #[ignore = "requires actual TypeScript fixtures from framework-rs/parity/rust_s3_post_parity.mjs"]
     async fn post_policy_matches_actual_typescript() {
         let fixtures: serde_json::Value = serde_json::from_slice(
             &std::fs::read(std::env::var("FORKLAUNCH_TEST_S3_POST_FIXTURES").unwrap()).unwrap(),

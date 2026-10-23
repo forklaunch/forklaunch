@@ -351,7 +351,7 @@ async fn malformed_cached_dto_is_mapper_failure_without_provider_or_store_mutati
 async fn configured_cached_dates_match_actual_source_subset() {
     let cases: Vec<Value> = serde_json::from_str(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../../../../cli/tests/fixtures/rust_billing_cached_dates.json"
+        "/../../../../../framework-rs/parity/fixtures/rust_billing_cached_dates.json"
     )))
     .unwrap();
     let state = Provider::default();

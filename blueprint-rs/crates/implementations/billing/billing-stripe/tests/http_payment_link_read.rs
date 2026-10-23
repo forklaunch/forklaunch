@@ -258,7 +258,7 @@ async fn sdks(base: &str, id: &str) {
     std::fs::write(&ts_path, ts).unwrap();
     std::fs::write(&rs_path, rs).unwrap();
     let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../../../cli/tests/rust_billing_bound_payment_link_read_route_sdks.mjs");
+        .join("../../../../../framework-rs/parity/rust_billing_bound_payment_link_read_route_sdks.mjs");
     let base = base.to_owned();
     let id = id.to_owned();
     let output = tokio::task::spawn_blocking(move || {

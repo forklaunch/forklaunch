@@ -69,8 +69,8 @@ features, but are not independently proof that an upstream operation was absent.
 No automatic alias provisioning from mutable cache/provider fields, financial
 retry, or blanket five-family closure follows from this audit.
 
-Source characterization: `cli/tests/rust_billing_subscription_update_preflight.mjs`
-and `cli/tests/rust_billing_checkout_expiration_source.mjs`.
+Source characterization: `framework-rs/parity/rust_billing_subscription_update_preflight.mjs`
+and `framework-rs/parity/rust_billing_checkout_expiration_source.mjs`.
 Primary provider reference: <https://docs.stripe.com/api/checkout/sessions/expire>.
 
 ## Owner-preflight correction validation
@@ -123,4 +123,4 @@ TS fixture proves corresponding HTTP equivalence. Generic native backend owner
 updates and correlation behavior remain unchanged. Other mapper errors and the
 broader HTTP transport gate remain separate work.
 
-Source fixture: `cli/tests/typescript_billing_subscription_owner_http.mjs`.
+Source fixture: `framework-rs/parity/typescript_billing_subscription_owner_http.mjs`.

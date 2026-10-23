@@ -1,4 +1,4 @@
-//! Sequential local runtime benchmarks; driven by `cli/tests/rust_benchmarks.mjs`.
+//! Sequential local runtime benchmarks; driven by `framework-rs/parity/rust_benchmarks.mjs`.
 use anyhow::{Context, Result, ensure};
 use axum::{Json, extract::ws::WebSocketUpgrade, response::Response};
 use forklaunch_axum::{ForkLaunchRouter, websocket};

@@ -1,20 +1,20 @@
 {
   "_comment": [
-    "E2E suite layout, read by the `changes` job of e2e_tests.yml. The E2E suite proves that CLI scaffolding and code-editing commands produce working projects; framework and module behaviour is tested by cargo test and the TypeScript packages' own suites.",
+    "E2E suite layout, read by the `changes` job of e2e_tests.yml. The E2E suite proves that CLI scaffolding and code-editing commands produce working projects; framework and module behaviour is tested by cargo test and the TypeScript packages' own suites, and TypeScript/Rust parity runs nightly (rust_parity.yml).",
     "tier 'fast' runs on every pull request that needs the suite; tier 'full' runs only on pushes to main, the nightly schedule and a dispatch with full=true.",
-    "Each entry is one job running cli/tests/shards.sh shards. `bundles` lists the golden-app bundles (ts, rust) the job downloads.",
+    "Each entry is one job running cli/tests/shards.sh shards.",
     "Job names are check names; renaming one changes the check."
   ],
   "typescript": [
-    {"tier": "fast", "name": "TS golden and change", "shards": "ts-golden ts-change", "bundles": "ts"},
-    {"tier": "fast", "name": "TS init, delete and sync", "shards": "ts-delete-sync ts-init", "bundles": "ts"},
-    {"tier": "fast", "name": "TS environment and release", "shards": "ts-env-release", "bundles": "ts"}
+    {"tier": "fast", "name": "TS build and change", "shards": "ts-build ts-change"},
+    {"tier": "fast", "name": "TS init, delete and sync", "shards": "ts-delete-sync ts-init"},
+    {"tier": "fast", "name": "TS environment and release", "shards": "ts-env-release"}
   ],
   "rust": [
-    {"tier": "fast", "name": "Rust commands", "shards": "rust-commands", "bundles": "rust"},
-    {"tier": "fast", "name": "Rust SDKs and startup", "shards": "rust-sdk", "bundles": "rust"},
-    {"tier": "fast", "name": "Mixed workspaces", "shards": "rust-mixed", "bundles": "rust"},
-    {"tier": "fast", "name": "Rust modules", "shards": "rust-modules", "bundles": "rust"},
-    {"tier": "full", "name": "Rust images and published crates", "shards": "rust-images", "bundles": "rust"}
+    {"tier": "fast", "name": "Rust commands", "shards": "rust-commands"},
+    {"tier": "fast", "name": "Rust SDKs and startup", "shards": "rust-sdk"},
+    {"tier": "fast", "name": "Mixed workspaces", "shards": "rust-mixed"},
+    {"tier": "fast", "name": "Rust modules", "shards": "rust-modules"},
+    {"tier": "full", "name": "Rust images and published crates", "shards": "rust-images"}
   ]
 }

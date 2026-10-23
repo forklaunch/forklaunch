@@ -1,6 +1,6 @@
 # Rust runtime benchmarks
 
-Run `cli/tests/rust_benchmarks.mjs` from any working directory. It builds the
+Run `framework-rs/parity/rust_benchmarks.mjs` from any working directory. It builds the
 feature-gated `forklaunch-testing` example, starts a loopback service, generates
 and compiles a real TypeScript SDK, checks every response, and writes a JSON
 report. The default build is optimized (`--release`); `--debug` supports quick
@@ -12,7 +12,7 @@ TSC_BIN=/path/to/typescript/bin/tsc \
 FORKLAUNCH_BENCH_ITERATIONS=1000 \
 FORKLAUNCH_BENCH_WARMUP=100 \
 FORKLAUNCH_BENCH_OUTPUT=/tmp/rust-benchmarks.json \
-CARGO_INCREMENTAL=0 node cli/tests/rust_benchmarks.mjs
+CARGO_INCREMENTAL=0 node framework-rs/parity/rust_benchmarks.mjs
 ```
 
 Use TypeScript 5.9.3, matching parity CI. Both sample counts must be positive
@@ -60,7 +60,7 @@ S3_BUCKET=forklaunch-bench \
 S3_ACCESS_KEY_ID=local-test-access \
 S3_SECRET_ACCESS_KEY=local-test-secret \
 FORKLAUNCH_BENCH_OUTPUT=/tmp/rust-benchmarks.json \
-CARGO_INCREMENTAL=0 node cli/tests/rust_benchmarks.mjs --require-infra
+CARGO_INCREMENTAL=0 node framework-rs/parity/rust_benchmarks.mjs --require-infra
 ```
 
 The ordinary S3 environment/default credential chain is supported. Set

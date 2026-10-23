@@ -194,15 +194,15 @@ jobs:
         if: always()
         run: '"$SCCACHE_PATH" --show-stats'
 
-  # Canonical applications scaffolded with this CLI and built once
-  # (cli/tests/README.md, "Golden apps"). The Rust bundle carries the shared
-  # pre-built Cargo target, which is the real saving: a suite's copied or
-  # fresh scaffold then rebuilds only its own crates. Shipped as artifacts,
-  # which do not count against the repository's 10 GB Actions cache.
-  golden-apps:
-    name: Golden apps
+  # The dependency graph of generated Rust applications, built once per run
+  # (with the compiler cache) and shipped as an artifact; every Rust job
+  # starts from it instead of compiling the same crates cold. The tests
+  # still scaffold fresh applications: only the Cargo target is shared.
+  # Artifacts do not count against the repository's 10 GB Actions cache.
+  rust-target:
+    name: Rust dependency target
     needs: [changes, build-cli]
-    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.typescript == 'true'
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     env:
       CARGO_BUILD_JOBS: '2'
@@ -212,8 +212,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       # The runner context is not available in job-level env.
-      - name: Golden apps location
-        run: echo "FORKLAUNCH_GOLDEN_APPS_DIR=$RUNNER_TEMP/golden-apps" >> "$GITHUB_ENV"
+      - name: Dependency target location
+        run: echo "FORKLAUNCH_RUST_TARGET=$RUNNER_TEMP/rust-target" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
       - name: Rust build cache
         uses: ./.github/actions/rust-build-cache
@@ -223,61 +223,20 @@ jobs:
           size: 2G
       - name: Install native build dependencies for generated workers
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev libsasl2-dev
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Install Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.2
-      - name: Install pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 10
-      - name: Configure pnpm store
-        run: |
-          mkdir -p ~/.pnpm-store
-          pnpm config set store-dir ~/.pnpm-store --global
-      - name: Restore pnpm store
-        uses: actions/cache/restore@v6
-        with:
-          path: ~/.pnpm-store
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('cli/src/core/package_json/package_json_constants.rs') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
       - uses: actions/download-artifact@v4
         with:
           name: forklaunch-cli
           path: cli-bin
       - run: chmod +x "$FORKLAUNCH_CLI"
-      - name: Mock platform token
-        run: |
-          mkdir -p ~/.forklaunch
-          cat > ~/.forklaunch/token << 'EOF'
-          access_token = "mock_access_token_for_e2e_tests"
-          refresh_token = "mock_refresh_token_for_e2e_tests"
-          expires_at = 9999999999
-          EOF
-      - name: Build golden apps
-        env:
-          NPM_CONFIG_PREFER_OFFLINE: "true"
-        run: bash cli/tests/golden_apps.sh build
-      - name: Package golden apps
-        run: |
-          bash cli/tests/golden_apps.sh package --out "$RUNNER_TEMP/golden-out" ts rust
-          ls -la "$RUNNER_TEMP/golden-out"
+      - name: Build the dependency target
+        run: bash cli/tests/fixtures/rust_dependency_target.sh build
+      - name: Pack the dependency target
+        run: bash cli/tests/fixtures/rust_dependency_target.sh pack "$RUNNER_TEMP/rust-dependency-target.tar.zst"
       # Already zstd-compressed: no second compression pass.
       - uses: actions/upload-artifact@v4
         with:
-          name: golden-apps-ts
-          path: ${{ runner.temp }}/golden-out/golden-apps-ts.tar.*
-          retention-days: 1
-          compression-level: 0
-          if-no-files-found: error
-      - uses: actions/upload-artifact@v4
-        with:
-          name: golden-apps-rust
-          path: ${{ runner.temp }}/golden-out/golden-apps-rust.tar.*
+          name: rust-dependency-target
+          path: ${{ runner.temp }}/rust-dependency-target.tar.zst
           retention-days: 1
           compression-level: 0
           if-no-files-found: error
@@ -286,12 +245,9 @@ jobs:
         uses: ./.github/actions/rust-build-cache/save
 
   test:
-    needs: [changes, build-cli, golden-apps]
-    if: ${{ !cancelled() && needs.build-cli.result == 'success' && needs.golden-apps.result == 'success' && needs.changes.outputs.typescript == 'true' }}
+    needs: [changes, build-cli]
+    if: needs.changes.outputs.typescript == 'true'
     runs-on: ubuntu-latest
-    env:
-      # Recorded with the golden apps; matching it keeps golden.py quiet.
-      CARGO_PROFILE_DEV_DEBUG: line-tables-only
     strategy:
       fail-fast: false
       matrix:
@@ -301,10 +257,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
-      - name: Golden apps location
-        run: |
-          echo "FORKLAUNCH_GOLDEN_APPS_DIR=$RUNNER_TEMP/golden-apps" >> "$GITHUB_ENV"
-          echo "CARGO_TARGET_DIR=$RUNNER_TEMP/golden-apps/target" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -352,21 +304,6 @@ jobs:
         with:
           name: forklaunch-cli
           path: cli-bin
-      - name: Download TypeScript golden apps
-        if: contains(matrix.bundles, 'ts')
-        uses: actions/download-artifact@v4
-        with:
-          name: golden-apps-ts
-          path: ${{ runner.temp }}/golden-dl
-      - name: Download Rust golden apps
-        if: contains(matrix.bundles, 'rust')
-        uses: actions/download-artifact@v4
-        with:
-          name: golden-apps-rust
-          path: ${{ runner.temp }}/golden-dl
-      - name: Unpack golden apps
-        if: matrix.bundles != ''
-        run: bash cli/tests/golden_apps.sh unpack "$RUNNER_TEMP"/golden-dl/golden-apps-*.tar.*
 
       - name: Create .forklaunch directory
         run: mkdir -p ~/.forklaunch
@@ -410,11 +347,11 @@ jobs:
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('cli/src/core/package_json/package_json_constants.rs') }}
 
   test-rust:
-    needs: [changes, build-cli, golden-apps]
-    if: ${{ !cancelled() && needs.build-cli.result == 'success' && needs.golden-apps.result == 'success' && needs.changes.outputs.rust == 'true' }}
+    needs: [changes, build-cli, rust-target]
+    if: ${{ !cancelled() && needs.build-cli.result == 'success' && needs.changes.outputs.rust == 'true' }}
     runs-on: ubuntu-latest
     env:
-      # Must match the golden-apps job: it is part of each Cargo fingerprint.
+      # Must match the rust-target job: it is part of each Cargo fingerprint.
       CARGO_PROFILE_DEV_DEBUG: line-tables-only
       # Loads .github/actions/rust-build-cache/stable-tmp/preload.cjs once the
       # cache step has set FORKLAUNCH_STABLE_TMP_PRELOAD; a no-op before that.
@@ -433,7 +370,7 @@ jobs:
       - name: Install Rust for generated backend checks
         uses: dtolnay/rust-toolchain@stable
 
-      # Its own store, else the golden-apps job's; stable temporary paths so
+      # Its own store, else the rust-target job's; stable temporary paths so
       # the scaffolds it compiles match next time.
       - name: Rust build cache
         uses: ./.github/actions/rust-build-cache
@@ -447,11 +384,11 @@ jobs:
       - name: Install native build dependencies for generated workers
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev libsasl2-dev
 
-      # The golden Rust bundle carries the shared Cargo target.
-      - name: Golden apps location
+      # The pre-built dependency target; same absolute path as where it was built.
+      - name: Dependency target location
         run: |
-          echo "FORKLAUNCH_GOLDEN_APPS_DIR=$RUNNER_TEMP/golden-apps" >> "$GITHUB_ENV"
-          echo "CARGO_TARGET_DIR=$RUNNER_TEMP/golden-apps/target" >> "$GITHUB_ENV"
+          echo "FORKLAUNCH_RUST_TARGET=$RUNNER_TEMP/rust-target" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_DIR=$RUNNER_TEMP/rust-target" >> "$GITHUB_ENV"
 
       - name: Install TypeScript compiler for SDK checks
         run: npm install --before="$(date -u -d '2 days ago' +%Y-%m-%dT%H:%M:%SZ)" --prefix "$RUNNER_TEMP/fl-rust-ts" --no-save --package-lock=false --ignore-scripts typescript@5.9.3 qs@6.16.0 @types/qs@6.15.1 @types/node@22 @types/ws@8.18.1 ws@8.22.0 ajv@8.20.0 ajv-draft-04@1.0.0 ajv-formats@3.0.1 @asyncapi/parser@3.6.3 stripe@22.6.2 bullmq@6.3.10 ioredis@6.0.0 zod@4.6.5 ts-deepmerge@8.0.0 cross-fetch@4.1.0 better-auth@1.7.6 esbuild@0.28.2
@@ -507,21 +444,17 @@ jobs:
         with:
           name: forklaunch-cli
           path: cli-bin
-      - name: Download TypeScript golden apps
-        if: contains(matrix.bundles, 'ts')
+      # Optional: without it (the target job failed) the suites build cold.
+      - name: Download the dependency target
+        id: target
+        if: needs.rust-target.result == 'success'
         uses: actions/download-artifact@v4
         with:
-          name: golden-apps-ts
-          path: ${{ runner.temp }}/golden-dl
-      - name: Download Rust golden apps
-        if: contains(matrix.bundles, 'rust')
-        uses: actions/download-artifact@v4
-        with:
-          name: golden-apps-rust
-          path: ${{ runner.temp }}/golden-dl
-      - name: Unpack golden apps
-        if: matrix.bundles != ''
-        run: bash cli/tests/golden_apps.sh unpack "$RUNNER_TEMP"/golden-dl/golden-apps-*.tar.*
+          name: rust-dependency-target
+          path: ${{ runner.temp }}/rust-target-dl
+      - name: Unpack the dependency target
+        if: steps.target.outcome == 'success'
+        run: bash cli/tests/fixtures/rust_dependency_target.sh unpack "$RUNNER_TEMP/rust-target-dl/rust-dependency-target.tar.zst"
       # The Rust scripts ran with it in their former native-suite job.
       - name: Skip formatting
         run: echo "FORKLAUNCH_SKIP_FORMAT=1" >> "$GITHUB_ENV"
@@ -576,7 +509,7 @@ jobs:
   # a suite skipped because something it depends on failed fails it.
   e2e-ok:
     name: E2E Tests
-    needs: [changes, build-cli, verify-packaged-cli, golden-apps, test, test-rust]
+    needs: [changes, build-cli, verify-packaged-cli, rust-target, test, test-rust]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -592,7 +525,7 @@ jobs:
               'changes': True,
               'build-cli': outputs.get('rust') == 'true' or outputs.get('typescript') == 'true',
               'verify-packaged-cli': outputs.get('rust') == 'true',
-              'golden-apps': outputs.get('rust') == 'true' or outputs.get('typescript') == 'true',
+              'rust-target': outputs.get('rust') == 'true',
               'test': outputs.get('typescript') == 'true',
               'test-rust': outputs.get('rust') == 'true',
           }

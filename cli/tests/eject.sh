@@ -1,9 +1,6 @@
 # The CLI binary. CI builds it once and exports FORKLAUNCH_CLI so the 43
 # scripts share one compile instead of each re-checking a release build.
 FL="${FORKLAUNCH_CLI:-cargo run --release}"
-# Golden apps: the canonical application this script starts from is scaffolded,
-# installed and built once (fixtures/golden.py); see "Golden apps" in README.md.
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fixtures/golden.sh"
 # KNOWN-ISSUE set-e exemption — this script tolerates in-test failures until
 # #267: ejected iam implementation fails tsgo build (TS2352 mapper casts).
 # Remove this exemption (restore `set -e`) when the issue is fixed.
@@ -15,7 +12,7 @@ fi
 mkdir -p output/eject
 cd output/eject
 
-golden_app ts-node service-test-node-application
+RUST_BACKTRACE=1 $FL init application service-test-node-application -p service-test-node-application -o src/modules -d postgresql -f prettier -l oxlint -v zod -F express -r node -t vitest -m billing-base -m iam-base -D "Test service" -A "Rohin Bhargava" -L 'AGPL-3.0'
 
 cd service-test-node-application/src/modules
 
@@ -33,7 +30,7 @@ pnpm build
 
 cd ../../..
 
-golden_app ts-bun service-test-bun-application
+RUST_BACKTRACE=1 $FL init application service-test-bun-application -p service-test-bun-application -o src/modules -d postgresql -f biome -l oxlint -v zod -F express -r bun -t vitest -m billing-base -m iam-base -D "Test service" -A "Rohin Bhargava" -L "MIT"
 
 cd service-test-bun-application/src/modules
 
