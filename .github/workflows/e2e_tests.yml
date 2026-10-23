@@ -176,7 +176,7 @@ jobs:
       - name: Rust build cache
         uses: ./.github/actions/rust-build-cache
         with:
-          family: generated
+          family: verify-packaged-cli
           fallback-family: cli
           size: 2G
 
@@ -190,46 +190,6 @@ jobs:
       - name: Verify packaged CLI installation and Rust generation
         run: bash cli/tests/rust_packaged_install.sh
 
-      - name: Compiler cache statistics
-        if: always()
-        run: '"$SCCACHE_PATH" --show-stats'
-
-  # Full runs only: scaffolds one application with every Rust component
-  # kind, checks its docker-compose.yaml and builds it, refreshing the
-  # `generated` compiler store that each Rust job starts from when it has no
-  # store of its own yet. Pull-request Rust jobs do not wait for it: it took
-  # 12 minutes, and they restore their own stores from earlier runs instead.
-  rust-target:
-    name: Rust dependency cache
-    needs: [changes, build-cli]
-    if: needs.changes.outputs.rust == 'true' && needs.changes.outputs.full == 'true'
-    runs-on: ubuntu-latest
-    env:
-      CARGO_BUILD_JOBS: '2'
-      # Must match every consumer: it is part of each Cargo fingerprint.
-      CARGO_PROFILE_DEV_DEBUG: line-tables-only
-      FORKLAUNCH_CLI: ${{ github.workspace }}/cli-bin/forklaunch
-    steps:
-      - uses: actions/checkout@v7
-      # The runner context is not available in job-level env.
-      - name: Dependency target location
-        run: echo "FORKLAUNCH_RUST_TARGET=$RUNNER_TEMP/rust-target" >> "$GITHUB_ENV"
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Rust build cache
-        uses: ./.github/actions/rust-build-cache
-        with:
-          family: generated
-          fallback-family: cli
-          size: 2G
-      - name: Install native build dependencies for generated workers
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev libsasl2-dev
-      - uses: actions/download-artifact@v4
-        with:
-          name: forklaunch-cli
-          path: cli-bin
-      - run: chmod +x "$FORKLAUNCH_CLI"
-      - name: Build the dependency target
-        run: bash cli/tests/fixtures/rust_dependency_target.sh build
       - name: Save compiler cache
         if: always()
         uses: ./.github/actions/rust-build-cache/save
@@ -341,7 +301,7 @@ jobs:
     if: ${{ !cancelled() && needs.build-cli.result == 'success' && needs.changes.outputs.rust == 'true' }}
     runs-on: ubuntu-latest
     env:
-      # Matches the rust-target job, whose store this job falls back to.
+      # Smaller debug info: less to compile, cache and store.
       CARGO_PROFILE_DEV_DEBUG: line-tables-only
       # Loads .github/actions/rust-build-cache/stable-tmp/preload.cjs once the
       # cache step has set FORKLAUNCH_STABLE_TMP_PRELOAD; a no-op before that.
@@ -360,13 +320,14 @@ jobs:
       - name: Install Rust for generated backend checks
         uses: dtolnay/rust-toolchain@stable
 
-      # Its own store, else the rust-target job's; stable temporary paths so
-      # the scaffolds it compiles match next time.
+      # Its own store from an earlier run, else the Rust commands job's (the
+      # broadest scaffold graph), else Build CLI's; stable temporary paths so
+      # the scaffolds it compiles hash the same next time.
       - name: Rust build cache
         uses: ./.github/actions/rust-build-cache
         with:
           family: ${{ matrix.family }}
-          fallback-family: generated
+          fallback-family: ${{ matrix.family == 'e2e-rust-commands' && 'cli' || 'e2e-rust-commands cli' }}
           stable-tmp: 'true'
           size: 2G
 
@@ -486,7 +447,7 @@ jobs:
   # a suite skipped because something it depends on failed fails it.
   e2e-ok:
     name: E2E Tests
-    needs: [changes, build-cli, verify-packaged-cli, rust-target, test, test-rust]
+    needs: [changes, build-cli, verify-packaged-cli, test, test-rust]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -502,7 +463,6 @@ jobs:
               'changes': True,
               'build-cli': outputs.get('rust') == 'true' or outputs.get('typescript') == 'true',
               'verify-packaged-cli': outputs.get('rust') == 'true',
-              'rust-target': outputs.get('rust') == 'true' and outputs.get('full') == 'true',
               'test': outputs.get('typescript') == 'true',
               'test-rust': outputs.get('rust') == 'true',
           }

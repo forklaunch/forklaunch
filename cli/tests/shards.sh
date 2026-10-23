@@ -5,9 +5,7 @@
 #   bash cli/tests/shards.sh run SHARD [SHARD..]  # run them, report timings
 #   bash cli/tests/shards.sh check                # every CI script is in exactly one shard
 #
-# Every script scaffolds the applications it tests. The Rust shards start
-# from a shared, pre-built dependency target when CI provides one
-# (fixtures/rust_dependency_target.sh).
+# Every script scaffolds the applications it tests.
 #
 # Scripts run from cli/tests. Every script in a shard runs even after a failure;
 # the shard fails if any did. FORKLAUNCH_SHARD_FAIL_FAST=1 stops at the first.

@@ -22,10 +22,9 @@ generated apps, and a build against the framework crates as packaged for
 release) runs on full runs only.
 
 Every script scaffolds the applications it tests. CI keeps the Rust jobs warm
-with sccache: each job restores its own compiler store from an earlier run
-(deterministic temporary directory names make its scaffolds hash the same),
-falling back to the store that `fixtures/rust_dependency_target.sh build`
-refreshes on full runs from an application with every Rust component kind.
+with sccache only: each job restores its own compiler store from an earlier
+run (deterministic temporary directory names make its scaffolds hash the
+same), and saves it again when its hit rate has dropped.
 
 The TypeScript/Rust parity suites are not here: they live in
 `framework-rs/parity` and run nightly from `.github/workflows/rust_parity.yml`.
