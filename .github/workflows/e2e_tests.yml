@@ -290,6 +290,9 @@ jobs:
     needs: [changes, build-cli, golden-apps]
     if: ${{ !cancelled() && needs.build-cli.result == 'success' && needs.golden-apps.result == 'success' && needs.changes.outputs.typescript == 'true' }}
     runs-on: ubuntu-latest
+    env:
+      # Recorded with the golden apps; matching it keeps golden.py quiet.
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
     strategy:
       fail-fast: false
       matrix:
