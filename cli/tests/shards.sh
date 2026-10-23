@@ -27,8 +27,8 @@ shard_scripts() {
     rust-sdk) echo rust_sdk_openapi_commands.sh rust_sdk_workspace.sh rust_bootstrap_lifecycle.sh rust_checked_mapper.sh rust_local_sdk.sh rust_static_router_lifecycle.sh ;;
     # The change/delete sweep reports a result per command case (see
     # fixtures/rust_command_sweep.py), in two halves that run in parallel.
-    rust-sweep-change) echo rust_command_sweep_change.sh ;;
-    rust-sweep-delete) echo rust_command_sweep_delete.sh ;;
+    rust-sweep-change) echo rust_command_sweep_change.sh rust_name_prompt.sh ;;
+    rust-sweep-delete) echo rust_command_sweep_delete.sh rust_generated_projects.sh ;;
     mixed-tooling) echo mixed_application_tooling.sh mixed_runtime_migration.sh neutral_framework_dependencies.sh raw_mixed_workspace.sh ;;
     rust-mixed) echo rust_mixed_sync.sh rust_typescript_attach.sh rust_mixed_attach.sh rust_mixed_lifecycle.sh ;;
     rust-modules) echo rust_module_lifecycle.sh ;;

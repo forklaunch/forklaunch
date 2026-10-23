@@ -56,7 +56,10 @@ with tempfile.TemporaryDirectory(prefix='forklaunch-name-prompts-') as directory
     for kind, answer, name in [('service', 'accounts', 'accounts'), ('library', '', 'my-library'), ('worker', 'jobs', 'jobs')]:
         terminal(['init', kind, '--language', 'rust', '--path', str(app), '-D', 'Prompt fixture'],
                  f'Rust {kind} crate name', answer)
-        cargo = tomllib.loads((app / 'crates' / name / 'Cargo.toml').read_text())
+        # Current layout: src/<name>, libraries under src/core/<name>.
+        manifest_path = next(path for path in [app / 'src' / name / 'Cargo.toml', app / 'src/core' / name / 'Cargo.toml']
+                             if path.is_file())
+        cargo = tomllib.loads(manifest_path.read_text())
         assert cargo['package']['name'] == name
     manifest = (app / '.forklaunch/manifest.toml').read_bytes()
     for name in [None, 'bad name']:
