@@ -1,6 +1,6 @@
 ---
 name: release-train
-description: "Release forklaunch-js packages: framework, then blueprint, then CLI version constants (pnpm up:packages, changesets, pnpm publish:packages, check_blueprint_deps --fix). Use when publishing @forklaunch/* to npm or bumping what the CLI generates."
+description: "Release forklaunch-js packages: framework, then blueprint, then CLI version constants. Default path is the TypeScript Release workflow (ts_release.yml: Version Packages PR, dry run, publish); manual fallback is pnpm up:packages, changesets, pnpm publish:packages, check_blueprint_deps --fix. Use when publishing @forklaunch/* to npm or bumping what the CLI generates."
 user-invokable: true
 ---
 
@@ -17,7 +17,88 @@ The whole ceremony is pnpm and changesets commands. **Never edit a
 the wrong versions, restore the files from git and run the command again with
 the right flags. A hand edit is how a range quietly goes down.
 
-## 0. Release from one branch
+## CI release (default): `.github/workflows/ts_release.yml`
+
+Steps 1 and 2 run in GitHub Actions. Every version reaches npm from `main`
+after a reviewed PR. Run **TypeScript Release** from the Actions tab, or with
+`gh workflow run ts_release.yml -f workspace=... -f stage=... -f publish=...`.
+
+| Input | Values | Meaning |
+| --- | --- | --- |
+| `workspace` | `framework` (default), `blueprint` | Which pnpm workspace |
+| `stage` | `release` (default), `version` | `version` opens the Version Packages PR. `release` builds, tests and publishes what `main` has that npm lacks |
+| `publish` | `false` (default), `true` | `release` only. When false, the run stops at `pnpm publish --dry-run`. When true it publishes, and only from `main` in this repo, never from a fork |
+| `prepare_blueprint` | `true` (default) | After a framework publish, wait for npm, then open the blueprint Version Packages PR |
+
+The order:
+
+1. Merge the feature PRs with their `.changeset/*.md` files into `main`.
+   Writing changesets stays a human step (see step 1 below).
+2. `workspace=framework stage=version`: the run does install
+   `--frozen-lockfile`, `pnpm cache delete '*'`, `pnpm up:packages`, build and
+   tests, `changeset version`, `pnpm install`, then build. It opens
+   `chore(release): framework versions`. The PR body lists the versions it
+   will publish. The run fails rather than open a PR if a new version would be
+   lower than npm's `latest`.
+3. Review and merge that PR.
+4. `workspace=framework stage=release publish=false`: this is the dry run.
+   It builds, tests, plans and runs `pnpm publish --dry-run` for every
+   pending package. The plan is in the job summary and the
+   `ts-release-plan-*` artifact.
+5. `workspace=framework stage=release publish=true`: the run verifies again,
+   then publishes. Each pending package's own `publish:package` script runs
+   with `--no-git-checks --provenance`, and E409 gets retried. The run then
+   polls `npm view` until every version has shown up twice in a row. After
+   that it waits for npm again and opens `chore(release): blueprint versions`.
+   That PR comes from `pnpm up:packages
+   '--config.minimum-release-age-exclude=@forklaunch/*'`, the per-package
+   tests and `changeset version`. The run fails if any blueprint reference to
+   a framework package is not on the version just published. It also fails if
+   `@mikro-orm/*` versions differ between the workspaces.
+6. Review and merge the blueprint PR. Run `workspace=blueprint stage=release`,
+   first with `publish=false`, then with `publish=true`.
+7. Step 3 (CLI constants) stays manual, a day later (see Traps).
+
+The workflow has guards. One concurrency group (`ts-release`) covers both
+workspaces, so releases never interleave. GitHub keeps one queued run and
+cancels older queued ones. The publish job checks that the commit is on
+`main`. The version job fails if the commands touched files outside the
+workspace. The workflow never edits manifests itself. Private packages are
+skipped even when they have a `publish:package` script, which fixes the
+`ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL` trap.
+
+The repository needs this setup:
+
+- **`NPM_TOKEN` secret (required).** An npm granular or automation token
+  with publish rights on `@forklaunch/*`. An automation token avoids the 2FA
+  prompt. Only the `publish` job reads it.
+- **`npm-publish` environment.** It is created on first use. Add required
+  reviewers and restrict it to `main` to put an approval in front of npm.
+- **Settings > Actions > General > "Allow GitHub Actions to create and
+  approve pull requests"**, so the workflow can open the Version Packages PRs.
+- **`RELEASE_PR_TOKEN` secret (optional).** A fine-grained PAT with Contents
+  and Pull requests write access. Without it the PRs come from
+  `GITHUB_TOKEN`, and GitHub does not run `pull_request` CI on them. To get
+  checks, close and reopen the PR, or push to it.
+
+The helper scripts live in `.github/workflows/scripts/ts_release/`. They also
+work locally and only read from npm:
+
+```bash
+node .github/workflows/scripts/ts_release/ts_release.mjs plan framework        # what npm lacks
+node .github/workflows/scripts/ts_release/ts_release.mjs wait framework        # poll npm view
+node .github/workflows/scripts/ts_release/ts_release.mjs check-pickup framework blueprint
+node .github/workflows/scripts/ts_release/ts_release.mjs check-mikro-orm framework blueprint
+node .github/workflows/scripts/ts_release/ts_release.mjs publish framework --dry-run
+```
+
+If CI is unavailable, or a run fails halfway, use the manual steps below.
+They are the same commands. To finish a half-published run, just re-run
+`stage=release publish=true`. Versions that npm already has are skipped.
+
+## Manual fallback
+
+### 0. Release from one branch
 
 Publish from one branch that holds everything going out: `main`, or a release
 branch merged from `main` plus the PRs in the release. npm publishes cannot be
@@ -30,13 +111,13 @@ Check npm auth first:
 npm whoami            # must print the publishing account
 ```
 
-## 1. Framework
+### 1. Framework
 
 ```bash
 cd framework
 pnpm install --frozen-lockfile
 pnpm cache delete '*'                            # fresh registry metadata (see Traps)
-pnpm up:packages                                 # every dependency to its latest *mature* version
+pnpm up:packages --config.fetch-full-metadata=true   # latest *mature* versions; full metadata carries publish times (see Traps)
 pnpm build && npx vitest run                     # compare failures with main
 ```
 
@@ -66,13 +147,20 @@ for d in common core express hyper-express internal testing validator ws infrast
 done
 ```
 
-## 2. Blueprint
+### 2. Blueprint
 
 ```bash
 cd blueprint
 pnpm install --frozen-lockfile
 pnpm cache delete '*'                             # see "Traps"
-pnpm up:packages '--config.minimum-release-age-exclude=@forklaunch/*'   # our own packages are minutes old
+# Two passes. The blueprint has no window of its own, and in pnpm 11.1 setting
+# minimum-release-age-exclude switches the window off for every package, so
+# third-party packages go first with the window on and @forklaunch/* after.
+# Stripe stays on its current major unless the release is about Stripe.
+pnpm -r update --latest '!uWebSockets.js' '!stripe' '!@forklaunch/*' \
+  --config.minimum-release-age=1440 --config.fetch-full-metadata=true
+pnpm -r update --latest '@forklaunch/*' --config.minimum-release-age=1440 \
+  '--config.minimum-release-age-exclude=@forklaunch/*' --config.fetch-full-metadata=true
 grep -h '"@forklaunch/core"' */package.json implementations/*/*/package.json | sort | uniq -c   # all on the new version?
 pnpm build
 ```
@@ -122,7 +210,9 @@ version from the tag; `Cargo.toml` stays `0.0.0`).
   - Exempt only our own scope in the blueprint: `'--config.minimum-release-age-exclude=@forklaunch/*'`.
   - The window is skipped for packages whose cached metadata lacks a `time` field, which is how the framework and blueprint once resolved different `@mikro-orm` versions. Clear the cache first (`pnpm cache delete '*'`) in both workspaces, so the window applies the same way in each.
   - Our own freshly published packages are also inside the window for generated apps. **Cut the CLI release, and expect the CLI e2e jobs to pass, only a day after publishing.** A PR that bumps the CLI constants shows red e2e until then; re-run it the next day.
-- **pnpm's metadata cache.** It can miss a version published minutes ago, or lack publish times. `pnpm cache delete '*'` before each `up:packages` fixes both.
+- **pnpm's metadata cache.** It can miss a version published minutes ago, or lack publish times. `pnpm cache delete '*'` is not enough: pnpm refills the cache with abbreviated metadata that has no `time`, warns "missing the time field; skipping the minimumReleaseAge check", and installs versions hours old (2026-10-20: jose 13h, fastmcp 3h). Pass `--config.fetch-full-metadata=true` to every `update`, and treat any such warning as a failed run.
+- **Check ages after every update.** Diff the manifests and `npm view <pkg> time` each changed version; anything under 24h means restore and rerun. The lockfile can still pick up young indirect versions in the `@forklaunch/*` pass; a young `@opentelemetry/api` there gave vitest two copies and every test failed with "Cannot read properties of undefined (reading 'config')". Restore the lockfile from git and `pnpm install --no-frozen-lockfile --config.optimistic-repeat-install=false` with the window on, so locked versions are reused.
+- **Stale vitest cache.** The same "reading 'config'" error can outlive the fix, tied to a test's path (an identical copy of the file passes). Move `node_modules/.vitest-cache` and each package's `node_modules/.vite` aside and rerun.
 - **`update` never lowers a specifier.** If an `up:packages` run wrote the wrong version, restore the manifests and lockfile (`git checkout -- '*package.json' pnpm-lock.yaml`), `pnpm install --frozen-lockfile`, and run again with the right flags.
 - **Quote globs in flags.** zsh expands `@forklaunch/*` before pnpm sees it.
 - **Publish command.** It is `pnpm publish:packages --no-git-checks`, never with `--` in front of the flag: the `--` is forwarded literally to `pnpm publish`. npm answers E409 "previously staged version" while it catches up. Re-running until every package reports "skipping" is the check.

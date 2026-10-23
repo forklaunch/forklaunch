@@ -4,6 +4,7 @@ use controller::ControllerCommand;
 use create::CreateCommand;
 use domain::DomainCommand;
 use hosting::HostingCommand;
+use log_limit::LogLimitCommand;
 use readiness::ReadinessCommand;
 use resize::ResizeCommand;
 use route::RouteCommand;
@@ -16,6 +17,7 @@ mod controller;
 mod create;
 mod domain;
 mod hosting;
+mod log_limit;
 mod readiness;
 mod resize;
 mod route;
@@ -28,6 +30,7 @@ pub(crate) struct AppCommand {
     services: ServicesCommand,
     domain: DomainCommand,
     hosting: HostingCommand,
+    log_limit: LogLimitCommand,
     readiness: ReadinessCommand,
     resize: ResizeCommand,
     route: RouteCommand,
@@ -42,6 +45,7 @@ impl AppCommand {
             services: ServicesCommand::new(),
             domain: DomainCommand::new(),
             hosting: HostingCommand::new(),
+            log_limit: LogLimitCommand::new(),
             readiness: ReadinessCommand::new(),
             resize: ResizeCommand::new(),
             route: RouteCommand::new(),
@@ -59,6 +63,7 @@ impl CliCommand for AppCommand {
             .subcommand(self.services.command())
             .subcommand(self.domain.command())
             .subcommand(self.hosting.command())
+            .subcommand(self.log_limit.command())
             .subcommand(self.readiness.command())
             .subcommand(self.resize.command())
             .subcommand(self.route.command())
@@ -72,6 +77,7 @@ impl CliCommand for AppCommand {
             Some(("services", matches)) => self.services.handler(matches),
             Some(("domain", matches)) => self.domain.handler(matches),
             Some(("hosting", matches)) => self.hosting.handler(matches),
+            Some(("log-limit", matches)) => self.log_limit.handler(matches),
             Some(("readiness", matches)) => self.readiness.handler(matches),
             Some(("resize", matches)) => self.resize.handler(matches),
             Some(("route", matches)) => self.route.handler(matches),

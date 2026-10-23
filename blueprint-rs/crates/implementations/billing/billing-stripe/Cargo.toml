@@ -1,0 +1,56 @@
+[package]
+description = "ForkLaunch Rust billing stripe APIs and runtime support"
+name = "forklaunch-billing-stripe"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+stripe-client = []
+postgres-reconciliation = ["forklaunch-billing-base/postgres"]
+postgres-identity = ["forklaunch-billing-base/postgres"]
+# Contract-bound HTTP handlers for generated billing services.
+http = ["forklaunch-billing-base/postgres", "forklaunch-core/auth", "forklaunch-core/remote-jwks", "dep:forklaunch-axum", "dep:forklaunch-common", "dep:forklaunch-validator", "dep:axum", "dep:form_urlencoded", "dep:tokio"]
+typescript-routing = ["http", "forklaunch-axum/typescript-routing"]
+bound-checkout = ["http", "postgres-identity"]
+
+[dependencies]
+forklaunch-core = { version = "=0.2.5", path = "../../../../../framework-rs/crates/core", features = ["http", "domain", "provider-http", "stripe-webhook", "instance-gateway"] }
+forklaunch-billing-base = { version = "=0.2.5", path = "../billing-base" }
+chrono = "0.4"
+forklaunch-billing-interface = { version = "=0.2.5", path = "../../../interfaces/billing-interface" }
+
+hmac = "0.13"
+sha2 = "0.11"
+subtle = "2"
+
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+zeroize = "1"
+uuid = { version = "1", features = ["v4"] }
+base16ct = { version = "1", features = ["alloc"] }
+forklaunch-common = { version = "=0.2.5", path = "../../../../../framework-rs/crates/common", features = ["javascript-date"], optional = true }
+forklaunch-validator = { version = "=0.2.5", path = "../../../../../framework-rs/crates/validator", optional = true }
+forklaunch-axum = { version = "=0.2.5", path = "../../../../../framework-rs/crates/axum", features = ["remote-jwks"], optional = true }
+axum = { version = "0.8", optional = true }
+form_urlencoded = { version = "1", optional = true }
+tokio = { version = "1", features = ["time"], optional = true }
+
+[dev-dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "sync", "time", "io-util"] }
+forklaunch-core = {version = "=0.2.5", path = "../../../../../framework-rs/crates/core", features = ["auth", "encryption", "postgres", "rust-sdk", "codegen", "typescript"] }
+forklaunch-axum = { version = "=0.2.5", path = "../../../../../framework-rs/crates/axum", features = ["mcp", "remote-jwks"] }
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "json"] }
+jsonwebtoken = "11"
+
+[[example]]
+name = "request_dates"
+required-features = ["http"]
+
+[lints]
+workspace = true

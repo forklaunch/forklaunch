@@ -377,15 +377,16 @@ export class Application<
       res.locals.errorMessage = err.message;
       console.error(err);
       res.type('text/plain');
-      res
-        .status(statusCode)
-        .send(
-          `${statusCode >= 500 ? 'Internal server error' : 'Request could not be processed'}:\n\nCorrelation id: ${
-            isForklaunchRequest(req)
-              ? req.context.correlationId
-              : 'No correlation ID'
-          }`
-        );
+      // Framework error diagnostics must bypass enriched send: validating them
+      // against the failing route can throw again and expose Express's HTML stack.
+      express.response.send.call(
+        res.status(statusCode),
+        `${statusCode >= 500 ? 'Internal server error' : 'Request could not be processed'}:\n\nCorrelation id: ${
+          isForklaunchRequest(req)
+            ? req.context.correlationId
+            : 'No correlation ID'
+        }`
+      );
       this.openTelemetryCollector.error(
         err.stack ?? err.message,
         meta({

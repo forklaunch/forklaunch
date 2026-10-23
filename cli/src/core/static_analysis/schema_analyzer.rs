@@ -34,10 +34,12 @@ impl SchemaAnalyzer {
         let source_type = SourceType::from_path(path).unwrap_or_default();
 
         let ParserReturn {
-            program, errors, ..
+            program,
+            diagnostics: errors,
+            ..
         } = Parser::new(&allocator, &source, source_type).parse();
 
-        if !errors.is_empty() {
+        if errors.has_errors() {
             anyhow::bail!("Failed to parse schema file: {:?}", errors);
         }
 
@@ -45,8 +47,8 @@ impl SchemaAnalyzer {
 
         // Visit all variable declarations looking for schema exports
         for stmt in &program.body {
-            if let Statement::ExportNamedDeclaration(export_decl) = stmt {
-                if let Some(Declaration::VariableDeclaration(var_decl)) = &export_decl.declaration {
+            if let Statement::ExportDeclaration(export_decl) = stmt {
+                if let Declaration::VariableDeclaration(var_decl) = &export_decl.declaration {
                     for declarator in &var_decl.declarations {
                         if let Some(schema) =
                             Self::extract_schema_from_declarator(declarator, &source)
@@ -65,8 +67,8 @@ impl SchemaAnalyzer {
         declarator: &VariableDeclarator,
         source: &str,
     ) -> Option<SchemaDefinition> {
-        let name = match &declarator.id.kind {
-            BindingPatternKind::BindingIdentifier(id) => id.name.as_str().to_string(),
+        let name = match &declarator.id {
+            BindingPattern::BindingIdentifier(id) => id.name.as_str().to_string(),
             _ => return None,
         };
 
@@ -139,7 +141,7 @@ impl SchemaAnalyzer {
     ) -> Option<SchemaProperty> {
         let name = match &obj_prop.key {
             PropertyKey::StaticIdentifier(id) => id.name.as_str().to_string(),
-            PropertyKey::StringLiteral(lit) => lit.value.as_str().to_string(),
+            PropertyKey::StringLiteral(lit) => lit.value.as_str().unwrap_or_default().to_string(),
             _ => return None,
         };
 

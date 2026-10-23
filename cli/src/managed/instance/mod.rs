@@ -3,6 +3,7 @@ use clap::{ArgMatches, Command};
 
 use crate::{CliCommand, core::command::command};
 
+mod app_claim_hook;
 mod app_claim_link;
 mod apply_variables;
 mod claim;
@@ -11,6 +12,7 @@ mod claim_next;
 mod create;
 mod deployments;
 mod destroy;
+mod email;
 mod feature_override;
 mod get;
 mod list;
@@ -19,9 +21,11 @@ mod model_usage;
 mod reset;
 mod resume;
 mod rotate_keys;
+mod sms;
 mod update;
 mod vars;
 
+use app_claim_hook::AppClaimHookCommand;
 use app_claim_link::AppClaimLinkCommand;
 use apply_variables::ApplyVariablesCommand;
 use claim::ClaimCommand;
@@ -30,6 +34,7 @@ use claim_next::ClaimNextCommand;
 use create::CreateCommand;
 use deployments::DeploymentsCommand;
 use destroy::DestroyCommand;
+use email::EmailCommand;
 use feature_override::{Feature, FeatureOverrideCommand, GatewaySettingsCommand};
 use get::GetCommand;
 use list::ListCommand;
@@ -38,6 +43,7 @@ use model_usage::ModelUsageCommand;
 use reset::ResetCommand;
 use resume::ResumeCommand;
 use rotate_keys::RotateKeysCommand;
+use sms::SmsCommand;
 use update::UpdateCommand;
 use vars::VarsCommand;
 
@@ -48,6 +54,9 @@ pub(super) struct InstanceCommand {
     claim_link: ClaimLinkCommand,
     claim_next: ClaimNextCommand,
     app_claim_link: AppClaimLinkCommand,
+    app_claim_hook: AppClaimHookCommand,
+    sms: SmsCommand,
+    email: EmailCommand,
     claim: ClaimCommand,
     destroy: DestroyCommand,
     vars: VarsCommand,
@@ -76,6 +85,9 @@ impl InstanceCommand {
             claim_link: ClaimLinkCommand::new(),
             claim_next: ClaimNextCommand::new(),
             app_claim_link: AppClaimLinkCommand::new(),
+            app_claim_hook: AppClaimHookCommand::new(),
+            sms: SmsCommand::new(),
+            email: EmailCommand::new(),
             claim: ClaimCommand::new(),
             destroy: DestroyCommand::new(),
             vars: VarsCommand::new(),
@@ -143,13 +155,18 @@ impl CliCommand for InstanceCommand {
              \x20 `voice`             concurrent calls, monthly minutes\n\
              \x20 `email-gateway`     recipients per day, messages per minute\n\
              \x20 `payments-gateway`  application fee, Stripe calls per minute\n\
-             \x20 `gateway-settings`  what is in force for each, and which is overridden",
+             \x20 `gateway-settings`  what is in force for each, and which is overridden\n\n\
+             CUSTOM EMAIL SENDER (Pro): `email set|status|remove` sends the instance's mail\n\
+             from your own domain instead of no-reply@<host prefix>.<platform sending domain>.",
         )
         .subcommand(self.list.command())
         .subcommand(self.create.command())
         .subcommand(self.claim_link.command())
         .subcommand(self.claim_next.command())
         .subcommand(self.app_claim_link.command())
+        .subcommand(self.app_claim_hook.command())
+        .subcommand(self.sms.command())
+        .subcommand(self.email.command())
         .subcommand(self.claim.command())
         .subcommand(self.destroy.command())
         .subcommand(self.vars.command())
@@ -178,6 +195,9 @@ impl CliCommand for InstanceCommand {
             Some(("claim-link", sub_matches)) => self.claim_link.handler(sub_matches),
             Some(("claim-next", sub_matches)) => self.claim_next.handler(sub_matches),
             Some(("app-claim-link", sub_matches)) => self.app_claim_link.handler(sub_matches),
+            Some(("app-claim-hook", sub_matches)) => self.app_claim_hook.handler(sub_matches),
+            Some(("sms", sub_matches)) => self.sms.handler(sub_matches),
+            Some(("email", sub_matches)) => self.email.handler(sub_matches),
             Some(("claim", sub_matches)) => self.claim.handler(sub_matches),
             Some(("destroy", sub_matches)) => self.destroy.handler(sub_matches),
             Some(("vars", sub_matches)) => self.vars.handler(sub_matches),

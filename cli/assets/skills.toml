@@ -52,6 +52,7 @@ include = [
   "platform-architecture",
   "prereqs",
   "quick-reference",
+  "rust-framework",
   "score",
   "score-self-heal",
   "security",

@@ -197,3 +197,7 @@ export const parse: typeof StaticSchemaValidator.parse =
  */
 export const openapi: typeof StaticSchemaValidator.openapi =
   StaticSchemaValidator.openapi.bind(StaticSchemaValidator);
+
+/** Explicit JSON Schema 2020-12 input projection, including positional tuples. */
+export const openapi2020: typeof StaticSchemaValidator.openapi2020 =
+  StaticSchemaValidator.openapi2020.bind(StaticSchemaValidator);

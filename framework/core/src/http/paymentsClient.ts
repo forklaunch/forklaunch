@@ -182,7 +182,10 @@ export function stripeGatewayFetch(
 ): typeof fetch {
   const base = new URL(settings.gatewayUrl);
   const basePath = base.pathname.replace(/\/+$/, '');
-  return async (input, init = {}) => {
+  const signedFetch = async (
+    input: Parameters<typeof fetch>[0],
+    init: NonNullable<Parameters<typeof fetch>[1]> = {}
+  ) => {
     const original = new URL(
       typeof input === 'string' || input instanceof URL ? input : input.url
     );
@@ -232,6 +235,18 @@ export function stripeGatewayFetch(
       }
     );
   };
+  // Bun exposes preconnect on fetch; Node does not. Preserve that real capability
+  // without opening a connection to the caller's Stripe/provider URL.
+  const preconnect: unknown = Reflect.get(fetchImpl, 'preconnect');
+  if (typeof preconnect === 'function') {
+    Object.defineProperty(signedFetch, 'preconnect', {
+      value: (_input: unknown, options?: unknown) =>
+        Reflect.apply(preconnect, fetchImpl, [base.origin, options])
+    });
+  }
+  // Stripe's SDK types this callable as typeof fetch, but invokes only fetch().
+  // Bun's static helper is installed above only when the actual runtime has it.
+  return signedFetch as typeof fetch;
 }
 
 /**
@@ -272,7 +287,7 @@ export function createStripeClient(options: StripeClientOptions = {}): Stripe {
   if (!explicitGateway && !isManagedInstance()) {
     if (!options.apiKey) {
       throw new Error(
-        'createStripeClient: not a managed instance (PLATFORM_GATEWAY_URL, INSTANCE_ID and ' +
+        'createStripeClient: no managed gateway (PLATFORM_GATEWAY_URL, INSTANCE_ID and ' +
           'INSTANCE_HMAC_KEY are unset) and no apiKey was given — pass { apiKey } for local ' +
           'development, or run the gateway mock (forklaunch-gateway-mock) with the managed env'
       );

@@ -10,7 +10,7 @@ fi
 mkdir -p output/change-library
 cd output/change-library
 
-RUST_BACKTRACE=1 $FL init application change-library-test-node-application -p . -o src/modules -d postgresql -f prettier -l eslint -v zod -F hyper-express -r bun -t vitest -m billing-base -m iam-base -D "Test service" -A "Rohin Bhargava" -L 'AGPL-3.0'
+RUST_BACKTRACE=1 $FL init application change-library-test-node-application -p . -o src/modules -d postgresql -f prettier -l oxlint -v zod -F hyper-express -r bun -t vitest -m billing-base -m iam-base -D "Test service" -A "Rohin Bhargava" -L 'AGPL-3.0'
 RUST_BACKTRACE=1 $FL init library lbry -p . -D "Test library"
 
 cd src/modules

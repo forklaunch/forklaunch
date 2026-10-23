@@ -200,7 +200,7 @@ describe('payments (e2e)', () => {
     try {
       const plain = createStripeClient({ apiKey: 'sk_test_local', Stripe });
       expect(plain).toBeInstanceOf(Stripe);
-      expect(() => createStripeClient({ Stripe })).toThrow('not a managed instance');
+      expect(() => createStripeClient({ Stripe })).toThrow('no managed gateway');
       // Without an explicit class the optional peer is loaded lazily.
       expect(createStripeClient({ apiKey: 'sk_test_local' })).toBeTruthy();
     } finally {

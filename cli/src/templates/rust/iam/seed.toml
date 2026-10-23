@@ -1,0 +1,41 @@
+# Roles, organizations and users `{{{name}}} --seed` creates or updates (idempotent;
+# nothing is deleted). Edit freely; set IAM_SEED_FILE to use another file.
+# Roles match the TypeScript IAM defaults. Admin reads of other users and the
+# directory read routes need `platform:read`.
+# Passwords never live here: each user names the variable that holds it.
+
+[[roles]]
+name = "viewer"
+permissions = ["platform:read"]
+
+[[roles]]
+name = "editor"
+permissions = ["platform:read", "platform:write"]
+
+[[roles]]
+name = "admin"
+permissions = ["platform:read", "platform:write"]
+
+[[roles]]
+name = "system"
+permissions = ["platform:read", "platform:write"]
+
+# Directory organization for seeded users. JWT-protected directory routes
+# (`/user/...`) scope every request to the caller's organization.
+[[organizations]]
+id = "seed-organization"
+name = "Default organization"
+domain = "example.com"
+subscription = "seed-subscription"
+
+# Each user also gets a directory record under its login id (the same records
+# `POST /user` creates), so `/user/<id>/surface-roles` works for it.
+[[users]]
+id = "seed-admin"
+email = "admin@example.com"
+display_name = "Administrator"
+first_name = "Admin"
+last_name = "User"
+roles = ["admin"]
+organization = "seed-organization"
+password_env = "IAM_SEED_ADMIN_PASSWORD"

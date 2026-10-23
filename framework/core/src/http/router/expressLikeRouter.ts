@@ -608,14 +608,28 @@ export class ForklaunchExpressLikeRouter<
           span: undefined
         },
         _rawBody: undefined as unknown,
-        _parsedVersions: undefined as unknown
+        _parsedVersions: undefined as unknown,
+        // hyper-express's content parser reads the body through its Request's
+        // body readers; serve the body the call was given.
+        buffer: async () =>
+          Buffer.from(
+            typeof req.body === 'string' ? req.body : JSON.stringify(req.body)
+          ),
+        json: async () => req.body,
+        text: async () =>
+          typeof req.body === 'string' ? req.body : JSON.stringify(req.body)
       };
 
       const res = {
         statusCode: 200,
+        // hyper-express's response enrichment reads the status and headers
+        // from these fields, which its own Response keeps.
+        _status_code: 200,
+        _headers: responseHeaders,
         status: (code: number) => {
           statusCode = code;
           res.statusCode = code;
+          res._status_code = code;
           return res;
         },
         send: (message: string) => {
@@ -635,6 +649,8 @@ export class ForklaunchExpressLikeRouter<
           return res;
         },
         getHeader: (key: string) => responseHeaders[key],
+        getHeaders: () => ({ ...responseHeaders }),
+        locals: {} as Record<string, unknown>,
         type: (contentType: string) => {
           responseHeaders['content-type'] = contentType;
           return res;
@@ -657,45 +673,73 @@ export class ForklaunchExpressLikeRouter<
 
       const executeMiddlewares = request?.executeMiddlewares ?? false;
 
-      if (executeMiddlewares && middlewares.length > 0) {
-        const allHandlers = [...middlewares];
-        let cursor = allHandlers.shift() as (
-          req_: typeof req,
-          resp_: typeof res,
-          next: (err?: Error) => Promise<void> | void
-        ) => Promise<void> | void;
-
-        if (cursor) {
-          for (const fn of allHandlers) {
-            await cursor(req, res, (err?: Error) => {
-              if (err) {
-                throw err;
-              }
-              cursor = fn as (
-                req_: typeof req,
-                resp_: typeof res,
-                next: (err?: Error) => Promise<void> | void
-              ) => Promise<void> | void;
-            });
-          }
-          await cursor(req, res, async (err?: Error) => {
-            if (err) {
-              throw err;
-            }
-          });
-        }
-      }
-
-      const cHandler = controllerHandler as (
+      type Step = (
         req_: typeof req,
         resp_: typeof res,
         next: (err?: Error) => Promise<void> | void
-      ) => void;
-      await cHandler(req, res, (err?: Error) => {
-        if (err) {
-          throw err;
-        }
-      });
+      ) => Promise<void> | void;
+      const cHandler = controllerHandler as Step;
+
+      if (executeMiddlewares && middlewares.length > 0) {
+        // Run the chain the way a server does: each middleware runs when the
+        // previous one calls next() (some do so only after their own async
+        // work) or, for an async middleware that takes no next, resolves; the
+        // controller runs last. A middleware that sends the
+        // response itself (an auth middleware's 401/403) ends the request
+        // before the controller runs.
+        const chain = middlewares as Step[];
+        await new Promise<void>((resolve, reject) => {
+          let settled = false;
+          let responded = false;
+          let controllerStarted = false;
+          const finish = (error?: unknown) => {
+            if (settled) return;
+            settled = true;
+            if (error) reject(error);
+            else resolve();
+          };
+          res.on('finish', () => {
+            responded = true;
+            if (!controllerStarted) finish();
+          });
+          const run = async (index: number): Promise<void> => {
+            try {
+              if (index === chain.length) {
+                controllerStarted = true;
+                await cHandler(req, res, (err?: Error) => {
+                  if (err) {
+                    throw err;
+                  }
+                });
+                finish();
+                return;
+              }
+              let calledNext = false;
+              await chain[index](req, res, (err?: Error) => {
+                calledNext = true;
+                if (err) {
+                  throw err;
+                }
+                return run(index + 1);
+              });
+              // hyper-express middlewares may take no `next` and continue
+              // by resolving, unless they answered the request themselves.
+              if (!calledNext && chain[index].length < 3 && !responded) {
+                await run(index + 1);
+              }
+            } catch (error) {
+              finish(error);
+            }
+          };
+          void run(0);
+        });
+      } else {
+        await cHandler(req, res, (err?: Error) => {
+          if (err) {
+            throw err;
+          }
+        });
+      }
 
       return {
         code: Number(statusCode),

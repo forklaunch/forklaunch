@@ -59,6 +59,11 @@ This directory contains internal planning documents, implementation specs, and t
 
 ## Contents
 
+### Rust Framework & Blueprint Planning
+- **[RUST-FRAMEWORK-BLUEPRINT-IMPLEMENTATION.md](RUST-FRAMEWORK-BLUEPRINT-IMPLEMENTATION.md)** - Implementation checklist for `framework-rs` and `blueprint-rs`
+  - Rust framework workspace with contract registry, Axum adapter, OpenAPI/AsyncAPI/MCP generation, TypeScript and Rust SDK generation
+  - Rust blueprint workspace mirroring TypeScript blueprint style with core, interface, and implementation crates
+  - Cross-language conformance plan for TypeScript and Rust services/SDKs
 ### Medical Coding / Billing Platform (CAC module — see [plan/cac/](cac/))
 - **[cac/MEDICAL-CODING-IMPLEMENTATION-PLAN.md](cac/MEDICAL-CODING-IMPLEMENTATION-PLAN.md)** - Free-first implementation plan for a HIPAA-compliant medical coding/billing module
   - **Decision flipped mid-plan (§1):** originally an app-level service outside the CLI's module system; now built as a first-class `Module::BaseCac` (`cac-base`) — named `cac` per the founder, the industry term for Computer-Assisted Coding — the same way `billing-base`/`iam-base`/`messaging-base` are, after confirming the pattern is proven (PR #264 added `messaging` the same way, 346 tests passing) and blocker-free (RBAC merged, no structural gaps — one cautionary precedent noted: don't leave it half-wired like `ecommerce-stripe` was)
@@ -146,4 +151,3 @@ When adding new planning documents:
 2. Include dates or versions in the filename if time-sensitive
 3. Update this README with a link and description
 4. Keep plans actionable and implementation-focused
-

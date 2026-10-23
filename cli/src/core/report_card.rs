@@ -430,8 +430,9 @@ fn remedy(check: &str) -> Option<String> {
             "Wrap Better Auth's EntityManager so its reads carry the tenant."
         }
         "ai-provider-direct" => {
-            "Call models through createModelGatewayClient() (the platform offers HIPAA products \
-             only BAA-covered models), or confirm the provider has signed a BAA for this use."
+            "Run `forklaunch infra add <service> models` and call models through the injected \
+             ModelGatewayClient (createModelGatewayClient(); the managed gateway offers HIPAA \
+             products only BAA-covered models), or confirm the provider has signed a BAA for this use."
         }
         "managed-provider-credentials" => {
             "Send one-time codes through the platform's instance gateway and call models with \
@@ -529,12 +530,13 @@ fn remedy(check: &str) -> Option<String> {
         }
         "dependency-lockfile-missing" => {
             "Commit the package manager's lockfile (pnpm-lock.yaml, bun.lock, package-lock.json, \
-             yarn.lock, poetry.lock or uv.lock) so every install gets the same, checkable versions."
+             yarn.lock, poetry.lock, uv.lock or Cargo.lock) so every install gets the same, checkable versions."
         }
         "dependency-scan-incomplete" => {
             "Fix any lockfile the finding names, unset FORKLAUNCH_NO_ADVISORY_LOOKUP if it is \
              set, and run `forklaunch compliance audit` with network access so pinned versions \
-             can be looked up in the advisory database."
+             can be looked up in the advisory database. Audit unsupported Git/private-registry \
+             sources at their pinned revisions separately."
         }
         _ => return None,
     };

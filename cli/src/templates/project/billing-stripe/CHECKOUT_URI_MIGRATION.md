@@ -1,0 +1,1 @@
+../../../../../blueprint/billing-stripe/CHECKOUT_URI_MIGRATION.md

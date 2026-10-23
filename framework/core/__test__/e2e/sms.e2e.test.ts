@@ -191,7 +191,7 @@ describe('sms (e2e)', () => {
     delete process.env.INSTANCE_ID;
     delete process.env.INSTANCE_HMAC_KEY;
     try {
-      expect(() => createSmsClient()).toThrow(/managed instance/);
+      expect(() => createSmsClient()).toThrow(/managed gateway/);
       const deferred = createSmsClient({
         gatewayUrl: undefined,
         instanceId: undefined,

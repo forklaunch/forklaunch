@@ -19,10 +19,87 @@ use crate::{
     },
     core::manifest::{ManifestConfig, ProjectManifestConfig},
 };
+use package_json_constants::{compose_up_command, split_compose_up_command};
 
 pub(crate) mod application_package_json;
 pub(crate) mod package_json_constants;
 pub(crate) mod project_package_json;
+
+/// `rendered` (a package.json the CLI reserialized from its structs) laid
+/// out like `original`, the file on disk: unchanged content keeps the original
+/// bytes, and otherwise every object keeps its original key order, with new
+/// keys after the existing ones, and the file keeps its trailing newline.
+/// The structs serialize in their own field order, so without this a change
+/// that touches one field reorders keys it never touched, and a change and
+/// its inverse do not round-trip.
+pub(crate) fn preserve_json_layout(original: &str, rendered: &str) -> String {
+    preserve_json_layout_renamed(original, rendered, &|key| key.to_string())
+}
+
+/// [`preserve_json_layout`] for a change that renames keys (an application
+/// rename moves `@old/core` to `@new/core`): `rename` maps an original key to
+/// the key it became, which then takes the original's place.
+pub(crate) fn preserve_json_layout_renamed(
+    original: &str,
+    rendered: &str,
+    rename: &dyn Fn(&str) -> String,
+) -> String {
+    use serde_json::{Map, Value};
+    fn ordered(original: &Value, rendered: &Value, rename: &dyn Fn(&str) -> String) -> Value {
+        match (original, rendered) {
+            (Value::Object(before), Value::Object(after)) => {
+                // Keys kept from the original, in its order.
+                let mut keys: std::vec::Vec<(String, Value)> = std::vec::Vec::new();
+                for (key, value) in before {
+                    let key = if after.contains_key(key) { key.clone() } else { rename(key) };
+                    if let Some(new) = after.get(&key) {
+                        keys.push((key, ordered(value, new, rename)));
+                    }
+                }
+                // New keys go after the key they follow in `rendered` (a
+                // replaced dependency takes its predecessor's place), or
+                // first when they lead it.
+                let mut previous: Option<&String> = None;
+                for (key, value) in after {
+                    if !keys.iter().any(|(existing, _)| existing == key) {
+                        let at = previous
+                            .and_then(|p| keys.iter().position(|(existing, _)| existing == p))
+                            .map_or(0, |i| i + 1);
+                        keys.insert(at, (key.clone(), value.clone()));
+                    }
+                    previous = Some(key);
+                }
+                Value::Object(keys.into_iter().collect::<Map<String, Value>>())
+            }
+            (Value::Array(before), Value::Array(after)) => Value::Array(
+                after
+                    .iter()
+                    .enumerate()
+                    .map(|(i, value)| {
+                        before.get(i).map_or_else(|| value.clone(), |old| ordered(old, value, rename))
+                    })
+                    .collect(),
+            ),
+            (_, rendered) => rendered.clone(),
+        }
+    }
+    let (Ok(before), Ok(after)) = (
+        serde_json::from_str::<Value>(original),
+        serde_json::from_str::<Value>(rendered),
+    ) else {
+        return rendered.to_string();
+    };
+    if before == after {
+        return original.to_string();
+    }
+    let Ok(mut out) = to_string_pretty(&ordered(&before, &after, rename)) else {
+        return rendered.to_string();
+    };
+    if original.ends_with('\n') && !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out
+}
 
 pub(crate) fn add_project_definition_to_package_json<
     T: Content + ManifestConfig + ProjectManifestConfig + InitializableManifestConfig + Serialize,
@@ -88,34 +165,14 @@ pub(crate) fn update_application_package_json(
     };
 
     let update_docker_cmd = |cmd: &str| {
-        let (docker_cmd, rest_cmd) = match cmd.split_once("&&") {
-            Some((docker, rest)) => (docker.trim(), rest.trim()),
-            None => (cmd.trim(), ""),
-        };
-
-        let mut services: Vec<&str> = docker_cmd
-            .split("-d")
-            .skip(1)
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .collect();
-
-        if !services.contains(&database.as_str()) {
-            services.push(&database);
+        let (mut services, rest_cmd) = split_compose_up_command(cmd);
+        if !services.contains(&database) {
+            services.push(database.clone());
             if is_mongo {
-                services.push("mongo-init");
+                services.push("mongo-init".to_string());
             }
         }
-
-        let new_docker_cmd = format!(
-            "docker compose up {}",
-            services
-                .iter()
-                .map(|svc| format!("-d {}", svc))
-                .collect::<Vec<_>>()
-                .join(" ")
-        );
-
+        let new_docker_cmd = compose_up_command(&services);
         if rest_cmd.is_empty() {
             new_docker_cmd
         } else {
@@ -143,11 +200,14 @@ pub(crate) fn update_application_package_json(
         scripts.seed = Some(update_docker_cmd(&seed_script));
     }
 
-    Ok(Some(RenderedTemplate {
-        path: base_path.join("package.json"),
-        content: to_string_pretty(&full_package_json)?,
-        context: Some(ERROR_FAILED_TO_UPDATE_APPLICATION_PACKAGE_JSON.to_string()),
-    }))
+    Ok(Some(
+        RenderedTemplate {
+            path: base_path.join("package.json"),
+            content: to_string_pretty(&full_package_json)?,
+            context: Some(ERROR_FAILED_TO_UPDATE_APPLICATION_PACKAGE_JSON.to_string()),
+        }
+        .preserving_json_layout(),
+    ))
 }
 
 pub(crate) fn replace_project_in_workspace_definition(
@@ -226,4 +286,21 @@ pub(crate) fn remove_project_definition_to_package_json(
 
     Ok(to_string_pretty(&full_package_json)
         .with_context(|| ERROR_FAILED_TO_ADD_PROJECT_METADATA_TO_PACKAGE_JSON)?)
+}
+
+#[cfg(test)]
+mod layout_tests {
+    use super::preserve_json_layout;
+
+    #[test]
+    fn unchanged_content_keeps_its_bytes_and_changes_keep_key_order() {
+        let original = "{\n  \"name\": \"a\",\n  \"dependencies\": {\"@app/core\": \"workspace:*\", \"zod\": \"1\"}\n}\n";
+        let same = "{\"dependencies\":{\"zod\":\"1\",\"@app/core\":\"workspace:*\"},\"name\":\"a\"}";
+        assert_eq!(preserve_json_layout(original, same), original);
+        let changed = "{\"dependencies\":{\"zod\":\"2\",\"@app/core\":\"workspace:*\",\"uuid\":\"1\"},\"name\":\"a\"}";
+        assert_eq!(
+            preserve_json_layout(original, changed),
+            "{\n  \"name\": \"a\",\n  \"dependencies\": {\n    \"@app/core\": \"workspace:*\",\n    \"uuid\": \"1\",\n    \"zod\": \"2\"\n  }\n}\n"
+        );
+    }
 }

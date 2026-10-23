@@ -292,7 +292,7 @@ fn current(dir: &Path, as_json: bool) -> Result<()> {
             "source": selection.source.key(),
             "loggedIn": logged_in,
             "default": selection.name.is_some()
-                && selection.name == accounts::default_account_name(dir)
+                && selection.name == accounts::default_profile_name(dir)
                 || selection.source == AccountSource::Default,
             "email": identity.email,
             "organizationId": identity.organization_id,

@@ -15,6 +15,7 @@ import {
   VersionedRequests
 } from '../../types/apiDefinition.types';
 import { ParamsDictionary } from '../../types/contractDetails.types';
+import { sendValidationDiagnostic } from '../internal/validationDiagnostic';
 
 /**
  * Pre-handler function to parse and validate input.
@@ -165,17 +166,16 @@ export function parse<
       default:
       case undefined:
       case 'error':
-        res.type('application/json');
+        res.type('text/plain');
         res.status(400);
         if (hasSend(res)) {
-          res.send(
-            `${
-              collectedParseErrors ??
-              prettyPrintParseErrors(parsedRequest.errors, 'Request')
-            }\n\nCorrelation id: ${
-              req.context.correlationId ?? 'No correlation ID'
-            }`
-          );
+          const diagnostic = `${
+            collectedParseErrors ??
+            prettyPrintParseErrors(parsedRequest.errors, 'Request')
+          }\n\nCorrelation id: ${
+            req.context.correlationId ?? 'No correlation ID'
+          }`;
+          sendValidationDiagnostic(res, () => res.send(diagnostic));
         } else {
           next?.(new Error('Request is not sendable.'));
         }

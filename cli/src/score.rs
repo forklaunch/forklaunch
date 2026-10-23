@@ -104,11 +104,25 @@ impl CliCommand for ScoreCommand {
                 .long("prompt")
                 .help(
                     "Print only the remediation prompt (the default output shows it after the summary): the \
-                     same prompt the website's \"Generate prompt\" builds (every finding \
-                     with its evidence and fix, the scored checklist, and the rescoring \
-                     loop). With --offline, a prompt built from the deterministic checks.",
+                     same prompt the website's \"Generate prompt\" builds (every open finding \
+                     with its evidence and fix, then the outstanding checklist items). \
+                     --prompt-scope chooses what it covers. With --offline, a prompt built \
+                     from the deterministic checks.",
                 )
                 .action(clap::ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("prompt_scope")
+                .long("prompt-scope")
+                .value_name("SCOPE")
+                .help(
+                    "What the remediation prompt covers: not-met (open findings and failed \
+                     requirements), undecided (requirements the reviewers could not decide: the \
+                     agent first checks whether each is already met, makes it demonstrable if so \
+                     and implements it if not), or both (the default). Ignored with --offline.",
+                )
+                .value_parser(["not-met", "undecided", "both"])
+                .default_value("both"),
         )
         .arg(
             Arg::new("min_score")
@@ -135,8 +149,13 @@ impl CliCommand for ScoreCommand {
             score_via_api(
                 &app_root,
                 &manifest.app_name,
+                manifest.platform_application_id.as_deref(),
                 !matches.get_flag("no_share"),
                 json_out || prompt_out,
+                matches
+                    .get_one::<String>("prompt_scope")
+                    .map(String::as_str)
+                    .unwrap_or("both"),
             )?
         };
         // The platform builds the prompt (the website's own builder); offline, or
@@ -229,8 +248,13 @@ fn studio_url(path: &str) -> String {
 fn score_via_api(
     app_root: &Path,
     app_name: &str,
+    // The platform application this project is bound to: its deployed instance
+    // counts decide the card's hosting criteria (read server-side as the caller).
+    application_id: Option<&str>,
     want_share: bool,
     quiet: bool,
+    // What the platform's remediation prompt covers: not-met, undecided or both.
+    prompt_scope: &str,
 ) -> Result<(Value, Option<String>, Option<String>)> {
     let auth = AuthMode::detect();
 
@@ -254,7 +278,10 @@ fn score_via_api(
     }
 
     let zip_base64 = base64::engine::general_purpose::STANDARD.encode(&archive);
-    let body = json!({ "appId": app_name, "zipBase64": zip_base64 });
+    let mut body = json!({ "appId": app_name, "zipBase64": zip_base64 });
+    if let Some(id) = application_id {
+        body["applicationId"] = Value::String(id.to_string());
+    }
 
     if !quiet {
         println!("  {} uploading for analysis…", dim("→"));
@@ -274,7 +301,7 @@ fn score_via_api(
         .context("analysis API returned no job id")?
         .to_string();
 
-    let job = poll_job(&auth, &job_id, quiet)?;
+    let job = poll_job(&auth, &job_id, prompt_scope, quiet)?;
     let card = job
         .get("reportCard")
         .cloned()
@@ -398,7 +425,17 @@ fn offline_prompt(card: &Value, offline: bool) -> String {
 }
 
 /// Poll until the job reaches a terminal state.
-fn poll_job(auth: &AuthMode, job_id: &str, quiet: bool) -> Result<Value> {
+/// The job status path, asking for the prompt in a scope. The default scope sends no
+/// parameter, so a platform that predates scopes is asked exactly what it was before.
+fn job_path(job_id: &str, prompt_scope: &str) -> String {
+    if prompt_scope == "not-met" {
+        format!("/job/{job_id}")
+    } else {
+        format!("/job/{job_id}?promptScope={prompt_scope}")
+    }
+}
+
+fn poll_job(auth: &AuthMode, job_id: &str, prompt_scope: &str, quiet: bool) -> Result<Value> {
     let started = Instant::now();
     let mut last_status = String::new();
 
@@ -411,7 +448,7 @@ fn poll_job(auth: &AuthMode, job_id: &str, quiet: bool) -> Result<Value> {
             );
         }
 
-        let response = get_with_auth(auth, &studio_url(&format!("/job/{job_id}")))
+        let response = get_with_auth(auth, &studio_url(&job_path(job_id, prompt_scope)))
             .context("lost contact with the analysis API")?;
         let http_status = response.status();
         if !http_status.is_success() {
@@ -656,6 +693,13 @@ mod tests {
         // a mismatch here 404s against a service that is up and healthy.
         assert!(studio_url("/zip").ends_with("/studio-orchestrator/analysis/zip"));
         assert!(studio_url("/share").ends_with("/studio-orchestrator/analysis/share"));
+    }
+
+    #[test]
+    fn the_prompt_scope_rides_on_the_job_poll_only_when_asked() {
+        assert_eq!(job_path("j1", "not-met"), "/job/j1");
+        assert_eq!(job_path("j1", "undecided"), "/job/j1?promptScope=undecided");
+        assert_eq!(job_path("j1", "both"), "/job/j1?promptScope=both");
     }
 
     #[test]

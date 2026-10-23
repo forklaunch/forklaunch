@@ -881,6 +881,7 @@ pub(crate) fn set_manifest_resource(
     key: &str,
     value: Option<&str>,
 ) -> Result<String> {
+    let text = &crate::core::manifest::strip_retired_manifest_keys(text);
     let mut doc: toml_edit::DocumentMut = text.parse().context("parsing manifest.toml")?;
     let projects = doc
         .get_mut("projects")
@@ -1120,6 +1121,7 @@ pub(crate) fn set_manifest_capability(
     id: &str,
     adding: bool,
 ) -> Result<String> {
+    let text = &crate::core::manifest::strip_retired_manifest_keys(text);
     let mut doc: toml_edit::DocumentMut = text.parse().context("parsing manifest.toml")?;
     let projects = doc
         .get_mut("projects")
@@ -1189,12 +1191,24 @@ pub(crate) fn set_manifest_capability(
 
 // -------------------------------------------------------------- .env.local
 
+pub(crate) fn env_key(line: &str) -> Option<&str> {
+    let line = line.trim_start();
+    let line = line
+        .strip_prefix("export ")
+        .or_else(|| line.strip_prefix("export\t"))
+        .unwrap_or(line)
+        .trim_start();
+    let key = line.split_once('=')?.0.trim_end();
+    (!key.is_empty()
+        && key.bytes().enumerate().all(|(index, byte)| {
+            byte == b'_' || byte.is_ascii_alphabetic() || (index > 0 && byte.is_ascii_digit())
+        }))
+    .then_some(key)
+}
+
 pub(crate) fn remove_env_lines(text: &str, keys: &[&str]) -> String {
     text.split_inclusive('\n')
-        .filter(|line| {
-            let line = line.trim_start();
-            !keys.iter().any(|k| line.starts_with(&format!("{k}=")))
-        })
+        .filter(|line| !env_key(line).is_some_and(|key| keys.contains(&key)))
         .collect()
 }
 

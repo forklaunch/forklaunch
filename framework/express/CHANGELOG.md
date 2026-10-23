@@ -1,5 +1,51 @@
 # @forklaunch/express
 
+## 1.2.53
+
+### Patch Changes
+
+- ea72223: The Bun cluster shim's last-resort 500 response no longer stringifies non-Error throws in development; it shows an Error's message in development and `Internal Server Error` otherwise.
+
+## 1.2.52
+
+### Patch Changes
+
+- d2319b3: The final error handler sends its plain-text diagnostic with Express's own `send`, so it is no longer validated against the failing route's contract (which could throw again and return Express's HTML stack trace). `res.setHeader` with an array value now sets repeated header values instead of joining them with newlines.
+- Updated dependencies [d2319b3]
+- Updated dependencies [d2319b3]
+- Updated dependencies [d2319b3]
+- Updated dependencies [cf365df]
+- Updated dependencies [f868861]
+- Updated dependencies [d2319b3]
+  - @forklaunch/core@3.3.0
+  - @forklaunch/validator@1.3.0
+
+## 1.2.51
+
+### Patch Changes
+
+- Dependency refresh: every third-party dependency moved to its latest version at least a day old.
+- Updated dependencies [de09443]
+- Updated dependencies [ec6f0f5]
+- Updated dependencies
+- Updated dependencies [7c27cfb]
+  - @forklaunch/core@3.2.0
+  - @forklaunch/common@1.2.32
+  - @forklaunch/validator@1.2.33
+
+## 1.2.50
+
+### Patch Changes
+
+- Dependency refresh: MikroORM 7.2.5, OpenTelemetry 0.223 / 2.12, AWS SDK 3.1152 and other minor updates.
+- Updated dependencies [e36cfd2]
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @forklaunch/core@3.1.0
+  - @forklaunch/common@1.2.31
+  - @forklaunch/validator@1.2.32
+
 ## 1.2.49
 
 ### Patch Changes

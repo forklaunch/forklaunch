@@ -161,7 +161,7 @@ fn parse_routes(source: &str, rel_path: &str) -> (Vec<StaticRoute>, bool) {
         SourceType::default().with_typescript(true),
     )
     .parse();
-    let complete = !parsed.panicked && parsed.errors.is_empty();
+    let complete = !parsed.fatal_error && !parsed.diagnostics.has_errors();
     let mut v = RouteVisitor {
         source,
         file: rel_path,
@@ -192,7 +192,7 @@ impl RouteVisitor<'_> {
 
 fn string_arg(arg: &Argument) -> Option<String> {
     match arg {
-        Argument::StringLiteral(s) => Some(s.value.to_string()),
+        Argument::StringLiteral(s) => Some(s.value.display().to_string()),
         Argument::TemplateLiteral(t) if t.expressions.is_empty() => {
             t.quasis.first().map(|q| q.value.raw.to_string())
         }
@@ -244,13 +244,15 @@ impl<'a> Visit<'a> for RouteVisitor<'_> {
                                 if let ObjectPropertyKind::ObjectProperty(p) = prop {
                                     let key = match &p.key {
                                         PropertyKey::StaticIdentifier(k) => k.name.as_str(),
-                                        PropertyKey::StringLiteral(k) => k.value.as_str(),
+                                        PropertyKey::StringLiteral(k) => {
+                                            k.value.as_str().unwrap_or_default()
+                                        }
                                         _ => continue,
                                     };
                                     match key {
                                         "access" => {
                                             if let Expression::StringLiteral(s) = &p.value {
-                                                access = Some(s.value.to_string());
+                                                access = Some(s.value.display().to_string());
                                             }
                                         }
                                         "auth" => auth = Some(self.text(p.value.span())),

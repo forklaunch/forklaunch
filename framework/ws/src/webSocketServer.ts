@@ -95,6 +95,7 @@ export class ForklaunchWebSocketServer<
 > extends WebSocketServer {
   private readonly schemaValidator: SV;
   private readonly eventSchemas: ES;
+  private readonly automaticPongEnabled: boolean;
 
   /**
    * Creates a new ForklaunchWebSocketServer with schema validation.
@@ -149,7 +150,8 @@ export class ForklaunchWebSocketServer<
     options?: ConstructorParameters<typeof WebSocketServer>[0],
     callback?: () => void
   ) {
-    super(options, callback);
+    super({ ...options, autoPong: false }, callback);
+    this.automaticPongEnabled = options?.autoPong !== false;
     this.schemaValidator = schemaValidator;
     this.eventSchemas = eventSchemas;
   }
@@ -195,6 +197,9 @@ export class ForklaunchWebSocketServer<
       SV,
       ServerEventSchema<SV, ES>
     >;
+    // @ts-expect-error - Initialize the grafted socket's protocol settings.
+    enhancedWs.automaticPongEnabled = this.automaticPongEnabled;
+
     // @ts-expect-error - Intentionally restricting types for compile-time schema validation
     enhancedWs.schemaValidator = this.schemaValidator;
 

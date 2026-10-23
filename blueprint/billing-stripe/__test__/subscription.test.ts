@@ -11,11 +11,11 @@ import {
 describe('Subscription Routes E2E Tests with PostgreSQL Container', () => {
   beforeAll(async () => {
     await setupTestDatabase();
-  }, 60000);
+  });
 
   afterAll(async () => {
     await cleanupTestDatabase();
-  }, 30000);
+  });
 
   describe('POST /subscription - createSubscription', () => {
     it('should create a subscription successfully', async () => {

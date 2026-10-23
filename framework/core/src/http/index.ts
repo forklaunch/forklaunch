@@ -1,3 +1,4 @@
+export * from './bindRuntimeAuth';
 export type { ParsedQs } from 'qs';
 export * from './application/expressLikeApplication';
 export * from './cluster/cluster.types';
@@ -35,6 +36,7 @@ export * from './openApiV3Generator/openApiV3Generator';
 export * from './router/discriminateBody';
 export * from './router/expressLikeRouter';
 export * from './telemetry/auditLogger';
+export * from './telemetry/requestAudit';
 export * from './telemetry/constants';
 export * from './telemetry/evaluateTelemetryOptions';
 export * from './telemetry/metricsDefinition';
@@ -53,4 +55,5 @@ export * from './types/sdk.types';
 export { MapToSdk } from './types/sdk.types';
 export * from './types/typedHandler.types';
 
+export * from './registerDelegatedSurface';
 export * from './localModelGatewayClient';

@@ -1,5 +1,31 @@
 # @forklaunch/implementation-messaging-twilio
 
+## 1.1.10
+
+### Patch Changes
+
+- d2319b3: SMS services no longer `await` MikroORM's synchronous `persist` inside their transactions. No behaviour change.
+- Updated dependencies [d2319b3]
+  - @forklaunch/implementation-messaging-base@1.1.10
+
+## 1.1.9
+
+### Patch Changes
+
+- Built on @forklaunch/core 3.2.0 (default audit trail, listUnsubscribe, compliant fields decrypt under their loading tenant) and a dependency refresh; Stripe stays on 22.x.
+- Updated dependencies
+  - @forklaunch/implementation-messaging-base@1.1.9
+  - @forklaunch/interfaces-messaging@1.1.8
+
+## 1.1.8
+
+### Patch Changes
+
+- Dependency refresh: @forklaunch/core 3.1.0 (explicit Stripe apiKey wins over a detected managed contract; managed email for regular apps), MikroORM 7.2.5, and other minor updates. Stripe stays on 22.x.
+- Updated dependencies
+  - @forklaunch/implementation-messaging-base@1.1.8
+  - @forklaunch/interfaces-messaging@1.1.7
+
 ## 1.1.7
 
 ### Patch Changes

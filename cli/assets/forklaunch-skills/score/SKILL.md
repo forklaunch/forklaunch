@@ -40,6 +40,7 @@ report-card contract.
 | `--no-share` | score online but skip minting the share link (newer CLIs) |
 | `--json` | the raw report card, for tooling (includes `remediationPrompt`) |
 | `--prompt` | print only the remediation prompt (no summary) |
+| `--prompt-scope not-met\|undecided\|both` | what the prompt covers: open findings and failed requirements, the requirements the reviewers could not decide (the agent first checks whether each is already met, makes it demonstrable if so, implements it if not), or both (default) |
 | `--pretty` | pretty-print the JSON |
 | `--min-score N` | exit non-zero if `overall` is below N — for CI |
 | `-p, --path <dir>` | app root (defaults to the manifest in the current directory) |
@@ -149,8 +150,10 @@ Three checks are `critical`:
 - **`ai-provider-direct`**: a service whose entities hold `phi` imports an AI
   provider SDK (`openai`, `@anthropic-ai/sdk`, `@ai-sdk/*`, Bedrock, Gemini, …)
   or reads a provider key. Health data may be reaching a vendor with no BAA.
-  Fix: call models through `createModelGatewayClient()` (the platform offers
-  HIPAA products only BAA-covered models), or confirm the provider's BAA.
+  Fix: `forklaunch infra add <service> models` and call models through the
+  injected `ModelGatewayClient` (`createModelGatewayClient()`; the managed
+  gateway offers HIPAA products only BAA-covered models), or confirm the
+  provider's BAA.
 - **`object-store-public-access`**: code makes stored files public (`public-read`,
   a removed public access block, or CORS `AllowedOrigins: ['*']`). Fix: keep the
   bucket private and share files with `presignDownload` links.

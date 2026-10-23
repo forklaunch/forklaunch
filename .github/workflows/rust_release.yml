@@ -1,0 +1,146 @@
+name: Rust Crate Release
+
+on:
+  pull_request:
+    paths:
+      - 'framework-rs/**'
+      - 'blueprint-rs/**'
+      - 'scripts/rust_release.py'
+      - 'scripts/rust_registry.py'
+      - 'scripts/rust_registry_smoke.rs'
+      - 'scripts/rust_feature_matrix.py'
+      - 'scripts/test_rust_release.py'
+      - 'cli/tests/fixtures/rust_mcp_service_startup.mjs'
+      - 'cli/tests/fixtures/rust_mcp_probe.mjs'
+      - '.github/workflows/rust_release.yml'
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: 'Workspace to release: framework (tag rust-vVERSION) or blueprint (tag rust-blueprint-vVERSION, after its framework versions are on crates.io)'
+        type: choice
+        options: [framework, blueprint]
+        default: framework
+      publish:
+        description: 'Upload to crates.io (select the scope''s existing tag and public GitHub release)'
+        type: boolean
+        default: false
+      reuse_verified_release_tag:
+        description: 'Optional prior public rust-vVERSION release for unchanged package versions; fresh packaged contents must match'
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-crate-release-${{ inputs.scope || 'pr' }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_INCREMENTAL: '0'
+  CARGO_BUILD_JOBS: '2'
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        # Pull requests verify both workspaces; a dispatch verifies the scope it releases.
+        scope: ${{ fromJSON(github.event_name == 'workflow_dispatch' && format('["{0}"]', inputs.scope) || '["framework","blueprint"]') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test release graph, integrity, registry and upload boundaries
+        run: python3 -m unittest discover -s scripts -p test_rust_release.py -v
+      # rdkafka-sys (blueprint Kafka worker) builds librdkafka, which needs libcurl headers.
+      - name: Install native build dependencies
+        if: matrix.scope == 'blueprint'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev libsasl2-dev
+      - name: Build each ${{ matrix.scope }} crate with default features and each feature alone
+        run: python3 scripts/rust_feature_matrix.py ${{ matrix.scope == 'blueprint' && 'blueprint-rs' || 'framework-rs' }} --target-dir "$RUNNER_TEMP/feature-matrix-target"
+      - name: Package ${{ matrix.scope }} crates
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRIOR_RELEASE_TAG: ${{ inputs.reuse_verified_release_tag || '' }}
+        run: |
+          reuse=()
+          if [ -n "$PRIOR_RELEASE_TAG" ]; then
+            python3 scripts/rust_release.py hydrate --repository "$GITHUB_REPOSITORY" --tag "$PRIOR_RELEASE_TAG" --output "$RUNNER_TEMP/prior-rust-release"
+            reuse=(--reuse-verified-release "$RUNNER_TEMP/prior-rust-release")
+          fi
+          python3 scripts/rust_release.py prepare --scope "${{ matrix.scope }}" --output "$RUNNER_TEMP/rust-release" "${reuse[@]}"
+      - name: Install staged registry crates and verify (framework also starts HTTP/MCP)
+        run: python3 scripts/rust_release.py verify --output "$RUNNER_TEMP/rust-release" --target-dir "$RUNNER_TEMP/rust-release-target"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rust-crate-release-${{ matrix.scope }}-${{ github.sha }}
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/rust-release/release.json
+            ${{ runner.temp }}/rust-release/verification.json
+            ${{ runner.temp }}/rust-release/cargo-target/package/*.crate
+            ${{ runner.temp }}/rust-release/fresh-packages/*.crate
+
+  publish:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: rust-crate-release-${{ inputs.scope }}-${{ github.sha }}
+          path: ${{ runner.temp }}/rust-release
+      - name: Validate exact tagged checkout and verification receipt
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          test "$GITHUB_REF_TYPE" = tag
+          python3 scripts/rust_release.py publish --output "$RUNNER_TEMP/rust-release" --tag "$RELEASE_TAG"
+      - name: Preserve exact verified archives and comparison evidence on public release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = false
+          evidence=()
+          if [ -d "$RUNNER_TEMP/rust-release/fresh-packages" ]; then
+            tar -C "$RUNNER_TEMP/rust-release" -czf "$RUNNER_TEMP/rust-release/fresh-package-comparisons.tar.gz" fresh-packages
+            evidence=("$RUNNER_TEMP/rust-release/fresh-package-comparisons.tar.gz")
+          fi
+          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/rust-release/release.json" "$RUNNER_TEMP/rust-release/verification.json" "$RUNNER_TEMP/rust-release/cargo-target/package/"*.crate "${evidence[@]}" --clobber
+      - name: Publish crates in dependency order
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 scripts/rust_release.py publish --scope "${{ inputs.scope }}" --output "$RUNNER_TEMP/rust-release" --tag "$RELEASE_TAG" --upload
+      - name: Preserve complete publication receipt for future verified reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/rust-release/publication.json" --clobber
+      - name: Preserve publication receipt, including partial releases
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-${{ inputs.scope }}-publication-${{ github.sha }}
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/rust-release/publication.json

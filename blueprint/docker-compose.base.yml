@@ -88,7 +88,8 @@ services:
       minio-init:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3200/ready"]
+      # Distroless image: no shell/wget/curl. Tempo's own -health flag probes /ready.
+      test: ["CMD", "/tempo", "-health", "-health.url=http://localhost:3200/ready"]
       interval: 10s
       timeout: 10s
       retries: 12
@@ -107,12 +108,8 @@ services:
     depends_on:
       minio-init:
         condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
-      interval: 10s
-      timeout: 10s
-      retries: 12
-      start_period: 30s
+    # No healthcheck: the image ships only the loki binary (no probe mode, no
+    # shell/wget/curl), so any check would stay unhealthy forever.
 
   # Metrics. Replaces Prometheus + the Thanos sidecar, matching production.
   # Health path is /ready. Mimir returns 404 for Prometheus's /-/healthy — that
@@ -132,12 +129,8 @@ services:
         condition: service_completed_successfully
       memcached:
         condition: service_started
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/ready"]
-      interval: 10s
-      timeout: 10s
-      retries: 12
-      start_period: 30s
+    # No healthcheck: the image ships only the mimir binary (no probe mode, no
+    # shell/wget/curl). Production still probes /ready from the load balancer.
 
   # Query cache for Mimir's bucket store. Present in production too.
   memcached:
@@ -184,12 +177,8 @@ services:
         condition: service_started
       tempo:
         condition: service_started
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:13133/"]
-      interval: 10s
-      timeout: 10s
-      retries: 12
-      start_period: 20s
+    # No healthcheck: distroless image, nothing inside can call the
+    # health_check extension on :13133 (published for host-side probes).
 
   postgres:
     image: postgres:latest

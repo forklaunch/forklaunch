@@ -1,0 +1,855 @@
+//! Configuration and entry points for canonicalization.
+
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::{Arc, Mutex},
+};
+
+use ahash::{AHashMap, AHashSet};
+use referencing::{Draft, Registry, Retrieve, Uri};
+use serde_json::Value;
+
+use crate::{
+    canonical::{
+        context::{CanonicalizationContext, SharedRegexes},
+        emptiness,
+        ir::{RawJson, RawReason, Schema, SchemaKind},
+        parse::{self, Seed},
+        refold,
+        schema::CanonicalSchema,
+        CanonicalizationError, DefinitionMap, ROOT_DEFINITION_KEY,
+    },
+    compiler::{
+        formats_are_assertions_by_default, normalize_base_uri, resolve_base_uri, validate_schema,
+    },
+    options::{PatternEngineOptions, PatternOptions},
+};
+
+/// Build a [`CanonicalizeOptions`] for configurable canonicalization.
+#[must_use]
+pub fn options() -> CanonicalizeOptions<'static> {
+    CanonicalizeOptions::default()
+}
+
+/// Why a subschema admits no value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UnsatisfiableReason {
+    /// Written as `false`.
+    Literal,
+    /// One part every value must satisfy admits nothing by itself. A subschema part has a
+    /// reason of its own under its pointer.
+    Empty(Cause),
+    /// Each part admits values; no value satisfies all of them together.
+    Conflict(Vec<Cause>),
+}
+
+/// A part of a schema object.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Cause {
+    /// JSON Pointer of the schema object holding `keywords`, or of the subschema itself.
+    pub pointer: String,
+    /// Keywords of one family present at `pointer`; empty for a whole subschema.
+    pub keywords: Vec<String>,
+}
+
+/// Configurable canonicalization entry point. Construct via [`options`].
+#[derive(Default)]
+pub struct CanonicalizeOptions<'r> {
+    registry: Option<&'r Registry<'r>>,
+    retriever: Option<Arc<dyn Retrieve>>,
+    base_uri: Option<String>,
+    pattern_options: PatternEngineOptions,
+    draft: Option<Draft>,
+    validate_formats: Option<bool>,
+}
+
+impl<'r> CanonicalizeOptions<'r> {
+    /// Use a pre-built [`Registry`] for dialect and `$ref` resolution.
+    #[must_use]
+    pub fn with_registry(mut self, registry: &'r Registry<'r>) -> Self {
+        self.registry = Some(registry);
+        self
+    }
+
+    /// Fetch external resources that are not present in the registry.
+    #[must_use]
+    pub fn with_retriever(mut self, retriever: impl Retrieve + 'static) -> Self {
+        self.retriever = Some(Arc::new(retriever));
+        self
+    }
+
+    /// Refuse to fetch any reference that is not already in the registry.
+    #[must_use]
+    pub fn offline(mut self) -> Self {
+        self.retriever = Some(Arc::new(crate::retriever::OfflineRetriever));
+        self
+    }
+
+    /// Use this URI as the base for resolving relative references in the root schema.
+    ///
+    /// Takes precedence over the root `$id`.
+    #[must_use]
+    pub fn with_base_uri(mut self, base_uri: impl Into<String>) -> Self {
+        self.base_uri = Some(base_uri.into());
+        self
+    }
+
+    /// Use this draft for canonicalization, overriding `$schema` detection.
+    #[must_use]
+    pub fn with_draft(mut self, draft: Draft) -> Self {
+        self.draft = Some(draft);
+        self
+    }
+
+    /// Set whether canonicalization treats `format` as a validation assertion.
+    ///
+    /// Left unset, it follows the draft default (Draft 4/6/7 assert known formats; 2019-09/2020-12 annotate).
+    /// Asserting lets incompatible format intersections like `date`/`uuid` collapse to `false`.
+    #[must_use]
+    pub fn should_validate_formats(mut self, enabled: bool) -> Self {
+        self.validate_formats = Some(enabled);
+        self
+    }
+
+    /// Select the regular-expression engine used for `pattern` compilation and membership.
+    #[must_use]
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn with_pattern_options<E>(mut self, options: PatternOptions<E>) -> Self {
+        self.pattern_options = options.inner;
+        self
+    }
+
+    /// Run canonicalization with the configured options.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`crate::canonicalize`].
+    pub fn canonicalize(self, value: &Value) -> Result<CanonicalSchema, CanonicalizationError> {
+        self.prepare(value)?.canonicalize()
+    }
+
+    /// Prepare `value` for canonicalizing its subschemas.
+    ///
+    /// The document decides the draft, the base URI and what `#` means, so a subschema selected
+    /// from a prepared document resolves its references as it does in place. Resolving the draft,
+    /// validating the document and indexing it depends only on the document, so preparing once
+    /// pays for it once however many subschemas are then selected.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use jsonschema::canonical::options;
+    /// use serde_json::json;
+    ///
+    /// let document = json!({
+    ///     "$defs": {
+    ///         "Named": {"type": "object", "required": ["name"]},
+    ///         "Pet": {"allOf": [
+    ///             {"$ref": "#/$defs/Named"},
+    ///             {"properties": {"age": {"type": "integer", "minimum": 0}}}
+    ///         ]}
+    ///     }
+    /// });
+    ///
+    /// let prepared = options().prepare(&document)?;
+    /// assert_eq!(
+    ///     prepared.canonicalize_at("/$defs/Pet")?.to_json_schema(),
+    ///     json!({
+    ///         "$schema": "https://json-schema.org/draft/2020-12/schema",
+    ///         "type": "object",
+    ///         "properties": {"age": {"type": "integer", "minimum": 0}},
+    ///         "required": ["name"]
+    ///     })
+    /// );
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Same as [`canonicalize`](Self::canonicalize), for the document itself.
+    pub fn prepare<'a>(
+        self,
+        value: &'a Value,
+    ) -> Result<PreparedDocument<'a>, CanonicalizationError>
+    where
+        'r: 'a,
+    {
+        prepare(value, &self)
+    }
+}
+
+/// A document indexed once, ready to canonicalize any number of its subschemas.
+///
+/// Built by [`CanonicalizeOptions::prepare`].
+pub struct PreparedDocument<'a> {
+    document: &'a Value,
+    draft: Draft,
+    pattern_options: PatternEngineOptions,
+    validate_formats: bool,
+    // `None` when the draft is unknown: nothing resolves, and every selection stays verbatim.
+    resolution: Option<(Registry<'a>, Uri<String>)>,
+    regexes: SharedRegexes,
+    /// The definition bodies the reads of this document have parsed so far, which its later reads
+    /// reuse. Grown out of those reads, so a document read once pays nothing for it.
+    seed: Mutex<Option<Arc<Seed>>>,
+}
+
+impl PreparedDocument<'_> {
+    /// The draft the document was read under.
+    #[must_use]
+    pub fn draft(&self) -> Draft {
+        self.draft
+    }
+
+    /// Canonicalize the document itself.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`crate::canonicalize`].
+    pub fn canonicalize(&self) -> Result<CanonicalSchema, CanonicalizationError> {
+        self.reduce(self.document)
+    }
+
+    /// Canonicalize the subschema at `pointer`, in the document's context.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`crate::canonicalize`], plus [`CanonicalizationError::PointerNotFound`] when
+    /// `pointer` names nothing.
+    pub fn canonicalize_at(&self, pointer: &str) -> Result<CanonicalSchema, CanonicalizationError> {
+        let target = referencing::pointer(self.document, pointer)
+            .ok_or_else(|| CanonicalizationError::PointerNotFound(pointer.to_string()))?;
+        match target {
+            Value::Bool(_) | Value::Object(_) => self.reduce(target),
+            other @ (Value::Null | Value::Number(_) | Value::String(_) | Value::Array(_)) => {
+                Err(CanonicalizationError::InvalidSchemaType(other.to_string()))
+            }
+        }
+    }
+
+    /// The subschemas that admit no value, by pointer, each with why.
+    ///
+    /// A pointer left out is not proven satisfiable: an unmodeled document reports nothing, like
+    /// [`Satisfiability::Unknown`](crate::canonical::Satisfiability).
+    ///
+    /// # Errors
+    ///
+    /// Same as [`crate::canonicalize`], for the document itself.
+    pub fn unsatisfiable(
+        &self,
+    ) -> Result<BTreeMap<String, UnsatisfiableReason>, CanonicalizationError> {
+        let Some((registry, base_uri)) = &self.resolution else {
+            return Ok(BTreeMap::new());
+        };
+        let resolver = registry.resolver(base_uri.clone());
+        let context =
+            CanonicalizationContext::new(self.draft, self.pattern_options, self.validate_formats)
+                .sharing_regexes(Arc::clone(&self.regexes));
+        let Some(mut parsed) = parse::parse_tracking_nodes(self.document, &context, &resolver)?
+        else {
+            return Ok(BTreeMap::new());
+        };
+        // A node holding a reference may still fold to nothing once every body is known, as
+        // `canonicalize` folds it; it is settled and named the same way here.
+        let mut settled_reasons = AHashMap::default();
+        if !parsed.unsettled.is_empty() {
+            if let Some(settled) = refold::Settled::of(&parsed, &context) {
+                for (key, body) in settled.definitions() {
+                    if matches!(body.kind(), SchemaKind::False) {
+                        parsed
+                            .parsed_definitions
+                            .insert(Arc::clone(key), parse::ParsedBody::Unsatisfiable);
+                    }
+                }
+                let unsettled: AHashMap<usize, &Schema> = parsed
+                    .unsettled
+                    .iter()
+                    .map(|(address, schema)| (*address, schema))
+                    .collect();
+                settle_nodes(
+                    self.document,
+                    &unsettled,
+                    &settled,
+                    &parsed.kept(),
+                    &mut settled_reasons,
+                );
+            }
+        }
+        let mut named = AHashSet::default();
+        let reasons = parsed
+            .parsed_nodes
+            .values()
+            .filter_map(|node| match node {
+                parse::ParsedNode::Unsatisfiable(reason) => Some(reason),
+                parse::ParsedNode::Reference(_) => None,
+            })
+            .chain(settled_reasons.values());
+        for reason in reasons {
+            reason.for_each_node(&mut |address| {
+                named.insert(address);
+            });
+        }
+        let mut empties = Vec::new();
+        let mut located = AHashMap::default();
+        locate_unsatisfiable(
+            self.document,
+            &mut String::new(),
+            &parsed,
+            &settled_reasons,
+            &named,
+            &mut empties,
+            &mut located,
+        );
+        Ok(empties
+            .into_iter()
+            .map(|(pointer, value, reason)| {
+                let reason = resolve_reason(reason, &pointer, value, &located);
+                (pointer, reason)
+            })
+            .collect())
+    }
+
+    /// The definition bodies earlier reads of this document parsed. A poisoned cache reads as
+    /// empty: a body is only ever a parse this document would repeat.
+    fn seed(&self) -> Option<Arc<Seed>> {
+        self.seed.lock().ok()?.clone()
+    }
+
+    /// Keep the bodies a read reached, so however many subschemas are selected next, each body is
+    /// parsed once for the document rather than once per read.
+    fn grow_seed(&self, grown: Seed) {
+        if let Ok(mut seed) = self.seed.lock() {
+            *seed = Some(Arc::new(grown));
+        }
+    }
+
+    fn reduce(&self, target: &Value) -> Result<CanonicalSchema, CanonicalizationError> {
+        let opaque = |target: &Value, reason: RawReason, pointer: Option<Arc<str>>| {
+            CanonicalSchema::new(
+                Schema::new(SchemaKind::Raw(RawJson::new(
+                    target.clone(),
+                    reason,
+                    pointer,
+                ))),
+                self.draft,
+                self.pattern_options,
+                self.validate_formats,
+                Arc::new(DefinitionMap::new()),
+                Arc::new(BTreeSet::new()),
+            )
+        };
+        let Some((registry, base_uri)) = &self.resolution else {
+            return Ok(opaque(target, RawReason::UnknownDialect, None));
+        };
+        let resolver = registry.resolver(base_uri.clone());
+        let context =
+            CanonicalizationContext::new(self.draft, self.pattern_options, self.validate_formats)
+                .sharing_regexes(Arc::clone(&self.regexes));
+        let seed = self.seed();
+        let (parsed, grown) = parse::parse(target, &context, &resolver, seed.as_deref())?;
+        if let Some(grown) = grown {
+            self.grow_seed(grown);
+        }
+        let Some(parsed) = parsed else {
+            let reason = raw_reason(&context);
+            // Only an unmodeled construct sits at one node; a run out of allowance gave up on the
+            // document as a whole.
+            let pointer = (reason == RawReason::Unmodeled)
+                .then(|| context.declined_at())
+                .flatten()
+                .and_then(|address| pointer_to(target, &mut String::new(), address));
+            return Ok(opaque(target, reason, pointer));
+        };
+        let parsed = emptiness::fold_definitions(parsed, target, &context, &resolver)?;
+        // Folded now every body is known, so this entry point and the set operations agree.
+        let parsed = refold::through_targets(parsed, &context);
+        let (inner, definitions, local) = (
+            parsed.root,
+            Arc::new(parsed.definitions),
+            Arc::new(parsed.local_definitions),
+        );
+        Ok(CanonicalSchema::new(
+            inner,
+            self.draft,
+            self.pattern_options,
+            self.validate_formats,
+            definitions,
+            local,
+        ))
+    }
+}
+
+/// Validate the document and index it for reference resolution.
+fn prepare<'a, 'r: 'a>(
+    value: &'a Value,
+    options: &CanonicalizeOptions<'r>,
+) -> Result<PreparedDocument<'a>, CanonicalizationError> {
+    // Only a boolean or object is a schema document.
+    match value {
+        Value::Bool(_) | Value::Object(_) => {}
+        other @ (Value::Null | Value::Number(_) | Value::String(_) | Value::Array(_)) => {
+            return Err(CanonicalizationError::InvalidSchemaType(other.to_string()))
+        }
+    }
+    let pattern_options = options.pattern_options;
+    let draft = detect_draft(value, options.draft, options.registry)?;
+    if draft == Draft::Unknown {
+        return Ok(PreparedDocument {
+            document: value,
+            draft,
+            pattern_options,
+            validate_formats: options.validate_formats.unwrap_or(false),
+            resolution: None,
+            regexes: SharedRegexes::default(),
+            seed: Mutex::new(None),
+        });
+    }
+    let validate_formats = options
+        .validate_formats
+        .unwrap_or_else(|| formats_are_assertions_by_default(draft));
+    validate_schema(draft, value)?;
+    let resource = draft.create_resource_ref(value);
+    let base_uri = resolve_base_uri(options.base_uri.as_ref(), resource.id())?;
+    let mut builder = match options.registry {
+        Some(registry) => registry.add(base_uri.as_str(), resource)?,
+        None => Registry::new().add(base_uri.as_str(), resource)?,
+    };
+    if let Some(retriever) = &options.retriever {
+        builder = builder.retriever(Arc::clone(retriever));
+    }
+    let registry = builder.draft(draft).prepare()?;
+    let base_uri = normalize_base_uri(&registry, &base_uri);
+    Ok(PreparedDocument {
+        document: value,
+        draft,
+        pattern_options,
+        validate_formats,
+        resolution: Some((registry, base_uri)),
+        regexes: SharedRegexes::default(),
+        seed: Mutex::new(None),
+    })
+}
+
+/// Resolve the draft: an explicit override, else detected from `$schema`.
+fn detect_draft<'r>(
+    value: &Value,
+    draft: Option<Draft>,
+    registry: Option<&'r Registry<'r>>,
+) -> Result<Draft, CanonicalizationError> {
+    let mut options = crate::options();
+    if let Some(draft) = draft {
+        options = options.with_draft(draft);
+    }
+    if let Some(registry) = registry {
+        options = options.with_registry(registry);
+    }
+    options
+        .draft_for(value)
+        .map_err(CanonicalizationError::from)
+}
+
+/// Whether the body `key` names is unsatisfiable, reading through a chain of pointers as
+/// [`CanonicalSchema::satisfiability`] does.
+fn names_unsatisfiable_body(parsed: &parse::ParseOutput, key: &str) -> bool {
+    let mut key = key;
+    let mut walked: Vec<&str> = Vec::new();
+    loop {
+        if walked.contains(&key) {
+            return false;
+        }
+        walked.push(key);
+        match parsed.parsed_definitions.get(key) {
+            Some(parse::ParsedBody::Unsatisfiable) => return true,
+            Some(parse::ParsedBody::Reference(next)) => {
+                key = next.as_ref();
+                continue;
+            }
+            None => {}
+        }
+        let body = if key == ROOT_DEFINITION_KEY {
+            &parsed.root
+        } else {
+            match parsed.definitions.get(key) {
+                Some(body) => body,
+                None => return false,
+            }
+        };
+        match body.kind() {
+            SchemaKind::False => return true,
+            SchemaKind::Reference(next) => key = next.as_ref(),
+            SchemaKind::MultiType(_)
+            | SchemaKind::TypedGroup { .. }
+            | SchemaKind::String(_)
+            | SchemaKind::Integer(_)
+            | SchemaKind::Number(_)
+            | SchemaKind::Array(_)
+            | SchemaKind::Object(_)
+            | SchemaKind::Const(_)
+            | SchemaKind::Enum(_)
+            | SchemaKind::Not(_)
+            | SchemaKind::AllOf(_)
+            | SchemaKind::AnyOf(_)
+            | SchemaKind::OneOf(_)
+            | SchemaKind::True
+            | SchemaKind::Raw(_) => return false,
+        }
+    }
+}
+
+/// Walk `value` alongside what the parse made of each node, naming the unsatisfiable ones by pointer.
+/// What stopped the run, read off the context the parse left behind. An exhausted allowance also
+/// records an approximation, so it is asked about first.
+fn raw_reason(context: &CanonicalizationContext) -> RawReason {
+    if context.outgrew_distribution() {
+        RawReason::OutgrewIntersections
+    } else if context.saw_inexact_intersection() {
+        RawReason::InexactIntersection
+    } else if context.outgrew_cases() {
+        RawReason::OutgrewCases
+    } else {
+        RawReason::Unmodeled
+    }
+}
+
+/// The pointer naming the node at `address`, or `None` where the parse declined on a schema it
+/// rewrote, which the document no longer holds.
+fn pointer_to(value: &Value, pointer: &mut String, address: usize) -> Option<Arc<str>> {
+    if std::ptr::from_ref(value) as usize == address {
+        return Some(Arc::from(pointer.as_str()));
+    }
+    let restore = pointer.len();
+    let mut children = |children: Box<dyn Iterator<Item = (String, &Value)> + '_>| {
+        for (segment, child) in children {
+            pointer.push('/');
+            pointer.push_str(&segment);
+            if let Some(found) = pointer_to(child, pointer, address) {
+                return Some(found);
+            }
+            pointer.truncate(restore);
+        }
+        None
+    };
+    match value {
+        Value::Object(map) => children(Box::new(map.iter().map(|(key, child)| {
+            let mut segment = String::new();
+            referencing::write_escaped_str(&mut segment, key);
+            (segment, child)
+        }))),
+        Value::Array(items) => children(Box::new(
+            items
+                .iter()
+                .enumerate()
+                .map(|(index, child)| (index.to_string(), child)),
+        )),
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => None,
+    }
+}
+
+/// An empty node as the walk found it: the recorded reason, or a pointer whose body is empty.
+#[derive(Clone, Copy)]
+enum Emptiness<'p> {
+    Recorded(&'p parse::RecordedReason),
+    ReferenceBody,
+}
+
+/// Walk `value`, settling every node the parse left holding a reference and naming why the ones
+/// that fold to nothing admit no value.
+fn settle_nodes(
+    value: &Value,
+    unsettled: &AHashMap<usize, &Schema>,
+    settled: &refold::Settled,
+    kept: &parse::Kept<'_>,
+    out: &mut AHashMap<usize, parse::RecordedReason>,
+) {
+    let address = std::ptr::from_ref(value) as usize;
+    if let (Some(schema), Value::Object(map)) = (unsettled.get(&address), value) {
+        let folds_to_nothing = settled
+            .settle(schema)
+            .is_some_and(|folded| matches!(folded.kind(), SchemaKind::False));
+        if folds_to_nothing {
+            let sides: Vec<(parse::PartKind, Schema)> = kept
+                .parts
+                .get(&address)
+                .expect("an unsettled node kept its sides")
+                .iter()
+                .map(|(kind, side)| (*kind, settled.settle(side).unwrap_or_else(|| side.clone())))
+                .collect();
+            out.insert(
+                address,
+                parse::attribute(address, map, &sides, settled.context(), kept),
+            );
+        }
+    }
+    match value {
+        Value::Object(map) => {
+            for child in map.values() {
+                settle_nodes(child, unsettled, settled, kept, out);
+            }
+        }
+        Value::Array(items) => {
+            for child in items {
+                settle_nodes(child, unsettled, settled, kept, out);
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+    }
+}
+
+/// Walk `value` alongside what the parse made of each node, collecting the empty nodes and the
+/// pointer of every node a recorded cause names.
+fn locate_unsatisfiable<'v>(
+    value: &'v Value,
+    pointer: &mut String,
+    parsed: &'v parse::ParseOutput,
+    settled: &'v AHashMap<usize, parse::RecordedReason>,
+    named: &AHashSet<usize>,
+    empties: &mut Vec<(String, &'v Value, Emptiness<'v>)>,
+    located: &mut AHashMap<usize, (String, &'v Value)>,
+) {
+    let address = std::ptr::from_ref(value) as usize;
+    if named.contains(&address) {
+        located.insert(address, (pointer.clone(), value));
+    }
+    if let Some(reason) = settled.get(&address) {
+        empties.push((pointer.clone(), value, Emptiness::Recorded(reason)));
+    } else {
+        match parsed.parsed_nodes.get(&std::ptr::from_ref(value)) {
+            Some(parse::ParsedNode::Unsatisfiable(reason)) => {
+                empties.push((pointer.clone(), value, Emptiness::Recorded(reason)));
+            }
+            Some(parse::ParsedNode::Reference(key)) if names_unsatisfiable_body(parsed, key) => {
+                empties.push((pointer.clone(), value, Emptiness::ReferenceBody));
+            }
+            Some(parse::ParsedNode::Reference(_)) | None => {}
+        }
+    }
+    let restore = pointer.len();
+    match value {
+        Value::Object(map) => {
+            for (key, child) in map {
+                pointer.push('/');
+                referencing::write_escaped_str(pointer, key);
+                locate_unsatisfiable(child, pointer, parsed, settled, named, empties, located);
+                pointer.truncate(restore);
+            }
+        }
+        Value::Array(items) => {
+            let mut index_buffer = itoa::Buffer::new();
+            for (index, child) in items.iter().enumerate() {
+                pointer.push('/');
+                pointer.push_str(index_buffer.format(index));
+                locate_unsatisfiable(child, pointer, parsed, settled, named, empties, located);
+                pointer.truncate(restore);
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+    }
+}
+
+fn resolve_reason(
+    reason: Emptiness<'_>,
+    pointer: &str,
+    value: &Value,
+    located: &AHashMap<usize, (String, &Value)>,
+) -> UnsatisfiableReason {
+    match reason {
+        Emptiness::Recorded(parse::RecordedReason::Literal) => UnsatisfiableReason::Literal,
+        Emptiness::Recorded(parse::RecordedReason::Empty(cause)) => {
+            UnsatisfiableReason::Empty(resolve_cause(cause, pointer, value, located))
+        }
+        Emptiness::Recorded(parse::RecordedReason::Conflict(causes)) => {
+            UnsatisfiableReason::Conflict(
+                causes
+                    .iter()
+                    .map(|cause| resolve_cause(cause, pointer, value, located))
+                    .collect(),
+            )
+        }
+        Emptiness::ReferenceBody => UnsatisfiableReason::Empty(Cause {
+            pointer: pointer.to_string(),
+            keywords: family_keywords(parse::PartKind::Reference, value),
+        }),
+    }
+}
+
+/// A cause naming a node the document does not hold (a rewritten object's child) falls back to
+/// what it was narrowed from, and past that to the keyword holding it at the empty node itself.
+fn resolve_cause(
+    cause: &parse::RecordedCause,
+    enclosing: &str,
+    enclosing_value: &Value,
+    located: &AHashMap<usize, (String, &Value)>,
+) -> Cause {
+    match located.get(&cause.node) {
+        Some((pointer, value)) => Cause {
+            pointer: pointer.clone(),
+            keywords: cause
+                .kind
+                .map_or_else(Vec::new, |kind| family_keywords(kind, value)),
+        },
+        None => match &cause.origin {
+            Some(origin) => resolve_cause(origin, enclosing, enclosing_value, located),
+            None => Cause {
+                pointer: enclosing.to_string(),
+                keywords: family_keywords(
+                    cause.kind.unwrap_or(parse::PartKind::Branch),
+                    enclosing_value,
+                ),
+            },
+        },
+    }
+}
+
+/// The family's keywords the object holds, in family order.
+fn family_keywords(kind: parse::PartKind, value: &Value) -> Vec<String> {
+    let map = value.as_object().expect("a cause names a schema object");
+    kind.keywords()
+        .iter()
+        .filter(|keyword| map.contains_key(**keyword))
+        .map(|keyword| (*keyword).to_string())
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{options, PreparedDocument};
+    use serde_json::{json, Value};
+
+    /// Every pointer in `document`, deepest first.
+    fn every_pointer(document: &Value) -> Vec<String> {
+        fn walk(value: &Value, pointer: &str, out: &mut Vec<String>) {
+            match value {
+                Value::Object(map) => {
+                    for (key, child) in map {
+                        walk(child, &format!("{pointer}/{key}"), out);
+                    }
+                }
+                Value::Array(items) => {
+                    for (index, child) in items.iter().enumerate() {
+                        walk(child, &format!("{pointer}/{index}"), out);
+                    }
+                }
+                Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+            }
+            out.push(pointer.to_string());
+        }
+        let mut out = Vec::new();
+        walk(document, "", &mut out);
+        out
+    }
+
+    /// A prepared document holding no bodies yet, whose first read parses every definition itself.
+    fn unseeded(document: &Value) -> PreparedDocument<'_> {
+        options().prepare(document).expect("prepares")
+    }
+
+    fn documents() -> Vec<Value> {
+        vec![
+            json!({
+                "$defs": {"Named": {"type": "object", "required": ["name"]}},
+                "properties": {"a": {"$ref": "#/$defs/Named"}},
+                "allOf": [{"$ref": "#/$defs/Named"}]
+            }),
+            // A body reached only through another body.
+            json!({
+                "$defs": {
+                    "Inner": {"type": "integer", "minimum": 5},
+                    "Outer": {"allOf": [{"$ref": "#/$defs/Inner"}, {"maximum": 3}]}
+                },
+                "properties": {"a": {"$ref": "#/$defs/Outer"}}
+            }),
+            // A cycle, which the definition fixpoint has to settle.
+            json!({
+                "$defs": {"Node": {
+                    "type": "object",
+                    "properties": {"next": {"$ref": "#/$defs/Node"}}
+                }},
+                "$ref": "#/$defs/Node"
+            }),
+            // A subresource carrying its own `$id`, so keys are generated against another base.
+            json!({
+                "$defs": {"Sub": {
+                    "$id": "https://example.com/sub",
+                    "$defs": {"Leaf": {"type": "string"}},
+                    "properties": {"leaf": {"$ref": "#/$defs/Leaf"}}
+                }},
+                "properties": {"s": {"$ref": "https://example.com/sub"}}
+            }),
+            // A dynamic reference, where a key is specialized by the scope it was reached through.
+            json!({
+                "$defs": {"Items": {
+                    "$dynamicAnchor": "T",
+                    "type": "array",
+                    "items": {"$dynamicRef": "#T"}
+                }},
+                "properties": {"a": {"$ref": "#/$defs/Items"}}
+            }),
+            // A definition the document's own root stops referencing once it folds.
+            json!({
+                "$defs": {"Dead": {"allOf": [{"type": "string"}, {"type": "integer"}]}},
+                "properties": {"a": {"$ref": "#/$defs/Dead"}}
+            }),
+        ]
+    }
+
+    #[test]
+    fn a_seeded_selection_reads_the_same_as_one_that_parses_its_own_definitions() {
+        for document in documents() {
+            let seeded = options().prepare(&document).expect("prepares");
+            // Primed by reading the whole document, which leaves every body it reached behind.
+            let _ = seeded.canonicalize();
+            for pointer in every_pointer(&document) {
+                let left = seeded.canonicalize_at(&pointer).map(|s| s.to_json_schema());
+                // Prepared afresh, so this read holds no body and parses each one it reaches.
+                let right = unseeded(&document)
+                    .canonicalize_at(&pointer)
+                    .map(|s| s.to_json_schema());
+                assert_eq!(
+                    left.as_ref().ok(),
+                    right.as_ref().ok(),
+                    "{pointer} of {document}"
+                );
+                assert_eq!(left.is_err(), right.is_err(), "{pointer} of {document}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_seeded_document_reads_the_same_as_one_that_parses_it_alone() {
+        for document in documents() {
+            let seeded = options().prepare(&document).expect("prepares");
+            // Primed by reading every subschema, so the bodies the document read reuses were
+            // parsed for another target.
+            for pointer in every_pointer(&document) {
+                let _ = seeded.canonicalize_at(&pointer);
+            }
+            assert_eq!(
+                seeded
+                    .canonicalize()
+                    .expect("canonicalizes")
+                    .to_json_schema(),
+                unseeded(&document)
+                    .canonicalize()
+                    .expect("canonicalizes")
+                    .to_json_schema(),
+                "{document}"
+            );
+        }
+    }
+
+    #[test]
+    fn reading_the_same_subschema_again_reads_the_same() {
+        for document in documents() {
+            let prepared = options().prepare(&document).expect("prepares");
+            for pointer in every_pointer(&document) {
+                let first = prepared
+                    .canonicalize_at(&pointer)
+                    .map(|s| s.to_json_schema());
+                let again = prepared
+                    .canonicalize_at(&pointer)
+                    .map(|s| s.to_json_schema());
+                assert_eq!(first.ok(), again.ok(), "{pointer} of {document}");
+            }
+        }
+    }
+}

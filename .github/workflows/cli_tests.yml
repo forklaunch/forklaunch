@@ -7,9 +7,25 @@ on:
       - main
     paths:
       - "cli/**"
+      - "framework-rs/**"
+      - "blueprint-rs/**"
+      - "scripts/sync_rust_embedded_sources.py"
+      - "scripts/test_sync_rust_embedded_sources.py"
+      - ".github/workflows/cli_tests.yml"
+      - ".github/actions/rust-build-cache/**"
   pull_request:
     paths:
       - "cli/**"
+      - "framework-rs/**"
+      - "blueprint-rs/**"
+      - "scripts/sync_rust_embedded_sources.py"
+      - "scripts/test_sync_rust_embedded_sources.py"
+      - ".github/workflows/cli_tests.yml"
+      - ".github/actions/rust-build-cache/**"
+
+permissions:
+  contents: read
+  actions: read
 
 jobs:
   test:
@@ -39,15 +55,24 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Rust dependencies
-        uses: actions/cache@v6
+      - uses: actions/setup-python@v5
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('cli/Cargo.lock') }}
+          python-version: '3.12'
+
+      - name: Embedded source ownership and Git metadata safety
+        run: python3 -m unittest discover -s scripts -p test_sync_rust_embedded_sources.py -v
+
+      # Replaces an actions/cache entry that cached `target` (cargo builds into
+      # cli/target) under a key hashing cli/Cargo.lock, which is gitignored.
+      - name: Rust build cache
+        uses: ./.github/actions/rust-build-cache
+        with:
+          family: tests-cli
 
       - name: Run CLI tests
         working-directory: ./cli
         run: cargo test --verbose
+
+      - name: Save compiler cache
+        if: always()
+        uses: ./.github/actions/rust-build-cache/save

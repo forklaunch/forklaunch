@@ -90,7 +90,7 @@ export class WebhookEventService {
     });
     this.em.assign(event, { processed: true });
     await this.em.transactional(async (innerEm) => {
-      await innerEm.persist(event);
+      innerEm.persist(event);
     });
   }
 }
