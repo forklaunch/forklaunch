@@ -2,7 +2,7 @@
 use crate::{config::ServiceConfig, domain::services::PostgresIamService, error::Result, persistence::database, registrations, server, write_contract_artifacts};
 use forklaunch_core::{
     config,
-    domain::AuditContext,
+    domain::{AuditContext, BlueprintError},
     persistence::{TenantContext, encryption::FieldEncryptor},
     telemetry::otlp::TelemetryRuntime,
 };
@@ -77,7 +77,7 @@ async fn seed() -> Result<()> {
                 directory.bind_auth_identity(id, id).await?;
             }
         }
-        Ok::<_, forklaunch_core::domain::BlueprintError>(report)
+        Ok::<_, BlueprintError>(report)
     }
     .await;
     pool.close().await;

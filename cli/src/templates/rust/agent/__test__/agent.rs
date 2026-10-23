@@ -18,7 +18,8 @@ use {{crate_module}}::agent::{AgentRuntime, builder};
 use {{crate_module}}::config::ServiceConfig;
 use serde_json::{Value, json};
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
+use std::env;
+use std::sync::{Arc, Mutex, Once};
 use tower::ServiceExt;
 
 /// Replies with the scripted responses in order.
@@ -60,6 +61,15 @@ fn test_sessions() -> SessionPolicy {
 }
 
 fn router(runtime: AgentRuntime) -> Router {
+    // `register` requires a JWKS URL at startup; every test replaces the auth
+    // policy below, so this placeholder is never contacted.
+    static JWKS: Once = Once::new();
+    JWKS.call_once(|| {
+        if env::var_os("JWKS_PUBLIC_KEY_URL").is_none() {
+            // SAFETY: set once, before any test reads the setting.
+            unsafe { env::set_var("JWKS_PUBLIC_KEY_URL", "http://127.0.0.1:9/jwks") };
+        }
+    });
     let mut state = {{crate_module}}::register(ServiceConfig::default()).unwrap();
     state.agent = runtime;
     {{crate_module}}::server::router(state).unwrap()

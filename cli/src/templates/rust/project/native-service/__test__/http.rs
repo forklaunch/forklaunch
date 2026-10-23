@@ -1,5 +1,18 @@
 use axum::{body::{Body, to_bytes}, http::Request};
+use std::{env, sync::Once};
 use tower::ServiceExt;
+
+/// Settings `register` requires at startup that these routes never use, such
+/// as the JWKS URL an added agent reads; the placeholder is never contacted.
+fn test_environment() {
+    static SET: Once = Once::new();
+    SET.call_once(|| {
+        if env::var_os("JWKS_PUBLIC_KEY_URL").is_none() {
+            // SAFETY: set once, before any test reads the setting.
+            unsafe { env::set_var("JWKS_PUBLIC_KEY_URL", "http://127.0.0.1:9/jwks") };
+        }
+    });
+}
 #[test]
 fn explicit_public_origin_survives_ephemeral_listener_binding() {
     let mut config = {{crate_module}}::config::ServiceConfig {
@@ -17,6 +30,7 @@ fn explicit_public_origin_survives_ephemeral_listener_binding() {
 }
 #[tokio::test]
 async fn health_and_contract_surfaces_share_native_router() {
+    test_environment();
     let state = {{crate_module}}::register({{crate_module}}::config::ServiceConfig::default()).unwrap();
     let router = {{crate_module}}::server::router(state).unwrap();
     for path in ["/health", "/openapi.json"] {

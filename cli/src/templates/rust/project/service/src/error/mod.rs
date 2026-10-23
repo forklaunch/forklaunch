@@ -1,5 +1,6 @@
 //! Service/domain errors shared by application modules. Controllers translate
 //! these into public endpoint errors; internal messages are not HTTP responses.
+use forklaunch_core::config::ConfigError;
 use std::{fmt, error::Error, result};
 
 pub type Result<T> = result::Result<T, AppError>;
@@ -23,8 +24,8 @@ impl fmt::Display for AppError {
 
 impl Error for AppError {}
 
-impl From<forklaunch_core::config::ConfigError> for AppError {
-    fn from(error: forklaunch_core::config::ConfigError) -> Self {
+impl From<ConfigError> for AppError {
+    fn from(error: ConfigError) -> Self {
         Self::InvalidConfig(error.to_string())
     }
 }

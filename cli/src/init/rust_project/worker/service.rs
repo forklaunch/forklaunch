@@ -361,7 +361,7 @@ const PRODUCER_POLICY: &str = r#"
 use axum::{extract::State,http::request::Parts};
 use contracts::jobs::{AcceptedJob,WorkInput};
 use forklaunch_axum::native::{EndpointError,EndpointPolicy,PolicyCapabilities};
-use forklaunch_core::{auth::request_hmac::{HmacAuthorization,SignedBody},config,contract::RouteContract};
+use forklaunch_core::{auth::request_hmac::{HmacAuthorization,SignedBody},config,contract::{RouteContract,bindings::OriginalBodySignedPolicy}};
 use std::time::{Duration,SystemTime,UNIX_EPOCH};
 use uuid::Uuid;
 use crate::{domain::services::{producer,replay},registrations::AppState};
@@ -377,7 +377,7 @@ const MAX_SKEW:Duration=Duration::from_secs(300);
 #[derive(Clone)]
 pub struct ProducerAuthorization;
 /// `authorize_body` verifies the original bytes and claims the nonce atomically.
-impl forklaunch_core::contract::bindings::OriginalBodySignedPolicy for ProducerAuthorization {}
+impl OriginalBodySignedPolicy for ProducerAuthorization {}
 impl EndpointPolicy<AppState> for ProducerAuthorization {
     const CAPABILITIES:PolicyCapabilities=PolicyCapabilities::SignedInternal;
     type Context=Uuid;

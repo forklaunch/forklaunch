@@ -1,3 +1,4 @@
+use forklaunch_core::config::ConfigError;
 use std::{fmt, error::Error, result};
 
 pub type Result<T> = result::Result<T, WorkerError>;
@@ -19,8 +20,8 @@ impl fmt::Display for WorkerError {
 
 impl Error for WorkerError {}
 
-impl From<forklaunch_core::config::ConfigError> for WorkerError {
-    fn from(error: forklaunch_core::config::ConfigError) -> Self {
+impl From<ConfigError> for WorkerError {
+    fn from(error: ConfigError) -> Self {
         Self::InvalidConfig(error.to_string())
     }
 }
