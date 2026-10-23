@@ -3,13 +3,13 @@
 //
 // parity_suites.json lists, per family, the scripts rust_parity.yml runs one
 // step at a time, each with the exact step environment. This runner replays
-// them in one process: it first compiles every Cargo example or test target
-// the family needs in a single cargo invocation per feature set (cargo
-// parallelises the builds and links that the scripts otherwise did serially),
-// then runs each script unchanged, so every assertion still runs exactly as in
-// its own step. Scripts still build anything the prebuild missed themselves.
+// them in one process, each script unchanged, so every assertion still runs
+// exactly as in its own step. --prebuild first compiles the family's Cargo
+// examples / test targets in one cargo invocation per feature set; measured
+// locally it was no faster than the scripts' own builds (and slower on a
+// filtered shard), so it is off by default.
 //
-//   node cli/tests/parity_suite.mjs <family> [--shard I/N] [--only REGEX] [--list] [--no-prebuild] [--keep-going]
+//   node cli/tests/parity_suite.mjs <family> [--shard I/N] [--only REGEX] [--list] [--prebuild] [--keep-going]
 //   node cli/tests/parity_suite.mjs --families
 //
 // ${FL_RUST_TS} / ${FL_CANONICAL_HTTP} in the table resolve from
@@ -72,7 +72,7 @@ const baseEnv = {...process.env};
 
 const started = Date.now();
 const seconds = since => ((Date.now() - since) / 1000).toFixed(1);
-if (!flag('--no-prebuild')) {
+if (flag('--prebuild')) {
   for (const build of family.prebuild ?? []) {
     // Test targets map to the script that runs them; build only the selected ones.
     const selected = new Set(entries.map(entry => entry.script));

@@ -66,8 +66,11 @@ features do not vary.
   `ts-golden` needs the ts bundle; `rust-golden` needs the rust bundle.
 * **Parity families:** `node cli/tests/parity_suite.mjs FAMILY [--shard I/N]`
   replays the single-script steps of `rust_parity.yml`, each with its exact
-  step environment (`parity_suites.json`), after one prebuild of the family's
-  Cargo examples and tests. Families: `zod` (34 steps, Node 22), `zod-node24`
+  step environment (`parity_suites.json`), in one process. `--only REGEX`
+  filters, `--keep-going` runs past failures, `--prebuild` compiles the
+  family's Cargo targets in one invocation first (off by default; it was not
+  faster locally). The runner inherits the job environment, so run a family
+  in the job it came from (`job` in the table). Families: `zod` (34 steps, Node 22), `zod-node24`
   (26 steps, Node 24.2.0), `billing` (59 steps, Node 22), `billing-node24` (1).
   `--list` prints a shard's scripts. `${FL_RUST_TS}` / `${FL_CANONICAL_HTTP}`
   resolve to `$RUNNER_TEMP/fl-rust-ts` / `$RUNNER_TEMP/fl-canonical-http`
