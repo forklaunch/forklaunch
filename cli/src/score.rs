@@ -117,12 +117,12 @@ impl CliCommand for ScoreCommand {
                 .value_name("SCOPE")
                 .help(
                     "What the remediation prompt covers: not-met (open findings and failed \
-                     requirements, the default), undecided (requirements the reviewers could \
-                     not decide: the agent first checks whether each is already met, makes it \
-                     demonstrable if so and implements it if not), or both. Ignored with --offline.",
+                     requirements), undecided (requirements the reviewers could not decide: the \
+                     agent first checks whether each is already met, makes it demonstrable if so \
+                     and implements it if not), or both (the default). Ignored with --offline.",
                 )
                 .value_parser(["not-met", "undecided", "both"])
-                .default_value("not-met"),
+                .default_value("both"),
         )
         .arg(
             Arg::new("min_score")
@@ -155,7 +155,7 @@ impl CliCommand for ScoreCommand {
                 matches
                     .get_one::<String>("prompt_scope")
                     .map(String::as_str)
-                    .unwrap_or("not-met"),
+                    .unwrap_or("both"),
             )?
         };
         // The platform builds the prompt (the website's own builder); offline, or
