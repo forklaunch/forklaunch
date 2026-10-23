@@ -25,7 +25,10 @@ shard_scripts() {
     # Rust and mixed scaffolding and code-editing commands.
     rust-commands) echo rust_init_commands.sh init_rust_projects.sh rust_sync_commands.sh rust_delete_commands.sh rust_change_commands.sh rust_conversion_preservation.sh rust_package_sources.sh rust_infrastructure_sources.sh ;;
     rust-sdk) echo rust_sdk_openapi_commands.sh rust_sdk_workspace.sh rust_bootstrap_lifecycle.sh rust_checked_mapper.sh rust_local_sdk.sh rust_static_router_lifecycle.sh ;;
-    rust-sweep) echo rust_command_sweep.sh rust_generated_projects.sh rust_name_prompt.sh ;;
+    # The change/delete sweep reports a result per command case (see
+    # fixtures/rust_command_sweep.py), in two halves that run in parallel.
+    rust-sweep-change) echo rust_command_sweep_change.sh ;;
+    rust-sweep-delete) echo rust_command_sweep_delete.sh ;;
     mixed-tooling) echo mixed_application_tooling.sh mixed_runtime_migration.sh neutral_framework_dependencies.sh raw_mixed_workspace.sh ;;
     rust-mixed) echo rust_mixed_sync.sh rust_typescript_attach.sh rust_mixed_attach.sh rust_mixed_lifecycle.sh ;;
     rust-modules) echo rust_module_lifecycle.sh ;;
@@ -35,7 +38,7 @@ shard_scripts() {
     *) return 1 ;;
   esac
 }
-SHARDS="ts-build ts-change ts-delete-sync ts-init ts-env-release rust-commands rust-sdk rust-sweep rust-mixed mixed-tooling rust-modules rust-images"
+SHARDS="ts-build ts-change ts-delete-sync ts-init ts-env-release rust-commands rust-sdk rust-sweep-change rust-sweep-delete rust-mixed mixed-tooling rust-modules rust-images"
 
 run_one() {
   local script="$1" started status
@@ -63,19 +66,35 @@ case "$command" in
     echo "$(echo "$seen" | wc -l | tr -d ' ') scripts in $(echo $SHARDS | wc -w | tr -d ' ') shards" ;;
   run)
     [ $# -gt 0 ] || { echo "usage: shards.sh run SHARD..." >&2; exit 2; }
-    failed=() total=0 started=$(date +%s)
+    failed=() total=0 started=$(date +%s) rows=
     for shard in "$@"; do
       scripts=$(shard_scripts "$shard") || { echo "unknown shard $shard; known: $SHARDS" >&2; exit 2; }
       for script in $scripts; do
         total=$((total + 1))
-        if ! run_one "$script"; then
+        script_started=$(date +%s)
+        if run_one "$script"; then
+          rows+="| $shard/$script | ✅ | $(( $(date +%s) - script_started ))s |"$'\n'
+        else
+          rows+="| $shard/$script | ❌ | $(( $(date +%s) - script_started ))s |"$'\n'
           failed+=("$shard/$script")
           [ "${FORKLAUNCH_SHARD_FAIL_FAST:-0}" = 1 ] && break 2
         fi
       done
     done
     echo "[shard] $((total - ${#failed[@]}))/$total passed in $(( $(date +%s) - started ))s"
-    for f in ${failed[@]+"${failed[@]}"}; do echo "[shard] FAIL $f"; done
+    for f in ${failed[@]+"${failed[@]}"}; do
+      echo "[shard] FAIL $f"
+      echo "::error title=${f##*/} failed::$f failed; see the job log for its output"
+    done
+    if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+      {
+        echo "### Shards $*: $((total - ${#failed[@]}))/$total scripts passed"
+        echo
+        echo "| Script | Result | Time |"
+        echo "| --- | --- | --- |"
+        printf '%s' "$rows"
+      } >> "$GITHUB_STEP_SUMMARY"
+    fi
     [ ${#failed[@]} = 0 ] ;;
   *) echo "usage: shards.sh list | check | run SHARD..." >&2; exit 2 ;;
 esac

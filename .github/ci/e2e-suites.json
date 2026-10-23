@@ -35,8 +35,13 @@
     },
     {
       "tier": "fast",
-      "name": "Rust command sweep and generated projects",
-      "shards": "rust-sweep"
+      "name": "Rust change sweep",
+      "shards": "rust-sweep-change"
+    },
+    {
+      "tier": "fast",
+      "name": "Rust delete sweep",
+      "shards": "rust-sweep-delete"
     },
     {
       "tier": "fast",
