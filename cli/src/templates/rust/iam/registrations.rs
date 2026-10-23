@@ -17,11 +17,14 @@ use std::sync::Arc;
 /// The module's routes, collected before mounting.
 pub type Routes = IamRoutes<PostgresIamService>;
 
+/// The IAM handle controllers take as their state.
+pub type Iam = IamHttp<PostgresIamService>;
+
 #[derive(Clone)]
 pub struct AppState {
     pub config: ServiceConfig,
     pub pool: PgPool,
-    pub iam: IamHttp<PostgresIamService>,
+    pub iam: Iam,
     pub browser: Option<BrowserIam>,
 }
 

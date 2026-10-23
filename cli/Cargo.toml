@@ -16,7 +16,7 @@ include = [
 ]
 
 [dependencies]
-forklaunch-core = { version = "0.2.4", path = "../framework-rs/crates/core", features = ["build", "asyncapi-import", "typescript-source"] }
+forklaunch-core = { version = "0.2.5", path = "../framework-rs/crates/core", features = ["build", "asyncapi-import", "typescript-source"] }
 url = "2"
 ctrlc = { version = "3.5.2", features = ["termination"] }
 anyhow = "1.0"

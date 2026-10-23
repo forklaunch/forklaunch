@@ -1,13 +1,20 @@
-//! Tenant-bound ecommerce HTTP handlers shared with MCP dispatch.
+//! Tenant-bound ecommerce HTTP support shared with MCP dispatch.
+//!
+//! Generated services own their controllers: each extracts its request, calls
+//! the audited service from [`EcommerceHttp::service`] (or one of the provider
+//! flows on [`EcommerceHttp`]) and maps errors with [`Failure`]. [`EcommerceRoutes`]
+//! binds them to the interface's contracts. The packaged
+//! [`EcommerceHttp::handler`] remains for services generated before 0.2.5.
 #![forbid(unsafe_code)]
 mod checkout;
-mod query;
+pub mod query;
 mod webhook;
 use crate::{StripeClient, StripeConnect, StripePaymentService};
 use axum::{
     Extension, Json,
+    body::Bytes,
     extract::{Path, RawQuery},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{MethodRouter, any},
 };
@@ -24,10 +31,13 @@ use forklaunch_ecommerce_base::{
 };
 use forklaunch_ecommerce_interface::{
     AddCartItemDto, AdjustStockDto, CartService, CreateCartDto, CreateInventoryDto, CreateOrderDto,
-    CreatePaymentDto, CreateProductDto, CreateVariantDto, InventoryService, OrderService,
+    CreatePaymentDto, CreateProductDto, CreateVariantDto, InventoryService, OrderDto, OrderService,
     PaymentService, ProductService, RemoveCartItemDto, StockCheckDto, TransitionOrderDto,
     UpdateProductDto, UpdateVariantDto, VariantService, contracts,
-    module::{CreateProviderPayment, CreatedPayment, OrderTransition, PaymentProvider},
+    module::{
+        Checkout, CheckoutResult, CreateProviderPayment, CreatedPayment, OrderTransition,
+        PaymentProvider,
+    },
 };
 use forklaunch_ecommerce_paypal::{PaypalClient, PaypalPaymentService};
 use forklaunch_worker_database::postgres::PostgresWorkerQueue;
@@ -197,6 +207,44 @@ fn text_response(result: BlueprintResult<()>, message: &'static str) -> Response
         Err(error) => failure(&error),
     }
 }
+/// An ecommerce error as its HTTP response: the status follows the error code
+/// and the body is the fixed text `Ecommerce operation failed`, so no store or
+/// provider detail reaches the caller.
+#[derive(Debug)]
+pub struct Failure(pub BlueprintError);
+
+impl From<BlueprintError> for Failure {
+    fn from(error: BlueprintError) -> Self {
+        Self(error)
+    }
+}
+
+impl IntoResponse for Failure {
+    fn into_response(self) -> Response {
+        failure(&self.0)
+    }
+}
+
+/// A JSON request body. A body that does not parse as `T` is a 400 with the
+/// text `Invalid ecommerce request body`.
+pub struct JsonBody<T>(pub T);
+
+impl<S, T> axum::extract::FromRequest<S> for JsonBody<T>
+where
+    S: Send + Sync,
+    T: serde::de::DeserializeOwned,
+{
+    type Rejection = Response;
+    async fn from_request(
+        request: axum::extract::Request,
+        state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        CheckedJson::<T>::from_request(request, state)
+            .await
+            .map(|CheckedJson(Json(value))| Self(value))
+    }
+}
+
 macro_rules! service {
     ($backend:expr,$session:expr) => {
         match $backend.service(&$session) {
@@ -266,7 +314,84 @@ impl EcommerceHttp {
         }
     }
 
-    /// The handler for one ecommerce operation.
+    /// The tenant-bound service, audited as the session's subject with a fresh
+    /// correlation ID.
+    ///
+    /// # Errors
+    /// Fails when the store rejects the audit context.
+    pub fn service(
+        &self,
+        session: &AuthenticatedSession,
+    ) -> BlueprintResult<BaseEcommerceService<PostgresEcommerceStore>> {
+        self.backend.service(session)
+    }
+
+    /// Prices the cart from its variants with tax and shipping, creates or
+    /// resumes its pending order and starts (or resumes) the provider payment.
+    /// Retries reuse the pending order and payment.
+    ///
+    /// # Errors
+    /// Fails for empty carts, insufficient stock and provider failures.
+    pub async fn checkout(
+        &self,
+        session: &AuthenticatedSession,
+        input: Checkout,
+    ) -> BlueprintResult<CheckoutResult> {
+        self.backend.checkout(session, input).await
+    }
+
+    /// Creates a provider payment for an order: `PayPal` when requested and
+    /// configured, Stripe (with Connect when configured) otherwise.
+    ///
+    /// # Errors
+    /// Fails when the order already has a pending payment or the provider is
+    /// unavailable.
+    pub async fn create_payment(
+        &self,
+        session: &AuthenticatedSession,
+        input: CreateProviderPayment,
+    ) -> BlueprintResult<CreatedPayment> {
+        self.backend.create_payment(session, input).await
+    }
+
+    /// Moves an order to `input.to` and enqueues its order event for the
+    /// inventory worker in the same transaction.
+    ///
+    /// # Errors
+    /// Fails for unknown orders and illegal transitions.
+    pub async fn transition_order(
+        &self,
+        session: &AuthenticatedSession,
+        id: String,
+        input: OrderTransition,
+    ) -> BlueprintResult<OrderDto> {
+        self.backend
+            .service(session)?
+            .store()
+            .transition_order_with_event(
+                TransitionOrderDto { id, to: input.to },
+                &self.backend.queue,
+                "order-events",
+            )
+            .await
+    }
+
+    /// Verifies and applies a raw Stripe callback. Unverified callbacks are a
+    /// 400 `Webhook verification failed`; a replay returns the recorded outcome.
+    pub async fn stripe_webhook(&self, headers: &HeaderMap, body: &Bytes) -> Response {
+        webhook::stripe(&self.backend, headers, body).await
+    }
+
+    /// Verifies and applies a raw `PayPal` callback, as [`Self::stripe_webhook`].
+    pub async fn paypal_webhook(&self, headers: &HeaderMap, body: &Bytes) -> Response {
+        webhook::paypal(&self.backend, headers, body).await
+    }
+
+    /// The packaged handler for one ecommerce operation.
+    ///
+    /// Deprecated since 0.2.5: generated services now own their controllers,
+    /// which call [`Self::service`] and the provider flows above. It stays
+    /// available, unchanged, for services generated earlier.
     ///
     /// # Panics
     /// Panics if `operation` is not an ecommerce operation.
@@ -715,4 +840,34 @@ async fn import_catalog(
     CheckedJson(Json(input)): CheckedJson<forklaunch_ecommerce_interface::import::CatalogImport>,
 ) -> Response {
     response(service!(backend, session).import_catalog(input).await)
+}
+
+#[cfg(test)]
+mod controller_api_tests {
+    use super::*;
+    use axum::{body::Body, extract::FromRequest, http::Request};
+
+    async fn text(response: Response) -> String {
+        let body = axum::body::to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap();
+        String::from_utf8(body.to_vec()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn failures_and_bodies_keep_the_packaged_responses() {
+        let response =
+            Failure(BlueprintError::new("ecommerce_not_found", "private")).into_response();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(text(response).await, "Ecommerce operation failed");
+        let request = Request::builder()
+            .header("content-type", "application/json")
+            .body(Body::from("{"))
+            .unwrap();
+        let Err(rejection) = JsonBody::<CreateCartDto>::from_request(request, &()).await else {
+            panic!("malformed body accepted");
+        };
+        assert_eq!(rejection.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(text(rejection).await, "Invalid ecommerce request body");
+    }
 }

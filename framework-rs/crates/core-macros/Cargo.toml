@@ -15,7 +15,7 @@ proc-macro2 = "1"
 quote = "1"
 syn = { version = "3", features = ["full", "visit-mut"] }
 proc-macro-crate = "3.5"
-forklaunch-common = { version = "0.2.4", path = "../common" }
+forklaunch-common = { version = "0.2.5", path = "../common" }
 
 [lints]
 workspace = true

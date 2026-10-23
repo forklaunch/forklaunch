@@ -848,7 +848,7 @@ mod tests {
     }
 
     #[test]
-    fn service_shaped_modules_bind_each_operation_once_through_thin_controllers() {
+    fn service_shaped_modules_bind_each_operation_once_through_owned_controllers() {
         for kind in [BuiltinModule::Iam, BuiltinModule::Cac, BuiltinModule::EcommerceStripe, BuiltinModule::BillingBase, BuiltinModule::BillingStripe] {
             let root = tempfile::tempdir().unwrap();
             let dir = root.path().join("src/module");
@@ -882,8 +882,18 @@ mod tests {
                 assert!(source("api/routes/mod.rs").contains(&format!("{resource}::mount(")), "{resource} is mounted");
                 for capture in route.captures_iter(&file.content) {
                     let controller = source(&format!("api/controllers/{}.rs", &capture[2]));
-                    assert!(controller.contains(&format!("pub fn {}(state: &AppState)", &capture[3])));
-                    assert!(controller.contains(&format!("handler(\"{}\")", &capture[1])));
+                    // Controllers own their handler code instead of returning a
+                    // packaged handler by operation name.
+                    assert!(!controller.contains(".handler(\""), "{} controller {} owns its handler", kind.variant(), &capture[2]);
+                    let start = [format!("pub fn {}(state: &AppState)", &capture[3]), format!("pub fn {}(_state: &AppState)", &capture[3])]
+                        .iter().find_map(|signature| controller.find(signature.as_str()))
+                        .unwrap_or_else(|| panic!("{} lacks controller {}", kind.variant(), &capture[3]));
+                    let body = &controller[start..start + controller[start..].find("\n}\n").expect("controller body")];
+                    assert!(body.contains("any("), "{} binds a handler", &capture[3]);
+                    // Billing operations carry their configured contract; it must be the routed one.
+                    if body.contains(".operation(") {
+                        assert!(body.contains(&format!(".operation(\"{}\")", &capture[1])), "{} serves {}", &capture[3], &capture[1]);
+                    }
                     operations.push(capture[1].to_owned());
                 }
             }

@@ -1,4 +1,5 @@
-//! HTTP query values follow the SDK/MCP JSON-composite wire representation.
+//! Query-string request mappers. Values follow the SDK/MCP JSON-composite wire
+//! representation; a malformed or repeated field is `ecommerce_invalid_query`.
 use forklaunch_core::domain::BlueprintError;
 use forklaunch_core::domain::BlueprintResult;
 use forklaunch_ecommerce_interface::{ProductSearchDto, catalog::CatalogQuery};
@@ -27,10 +28,18 @@ fn integer(fields: &BTreeMap<String, String>, name: &str) -> BlueprintResult<Opt
         .map(|value| value.parse().map_err(|_| invalid()))
         .transpose()
 }
-pub(super) fn ids(query: Option<&str>) -> BlueprintResult<Option<Vec<String>>> {
+/// The optional JSON `ids` array of a list query.
+///
+/// # Errors
+/// Rejects repeated fields and a malformed `ids` value.
+pub fn ids(query: Option<&str>) -> BlueprintResult<Option<Vec<String>>> {
     array(&fields(query)?)
 }
-pub(super) fn search(query: Option<&str>) -> BlueprintResult<ProductSearchDto> {
+/// The product search filters.
+///
+/// # Errors
+/// Rejects repeated fields and malformed values.
+pub fn search(query: Option<&str>) -> BlueprintResult<ProductSearchDto> {
     let fields = fields(query)?;
     Ok(ProductSearchDto {
         ids: array(&fields)?,
@@ -45,7 +54,11 @@ pub(super) fn search(query: Option<&str>) -> BlueprintResult<ProductSearchDto> {
         option_value: fields.get("optionValue").cloned(),
     })
 }
-pub(super) fn catalog(query: Option<&str>) -> BlueprintResult<CatalogQuery> {
+/// The public catalog filters and page.
+///
+/// # Errors
+/// Rejects repeated fields and malformed values.
+pub fn catalog(query: Option<&str>) -> BlueprintResult<CatalogQuery> {
     let fields = fields(query)?;
     Ok(CatalogQuery {
         ids: array(&fields)?,

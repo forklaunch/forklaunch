@@ -1,7 +1,8 @@
-//! Contract-bound HTTP handlers for the current CAC skeleton. No clinical
+//! Contract-bound HTTP support for the current CAC skeleton. No clinical
 //! entities are registered upstream yet: authorized compliance requests
-//! therefore return 404. Generated services bind these handlers in their own
-//! controllers and routes.
+//! therefore return 404. Generated services own their controllers, which call
+//! [`CacHttp::provider`] and mount through [`CacRoutes`]; the packaged
+//! [`CacHttp::handler`] remains for services generated before 0.2.5.
 use axum::{
     Json,
     extract::Path,
@@ -45,7 +46,22 @@ impl<P: CodeSetProvider + 'static> CacHttp<P> {
         }
     }
 
-    /// The handler for one CAC operation.
+    /// The code-set provider that generated controllers call.
+    #[must_use]
+    pub fn provider(&self) -> &Arc<P> {
+        &self.provider
+    }
+
+    /// The configured service identity, as reported by the health route.
+    #[must_use]
+    pub fn service(&self) -> &ServiceInfo {
+        &self.service
+    }
+
+    /// The packaged handler for one CAC operation.
+    ///
+    /// Deprecated since 0.2.5: generated services now own their controllers.
+    /// It stays available, unchanged, for services generated earlier.
     ///
     /// # Panics
     /// Panics if `operation` is not a CAC operation.

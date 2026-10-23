@@ -4,7 +4,7 @@ Rust CAC module with the upstream free mock procedure-code provider. No licensed
 CPT data or clinical entities are included. Configure `HMAC_SECRET_KEY` and a
 trusted `JWKS_PUBLIC_KEY_URL`, then run `cargo run -p {{{name}}}`.
 
-The crate follows the generated service layout. `config.rs` reads trusted settings, `registrations.rs` builds the provider and `AppState`, and `api/routes/<resource>.rs` binds each CAC contract to the controller in `api/controllers/<resource>.rs`. Controllers return handlers from `forklaunch-cac-base`; replace a controller to customize one operation. Routers added with `forklaunch init router` live in `api/routes/extensions`.
+The crate follows the generated service layout. `config.rs` reads trusted settings, `registrations.rs` builds the provider and `AppState`, and `api/routes/<resource>.rs` binds each CAC contract to the controller in `api/controllers/<resource>.rs`. Controllers are the module's own code: each extracts its request, calls the code-set provider and maps the result to the contract's responses, so edit one to customize that operation. Routers added with `forklaunch init router` live in `api/routes/extensions`.
 
 `GET /codeSet` reports the provider descriptor. `GET /codeSet/:code` returns one
 of the three existing mock codes or a text 404. Both require TypeScript-compatible

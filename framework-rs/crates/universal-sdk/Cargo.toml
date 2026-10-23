@@ -14,7 +14,7 @@ zod-checks = ["forklaunch-core/zod-checks"]
 zod-uri = ["forklaunch-core/zod-uri"]
 
 [dependencies]
-forklaunch-core = { version = "0.2.4", path = "../core", features = ["http", "date-codec", "auth"] }
+forklaunch-core = { version = "0.2.5", path = "../core", features = ["http", "date-codec", "auth"] }
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "query", "multipart", "stream"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "=1.0.151"

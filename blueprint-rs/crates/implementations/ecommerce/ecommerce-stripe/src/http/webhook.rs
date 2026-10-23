@@ -37,16 +37,25 @@ pub(super) async fn handle_stripe_webhook(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
+    stripe(&backend, &headers, &body).await
+}
+/// Verifies a raw Stripe callback against the configured signing secret, then
+/// records and applies it once.
+pub(super) async fn stripe(
+    backend: &EcommerceBackend,
+    headers: &HeaderMap,
+    body: &Bytes,
+) -> Response {
     let Some(verifier) = &backend.stripe_webhook else {
         return rejected();
     };
-    let Some(signature) = header(&headers, "stripe-signature") else {
+    let Some(signature) = header(headers, "stripe-signature") else {
         return rejected();
     };
-    if !verifier.verify(&body, &signature) {
+    if !verifier.verify(body, &signature) {
         return rejected();
     }
-    let Ok(payload) = serde_json::from_slice::<Value>(&body) else {
+    let Ok(payload) = serde_json::from_slice::<Value>(body) else {
         return rejected();
     };
     let (Some(id), Some(event_type)) = (payload["id"].as_str(), payload["type"].as_str()) else {
@@ -57,17 +66,26 @@ pub(super) async fn handle_stripe_webhook(
         provider_event_id: id.to_owned(),
         event_type: event_type.to_owned(),
     };
-    process_verified(&backend, event, payload).await
+    process_verified(backend, event, payload).await
 }
 pub(super) async fn handle_paypal_webhook(
     Extension(backend): Extension<Arc<EcommerceBackend>>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
+    paypal(&backend, &headers, &body).await
+}
+/// Verifies a raw `PayPal` callback through the provider's verification API,
+/// then records and applies it once.
+pub(super) async fn paypal(
+    backend: &EcommerceBackend,
+    headers: &HeaderMap,
+    body: &Bytes,
+) -> Response {
     let (Some(client), Some(webhook_id)) = (&backend.paypal, &backend.paypal_webhook_id) else {
         return rejected();
     };
-    let Ok(payload) = serde_json::from_slice::<Value>(&body) else {
+    let Ok(payload) = serde_json::from_slice::<Value>(body) else {
         return rejected();
     };
     let Ok(event) = serde_json::from_value::<PaypalWebhookEvent>(payload.clone()) else {
@@ -75,11 +93,11 @@ pub(super) async fn handle_paypal_webhook(
     };
     let params = (|| {
         Some(VerifyWebhookSignature {
-            transmission_id: header(&headers, "paypal-transmission-id")?,
-            transmission_time: header(&headers, "paypal-transmission-time")?,
-            transmission_sig: header(&headers, "paypal-transmission-sig")?,
-            cert_url: header(&headers, "paypal-cert-url")?,
-            auth_algo: header(&headers, "paypal-auth-algo")?,
+            transmission_id: header(headers, "paypal-transmission-id")?,
+            transmission_time: header(headers, "paypal-transmission-time")?,
+            transmission_sig: header(headers, "paypal-transmission-sig")?,
+            cert_url: header(headers, "paypal-cert-url")?,
+            auth_algo: header(headers, "paypal-auth-algo")?,
             webhook_id: webhook_id.clone(),
             webhook_event: payload.clone(),
         })
@@ -93,7 +111,7 @@ pub(super) async fn handle_paypal_webhook(
         return rejected();
     }
     process_verified(
-        &backend,
+        backend,
         WebhookEvent {
             provider: "paypal".to_owned(),
             provider_event_id: event.id,

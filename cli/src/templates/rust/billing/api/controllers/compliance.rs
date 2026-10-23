@@ -1,13 +1,23 @@
-//! Subject data export and erasure.
-//! Handlers come from `forklaunch-billing-stripe`; return your own
-//! `axum::routing::any(handler)` to customize one.
+//! Subject data export and erasure. Billing records carry no classified
+//! subject data yet, so authorized requests report that nothing was found.
 use crate::registrations::AppState;
+use axum::{http::StatusCode, routing::any};
 use forklaunch_billing_stripe::http::Handler;
 
-pub fn export_user_data(state: &AppState) -> Handler {
-    state.billing.handler("exportuserdata")
+/// Exports a subject's classified data.
+pub fn export_user_data(_state: &AppState) -> Handler {
+    any(export)
 }
 
-pub fn erase_user_data(state: &AppState) -> Handler {
-    state.billing.handler("eraseuserdata")
+async fn export() -> (StatusCode, &'static str) {
+    (StatusCode::NOT_FOUND, "User not found or no PII data to export")
+}
+
+/// Erases a subject's classified data.
+pub fn erase_user_data(_state: &AppState) -> Handler {
+    any(erase)
+}
+
+async fn erase() -> (StatusCode, &'static str) {
+    (StatusCode::NOT_FOUND, "User not found or no PII data to erase")
 }

@@ -121,7 +121,7 @@ impl EcommerceBackend {
             )
             .await
     }
-    async fn checkout(
+    pub(super) async fn checkout(
         &self,
         session: &AuthenticatedSession,
         input: Checkout,

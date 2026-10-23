@@ -7,10 +7,13 @@ use std::sync::Arc;
 /// The module's routes, collected before mounting.
 pub type Routes = CacRoutes<MockProcedureCodeProvider>;
 
+/// The CAC handle controllers take as their state.
+pub type Cac = CacHttp<MockProcedureCodeProvider>;
+
 #[derive(Clone)]
 pub struct AppState {
     pub config: ServiceConfig,
-    pub cac: CacHttp<MockProcedureCodeProvider>,
+    pub cac: Cac,
 }
 
 pub async fn register(config: ServiceConfig) -> Result<AppState> {

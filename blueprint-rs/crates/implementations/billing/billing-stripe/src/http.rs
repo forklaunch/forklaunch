@@ -1,6 +1,15 @@
-//! Persistent billing HTTP handlers shared with authenticated MCP dispatch.
+//! Persistent billing HTTP support shared with authenticated MCP dispatch.
+//!
+//! Generated services own their controllers: each takes the
+//! [`BillingOperation`] from [`BillingHttp::operation`], maps its request,
+//! calls the audited [`BillingService`] and replies through the operation, and
+//! [`BillingRoutes`] binds them to the interface's contracts. Webhooks, bound
+//! capabilities and configured HMAC verification stay here. The packaged
+//! [`BillingHttp::handler`] remains for services generated before 0.2.5.
 mod configured_hmac;
+mod operation;
 pub use configured_hmac::project_configured_billing_hmac;
+pub use operation::{BillingOperation, BillingService, decode, list_ids, with_path_id};
 mod configured_payment_link_input;
 pub use configured_payment_link_input::project_configured_payment_link_update;
 #[cfg(feature = "bound-checkout")]
@@ -464,6 +473,19 @@ async fn dispatch_with_context(
     input: Value,
     context: forklaunch_axum::RequestContext,
 ) -> Response {
+    match backend.call(&session, &contract, input).await {
+        Ok(result) => result.into_response(),
+        Err(error) => dispatch_failure(&backend, &contract, &error, &context),
+    }
+}
+/// The error response of routes whose configured TypeScript mappers report
+/// failures in the TypeScript parser's format.
+fn dispatch_failure(
+    backend: &BillingBackend,
+    contract: &RouteContract,
+    error: &BlueprintError,
+    context: &forklaunch_axum::RequestContext,
+) -> Response {
     let configured_operation = (backend.configured_cached_reads
         && matches!(
             contract.operation_name.as_str(),
@@ -471,9 +493,8 @@ async fn dispatch_with_context(
         ))
         || (backend.configured_payment_link_updates
             && contract.operation_name == "updatePaymentLink");
-    match backend.call(&session, &contract, input).await {
-        Ok(result) => result.into_response(),
-        Err(error)
+    match error {
+        error
             if error.code == "billing_configured_mapper_error"
                 || (configured_operation && error.code != "billing_validation") =>
         {
@@ -499,7 +520,7 @@ async fn dispatch_with_context(
             )
                 .into_response()
         }
-        Err(error) => failure(&error),
+        error => failure(error),
     }
 }
 /// One operation's request handler. Its contract supplies the method and path.
@@ -525,7 +546,43 @@ impl BillingHttp {
         }
     }
 
-    /// The handler for one core billing, callback, compliance or health operation.
+    /// One core billing operation with its configured contract projections,
+    /// the state its generated controller takes.
+    ///
+    /// # Panics
+    /// Panics if `operation` is not a billing operation of this backend.
+    #[must_use]
+    pub fn operation(&self, operation: &str) -> BillingOperation {
+        BillingOperation::new(&self.backend, operation)
+    }
+
+    /// Verifies a raw Stripe event against the configured webhook secret, then
+    /// records and synchronizes it once.
+    pub async fn stripe_webhook(
+        &self,
+        headers: axum::http::HeaderMap,
+        body: axum::body::Bytes,
+    ) -> Response {
+        webhook::stripe(Arc::clone(&self.backend), headers, body).await
+    }
+
+    /// Verifies a managed platform event for `feature` against the instance
+    /// key, then records and synchronizes it once.
+    pub async fn platform_event(
+        &self,
+        feature: String,
+        headers: axum::http::HeaderMap,
+        body: axum::body::Bytes,
+    ) -> Response {
+        webhook::platform(Arc::clone(&self.backend), feature, headers, body).await
+    }
+
+    /// The packaged handler for one core billing, callback, compliance or
+    /// health operation.
+    ///
+    /// Deprecated since 0.2.5: generated services now own their controllers,
+    /// which call [`Self::operation`]. It stays available, unchanged, for
+    /// services generated earlier.
     ///
     /// # Panics
     /// Panics if `operation` is not a billing operation of this backend.

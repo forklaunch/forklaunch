@@ -12,9 +12,9 @@ default = []
 redis-client = ["dep:redis", "dep:serde", "dep:serde_json", "dep:tokio", "dep:uuid", "forklaunch-core/http", "dep:futures-util"]
 
 [dependencies]
-forklaunch-worker-interface = { version = "=0.2.4", path = "../../../interfaces/worker-interface" }
+forklaunch-worker-interface = { version = "=0.2.5", path = "../../../interfaces/worker-interface" }
 
-forklaunch-core = { version = "=0.2.4", path = "../../../../../framework-rs/crates/core", features = ["domain"] }
+forklaunch-core = { version = "=0.2.5", path = "../../../../../framework-rs/crates/core", features = ["domain"] }
 redis = { version = "1.7", default-features = false, features = ["tokio-rustls-comp", "tls-rustls-webpki-roots", "connection-manager", "script"], optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
@@ -27,7 +27,7 @@ futures-util = { version = "0.3", default-features = false, features = ["std"], 
 axum = "0.8"
 tower = { version = "0.5", features = ["util"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "net", "io-util"] }
-forklaunch-worker-database = { version = "=0.2.4", path = "../worker-database", features = ["runtime", "http-control"] }
+forklaunch-worker-database = { version = "=0.2.5", path = "../worker-database", features = ["runtime", "http-control"] }
 
 [lints]
 workspace = true

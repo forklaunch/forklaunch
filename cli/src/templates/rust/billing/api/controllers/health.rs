@@ -1,9 +1,14 @@
 //! Health check.
-//! Handlers come from `forklaunch-billing-stripe`; return your own
-//! `axum::routing::any(handler)` to customize one.
-use crate::registrations::AppState;
+use crate::{SERVICE_NAME, registrations::AppState};
+use axum::{Json, routing::any};
 use forklaunch_billing_stripe::http::Handler;
+use serde_json::{Value, json};
 
-pub fn get_health(state: &AppState) -> Handler {
-    state.billing.handler("getHealth")
+/// Reports that the service is up.
+pub fn get_health(_state: &AppState) -> Handler {
+    any(health)
+}
+
+async fn health() -> Json<Value> {
+    Json(json!({"service": SERVICE_NAME, "status": "ok"}))
 }

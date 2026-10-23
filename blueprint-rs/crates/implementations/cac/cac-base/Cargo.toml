@@ -13,9 +13,9 @@ default = []
 http = ["forklaunch-core/auth", "forklaunch-core/remote-jwks", "dep:forklaunch-axum", "dep:axum", "dep:serde_json"]
 
 [dependencies]
-forklaunch-cac-interface = { version = "=0.2.4", path = "../../../interfaces/cac-interface" }
-forklaunch-core = { version = "=0.2.4", path = "../../../../../framework-rs/crates/core", features = ["http", "domain"] }
-forklaunch-axum = { version = "=0.2.4", path = "../../../../../framework-rs/crates/axum", features = ["remote-jwks"], optional = true }
+forklaunch-cac-interface = { version = "=0.2.5", path = "../../../interfaces/cac-interface" }
+forklaunch-core = { version = "=0.2.5", path = "../../../../../framework-rs/crates/core", features = ["http", "domain"] }
+forklaunch-axum = { version = "=0.2.5", path = "../../../../../framework-rs/crates/axum", features = ["remote-jwks"], optional = true }
 axum = { version = "0.8", optional = true }
 serde_json = { version = "1", optional = true }
 

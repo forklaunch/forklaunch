@@ -23,7 +23,7 @@ serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["net", "time"], optional = true }
 tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"], optional = true }
 futures-util = { version = "0.3", features = ["sink"], optional = true }
-forklaunch-core = { version = "0.2.4", path = "../core", features = ["ws"] }
+forklaunch-core = { version = "0.2.5", path = "../core", features = ["ws"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "io-util"] }

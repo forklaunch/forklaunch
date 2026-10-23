@@ -28,6 +28,123 @@ use forklaunch_iam_interface::{
 use serde_json::{Value, json};
 use std::sync::Arc;
 
+/// A directory error as its HTTP response: the status follows the error code
+/// and the body is the error's message as text, as in the TypeScript module.
+#[derive(Debug)]
+pub struct DirectoryFailure(pub BlueprintError);
+
+impl From<BlueprintError> for DirectoryFailure {
+    fn from(error: BlueprintError) -> Self {
+        Self(error)
+    }
+}
+
+impl IntoResponse for DirectoryFailure {
+    fn into_response(self) -> Response {
+        failure(&self.0)
+    }
+}
+
+/// Decodes a directory request body. Like the packaged handlers, a body whose
+/// `ids` member is not a string array is rejected too.
+///
+/// # Errors
+/// `iam_directory_invalid` (400) when the body does not match `T`.
+pub fn decode<T: serde::de::DeserializeOwned>(input: Value) -> BlueprintResult<T> {
+    if let Some(ids) = input.get("ids") {
+        serde_json::from_value::<Vec<String>>(ids.clone()).map_err(|_| invalid())?;
+    }
+    serde_json::from_value(input).map_err(|_| invalid())
+}
+
+/// The required JSON `ids` array of a batch read or delete query.
+///
+/// # Errors
+/// `iam_directory_invalid` (400) when `ids` is missing, repeated or malformed.
+pub fn batch_ids(query: Option<&str>) -> BlueprintResult<Vec<String>> {
+    let input = query_input(query)?;
+    serde_json::from_value(input["ids"].clone()).map_err(|_| invalid())
+}
+
+impl<S> super::IamHttp<S> {
+    /// The tenant-bound directory service, audited as the session's subject
+    /// under the request's correlation ID.
+    ///
+    /// # Errors
+    /// Fails when the store rejects the audit context.
+    pub fn directory(
+        &self,
+        session: &AuthenticatedSession,
+        context: &RequestContext,
+    ) -> BlueprintResult<BaseIamDirectory<PostgresDirectoryStore>> {
+        let store = self.directory.with_audit_context(AuditContext::actor(
+            &session.principal.subject,
+            context.correlation_id.clone(),
+        ))?;
+        Ok(BaseIamDirectory::new(Arc::new(store)))
+    }
+
+    /// [`Self::directory`] scoped to the caller's organization, for the
+    /// JWT-protected `/user` routes. The organization comes from trusted
+    /// storage (or the stored session), never from caller claims.
+    ///
+    /// # Errors
+    /// `iam_directory_organization_required` (401) when the caller has none.
+    pub async fn user_directory(
+        &self,
+        session: &AuthenticatedSession,
+        context: &RequestContext,
+    ) -> BlueprintResult<BaseIamDirectory<PostgresDirectoryStore>> {
+        let service = self.directory(session, context)?;
+        let organization = organization_scope(&service, session, self.mode).await?;
+        Ok(service.with_organization_scope(organization))
+    }
+
+    /// The directory's export and erasure service with the configured
+    /// compliance classifications, audited like [`Self::directory`].
+    ///
+    /// # Errors
+    /// Fails when the store rejects the audit context.
+    pub fn compliance(
+        &self,
+        session: &AuthenticatedSession,
+        context: &RequestContext,
+    ) -> BlueprintResult<DirectoryComplianceService<PostgresDirectoryStore>> {
+        let store = self.directory.with_audit_context(AuditContext::actor(
+            &session.principal.subject,
+            context.correlation_id.clone(),
+        ))?;
+        Ok(DirectoryComplianceService::new(
+            Arc::new(store),
+            self.compliance.as_ref().clone(),
+        ))
+    }
+}
+
+async fn organization_scope(
+    service: &BaseIamDirectory<PostgresDirectoryStore>,
+    session: &AuthenticatedSession,
+    mode: DirectoryAuthorizationMode,
+) -> BlueprintResult<String> {
+    if mode == DirectoryAuthorizationMode::StoredSessions {
+        session
+            .claims
+            .get("directoryOrganizationId")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+    } else {
+        service
+            .get_organization_id_by_user_id(&session.principal.subject)
+            .await?
+    }
+    .ok_or_else(|| {
+        BlueprintError::new(
+            "iam_directory_organization_required",
+            "Unauthorized: missing organization context",
+        )
+    })
+}
+
 /// Authentication grant source for directory JWT routes. Legacy bearer and
 /// internal HMAC routes retain their existing credential policy.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -258,23 +375,7 @@ async fn call(
     let mut service = BaseIamDirectory::new(Arc::new(store));
     let operation = contract.operation_name.as_str();
     if matches!(contract.auth, Some(AuthConfig::Jwt(_))) && contract.path.starts_with("/user") {
-        let organization = if mode == DirectoryAuthorizationMode::StoredSessions {
-            session
-                .claims
-                .get("directoryOrganizationId")
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-        } else {
-            service
-                .get_organization_id_by_user_id(&session.principal.subject)
-                .await?
-        }
-        .ok_or_else(|| {
-            BlueprintError::new(
-                "iam_directory_organization_required",
-                "Unauthorized: missing organization context",
-            )
-        })?;
+        let organization = organization_scope(&service, session, mode).await?;
         // Resolve organization membership from trusted storage rather than caller claims.
         service = service.with_organization_scope(organization);
     }
@@ -420,6 +521,18 @@ mod tests {
     use forklaunch_core::ServiceInfo;
     use forklaunch_iam_interface::contracts;
     use tower::ServiceExt;
+
+    #[test]
+    fn request_mappers_reject_what_the_packaged_handlers_reject() {
+        assert!(decode::<Value>(json!({"ids": 5})).is_err());
+        assert!(decode::<Value>(json!({"ids": ["a"], "name": "x"})).is_ok());
+        assert_eq!(batch_ids(Some("ids=%5B%22a%22%5D")).unwrap(), vec!["a"]);
+        for query in [None, Some("ids=a"), Some("ids=%5B%5D&ids=%5B%5D")] {
+            assert_eq!(batch_ids(query).unwrap_err().code, "iam_directory_invalid");
+        }
+        let response = DirectoryFailure(invalid()).into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
 
     #[tokio::test]
     async fn directory_and_session_auth_errors_follow_their_declared_content_types() {

@@ -1,6 +1,11 @@
-//! Contract-bound HTTP handlers for an asynchronous, tenant-bound IAM backend.
-//! Generated services bind them in their own controllers and routes; storage,
-//! authentication and audit stay here.
+//! Contract-bound HTTP support for an asynchronous, tenant-bound IAM backend.
+//!
+//! Generated services own their controllers: session controllers call
+//! [`IamHttp::sessions`], directory controllers call the audited services from
+//! [`IamHttp::directory`] and [`IamHttp::user_directory`], and [`IamRoutes`]
+//! binds them to the interface's contracts. Storage, authentication and audit
+//! stay here. The packaged [`IamHttp::handler`] remains for services generated
+//! before 0.2.5.
 #[cfg(feature = "browser-sessions")]
 pub mod browser;
 pub mod directory;
@@ -160,7 +165,16 @@ impl<S: AsyncIamSessions + 'static> IamHttp<S> {
         self
     }
 
-    /// The handler for one session, directory or compliance operation.
+    /// The tenant-bound session service that session controllers call.
+    #[must_use]
+    pub fn sessions(&self) -> &Arc<S> {
+        &self.sessions
+    }
+
+    /// The packaged handler for one session, directory or compliance operation.
+    ///
+    /// Deprecated since 0.2.5: generated services now own their controllers.
+    /// It stays available, unchanged, for services generated earlier.
     ///
     /// # Panics
     /// Panics if `operation` is not an IAM operation.
@@ -336,7 +350,9 @@ fn cors_layer(origins: &[axum::http::HeaderValue]) -> tower_http::cors::CorsLaye
         .allow_headers(AllowHeaders::mirror_request())
 }
 
-fn is_admin_reader(session: &AuthenticatedSession) -> bool {
+/// Whether the session holds [`ADMIN_READ_PERMISSION`].
+#[must_use]
+pub fn is_admin_reader(session: &AuthenticatedSession) -> bool {
     session
         .principal
         .permissions
@@ -345,7 +361,8 @@ fn is_admin_reader(session: &AuthenticatedSession) -> bool {
 }
 
 /// A session reads itself; reading anyone else needs [`ADMIN_READ_PERMISSION`].
-fn may_read_user(session: &AuthenticatedSession, id: &str) -> bool {
+#[must_use]
+pub fn may_read_user(session: &AuthenticatedSession, id: &str) -> bool {
     session.principal.subject == id || is_admin_reader(session)
 }
 
@@ -501,10 +518,18 @@ async fn organizations_handler<S: AsyncIamSessions>(
     }
 }
 
+/// The `limit` and `cursor` query of a session list route.
 #[derive(serde::Deserialize)]
-struct PageQuery {
-    limit: Option<usize>,
-    cursor: Option<String>,
+pub struct PageQuery {
+    pub limit: Option<usize>,
+    pub cursor: Option<String>,
+}
+
+/// The page a list query asks for: `limit` defaults to 100 and must be 1 to
+/// 1000. `None` for a malformed query or an out-of-range limit.
+#[must_use]
+pub fn list_page(query: Result<Query<PageQuery>, QueryRejection>) -> Option<PageRequest> {
+    page_request(query).ok()
 }
 
 fn page_request(query: Result<Query<PageQuery>, QueryRejection>) -> Result<PageRequest, ()> {
@@ -521,6 +546,19 @@ fn page_request(query: Result<Query<PageQuery>, QueryRejection>) -> Result<PageR
 
 fn invalid_input(headers: &HeaderMap) -> Response {
     response_error(ErrorKind::Validation, "invalid request", headers)
+}
+
+/// A session route error: the framework's JSON error body with the request's
+/// `x-correlation-id` (or `x-request-id`).
+#[must_use]
+pub fn session_error(kind: ErrorKind, message: &str, headers: &HeaderMap) -> Response {
+    response_error(kind, message, headers)
+}
+
+/// A session backend failure: logs the error code and returns a generic 500.
+#[must_use]
+pub fn session_backend_error(error: &BlueprintError, headers: &HeaderMap) -> Response {
+    backend_error(error, headers)
 }
 
 fn response_error(kind: ErrorKind, message: &str, headers: &HeaderMap) -> Response {

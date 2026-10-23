@@ -13,7 +13,7 @@ encryption = ["forklaunch-core/encryption", "dep:serde"]
 aws-sdk = ["dep:aws-sdk-s3", "dep:aws-config", "dep:tokio", "dep:base64", "dep:chrono", "dep:hmac", "dep:sha2", "dep:serde_json", "dep:url", "dep:zeroize", "dep:aws-smithy-runtime-api", "dep:aws-smithy-types", "dep:aws-runtime"]
 
 [dependencies]
-forklaunch-core = { version = "0.2.4", path = "../core" }
+forklaunch-core = { version = "0.2.5", path = "../core" }
 serde = { version = "1", optional = true }
 
 aws-sdk-s3 = { version = "=1.124.0", default-features = false, features = ["rt-tokio", "default-https-client", "behavior-version-latest"], optional = true }

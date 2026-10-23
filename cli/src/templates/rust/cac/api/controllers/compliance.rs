@@ -1,13 +1,23 @@
-//! Subject data export and erasure.
-//! Handlers come from `forklaunch-cac-base`; return your own
-//! `axum::routing::any(handler)` to customize one.
+//! Subject data export and erasure. The CAC skeleton stores no subject data,
+//! so authorized requests report that nothing was found.
 use crate::registrations::AppState;
+use axum::{http::StatusCode, routing::any};
 use forklaunch_cac_base::http::Handler;
 
-pub fn export_user_data(state: &AppState) -> Handler {
-    state.cac.handler("exportUserData")
+/// Exports a subject's classified data.
+pub fn export_user_data(_state: &AppState) -> Handler {
+    any(export)
 }
 
-pub fn erase_user_data(state: &AppState) -> Handler {
-    state.cac.handler("eraseUserData")
+async fn export() -> (StatusCode, &'static str) {
+    (StatusCode::NOT_FOUND, "User not found or no PII data to export")
+}
+
+/// Erases a subject's classified data.
+pub fn erase_user_data(_state: &AppState) -> Handler {
+    any(erase)
+}
+
+async fn erase() -> (StatusCode, &'static str) {
+    (StatusCode::NOT_FOUND, "User not found or no PII data to erase")
 }
