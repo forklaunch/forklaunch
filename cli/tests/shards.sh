@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Shard entrypoints for the end-to-end scripts in cli/tests.
+#
+#   bash cli/tests/shards.sh list                 # shards and their scripts
+#   bash cli/tests/shards.sh run SHARD [SHARD..]  # run them, report timings
+#   bash cli/tests/shards.sh check                # every CI script is in exactly one shard
+#
+# ts-golden and rust-golden consume golden apps (see README.md, "Golden apps"):
+# set FORKLAUNCH_GOLDEN_APPS_DIR to an unpacked artifact, or leave it unset to
+# build them locally on demand. The other shards exercise a command on purpose
+# and scaffold their own small apps.
+#
+# .sh scripts run from cli/tests and .py scripts from the repository root, as
+# the workflows run them. Every script in a shard runs even after a failure;
+# the shard fails if any did. FORKLAUNCH_SHARD_FAIL_FAST=1 stops at the first.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+shard_scripts() {
+  case "$1" in
+    # TypeScript: start from the golden ts-node / ts-bun apps.
+    ts-golden) echo init_compile.sh init_service.sh init_worker.sh init_library.sh init_router.sh depcheck.sh eject.sh ;;
+    # TypeScript command tests: change, delete and sync on small fresh apps.
+    ts-change) echo change_application.sh change_library.sh change_router.sh change_router_add_mappers.sh change_sdk_mode.sh change_service.sh change_service_worker_migration.sh change_worker.sh ts_change_round_trips.sh ;;
+    ts-delete-sync) echo delete_library.sh delete_router.sh delete_service.sh delete_worker.sh sync_add_remove_flow.sh sync_application_add.sh sync_application_remove.sh sync_library_subcommand.sh sync_service_subcommand.sh sync_worker_subcommand.sh ;;
+    ts-init) echo dryrun.sh existing_docker_compose.sh init_application.sh init_application_custom_path.sh init_billing_stripe.sh init_cac.sh init_iam_better_auth.sh init_messaging_twilio.sh init_module.sh init_module_src_path.sh init_relay.sh init_relay_drift.sh init_service_mappers.sh init_worker_mappers.sh init_worker_workspace_and_typecheck.sh ;;
+    ts-env-release) echo environment_sync.sh environment_validate.sh precheck_version_match_allows_run.sh precheck_version_mismatch_decline_fails.sh release_non_tty.sh ;;
+    # Rust: start from the golden rust-service / mixed apps and their target.
+    rust-golden) echo rust_http_runtime.sh rust_generated_otlp_runtime.sh rust_container_runtime.sh rust_sdk_workspace.sh ;;
+    # Rust command tests: init, sync, delete, change and conversion commands.
+    rust-commands) echo rust_init_commands.sh init_rust_projects.sh rust_sync_commands.sh rust_delete_commands.sh rust_sdk_openapi_commands.sh rust_package_sources.sh rust_change_commands.sh rust_conversion_preservation.py ;;
+    rust-mixed-commands) echo rust_mixed_sync.sh rust_typescript_attach.sh rust_mixed_attach.sh rust_mixed_lifecycle.sh ;;
+    *) return 1 ;;
+  esac
+}
+SHARDS="ts-golden ts-change ts-delete-sync ts-init ts-env-release rust-golden rust-commands rust-mixed-commands"
+
+run_one() {
+  local script="$1" started status
+  started=$(date +%s)
+  echo "[shard] >>> $script"
+  case "$script" in
+    *.py) (cd "$REPO_ROOT" && python3 "cli/tests/$script") ;;
+    *) (cd "$SCRIPT_DIR" && bash "$script") ;;
+  esac
+  status=$?
+  echo "[shard] <<< $script: $([ $status = 0 ] && echo PASS || echo "FAIL ($status)") in $(( $(date +%s) - started ))s"
+  return $status
+}
+
+command="${1:-list}"; shift || true
+case "$command" in
+  list)
+    for shard in $SHARDS; do echo "$shard: $(shard_scripts "$shard")"; done ;;
+  check)
+    # Each script named by a shard exists, and appears in only one shard.
+    seen=$(for shard in $SHARDS; do shard_scripts "$shard" | tr ' ' '\n'; done)
+    dupes=$(echo "$seen" | sort | uniq -d)
+    missing=$(for s in $seen; do [ -f "$SCRIPT_DIR/$s" ] || echo "$s"; done)
+    [ -z "$dupes$missing" ] || { echo "duplicated: $dupes"; echo "missing: $missing"; exit 1; }
+    echo "$(echo "$seen" | wc -l | tr -d ' ') scripts in $(echo $SHARDS | wc -w | tr -d ' ') shards" ;;
+  run)
+    [ $# -gt 0 ] || { echo "usage: shards.sh run SHARD..." >&2; exit 2; }
+    failed=() total=0 started=$(date +%s)
+    for shard in "$@"; do
+      scripts=$(shard_scripts "$shard") || { echo "unknown shard $shard; known: $SHARDS" >&2; exit 2; }
+      for script in $scripts; do
+        total=$((total + 1))
+        if ! run_one "$script"; then
+          failed+=("$shard/$script")
+          [ "${FORKLAUNCH_SHARD_FAIL_FAST:-0}" = 1 ] && break 2
+        fi
+      done
+    done
+    echo "[shard] $((total - ${#failed[@]}))/$total passed in $(( $(date +%s) - started ))s"
+    for f in ${failed[@]+"${failed[@]}"}; do echo "[shard] FAIL $f"; done
+    [ ${#failed[@]} = 0 ] ;;
+  *) echo "usage: shards.sh list | check | run SHARD..." >&2; exit 2 ;;
+esac

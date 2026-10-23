@@ -5,7 +5,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 export FORKLAUNCH_SKIP_FORMAT=1
 export CARGO_INCREMENTAL=0
 export RUSTUP_TOOLCHAIN="${RUSTUP_TOOLCHAIN:-stable}"
-export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$REPO_ROOT/cli/target}"
+# Cargo output defaults to the target the golden apps compiled into.
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$(python3 "$SCRIPT_DIR/fixtures/golden.py" target)}"
 if [ "${FORKLAUNCH_WORKER_RUNTIME_LOCKED:-}" != 1 ]; then
     exec python3 "$SCRIPT_DIR/fixtures/worker_runtime_lock.py" "${BASH_SOURCE[0]}" "$@"
 fi
@@ -20,8 +21,9 @@ cleanup() {
     if [ "${FORKLAUNCH_KEEP_FIXTURE:-0}" != 1 ]; then rm -rf "$RUN_ROOT"; fi
 }
 trap cleanup EXIT
-run_cli init application telemetry-app --path "$RUN_ROOT/app" --database postgresql --validator zod --formatter prettier --linter oxlint --http-framework express --runtime node --test-framework vitest -D 'Generated telemetry' -A ForkLaunch -L MIT
-run_cli init service accounts --path "$RUN_ROOT/app" --language rust -D Accounts
+# TypeScript shell plus Rust service accounts: the golden 'rust-service' scaffold.
+source "$SCRIPT_DIR/fixtures/golden.sh"
+golden_app --scaffold rust-service "$RUN_ROOT/app"
 run_cli init worker starter --path "$RUN_ROOT/app" --language rust --consumer-only --type database --database postgresql -D Starter
 cp -R "$RUN_ROOT/app" "$RUN_ROOT/relocated-app"
 cd "$RUN_ROOT/relocated-app"
