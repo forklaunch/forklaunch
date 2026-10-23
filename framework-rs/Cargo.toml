@@ -5,7 +5,7 @@ members = [
     "crates/universal-sdk","crates/common", "crates/core", "crates/core-macros", "crates/validator", "crates/axum", "crates/ws", "crates/redis", "crates/s3", "crates/testing"]
 
 [workspace.package]
-version = "0.2.3"
+version = "0.2.4"
 edition = "2024"
 license = "MIT"
 authors = ["Forklift Technologies, Inc. <engineering@forklaunch.com>"]

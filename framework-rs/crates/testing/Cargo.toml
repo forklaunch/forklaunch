@@ -16,7 +16,7 @@ name = "runtime_benchmarks"
 required-features = ["benchmarks"]
 
 [dependencies]
-forklaunch-core = { version = "0.2.3", path = "../core", features = ["codegen", "typescript"]}
+forklaunch-core = { version = "0.2.4", path = "../core", features = ["codegen", "typescript"]}
 
 anyhow = { version = "1", optional = true }
 axum = { version = "0.8", features = ["ws"], optional = true }
@@ -26,11 +26,11 @@ serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "=1.0.151", optional = true }
 garde = { version = "0.23", features = ["derive"], optional = true }
 schemars = { version = "1.2", optional = true }
-forklaunch-axum = { version = "0.2.3", path = "../axum", features = ["websocket"], optional = true }
-forklaunch-validator = { version = "0.2.3", path = "../validator", optional = true }
-forklaunch-ws = { version = "0.2.3", path = "../ws", features = ["transport"], optional = true }
-forklaunch-infrastructure-redis = { version = "0.2.3", path = "../redis", features = ["redis-client"], optional = true }
-forklaunch-infrastructure-s3 = { version = "0.2.3", path = "../s3", features = ["aws-sdk"], optional = true }
+forklaunch-axum = { version = "0.2.4", path = "../axum", features = ["websocket"], optional = true }
+forklaunch-validator = { version = "0.2.4", path = "../validator", optional = true }
+forklaunch-ws = { version = "0.2.4", path = "../ws", features = ["transport"], optional = true }
+forklaunch-infrastructure-redis = { version = "0.2.4", path = "../redis", features = ["redis-client"], optional = true }
+forklaunch-infrastructure-s3 = { version = "0.2.4", path = "../s3", features = ["aws-sdk"], optional = true }
 
 [lints]
 workspace = true

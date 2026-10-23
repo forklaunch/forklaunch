@@ -13,7 +13,7 @@ redis-client = ["dep:redis"]
 encryption = ["forklaunch-core/encryption", "dep:serde"]
 
 [dependencies]
-forklaunch-core = { version = "0.2.3", path = "../core" }
+forklaunch-core = { version = "0.2.4", path = "../core" }
 
 redis = { version = "1.7", default-features = false, features = ["tls-rustls", "tls-rustls-webpki-roots"], optional = true }
 serde = { version = "1", optional = true }

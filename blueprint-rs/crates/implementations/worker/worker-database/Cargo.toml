@@ -16,9 +16,9 @@ postgres = ["dep:sqlx", "forklaunch-core/postgres", "forklaunch-core/http", "dep
 [dependencies]
 axum = { version = "0.8", optional = true }
 subtle = { version = "2", optional = true }
-forklaunch-worker-interface = { version = "=0.2.3", path = "../../../interfaces/worker-interface" }
+forklaunch-worker-interface = { version = "=0.2.4", path = "../../../interfaces/worker-interface" }
 
-forklaunch-core = { version = "=0.2.3", path = "../../../../../framework-rs/crates/core", features = ["domain"] }
+forklaunch-core = { version = "=0.2.4", path = "../../../../../framework-rs/crates/core", features = ["domain"] }
 sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "json", "uuid", "migrate", "macros"], optional = true }
 serde_json = { version = "1", optional = true }
 uuid = { version = "1", features = ["v4"], optional = true }
@@ -30,7 +30,7 @@ futures-util = { version = "0.3", default-features = false, features = ["std"], 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
-forklaunch-iam-base = { version = "=0.2.3", path = "../../iam/iam-base", features = ["postgres"] }
+forklaunch-iam-base = { version = "=0.2.4", path = "../../iam/iam-base", features = ["postgres"] }
 
 [lints]
 workspace = true

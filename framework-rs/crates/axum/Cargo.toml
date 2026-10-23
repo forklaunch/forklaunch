@@ -35,11 +35,11 @@ tower-sessions = { version = "0.15", optional = true }
 subtle = { version = "2", optional = true }
 rand = { version = "0.10", optional = true }
 url = { version = "2", optional = true }
-forklaunch-validator = { version = "0.2.3", path = "../validator", optional = true }
-forklaunch-ws = { version = "0.2.3", path = "../ws", features = ["transport"], optional = true }
+forklaunch-validator = { version = "0.2.4", path = "../validator", optional = true }
+forklaunch-ws = { version = "0.2.4", path = "../ws", features = ["transport"], optional = true }
 futures-util = { version = "0.3", features = ["sink"], optional = true }
-forklaunch-common = { version = "0.2.3", path = "../common" }
-forklaunch-core = { version = "0.2.3", path = "../core", features = ["openapi", "auth", "http"] }
+forklaunch-common = { version = "0.2.4", path = "../common" }
+forklaunch-core = { version = "0.2.4", path = "../core", features = ["openapi", "auth", "http"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "=1.0.151"
 tracing = "0.1"
@@ -59,9 +59,9 @@ jsonwebtoken = { version = "11", features = ["aws_lc_rs"], optional = true }
 schemars = { version = "1.2", optional = true }
 
 [dev-dependencies]
-forklaunch-core = { version = "0.2.3", path = "../core", features = ["validator", "encryption", "rmcp-server"] }
+forklaunch-core = { version = "0.2.4", path = "../core", features = ["validator", "encryption", "rmcp-server"] }
 http-body = "1"
-forklaunch-validator = { version = "0.2.3", path = "../validator" }
+forklaunch-validator = { version = "0.2.4", path = "../validator" }
 garde = { version = "0.23", features = ["derive"] }
 schemars = "1.2"
 reqwest = { version = "0.13", default-features = false, features = ["json"] }

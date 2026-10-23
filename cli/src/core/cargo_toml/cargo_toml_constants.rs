@@ -2,9 +2,9 @@
 // compares these with framework-rs and blueprint-rs; `--fix` rewrites them.
 
 // forklaunch framework-rs workspace
-pub(crate) const FRAMEWORK_VERSION: &str = "0.2.3";
+pub(crate) const FRAMEWORK_VERSION: &str = "0.2.4";
 // forklaunch blueprint-rs workspace, released against FRAMEWORK_VERSION
-pub(crate) const BLUEPRINT_VERSION: &str = "0.2.3";
+pub(crate) const BLUEPRINT_VERSION: &str = "0.2.4";
 
 // Third-party crates, keyed by dependency name. Ranges follow the newest
 // requirement in the framework workspaces; `=` entries must match exactly.

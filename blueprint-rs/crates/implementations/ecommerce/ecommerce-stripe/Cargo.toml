@@ -14,10 +14,10 @@ postgres = ["forklaunch-ecommerce-base/postgres"]
 http = ["postgres", "forklaunch-ecommerce-base/worker", "forklaunch-core/auth", "forklaunch-core/remote-jwks", "dep:forklaunch-ecommerce-paypal", "dep:forklaunch-worker-database", "dep:forklaunch-axum", "dep:axum", "dep:form_urlencoded", "dep:tokio"]
 
 [dependencies]
-forklaunch-core = { version = "=0.2.3", path = "../../../../../framework-rs/crates/core", features = ["http", "domain", "provider-http", "stripe-webhook"] }
+forklaunch-core = { version = "=0.2.4", path = "../../../../../framework-rs/crates/core", features = ["http", "domain", "provider-http", "stripe-webhook"] }
 uuid = { version = "1", features = ["v4"] }
-forklaunch-ecommerce-interface = { version = "=0.2.3", path = "../../../interfaces/ecommerce-interface" }
-forklaunch-ecommerce-base = { version = "=0.2.3", path = "../ecommerce-base" }
+forklaunch-ecommerce-interface = { version = "=0.2.4", path = "../../../interfaces/ecommerce-interface" }
+forklaunch-ecommerce-base = { version = "=0.2.4", path = "../ecommerce-base" }
 reqwest = { version = "0.13", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -25,19 +25,19 @@ zeroize = "1"
 tracing = "0.1"
 hmac = "0.13"
 sha2 = "0.11"
-forklaunch-ecommerce-paypal = { version = "=0.2.3", path = "../ecommerce-paypal", optional = true }
-forklaunch-worker-database = { version = "=0.2.3", path = "../../worker/worker-database", features = ["postgres"], optional = true }
-forklaunch-axum = { version = "=0.2.3", path = "../../../../../framework-rs/crates/axum", features = ["remote-jwks", "mcp"], optional = true }
+forklaunch-ecommerce-paypal = { version = "=0.2.4", path = "../ecommerce-paypal", optional = true }
+forklaunch-worker-database = { version = "=0.2.4", path = "../../worker/worker-database", features = ["postgres"], optional = true }
+forklaunch-axum = { version = "=0.2.4", path = "../../../../../framework-rs/crates/axum", features = ["remote-jwks", "mcp"], optional = true }
 axum = { version = "0.8", optional = true }
 form_urlencoded = { version = "1", optional = true }
 tokio = { version = "1", features = ["sync"], optional = true }
 
 [dev-dependencies]
-forklaunch-core = { version = "=0.2.3", path = "../../../../../framework-rs/crates/core", features = ["postgres", "encryption"] }
+forklaunch-core = { version = "=0.2.4", path = "../../../../../framework-rs/crates/core", features = ["postgres", "encryption"] }
 sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "json"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "net", "time"] }
 axum = "0.8"
-forklaunch-worker-interface = { version = "=0.2.3", path = "../../../interfaces/worker-interface" }
+forklaunch-worker-interface = { version = "=0.2.4", path = "../../../interfaces/worker-interface" }
 jsonwebtoken = { version = "11", features = ["aws_lc_rs"] }
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }
 

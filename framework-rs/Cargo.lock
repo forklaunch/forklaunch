@@ -1680,7 +1680,7 @@ checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
 name = "forklaunch-axum"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "axum",
  "bytes",
@@ -1715,7 +1715,7 @@ dependencies = [
 
 [[package]]
 name = "forklaunch-common"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "forklaunch-regress",
  "ryu-js",
@@ -1725,7 +1725,7 @@ dependencies = [
 
 [[package]]
 name = "forklaunch-core"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "ada-url",
  "aes-gcm",
@@ -1786,7 +1786,7 @@ dependencies = [
 
 [[package]]
 name = "forklaunch-core-macros"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "forklaunch-common",
  "forklaunch-core",
@@ -1799,7 +1799,7 @@ dependencies = [
 
 [[package]]
 name = "forklaunch-infrastructure-redis"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "forklaunch-core",
  "redis",
@@ -1809,7 +1809,7 @@ dependencies = [
 
 [[package]]
 name = "forklaunch-infrastructure-s3"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -1885,7 +1885,7 @@ dependencies = [
 
 [[package]]
 name = "forklaunch-testing"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "anyhow",
  "axum",
@@ -1905,7 +1905,7 @@ dependencies = [
 
 [[package]]
 name = "forklaunch-universal-sdk"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "axum",
  "chrono",
@@ -1922,7 +1922,7 @@ dependencies = [
 
 [[package]]
 name = "forklaunch-validator"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "ada-url",
  "chrono",
@@ -1937,7 +1937,7 @@ dependencies = [
 
 [[package]]
 name = "forklaunch-ws"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "forklaunch-core",
  "futures-util",
