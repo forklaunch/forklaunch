@@ -1,4 +1,7 @@
-use std::{collections::HashMap, path::Path};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -8,15 +11,16 @@ use crate::{
     constants::RELEASE_MANIFEST_SCHEMA_VERSION,
     core::{
         ast::infrastructure::{
-            compliance::scan_all_compliance,
-            integrations::Integration,
+            compliance::scan_all_compliance, integrations::Integration,
             worker_config::WorkerConfig as AstWorkerConfig,
         },
         library_scanner::{
-            Topology, ImportScanner, LibraryDefinition, parse_route_file,
-            scan_project_libraries,
+            ImportScanner, LibraryDefinition, Topology, parse_route_file, scan_project_libraries,
         },
-        manifest::{ProjectType, ResourceInventory, application::ApplicationManifestData},
+        manifest::{
+            ProjectEntry, ProjectLanguage, ProjectType, ResourceInventory,
+            application::ApplicationManifestData,
+        },
         sync::detection::detect_routers_from_service,
     },
 };
@@ -97,6 +101,7 @@ pub(crate) enum WorkerType {
 pub(crate) enum Runtime {
     Node,
     Bun,
+    Tokio,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -233,6 +238,27 @@ pub(crate) struct ServiceDefinition {
     pub build_context: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dockerfile: Option<String>,
+    /// Per-component runtime prevents mixed-app native binaries using JS startup.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub runtime: Option<Runtime>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub binary: Option<String>,
+    #[serde(rename = "nativeWorkerRole", skip_serializing_if = "Option::is_none")]
+    pub native_worker_role: Option<String>,
+    /// A native one-shot schema migration the platform runs before the process starts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub migrate: Option<NativeMigration>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variant: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct NativeMigration {
+    pub binary: String,
+    pub args: Vec<String>,
+    /// The variable that carries the schema owner's URL to the migration.
+    #[serde(rename = "databaseUrlEnv")]
+    pub database_url_env: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -424,6 +450,269 @@ pub(crate) struct EnvironmentVariable {
     pub value: String,
 }
 
+fn application_uses_rust(manifest: &ApplicationManifestData) -> bool {
+    manifest.runtime == "tokio"
+        || manifest.language.as_deref() == Some("rust")
+        || manifest.language.as_deref() == Some("mixed")
+        || manifest.application_language.as_deref() == Some("rust")
+        || manifest.application_language.as_deref() == Some("mixed")
+        || manifest.cargo_workspace.is_some()
+}
+
+fn project_language(project: &ProjectEntry) -> ProjectLanguage {
+    if project
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata.language.as_deref())
+        == Some("rust")
+    {
+        ProjectLanguage::Rust
+    } else {
+        ProjectLanguage::TypeScript
+    }
+}
+
+fn project_is_rust(project: &ProjectEntry) -> bool {
+    project_language(project) == ProjectLanguage::Rust
+}
+
+/// Native binaries that migrate a database with `--migrate`: generated PostgreSQL
+/// services read `MIGRATION_DATABASE_URL`; modules and worker consumers take the
+/// owner URL as `DATABASE_URL`. Producers never migrate, so a worker migrates once.
+fn project_native_migration(project: &ProjectEntry, binary: Option<String>) -> Option<NativeMigration> {
+    let database = project.resources.as_ref().and_then(|resources| resources.database.as_deref());
+    if !project_is_rust(project) || database.is_none_or(|database| database != "postgresql") {
+        return None;
+    }
+    let variant = project.variant.as_deref().unwrap_or_default();
+    let database_url_env = match (&project.r#type, variant) {
+        (ProjectType::Service, "") => "MIGRATION_DATABASE_URL",
+        (ProjectType::Service, variant) if variant.starts_with("iam") || variant.starts_with("billing") || variant.starts_with("ecommerce") => "DATABASE_URL",
+        (ProjectType::Worker, _) => "DATABASE_URL",
+        _ => return None,
+    };
+    Some(NativeMigration { binary: binary?, args: vec!["--migrate".into()], database_url_env: database_url_env.into() })
+}
+
+fn project_native_binary(project: &ProjectEntry) -> Option<String> {
+    project_is_rust(project).then(|| {
+        project
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.crate_name.clone())
+            .unwrap_or_else(|| project.name.clone())
+    })
+}
+
+fn project_relative_path(manifest: &ApplicationManifestData, project: &ProjectEntry) -> String {
+    if crate::core::storefront::is_capture(project) {
+        return project
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.static_path.clone())
+            .unwrap_or_else(|| {
+                Path::new(&manifest.modules_path)
+                    .join(&project.name)
+                    .to_string_lossy()
+                    .into_owned()
+            });
+    }
+    if project_is_rust(project) {
+        project
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.crate_path.clone())
+            .unwrap_or_else(|| {
+                Path::new("crates")
+                    .join(&project.name)
+                    .to_string_lossy()
+                    .into()
+            })
+    } else {
+        Path::new(&manifest.modules_path)
+            .join(&project.name)
+            .to_string_lossy()
+            .into_owned()
+    }
+}
+
+fn project_abs_path(
+    app_root: &Path,
+    manifest: &ApplicationManifestData,
+    project: &ProjectEntry,
+) -> PathBuf {
+    app_root.join(project_relative_path(manifest, project))
+}
+
+// Compose is the configured local build source, including per-language root
+// Dockerfiles with project-specific contexts. Project-local/custom overrides win.
+fn compose_project_build(
+    app_root: &Path,
+    manifest: &ApplicationManifestData,
+    project: &ProjectEntry,
+) -> Option<(String, String, Option<String>)> {
+    if project_abs_path(app_root, manifest, project)
+        .join("Dockerfile")
+        .is_file()
+        || manifest
+            .dockerfile
+            .as_deref()
+            .is_some_and(|path| !matches!(path, "Dockerfile" | "./Dockerfile"))
+    {
+        return None;
+    }
+    let path = app_root.join(
+        manifest
+            .docker_compose_path
+            .as_deref()
+            .unwrap_or("docker-compose.yaml"),
+    );
+    let compose: serde_yml::Value =
+        serde_yml::from_str(&std::fs::read_to_string(&path).ok()?).ok()?;
+    let services = compose.get("services")?;
+    let service = services
+        .get(&project.name)
+        .or_else(|| services.get(format!("{}-service", project.name)))
+        .or_else(|| services.get(format!("{}-worker", project.name)))?;
+    let build = service.get("build").or_else(|| {
+        let image = service.get("image")?.as_str()?;
+        services.as_mapping()?.values().find_map(|candidate| {
+            (candidate.get("image").and_then(serde_yml::Value::as_str) == Some(image))
+                .then(|| candidate.get("build"))
+                .flatten()
+        })
+    })?;
+    let context = build.get("context")?.as_str()?;
+    let dockerfile = build
+        .get("dockerfile")
+        .and_then(serde_yml::Value::as_str)
+        .unwrap_or("Dockerfile");
+    let absolute = path.parent()?.join(context);
+    let relative = pathdiff::diff_paths(&absolute, app_root)?;
+    let context = if relative.as_os_str().is_empty() {
+        ".".into()
+    } else {
+        relative.to_string_lossy().into_owned()
+    };
+    Some((
+        context,
+        dockerfile.into(),
+        build
+            .get("target")
+            .and_then(serde_yml::Value::as_str)
+            .map(str::to_owned),
+    ))
+}
+
+/// Shared language images carry per-component commands and migrations in the
+/// release manifest; only Compose build targets remain unrepresentable.
+fn check_release_build_targets(app_root: &Path, manifest: &ApplicationManifestData) -> Result<()> {
+    for project in &manifest.projects {
+        if let Some((_, _, Some(target))) = compose_project_build(app_root, manifest, project) {
+            anyhow::bail!(
+                "Release build targets are not supported by the release manifest contract: project {} selects Compose target {target}; local Docker Compose remains supported",
+                project.name
+            );
+        }
+    }
+    Ok(())
+}
+
+fn project_dockerfile(
+    app_root: &Path,
+    manifest: &ApplicationManifestData,
+    project: &ProjectEntry,
+) -> String {
+    if project_abs_path(app_root, manifest, project)
+        .join("Dockerfile")
+        .is_file()
+    {
+        return "Dockerfile".to_string();
+    }
+    if let Some(custom) = manifest
+        .dockerfile
+        .as_deref()
+        .filter(|path| !matches!(*path, "Dockerfile" | "./Dockerfile"))
+    {
+        return custom.into();
+    }
+    if let Some((_, file, _)) = compose_project_build(app_root, manifest, project) {
+        return file;
+    }
+    if !project_is_rust(project) && app_root.join("Dockerfile.typescript").is_file() {
+        return pathdiff::diff_paths(
+            app_root.join("Dockerfile.typescript"),
+            app_root.join(&manifest.modules_path),
+        )
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    }
+    if project_is_rust(project)
+        && (matches!(manifest.runtime.as_str(), "node" | "bun")
+            || (manifest.language.as_deref() == Some("mixed")
+                && app_root.join("Dockerfile.rust").is_file()))
+    {
+        return "Dockerfile.rust".to_string();
+    }
+    manifest
+        .dockerfile
+        .clone()
+        .unwrap_or_else(|| "Dockerfile".to_string())
+}
+
+fn project_build_context(
+    app_root: &Path,
+    manifest: &ApplicationManifestData,
+    project: &ProjectEntry,
+) -> Option<String> {
+    let project_path = project_relative_path(manifest, project);
+    if app_root.join(&project_path).join("Dockerfile").exists() {
+        return Some(project_path);
+    }
+
+    if let Some((context, _, _)) = compose_project_build(app_root, manifest, project) {
+        return Some(context);
+    }
+    if project_is_rust(project) {
+        let dockerfile = project_dockerfile(app_root, manifest, project);
+        if app_root.join(dockerfile).exists() {
+            return Some(".".to_string());
+        }
+    }
+
+    Some(manifest.modules_path.clone())
+}
+
+fn project_native_worker_role(project: &ProjectEntry, role: &str) -> Option<String> {
+    if !project_is_rust(project) { return None; }
+    let metadata = project.metadata.as_ref()?;
+    // Separate producer/consumer executables do not implement the legacy role flag.
+    if metadata.worker_service == Some(true) { return None; }
+    (metadata.worker_control_service == Some(true) && role == "control").then(|| "--control-service".to_owned())
+}
+
+fn project_worker_consumer_binary(project: &ProjectEntry) -> Option<String> {
+    project_native_binary(project).map(|binary| {
+        if project.metadata.as_ref().and_then(|m| m.worker_service) == Some(true) {
+            format!("{binary}-worker")
+        } else { binary }
+    })
+}
+
+fn project_worker_type(project: &ProjectEntry) -> String {
+    project
+        .metadata
+        .as_ref()
+        .and_then(|metadata| {
+            metadata
+                .worker_type
+                .clone()
+                .or_else(|| metadata.r#type.clone())
+        })
+        .unwrap_or_else(|| "bullmq".to_string())
+}
+
 pub(crate) fn generate_release_manifest(
     app_root: &Path,
     application_id: String,
@@ -441,13 +730,21 @@ pub(crate) fn generate_release_manifest(
     openapi_s3_keys: &HashMap<String, String>,
     user_managed_db_projects: &std::collections::HashSet<String>,
 ) -> Result<ReleaseManifest> {
+    let normalized = crate::core::manifest::language::normalized(app_root, manifest)?;
+    let manifest = &normalized;
+    check_release_build_targets(app_root, manifest)?;
     let timestamp = chrono::Utc::now().to_rfc3339();
 
     // Create a single ImportScanner for all topology scans — its result_cache
     // persists across services/workers so shared imports are scanned only once.
     let modules_root = app_root.join(&manifest.modules_path);
     let package_json_path = app_root.join("package.json");
-    let mut import_scanner = ImportScanner::with_app_root(&modules_root, &package_json_path, &manifest.app_name, app_root);
+    let mut import_scanner = ImportScanner::with_app_root(
+        &modules_root,
+        &package_json_path,
+        &manifest.app_name,
+        app_root,
+    );
 
     let mut services = Vec::new();
     for project in &manifest.projects {
@@ -480,7 +777,7 @@ pub(crate) fn generate_release_manifest(
             });
 
             // Scan for controllers, routes, and their dependencies
-            let service_path = app_root.join(&manifest.modules_path).join(&project.name);
+            let service_path = project_abs_path(app_root, manifest, project);
             let controllers = if service_path.join("api").join("routes").exists() {
                 if let Ok(routers) = detect_routers_from_service(&service_path) {
                     if !routers.is_empty() {
@@ -488,16 +785,15 @@ pub(crate) fn generate_release_manifest(
                             routers
                                 .into_iter()
                                 .map(|router_name| {
-                                    let route_file = service_path.join("api").join("routes").join(format!(
-                                        "{}.routes.ts",
-                                        router_name
-                                    ));
+                                    let route_file = service_path
+                                        .join("api")
+                                        .join("routes")
+                                        .join(format!("{}.routes.ts", router_name));
 
                                     // Parse route file to extract routes and handler→source mappings
-                                    let (parsed_routes, handler_sources) = parse_route_file(
-                                        &route_file,
-                                        &modules_root,
-                                    ).unwrap_or_default();
+                                    let (parsed_routes, handler_sources) =
+                                        parse_route_file(&route_file, &modules_root)
+                                            .unwrap_or_default();
 
                                     // Build RouteDefinitions with per-route topology
                                     let routes: Vec<RouteDefinition> = parsed_routes
@@ -511,7 +807,15 @@ pub(crate) fn generate_release_manifest(
                                                 });
 
                                             RouteDefinition {
-                                                id: format!("{}-{}", parsed.method.to_lowercase(), parsed.path.replace('/', "-").trim_matches('-').to_string()),
+                                                id: format!(
+                                                    "{}-{}",
+                                                    parsed.method.to_lowercase(),
+                                                    parsed
+                                                        .path
+                                                        .replace('/', "-")
+                                                        .trim_matches('-')
+                                                        .to_string()
+                                                ),
                                                 method: parsed.method,
                                                 path: parsed.path,
                                                 handler: parsed.handler,
@@ -524,7 +828,12 @@ pub(crate) fn generate_release_manifest(
                                         .collect();
 
                                     ControllerDefinition {
-                                        id: format!("{}-controller", router_name.to_lowercase().trim_end_matches("controller")),
+                                        id: format!(
+                                            "{}-controller",
+                                            router_name
+                                                .to_lowercase()
+                                                .trim_end_matches("controller")
+                                        ),
                                         name: router_name.clone(),
                                         path: format!("/{}", router_name),
                                         routes,
@@ -563,25 +872,13 @@ pub(crate) fn generate_release_manifest(
                     privileged: project.metadata.as_ref().and_then(|m| m.privileged),
                     serves: serving_ports(project),
                 }),
-                build_context: if app_root
-                    .join(&manifest.modules_path)
-                    .join(&project.name)
-                    .join("Dockerfile")
-                    .exists()
-                {
-                    Some(
-                        Path::new(&manifest.modules_path)
-                            .join(&project.name)
-                            .to_string_lossy()
-                            .into_owned(),
-                    )
-                } else {
-                    Some(manifest.modules_path.clone())
-                },
-                dockerfile: manifest
-                    .dockerfile
-                    .clone()
-                    .or_else(|| Some("Dockerfile".to_string())),
+                build_context: project_build_context(app_root, manifest, project),
+                dockerfile: Some(project_dockerfile(app_root, manifest, project)),
+                runtime: project_is_rust(project).then_some(Runtime::Tokio),
+                binary: project_native_binary(project),
+                native_worker_role: None,
+                migrate: project_native_migration(project, project_native_binary(project)),
+                variant: project.variant.clone(),
             });
         } else if project.r#type == ProjectType::Worker {
             let runtime_deps = project_runtime_deps.get(&project.name).cloned();
@@ -611,7 +908,7 @@ pub(crate) fn generate_release_manifest(
                 openapi_specs.get(&project.name).cloned()
             };
 
-            let worker_path = app_root.join(&manifest.modules_path).join(&project.name);
+            let worker_path = project_abs_path(app_root, manifest, project);
             let controllers = if worker_path.join("api").join("routes").exists() {
                 if let Ok(routers) = detect_routers_from_service(&worker_path) {
                     if !routers.is_empty() {
@@ -619,15 +916,14 @@ pub(crate) fn generate_release_manifest(
                             routers
                                 .into_iter()
                                 .map(|router_name| {
-                                    let route_file = worker_path.join("api").join("routes").join(format!(
-                                        "{}.routes.ts",
-                                        router_name
-                                    ));
+                                    let route_file = worker_path
+                                        .join("api")
+                                        .join("routes")
+                                        .join(format!("{}.routes.ts", router_name));
 
-                                    let (parsed_routes, handler_sources) = parse_route_file(
-                                        &route_file,
-                                        &modules_root,
-                                    ).unwrap_or_default();
+                                    let (parsed_routes, handler_sources) =
+                                        parse_route_file(&route_file, &modules_root)
+                                            .unwrap_or_default();
 
                                     let routes: Vec<RouteDefinition> = parsed_routes
                                         .into_iter()
@@ -639,7 +935,15 @@ pub(crate) fn generate_release_manifest(
                                                 });
 
                                             RouteDefinition {
-                                                id: format!("{}-{}", parsed.method.to_lowercase(), parsed.path.replace('/', "-").trim_matches('-').to_string()),
+                                                id: format!(
+                                                    "{}-{}",
+                                                    parsed.method.to_lowercase(),
+                                                    parsed
+                                                        .path
+                                                        .replace('/', "-")
+                                                        .trim_matches('-')
+                                                        .to_string()
+                                                ),
                                                 method: parsed.method,
                                                 path: parsed.path,
                                                 handler: parsed.handler,
@@ -652,7 +956,12 @@ pub(crate) fn generate_release_manifest(
                                         .collect();
 
                                     ControllerDefinition {
-                                        id: format!("{}-controller", router_name.to_lowercase().trim_end_matches("controller")),
+                                        id: format!(
+                                            "{}-controller",
+                                            router_name
+                                                .to_lowercase()
+                                                .trim_end_matches("controller")
+                                        ),
                                         name: router_name.clone(),
                                         path: format!("/{}", router_name),
                                         routes,
@@ -670,6 +979,7 @@ pub(crate) fn generate_release_manifest(
                 None
             };
 
+            if project.metadata.as_ref().and_then(|m| m.worker_service) != Some(false) {
             services.push(ServiceDefinition {
                 id: format!("{}-service", project.name),
                 name: format!("{}-service", project.name),
@@ -703,37 +1013,22 @@ pub(crate) fn generate_release_manifest(
                     privileged: project.metadata.as_ref().and_then(|m| m.privileged),
                     serves: serving_ports(project),
                 }),
-                build_context: if app_root
-                    .join(&manifest.modules_path)
-                    .join(&project.name)
-                    .join("Dockerfile")
-                    .exists()
-                {
-                    Some(
-                        Path::new(&manifest.modules_path)
-                            .join(&project.name)
-                            .to_string_lossy()
-                            .into_owned(),
-                    )
-                } else {
-                    Some(manifest.modules_path.clone())
-                },
-                dockerfile: manifest
-                    .dockerfile
-                    .clone()
-                    .or_else(|| Some("Dockerfile".to_string())),
+                build_context: project_build_context(app_root, manifest, project),
+                dockerfile: Some(project_dockerfile(app_root, manifest, project)),
+                runtime: project_is_rust(project).then_some(Runtime::Tokio),
+                binary: project_native_binary(project),
+                native_worker_role: project_native_worker_role(project, "control"),
+                migrate: None,
+                variant: project.variant.clone(),
             });
+            }
 
-            let worker_type_str = project
-                .metadata
-                .as_ref()
-                .and_then(|m| m.r#type.clone())
-                .unwrap_or_else(|| "bullmq".to_string());
+            let worker_type_str = project_worker_type(project);
 
             let worker_type = match worker_type_str.as_str() {
                 "kafka" => WorkerType::Kafka,
                 "redis" => WorkerType::Redis,
-                "postgresql" => WorkerType::PostgreSQL,
+                "database" | "postgresql" => WorkerType::PostgreSQL,
                 _ => WorkerType::BullMQ,
             };
 
@@ -764,25 +1059,13 @@ pub(crate) fn generate_release_manifest(
                 name: format!("{}-worker", project.name),
                 status: None,
                 config: ServiceConfigEnum::Worker(worker_config),
-                build_context: if app_root
-                    .join(&manifest.modules_path)
-                    .join(&project.name)
-                    .join("Dockerfile")
-                    .exists()
-                {
-                    Some(
-                        Path::new(&manifest.modules_path)
-                            .join(&project.name)
-                            .to_string_lossy()
-                            .into_owned(),
-                    )
-                } else {
-                    Some(manifest.modules_path.clone())
-                },
-                dockerfile: manifest
-                    .dockerfile
-                    .clone()
-                    .or_else(|| Some("Dockerfile".to_string())),
+                build_context: project_build_context(app_root, manifest, project),
+                dockerfile: Some(project_dockerfile(app_root, manifest, project)),
+                runtime: project_is_rust(project).then_some(Runtime::Tokio),
+                binary: project_worker_consumer_binary(project),
+                native_worker_role: project_native_worker_role(project, "consumer"),
+                migrate: project_native_migration(project, project_worker_consumer_binary(project)),
+                variant: project.variant.clone(),
             });
         }
     }
@@ -798,7 +1081,12 @@ pub(crate) fn generate_release_manifest(
                 if user_managed_db {
                     // When DB is user-managed, emit a single detached DB resource (no service_name)
                     // to avoid duplicates, then add non-DB resources for each component
-                    add_resources_from_inventory(&project.name, project_resources, &mut resources, true);
+                    add_resources_from_inventory(
+                        &project.name,
+                        project_resources,
+                        &mut resources,
+                        true,
+                    );
 
                     // Add non-DB resources for service and worker components
                     let service_name = format!("{}-service", project.name);
@@ -809,15 +1097,30 @@ pub(crate) fn generate_release_manifest(
                 } else {
                     // Create resources for the worker-service component
                     let service_name = format!("{}-service", project.name);
-                    add_resources_from_inventory(&service_name, project_resources, &mut resources, false);
+                    add_resources_from_inventory(
+                        &service_name,
+                        project_resources,
+                        &mut resources,
+                        false,
+                    );
 
                     // Create resources for the worker-worker component
                     let worker_name = format!("{}-worker", project.name);
-                    add_resources_from_inventory(&worker_name, project_resources, &mut resources, false);
+                    add_resources_from_inventory(
+                        &worker_name,
+                        project_resources,
+                        &mut resources,
+                        false,
+                    );
                 }
             } else {
                 // For regular service projects, create resources with the project name
-                add_resources_from_inventory(&project.name, project_resources, &mut resources, user_managed_db);
+                add_resources_from_inventory(
+                    &project.name,
+                    project_resources,
+                    &mut resources,
+                    user_managed_db,
+                );
             }
         }
     }
@@ -832,7 +1135,15 @@ pub(crate) fn generate_release_manifest(
         cloud_provider: Some("aws".to_string()),
         vpc_id: None,
         default_instance_size: None,
-        build_context: if app_root
+        build_context: if application_uses_rust(manifest)
+            && manifest
+                .dockerfile
+                .as_deref()
+                .map(|dockerfile| app_root.join(dockerfile).exists())
+                .unwrap_or_else(|| app_root.join("Dockerfile").exists())
+        {
+            Some(".".to_string())
+        } else if app_root
             .join(&manifest.modules_path)
             .join("Dockerfile")
             .exists()
@@ -846,6 +1157,7 @@ pub(crate) fn generate_release_manifest(
     let runtime = match manifest.runtime.as_str() {
         "node" => Some(Runtime::Node),
         "bun" => Some(Runtime::Bun),
+        "tokio" => Some(Runtime::Tokio),
         _ => None,
     };
 
@@ -865,12 +1177,12 @@ pub(crate) fn generate_release_manifest(
                         .get(&name)
                         .cloned()
                         .unwrap_or_default();
-                    let retention = retention_policies.get(&name).map(|r| {
-                        ReleaseRetentionConfig {
+                    let retention = retention_policies
+                        .get(&name)
+                        .map(|r| ReleaseRetentionConfig {
                             duration: r.duration.clone(),
                             action: r.action.clone(),
-                        }
-                    });
+                        });
                     ReleaseEntityCompliance {
                         name,
                         fields,
@@ -1067,7 +1379,461 @@ fn add_non_db_resources(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::{HashMap, HashSet};
+
+    use tempfile::TempDir;
+
     use super::*;
+    use crate::core::manifest::{ProjectMetadata, ResourceInventory};
+
+    fn rust_release_test_manifest() -> ApplicationManifestData {
+        ApplicationManifestData {
+            id: "rust-test-id".to_string(),
+            cli_version: "1.0.0".to_string(),
+            app_name: "rust-test".to_string(),
+            camel_case_app_name: "rustTest".to_string(),
+            pascal_case_app_name: "RustTest".to_string(),
+            kebab_case_app_name: "rust-test".to_string(),
+            title_case_app_name: "Rust Test".to_string(),
+            modules_path: "crates".to_string(),
+            docker_compose_path: Some("docker-compose.yaml".to_string()),
+            dockerfile: Some("Dockerfile".to_string()),
+            git_repository: None,
+            runtime: "tokio".to_string(),
+            formatter: "rustfmt".to_string(),
+            linter: "clippy".to_string(),
+            validator: "serde".to_string(),
+            http_framework: "axum".to_string(),
+            test_framework: Some("cargo-test".to_string()),
+            app_description: "Rust test application".to_string(),
+            author: "Test Author".to_string(),
+            license: "MIT".to_string(),
+            language: Some("rust".to_string()),
+            application_language: Some("rust".to_string()),
+            sdk_targets: vec!["typescript".to_string(), "rust".to_string()],
+            cargo_workspace: Some("Cargo.toml".to_string()),
+            contract_artifact_path: None,
+            openapi_path: None,
+            asyncapi_path: None,
+            projects: vec![
+                ProjectEntry {
+                    r#type: ProjectType::Service,
+                    name: "accounts".to_string(),
+                    description: "Accounts service".to_string(),
+                    variant: None,
+                    serves: None,
+                    resources: Some(ResourceInventory {
+                        database: Some("postgresql".to_string()),
+                        cache: None,
+                        queue: None,
+                        object_store: None,
+                        redis_partition: None,
+                        capabilities: None,
+                    }),
+                    routers: Some(vec!["users".to_string()]),
+                    metadata: Some(ProjectMetadata {
+                        language: Some("rust".to_string()),
+                        crate_name: Some("accounts".to_string()),
+                        crate_path: Some("crates/accounts".to_string()),
+                        openapi_path: Some(
+                            "crates/accounts/sdk/typescript/openapi.json".to_string(),
+                        ),
+                        ..ProjectMetadata::default()
+                    }),
+                },
+                ProjectEntry {
+                    r#type: ProjectType::Worker,
+                    name: "email-worker".to_string(),
+                    description: "Email worker".to_string(),
+                    variant: None,
+                    serves: None,
+                    resources: Some(ResourceInventory {
+                        database: Some("postgresql".to_string()),
+                        cache: None,
+                        queue: None,
+                        object_store: None,
+                        redis_partition: None,
+                        capabilities: None,
+                    }),
+                    routers: None,
+                    metadata: Some(ProjectMetadata {
+                        language: Some("rust".to_string()),
+                        crate_name: Some("email-worker".to_string()),
+                        crate_path: Some("crates/email-worker".to_string()),
+                        worker_type: Some("database".to_string()),
+                        openapi_path: Some(
+                            "crates/email-worker/sdk/typescript/openapi.json".to_string(),
+                        ),
+                        ..ProjectMetadata::default()
+                    }),
+                },
+            ],
+            project_peer_topology: HashMap::new(),
+            database: "postgresql".to_string(),
+            is_postgres: true,
+            is_sqlite: false,
+            is_mysql: false,
+            is_mariadb: false,
+            is_better_sqlite: false,
+            is_libsql: false,
+            is_mssql: false,
+            is_mongo: false,
+            is_in_memory_database: false,
+            is_eslint: false,
+            is_biome: false,
+            is_oxlint: false,
+            is_prettier: false,
+            is_express: false,
+            is_hyper_express: false,
+            is_zod: false,
+            is_typebox: false,
+            is_bun: false,
+            is_node: false,
+            is_vitest: false,
+            is_jest: false,
+            platform_application_id: None,
+            platform_organization_id: None,
+            framework: None,
+            compliance: None,
+        }
+    }
+
+    #[test]
+    fn worker_producer_and_consumer_have_distinct_native_roles() {
+        let root = TempDir::new().unwrap();
+        let mut manifest = rust_release_test_manifest();
+        let worker = manifest.projects.iter_mut().find(|project| project.r#type == ProjectType::Worker).unwrap();
+        worker.metadata.as_mut().unwrap().worker_service = Some(true);
+        let producer = project_native_binary(worker).unwrap();
+        assert_eq!(project_worker_consumer_binary(worker).unwrap(), format!("{producer}-worker"));
+        assert!(project_native_worker_role(worker, "control").is_none());
+        assert!(project_native_worker_role(worker, "consumer").is_none());
+        crate::core::manifest::language::normalized(root.path(), &manifest).unwrap();
+        let worker = manifest.projects.iter_mut().find(|project| project.r#type == ProjectType::Worker).unwrap();
+        worker.metadata.as_mut().unwrap().contract_export = Some(false);
+        assert!(crate::core::manifest::language::normalized(root.path(), &manifest).is_err());
+    }
+
+    #[test]
+    fn release_language_normalization_preserves_legacy_rust_and_rejects_conflicts() {
+        let root = TempDir::new().unwrap();
+        let mut manifest = rust_release_test_manifest();
+        manifest.projects[0].metadata.as_mut().unwrap().language = None;
+        let normalized = crate::core::manifest::language::normalized(root.path(), &manifest).unwrap();
+        assert!(project_is_rust(&normalized.projects[0]));
+        assert!(manifest.projects[0].metadata.as_ref().unwrap().language.is_none());
+        manifest.projects[0].metadata.as_mut().unwrap().language = Some("go".into());
+        assert!(crate::core::manifest::language::normalized(root.path(), &manifest).is_err());
+        manifest.projects[0].metadata.as_mut().unwrap().language = Some("rust".into());
+        manifest.projects[0].metadata.as_mut().unwrap().worker_control_service = Some(true);
+        assert!(crate::core::manifest::language::normalized(root.path(), &manifest).is_err());
+        manifest.projects[0].metadata.as_mut().unwrap().worker_control_service = None;
+        manifest.application_language = Some("typescript".into());
+        assert!(crate::core::manifest::language::normalized(root.path(), &manifest).is_err());
+        manifest.language = Some("mixed".into());
+        manifest.application_language = Some("mixed".into());
+        let worker = manifest.projects.iter_mut().find(|p| p.r#type == ProjectType::Worker).unwrap();
+        worker.metadata.as_mut().unwrap().language = Some("typescript".into());
+        worker.metadata.as_mut().unwrap().worker_control_service = Some(true);
+        assert!(crate::core::manifest::language::normalized(root.path(), &manifest).is_err());
+    }
+
+    #[test]
+    fn test_rust_release_manifest_uses_crate_paths_and_root_dockerfile() {
+        let temp_dir = TempDir::new().unwrap();
+        let app_root = temp_dir.path();
+        std::fs::write(app_root.join("Dockerfile"), "FROM rust:1.91-slim\n").unwrap();
+        std::fs::create_dir_all(app_root.join("crates/accounts")).unwrap();
+        std::fs::create_dir_all(app_root.join("crates/email-worker")).unwrap();
+
+        let manifest = rust_release_test_manifest();
+        let mut openapi_specs = HashMap::new();
+        openapi_specs.insert(
+            "accounts".to_string(),
+            serde_json::json!({ "openapi": "3.1.0", "info": { "title": "accounts" } }),
+        );
+        openapi_specs.insert(
+            "email-worker".to_string(),
+            serde_json::json!({ "openapi": "3.1.0", "info": { "title": "email-worker" } }),
+        );
+
+        let release_manifest = generate_release_manifest(
+            app_root,
+            "app-id".to_string(),
+            "1.0.0".to_string(),
+            "commit".to_string(),
+            Some("main".to_string()),
+            None,
+            &manifest,
+            &openapi_specs,
+            Vec::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashSet::new(),
+        )
+        .unwrap();
+
+        assert_eq!(release_manifest.runtime, Some(Runtime::Tokio));
+        assert_eq!(
+            release_manifest.infrastructure.build_context,
+            Some(".".to_string())
+        );
+
+        let accounts = release_manifest
+            .services
+            .iter()
+            .find(|service| service.id == "accounts")
+            .expect("accounts service should exist");
+        assert_eq!(accounts.build_context, Some(".".to_string()));
+        assert_eq!(accounts.dockerfile, Some("Dockerfile".to_string()));
+        assert_eq!(accounts.runtime, Some(Runtime::Tokio));
+        assert_eq!(accounts.binary.as_deref(), Some("accounts"));
+        let ServiceConfigEnum::Service(accounts_config) = &accounts.config else {
+            panic!("accounts should be a service config");
+        };
+        assert!(accounts_config.open_api_spec.is_some());
+
+        let worker = release_manifest
+            .services
+            .iter()
+            .find(|service| service.id == "email-worker-worker")
+            .expect("email worker should exist");
+        assert_eq!(worker.build_context, Some(".".to_string()));
+        assert_eq!(worker.runtime, Some(Runtime::Tokio));
+        assert_eq!(worker.binary.as_deref(), Some("email-worker"));
+        assert!(
+            worker.native_worker_role.is_none(),
+            "legacy workers retain their original command"
+        );
+        let ServiceConfigEnum::Worker(worker_config) = &worker.config else {
+            panic!("email worker should have worker config");
+        };
+        assert_eq!(worker_config.worker_type, WorkerType::PostgreSQL);
+    }
+
+    #[test]
+    fn mixed_release_respects_compose_context_and_refuses_unsupported_targets() {
+        let root = TempDir::new().unwrap();
+        let mut manifest = rust_release_test_manifest();
+        manifest.dockerfile = None;
+        let project = &manifest.projects[0];
+        std::fs::write(
+            root.path().join("docker-compose.yaml"),
+            format!(
+                "services:\n  {}:\n    build: {{context: ., dockerfile: Dockerfile.typescript}}\n",
+                project.name
+            ),
+        )
+        .unwrap();
+        assert_eq!(
+            project_build_context(root.path(), &manifest, project).as_deref(),
+            Some(".")
+        );
+        assert_eq!(
+            project_dockerfile(root.path(), &manifest, project),
+            "Dockerfile.typescript"
+        );
+        std::fs::write(root.path().join("docker-compose.yaml"),format!("services:\n  {}:\n    build: {{context: ., dockerfile: Dockerfile.typescript, target: auth}}\n",project.name)).unwrap();
+        assert!(
+            check_release_build_targets(root.path(), &manifest)
+                .unwrap_err()
+                .to_string()
+                .contains("target auth")
+        );
+        manifest.dockerfile = Some("Custom.Dockerfile".into());
+        assert!(check_release_build_targets(root.path(), &manifest).is_ok());
+        assert_eq!(
+            project_dockerfile(root.path(), &manifest, &manifest.projects[0]),
+            "Custom.Dockerfile"
+        );
+    }
+
+    #[test]
+    fn native_migrations_name_the_binary_and_owner_url_variable() {
+        let manifest = rust_release_test_manifest();
+        let (service, worker) = (&manifest.projects[0], &manifest.projects[1]);
+        let migration = project_native_migration(service, project_native_binary(service)).unwrap();
+        assert_eq!(migration.binary, "accounts");
+        assert_eq!(migration.args, ["--migrate"]);
+        assert_eq!(migration.database_url_env, "MIGRATION_DATABASE_URL");
+        let consumer = project_native_migration(worker, Some("email-worker-worker".into())).unwrap();
+        assert_eq!(consumer.database_url_env, "DATABASE_URL");
+        let mut billing = service.clone();
+        billing.variant = Some("billing-stripe".into());
+        assert_eq!(
+            project_native_migration(&billing, Some("billing".into())).unwrap().database_url_env,
+            "DATABASE_URL"
+        );
+        let mut storeless = service.clone();
+        storeless.resources = None;
+        assert!(project_native_migration(&storeless, Some("accounts".into())).is_none());
+        let mut cac = service.clone();
+        cac.variant = Some("cac-base".into());
+        assert!(project_native_migration(&cac, Some("cac".into())).is_none());
+    }
+
+    #[test]
+    fn release_accepts_owned_shared_process_images() {
+        let root = TempDir::new().unwrap();
+        let manifest = rust_release_test_manifest();
+        std::fs::create_dir_all(root.path().join(".forklaunch")).unwrap();
+        std::fs::write(root.path().join("Dockerfile.typescript"), "FROM node:22\n").unwrap();
+        std::fs::write(
+            root.path().join(".forklaunch/generated.json"),
+            serde_json::to_string(&serde_json::json!({"typescriptImage": {
+                "dockerfileSha256": crate::core::forklaunch_state::sha256_hex("FROM node:22\n"), "processes": {"api": {"entry":"server"}}
+            }}))
+            .unwrap(),
+        )
+        .unwrap();
+        // Commands and migrations travel per component, so shared images release.
+        assert!(check_release_build_targets(root.path(), &manifest).is_ok());
+        let mut customized = manifest.clone();
+        customized.dockerfile = Some("Custom.Dockerfile".into());
+        assert!(check_release_build_targets(root.path(), &customized).is_ok());
+        std::fs::write(root.path().join("Dockerfile.typescript"), "FROM custom\n").unwrap();
+        assert!(check_release_build_targets(root.path(), &manifest).is_ok());
+    }
+
+    #[test]
+    fn mixed_release_uses_each_languages_dockerfile_for_services_and_workers() {
+        for runtime in ["node", "bun"] {
+            let root = TempDir::new().unwrap();
+            std::fs::write(root.path().join("Dockerfile.rust"), "FROM rust:1.91-slim\n").unwrap();
+            std::fs::create_dir_all(root.path().join("modules")).unwrap();
+            std::fs::write(root.path().join("Dockerfile.typescript"), "FROM node:22\n").unwrap();
+            let mut manifest = rust_release_test_manifest();
+            manifest.runtime = runtime.to_string();
+            manifest.modules_path = "modules".to_string();
+            manifest.language = Some("mixed".to_string());
+            manifest.application_language = Some("mixed".to_string());
+            for project in &mut manifest.projects {
+                if project.r#type == ProjectType::Worker {
+                    project.metadata.as_mut().unwrap().worker_control_service = Some(true);
+                }
+            }
+            manifest.projects[0].metadata.as_mut().unwrap().crate_name =
+                Some("accounts-native".into());
+            let mut legacy = manifest.projects[0].clone();
+            legacy.name = "legacy-api".to_string();
+            legacy.metadata = Some(ProjectMetadata {
+                language: Some("typescript".to_string()),
+                ..ProjectMetadata::default()
+            });
+            manifest.projects.push(legacy);
+            let release = generate_release_manifest(
+                root.path(),
+                "app-id".into(),
+                "1.0.0".into(),
+                "commit".into(),
+                None,
+                None,
+                &manifest,
+                &HashMap::new(),
+                Vec::new(),
+                &HashMap::new(),
+                &HashMap::new(),
+                &HashMap::new(),
+                &HashMap::new(),
+                &HashMap::new(),
+                &HashSet::new(),
+            )
+            .unwrap();
+            assert_eq!(release.services.len(), 4);
+            for service in release.services {
+                let legacy = service.id == "legacy-api";
+                let serialized = serde_json::to_value(&service).unwrap();
+                match service.id.as_str() {
+                    // The legacy binary takes `--control-service`; its consumer takes no flag.
+                    "email-worker-service" => assert_eq!(serialized["nativeWorkerRole"], "--control-service"),
+                    _ => assert!(serialized.get("nativeWorkerRole").is_none()),
+                }
+                if legacy {
+                    assert!(serialized.get("runtime").is_none());
+                    assert!(serialized.get("binary").is_none());
+                } else {
+                    assert_eq!(serialized["runtime"], "tokio");
+                    assert_eq!(
+                        serialized["binary"],
+                        if service.id == "accounts" {
+                            "accounts-native"
+                        } else {
+                            "email-worker"
+                        }
+                    );
+                }
+
+                assert_eq!(
+                    service.build_context.as_deref(),
+                    Some(if legacy { "modules" } else { "." })
+                );
+                assert_eq!(
+                    service.dockerfile.as_deref(),
+                    Some(if legacy {
+                        "../Dockerfile.typescript"
+                    } else {
+                        "Dockerfile.rust"
+                    })
+                );
+            }
+            // A project-local Dockerfile is relative to its project-local context.
+            let custom = root.path().join("crates/accounts");
+            std::fs::create_dir_all(&custom).unwrap();
+            std::fs::write(custom.join("Dockerfile"), "FROM custom\n").unwrap();
+            assert_eq!(
+                project_build_context(root.path(), &manifest, &manifest.projects[0]).as_deref(),
+                Some("crates/accounts")
+            );
+            assert_eq!(
+                project_dockerfile(root.path(), &manifest, &manifest.projects[0]),
+                "Dockerfile"
+            );
+            manifest.dockerfile = Some("Dockerfile.custom".into());
+            assert_eq!(
+                project_dockerfile(root.path(), &manifest, &manifest.projects[2]),
+                "Dockerfile.custom"
+            );
+        }
+    }
+
+    #[test]
+    fn prebuilt_release_keeps_storefront_paths_after_mixed_migration() {
+        let root = TempDir::new().unwrap();
+        let mut manifest = rust_release_test_manifest();
+        manifest.modules_path = "modules".into();
+        manifest.runtime = "node".into();
+        for directory in [
+            "modules",
+            "crates/accounts",
+            "crates/email-worker",
+            "crates/shop",
+        ] {
+            std::fs::create_dir_all(root.path().join(directory)).unwrap();
+        }
+        let mut capture = manifest.projects[0].clone();
+        capture.name = "shop".into();
+        capture.r#type = ProjectType::Library;
+        capture.variant = Some("storefront".into());
+        capture.metadata = Some(ProjectMetadata {
+            static_path: Some("crates/shop".into()),
+            ..ProjectMetadata::default()
+        });
+        assert_eq!(project_relative_path(&manifest, &capture), "crates/shop");
+        manifest.projects.push(capture);
+        super::super::prebuilt::validate_paths(root.path(), &manifest).unwrap();
+        manifest
+            .projects
+            .last_mut()
+            .unwrap()
+            .metadata
+            .as_mut()
+            .unwrap()
+            .static_path = Some("../outside".into());
+        assert!(super::super::prebuilt::validate_paths(root.path(), &manifest).is_err());
+    }
 
     #[test]
     fn test_required_env_var_serializes_declared_optionality() {
@@ -1185,18 +1951,14 @@ mod tests {
                         dep_type: "npm".to_string(),
                         version: Some("^17.7.0".to_string()),
                         target_service: None,
-                        source_files: vec![
-                            "domain/services/user.service.ts".to_string(),
-                        ],
+                        source_files: vec!["domain/services/user.service.ts".to_string()],
                     },
                     Dependency {
                         name: "@mikro-orm/core".to_string(),
                         dep_type: "npm".to_string(),
                         version: Some("^6.5.0".to_string()),
                         target_service: None,
-                        source_files: vec![
-                            "domain/services/user.service.ts".to_string(),
-                        ],
+                        source_files: vec!["domain/services/user.service.ts".to_string()],
                     },
                 ],
             }),
@@ -1208,22 +1970,49 @@ mod tests {
         let json_str = json.unwrap();
 
         // Verify flat topology structure
-        assert!(json_str.contains("\"topology\""), "JSON should contain topology field");
+        assert!(
+            json_str.contains("\"topology\""),
+            "JSON should contain topology field"
+        );
         assert!(json_str.contains("\"deps\""), "JSON should have deps array");
-        assert!(json_str.contains("\"sourceFiles\""), "JSON should have per-dep sourceFiles");
+        assert!(
+            json_str.contains("\"sourceFiles\""),
+            "JSON should have per-dep sourceFiles"
+        );
 
         // Verify npm dependencies have versions
-        assert!(json_str.contains("\"@forklaunch/core\""), "Should contain npm dependency");
-        assert!(json_str.contains("\"^0.6.5\""), "Should contain version for @forklaunch/core");
-        assert!(json_str.contains("\"stripe\""), "Should contain stripe dependency");
-        assert!(json_str.contains("\"^17.7.0\""), "Should contain version for stripe");
+        assert!(
+            json_str.contains("\"@forklaunch/core\""),
+            "Should contain npm dependency"
+        );
+        assert!(
+            json_str.contains("\"^0.6.5\""),
+            "Should contain version for @forklaunch/core"
+        );
+        assert!(
+            json_str.contains("\"stripe\""),
+            "Should contain stripe dependency"
+        );
+        assert!(
+            json_str.contains("\"^17.7.0\""),
+            "Should contain version for stripe"
+        );
 
         // Verify nested deps are flattened
-        assert!(json_str.contains("\"@mikro-orm/core\""), "Should contain nested npm dep");
+        assert!(
+            json_str.contains("\"@mikro-orm/core\""),
+            "Should contain nested npm dep"
+        );
 
         // Verify source files
-        assert!(json_str.contains("\"domain/services/user.service.ts\""), "Should have local path");
-        assert!(json_str.contains("\"api/controllers/user.controller.ts\""), "Should have controller path");
+        assert!(
+            json_str.contains("\"domain/services/user.service.ts\""),
+            "Should have local path"
+        );
+        assert!(
+            json_str.contains("\"api/controllers/user.controller.ts\""),
+            "Should have controller path"
+        );
     }
 
     #[test]
@@ -1241,9 +2030,7 @@ mod tests {
                 middleware: None,
                 schema: None,
                 auth: None,
-                topology: Some(Topology {
-                    deps: vec![],
-                }),
+                topology: Some(Topology { deps: vec![] }),
             }],
         };
 
@@ -1256,13 +2043,19 @@ mod tests {
         // Parse as JSON and check the top-level keys
         let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
         let obj = parsed.as_object().unwrap();
-        assert!(!obj.contains_key("topology"), "Controller should not have top-level topology");
+        assert!(
+            !obj.contains_key("topology"),
+            "Controller should not have top-level topology"
+        );
         assert!(obj.contains_key("routes"), "Controller should have routes");
 
         // But routes inside should still have topology
         let routes = obj.get("routes").unwrap().as_array().unwrap();
         let first_route = routes[0].as_object().unwrap();
-        assert!(first_route.contains_key("topology"), "Route should have topology");
+        assert!(
+            first_route.contains_key("topology"),
+            "Route should have topology"
+        );
     }
 
     #[test]
@@ -1441,8 +2234,7 @@ health_path = "/health"
         let rewritten = toml::to_string(&project).unwrap();
         assert!(rewritten.contains("port_env = \"WS_PORT\""), "{rewritten}");
         let bare: crate::core::manifest::ProjectEntry =
-            toml::from_str("type = \"Service\"\nname = \"iam\"\ndescription = \"\"\n")
-                .unwrap();
+            toml::from_str("type = \"Service\"\nname = \"iam\"\ndescription = \"\"\n").unwrap();
         assert!(serving_ports(&bare).is_none());
         assert!(!toml::to_string(&bare).unwrap().contains("serves"));
     }

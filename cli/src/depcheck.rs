@@ -10,10 +10,7 @@ use clap::{Arg, ArgMatches, Command};
 use serde_json::{Value, from_str, json};
 use termcolor::{ColorChoice, StandardStream, WriteColor};
 
-use crate::{
-    CliCommand,
-    core::command::command,
-};
+use crate::{CliCommand, core::command::command};
 
 struct ProjectDependencyVersion {
     project_name: String,

@@ -3,9 +3,11 @@ import { generateHmacAuthHeaders } from './generateHmacAuthHeaders';
 import { timingSafeEqual } from 'crypto';
 
 /**
- * The instance gateway: how a managed instance reaches platform-held services
- * (models, payments, email, SMS, WhatsApp, voice) without holding a vendor
- * credential, and how the platform delivers vendor events back to it.
+ * The managed gateway (the instance gateway): how a ForkLaunch app reaches
+ * platform-held services (models, payments, email, SMS, WhatsApp, voice)
+ * without holding a vendor credential, and how the platform delivers vendor
+ * events back to it. A managed instance and an app deployed to its own
+ * environment (`forklaunch deploy create`) both use it.
  *
  * Outbound, every request is signed with the instance's own HMAC key
  * (`INSTANCE_HMAC_KEY`, key id `INSTANCE_ID`) over the router-relative path,
@@ -19,9 +21,11 @@ import { timingSafeEqual } from 'crypto';
  * `verifyPlatformEvent` checks that signature, the timestamp and the nonce.
  *
  * The platform injects `PLATFORM_GATEWAY_URL`, `INSTANCE_ID` and
- * `INSTANCE_HMAC_KEY` into a hosted instance. Their absence means the service
- * is not running in managed mode, and a client refuses to be created rather
- * than failing on its first call.
+ * `INSTANCE_HMAC_KEY` into a managed instance, and into the components of a
+ * regular deployment that the release binds a capability to (`forklaunch
+ * infra add <service> <capability>`). Their absence means the service has no
+ * managed gateway, and a client refuses to be created rather than failing on
+ * its first call.
  */
 
 /** Where the gateway router is mounted on the platform service. */
@@ -86,8 +90,11 @@ export function instanceGatewaySettings(
   const hmacKey = options.hmacKey ?? process.env.INSTANCE_HMAC_KEY;
   if (!gatewayUrl || !instanceId || !hmacKey) {
     throw new Error(
-      `${feature} is only available to instances hosted in managed mode: ` +
-        'PLATFORM_GATEWAY_URL, INSTANCE_ID and INSTANCE_HMAC_KEY must be set'
+      `${feature} goes through the ForkLaunch managed gateway: ` +
+        'PLATFORM_GATEWAY_URL, INSTANCE_ID and INSTANCE_HMAC_KEY must be set. ' +
+        'The platform sets them for a managed instance, and at deploy for a component ' +
+        'that declares the capability (`forklaunch infra add <service> <capability>`), ' +
+        'which also points them at the local gateway mock'
     );
   }
   return { gatewayUrl, instanceId, hmacKey };

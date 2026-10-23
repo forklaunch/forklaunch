@@ -314,7 +314,7 @@ async generatePulumiCode(
 - VPC and networking (subnets, security groups, NAT gateways)
 - ECS clusters and services
 - Load balancers (ALB) and target groups
-- RDS databases (PostgreSQL, MySQL)
+- Databases, per engine (see *Database engines* below)
 - ElastiCache clusters (Redis)
 - MSK clusters (Kafka)
 - ECR repositories
@@ -328,6 +328,34 @@ async generatePulumiCode(
 - CloudTrail audit logging
 
 **Location:** `src/modules/deployment-agent-worker/domain/services/pulumi-generator.service.ts`
+
+**Database engines.** The engine is the component's MikroORM driver
+(`resource.technology`, else the app's `config.database.engine`).
+
+| Engine | AWS | Default version (family) | `DB_URL` scheme |
+|---|---|---|---|
+| postgresql | RDS `postgres` | 17 (`postgres17`) | `postgresql://` |
+| mysql | RDS `mysql` | 8.4 (`mysql8.4`) | `mysql://` |
+| mariadb | RDS `mariadb` | 11.4 (`mariadb11.4`) | `mysql://` |
+| mssql | RDS `sqlserver-ex` | 16.00 (`sqlserver-ex-16.0`) | `mssql://` |
+| mongodb | DocumentDB cluster (`templates/database-docdb.pulumi.ts`) | 5.0.0 (`docdb5.0`) | `mongodb://…?tls=true&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false&authSource=admin` |
+| sqlite, better-sqlite, libsql | nothing provisioned, no `DB_*` injected | | |
+
+A version set on the resource is used as given (its family derived from it
+whole); the app-level `config.database.engineVersion` applies only to its own
+engine. SQL Server gets no `DBName` (RDS rejects it); each component creates
+its database on connect (MikroORM `ensureDatabase`). SQL Server Express has no
+Multi-AZ on RDS: `rdsMultiAzFor` forces it off and logs a `[Compliance]` note
+when Multi-AZ was asked for. DocumentDB: TLS enforced by its parameter group, KMS storage,
+`db.t4g.medium` minimum, Multi-AZ = a second instance.
+
+On a shared compute pool only Postgres lives in the pool's partition. Any
+other server engine gets its own instance in the pool VPC
+(`generatePoolOwnDatabases`), with an extra ingress rule for the pool hosts'
+security group (read from the pool output `ecsSecurityGroupId`; missing:
+`SHARED_POOL_OUTPUT_MISSING`). Tier moves and data wipes of an app with a
+non-Postgres engine are refused with `UNSUPPORTED_DATABASE_ENGINE_FOR_DATA_MOVE`.
+User docs: the ForkLaunch platform docs (Databases page).
 
 ### Pulumi Executor Service
 

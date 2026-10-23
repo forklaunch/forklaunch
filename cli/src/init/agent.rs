@@ -13,7 +13,10 @@ use rustyline::{Editor, history::DefaultHistory};
 use termcolor::{ColorChoice, StandardStream, WriteColor};
 use toml::from_str;
 
-use super::service::{generate_basic_service, service_manifest_data};
+use super::{
+    rust_project,
+    service::{generate_basic_service, service_manifest_data},
+};
 use crate::{
     CliCommand,
     constants::{Database, ERROR_FAILED_TO_PARSE_MANIFEST, ERROR_FAILED_TO_READ_MANIFEST},
@@ -43,7 +46,7 @@ const DEFAULT_INSTRUCTIONS: &str = "You are a careful assistant for this app. Us
 pub(crate) struct AgentCommand;
 
 impl AgentCommand {
-    pub(super) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {}
     }
 }
@@ -231,6 +234,13 @@ impl CliCommand for AgentCommand {
                     .help("The application path to initialize the agent in"),
             )
             .arg(
+                Arg::new("language")
+                    .long("language")
+                    .help("Project language to generate")
+                    .value_parser(rust_project::PROJECT_LANGUAGE_VARIANTS)
+                    .default_value("typescript"),
+            )
+            .arg(
                 Arg::new("description")
                     .short('D')
                     .long("description")
@@ -261,6 +271,19 @@ impl CliCommand for AgentCommand {
                     .help("The database to use (default: the app's database)")
                     .value_parser(Database::VARIANTS),
             )
+            // Read by the shared Rust service generator; agents never set them.
+            .arg(
+                Arg::new("infrastructure")
+                    .long("infrastructure")
+                    .hide(true)
+                    .action(ArgAction::Append),
+            )
+            .arg(
+                Arg::new("mappers")
+                    .long("mappers")
+                    .hide(true)
+                    .action(ArgAction::SetTrue),
+            )
             .arg(
                 Arg::new("dryrun")
                     .short('n')
@@ -271,6 +294,9 @@ impl CliCommand for AgentCommand {
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
+        if rust_project::uses_rust_generation(matches) {
+            return rust_project::generate_rust_agent(matches);
+        }
         let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 

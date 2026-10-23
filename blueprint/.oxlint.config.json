@@ -1,4 +1,8 @@
 {
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "options": {
+    "typeAware": true
+  },
   "categories": {
     "correctness": "error",
     "suspicious": "warn",
@@ -10,14 +14,18 @@
     "**/tests/**/*",
     "**/dist/**/*",
     "**/lib/**/*",
-    "**/node_modules/**/*"
+    "**/node_modules/**/*",
+    "**/sdk/typescript/**/*",
+    "**/events/typescript/**/*"
   ],
   "overrides": [
     {
       "files": ["**/*.ts", "**/*.tsx"],
       "rules": {
         "no-async-endpoint-handlers": "off",
-        "no-await-in-loop": "off"
+        "no-await-in-loop": "off",
+        "unicorn/require-module-specifiers": "off",
+        "typescript/no-unnecessary-type-assertion": "off"
       }
     }
   ]

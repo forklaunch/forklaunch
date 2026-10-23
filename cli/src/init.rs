@@ -16,8 +16,10 @@ pub(crate) mod library;
 pub(crate) mod module;
 pub(crate) mod relay;
 pub(crate) mod router;
+pub(crate) mod rust_project;
 pub(crate) mod service;
 pub(crate) mod storefront;
+mod typescript_workspace;
 pub(crate) mod worker;
 
 // TODO: add injected token into struct
@@ -61,6 +63,9 @@ impl CliCommand for InitCommand {
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
+        if typescript_workspace::attach_if_needed(matches)? {
+            return Ok(());
+        }
         match matches.subcommand() {
             Some(("agent", sub_matches)) => self.agent.handler(sub_matches),
             Some(("application", sub_matches)) => self.application.handler(sub_matches),

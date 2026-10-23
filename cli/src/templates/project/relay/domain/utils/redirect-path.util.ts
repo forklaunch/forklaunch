@@ -21,6 +21,11 @@ export function sanitizeRedirectPath(
   if (typeof candidate !== 'string' || candidate.length === 0) {
     return DEFAULT_REDIRECT_PATH;
   }
+  // Browsers remove ASCII controls before resolving URLs: /\t/host becomes
+  // //host. Reject them before accepting a root-relative destination.
+  if (/[\u0000-\u001f\u007f]/.test(candidate)) {
+    return DEFAULT_REDIRECT_PATH;
+  }
   if (!candidate.startsWith('/')) {
     return DEFAULT_REDIRECT_PATH;
   }

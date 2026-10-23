@@ -1,0 +1,103 @@
+[[bin]]
+name = "notes"
+path = "main.rs"
+
+[build-dependencies.contracts]
+package = "notes-contracts"
+path = ".forklaunch/contracts"
+
+[build-dependencies.forklaunch-core]
+features = [
+    "compliance-artifact",
+    "typed-schema",
+    "build",
+    "encryption",
+]
+version = "=0.2.2"
+
+[build-dependencies.uuid]
+version = "1"
+
+[dependencies]
+axum = "0.8"
+serde_json = "1"
+
+[dependencies.contracts]
+package = "notes-contracts"
+path = ".forklaunch/contracts"
+
+[dependencies.forklaunch-axum]
+default-features = false
+features = [
+    "native-server",
+    "native-jwt",
+]
+version = "=0.2.2"
+
+[dependencies.forklaunch-core]
+features = [
+    "typed-schema",
+    "openapi",
+    "http",
+    "otlp",
+    "postgres",
+    "encryption",
+]
+version = "=0.2.2"
+
+[dependencies.sqlx]
+default-features = false
+features = [
+    "runtime-tokio",
+    "tls-rustls",
+    "postgres",
+    "uuid",
+    "migrate",
+    "macros",
+]
+version = "0.9"
+
+[dependencies.tokio]
+features = [
+    "macros",
+    "rt-multi-thread",
+    "net",
+    "signal",
+]
+version = "1"
+
+[dependencies.uuid]
+features = ["v4"]
+version = "1"
+
+[dev-dependencies.tower]
+features = ["util"]
+version = "0.5"
+
+[lib]
+path = "lib.rs"
+
+[package]
+autotests = false
+description = "Notes"
+name = "notes"
+
+[package.authors]
+workspace = true
+
+[package.edition]
+workspace = true
+
+[package.license]
+workspace = true
+
+[package.version]
+workspace = true
+
+[[test]]
+name = "http"
+path = "__test__/http.rs"
+
+[[test]]
+name = "persistence"
+path = "__test__/persistence.rs"

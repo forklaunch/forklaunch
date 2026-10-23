@@ -1,5 +1,23 @@
 # @forklaunch/infrastructure-s3
 
+## 1.5.4
+
+### Patch Changes
+
+- 49e1bb2: Read `v4` field envelopes. Native (Rust) cache and object-store writers seal records as randomized, stamped `v4` envelopes; the TypeScript readers only recognized `v1`–`v3` and returned the ciphertext as the value.
+
+## 1.5.3
+
+### Patch Changes
+
+- Dependency refresh: every third-party dependency moved to its latest version at least a day old.
+- Updated dependencies [de09443]
+- Updated dependencies [ec6f0f5]
+- Updated dependencies
+- Updated dependencies [7c27cfb]
+  - @forklaunch/core@3.2.0
+  - @forklaunch/common@1.2.32
+
 ## 1.5.2
 
 ### Patch Changes

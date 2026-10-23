@@ -212,7 +212,7 @@ fn is_bare_not_found(snippet: &str) -> bool {
 
 /// Recognizes the "no route matched" 404 that Express-style servers generate, as
 /// opposed to a 404 a real handler chose to return.
-fn is_unrouted_404(snippet: &str) -> bool {
+pub(super) fn is_unrouted_404(snippet: &str) -> bool {
     let snippet = snippet.trim_start();
     ["GET", "POST", "PUT", "PATCH", "DELETE"]
         .iter()

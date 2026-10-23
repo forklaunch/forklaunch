@@ -1,0 +1,1 @@
+../../../framework-rs/crates/core/src/codegen/schema.rs

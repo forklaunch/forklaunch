@@ -114,7 +114,7 @@ export class BaseOrderService<
       ...(args[0] instanceof EntityManager ? args.slice(1) : args)
     );
     await (em ?? this.em).transactional(async (innerEm) => {
-      await innerEm.persist(order);
+      innerEm.persist(order);
     });
     return this.mappers.OrderMapper.toDto(order);
   }

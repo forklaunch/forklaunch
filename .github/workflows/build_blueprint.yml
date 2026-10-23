@@ -7,8 +7,8 @@ on:
       - main
     paths:
       - 'blueprint/**'
-      - 'cli/tests/iam_authorization_scope.cjs'
-      - 'cli/tests/scaffold_gitignore.py'
+      - 'cli/tests/fixtures/iam_authorization_scope.cjs'
+      - 'cli/tests/fixtures/scaffold_gitignore.py'
       - 'cli/src/core/gitignore.rs'
       - 'cli/src/templates/application/.gitignore'
       - 'cli/src/templates/project/iam-better-auth/**'
@@ -16,12 +16,15 @@ on:
   pull_request:
     paths:
       - 'blueprint/**'
-      - 'cli/tests/iam_authorization_scope.cjs'
-      - 'cli/tests/scaffold_gitignore.py'
+      - 'cli/tests/fixtures/iam_authorization_scope.cjs'
+      - 'cli/tests/fixtures/scaffold_gitignore.py'
       - 'cli/src/core/gitignore.rs'
       - 'cli/src/templates/application/.gitignore'
       - 'cli/src/templates/project/iam-better-auth/**'
       - '.github/workflows/build_blueprint.yml'
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -39,7 +42,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 11.1.0
+          version: 11.28.7
       - name: Install dependencies
         working-directory: ./blueprint
         run: pnpm install
@@ -54,8 +57,8 @@ jobs:
           const blueprintRequire = createRequire(resolve('blueprint/package.json'));
           const tsupRequire = createRequire(blueprintRequire.resolve('tsup'));
           const checks = [
-            ['Authorization', process.execPath, ['cli/tests/iam_authorization_scope.cjs', tsupRequire.resolve('esbuild')], /^(\d+) authorization regressions passed$/m, 11],
-            ['Scaffold Git', 'python3', ['cli/tests/scaffold_gitignore.py'], /Ran (\d+) tests?/, 2]
+            ['Authorization', process.execPath, ['cli/tests/fixtures/iam_authorization_scope.cjs', tsupRequire.resolve('esbuild')], /^(\d+) authorization regressions passed$/m, 11],
+            ['Scaffold Git', 'python3', ['cli/tests/fixtures/scaffold_gitignore.py'], /Ran (\d+) tests?/, 2]
           ];
           for (const [name, command, args, summary, minimum] of checks) {
             const result = spawnSync(command, args, { encoding: 'utf8', timeout: 30000 });

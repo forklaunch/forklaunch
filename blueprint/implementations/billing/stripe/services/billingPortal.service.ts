@@ -78,10 +78,14 @@ export class StripeBillingPortalService<
     billingPortalDto: StripeCreateBillingPortalDto,
     ...args: unknown[]
   ): Promise<Dto['BillingPortalMapper']> {
+    await this.mappers.CreateBillingPortalMapper.validateCreate?.(billingPortalDto);
+
     const session = await this.stripeClient.billingPortal.sessions.create({
       ...billingPortalDto.stripeFields,
       customer: billingPortalDto.customerId
     });
+
+    await this.mappers.CreateBillingPortalMapper.validateProviderCreate?.(session);
 
     return await this.baseBillingPortalService.createBillingPortalSession(
       {
@@ -116,10 +120,30 @@ export class StripeBillingPortalService<
       await this.baseBillingPortalService.getBillingPortalSession({
         id: billingPortalDto.id
       });
+    if (
+      !this.options?.enableDatabaseBackup &&
+      this.mappers.UpdateBillingPortalMapper.toCachedDto &&
+      billingPortalDto.customerId !== undefined &&
+      billingPortalDto.customerId !== existingSession.customerId
+    ) {
+      throw new Error('Cached session identity cannot change');
+    }
+    if (
+      !this.options?.enableDatabaseBackup &&
+      this.mappers.UpdateBillingPortalMapper.toCachedDto &&
+      this.mappers.UpdateBillingPortalMapper.validateCachedUpdate
+    ) {
+      await this.mappers.UpdateBillingPortalMapper.validateCachedUpdate(
+        billingPortalDto,
+        existingSession
+      );
+    }
     const session = await this.stripeClient.billingPortal.sessions.create({
       ...billingPortalDto.stripeFields,
       customer: billingPortalDto.customerId || existingSession.customerId
     });
+
+    await this.mappers.CreateBillingPortalMapper.validateProviderCreate?.(session);
 
     return await this.baseBillingPortalService.updateBillingPortalSession(
       {

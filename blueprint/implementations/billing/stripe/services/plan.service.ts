@@ -87,6 +87,8 @@ export class StripePlanService<
     planDto: StripeCreatePlanDto,
     em?: EntityManager
   ): Promise<Dto['PlanMapper']> {
+    await this.mappers.CreatePlanMapper.validateCreate?.(planDto);
+
     let stripePlan = await this.stripeClient.plans.create({
       ...planDto.stripeFields,
       amount: planDto.price,
@@ -95,10 +97,15 @@ export class StripePlanService<
       currency: planDto.currency as string
     });
 
-    // retrieve the plan with the product expanded
-    stripePlan = await this.stripeClient.plans.retrieve(stripePlan.id, {
+    await this.mappers.CreatePlanMapper.validateProviderCreate?.(stripePlan);
+
+    // Retain the returned identity across the subsequent expanded read.
+    const createdId = stripePlan.id;
+    stripePlan = await this.stripeClient.plans.retrieve(createdId, {
       expand: ['product']
     });
+
+    await this.mappers.PlanMapper.validateProviderRead?.(createdId, stripePlan);
 
     const plan = await this.basePlanService.createPlan(
       {
@@ -121,6 +128,10 @@ export class StripePlanService<
     const plan = await this.stripeClient.plans.retrieve(planEntity.externalId, {
       expand: ['product']
     });
+    await this.mappers.PlanMapper.validateProviderRead?.(
+      planEntity.externalId,
+      plan
+    );
     planEntity.stripeFields = plan.product as Stripe.Product;
     return planEntity;
   }
@@ -129,6 +140,7 @@ export class StripePlanService<
     planDto: StripeUpdatePlanDto,
     em?: EntityManager
   ): Promise<Dto['PlanMapper']> {
+    await this.mappers.UpdatePlanMapper.validateUpdate?.(planDto);
     const planEntity = await this.basePlanService.getPlan(
       {
         id: planDto.id
@@ -138,6 +150,16 @@ export class StripePlanService<
 
     const existingPlan = await this.stripeClient.plans.retrieve(
       planEntity.externalId
+    );
+
+    await this.mappers.PlanMapper.validateProviderRead?.(
+      planEntity.externalId,
+      existingPlan
+    );
+
+    await this.mappers.UpdatePlanMapper.validateProviderUpdate?.(
+      planDto,
+      existingPlan
     );
 
     const existingProduct = existingPlan.product;
@@ -162,15 +184,19 @@ export class StripePlanService<
       product: productId
     });
 
-    updatedPlan = await this.stripeClient.plans.retrieve(updatedPlan.id, {
+    await this.mappers.CreatePlanMapper.validateProviderCreate?.(updatedPlan);
+
+    const createdId = updatedPlan.id;
+    updatedPlan = await this.stripeClient.plans.retrieve(createdId, {
       expand: ['product']
     });
+
+    await this.mappers.PlanMapper.validateProviderRead?.(createdId, updatedPlan);
 
     const updatedPlanEntity = await this.basePlanService.updatePlan(
       {
         ...planDto,
         externalId: updatedPlan.id,
-        name: planDto.name,
         billingProvider: 'stripe'
       },
       em,
@@ -209,6 +235,10 @@ export class StripePlanService<
             {
               expand: ['product']
             }
+          );
+          await this.mappers.PlanMapper.validateProviderRead?.(
+            plan.externalId,
+            fetchedPlan
           );
           return fetchedPlan.product as Stripe.Product;
         } catch {

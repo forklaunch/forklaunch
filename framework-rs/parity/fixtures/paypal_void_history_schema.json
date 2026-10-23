@@ -1,0 +1,130 @@
+{
+  "source": "https://developer.paypal.com/api/orders/v2/schema.json",
+  "sourceSha256": "5bcb2242a4158a307dceff74f74352a078777f9afb9b0fb407ce10e392ee96b7",
+  "payment_collection": {
+    "title": "Payment Collection",
+    "description": "The collection of payments, or transactions, for a purchase unit in an order. For example, authorized payments, captured payments, and refunds.",
+    "type": "object",
+    "properties": {
+      "authorizations": {
+        "description": "An array of authorized payments for a purchase unit. A purchase unit can have zero or more authorized payments.",
+        "type": "array",
+        "minItems": 0,
+        "maxItems": 32767,
+        "items": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/authorization_with_additional_data"
+            },
+            {
+              "title": "authorizations",
+              "description": "The authorized payment for a purchase unit."
+            }
+          ]
+        }
+      },
+      "captures": {
+        "description": "An array of captured payments for a purchase unit. A purchase unit can have zero or more captured payments.",
+        "type": "array",
+        "minItems": 0,
+        "maxItems": 32767,
+        "items": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/capture"
+            },
+            {
+              "title": "capture",
+              "description": "The captured payment for a purchase unit."
+            }
+          ]
+        }
+      },
+      "refunds": {
+        "description": "An array of refunds for a purchase unit. A purchase unit can have zero or more refunds.",
+        "type": "array",
+        "minItems": 0,
+        "maxItems": 32767,
+        "items": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/refund"
+            },
+            {
+              "title": "refund",
+              "description": "A refund for a purchase unit."
+            }
+          ]
+        }
+      }
+    }
+  },
+  "order_status": {
+    "title": "Order Status",
+    "description": "The order status.",
+    "type": "string",
+    "enum": [
+      "CREATED",
+      "SAVED",
+      "APPROVED",
+      "VOIDED",
+      "COMPLETED",
+      "PAYER_ACTION_REQUIRED"
+    ],
+    "oneOf": [
+      {
+        "type": "string",
+        "enum": [
+          "CREATED"
+        ],
+        "description": "The order was created with the specified context."
+      },
+      {
+        "type": "string",
+        "enum": [
+          "SAVED"
+        ],
+        "description": "The order was saved and persisted. The order status continues to be in progress until a capture is made with <code>final_capture = true</code> for all purchase units within the order."
+      },
+      {
+        "type": "string",
+        "enum": [
+          "APPROVED"
+        ],
+        "description": "The customer approved the payment through the PayPal wallet or another form of guest or unbranded payment. For example, a card, bank account, or so on."
+      },
+      {
+        "type": "string",
+        "enum": [
+          "VOIDED"
+        ],
+        "description": "All purchase units in the order are voided."
+      },
+      {
+        "type": "string",
+        "enum": [
+          "COMPLETED"
+        ],
+        "description": "The intent of the order was completed and a `payments` resource was created. <strong>Important</strong>: Check the payment status in `purchase_units[].payments.captures[].status` before fulfilling the order. A completed order can indicate a payment was authorized, an authorized payment was captured, or a payment was declined."
+      },
+      {
+        "type": "string",
+        "enum": [
+          "PAYER_ACTION_REQUIRED"
+        ],
+        "description": "The order requires an action from the payer (e.g. 3DS authentication). Redirect the payer to the \"rel\":\"payer-action\" HATEOAS link returned as part of the response prior to authorizing or capturing the order. Some payment sources may not return a payer-action HATEOAS link (eg. MB WAY). For these payment sources the payer-action is managed by the scheme itself (eg. through SMS, email, in-app notification, etc)."
+      }
+    ]
+  },
+  "purchase_unit_payments": {
+    "allOf": [
+      {
+        "$ref": "#/components/schemas/payment_collection"
+      },
+      {
+        "description": "The comprehensive history of payments for the purchase unit.",
+        "readOnly": true
+      }
+    ]
+  }
+}

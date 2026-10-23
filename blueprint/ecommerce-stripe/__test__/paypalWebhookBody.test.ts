@@ -30,7 +30,7 @@ describe('PayPal webhook body validation', () => {
     }
   };
 
-  it('drops fields the schema does not declare, so req.body is not the delivered event', () => {
+  it('drops fields the schema does not declare (zod), so req.body is not the delivered event', () => {
     const result = schemaValidator.parse(
       PaypalWebhookEventSchema,
       deliveredByPaypal
@@ -40,6 +40,13 @@ describe('PayPal webhook body validation', () => {
     const validated = (result as { ok: true; value: Record<string, unknown> })
       .value;
 
+    // The module uses the app's validator. Zod drops undeclared keys; TypeBox
+    // keeps them, so there is nothing to pin in a TypeBox app (the handler
+    // reads the raw bytes either way).
+    if ('create_time' in validated) {
+      expect(validated).toEqual(deliveredByPaypal);
+      return;
+    }
     for (const dropped of [
       'create_time',
       'event_version',

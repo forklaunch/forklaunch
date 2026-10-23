@@ -1,5 +1,60 @@
 # @forklaunch/core
 
+## 3.3.0
+
+### Minor Changes
+
+- d2319b3: Contract, documentation and validation fixes:
+
+  - New exports from `@forklaunch/core/http`: `bindRuntimeAuth` (binds JWT or HMAC credentials to a portable auth policy and rejects bindings that try to override the policy) and `registerDelegatedSurface` (registers provider-owned routes, such as Better Auth's, and keeps them out of generated endpoint SDKs).
+  - OpenAPI: path parameters are marked `required`; security requirements name the scheme that is declared (the auth header name, or `basic`) with an empty scope list; `undefined`/`void` responses have no `content`; a request body is optional when its schema is optional (through the validator's new `openapiRequestBody`).
+  - Response validation: in `error` mode, a status code the contract does not declare is a 500 (`Undocumented response status`) instead of being validated against a missing schema; `warning` mode still sends and logs it. Framework diagnostics are no longer re-validated against the failing route.
+  - Request validation errors (400) are sent as `text/plain`, matching their body.
+  - MCP tools: versioned routes pick the version by position, keep response schemas for bodyless routes, send JSON bodies with `JSON.stringify` (JSON strings included), stop double-encoding URLs, and omit `Content-Type` when there is no body.
+  - AsyncAPI: plain JSON Schema payloads are normalized to object-form schemas, non-Draft-7 dialects are wrapped in a Multi Format Schema Object, channel and message `$ref`s are JSON-pointer escaped, and empty channel addresses or ones containing `?`/`#` are rejected.
+  - WebSocket schema parsing treats only an `undefined` schema as "no schema".
+
+- d2319b3: HMAC request verification now accepts signatures over the full wire path: the request URL without its query string, router mount included, e.g. `POST /payment-link`. That is the path the Rust verifiers and the new `@forklaunch/universal-sdk` signers sign. Express routers used to verify only the router-relative `req.path` (`/`). That form is still accepted, so existing callers keep working, but it is deprecated because a relative path is not bound to its mount; the first time a request uses it, the server logs a warning. Set `HMAC_ACCEPT_MOUNT_RELATIVE_PATHS=false` to reject it once every caller signs the full path.
+
+### Patch Changes
+
+- d2319b3: `stripeGatewayFetch` keeps Bun's `fetch.preconnect` (pointed at the gateway origin) when the runtime has it, so the Stripe SDK works on Bun. The `forklaunch-gateway-mock` binary adds the scoped payments context routes (`POST /payments/context`, `/payments/context/checkout-read`, `/payments/context/payment-link-read`, `/payments/context/paused-subscription-read`) that managed billing uses for verified checkout, payment-link and paused-subscription reads.
+- cf365df: `@forklaunch/testing`:
+
+  - `startTestJwtIssuer()` starts a local RS256 issuer that serves its JWKS over HTTP (default path `/api/auth/jwks`, as IAM serves it) and mints tokens with `sub`, `tenant_id`, `roles` and `permissions` claims, mirroring the Rust IAM's session tokens. `BlueprintTestHarness` takes `jwt: true` (or issuer options) to start one, point `JWKS_PUBLIC_KEY_URL` at it and return it as `setup.jwt`. `surfaceFromTestClaims` gives routers `surfaceRoles` / `surfacePermissions` that read those claims. Previously `JWKS_PUBLIC_KEY_URL` always pointed at `localhost:3000`, which nothing serves in a generated app, so JWT-protected routes could not be exercised in tests.
+  - The harness starts the containers a test needs (database, Redis, Kafka, S3) concurrently instead of one after another.
+  - Postgres and Redis containers wait for their "ready" log line rather than the default port check. The port check runs `docker exec`, which never settles under the Bun runtime, so every Redis-backed test hook in a Bun app hung until it timed out. Postgres also no longer reports ready during its init-time restart.
+  - The Kafka container advertises the host port clients actually reach (a free port bound up front) and waits for the broker to start, so producers in tests can connect; the KRaft cluster id default is now a valid one.
+
+  `@forklaunch/core`:
+
+  - Local SDK calls with `executeMiddlewares: true` run the middleware chain the way a server does: a middleware that answers the request itself (an auth 401/403) ends it before the controller runs, async hyper-express middlewares that take no `next` continue when they resolve, and the stand-in request/response carry what the express and hyper-express adapters read (`getHeaders`, `locals`, hyper-express's status/header fields and body readers). Before, every middleware ran even after one had responded, the controller then overwrote the response, and the express and hyper-express response enrichment crashed on the stand-in response.
+  - Response validation for a default error status (400/401/403/404/500) no longer crashes with TypeBox when the route declares that status: a compiled TypeBox schema cannot be a union member, so the declared schema and the string message are tried in turn. Zod output is unchanged.
+
+- f868861: - The managed gateway clients (`createModelGatewayClient`, `createSmsClient`, `createWhatsAppClient`, `createVoiceClient`, `createStripeClient`, and the shared `instanceGatewaySettings`) no longer say they are only for managed instances. Their refusal names the managed gateway settings (`PLATFORM_GATEWAY_URL`, `INSTANCE_ID`, `INSTANCE_HMAC_KEY`), which the platform sets for a managed instance and, at deploy, for a component of a regular app that declares the capability (`forklaunch infra add <service> <capability>`). Code that matched the old message text ("managed mode", "not a managed instance") should match on the error's settings names instead.
+- Updated dependencies [d2319b3]
+  - @forklaunch/validator@1.3.0
+
+## 3.2.0
+
+### Minor Changes
+
+- de09443: **Behaviour change:** a compliant field (pii/phi/pci) now decrypts under the tenant it was loaded under, not whatever tenant is bound when `.deanon` runs. The field records the tenant bound when the row was hydrated (with `wrapEmWithTenantContext`, the entity manager's tenant), or when a plain value was assigned to it, and uses that key for every later read and write. So `.deanon` works after `await em.find(...)` returns, with nothing bound, and you can remove `withEncryptionContext(tenantId, …)` wrappers that exist only to build DTOs from loaded entities. A read with a _different_ tenant bound now throws the new `TenantMismatchError` instead of decrypting, as does flushing a value assigned under one tenant through another tenant's entity manager. Rows loaded with no tenant bound (a raw `orm.em.fork()`) behave as before: reading them needs a tenant bound at read time. A write with no tenant anywhere still throws `UnboundTenantError`.
+
+  Also fixed: `em.assign(entity, { week: 29 })` (and `wrap(entity).assign`) on an existing row threw MikroORM's "Trying to set X.week of type 'string' to 29 of type 'number'" for every encrypted field that is not a string (integer, number, boolean, date, json, array). Compliant properties now report their in-memory type (`CompliantField`) to MikroORM instead of `string`, so assigned values reach the property setter and are wrapped as with `em.create`.
+
+- ec6f0f5: - **Default audit trail.** Every request handled through ForkLaunch appends one audit record (`log.type: audit`) when its response finishes: user, tenant, method, route, status, duration and a SHA-256 of the body (never the body itself). Refused requests are recorded as `auth_failure` (401), `rbac_deny` (403) or `rate_limit` (429). Every `.deanon` read of a compliant field adds a `data_access` record (field, level, tenant), and every create, update or delete of a record holding pii, phi or pci fields adds a `data_change` record (entity and id, action, sensitive field names, tenant). Entities defined with `defineComplianceEntity` get the change hooks automatically. Set `FORKLAUNCH_AUDIT=off` to turn it off.
+  - `onComplianceChange(listener)` reports changes to sensitive records, for apps that want their own audit sink.
+- 7c27cfb: `createEmailClient().send` takes an optional `listUnsubscribe: { url?, mailto?, oneClick? }`. The platform adds `List-Unsubscribe` (RFC 2369) and, with `oneClick`, `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 8058) to the message, which Gmail and Yahoo require of bulk senders. These are targets, not header text: `url` must be https (printable ASCII, up to 512 characters, no `< > , " \`), `mailto` a plain mailbox, at least one is required, and `oneClick` needs `url` (also enforced by the `EmailListUnsubscribe` type). The client, the platform gateway and the local gateway mock apply the same rules; the mock records the option and the headers it implies on `GET /__mock/email/messages`. `validateListUnsubscribe` and `EMAIL_LIMITS.maxUnsubscribeUrlLength` are exported.
+
+  Needs a platform whose email gateway accepts `listUnsubscribe`; an older gateway ignores the field.
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/common@1.2.32
+  - @forklaunch/validator@1.2.33
+
 ## 3.1.0
 
 ### Minor Changes

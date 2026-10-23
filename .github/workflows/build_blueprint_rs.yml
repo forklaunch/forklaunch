@@ -1,0 +1,47 @@
+name: Build Blueprint RS
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'blueprint-rs/**'
+      - 'framework-rs/**'
+      - 'scripts/rust_format.py'
+      - '.github/workflows/build_blueprint_rs.yml'
+  pull_request:
+    paths:
+      - 'blueprint-rs/**'
+      - 'framework-rs/**'
+      - 'scripts/rust_format.py'
+      - '.github/workflows/build_blueprint_rs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+
+      - name: Check formatting
+        run: python3 scripts/rust_format.py blueprint-rs/Cargo.toml
+
+      - name: Run clippy
+        working-directory: ./blueprint-rs
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Run tests
+        working-directory: ./blueprint-rs
+        run: cargo test --workspace
+
+      - name: Build docs
+        working-directory: ./blueprint-rs
+        run: cargo doc --workspace --no-deps

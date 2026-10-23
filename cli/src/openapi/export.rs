@@ -7,6 +7,7 @@ use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 use crate::{
     CliCommand,
     core::{
+        artifact_paths::{self, Artifact},
         command::command,
         openapi_export::export_all_services,
     },
@@ -34,8 +35,11 @@ impl CliCommand for ExportCommand {
                 Arg::new("output")
                     .long("output")
                     .short('o')
-                    .default_value(".forklaunch/openapi")
-                    .help("Output directory for OpenAPI specs"),
+                    .help(
+                        "Also write every spec to <output>/<service>/openapi.json. By default each \
+                         service writes its own registered OpenAPI artifact (its SDK folder; \
+                         .forklaunch/openapi/<service>/openapi.json for services without one)",
+                    ),
             )
     }
 
@@ -43,27 +47,56 @@ impl CliCommand for ExportCommand {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
         let (app_root, manifest) = crate::core::validate::require_manifest(matches)?;
+        let manifest_value: toml::Value = toml::from_str(&std::fs::read_to_string(
+            app_root.join(".forklaunch/manifest.toml"),
+        )?)?;
 
-        let output_dir = matches.get_one::<String>("output").unwrap();
-        let output_path = app_root.join(output_dir);
-
-        create_dir_all(&output_path)
-            .with_context(|| format!("Failed to create output directory: {:?}", output_path))?;
+        let output_path = matches
+            .get_one::<String>("output")
+            .map(|output| app_root.join(output));
+        if let Some(output_path) = &output_path {
+            create_dir_all(output_path).with_context(|| {
+                format!("Failed to create output directory: {:?}", output_path)
+            })?;
+        }
 
         log_info!(stdout, "Exporting OpenAPI specifications...");
         writeln!(stdout)?;
 
-        let result = export_all_services(&app_root, &manifest, &output_path);
+        let result = export_all_services(&app_root, &manifest, output_path.as_deref());
 
         writeln!(stdout)?;
 
         match result {
             Ok(exported_services) => {
-                log_header!(stdout, Color::Green, "Successfully exported {} OpenAPI specification(s)", exported_services.len());
-                writeln!(stdout, "  Output: {}", output_path.display())?;
+                log_header!(
+                    stdout,
+                    Color::Green,
+                    "Successfully exported {} OpenAPI specification(s)",
+                    exported_services.len()
+                );
+                if let Some(output_path) = &output_path {
+                    writeln!(stdout, "  Output: {}", output_path.display())?;
+                }
 
                 for service_name in &exported_services {
-                    log_ok!(stdout, "  - {}", service_name);
+                    let written = output_path.as_ref().map_or_else(
+                        || {
+                            artifact_paths::manifest_path(
+                                &manifest_value,
+                                service_name,
+                                Artifact::OpenApi,
+                            )
+                        },
+                        |output| {
+                            output
+                                .join(service_name)
+                                .join("openapi.json")
+                                .display()
+                                .to_string()
+                        },
+                    );
+                    log_ok!(stdout, "  - {} ({})", service_name, written);
                 }
             }
             Err(e) => {

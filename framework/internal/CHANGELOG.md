@@ -1,5 +1,14 @@
 # @forklaunch/internal
 
+## 1.2.35
+
+### Patch Changes
+
+- Dependency refresh: every third-party dependency moved to its latest version at least a day old.
+- Updated dependencies
+  - @forklaunch/common@1.2.32
+  - @forklaunch/validator@1.2.33
+
 ## 1.2.34
 
 ### Patch Changes

@@ -32,6 +32,18 @@ fn get_comment_styles() -> HashMap<&'static str, CommentStyle> {
         styles.insert(ext, c_style.clone());
     }
 
+    // A Rust outer documentation comment attaches to the following item and
+    // makes subsequent inner module docs/attributes invalid. Provenance is an
+    // ordinary comment, including for empty export modules.
+    styles.insert(
+        "rs",
+        CommentStyle {
+            open: "/*",
+            line: " * ",
+            close: " */",
+        },
+    );
+
     let py_style = CommentStyle {
         open: "\"\"\"",
         line: "",

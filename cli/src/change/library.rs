@@ -33,6 +33,7 @@ use crate::{
         removal_template::{RemovalTemplate, remove_template_files},
         rendered_template::{RenderedTemplate, RenderedTemplatesCache, write_rendered_templates},
     },
+    init::rust_project::{self, RustProjectKind},
     prompt::{ArrayCompleter, prompt_field_from_selections_with_validation},
 };
 
@@ -121,6 +122,43 @@ impl CliCommand for LibraryCommand {
 
         let (app_root_path, project_name) = find_app_root_path(matches, RequiredLocation::Project)?;
         let manifest_path = app_root_path.join(".forklaunch").join("manifest.toml");
+        crate::init::rust_project::preflight_mixed_images(&app_root_path)?;
+        let rust_project_name = project_name
+            .clone()
+            .context("Project path is required for Rust library changes")?;
+        if crate::core::storefront::registered(&app_root_path, &rust_project_name)? {
+            crate::core::storefront::change(
+                &app_root_path,
+                &rust_project_name,
+                matches.get_one::<String>("name").map(String::as_str),
+                matches.get_one::<String>("description").map(String::as_str),
+                matches.get_flag("dryrun"),
+            )?;
+            log_ok!(stdout, "Storefront '{}' updated", rust_project_name);
+            return Ok(());
+        }
+        if rust_project::is_rust_project(&app_root_path, &rust_project_name)? {
+            let name = matches.get_one::<String>("name").map(String::as_str);
+            if let Some(name) = name
+                && !validate_name(name)
+            {
+                anyhow::bail!("Library name cannot be empty or include numbers or spaces");
+            }
+            let changed_name = rust_project::change_rust_project(
+                &app_root_path,
+                &rust_project_name,
+                name,
+                matches.get_one::<String>("description").map(String::as_str),
+                None,
+                None,
+                Some(RustProjectKind::Library),
+                matches.get_flag("dryrun"),
+            )?;
+            if !matches.get_flag("dryrun") {
+                log_ok!(stdout, "{} changed successfully!", changed_name);
+            }
+            return Ok(());
+        }
 
         let existing_manifest_data: LibraryManifestData = toml::from_str::<LibraryManifestData>(
             &read_to_string(&manifest_path).with_context(|| ERROR_FAILED_TO_READ_MANIFEST)?,
@@ -254,7 +292,7 @@ impl CliCommand for LibraryCommand {
                 path: application_package_json_path.to_path_buf(),
                 content: serde_json::to_string_pretty(&application_package_json_to_write)?,
                 context: None,
-            },
+            }.preserving_json_layout(),
         );
 
         rendered_templates_cache.insert(
@@ -275,7 +313,7 @@ impl CliCommand for LibraryCommand {
                 path: project_package_json_path.into(),
                 content: serde_json::to_string_pretty(&project_json_to_write)?,
                 context: None,
-            },
+            }.preserving_json_layout(),
         );
 
         let rendered_templates: Vec<RenderedTemplate> = rendered_templates_cache
@@ -288,7 +326,12 @@ impl CliCommand for LibraryCommand {
         move_template_files(&move_templates, dryrun, &mut stdout)?;
 
         if !dryrun {
-            log_ok!(stdout, "{} changed successfully!", &manifest_data.library_name);
+            crate::init::rust_project::refresh_mixed_images(&app_root_path)?;
+            log_ok!(
+                stdout,
+                "{} changed successfully!",
+                &manifest_data.library_name
+            );
             format_code(&library_base_path, &manifest_data.runtime.parse()?);
         }
 

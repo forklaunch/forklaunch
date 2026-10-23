@@ -32,11 +32,16 @@ export const setupTestDatabase = async (): Promise<TestSetupResult> => {
     databaseType: getEnvVar('DATABASE_TYPE') as DatabaseType,
     useMigrations: true,
     migrationsPath: path.join(__dirname, getEnvVar("MIGRATIONS_PATH")),
-    {{/is_database_enabled}}needsRedis: {{#is_cache_enabled}}true{{/is_cache_enabled}}{{^is_cache_enabled}}false{{/is_cache_enabled}},
+    {{/is_database_enabled}}needsRedis: {{#is_cache_enabled}}true{{/is_cache_enabled}}{{^is_cache_enabled}}{{#is_request_cache_needed}}true{{/is_request_cache_needed}}{{^is_request_cache_needed}}false{{/is_request_cache_needed}}{{/is_cache_enabled}},
     {{#is_kafka_enabled}}needsKafka: true,
     {{/is_kafka_enabled}}{{#is_s3_enabled}}needsS3: true,
     s3Bucket: 'test-bucket',
-    {{/is_s3_enabled}}
+    {{/is_s3_enabled}}{{#is_iam_configured}}customEnvVars: {
+      IAM_URL: 'http://localhost:8000'{{#is_billing_configured}},
+      BILLING_URL: 'http://localhost:8001'{{/is_billing_configured}}
+    }{{/is_iam_configured}}{{^is_iam_configured}}{{#is_billing_configured}}customEnvVars: {
+      BILLING_URL: 'http://localhost:8001'
+    }{{/is_billing_configured}}{{/is_iam_configured}}
   });
 
   return await harness.setup();

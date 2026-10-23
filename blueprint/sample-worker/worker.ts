@@ -24,9 +24,9 @@ const processEvents: (
     for (const event of events) {
       try {
         openTelemetryCollector.info(
-          `processing message from ${name}: ${event.message}`
+          `Processing worker message from ${name}`
         );
-        s3.putObject({
+        await s3.putObject({
           key: event.id,
           value: event
         });
@@ -45,12 +45,8 @@ const processEvents: (
 const processErrors: WorkerFailureHandler<SampleWorkerEventRecord> = async (
   events
 ) => {
-  events.forEach((event) => {
-    openTelemetryCollector.error(
-      event.error,
-      'error processing message',
-      event.value
-    );
+  events.forEach(() => {
+    openTelemetryCollector.error('Worker message processing failed');
   });
 };
 

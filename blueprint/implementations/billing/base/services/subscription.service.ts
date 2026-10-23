@@ -34,6 +34,8 @@ export class BaseSubscriptionService<
     tracing?: boolean;
   };
   protected em: EntityManager;
+  private readonly userPartyType: string;
+  private readonly organizationPartyType: string;
   protected readonly openTelemetryCollector: OpenTelemetryCollector<MetricsDefinition>;
   protected readonly schemaValidator: SchemaValidator;
   protected readonly mappers: SubscriptionMappers<
@@ -57,6 +59,22 @@ export class BaseSubscriptionService<
       telemetry?: TelemetryOptions;
     }
   ) {
+    const partyTypes = mappers.SubscriptionMapper.partyTypes;
+    if (
+      partyTypes !== undefined &&
+      (!partyTypes ||
+        Array.isArray(partyTypes) ||
+        typeof partyTypes.user !== 'string' ||
+        !partyTypes.user.trim() ||
+        typeof partyTypes.organization !== 'string' ||
+        !partyTypes.organization.trim() ||
+        partyTypes.user === partyTypes.organization)
+    ) {
+      throw new Error('Invalid subscription party types');
+    }
+    // Copy trusted mapper metadata so later object changes cannot redirect reads.
+    this.userPartyType = partyTypes?.user ?? 'USER';
+    this.organizationPartyType = partyTypes?.organization ?? 'ORGANIZATION';
     this.em = em;
     this.openTelemetryCollector = openTelemetryCollector;
     this.schemaValidator = schemaValidator;
@@ -87,7 +105,7 @@ export class BaseSubscriptionService<
       ...(args[0] instanceof EntityManager ? args.slice(1) : args)
     );
     await (em ?? this.em).transactional(async (innerEm) => {
-      await innerEm.persist(subscription);
+      innerEm.persist(subscription);
     });
     const createdSubscriptionDto =
       await this.mappers.SubscriptionMapper.toDto(subscription);
@@ -139,7 +157,7 @@ export class BaseSubscriptionService<
       this.mappers.SubscriptionMapper.entity as typeof Subscription,
       {
         partyId: id,
-        partyType: 'USER',
+        partyType: this.userPartyType,
         active: true
       }
     );
@@ -160,7 +178,7 @@ export class BaseSubscriptionService<
       this.mappers.SubscriptionMapper.entity as typeof Subscription,
       {
         partyId: id,
-        partyType: 'ORGANIZATION',
+        partyType: this.organizationPartyType,
         active: true
       }
     );
@@ -187,7 +205,7 @@ export class BaseSubscriptionService<
     );
     const updatedSubscription = await (em ?? this.em).upsert(subscription);
     await (em ?? this.em).transactional(async (innerEm) => {
-      await innerEm.persist(updatedSubscription);
+      innerEm.persist(updatedSubscription);
     });
     const updatedSubscriptionDto =
       await this.mappers.SubscriptionMapper.toDto(updatedSubscription);
@@ -248,7 +266,7 @@ export class BaseSubscriptionService<
     }
     subscription.active = false;
     await (em ?? this.em).transactional(async (innerEm) => {
-      await innerEm.persist(subscription);
+      innerEm.persist(subscription);
     });
   }
 
@@ -265,7 +283,7 @@ export class BaseSubscriptionService<
     }
     subscription.active = true;
     await (em ?? this.em).transactional(async (innerEm) => {
-      await innerEm.persist(subscription);
+      innerEm.persist(subscription);
     });
   }
 }

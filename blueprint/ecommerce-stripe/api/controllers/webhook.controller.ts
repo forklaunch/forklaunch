@@ -177,13 +177,11 @@ export const handleStripeWebhook = handlers.post(
     }
   },
   async (req, res) => {
-    // Captured by the `verify` hook on this router's own json body-parser
-    // (see webhook.routes.ts — the hook is scoped to this router, not the
-    // app's json body-parser, precisely so other routes' JSON parsing is
-    // unaffected) — Stripe's signature is computed over the exact raw
-    // bytes it sent, so the already-JSON-parsed req.body (property order/
-    // whitespace not guaranteed identical) cannot be used here.
-    const rawBody = (req as { rawBody?: Buffer }).rawBody;
+    // The framework's body parser (Express and hyper-express alike) keeps
+    // the exact request bytes on `req._rawBody`. Stripe's signature is
+    // computed over those bytes, so the already-JSON-parsed req.body
+    // (property order/whitespace not guaranteed identical) cannot be used.
+    const rawBody = (req as { _rawBody?: Buffer })._rawBody;
     const signature = req.headers['stripe-signature'];
 
     if (!rawBody || !signature) {
@@ -371,7 +369,7 @@ export const handlePaypalWebhook = handlers.post(
     // not declare (create_time, summary, links, ...), which is precisely the
     // deviation PayPal's docs warn will fail verification. Parse the captured
     // raw bytes instead and send the whole event.
-    const rawBody = (req as { rawBody?: Buffer }).rawBody;
+    const rawBody = (req as { _rawBody?: Buffer })._rawBody;
     if (!rawBody) {
       res.status(400).send('Missing request body');
       return;

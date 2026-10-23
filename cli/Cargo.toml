@@ -7,58 +7,78 @@ description = "Launch faster with forklaunch"
 authors = ["Forklift Technologies, Inc. <engineering@forklaunch.com>"]
 keywords = ["cli", "scaffolding", "microservices", "typescript", "rust"]
 repository = "https://github.com/forklaunch/forklaunch-js"
+# Source archives have no Git index; explicitly retain embedded dotfile templates.
+include = [
+    "src/**", "assets/**", "docs/**", "scripts/**", "build.rs", "Cargo.toml", "Cargo.lock", "LICENSE", "README.md",
+    "package.json", "bun.lock", "pnpm-lock.yaml", ".rustfmt.toml", ".gitignore", ".npmignore",
+    "tests/*.mjs", "tests/*.cjs", "tests/*.ts", "tests/*.sh", "tests/*.py", "tests/*.json", "tests/fixtures/**",
+    "!**/node_modules/**", "!tests/output/**", "!**/__pycache__/**", "!**/*.pyc", "!**/*.pyo",
+]
 
 [dependencies]
+forklaunch-core = { version = "0.2.5", path = "../framework-rs/crates/core", features = ["build", "asyncapi-import", "typescript-source"] }
+url = "2"
+ctrlc = { version = "3.5.2", features = ["termination"] }
 anyhow = "1.0"
-base64 = "0.22.1"
-clap = { version = "4.5.42", features = ["cargo"] }
+base64 = "0.23.1"
+# Development session-signing keys for generated Rust IAM modules (already linked via rustls).
+aws-lc-rs = "1"
+clap = { version = "4.6.7", features = ["cargo"] }
 convert_case = "0.8.0"
-futures-io = "0.3.31"
+futures-io = "0.3.34"
 include_dir = { version = "0.7.4", features = ["glob"] }
-indexmap = { version = "2.10.0", features = ["serde"] }
-log = "0.4.27"
-oxc_allocator = "0.80.0"
-oxc_ast = { version = "0.80.0", features = ["serialize"] }
-oxc_codegen = "0.80.0"
-oxc_parser = "0.80.0"
-oxc_ast_visit = "0.80.0"
-oxc_span = "0.80.0"
+indexmap = { version = "2.14.2", features = ["serde"] }
+log = "0.4.34"
+oxc_allocator = "0.155.0"
+oxc_ast = { version = "0.155.0", features = ["serialize"] }
+oxc_codegen = "0.155.0"
+oxc_parser = "0.155.0"
+oxc_ast_visit = "0.155.0"
+oxc_span = "0.155.0"
 paste = "1.0.15"
 pathdiff = "0.2.3"
-percent-encoding = "2.3.1"
+percent-encoding = "2.3.2"
 ramhorns = "1.0.1"
-rcgen = "0.14.3"
-reqwest = { version = "0.13.2", features = ["blocking", "json", "native-tls-vendored"] }
-rustyline = "17.0.0"
-rustyline-derive = "0.11.1"
+rcgen = "0.14.10"
+reqwest = { version = "0.13.5", features = ["blocking", "json", "native-tls-vendored"] }
+rustyline = "19.0.0"
+rustyline-derive = "0.13.0"
 serde = { version = "1.0", features = ["derive"] }
-serde_json = { version = "1.0.142", features = ["preserve_order"] }
-serde_yml = "0.0.12"
+serde_json = { version = "1.0.151", features = ["preserve_order"] }
+# Preserve the internal import name while replacing the unmaintained parser.
+serde_yml = { package = "serde_norway", version = "0.9.42" }
 termcolor = "1.4.1"
-toml = "1.1.0"
-wasm-bindgen = "0.2.100"
-uuid = { version = "1.17.0", features = ["serde", "v4", "v5"] }
+syn = { version = "3", features = ["full", "visit"] }
+prettyplease = "0.3"
+proc-macro2 = { version = "1", features = ["span-locations"] }
+toml = "1.1.8"
+wasm-bindgen = "0.2.129"
+uuid = { version = "1.28.0", features = ["serde", "v4", "v5"] }
 fs_extra = "1.3.0"
 walkdir = "2.5.0"
-zip = { version = "2", default-features = false, features = ["deflate"] }
-regex = "1.11.1"
-lazy_static = "1.5.0"
+zip = { version = "9", default-features = false, features = ["deflate"] }
+regex = "1.13.1"
+lazy_static = "1.5.1"
 dialoguer = { version = "0.12.0", features = ["fuzzy-select"] }
-glob = "0.3.2"
-getrandom = { version = "0.2", features = ["js"] }
+glob = "0.3.4"
+getrandom = { version = "0.4", features = ["wasm_js"] }
 hmac = "0.13"
 sha2 = "0.11"
-rand = "0.8"
-serde-envfile = "0.3.0"
-tempfile = "3.20.0"
-dirs = "5.0.1"
-colored = "2.1.0"
-derive_more = { version = "2.0.1", features = ["from"] }
-tungstenite = { version = "0.26", features = ["native-tls"] }
+serde-envfile = "0.4.1"
+tempfile = "3.27.0"
+dirs = "7.0.0"
+colored = "3.1.1"
+derive_more = { version = "2.1.1", features = ["from"] }
+tungstenite = { version = "0.30", features = ["native-tls"] }
 urlencoding = "2.1"
 chrono = { version = "0.4", features = ["serde"] }
 ignore = "0.4"
 tar = "0.4"
-flate2 = "1.0"
-opener = "0.7"
-toml_edit = "0.25.15"
+flate2 = "1.1"
+opener = "0.9"
+toml_edit = "0.25.17"
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.31", features = ["signal", "process"] }
+
+

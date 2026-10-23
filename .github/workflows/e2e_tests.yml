@@ -1,40 +1,139 @@
 name: E2E Tests
 
+# Runs on every pull request so the aggregate "E2E Tests" check always reports;
+# the `changes` job decides which suites a pull request actually needs. Pushes
+# to main, the nightly schedule and a dispatch with `full` run everything.
 on:
   workflow_dispatch:
+    inputs:
+      full:
+        description: 'Run every suite regardless of which paths changed'
+        type: boolean
+        default: false
   push:
     branches:
       - main
-    paths:
-      - "cli/**"
   pull_request:
-    paths:
-      - "cli/**"
+  schedule:
+    - cron: '23 6 * * *'
 
+# actions: read lets the compiler-cache steps find and download earlier
+# runs' store artifacts.
 permissions:
   contents: read
+  actions: read
+
+# A newer push to the same pull request supersedes the run in flight.
+concurrency:
+  group: e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # One place that decides which suites a pull request needs. Every other job
+  # gates on its outputs; the aggregate `E2E Tests` job at the end turns the
+  # skipped ones into a single passing (or failing) status.
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      rust: ${{ steps.mode.outputs.full == 'true' || steps.filter.outputs.rust == 'true' }}
+      typescript: ${{ steps.mode.outputs.full == 'true' || steps.filter.outputs.typescript == 'true' }}
+      full: ${{ steps.mode.outputs.full }}
+      typescript-matrix: ${{ steps.suites.outputs.typescript }}
+      rust-matrix: ${{ steps.suites.outputs.rust }}
+    steps:
+      - name: Decide between a full and a filtered run
+        id: mode
+        env:
+          EVENT: ${{ github.event_name }}
+          FULL: ${{ inputs.full || false }}
+          ON_DEFAULT_BRANCH: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+        run: |
+          if [ "$EVENT" = push ] || [ "$EVENT" = schedule ] || [ "$FULL" = true ] || [ "$ON_DEFAULT_BRANCH" = true ]; then
+            echo "full=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "full=false" >> "$GITHUB_OUTPUT"
+          fi
+      # Pull requests list their files through the API and need only the
+      # suite layout; a filtered dispatch compares the branch with the
+      # default branch and needs the history.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: ${{ (steps.mode.outputs.full != 'true' && github.event_name != 'pull_request') && '0' || '1' }}
+          sparse-checkout: .github/ci
+      # Fast-tier suites on pull requests; every suite on a full run.
+      - name: Select suites for this tier
+        id: suites
+        env:
+          FULL: ${{ steps.mode.outputs.full }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          layout = json.load(open('.github/ci/e2e-suites.json'))
+          full = os.environ['FULL'] == 'true'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              for kind in ('typescript', 'rust'):
+                  chosen = [{k: v for k, v in entry.items() if k != 'tier'}
+                            for entry in layout[kind] if full or entry['tier'] == 'fast']
+                  # Each Rust job keeps its own compiler store.
+                  for entry in chosen:
+                      label = entry['name']
+                      entry.setdefault('family', 'e2e-' + re.sub(r'[^a-z0-9]+', '-', label.lower()).strip('-'))
+                  print(f'{kind}: {[e.get("name", e.get("suite")) for e in chosen]}')
+                  out.write(f'{kind}={json.dumps(chosen)}\n')
+          PY
+      - id: filter
+        if: steps.mode.outputs.full != 'true'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          base: ${{ github.event_name == 'pull_request' && '' || github.event.repository.default_branch }}
+          filters: |
+            rust:
+              - 'cli/**'
+              - 'framework-rs/**'
+              - 'blueprint-rs/**'
+              - 'blueprint/client-sdk/**'
+              - 'blueprint/iam-better-auth/**'
+              - 'framework/core/src/persistence/**'
+              - 'framework/universal-sdk/**'
+              - 'scripts/rust_*'
+              - '.github/workflows/e2e_tests.yml'
+              - '.github/actions/rust-build-cache/**'
+            typescript:
+              - 'cli/**'
+              - 'framework/**'
+              - 'blueprint/**'
+              - '.github/workflows/e2e_tests.yml'
+
   # The CLI is compiled once and shared. Previously all six test jobs ran
   # `cargo build --release` themselves — around four minutes each, roughly
   # twenty-five minutes of duplicated compute per run — and every one of the
   # 207 `cargo run --release` calls inside the scripts re-checked that build.
+  #
+  # Compiled output comes from the shared sccache store (see
+  # .github/actions/rust-build-cache), which every Rust job in this and the
+  # other workflows reads and writes, so the target directory is no longer
+  # cached per job.
   build-cli:
     name: Build CLI
+    needs: changes
+    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.typescript == 'true'
     runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_JOBS: '2'
     steps:
       - uses: actions/checkout@v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      # Replaces a hand-rolled actions/cache whose path was `target` while
-      # cargo builds into `cli/target`, so build artifacts were never cached
-      # and every job paid a full rebuild.
-      - name: Cache Rust build
-        uses: Swatinem/rust-cache@v2
+      - name: Rust build cache
+        uses: ./.github/actions/rust-build-cache
         with:
-          workspaces: cli
+          family: cli
 
       - name: Build CLI
         working-directory: ./cli
@@ -51,31 +150,58 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+      - name: Save compiler cache
+        if: always()
+        uses: ./.github/actions/rust-build-cache/save
+
+  # The packaged-install check used to run inside Build CLI, after the build,
+  # so every suite waited on it as well. It now runs beside Build CLI and,
+  # because it scaffolds and compiles a generated Rust service, worker and
+  # library, doubles as the pre-warm for the Rust suites: they start only once
+  # it has written that dependency graph into the compiler cache, instead of
+  # all compiling it cold at the same moment.
+  verify-packaged-cli:
+    name: Verify packaged CLI
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_JOBS: '2'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust build cache
+        uses: ./.github/actions/rust-build-cache
+        with:
+          family: verify-packaged-cli
+          fallback-family: cli
+          size: 2G
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify packaged CLI installation and Rust generation
+        run: bash cli/tests/rust_packaged_install.sh
+
+      - name: Save compiler cache
+        if: always()
+        uses: ./.github/actions/rust-build-cache/save
+
   test:
-    needs: build-cli
+    needs: [changes, build-cli]
+    if: needs.changes.outputs.typescript == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - group: 1
-            name: "Init Tests (heavy modules)"
-            scripts: "change_router_add_mappers.sh dryrun.sh existing_docker_compose.sh init_module_src_path.sh release_non_tty.sh sync_service_subcommand.sh"
-          - group: 2
-            name: "Init Tests (components)"
-            scripts: "change_library.sh delete_worker.sh environment_validate.sh init_application.sh init_compile.sh init_messaging_twilio.sh sync_worker_subcommand.sh"
-          - group: 3
-            name: "Sync Tests"
-            scripts: "change_sdk_mode.sh change_worker.sh delete_library.sh delete_service.sh depcheck.sh init_service_mappers.sh precheck_version_mismatch_decline_fails.sh sync_add_remove_flow.sh"
-          - group: 4
-            name: "Change Tests"
-            scripts: "change_router.sh change_service.sh change_service_worker_migration.sh eject.sh init_worker.sh precheck_version_match_allows_run.sh sync_application_remove.sh"
-          - group: 5
-            name: "Delete Tests"
-            scripts: "change_application.sh init_application_custom_path.sh init_module.sh init_service.sh init_worker_mappers.sh init_worker_workspace_and_typecheck.sh sync_application_add.sh"
-          - group: 6
-            name: "Other Tests"
-            scripts: "delete_router.sh environment_sync.sh init_billing_stripe.sh init_cac.sh init_iam_better_auth.sh init_library.sh init_relay.sh init_relay_drift.sh init_router.sh sync_library_subcommand.sh"
+        include: ${{ fromJSON(needs.changes.outputs.typescript-matrix) }}
 
     name: ${{ matrix.name }}
 
@@ -85,8 +211,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
+      # Must equal BUN_VERSION in cli/src/constants.rs (the generated images'
+      # oven/bun tag); a unit test in cli/src/core/github_configs.rs enforces it.
       - name: Install Bun
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
 
       - name: Install pnpm
         uses: pnpm/action-setup@v2
@@ -142,27 +272,19 @@ jobs:
           # Scripts fall back to `cargo run --release` when this is unset, so
           # they still work unchanged for anyone running them locally.
           FORKLAUNCH_CLI: ${{ github.workspace }}/cli-bin/forklaunch
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+          FORKLAUNCH_TEST_WS_SDK_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+          ASYNCAPI_PARSER_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/@asyncapi/parser
           # With a warm store there is no reason to go to the network first.
           NPM_CONFIG_PREFER_OFFLINE: "true"
+          SHARDS: ${{ matrix.shards }}
+        # shards.sh runs every script of each shard, prints per-script
+        # timings and fails if any script failed.
         run: |
-          set -e
           chmod +x "$FORKLAUNCH_CLI"
-          test_count=0
-          for test_script in ${{ matrix.scripts }}; do
-            if [ -f "$test_script" ]; then
-              echo "[INFO] Running test: $test_script"
-              test_count=$((test_count + 1))
-              if ! ./"$test_script"; then
-                echo "[ERROR] Test failed: $test_script"
-                exit 1
-              fi
-              echo "[OK] Test passed: $test_script"
-            else
-              echo "[ERROR] Missing test script: $test_script"
-              exit 1
-            fi
-          done
-          echo "[SUCCESS] All $test_count tests passed in group: ${{ matrix.name }}"
+          # shellcheck disable=SC2086
+          bash shards.sh run $SHARDS
 
       # A content-addressed store, so saving a partially populated one is safe:
       # entries are immutable and keyed by hash, and the next run reuses
@@ -173,3 +295,183 @@ jobs:
         with:
           path: ~/.pnpm-store
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('cli/src/core/package_json/package_json_constants.rs') }}
+
+  test-rust:
+    needs: [changes, build-cli]
+    if: ${{ !cancelled() && needs.build-cli.result == 'success' && needs.changes.outputs.rust == 'true' }}
+    runs-on: ubuntu-latest
+    env:
+      # Smaller debug info: less to compile, cache and store.
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      # Loads .github/actions/rust-build-cache/stable-tmp/preload.cjs once the
+      # cache step has set FORKLAUNCH_STABLE_TMP_PRELOAD; a no-op before that.
+      # Set here because GitHub refuses NODE_OPTIONS through GITHUB_ENV.
+      NODE_OPTIONS: --import=data:text/javascript,if(process.env.FORKLAUNCH_STABLE_TMP_PRELOAD){(await(import(%22node:module%22))).createRequire(process.env.FORKLAUNCH_STABLE_TMP_PRELOAD)(process.env.FORKLAUNCH_STABLE_TMP_PRELOAD)}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.changes.outputs.rust-matrix) }}
+
+    name: ${{ matrix.name }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust for generated backend checks
+        uses: dtolnay/rust-toolchain@stable
+
+      # Its own store from an earlier run, else the Rust commands job's (the
+      # broadest scaffold graph), else Build CLI's; stable temporary paths so
+      # the scaffolds it compiles hash the same next time.
+      - name: Rust build cache
+        uses: ./.github/actions/rust-build-cache
+        with:
+          family: ${{ matrix.family }}
+          fallback-family: ${{ matrix.family == 'e2e-rust-commands' && 'cli' || 'e2e-rust-commands cli' }}
+          stable-tmp: 'true'
+          size: 2G
+
+      # rdkafka-sys (generated Kafka workers) builds librdkafka, which needs libcurl headers.
+      - name: Install native build dependencies for generated workers
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev libsasl2-dev
+
+      # One target for every script in the job: they share third-party crates.
+      - name: Reuse Cargo artifacts across generated Rust workspaces
+        run: echo "CARGO_TARGET_DIR=$RUNNER_TEMP/forklaunch-generated-target" >> "$GITHUB_ENV"
+
+      - name: Install TypeScript compiler for SDK checks
+        run: npm install --before="$(date -u -d '2 days ago' +%Y-%m-%dT%H:%M:%SZ)" --prefix "$RUNNER_TEMP/fl-rust-ts" --no-save --package-lock=false --ignore-scripts typescript@5.9.3 qs@6.16.0 @types/qs@6.15.1 @types/node@22 @types/ws@8.18.1 ws@8.22.0 ajv@8.20.0 ajv-draft-04@1.0.0 ajv-formats@3.0.1 @asyncapi/parser@3.6.3 stripe@22.6.2 bullmq@6.3.10 ioredis@6.0.0 zod@4.6.5 ts-deepmerge@8.0.0 cross-fetch@4.1.0 better-auth@1.7.6 esbuild@0.28.2
+
+      - name: Configure pinned worker and auth client fixtures
+        run: |
+          echo "BULLMQ_SDK_PATH=$RUNNER_TEMP/fl-rust-ts/node_modules/bullmq" >> "$GITHUB_ENV"
+          echo "FORKLAUNCH_TEST_BETTER_AUTH_DEPENDENCIES=$RUNNER_TEMP/fl-rust-ts" >> "$GITHUB_ENV"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # Must equal BUN_VERSION in cli/src/constants.rs (the generated images'
+      # oven/bun tag); a unit test in cli/src/core/github_configs.rs enforces it.
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10
+
+      # The scaffolded applications install the same dependency trees over and
+      # over. Nothing cached them before, so every install refetched everything
+      # from the registry — the single largest cost in these jobs.
+      # Pinned rather than read back from `pnpm store path`, which reported a
+      # directory that pnpm had not created yet — the save step then refused it
+      # with "Path(s) specified in the action for caching do(es) not exist".
+      # Creating it up front also guarantees every generated application shares
+      # one store instead of each resolving its own.
+      - name: Configure pnpm store
+        run: |
+          mkdir -p ~/.pnpm-store
+          pnpm config set store-dir ~/.pnpm-store --global
+
+      # Split restore/save rather than plain actions/cache, which skips its
+      # post-save step whenever the job fails. That is the wrong way round
+      # here: a red run still populates the store, and it is precisely while
+      # CI is failing that the next attempt most wants a warm cache.
+      - name: Restore pnpm store
+        id: pnpm-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('cli/src/core/package_json/package_json_constants.rs') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Download CLI binary
+        uses: actions/download-artifact@v4
+        with:
+          name: forklaunch-cli
+          path: cli-bin
+      # The Rust scripts ran with it in their former native-suite job.
+      - name: Skip formatting
+        run: echo "FORKLAUNCH_SKIP_FORMAT=1" >> "$GITHUB_ENV"
+
+      - name: Create .forklaunch directory
+        run: mkdir -p ~/.forklaunch
+
+      - name: Create token file
+        run: |
+          cat > ~/.forklaunch/token << 'EOF'
+          access_token = "mock_access_token_for_e2e_tests"
+          refresh_token = "mock_refresh_token_for_e2e_tests"
+          expires_at = 9999999999
+          EOF
+
+      - name: Run ${{ matrix.name }}
+        working-directory: ./cli/tests
+        env:
+          # Scripts fall back to `cargo run --release` when this is unset, so
+          # they still work unchanged for anyone running them locally.
+          FORKLAUNCH_CLI: ${{ github.workspace }}/cli-bin/forklaunch
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+          FORKLAUNCH_TEST_WS_SDK_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+          ASYNCAPI_PARSER_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/@asyncapi/parser
+          # With a warm store there is no reason to go to the network first.
+          NPM_CONFIG_PREFER_OFFLINE: "true"
+          SHARDS: ${{ matrix.shards }}
+        # shards.sh runs every script of each shard, prints per-script
+        # timings and fails if any script failed.
+        run: |
+          chmod +x "$FORKLAUNCH_CLI"
+          # shellcheck disable=SC2086
+          bash shards.sh run $SHARDS
+
+      # A content-addressed store, so saving a partially populated one is safe:
+      # entries are immutable and keyed by hash, and the next run reuses
+      # whatever made it in.
+      - name: Save pnpm store
+        if: always() && steps.pnpm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('cli/src/core/package_json/package_json_constants.rs') }}
+
+      - name: Save compiler cache
+        if: always()
+        uses: ./.github/actions/rust-build-cache/save
+
+  # The one status to require. It passes when every suite this change needed
+  # passed, and when a suite was skipped only because `changes` ruled it out;
+  # a suite skipped because something it depends on failed fails it.
+  e2e-ok:
+    name: E2E Tests
+    needs: [changes, build-cli, verify-packaged-cli, test, test-rust]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check every needed suite passed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          needs = json.loads(os.environ['RESULTS'])
+          outputs = needs['changes'].get('outputs', {})
+          wanted = {
+              'changes': True,
+              'build-cli': outputs.get('rust') == 'true' or outputs.get('typescript') == 'true',
+              'verify-packaged-cli': outputs.get('rust') == 'true',
+              'test': outputs.get('typescript') == 'true',
+              'test-rust': outputs.get('rust') == 'true',
+          }
+          failed = False
+          for job, need in needs.items():
+              result = need['result']
+              required = wanted.get(job, True)
+              ok = result == 'success' or (result == 'skipped' and not required)
+              print(f"{job}: {result}{'' if required else ' (not needed)'}")
+              failed |= not ok
+          sys.exit(1 if failed else 0)
+          PY

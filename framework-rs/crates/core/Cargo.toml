@@ -1,0 +1,249 @@
+[package]
+description = "ForkLaunch Rust core APIs and runtime support"
+name = "forklaunch-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[features]
+ws = ["dep:serde", "dep:serde_json", "serde_json/raw_value"]
+ws-validation = ["ws", "dep:forklaunch-validator"]
+mcp = ["schema-validation", "json-schema", "dep:serde_json", "serde_json/preserve_order"]
+rmcp-server = ["mcp", "schema-validation", "dep:rmcp", "dep:axum", "dep:tokio", "tokio/net", "tokio/macros", "dep:tower", "dep:percent-encoding", "dep:form_urlencoded", "dep:base64", "dep:serde", "dep:forklaunch-validator"]
+validator = ["http", "dep:forklaunch-validator"]
+openapi = ["json-schema", "typescript"]
+default = []
+schema-validation = ["json-schema", "dep:jsonschema", "dep:regex"]
+http = ["schema-validation", "dep:serde", "dep:serde_json", "dep:multer", "dep:mime", "dep:encoding_rs", "dep:percent-encoding", "dep:flate2", "dep:brotli", "dep:futures-util"]
+auth = ["http", "dep:jsonwebtoken", "dep:hmac", "dep:sha2", "dep:subtle", "dep:chrono", "dep:base64"]
+session-client = ["auth", "dep:reqwest", "dep:zeroize"]
+remote-jwks = ["auth", "dep:reqwest", "dep:tokio"]
+oidc = ["auth", "dep:oauth2", "dep:openidconnect", "dep:reqwest"]
+zod-regex = ["schema-validation", "forklaunch-common/zod-regex"]
+zod-checks = ["schema-validation", "forklaunch-common/zod-checks"]
+zod-uri = ["schema-validation", "dep:ada-url"]
+otlp = ["dep:opentelemetry_sdk", "dep:opentelemetry-otlp", "dep:opentelemetry-appender-tracing", "dep:tracing-subscriber", "dep:tokio"]
+postgres = ["dep:sqlx", "dep:tokio", "dep:url"]
+# Same as `postgres`; kept for applications that selected SQLx 0.9 by name.
+postgres09 = ["postgres"]
+compliance-artifact = ["dep:serde_json"]
+encryption = ["compliance-artifact", "dep:uuid", "dep:aes-gcm", "dep:hkdf", "dep:hmac", "dep:sha2", "dep:base64", "dep:getrandom", "dep:zeroize", "dep:serde", "dep:serde_json"]
+json-schema = ["dep:serde_json", "dep:serde", "dep:percent-encoding"]
+retention-calendar = ["dep:chrono"]
+mappers = ["typed-schema", "schema-validation"]
+date-codec = ["dep:chrono", "dep:serde", "dep:serde_json"]
+typed-schema = ["date-codec", "json-schema", "dep:schemars", "serde/derive"]
+codegen = ["ws", "schema-validation", "dep:url", "dep:anyhow", "dep:convert_case", "dep:ramhorns"]
+typescript = ["codegen"]
+rust-sdk = ["codegen", "dep:syn", "dep:prettyplease"]
+asyncapi = ["codegen"]
+asyncapi-import = ["asyncapi"]
+build = ["typescript", "rust-sdk", "openapi", "asyncapi", "dep:sha2", "dep:toml"]
+
+typescript-source = ["build", "dep:oxc_allocator", "dep:oxc_parser", "dep:oxc_ast", "dep:oxc_span"]
+# Shared module types and platform clients, as `@forklaunch/core/http` provides
+# them to TypeScript implementations.
+domain = ["dep:serde", "serde/derive", "dep:schemars", "dep:serde_json"]
+provider-http = ["http", "domain", "dep:reqwest", "dep:url"]
+stripe-webhook = ["domain", "dep:hmac", "dep:sha2", "dep:zeroize"]
+instance-gateway = ["provider-http", "auth", "dep:chrono", "chrono/clock", "dep:uuid", "dep:zeroize"]
+# Agent route shapes and contracts, host-compilable for contract crates.
+agent-contract = ["typed-schema", "dep:serde", "serde/derive", "dep:serde_json"]
+# Streamable HTTP MCP client (no stdio).
+mcp-client = ["mcp", "dep:reqwest", "dep:serde", "serde/derive", "dep:tokio", "tokio/time", "dep:url"]
+# Agents: tool registry, approvals, run loop over the managed model gateway.
+agent = ["agent-contract", "mcp-client", "instance-gateway", "dep:aes-gcm", "dep:sha2", "dep:base64", "dep:getrandom", "dep:tokio", "tokio/time", "tokio/sync", "tokio/macros", "dep:futures-util", "dep:url", "dep:percent-encoding"]
+
+[dependencies]
+syn = { version = "3", features = ["full", "visit-mut"], optional = true }
+prettyplease = { version = "0.3", optional = true }
+toml = { version = "1.1", optional = true }
+oxc_allocator = { version = "0.155.0", optional = true }
+oxc_parser = { version = "0.155.0", optional = true }
+oxc_ast = { version = "0.155.0", features = ["serialize"], optional = true }
+oxc_span = { version = "0.155.0", optional = true }
+rmcp = { version = "3.6.0", default-features = false, features = ["server", "transport-streamable-http-server"], optional = true }
+axum = { version = "0.8", optional = true }
+tower = { version = "0.5", features = ["util"], optional = true }
+form_urlencoded = { version = "1", optional = true }
+forklaunch-validator = { version = "0.2.5", path = "../validator", optional = true }
+uuid = { version = "1", features = ["v4"], optional = true }
+forklaunch-common = { version = "0.2.5", path = "../common" }
+forklaunch-core-macros = { version = "0.2.5", path = "../core-macros" }
+
+opentelemetry = { version = "0.33", features = ["metrics", "trace"] }
+tracing = "0.1"
+opentelemetry_sdk = { version = "0.33", features = ["trace", "metrics", "logs"], optional = true }
+opentelemetry-otlp = { version = "0.33", default-features = false, features = ["trace", "metrics", "logs", "http-proto", "http-json", "reqwest-blocking-client", "reqwest-rustls"], optional = true }
+opentelemetry-appender-tracing = { version = "0.33", optional = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"], optional = true }
+tokio = { version = "1", features = ["rt", "sync", "time"], optional = true }
+
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres"], optional = true }
+url = { version = "2", optional = true }
+
+aes-gcm = { version = "0.11", optional = true }
+hkdf = { version = "0.13", optional = true }
+hmac = { version = "0.13", optional = true }
+sha2 = { version = "0.11", optional = true }
+base64 = { version = "0.23", optional = true }
+getrandom = { version = "0.4", optional = true }
+zeroize = { version = "1", optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+# Generated artifacts (contracts, bindings, event packages) keep one key order
+# however the build unifies features: a lone package build and a workspace
+# build write identical files.
+serde_json = { version = "=1.0.151", features = ["float_roundtrip", "preserve_order"], optional = true }
+
+multer = { version = "3", optional = true }
+mime = { version = "0.3", optional = true }
+encoding_rs = { version = "0.8", optional = true }
+percent-encoding = { version = "2", optional = true }
+flate2 = { version = "1", optional = true }
+brotli = { version = "9", optional = true }
+futures-util = { version = "0.3", default-features = false, features = ["std"], optional = true }
+jsonwebtoken = { version = "11", features = ["aws_lc_rs"], optional = true }
+subtle = { version = "2", optional = true }
+chrono = { version = "0.4", default-features = false, features = ["std"], optional = true }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "form", "query"], optional = true }
+oauth2 = { version = "5.0.0", default-features = false, optional = true }
+openidconnect = { version = "4.0.1", default-features = false, optional = true }
+schemars = { version = "1.2", optional = true, features = ["uuid1"] }
+ada-url = { version = "=3.2.4", optional = true }
+indexmap = "2"
+regex = { version = "1", optional = true }
+jsonschema = { package = "forklaunch-jsonschema-protocol", version = "0.1.1", path = "../vendor/jsonschema", default-features = false, features = ["idna", "forklaunch-ajv-pointer-decoding", "forklaunch-ajv-ref-siblings", "forklaunch-static-anchor-resolution", "forklaunch-legacy-fragment-ids"], optional = true }
+anyhow = {version = "1", optional = true}
+convert_case = {version = "0.12", optional = true}
+ramhorns = {version = "1.0.1", optional = true}
+
+[dev-dependencies]
+chrono = { version = "0.4", default-features = false, features = ["std", "serde"] }
+schemars = { version = "1.2", features = ["chrono04"] }
+axum = { version = "0.8", features = ["multipart"] }
+garde = { version = "0.23", features = ["derive"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time", "test-util"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "=1.0.151"
+opentelemetry_sdk = { version = "0.33", features = ["testing"] }
+
+[lints]
+workspace = true
+
+[[example]]
+name = "field_encryption_parity"
+required-features = ["encryption"]
+
+[[example]]
+name = "otlp_runtime"
+required-features = ["otlp"]
+
+[[example]]
+name = "postgres_admission"
+required-features = ["postgres"]
+
+[[example]]
+name = "request_hmac_parity"
+required-features = ["auth"]
+
+[[example]]
+name = "typescript_basic_parity"
+required-features = ["auth"]
+
+[[example]]
+name = "typescript_hmac_parity"
+required-features = ["auth"]
+
+[[example]]
+name = "typescript_rbac_parity"
+required-features = ["auth"]
+
+[[example]]
+name = "typescript_session_parity"
+required-features = ["auth"]
+
+[[example]]
+name = "simple_query_parity"
+required-features = ["http"]
+
+[[example]]
+name = "version_fields"
+required-features = ["http"]
+
+[[example]]
+name = "version_selection"
+required-features = ["http"]
+
+[[example]]
+name = "parse_errors_parity"
+required-features = ["http"]
+
+[[example]]
+name = "mcp_body_admission"
+required-features = ["rmcp-server"]
+[[example]]
+name = "uri_schema_parity"
+required-features = ["schema-validation"]
+
+[[example]]
+name = "array_cardinality_parity"
+required-features = ["schema-validation"]
+[[example]]
+name = "codegen_schema_bundle"
+required-features = ["build", "asyncapi-import"]
+[[example]]
+name = "codegen_fixed_tuple_models"
+required-features = ["build", "asyncapi-import"]
+[[example]]
+name = "typescript_socket_artifacts"
+required-features = ["build", "asyncapi-import"]
+[[example]]
+name = "typescript_multipart_clients"
+required-features = ["build", "asyncapi-import"]
+[[example]]
+name = "typescript_recursive_client"
+required-features = ["build", "asyncapi-import"]
+[[example]]
+name = "typescript_presence_client"
+required-features = ["build", "asyncapi-import"]
+[[example]]
+name = "typescript_optional_body"
+required-features = ["build", "asyncapi-import"]
+[[example]]
+name = "typescript_stream_client"
+required-features = ["build", "asyncapi-import"]
+[[example]]
+name = "typescript_versioned_client"
+required-features = ["build", "asyncapi-import"]
+[[example]]
+name = "typescript_json_composition"
+required-features = ["build", "asyncapi-import"]
+[[example]]
+name = "rust_sdk_recursive_client"
+required-features = ["build", "asyncapi-import"]
+[[example]]
+name = "rust_sdk_presence_client"
+required-features = ["build", "asyncapi-import"]
+[[example]]
+name = "rust_sdk_typed_requests"
+required-features = ["build", "asyncapi-import"]
+[[example]]
+name = "rust_sdk_stream_client"
+required-features = ["build", "asyncapi-import"]
+[[example]]
+name = "rust_sdk_versioned_client"
+required-features = ["build", "asyncapi-import"]
+
+[[example]]
+name = "typescript_contract_build"
+required-features = ["typescript-source"]
+
+[[example]]
+name = "model_gateway"
+required-features = ["instance-gateway"]
+
+[[example]]
+name = "preview_model_gateway"
+required-features = ["instance-gateway"]

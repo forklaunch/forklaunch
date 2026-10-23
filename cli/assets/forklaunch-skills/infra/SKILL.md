@@ -1,6 +1,6 @@
 ---
 name: infra
-description: "fl infra: add/remove a capability in a service's code (object store, cache); list, status, resize, config-set, stop, delete provisioned database/cache/queue/object-store resources."
+description: "fl infra: add/remove a capability in a service's code (object store, cache, or a managed gateway capability: email, sms, whatsapp, voice, payments, models); list, status, resize, config-set, stop, delete provisioned database/cache/queue/object-store resources."
 user-invokable: true
 ---
 
@@ -30,11 +30,15 @@ role scoped to that bucket, with no keys. `infra add <service> payments` wires
 Stripe Connect through the platform instead of a Stripe key (see `/integrations`).
 See `/cli` for flags.
 
+**Managed gateway capabilities** (email, sms, whatsapp, voice, payments,
+models) work for managed instances and for apps deployed with `forklaunch
+deploy create` (the deploy supplies the gateway settings to the components
+that declare them). Each may go on a service or a worker; a worker can call
+the gateway, but events reach only an HTTP service's `/platform-events` route.
+
 `forklaunch infra add <service> email` (or `<worker>`) registers the
-platform-held `EmailClient` (SES through the instance gateway, no mail key)
-and an email events handler. It works for managed instances and for apps
-deployed with `forklaunch deploy create` (the deploy supplies the gateway
-settings); see `/integrations`.
+platform-held `EmailClient` (SES through the managed gateway, no mail key)
+and an email events handler; see `/integrations`.
 
 `forklaunch infra add <service> sms` wires platform-held text messages the
 same way: an `SmsClient` registration, an SMS event handler and the local
@@ -45,10 +49,15 @@ holds no vendor key. See `/integrations`.
 a keyless `WhatsAppClient`, a WhatsApp event handler and the local gateway mock
 (see `/integrations`).
 
-`forklaunch infra add <service> voice` adds outbound phone calls for a managed
-app: the platform places them through its Amazon Connect instance, so the
-service gets a keyless `VoiceClient` and a call-events handler, not AWS
+`forklaunch infra add <service> voice` adds outbound phone calls through the
+managed gateway: the platform places them through its Amazon Connect instance,
+so the service gets a keyless `VoiceClient` and a call-events handler, not AWS
 credentials. See `/integrations` (*Voice calls*).
+
+`forklaunch infra add <service> models` registers a keyless
+`ModelGatewayClient` for platform-hosted AI models (release resource type
+`models`). A direct OpenAI or Anthropic client already in the service is left
+alone. See `/integrations` (*Models*).
 
 **The remaining `fl infra` commands never provision anything.** It only inspects and manages resources that already exist on the platform for the target environment (created through the normal platform provisioning flow). Running any command against an environment with no provisioned resources yet will correctly report zero results, not an error.
 
@@ -190,6 +199,16 @@ fl infra config-set billing:database --environment staging --primary-region us-e
 Same `--dry-run` safety guarantee as `resize` — read-only resolve + fetch + diff print, no mutation. The metadata-only branch (only `--distribution-strategy`/`--primary-region` set) is instant (`PATCH`, synchronous, no deployment polling); any other config flag routes through `POST /:id/deploy` and polls to completion, printing the dashboard URL before polling starts.
 
 **Not yet live-verified this session:** same caveat as `resize` — dry-run and unit tests only, no real AWS config change exercised yet.
+
+**Database engines.** A `database` resource runs the component's MikroORM
+engine: RDS for postgresql, mysql, mariadb and mssql (SQL Server Express
+has no Multi-AZ on RDS: `--multi-az` or a compliance standard leaves it
+Single-AZ, with a `[Compliance]` warning in the deployment worker's log), Amazon DocumentDB for mongodb,
+and nothing at all for sqlite/libsql (so `infra list` shows no database). On a
+shared pool only Postgres lives in the pool's partition; a non-Postgres
+database is the app's own instance in the pool VPC, with its own resource
+outputs like a dedicated database, and its cost is the app's alone. Per-engine table and env vars:
+`/platform-architecture` (*Database engines*).
 
 ### 5. `fl infra stop` — stop a resource
 
