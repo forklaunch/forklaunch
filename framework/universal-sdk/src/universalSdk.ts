@@ -1,11 +1,12 @@
-import portableRequest, { hmacSignedFetch, type ForkLaunchSdkResponse } from './portableRuntime';
+// toPlainString comes from the bundled runtime (the same source as
+// @forklaunch/common's), so this package doesn't need a newer common to build.
+import portableRequest, { hmacSignedFetch, toPlainString, type ForkLaunchSdkResponse } from './portableRuntime';
 import { portableOperations, type PortableOperation } from './core/portableOperation';
 import { registerZodRegex, type ZodRegexExecution } from './core/zodRegex';
 import {
   openApiCompliantPath,
   safeParse,
-  safeStringify,
-  toPlainString
+  safeStringify
 } from '@forklaunch/common';
 import Ajv from 'ajv';
 import Ajv2020 from 'ajv/dist/2020.js';
