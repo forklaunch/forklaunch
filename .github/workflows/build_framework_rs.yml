@@ -12,18 +12,25 @@ on:
       - 'framework/**/package.json'
       - '.github/workflows/build_framework_rs.yml'
   pull_request:
-    paths:
-      - 'framework-rs/**'
-      - 'scripts/rust_format.py'
-      - 'scripts/check_rust_package_owners.py'
-      - 'framework/**/package.json'
-      - '.github/workflows/build_framework_rs.yml'
 
 permissions:
   contents: read
 
 jobs:
+  # Which suites this pull request can affect (.github/ci/impact.py). Pushes
+  # and dispatches run everything.
+  changes:
+    name: Changed paths
+    uses: ./.github/workflows/changes.yml
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      full: ${{ github.event_name != 'pull_request' }}
+
   build:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.impacts), 'framework-rs')
     runs-on: ubuntu-latest
 
     steps:

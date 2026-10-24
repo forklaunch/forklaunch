@@ -5,17 +5,6 @@ name: Rust Security Audit
 # security-audit job of the parity workflow.
 on:
   pull_request:
-    paths:
-      - 'cli/Cargo.toml'
-      - 'framework-rs/**/Cargo.toml'
-      - 'framework-rs/Cargo.lock'
-      - 'blueprint-rs/**/Cargo.toml'
-      - 'blueprint-rs/Cargo.lock'
-      - 'scripts/rust_security_audit*.py'
-      - 'cli/tests/fixtures/rust_security_advisories.json'
-      - 'scripts/*rust_ecs_smoke_plan.py'
-      - '.github/workflows/rust_security.yml'
-      - '.github/actions/rust-build-cache/**'
   push:
     branches: [main]
   # New advisories appear without any change here.
@@ -29,11 +18,24 @@ permissions:
   actions: read
 
 jobs:
+  # Which suites this pull request can affect (.github/ci/impact.py). Pushes
+  # and dispatches run everything.
+  changes:
+    name: Changed paths
+    uses: ./.github/workflows/changes.yml
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      full: ${{ github.event_name != 'pull_request' }}
+
   security-audit:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.impacts), 'rust-security')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
       - name: Rust build cache
         uses: ./.github/actions/rust-build-cache
         with:

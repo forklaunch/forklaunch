@@ -11,17 +11,25 @@ on:
       - 'scripts/rust_format.py'
       - '.github/workflows/build_blueprint_rs.yml'
   pull_request:
-    paths:
-      - 'blueprint-rs/**'
-      - 'framework-rs/**'
-      - 'scripts/rust_format.py'
-      - '.github/workflows/build_blueprint_rs.yml'
 
 permissions:
   contents: read
 
 jobs:
+  # Which suites this pull request can affect (.github/ci/impact.py). Pushes
+  # and dispatches run everything.
+  changes:
+    name: Changed paths
+    uses: ./.github/workflows/changes.yml
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      full: ${{ github.event_name != 'pull_request' }}
+
   build:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.impacts), 'blueprint-rs')
     runs-on: ubuntu-latest
 
     steps:
