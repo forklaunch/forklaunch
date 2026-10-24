@@ -14,20 +14,25 @@ on:
       - 'cli/src/templates/project/iam-better-auth/**'
       - '.github/workflows/build_blueprint.yml'
   pull_request:
-    paths:
-      - 'blueprint/**'
-      - 'cli/tests/fixtures/iam_authorization_scope.cjs'
-      - 'cli/tests/fixtures/scaffold_gitignore.py'
-      - 'cli/src/core/gitignore.rs'
-      - 'cli/src/templates/application/.gitignore'
-      - 'cli/src/templates/project/iam-better-auth/**'
-      - '.github/workflows/build_blueprint.yml'
 
 permissions:
   contents: read
 
 jobs:
+  # Which suites this pull request can affect (.github/ci/impact.py). Pushes
+  # and dispatches run everything.
+  changes:
+    name: Changed paths
+    uses: ./.github/workflows/changes.yml
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      full: ${{ github.event_name != 'pull_request' }}
+
   build:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.impacts), 'blueprint')
     runs-on: ubuntu-latest
 
     steps:
@@ -40,7 +45,7 @@ jobs:
           node-version: '24'
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.4.0
         with:
           version: 11.28.7
       - name: Install dependencies

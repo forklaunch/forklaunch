@@ -14,27 +14,32 @@ on:
       - '.github/workflows/scripts/check_blueprint_deps/**'
       - '.github/actions/rust-build-cache/**'
   pull_request:
-    paths:
-      - 'blueprint/**/package.json'
-      - 'cli/src/core/package_json/package_json_constants.rs'
-      - 'framework-rs/**/Cargo.toml'
-      - 'blueprint-rs/**/Cargo.toml'
-      - 'cli/src/core/cargo_toml/cargo_toml_constants.rs'
-      - '.github/workflows/scripts/check_blueprint_deps/**'
-      - '.github/actions/rust-build-cache/**'
 
 permissions:
   contents: read
   actions: read
 
 jobs:
+  # Which suites this pull request can affect (.github/ci/impact.py). Pushes
+  # and dispatches run everything.
+  changes:
+    name: Changed paths
+    uses: ./.github/workflows/changes.yml
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      full: ${{ github.event_name != 'pull_request' }}
+
   depcheck:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.impacts), 'depcheck')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
 
       - name: Rust build cache
         uses: ./.github/actions/rust-build-cache

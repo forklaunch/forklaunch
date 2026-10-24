@@ -3,6 +3,7 @@
     "E2E suite layout, read by the `changes` job of e2e_tests.yml. The E2E suite proves that CLI scaffolding and code-editing commands produce working projects; framework and module behaviour is tested by cargo test and the TypeScript packages' own suites, and TypeScript/Rust parity runs nightly (rust_parity.yml).",
     "tier 'fast' runs on every pull request that needs the suite; tier 'full' runs only on pushes to main, the nightly schedule and a dispatch with full=true.",
     "Each entry is one job running cli/tests/shards.sh shards.",
+    "Which jobs a pull request runs is decided by .github/ci/impact.py from its changed paths.",
     "Job names are check names; renaming one changes the check."
   ],
   "typescript": [
