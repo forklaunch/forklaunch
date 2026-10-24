@@ -1751,7 +1751,7 @@ fn infer_component_details(
     // Development transport policies are booleans, never connection metadata.
     // In particular DATABASE_* must not infer the database-name property, and
     // local compose defaults must not become production passthrough values.
-    if key_upper.ends_with("_ALLOW_PLAINTEXT_DEVELOPMENT") {
+    if key_upper.ends_with("_ALLOW_PLAINTEXT_DEVELOPMENT") || key_upper.ends_with("_DATABASE_BACKUP") {
         return None;
     }
 
@@ -2693,13 +2693,14 @@ mod tests {
     }
 
     #[test]
-    fn development_transport_switches_are_not_infrastructure_components() {
+    fn database_policy_switches_are_not_infrastructure_components() {
         let temp_dir = TempDir::new().unwrap();
         let switches = [
             "DATABASE_ALLOW_PLAINTEXT_DEVELOPMENT",
             "WORKER_ALLOW_PLAINTEXT_DEVELOPMENT",
             "JWKS_ALLOW_PLAINTEXT_DEVELOPMENT",
             "BILLING_ALLOW_PLAINTEXT_DEVELOPMENT",
+            "BILLING_DATABASE_BACKUP",
         ];
         let mut vars: Vec<(&str, &str)> = switches.iter().map(|key| (*key, "false")).collect();
         vars.push(("DB_HOST", "postgres"));
