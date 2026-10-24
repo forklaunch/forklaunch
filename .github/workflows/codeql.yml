@@ -1,0 +1,62 @@
+name: CodeQL
+
+# Advanced CodeQL setup, so test-only paths can be excluded
+# (.github/codeql/codeql-config.yml). GitHub rejects advanced uploads while the
+# repository's default setup is enabled, so this runs only once the
+# CODEQL_ADVANCED_SETUP repository variable is 'true' (set it when switching
+# default setup off).
+#
+# Pull requests analyse only the languages whose files changed
+# (.github/ci/impact.py: workflow and action files -> actions, JS/TS ->
+# javascript-typescript, *.py -> python, *.rs and Cargo files -> rust; a path
+# no rule covers, or a change to this workflow or its config, -> all of them).
+# Pushes to main and the weekly schedule analyse every language.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '17 4 * * 1'
+
+permissions:
+  contents: read
+
+# A newer push to the same pull request supersedes the analysis in flight.
+concurrency:
+  group: codeql-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  changes:
+    name: Changed paths
+    if: vars.CODEQL_ADVANCED_SETUP == 'true'
+    uses: ./.github/workflows/changes.yml
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      full: ${{ github.event_name != 'pull_request' }}
+
+  analyze:
+    needs: changes
+    if: needs.changes.outputs.codeql != '[]'
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ${{ fromJSON(needs.changes.outputs.codeql) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          config-file: ./.github/codeql/codeql-config.yml
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}

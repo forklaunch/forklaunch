@@ -175,17 +175,18 @@ const runtimeDependencies = environmentConfig.chain({
   StripeClient: {
     lifetime: Lifetime.Singleton,
     type: Stripe,
-    // Managed instances: the real Stripe SDK pointed at the platform's
-    // gateway (their own connected account, no key here). Anywhere else: the
-    // service's own key.
+    // The service's own key wins when it has one. Without one, a managed
+    // instance gets the real Stripe SDK pointed at the platform's gateway
+    // (its own connected account, no key here). The key must win: the
+    // managed contract (PLATFORM_GATEWAY_URL, INSTANCE_ID, INSTANCE_HMAC_KEY)
+    // can also reach a regular app's component that uses another platform
+    // feature such as email, and that must not reroute its billing.
     factory: ({ STRIPE_API_KEY }) => {
+      if (STRIPE_API_KEY) return new Stripe(STRIPE_API_KEY);
       if (isManagedInstance()) return createStripeClient({ Stripe });
-      if (!STRIPE_API_KEY) {
-        throw new Error(
-          'STRIPE_API_KEY is required unless the service runs as a managed instance'
-        );
-      }
-      return new Stripe(STRIPE_API_KEY);
+      throw new Error(
+        'STRIPE_API_KEY is required unless the service runs as a managed instance'
+      );
     }
   },
   Orm: {

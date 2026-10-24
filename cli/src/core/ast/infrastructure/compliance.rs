@@ -1,4 +1,8 @@
-use std::{collections::{HashMap, HashSet}, fs, path::{Path, PathBuf}};
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    path::{Path, PathBuf},
+};
 
 use anyhow::Result;
 use oxc_allocator::Allocator;
@@ -44,18 +48,20 @@ const KNOWN_BASE_PROPERTIES: &[(&str, &[&str])] = &[
 ];
 
 fn get_known_base_classifications(name: &str) -> Option<HashMap<String, String>> {
-    KNOWN_BASE_PROPERTIES.iter().find_map(|(base_name, fields)| {
-        if *base_name == name {
-            Some(
-                fields
-                    .iter()
-                    .map(|f| (f.to_string(), "none".to_string()))
-                    .collect(),
-            )
-        } else {
-            None
-        }
-    })
+    KNOWN_BASE_PROPERTIES
+        .iter()
+        .find_map(|(base_name, fields)| {
+            if *base_name == name {
+                Some(
+                    fields
+                        .iter()
+                        .map(|f| (f.to_string(), "none".to_string()))
+                        .collect(),
+                )
+            } else {
+                None
+            }
+        })
 }
 
 /// Collected variable declarations from the file.
@@ -71,8 +77,8 @@ fn collect_variable_declarations<'a>(program: &'a oxc_ast::ast::Program<'a>) -> 
     for stmt in &program.body {
         let var_decl = match stmt {
             Statement::VariableDeclaration(vd) => vd,
-            Statement::ExportNamedDeclaration(export) => match &export.declaration {
-                Some(Declaration::VariableDeclaration(vd)) => vd,
+            Statement::ExportDeclaration(export) => match &export.declaration {
+                Declaration::VariableDeclaration(vd) => vd,
                 _ => continue,
             },
             _ => continue,
@@ -80,9 +86,7 @@ fn collect_variable_declarations<'a>(program: &'a oxc_ast::ast::Program<'a>) -> 
 
         for declarator in &var_decl.declarations {
             if let Some(init) = &declarator.init {
-                if let oxc_ast::ast::BindingPatternKind::BindingIdentifier(id) =
-                    &declarator.id.kind
-                {
+                if let oxc_ast::ast::BindingPattern::BindingIdentifier(id) = &declarator.id {
                     decls.insert(id.name.to_string(), init);
                 }
             }
@@ -102,7 +106,7 @@ fn collect_imports(program: &oxc_ast::ast::Program) -> ImportMap {
             _ => continue,
         };
 
-        let source = import.source.value.to_string();
+        let source = import.source.value.display().to_string();
 
         if let Some(specifiers) = &import.specifiers {
             for spec in specifiers {
@@ -200,28 +204,26 @@ fn resolve_imported_variable(
     // Check re-exports (export * from './other', export { X } from './other')
     for stmt in &program.body {
         if let Statement::ExportAllDeclaration(export_all) = stmt {
-            let re_export_source = export_all.source.value.to_string();
+            let re_export_source = export_all.source.value.display().to_string();
             if let Some(result) =
                 resolve_imported_variable(&re_export_source, original_name, &resolved_path, visited)
             {
                 return Some(result);
             }
         }
-        if let Statement::ExportNamedDeclaration(export) = stmt {
-            if let Some(ref source) = export.source {
-                let re_export_source = source.value.to_string();
-                for spec in &export.specifiers {
-                    let exported_name = spec.exported.name().to_string();
-                    if exported_name == original_name {
-                        let local_name = spec.local.name().to_string();
-                        if let Some(result) = resolve_imported_variable(
-                            &re_export_source,
-                            &local_name,
-                            &resolved_path,
-                            visited,
-                        ) {
-                            return Some(result);
-                        }
+        if let Statement::ExportFromDeclaration(export) = stmt {
+            let re_export_source = export.source.value.display().to_string();
+            for spec in &export.specifiers {
+                let exported_name = spec.exported.name().to_string();
+                if exported_name == original_name {
+                    let local_name = spec.local.name().to_string();
+                    if let Some(result) = resolve_imported_variable(
+                        &re_export_source,
+                        &local_name,
+                        &resolved_path,
+                        visited,
+                    ) {
+                        return Some(result);
                     }
                 }
             }
@@ -235,7 +237,14 @@ fn resolve_imported_variable(
     if let Some(expr) = var_decls.get(original_name) {
         if let Expression::ObjectExpression(obj) = expr {
             let mut classifications = HashMap::new();
-            extract_field_classifications_static(obj, &var_decls, &imports, &resolved_path, visited, &mut classifications);
+            extract_field_classifications_static(
+                obj,
+                &var_decls,
+                &imports,
+                &resolved_path,
+                visited,
+                &mut classifications,
+            );
             return Some(classifications);
         }
     }
@@ -269,7 +278,14 @@ fn extract_field_classifications_static<'a>(
                 }
             }
             ObjectPropertyKind::SpreadProperty(spread) => {
-                resolve_spread_static(&spread.argument, var_decls, imports, file_path, visited, classifications);
+                resolve_spread_static(
+                    &spread.argument,
+                    var_decls,
+                    imports,
+                    file_path,
+                    visited,
+                    classifications,
+                );
             }
         }
     }
@@ -296,7 +312,14 @@ fn resolve_spread_static<'a>(
         // Check same-file variable
         if let Some(resolved) = var_decls.get(name) {
             if let Expression::ObjectExpression(obj) = resolved {
-                extract_field_classifications_static(obj, var_decls, imports, file_path, visited, classifications);
+                extract_field_classifications_static(
+                    obj,
+                    var_decls,
+                    imports,
+                    file_path,
+                    visited,
+                    classifications,
+                );
                 return;
             }
         }
@@ -362,7 +385,7 @@ impl<'a, 'b> Visit<'a> for ComplianceVisitor<'a, 'b> {
                             match key_name.as_deref() {
                                 Some("name") => {
                                     if let Expression::StringLiteral(s) = &obj_prop.value {
-                                        entity_name = s.value.to_string();
+                                        entity_name = s.value.display().to_string();
                                     }
                                 }
                                 Some("retention") => {
@@ -516,7 +539,7 @@ fn extract_retention(expr: &Expression) -> Option<RetentionInfo> {
                 Some("duration") => duration = extract_duration_value(&obj_prop.value),
                 Some("action") => {
                     if let Expression::StringLiteral(s) = &obj_prop.value {
-                        action = Some(s.value.to_string());
+                        action = Some(s.value.display().to_string());
                     }
                 }
                 _ => {}
@@ -535,7 +558,7 @@ fn extract_retention(expr: &Expression) -> Option<RetentionInfo> {
 
 fn extract_duration_value(expr: &Expression) -> Option<String> {
     match expr {
-        Expression::StringLiteral(s) => Some(s.value.to_string()),
+        Expression::StringLiteral(s) => Some(s.value.display().to_string()),
         Expression::CallExpression(call) => {
             if let Expression::StaticMemberExpression(member) = &call.callee {
                 let method = member.property.name.as_str();
@@ -564,7 +587,7 @@ fn find_compliance_call(expr: &Expression) -> Option<String> {
                 if member.property.name == "compliance" {
                     if let Some(arg) = call.arguments.first() {
                         if let Some(Expression::StringLiteral(s)) = arg.as_expression() {
-                            return Some(s.value.to_string());
+                            return Some(s.value.display().to_string());
                         }
                     }
                 }
@@ -624,7 +647,9 @@ fn extract_compliance_from_source_with_path(
     let allocator = Allocator::default();
 
     let ParserReturn {
-        program, errors, ..
+        program,
+        diagnostics: errors,
+        ..
     } = Parser::new(
         &allocator,
         source_code,
@@ -632,7 +657,7 @@ fn extract_compliance_from_source_with_path(
     )
     .parse();
 
-    if !errors.is_empty() {
+    if errors.has_errors() {
         log::debug!(
             "TypeScript parse errors during compliance scan: {:?}",
             errors
@@ -721,7 +746,10 @@ mod tests {
         assert_eq!(entities.len(), 1);
         assert_eq!(entities[0].entity_name, "User");
         assert_eq!(entities[0].field_classifications.get("id").unwrap(), "none");
-        assert_eq!(entities[0].field_classifications.get("email").unwrap(), "pii");
+        assert_eq!(
+            entities[0].field_classifications.get("email").unwrap(),
+            "pii"
+        );
         assert_eq!(entities[0].field_classifications.get("ssn").unwrap(), "phi");
     }
 
@@ -787,7 +815,10 @@ mod tests {
         "#;
         let entities = extract_compliance_from_source(source).unwrap();
         assert_eq!(entities[0].field_classifications.len(), 5);
-        assert_eq!(entities[0].field_classifications.get("cardNumber").unwrap(), "pci");
+        assert_eq!(
+            entities[0].field_classifications.get("cardNumber").unwrap(),
+            "pci"
+        );
     }
 
     #[test]
@@ -808,7 +839,14 @@ mod tests {
         let source = r#"
         export const S = defineComplianceEntity({ name: 'S', retention: { duration: RetentionDuration.months(6), action: 'delete' }, properties: { id: fp.uuid().primary().compliance('none') } });
         "#;
-        assert_eq!(extract_compliance_from_source(source).unwrap()[0].retention.as_ref().unwrap().duration, "P6M");
+        assert_eq!(
+            extract_compliance_from_source(source).unwrap()[0]
+                .retention
+                .as_ref()
+                .unwrap()
+                .duration,
+            "P6M"
+        );
     }
 
     #[test]
@@ -816,7 +854,14 @@ mod tests {
         let source = r#"
         export const T = defineComplianceEntity({ name: 'T', retention: { duration: RetentionDuration.days(30), action: 'delete' }, properties: { id: fp.uuid().primary().compliance('none') } });
         "#;
-        assert_eq!(extract_compliance_from_source(source).unwrap()[0].retention.as_ref().unwrap().duration, "P30D");
+        assert_eq!(
+            extract_compliance_from_source(source).unwrap()[0]
+                .retention
+                .as_ref()
+                .unwrap()
+                .duration,
+            "P30D"
+        );
     }
 
     #[test]
@@ -843,8 +888,17 @@ mod tests {
         let entities = extract_compliance_from_source(source).unwrap();
         assert_eq!(entities[0].field_classifications.len(), 5); // 4 base + 1 custom
         assert_eq!(entities[0].field_classifications.get("id").unwrap(), "none");
-        assert_eq!(entities[0].field_classifications.get("createdAt").unwrap(), "none");
-        assert_eq!(entities[0].field_classifications.get("customField").unwrap(), "pii");
+        assert_eq!(
+            entities[0].field_classifications.get("createdAt").unwrap(),
+            "none"
+        );
+        assert_eq!(
+            entities[0]
+                .field_classifications
+                .get("customField")
+                .unwrap(),
+            "pii"
+        );
     }
 
     #[test]
@@ -856,8 +910,14 @@ mod tests {
         });
         "#;
         let entities = extract_compliance_from_source(source).unwrap();
-        assert_eq!(entities[0].field_classifications.get("_id").unwrap(), "none");
-        assert_eq!(entities[0].field_classifications.get("data").unwrap(), "phi");
+        assert_eq!(
+            entities[0].field_classifications.get("_id").unwrap(),
+            "none"
+        );
+        assert_eq!(
+            entities[0].field_classifications.get("data").unwrap(),
+            "phi"
+        );
     }
 
     #[test]
@@ -873,8 +933,14 @@ mod tests {
         });
         "#;
         let entities = extract_compliance_from_source(source).unwrap();
-        assert_eq!(entities[0].field_classifications.get("orgId").unwrap(), "none");
-        assert_eq!(entities[0].field_classifications.get("secret").unwrap(), "pci");
+        assert_eq!(
+            entities[0].field_classifications.get("orgId").unwrap(),
+            "none"
+        );
+        assert_eq!(
+            entities[0].field_classifications.get("secret").unwrap(),
+            "pci"
+        );
     }
 
     #[test]
@@ -884,7 +950,10 @@ mod tests {
         export const User = defineComplianceEntity({ name: 'User', properties: userProps });
         "#;
         let entities = extract_compliance_from_source(source).unwrap();
-        assert_eq!(entities[0].field_classifications.get("email").unwrap(), "pii");
+        assert_eq!(
+            entities[0].field_classifications.get("email").unwrap(),
+            "pii"
+        );
     }
 
     #[test]
@@ -904,7 +973,10 @@ mod tests {
         "#;
         let entities = extract_compliance_from_source(source).unwrap();
         assert_eq!(entities[0].field_classifications.len(), 7); // 4 base + 3 scalar (relation excluded)
-        assert_eq!(entities[0].field_classifications.get("name").unwrap(), "pii");
+        assert_eq!(
+            entities[0].field_classifications.get("name").unwrap(),
+            "pii"
+        );
         assert_eq!(entities[0].retention.as_ref().unwrap().duration, "P3Y");
     }
 
@@ -913,6 +985,7 @@ mod tests {
     #[test]
     fn test_spread_imported_from_relative_file() {
         use std::fs::{create_dir_all, write};
+
         use tempfile::TempDir;
 
         let temp_dir = TempDir::new().unwrap();
@@ -966,6 +1039,7 @@ mod tests {
     #[test]
     fn test_spread_imported_via_index_reexport() {
         use std::fs::{create_dir_all, write};
+
         use tempfile::TempDir;
 
         let temp_dir = TempDir::new().unwrap();
@@ -1011,9 +1085,18 @@ mod tests {
 
         let entities = scan_entity_compliance(temp_dir.path()).unwrap();
         assert_eq!(entities.len(), 1);
-        assert_eq!(entities[0].field_classifications.get("tenantId").unwrap(), "none");
-        assert_eq!(entities[0].field_classifications.get("isActive").unwrap(), "none");
-        assert_eq!(entities[0].field_classifications.get("value").unwrap(), "pci");
+        assert_eq!(
+            entities[0].field_classifications.get("tenantId").unwrap(),
+            "none"
+        );
+        assert_eq!(
+            entities[0].field_classifications.get("isActive").unwrap(),
+            "none"
+        );
+        assert_eq!(
+            entities[0].field_classifications.get("value").unwrap(),
+            "pci"
+        );
     }
 
     // ---- File/project scanning tests ----
@@ -1021,6 +1104,7 @@ mod tests {
     #[test]
     fn test_scan_entity_compliance_from_files() {
         use std::fs::{create_dir_all, write};
+
         use tempfile::TempDir;
 
         let temp_dir = TempDir::new().unwrap();
@@ -1037,7 +1121,11 @@ mod tests {
             "export const Payment = defineComplianceEntity({ name: 'Payment', retention: { duration: 'P5Y', action: 'anonymize' }, properties: { id: fp.uuid().primary().compliance('none'), cardNumber: fp.string().nullable().compliance('pci') } });",
         ).unwrap();
 
-        write(entities_dir.join("index.ts"), "export * from './user.entity';").unwrap();
+        write(
+            entities_dir.join("index.ts"),
+            "export * from './user.entity';",
+        )
+        .unwrap();
         write(entities_dir.join("helpers.ts"), "export function x() {}").unwrap();
 
         let entities = scan_entity_compliance(temp_dir.path()).unwrap();
@@ -1046,25 +1134,37 @@ mod tests {
         let user = entities.iter().find(|e| e.entity_name == "User").unwrap();
         assert_eq!(user.field_classifications.get("email").unwrap(), "pii");
 
-        let payment = entities.iter().find(|e| e.entity_name == "Payment").unwrap();
+        let payment = entities
+            .iter()
+            .find(|e| e.entity_name == "Payment")
+            .unwrap();
         assert_eq!(payment.retention.as_ref().unwrap().duration, "P5Y");
     }
 
     #[test]
     fn test_scan_entity_compliance_no_entities_dir() {
         use tempfile::TempDir;
-        assert_eq!(scan_entity_compliance(TempDir::new().unwrap().path()).unwrap().len(), 0);
+        assert_eq!(
+            scan_entity_compliance(TempDir::new().unwrap().path())
+                .unwrap()
+                .len(),
+            0
+        );
     }
 
     #[test]
     fn test_scan_all_compliance_multi_project() {
         use std::fs::{create_dir_all, write};
+
         use tempfile::TempDir;
 
         let temp_dir = TempDir::new().unwrap();
         let modules_path = temp_dir.path();
 
-        let a_entities = modules_path.join("svc-a").join("persistence").join("entities");
+        let a_entities = modules_path
+            .join("svc-a")
+            .join("persistence")
+            .join("entities");
         create_dir_all(&a_entities).unwrap();
         write(
             a_entities.join("patient.entity.ts"),
@@ -1077,7 +1177,10 @@ mod tests {
             "#,
         ).unwrap();
 
-        let b_entities = modules_path.join("svc-b").join("persistence").join("entities");
+        let b_entities = modules_path
+            .join("svc-b")
+            .join("persistence")
+            .join("entities");
         create_dir_all(&b_entities).unwrap();
         write(
             b_entities.join("order.entity.ts"),

@@ -5,7 +5,7 @@ import {
   ParamsDictionary
 } from '@forklaunch/core/http';
 import { AnySchemaValidator } from '@forklaunch/validator';
-import { NextFunction } from 'express';
+import { NextFunction, type Response } from 'express';
 import { ParsedQs } from 'qs';
 import { MiddlewareRequest, MiddlewareResponse } from '../types/express.types';
 
@@ -50,7 +50,8 @@ export function enrichResponseTransmission<SV extends AnySchemaValidator>(
 ) {
   const originalSend = res.send;
   const originalJson = res.json;
-  const originalSetHeader = res.setHeader;
+  // Capture the underlying Express setter, which accepts repeated header values.
+  const originalSetHeader = res.setHeader as Response['setHeader'];
 
   /**
    * Intercepts and enhances the JSON response method.
@@ -140,12 +141,13 @@ export function enrichResponseTransmission<SV extends AnySchemaValidator>(
    * ```
    */
   res.setHeader = function (name: string, value: unknown | unknown[]) {
+    let stringifiedValue;
     if (Array.isArray(value)) {
-      const mappedArray = value.map((v) => toPlainString(v));
-      // @ts-expect-error - Node.js setHeader accepts string[] but Express types only allow string
-      return originalSetHeader.call(this, name, mappedArray);
+      stringifiedValue = value.map((v) => toPlainString(v));
+    } else {
+      stringifiedValue = toPlainString(value);
     }
-    return originalSetHeader.call(this, name, toPlainString(value));
+    return originalSetHeader.call(this, name, stringifiedValue);
   };
 
   res.sseEmitter = async function (

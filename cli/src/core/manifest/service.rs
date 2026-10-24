@@ -1,7 +1,7 @@
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use convert_case::{Case, Casing};
 use ramhorns::Content;
 use serde::{Deserialize, Serialize};
-use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 use super::{
     InitializableManifestConfig, InitializableManifestConfigMetadata, ProjectManifestConfig,
@@ -15,7 +15,7 @@ use crate::{
 /// Generate a random base64-encoded secret of specified length
 pub(crate) fn generate_random_secret(byte_length: usize) -> String {
     let mut bytes = vec![0u8; byte_length];
-    getrandom::getrandom(&mut bytes).expect("Failed to generate random bytes");
+    getrandom::fill(&mut bytes).expect("Failed to generate random bytes");
     STANDARD.encode(&bytes)
 }
 
@@ -28,6 +28,8 @@ config_struct!(
         pub(crate) service_path: String,
         #[serde(skip_serializing, skip_deserializing)]
         pub(crate) camel_case_name: String,
+        // Derived from the project name; never a manifest key.
+        #[serde(skip_serializing, skip_deserializing)]
         pub(crate) snake_case_name: String,
         #[serde(skip_serializing, skip_deserializing)]
         pub(crate) pascal_case_name: String,

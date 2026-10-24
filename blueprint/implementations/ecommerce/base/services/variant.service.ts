@@ -115,7 +115,7 @@ export class BaseVariantService<
       ...(args[0] instanceof EntityManager ? args.slice(1) : args)
     );
     await (em ?? this.em).transactional(async (innerEm) => {
-      await innerEm.persist(variant);
+      innerEm.persist(variant);
     });
     return this.mappers.VariantMapper.toDto(variant);
   }

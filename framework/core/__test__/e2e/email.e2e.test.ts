@@ -53,6 +53,8 @@ async function messages(to?: string) {
     to: string[];
     subject: string;
     configurationSet: string;
+    listUnsubscribe?: { url?: string; mailto?: string; oneClick?: boolean };
+    headers?: Record<string, string>;
   }[];
 }
 
@@ -181,6 +183,82 @@ describe('email (e2e)', () => {
     expect(answer.status).toBe(400);
   });
 
+  it('carries one-click unsubscribe to the gateway, which records the headers', async () => {
+    const email = createEmailClient(h.clientOptions);
+    const url = 'https://members.example.com/unsubscribe?token=abc';
+    await email.send({
+      to: 'pat@example.com',
+      subject: 'Your weekly recap',
+      html: '<p>Hi</p>',
+      listUnsubscribe: {
+        url,
+        mailto: 'unsubscribe@example.com',
+        oneClick: true
+      }
+    });
+    const [recorded] = await messages('pat@example.com');
+    expect(recorded.listUnsubscribe).toEqual({
+      url,
+      mailto: 'unsubscribe@example.com',
+      oneClick: true
+    });
+    expect(recorded.headers).toEqual({
+      'List-Unsubscribe': `<${url}>, <mailto:unsubscribe@example.com>`,
+      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+    });
+
+    // Without it, nothing is added.
+    await email.send({ to: 'lee@example.com', subject: 'Hi', text: 'x' });
+    const [plain] = await messages('lee@example.com');
+    expect(plain).not.toHaveProperty('listUnsubscribe');
+    expect(plain).not.toHaveProperty('headers');
+  });
+
+  it('refuses a bad listUnsubscribe before sending, and the mock refuses it too', async () => {
+    const email = createEmailClient(h.clientOptions);
+    for (const listUnsubscribe of [
+      { url: 'http://members.example.com/unsubscribe' },
+      { url: 'https://members.example.com/u\r\nBcc: x@example.com' },
+      { url: 'https://members.example.com/u>,<https://evil.test' },
+      { mailto: 'not-an-address' }
+    ]) {
+      const error = await email
+        .send({
+          to: 'a@example.com',
+          subject: 'Hi',
+          text: 'x',
+          listUnsubscribe
+        })
+        .catch((e) => e);
+      expect(error).toBeInstanceOf(EmailRequestError);
+      expect(error.status).toBe(400);
+      expect(error.message).toContain('listUnsubscribe');
+    }
+    expect(await h.requests('email')).toEqual([]);
+
+    // A client that skips validation meets the same rules at the gateway.
+    const { createInstanceGatewayTransport } =
+      await import('../../src/http/instanceGateway');
+    const raw = createInstanceGatewayTransport(h.clientOptions);
+    for (const listUnsubscribe of [
+      { mailto: 'u@example.com', oneClick: true },
+      { url: 'https://example.com/u', headers: 'X-Injected: 1' },
+      { url: 'https://example.com/u\r\nX-Injected: 1' },
+      {}
+    ]) {
+      const answer = await raw
+        .request('POST', '/email/send', {
+          to: 'a@example.com',
+          subject: 'Hi',
+          text: 'x',
+          listUnsubscribe
+        })
+        .catch((e) => e);
+      expect(answer.status).toBe(400);
+    }
+    expect(await messages()).toEqual([]);
+  });
+
   it('refuses a wrong key with 401, and refuses to exist outside managed mode', async () => {
     const wrong = createEmailClient({
       ...h.clientOptions,
@@ -198,7 +276,9 @@ describe('email (e2e)', () => {
     delete process.env.INSTANCE_ID;
     delete process.env.INSTANCE_HMAC_KEY;
     try {
-      expect(() => createEmailClient()).toThrow(/managed instances/);
+      expect(() => createEmailClient()).toThrow(
+        /INSTANCE_HMAC_KEY must be set/
+      );
     } finally {
       process.env = saved;
     }

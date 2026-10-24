@@ -6,8 +6,8 @@ import {
 } from './instanceGateway';
 
 /**
- * Client for platform-held voice calls (Amazon Connect), used from inside a
- * managed instance.
+ * Client for platform-held voice calls (Amazon Connect) through the managed
+ * gateway, from a managed instance or any app deployed on ForkLaunch.
  *
  * The instance never holds an AWS credential, a Connect instance id or a
  * contact-flow ARN. It asks the platform to place a call with a FLOW NAME from
@@ -154,7 +154,7 @@ export function voiceRequestProblem(
 export class VoiceClient {
   private readonly transport: InstanceGatewayTransport;
 
-  /** Throws when the process is not a managed instance (see instanceGatewaySettings). */
+  /** Throws without the managed gateway settings (see instanceGatewaySettings). */
   constructor(options: VoiceClientOptions = {}) {
     this.transport = createInstanceGatewayTransport(
       options,
@@ -214,7 +214,7 @@ function callPath(callId: string): string {
   return `/voice/calls/${callId}`;
 }
 
-/** A voice client for this managed instance (settings from the environment). */
+/** A voice client through the managed gateway (settings from the environment). */
 export function createVoiceClient(
   options: VoiceClientOptions = {}
 ): VoiceClient {

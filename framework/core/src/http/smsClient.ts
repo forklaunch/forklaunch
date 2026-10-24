@@ -8,8 +8,8 @@ import {
 } from './instanceGateway';
 
 /**
- * Client for platform-held SMS (AWS End User Messaging SMS), used from inside
- * a managed instance.
+ * Client for platform-held SMS (AWS End User Messaging SMS) through the
+ * managed gateway, from a managed instance or any app deployed on ForkLaunch.
  *
  * The instance never holds an AWS credential or a phone number. It signs each
  * send with its own HMAC key; the platform checks the instance's monthly
@@ -184,8 +184,9 @@ export function validateSmsSend(request: SmsSendRequest): void {
 }
 
 const NOT_MANAGED =
-  'SMS is platform-held: this service must run as a managed instance ' +
-  '(PLATFORM_GATEWAY_URL, INSTANCE_ID and INSTANCE_HMAC_KEY set). ' +
+  'SMS goes through the ForkLaunch managed gateway: PLATFORM_GATEWAY_URL, ' +
+  'INSTANCE_ID and INSTANCE_HMAC_KEY must be set (the platform sets them for a ' +
+  'managed instance, and at deploy for a component that declares sms). ' +
   'Locally, run the gateway mock (npx -p @forklaunch/core forklaunch-gateway-mock) ' +
   'and point those variables at it; do not add a Twilio or AWS SDK.';
 

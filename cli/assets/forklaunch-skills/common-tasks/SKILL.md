@@ -642,6 +642,27 @@ const res = await platformApi.service.get(...)
 if (res.code !== 200) return null  // handle error
 ```
 
+### MongoDB service connects locally but not once deployed
+
+Deployed, MongoDB is Amazon DocumentDB, which needs TLS and
+`retryWrites=false`; only the platform's `DB_URL` has them. If the service's
+`mikro-orm.config.ts` builds `clientUrl` from a bare `mongodb://` template
+string (generated before the `DB_URL` change), make it prefer `DB_URL`:
+
+```ts
+// before
+  clientUrl: `mongodb://${validConfigInjector.resolve(
+// after
+  clientUrl: getEnvVar('DB_URL') || `mongodb://${validConfigInjector.resolve(
+```
+
+That line is the required fix (the platform's `DB_URL` names the database in
+its path). Optionally add `dbName: validConfigInjector.resolve(tokens.DB_NAME),`
+after `clientUrl`, as new services have. Locally nothing changes (no `DB_URL`, so the
+docker-compose URL is built as before). SQL engines are unaffected: they use
+`DB_HOST`/`DB_PORT`/`DB_USER`/`DB_PASSWORD`/`DB_NAME`. See
+`/development-guidelines` (*How each engine connects*).
+
 ### Editing generated `.env.local` / `.env.test` files
 
 Generated env files ship with **no trailing newline**. A blind append (`printf 'KEY=value\n' >> .env.local`, or a naive string-append edit) lands directly on the last existing line and silently merges the two — e.g. `CORS_ORIGINS="..."JWKS_PUBLIC_KEY_URL=...` — which then fails validation with a confusing "Required" error for a variable that visually looks present. Always read the file, ensure it ends with a newline (or append a leading `\n`), then write — don't blind-append with `>>`.

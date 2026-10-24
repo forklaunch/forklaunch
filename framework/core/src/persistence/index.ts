@@ -47,6 +47,7 @@ export {
   CompliantField,
   CompliantIndexType,
   CompliantQueryError,
+  TenantMismatchError,
   CompliantType,
   LegacyCiphertextError,
   deanon,
@@ -69,6 +70,11 @@ export { defineComplianceEntity } from './defineComplianceEntity';
 
 // Native query blocking (prevents bypassing EncryptedType via raw queries)
 export { wrapEmWithNativeQueryBlocking } from './complianceEventSubscriber';
+export {
+  onComplianceChange,
+  type ComplianceChangeEvent,
+  type ComplianceChangeListener
+} from './complianceChanges';
 
 // Encrypted custom type (transparent field encryption at the MikroORM data layer)
 export {

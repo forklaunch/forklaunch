@@ -1,23 +1,25 @@
+import { readModelStream } from './modelStream';
 import {
   createInstanceGatewayTransport,
   InstanceGatewayRequestError
 } from './instanceGateway';
 
 /**
- * Client for the ForkLaunch model gateway, used from inside a managed
- * instance.
+ * Client for the ForkLaunch model gateway (part of the managed gateway), for
+ * a managed instance or any app deployed on ForkLaunch.
  *
- * A managed instance calls platform-hosted AI models (Azure AI Foundry)
- * without holding a provider key: each request is signed with the
- * instance's own HMAC key, and the platform enforces the product's model
- * allowlist, monthly token budget and rate limit. For a HIPAA product the
- * platform only offers models covered by its BAA.
+ * The service calls platform-hosted AI models (Azure AI Foundry) without
+ * holding a provider key: each request is signed with its own HMAC key, and
+ * the platform enforces the model allowlist, monthly token budget and rate
+ * limit. For a HIPAA product the platform only offers models covered by its
+ * BAA.
  *
- * The platform injects everything this needs into a hosted instance:
- * `PLATFORM_GATEWAY_URL` (the platform's public base), `INSTANCE_ID` and
- * `INSTANCE_HMAC_KEY`. Their absence means the instance is not hosted in
- * managed mode, and the client refuses to be created rather than failing on
- * the first call.
+ * The platform injects everything this needs: `PLATFORM_GATEWAY_URL` (the
+ * platform's public base), `INSTANCE_ID` and `INSTANCE_HMAC_KEY`, into a
+ * managed instance and, at deploy, into a component that declares models
+ * (`forklaunch infra add <service> models`, which also points them at the
+ * local gateway mock). Without them the client refuses to be created rather
+ * than failing on the first call.
  *
  * @example
  * const models = createModelGatewayClient();
@@ -128,7 +130,10 @@ export interface ModelGatewayClient {
 export function createModelGatewayClient(
   options: ModelGatewayClientOptions = {}
 ): ModelGatewayClient {
-  const transport = createInstanceGatewayTransport(options, 'The model gateway');
+  const transport = createInstanceGatewayTransport(
+    options,
+    'The model gateway'
+  );
 
   async function send(
     method: 'GET' | 'POST',
@@ -171,48 +176,9 @@ export function createModelGatewayClient(
             request as unknown as Record<string, unknown>,
             streamOptions.signal
           );
-          if (!response.body) return;
-          for await (const data of sseData(response.body)) {
-            if (data === '[DONE]') return;
-            try {
-              yield JSON.parse(data) as GatewayChatChunk;
-            } catch {
-              // not a chunk; skip it
-            }
-          }
+          yield* readModelStream(response);
         }
       }
     }
   };
-}
-
-/** The `data:` payloads of a server-sent-event stream, in order. */
-async function* sseData(
-  stream: ReadableStream<Uint8Array>
-): AsyncGenerator<string> {
-  const decoder = new TextDecoder();
-  let buffer = '';
-  const reader = stream.getReader();
-  try {
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let boundary: number;
-      while ((boundary = buffer.search(/\r?\n\r?\n/)) !== -1) {
-        const event = buffer.slice(0, boundary);
-        buffer = buffer.slice(boundary).replace(/^\r?\n\r?\n/, '');
-        const data = event
-          .split(/\r?\n/)
-          .filter((line) => line.startsWith('data:'))
-          .map((line) => line.slice(5).trimStart())
-          .join('\n');
-        if (data) yield data;
-      }
-    }
-    const tail = buffer.trim();
-    if (tail.startsWith('data:')) yield tail.slice(5).trimStart();
-  } finally {
-    reader.releaseLock();
-  }
 }

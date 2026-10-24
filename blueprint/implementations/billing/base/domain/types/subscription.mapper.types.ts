@@ -9,6 +9,8 @@ export type SubscriptionMappers<
   MapperDomains extends BaseSubscriptionDtos<PartyType, BillingProviderType>
 > = {
   SubscriptionMapper: {
+    /** Trusted persisted party discriminators for local subscription lookups. */
+    partyTypes?: Readonly<{ user: string; organization: string }>;
     entity: MapperEntities['SubscriptionMapper'];
     toDto: (
       entity: InferEntity<MapperEntities['SubscriptionMapper']>

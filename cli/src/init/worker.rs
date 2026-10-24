@@ -13,6 +13,7 @@ use serde_json::to_string_pretty;
 use termcolor::{ColorChoice, StandardStream, WriteColor};
 use toml::from_str;
 
+use super::rust_project;
 use crate::{
     CliCommand,
     constants::{
@@ -39,8 +40,9 @@ use crate::{
         manifest::{
             ApplicationInitializationMetadata, InitializableManifestConfig,
             InitializableManifestConfigMetadata, ManifestData, ProjectMetadata, ProjectType,
-            ResourceInventory, add_project_definition_to_manifest, next_available_redis_partition,
-            application::ApplicationManifestData, worker::WorkerManifestData,
+            ResourceInventory, add_project_definition_to_manifest,
+            application::ApplicationManifestData, next_available_redis_partition,
+            worker::WorkerManifestData,
         },
         name::validate_name,
         package_json::{
@@ -51,15 +53,15 @@ use crate::{
                 COMMON_VERSION, CORE_VERSION, DOTENV_VERSION, ESLINT_VERSION, EXPRESS_VERSION,
                 HYPER_EXPRESS_VERSION, UWEBSOCKETS_VERSION, INFRASTRUCTURE_REDIS_VERSION, INTERNAL_VERSION,
                 IOREDIS_VERSION, MIKRO_ORM_CLI_VERSION, MIKRO_ORM_CORE_VERSION,
-                MIKRO_ORM_DATABASE_VERSION, MIKRO_ORM_MIGRATIONS_VERSION,
-                MIKRO_ORM_SEEDER_VERSION, OXLINT_VERSION,
-                PINO_VERSION, PRETTIER_VERSION, PROJECT_BUILD_SCRIPT, PROJECT_DOCS_SCRIPT,
-                PROJECT_SEED_SCRIPT, SQLITE3_VERSION, TESTING_VERSION, TSX_VERSION,
-                TYPEBOX_VERSION, TYPEDOC_VERSION, TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION,
-                TYPES_EXPRESS_VERSION, TYPES_JEST_VERSION, TYPES_QS_VERSION, TYPES_UUID_VERSION,
-                TYPESCRIPT_ESLINT_VERSION, UNIVERSAL_SDK_VERSION, UUID_VERSION, VALIDATOR_VERSION,
-                WORKER_BULLMQ_VERSION, WORKER_DATABASE_VERSION, WORKER_INTERFACES_VERSION,
-                WORKER_KAFKA_VERSION, WORKER_REDIS_VERSION, ZOD_VERSION, project_clean_script,
+                MIKRO_ORM_DATABASE_VERSION, MIKRO_ORM_MIGRATIONS_VERSION, MIKRO_ORM_SEEDER_VERSION,
+                OXLINT_VERSION, OXLINT_TSGOLINT_VERSION, PINO_VERSION, PRETTIER_VERSION, PROJECT_BUILD_SCRIPT,
+                PROJECT_DOCS_SCRIPT, PROJECT_SEED_SCRIPT, SQLITE3_VERSION, TESTING_VERSION,
+                TSX_VERSION, TYPEBOX_VERSION, TYPEDOC_VERSION,
+                TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION, TYPES_EXPRESS_VERSION, TYPES_JEST_VERSION,
+                TYPES_QS_VERSION, TYPES_UUID_VERSION, TYPESCRIPT_ESLINT_VERSION,
+                UNIVERSAL_SDK_VERSION, UUID_VERSION, VALIDATOR_VERSION, WORKER_BULLMQ_VERSION,
+                WORKER_DATABASE_VERSION, WORKER_INTERFACES_VERSION, WORKER_KAFKA_VERSION,
+                WORKER_REDIS_VERSION, ZOD_VERSION, project_clean_script,
                 project_dev_local_worker_script, project_dev_server_script,
                 project_dev_worker_client_script, project_format_script, project_lint_fix_script,
                 project_lint_script, project_migrate_script, project_start_server_script,
@@ -117,6 +119,7 @@ fn generate_basic_worker(
             "seeder.ts".to_string(),
             "compliance.controller.ts".to_string(),
             "compliance.routes.ts".to_string(),
+            "compliance.contract.ts".to_string(),
             "enforce-retention.ts".to_string(),
         ]
     } else {
@@ -125,7 +128,7 @@ fn generate_basic_worker(
     // compliance endpoints authenticate via IAM-issued JWTs
     // (JWKS_PUBLIC_KEY_URL is only registered when IAM is configured)
     if !manifest_data.is_iam_configured {
-        for file in ["compliance.controller.ts", "compliance.routes.ts"] {
+        for file in ["compliance.controller.ts", "compliance.routes.ts", "compliance.contract.ts"] {
             if !ignore_files.iter().any(|f| f == file) {
                 ignore_files.push(file.to_string());
             }
@@ -164,7 +167,8 @@ fn generate_basic_worker(
         None,
     )?);
     rendered_templates.extend(
-        generate_project_tsconfig(&output_path, Some(&["express", "qs"])).with_context(|| ERROR_FAILED_TO_CREATE_TSCONFIG)?,
+        generate_project_tsconfig(&output_path, Some(&["express", "qs"]))
+            .with_context(|| ERROR_FAILED_TO_CREATE_TSCONFIG)?,
     );
     rendered_templates.extend(
         generate_gitignore(&output_path).with_context(|| ERROR_FAILED_TO_CREATE_GITIGNORE)?,
@@ -267,7 +271,7 @@ fn add_worker_to_artifacts(
         Some(ProjectMetadata {
             r#type: Some(manifest_data.worker_type_lowercase.clone()),
             hosting_type: None,
-            privileged: None,
+            ..ProjectMetadata::default()
         }),
     )
     .with_context(|| ERROR_FAILED_TO_ADD_PROJECT_METADATA_TO_MANIFEST)?;
@@ -602,7 +606,7 @@ pub(crate) fn generate_worker_package_json(
                 },
                 pino: Some(PINO_VERSION.to_string()),
                 ioredis: Some(IOREDIS_VERSION.to_string()),
-                additional_deps: HashMap::new(),
+                additional_deps: indexmap::IndexMap::new(),
             }
         }),
         dev_dependencies: Some(if let Some(dev_dependencies) = dev_dependencies_override {
@@ -635,6 +639,11 @@ pub(crate) fn generate_worker_package_json(
                 } else {
                     None
                 },
+                oxlint_tsgolint: if manifest_data.is_oxlint {
+                    Some(OXLINT_TSGOLINT_VERSION.to_string())
+                } else {
+                    None
+                },
                 prettier: if manifest_data.is_prettier {
                     Some(PRETTIER_VERSION.to_string())
                 } else {
@@ -653,7 +662,7 @@ pub(crate) fn generate_worker_package_json(
                 types_ioredis: None,
                 pino: None,
                 ioredis: Some(IOREDIS_VERSION.to_string()),
-                additional_deps: HashMap::new(),
+                additional_deps: indexmap::IndexMap::new(),
             }
         }),
         mikro_orm: Some(ProjectMikroOrm {
@@ -684,6 +693,15 @@ impl CliCommand for WorkerCommand {
                     .long("path")
                     .help("The application path to initialize the worker in"),
             )
+            .arg(
+                Arg::new("language")
+                    .long("language")
+                    .help("Project language to generate")
+                    .value_parser(rust_project::PROJECT_LANGUAGE_VARIANTS)
+                    .default_value("typescript"),
+            )
+            .arg(Arg::new("consumer-only").long("consumer-only").action(ArgAction::SetTrue).help("Generate only the Rust worker consumer, without its producer HTTP/MCP service"))
+            .arg(Arg::new("worker-runtime").long("runtime").value_parser(["leased","apalis"]).help("Rust worker runtime; Apalis requires PostgreSQL"))
             .arg(
                 Arg::new("type")
                     .short('t')
@@ -720,11 +738,18 @@ impl CliCommand for WorkerCommand {
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
+        if matches.get_flag("consumer-only") && !rust_project::uses_rust_generation(matches) { anyhow::bail!("--consumer-only is available for Rust worker generation only"); }
+        if matches.contains_id("worker-runtime") && !rust_project::uses_rust_generation(matches) { anyhow::bail!("--runtime is available for Rust worker generation only"); }
+        if rust_project::uses_rust_generation(matches) {
+            return rust_project::generate_rust_worker(matches);
+        }
+
         let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
         let (app_root_path, _) = find_app_root_path(matches, RequiredLocation::Application)?;
         let manifest_path = app_root_path.join(".forklaunch").join("manifest.toml");
+        crate::init::rust_project::preflight_mixed_images(&app_root_path)?;
 
         let existing_manifest_data = from_str::<ApplicationManifestData>(
             &read_to_string(manifest_path).with_context(|| ERROR_FAILED_TO_READ_MANIFEST)?,
@@ -802,6 +827,13 @@ impl CliCommand for WorkerCommand {
 
         let mut manifest_data = WorkerManifestData {
             // Common fields from ApplicationManifestData
+            language: manifest_data.language.clone(),
+            application_language: manifest_data.application_language.clone(),
+            sdk_targets: manifest_data.sdk_targets.clone(),
+            cargo_workspace: manifest_data.cargo_workspace.clone(),
+            contract_artifact_path: manifest_data.contract_artifact_path.clone(),
+            openapi_path: manifest_data.openapi_path.clone(),
+            asyncapi_path: manifest_data.asyncapi_path.clone(),
             id: manifest_data.id.clone(),
             app_name: manifest_data.app_name.clone(),
             modules_path: manifest_data.modules_path.clone(),
@@ -867,6 +899,7 @@ impl CliCommand for WorkerCommand {
             is_database_worker: r#type == WorkerType::Database,
             platform_application_id: manifest_data.platform_application_id.clone(),
             platform_organization_id: manifest_data.platform_organization_id.clone(),
+            framework: manifest_data.framework.clone(),
             compliance: manifest_data.compliance.clone(),
 
             is_postgres: if let Some(database) = &database {
@@ -922,7 +955,10 @@ impl CliCommand for WorkerCommand {
                 &r#type,
                 &worker_name.to_case(Case::Pascal),
             ),
-            worker_producer_factory: get_worker_producer_factory(&r#type),
+            worker_producer_factory: get_worker_producer_factory(
+                &r#type,
+                &worker_name.to_case(Case::Pascal),
+            ),
 
             is_iam_configured: manifest_data.projects.iter().any(|project_entry| {
                 if project_entry.name == "iam" {
@@ -947,7 +983,9 @@ impl CliCommand for WorkerCommand {
             is_type_needed: true,
             with_mappers: matches.get_flag("mappers"),
 
-            redis_partition: if r#type == WorkerType::BullMQCache || r#type == WorkerType::RedisCache {
+            redis_partition: if r#type == WorkerType::BullMQCache
+                || r#type == WorkerType::RedisCache
+            {
                 next_available_redis_partition(&manifest_data.projects)
             } else {
                 0
@@ -976,6 +1014,13 @@ impl CliCommand for WorkerCommand {
         .with_context(|| "Failed to create worker")?;
 
         if !dryrun {
+            crate::sdk::typescript_build::prepare_default_service(
+                &app_root_path,
+                &worker_name,
+                &manifest_data.runtime,
+                manifest_data.is_iam_configured,
+            )?;
+            crate::init::rust_project::refresh_mixed_images(&app_root_path)?;
             log_ok!(stdout, "{} initialized successfully!", worker_name);
         }
 

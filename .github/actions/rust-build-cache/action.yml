@@ -1,0 +1,195 @@
+name: Rust build cache
+description: >-
+  Shared compiler cache for the Rust builds in CI. Installs sccache with its
+  local disk store, restores that store from the GitHub Actions cache for the
+  given family, and routes every later cargo invocation in the job through it,
+  including the ones test scripts run against scaffolded applications: they
+  inherit RUSTC_WRAPPER from the job environment. Jobs that should publish
+  what they compiled call ./.github/actions/rust-build-cache/save at the end.
+  Optionally restores (and saves) the Cargo registry and git checkouts with
+  Swatinem/rust-cache; no target directory is cached.
+#
+# Why a disk store saved as one cache entry, and not sccache's own GitHub
+# Actions backend: that backend uploads every compiled object as a separate
+# cache entry, and GitHub throttles cache uploads per repository. On the first
+# trial run 1,075 of 1,334 writes in a single job were rejected, with dozens
+# of jobs writing at once.
+inputs:
+  token:
+    description: Token that can list and download this repository's artifacts (actions:read).
+    default: ${{ github.token }}
+  family:
+    description: >-
+      Which compiler cache to restore. Jobs that compile the same workspace
+      with the same profile and features share a family. No family name may
+      be a prefix of another followed by '-' (restore matches by prefix).
+    required: true
+  fallback-family:
+    description: >-
+      Family to start from when this one has no store yet, for instance the
+      CLI's store for a job that also builds the CLI.
+    default: ''
+  stable-tmp:
+    description: >-
+      'true' makes mkdtemp in Python, Node and `mktemp -d` in shell scripts
+      pick deterministic names (<prefix>fl0000, fl0001, ...) for the rest of
+      the job. sccache keys include the working directory, so applications
+      the tests scaffold under random temporary directories never matched
+      between runs. See stable-tmp/sitecustomize.py. For Node, the job must
+      also set NODE_OPTIONS to the loader shown in e2e_tests.yml (GitHub
+      does not let a step export NODE_OPTIONS). It only pays off in a job
+      that saves its store: a job that only restores never keeps what it
+      compiled under the stable paths.
+    default: 'false'
+  free-disk:
+    description: >-
+      'true' first deletes preinstalled toolchains this repository never uses
+      (.NET, Android SDK, GHC, CodeQL bundle, Swift), freeing roughly 25 GB of
+      the root disk for jobs whose target directories run it out of space.
+    default: 'false'
+  # Every store is downloaded and uploaded once per job that uses it, so
+  # keep them to what the job needs.
+  size:
+    description: Upper bound sccache keeps the local store under (SCCACHE_CACHE_SIZE).
+    default: 1G
+  registry-cache:
+    description: "'restore' restores the shared Cargo registry cache, 'save' also saves it at the end of the job, 'off' skips it."
+    default: 'off'
+  registry-key:
+    description: Shared key for the Cargo registry cache. Jobs that resolve the same dependency graphs should share one.
+    default: cargo-home
+  workspaces:
+    description: Workspaces whose manifests and lock files key the registry cache (Swatinem/rust-cache syntax).
+    default: framework-rs
+runs:
+  using: composite
+  steps:
+    - name: Free disk space
+      if: inputs.free-disk == 'true'
+      shell: bash
+      run: |
+        df -h /
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+          /opt/hostedtoolcache/CodeQL /usr/share/swift
+        df -h /
+    - name: Install sccache
+      uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+      with:
+        version: v0.18.0
+    # sccache hashes every CARGO_* variable in rustc's environment, and the
+    # test scripts each pick their own CARGO_TARGET_DIR, so the same crate
+    # compiled by two scripts (or two jobs) never matched: the first trial run
+    # had 0 hits out of 714 in a Rust suite that restored a 1.2 GB store.
+    # rustc does not read the variable (cargo has already turned it into
+    # --out-dir, which sccache leaves out of the hash), and no crate in the
+    # graph reads it at compile time, so the wrapper drops it.
+    # An absolute path, not a bare name: a few test scripts run cargo with a
+    # reduced PATH, and the wrapper must still resolve there.
+    # CARGO_INCREMENTAL=0 because sccache cannot cache incremental builds.
+    # SCCACHE_IDLE_TIMEOUT=0 keeps one server for the whole job, so the stats
+    # cover every compilation and no step pays a server restart.
+    - name: Route cargo through sccache
+      shell: bash
+      env:
+        FAMILY: ${{ inputs.family }}
+        SIZE: ${{ inputs.size }}
+      run: |
+        # Named `sccache` so cc-rs still recognises it and routes the C
+        # compilers of -sys crates through the cache too.
+        mkdir -p "$RUNNER_TEMP/sccache-wrapper"
+        wrapper="$RUNNER_TEMP/sccache-wrapper/sccache"
+        printf '#!/bin/sh\nunset CARGO_TARGET_DIR CARGO_BUILD_TARGET_DIR\nexec "%s" "$@"\n' "$SCCACHE_PATH" > "$wrapper"
+        chmod +x "$wrapper"
+        # Keep the store off the root filesystem when the runner has its
+        # separate temporary disk: with a restored store next to large
+        # jobs' target directories, the framework job ran out of space.
+        dir="$HOME/.cache/sccache-ci"
+        if [ -d /mnt ] && sudo -n true 2>/dev/null && sudo mkdir -p /mnt/sccache-ci && sudo chown "$(id -u):$(id -g)" /mnt/sccache-ci; then
+          dir=/mnt/sccache-ci
+        fi
+        mkdir -p "$dir"
+        df -h / "$dir"
+        {
+          echo "SCCACHE_DIR=$dir"
+          echo "SCCACHE_CACHE_SIZE=$SIZE"
+          echo "SCCACHE_IDLE_TIMEOUT=0"
+          echo "RUSTC_WRAPPER=$wrapper"
+          echo "CARGO_INCREMENTAL=0"
+          echo "FORKLAUNCH_SCCACHE_FAMILY=$FAMILY"
+        } >> "$GITHUB_ENV"
+    - name: Deterministic temporary directories
+      if: inputs.stable-tmp == 'true'
+      shell: bash
+      env:
+        STABLE_TMP: ${{ github.action_path }}/stable-tmp
+      run: |
+        {
+          echo "FORKLAUNCH_STABLE_TMP=1"
+          echo "PYTHONPATH=$STABLE_TMP${PYTHONPATH:+:$PYTHONPATH}"
+          # GitHub refuses NODE_OPTIONS through GITHUB_ENV, so the job sets
+          # NODE_OPTIONS itself (see STABLE_TMP_NODE_OPTIONS in the
+          # workflows) to a no-op import that loads this file when set.
+          echo "FORKLAUNCH_STABLE_TMP_PRELOAD=$STABLE_TMP/preload.cjs"
+        } >> "$GITHUB_ENV"
+        echo "$STABLE_TMP/bin" >> "$GITHUB_PATH"
+    # The newest store of this family from a run of this repository on this
+    # branch, else on the default branch, else the fallback family's. Stores
+    # are workflow artifacts rather than Actions cache entries: the cache is
+    # capped at 10 GB per repository, which did not hold one store per job,
+    # and artifacts on a public repository are not.
+    - name: Find compiler cache
+      id: find
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        FAMILY: ${{ inputs.family }}
+        FALLBACK: ${{ inputs.fallback-family }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      run: |
+        branch="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+        for name in "$FAMILY" $FALLBACK; do
+          for from in "$branch" "$DEFAULT_BRANCH"; do
+            run=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=sccache-$name&per_page=100" --jq \
+              "[.artifacts[] | select(.expired == false
+                and .workflow_run.repository_id == $GITHUB_REPOSITORY_ID
+                and .workflow_run.head_repository_id == $GITHUB_REPOSITORY_ID
+                and .workflow_run.head_branch == \"$from\")] | sort_by(.created_at) | last | .workflow_run.id // empty" 2>/dev/null) || run=''
+            if [ -n "$run" ]; then
+              echo "Restoring compiler cache $name from run $run on $from"
+              { echo "name=sccache-$name"; echo "run=$run"; } >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+        done
+        echo "No compiler cache for $FAMILY yet; starting cold"
+    # The download action fetches in parallel chunks; `gh api .../zip` streamed
+    # a 1.9 GB store at about 4 MB/s, eight minutes per job.
+    - name: Download compiler cache
+      id: download
+      if: steps.find.outputs.run != ''
+      continue-on-error: true
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      with:
+        name: ${{ steps.find.outputs.name }}
+        run-id: ${{ steps.find.outputs.run }}
+        github-token: ${{ inputs.token }}
+        path: ${{ runner.temp }}/sccache-restore
+    - name: Unpack compiler cache
+      if: steps.download.outcome == 'success'
+      shell: bash
+      run: |
+        if tar -xf "$RUNNER_TEMP/sccache-restore/store.tar" -C "$SCCACHE_DIR"; then
+          du -sh "$SCCACHE_DIR"
+        else
+          echo "::warning::Could not unpack the compiler cache; starting cold"
+          find "$SCCACHE_DIR" -mindepth 1 -delete || true
+        fi
+        rm -rf "$RUNNER_TEMP/sccache-restore"
+    - name: Cache Cargo registry
+      if: inputs.registry-cache != 'off'
+      uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      with:
+        shared-key: ${{ inputs.registry-key }}
+        workspaces: ${{ inputs.workspaces }}
+        cache-targets: 'false'
+        save-if: ${{ inputs.registry-cache == 'save' }}

@@ -15,6 +15,7 @@ use anyhow::Result;
 use serde::Serialize;
 
 use crate::core::ast::infrastructure::compliance::scan_entity_compliance;
+use crate::core::static_analysis::route_analyzer;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -128,6 +129,14 @@ fn read_production_sources(project_path: &Path) -> String {
 /// `localChecks`, so a consumer can tell a check that ran and found nothing
 /// (a pass) from one this CLI version does not have.
 pub(crate) const LOCAL_CHECK_IDS: &[&str] = &[
+    // From `deps::scan` over the app's lockfiles (run beside these, not by run_local_checks).
+    "dependency-vulnerable",
+    "dependency-malicious",
+    "dependency-lockfile-missing",
+    "dependency-scan-incomplete",
+    "route-auth-missing",
+    "route-outside-framework",
+    "route-scan-incomplete",
     "encryptor-registration",
     "tenant-em-wiring",
     "better-auth-encryption-context",
@@ -1179,6 +1188,43 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
 
         let owns_persistence = project_path.join("persistence").is_dir();
 
+        // 0. Route protection, read from each route's contract. A non-public contract with no
+        //    auth method lets callers in without a credential; a route registered on the raw
+        //    application with an inline handler gets none of the framework's auth or validation.
+        let route_scan = route_analyzer::scan_routes(&project_path);
+        for file in &route_scan.unreadable {
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.clone(),
+                check: "route-scan-incomplete".to_string(),
+                subject: file.clone(),
+                message: "Could not be fully parsed, so routes declared in it may be missing from the route list. Fix the syntax error, or check this file's routes by hand.".to_string(),
+            });
+        }
+        for route in route_scan.routes {
+            let at = format!("{} {} ({}:{})", route.method, route.path, route.file, route.line);
+            if route.missing_auth() {
+                findings.push(LocalFinding {
+                    severity: Severity::Warning,
+                    project: project.clone(),
+                    check: "route-auth-missing".to_string(),
+                    subject: at,
+                    message: format!(
+                        "Declares access '{}' but no auth method, so the framework lets callers in without a credential. Add an auth block (e.g. auth: jwtAuth(ROLES)) or mark the route access: 'public' if it is meant to be open.",
+                        route.access.as_deref().unwrap_or("(none)")
+                    ),
+                });
+            } else if route.source == route_analyzer::RouteSource::OutsideFramework {
+                findings.push(LocalFinding {
+                    severity: Severity::Info,
+                    project: project.clone(),
+                    check: "route-outside-framework".to_string(),
+                    subject: at,
+                    message: "Registered on the raw application with an inline handler, so ForkLaunch's access levels, auth and validation do not apply. Confirm it is meant to be open, or declare it with handlers.* and a contract.".to_string(),
+                });
+            }
+        }
+
         // 1. Tenant-isolation wiring in every runtime entrypoint
         if owns_persistence {
             for entrypoint in ENTRYPOINTS {
@@ -1339,7 +1385,7 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
                         check: "ai-provider-direct".to_string(),
                         subject: providers.join(", "),
                         message: format!(
-                            "entities hold health data (phi) and this service calls an AI provider directly ({}) — route model calls through the ForkLaunch model gateway (createModelGatewayClient, BAA-covered models only) or confirm the provider has signed a BAA covering this use",
+                            "entities hold health data (phi) and this service calls an AI provider directly ({}) — run `forklaunch infra add <service> models` and call models through the injected ModelGatewayClient (the managed gateway offers HIPAA products only BAA-covered models), or confirm the provider has signed a BAA covering this use",
                             providers.join(", ")
                         ),
                     });
@@ -1560,9 +1606,25 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
         let sources = read_production_sources(&project_path);
         let registrations =
             fs::read_to_string(project_path.join("registrations.ts")).unwrap_or_default();
-        let wired = registrations.contains("S3ObjectStore");
+        // A Rust crate holds what `infra add` wrote in its own sources: the
+        // object-store factory and the capability client factories.
+        let rust_root = rust_source_root(&project_path);
+        let wired = match &rust_root {
+            Some(root) => root.join("infrastructure/s3.rs").is_file(),
+            None => registrations.contains("S3ObjectStore"),
+        };
+        let rust_capabilities = rust_root
+            .as_ref()
+            .and_then(|root| fs::read_to_string(root.join("capabilities/mod.rs")).ok())
+            .unwrap_or_default();
         if let Some(declared_in) = declared.as_ref().and_then(|d| d.get(&project)) {
             let message = match (*declared_in, wired) {
+                (true, false) if rust_root.is_some() => Some(
+                    "the manifest declares an object store but the crate has no infrastructure/s3.rs factory — run `forklaunch infra add <service> object-store`",
+                ),
+                (false, true) if rust_root.is_some() => Some(
+                    "the crate has an infrastructure/s3.rs object store but the manifest declares no object store — the platform will not provision a bucket or grant access to one",
+                ),
                 (true, false) => Some(
                     "the manifest declares an object store but registrations.ts registers no S3ObjectStore — the service has nothing to call it with",
                 ),
@@ -1591,10 +1653,36 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
                 // A registration only counts as the capability in a service that
                 // reads the gateway contract: billing-stripe's own keyed
                 // `StripeClient` is ordinary Stripe, not undeclared payments.
-                let is_wired = registrations
-                    .contains(&format!("{}:", capability.registration_key))
-                    && (is_declared || is_managed_instance(&project_path, &sources));
-                let message = match (is_declared, is_wired) {
+                let factory = if capability.id == "models" {
+                    "fn models_client(".to_owned()
+                } else {
+                    format!("fn {}_client(", capability.id)
+                };
+                let registered = if rust_root.is_some() {
+                    rust_capabilities.contains(&factory)
+                } else {
+                    registrations.contains(&format!("{}:", capability.registration_key))
+                };
+                let is_wired =
+                    registered && (is_declared || is_managed_instance(&project_path, &sources));
+                // A managed template may enable the model gateway for the whole
+                // product (`managed template update --gateway-*`) and build the
+                // client by hand: the platform serves it without a manifest
+                // resource, so an undeclared one there is not a gap.
+                let template_models = capability.id == "models"
+                    && !is_declared
+                    && is_managed_instance(&project_path, &sources);
+                let message = match (is_declared, is_wired && !template_models) {
+                    (true, false) if rust_root.is_some() => Some(format!(
+                        "the manifest declares {} but capabilities/mod.rs has no {}) — the service has nothing to call it with",
+                        capability.id,
+                        factory.trim_start_matches("fn ")
+                    )),
+                    (false, true) if rust_root.is_some() => Some(format!(
+                        "capabilities/mod.rs builds {}) but the manifest does not declare {} — the platform will not provision it for this service",
+                        factory.trim_start_matches("fn "),
+                        capability.id
+                    )),
                     (true, false) => Some(format!(
                         "the manifest declares {} but registrations.ts registers no {} — the service has nothing to call it with",
                         capability.id, capability.registration_key
@@ -1991,6 +2079,17 @@ mod voice_tests {
             assert!(LOCAL_CHECK_IDS.contains(&id));
         }
     }
+}
+
+/// The source root of a Rust project crate (`lib.rs` beside `Cargo.toml`,
+/// or under `src/`); None for a TypeScript project.
+fn rust_source_root(project_path: &Path) -> Option<std::path::PathBuf> {
+    if !project_path.join("Cargo.toml").is_file() || project_path.join("registrations.ts").is_file() {
+        return None;
+    }
+    [project_path.to_path_buf(), project_path.join("src")]
+        .into_iter()
+        .find(|root| root.join("lib.rs").is_file())
 }
 
 #[cfg(test)]
@@ -2490,7 +2589,13 @@ mod wiring_tests {
             .unwrap_or_else(|| panic!("expected ai-provider-direct, got {:?}", findings));
         assert!(matches!(f.severity, Severity::Warning));
         assert_eq!(f.subject, "OPENAI_API_KEY, openai");
-        assert!(f.message.contains("createModelGatewayClient"));
+        // The fix is the models capability.
+        assert!(
+            f.message.contains("forklaunch infra add <service> models"),
+            "{}",
+            f.message
+        );
+        assert!(f.message.contains("ModelGatewayClient"));
     }
 
     #[test]
@@ -2717,6 +2822,95 @@ mod payments_tests {
                 "getEnvVar('INSTANCE_HMAC_KEY'); StripeClient: { factory: () => createStripeClient({ Stripe }) }"
             ),
             vec!["payments"]
+        );
+    }
+
+    #[test]
+    fn a_rust_crate_is_wired_by_the_factories_infra_add_writes() {
+        let write = |name: &str, files: &[(&str, &str)]| {
+            let root = std::env::temp_dir().join(format!("fl-rust-wiring-{name}"));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(root.join(".forklaunch")).unwrap();
+            let crate_dir = root.join("src/modules/notes");
+            std::fs::write(
+                root.join(".forklaunch/manifest.toml"),
+                "app_name = \"demo\"\n\n[[projects]]\nname = \"notes\"\n[projects.resources]\nobject_store = \"s3\"\ncapabilities = [\"models\", \"email\"]\n",
+            )
+            .unwrap();
+            for (path, text) in [("Cargo.toml", "[package]\nname = \"notes\"\n"), ("lib.rs", "pub mod capabilities;\n")]
+                .iter()
+                .chain(files)
+            {
+                std::fs::create_dir_all(crate_dir.join(path).parent().unwrap()).unwrap();
+                std::fs::write(crate_dir.join(path), text).unwrap();
+            }
+            let mut checks: Vec<String> = run_local_checks(&root.join("src/modules"))
+                .unwrap()
+                .into_iter()
+                .filter(|f| f.check == "capability-wiring" || f.check == "object-store-wiring")
+                .map(|f| format!("{}:{}", f.check, f.subject))
+                .collect();
+            checks.sort();
+            let _ = std::fs::remove_dir_all(&root);
+            checks
+        };
+        let module = "pub fn email_client() -> X { todo!() }\npub fn models_client() -> Y { todo!() }\n";
+        assert!(write("wired", &[("capabilities/mod.rs", module), ("infrastructure/s3.rs", "")]).is_empty());
+        assert_eq!(
+            write("unwired", &[]),
+            vec![
+                "capability-wiring:email",
+                "capability-wiring:models",
+                "object-store-wiring:registrations.ts"
+            ]
+        );
+    }
+
+    #[test]
+    fn capability_wiring_covers_models() {
+        let write = |name: &str, capabilities: &str, registrations: &str| {
+            let root = std::env::temp_dir().join(format!("fl-models-wiring-{name}"));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(root.join(".forklaunch")).unwrap();
+            std::fs::create_dir_all(root.join("src/modules/intake")).unwrap();
+            std::fs::write(
+                root.join(".forklaunch/manifest.toml"),
+                format!("app_name = \"demo\"\n\n[[projects]]\nname = \"intake\"\n[projects.resources]\n{capabilities}"),
+            )
+            .unwrap();
+            std::fs::write(root.join("src/modules/intake/registrations.ts"), registrations).unwrap();
+            let checks: Vec<String> = run_local_checks(&root.join("src/modules"))
+                .unwrap()
+                .into_iter()
+                .filter(|f| f.check == "capability-wiring")
+                .map(|f| f.subject)
+                .collect();
+            let _ = std::fs::remove_dir_all(&root);
+            checks
+        };
+        let wired = "getEnvVar('INSTANCE_HMAC_KEY'); ModelGatewayClient: { factory: () => createModelGatewayClient() }";
+        // Declared and wired: nothing to say.
+        assert!(write("ok", "capabilities = [\"models\"]\n", wired).is_empty());
+        // Declared, not wired.
+        assert_eq!(
+            write(
+                "unwired",
+                "capabilities = [\"models\"]\n",
+                "getEnvVar('PORT');"
+            ),
+            vec!["models"]
+        );
+        // A managed template that builds the client by hand is served by the
+        // template's model gateway settings, not a manifest resource.
+        assert!(write("template", "cache = \"redis\"\n", wired).is_empty());
+        // Outside managed mode an undeclared client is not a capability.
+        assert!(
+            write(
+                "plain",
+                "cache = \"redis\"\n",
+                "ModelGatewayClient: { factory: () => createModelGatewayClient() }"
+            )
+            .is_empty()
         );
     }
 

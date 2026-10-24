@@ -196,7 +196,20 @@ pub(crate) fn precheck_version(
     // The keyring belongs to the machine, not to the project the command
     // happens to be typed in. Handing these to a project-pinned older CLI
     // would give `account` to a binary that has never heard of it.
-    if matches!(subcommand, "account" | "login" | "logout") {
+    if matches!(subcommand, "account" | "login" | "logout" | "model") {
+        return Ok(VersionCheckOutcome::SkipWhitelisted);
+    }
+
+    // Changing the pin must run in the explicitly invoked CLI, not the old
+    // pinned binary that the user is replacing. Other changes remain pinned.
+    if subcommand == "change"
+        && let Some(("application", application)) = matches.subcommand()
+        && application
+            .try_get_one::<String>("cli-version")
+            .ok()
+            .flatten()
+            .is_some()
+    {
         return Ok(VersionCheckOutcome::SkipWhitelisted);
     }
 

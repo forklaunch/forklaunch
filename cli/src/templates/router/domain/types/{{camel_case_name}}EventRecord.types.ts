@@ -4,3 +4,5 @@ export interface {{pascal_case_name}}EventRecord extends WorkerEventEntity {
   message: string;
 }
 {{/is_worker}}
+{{^is_worker}}export {};
+{{/is_worker}}

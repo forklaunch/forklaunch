@@ -49,31 +49,34 @@ pub(crate) struct PnpmWorkspace {
     pub(crate) other: BTreeMap<String, Value>,
 }
 
+// Biome resolves its optional platform binary when invoked. Its postinstall
+// only warns if the binary is missing, so no install-time execution is needed.
+const BIOME_BUILD_DEPENDENCY: &str = "@biomejs/biome";
+
 fn default_allow_builds() -> BTreeMap<String, Value> {
     ALLOWED_BUILD_DEPENDENCIES
         .iter()
         .map(|dep| ((*dep).to_string(), Value::Bool(true)))
+        .chain([(BIOME_BUILD_DEPENDENCY.to_string(), Value::Bool(false))])
         .collect()
 }
 
 /// pnpm writes string placeholders ("set this to true or false") for
-/// unapproved build deps. Coerce any non-boolean entries to `true` and make
-/// sure the scaffold's known build deps are present, healing workspaces that
-/// picked up placeholders before this fix.
+/// unapproved build deps. Apply the scaffold's reviewed decision for Biome;
+/// retain the existing approval behavior for other placeholders and preserve
+/// every explicit boolean decision. Backfill missing scaffold dependencies.
 fn sanitize_allow_builds(pnpm_workspace: &mut PnpmWorkspace) {
     let mut allow_builds = pnpm_workspace
         .allow_builds
         .take()
         .unwrap_or_else(default_allow_builds);
-    for value in allow_builds.values_mut() {
+    for (dependency, value) in &mut allow_builds {
         if !matches!(value, Value::Bool(_)) {
-            *value = Value::Bool(true);
+            *value = Value::Bool(dependency != BIOME_BUILD_DEPENDENCY);
         }
     }
-    for dep in ALLOWED_BUILD_DEPENDENCIES {
-        allow_builds
-            .entry((*dep).to_string())
-            .or_insert(Value::Bool(true));
+    for (dependency, decision) in default_allow_builds() {
+        allow_builds.entry(dependency).or_insert(decision);
     }
     pnpm_workspace.allow_builds = Some(allow_builds);
 }
@@ -86,8 +89,7 @@ fn sanitize_allow_builds(pnpm_workspace: &mut PnpmWorkspace) {
 /// gate, so strip version suffixes down to bare package names on every
 /// rewrite.
 fn sanitize_minimum_release_age_exclude(pnpm_workspace: &mut PnpmWorkspace) {
-    let Some(Value::Sequence(entries)) =
-        pnpm_workspace.other.get_mut("minimumReleaseAgeExclude")
+    let Some(Value::Sequence(entries)) = pnpm_workspace.other.get_mut("minimumReleaseAgeExclude")
     else {
         return;
     };
@@ -145,9 +147,9 @@ fn ensure_minimum_release_age_exclude(pnpm_workspace: &mut PnpmWorkspace) {
     let Value::Sequence(entries) = entry else {
         return;
     };
-    let already_covered = entries.iter().any(|value| {
-        matches!(value, Value::String(spec) if spec == FORKLAUNCH_RELEASE_AGE_EXCLUDE)
-    });
+    let already_covered = entries.iter().any(
+        |value| matches!(value, Value::String(spec) if spec == FORKLAUNCH_RELEASE_AGE_EXCLUDE),
+    );
     if !already_covered {
         entries.push(Value::String(FORKLAUNCH_RELEASE_AGE_EXCLUDE.to_string()));
     }
@@ -176,8 +178,146 @@ fn ensure_minimum_release_age(pnpm_workspace: &mut PnpmWorkspace) {
 /// serialises this map directly without running the `ensure_*` helpers. Leaving
 /// it out there is what makes a newly scaffolded app fail to install for the
 /// first 24 hours after a framework release.
+/// Keep the scaffold's first-party release cohort coherent. Transitive caret
+/// ranges otherwise admit a newer core with a different exact MikroORM identity.
+/// Only new workspaces receive these defaults; existing user overrides survive.
+pub(crate) fn framework_release_overrides() -> Value {
+    use super::package_json::package_json_constants::*;
+    Value::Mapping(
+        [
+            (
+                Value::String("@forklaunch/better-auth-mikro-orm-fork".into()),
+                Value::String(BETTER_AUTH_MIKRO_ORM_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/bunrun".into()),
+                Value::String(BUNRUN_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/common".into()),
+                Value::String(COMMON_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/core".into()),
+                Value::String(CORE_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/express".into()),
+                Value::String(EXPRESS_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/hyper-express".into()),
+                Value::String(HYPER_EXPRESS_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/implementation-billing-base".into()),
+                Value::String(BILLING_BASE_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/implementation-billing-stripe".into()),
+                Value::String(BILLING_STRIPE_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/implementation-ecommerce-base".into()),
+                Value::String(ECOMMERCE_BASE_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/implementation-ecommerce-paypal".into()),
+                Value::String(ECOMMERCE_PAYPAL_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/implementation-ecommerce-stripe".into()),
+                Value::String(ECOMMERCE_STRIPE_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/implementation-iam-base".into()),
+                Value::String(IAM_BASE_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/implementation-messaging-base".into()),
+                Value::String(MESSAGING_BASE_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/implementation-messaging-twilio".into()),
+                Value::String(MESSAGING_TWILIO_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/implementation-cac-base".into()),
+                Value::String(CAC_BASE_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/implementation-worker-bullmq".into()),
+                Value::String(WORKER_BULLMQ_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/implementation-worker-redis".into()),
+                Value::String(WORKER_REDIS_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/implementation-worker-database".into()),
+                Value::String(WORKER_DATABASE_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/implementation-worker-kafka".into()),
+                Value::String(WORKER_KAFKA_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/infrastructure-redis".into()),
+                Value::String(INFRASTRUCTURE_REDIS_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/infrastructure-s3".into()),
+                Value::String(INFRASTRUCTURE_S3_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/interfaces-billing".into()),
+                Value::String(BILLING_INTERFACES_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/interfaces-ecommerce".into()),
+                Value::String(ECOMMERCE_INTERFACES_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/interfaces-iam".into()),
+                Value::String(IAM_INTERFACES_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/interfaces-messaging".into()),
+                Value::String(MESSAGING_INTERFACES_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/interfaces-cac".into()),
+                Value::String(CAC_INTERFACES_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/interfaces-worker".into()),
+                Value::String(WORKER_INTERFACES_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/internal".into()),
+                Value::String(INTERNAL_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/testing".into()),
+                Value::String(TESTING_VERSION.trim_start_matches('~').into()),
+            ),
+            (
+                Value::String("@forklaunch/universal-sdk".into()),
+                Value::String(UNIVERSAL_SDK_VERSION.trim_start_matches(['~', '^']).into()),
+            ),
+            (
+                Value::String("@forklaunch/validator".into()),
+                Value::String(VALIDATOR_VERSION.trim_start_matches('~').into()),
+            ),
+        ]
+        .into_iter()
+        .collect(),
+    )
+}
+
 fn default_other() -> BTreeMap<String, Value> {
     BTreeMap::from([
+        ("overrides".to_string(), framework_release_overrides()),
         ("minimumReleaseAge".to_string(), Value::Number(1440.into())),
         (
             "minimumReleaseAgeExclude".to_string(),
@@ -235,8 +375,30 @@ pub(crate) fn render_pnpm_workspace_with_packages(
     sanitize_minimum_release_age_exclude(&mut pnpm_workspace);
     ensure_minimum_release_age_exclude(&mut pnpm_workspace);
     ensure_minimum_release_age(&mut pnpm_workspace);
-    Ok(to_string(&pnpm_workspace)
-        .with_context(|| ERROR_FAILED_TO_GENERATE_PNPM_WORKSPACE)?)
+    Ok(to_string(&pnpm_workspace).with_context(|| ERROR_FAILED_TO_GENERATE_PNPM_WORKSPACE)?)
+}
+
+/// `content` (a rendered pnpm-workspace.yaml) with the settings the shared
+/// production image needs: `injectWorkspacePackages: true` and `build` among
+/// `syncInjectedDepsAfterScripts`, as the image reconciler writes them.
+pub(crate) fn with_injected_workspace_packages(content: &str) -> Result<String> {
+    let mut workspace: PnpmWorkspace =
+        from_str(content).with_context(|| ERROR_FAILED_TO_PARSE_PNPM_WORKSPACE)?;
+    workspace
+        .other
+        .entry("injectWorkspacePackages".to_string())
+        .or_insert(Value::Bool(true));
+    let scripts = workspace
+        .other
+        .entry("syncInjectedDepsAfterScripts".to_string())
+        .or_insert_with(|| Value::Sequence(Vec::new()));
+    if let Value::Sequence(scripts) = scripts {
+        let build = Value::String("build".to_string());
+        if !scripts.contains(&build) {
+            scripts.push(build);
+        }
+    }
+    Ok(to_string(&workspace).with_context(|| ERROR_FAILED_TO_GENERATE_PNPM_WORKSPACE)?)
 }
 
 pub(crate) fn add_project_definition_to_pnpm_workspace<
@@ -291,6 +453,68 @@ pub(crate) fn remove_project_definition_to_pnpm_workspace(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn generated_workspace_explicitly_skips_biome_postinstall() {
+        let dir = tempfile::tempdir().unwrap();
+        let rendered = generate_pnpm_workspace(dir.path().to_str().unwrap(), &Vec::new())
+            .unwrap()
+            .unwrap();
+        let workspace: PnpmWorkspace = from_str(&rendered.content).unwrap();
+        let decisions = workspace.allow_builds.unwrap();
+        assert_eq!(decisions[BIOME_BUILD_DEPENDENCY], Value::Bool(false));
+        assert_eq!(decisions["esbuild"], Value::Bool(true));
+    }
+
+    #[test]
+    fn rewriting_workspace_backfills_biome_and_preserves_other_policy() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("pnpm-workspace.yaml"),
+            "packages: [core]\nallowBuilds:\n  esbuild: false\nminimumReleaseAge: 1440\n",
+        )
+        .unwrap();
+        let rendered =
+            render_pnpm_workspace_with_packages(dir.path(), vec!["core".into(), "iam".into()])
+                .unwrap();
+        let workspace: PnpmWorkspace = from_str(&rendered).unwrap();
+        let decisions = workspace.allow_builds.unwrap();
+        assert_eq!(decisions[BIOME_BUILD_DEPENDENCY], Value::Bool(false));
+        assert_eq!(decisions["esbuild"], Value::Bool(false));
+        assert_eq!(
+            workspace.other["minimumReleaseAge"],
+            Value::Number(1440.into())
+        );
+    }
+
+    #[test]
+    fn biome_placeholder_is_skipped_but_explicit_user_decisions_are_preserved() {
+        for (input, expected) in [
+            ("set this to true or false", false),
+            ("false", false),
+            ("true", true),
+        ] {
+            let mut workspace: PnpmWorkspace = from_str(&format!(
+                "packages: [core]\nallowBuilds:\n  '@biomejs/biome': {input}\n"
+            ))
+            .unwrap();
+            sanitize_allow_builds(&mut workspace);
+            assert_eq!(
+                workspace.allow_builds.unwrap()[BIOME_BUILD_DEPENDENCY],
+                Value::Bool(expected)
+            );
+        }
+    }
+
+    #[test]
+    fn blueprint_skips_the_same_optional_biome_postinstall() {
+        let workspace: PnpmWorkspace =
+            from_str(include_str!("../../../blueprint/pnpm-workspace.yaml")).unwrap();
+        assert_eq!(
+            workspace.allow_builds.unwrap()[BIOME_BUILD_DEPENDENCY],
+            Value::Bool(false)
+        );
+    }
 
     #[test]
     fn test_minimum_release_age_exclude_strips_forklaunch_versions() {
@@ -355,8 +579,7 @@ mod tests {
     #[test]
     fn test_forklaunch_scope_is_not_duplicated() {
         let mut ws: PnpmWorkspace =
-            from_str("packages:\n- core\nminimumReleaseAgeExclude:\n- '@forklaunch/*'\n")
-                .unwrap();
+            from_str("packages:\n- core\nminimumReleaseAgeExclude:\n- '@forklaunch/*'\n").unwrap();
         ensure_minimum_release_age_exclude(&mut ws);
         ensure_minimum_release_age_exclude(&mut ws);
 
@@ -390,6 +613,32 @@ mod tests {
     }
 
     #[test]
+    fn fresh_workspace_pins_declared_framework_cohort() {
+        let dir = tempfile::tempdir().unwrap();
+        let generated = generate_pnpm_workspace(dir.path().to_str().unwrap(), &Vec::new())
+            .unwrap()
+            .unwrap();
+        let workspace: PnpmWorkspace = from_str(&generated.content).unwrap();
+        assert_eq!(
+            workspace.other["overrides"]["@forklaunch/core"].as_str(),
+            Some(crate::core::package_json::package_json_constants::CORE_VERSION.trim_start_matches(['~', '^']))
+        );
+        assert_eq!(
+            workspace.other["overrides"]["@forklaunch/testing"].as_str(),
+            Some(crate::core::package_json::package_json_constants::TESTING_VERSION.trim_start_matches(['~', '^']))
+        );
+        let mut customized = workspace;
+        customized
+            .other
+            .insert("overrides".into(), from_str("custom: 1.2.3").unwrap());
+        let roundtrip: PnpmWorkspace = from_str(&to_string(&customized).unwrap()).unwrap();
+        assert_eq!(
+            roundtrip.other["overrides"]["custom"].as_str(),
+            Some("1.2.3")
+        );
+    }
+
+    #[test]
     fn test_generate_pnpm_workspace_pins_minimum_release_age() {
         let dir = tempfile::tempdir().unwrap();
         let rendered = generate_pnpm_workspace(dir.path().to_str().unwrap(), &Vec::new())
@@ -415,8 +664,7 @@ mod tests {
 
     #[test]
     fn test_ensure_minimum_release_age_preserves_existing_value() {
-        let mut ws: PnpmWorkspace =
-            from_str("packages:\n- core\nminimumReleaseAge: 0\n").unwrap();
+        let mut ws: PnpmWorkspace = from_str("packages:\n- core\nminimumReleaseAge: 0\n").unwrap();
         ensure_minimum_release_age(&mut ws);
         assert!(to_string(&ws).unwrap().contains("minimumReleaseAge: 0"));
     }

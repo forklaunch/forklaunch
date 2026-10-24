@@ -19,7 +19,7 @@ pub(crate) fn replace_import_statment<'a>(
                 _ => return,
             };
 
-            if import.source.value.as_str() == import_source_identifier {
+            if import.source.value == import_source_identifier {
                 found_import = true;
                 if injection_pos.is_none() {
                     injection_pos = Some(index);

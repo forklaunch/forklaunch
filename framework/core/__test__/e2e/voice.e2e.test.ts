@@ -172,7 +172,7 @@ describe('voice (e2e): calls that end by themselves', () => {
   it('refuses to be created outside managed mode', () => {
     expect(() =>
       createVoiceClient({ gatewayUrl: '', instanceId: '', hmacKey: '' })
-    ).toThrow(/only available to instances hosted in managed mode/);
+    ).toThrow(/goes through the ForkLaunch managed gateway/);
   });
 });
 

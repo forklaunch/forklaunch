@@ -1,5 +1,30 @@
 # @forklaunch/implementation-iam-base
 
+## 1.0.43
+
+### Patch Changes
+
+- d2319b3: - `updateBatchPermissions` resolves each permission's roles on the transaction's EntityManager, one at a time, and flushes inside the transaction. It used to start the updates without awaiting them, so the batch could persist before its role changes were read.
+  - `updatePermission` passes the caller's EntityManager through to role resolution.
+  - `getBatchUsers` and `deleteBatchUsers` filter by `id: { $in: ids }` and no longer pass the `ids` array itself as a filter field.
+  - Services stop awaiting MikroORM's synchronous `persist`.
+
+## 1.0.42
+
+### Patch Changes
+
+- Built on @forklaunch/core 3.2.0 (default audit trail, listUnsubscribe, compliant fields decrypt under their loading tenant) and a dependency refresh; Stripe stays on 22.x.
+- Updated dependencies
+  - @forklaunch/interfaces-iam@1.0.39
+
+## 1.0.41
+
+### Patch Changes
+
+- Dependency refresh: @forklaunch/core 3.1.0 (explicit Stripe apiKey wins over a detected managed contract; managed email for regular apps), MikroORM 7.2.5, and other minor updates. Stripe stays on 22.x.
+- Updated dependencies
+  - @forklaunch/interfaces-iam@1.0.38
+
 ## 1.0.40
 
 ### Patch Changes

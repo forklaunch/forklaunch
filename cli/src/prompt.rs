@@ -86,7 +86,7 @@ where
 {
     loop {
         let mut continue_loop = true;
-        let input = match matches.get_one::<String>(matches_key) {
+        let input = match matches.try_get_one::<String>(matches_key).ok().flatten() {
             Some(val) => {
                 continue_loop = false;
                 val.to_string()
@@ -163,7 +163,7 @@ pub(crate) fn prompt_comma_separated_list(
     prompt_text: &str,
     is_optional: bool,
 ) -> Result<Vec<String>> {
-    match matches.get_many::<String>(matches_key) {
+    match matches.try_get_many::<String>(matches_key).ok().flatten() {
         Some(values) => Ok(values.cloned().collect()),
         None => {
             // Non-interactive (no TTY): a MultiSelect here would spin at 100% CPU on a dead

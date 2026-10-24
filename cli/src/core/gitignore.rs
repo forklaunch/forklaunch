@@ -13,20 +13,8 @@ pub(crate) fn generate_gitignore(path_dir: &Path) -> Result<Option<RenderedTempl
 
     Ok(Some(RenderedTemplate {
         path,
-        content: [
-            "node_modules",
-            ".idea",
-            ".DS_Store",
-            "",
-            "dist",
-            "lib",
-            "",
-            ".vscode",
-            "",
-            "*dist",
-            "*lib",
-        ]
-        .join("\n"),
+        // Keep generic modules and application scaffolds on the same policy.
+        content: include_str!("../templates/application/.gitignore").to_owned(),
         context: None,
     }))
 }

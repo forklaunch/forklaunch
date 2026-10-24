@@ -1,5 +1,49 @@
 # @forklaunch/hyper-express
 
+## 1.2.51
+
+### Patch Changes
+
+- d2319b3: Import `swagger-ui-dist/absolute-path.js` with its file extension, so the Swagger middleware loads under strict ESM resolution.
+- Updated dependencies [d2319b3]
+- Updated dependencies [d2319b3]
+- Updated dependencies [d2319b3]
+- Updated dependencies [cf365df]
+- Updated dependencies [f868861]
+- Updated dependencies [d2319b3]
+- Updated dependencies [d2319b3]
+  - @forklaunch/core@3.3.0
+  - @forklaunch/validator@1.3.0
+  - @forklaunch/ws@1.3.0
+
+## 1.2.50
+
+### Patch Changes
+
+- Dependency refresh: every third-party dependency moved to its latest version at least a day old.
+- Updated dependencies [de09443]
+- Updated dependencies [ec6f0f5]
+- Updated dependencies
+- Updated dependencies [7c27cfb]
+  - @forklaunch/core@3.2.0
+  - @forklaunch/common@1.2.32
+  - @forklaunch/validator@1.2.33
+  - @forklaunch/ws@1.2.47
+
+## 1.2.49
+
+### Patch Changes
+
+- Dependency refresh: MikroORM 7.2.5, OpenTelemetry 0.223 / 2.12, AWS SDK 3.1152 and other minor updates.
+- Updated dependencies [e36cfd2]
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @forklaunch/core@3.1.0
+  - @forklaunch/common@1.2.31
+  - @forklaunch/validator@1.2.32
+  - @forklaunch/ws@1.2.46
+
 ## 1.2.48
 
 ### Patch Changes

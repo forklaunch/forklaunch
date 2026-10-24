@@ -4,13 +4,17 @@ import { RedisTtlCache } from "@forklaunch/infrastructure-redis";{{/is_request_c
 import { S3ObjectStore, s3ClientConfig } from "@forklaunch/infrastructure-s3";{{/is_s3_enabled}}
 import { OpenTelemetryCollector } from "@forklaunch/core/http";
 import {
-  ComplianceDataService,
+  {{#is_database_enabled}}ComplianceDataService,{{/is_database_enabled}}
   createConfigInjector,
   getEnvVar,
   Lifetime,
-  RetentionService,
-} from "@forklaunch/core/services";
-import { FieldEncryptor, parseEncryptionKeyList, wrapEmWithTenantContext } from "@forklaunch/core/persistence";{{#is_worker}}
+  {{#is_database_enabled}}RetentionService,{{/is_database_enabled}}
+} from "@forklaunch/core/services";{{#is_request_cache_needed}}
+import { FieldEncryptor, parseEncryptionKeyList{{#is_database_enabled}}, wrapEmWithTenantContext{{/is_database_enabled}} } from "@forklaunch/core/persistence";{{/is_request_cache_needed}}{{^is_request_cache_needed}}{{#is_s3_enabled}}
+import { FieldEncryptor, parseEncryptionKeyList{{#is_database_enabled}}, wrapEmWithTenantContext{{/is_database_enabled}} } from "@forklaunch/core/persistence";{{/is_s3_enabled}}{{^is_s3_enabled}}{{#is_worker}}{{^is_database_worker}}
+import { FieldEncryptor, parseEncryptionKeyList{{#is_database_enabled}}, wrapEmWithTenantContext{{/is_database_enabled}} } from "@forklaunch/core/persistence";{{/is_database_worker}}{{#is_database_worker}}{{#is_database_enabled}}
+import { wrapEmWithTenantContext } from "@forklaunch/core/persistence";{{/is_database_enabled}}{{/is_database_worker}}{{/is_worker}}{{^is_worker}}{{#is_database_enabled}}
+import { wrapEmWithTenantContext } from "@forklaunch/core/persistence";{{/is_database_enabled}}{{/is_worker}}{{/is_s3_enabled}}{{/is_request_cache_needed}}{{#is_worker}}
 import { {{worker_type}}WorkerConsumer } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/consumers';
 import { {{worker_type}}WorkerProducer } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/producers';
 import { {{worker_type}}WorkerSchemas } from '@forklaunch/implementation-worker-{{worker_type_lowercase}}/schemas';

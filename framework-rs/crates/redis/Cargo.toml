@@ -1,0 +1,33 @@
+[package]
+description = "ForkLaunch Rust infrastructure redis APIs and runtime support"
+name = "forklaunch-infrastructure-redis"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+redis-client = ["dep:redis"]
+encryption = ["forklaunch-core/encryption", "dep:serde"]
+
+[dependencies]
+forklaunch-core = { version = "0.2.5", path = "../core" }
+
+redis = { version = "1.7", default-features = false, features = ["tls-rustls", "tls-rustls-webpki-roots"], optional = true }
+serde = { version = "1", optional = true }
+
+[dev-dependencies]
+serde_json = "=1.0.151"
+
+[lints]
+workspace = true
+
+[[example]]
+name = "redis_queue_parity"
+required-features = ["redis-client"]
+
+[[example]]
+name = "json_cache_parity"
+required-features = ["redis-client", "encryption"]

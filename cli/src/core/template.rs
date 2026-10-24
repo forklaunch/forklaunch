@@ -2,14 +2,14 @@ use std::{fs::create_dir_all, path::Path};
 
 use anyhow::{Context, Result};
 use include_dir::{Dir, File};
-use ramhorns::Template;
+use ramhorns::{Content, Template};
 use regex::Regex;
 
 use super::{
     manifest::ManifestData,
     rendered_template::{RenderedTemplate, TEMPLATES_DIR},
 };
-use crate::constants::{Module, error_failed_to_create_dir};
+use crate::constants::{error_failed_to_create_dir, Module};
 
 #[derive(Debug, Clone)]
 pub(crate) struct PathIO {
@@ -58,6 +58,25 @@ fn forklaunch_replacements(app_name: &String, template: String) -> String {
     template.replace("@forklaunch/blueprint-", format!("@{app_name}/").as_str())
 }
 
+/// Shared rendering primitive for legacy manifests, native scaffolds and SDKs.
+/// Language-specific replacements and file ownership stay with their callers.
+pub(crate) fn render_template<T: Content>(source: &str, data: &T) -> Result<String> {
+    Ok(Template::new(source)?.render(data))
+}
+
+pub(crate) fn render_embedded_template<T: Content>(
+    template_path: &str,
+    data: &T,
+) -> Result<String> {
+    let source = TEMPLATES_DIR
+        .get_file(template_path)
+        .with_context(|| format!("Missing embedded template {template_path}"))?
+        .contents_utf8()
+        .with_context(|| format!("Embedded template {template_path} is not UTF-8"))?;
+    render_template(source, data)
+        .with_context(|| format!("Failed to render embedded template {template_path}"))
+}
+
 pub(crate) fn generate_with_template(
     output_prefix: Option<&String>,
     template_dir: &PathIO,
@@ -96,25 +115,41 @@ pub(crate) fn generate_with_template(
                 &entry.path().to_string_lossy()
             )
         })?;
-        let tpl = Template::new(file_contents.clone())?;
         let rendered = match data {
-            ManifestData::Application(manifest_data) => {
-                forklaunch_replacements(&manifest_data.app_name, tpl.render(&manifest_data))
-            }
+            ManifestData::Application(manifest_data) => forklaunch_replacements(
+                &manifest_data.app_name,
+                render_template(&file_contents, manifest_data)?,
+            ),
             ManifestData::Service(manifest_data) => database_replacements(
                 &manifest_data.database,
-                forklaunch_replacements(&manifest_data.app_name, tpl.render(&manifest_data)),
+                forklaunch_replacements(
+                    &manifest_data.app_name,
+                    render_template(&file_contents, manifest_data)?,
+                ),
             ),
-            ManifestData::Library(manifest_data) => {
-                forklaunch_replacements(&manifest_data.app_name, tpl.render(&manifest_data))
-            }
-            ManifestData::Router(manifest_data) => {
-                forklaunch_replacements(&manifest_data.app_name, tpl.render(&manifest_data))
-            }
-            ManifestData::Worker(manifest_data) => {
-                forklaunch_replacements(&manifest_data.app_name, tpl.render(&manifest_data))
-            }
+            ManifestData::Library(manifest_data) => forklaunch_replacements(
+                &manifest_data.app_name,
+                render_template(&file_contents, manifest_data)?,
+            ),
+            ManifestData::Router(manifest_data) => forklaunch_replacements(
+                &manifest_data.app_name,
+                render_template(&file_contents, manifest_data)?,
+            ),
+            ManifestData::Worker(manifest_data) => forklaunch_replacements(
+                &manifest_data.app_name,
+                render_template(&file_contents, manifest_data)?,
+            ),
         };
+        // Blueprint schema factories use TypeBox locally; generated contracts must
+        // use the application's selected validator, just like registrations.
+        let validator = match data {
+            ManifestData::Application(data) => &data.validator,
+            ManifestData::Service(data) => &data.validator,
+            ManifestData::Library(data) => &data.validator,
+            ManifestData::Router(data) => &data.validator,
+            ManifestData::Worker(data) => &data.validator,
+        };
+        let rendered = rendered.replace("@forklaunch/validator/typebox", &format!("@forklaunch/validator/{validator}"));
         if !output_path.exists() {
             let output_path_str = output_path.file_name().unwrap().to_str().unwrap();
             let should_ignore = ignore_files
@@ -204,9 +239,7 @@ pub(crate) fn get_routers_from_standard_package(package: Module) -> Option<Vec<S
             String::from("user"),
         ]),
         Module::BaseMessaging => Some(vec![String::from("sms")]),
-        Module::TwilioMessaging => {
-            Some(vec![String::from("sms"), String::from("webhook")])
-        }
+        Module::TwilioMessaging => Some(vec![String::from("sms"), String::from("webhook")]),
         Module::StripeEcommerce => Some(vec![
             String::from("product"),
             String::from("variant"),
@@ -265,4 +298,95 @@ mod tests {
         declared.sort();
         assert_eq!(declared, routers_in_template("ecommerce-stripe"));
     }
+    #[test]
+    fn emitted_service_and_worker_templates_keep_only_used_dependencies() {
+        #[derive(ramhorns::Content)]
+        struct Flags {
+            is_worker: bool,
+            is_database_enabled: bool,
+            is_iam_configured: bool,
+        }
+        for worker in [false, true] {
+            for database in [false, true] {
+                let flags = Flags {
+                    is_worker: worker,
+                    is_database_enabled: database,
+                    is_iam_configured: true,
+                };
+                let render = |path: &str| {
+                    ramhorns::Template::new(
+                        TEMPLATES_DIR
+                            .get_file(path)
+                            .unwrap()
+                            .contents_utf8()
+                            .unwrap(),
+                    )
+                    .unwrap()
+                    .render(&flags)
+                };
+                let registration = render("project/service/registrations.ts");
+                for name in [
+                    "ComplianceDataService",
+                    "RetentionService",
+                    "wrapEmWithTenantContext",
+                ] {
+                    assert_eq!(
+                        registration.contains(name),
+                        database,
+                        "{name}: worker={worker}, database={database}"
+                    );
+                }
+                let server = render("project/service/server.ts");
+                assert!(!server.contains("PERMISSIONS, ROLES"));
+                let controller = render("router/api/controllers/{{camel_case_name}}.controller.ts");
+                assert!(!controller.contains("const openTelemetryCollector"));
+                assert!(controller.contains("bindRuntimeAuth("));
+                assert!(controller.contains("jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL"));
+                assert!(!controller.contains("ROLES.ADMIN"));
+                let contract = render("router/api/contracts/{{camel_case_name}}.contract.ts");
+                assert!(contract.contains("auth: { scheme: 'jwt', allowedRoles: ['admin'] }"));
+                assert!(contract.contains("access: 'protected'"));
+                for kind in ["service", "worker"] {
+                    let utils = render(&format!("project/{kind}/__test__/test-utils.ts"));
+                    assert_eq!(utils.contains("import { getEnvVar }"), database);
+                }
+                let event = render("router/domain/types/{{camel_case_name}}EventRecord.types.ts");
+                assert_eq!(event.contains("export {};"), !worker);
+                if worker {
+                    assert!(
+                        render("router/domain/services/{{camel_case_name}}.service.ts")
+                            .contains("id: _id, createdAt: _createdAt, updatedAt: _updatedAt")
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// One file of the TypeScript service template rendered for `data`, as init
+/// writes it (replacements and watermark included), or `None` when the
+/// template has no such file.
+pub(crate) fn render_service_template_file(
+    relative: &str,
+    data: &super::manifest::service::ServiceManifestData,
+) -> Result<Option<String>> {
+    let Some(file) = TEMPLATES_DIR.get_file(Path::new("project/service").join(relative)) else {
+        return Ok(None);
+    };
+    let source = file
+        .contents_utf8()
+        .with_context(|| format!("Template {relative} is not UTF-8"))?;
+    let rendered = database_replacements(
+        &data.database,
+        forklaunch_replacements(&data.app_name, render_template(source, data)?),
+    )
+    .replace(
+        "@forklaunch/validator/typebox",
+        &format!("@forklaunch/validator/{}", data.validator),
+    );
+    Ok(Some(super::watermark::apply_watermark(&RenderedTemplate {
+        path: Path::new(relative).to_path_buf(),
+        content: rendered,
+        context: None,
+    })?))
 }

@@ -1,5 +1,4 @@
-use std::fs::write;
-use std::io::Write;
+use std::{fs::write, io::Write};
 
 use anyhow::{Context, Result};
 use clap::{Arg, ArgMatches, Command};
@@ -7,7 +6,9 @@ use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use super::CliCommand;
 use crate::{
-    constants::{ERROR_FAILED_TO_SEND_REQUEST, error_failed_to_write_file, get_platform_management_api_url},
+    constants::{
+        ERROR_FAILED_TO_SEND_REQUEST, error_failed_to_write_file, get_platform_management_api_url,
+    },
     core::{
         command::command,
         http_client,

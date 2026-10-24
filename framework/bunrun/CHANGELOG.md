@@ -1,5 +1,11 @@
 # @forklaunch/bunrun
 
+## 1.2.27
+
+### Patch Changes
+
+- Dependency refresh: MikroORM 7.2.5, OpenTelemetry 0.223 / 2.12, AWS SDK 3.1152 and other minor updates.
+
 ## 1.2.26
 
 ### Patch Changes

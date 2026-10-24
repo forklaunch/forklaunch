@@ -65,7 +65,8 @@ pub(crate) fn redis_ttl_cache_runtime_dependency<'a>(
     otel_token: &str,
 ) -> Result<()> {
     let redis_registration_text: &'static str = Box::leak(
-        format!("const configInjector = createConfigInjector(SchemaValidator(), {{
+        format!(
+            "const configInjector = createConfigInjector(SchemaValidator(), {{
                 TtlCache: {{
                     lifetime: Lifetime.Singleton,
                     type: RedisTtlCache,
@@ -79,7 +80,8 @@ pub(crate) fn redis_ttl_cache_runtime_dependency<'a>(
                             encryptor: new FieldEncryptor(ENCRYPTION_KEY),
                         }}),
                 }}
-            }});")
+            }});"
+        )
         .into_boxed_str(),
     );
 

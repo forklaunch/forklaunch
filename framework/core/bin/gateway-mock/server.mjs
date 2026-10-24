@@ -49,7 +49,9 @@
  *   MOCK_INSTANCE_HMAC_KEY  verify instance signatures and sign events
  *                           (unset: accept any signature; events unsigned)
  *   MOCK_EVENTS_URL         the app's base URL for event delivery
- *   MOCK_EVENTS_URL_<FEATURE>  per-feature override (the service that declared it)
+ *   MOCK_EVENTS_URL_<FEATURE>  per-feature override (the service that declared it);
+ *                           a comma-separated list when several projects hold
+ *                           the feature — each event goes to every entry
  *   (plus each feature's own MOCK_* settings; see its route file)
  *
  * Usage: npx -p @forklaunch/core forklaunch-gateway-mock
@@ -141,34 +143,50 @@ export async function startGatewayMock(env = process.env) {
       occurredAt: new Date().toISOString(),
       data: data ?? {}
     };
-    const record = { event, status: null, error: null };
+    const record = { event, status: null, error: null, deliveries: [] };
     events.push(record);
-    // A feature's events can go to its own service (MOCK_EVENTS_URL_<FEATURE>).
-    const target =
+    // A feature's events can go to its own service (MOCK_EVENTS_URL_<FEATURE>),
+    // or to several: every project that holds the feature, comma-separated.
+    const targets = (
       env[`MOCK_EVENTS_URL_${feature.toUpperCase().replace(/-/g, '_')}`] ||
-      eventsUrl;
-    if (!target) {
+      eventsUrl
+    )
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+    if (targets.length === 0) {
       record.error = 'MOCK_EVENTS_URL is not set; event recorded, not delivered';
       return record;
     }
     const path = `/platform-events/${feature}`;
     const body = JSON.stringify(event);
-    const headers = { 'content-type': 'application/json' };
-    if (hmacKey) {
-      const ts = new Date().toISOString();
-      const nonce = randomUUID();
-      headers.authorization = `HMAC keyId=platform ts=${ts} nonce=${nonce} signature=${sign(hmacKey, 'POST', path, `${body}\n`, ts, nonce)}`;
+    for (const target of targets) {
+      // A fresh signature per destination: each app rejects a reused nonce.
+      const headers = { 'content-type': 'application/json' };
+      if (hmacKey) {
+        const ts = new Date().toISOString();
+        const nonce = randomUUID();
+        headers.authorization = `HMAC keyId=platform ts=${ts} nonce=${nonce} signature=${sign(hmacKey, 'POST', path, `${body}\n`, ts, nonce)}`;
+      }
+      const delivery = { target, status: null, error: null };
+      try {
+        const response = await fetch(`${target.replace(/\/$/, '')}${path}`, {
+          method: 'POST',
+          headers,
+          body
+        });
+        delivery.status = response.status;
+      } catch (error) {
+        delivery.error = String(error?.message ?? error);
+      }
+      record.deliveries.push(delivery);
     }
-    try {
-      const response = await fetch(`${target.replace(/\/$/, '')}${path}`, {
-        method: 'POST',
-        headers,
-        body
-      });
-      record.status = response.status;
-    } catch (error) {
-      record.error = String(error?.message ?? error);
-    }
+    // The summary: the first failed delivery, else the last one.
+    const summary =
+      record.deliveries.find((d) => d.error || d.status >= 300) ??
+      record.deliveries[record.deliveries.length - 1];
+    record.status = summary.status;
+    record.error = summary.error;
     return record;
   }
 

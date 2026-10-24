@@ -69,7 +69,7 @@ export class BaseInventoryService<
       ...(args[0] instanceof EntityManager ? args.slice(1) : args)
     );
     await (em ?? this.em).transactional(async (innerEm) => {
-      await innerEm.persist(inventory);
+      innerEm.persist(inventory);
     });
     return this.mappers.InventoryMapper.toDto(inventory);
   }
