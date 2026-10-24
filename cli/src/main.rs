@@ -64,6 +64,7 @@ mod infra;
 mod init;
 mod integrate;
 mod login;
+mod model;
 mod logout;
 mod managed;
 mod notifiers;
@@ -109,6 +110,7 @@ fn main() -> Result<()> {
     let app = AppCommand::new();
     let integrate = IntegrateCommand::new();
     let login = LoginCommand::new();
+    let model = model::ModelCommand;
     let logout = LogoutCommand::new();
     let managed = ManagedCommand::new();
     let notifiers = NotifiersCommand::new();
@@ -163,6 +165,7 @@ fn main() -> Result<()> {
         .subcommand(org.command())
         .subcommand(release.command())
         .subcommand(login.command())
+        .subcommand(model.command())
         .subcommand(logout.command())
         .subcommand(managed.command())
         .subcommand(notifiers.command())
@@ -209,6 +212,7 @@ fn main() -> Result<()> {
         Some(("org", sub_matches)) => org.handler(sub_matches),
         Some(("release", sub_matches)) => release.handler(sub_matches),
         Some(("login", sub_matches)) => login.handler(sub_matches),
+        Some(("model", sub_matches)) => model.handler(sub_matches),
         Some(("logout", sub_matches)) => logout.handler(sub_matches),
         Some(("managed", sub_matches)) => managed.handler(sub_matches),
         Some(("notifiers", sub_matches)) => notifiers.handler(sub_matches),

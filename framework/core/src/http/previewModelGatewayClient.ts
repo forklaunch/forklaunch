@@ -1,3 +1,5 @@
+import { readModelStream } from './modelStream';
+import type { GatewayChatChunk } from './modelGatewayClient';
 import {
   createInstanceGatewayTransport,
   InstanceGatewayRequestError
@@ -35,6 +37,10 @@ export interface PreviewModelGatewayClient {
   models(): Promise<GatewayPreviewModels>;
   chat: {
     completions: {
+      stream(
+        request: GatewayChatRequest,
+        options?: { signal?: AbortSignal }
+      ): AsyncGenerator<GatewayChatChunk>;
       create(
         request: GatewayChatRequest
       ): Promise<GatewayPreviewChatCompletion>;
@@ -120,7 +126,7 @@ async function readPreviewCatalog(
  * This client neither holds the desktop login nor calls a provider directly.
  *
  * Unlike createModelGatewayClient (managed instances), this catalog makes no
- * monthly-token or BAA claims. Streaming is not supported by the preview relay.
+ * monthly-token or BAA claims. Streaming requires a relay/server that supports text streams.
  * The gateway still applies its own bounded chat request protocol.
  *
  * @example
@@ -142,10 +148,11 @@ export function createPreviewModelGatewayClient(
   async function send(
     method: 'GET' | 'POST',
     route: string,
-    body?: Record<string, unknown>
+    body?: Record<string, unknown>,
+    signal?: AbortSignal
   ): Promise<Response> {
     try {
-      return await transport.request(method, route, body);
+      return await transport.request(method, route, body, { signal });
     } catch (error) {
       if (error instanceof InstanceGatewayRequestError)
         throw new ModelGatewayRequestError(
@@ -163,6 +170,15 @@ export function createPreviewModelGatewayClient(
     },
     chat: {
       completions: {
+        async *stream(request, options = {}) {
+          const response = await send(
+            'POST',
+            '/models/chat/completions',
+            { ...request, stream: true },
+            options.signal
+          );
+          yield* readModelStream(response);
+        },
         async create(request) {
           return (await (
             await send(

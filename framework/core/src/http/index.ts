@@ -56,3 +56,4 @@ export { MapToSdk } from './types/sdk.types';
 export * from './types/typedHandler.types';
 
 export * from './registerDelegatedSurface';
+export * from './localModelGatewayClient';
