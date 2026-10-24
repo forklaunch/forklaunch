@@ -938,3 +938,4 @@ mod prompt_tests {
         assert!(p.contains("Remediation: Inspect the cited code"));
     }
 }
+// path-filter check
