@@ -9,3 +9,4 @@ pub async fn run() -> Result<(), RuntimeError> {
     if std::env::args().skip(1).eq(["--migrate"]) { return crate::worker_hooks::migrate().await; }
     forklaunch_worker_interface::native::run_application(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"), &Application).await
 }
+// path-filter check
