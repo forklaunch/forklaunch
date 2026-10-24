@@ -111,6 +111,7 @@ Studio CLI command blocks are scaffold-only. They may contain:
 - `forklaunch init application ...`
 - `forklaunch init service ...`
 - `forklaunch init worker ...`
+- `forklaunch init agent ...`
 - `forklaunch init library ...`
 - `forklaunch init router ...`
 - exactly one package install command after all init commands: `pnpm install` for Node runtime or `bun install` for Bun runtime
@@ -213,6 +214,22 @@ Adds an isolated module under `src/modules/<name>/` with:
 ### `forklaunch init worker`
 
 Same as service but with BullMQ/Kafka worker infrastructure instead of HTTP routes.
+
+### `forklaunch init agent`
+
+Adds an AI agent: a service with `variant = "agent"` that serves
+`GET /api/v1/agent/tools`, `POST /api/v1/agent/tasks` and `/tasks/stream`,
+plus `agent.config.ts` and a `tools/` folder. Needs IAM in the app.
+
+```bash
+forklaunch init agent assistant --path ./src/modules \
+  --description "Order assistant" --instructions "You help staff with orders." \
+  --service orders --mcp linear=https://mcp.linear.app/mcp
+```
+
+`--service` and `--mcp` repeat. See `/agents` for adding tools.
+`--language rust` generates a Rust agent on the framework agent runtime
+instead: tools live in `agent/tools/` and sources in `agent/mod.rs`.
 
 ### `forklaunch init library`
 

@@ -4,6 +4,10 @@ export default defineConfig({
   test: {
     globals: true,
     exclude: ['**/lib/**', '**/dist/**', '**/node_modules/**'],
+    // Workspace packages are injected (copied into node_modules/.pnpm as
+    // `<name>@file+<dir>`), so Vitest would hand them to Node, whose ESM
+    // loader rejects their extensionless imports. Transform them instead.
+    server: { deps: { inline: [/node_modules\/\.pnpm\/[^/]+@file\+/] } },
     // Test files start their own containers (Postgres, Redis, Kafka, ...) in
     // beforeAll and stop them in afterAll. Creating a container can take tens
     // of seconds on a busy Docker daemon, more so when every file starts its

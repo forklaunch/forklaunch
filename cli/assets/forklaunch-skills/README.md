@@ -85,6 +85,7 @@ Full version in `AGENTS.md` and `CLAUDE.md`.
 ### Backend
 - `/backend-patterns` — Handlers, services, entities, schemas, routes, DI, auth, feature gating.
 - `/common-tasks` — Step-by-step: add endpoints, create entities, add pages, feature gating, debugging, migrations.
+- `/agents` — AI agents: `forklaunch init agent`, MCP-style tools (app services, external MCP servers, API connectors), approvals for tools that change data, credentials as settings.
 - `/framework` — HTTP handler definitions, route config, validation, auth, OpenAPI, MCP, SDK gen, streaming.
 - `/imports-and-structure` — Import layers, module structure, file naming. **Always import from `@{{app-name}}/core`.**
 - `/websockets-and-mappers` — WebSockets, real-time, log streaming, requestMapper/responseMapper.

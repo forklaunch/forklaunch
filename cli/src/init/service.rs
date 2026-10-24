@@ -93,11 +93,12 @@ use crate::{
     },
 };
 
-fn generate_basic_service(
+pub(crate) fn generate_basic_service(
     service_name: &String,
     base_path: &Path,
     app_root_path: &Path,
     manifest_data: &mut ServiceManifestData,
+    variant: Option<String>,
     stdout: &mut StandardStream,
     dryrun: bool,
 ) -> Result<()> {
@@ -157,7 +158,7 @@ fn generate_basic_service(
     );
 
     rendered_templates.extend(
-        add_service_to_artifacts(manifest_data, base_path, app_root_path)
+        add_service_to_artifacts(manifest_data, variant, base_path, app_root_path)
             .with_context(|| ERROR_FAILED_TO_ADD_SERVICE_METADATA_TO_ARTIFACTS)?,
     );
 
@@ -226,8 +227,144 @@ fn generate_basic_service(
     Ok(())
 }
 
+/// Service manifest data for a new service in this app. Shared with `init agent`,
+/// which scaffolds an agent as a service with the "agent" variant.
+pub(crate) fn service_manifest_data(
+    manifest_data: &ApplicationManifestData,
+    base_path: &Path,
+    service_name: &String,
+    description: &String,
+    database: &Database,
+    infrastructure: &[Infrastructure],
+    with_mappers: bool,
+) -> ServiceManifestData {
+    let database = database.clone();
+    ServiceManifestData {
+        // Common fields from ApplicationManifestData
+        language: manifest_data.language.clone(),
+        application_language: manifest_data.application_language.clone(),
+        sdk_targets: manifest_data.sdk_targets.clone(),
+        cargo_workspace: manifest_data.cargo_workspace.clone(),
+        contract_artifact_path: manifest_data.contract_artifact_path.clone(),
+        openapi_path: manifest_data.openapi_path.clone(),
+        asyncapi_path: manifest_data.asyncapi_path.clone(),
+        id: manifest_data.id.clone(),
+        app_name: manifest_data.app_name.clone(),
+        modules_path: manifest_data.modules_path.clone(),
+        docker_compose_path: manifest_data.docker_compose_path.clone(),
+        dockerfile: manifest_data.dockerfile.clone(),
+        git_repository: manifest_data.git_repository.clone(),
+        camel_case_app_name: manifest_data.camel_case_app_name.clone(),
+        pascal_case_app_name: manifest_data.pascal_case_app_name.clone(),
+        kebab_case_app_name: manifest_data.kebab_case_app_name.clone(),
+        title_case_app_name: manifest_data.title_case_app_name.clone(),
+        app_description: manifest_data.app_description.clone(),
+        author: manifest_data.author.clone(),
+        cli_version: manifest_data.cli_version.clone(),
+        formatter: manifest_data.formatter.clone(),
+        linter: manifest_data.linter.clone(),
+        validator: manifest_data.validator.clone(),
+        runtime: manifest_data.runtime.clone(),
+        test_framework: manifest_data.test_framework.clone(),
+        projects: manifest_data.projects.clone(),
+        http_framework: manifest_data.http_framework.clone(),
+        license: manifest_data.license.clone(),
+        project_peer_topology: manifest_data.project_peer_topology.clone(),
+        is_biome: manifest_data.is_biome,
+        is_eslint: manifest_data.is_eslint,
+        is_oxlint: manifest_data.is_oxlint,
+        is_prettier: manifest_data.is_prettier,
+        is_express: manifest_data.is_express,
+        is_hyper_express: manifest_data.is_hyper_express,
+        is_zod: manifest_data.is_zod,
+        is_typebox: manifest_data.is_typebox,
+        is_bun: manifest_data.is_bun,
+        is_node: manifest_data.is_node,
+        is_vitest: manifest_data.is_vitest,
+        is_jest: manifest_data.is_jest,
+
+        service_name: service_name.clone(),
+        service_path: service_name.clone(),
+        camel_case_name: service_name.to_case(Case::Camel),
+        snake_case_name: service_name.to_case(Case::Snake),
+        pascal_case_name: service_name.to_case(Case::Pascal),
+        kebab_case_name: service_name.to_case(Case::Kebab),
+        title_case_name: service_name.to_case(Case::Title),
+        description: description.clone(),
+        database: database.to_string(),
+        database_port: get_database_port(&database),
+        db_driver: get_db_driver(&database),
+
+        is_mongo: database == Database::MongoDB,
+        is_postgres: database == Database::PostgreSQL,
+        is_sqlite: database == Database::SQLite,
+        is_mysql: database == Database::MySQL,
+        is_mariadb: database == Database::MariaDB,
+        is_better_sqlite: database == Database::BetterSQLite,
+        is_libsql: database == Database::LibSQL,
+        is_mssql: database == Database::MsSQL,
+        is_in_memory_database: is_in_memory_database(&database),
+
+        is_iam: false,
+        is_billing: false,
+        is_messaging: false,
+        is_cac: false,
+        is_cache_enabled: infrastructure.contains(&Infrastructure::Redis),
+        platform_application_id: manifest_data.platform_application_id.clone(),
+        platform_organization_id: manifest_data.platform_organization_id.clone(),
+        framework: manifest_data.framework.clone(),
+        compliance: manifest_data.compliance.clone(),
+        is_s3_enabled: infrastructure.contains(&Infrastructure::S3),
+        is_database_enabled: true,
+
+        is_better_auth: false,
+        is_stripe: false,
+        is_twilio: false,
+        is_ecommerce: false,
+        ships_worker: false,
+
+        is_iam_configured: manifest_data.projects.iter().any(|project_entry| {
+            if project_entry.name == "iam" {
+                return true;
+            }
+            return false;
+        }),
+
+        is_billing_configured: manifest_data.projects.iter().any(|project_entry| {
+            if project_entry.name == "billing" {
+                return true;
+            }
+            return false;
+        }),
+
+        is_request_cache_needed: infrastructure.contains(&Infrastructure::Redis)
+            || manifest_data.projects.iter().any(|project_entry| {
+                project_entry.name == "iam" || project_entry.name == "billing"
+            }),
+        is_type_needed: manifest_data.projects.iter().any(|project_entry| {
+            project_entry.name == "iam" || project_entry.name == "billing"
+        }),
+
+        // Generate mappers if --mappers flag is set, or always for billing/IAM variants
+        with_mappers: with_mappers,
+
+        iam_secret: None,
+
+        // These will be properly generated when initialized
+        generated_better_auth_secret: String::new(),
+        generated_hmac_secret: String::new(),
+        generated_encryption_key:
+            crate::core::env_defaults::find_existing_encryption_key(base_path)
+                .unwrap_or_else(|| {
+                    crate::core::manifest::service::generate_random_secret(32)
+                }),
+        otel_token: "OtelCollector".to_string(),
+    }
+}
+
 fn add_service_to_artifacts(
     manifest_data: &mut ServiceManifestData,
+    variant: Option<String>,
     base_path: &Path,
     app_root_path: &Path,
 ) -> Result<Vec<RenderedTemplate>> {
@@ -238,7 +375,7 @@ fn add_service_to_artifacts(
     let forklaunch_manifest_buffer = add_project_definition_to_manifest(
         ProjectType::Service,
         manifest_data,
-        None,
+        variant,
         Some(ResourceInventory {
             database: Some(manifest_data.database.to_owned()),
             cache: None,
@@ -866,127 +1003,15 @@ impl CliCommand for ServiceCommand {
             None,
         )?;
 
-        let mut manifest_data: ServiceManifestData = ServiceManifestData {
-            // Common fields from ApplicationManifestData
-            language: manifest_data.language.clone(),
-            application_language: manifest_data.application_language.clone(),
-            sdk_targets: manifest_data.sdk_targets.clone(),
-            cargo_workspace: manifest_data.cargo_workspace.clone(),
-            contract_artifact_path: manifest_data.contract_artifact_path.clone(),
-            openapi_path: manifest_data.openapi_path.clone(),
-            asyncapi_path: manifest_data.asyncapi_path.clone(),
-            id: manifest_data.id.clone(),
-            app_name: manifest_data.app_name.clone(),
-            modules_path: manifest_data.modules_path.clone(),
-            docker_compose_path: manifest_data.docker_compose_path.clone(),
-            dockerfile: manifest_data.dockerfile.clone(),
-            git_repository: manifest_data.git_repository.clone(),
-            camel_case_app_name: manifest_data.camel_case_app_name.clone(),
-            pascal_case_app_name: manifest_data.pascal_case_app_name.clone(),
-            kebab_case_app_name: manifest_data.kebab_case_app_name.clone(),
-            title_case_app_name: manifest_data.title_case_app_name.clone(),
-            app_description: manifest_data.app_description.clone(),
-            author: manifest_data.author.clone(),
-            cli_version: manifest_data.cli_version.clone(),
-            formatter: manifest_data.formatter.clone(),
-            linter: manifest_data.linter.clone(),
-            validator: manifest_data.validator.clone(),
-            runtime: manifest_data.runtime.clone(),
-            test_framework: manifest_data.test_framework.clone(),
-            projects: manifest_data.projects.clone(),
-            http_framework: manifest_data.http_framework.clone(),
-            license: manifest_data.license.clone(),
-            project_peer_topology: manifest_data.project_peer_topology.clone(),
-            is_biome: manifest_data.is_biome,
-            is_eslint: manifest_data.is_eslint,
-            is_oxlint: manifest_data.is_oxlint,
-            is_prettier: manifest_data.is_prettier,
-            is_express: manifest_data.is_express,
-            is_hyper_express: manifest_data.is_hyper_express,
-            is_zod: manifest_data.is_zod,
-            is_typebox: manifest_data.is_typebox,
-            is_bun: manifest_data.is_bun,
-            is_node: manifest_data.is_node,
-            is_vitest: manifest_data.is_vitest,
-            is_jest: manifest_data.is_jest,
-
-            service_name: service_name.clone(),
-            service_path: service_name.clone(),
-            camel_case_name: service_name.to_case(Case::Camel),
-            snake_case_name: service_name.to_case(Case::Snake),
-            pascal_case_name: service_name.to_case(Case::Pascal),
-            kebab_case_name: service_name.to_case(Case::Kebab),
-            title_case_name: service_name.to_case(Case::Title),
-            description: description.clone(),
-            database: database.to_string(),
-            database_port: get_database_port(&database),
-            db_driver: get_db_driver(&database),
-
-            is_mongo: database == Database::MongoDB,
-            is_postgres: database == Database::PostgreSQL,
-            is_sqlite: database == Database::SQLite,
-            is_mysql: database == Database::MySQL,
-            is_mariadb: database == Database::MariaDB,
-            is_better_sqlite: database == Database::BetterSQLite,
-            is_libsql: database == Database::LibSQL,
-            is_mssql: database == Database::MsSQL,
-            is_in_memory_database: is_in_memory_database(&database),
-
-            is_iam: false,
-            is_billing: false,
-            is_messaging: false,
-            is_cac: false,
-            is_cache_enabled: infrastructure.contains(&Infrastructure::Redis),
-            platform_application_id: manifest_data.platform_application_id.clone(),
-            platform_organization_id: manifest_data.platform_organization_id.clone(),
-            framework: manifest_data.framework.clone(),
-            compliance: manifest_data.compliance.clone(),
-            is_s3_enabled: infrastructure.contains(&Infrastructure::S3),
-            is_database_enabled: true,
-
-            is_better_auth: false,
-            is_stripe: false,
-            is_twilio: false,
-            is_ecommerce: false,
-            ships_worker: false,
-
-            is_iam_configured: manifest_data.projects.iter().any(|project_entry| {
-                if project_entry.name == "iam" {
-                    return true;
-                }
-                return false;
-            }),
-
-            is_billing_configured: manifest_data.projects.iter().any(|project_entry| {
-                if project_entry.name == "billing" {
-                    return true;
-                }
-                return false;
-            }),
-
-            is_request_cache_needed: infrastructure.contains(&Infrastructure::Redis)
-                || manifest_data.projects.iter().any(|project_entry| {
-                    project_entry.name == "iam" || project_entry.name == "billing"
-                }),
-            is_type_needed: manifest_data.projects.iter().any(|project_entry| {
-                project_entry.name == "iam" || project_entry.name == "billing"
-            }),
-
-            // Generate mappers if --mappers flag is set, or always for billing/IAM variants
-            with_mappers: matches.get_flag("mappers"),
-
-            iam_secret: None,
-
-            // These will be properly generated when initialized
-            generated_better_auth_secret: String::new(),
-            generated_hmac_secret: String::new(),
-            generated_encryption_key:
-                crate::core::env_defaults::find_existing_encryption_key(&base_path)
-                    .unwrap_or_else(|| {
-                        crate::core::manifest::service::generate_random_secret(32)
-                    }),
-            otel_token: "OtelCollector".to_string(),
-        };
+        let mut manifest_data = service_manifest_data(
+            &manifest_data,
+            &base_path,
+            &service_name,
+            &description,
+            &database,
+            &infrastructure,
+            matches.get_flag("mappers"),
+        );
 
         let dryrun = matches.get_flag("dryrun");
         generate_basic_service(
@@ -994,6 +1019,7 @@ impl CliCommand for ServiceCommand {
             &base_path,
             &app_root_path,
             &mut manifest_data,
+            None,
             &mut stdout,
             dryrun,
         )

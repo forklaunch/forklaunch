@@ -22,6 +22,7 @@ source_commit = "2b0eb5ecf69f5ed2636858f7d1d9a19bb490d2f5"
 include = [
   "README.md",
   "SETUP.md",
+  "agents",
   "backend-patterns",
   "cli",
   "common-tasks",

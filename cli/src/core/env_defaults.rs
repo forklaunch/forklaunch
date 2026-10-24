@@ -442,7 +442,7 @@ pub(crate) fn find_existing_hmac_secret(modules_path: &Path) -> Option<String> {
     None
 }
 
-fn generate_random_b64_secret(byte_length: usize) -> String {
+pub(crate) fn generate_random_b64_secret(byte_length: usize) -> String {
     let mut bytes = vec![0u8; byte_length];
     getrandom::fill(&mut bytes).expect("Failed to generate random bytes");
     STANDARD.encode(&bytes)
