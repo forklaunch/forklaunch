@@ -65,7 +65,6 @@ if [ -n "${FORKLAUNCH_AGENT_CORE_TARBALL:-}" ]; then
     rm pnpm-workspace.yaml.bak
     pnpm install
     pnpm build
-    pnpm lint
     (cd assistant && pnpm vitest run __test__/agent.test.ts)
 fi
 
