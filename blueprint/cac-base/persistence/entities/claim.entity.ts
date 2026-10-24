@@ -1,0 +1,46 @@
+import { sqlBaseProperties } from '@forklaunch/blueprint-core';
+import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
+import type { InferEntity } from '@mikro-orm/core';
+import { ClaimStatus } from '../../domain/enum/claimStatus.enum';
+import { CodeSetProviderType } from '../../domain/enum/codeSetProviderType.enum';
+import { Denial } from './denial.entity';
+import { Encounter } from './encounter.entity';
+import { Insurance } from './insurance.entity';
+import { Patient } from './patient.entity';
+import { Remittance } from './remittance.entity';
+
+// A claim is built from one encounter's charges + diagnoses — see
+// services/claim.service.ts for the builder/scrubbing orchestration (§6).
+export const Claim = defineComplianceEntity({
+  name: 'Claim',
+  properties: {
+    ...sqlBaseProperties,
+    organizationId: fp.uuid().compliance('none'),
+    patient: () => fp.manyToOne(Patient).deleteRule('cascade').updateRule('cascade'),
+    // One claim per encounter (see `uniques` below).
+    encounter: () => fp.manyToOne(Encounter).deleteRule('cascade').updateRule('cascade'),
+    // The payer being billed — nullable for self-pay claims.
+    payer: () =>
+      fp.manyToOne(Insurance).nullable().deleteRule('set null').updateRule('cascade'),
+    status: fp
+      .enum(() => ClaimStatus)
+      .default(ClaimStatus.DRAFT)
+      .compliance('none'),
+    // Which CodeSetProvider this claim was actually built under — resolved
+    // once at build time (see ClaimService.buildClaim) and never
+    // re-resolved. A later CodeSetLicense flip never changes this claim's
+    // own history (§5's "historical claims are never retroactively
+    // recoded" rule) — only claims built after the flip get 'cpt'.
+    codeSetType: fp
+      .enum(() => CodeSetProviderType)
+      .default(CodeSetProviderType.MOCK)
+      .compliance('none'),
+    remittances: () => fp.oneToMany(Remittance).mappedBy('claim'),
+    denials: () => fp.oneToMany(Denial).mappedBy('claim')
+  },
+  // a double-submitted build answers 409 instead of creating a second claim
+  uniques: [{ properties: ['encounter'] }],
+  userIdField: 'patient'
+});
+
+export type Claim = InferEntity<typeof Claim>;

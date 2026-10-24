@@ -18,7 +18,9 @@ describe('MockProcedureCodeProvider', () => {
   });
 
   it('returns undefined for an unknown code', async () => {
-    const result = await provider.lookupProcedureCode({ code: 'PROC-999' });
+    const result = await provider.lookupProcedureCode({
+      code: 'NOT-A-REAL-CODE'
+    });
     expect(result).toBeUndefined();
   });
 });
