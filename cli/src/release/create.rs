@@ -1748,6 +1748,13 @@ fn infer_component_details(
 )> {
     let key_upper = key.to_ascii_uppercase();
 
+    // Development transport policies are booleans, never connection metadata.
+    // In particular DATABASE_* must not infer the database-name property, and
+    // local compose defaults must not become production passthrough values.
+    if key_upper.ends_with("_ALLOW_PLAINTEXT_DEVELOPMENT") || key_upper.ends_with("_DATABASE_BACKUP") {
+        return None;
+    }
+
     // OTEL_SERVICE_NAME is per-service/worker and must NOT use passthrough.
     // The platform sets it dynamically per component at deploy time.
     // Without component metadata, resolveComponentInitialValue returns undefined.
@@ -1825,7 +1832,13 @@ fn infer_component_details(
             default_component_property(&EnvironmentVariableComponentType::Service, &key_upper)
         });
         let path = None;
-        let passthrough_value = Some(value.to_string());
+        let (passthrough, optional) = compose_interpolation(value);
+        // Compose requirements are not values, and empty optional defaults
+        // must remain absent instead of shipping interpolation syntax.
+        if optional == Some(false) || (optional.is_some() && passthrough.is_empty()) || passthrough.contains("${") {
+            return None;
+        }
+        let passthrough_value = Some(passthrough);
         return Some((
             EnvironmentVariableComponentType::Service,
             property,
@@ -2677,6 +2690,50 @@ mod tests {
         assert_eq!(compose_interpolation("${TENANT_ID:?Configure a tenant}"), (String::new(), Some(false)));
         assert_eq!(compose_interpolation("http://iam:8002"), ("http://iam:8002".into(), None));
         assert_eq!(compose_interpolation("prefix-${X:-y}"), ("prefix-${X:-y}".into(), None));
+    }
+
+    #[test]
+    fn database_policy_switches_are_not_infrastructure_components() {
+        let temp_dir = TempDir::new().unwrap();
+        let switches = [
+            "DATABASE_ALLOW_PLAINTEXT_DEVELOPMENT",
+            "WORKER_ALLOW_PLAINTEXT_DEVELOPMENT",
+            "JWKS_ALLOW_PLAINTEXT_DEVELOPMENT",
+            "BILLING_ALLOW_PLAINTEXT_DEVELOPMENT",
+            "BILLING_DATABASE_BACKUP",
+        ];
+        let mut vars: Vec<(&str, &str)> = switches.iter().map(|key| (*key, "false")).collect();
+        vars.push(("DB_HOST", "postgres"));
+        fs::write(
+            temp_dir.path().join("docker-compose.yaml"),
+            create_test_docker_compose(vec![("my-service", vars)]),
+        ).unwrap();
+        let manifest = create_test_manifest(vec![("my-service", ProjectType::Service)]);
+        let (components, compose_vars) = build_env_var_component_map(temp_dir.path(), &manifest);
+        for key in switches {
+            assert!(!components.contains_key(key), "{key} is a policy, not a connection");
+            assert!(compose_vars["my-service"].contains(&(key.into(), "false".into())));
+        }
+        assert!(matches!(components["DB_HOST"].0, EnvironmentVariableComponentType::Database));
+    }
+
+    #[test]
+    fn compose_passthrough_uses_defaults_but_never_required_placeholders() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("docker-compose.yaml"), create_test_docker_compose(vec![(
+            "my-service", vec![
+                ("TENANT_ID", "${IAM_TENANT_ID:?Configure a trusted tenant}"),
+                ("CORS_ORIGINS", "${CORS_ORIGINS:-}"),
+                ("RUST_LOG", "${RUST_LOG:-info}"),
+                ("CUSTOM_REGION", "${CUSTOM_REGION}"),
+            ],
+        )])).unwrap();
+        let manifest = create_test_manifest(vec![("my-service", ProjectType::Service)]);
+        let (components, _) = build_env_var_component_map(temp_dir.path(), &manifest);
+        assert!(!components.contains_key("TENANT_ID"));
+        assert!(!components.contains_key("CORS_ORIGINS"));
+        assert!(!components.contains_key("CUSTOM_REGION"));
+        assert_eq!(components["RUST_LOG"].4.as_deref(), Some("info"));
     }
 
     #[test]

@@ -286,6 +286,9 @@ pub(super) fn plan(root: &Path) -> Result<(String, Vec<String>, Vec<String>)> {
     docker.push_str("\nFROM debian:bookworm-slim AS runtime\nWORKDIR /app\nRUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*\n");
     // Deployed PostgreSQL URLs verify the server against the AWS RDS CA bundle.
     docker.push_str(&format!("ADD --chmod=0644 {RDS_CA_BUNDLE_URL} {RDS_CA_BUNDLE_PATH}\n"));
+    // ADD --chmod also applies to a newly created parent in BuildKit. Restore
+    // directory traversal before the image switches to its non-root user.
+    docker.push_str("RUN chmod 0755 /app/certs\n");
     for binary in &runnable {
         docker.push_str(&format!(
             "COPY --from=builder /app/target/release/{binary} /app/bin/{binary}\n"
@@ -514,6 +517,10 @@ mod tests {
         assert!(!docker.contains("COPY . ."));
         assert!(!docker.contains("src/web"));
         assert!(docker.contains("cargo build --locked --release --workspace --bins"));
+        let ca = docker.find("ADD --chmod=0644").unwrap();
+        let traverse = docker.find("RUN chmod 0755 /app/certs").unwrap();
+        let nonroot = docker.find("USER 65532:65532").unwrap();
+        assert!(ca < traverse && traverse < nonroot);
         assert!(docker.contains("/app/bin/api"));
         assert!(docker.contains("/app/bin/jobs-worker"));
         let compose =
