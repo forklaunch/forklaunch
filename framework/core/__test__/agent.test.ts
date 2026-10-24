@@ -454,12 +454,13 @@ describe('external MCP servers', () => {
     const port = 20000 + Math.floor(Math.random() * 20000);
     await server.start({
       transportType: 'httpStream',
-      httpStream: { port, endpoint: '/mcp' }
+      // Explicit IPv4 on both ends: `localhost` can bind ::1 and dial 127.0.0.1.
+      httpStream: { host: '127.0.0.1', port, endpoint: '/mcp' }
     });
     try {
       const source = mcpServer({
         name: 'notes',
-        url: `http://localhost:${port}/mcp`,
+        url: `http://127.0.0.1:${port}/mcp`,
         headers: { authorization: 'Bearer token', 'x-empty': undefined }
       });
       const tools = await source.list(context());
