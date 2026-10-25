@@ -79,7 +79,7 @@ jobs:
           python3 scripts/rust_release.py prepare --scope "${{ matrix.scope }}" --output "$RUNNER_TEMP/rust-release" "${reuse[@]}"
       - name: Install staged registry crates and verify (framework also starts HTTP/MCP)
         run: python3 scripts/rust_release.py verify --output "$RUNNER_TEMP/rust-release" --target-dir "$RUNNER_TEMP/rust-release-target"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: rust-crate-release-${{ matrix.scope }}-${{ github.sha }}
           retention-days: 30
@@ -139,7 +139,7 @@ jobs:
         run: gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/rust-release/publication.json" --clobber
       - name: Preserve publication receipt, including partial releases
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rust-${{ inputs.scope }}-publication-${{ github.sha }}
           if-no-files-found: ignore
