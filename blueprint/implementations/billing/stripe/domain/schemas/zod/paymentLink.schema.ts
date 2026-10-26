@@ -5,6 +5,9 @@ import {
   enum_,
   number,
   optional,
+  record,
+  schemify,
+  unknown,
   string,
   type
 } from '@forklaunch/validator/zod';
@@ -16,6 +19,14 @@ import {
   StripePaymentLinkUpdateParams
 } from '../../types/stripe.dto.types';
 
+// Structural provider input validation only; arbitrary nested options are retained.
+// Keep the existing SDK static DTO contract; nested SDK fields are not validated here.
+const paymentLinkCreateFields = schemify({
+  line_items: array(record(string, unknown))
+}).passthrough() as unknown as ReturnType<
+  typeof type<StripePaymentLinkCreateParams>
+>;
+
 export const CreatePaymentLinkSchema = <
   T extends Record<string, LiteralSchema>
 >(
@@ -26,7 +37,7 @@ export const CreatePaymentLinkSchema = <
   currency: enum_(CurrencyEnum),
   paymentMethods: array(enum_(PaymentMethodEnum)),
   status: enum_(StatusEnum),
-  stripeFields: type<StripePaymentLinkCreateParams>()
+  stripeFields: paymentLinkCreateFields
 });
 
 export const UpdatePaymentLinkSchema = <

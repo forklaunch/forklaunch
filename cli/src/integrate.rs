@@ -126,7 +126,11 @@ impl CliCommand for IntegrateCommand {
         write(&manifest_path, updated_manifest)
             .with_context(|| format!("Failed to write manifest at {:?}", manifest_path))?;
 
-        log_header!(stdout, Color::Green, "\nApplication integrated successfully!");
+        log_header!(
+            stdout,
+            Color::Green,
+            "\nApplication integrated successfully!"
+        );
 
         log_info!(stdout, "Platform App ID: {}", application_id);
         log_info!(stdout, "Application Name: {}", app_data.name);

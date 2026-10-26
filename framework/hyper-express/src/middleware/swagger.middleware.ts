@@ -6,7 +6,7 @@ import {
 } from '@forklaunch/hyper-express-fork';
 import LiveDirectory from 'live-directory';
 import { OpenAPIObject } from 'openapi3-ts/oas31';
-import getAbsoluteSwaggerFsPath from 'swagger-ui-dist/absolute-path';
+import getAbsoluteSwaggerFsPath from 'swagger-ui-dist/absolute-path.js';
 import swaggerUi from 'swagger-ui-express';
 
 /**

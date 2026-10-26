@@ -181,15 +181,15 @@ fn flatten_topology(root: &CodeNode) -> Topology {
 pub struct ImportScanner {
     modules_root: PathBuf,
     #[allow(dead_code)]
-    app_root: PathBuf,                                             // upper bound for lockfile search
+    app_root: PathBuf, // upper bound for lockfile search
     package_json_cache: HashMap<PathBuf, HashMap<String, String>>, // path → deps (specifiers)
-    lockfile_importers: HashMap<String, HashMap<String, String>>,  // relative_path → { pkg → exact_version }
-    lockfile_root: Option<PathBuf>,                                // directory containing pnpm-lock.yaml
+    lockfile_importers: HashMap<String, HashMap<String, String>>, // relative_path → { pkg → exact_version }
+    lockfile_root: Option<PathBuf>, // directory containing pnpm-lock.yaml
     visited: HashSet<PathBuf>,
     result_cache: HashMap<PathBuf, CodeNode>,
-    scope_prefix: String,        // e.g., "@forklaunch-platform/"
+    scope_prefix: String, // e.g., "@forklaunch-platform/"
     #[allow(dead_code)]
-    app_name: String,            // e.g., "forklaunch-platform"
+    app_name: String, // e.g., "forklaunch-platform"
     node_version: Option<String>, // Node.js version from Dockerfile (e.g., "25")
     flignore: Option<Gitignore>, // .flignore matcher loaded from app_root
 }
@@ -201,24 +201,39 @@ impl ImportScanner {
     }
 
     #[allow(dead_code)]
-    pub fn new_with_app_name(modules_root: &Path, package_json_path: &Path, app_name: &str) -> Self {
+    pub fn new_with_app_name(
+        modules_root: &Path,
+        package_json_path: &Path,
+        app_name: &str,
+    ) -> Self {
         Self::with_app_root(modules_root, package_json_path, app_name, Path::new("/"))
     }
 
-    pub fn with_app_root(modules_root: &Path, package_json_path: &Path, app_name: &str, app_root: &Path) -> Self {
+    pub fn with_app_root(
+        modules_root: &Path,
+        package_json_path: &Path,
+        app_name: &str,
+        app_root: &Path,
+    ) -> Self {
         let mut package_json_cache = HashMap::new();
         if let Ok(deps) = Self::load_dependencies(package_json_path) {
             package_json_cache.insert(
-                package_json_path.canonicalize().unwrap_or_else(|_| package_json_path.to_path_buf()),
+                package_json_path
+                    .canonicalize()
+                    .unwrap_or_else(|_| package_json_path.to_path_buf()),
                 deps,
             );
         }
 
-        let canonical_app_root = app_root.canonicalize().unwrap_or_else(|_| app_root.to_path_buf());
+        let canonical_app_root = app_root
+            .canonicalize()
+            .unwrap_or_else(|_| app_root.to_path_buf());
 
         // Find and parse pnpm-lock.yaml walking up from modules_root, bounded by app_root
         let (lockfile_importers, lockfile_root) = Self::load_lockfile(
-            &modules_root.canonicalize().unwrap_or_else(|_| modules_root.to_path_buf()),
+            &modules_root
+                .canonicalize()
+                .unwrap_or_else(|_| modules_root.to_path_buf()),
             &canonical_app_root,
         );
 
@@ -235,7 +250,9 @@ impl ImportScanner {
         };
 
         Self {
-            modules_root: modules_root.canonicalize().unwrap_or_else(|_| modules_root.to_path_buf()),
+            modules_root: modules_root
+                .canonicalize()
+                .unwrap_or_else(|_| modules_root.to_path_buf()),
             app_root: canonical_app_root,
             package_json_cache,
             lockfile_importers,
@@ -286,7 +303,10 @@ impl ImportScanner {
     }
 
     /// Walk up from `start_dir` to find pnpm-lock.yaml, stopping at `stop_dir` (inclusive).
-    fn load_lockfile(start_dir: &Path, stop_dir: &Path) -> (HashMap<String, HashMap<String, String>>, Option<PathBuf>) {
+    fn load_lockfile(
+        start_dir: &Path,
+        stop_dir: &Path,
+    ) -> (HashMap<String, HashMap<String, String>>, Option<PathBuf>) {
         let mut dir = start_dir.to_path_buf();
         loop {
             let candidate = dir.join("pnpm-lock.yaml");
@@ -315,8 +335,7 @@ impl ImportScanner {
 
         let mut result = HashMap::new();
 
-        let importers = yaml.get("importers")
-            .and_then(|v| v.as_mapping());
+        let importers = yaml.get("importers").and_then(|v| v.as_mapping());
         let importers = match importers {
             Some(m) => m,
             None => return Ok(result),
@@ -338,7 +357,8 @@ impl ImportScanner {
                             Some(s) => s,
                             None => continue,
                         };
-                        let version = info_val.get("version")
+                        let version = info_val
+                            .get("version")
                             .and_then(|v| v.as_str())
                             .unwrap_or("");
 
@@ -376,7 +396,9 @@ impl ImportScanner {
 
     fn scan_node(&mut self, file_path: &Path) -> Result<CodeNode> {
         // Canonicalize to ensure cache/visited checks work regardless of ../. in paths
-        let file_path = file_path.canonicalize().unwrap_or_else(|_| file_path.to_path_buf());
+        let file_path = file_path
+            .canonicalize()
+            .unwrap_or_else(|_| file_path.to_path_buf());
         let file_path = file_path.as_path();
 
         let file_name = file_path
@@ -387,13 +409,8 @@ impl ImportScanner {
 
         // Skip files excluded by .flignore
         if let Some(ref gi) = self.flignore {
-            let relative = file_path
-                .strip_prefix(&self.app_root)
-                .unwrap_or(file_path);
-            if gi
-                .matched_path_or_any_parents(relative, false)
-                .is_ignore()
-            {
+            let relative = file_path.strip_prefix(&self.app_root).unwrap_or(file_path);
+            if gi.matched_path_or_any_parents(relative, false).is_ignore() {
                 return Ok(CodeNode {
                     name: file_name,
                     node_type: "local".to_string(),
@@ -476,19 +493,27 @@ impl ImportScanner {
                 //   2. npm (with target_service): mixed SdkClient + other imports from scoped package
                 //   3. dev-dependency: type-only import (import type { ... })
                 //   4. npm: regular import
-                let is_scoped = !self.scope_prefix.is_empty()
-                    && import.starts_with(&self.scope_prefix);
+                let is_scoped =
+                    !self.scope_prefix.is_empty() && import.starts_with(&self.scope_prefix);
                 let sdk_status = sdk_client_info.get(&import);
 
                 let (node_type, target_service) = match (sdk_status, is_scoped) {
                     (Some(true), true) => {
                         // Only SdkClient imports → api-call
-                        let svc = import[self.scope_prefix.len()..].split('/').next().unwrap_or("").to_string();
+                        let svc = import[self.scope_prefix.len()..]
+                            .split('/')
+                            .next()
+                            .unwrap_or("")
+                            .to_string();
                         ("api-call", Some(svc))
                     }
                     (Some(false), true) => {
                         // Mixed SdkClient + other imports → npm with target_service for edge
-                        let svc = import[self.scope_prefix.len()..].split('/').next().unwrap_or("").to_string();
+                        let svc = import[self.scope_prefix.len()..]
+                            .split('/')
+                            .next()
+                            .unwrap_or("")
+                            .to_string();
                         ("npm", Some(svc))
                     }
                     _ if is_type_only => {
@@ -547,13 +572,15 @@ impl ImportScanner {
         };
 
         // Cache the result so re-visits return instantly
-        self.result_cache.insert(file_path.to_path_buf(), node.clone());
+        self.result_cache
+            .insert(file_path.to_path_buf(), node.clone());
 
         Ok(node)
     }
 
     fn extract_imports(&self, content: &str) -> Vec<(String, bool)> {
-        let re = Regex::new(r#"import\s+(type\s+)?(?:[\w\s{},*]+from\s+)?['"]([^'"]+)['"]"#).unwrap();
+        let re =
+            Regex::new(r#"import\s+(type\s+)?(?:[\w\s{},*]+from\s+)?['"]([^'"]+)['"]"#).unwrap();
         re.captures_iter(content)
             .filter_map(|cap| {
                 cap.get(2).map(|m| {
@@ -573,7 +600,8 @@ impl ImportScanner {
         if self.scope_prefix.is_empty() {
             return result;
         }
-        let re = Regex::new(r#"import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+['"]([^'"]+)['"]"#).unwrap();
+        let re =
+            Regex::new(r#"import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+['"]([^'"]+)['"]"#).unwrap();
         for cap in re.captures_iter(content) {
             let names_str = cap.get(1).map_or("", |m| m.as_str());
             let module_path = cap.get(2).map_or("", |m| m.as_str());
@@ -582,7 +610,8 @@ impl ImportScanner {
                 continue;
             }
 
-            let names: Vec<&str> = names_str.split(',')
+            let names: Vec<&str> = names_str
+                .split(',')
                 .map(|s| s.trim())
                 .filter(|s| !s.is_empty())
                 // Strip leading `type ` prefix from individual named imports
@@ -627,8 +656,12 @@ impl ImportScanner {
         // 1. Try pnpm-lock.yaml for exact resolved version
         if let Some(ref lockfile_root) = self.lockfile_root.clone() {
             // Find the importer whose path best matches file_dir relative to lockfile root
-            let canonical_dir = file_dir.canonicalize().unwrap_or_else(|_| file_dir.to_path_buf());
-            let canonical_root = lockfile_root.canonicalize().unwrap_or_else(|_| lockfile_root.clone());
+            let canonical_dir = file_dir
+                .canonicalize()
+                .unwrap_or_else(|_| file_dir.to_path_buf());
+            let canonical_root = lockfile_root
+                .canonicalize()
+                .unwrap_or_else(|_| lockfile_root.clone());
             if let Ok(rel) = canonical_dir.strip_prefix(&canonical_root) {
                 let rel_str = rel.to_string_lossy().to_string();
                 // Walk up from file_dir's relative path to find the matching importer
@@ -753,9 +786,7 @@ pub fn parse_route_file(
 
     // 1. Extract imports: `import { handler1, handler2 } from '../controllers/foo.controller'`
     //    Use (?s) dotall flag so [^}]+ matches across newlines for multi-line imports
-    let import_re = Regex::new(
-        r#"(?s)import\s*\{([^}]+)\}\s*from\s*['"]([^'"]+)['"]"#
-    ).unwrap();
+    let import_re = Regex::new(r#"(?s)import\s*\{([^}]+)\}\s*from\s*['"]([^'"]+)['"]"#).unwrap();
 
     // Build map: handler_name → import source path (relative)
     let mut handler_to_import_path: HashMap<String, String> = HashMap::new();
@@ -791,8 +822,9 @@ pub fn parse_route_file(
     //    `router.get('/:id', getUser)` or `routerName.post('/', createUser)`
     //    Handles both single-line and multi-line formats
     let route_re = Regex::new(
-        r#"\.\s*(get|post|put|delete|patch|head|options)\s*\(\s*['"]([^'"]+)['"]\s*,\s*(\w+)"#
-    ).unwrap();
+        r#"\.\s*(get|post|put|delete|patch|head|options)\s*\(\s*['"]([^'"]+)['"]\s*,\s*(\w+)"#,
+    )
+    .unwrap();
 
     let mut routes: Vec<ParsedRoute> = Vec::new();
     for cap in route_re.captures_iter(&content) {
@@ -817,13 +849,17 @@ mod tests {
     #[test]
     fn test_scan_worker_controller_topology() {
         // Test with actual sample-worker controller
-        let controller_path = Path::new("../blueprint/sample-worker/api/controllers/sampleWorker.controller.ts");
+        let controller_path =
+            Path::new("../blueprint/sample-worker/api/controllers/sampleWorker.controller.ts");
         let modules_root = Path::new("../blueprint/sample-worker");
         let package_json = Path::new("../blueprint/sample-worker/package.json");
 
         // Skip test if files don't exist (e.g., in CI without blueprint)
         if !controller_path.exists() {
-            eprintln!("Skipping test - controller not found at: {:?}", controller_path);
+            eprintln!(
+                "Skipping test - controller not found at: {:?}",
+                controller_path
+            );
             return;
         }
 
@@ -845,7 +881,10 @@ mod tests {
         println!("Dependencies found: {}", topology.deps.len());
 
         for dep in &topology.deps {
-            println!("  - {} (type: {}, version: {:?}, sourceFiles: {:?})", dep.name, dep.dep_type, dep.version, dep.source_files);
+            println!(
+                "  - {} (type: {}, version: {:?}, sourceFiles: {:?})",
+                dep.name, dep.dep_type, dep.version, dep.source_files
+            );
         }
 
         // Verify we found npm dependencies
@@ -854,7 +893,10 @@ mod tests {
 
         // Verify deps have source files
         let has_source_files = topology.deps.iter().any(|d| !d.source_files.is_empty());
-        assert!(has_source_files, "At least some deps should have source files");
+        assert!(
+            has_source_files,
+            "At least some deps should have source files"
+        );
 
         println!("\n=== JSON OUTPUT ===");
         println!("{}", json.unwrap());
@@ -863,13 +905,17 @@ mod tests {
     #[test]
     fn test_scan_service_controller_topology() {
         // Test with actual billing-stripe service controller
-        let controller_path = Path::new("../blueprint/billing-stripe/api/controllers/plan.controller.ts");
+        let controller_path =
+            Path::new("../blueprint/billing-stripe/api/controllers/plan.controller.ts");
         let modules_root = Path::new("../blueprint/billing-stripe");
         let package_json = Path::new("../blueprint/billing-stripe/package.json");
 
         // Skip test if files don't exist
         if !controller_path.exists() {
-            eprintln!("Skipping test - controller not found at: {:?}", controller_path);
+            eprintln!(
+                "Skipping test - controller not found at: {:?}",
+                controller_path
+            );
             return;
         }
 
@@ -880,19 +926,26 @@ mod tests {
         let topology = result.unwrap();
 
         // Verify flat topology
-        assert!(!topology.deps.is_empty(), "Service should have dependencies");
+        assert!(
+            !topology.deps.is_empty(),
+            "Service should have dependencies"
+        );
 
         println!("=== SERVICE TOPOLOGY SCAN ===");
         println!("Dependencies found: {}", topology.deps.len());
 
         for dep in &topology.deps {
-            println!("  - {} (type: {}, version: {:?}, sourceFiles: {:?})", dep.name, dep.dep_type, dep.version, dep.source_files);
+            println!(
+                "  - {} (type: {}, version: {:?}, sourceFiles: {:?})",
+                dep.name, dep.dep_type, dep.version, dep.source_files
+            );
         }
 
         // Services should have npm dependencies like @forklaunch packages
-        let has_forklaunch = topology.deps.iter().any(|d|
-            d.name.starts_with("@forklaunch")
-        );
+        let has_forklaunch = topology
+            .deps
+            .iter()
+            .any(|d| d.name.starts_with("@forklaunch"));
         assert!(has_forklaunch, "Service should use @forklaunch packages");
     }
 
@@ -919,7 +972,8 @@ mod tests {
         assert!(paths.contains(&"stripe"));
 
         // Verify type-only detection
-        let type_only: Vec<&str> = imports.iter()
+        let type_only: Vec<&str> = imports
+            .iter()
             .filter(|(_, is_type)| *is_type)
             .map(|(p, _)| p.as_str())
             .collect();
@@ -940,15 +994,9 @@ mod tests {
             "@forklaunch/core"
         );
         // Non-scoped package
-        assert_eq!(
-            ImportScanner::normalize_scoped_package("stripe"),
-            "stripe"
-        );
+        assert_eq!(ImportScanner::normalize_scoped_package("stripe"), "stripe");
         // Non-scoped with subpath
-        assert_eq!(
-            ImportScanner::normalize_scoped_package("zod/v3"),
-            "zod"
-        );
+        assert_eq!(ImportScanner::normalize_scoped_package("zod/v3"), "zod");
         assert_eq!(
             ImportScanner::normalize_scoped_package("express"),
             "express"
@@ -982,13 +1030,23 @@ mod tests {
 
         // Verify handlers
         let handlers: Vec<&str> = routes.iter().map(|r| r.handler.as_str()).collect();
-        assert!(handlers.contains(&"createPlan"), "Should have createPlan handler");
+        assert!(
+            handlers.contains(&"createPlan"),
+            "Should have createPlan handler"
+        );
         assert!(handlers.contains(&"getPlan"), "Should have getPlan handler");
 
         // Verify handler sources point to controller file
-        assert!(!handler_sources.is_empty(), "Should have handler source mappings");
+        assert!(
+            !handler_sources.is_empty(),
+            "Should have handler source mappings"
+        );
         for (_handler, source_path) in &handler_sources {
-            assert!(source_path.exists(), "Source path should exist: {:?}", source_path);
+            assert!(
+                source_path.exists(),
+                "Source path should exist: {:?}",
+                source_path
+            );
         }
 
         println!("=== PARSED ROUTES ===");
@@ -1023,18 +1081,25 @@ mod tests {
         assert!(handlers.contains(&"sampleWorkerGet"));
         assert!(handlers.contains(&"sampleWorkerPost"));
 
-        assert!(!handler_sources.is_empty(), "Should resolve handler sources");
+        assert!(
+            !handler_sources.is_empty(),
+            "Should resolve handler sources"
+        );
     }
 
     #[test]
     fn test_route_topology_has_npm_versions() {
         // Test that per-route topology scanning resolves npm package versions from package.json
-        let controller_path = Path::new("../blueprint/billing-stripe/api/controllers/plan.controller.ts");
+        let controller_path =
+            Path::new("../blueprint/billing-stripe/api/controllers/plan.controller.ts");
         let modules_root = Path::new("../blueprint/billing-stripe");
         let package_json = Path::new("../blueprint/billing-stripe/package.json");
 
         if !controller_path.exists() {
-            eprintln!("Skipping test - controller not found at: {:?}", controller_path);
+            eprintln!(
+                "Skipping test - controller not found at: {:?}",
+                controller_path
+            );
             return;
         }
 
@@ -1047,7 +1112,9 @@ mod tests {
         assert!(!topology.deps.is_empty(), "Should have npm dependencies");
 
         // Find npm deps and verify they have versions
-        let npm_deps: Vec<&Dependency> = topology.deps.iter()
+        let npm_deps: Vec<&Dependency> = topology
+            .deps
+            .iter()
             .filter(|d| d.dep_type == "npm")
             .collect();
 
@@ -1055,7 +1122,10 @@ mod tests {
 
         println!("=== ROUTE TOPOLOGY NPM VERSIONS ===");
         for npm_dep in &npm_deps {
-            println!("  {} -> version: {:?}, sourceFiles: {:?}", npm_dep.name, npm_dep.version, npm_dep.source_files);
+            println!(
+                "  {} -> version: {:?}, sourceFiles: {:?}",
+                npm_dep.name, npm_dep.version, npm_dep.source_files
+            );
             assert!(
                 npm_dep.version.is_some(),
                 "npm dep '{}' should have a version",
@@ -1082,11 +1152,14 @@ mod tests {
             return;
         }
 
-        let (routes, handler_sources) = parse_route_file(route_file, modules_root)
-            .expect("Should parse route file");
+        let (routes, handler_sources) =
+            parse_route_file(route_file, modules_root).expect("Should parse route file");
 
         assert!(!routes.is_empty(), "Should find routes");
-        assert!(!handler_sources.is_empty(), "Should resolve handler sources");
+        assert!(
+            !handler_sources.is_empty(),
+            "Should resolve handler sources"
+        );
 
         println!("=== PER-ROUTE TOPOLOGY ===");
         for route in &routes {
@@ -1104,10 +1177,16 @@ mod tests {
 
                 for dep in &topo.deps {
                     match dep.dep_type.as_str() {
-                        "npm" => println!("    npm: {} @ {}", dep.name,
-                            dep.version.as_deref().unwrap_or("?")),
-                        "api-call" => println!("    api-call: {} -> {}", dep.name,
-                            dep.target_service.as_deref().unwrap_or("?")),
+                        "npm" => println!(
+                            "    npm: {} @ {}",
+                            dep.name,
+                            dep.version.as_deref().unwrap_or("?")
+                        ),
+                        "api-call" => println!(
+                            "    api-call: {} -> {}",
+                            dep.name,
+                            dep.target_service.as_deref().unwrap_or("?")
+                        ),
                         _ => {}
                     }
                 }
@@ -1117,7 +1196,10 @@ mod tests {
                     assert!(
                         dep.version.is_some() && !dep.version.as_ref().unwrap().is_empty(),
                         "Route {} {} handler '{}': npm dep '{}' should have version",
-                        route.method, route.path, route.handler, dep.name
+                        route.method,
+                        route.path,
+                        route.handler,
+                        dep.name
                     );
                 }
             } else {

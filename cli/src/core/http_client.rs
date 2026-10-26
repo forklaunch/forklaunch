@@ -290,17 +290,11 @@ mod tests {
 
     #[test]
     fn test_extract_url_path_no_path() {
-        assert_eq!(
-            extract_url_path("https://api.example.com").unwrap(),
-            "/"
-        );
+        assert_eq!(extract_url_path("https://api.example.com").unwrap(), "/");
     }
 
     #[test]
     fn test_extract_url_path_root() {
-        assert_eq!(
-            extract_url_path("https://api.example.com/").unwrap(),
-            "/"
-        );
+        assert_eq!(extract_url_path("https://api.example.com/").unwrap(), "/");
     }
 }

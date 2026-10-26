@@ -1,0 +1,292 @@
+# Release train for the TypeScript packages: framework/ first, then blueprint/.
+# The steps and their traps are in .claude/skills/release-train/SKILL.md.
+#
+# Every release goes through main in two stages per workspace:
+#   stage=version  run pnpm up:packages + changeset version on main and open a
+#                  "Version Packages" PR (never publishes).
+#   stage=release  build, test and plan what main has that npm does not. With
+#                  publish=false (the default) it stops at `pnpm publish --dry-run`;
+#                  with publish=true, from main only, it publishes with provenance,
+#                  polls npm until every version is visible and, for the
+#                  framework, then opens the blueprint Version Packages PR.
+#
+# Secrets: NPM_TOKEN (npm automation/granular token with publish rights on
+# @forklaunch). Optional RELEASE_PR_TOKEN (fine-grained PAT, contents + pull
+# requests write) so CI runs on the PRs this workflow opens; GITHUB_TOKEN works
+# but GitHub does not start pull_request workflows for PRs it opens.
+name: TypeScript Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      workspace:
+        description: 'Workspace to release (framework first, then blueprint)'
+        type: choice
+        options:
+          - framework
+          - blueprint
+        default: framework
+      stage:
+        description: 'version = open the Version Packages PR; release = verify and optionally publish what is on main'
+        type: choice
+        options:
+          - release
+          - version
+        default: release
+      publish:
+        description: 'stage=release only: publish to npm (main only). Off = build, test and pnpm publish --dry-run'
+        type: boolean
+        default: false
+      prepare_blueprint:
+        description: 'After a framework publish, open the blueprint Version Packages PR once npm shows every framework version'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# One release at a time across both workspaces: a blueprint run must never
+# interleave with a framework publish it depends on.
+concurrency:
+  group: ts-release
+  cancel-in-progress: false
+
+env:
+  RELEASE_SCRIPT: .github/workflows/scripts/ts_release/ts_release.mjs
+  BUILD_AND_TEST: .github/workflows/scripts/ts_release/build_and_test.sh
+
+jobs:
+  verify:
+    if: inputs.stage == 'release'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      WS: ${{ inputs.workspace }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.28.7
+
+      - name: Install (frozen lockfile)
+        working-directory: ${{ inputs.workspace }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Blueprint dependency checks
+        if: inputs.workspace == 'blueprint'
+        run: |
+          node "$RELEASE_SCRIPT" check-mikro-orm framework blueprint
+          # Warning only here: the Version Packages PR is where this is enforced.
+          node "$RELEASE_SCRIPT" check-pickup framework blueprint --warn-only
+
+      - name: Build and test
+        run: bash "$BUILD_AND_TEST" "$WS"
+
+      - name: Unreleased changesets
+        working-directory: ${{ inputs.workspace }}
+        run: |
+          pending=$(find .changeset -maxdepth 1 -name '*.md' ! -name README.md | sort)
+          if [ -n "$pending" ]; then
+            echo "::warning::$WS has changesets that are not versioned yet; they are not part of this release: $(echo $pending | tr '\n' ' ')"
+          fi
+
+      - name: Plan (versions on this ref that npm does not have)
+        id: plan
+        run: node "$RELEASE_SCRIPT" plan "$WS" --out "$RUNNER_TEMP/ts-release-plan.json"
+
+      - name: Dry-run publish
+        run: node "$RELEASE_SCRIPT" publish "$WS" --dry-run
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ts-release-plan-${{ inputs.workspace }}-${{ github.sha }}
+          retention-days: 30
+          if-no-files-found: error
+          path: ${{ runner.temp }}/ts-release-plan.json
+
+  publish:
+    needs: verify
+    # Never from a fork, never from anything but main.
+    if: inputs.stage == 'release' && inputs.publish && !github.event.repository.fork && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    # Add required reviewers and a main-only deployment rule to this environment
+    # in Settings > Environments to put a human approval in front of npm.
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write # npm provenance
+    env:
+      WS: ${{ inputs.workspace }}
+      # Referenced (not copied) by ~/.npmrc below; npm fails on an unset one.
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Confirm the commit is on main
+        run: |
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.28.7
+
+      - name: npm auth
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::Repository secret NPM_TOKEN is not set"
+            exit 1
+          fi
+          # Literal ${NODE_AUTH_TOKEN}: npm and pnpm expand it at use, so the
+          # token itself is never written to disk.
+          echo '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}' > "$HOME/.npmrc"
+          npm whoami
+
+      - name: Install (frozen lockfile) and build
+        working-directory: ${{ inputs.workspace }}
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Plan
+        run: node "$RELEASE_SCRIPT" plan "$WS" --out "$RUNNER_TEMP/ts-release-plan.json"
+
+      - name: Publish
+        run: node "$RELEASE_SCRIPT" publish "$WS" --provenance
+
+      - name: Wait until npm shows every version
+        run: node "$RELEASE_SCRIPT" wait "$WS" --timeout 1200 --interval 20 --confirmations 2
+
+  version:
+    needs: publish
+    # stage=version for either workspace, or chained after a successful
+    # framework publish to open the blueprint PR.
+    if: >-
+      !cancelled() && !github.event.repository.fork && github.ref == 'refs/heads/main' &&
+      (inputs.stage == 'version' ||
+       (inputs.stage == 'release' && inputs.workspace == 'framework' && inputs.publish &&
+        inputs.prepare_blueprint && needs.publish.result == 'success'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      WS: ${{ inputs.stage == 'version' && inputs.workspace || 'blueprint' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.28.7
+
+      - name: Wait until npm shows every framework version on this ref
+        if: env.WS == 'blueprint'
+        run: node "$RELEASE_SCRIPT" wait framework --timeout 1800 --interval 20 --confirmations 2
+
+      - name: Install (frozen lockfile)
+        working-directory: ${{ env.WS }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Fresh registry metadata
+        working-directory: ${{ env.WS }}
+        run: pnpm cache delete '*'
+
+      - name: Update dependencies (framework)
+        if: env.WS == 'framework'
+        working-directory: framework
+        run: pnpm up:packages
+
+      - name: Update dependencies (blueprint, our own scope exempt from the release-age window)
+        if: env.WS == 'blueprint'
+        working-directory: blueprint
+        # Only @forklaunch/* is exempt. Never exempt a third-party package and
+        # never set minimum-release-age=0.
+        run: pnpm up:packages '--config.minimum-release-age-exclude=@forklaunch/*'
+
+      - name: Blueprint picked up the framework
+        if: env.WS == 'blueprint'
+        run: |
+          node "$RELEASE_SCRIPT" check-pickup framework blueprint
+          node "$RELEASE_SCRIPT" check-mikro-orm framework blueprint
+
+      - name: Build and test
+        run: bash "$BUILD_AND_TEST" "$WS"
+
+      - name: Version packages
+        id: version
+        working-directory: ${{ env.WS }}
+        run: |
+          pnpm exec changeset status --verbose > "$RUNNER_TEMP/changeset-status.txt" 2>&1 || true
+          cat "$RUNNER_TEMP/changeset-status.txt"
+          pnpm exec changeset version
+          # Lockfile refresh after the version bump (CI defaults to frozen).
+          pnpm install --no-frozen-lockfile
+          pnpm build
+
+      - name: Only this workspace changed
+        run: |
+          outside=$(git status --porcelain -- . ":(exclude)$WS")
+          if [ -n "$outside" ]; then
+            echo "::error::release commands changed files outside $WS/:"
+            echo "$outside"
+            exit 1
+          fi
+
+      - name: Plan the release this PR will make
+        run: |
+          set -o pipefail
+          node "$RELEASE_SCRIPT" plan "$WS" --out "$RUNNER_TEMP/ts-release-plan.json" | tee "$RUNNER_TEMP/plan.txt"
+
+      - name: Open the Version Packages PR
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
+        run: |
+          if [ -z "$(git status --porcelain -- "$WS")" ]; then
+            echo "::notice::$WS: nothing changed; no PR opened"
+            exit 0
+          fi
+          branch="release/$WS-$GITHUB_RUN_ID"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c "$branch"
+          git add -A -- "$WS"
+          git commit -m "chore(release): $WS versions" -m "pnpm up:packages + changeset version by $GITHUB_WORKFLOW run $GITHUB_RUN_ID."
+          git push origin "$branch"
+          {
+            echo "Generated by [$GITHUB_WORKFLOW run $GITHUB_RUN_ID]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID) from \`$GITHUB_SHA\`: \`pnpm up:packages\` + \`changeset version\`. Nothing in it was edited by hand."
+            echo
+            echo "After merging, run **TypeScript Release** with workspace=\`$WS\`, stage=\`release\`, publish=\`true\`."
+            echo
+            echo '### Versions to publish'
+            echo '```'
+            grep -v '^published' "$RUNNER_TEMP/plan.txt" || echo '(none: dependency updates only)'
+            echo '```'
+            echo '### changeset status'
+            echo '```'
+            cat "$RUNNER_TEMP/changeset-status.txt"
+            echo '```'
+          } > "$RUNNER_TEMP/pr-body.md"
+          gh pr create --base main --head "$branch" --title "chore(release): $WS versions" --body-file "$RUNNER_TEMP/pr-body.md"

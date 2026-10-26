@@ -187,7 +187,9 @@ fn update_constants_file(actual_versions: &HashMap<String, String>) -> Result<()
                             continue;
                         }
 
-                        if version != actual_version {
+                        if version.trim_start_matches(['^', '~'])
+                            != actual_version.trim_start_matches(['^', '~'])
+                        {
                             should_update = true;
                             // Preserve the leading character from the original constant
                             let leading_char = version.chars().next().unwrap_or(' ');
@@ -241,7 +243,8 @@ fn update_constants_file(actual_versions: &HashMap<String, String>) -> Result<()
     }
 
     if updated_count > 0 {
-        let updated_content = updated_lines.join("\n");
+        let mut updated_content = updated_lines.join("\n");
+        updated_content.push('\n');
         write(constants_path, updated_content)
             .map_err(|e| format!("Failed to write updated constants file: {}", e))?;
         println!(

@@ -4,10 +4,12 @@ use anyhow::{Context, Result, anyhow, bail};
 use clap::ArgMatches;
 use serde::Deserialize;
 
-use super::base_path::{RequiredLocation, find_app_root_path};
-use super::hmac::AuthMode;
-use super::manifest::application::ApplicationManifestData;
-use super::token::get_token;
+use super::{
+    base_path::{RequiredLocation, find_app_root_path},
+    hmac::AuthMode,
+    manifest::application::ApplicationManifestData,
+    token::get_token,
+};
 use crate::constants::{get_billing_api_url, is_dev_build};
 
 /// Validates user is authenticated. Returns the auth token.
@@ -25,9 +27,7 @@ pub(crate) fn resolve_auth() -> Result<AuthMode> {
 }
 
 /// Validates manifest exists and parses it. Returns (app_root, manifest).
-pub(crate) fn require_manifest(
-    matches: &ArgMatches,
-) -> Result<(PathBuf, ApplicationManifestData)> {
+pub(crate) fn require_manifest(matches: &ArgMatches) -> Result<(PathBuf, ApplicationManifestData)> {
     let (app_root, _) = find_app_root_path(matches, RequiredLocation::Application)?;
     let manifest_path = app_root.join(".forklaunch").join("manifest.toml");
     let content = std::fs::read_to_string(&manifest_path)
@@ -109,10 +109,9 @@ pub(crate) fn require_active_account(auth_mode: &AuthMode) -> Result<()> {
 
 /// Validates app is integrated with platform. Returns the application ID.
 pub(crate) fn require_integration(manifest: &ApplicationManifestData) -> Result<String> {
-    manifest
-        .platform_application_id
-        .clone()
-        .ok_or_else(|| {
-            anyhow!("Application not integrated with platform.\nRun: forklaunch integrate --app <app-id>")
-        })
+    manifest.platform_application_id.clone().ok_or_else(|| {
+        anyhow!(
+            "Application not integrated with platform.\nRun: forklaunch integrate --app <app-id>"
+        )
+    })
 }

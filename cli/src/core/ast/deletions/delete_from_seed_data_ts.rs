@@ -8,10 +8,10 @@ pub(crate) fn delete_from_seed_data_ts<'a>(
     seed_data_program: &mut Program<'a>,
     import_source_identifier: &str,
 ) -> Result<String> {
-    let mut new_body = Vec::new_in(allocator);
+    let mut new_body = Vec::new_in(&allocator);
     seed_data_program.body.iter().for_each(|stmt| {
         let export_statment = match stmt {
-            Statement::ExportNamedDeclaration(export) => export,
+            Statement::ExportDeclaration(export) => export,
             _ => {
                 new_body.push(stmt.clone_in(allocator));
                 return;
@@ -19,7 +19,7 @@ pub(crate) fn delete_from_seed_data_ts<'a>(
         };
 
         let var_statment = match &export_statment.declaration {
-            Some(Declaration::VariableDeclaration(var_decl)) => var_decl,
+            Declaration::VariableDeclaration(var_decl) => var_decl,
             _ => {
                 new_body.push(stmt.clone_in(allocator));
                 return;

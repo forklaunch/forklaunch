@@ -1,0 +1,1 @@
+../../../framework/core/src/http/bindRuntimeAuth.ts

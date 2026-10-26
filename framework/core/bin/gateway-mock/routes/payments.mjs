@@ -41,7 +41,8 @@
  *                               http://localhost:12111 (docker stripe/stripe-mock)
  *   MOCK_STRIPE_UPSTREAM_KEY    the key sent upstream (default sk_test_123)
  */
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { PaymentsContextProtocol } from './payments-context.mjs';
 
 const env = process.env;
 const AUTO_ENABLE = !['0', 'false', 'no'].includes(
@@ -446,6 +447,7 @@ async function onboardingLink(ctx) {
     ctx.state.accountCount = (ctx.state.accountCount ?? 0) + 1;
     account = ctx.state.accounts[ctx.instanceId] = {
       id: `acct_mock_${String(ctx.state.accountCount).padStart(4, '0')}`,
+      bindingGeneration: randomUUID(),
       chargesEnabled: false,
       payoutsEnabled: false,
       detailsSubmitted: false,
@@ -464,6 +466,46 @@ function status(ctx) {
     payoutsEnabled: Boolean(account?.payoutsEnabled),
     requirementsDue: account ? account.requirementsDue : ['onboarding']
   });
+}
+
+// Dedicated context routes never widen STRIPE_ALLOWLIST. Synthetic mode is
+// test-only; configured upstream verifies its own actual account and mode.
+async function scopedRead(ctx, operation) {
+  const read = async () => {
+    const account = accountFor(ctx);
+    return account ? {instanceId:ctx.instanceId, organizationId:`mock:${ctx.instanceId}`,
+      stripeAccountId:account.id, bindingGeneration:account.bindingGeneration} : null;
+  };
+  const protocol = new PaymentsContextProtocol(UPSTREAM_KEY, UPSTREAM ?? 'https://gateway-mock.invalid', async request => {
+    if (UPSTREAM) {
+      const response = await fetch(`${UPSTREAM}${request.path}`, {method:'GET', redirect:'error',
+        signal:AbortSignal.timeout(5000), headers:{authorization:`Bearer ${UPSTREAM_KEY}`,
+          'stripe-account':request.stripeAccount,'stripe-version':request.stripeVersion}});
+      return {status:response.status,body:await response.text()};
+    }
+    let object;
+    if (request.path === '/v1/balance') object = {object:'balance',livemode:false};
+    else if (request.path === `/v1/accounts/${request.stripeAccount}`) object = {object:'account',id:request.stripeAccount};
+    else {
+      const saved = ctx.state.objects.get(request.path.split('/').pop());
+      if (saved?.__account === request.stripeAccount) object = visible(saved);
+    }
+    return {status:object ? 200 : 404,body:JSON.stringify(object ?? {})};
+  });
+  try {
+    const fields = operation === 'issue' ? ['accountId','livemode','apiVersion'] : operation === 'pausedSubscription' ? ['contextToken','eventId','subscriptionId','apiVersion'] : ['contextToken','id','apiVersion'];
+    if (!ctx.body || typeof ctx.body !== 'object' || Array.isArray(ctx.body)
+      || Object.keys(ctx.body).some(k => !fields.includes(k)) || ctx.req.url.includes('?')) throw new Error('invalid');
+    const minute = Math.floor(Date.now()/60000);
+    ctx.state.rate ??= {};
+    const key = `${ctx.instanceId}:${minute}`;
+    ctx.state.rate[key] = (ctx.state.rate[key] ?? 0)+1;
+    if (ctx.state.rate[key] > RPM) return stripeError(ctx,429,'rate_limit_error','Payments request limit exceeded','rate_limit');
+    const owner = {id:ctx.instanceId,organizationId:`mock:${ctx.instanceId}`};
+    return ctx.send(200, await protocol[operation](owner,ctx.body,read),{'cache-control':'no-store'});
+  } catch {
+    return stripeError(ctx,409,'invalid_request_error','Payment context is unavailable or no longer matches','payments_context_invalid');
+  }
 }
 
 async function stripeProxy(ctx) {
@@ -532,6 +574,10 @@ export default {
   routes: [
     { method: 'POST', path: '/payments/onboarding-link', handler: onboardingLink },
     { method: 'GET', path: '/payments/status', handler: status },
+    { method: 'POST', path: '/payments/context', handler: ctx => scopedRead(ctx,'issue') },
+    { method: 'POST', path: '/payments/context/checkout-read', handler: ctx => scopedRead(ctx,'checkout') },
+    { method: 'POST', path: '/payments/context/payment-link-read', handler: ctx => scopedRead(ctx,'paymentLink') },
+    { method: 'POST', path: '/payments/context/paused-subscription-read', handler: ctx => scopedRead(ctx,'pausedSubscription') },
     ...['GET', 'POST', 'DELETE'].map((method) => ({ method, path: PROXY, handler: stripeProxy }))
   ],
   vendorRoutes: [

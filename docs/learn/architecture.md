@@ -20,7 +20,7 @@ description: The directory structure and module layout of a ForkLaunch applicati
     ├── tsconfig.json # TypeScript root config
     ├── tsconfig.base.json # Shared TS config
     ├── vitest.config.ts # Root test config
-    ├── eslint.config.mjs # Root linting config
+    ├── .oxlint.config.json # Root linting config
     ├── LICENSE # MIT License
     ├── README.md # Project documentation
     ├── Dockerfile # Container build config
@@ -38,7 +38,7 @@ description: The directory structure and module layout of a ForkLaunch applicati
     │   ├── registrations.ts # Dependency injection registrations
     │   ├── tsconfig.json
     │   ├── vitest.config.ts
-    │   ├── eslint.config.mjs
+    │   ├── .oxlint.config.json
     │   │
     │   └── persistence/
     │       ├── index.ts
@@ -56,7 +56,7 @@ description: The directory structure and module layout of a ForkLaunch applicati
     │   ├── tempo.yaml # Tempo tracing config
     │   ├── tsconfig.json
     │   ├── vitest.config.ts
-    │   ├── eslint.config.mjs
+    │   ├── .oxlint.config.json
     │   │
     │   └── grafana-provisioning/
     │       ├── dashboards/
@@ -75,7 +75,7 @@ description: The directory structure and module layout of a ForkLaunch applicati
         ├── universalSdk.ts # SDK implementation
         ├── tsconfig.json
         ├── vitest.config.ts
-        └── eslint.config.mjs
+        └── .oxlint.config.json
         │
         # Purpose: Universal SDK for shared utilities
         # Dependencies: ForkLaunch common & universal-sdk

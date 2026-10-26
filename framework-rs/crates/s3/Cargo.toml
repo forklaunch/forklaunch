@@ -1,0 +1,51 @@
+[package]
+description = "ForkLaunch Rust infrastructure s3 APIs and runtime support"
+name = "forklaunch-infrastructure-s3"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+encryption = ["forklaunch-core/encryption", "dep:serde"]
+aws-sdk = ["dep:aws-sdk-s3", "dep:aws-config", "dep:tokio", "dep:base64", "dep:chrono", "dep:hmac", "dep:sha2", "dep:serde_json", "dep:url", "dep:zeroize", "dep:aws-smithy-runtime-api", "dep:aws-smithy-types", "dep:aws-runtime"]
+
+[dependencies]
+forklaunch-core = { version = "0.2.5", path = "../core" }
+serde = { version = "1", optional = true }
+
+aws-sdk-s3 = { version = "=1.124.0", default-features = false, features = ["rt-tokio", "default-https-client", "behavior-version-latest"], optional = true }
+aws-config = { version = "=1.8.11", features = ["behavior-version-latest"], optional = true }
+tokio = { version = "1", features = ["time"], optional = true }
+
+aws-runtime = { version = "1", optional = true }
+aws-smithy-runtime-api = { version = "1", features = ["client"], optional = true }
+aws-smithy-types = { version = "1", optional = true }
+base64 = { version = "0.23", optional = true }
+chrono = { version = "0.4", default-features = false, features = ["std"], optional = true }
+hmac = { version = "0.13", optional = true }
+sha2 = { version = "0.11", optional = true }
+serde_json = { version = "=1.0.151", optional = true }
+url = { version = "2", optional = true }
+zeroize = { version = "1", optional = true }
+
+[dev-dependencies]
+aws-credential-types = "1"
+bytes = "1"
+http-body = "1"
+tempfile = "3"
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "multipart"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "fs"] }
+
+[lints]
+workspace = true
+
+[[example]]
+name = "s3_environment_parity"
+required-features = ["aws-sdk"]
+
+[[example]]
+name = "json_object_parity"
+required-features = ["aws-sdk", "encryption"]

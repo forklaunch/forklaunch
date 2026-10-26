@@ -1,0 +1,192 @@
+{{#has_optional_fields}}
+fn deserialize_optional_field<'de, D, T>(deserializer: D) -> ::std::result::Result<::std::option::Option<T>, D::Error>
+where D: ::serde::Deserializer<'de>, T: ::serde::Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(::std::option::Option::Some)
+}
+{{/has_optional_fields}}
+{{#has_required_fields}}
+fn deserialize_required_field<'de, D, T>(deserializer: D) -> ::std::result::Result<T, D::Error>
+where D: ::serde::Deserializer<'de>, T: ::serde::Deserialize<'de>,
+{
+    T::deserialize(deserializer)
+}
+{{/has_required_fields}}
+
+{{#models}}
+{{#union}}
+#[derive(::std::fmt::Debug, ::std::clone::Clone, ::std::cmp::PartialEq, ::serde::Serialize, ::serde::Deserialize)]
+#[serde(untagged)]
+pub enum {{name}} {
+{{#variants}}
+    {{name}}({{{value_type}}}),
+{{/variants}}
+}
+
+{{#has_default}}impl ::std::default::Default for {{name}} {
+    fn default() -> Self {
+{{#variants}}{{#first}}
+        Self::{{name}}(::std::default::Default::default())
+{{/first}}{{/variants}}
+    }
+}
+{{/has_default}}
+{{/union}}{{#string_enum}}
+#[derive(::std::fmt::Debug, ::std::clone::Clone, ::std::marker::Copy, ::std::default::Default, ::std::cmp::PartialEq, ::std::cmp::Eq, ::std::hash::Hash, ::std::cmp::PartialOrd, ::std::cmp::Ord, ::serde::Serialize, ::serde::Deserialize)]
+pub enum {{name}} {
+{{#enum_variants}}
+    {{#first}}#[default]
+    {{/first}}#[serde(rename = {{{wire_name_literal}}})]
+    {{name}},
+{{/enum_variants}}
+}
+
+impl {{name}} {
+    /// The exact wire value.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+{{#enum_variants}}
+            Self::{{name}} => {{{wire_name_literal}}},
+{{/enum_variants}}
+        }
+    }
+}
+
+impl ::std::fmt::Display for {{name}} {
+    fn fmt(&self, formatter: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+{{/string_enum}}
+{{^union}}{{^string_enum}}
+{{^sequence}}
+#[derive(::std::fmt::Debug, ::std::clone::Clone{{#has_default}}, ::std::default::Default{{/has_default}}, ::std::cmp::PartialEq, ::serde::Serialize, ::serde::Deserialize)]
+{{#deny_unknown_fields}}#[serde(deny_unknown_fields)]{{/deny_unknown_fields}}{{#transparent}}#[serde(transparent)]{{/transparent}}
+pub struct {{name}} {
+{{#fields}}
+    {{#date_codec}}#[serde(with = "{{{date_codec}}}")]{{#optional}}#[serde(default, skip_serializing_if = "::std::option::Option::is_none")]{{/optional}}{{/date_codec}}
+    {{^date_codec}}{{#optional}}#[serde(default, deserialize_with = "deserialize_optional_field", skip_serializing_if = "::std::option::Option::is_none")]{{/optional}}{{#required}}#[serde(deserialize_with = "deserialize_required_field")]{{/required}}{{/date_codec}}
+    {{#flatten}}#[serde(flatten)]{{/flatten}}{{^flatten}}#[serde(rename = {{{wire_name_literal}}})]{{/flatten}}
+    pub {{field_name}}: {{{field_type}}},
+{{/fields}}
+}
+{{/sequence}}{{/string_enum}}
+{{/union}}
+
+{{#sequence}}
+#[derive(::std::fmt::Debug, ::std::clone::Clone{{#has_default}}, ::std::default::Default{{/has_default}}, ::std::cmp::PartialEq)]
+pub struct {{name}} {
+{{#fields}}
+    pub {{field_name}}: {{{field_type}}},
+{{/fields}}
+{{#sequence_rest}}
+    pub rest: ::std::vec::Vec<{{{sequence_rest_type}}}>,
+{{/sequence_rest}}
+}
+
+impl ::serde::Serialize for {{name}} {
+    fn serialize<__ForklaunchSerializer: ::serde::Serializer>(&self, serializer: __ForklaunchSerializer) -> ::std::result::Result<__ForklaunchSerializer::Ok, __ForklaunchSerializer::Error> {
+        use ::serde::ser::SerializeSeq as _;
+        #[allow(unused_mut)]
+        let mut length = 0usize;
+        #[allow(unused_mut, unused_variables)]
+        let mut missing = false;
+{{#fields}}
+{{#optional}}
+        if self.{{field_name}}.is_some() {
+            if missing { return ::std::result::Result::Err(<__ForklaunchSerializer::Error as ::serde::ser::Error>::custom("tuple positions must be contiguous")); }
+            length = length.checked_add(1).ok_or_else(|| <__ForklaunchSerializer::Error as ::serde::ser::Error>::custom("tuple length overflow"))?;
+        } else { missing = true; }
+{{/optional}}
+{{^optional}}
+        length = length.checked_add(1).ok_or_else(|| <__ForklaunchSerializer::Error as ::serde::ser::Error>::custom("tuple length overflow"))?;
+{{/optional}}
+{{/fields}}
+{{#sequence_rest}}
+        if missing && !self.rest.is_empty() { return ::std::result::Result::Err(<__ForklaunchSerializer::Error as ::serde::ser::Error>::custom("tuple rest requires every prefix position")); }
+        length = length.checked_add(self.rest.len()).ok_or_else(|| <__ForklaunchSerializer::Error as ::serde::ser::Error>::custom("tuple length overflow"))?;
+{{/sequence_rest}}
+        let _ = missing;
+        let wire_length = u64::try_from(length).map_err(|_| <__ForklaunchSerializer::Error as ::serde::ser::Error>::custom("tuple length overflow"))?;
+        if !({{sequence_min}}..={{sequence_max}}).contains(&wire_length) {
+            return ::std::result::Result::Err(<__ForklaunchSerializer::Error as ::serde::ser::Error>::custom("tuple length outside declared bounds"));
+        }
+        #[allow(unused_mut)]
+        let mut sequence = serializer.serialize_seq(::std::option::Option::Some(length))?;
+{{#fields}}
+{{#optional}}
+        if let ::std::option::Option::Some(value) = &self.{{field_name}} { sequence.serialize_element(value)?; }
+{{/optional}}
+{{^optional}}
+        sequence.serialize_element(&self.{{field_name}})?;
+{{/optional}}
+{{/fields}}
+{{#sequence_rest}}
+        for value in &self.rest { sequence.serialize_element(value)?; }
+{{/sequence_rest}}
+        sequence.end()
+    }
+}
+
+impl<'de> ::serde::Deserialize<'de> for {{name}} {
+    fn deserialize<__ForklaunchDeserializer: ::serde::Deserializer<'de>>(deserializer: __ForklaunchDeserializer) -> ::std::result::Result<Self, __ForklaunchDeserializer::Error> {
+        struct __ForklaunchSequenceVisitor;
+        impl<'de> ::serde::de::Visitor<'de> for __ForklaunchSequenceVisitor {
+            type Value = {{name}};
+            fn expecting(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                formatter.write_str("the {{name}} tuple sequence")
+            }
+            fn visit_seq<__ForklaunchSeqAccess: ::serde::de::SeqAccess<'de>>(self, mut sequence: __ForklaunchSeqAccess) -> ::std::result::Result<Self::Value, __ForklaunchSeqAccess::Error> {
+                #[allow(unused_mut)]
+                let mut length = 0u64;
+                #[allow(unused_mut)]
+                let mut ended = false;
+{{#fields}}
+{{#optional}}
+                let {{field_name}}: {{{field_type}}} = if ended { ::std::option::Option::None } else {
+                    let value = sequence.next_element()?;
+                    ended = value.is_none();
+                    value
+                };
+                if {{field_name}}.is_some() { length = length.checked_add(1).ok_or_else(|| ::serde::de::Error::custom("tuple length overflow"))?; }
+{{/optional}}
+{{^optional}}
+                let {{field_name}} = sequence.next_element()?.ok_or_else(|| ::serde::de::Error::custom("missing tuple element {{field_name}}"))?;
+                length = length.checked_add(1).ok_or_else(|| ::serde::de::Error::custom("tuple length overflow"))?;
+{{/optional}}
+{{/fields}}
+{{#sequence_rest}}
+                let mut rest = ::std::vec::Vec::new();
+                while !ended {
+                    if length == {{sequence_max}} {
+                        if sequence.next_element::<::serde::de::IgnoredAny>()?.is_some() {
+                            return ::std::result::Result::Err(::serde::de::Error::custom("tuple length exceeds declared maximum"));
+                        }
+                        break;
+                    }
+                    if let ::std::option::Option::Some(value) = sequence.next_element()? {
+                        length = length.checked_add(1).ok_or_else(|| ::serde::de::Error::custom("tuple length overflow"))?;
+                        rest.push(value);
+                    } else { ended = true; }
+                }
+{{/sequence_rest}}
+{{^sequence_rest}}
+                if !ended && sequence.next_element::<::serde::de::IgnoredAny>()?.is_some() {
+                    return ::std::result::Result::Err(::serde::de::Error::custom("extra tuple element"));
+                }
+{{/sequence_rest}}
+                if !({{sequence_min}}..={{sequence_max}}).contains(&length) { return ::std::result::Result::Err(::serde::de::Error::custom("tuple length outside declared bounds")); }
+                ::std::result::Result::Ok({{name}} { {{#fields}}{{field_name}}, {{/fields}}{{#sequence_rest}}rest,{{/sequence_rest}} })
+            }
+        }
+        deserializer.deserialize_seq(__ForklaunchSequenceVisitor)
+    }
+}
+{{/sequence}}
+
+{{/models}}
+{{#aliases}}
+pub type {{name}} = {{{target_type}}};
+
+{{/aliases}}

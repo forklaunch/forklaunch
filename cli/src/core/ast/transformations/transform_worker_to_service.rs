@@ -54,10 +54,10 @@ pub(crate) fn transform_registrations_ts_worker_to_service(
 
     // Delete EventRecord-related imports (type interface and entity alias)
     // These contain "EventRecord" in the import source path
-    let mut new_body = oxc_allocator::Vec::new_in(&allocator);
+    let mut new_body = oxc_allocator::Vec::new_in(&&allocator);
     for stmt in program.body.iter() {
         if let oxc_ast::ast::Statement::ImportDeclaration(import) = stmt {
-            let source = import.source.value.as_str();
+            let source = import.source.value.as_str().unwrap_or_default();
             if source.contains("EventRecord") {
                 continue; // Skip EventRecord imports
             }

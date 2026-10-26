@@ -1,5 +1,13 @@
 # @forklaunch/implementation-messaging-twilio
 
+## 1.1.10
+
+### Patch Changes
+
+- d2319b3: SMS services no longer `await` MikroORM's synchronous `persist` inside their transactions. No behaviour change.
+- Updated dependencies [d2319b3]
+  - @forklaunch/implementation-messaging-base@1.1.10
+
 ## 1.1.9
 
 ### Patch Changes

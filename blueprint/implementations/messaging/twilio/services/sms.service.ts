@@ -153,7 +153,7 @@ export class TwilioSmsService<
     }
 
     await (em ?? this.em).transactional(async (innerEm) => {
-      await innerEm.persist(smsRecord);
+      innerEm.persist(smsRecord);
     });
 
     return this.mappers.SmsRecordMapper.toDto(

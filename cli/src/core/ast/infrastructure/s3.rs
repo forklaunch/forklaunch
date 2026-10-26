@@ -80,7 +80,7 @@ pub(crate) fn s3_url_environment_variable<'a>(
     type: optional(number),
     value: Number(getEnvVar('S3_PRESIGN_MAX_DOWNLOAD_SECONDS')) || undefined
   },
-    });";;
+    });";
 
     let mut s3_env_var_program = parse_ast_program(&allocator, &s3_env_var_text, SourceType::ts());
 

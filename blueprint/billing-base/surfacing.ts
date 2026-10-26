@@ -53,7 +53,8 @@ export async function createSurfaceSubscription(params: {
       const headers = generateHmacAuthHeaders({
         secretKey: hmacSecretKey,
         method: 'GET',
-        path: `/${payload.organizationId}/subscription`
+        // HMAC signs the full wire path, without the query string.
+        path: `/subscription/organization/${encodeURIComponent(payload.organizationId)}`
       });
 
       const response =
@@ -72,7 +73,7 @@ export async function createSurfaceSubscription(params: {
       const planHeaders = generateHmacAuthHeaders({
         secretKey: hmacSecretKey,
         method: 'GET',
-        path: `/${sub.productId}/plan`
+        path: `/plan/${encodeURIComponent(sub.productId)}`
       });
       const planResponse = await billingSdk.plan.getPlan({
         params: { id: sub.productId },
@@ -136,7 +137,8 @@ export async function createSurfaceFeatures(params: {
       const subHeaders = generateHmacAuthHeaders({
         secretKey: hmacSecretKey,
         method: 'GET',
-        path: `/${payload.organizationId}/subscription`
+        // HMAC signs the full wire path, without the query string.
+        path: `/subscription/organization/${encodeURIComponent(payload.organizationId)}`
       });
 
       const response =
@@ -153,7 +155,7 @@ export async function createSurfaceFeatures(params: {
       const planHeaders = generateHmacAuthHeaders({
         secretKey: hmacSecretKey,
         method: 'GET',
-        path: `/${response.response.productId}/plan`
+        path: `/plan/${encodeURIComponent(response.response.productId)}`
       });
       const planResponse = await billingSdk.plan.getPlan({
         params: { id: response.response.productId },

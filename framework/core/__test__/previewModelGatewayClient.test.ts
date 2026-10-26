@@ -65,10 +65,9 @@ describe('Separate preview catalog contract', () => {
     // @ts-expect-error Preview model selection does not establish a BAA.
     type PreviewBaa = GatewayPreviewModels['models'][number]['baa'];
     type PreviewCompletions = PreviewModelGatewayClient['chat']['completions'];
-    // @ts-expect-error The preview gateway does not support streaming.
     type PreviewStreaming = PreviewCompletions['stream'];
     expectTypeOf<PreviewMonthly>().toEqualTypeOf<PreviewBaa>();
-    expectTypeOf<PreviewStreaming>().toEqualTypeOf<PreviewBaa>();
+    expectTypeOf<PreviewStreaming>().toBeFunction();
   });
   it('validates the preview catalog and uses the exact existing signed gateway route', async () => {
     const raw = catalog(),
@@ -174,7 +173,7 @@ describe('Separate preview catalog contract', () => {
       'https://local-preview.example/instance-gateway/models/chat/completions'
     );
     expect(JSON.parse(String(f.calls[0].init.body))).toEqual(body);
-    expect('stream' in f.client.chat.completions).toBe(false);
+    expect('stream' in f.client.chat.completions).toBe(true);
   });
 });
 

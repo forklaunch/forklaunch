@@ -1,5 +1,11 @@
 # @forklaunch/implementation-worker-bullmq
 
+## 1.0.41
+
+### Patch Changes
+
+- d2319b3: Mark intentionally unawaited calls (`failureHandler` on failed jobs, the Kafka producer `connect` and peek consumer `run`) with `void`. No behaviour change; this keeps type-aware lint clean in generated apps.
+
 ## 1.0.40
 
 ### Patch Changes

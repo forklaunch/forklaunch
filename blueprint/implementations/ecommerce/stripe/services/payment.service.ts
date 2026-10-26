@@ -32,6 +32,7 @@ export class StripePaymentService<
   Dto extends BasePaymentDtos = BasePaymentDtos
 > implements PaymentService {
   basePaymentService: BasePaymentService<SchemaValidator, Entities, Dto>;
+  private readonly validateResume?: StripePaymentMappers<Entities, Dto>['PaymentMapper']['validateResume'];
   protected readonly stripeClient: Stripe;
   protected readonly em: EntityManager;
   protected readonly openTelemetryCollector: OpenTelemetryCollector<MetricsDefinition>;
@@ -66,6 +67,7 @@ export class StripePaymentService<
     }
   ) {
     this.stripeClient = stripeClient;
+    this.validateResume = mappers.PaymentMapper.validateResume;
     this.em = em;
     this.openTelemetryCollector = openTelemetryCollector;
     if (options?.connect) {
@@ -201,6 +203,7 @@ export class StripePaymentService<
     em?: EntityManager
   ): Promise<Dto['PaymentMapper'] & { clientSecret?: string }> {
     const payment = await this.basePaymentService.getPayment(idDto, em);
+    await this.validateResume?.(payment, em ?? this.em);
     if (!payment.providerRef) {
       return payment;
     }
@@ -211,6 +214,10 @@ export class StripePaymentService<
         ? { stripeAccount: this.connect.connectedAccountId }
         : undefined
     );
+    if (paymentIntent?.id !== payment.providerRef) {
+      throw new Error('Stripe returned an invalid PaymentIntent response');
+    }
+    await this.validateResume?.(payment, em ?? this.em);
     return {
       ...payment,
       clientSecret: paymentIntent.client_secret ?? undefined

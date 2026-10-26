@@ -199,11 +199,26 @@ function generateOperationObject<SV extends AnySchemaValidator>(
   for (const key in discriminatedResponseBodiesResult) {
     coercedResponses[key] = {
       description: HTTPStatuses[key],
-      content: contentResolver(
-        schemaValidator,
-        discriminatedResponseBodiesResult[key].schema,
-        discriminatedResponseBodiesResult[key].contentType
-      ),
+      // Undefined/void represent no response body, not a JSON null payload.
+      // Check the schema kind rather than its OpenAPI projection: null and
+      // nullish also project to null but still admit an actual JSON body.
+      content:
+        (schemaValidator.undefined !== undefined &&
+          typedSchemaValidator.isInstanceOf(
+            discriminatedResponseBodiesResult[key].schema,
+            schemaValidator.undefined
+          )) ||
+        (schemaValidator.void !== undefined &&
+          typedSchemaValidator.isInstanceOf(
+            discriminatedResponseBodiesResult[key].schema,
+            schemaValidator.void
+          ))
+          ? undefined
+          : contentResolver(
+              schemaValidator,
+              discriminatedResponseBodiesResult[key].schema,
+              discriminatedResponseBodiesResult[key].contentType
+            ),
       headers: responseHeaders
         ? Object.fromEntries(
             Object.entries(responseHeaders).map(([key, value]) => [
@@ -240,23 +255,36 @@ function generateOperationObject<SV extends AnySchemaValidator>(
       operationObject.parameters?.push({
         name: key,
         in: 'path',
+        required: true,
         schema: typedSchemaValidator.openapi(params[key])
       });
     }
   }
 
+  const adapter = schemaValidator as SchemaValidator;
+  const bareProjection =
+    body && adapter.isSchema(body)
+      ? adapter.openapiRequestBody?.(body)
+      : undefined;
   const discriminatedBodyResult = body
-    ? discriminateBody(schemaValidator, body)
+    ? discriminateBody(schemaValidator, body, bareProjection?.schema)
     : null;
 
   if (discriminatedBodyResult) {
+    const projection =
+      bareProjection ??
+      adapter.openapiRequestBody?.(discriminatedBodyResult.schema);
     operationObject.requestBody = {
-      required: true,
-      content: contentResolver(
-        schemaValidator,
-        discriminatedBodyResult.schema,
-        discriminatedBodyResult.contentType
-      )
+      required: projection?.required ?? true,
+      content: projection
+        ? {
+            [discriminatedBodyResult.contentType]: { schema: projection.schema }
+          }
+        : contentResolver(
+            schemaValidator,
+            discriminatedBodyResult.schema,
+            discriminatedBodyResult.contentType
+          )
     };
   }
 
@@ -292,33 +320,15 @@ function generateOperationObject<SV extends AnySchemaValidator>(
     };
 
     if ('basic' in auth) {
-      operationObject.security = [
-        {
-          basic: Array.from(
-            'allowedPermissions' in auth &&
-              auth.allowedPermissions instanceof Set
-              ? auth.allowedPermissions.values()
-              : []
-          )
-        }
-      ];
+      operationObject.security = [{ basic: [] }];
 
       securitySchemes['basic'] = {
         type: 'http',
         scheme: 'basic'
       };
     } else if (auth) {
-      operationObject.security = [
-        {
-          [auth.headerName !== 'Authorization' ? 'bearer' : 'apiKey']:
-            Array.from(
-              'allowedPermissions' in auth &&
-                auth.allowedPermissions instanceof Set
-                ? auth.allowedPermissions.values()
-                : []
-            )
-        }
-      ];
+      const schemeName = auth.headerName || 'Authorization';
+      operationObject.security = [{ [schemeName]: [] }];
 
       if (auth.headerName && auth.headerName !== 'Authorization') {
         securitySchemes[auth.headerName] = {

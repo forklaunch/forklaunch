@@ -10,6 +10,12 @@ pub(crate) fn format_code(base_path: &Path, runtime: &Runtime) {
     if std::env::var_os("FORKLAUNCH_SKIP_FORMAT").is_some() {
         return;
     }
+    // Before the first install the formatter is not available, and running the
+    // script would make the package manager install dependencies and write a
+    // lockfile the user never asked for.
+    if !base_path.ancestors().any(|directory| directory.join("node_modules").is_dir()) {
+        return;
+    }
     let command = match runtime {
         Runtime::Node => "pnpm",
         Runtime::Bun => "bun",

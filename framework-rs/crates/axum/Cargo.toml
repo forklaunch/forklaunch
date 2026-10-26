@@ -1,0 +1,150 @@
+[package]
+description = "ForkLaunch Rust axum APIs and runtime support"
+name = "forklaunch-axum"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[features]
+native-server = ["native", "forklaunch-core/rmcp-server", "forklaunch-core/otlp"]
+native-streams = ["native", "axum/ws", "dep:forklaunch-ws", "forklaunch-ws/typed-schema", "dep:futures-util"]
+# Agent routes (`/api/v1/agent`) bound on the native contract router.
+agent = ["native-streams", "native-jwt", "forklaunch-core/agent"]
+# Bearer-JWT session policy over a remote JWKS for plain native services.
+native-jwt = ["native", "forklaunch-core/remote-jwks"]
+native = ["dep:schemars", "axum/multipart", "dep:serde_urlencoded", "forklaunch-core/typed-schema", "forklaunch-core/schema-validation", "dep:bytes", "dep:http-body", "dep:axum", "dep:tokio", "dep:tower", "dep:tower-http", "dep:uuid", "tokio/sync", "tokio/signal", "tokio/time"]
+typescript-routing = ["adapter", "forklaunch-common/zod-regex"]
+zod-regex = ["dep:forklaunch-validator", "forklaunch-validator/zod-regex", "forklaunch-core/zod-regex", "forklaunch-ws?/zod-regex"]
+zod-checks = ["forklaunch-core/zod-checks", "forklaunch-ws?/zod-checks"]
+default = ["adapter"]
+zod-uri = ["dep:forklaunch-validator", "forklaunch-validator/zod-uri", "forklaunch-core/zod-uri", "forklaunch-ws?/zod-uri"]
+cookie-session = ["adapter", "dep:tower-sessions", "dep:subtle", "dep:rand", "dep:url"]
+multipart = ["adapter", "axum/multipart", "dep:forklaunch-validator"]
+sse = ["adapter", "dep:futures-util", "dep:forklaunch-validator"]
+websocket = ["adapter", "axum/ws", "dep:forklaunch-ws", "dep:futures-util"]
+mcp = ["adapter", "forklaunch-core/rmcp-server", "tokio/sync", "tokio/time"]
+remote-jwks = ["adapter", "forklaunch-core/remote-jwks", "dep:jsonwebtoken"]
+adapter = ["forklaunch-common/javascript-number", "dep:uuid", "tokio/time", "dep:axum", "dep:tokio", "dep:tower", "dep:tower-http", "dep:bytes", "dep:form_urlencoded", "dep:http-body", "dep:http-body-util"]
+
+[dependencies]
+serde_urlencoded = { version = "0.7", optional = true }
+uuid = { version = "1", features = ["v4"], optional = true }
+tower-sessions = { version = "0.15", optional = true }
+subtle = { version = "2", optional = true }
+rand = { version = "0.10", optional = true }
+url = { version = "2", optional = true }
+forklaunch-validator = { version = "0.2.5", path = "../validator", optional = true }
+forklaunch-ws = { version = "0.2.5", path = "../ws", features = ["transport"], optional = true }
+futures-util = { version = "0.3", features = ["sink"], optional = true }
+forklaunch-common = { version = "0.2.5", path = "../common" }
+forklaunch-core = { version = "0.2.5", path = "../core", features = ["openapi", "auth", "http"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "=1.0.151"
+tracing = "0.1"
+opentelemetry = "0.33"
+
+axum = { version = "0.8", optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "macros"], optional = true }
+tower = { version = "0.5", features = ["util"], optional = true }
+tower-http = { version = "0.7", features = ["cors", "limit", "trace", "request-id", "util"], optional = true }
+form_urlencoded = { version = "1", optional = true }
+bytes = { version = "1", optional = true }
+http-body = { version = "1", optional = true }
+http-body-util = { version = "0.1", optional = true }
+
+jsonwebtoken = { version = "11", features = ["aws_lc_rs"], optional = true }
+
+schemars = { version = "1.2", optional = true }
+
+[dev-dependencies]
+forklaunch-core = { version = "0.2.5", path = "../core", features = ["validator", "encryption", "rmcp-server"] }
+http-body = "1"
+forklaunch-validator = { version = "0.2.5", path = "../validator" }
+garde = { version = "0.23", features = ["derive"] }
+schemars = "1.2"
+reqwest = { version = "0.13", default-features = false, features = ["json"] }
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+opentelemetry_sdk = { version = "0.33", features = ["testing"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "sync"] }
+tower = { version = "0.5", features = ["util"] }
+
+[lints]
+workspace = true
+
+[[example]]
+name = "native_version_union"
+required-features = ["native"]
+
+[[example]]
+name = "docs_parity"
+required-features = ["adapter"]
+
+[[example]]
+name = "router_origin_parity"
+required-features = ["adapter"]
+
+[[example]]
+name = "correlation_parity"
+required-features = ["adapter"]
+
+[[example]]
+name = "cors_parity"
+required-features = ["adapter"]
+
+[[example]]
+name = "json_composition_runtime"
+required-features = ["adapter"]
+
+[[example]]
+name = "json_request_parity"
+required-features = ["adapter"]
+
+[[example]]
+name = "request_fields_parity"
+required-features = ["adapter"]
+
+[[example]]
+name = "request_order_parity"
+required-features = ["adapter"]
+
+[[example]]
+name = "request_transform_parity"
+required-features = ["adapter"]
+
+[[example]]
+name = "response_warning_parity"
+required-features = ["adapter"]
+
+[[example]]
+name = "version_default_errors"
+required-features = ["adapter"]
+
+[[example]]
+name = "version_json_wire"
+required-features = ["adapter"]
+
+[[example]]
+name = "version_optional_body"
+required-features = ["adapter"]
+
+[[example]]
+name = "version_query_parity"
+required-features = ["adapter"]
+
+[[example]]
+name = "version_request_diagnostics"
+required-features = ["adapter"]
+
+[[example]]
+name = "version_request_modes"
+required-features = ["adapter"]
+
+[[example]]
+name = "version_response_parity"
+required-features = ["adapter"]
+
+[[example]]
+name = "version_text_wire"
+required-features = ["adapter"]

@@ -172,12 +172,7 @@ const expressApplicationOptions = serviceDependencies.chain({
         >
       >()
     ),
-    factory: async ({
-      BETTER_AUTH_BASE_PATH,
-      CORS_ORIGINS,
-      BetterAuth,
-      SurfacingService
-    }) => {
+    factory: async ({ CORS_ORIGINS, BetterAuth, SurfacingService }) => {
       const betterAuthOpenAPIContent = await (
         BetterAuth as BetterAuth
       ).api.generateOpenAPISchema();
@@ -215,14 +210,9 @@ const expressApplicationOptions = serviceDependencies.chain({
           sources: [
             {
               title: 'BetterAuth',
-              content: {
-                ...betterAuthOpenAPIContent,
-                paths: Object.fromEntries(
-                  Object.entries(betterAuthOpenAPIContent.paths).map(
-                    ([key, value]) => [`${BETTER_AUTH_BASE_PATH}${key}`, value]
-                  )
-                )
-              }
+              // The auth schema's server URL already includes its base path.
+              // Prefixing paths too makes Scalar send requests to it twice.
+              content: betterAuthOpenAPIContent
             }
           ]
         }

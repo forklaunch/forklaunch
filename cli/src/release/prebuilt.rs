@@ -65,7 +65,20 @@ pub(super) fn validate_paths(root: &Path, manifest: &ApplicationManifestData) ->
         {
             bail!("Invalid project name in prebuilt snapshot");
         }
-        spec_directory(root, &format!("{}/{}", manifest.modules_path, project.name))?;
+        let metadata = project.metadata.as_ref();
+        let directory =
+            if crate::core::storefront::is_capture(project) {
+                metadata.and_then(|metadata| metadata.static_path.clone())
+                    .unwrap_or_else(|| format!("{}/{}", manifest.modules_path, project.name))
+            } else if metadata.and_then(|metadata| metadata.language.as_deref()) == Some("rust") {
+                metadata
+                    .and_then(|metadata| metadata.crate_path.clone())
+                    .unwrap_or_else(|| format!("crates/{}", project.name))
+            } else {
+                format!("{}/{}", manifest.modules_path, project.name)
+            };
+        // Honor portable Rust crate locations without relaxing snapshot bounds.
+        spec_directory(root, &directory)?;
     }
     Ok(())
 }

@@ -1,6 +1,7 @@
 import type { AuthCacheService } from '@forklaunch/blueprint-core';
 import { generateHmacAuthHeaders } from '@forklaunch/core/http';
 import { universalSdk } from '@forklaunch/universal-sdk';
+import { surfacingPath } from './domain/utils/surfacingPath.util';
 import { IamSdkClient } from './sdk';
 
 export { generateHmacAuthHeaders } from '@forklaunch/core/http';
@@ -42,11 +43,11 @@ export async function createSurfaceRoles(params: {
     }
 
     try {
-      // Path must match req.path (route-relative, without router prefix)
+      // HMAC covers the full request path, including the /user mount.
       const headers = generateHmacAuthHeaders({
         secretKey: hmacSecretKey,
         method: 'GET',
-        path: `/${payload.sub}/surface-roles`
+        path: surfacingPath(payload.sub, 'roles')
       });
 
       const response = await iamSdk.user.surfaceRoles({
@@ -97,7 +98,7 @@ export async function createSurfacePermissions(params: {
       const headers = generateHmacAuthHeaders({
         secretKey: hmacSecretKey,
         method: 'GET',
-        path: `/${payload.sub}/surface-permissions`
+        path: surfacingPath(payload.sub, 'permissions')
       });
 
       const response = await iamSdk.user.surfacePermissions({

@@ -13,7 +13,7 @@ describe('User Surfacing Routes E2E Tests with PostgreSQL Container', () => {
   beforeAll(async () => {
     const setup = await setupTestDatabase();
     orm = setup.orm;
-  }, 60000);
+  });
 
   beforeEach(async () => {
     await clearDatabase({ orm });
@@ -24,7 +24,7 @@ describe('User Surfacing Routes E2E Tests with PostgreSQL Container', () => {
 
   afterAll(async () => {
     await cleanupTestDatabase();
-  }, 30000);
+  });
 
   describe('GET /user/:id/surface-roles - surfaceRoles', () => {
     it('refuses user-only role lookup even when an active session exists', async () => {

@@ -10,7 +10,7 @@ fi
 mkdir -p output/delete-service
 cd output/delete-service
 
-RUST_BACKTRACE=1 $FL init application service-test-node-application -p service-test-node-application -o src/modules -d postgresql -f prettier -l eslint -v zod -F express -r node -t vitest -m billing-base -m iam-base -D "Test service" -A "Rohin Bhargava" -L 'AGPL-3.0'
+RUST_BACKTRACE=1 $FL init application service-test-node-application -p service-test-node-application -o src/modules -d postgresql -f prettier -l oxlint -v zod -F express -r node -t vitest -m billing-base -m iam-base -D "Test service" -A "Rohin Bhargava" -L 'AGPL-3.0'
 
 cd service-test-node-application
 

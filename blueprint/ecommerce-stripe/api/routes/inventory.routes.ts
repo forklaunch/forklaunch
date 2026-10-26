@@ -3,6 +3,7 @@ import { ci, tokens } from '../../bootstrapper';
 import {
   adjustStock,
   checkStock,
+  createInventory,
   getInventory
 } from '../controllers/inventory.controller';
 
@@ -14,6 +15,7 @@ export const inventoryRouter = forklaunchRouter(
   openTelemetryCollector
 );
 
+export const createInventoryRoute = inventoryRouter.post('/', createInventory);
 export const checkStockRoute = inventoryRouter.post('/check', checkStock);
 export const adjustStockRoute = inventoryRouter.put('/adjust', adjustStock);
 export const getInventoryRoute = inventoryRouter.get('/:variantId', getInventory);

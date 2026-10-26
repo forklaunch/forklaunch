@@ -23,6 +23,57 @@ Use when the user asks about:
 - Data residency enforcement
 - Secrets management
 
+## Rust Storage Declarations and Audit Coverage
+
+Generated health services explicitly declare that they own no durable storage in
+`persistence/compliance_schema.rs`. Durable worker hooks declare the actual sealed
+event and public routing context; they do not classify every broker scheduler,
+lease or dead-letter column. Both emit `.forklaunch/compliance.json` in the crate
+during compilation and regenerate a deleted artifact on the next compile. It is a
+git-ignored build output; edit the typed declarations, never the JSON.
+
+Built-in modules copy canonical declared logical members from their TS blueprint
+policy into the application-owned declaration hook. Those lists are partial:
+inherited fields, relationships, provider control tables and unclassified
+extensions are not silently marked `none`. Existing explicit TS `none` policy is
+preserved even where the Rust adapter encrypts the value. Encryption settings do
+not invent a privacy classification. Review the source hook when changing policy.
+CAC currently uses a mock code provider and explicitly owns no durable storage.
+The lightweight `forklaunch-core` build feature is `compliance-artifact`; it does
+not require runtime encryption or database dependencies.
+
+
+For Rust projects, use strict `ComplianceMetadata` storage declarations and the
+framework's protected-member adapters. The TypeScript property-builder and
+MikroORM examples below do not apply to Rust.
+
+The Notes build hook generates `.forklaunch/compliance.json` in the service crate
+from the same storage declarations used by its protected-field adapter, and
+`forklaunch compliance validate-artifacts` reads it there (older crate-root
+`compliance.json` files are still accepted; `forklaunch sync` moves them). Each member has
+an explicit `none`, `pii`, `phi`, or `pci` classification and storage mapping.
+This artifact describes declared policy; it does not certify encryption,
+tenancy, source freshness, key rotation, retention, export, or erasure.
+
+```sh
+cargo check --workspace
+forklaunch compliance validate-artifacts --path . --json
+forklaunch compliance audit --path . --offline --json
+```
+
+`validate-artifacts` discovers Rust service/worker artifacts using manifest
+`cratePath` entries, validates their bounded versioned schema and fails when an
+artifact is missing or invalid. A missing exporter is unfinished integration;
+do not create an empty artifact merely to make the check pass. An intentionally
+empty declaration set still provides no runtime compliance evidence.
+
+`audit` includes Rust declarations separately under `rustDeclarations`, with
+explicit unknown encryption, tenancy and lifecycle coverage. `--offline` uses
+cached dependency advisories and sends no platform report. Rust applications
+stay in local reporting because platform scoring cannot currently represent
+this declared-only coverage. Do not turn successful artifact validation into a
+compliance score or an `encrypted: true` claim.
+
 ## Architecture Overview
 
 The compliance framework is enforced at the framework level — architecturally impossible to skip:
@@ -822,6 +873,36 @@ const exported = await compliance.export("user-123");
 - Any SDK with `compliance.eraseUserData` / `compliance.exportUserData` qualifies
 - Lives in **client-sdk** (not framework) because it knows what services exist
 
+## Rust Protected Values and Subject Lifecycle
+
+Use `ProtectedField` for actual encrypted storage and audited plaintext reads;
+`ComplianceMetadata` alone is a declaration. Keep `anonymous()` irreversibly
+redacted. Opt-in `DisclosurePolicy::{RandomToken, Year, Zip3, Last4}` produces
+explicit authenticated projections, not certified anonymity. Existing rows need
+an audited reclassification migration; key rotation preserves random tokens.
+
+With core `postgres` + `encryption`, `subject::export` provides stable encrypted
+snapshots and authorized idempotent mailbox delivery. `prepare` requires an
+explicit absolute snapshot expiry; persist it with the operation ID. Schedule
+bounded `purge_expired` using a separate cleanup role, with acknowledged intent.
+Expired source snapshots cannot be read or recreated after cleanup. Retain
+non-plaintext operation tombstones for the full operation-ID replay lifetime.
+Mailbox cleanup does not automatically remove source snapshots or backups.
+
+`PostgresSubjectEraseStore::database_only` covers declared SQL records only.
+For external copies, enqueue `PostgresErasureOutbox` targets in the same SQL
+transaction as caller-owned authorized source deletion, then reconcile through
+an idempotent destination adapter. A remote success followed by receipt failure
+must be safely retryable. Require immutable version locators or conditional
+deletes to preserve concurrent writes. Completion covers the sealed target set,
+not automatically all subject data. Do not generate destructive product routes
+or invent retention/ownership policy from compliance classifications.
+
+See `framework-rs/crates/core/PERSISTENCE.md` in the framework repository for
+examples and PostgreSQL regression receipts. Inspect configured dependency
+versions before assuming these APIs exist in an application. A declared-only
+CLI artifact report is never proof of runtime lifecycle enforcement.
+
 ## Secrets Management
 
 ```typescript
@@ -860,7 +941,7 @@ All under the `/compliance` router prefix:
 | GET    | `/applications/:appId/environments/:envName/audit/reports`  | JWT  | List historical audit reports        |
 | POST   | `/retention/enforce`                                        | HMAC | Trigger retention enforcement        |
 
-### Per-Service Compliance Endpoints (generated on every service)
+### TypeScript Per-Service Compliance Endpoints
 
 | Method | Path                         | Auth | Description                             |
 | ------ | ---------------------------- | ---- | --------------------------------------- |
