@@ -6,6 +6,28 @@ user-invokable: true
 
 # ForkLaunch CLI Skill
 
+## Frontend domain controls
+
+With a CLI version supporting website domain actions, use the website command
+for the static frontend; `app domain` continues to configure application/service
+DNS. Every action is scoped to an environment and region:
+
+```bash
+fl app website --environment production --region us-east-2
+fl app website --environment production --region us-east-2 --enable
+fl app website --environment production --region us-east-2 --domain study.example.com
+fl app website --environment production --region us-east-2 --check-domain
+fl app website --environment production --region us-east-2 --remove-domain
+```
+
+The read returns the published URL, pending change, DNS validation records, and
+certificate status. Connect/remove stage changes; deploy a saved release after
+validation to publish them. The CLI first reads current revisions and includes
+both in the write. On conflicts or ambiguous write failures, read status before
+retrying. Custom frontend domains require Pro or Enterprise. `--disable` is only
+available before the first website publication. CLI 1.33.0 predates the domain
+flags; check `fl app website --help` before using them.
+
 ## Prerequisites
 
 Before running any `forklaunch` command, verify the CLI is installed:
