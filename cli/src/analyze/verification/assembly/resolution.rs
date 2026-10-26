@@ -379,8 +379,8 @@ impl Resolver {
             "ContractRouter" | "NativeApplication" => {
                 package == "forklaunch-axum" && path[1..] == ["native", expected]
             }
-            "routing::with_openapi" => {
-                package == "forklaunch-axum" && path[1..] == ["native", "with_openapi"]
+            "routing::with_openapi" | "routing::with_docs" => {
+                package == "forklaunch-axum" && path[1..] == ["native", expected.strip_prefix("routing::").unwrap()]
             }
             _ => expected
                 .strip_prefix("routing::")
