@@ -38,7 +38,32 @@ async fn health_and_contract_surfaces_share_native_router() {
         assert_eq!(response.status(), 200);
         assert!(!to_bytes(response.into_body(), 1024 * 1024).await.unwrap().is_empty());
     }
+    for (path, status, content_type) in [
+        ("/api/v1/docs", 200, "text/html"),
+        ("/api/v1/openapi", 200, "application/json"),
+        ("/docs", 404, ""),
+    ] {
+        let response = router.clone().oneshot(Request::builder().uri(path).body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(response.status(), status, "{path}");
+        if status == 200 {
+            assert!(response.headers()["content-type"].to_str().unwrap().starts_with(content_type));
+        }
+    }
     let denied = router.oneshot(Request::builder().method("POST").uri("/mcp")
         .header("origin", "https://untrusted.example").body(Body::empty()).unwrap()).await.unwrap();
     assert_eq!(denied.status(), 403);
+}
+
+#[tokio::test]
+async fn documentation_uses_configured_version_and_suffix() {
+    test_environment();
+    let config = {{crate_module}}::config::ServiceConfig {
+        version: "v2".into(), docs_path: "/reference".into(), ..Default::default()
+    };
+    let state = {{crate_module}}::register(config).unwrap();
+    let router = {{crate_module}}::server::router(state).unwrap();
+    for (path, expected) in [("/api/v2/reference", 200), ("/api/v1/docs", 404), ("/reference", 404)] {
+        let response = router.clone().oneshot(Request::builder().uri(path).body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(response.status(), expected, "{path}");
+    }
 }
