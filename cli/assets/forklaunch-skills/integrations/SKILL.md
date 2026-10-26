@@ -697,6 +697,12 @@ const { url } = await payments.onboardingLink({
 });
 const { chargesEnabled, payoutsEnabled, requirementsDue } = await payments.status();
 
+// Where the money is: balance, recent payouts, bank and schedule. Read-only,
+// this instance's own account, empty before onboarding.
+const { available, pending, payouts, bank, schedule } = await payments.payouts({ limit: 10 });
+// Stripe's own page for changing the bank or getting tax forms (409 before onboarding).
+const { url: manage } = await payments.dashboardLink();
+
 // The real Stripe SDK; requests go to the platform, pinned to this instance's account.
 const stripe = createStripeClient({ Stripe });
 const session = await stripe.checkout.sessions.create({
@@ -719,6 +725,11 @@ protected data (`ssn`, `dob`, `diagnosis`, …) and SSN-shaped text (400),
 rate-limits per instance (429), sets `Stripe-Account` to the instance's own
 account whatever the app sent, and adds the product's application fee. The SDK
 raises its usual typed errors (`StripePermissionError`, …).
+
+To show the business owner their money, use `payments.payouts()` (balance,
+recent payouts, bank, schedule) and `payments.dashboardLink()` (Stripe's page
+for changing them), not the proxy: they read the caller's own account only and
+never move money, which is why the proxy keeps refusing payouts and balance.
 
 The fee and the rate are settings: `forklaunch managed template update --slug
 <slug> --payments-fee-percent 2 --payments-fee-amount 30 --payments-rpm 120` for

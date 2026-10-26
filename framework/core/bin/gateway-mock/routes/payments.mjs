@@ -7,6 +7,10 @@
  *                                   creates the instance's connected account
  *                                   on first use (acct_mock_<n>)
  *   GET  /payments/status           { chargesEnabled, payoutsEnabled, requirementsDue }
+ *   GET  /payments/payouts?limit=N  { available, pending, payouts, bank, schedule }:
+ *                                   empty before onboarding; once enabled, a
+ *                                   balance and one paid payout (read-only)
+ *   POST /payments/dashboard-link   { url } once onboarded; 409 before
  *   *    /stripe/v1/...             the Stripe API, as the real Stripe SDK
  *                                   sends it (form-encoded, signed verbatim)
  *
@@ -468,6 +472,47 @@ function status(ctx) {
   });
 }
 
+/** Mirrors the platform: 1..50, 10 when missing or not a number. */
+function payoutsLimit(raw) {
+  const n = raw === null || raw.trim() === '' ? NaN : Number(raw);
+  if (!Number.isFinite(n)) return 10;
+  return Math.min(50, Math.max(1, Math.floor(n)));
+}
+
+function payouts(ctx) {
+  const account = accountFor(ctx);
+  if (!account) {
+    return ctx.send(200, { available: [], pending: [], payouts: [], bank: null, schedule: null });
+  }
+  const limit = payoutsLimit(new URL(ctx.req.url ?? '/', 'http://mock').searchParams.get('limit'));
+  const enabled = Boolean(account.payoutsEnabled);
+  const day = 86_400_000;
+  return ctx.send(200, {
+    available: [{ amount: enabled ? 12_500 : 0, currency: 'usd' }],
+    pending: [{ amount: enabled ? 4_200 : 0, currency: 'usd' }],
+    payouts: enabled
+      ? [{
+          id: `po_mock_${account.id.slice(-4)}`,
+          amount: 9_900,
+          currency: 'usd',
+          status: 'paid',
+          arrivalDate: new Date(Date.now() - 2 * day).toISOString(),
+          automatic: true
+        }].slice(0, limit)
+      : [],
+    bank: enabled ? { bankName: 'STRIPE TEST BANK', last4: '6789' } : null,
+    schedule: enabled ? { interval: 'daily', delayDays: 2 } : null
+  });
+}
+
+function dashboardLink(ctx) {
+  const account = accountFor(ctx);
+  if (!account?.detailsSubmitted) {
+    return ctx.send(409, 'Payments are not set up yet: finish Stripe onboarding first');
+  }
+  return ctx.send(200, { url: `https://connect.stripe.com/express/${account.id}/mock_${randomBytes(6).toString('hex')}` });
+}
+
 // Dedicated context routes never widen STRIPE_ALLOWLIST. Synthetic mode is
 // test-only; configured upstream verifies its own actual account and mode.
 async function scopedRead(ctx, operation) {
@@ -574,6 +619,8 @@ export default {
   routes: [
     { method: 'POST', path: '/payments/onboarding-link', handler: onboardingLink },
     { method: 'GET', path: '/payments/status', handler: status },
+    { method: 'GET', path: '/payments/payouts', handler: payouts },
+    { method: 'POST', path: '/payments/dashboard-link', handler: dashboardLink },
     { method: 'POST', path: '/payments/context', handler: ctx => scopedRead(ctx,'issue') },
     { method: 'POST', path: '/payments/context/checkout-read', handler: ctx => scopedRead(ctx,'checkout') },
     { method: 'POST', path: '/payments/context/payment-link-read', handler: ctx => scopedRead(ctx,'paymentLink') },
