@@ -655,3 +655,7 @@ client/
 6. **Shadcn components from `@/components/ui/`** — never import from Radix directly
 7. **State management is minimal** — `useState` for local state, `useAuth` context for auth, `useFeatureAccess` for features
 8. **No raw `fetch()` or `axios`** — always use pre-initialized SDK clients from `@/lib/api`
+
+## CLI-owned web and mobile foundations
+
+For a new frontend, use `forklaunch init frontend --path <application-root> --name '<display name>' --target web|mobile|both`, adding `--assistant` only when needed. Web lives in `apps/web`; mobile lives in `apps/mobile`. Keep existing `apps/client` apps intact. Do not maintain a second desktop-owned starter. Both clients use the same authorized backend actions; frontend code never contains provider credentials. See the `expo-mobile` skill for native builds and authentication.
