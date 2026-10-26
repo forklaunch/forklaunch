@@ -1,5 +1,11 @@
 # @forklaunch/infrastructure-redis
 
+## 1.4.22
+
+### Patch Changes
+
+- 49e1bb2: Read `v4` field envelopes. Native (Rust) cache and object-store writers seal records as randomized, stamped `v4` envelopes; the TypeScript readers only recognized `v1`–`v3` and returned the ciphertext as the value.
+
 ## 1.4.21
 
 ### Patch Changes

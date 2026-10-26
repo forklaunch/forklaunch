@@ -84,7 +84,7 @@ export type StripeCreateBillingPortalDto = Omit<
   CreateBillingPortalDto,
   'providerFields'
 > & {
-  stripeFields: Omit<
+  stripeFields?: Omit<
     StripeBillingPortalSessionCreateParams,
     BillingPortalOmissions
   >;
@@ -126,10 +126,9 @@ export type StripeCreateCheckoutSessionDto<StatusEnum> = Omit<
     typeof CurrencyEnum,
     StatusEnum
   >,
-  'providerFields' | 'uri'
+  'providerFields'
 > & {
-  uri: string;
-  stripeFields: Omit<
+  stripeFields?: Omit<
     StripeCheckoutSessionCreateParams,
     CheckoutSessionOmissions
   >;
@@ -151,9 +150,8 @@ export type StripeUpdateCheckoutSessionDto<StatusEnum> = Omit<
 
 export type StripeCheckoutSessionDto<StatusEnum> = Omit<
   CheckoutSessionDto<typeof PaymentMethodEnum, typeof CurrencyEnum, StatusEnum>,
-  'providerFields' | 'uri'
+  'providerFields'
 > & {
-  uri: string;
   stripeFields: StripeCheckoutSession;
 };
 
@@ -210,7 +208,7 @@ export type StripeCreatePlanDto = Omit<
   >,
   'providerFields'
 > & {
-  stripeFields: Omit<StripePlanCreateParams, PlanOmissions>;
+  stripeFields?: Omit<StripePlanCreateParams, PlanOmissions>;
 };
 
 export type StripeUpdatePlanDto = Omit<
@@ -248,7 +246,7 @@ export type StripeCreateSubscriptionDto<PartyType> = Omit<
   CreateSubscriptionDto<PartyType, typeof BillingProviderEnum>,
   'providerFields'
 > & {
-  stripeFields: Omit<StripeSubscriptionCreateParams, SubscriptionOmissions>;
+  stripeFields?: Omit<StripeSubscriptionCreateParams, SubscriptionOmissions>;
 };
 
 export type StripeUpdateSubscriptionDto<PartyType> = Omit<

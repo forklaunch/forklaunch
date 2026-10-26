@@ -1,0 +1,62 @@
+[package]
+description = "ForkLaunch Rust iam base APIs and runtime support"
+name = "forklaunch-iam-base"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+postgres = ["dep:sqlx", "forklaunch-core/postgres", "forklaunch-core/encryption", "dep:sha2", "tokio/rt-multi-thread", "tokio/macros"]
+oidc-sessions = ["postgres", "forklaunch-core/auth"]
+jwt-sessions = ["postgres", "dep:jsonwebtoken", "dep:base64"]
+# `iam --seed`: roles and login users from a TOML seed file.
+seed = ["postgres", "dep:toml"]
+browser-sessions = ["postgres", "dep:tower-sessions", "dep:async-trait", "forklaunch-axum?/cookie-session"]
+# Contract-bound HTTP handlers for generated IAM services.
+http = ["postgres", "dep:axum", "dep:forklaunch-axum", "dep:form_urlencoded", "dep:tracing", "dep:tower-http"]
+
+[dependencies]
+tower-sessions = { version = "0.15", optional = true }
+async-trait = { version = "0.1", optional = true }
+forklaunch-iam-interface = { version = "=0.2.5", path = "../../../interfaces/iam-interface" }
+
+argon2 = "0.6"
+getrandom = "0.4"
+uuid = { version = "1", features = ["v4"] }
+
+forklaunch-core = { version = "=0.2.5", path = "../../../../../framework-rs/crates/core", features = ["auth", "oidc", "http", "domain"] }
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "json", "migrate", "macros"], optional = true }
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+regex = "1"
+tokio = { version = "1", default-features = false, features = ["sync"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+sha2 = { version = "0.11", optional = true }
+jsonwebtoken = { version = "11", features = ["aws_lc_rs"], optional = true }
+base16ct = { version = "1", features = ["alloc"] }
+axum = { version = "0.8", optional = true }
+forklaunch-axum = { version = "=0.2.5", path = "../../../../../framework-rs/crates/axum", features = ["remote-jwks"], optional = true }
+form_urlencoded = { version = "1", optional = true }
+base64 = { version = "0.22", optional = true }
+toml = { version = "1", default-features = false, features = ["std", "parse", "serde"], optional = true }
+tracing = { version = "0.1", optional = true }
+tower-http = { version = "0.7", features = ["cors"], optional = true }
+
+[[example]]
+name = "canonical_iam"
+path = "examples/canonical_iam.rs"
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "signal"] }
+# canonical_iam: the TypeScript/Rust HTTP parity fixture (rust_canonical_http_parity).
+axum = "0.8"
+forklaunch-axum = { version = "=0.2.5", path = "../../../../../framework-rs/crates/axum" }
+forklaunch-validator = { version = "=0.2.5", path = "../../../../../framework-rs/crates/validator" }
+form_urlencoded = "1"
+tower = { version = "0.5", features = ["util"] }

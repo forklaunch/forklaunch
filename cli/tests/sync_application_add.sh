@@ -17,7 +17,7 @@ RUST_BACKTRACE=1 $FL init application sync-test-node-application \
     -o src/modules \
     -d postgresql \
     -f prettier \
-    -l eslint \
+    -l oxlint \
     -v zod \
     -F express \
     -r node \
@@ -33,7 +33,7 @@ RUST_BACKTRACE=1 $FL init application sync-test-dummy-application \
     -o src/modules \
     -d postgresql \
     -f prettier \
-    -l eslint \
+    -l oxlint \
     -v zod \
     -F express \
     -r node \

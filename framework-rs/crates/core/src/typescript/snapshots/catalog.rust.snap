@@ -1,0 +1,907 @@
+use std::fmt;
+use std::collections::BTreeMap;
+use forklaunch_universal_sdk as runtime;
+pub use runtime::{SdkError, SdkAuth, HmacSigner, SdkResponseWithHeaders};
+
+
+pub use runtime::{SdkEventStream, sse};
+pub type SdkRequest = runtime::SdkRequest;
+type ClientRuntime = runtime::UniversalSdk;
+
+
+fn deserialize_optional_field<'de, D, T>(deserializer: D) -> ::std::result::Result<::std::option::Option<T>, D::Error>
+where D: ::serde::Deserializer<'de>, T: ::serde::Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(::std::option::Option::Some)
+}
+
+
+fn deserialize_required_field<'de, D, T>(deserializer: D) -> ::std::result::Result<T, D::Error>
+where D: ::serde::Deserializer<'de>, T: ::serde::Deserialize<'de>,
+{
+    T::deserialize(deserializer)
+}
+
+
+
+
+
+
+#[derive(::std::fmt::Debug, ::std::clone::Clone, ::std::default::Default, ::std::cmp::PartialEq, ::serde::Serialize, ::serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CreateItemRequestBody {
+
+
+    #[serde(deserialize_with = "deserialize_required_field")]
+    #[serde(rename = "id")]
+    pub id: ::std::string::String,
+
+
+    #[serde(deserialize_with = "deserialize_required_field")]
+    #[serde(rename = "name")]
+    pub name: ::std::string::String,
+
+
+    #[serde(default, deserialize_with = "deserialize_optional_field", skip_serializing_if = "::std::option::Option::is_none")]
+    #[serde(rename = "note")]
+    pub note: ::std::option::Option<::std::option::Option<::std::string::String>>,
+
+
+    #[serde(default, deserialize_with = "deserialize_optional_field", skip_serializing_if = "::std::option::Option::is_none")]
+    #[serde(rename = "tags")]
+    pub tags: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
+
+}
+
+
+
+
+
+
+
+
+
+#[derive(::std::fmt::Debug, ::std::clone::Clone, ::std::default::Default, ::std::cmp::PartialEq, ::serde::Serialize, ::serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CreateItemResponse {
+
+
+    #[serde(deserialize_with = "deserialize_required_field")]
+    #[serde(rename = "id")]
+    pub id: ::std::string::String,
+
+
+    #[serde(deserialize_with = "deserialize_required_field")]
+    #[serde(rename = "name")]
+    pub name: ::std::string::String,
+
+
+    #[serde(default, deserialize_with = "deserialize_optional_field", skip_serializing_if = "::std::option::Option::is_none")]
+    #[serde(rename = "note")]
+    pub note: ::std::option::Option<::std::option::Option<::std::string::String>>,
+
+
+    #[serde(default, deserialize_with = "deserialize_optional_field", skip_serializing_if = "::std::option::Option::is_none")]
+    #[serde(rename = "tags")]
+    pub tags: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
+
+}
+
+
+
+
+
+
+
+
+
+#[derive(::std::fmt::Debug, ::std::clone::Clone, ::std::default::Default, ::std::cmp::PartialEq, ::serde::Serialize, ::serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DeleteItemParams {
+
+
+    #[serde(deserialize_with = "deserialize_required_field")]
+    #[serde(rename = "id")]
+    pub id: DeleteItemParamsField0,
+
+}
+
+
+
+
+
+
+
+
+
+#[derive(::std::fmt::Debug, ::std::clone::Clone, ::std::default::Default, ::std::cmp::PartialEq, ::serde::Serialize, ::serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GetItemHeaders {
+
+
+    #[serde(default, deserialize_with = "deserialize_optional_field", skip_serializing_if = "::std::option::Option::is_none")]
+    #[serde(rename = "x-request-id")]
+    pub x_request_id: Option<GetItemHeadersField0>,
+
+}
+
+
+
+
+
+
+
+
+
+#[derive(::std::fmt::Debug, ::std::clone::Clone, ::std::default::Default, ::std::cmp::PartialEq, ::serde::Serialize, ::serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GetItemParams {
+
+
+    #[serde(deserialize_with = "deserialize_required_field")]
+    #[serde(rename = "id")]
+    pub id: GetItemParamsField0,
+
+}
+
+
+
+
+
+
+
+
+
+#[derive(::std::fmt::Debug, ::std::clone::Clone, ::std::default::Default, ::std::cmp::PartialEq, ::serde::Serialize, ::serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GetItemQuery {
+
+
+    #[serde(default, deserialize_with = "deserialize_optional_field", skip_serializing_if = "::std::option::Option::is_none")]
+    #[serde(rename = "includeDetails")]
+    pub include_details: Option<GetItemQueryField0>,
+
+}
+
+
+
+
+
+
+
+
+
+#[derive(::std::fmt::Debug, ::std::clone::Clone, ::std::default::Default, ::std::cmp::PartialEq, ::serde::Serialize, ::serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GetItemStatus200ApplicationJsonResponse {
+
+
+    #[serde(deserialize_with = "deserialize_required_field")]
+    #[serde(rename = "id")]
+    pub id: ::std::string::String,
+
+
+    #[serde(deserialize_with = "deserialize_required_field")]
+    #[serde(rename = "name")]
+    pub name: ::std::string::String,
+
+
+    #[serde(default, deserialize_with = "deserialize_optional_field", skip_serializing_if = "::std::option::Option::is_none")]
+    #[serde(rename = "note")]
+    pub note: ::std::option::Option<::std::option::Option<::std::string::String>>,
+
+
+    #[serde(default, deserialize_with = "deserialize_optional_field", skip_serializing_if = "::std::option::Option::is_none")]
+    #[serde(rename = "tags")]
+    pub tags: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
+
+}
+
+
+
+
+
+
+
+
+
+#[derive(::std::fmt::Debug, ::std::clone::Clone, ::std::default::Default, ::std::cmp::PartialEq, ::serde::Serialize, ::serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GetItemStatus200ApplicationJsonResponseHeaders {
+
+
+    #[serde(deserialize_with = "deserialize_required_field")]
+    #[serde(rename = "etag")]
+    pub etag: ::std::string::String,
+
+
+    #[serde(deserialize_with = "deserialize_required_field")]
+    #[serde(rename = "x-count")]
+    pub x_count: i64,
+
+
+    #[serde(default, deserialize_with = "deserialize_optional_field", skip_serializing_if = "::std::option::Option::is_none")]
+    #[serde(rename = "x-next")]
+    pub x_next: ::std::option::Option<::std::string::String>,
+
+}
+
+
+
+
+
+
+
+
+
+#[derive(::std::fmt::Debug, ::std::clone::Clone, ::std::default::Default, ::std::cmp::PartialEq, ::serde::Serialize, ::serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NativeEventsResponse {
+
+
+    #[serde(deserialize_with = "deserialize_required_field")]
+    #[serde(rename = "data")]
+    pub data: NativeEventsResponseData,
+
+
+    #[serde(default, deserialize_with = "deserialize_optional_field", skip_serializing_if = "::std::option::Option::is_none")]
+    #[serde(rename = "id")]
+    pub id: ::std::option::Option<::std::string::String>,
+
+}
+
+
+
+
+
+
+
+
+
+#[derive(::std::fmt::Debug, ::std::clone::Clone, ::std::default::Default, ::std::cmp::PartialEq, ::serde::Serialize, ::serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NativeEventsResponseData {
+
+
+    #[serde(deserialize_with = "deserialize_required_field")]
+    #[serde(rename = "id")]
+    pub id: ::std::string::String,
+
+}
+
+
+
+
+
+
+
+
+
+#[derive(::std::fmt::Debug, ::std::clone::Clone, ::std::default::Default, ::std::cmp::PartialEq, ::serde::Serialize, ::serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WatchItemsResponse {
+
+
+    #[serde(deserialize_with = "deserialize_required_field")]
+    #[serde(rename = "data")]
+    pub data: WatchItemsResponseData,
+
+
+    #[serde(default, deserialize_with = "deserialize_optional_field", skip_serializing_if = "::std::option::Option::is_none")]
+    #[serde(rename = "id")]
+    pub id: ::std::option::Option<::std::string::String>,
+
+}
+
+
+
+
+
+
+
+
+
+#[derive(::std::fmt::Debug, ::std::clone::Clone, ::std::default::Default, ::std::cmp::PartialEq, ::serde::Serialize, ::serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WatchItemsResponseData {
+
+
+    #[serde(deserialize_with = "deserialize_required_field")]
+    #[serde(rename = "id")]
+    pub id: ::std::string::String,
+
+}
+
+
+
+
+
+
+
+pub type DeleteItemParamsField0 = ::std::string::String;
+
+
+pub type DeleteItemResponse = ();
+
+
+pub type GetItemHeadersField0 = ::std::string::String;
+
+
+pub type GetItemParamsField0 = ::std::string::String;
+
+
+pub type GetItemQueryField0 = bool;
+
+
+pub type GetItemStatus200ApplicationPdfResponse = Vec<u8>;
+
+
+pub type GetItemStatus200TextCsvResponse = ::std::string::String;
+
+
+pub type GetItemStatus200TextHtmlResponse = ::std::string::String;
+
+
+pub type GetItemStatus200TextPlainResponse = ::std::string::String;
+
+
+pub type GetItemStatus302Response = ();
+
+
+pub type GetItemStatus404Response = ::std::string::String;
+
+
+
+#[derive(Default, Clone, PartialEq, ::serde::Serialize, ::serde::Deserialize)]
+pub struct GetItemRequest {
+    pub params: GetItemParams,
+    pub query: GetItemQuery,
+    pub headers: GetItemHeaders,
+
+}
+
+
+impl fmt::Debug for GetItemRequest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_struct("GetItemRequest")
+            .field("params", &"<redacted>")
+            .field("query", &"<redacted>")
+            .field("headers", &"<redacted>")
+
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, ::serde::Serialize, ::serde::Deserialize)]
+pub enum GetItemResponses {
+
+    Status200ApplicationJson(SdkResponseWithHeaders<Box<GetItemStatus200ApplicationJsonResponse>, GetItemStatus200ApplicationJsonResponseHeaders>),
+
+    Status200ApplicationPdf(GetItemStatus200ApplicationPdfResponse),
+
+    Status200TextCsv(GetItemStatus200TextCsvResponse),
+
+    Status200TextHtml(GetItemStatus200TextHtmlResponse),
+
+    Status200TextPlain(GetItemStatus200TextPlainResponse),
+
+    Status302(GetItemStatus302Response),
+
+    Status404(GetItemStatus404Response),
+
+    Error { status: u16, message: String },
+}
+
+
+#[derive(Clone, PartialEq, Eq, ::serde::Serialize, ::serde::Deserialize)]
+pub struct CreateItemRequest<T = CreateItemRequestBody> {
+    pub params: BTreeMap<String, String>,
+    pub query: BTreeMap<String, String>,
+    pub headers: BTreeMap<String, String>,
+    pub body: Option<T>,
+}
+
+
+impl<T> Default for CreateItemRequest<T> {
+    fn default() -> Self {
+        Self { params: Default::default(), query: Default::default(), headers: Default::default(), body: None }
+    }
+}
+
+impl<T> fmt::Debug for CreateItemRequest<T> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_struct("CreateItemRequest")
+            .field("params", &"<redacted>")
+            .field("query", &"<redacted>")
+            .field("headers", &"<redacted>")
+            .field("has_body", &self.body.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, ::serde::Serialize, ::serde::Deserialize)]
+pub enum CreateItemResponses {
+
+    Status201(Box<CreateItemResponse>),
+
+    Error { status: u16, message: String },
+}
+
+
+#[derive(Default, Clone, PartialEq, Eq, ::serde::Serialize, ::serde::Deserialize)]
+pub struct WatchItemsRequest {
+    pub params: BTreeMap<String, String>,
+    pub query: BTreeMap<String, String>,
+    pub headers: BTreeMap<String, String>,
+
+}
+
+
+impl fmt::Debug for WatchItemsRequest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_struct("WatchItemsRequest")
+            .field("params", &"<redacted>")
+            .field("query", &"<redacted>")
+            .field("headers", &"<redacted>")
+
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Debug)]
+pub enum WatchItemsResponses {
+
+    Status200(Box<SdkEventStream<WatchItemsResponse>>),
+
+    Error { status: u16, message: String },
+}
+
+
+#[derive(Default, Clone, PartialEq, Eq, ::serde::Serialize, ::serde::Deserialize)]
+pub struct NativeEventsRequest {
+    pub params: BTreeMap<String, String>,
+    pub query: BTreeMap<String, String>,
+    pub headers: BTreeMap<String, String>,
+
+}
+
+
+impl fmt::Debug for NativeEventsRequest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_struct("NativeEventsRequest")
+            .field("params", &"<redacted>")
+            .field("query", &"<redacted>")
+            .field("headers", &"<redacted>")
+
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Debug)]
+pub enum NativeEventsResponses {
+
+    Status200(Box<SdkEventStream<NativeEventsResponse>>),
+
+    Error { status: u16, message: String },
+}
+
+
+#[derive(Default, Clone, PartialEq, ::serde::Serialize, ::serde::Deserialize)]
+pub struct DeleteItemRequest {
+    pub params: DeleteItemParams,
+    pub query: BTreeMap<String, String>,
+    pub headers: BTreeMap<String, String>,
+
+}
+
+
+impl fmt::Debug for DeleteItemRequest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_struct("DeleteItemRequest")
+            .field("params", &"<redacted>")
+            .field("query", &"<redacted>")
+            .field("headers", &"<redacted>")
+
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, ::serde::Serialize, ::serde::Deserialize)]
+pub enum DeleteItemResponses {
+
+    Status204(DeleteItemResponse),
+
+    Error { status: u16, message: String },
+}
+
+
+#[derive(Clone)]
+pub struct ForkLaunchClient {
+    runtime: ClientRuntime,
+}
+
+impl fmt::Debug for ForkLaunchClient {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_struct("ForkLaunchClient")
+            .field("runtime", &self.runtime).finish()
+    }
+}
+
+impl ForkLaunchClient {
+    #[must_use]
+    pub fn new(base_url: impl Into<String>) -> Self {
+        Self { runtime: ClientRuntime::new(base_url) }
+    }
+
+    /// Custom transports must enforce TLS verification and disable credential-bearing redirects.
+    #[must_use]
+    pub fn with_http_client(base_url: impl Into<String>, http: reqwest::Client) -> Self {
+        Self { runtime: ClientRuntime::with_http_client(base_url, http) }
+    }
+
+    /// Local development only: permits plaintext credentials outside loopback.
+    #[must_use]
+    pub fn with_plaintext_development_transport(mut self) -> Self {
+        self.runtime = self.runtime.with_plaintext_development_transport();
+        self
+    }
+
+
+    pub fn with_sse_event_limit(mut self, max_event_bytes: usize) -> Result<Self, SdkError> {
+        self.runtime = self.runtime.with_sse_event_limit(max_event_bytes)?;
+        Ok(self)
+    }
+
+    #[must_use]
+    pub fn with_default_header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        self.runtime = self.runtime.with_default_header(name, value);
+        self
+    }
+    #[must_use]
+    pub fn with_bearer_token(mut self, token: impl Into<String>) -> Self {
+        self.runtime = self.runtime.with_bearer_token(token);
+        self
+    }
+    #[must_use]
+    pub fn with_jwt(self, token: impl Into<String>) -> Self { self.with_bearer_token(token) }
+    #[must_use]
+    pub fn with_basic_auth(mut self, username: impl Into<String>, password: impl Into<String>) -> Self {
+        self.runtime = self.runtime.with_basic_auth(username, password);
+        self
+    }
+    /// One fixed `authorization` value; an HMAC credential verifies at most once.
+    /// Prefer `with_hmac_secret` for service-to-service calls.
+    #[must_use]
+    pub fn with_hmac_authorization(mut self, value: impl Into<String>) -> Self {
+        self.runtime = self.runtime.with_hmac_authorization(value);
+        self
+    }
+    /// Sign every request with the ForkLaunch request HMAC (`keyId=default`): the final
+    /// method, URL path, body bytes, a fresh timestamp and a random nonce.
+    #[must_use]
+    pub fn with_hmac_secret(mut self, secret: impl Into<Vec<u8>>) -> Self {
+        self.runtime = self.runtime.with_hmac_secret(secret);
+        self
+    }
+    /// Sign every request with a named server key.
+    #[must_use]
+    pub fn with_hmac_signer(mut self, signer: HmacSigner) -> Self {
+        self.runtime = self.runtime.with_hmac_signer(signer);
+        self
+    }
+    #[must_use]
+    pub fn with_auth_hook<F>(mut self, hook: F) -> Self
+    where F: Fn(&mut SdkRequest) + Send + Sync + 'static {
+        self.runtime = self.runtime.with_auth_hook(hook);
+        self
+    }
+
+
+
+    /// Construct a transport request.
+    pub fn get_item_request(&self, input: GetItemRequest) -> Result<SdkRequest, serde_json::Error> {
+        let path = runtime::path_with_params("/items/:id", &runtime::request_fields(&input.params)?);
+        Ok(SdkRequest {
+            method: "GET",
+            url: format!("{}{}", self.runtime.base_url(), path),
+            query: runtime::request_fields(&input.query)?,
+            headers: runtime::request_fields(&input.headers)?,
+            body: None,
+            body_bytes: None,
+
+            multipart: None,
+            content_type: "application/json",
+        })
+    }
+
+
+    pub async fn get_item(&self, input: GetItemRequest) -> Result<GetItemResponses, SdkError> {
+        let request = self.get_item_request(input).map_err(SdkError::Encode)?;
+
+        let response = self.runtime.execute(request).await?;
+        let status = response.status().as_u16();
+        let _content_type = runtime::response_content_type(&response)?;
+
+        match status {
+
+            200 if _content_type == "application/json" => {
+                let headers=runtime::decode_response_headers::<GetItemStatus200ApplicationJsonResponseHeaders>(response.headers(), "{\"etag\":{\"required\":true,\"schema\":{\"type\":\"string\"}},\"x-count\":{\"required\":true,\"schema\":{\"minimum\":0,\"type\":\"integer\"}},\"x-next\":{\"required\":false,\"schema\":{\"type\":\"string\"}}}")?;
+
+                let value:serde_json::Value=serde_json::from_slice(&response.bytes().await?).map_err(|_|SdkError::Contract("invalid response JSON"))?;
+
+                runtime::ResponseValidator::new("{\"additionalProperties\":false,\"properties\":{\"id\":{\"type\":\"string\"},\"name\":{\"minLength\":1,\"type\":\"string\"},\"note\":{\"type\":[\"string\",\"null\"]},\"tags\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"}},\"required\":[\"id\",\"name\"],\"type\":\"object\"}")?.validate(&value)?;
+                let body=serde_json::from_value::<Box<GetItemStatus200ApplicationJsonResponse>>(value).map_err(|_|SdkError::Contract("invalid typed response"))?;
+
+
+
+
+                Ok(GetItemResponses::Status200ApplicationJson(SdkResponseWithHeaders {body,headers}))
+            },
+
+            200 if _content_type == "application/pdf" => {
+
+
+
+
+
+
+                let body=response.bytes().await?.to_vec();
+                Ok(GetItemResponses::Status200ApplicationPdf(body))
+            },
+
+            200 if _content_type == "text/csv" => {
+
+
+
+                let body=response.text().await?;  runtime::ResponseValidator::new("{\"type\":\"string\"}")?.validate(&serde_json::Value::String(body.clone()))?;
+
+
+
+                Ok(GetItemResponses::Status200TextCsv(body))
+            },
+
+            200 if _content_type == "text/html" => {
+
+
+
+                let body=response.text().await?;  runtime::ResponseValidator::new("{\"type\":\"string\"}")?.validate(&serde_json::Value::String(body.clone()))?;
+
+
+
+                Ok(GetItemResponses::Status200TextHtml(body))
+            },
+
+            200 if _content_type == "text/plain" => {
+
+
+
+                let body=response.text().await?;  runtime::ResponseValidator::new("{\"type\":\"string\"}")?.validate(&serde_json::Value::String(body.clone()))?;
+
+
+
+                Ok(GetItemResponses::Status200TextPlain(body))
+            },
+
+            302 => {
+
+                let bytes=response.bytes().await?; let _=bytes; let body=();
+
+
+
+
+
+                Ok(GetItemResponses::Status302(body))
+            },
+
+            404 if _content_type == "text/plain" => {
+
+
+
+                let body=response.text().await?;  runtime::ResponseValidator::new("{\"type\":\"string\"}")?.validate(&serde_json::Value::String(body.clone()))?;
+
+
+
+                Ok(GetItemResponses::Status404(body))
+            },
+
+            _ => Err(SdkError::Contract("undeclared response status or content type")),
+        }
+    }
+
+
+
+    /// Serialize a schema-typed body before constructing the transport request.
+    pub fn create_item_request(&self, input: CreateItemRequest) -> Result<SdkRequest, serde_json::Error> {
+        Ok(self.create_item_raw_request(CreateItemRequest::<String> {
+            params: input.params, query: input.query, headers: input.headers,
+            body: input.body.map(|body| serde_json::to_string(&body)).transpose()?,
+        }))
+    }
+
+    /// Execute a schema-typed request. Raw encoded bytes require the explicit `_raw` method.
+    pub async fn create_item(&self, input: CreateItemRequest) -> Result<CreateItemResponses, SdkError> {
+        let input = CreateItemRequest::<String> {
+            params: input.params, query: input.query, headers: input.headers,
+            body: input.body.map(|body| serde_json::to_string(&body)).transpose().map_err(SdkError::Encode)?,
+        };
+        self.create_item_raw(input).await
+    }
+
+    /// Construct a transport request from explicitly encoded wire data.
+    #[must_use]
+    pub fn create_item_raw_request(&self, input: CreateItemRequest<String>) -> SdkRequest {
+        let path = runtime::path_with_params("/items", &input.params);
+        SdkRequest {
+            method: "POST",
+            url: format!("{}{}", self.runtime.base_url(), path),
+            query: input.query,
+            headers: input.headers,
+            body: input.body,
+            body_bytes: None,
+
+            multipart: None,
+            content_type: "application/json",
+        }
+    }
+
+
+    pub async fn create_item_raw(&self, input: CreateItemRequest<String>) -> Result<CreateItemResponses, SdkError> {
+        let request = self.create_item_raw_request(input);
+
+        let response = self.runtime.execute(request).await?;
+        let status = response.status().as_u16();
+        let _content_type = runtime::response_content_type(&response)?;
+
+        match status {
+
+            201 if _content_type == "application/json" => {
+
+
+                let value:serde_json::Value=serde_json::from_slice(&response.bytes().await?).map_err(|_|SdkError::Contract("invalid response JSON"))?;
+
+                runtime::ResponseValidator::new("{\"additionalProperties\":false,\"properties\":{\"id\":{\"type\":\"string\"},\"name\":{\"minLength\":1,\"type\":\"string\"},\"note\":{\"type\":[\"string\",\"null\"]},\"tags\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"}},\"required\":[\"id\",\"name\"],\"type\":\"object\"}")?.validate(&value)?;
+                let body=serde_json::from_value::<Box<CreateItemResponse>>(value).map_err(|_|SdkError::Contract("invalid typed response"))?;
+
+
+
+
+                Ok(CreateItemResponses::Status201(body))
+            },
+
+            _ => Err(SdkError::Contract("undeclared response status or content type")),
+        }
+    }
+
+
+
+    /// Construct a transport request.
+    #[must_use]
+    pub fn watch_items_request(&self, input: WatchItemsRequest) -> SdkRequest {
+        let path = runtime::path_with_params("/items/events", &input.params);
+        SdkRequest {
+            method: "GET",
+            url: format!("{}{}", self.runtime.base_url(), path),
+            query: input.query,
+            headers: input.headers,
+            body: None,
+            body_bytes: None,
+
+            multipart: None,
+            content_type: "application/json",
+        }
+    }
+
+
+    pub async fn watch_items(&self, input: WatchItemsRequest) -> Result<WatchItemsResponses, SdkError> {
+        let request = self.watch_items_request(input);
+
+        let response = self.runtime.execute(request).await?;
+        let status = response.status().as_u16();
+        let _content_type = runtime::response_content_type(&response)?;
+
+        match status {
+
+            200 if _content_type == "text/event-stream" => {
+
+
+
+
+                let body=Box::new(SdkEventStream::from_response(response,self.runtime.sse_event_limit(), "{\"additionalProperties\":false,\"properties\":{\"data\":{\"additionalProperties\":false,\"properties\":{\"id\":{\"minLength\":1,\"type\":\"string\"}},\"required\":[\"id\"],\"type\":\"object\"},\"id\":{\"type\":\"string\"}},\"required\":[\"data\"],\"type\":\"object\"}")?);
+
+
+                Ok(WatchItemsResponses::Status200(body))
+            },
+
+            _ => Err(SdkError::Contract("undeclared response status or content type")),
+        }
+    }
+
+
+
+    /// Construct a transport request.
+    #[must_use]
+    pub fn native_events_request(&self, input: NativeEventsRequest) -> SdkRequest {
+        let path = runtime::path_with_params("/items/native-events", &input.params);
+        SdkRequest {
+            method: "GET",
+            url: format!("{}{}", self.runtime.base_url(), path),
+            query: input.query,
+            headers: input.headers,
+            body: None,
+            body_bytes: None,
+
+            multipart: None,
+            content_type: "application/json",
+        }
+    }
+
+
+    pub async fn native_events(&self, input: NativeEventsRequest) -> Result<NativeEventsResponses, SdkError> {
+        let request = self.native_events_request(input);
+
+        let response = self.runtime.execute(request).await?;
+        let status = response.status().as_u16();
+        let _content_type = runtime::response_content_type(&response)?;
+
+        match status {
+
+            200 if _content_type == "text/event-stream" => {
+
+
+
+
+                let body=Box::new(SdkEventStream::from_response(response,self.runtime.sse_event_limit(), "{\"additionalProperties\":false,\"properties\":{\"data\":{\"additionalProperties\":false,\"properties\":{\"id\":{\"minLength\":1,\"type\":\"string\"}},\"required\":[\"id\"],\"type\":\"object\"},\"id\":{\"type\":\"string\"}},\"required\":[\"data\"],\"type\":\"object\"}")?);
+
+
+                Ok(NativeEventsResponses::Status200(body))
+            },
+
+            _ => Err(SdkError::Contract("undeclared response status or content type")),
+        }
+    }
+
+
+
+    /// Construct a transport request.
+    pub fn delete_item_request(&self, input: DeleteItemRequest) -> Result<SdkRequest, serde_json::Error> {
+        let path = runtime::path_with_params("/items/:id", &runtime::request_fields(&input.params)?);
+        Ok(SdkRequest {
+            method: "DELETE",
+            url: format!("{}{}", self.runtime.base_url(), path),
+            query: input.query,
+            headers: input.headers,
+            body: None,
+            body_bytes: None,
+
+            multipart: None,
+            content_type: "application/json",
+        })
+    }
+
+
+    pub async fn delete_item(&self, input: DeleteItemRequest) -> Result<DeleteItemResponses, SdkError> {
+        let request = self.delete_item_request(input).map_err(SdkError::Encode)?;
+
+        let response = self.runtime.execute(request).await?;
+        let status = response.status().as_u16();
+        let _content_type = runtime::response_content_type(&response)?;
+
+        match status {
+
+            204 => {
+
+                let bytes=response.bytes().await?; let _=bytes; let body=();
+
+
+
+
+
+                Ok(DeleteItemResponses::Status204(body))
+            },
+
+            _ => Err(SdkError::Contract("undeclared response status or content type")),
+        }
+    }
+
+
+}

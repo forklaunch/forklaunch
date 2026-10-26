@@ -1,0 +1,42 @@
+[package]
+description = "ForkLaunch Rust worker interface APIs and runtime support"
+name = "forklaunch-worker-interface"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+forklaunch-ws = { version = "=0.2.5", path = "../../../../framework-rs/crates/ws" }
+forklaunch-core = { path = "../../../../framework-rs/crates/core", version = "=0.2.5",  features = ["asyncapi", "http", "domain"]}
+opentelemetry = { version = "0.33", features = ["metrics", "trace"], optional = true }
+schemars = { version = "1.2", features = ["uuid1"], optional = true }
+serde = { version = "1", features = ["derive"], optional = true}
+serde_json = {version = "1", optional = true}
+uuid = { version = "1", features = ["serde", "v4"], optional = true}
+zeroize = {version = "1", optional = true}
+url = {version = "2", optional = true}
+tokio = { version = "1", features = ["time"], optional = true}
+apalis = { version = "=1.0.0", optional = true }
+apalis-core = { version = "=1.0.0", optional = true }
+
+[lints]
+workspace = true
+
+[features]
+default = []
+native = ["encrypted", "telemetry", "forklaunch-core/otlp", "tokio/macros", "tokio/signal"]
+telemetry = ["encrypted", "dep:opentelemetry"]
+schema = ["encrypted", "dep:schemars"]
+apalis = ["encrypted", "dep:apalis", "dep:apalis-core"]
+encrypted = ["forklaunch-core/encryption", "dep:serde", "dep:serde_json", "dep:uuid", "dep:zeroize", "dep:url", "dep:tokio"]
+
+[dev-dependencies]
+opentelemetry_sdk = { version = "0.33", features = ["testing"] }
+tokio = { version = "1", features = ["macros", "rt", "test-util"] }
+
+[dev-dependencies.forklaunch-core]
+path = "../../../../framework-rs/crates/core"
+version = "=0.2.5"
+features = ["build", "typed-schema", "encryption"]

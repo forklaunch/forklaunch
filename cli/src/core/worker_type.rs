@@ -136,11 +136,18 @@ const BULLMQ_WORKER_PRODUCER_FACTORY: &str =
     EventEncryptor,
     (context?.tenantId as string) ?? ''
   )";
-const DATABASE_WORKER_PRODUCER_FACTORY: &str = "({ EntityMgr, WorkerOptions }) =>
+// The producer is handed the event record entity: MikroORM 7 persists only
+// entity instances, and the generated service enqueues plain event objects.
+fn get_database_worker_producer_factory(pascal_case_name: &str) -> String {
+    format!(
+        "({{ EntityMgr, WorkerOptions }}) =>
   new DatabaseWorkerProducer(
     EntityMgr,
-    WorkerOptions
-  )";
+    WorkerOptions,
+    {pascal_case_name}EventRecord
+  )"
+    )
+}
 const KAFKA_WORKER_PRODUCER_FACTORY: &str =
     "({ QUEUE_NAME, WorkerOptions, EventEncryptor }, context) =>
   new EncryptingWorkerProducer(
@@ -163,10 +170,10 @@ const REDIS_WORKER_PRODUCER_FACTORY: &str =
     (context?.tenantId as string) ?? ''
   )";
 
-pub(crate) fn get_worker_producer_factory(r#type: &WorkerType) -> String {
+pub(crate) fn get_worker_producer_factory(r#type: &WorkerType, pascal_case_name: &str) -> String {
     match r#type {
         WorkerType::BullMQCache => BULLMQ_WORKER_PRODUCER_FACTORY.to_string(),
-        WorkerType::Database => DATABASE_WORKER_PRODUCER_FACTORY.to_string(),
+        WorkerType::Database => get_database_worker_producer_factory(pascal_case_name),
         WorkerType::Kafka => KAFKA_WORKER_PRODUCER_FACTORY.to_string(),
         WorkerType::RedisCache => REDIS_WORKER_PRODUCER_FACTORY.to_string(),
     }

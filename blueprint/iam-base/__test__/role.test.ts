@@ -15,7 +15,7 @@ describe('Role Routes E2E Tests with PostgreSQL Container', () => {
   beforeAll(async () => {
     const setup = await setupTestDatabase();
     orm = setup.orm;
-  }, 60000);
+  });
 
   beforeEach(async () => {
     await clearDatabase({ orm });
@@ -26,7 +26,7 @@ describe('Role Routes E2E Tests with PostgreSQL Container', () => {
 
   afterAll(async () => {
     await cleanupTestDatabase();
-  }, 30000);
+  });
 
   describe('POST /role - createRole', () => {
     it('should create a role successfully', async () => {
@@ -48,7 +48,7 @@ describe('Role Routes E2E Tests with PostgreSQL Container', () => {
 
       const invalidData = {
         name: '', // Empty name should fail validation
-        permissions: []
+        permissionIds: []
       };
 
       try {
@@ -69,7 +69,7 @@ describe('Role Routes E2E Tests with PostgreSQL Container', () => {
 
       const invalidData = {
         name: 'test-role',
-        permissions: ['00000000-0000-0000-0000-000000000000'] // Non-existent permission ID
+        permissionIds: ['00000000-0000-0000-0000-000000000000'] // Non-existent permission ID
       };
 
       try {
@@ -96,11 +96,11 @@ describe('Role Routes E2E Tests with PostgreSQL Container', () => {
         mockRoleData,
         {
           name: 'moderator',
-          permissions: ['123e4567-e89b-12d3-a456-426614174002']
+          permissionIds: ['123e4567-e89b-12d3-a456-426614174002']
         },
         {
           name: 'viewer',
-          permissions: ['123e4567-e89b-12d3-a456-426614174002']
+          permissionIds: ['123e4567-e89b-12d3-a456-426614174002']
         }
       ];
 
@@ -124,11 +124,11 @@ describe('Role Routes E2E Tests with PostgreSQL Container', () => {
         mockRoleData,
         {
           name: '', // This should fail
-          permissions: ['123e4567-e89b-12d3-a456-426614174002']
+          permissionIds: ['123e4567-e89b-12d3-a456-426614174002']
         },
         {
           name: 'valid-role',
-          permissions: ['123e4567-e89b-12d3-a456-426614174002']
+          permissionIds: ['123e4567-e89b-12d3-a456-426614174002']
         }
       ];
 
@@ -228,7 +228,7 @@ describe('Role Routes E2E Tests with PostgreSQL Container', () => {
       const invalidData = {
         id: '123e4567-e89b-12d3-a456-426614174000',
         name: '', // Empty name should fail validation
-        permissions: ['123e4567-e89b-12d3-a456-426614174002']
+        permissionIds: ['123e4567-e89b-12d3-a456-426614174002']
       };
 
       try {
@@ -327,7 +327,7 @@ describe('Role Routes E2E Tests with PostgreSQL Container', () => {
       // Try to create role with existing name
       const duplicateData = {
         name: 'admin', // This name already exists in test data
-        permissions: ['123e4567-e89b-12d3-a456-426614174002']
+        permissionIds: ['123e4567-e89b-12d3-a456-426614174002']
       };
 
       try {
@@ -348,7 +348,7 @@ describe('Role Routes E2E Tests with PostgreSQL Container', () => {
 
       const invalidNameData = {
         name: 'Invalid Role Name!', // Should be alphanumeric with hyphens/underscores
-        permissions: ['123e4567-e89b-12d3-a456-426614174002']
+        permissionIds: ['123e4567-e89b-12d3-a456-426614174002']
       };
 
       try {
@@ -386,7 +386,7 @@ describe('Role Routes E2E Tests with PostgreSQL Container', () => {
 
       const roleWithoutPermissions = {
         name: 'guest',
-        permissions: [] // Empty permissions should be allowed
+        permissionIds: [] // Empty permissions should be allowed
       };
 
       const response = await createRoleRoute.sdk.createRole({
@@ -420,7 +420,7 @@ describe('Role Routes E2E Tests with PostgreSQL Container', () => {
       const updateData = {
         id: '123e4567-e89b-12d3-a456-426614174000',
         name: 'admin',
-        permissions: [
+        permissionIds: [
           '123e4567-e89b-12d3-a456-426614174002', // Original permission
           '123e4567-e89b-12d3-a456-426614174003' // New permission
         ]

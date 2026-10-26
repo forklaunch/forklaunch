@@ -74,7 +74,7 @@ export class BaseSmsService<
     (smsRecord as { status: SmsStatusEnum }).status = SmsStatusEnum.SENT;
 
     await (em ?? this.em).transactional(async (innerEm) => {
-      await innerEm.persist(smsRecord);
+      innerEm.persist(smsRecord);
     });
 
     return this.mappers.SmsRecordMapper.toDto(

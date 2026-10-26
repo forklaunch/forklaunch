@@ -1,4 +1,5 @@
-import { handlers, schemaValidator, string } from '@forklaunch/blueprint-core';
+import { discoveryContract } from '../contracts/discovery.contract';
+import { handlers, schemaValidator } from '@forklaunch/blueprint-core';
 
 /**
  * GET /discovery/auth-methods
@@ -7,15 +8,8 @@ import { handlers, schemaValidator, string } from '@forklaunch/blueprint-core';
  */
 export const getAuthMethods = handlers.get(
   schemaValidator,
-  '/auth-methods',
-  {
-    name: 'GetAuthMethods',
-    access: 'public',
-    summary: 'Get configured authentication methods',
-    responses: {
-      204: string
-    }
-  },
+  discoveryContract.getAuthMethods.path,
+  discoveryContract.getAuthMethods.details,
   async (_req, res) => {
     res.status(204).send('');
   }

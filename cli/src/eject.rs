@@ -229,7 +229,10 @@ fn perform_string_replacements(
     for file in app_files {
         if file.file_name() != "package.json" {
             let file_path = file.path();
-            let relative_path_difference = get_relative_path(file_path, base_path);
+            let relative_path_difference = get_relative_path(
+                file_path.parent().context("Ejected source must have a parent directory")?,
+                base_path,
+            );
 
             let content = rendered_templates_cache
                 .get(file_path)?
@@ -540,6 +543,11 @@ impl CliCommand for EjectCommand {
 
         let (app_root_path, project_name) = find_app_root_path(matches, RequiredLocation::Project)?;
         let manifest_path = app_root_path.join(".forklaunch").join("manifest.toml");
+        if let Some(name) = &project_name
+            && crate::init::rust_project::is_rust_project(&app_root_path, name)?
+        {
+            anyhow::bail!("{}", rust_eject_message(name));
+        }
 
         let mut manifest_data = toml::from_str::<ApplicationManifestData>(
             &read_to_string(manifest_path).with_context(|| ERROR_FAILED_TO_READ_MANIFEST)?,
@@ -642,5 +650,23 @@ impl CliCommand for EjectCommand {
         }
 
         Ok(())
+    }
+}
+
+/// Eject copies `@forklaunch/*` TypeScript package sources into a project.
+/// Native projects already own their HTTP layer as source and depend on
+/// published crates, so there is nothing of that kind to copy.
+fn rust_eject_message(name: &str) -> String {
+    format!(
+        "{name} is a Rust project; eject copies @forklaunch TypeScript package sources and does not apply. Its module HTTP code is already application source, and its framework and blueprint crates come from crates.io. To build against editable crates, check out framework-rs and run `forklaunch change application --framework-path <framework-rs>`"
+    )
+}
+
+#[cfg(test)]
+mod rust_tests {
+    #[test]
+    fn rust_projects_are_told_why_eject_does_not_apply() {
+        let message = super::rust_eject_message("billing");
+        assert!(message.contains("Rust project") && message.contains("--framework-path"));
     }
 }

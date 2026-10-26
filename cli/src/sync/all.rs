@@ -1,4 +1,9 @@
-use std::{collections::{HashMap, HashSet}, fs, io::Write, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    io::Write,
+    path::Path,
+};
 
 use anyhow::{Context, Result};
 use clap::{Arg, ArgAction, ArgMatches, Command};
@@ -20,16 +25,17 @@ use crate::{
         command::command,
         docker::{DockerCompose, sync_docker_compose_env_vars},
         env_template::{generate_env_templates, sync_env_local_files},
-        manifest::{
-            ProjectType, application::ApplicationManifestData,
-        },
+        manifest::{ProjectType, application::ApplicationManifestData},
+        openapi_export,
         rendered_template::{RenderedTemplate, RenderedTemplatesCache, write_rendered_templates},
         sync::{
             artifacts::{ArtifactType, remove_project_from_artifacts},
             detection::detect_project_type,
         },
     },
+    init::rust_project,
     prompt::{ArrayCompleter, prompt_for_confirmation, prompt_with_validation_with_answers},
+    sdk::generate::generate_or_check_sdk_outputs,
 };
 
 /// Performs a full sync of all projects in the modules directory with the manifest.
@@ -53,15 +59,44 @@ pub fn sync_all_projects(
     prompts_map: &HashMap<String, HashMap<String, String>>,
     stdout: &mut StandardStream,
 ) -> Result<bool> {
+    for project in manifest_data
+        .projects
+        .iter()
+        .filter(|project| crate::core::storefront::is_capture(project))
+    {
+        crate::core::storefront::change(app_root_path, &project.name, None, None, true)?;
+    }
+    if rust_project::is_rust_app_root(app_root_path)? {
+        rust_project::sync_all_rust_projects(app_root_path, stdout)?;
+        // Native sync persists its own changes. Refresh callers (including
+        // release preparation) before they stage TypeScript manifest edits.
+        let updated: ApplicationManifestData = toml_from_str(&fs::read_to_string(
+            app_root_path.join(".forklaunch/manifest.toml"),
+        )?)?;
+        manifest_data.projects = updated.projects;
+        if manifest_data.runtime == "tokio" {
+            regenerate_native_app_sdks_after_sync(app_root_path, manifest_data, stdout)?;
+            return Ok(false);
+        }
+    }
+
     let modules_path = app_root_path.join(&manifest_data.modules_path);
     let mut changes_made = false;
 
     if !modules_path.exists() {
-        log_warn!(stdout, "Modules path does not exist: {}", modules_path.display());
+        log_warn!(
+            stdout,
+            "Modules path does not exist: {}",
+            modules_path.display()
+        );
         return Ok(false);
     }
 
-    log_info!(stdout, "Scanning modules directory: {}", modules_path.display());
+    log_info!(
+        stdout,
+        "Scanning modules directory: {}",
+        modules_path.display()
+    );
 
     let existing_folders: HashSet<String> = fs::read_dir(&modules_path)?
         .filter_map(|entry| {
@@ -76,7 +111,9 @@ pub fn sync_all_projects(
 
     let mut orphaned_projects = vec![];
     for project in &manifest_data.projects {
-        if !DIRS_TO_IGNORE.contains(&project.name.as_str())
+        if !crate::core::storefront::is_capture(project)
+            && project.metadata.as_ref().and_then(|metadata| metadata.language.as_deref()) != Some("rust")
+            && !DIRS_TO_IGNORE.contains(&project.name.as_str())
             && !existing_folders.contains(&project.name)
         {
             orphaned_projects.push(project.name.clone());
@@ -85,7 +122,11 @@ pub fn sync_all_projects(
 
     if !orphaned_projects.is_empty() {
         writeln!(stdout)?;
-        log_warn!(stdout, "Found {} orphaned project(s) in manifest:", orphaned_projects.len());
+        log_warn!(
+            stdout,
+            "Found {} orphaned project(s) in manifest:",
+            orphaned_projects.len()
+        );
         for project_name in &orphaned_projects {
             writeln!(stdout, "  - {}", project_name)?;
         }
@@ -130,13 +171,18 @@ pub fn sync_all_projects(
                 changes_made = true;
             }
 
-            log_ok!(stdout, "Cleaned up {} orphaned project(s)", orphaned_projects.len());
+            log_ok!(
+                stdout,
+                "Cleaned up {} orphaned project(s)",
+                orphaned_projects.len()
+            );
             writeln!(stdout)?;
         } else {
             log_warn!(stdout, "Skipping cleanup of orphaned projects");
         }
     }
 
+    let mut confirmed_prompts = prompts_map.clone();
     for entry in fs::read_dir(&modules_path)? {
         let entry = entry?;
         let project_path = entry.path();
@@ -151,9 +197,19 @@ pub fn sync_all_projects(
 
         let project_name = project_name.to_string_lossy().to_string();
 
-        if DIRS_TO_IGNORE.contains(&project_name.as_str()) {
+        if DIRS_TO_IGNORE.contains(&project_name.as_str())
+            || rust_project::is_rust_project(app_root_path, &project_name)?
+        {
             continue;
         }
+
+        if confirm_all {
+            let answers = confirmed_prompts.entry(project_name.clone()).or_default();
+            for key in ["override_description", "override_worker_type"] {
+                answers.entry(key.to_owned()).or_insert_with(|| "n".to_owned());
+            }
+        }
+        let prompts_map = if confirm_all { &confirmed_prompts } else { prompts_map };
 
         writeln!(stdout)?;
         log_info!(stdout, "Processing: {}", project_name);
@@ -164,6 +220,9 @@ pub fn sync_all_projects(
             .iter()
             .find(|p| p.name == project_name);
 
+        if manifest_project.is_some_and(crate::core::storefront::is_capture) {
+            continue;
+        }
         let project_type = if let Some(existing) = manifest_project {
             let init_type: InitializeType = match existing.r#type {
                 ProjectType::Service => InitializeType::Service,
@@ -183,7 +242,11 @@ pub fn sync_all_projects(
                 log_warn!(stdout, "Could not auto-detect project type");
 
                 if confirm_all {
-                    log_warn!(stdout, "Skipping '{}' (cannot auto-detect and no interaction allowed)", project_name);
+                    log_warn!(
+                        stdout,
+                        "Skipping '{}' (cannot auto-detect and no interaction allowed)",
+                        project_name
+                    );
                     continue;
                 }
 
@@ -197,10 +260,7 @@ pub fn sync_all_projects(
                     stdout,
                     "category",
                     &ArgMatches::default(),
-                    &format!(
-                        "Project type for '{}' (or 'skip' to ignore)",
-                        project_name
-                    ),
+                    &format!("Project type for '{}' (or 'skip' to ignore)", project_name),
                     Some(SYNC_TYPE_OPTIONS),
                     |input| SYNC_TYPE_OPTIONS.contains(&input),
                     |_| "Invalid option. Please try again.".to_string(),
@@ -209,7 +269,11 @@ pub fn sync_all_projects(
                 )?;
 
                 if type_str == "skip" {
-                    log_info!(stdout, "Skipping '{}' (not a forklaunch project)", project_name);
+                    log_info!(
+                        stdout,
+                        "Skipping '{}' (not a forklaunch project)",
+                        project_name
+                    );
                     continue;
                 }
 
@@ -271,8 +335,8 @@ pub fn sync_all_projects(
                             changes_made = true;
                         }
                     }
-                    Err(e) => {
-                        log_error!(stdout, "{}", e);
+                    Err(error) => {
+                        return Err(error).with_context(|| format!("Failed to sync project {project_name}"));
                     }
                 }
             }
@@ -300,8 +364,8 @@ pub fn sync_all_projects(
                             changes_made = true;
                         }
                     }
-                    Err(e) => {
-                        log_error!(stdout, "{}", e);
+                    Err(error) => {
+                        return Err(error).with_context(|| format!("Failed to sync project {project_name}"));
                     }
                 }
             }
@@ -329,8 +393,8 @@ pub fn sync_all_projects(
                             changes_made = true;
                         }
                     }
-                    Err(e) => {
-                        log_error!(stdout, "{}", e);
+                    Err(error) => {
+                        return Err(error).with_context(|| format!("Failed to sync project {project_name}"));
                     }
                 }
             }
@@ -344,6 +408,43 @@ pub fn sync_all_projects(
     }
 
     Ok(changes_made)
+}
+
+fn regenerate_native_app_sdks_after_sync(
+    app_root_path: &Path,
+    manifest: &ApplicationManifestData,
+    stdout: &mut StandardStream,
+) -> Result<()> {
+    // Each service refreshes its registered artifacts; no shared export folder.
+    let exported_services =
+        openapi_export::export_all_services(app_root_path, manifest, None).context(
+            "Project sync completed, but contract/OpenAPI export failed before SDK regeneration",
+        )?;
+    if exported_services.is_empty() {
+        log_info!(stdout, "No HTTP services or workers found for SDK regeneration");
+        return Ok(());
+    }
+    let targets = &manifest.sdk_targets;
+    let rust = targets.is_empty()
+        || targets
+            .iter()
+            .any(|target| matches!(target.as_str(), "rust" | "all"));
+    let typescript = targets.is_empty()
+        || targets
+            .iter()
+            .any(|target| matches!(target.as_str(), "typescript" | "ts" | "all"));
+    let target = match (rust, typescript) {
+        (true, true) => "all",
+        (true, false) => "rust",
+        _ => "typescript",
+    };
+    log_info!(
+        stdout,
+        "Regenerating {target} SDKs from {} service artifact(s)",
+        exported_services.len()
+    );
+    generate_or_check_sdk_outputs(app_root_path, target, "contract", None, false, stdout)
+        .context("Failed to regenerate SDKs from service artifacts")
 }
 
 #[derive(Debug)]
@@ -415,6 +516,13 @@ impl CliCommand for SyncAllCommand {
             &mut stdout,
         )?;
 
+        crate::core::github_configs::reconcile_github_configs(&app_root_path)?;
+        if manifest_data.runtime == "tokio" {
+            writeln!(stdout)?;
+            log_header!(stdout, Color::Green, "Sync all completed");
+            return Ok(());
+        }
+
         let modules_path = app_root_path.join(&manifest_data.modules_path);
         generate_env_templates(
             &modules_path,
@@ -449,6 +557,9 @@ impl CliCommand for SyncAllCommand {
             .collect();
 
         write_rendered_templates(&rendered_templates, false, &mut stdout)?;
+        if rust_project::is_rust_app_root(&app_root_path)? {
+            regenerate_native_app_sdks_after_sync(&app_root_path, &manifest_data, &mut stdout)?;
+        }
 
         writeln!(stdout)?;
         log_header!(stdout, Color::Green, "Sync all completed");

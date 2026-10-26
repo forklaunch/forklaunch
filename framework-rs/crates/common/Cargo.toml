@@ -1,0 +1,32 @@
+[package]
+description = "ForkLaunch Rust common APIs and runtime support"
+name = "forklaunch-common"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+javascript-date = ["dep:tz-rs"]
+javascript-number = ["dep:ryu-js"]
+zod-checks = ["javascript-number"]
+zod-regex = ["dep:regress"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tz-rs = { version = "=0.7.3", optional = true }
+regress = { package = "forklaunch-regress", version = "=0.11.1", path = "../vendor/regress", default-features = false, features = ["std", "utf16"], optional = true }
+ryu-js = { version = "=1.0.3", optional = true }
+
+[lints]
+workspace = true
+
+[[example]]
+name = "zod_regex_parity"
+required-features = ["zod-regex"]
+
+[[example]]
+name = "javascript_date_parity"
+required-features = ["javascript-date"]

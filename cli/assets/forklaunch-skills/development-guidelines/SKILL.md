@@ -214,8 +214,8 @@ override the platform's value forever.
 
 | Linter   | Notes                                       |
 | -------- | ------------------------------------------- |
-| `eslint` | Mature ecosystem, extensive plugin support. |
-| `oxlint` | Rust-based, significantly faster.           |
+| `oxlint` | Default. Rust-based, type-aware on TypeScript 7 via `oxlint-tsgolint`. |
+| `eslint` | Not selectable for new apps: typescript-eslint does not support TypeScript 7 yet. |
 
 ### Test Frameworks
 

@@ -71,7 +71,7 @@ export class BullMqWorkerConsumer<
 
     this.worker.on('failed', (job: Job | undefined, error: Error) => {
       if (job) {
-        this.failureHandler([
+        void this.failureHandler([
           {
             value: job.data as EventEntity,
             error

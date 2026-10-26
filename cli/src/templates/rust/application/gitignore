@@ -1,0 +1,11 @@
+**/target/
+**/node_modules/
+**/dist/
+.env
+.env.*
+!.env.example
+/secrets/
+/artifacts/
+.DS_Store
+# Rust build scripts regenerate storage declarations on every build.
+**/.forklaunch/compliance.json

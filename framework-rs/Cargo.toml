@@ -1,0 +1,24 @@
+[workspace]
+resolver = "3"
+exclude = ["crates/vendor/jsonschema", "crates/vendor/referencing", "crates/vendor/regress"]
+members = [
+    "crates/universal-sdk","crates/common", "crates/core", "crates/core-macros", "crates/validator", "crates/axum", "crates/ws", "crates/redis", "crates/s3", "crates/testing"]
+
+[workspace.package]
+version = "0.2.5"
+edition = "2024"
+license = "MIT"
+authors = ["Forklift Technologies, Inc. <engineering@forklaunch.com>"]
+repository = "https://github.com/forklaunch/forklaunch-js"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# Implementations satisfy async traits even when one has nothing to await.
+unused_async_trait_impl = "allow"
+# Rust 1.99: `assert!(x.is_empty())` reads better than its suggested rewrite.
+assert_is_empty = "allow"
+

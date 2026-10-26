@@ -18,7 +18,7 @@ export const CheckoutSession = defineComplianceEntity({
       .array()
       .compliance('none'),
     currency: fp.enum(() => CurrencyEnum).compliance('none'),
-    uri: fp.string().compliance('none'),
+    uri: fp.string().nullable().compliance('none'),
     successRedirectUri: fp.string().nullable().compliance('none'),
     cancelRedirectUri: fp.string().nullable().compliance('none'),
     expiresAt: fp.datetime().compliance('none'),

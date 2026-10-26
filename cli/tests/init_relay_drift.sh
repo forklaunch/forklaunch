@@ -22,7 +22,7 @@ mkdir -p output/init-relay-drift
 cd output/init-relay-drift
 
 # 1. Scaffold a pristine better-auth iam.
-RUST_BACKTRACE=1 $FL init application relay-drift -p relay-drift -o src/modules -d postgresql -f prettier -l eslint -v zod -F express -r node -t vitest -m iam-better-auth -D "Test library" -A "Rohin Bhargava" -L 'AGPL-3.0'
+RUST_BACKTRACE=1 $FL init application relay-drift -p relay-drift -o src/modules -d postgresql -f prettier -l oxlint -v zod -F express -r node -t vitest -m iam-better-auth -D "Test library" -A "Rohin Bhargava" -L 'AGPL-3.0'
 
 IAM_DIR="relay-drift/src/modules/iam"
 

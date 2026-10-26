@@ -1,3 +1,4 @@
+import { organizationContract } from '../contracts/organization.contract';
 import { forklaunchRouter, schemaValidator } from '@forklaunch/blueprint-core';
 import { ci, tokens } from '../../bootstrapper';
 import {
@@ -10,24 +11,24 @@ import {
 const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 
 export const organizationRouter = forklaunchRouter(
-  '/organization',
+  organizationContract.basePath,
   schemaValidator,
   openTelemetryCollector
 );
 
 export const createOrganizationRoute = organizationRouter.post(
-  '/',
+  organizationContract.createOrganization.path,
   createOrganization
 );
 export const getOrganizationRoute = organizationRouter.get(
-  '/:id',
+  organizationContract.getOrganization.path,
   getOrganization
 );
 export const updateOrganizationRoute = organizationRouter.put(
-  '/',
+  organizationContract.updateOrganization.path,
   updateOrganization
 );
 export const deleteOrganizationRoute = organizationRouter.delete(
-  '/:id',
+  organizationContract.deleteOrganization.path,
   deleteOrganization
 );

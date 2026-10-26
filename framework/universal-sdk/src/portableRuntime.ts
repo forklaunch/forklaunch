@@ -1,0 +1,1794 @@
+export type ForkLaunchQueryValue = string | number | boolean | null | readonly ForkLaunchQueryValue[] | { readonly [key: string]: ForkLaunchQueryValue } | undefined;
+export type ForkLaunchPathValue = string | number | boolean;
+export type ForkLaunchHeaders = Record<string, ForkLaunchQueryValue>;
+export type ForkLaunchSdkFetchInit = Omit<RequestInit, 'method' | 'body' | 'headers'>;
+
+export type ForkLaunchSdkRequest<Params = never, Query = never, Body = never, Headers = ForkLaunchHeaders, BodyOptional extends boolean = false> =
+  ForkLaunchSdkFetchInit &
+  ([Params] extends [never] ? {} : { params: Params }) &
+  ([Query] extends [never] ? {} : { query: Query }) &
+  ([Body] extends [never] ? {} : BodyOptional extends true ? { body?: Body } : { body: Body }) &
+  ([Headers] extends [never] ? {} : {} extends Headers ? { headers?: Headers } : { headers: Headers });
+
+export type ForkLaunchSdkResponse<Responses extends Record<number, unknown>, Headers = never, ContentTypes extends Partial<Record<number, string>> = {}> = {
+  [Code in keyof Responses & number]: {
+    code: Code;
+    status: Code;
+    contentType: Code extends keyof ContentTypes ? ContentTypes[Code] : Code extends keyof ForkLaunchErrorResponses ? 'text/plain' : 'application/json';
+    response: Responses[Code];
+  } & ([Headers] extends [never] ? {} : { headers: Headers });
+}[keyof Responses & number];
+
+export type ForkLaunchSdkConfig = {
+  baseUrl?: string;
+  /** Local development only; permits plaintext credentials outside loopback. */
+  allowPlaintextDevelopment?: boolean;
+  serviceBaseUrls?: Partial<Record<string, string>>;
+  fetch?: typeof fetch;
+  maxSseEventBytes?: number;
+  zodRegexExecution?: ZodRegexExecution;
+  maxMultipartResponseBytes?: number;
+  headers?: ForkLaunchHeaders;
+  beforeRequest?: (request: ForkLaunchSdkRequestMeta) => ForkLaunchSdkRequestMeta | Promise<ForkLaunchSdkRequestMeta>;
+  /** Sign every API request with the ForkLaunch request HMAC (internal routes). */
+  hmac?: HmacSigningOptions;
+};
+
+export type ForkLaunchSdkRequestMeta = {
+  service: string;
+  router: string;
+  operation: string;
+  method: string;
+  path: string;
+  requestKind?: 'json' | 'text' | 'binary' | 'urlEncoded' | 'multipart';
+  requestContentType?: string;
+  requestSchema?: AnySchema;
+  requestObjects?: Record<string,{schema:AnySchema;fields:SdkVersionRules}>;
+  responseKinds?: Partial<Record<string, 'empty' | 'json' | 'text' | 'binary' | 'sse' | 'multipart'>>;
+  responseSchemas?: Record<string, AnySchema>;
+  versionMetadata?: SdkVersionMetadata;
+  responseHeaders?: Record<string, Record<string, {required:boolean; schema:unknown}>>;
+  input: {
+    params?: Record<string, ForkLaunchPathValue>;
+    query?: Record<string, ForkLaunchQueryValue>;
+    body?: unknown;
+    headers?: ForkLaunchHeaders;
+  } & ForkLaunchSdkFetchInit;
+};
+
+export type ForkLaunchErrorResponses = { 400: string; 401: string; 403: string; 404: string; 500: string };
+
+/** The complete successful HTTP envelope, retaining status-specific response types. */
+export type ForkLaunchQuerySuccess<Result extends { status: number }> = Result extends unknown
+  ? number extends Result['status'] ? Result : `${Result['status']}` extends `2${string}` ? Result : never
+  : never;
+
+export class ForkLaunchSdkHttpError<Result extends { status: number } = { status: number; response?: unknown }> extends Error {
+  constructor(public readonly result: Result) {
+    super(`HTTP request failed with status ${result.status}`);
+    this.name = 'ForkLaunchSdkHttpError';
+  }
+}
+
+function querySuccess<Result extends { status: number }>(result: Result): ForkLaunchQuerySuccess<Result> {
+  if (result.status < 200 || result.status >= 300) throw new ForkLaunchSdkHttpError(result);
+  return result as ForkLaunchQuerySuccess<Result>;
+}
+
+/** Optional TanStack Query v5 options. Keys are explicit: include resource and tenant scope,
+ * but never credentials. No React or TanStack runtime dependency is added to the SDK. */
+export function forkLaunchQueryOptions<Input extends { signal?: AbortSignal | null }, Result extends { status: number }, const Key extends readonly unknown[]>(
+  queryKey: Key,
+  operation: (input: Input) => Promise<Result>,
+  input: Input,
+) {
+  return {
+    queryKey,
+    queryFn: async ({ signal }: { signal: AbortSignal }): Promise<ForkLaunchQuerySuccess<Result>> => {
+      const callerSignal = input.signal;
+      if (!callerSignal || callerSignal === signal) return querySuccess(await operation({ ...input, signal }));
+      const controller = new AbortController();
+      const abortQuery = () => controller.abort(signal.reason);
+      const abortCaller = () => controller.abort(callerSignal.reason);
+      signal.addEventListener('abort', abortQuery, { once: true });
+      callerSignal.addEventListener('abort', abortCaller, { once: true });
+      if (signal.aborted) abortQuery();
+      else if (callerSignal.aborted) abortCaller();
+      try {
+        return querySuccess(await operation({ ...input, signal: controller.signal }));
+      } finally {
+        signal.removeEventListener('abort', abortQuery);
+        callerSignal.removeEventListener('abort', abortCaller);
+      }
+    },
+  };
+}
+
+/** Optional TanStack mutation options. Invalidation and retries remain explicit caller policy. */
+export function forkLaunchMutationOptions<Input, Result extends { status: number }, const Key extends readonly unknown[]>(
+  mutationKey: Key,
+  operation: (input: Input) => Promise<Result>,
+) {
+  return {
+    mutationKey,
+    mutationFn: async (input: Input): Promise<ForkLaunchQuerySuccess<Result>> => querySuccess(await operation(input)),
+  };
+}
+
+/**
+ * Safely stringifies any JavaScript value, handling special cases like:
+ * - Error objects
+ * - BigInt
+ * - Functions
+ * - Symbols
+ * - Special number values (NaN, Infinity)
+ * - Built-in objects (Date, RegExp)
+ * - Collections (Map, Set)
+ * - TypedArrays and ArrayBuffers
+ *
+ * @param arg - The value to stringify
+ * @returns A string representation of the value
+ *
+ * @example
+ * ```typescript
+ * // Handle Error objects
+ * safeStringify(new Error("test")); // '{"name":"Error","message":"test","stack":"..."}'
+ *
+ * // Handle special types
+ * safeStringify(BigInt(123)); // "123n"
+ * safeStringify(Symbol("test")); // "Symbol(test)"
+ * safeStringify(() => {}); // "[Function: anonymous]"
+ * safeStringify(new Map([["key", "value"]])); // '{"__type":"Map","value":[["key","value"]]}'
+ * ```
+ */
+export function safeStringify(arg: unknown): string {
+  if (typeof arg === 'string') {
+    return arg;
+  }
+
+  if (arg == null) {
+    return String(arg);
+  }
+
+  const replacer = (key: string, value: unknown): unknown => {
+    if (value instanceof Error) {
+      return {
+        name: value.name,
+        message: value.message,
+        stack: value.stack,
+        cause: value.cause
+      };
+    }
+
+    if (typeof value === 'bigint') {
+      return value.toString() + 'n';
+    }
+
+    if (typeof value === 'function') {
+      return `[Function: ${value.name || 'anonymous'}]`;
+    }
+
+    if (typeof value === 'symbol') {
+      return value.toString();
+    }
+
+    if (typeof value === 'number') {
+      if (Number.isNaN(value)) return 'NaN';
+      if (value === Infinity) return 'Infinity';
+      if (value === -Infinity) return '-Infinity';
+    }
+
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+
+    if (value instanceof RegExp) {
+      return value.toString();
+    }
+
+    if (value instanceof Map) {
+      return {
+        __type: 'Map',
+        value: Array.from(value.entries())
+      };
+    }
+
+    if (value instanceof Set) {
+      return {
+        __type: 'Set',
+        value: Array.from(value.values())
+      };
+    }
+
+    if (ArrayBuffer.isView(value)) {
+      return {
+        __type: value.constructor.name,
+        // ArrayBuffer.isView narrows to ArrayBufferView, which covers DataView
+        // as well as the typed arrays. DataView is genuinely not indexable, so
+        // TypeScript is right that the two types do not overlap and refuses a
+        // direct assertion. The hop through unknown is load-bearing here rather
+        // than habit: every typed array reaching this branch is ArrayLike, and
+        // a DataView yields an empty array instead of throwing.
+        value: Array.from(value as unknown as ArrayLike<unknown>)
+      };
+    }
+
+    if (value instanceof ArrayBuffer) {
+      return {
+        __type: 'ArrayBuffer',
+        value: Array.from(new Uint8Array(value))
+      };
+    }
+
+    return value;
+  };
+
+  try {
+    return JSON.stringify(arg, replacer);
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      return `[Unserializable: ${error.message}]`;
+    }
+    return '[Unserializable: Unknown error]';
+  }
+}
+
+
+// Shared HTTP/SSE/WebSocket schema validation. No transport or Node dependencies.
+import { Ajv, type AnySchema, type ValidateFunction } from 'ajv';
+import { Ajv2020 } from 'ajv/dist/2020.js';
+import { Ajv2019 } from 'ajv/dist/2019.js';
+import AjvDraft4Module from 'ajv-draft-04';
+import addFormatsModule, { type FormatsPlugin } from 'ajv-formats';
+
+function socketDecimal(value: number): [bigint, number] {
+  const [coefficient, exponent = '0'] = String(value).toLowerCase().split('e');
+  const [integer, fraction = ''] = coefficient.split('.');
+  return [BigInt(integer + fraction), Number(exponent) - fraction.length];
+}
+function socketMultipleOf(value: number, divisor: number): boolean {
+  let [numerator, scale] = socketDecimal(value);
+  let [denominator, divisorScale] = socketDecimal(divisor);
+  scale -= divisorScale;
+  if (scale >= 0) numerator *= 10n ** BigInt(scale);
+  else denominator *= 10n ** BigInt(-scale);
+  return numerator % denominator === 0n;
+}
+function socketValidator(schema: AnySchema, regexExecution?: ZodRegexExecution): ValidateFunction {
+  const dialect = typeof schema === 'object' ? schema.$schema : undefined;
+  // CommonJS constructor declarations are exposed as a namespace in NodeNext.
+  const AjvDraft4 = AjvDraft4Module as unknown as typeof Ajv;
+  const engine =
+    typeof dialect === 'string' && dialect.includes('/draft-04/')
+      ? new AjvDraft4({
+          strict: false,
+          validateFormats: true,
+          ownProperties: true,
+        })
+      : typeof dialect === 'string' && dialect.includes('2020-12')
+        ? new Ajv2020({
+            strict: false,
+            validateFormats: true,
+            ownProperties: true,
+          })
+        : typeof dialect === 'string' && dialect.includes('2019-09')
+          ? new Ajv2019({
+              strict: false,
+              validateFormats: true,
+              ownProperties: true,
+            })
+          : new Ajv({
+              strict: false,
+              validateFormats: true,
+              ownProperties: true,
+            });
+  if (typeof dialect === 'string' && dialect.includes('/draft-06/'))
+    engine.addMetaSchema(socketDraft6MetaSchema);
+  if (typeof dialect === 'string' && dialect.includes('/draft-04/')) {
+    // The Draft 4 adapter also registers newer AJV applicator/const keywords.
+    // They are annotations in this dialect and must not narrow accepted values.
+    for (const keyword of [
+      'const',
+      'contains',
+      'propertyNames',
+      'if',
+      'then',
+      'else',
+    ])
+      engine.removeKeyword(keyword);
+  }
+  if (typeof dialect === 'string' && dialect.includes('/draft-06/'))
+    for (const keyword of ['if', 'then', 'else']) engine.removeKeyword(keyword);
+  // CJS package declarations are exposed as a namespace under NodeNext ESM.
+  const addFormats = addFormatsModule as unknown as FormatsPlugin;
+  addFormats(engine);
+  registerZodChecks(engine);
+  registerZodRegex(engine, regexExecution);
+  engine.addFormat('forklaunch-whatwg-url', {
+    type: 'string',
+    validate: (value: string) => {
+      try { new URL(value); return true; } catch { return false; }
+    },
+  });
+  // Native (Rust/schemars) integer formats: annotation-only bounds checks, so
+  // contracts stay unchanged and Ajv does not warn `unknown format "uint64"`.
+  for (const [name, min, max] of [['int8', -128, 127], ['int16', -32768, 32767], ['uint8', 0, 255], ['uint16', 0, 65535], ['uint32', 0, 4294967295], ['uint64', 0, Infinity], ['uint', 0, Infinity], ['int', -Infinity, Infinity], ['int128', -Infinity, Infinity], ['uint128', 0, Infinity]] as const)
+    engine.addFormat(name, { type: 'number', validate: (value: number) => Number.isInteger(value) && value >= min && value <= max });
+  engine.removeKeyword('multipleOf');
+  engine.addKeyword({
+    keyword: 'multipleOf',
+    type: 'number',
+    schemaType: 'number',
+    compile: (divisor: number) => (value: number) =>
+      socketMultipleOf(value, divisor),
+  });
+  // No loadSchema callback: external resources are never fetched.
+  return engine.compile(socketAjvSchema(schema));
+}
+// AJV excludes properties named __proto__ from ordinary property compilation.
+// Keep their original pointer targets and also validate them as exact patterns.
+function socketAjvSchema(schema: AnySchema): AnySchema {
+  const copy = JSON.parse(JSON.stringify(schema)) as AnySchema;
+  const dictionaries = new Set([
+    'properties',
+    'patternProperties',
+    '$defs',
+    'definitions',
+    'dependentSchemas',
+    'dependencies',
+  ]);
+  const singles = new Set([
+    'additionalProperties',
+    'additionalItems',
+    'unevaluatedProperties',
+    'unevaluatedItems',
+    'contains',
+    'not',
+    'if',
+    'then',
+    'else',
+    'propertyNames',
+    'contentSchema',
+  ]);
+  const dialect = typeof copy === 'object' ? copy.$schema : undefined;
+  const draft4 = typeof dialect === 'string' && dialect.includes('/draft-04/');
+  const draft6 = typeof dialect === 'string' && dialect.includes('/draft-06/');
+  const draft7 =
+    dialect === undefined ||
+    (typeof dialect === 'string' && dialect.includes('/draft-07/'));
+  const draft2019 =
+    typeof dialect === 'string' && dialect.includes('/draft/2019-09/');
+  const draft2020 =
+    typeof dialect === 'string' && dialect.includes('/draft/2020-12/');
+  const legacy = draft4 || draft6 || draft7;
+  const hasResourceId = (object: Record<string, unknown>, resource: unknown): boolean => {
+    const id = object[draft4 ? 'id' : '$id'];
+    // Legacy fragment IDs name anchors within the enclosing resource. They do
+    // not change the document against which a JSON Pointer fragment resolves.
+    if (typeof id !== 'string' || id === '' || id.startsWith('#')) return false;
+    const parentId = resource && typeof resource === 'object'
+      ? (resource as Record<string, unknown>)[draft4 ? 'id' : '$id'] : undefined;
+    // The absolute spelling of an anchor in this same document has identical
+    // scope. A distinct document URI still starts a nested resource.
+    return !(id.includes('#') && typeof parentId === 'string' &&
+      id.split('#', 1)[0] === parentId.split('#', 1)[0]);
+  };
+  const ignored = new Set([
+    // Model identity is an annotation. AJV's resource walk also visits unknown
+    // keywords and otherwise mistakes its repeated `id` for a Draft 4 resource.
+    'x-forklaunch-model',
+    ...(draft4 ? ['const', 'contains', 'propertyNames'] : []),
+    ...(draft4 || draft6 ? ['if', 'then', 'else'] : []),
+    ...(legacy
+      ? [
+          'dependentSchemas',
+          'dependentRequired',
+          'unevaluatedProperties',
+          'unevaluatedItems',
+          'contentSchema',
+          'minContains',
+          'maxContains',
+        ]
+      : []),
+    ...(legacy || draft2019 ? ['prefixItems'] : []),
+    ...(draft2020 ? ['additionalItems'] : []),
+  ]);
+  // A pointer can make literal data act as a schema too. Repairing that data
+  // would change const/enum equality or defaults, so reject the dual-use case.
+  const literalRanges: string[][] = [];
+  const repairPaths: string[][] = [];
+  const schemaLocations = new Map<object, { path: string[]; resourcePath: string[]; resource: unknown }>();
+  const checked = new Set<string>();
+  const inspect: Array<{ node: unknown; path: string[]; resource: unknown; resourcePath: string[] }> = [
+    { node: copy, path: [], resource: copy, resourcePath: [] },
+  ];
+  let remaining = 10000;
+  while (inspect.length) {
+    const { node, path, resource, resourcePath } = inspect.pop()!;
+    const location = JSON.stringify(path);
+    if (checked.has(location)) continue;
+    checked.add(location);
+    if (--remaining < 0 || path.length > 64)
+      throw new Error('Socket schema inspection budget exceeded');
+    if (!node || typeof node !== 'object' || Array.isArray(node)) continue;
+    const object = node as Record<string, unknown>;
+    const ownsResource = hasResourceId(object, resource);
+    const base = ownsResource ? node : resource;
+    const basePath = ownsResource ? path : resourcePath;
+    schemaLocations.set(node, { path, resourcePath: basePath, resource: base });
+    for (const key of ['default', 'const', 'enum']) {
+      if (Object.prototype.hasOwnProperty.call(object, key)) literalRanges.push([...path, key]);
+    }
+    if (object.properties && typeof object.properties === 'object' &&
+        Object.prototype.hasOwnProperty.call(object.properties, '__proto__')) repairPaths.push(path);
+    const push = (child: unknown, childPath: string[]) => {
+      if (inspect.length >= remaining) throw new Error('Socket schema inspection budget exceeded');
+      inspect.push({ node: child, path: childPath, resource: base, resourcePath: basePath });
+    };
+    if (typeof object.$ref === 'string' && object.$ref.startsWith('#')) {
+      const pointer = decodeURIComponent(object.$ref.slice(1));
+      if (pointer.startsWith('/')) {
+        const tokens = pointer.slice(1).split('/').map(key => key.replace(/~1/g, '/').replace(/~0/g, '~'));
+        let target: unknown = base;
+        for (const key of tokens) target = target && typeof target === 'object' &&
+          Object.prototype.hasOwnProperty.call(target, key) ? (target as Record<string, unknown>)[key] : undefined;
+        push(target, [...basePath, ...tokens]);
+      }
+    }
+    for (const [key, child] of Object.entries(object)) {
+      if (ignored.has(key)) continue;
+      if (dictionaries.has(key) && child && typeof child === 'object' && !Array.isArray(child)) {
+        for (const [name, value] of Object.entries(child)) push(value, [...path, key, name]);
+      } else if (singles.has(key)) push(child, [...path, key]);
+      else if (['items', 'prefixItems', 'allOf', 'anyOf', 'oneOf'].includes(key)) {
+        if (Array.isArray(child)) child.forEach((value, index) => push(value, [...path, key, String(index)]));
+        else push(child, [...path, key]);
+      }
+    }
+  }
+  function assertNotLiteral(path: string[], operation: string): void {
+    for (const range of literalRanges) {
+      if (--remaining < 0) throw new Error('Socket schema inspection budget exceeded');
+      if (range.length <= path.length && range.every((key, index) => path[index] === key))
+        throw new Error(`Socket ${operation} cannot rewrite literal default/const/enum data`);
+    }
+  }
+  for (const path of repairPaths) assertNotLiteral(path, 'own-property repair');
+  let activeSchemas: WeakSet<object> | undefined;
+  if (ignored.size) {
+    const active = new WeakSet<object>();
+    activeSchemas = active;
+    const pending: Array<{ node: unknown; resource: unknown }> = [{ node: copy, resource: copy }];
+    const annotations: Array<{ value: unknown; path: string[] }> = [];
+    // AJV discovers resource IDs before consulting its dialect vocabulary.
+    // Identify real schema positions, including explicit local references into
+    // ignored annotation storage, before cleaning its private compilation copy.
+    while (pending.length) {
+      const { node, resource } = pending.pop()!;
+      if (
+        !node ||
+        typeof node !== 'object' ||
+        Array.isArray(node) ||
+        active.has(node)
+      )
+        continue;
+      active.add(node);
+      const object = node as Record<string, unknown>;
+      const base = schemaLocations.get(node)?.resource ?? resource;
+      const push = (child: unknown) => pending.push({ node: child, resource: base });
+      if (typeof object.$ref === 'string' && object.$ref.startsWith('#')) {
+        const pointer = decodeURIComponent(object.$ref.slice(1));
+        let target: unknown = base;
+        if (pointer.startsWith('/')) {
+          for (const segment of pointer.slice(1).split('/')) {
+            const key = segment.replace(/~1/g, '/').replace(/~0/g, '~');
+            target =
+              target &&
+              typeof target === 'object' &&
+              Object.prototype.hasOwnProperty.call(target, key)
+                ? (target as Record<string, unknown>)[key]
+                : undefined;
+          }
+        } else if (pointer !== '') target = undefined;
+        push(target);
+      }
+      for (const [key, child] of Object.entries(object)) {
+        if (ignored.has(key)) {
+          const location = schemaLocations.get(node);
+          if (!location) throw new Error('Socket schema location unavailable');
+          annotations.push({ value: child, path: [...location.path, key] });
+        }
+        else if (
+          dictionaries.has(key) &&
+          child &&
+          typeof child === 'object' &&
+          !Array.isArray(child)
+        ) {
+          for (const value of Object.values(child)) push(value);
+        } else if (singles.has(key)) push(child);
+        else if (
+          ['items', 'prefixItems', 'allOf', 'anyOf', 'oneOf'].includes(key)
+        ) {
+          if (Array.isArray(child)) {
+            for (const value of child) push(value);
+          } else push(child);
+        }
+      }
+    }
+    function cleanAnnotation(value: unknown, path: string[]): void {
+      if (!value || typeof value !== 'object' || active.has(value)) return;
+      if (Array.isArray(value)) {
+        value.forEach((child, index) => cleanAnnotation(child, [...path, String(index)]));
+        return;
+      }
+      const object = value as Record<string, unknown>;
+      for (const keyword of ['$id', 'id', '$anchor', '$dynamicAnchor']) {
+        if (typeof object[keyword] !== 'string') continue;
+        assertNotLiteral(path, 'annotation cleanup');
+        delete object[keyword];
+      }
+      for (const [key, child] of Object.entries(object)) cleanAnnotation(child, [...path, key]);
+    }
+    for (const annotation of annotations) cleanAnnotation(annotation.value, annotation.path);
+  }
+  const visited = new WeakSet<object>();
+  function visit(node: unknown, location: string[]): void {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return;
+    if (activeSchemas && !activeSchemas.has(node)) return;
+    if (visited.has(node)) return;
+    visited.add(node);
+    const object = node as Record<string, unknown>;
+    if (typeof object.$schema === 'string') {
+      let normalized = object.$schema;
+      if (object.$schema.includes('/draft-04/'))
+        normalized = 'http://json-schema.org/draft-04/schema#';
+      else if (object.$schema.includes('/draft-06/'))
+        normalized = 'http://json-schema.org/draft-06/schema#';
+      else if (object.$schema.includes('/draft-07/'))
+        normalized = 'http://json-schema.org/draft-07/schema#';
+      else if (object.$schema.includes('/draft/2019-09/'))
+        normalized = 'https://json-schema.org/draft/2019-09/schema';
+      else if (object.$schema.includes('/draft/2020-12/'))
+        normalized = 'https://json-schema.org/draft/2020-12/schema';
+      if (normalized !== object.$schema) {
+        const path = schemaLocations.get(node)?.path;
+        if (!path) throw new Error('Socket schema location unavailable');
+        assertNotLiteral(path, 'dialect normalization');
+        object.$schema = normalized;
+      }
+    }
+    const base = schemaLocations.get(node)?.resource === node ? [] : location;
+    const properties = object.properties as Record<string, unknown> | undefined;
+    if (
+      properties &&
+      Object.prototype.hasOwnProperty.call(properties, '__proto__')
+    ) {
+      const patterns = (object.patternProperties ??=
+        Object.create(null)) as Record<string, unknown>;
+      let pattern = '^__proto__(?![\\s\\S])';
+      // Existing patterns may be $ref targets; retain their original meaning.
+      while (Object.prototype.hasOwnProperty.call(patterns, pattern))
+        pattern += '(?:)';
+      const pointer = [...base, 'properties', '__proto__']
+        .map((token) =>
+          encodeURIComponent(token.replace(/~/g, '~0').replace(/\//g, '~1')),
+        )
+        .join('/');
+      const reference = { $ref: `#/${pointer}` };
+      patterns[pattern] = reference;
+    }
+    for (const [key, child] of Object.entries(object)) {
+      if (
+        dictionaries.has(key) &&
+        child &&
+        typeof child === 'object' &&
+        !Array.isArray(child)
+      ) {
+        for (const [name, value] of Object.entries(child))
+          visit(value, [...base, key, name]);
+      } else if (singles.has(key)) visit(child, [...base, key]);
+      else if (
+        ['items', 'prefixItems', 'allOf', 'anyOf', 'oneOf'].includes(key)
+      ) {
+        if (Array.isArray(child))
+          child.forEach((value, index) =>
+            visit(value, [...base, key, String(index)]),
+          );
+        else visit(child, [...base, key]);
+      }
+    }
+  }
+  visit(copy, []);
+  // Explicit local pointers can select schemas under unknown annotation keys.
+  // Those targets need the same own-property repair as ordinary schema fields.
+  for (const [node, location] of schemaLocations)
+    visit(node, location.path.slice(location.resourcePath.length));
+  return copy;
+}
+// Explicit portable date metadata; ordinary date-looking strings stay strings.
+function portableDates(schema: AnySchema, value: unknown, encode = false, root: AnySchema = schema, depth = 0): unknown {
+  if (depth === 0 && !JSON.stringify(schema).includes('x-forklaunch-date-codec')) return value;
+  if (depth > 64) throw new TypeError('Date codec recursion limit exceeded');
+  if (typeof schema !== 'object' || schema === null) return value;
+  if (schema.$ref !== undefined) {
+    if (typeof schema.$ref !== 'string' || !schema.$ref.startsWith('#/')) throw new TypeError('Unsupported date codec reference');
+    let target: unknown = root;
+    for (const part of schema.$ref.slice(2).split('/')) {
+      const key = part.replace(/~1/g, '/').replace(/~0/g, '~');
+      if (typeof target !== 'object' || target === null || !Object.prototype.hasOwnProperty.call(target, key)) throw new TypeError('Unresolved date codec reference');
+      target = (target as Record<string, unknown>)[key];
+    }
+    return portableDates(target as AnySchema, value, encode, root, depth + 1);
+  }
+  const codec = schema['x-forklaunch-date-codec'];
+  if (codec !== undefined) {
+    if (codec.version !== 1 || codec.kind !== 'utc-milliseconds' || !['input', 'value'].includes(codec.projection)) throw new TypeError('Unsupported date codec');
+    if (encode) {
+      if (!(value instanceof Date) || !Number.isFinite(Date.prototype.getTime.call(value))) throw new TypeError('Expected a valid Date');
+      const wire = Date.prototype.toISOString.call(value);
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:[0-5]\d\.\d{3}Z$/.test(wire)) throw new TypeError('Date outside portable year range');
+      return wire;
+    }
+    const pattern = codec.projection === 'input' ? /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:[0-5]\d(?:\.\d{1,3})?Z$/ : /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:[0-5]\d\.\d{3}Z$/;
+    if (typeof value !== 'string' || !pattern.test(value)) throw new TypeError('Invalid UTC millisecond timestamp');
+    const result = new Date(value);
+    if (!Number.isFinite(result.getTime()) || result.toISOString().slice(0,19) !== value.slice(0,19)) throw new TypeError('Invalid calendar date');
+    return result;
+  }
+  const alternatives = schema.oneOf ?? schema.anyOf;
+  if (Array.isArray(alternatives)) {
+    for (const candidate of alternatives) {
+      try {
+        const transformed = encode ? portableDates(candidate, value, true, root, depth + 1) : value;
+        if (socketValidator({ ...candidate, $defs: (root as any).$defs, definitions: (root as any).definitions })(transformed)) return encode ? transformed : portableDates(candidate, value, false, root, depth + 1);
+      } catch { /* Other alternatives may match. */ }
+    }
+    throw new TypeError('No date codec union alternative matches');
+  }
+  if (Array.isArray(schema.allOf)) {
+    for (const candidate of schema.allOf) value = portableDates(candidate, value, encode, root, depth + 1);
+  }
+  if (Array.isArray(value)) return value.map((item, index) => portableDates(schema.prefixItems?.[index] ?? (Array.isArray(schema.items) ? schema.items[index] : schema.items) ?? true, item, encode, root, depth + 1));
+  if (typeof value === 'object' && value !== null && !(value instanceof Date)) {
+    const output: Record<string,unknown> = Object.create(null);
+    for (const [key, item] of Object.entries(value)) output[key] = portableDates(schema.properties?.[key] ?? schema.additionalProperties ?? true, item, encode, root, depth + 1);
+    return output;
+  }
+  return value;
+}
+
+// BEGIN GENERATED UNICODE16 EMOJI RANGES
+const zodEmojiRanges: readonly (readonly [number, number])[] = [
+  [35, 35],
+  [42, 42],
+  [48, 57],
+  [169, 169],
+  [174, 174],
+  [8205, 8205],
+  [8252, 8252],
+  [8265, 8265],
+  [8419, 8419],
+  [8482, 8482],
+  [8505, 8505],
+  [8596, 8601],
+  [8617, 8618],
+  [8986, 8987],
+  [9000, 9000],
+  [9096, 9096],
+  [9167, 9167],
+  [9193, 9203],
+  [9208, 9210],
+  [9410, 9410],
+  [9642, 9643],
+  [9654, 9654],
+  [9664, 9664],
+  [9723, 9726],
+  [9728, 9733],
+  [9735, 9746],
+  [9748, 9861],
+  [9872, 9989],
+  [9992, 10002],
+  [10004, 10004],
+  [10006, 10006],
+  [10013, 10013],
+  [10017, 10017],
+  [10024, 10024],
+  [10035, 10036],
+  [10052, 10052],
+  [10055, 10055],
+  [10060, 10060],
+  [10062, 10062],
+  [10067, 10069],
+  [10071, 10071],
+  [10083, 10087],
+  [10133, 10135],
+  [10145, 10145],
+  [10160, 10160],
+  [10175, 10175],
+  [10548, 10549],
+  [11013, 11015],
+  [11035, 11036],
+  [11088, 11088],
+  [11093, 11093],
+  [12336, 12336],
+  [12349, 12349],
+  [12951, 12951],
+  [12953, 12953],
+  [65039, 65039],
+  [126976, 127231],
+  [127245, 127247],
+  [127279, 127279],
+  [127340, 127345],
+  [127358, 127359],
+  [127374, 127374],
+  [127377, 127386],
+  [127405, 127487],
+  [127489, 127503],
+  [127514, 127514],
+  [127535, 127535],
+  [127538, 127546],
+  [127548, 127551],
+  [127561, 128317],
+  [128326, 128591],
+  [128640, 128767],
+  [128884, 128895],
+  [128981, 129023],
+  [129036, 129039],
+  [129096, 129103],
+  [129114, 129119],
+  [129160, 129167],
+  [129198, 129279],
+  [129292, 129338],
+  [129340, 129349],
+  [129351, 129791],
+  [130048, 131069],
+  [917536, 917631],
+];
+// END GENERATED UNICODE16 EMOJI RANGES
+function emoji(value: string): boolean {
+  if (!value.length) return false;
+  for (const ch of value) {
+    const code = ch.codePointAt(0)!;
+    let low = 0, high = zodEmojiRanges.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (zodEmojiRanges[middle][1] < code) low = middle + 1;
+      else high = middle;
+    }
+    if (low === zodEmojiRanges.length || zodEmojiRanges[low][0] > code) return false;
+  }
+  return true;
+}
+
+// Reserved versioned capability; arbitrary JSON Schema keywords are unchanged.
+const zodChecksKeyword = 'x-forklaunch-zod-checks';
+interface ZodChecks {
+  version: 1;
+  stringPredicates?: {kind: 'startsWith' | 'endsWith' | 'includes'; sourceUnits: number[]; position?: number | 'NaN' | 'Infinity' | '-Infinity'}[];
+  arrayMinItems?: (number | 'NaN' | 'Infinity' | '-Infinity')[];
+  arrayMaxItems?: (number | 'NaN' | 'Infinity' | '-Infinity')[];
+  utf16MinLengths?: (number | 'NaN' | 'Infinity' | '-Infinity')[];
+  utf16MaxLengths?: (number | 'NaN' | 'Infinity' | '-Infinity')[];
+  utf16MinLength?: number;
+  utf16MaxLength?: number;
+  formats?: ('email' | 'uuid' | 'uri' | 'cuid' | 'cuid2' | 'ulid' | 'nanoid' | 'base64' | 'base64url' | 'date' | 'duration' | 'ip' | 'ipv4' | 'ipv6' | 'cidr' | 'cidrv4' | 'cidrv6' | 'emoji')[];
+  jwtAlgorithms?: (string | null)[];
+  dateTimes?: { precision: number | null; local: boolean; offset: boolean }[];
+  timePrecisions?: (number | null)[];
+  multipleOf?: (number | 'NaN' | 'Infinity' | '-Infinity')[];
+}
+function compileZodChecks(input: unknown): (value: unknown) => boolean {
+  if (!input || typeof input !== 'object' || Array.isArray(input))
+    throw new Error('Invalid Zod check profile');
+  const value = input as Record<string, unknown>;
+  if (
+    value.version !== 1 ||
+    Object.keys(value).some(
+      (key) =>
+        ![
+          'version',
+          'stringPredicates',
+          'utf16MinLengths',
+          'utf16MaxLengths',
+          'utf16MinLength',
+          'utf16MaxLength',
+          'multipleOf',
+          'arrayMinItems',
+          'arrayMaxItems',
+          'formats',
+          'timePrecisions',
+          'dateTimes',
+          'jwtAlgorithms'
+        ].includes(key)
+    )
+  )
+    throw new Error('Invalid Zod check profile version or fields');
+  for (const key of ['utf16MinLength', 'utf16MaxLength']) {
+    if (
+      Object.prototype.hasOwnProperty.call(value, key) &&
+      (typeof value[key] !== 'number' ||
+        !Number.isSafeInteger(value[key]) ||
+        (value[key] as number) < 0)
+    )
+      throw new Error('Invalid Zod UTF-16 bound');
+  }
+  for (const key of ['multipleOf', 'arrayMinItems', 'arrayMaxItems', 'utf16MinLengths', 'utf16MaxLengths']) {
+    if (Object.prototype.hasOwnProperty.call(value,key)) {
+      const rules=value[key];
+      if (!Array.isArray(rules) || rules.length>10000 || rules.some(rule=>
+        !(typeof rule==='number' && Number.isFinite(rule)) && !['NaN','Infinity','-Infinity'].includes(rule)))
+        throw new Error('Invalid Zod numeric rules');
+    }
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(value, 'formats') &&
+    (!Array.isArray(value.formats) ||
+      value.formats.length > 10000 ||
+      value.formats.some(
+        (format) => !['email', 'uuid', 'uri', 'cuid', 'cuid2', 'ulid', 'nanoid', 'base64', 'base64url', 'date', 'duration', 'ip', 'ipv4', 'ipv6', 'cidr', 'cidrv4', 'cidrv6', 'emoji'].includes(format)
+      ))
+  )
+    throw new Error('Invalid Zod format rules');
+  if (Object.prototype.hasOwnProperty.call(value, 'timePrecisions') &&
+      (!Array.isArray(value.timePrecisions) || value.timePrecisions.length > 10000 ||
+       value.timePrecisions.some((p) => p !== null && (typeof p !== 'number' || !Number.isInteger(p) || p < 0 || p > 1000))))
+    throw new Error('Invalid Zod time precisions');
+  if (Object.prototype.hasOwnProperty.call(value, 'dateTimes') &&
+      (!Array.isArray(value.dateTimes) || value.dateTimes.length > 10000 || value.dateTimes.some((rule) =>
+        !rule || typeof rule !== 'object' || Array.isArray(rule) || Object.keys(rule).length !== 3 ||
+        typeof rule.local !== 'boolean' || typeof rule.offset !== 'boolean' ||
+        (rule.precision !== null && (typeof rule.precision !== 'number' || !Number.isInteger(rule.precision) || rule.precision < 0 || rule.precision > 1000)))))
+    throw new Error('Invalid Zod datetime rules');
+  if (Object.prototype.hasOwnProperty.call(value, 'jwtAlgorithms') &&
+      (!Array.isArray(value.jwtAlgorithms) || value.jwtAlgorithms.length > 10000 ||
+       value.jwtAlgorithms.some((algorithm) => algorithm !== null && typeof algorithm !== 'string')))
+    throw new Error('Invalid Zod JWT algorithms');
+  if (Object.prototype.hasOwnProperty.call(value, 'stringPredicates')) {
+    const rules = value.stringPredicates;
+    if (!Array.isArray(rules) || rules.length > 10000) throw new Error('Invalid string predicates');
+    let remaining = 262144;
+    for (const rule of rules) {
+      if (!rule || typeof rule !== 'object' || Array.isArray(rule) ||
+          !['startsWith','endsWith','includes'].includes(rule.kind) ||
+          Object.keys(rule).length !== (rule.kind === 'includes' ? 3 : 2) ||
+          !Object.prototype.hasOwnProperty.call(rule,'kind') || !Object.prototype.hasOwnProperty.call(rule,'sourceUnits') ||
+          Object.keys(rule).some(key=>!['kind','sourceUnits',...(rule.kind==='includes'?['position']:[])].includes(key)) ||
+          !Array.isArray(rule.sourceUnits) || rule.sourceUnits.length > 4096 ||
+          (remaining -= rule.sourceUnits.length) < 0 ||
+          rule.sourceUnits.some((unit: unknown)=>typeof unit !== 'number' || !Number.isInteger(unit) || unit < 0 || unit > 65535) ||
+          (rule.kind === 'includes' && !(typeof rule.position === 'number' && Number.isFinite(rule.position)) && !['NaN','Infinity','-Infinity'].includes(rule.position)))
+        throw new Error('Invalid string predicate rule');
+    }
+  }
+  if (
+    (Array.isArray(value.stringPredicates) ? value.stringPredicates.length : 0) +
+    (Array.isArray(value.utf16MinLengths) ? value.utf16MinLengths.length : 0) +
+    (Array.isArray(value.utf16MaxLengths) ? value.utf16MaxLengths.length : 0) +
+    (Array.isArray(value.arrayMinItems) ? value.arrayMinItems.length : 0) +
+    (Array.isArray(value.arrayMaxItems) ? value.arrayMaxItems.length : 0) +
+    (Array.isArray(value.jwtAlgorithms) ? value.jwtAlgorithms.length : 0) +
+    (Array.isArray(value.dateTimes) ? value.dateTimes.length : 0) +
+    (Array.isArray(value.timePrecisions) ? value.timePrecisions.length : 0) +
+    (Array.isArray(value.formats) ? value.formats.length : 0) +
+      (Array.isArray(value.multipleOf) ? value.multipleOf.length : 0) >
+    10000
+  )
+    throw new Error('Zod check profile exceeds 10000 rules');
+  const profile = value as unknown as ZodChecks;
+  const predicates = profile.stringPredicates?.map(rule=>({kind:rule.kind,
+    needle:rule.sourceUnits.map(unit=>String.fromCharCode(unit)).join(''),
+    position:typeof rule.position === 'number' ? rule.position : Number(rule.position)}));
+  // Capture immutable admitted configuration; do not retain mutable user arrays.
+  const minimum = profile.utf16MinLength,
+    maximum = profile.utf16MaxLength;
+  const divisors = profile.multipleOf?.map((divisor) =>
+    typeof divisor === 'number' ? divisor : Number(divisor)
+  );
+  const utf16Minimum = profile.utf16MinLengths?.map(bound=>typeof bound==='number'?bound:Number(bound));
+  const utf16Maximum = profile.utf16MaxLengths?.map(bound=>typeof bound==='number'?bound:Number(bound));
+  const arrayMinimum = profile.arrayMinItems?.map(bound=>typeof bound==='number'?bound:Number(bound));
+  const arrayMaximum = profile.arrayMaxItems?.map(bound=>typeof bound==='number'?bound:Number(bound));
+  const formatChecks = profile.formats?.slice();
+  const jwtAlgorithms = profile.jwtAlgorithms?.slice();
+  const timeSource = (p: number | null) =>
+    `([01]\\d|2[0-3]):[0-5]\\d(:[0-5]\\d${p ? `\\.\\d{${p}}` : p === null ? '(\\.\\d+)?' : ''})${p ? '+' : '?'}`;
+  const timeChecks = profile.timePrecisions?.map((p) => new RegExp(`^${timeSource(p)}$`));
+  const email =
+    /^(?!\.)(?!.*\.\.)([A-Z0-9_'+\-\.]*)[A-Z0-9_+-]@([A-Z0-9][A-Z0-9\-]*\.)+[A-Z]{2,}$/i;
+  const uuid =
+    /^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/i;
+  const simpleFormats = {
+    ipv4: /^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])$/,
+    ipv6: /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/,
+    cidrv4: /^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\/(3[0-2]|[12]?[0-9])$/,
+    cidrv6: /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))\/(12[0-8]|1[01][0-9]|[1-9]?[0-9])$/,
+    duration: /^[-+]?P(?!$)(?:(?:[-+]?\d+Y)|(?:[-+]?\d+[.,]\d+Y$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:(?:[-+]?\d+W)|(?:[-+]?\d+[.,]\d+W$))?(?:(?:[-+]?\d+D)|(?:[-+]?\d+[.,]\d+D$))?(?:T(?=[\d+-])(?:(?:[-+]?\d+H)|(?:[-+]?\d+[.,]\d+H$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:[-+]?\d+(?:[.,]\d+)?S)?)??$/,
+    date: /^((\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-((0[13578]|1[02])-(0[1-9]|[12]\d|3[01])|(0[469]|11)-(0[1-9]|[12]\d|30)|(02)-(0[1-9]|1\d|2[0-8])))$/,
+    cuid: /^c[^\s-]{8,}$/i,
+    cuid2: /^[0-9a-z]+$/,
+    ulid: /^[0-9A-HJKMNP-TV-Z]{26}$/i,
+    nanoid: /^[a-z0-9_-]{21}$/i,
+    base64: /^([0-9a-zA-Z+/]{4})*(([0-9a-zA-Z+/]{2}==)|([0-9a-zA-Z+/]{3}=))?$/,
+    base64url: /^([0-9a-zA-Z-_]{4})*(([0-9a-zA-Z-_]{2}(==)?)|([0-9a-zA-Z-_]{3}(=)?))?$/
+  };
+  const dateTimeChecks = profile.dateTimes?.map((rule) => new RegExp(
+    `^${simpleFormats.date.source.slice(1,-1)}T${timeSource(rule.precision)}(${rule.local ? 'Z?' : 'Z'}${rule.offset ? '|([+-]\\d{2}:?\\d{2})' : ''})$`
+  ));
+  return (data: unknown) => {
+    if (typeof data === 'string' && predicates && !predicates.every(rule=>
+      rule.kind === 'includes' ? data.includes(rule.needle,rule.position) :
+      rule.kind === 'startsWith' ? data.startsWith(rule.needle) : data.endsWith(rule.needle))) return false;
+    if (typeof data === 'string' && jwtAlgorithms && !jwtAlgorithms.every((algorithm) => jwt(data, algorithm))) return false;
+    if (typeof data === 'string' && dateTimeChecks && !dateTimeChecks.every((check) => check.test(data))) return false;
+    if (typeof data === 'string' && timeChecks && !timeChecks.every((check) => check.test(data))) return false;
+    if (typeof data === 'string' && formatChecks)
+      for (const format of formatChecks) {
+        if (format === 'emoji' && !emoji(data)) return false;
+        if (format === 'ip' && !simpleFormats.ipv4.test(data) && !simpleFormats.ipv6.test(data)) return false;
+        if (format === 'cidr' && !simpleFormats.cidrv4.test(data) && !simpleFormats.cidrv6.test(data)) return false;
+        if (format in simpleFormats && !simpleFormats[format as keyof typeof simpleFormats].test(data)) return false;
+        if (format === 'email' && !email.test(data)) return false;
+        if (format === 'uuid' && !uuid.test(data)) return false;
+        if (format === 'uri') {
+          try {
+            new URL(data);
+          } catch {
+            return false;
+          }
+        }
+      }
+
+    if (
+      typeof data === 'string' &&
+      ((utf16Minimum?.some(bound=>data.length<bound)) ||
+        (utf16Maximum?.some(bound=>data.length>bound)) ||
+        (minimum !== undefined && data.length < minimum) ||
+        (maximum !== undefined && data.length > maximum))
+    )
+      return false;
+    if (Array.isArray(data) && (arrayMinimum?.some(bound=>data.length<bound) || arrayMaximum?.some(bound=>data.length>bound))) return false;
+    if (typeof data === 'number' && divisors) {
+      for (const divisor of divisors) {
+        const decimals = Math.max(
+          (data.toString().split('.')[1] || '').length,
+          (divisor.toString().split('.')[1] || '').length
+        );
+        const numerator = parseInt(data.toFixed(decimals).replace('.', ''));
+        const denominator = parseInt(
+          divisor.toFixed(decimals).replace('.', '')
+        );
+        if ((numerator % denominator) / Math.pow(10, decimals) !== 0)
+          return false;
+      }
+    }
+    return true;
+  };
+}
+
+/** Add the reserved capability without replacing the supplied engine/options.
+ * Reusing an engine with this module instance is supported. Separately bundled
+ * consumers must use separate engines; their handler identities differ. A caller-installed handler under the reserved
+ * name is rejected rather than silently trusting different validation semantics.
+ */
+export function registerZodChecks(ajv: Ajv): Ajv {
+  const existing = ajv.getKeyword(zodChecksKeyword);
+  if (existing) {
+    if (
+      typeof existing === 'object' &&
+      'compile' in existing &&
+      existing.compile === compileZodChecks
+    )
+      return ajv;
+    throw new Error('Reserved Zod check keyword is already registered');
+  }
+  ajv.addKeyword({
+    keyword: zodChecksKeyword,
+    schemaType: 'object',
+    compile: compileZodChecks,
+    errors: false
+  });
+  return ajv;
+}
+
+// Raw Zod syntax/header policy only; this is not JWT authentication.
+function jwt(value: string, algorithm: string | null): boolean {
+  if (!/^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]*$/.test(value)) return false;
+  try {
+    const header = value.split('.')[0];
+    const base64 = header.replace(/-/g, '+').replace(/_/g, '/')
+      .padEnd(header.length + ((4 - (header.length % 4)) % 4), '=');
+    const decoded = JSON.parse(atob(base64));
+    if (typeof decoded !== 'object' || decoded === null) return false;
+    if ('typ' in decoded && decoded.typ !== 'JWT') return false;
+    return !!decoded.alg && (!algorithm || decoded.alg === algorithm);
+  } catch {
+    return false;
+  }
+}
+
+
+/** Explicit host RegExp execution: synchronous and not interruptible/budgeted. */
+export type ZodRegexExecution = 'host-native';
+const keyword = 'x-forklaunch-zod-regex';
+const maximumRules = 64;
+const maximumSourceUnits = 4096;
+
+function compileHost(schema: unknown): (value: string) => boolean {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema))
+    throw new Error('Invalid Zod regex profile');
+  const profile = schema as Record<string, unknown>;
+  if (Object.keys(profile).length !== 2 || profile.version !== 1 || !Array.isArray(profile.rules) || profile.rules.length > maximumRules)
+    throw new Error('Invalid Zod regex profile');
+  let remaining = maximumRules * maximumSourceUnits;
+  const expressions: RegExp[] = [];
+  for (const candidate of profile.rules) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate))
+      throw new Error('Invalid Zod regex rule');
+    const rule = candidate as Record<string, unknown>;
+    if (Object.keys(rule).length !== 2 || !Array.isArray(rule.sourceUnits) || rule.sourceUnits.length > maximumSourceUnits || typeof rule.flags !== 'string' || rule.flags.length > 8)
+      throw new Error('Invalid Zod regex rule');
+    remaining -= rule.sourceUnits.length;
+    if (remaining < 0 || !/^[dgimsuvy]*$/.test(rule.flags) || new Set(rule.flags).size !== rule.flags.length || (rule.flags.includes('u') && rule.flags.includes('v')))
+      throw new Error('Invalid Zod regex limits or flags');
+    // All units are admitted before allocating the source string.
+    for (const unit of rule.sourceUnits)
+      if (!Number.isInteger(unit) || unit < 0 || unit > 65535)
+        throw new Error('Invalid Zod regex source unit');
+    const source = String.fromCharCode(...rule.sourceUnits);
+    expressions.push(new RegExp(source, rule.flags));
+  }
+  return (value: string) => {
+    for (const expression of expressions) {
+      expression.lastIndex = 0;
+      if (!expression.test(value)) return false;
+    }
+    return true;
+  };
+}
+function disabled(): never {
+  throw new Error('x-forklaunch-zod-regex requires explicit host-native regex execution policy');
+}
+
+/** Register the reserved keyword even when disabled, so strict:false cannot ignore it.
+ * Caller-installed conflicting keyword handlers are never overwritten. Sharing
+ * engines with separately emitted helper implementations is rejected explicitly.
+ */
+export function registerZodRegex(ajv: Ajv, execution?: ZodRegexExecution): Ajv {
+  if (execution !== undefined && execution !== 'host-native')
+    throw new Error('Unsupported Zod regex execution policy');
+  const compile = execution === 'host-native' ? compileHost : disabled;
+  const existing = ajv.getKeyword(keyword);
+  if (existing) {
+    if (typeof existing !== 'object' || !('compile' in existing) || existing.compile !== compile)
+      throw new Error('Conflicting reserved Zod regex capability');
+    return ajv;
+  }
+  ajv.addKeyword({keyword, type: 'string', schemaType: 'object', compile});
+  return ajv;
+}
+const socketDraft6MetaSchema = JSON.parse("{\n  \"$schema\": \"http://json-schema.org/draft-06/schema#\",\n  \"$id\": \"http://json-schema.org/draft-06/schema#\",\n  \"title\": \"Core schema meta-schema\",\n  \"definitions\": {\n    \"schemaArray\": {\n      \"type\": \"array\",\n      \"minItems\": 1,\n      \"items\": {\"$ref\": \"#\"}\n    },\n    \"nonNegativeInteger\": {\n      \"type\": \"integer\",\n      \"minimum\": 0\n    },\n    \"nonNegativeIntegerDefault0\": {\n      \"allOf\": [{\"$ref\": \"#/definitions/nonNegativeInteger\"}, {\"default\": 0}]\n    },\n    \"simpleTypes\": {\n      \"enum\": [\"array\", \"boolean\", \"integer\", \"null\", \"number\", \"object\", \"string\"]\n    },\n    \"stringArray\": {\n      \"type\": \"array\",\n      \"items\": {\"type\": \"string\"},\n      \"uniqueItems\": true,\n      \"default\": []\n    }\n  },\n  \"type\": [\"object\", \"boolean\"],\n  \"properties\": {\n    \"$id\": {\n      \"type\": \"string\",\n      \"format\": \"uri-reference\"\n    },\n    \"$schema\": {\n      \"type\": \"string\",\n      \"format\": \"uri\"\n    },\n    \"$ref\": {\n      \"type\": \"string\",\n      \"format\": \"uri-reference\"\n    },\n    \"title\": {\n      \"type\": \"string\"\n    },\n    \"description\": {\n      \"type\": \"string\"\n    },\n    \"default\": {},\n    \"examples\": {\n      \"type\": \"array\",\n      \"items\": {}\n    },\n    \"multipleOf\": {\n      \"type\": \"number\",\n      \"exclusiveMinimum\": 0\n    },\n    \"maximum\": {\n      \"type\": \"number\"\n    },\n    \"exclusiveMaximum\": {\n      \"type\": \"number\"\n    },\n    \"minimum\": {\n      \"type\": \"number\"\n    },\n    \"exclusiveMinimum\": {\n      \"type\": \"number\"\n    },\n    \"maxLength\": {\"$ref\": \"#/definitions/nonNegativeInteger\"},\n    \"minLength\": {\"$ref\": \"#/definitions/nonNegativeIntegerDefault0\"},\n    \"pattern\": {\n      \"type\": \"string\",\n      \"format\": \"regex\"\n    },\n    \"additionalItems\": {\"$ref\": \"#\"},\n    \"items\": {\n      \"anyOf\": [{\"$ref\": \"#\"}, {\"$ref\": \"#/definitions/schemaArray\"}],\n      \"default\": {}\n    },\n    \"maxItems\": {\"$ref\": \"#/definitions/nonNegativeInteger\"},\n    \"minItems\": {\"$ref\": \"#/definitions/nonNegativeIntegerDefault0\"},\n    \"uniqueItems\": {\n      \"type\": \"boolean\",\n      \"default\": false\n    },\n    \"contains\": {\"$ref\": \"#\"},\n    \"maxProperties\": {\"$ref\": \"#/definitions/nonNegativeInteger\"},\n    \"minProperties\": {\"$ref\": \"#/definitions/nonNegativeIntegerDefault0\"},\n    \"required\": {\"$ref\": \"#/definitions/stringArray\"},\n    \"additionalProperties\": {\"$ref\": \"#\"},\n    \"definitions\": {\n      \"type\": \"object\",\n      \"additionalProperties\": {\"$ref\": \"#\"},\n      \"default\": {}\n    },\n    \"properties\": {\n      \"type\": \"object\",\n      \"additionalProperties\": {\"$ref\": \"#\"},\n      \"default\": {}\n    },\n    \"patternProperties\": {\n      \"type\": \"object\",\n      \"additionalProperties\": {\"$ref\": \"#\"},\n      \"default\": {}\n    },\n    \"dependencies\": {\n      \"type\": \"object\",\n      \"additionalProperties\": {\n        \"anyOf\": [{\"$ref\": \"#\"}, {\"$ref\": \"#/definitions/stringArray\"}]\n      }\n    },\n    \"propertyNames\": {\"$ref\": \"#\"},\n    \"const\": {},\n    \"enum\": {\n      \"type\": \"array\",\n      \"minItems\": 1,\n      \"uniqueItems\": true\n    },\n    \"type\": {\n      \"anyOf\": [\n        {\"$ref\": \"#/definitions/simpleTypes\"},\n        {\n          \"type\": \"array\",\n          \"items\": {\"$ref\": \"#/definitions/simpleTypes\"},\n          \"minItems\": 1,\n          \"uniqueItems\": true\n        }\n      ]\n    },\n    \"format\": {\"type\": \"string\"},\n    \"allOf\": {\"$ref\": \"#/definitions/schemaArray\"},\n    \"anyOf\": {\"$ref\": \"#/definitions/schemaArray\"},\n    \"oneOf\": {\"$ref\": \"#/definitions/schemaArray\"},\n    \"not\": {\"$ref\": \"#\"}\n  },\n  \"default\": {}\n}\n") as Record<string, unknown>;
+
+/** Credentials require TLS outside loopback unless a local development exception is explicit. */
+function requireSecureHttpTransport(value: string, allowPlaintextDevelopment: boolean = false): void {
+    const endpoint = new URL(value, typeof globalThis.location === 'undefined' ? undefined : globalThis.location.href);
+    const loopback = endpoint.hostname === 'localhost' || endpoint.hostname === '[::1]'
+        || /^127(?:\.\d{1,3}){3}$/.test(endpoint.hostname);
+    if (endpoint.username || endpoint.password || endpoint.hash
+        || !(endpoint.protocol === 'https:' || (endpoint.protocol === 'http:' && (loopback || allowPlaintextDevelopment === true)))) {
+        throw new TypeError('HTTP TLS is required outside loopback development');
+    }
+}
+// End HTTP transport admission.
+
+/** Serialize Web upload bodies for adapters that do not consume standard Blob/FormData. */
+async function compatibleFetchBody(body: BodyInit | undefined, headers: Headers, fetcher: typeof fetch): Promise<BodyInit | undefined> {
+    if (fetcher === globalThis.fetch) return body;
+    if (body instanceof Blob) return body.arrayBuffer();
+    if (body instanceof FormData) {
+        // The standard encoder owns MIME boundaries, names, files and CRLF framing.
+        const encoded = new Response(body);
+        const contentType = encoded.headers.get('content-type');
+        if (!contentType) throw new TypeError('Multipart encoder did not select a content type');
+        headers.set('content-type', contentType);
+        return encoded.arrayBuffer();
+    }
+    return body;
+}
+
+
+interface ForkLaunchResponseReader {
+    read(): Promise<{ done: boolean; value?: Uint8Array }>;
+    cancel(): Promise<void>;
+    releaseLock(): void;
+}
+
+/** Web fetch uses ReadableStream; Node fetch adapters expose async iterable bytes. */
+function responseReader(response: Response): ForkLaunchResponseReader {
+    const body = response.body as unknown as {
+        getReader?: () => ReadableStreamDefaultReader<Uint8Array>;
+        [Symbol.asyncIterator]?: () => AsyncIterator<Uint8Array, unknown>;
+        destroy?: () => void;
+    } | null;
+    if (!body) throw new TypeError('No response body for event stream');
+    if (typeof body.getReader === 'function') return body.getReader();
+    const createIterator = body[Symbol.asyncIterator];
+    if (typeof createIterator !== 'function')
+        throw new TypeError('Response body must expose a readable byte stream');
+    const iterator = createIterator.call(body);
+    return {
+        async read() {
+            const result = await iterator.next();
+            if (result.done) return { done: true };
+            if (!(result.value instanceof Uint8Array))
+                throw new TypeError('Response stream yielded non-byte data');
+            return { done: false, value: result.value };
+        },
+        async cancel() {
+            // Destroy first to interrupt a pending read, including unstarted iterators.
+            body.destroy?.();
+            await iterator.return?.();
+        },
+        releaseLock() {}
+    };
+}
+
+async function cancelResponseBody(response: Response): Promise<void> {
+    if (!response.body) return;
+    const reader = responseReader(response);
+    try { await reader.cancel(); }
+    finally { reader.releaseLock(); }
+}
+
+/** Pull-driven SSE decoding; iterator completion or cancellation releases the reader. */
+function sseEvents(response: Response, maxEventBytes = 1048576, onClose: () => void = () => {}, validate?: (event: unknown) => unknown): AsyncGenerator<{
+    data: unknown;
+    id?: string;
+}> {
+    if (!response.body)
+        throw new TypeError('No response body for event stream');
+    const reader = responseReader(response);
+    const decoder = new TextDecoder('utf-8', { ignoreBOM: true });
+    let line: number[] = [];
+    let data = '';
+    let id: string | undefined;
+    let skipLf = false;
+    let firstLine = true;
+    let frameBytes = 0;
+    let released = false;
+    async function close() {
+        if (released)
+            return;
+        released = true;
+        try {
+            onClose();
+            await reader.cancel();
+        }
+        catch { /* Preserve the original read/parse error. */ }
+        finally {
+            reader.releaseLock();
+        }
+    }
+    async function* decode(): AsyncGenerator<{
+        data: unknown;
+        id?: string;
+    }> {
+        try {
+            if (!Number.isSafeInteger(maxEventBytes) || maxEventBytes < 1)
+                throw new RangeError('SSE event limit must be positive');
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done)
+                    break;
+                if (!value) throw new TypeError('Response stream yielded no byte data');
+                for (const byte of value) {
+                    if (skipLf) {
+                        skipLf = false;
+                        if (byte === 10)
+                            continue;
+                    }
+                    if (++frameBytes > maxEventBytes)
+                        throw new RangeError('SSE event exceeds configured limit');
+                    if (byte !== 10 && byte !== 13) {
+                        line.push(byte);
+                        continue;
+                    }
+                    skipLf = byte === 13;
+                    let text = decoder.decode(Uint8Array.from(line));
+                    line = [];
+                    if (firstLine) {
+                        firstLine = false;
+                        if (text.startsWith('\uFEFF'))
+                            text = text.slice(1);
+                    }
+                    if (text === '') {
+                        frameBytes = 0;
+                        if (data !== '') {
+                            const raw = data.slice(0, -1);
+                            data = '';
+                            // Non-JSON data stays text, as the universal SDK and
+                            // the native codec deliver it.
+                            let parsed: unknown;
+                            try {
+                                parsed = JSON.parse(raw);
+                            }
+                            catch {
+                                parsed = raw;
+                            }
+                            const event = id === undefined ? { data: parsed } : { data: parsed, id };
+                            const decoded = validate ? validate(event) : event;
+                            yield decoded as { data: unknown; id?: string };
+                        }
+                        continue;
+                    }
+                    if (text.startsWith(':'))
+                        continue;
+                    const colon = text.indexOf(':');
+                    const field = colon < 0 ? text : text.slice(0, colon);
+                    let fieldValue = colon < 0 ? '' : text.slice(colon + 1);
+                    if (fieldValue.startsWith(' '))
+                        fieldValue = fieldValue.slice(1);
+                    if (field === 'data')
+                        data += `${fieldValue}\n`;
+                    else if (field === 'id' && !fieldValue.includes('\0'))
+                        id = fieldValue;
+                }
+            }
+        }
+        finally {
+            await close();
+        }
+    }
+    const iterator = decode();
+    const finish = iterator.return.bind(iterator);
+    const fail = iterator.throw.bind(iterator);
+    iterator.return = async (value) => { await close(); return finish(value); };
+    iterator.throw = async (error) => { await close(); return fail(error); };
+    return iterator;
+}
+
+
+async function decodeMultipartResponse(response: Response, maxBytes = 8388608): Promise<FormData> {
+  const contentType = response.headers.get('content-type') ?? '';
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0 || contentType.split(';')[0].trim().toLowerCase() !== 'multipart/form-data') {
+    try { await cancelResponseBody(response); } catch { /* Preserve validation error. */ }
+    throw new TypeError('Invalid multipart response media or byte limit');
+  }
+  const reader = responseReader(response);
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      if (value.byteLength > maxBytes - length) throw new RangeError('Multipart response exceeds byte limit');
+      length += value.byteLength;
+      chunks.push(value);
+    }
+  } catch (error) {
+    try { await reader.cancel(); } catch { /* Preserve original error. */ }
+    throw error;
+  } finally { reader.releaseLock(); }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  const form = await new Response(bytes, { headers: { 'content-type': contentType } }).formData();
+  let count = 0;
+  form.forEach(() => { if (++count > 1024) throw new RangeError('Multipart response exceeds part limit'); });
+  return form;
+}
+
+
+function pathWithParams(path: string, params?: Record<string, ForkLaunchPathValue>) {
+  if (!params) return path;
+  return path.split('/').map(segment => {
+    const name = segment.startsWith(':') ? segment.slice(1)
+      : segment.startsWith('{') && segment.endsWith('}') ? segment.slice(1, -1) : undefined;
+    return name !== undefined && Object.prototype.hasOwnProperty.call(params, name)
+      ? encodeURIComponent(String(params[name])) : segment;
+  }).join('/');
+}
+
+function encodeForm(body: unknown): URLSearchParams {
+  if (body instanceof URLSearchParams) {
+    if (body.size > 1000 || body.toString().length > 102400) throw new TypeError('URL form limit');
+    return body;
+  }
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) throw new TypeError('Form body must be an object or URLSearchParams');
+  if (Object.getPrototypeOf(body) !== Object.prototype && Object.getPrototypeOf(body) !== null) throw new TypeError('Unsupported form object');
+  const wellFormed = (text: string) => { for (let i = 0; i < text.length; i++) { const c = text.charCodeAt(i); if (c >= 0xd800 && c <= 0xdbff) { const next = text.charCodeAt(++i); if (!(next >= 0xdc00 && next <= 0xdfff)) throw new TypeError('Invalid form Unicode'); } else if (c >= 0xdc00 && c <= 0xdfff) throw new TypeError('Invalid form Unicode'); } return text; };
+  const params = new URLSearchParams(), seen = new Set<object>();
+  let size = 0;
+  const key = (name: string) => { if (!name || name === '__proto__' || /^\d+$/.test(name) || /[\[\]]/.test(name)) throw new TypeError('Unsupported form field name'); return wellFormed(name); };
+  const append = (path: string, value: unknown, depth: number): void => {
+    if (depth > 32 || params.size >= 1000 || path.length > 102400) throw new TypeError('URL form limit');
+    if (typeof value === 'object' && value !== null) {
+      if (seen.has(value) || (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)) throw new TypeError('Unsupported form value');
+      seen.add(value);
+      const entries = Object.entries(value).filter(([, item]) => item !== undefined);
+      if (Array.isArray(value) && (entries.length !== value.length || entries.some(([name], index) => name !== String(index)))) throw new TypeError('Sparse or extended form array');
+      if (!entries.length) throw new TypeError('Empty form collection has no lossless wire representation');
+      for (const [name, item] of entries) append(`${path}[${Array.isArray(value) ? name : key(name)}]`, item, depth + 1);
+      seen.delete(value);
+    } else {
+      if (!['string','number','boolean'].includes(typeof value) || (typeof value === 'number' && !Number.isFinite(value))) throw new TypeError('Unsupported form scalar');
+      const text = wellFormed(String(value));
+      if (text.length > 102400) throw new TypeError('URL form limit');
+      const pair = new URLSearchParams([[path, text]]).toString(); size += pair.length + (params.size ? 1 : 0);
+      if (size > 102400) throw new TypeError('URL form limit');
+      params.append(path, text);
+    }
+  };
+  for (const [name, value] of Object.entries(body)) if (value !== undefined) append(key(name), value, 0);
+  return params;
+}
+
+function encodeMultipart(body: unknown): FormData {
+  if (body instanceof FormData) return body;
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) throw new TypeError('Multipart body must be an object or FormData');
+  const form = new FormData();
+  for (const [name, raw] of Object.entries(body)) {
+    for (const value of Array.isArray(raw) ? raw : [raw]) {
+      form.append(name, value instanceof Blob ? value : safeStringify(value));
+    }
+  }
+  return form;
+}
+
+function encodeBinary(body: unknown): Blob | ArrayBuffer {
+  if (body instanceof Blob || body instanceof ArrayBuffer) return body;
+  if (body instanceof Uint8Array) return new Uint8Array(body).buffer;
+  throw new TypeError('Binary body must be a Blob, ArrayBuffer or Uint8Array');
+}
+
+type SdkVersionRules = Record<string, {required:boolean;schema:AnySchema}>;
+type SdkVersionResponse = {schema:AnySchema;headers:SdkVersionRules};
+type SdkVersionMetadata = {formatVersion:1;branches:Array<{path:string;params:SdkVersionRules;query:SdkVersionRules;headers:SdkVersionRules;bodyKind:string;parserOptions?:Partial<SdkParserOptions>;bodyMedia:string;bodyOptional:boolean;bodySchema:AnySchema;requestObjects?:Record<string,{schema:AnySchema;fields:SdkVersionRules}>;responses:Record<string,SdkVersionResponse>}>};
+function versionFieldMatches(rules:SdkVersionRules, values:Map<string,string[]>, execution?:ZodRegexExecution):boolean {
+  for(const [name, rule] of Object.entries(rules)) {
+    const wire=values.get(name)??[];
+    if(!wire.length){if(rule.required)return false;continue;}
+    const validate=socketValidator(rule.schema,execution), candidates:unknown[]=[];
+    if(wire.length===1){candidates.push(wire[0]);try{candidates.push(JSON.parse(wire[0]));}catch{/* Not JSON: retain exact text. */}}
+    candidates.push(wire);try{candidates.push(wire.map(value=>JSON.parse(value)));}catch{/* Array of exact strings remains a candidate. */}
+    if(!candidates.some(value=>validate(value)))return false;
+  }return true;
+}
+function requestObjectMatches(group:{schema:AnySchema;fields:SdkVersionRules},values:Map<string,string[]>,headers:boolean,execution?:ZodRegexExecution):boolean {
+  const object:Record<string,unknown>=Object.create(null);
+  for(const [name,rule] of Object.entries(group.fields)) {
+    const wire=values.get(headers?name.toLowerCase():name)??[];
+    if(!wire.length){if(rule.required)return false;continue;}
+    const validate=socketValidator(rule.schema,execution),candidates:unknown[]=[];
+    if(wire.length===1){candidates.push(wire[0]);try{candidates.push(JSON.parse(wire[0]));}catch{}}
+    candidates.push(wire);try{candidates.push(wire.map(value=>JSON.parse(value)));}catch{}
+    const matched=candidates.find(value=>validate(value));
+    if(matched===undefined)return false;
+    object[name]=matched;
+  }
+  if(!headers)for(const [name,wire] of values)if(!Object.hasOwn(group.fields,name))object[name]=wire.length===1?wire[0]:wire;
+  return socketValidator(group.schema,execution)(object);
+}
+function versionPath(pattern:string,path:string):Map<string,string[]>|undefined{
+  const segments=(value:string)=>value.split('/').filter(Boolean), expected=segments(pattern), actual=segments(path);
+  if(expected.length!==actual.length)return undefined;const values=new Map<string,string[]>();
+  for(let index=0;index<expected.length;index++){
+    const segment=expected[index], name=segment.startsWith(':')?segment.slice(1):segment.startsWith('{')&&segment.endsWith('}')?segment.slice(1,-1):undefined;
+    if(name!==undefined)values.set(name,[decodeURIComponent(actual[index])]);else if(segment!==actual[index])return undefined;
+  }
+  return values;
+}
+// Explicit portable multipart profile: unique ASCII names, UTF-8 text, finite files.
+function decodeVersionMultipart(bytes:Uint8Array, contentType:string):Record<string,unknown> {
+  if(bytes.length>2097152)throw new TypeError('Version multipart byte limit');
+  const boundary=/^multipart\/form-data\s*;\s*boundary=(?:"([A-Za-z0-9'()+_,.\/:=? -]{1,70})"|([A-Za-z0-9'()+_,.\/:=?-]{1,70}))\s*$/i.exec(contentType);
+  if(!boundary)throw new TypeError('Unsupported portable multipart boundary');
+  const marker='--'+(boundary[1]??boundary[2]);
+  let wire='';for(let offset=0;offset<bytes.length;offset+=8192)wire+=String.fromCharCode(...bytes.subarray(offset,offset+8192));
+  if(wire===marker+'--\r\n'||wire===marker+'--')return Object.create(null);
+  if(!wire.startsWith(marker+'\r\n'))throw new TypeError('Unsupported portable multipart framing');
+  const parts=wire.slice(marker.length+2).split('\r\n'+marker);
+  const end=parts.pop();if(end!=='--'&&end!=='--\r\n')throw new TypeError('Unsupported portable multipart termination');
+  if(parts.length>128)throw new TypeError('Version multipart part limit');
+  const result:Record<string,unknown>=Object.create(null);
+  for(let index=0;index<parts.length;index++){
+    let part=parts[index];if(index){if(!part.startsWith('\r\n'))throw new TypeError('Unsupported portable multipart separator');part=part.slice(2);}
+    const split=part.indexOf('\r\n\r\n');if(split<0||split>16384)throw new TypeError('Unsupported portable multipart headers');
+    const headers=new Map<string,string>();
+    for(const line of part.slice(0,split).split('\r\n')){const colon=line.indexOf(':');if(colon<1)throw new TypeError('Invalid multipart header');const name=line.slice(0,colon).toLowerCase();if(!['content-disposition','content-type'].includes(name)||headers.has(name))throw new TypeError('Unsupported portable multipart header');headers.set(name,line.slice(colon+1).trim());}
+    const disposition=/^form-data;\s*name="([\x20-\x21\x23-\x5b\x5d-\x7e]+)"(?:;\s*filename="([\x20-\x21\x23-\x5b\x5d-\x7e]+)")?$/.exec(headers.get('content-disposition')??'');
+    if(!disposition||Object.prototype.hasOwnProperty.call(result,disposition[1]))throw new TypeError('Nonportable or repeated multipart name');
+    const media=headers.get('content-type');
+    if(media&&!/^[\w!#$&^.+-]+\/[\w!#$&^.+-]+(?:;\s*charset=(?:utf-8|"utf-8"))?$/i.test(media))throw new TypeError('Unsupported multipart charset');
+    if(!disposition[2]&&media?.toLowerCase()==='application/octet-stream')throw new TypeError('Portable binary part requires filename');
+    const value=part.slice(split+4);if(value.length>1048576)throw new TypeError('Version multipart field limit');
+    const data=Uint8Array.from(value,char=>char.charCodeAt(0));
+    result[disposition[1]]=disposition[2]?Array.from(data):new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(data);
+  }
+  return result;
+}
+async function portableVersionWireBody(body:unknown, headers:Headers):Promise<unknown> {
+  if(!(body instanceof FormData))return body;
+  let count=0,total=0;const names=new Set<string>();
+  body.forEach((value,name)=>{if(++count>128||!name||!/^[\x20-\x7e]+$/.test(name)||names.has(name))throw new TypeError('Nonportable multipart fields');names.add(name);const size=typeof value==='string'?new TextEncoder().encode(value).length:value.size;if(size>1048576||(total+=size)>2097152)throw new TypeError('Version multipart field limit');});
+  const request=new Request('http://sdk.invalid/',{method:'POST',body});
+  const bytes=new Uint8Array(await request.arrayBuffer());
+  const type=request.headers.get('content-type')!;
+  decodeVersionMultipart(bytes,type);
+  headers.set('content-type',type);
+  return bytes;
+}
+function defaultVersionParserOptions() {
+  return {jsonStrict:true,jsonDefaultCharset:'utf-8',textDefaultCharset:'utf-8',formDefaultCharset:'utf-8',formExtended:true,formCharsetSentinel:false,formInterpretNumericEntities:false,formDepth:32,formParameterLimit:1000,jsonWire:{limitBytes:102400,inflate:true},textWire:{limitBytes:102400,inflate:true},formWire:{limitBytes:102400,inflate:true},rawWire:{limitBytes:102400,inflate:true}};
+}
+type SdkParserOptions=ReturnType<typeof defaultVersionParserOptions>;
+function versionParserOptions(value?:Partial<SdkParserOptions>):SdkParserOptions {
+  const defaults=defaultVersionParserOptions();
+  if(value&&Object.keys(value).some(key=>!(key in defaults)))throw new TypeError('Unsupported version parser option');
+  const options={...defaults,...value};
+  for(const key of ['jsonWire','textWire','formWire','rawWire']as const){const wire={...defaults[key],...value?.[key]};if(Object.keys(wire).some(key=>!['limitBytes','inflate'].includes(key))||!Number.isSafeInteger(wire.limitBytes)||wire.limitBytes<0||wire.limitBytes>2097152||typeof wire.inflate!=='boolean')throw new TypeError('Unsupported parser wire limits');options[key]=wire;}
+  if([options.jsonDefaultCharset,options.textDefaultCharset,options.formDefaultCharset].some(charset=>charset!=='utf-8'))throw new TypeError('Unsupported parser default charset');
+  if([options.jsonStrict,options.formExtended,options.formCharsetSentinel,options.formInterpretNumericEntities].some(flag=>typeof flag!=='boolean')||!Number.isInteger(options.formDepth)||options.formDepth<0||options.formDepth>32||!Number.isInteger(options.formParameterLimit)||options.formParameterLimit<1||options.formParameterLimit>100000)throw new TypeError('Unsupported parser profile');
+  return options;
+}
+async function matchVersionRequest(metadata:SdkVersionMetadata, path:string, basePath:string, query:URLSearchParams, headers:Headers, body:unknown, execution?:ZodRegexExecution):Promise<Array<Record<string,SdkVersionResponse>>> {
+  if(metadata.formatVersion!==1||!metadata.branches.length||metadata.branches.length>64)throw new TypeError('Unsupported version metadata');
+  let bytes:Uint8Array;
+  if(body===undefined)bytes=new Uint8Array();
+  else if(typeof body==='string')bytes=new TextEncoder().encode(body);
+  else if(body instanceof Blob){if(body.size>2097152)throw new TypeError('Version request body limit');bytes=new Uint8Array(await body.arrayBuffer());}
+  else if(body instanceof ArrayBuffer)bytes=new Uint8Array(body);
+  else if(body instanceof Uint8Array)bytes=body;
+  else throw new TypeError('Version matching requires a finite wire body');
+  if(bytes.length>2097152)throw new TypeError('Version request body limit');
+  const text=typeof body==='string'?body:'';
+  if(headers.has('content-encoding')&&headers.get('content-encoding')!=='identity')throw new TypeError('Unsupported version request encoding');
+  const queryValues=new Map<string,string[]>();for(const [name,value]of query){const values=queryValues.get(name)??[];values.push(value);queryValues.set(name,values);}
+  const headerValues=new Map<string,string[]>();headers.forEach((value,name)=>headerValues.set(name,[value]));
+  if((headers.get('content-type')??'').split(';').slice(1).some(part=>{const parameter=part.trim().toLowerCase();return parameter.startsWith('charset=')&&!['charset=utf-8','charset=utf8','charset=\"utf-8\"'].includes(parameter);}))throw new TypeError('Unsupported version request charset');
+  const media=headers.get('content-type')?.split(';')[0].trim().toLowerCase()??'';
+  const matches:Array<Record<string,SdkVersionResponse>>=[];
+  for(const branch of metadata.branches){
+    const params=versionPath(basePath.replace(/\/$/,'')+branch.path,path);
+    if(!params||!versionFieldMatches(branch.params,params,execution)||!versionFieldMatches(branch.query,queryValues,execution)||!versionFieldMatches(branch.headers,headerValues,execution))continue;
+    if(Object.entries(branch.requestObjects??{}).some(([location,group])=>!requestObjectMatches(group,location==='headers'?headerValues:queryValues,location==='headers',execution)))continue;
+    if(bytes.length&&branch.bodyKind!=='empty'&&branch.bodyMedia!==media)continue;
+    const options=versionParserOptions(branch.parserOptions);
+    const limit=branch.bodyKind==='json'?options.jsonWire.limitBytes:branch.bodyKind==='form'?options.formWire.limitBytes:branch.bodyKind==='binary'?options.rawWire.limitBytes:options.textWire.limitBytes;
+    if(branch.bodyKind!=='multipart'&&branch.bodyKind!=='empty'&&bytes.length>limit)throw new TypeError('Version request body limit');
+    let accepted=false;
+    if(!bytes.length&&branch.bodyOptional)accepted=true;
+    else if(branch.bodyKind==='empty')accepted=!bytes.length;
+    else if(branch.bodyKind==='multipart'){if(branch.bodyMedia!==media)continue;accepted=socketValidator(branch.bodySchema,execution)(decodeVersionMultipart(bytes,headers.get('content-type')??''));}
+    else if(branch.bodyKind==='form'){
+      if(branch.bodyMedia!==media)continue;
+      const formText=typeof body==='string'?text:new TextDecoder().decode(bytes), count=formText.split('&').length;
+      if(count>options.formParameterLimit)throw new TypeError('Version form parameter limit');
+      // `qs` is CommonJS: Node's ESM loader exposes it as `default`; TypeScript
+      // only types that without esModuleInterop when the namespace is used.
+      const qsModule=await import('qs');
+      const qs=(qsModule as unknown as {default?:typeof qsModule}).default??qsModule;
+      const value=qs.parse(formText,{allowPrototypes:true,depth:options.formExtended?options.formDepth:0,strictDepth:true,parameterLimit:options.formParameterLimit,arrayLimit:options.formExtended?Math.max(100,count):count,charsetSentinel:options.formCharsetSentinel,interpretNumericEntities:options.formInterpretNumericEntities,charset:'utf-8'});
+      accepted=socketValidator(branch.bodySchema,execution)(value);
+    }
+    else if(branch.bodyKind==='binary'){if(branch.bodyMedia!==media)continue;accepted=socketValidator(branch.bodySchema,execution)(Array.from(bytes));}
+    else if(branch.bodyKind==='json'||branch.bodyKind==='text'){
+      if(branch.bodyMedia!==media)continue;
+      let value:unknown=new TextDecoder().decode(bytes);if(branch.bodyKind==='json'){try{value=JSON.parse(String(value));}catch{continue;}if(options.jsonStrict&&(value===null||typeof value!=='object'))continue;}
+      accepted=socketValidator(branch.bodySchema,execution)(value);
+    }else throw new TypeError('Unsupported version body predicate');
+    if(accepted)matches.push(branch.responses);
+  }
+  if(!matches.length)throw new TypeError('Request matches no declared API version');return matches;
+}
+function versionResponsePlans(matches:Array<Record<string,SdkVersionResponse>>,status:number,media:string):SdkVersionResponse[]{
+  const plans=matches.map(branch=>branch[`${status}:${media}`]??branch[`${status}:`]).filter((plan):plan is SdkVersionResponse=>plan!==undefined);
+  if(!plans.length)throw new TypeError('Response is not declared by a matched API version');return plans;
+}
+function decodeVersionHeaders(plans:SdkVersionResponse[],headers:Headers,execution?:ZodRegexExecution):Record<string,unknown>{
+  for(const plan of plans){
+    const decoded:Record<string,unknown>={};let matches=true;
+    for(const [name,rule] of Object.entries(plan.headers)){
+      const wire=headers.get(name);if(wire===null){if(rule.required){matches=false;break;}continue;}
+      const validate=socketValidator(rule.schema,execution);let value:unknown=wire;
+      if(!validate(value)){try{value=JSON.parse(wire);}catch{matches=false;break;}if(!validate(value)){matches=false;break;}}
+      decoded[name]=value;
+    }
+    if(matches)return decoded;
+  }
+  throw new TypeError('Response headers violate matched API versions');
+}
+function decodeVersionBody(plans:SdkVersionResponse[],value:unknown,execution?:ZodRegexExecution):unknown{
+  for(const plan of plans){if(socketValidator(plan.schema,execution)(value))return portableDates(plan.schema,value);}
+  throw new TypeError('Response body violates matched API versions');
+}
+
+/**
+ * Per-request ForkLaunch HMAC signing, the same scheme as `@forklaunch/core`
+ * `createHmacToken` / `generateHmacAuthHeaders` and the Rust verifiers:
+ *
+ *   authorization: HMAC keyId=<id> ts=<ISO-8601> nonce=<random> signature=<base64>
+ *   signature = base64(HMAC-SHA256(secret,
+ *     `${METHOD}\n${path}\n${body ? body + '\n' : 'undefined'}${ts}\n${nonce}`))
+ *
+ * The signed path is the final request URL's path without the query string,
+ * exactly as sent (`POST /payment-link`, never a router-relative `/`). The body
+ * is the exact UTF-8 bytes sent; an absent or empty body signs as `undefined`.
+ * Every request gets a fresh timestamp and a random nonce, so servers that claim
+ * nonces reject replays. Uses Web Crypto, so it runs in browsers, Node and Bun.
+ */
+export type HmacSigningOptions = {
+  /** The target service's shared HMAC secret (for example `BILLING_HMAC_SECRET_KEY`). */
+  secretKey: string;
+  /** The server key id; defaults to `default`. */
+  keyId?: string;
+};
+
+const encoder = new TextEncoder();
+
+function base64(bytes: ArrayBuffer): string {
+  let binary = '';
+  for (const byte of new Uint8Array(bytes)) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function randomNonce(): string {
+  const crypto = globalThis.crypto;
+  if (typeof crypto?.randomUUID === 'function') return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/** The `authorization` header value for one request. */
+export async function createHmacAuthorization({
+  secretKey,
+  keyId = 'default',
+  method,
+  path,
+  body,
+  timestamp = new Date(),
+  nonce = randomNonce()
+}: HmacSigningOptions & {
+  method: string;
+  path: string;
+  /** The exact wire bytes or text; omit for no body. */
+  body?: Uint8Array | string;
+  timestamp?: Date;
+  nonce?: string;
+}): Promise<`HMAC keyId=${string} ts=${string} nonce=${string} signature=${string}`> {
+  if (!secretKey) throw new TypeError('HMAC signing requires a secret key');
+  if (/[\s]/.test(keyId) || /[\r\n]/.test(path) || /[\r\n\s]/.test(method)) {
+    throw new TypeError('Invalid HMAC signing input');
+  }
+  const text = body === undefined ? '' : typeof body === 'string' ? body : new TextDecoder().decode(body);
+  const ts = timestamp.toISOString();
+  const payload = `${method}\n${path}\n${text ? `${text}\n` : 'undefined'}${ts}\n${nonce}`;
+  const key = await globalThis.crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secretKey),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = base64(await globalThis.crypto.subtle.sign('HMAC', key, encoder.encode(payload)));
+  return `HMAC keyId=${keyId} ts=${ts} nonce=${nonce} signature=${signature}`;
+}
+
+/**
+ * Wrap `fetch` so every request is signed over its final method, URL path and
+ * body bytes. A caller-supplied `authorization` header is replaced. Multipart
+ * and other non-text bodies are serialized once, signed, and sent as those bytes.
+ */
+export function hmacSignedFetch(
+  options: HmacSigningOptions & { fetch?: typeof fetch }
+): typeof fetch {
+  const { secretKey, keyId } = options;
+  if (!secretKey) throw new TypeError('HMAC signing requires a secret key');
+  const signed = async (
+    input: RequestInfo | URL,
+    init?: RequestInit
+  ): Promise<Response> => {
+    const base = options.fetch ?? fetch;
+    const request = new Request(input, init);
+    const bytes = request.body ? new Uint8Array(await request.arrayBuffer()) : undefined;
+    const headers = new Headers(request.headers);
+    headers.set(
+      'authorization',
+      await createHmacAuthorization({
+        secretKey,
+        keyId,
+        method: request.method,
+        path: new URL(request.url).pathname,
+        body: bytes
+      })
+    );
+    return base(request.url, {
+      method: request.method,
+      headers,
+      body: bytes && bytes.length ? bytes : undefined,
+      redirect: init?.redirect ?? request.redirect,
+      signal: init?.signal ?? (input instanceof Request ? input.signal : undefined),
+      credentials: init?.credentials,
+      mode: init?.mode,
+      cache: init?.cache,
+      keepalive: init?.keepalive,
+      referrer: init?.referrer,
+      referrerPolicy: init?.referrerPolicy,
+      integrity: init?.integrity
+    });
+  };
+  // Bun's `typeof fetch` also carries `preconnect`; forward it when the
+  // underlying fetch has one so the wrapper stays a drop-in replacement.
+  return Object.assign(signed, {
+    preconnect: (...args: unknown[]) => {
+      const base = (options.fetch ?? fetch) as unknown as {
+        preconnect?: (...args: unknown[]) => void;
+      };
+      base.preconnect?.(...args);
+    }
+  }) as typeof fetch;
+}
+
+async function request<Responses extends Record<number, unknown>, ContentTypes extends Partial<Record<number, string>> = {}>(
+  config: ForkLaunchSdkConfig,
+  meta: ForkLaunchSdkRequestMeta
+): Promise<ForkLaunchSdkResponse<Responses, never, ContentTypes>> {
+  const fetcher = config.hmac ? hmacSignedFetch({ ...config.hmac, fetch: config.fetch }) : config.fetch ?? fetch;
+  // The hook may change transport inputs, but cannot weaken the response contract.
+  const responseKinds = { ...meta.responseKinds };
+  const requestSchema = structuredClone(meta.requestSchema ?? true);
+  const requestObjects = structuredClone(meta.requestObjects ?? {});
+  const responseSchemas = structuredClone(meta.responseSchemas ?? {});
+  const responseHeaderRules = structuredClone(meta.responseHeaders ?? {});
+  const versionMetadata = meta.versionMetadata ? structuredClone(meta.versionMetadata) : undefined;
+  const resolved = config.beforeRequest ? await config.beforeRequest(meta) : meta;
+  const { params, query: queryInput, body, headers, ...fetchInit } = resolved.input;
+  const query = queryInput ? `?${new URLSearchParams(Object.entries(queryInput).filter(([, value]) => value !== undefined).map(([key, value]) => [key, typeof value === 'object' ? JSON.stringify(value) : String(value)]))}` : '';
+  const path = pathWithParams(resolved.path, params);
+  const baseUrl = config.serviceBaseUrls?.[resolved.service] ?? config.baseUrl ?? '';
+  const requestHeaders = new Headers();
+  for (const source of [config.headers, headers]) {
+    for (const [name, value] of Object.entries(source ?? {})) {
+      if (value !== undefined) requestHeaders.set(name, typeof value === 'object' ? JSON.stringify(value) : String(value));
+    }
+  }
+  if (body !== undefined) requestHeaders.set('content-type', resolved.requestContentType ?? 'application/json');
+  if (resolved.requestKind === 'multipart') {
+    // The encoder must select the boundary, including after hooks/default headers.
+    requestHeaders.delete('content-type');
+  }
+  for(const [location, group] of Object.entries(requestObjects)) {
+    const values = new Map<string,string[]>();
+    if(location==='query')new URL(`${baseUrl}${path}${query}`,globalThis.location?.href??'http://sdk.invalid').searchParams.forEach((value,name)=>values.set(name,[...(values.get(name)??[]),value]));
+    else requestHeaders.forEach((value,name)=>values.set(name,[value]));
+    if(!requestObjectMatches(group,values,location==='headers',config.zodRegexExecution))throw new TypeError('Request fields violate declared object constraints');
+  }
+  const controller = Object.values(responseKinds).includes('sse') ? new AbortController() : undefined;
+  requireSecureHttpTransport(`${baseUrl}${path}${query}`, config.allowPlaintextDevelopment);
+  const callerSignal = fetchInit.signal;
+  const forwardAbort = () => controller?.abort(callerSignal?.reason);
+  if (controller && callerSignal) {
+    if (callerSignal.aborted) forwardAbort();
+    else callerSignal.addEventListener('abort', forwardAbort, { once: true });
+  }
+  const releaseRequest = () => {
+    callerSignal?.removeEventListener('abort', forwardAbort);
+    controller?.abort();
+  };
+  let streamOwned = false;
+  try {
+  const encodedBody = body === undefined ? undefined : resolved.requestKind === 'multipart' ? encodeMultipart(body) : resolved.requestKind === 'binary' ? encodeBinary(body) : resolved.requestKind === 'text' ? String(body) : resolved.requestKind === 'urlEncoded' ? encodeForm(body) : encodeRequestJson(requestSchema, body, config.zodRegexExecution);
+  const admittedBody = versionMetadata ? await portableVersionWireBody(encodedBody, requestHeaders) as BodyInit | undefined : encodedBody;
+  const wireBody = await compatibleFetchBody(admittedBody, requestHeaders, fetcher);
+  const matchedVersions = versionMetadata ? await matchVersionRequest(versionMetadata, new URL(`${baseUrl}${path}`, globalThis.location?.href ?? 'http://sdk.invalid').pathname, new URL(baseUrl || '/', globalThis.location?.href ?? 'http://sdk.invalid').pathname, new URLSearchParams(query), requestHeaders, wireBody, config.zodRegexExecution) : undefined;
+    const response = await fetcher(`${baseUrl}${path}${query}`, {
+      ...fetchInit,
+      redirect: Object.keys(responseKinds).some(key => {
+        const status = Number(key.split(':')[0]);
+        return status >= 300 && status < 400;
+      }) ? 'manual' : 'error',
+      signal: controller?.signal ?? fetchInit.signal,
+      method: resolved.method,
+      headers: requestHeaders,
+      body: wireBody
+    });
+    if (response.type === 'opaqueredirect') throw new TypeError('Browser redirect responses are opaque; use a redirect-aware application navigation flow');
+    const receivedType = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() ?? '';
+    // Servers commonly label bodyless responses (HEAD, 204, 205, 304); a
+    // declared empty response matches regardless of that label.
+    const bodyless = resolved.method.toUpperCase() === 'HEAD' || [204, 205, 304].includes(response.status);
+    const contentType = bodyless && responseKinds[`${response.status}:${receivedType}`] === undefined && responseKinds[`${response.status}:`] === 'empty' ? '' : receivedType;
+    const responseKey = `${response.status}:${contentType}`;
+    const declaredStatus = Object.keys(responseKinds).some(key => key.startsWith(`${response.status}:`));
+    // These built-in text errors are explicitly present in the generated envelope union.
+    const builtinError = !declaredStatus && [400, 401, 403, 404, 500].includes(response.status) && contentType === 'text/plain';
+    const kind = responseKinds[responseKey] ?? (builtinError ? 'text' : undefined);
+    if (kind === undefined) {
+      try { await cancelResponseBody(response); } catch { /* Preserve contract error. */ }
+      throw new TypeError(declaredStatus ? 'Undeclared response content type' : 'Undeclared response status');
+    }
+    let decodedHeaders: Record<string, unknown>;
+    let validate: ((value: unknown) => unknown) | undefined;
+    try {
+      const versionPlans = matchedVersions ? versionResponsePlans(matchedVersions, response.status, contentType) : undefined;
+      decodedHeaders = versionPlans ? decodeVersionHeaders(versionPlans, response.headers, config.zodRegexExecution) : decodeResponseHeaders(response.headers, responseHeaderRules[responseKey] ?? {}, config.zodRegexExecution);
+      if (kind === 'json' || kind === 'text' || kind === 'sse') {
+        validate = versionPlans ? value=>decodeVersionBody(versionPlans,value,config.zodRegexExecution) : responseValidator(responseSchemas[responseKey] ?? (builtinError ? { type: 'string' } : false), config.zodRegexExecution);
+      }
+    } catch (error) {
+      try { await cancelResponseBody(response); } catch { /* Preserve validation error. */ }
+      throw error;
+    }
+    let parsedResponse: unknown;
+    if (kind === 'sse') {
+      if (contentType !== 'text/event-stream') { try { await cancelResponseBody(response); } catch { /* Preserve the media error. */ } throw new TypeError('Expected text/event-stream response'); }
+      parsedResponse = sseEvents(response, config.maxSseEventBytes, releaseRequest, validate);
+      streamOwned = true;
+    } else if (kind === 'multipart') {
+      parsedResponse = await decodeMultipartResponse(response, config.maxMultipartResponseBytes);
+    } else if (kind === 'binary') {
+      parsedResponse = new Uint8Array(await response.arrayBuffer());
+    } else {
+      const text = await response.text();
+      if(matchedVersions && kind==='empty' && text)throw new TypeError('Nonempty versioned empty response');
+      parsedResponse = kind === 'empty' ? undefined : kind === 'text' ? text : text
+        ? kind === 'json' || contentType === 'application/json' || contentType.endsWith('+json') ? JSON.parse(text) : text
+        : undefined;
+    }
+    if (kind !== 'sse' && validate) parsedResponse = validate(parsedResponse);
+    return {
+      code: response.status,
+      status: response.status,
+      contentType,
+      response: parsedResponse,
+      headers: decodedHeaders
+    } as unknown as ForkLaunchSdkResponse<Responses, never, ContentTypes>;
+  } finally {
+    if (!streamOwned) releaseRequest();
+  }
+}
+
+// Bounded cache: validators are shared by repeated calls, never compiled per event.
+function encodeRequestJson(schema: AnySchema, value: unknown, execution?: ZodRegexExecution): string | undefined {
+  const wire = JSON.stringify(portableDates(schema, value, true));
+  if (JSON.stringify(schema).includes('x-forklaunch-date-codec')) {
+    if (wire === undefined || !socketValidator(schema, execution)(JSON.parse(wire))) throw new TypeError('Encoded date request violates its wire contract');
+  }
+  return wire;
+}
+const responseValidators = new Map<string, ValidateFunction>();
+function responseValidator(schema: AnySchema, execution?: ZodRegexExecution): (value: unknown) => unknown {
+  const key = JSON.stringify([execution, schema]);
+  let validate = responseValidators.get(key);
+  if (!validate) {
+    validate = socketValidator(schema, execution);
+    if (responseValidators.size >= 128) responseValidators.delete(responseValidators.keys().next().value!);
+    responseValidators.set(key, validate);
+  }
+  return value => {
+    if (!validate(value)) throw new TypeError('Response does not satisfy its declared schema');
+    return portableDates(schema, value);
+  };
+}
+function decodeResponseHeaders(headers: Headers, rules: Record<string,{required:boolean;schema:unknown}>, execution?: ZodRegexExecution): Record<string,unknown> {
+  const output: Record<string,unknown> = {};
+  for (const [name,rule] of Object.entries(rules)) {
+    const raw = headers.get(name);
+    if (raw === null) {
+      if (rule.required) throw new TypeError('Missing required response header');
+      continue;
+    }
+    const validate = responseValidator(rule.schema as AnySchema, execution);
+    try { const decoded = validate(raw); Object.defineProperty(output, name, { value: decoded, enumerable: true, writable: true, configurable: true }); }
+    catch {
+      let parsed: unknown;
+      try { parsed = validate(JSON.parse(raw)); }
+      catch { throw new TypeError('Invalid response header'); }
+      Object.defineProperty(output, name, { value: parsed, enumerable: true, writable: true, configurable: true });
+    }
+  }
+  return output;
+}
+
+
+export default request;

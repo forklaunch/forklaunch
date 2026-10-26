@@ -1,0 +1,231 @@
+{
+  "format": 1,
+  "scope": "Reviewed declaration mappings with explicit covered domains. Pointer validation is not behavioral proof or package completion. Unlisted exports remain under audit.",
+  "mappings": [
+    {
+      "package": "@forklaunch/common",
+      "source": "framework/common/src/camelCase.ts",
+      "export": "removeLeadingSeparators",
+      "rustSource": "framework-rs/crates/common/src/naming.rs",
+      "rustSymbol": "remove_leading_separators",
+      "fixture": "framework-rs/parity/rust_common_naming.mjs",
+      "nativeFixture": "framework-rs/crates/common/examples/naming_parity.rs",
+      "status": "covered-domain",
+      "domain": "Valid Unicode scalar strings accepted by Rust str; direct string arguments without JavaScript coercion.",
+      "boundaries": [
+        "JavaScript lone UTF-16 surrogates and runtime non-string inputs are outside this mapping."
+      ]
+    },
+    {
+      "package": "@forklaunch/common",
+      "source": "framework/common/src/camelCase.ts",
+      "export": "splitBySeparators",
+      "rustSource": "framework-rs/crates/common/src/naming.rs",
+      "rustSymbol": "split_by_separators",
+      "fixture": "framework-rs/parity/rust_common_naming.mjs",
+      "nativeFixture": "framework-rs/crates/common/examples/naming_parity.rs",
+      "status": "covered-domain",
+      "domain": "Valid Unicode scalar strings accepted by Rust str; direct string arguments without JavaScript coercion.",
+      "boundaries": [
+        "JavaScript lone UTF-16 surrogates and runtime non-string inputs are outside this mapping."
+      ]
+    },
+    {
+      "package": "@forklaunch/common",
+      "source": "framework/common/src/camelCase.ts",
+      "export": "removeNonAlphanumeric",
+      "rustSource": "framework-rs/crates/common/src/naming.rs",
+      "rustSymbol": "remove_non_alphanumeric",
+      "fixture": "framework-rs/parity/rust_common_naming.mjs",
+      "nativeFixture": "framework-rs/crates/common/examples/naming_parity.rs",
+      "status": "covered-domain",
+      "domain": "Valid Unicode scalar strings accepted by Rust str; direct string arguments without JavaScript coercion.",
+      "boundaries": [
+        "JavaScript lone UTF-16 surrogates and runtime non-string inputs are outside this mapping."
+      ]
+    },
+    {
+      "package": "@forklaunch/common",
+      "source": "framework/common/src/camelCase.ts",
+      "export": "removeLeadingNumbers",
+      "rustSource": "framework-rs/crates/common/src/naming.rs",
+      "rustSymbol": "remove_leading_numbers",
+      "fixture": "framework-rs/parity/rust_common_naming.mjs",
+      "nativeFixture": "framework-rs/crates/common/examples/naming_parity.rs",
+      "status": "covered-domain",
+      "domain": "Valid Unicode scalar strings accepted by Rust str; direct string arguments without JavaScript coercion.",
+      "boundaries": [
+        "JavaScript lone UTF-16 surrogates and runtime non-string inputs are outside this mapping."
+      ]
+    },
+    {
+      "package": "@forklaunch/common",
+      "source": "framework/common/src/camelCase.ts",
+      "export": "capitalize",
+      "rustSource": "framework-rs/crates/common/src/naming.rs",
+      "rustSymbol": "capitalize",
+      "fixture": "framework-rs/parity/rust_common_naming.mjs",
+      "nativeFixture": "framework-rs/crates/common/examples/naming_parity.rs",
+      "status": "covered-domain",
+      "domain": "Valid Unicode scalar strings accepted by Rust str; direct string arguments without JavaScript coercion.",
+      "boundaries": [
+        "JavaScript lone UTF-16 surrogates and runtime non-string inputs are outside this mapping."
+      ]
+    },
+    {
+      "package": "@forklaunch/common",
+      "source": "framework/common/src/camelCase.ts",
+      "export": "uncapitalize",
+      "rustSource": "framework-rs/crates/common/src/naming.rs",
+      "rustSymbol": "uncapitalize",
+      "fixture": "framework-rs/parity/rust_common_naming.mjs",
+      "nativeFixture": "framework-rs/crates/common/examples/naming_parity.rs",
+      "status": "covered-domain",
+      "domain": "Valid Unicode scalar strings accepted by Rust str; direct string arguments without JavaScript coercion.",
+      "boundaries": [
+        "JavaScript lone UTF-16 surrogates and runtime non-string inputs are outside this mapping."
+      ]
+    },
+    {
+      "package": "@forklaunch/common",
+      "source": "framework/common/src/camelCase.ts",
+      "export": "toCamelCaseIdentifier",
+      "rustSource": "framework-rs/crates/common/src/naming.rs",
+      "rustSymbol": "to_camel_case_identifier",
+      "fixture": "framework-rs/parity/rust_common_naming.mjs",
+      "nativeFixture": "framework-rs/crates/common/examples/naming_parity.rs",
+      "status": "covered-domain",
+      "domain": "Valid Unicode scalar strings accepted by Rust str; direct string arguments without JavaScript coercion.",
+      "boundaries": [
+        "JavaScript lone UTF-16 surrogates and runtime non-string inputs are outside this mapping."
+      ]
+    },
+    {
+      "package": "@forklaunch/common",
+      "source": "framework/common/src/camelCase.ts",
+      "export": "toPrettyCamelCase",
+      "rustSource": "framework-rs/crates/common/src/naming.rs",
+      "rustSymbol": "to_pretty_camel_case",
+      "fixture": "framework-rs/parity/rust_common_naming.mjs",
+      "nativeFixture": "framework-rs/crates/common/examples/naming_parity.rs",
+      "status": "covered-domain",
+      "domain": "Valid Unicode scalar strings accepted by Rust str; direct string arguments without JavaScript coercion.",
+      "boundaries": [
+        "JavaScript lone UTF-16 surrogates and runtime non-string inputs are outside this mapping."
+      ]
+    },
+    {
+      "package": "@forklaunch/common",
+      "source": "framework/common/src/camelCase.ts",
+      "export": "toValidIdentifier",
+      "rustSource": "framework-rs/crates/common/src/naming.rs",
+      "rustSymbol": "to_valid_identifier",
+      "fixture": "framework-rs/parity/rust_common_naming.mjs",
+      "nativeFixture": "framework-rs/crates/common/examples/naming_parity.rs",
+      "status": "covered-domain",
+      "domain": "Valid Unicode scalar strings accepted by Rust str; direct string arguments without JavaScript coercion.",
+      "boundaries": [
+        "JavaScript lone UTF-16 surrogates and runtime non-string inputs are outside this mapping."
+      ]
+    },
+    {
+      "package": "@forklaunch/common",
+      "source": "framework/common/src/camelCase.ts",
+      "export": "isValidIdentifier",
+      "rustSource": "framework-rs/crates/common/src/naming.rs",
+      "rustSymbol": "is_valid_identifier",
+      "fixture": "framework-rs/parity/rust_common_naming.mjs",
+      "nativeFixture": "framework-rs/crates/common/examples/naming_parity.rs",
+      "status": "covered-domain",
+      "domain": "Valid Unicode scalar strings accepted by Rust str; direct string arguments without JavaScript coercion.",
+      "boundaries": [
+        "JavaScript lone UTF-16 surrogates and runtime non-string inputs are outside this mapping."
+      ]
+    },
+    {
+      "package": "@forklaunch/common",
+      "source": "framework/common/src/camelCase.ts",
+      "export": "getTransformationInfo",
+      "rustSource": "framework-rs/crates/common/src/naming.rs",
+      "rustSymbol": "get_transformation_info",
+      "fixture": "framework-rs/parity/rust_common_naming.mjs",
+      "nativeFixture": "framework-rs/crates/common/examples/naming_parity.rs",
+      "status": "covered-domain",
+      "domain": "Valid Unicode scalar strings accepted by Rust str; direct string arguments without JavaScript coercion.",
+      "boundaries": [
+        "JavaScript lone UTF-16 surrogates and runtime non-string inputs are outside this mapping."
+      ]
+    },
+    {
+      "package": "@forklaunch/common",
+      "source": "framework/common/src/hashString.ts",
+      "export": "hashString",
+      "rustSource": "framework-rs/crates/common/src/naming.rs",
+      "rustSymbol": "hash_string",
+      "fixture": "framework-rs/parity/rust_common_naming.mjs",
+      "nativeFixture": "framework-rs/crates/common/examples/naming_parity.rs",
+      "status": "covered-domain",
+      "domain": "Valid Unicode scalar strings accepted by Rust str; direct string arguments without JavaScript coercion.",
+      "boundaries": [
+        "JavaScript lone UTF-16 surrogates and runtime non-string inputs are outside this mapping."
+      ]
+    },
+    {
+      "package": "@forklaunch/common",
+      "source": "framework/common/src/openApiCompliantPath.ts",
+      "export": "openApiCompliantPath",
+      "rustSource": "framework-rs/crates/common/src/lib.rs",
+      "rustSymbol": "open_api_compliant_path",
+      "fixture": "framework-rs/parity/rust_common_naming.mjs",
+      "nativeFixture": "framework-rs/crates/common/examples/naming_parity.rs",
+      "status": "covered-domain",
+      "domain": "Valid Unicode scalar strings accepted by Rust str; direct string arguments without JavaScript coercion.",
+      "boundaries": [
+        "JavaScript lone UTF-16 surrogates and runtime non-string inputs are outside this mapping.",
+        "String conversion only; mixed literal/parameter path routing requires separate matching coverage."
+      ]
+    },
+    {
+      "package": "@forklaunch/common",
+      "source": "framework/common/src/slashManipulation.ts",
+      "export": "removeTrailingSlash",
+      "rustSource": "framework-rs/crates/common/src/lib.rs",
+      "rustSymbol": "remove_trailing_slash",
+      "fixture": "framework-rs/parity/rust_common_naming.mjs",
+      "nativeFixture": "framework-rs/crates/common/examples/naming_parity.rs",
+      "status": "covered-domain",
+      "domain": "Valid Unicode scalar strings accepted by Rust str; direct string arguments without JavaScript coercion.",
+      "boundaries": [
+        "JavaScript lone UTF-16 surrogates and runtime non-string inputs are outside this mapping."
+      ]
+    },
+    {
+      "package": "@forklaunch/common",
+      "source": "framework/common/src/slashManipulation.ts",
+      "export": "removeDoubleLeadingSlash",
+      "rustSource": "framework-rs/crates/common/src/lib.rs",
+      "rustSymbol": "remove_double_leading_slash",
+      "fixture": "framework-rs/parity/rust_common_naming.mjs",
+      "nativeFixture": "framework-rs/crates/common/examples/naming_parity.rs",
+      "status": "covered-domain",
+      "domain": "Valid Unicode scalar strings accepted by Rust str; direct string arguments without JavaScript coercion.",
+      "boundaries": [
+        "JavaScript lone UTF-16 surrogates and runtime non-string inputs are outside this mapping."
+      ]
+    },
+    {
+      "package": "@forklaunch/common",
+      "source": "framework/common/src/slashManipulation.ts",
+      "export": "sanitizePathSlashes",
+      "rustSource": "framework-rs/crates/common/src/lib.rs",
+      "rustSymbol": "sanitize_path_slashes",
+      "fixture": "framework-rs/parity/rust_common_naming.mjs",
+      "nativeFixture": "framework-rs/crates/common/examples/naming_parity.rs",
+      "status": "covered-domain",
+      "domain": "Valid Unicode scalar strings accepted by Rust str; direct string arguments without JavaScript coercion.",
+      "boundaries": [
+        "JavaScript lone UTF-16 surrogates and runtime non-string inputs are outside this mapping."
+      ]
+    }
+  ]
+}

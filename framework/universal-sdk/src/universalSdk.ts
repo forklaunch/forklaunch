@@ -1,21 +1,29 @@
+import portableRequest, { hmacSignedFetch, type ForkLaunchSdkResponse } from './portableRuntime';
+import { portableOperations, type PortableOperation } from './core/portableOperation';
+import { registerZodRegex, type ZodRegexExecution } from './core/zodRegex';
 import {
   openApiCompliantPath,
   safeParse,
   safeStringify
 } from '@forklaunch/common';
 import Ajv from 'ajv';
+import Ajv2020 from 'ajv/dist/2020.js';
+import { draft7, draft2020, ResponseAjvFactory } from './core/responseDialect';
 import addFormats from 'ajv-formats';
 import { OpenAPIObject } from 'openapi3-ts/oas31';
-import { coerceSpecialTypes } from './core/coerceSpecialTypes';
 import { mapContentType } from './core/mapContentType';
-import { refreshOpenApi } from './core/openApi';
+import { refreshOpenApi, getRegistryOperation } from './core/openApi';
+import { ResponseSchemas, schemaPointer } from './core/responseSchema';
+import { registerFactoryUriFormat } from './core/uriFormat';
+import { registerZodChecks } from './core/zodChecks';
 import { getSdkPath } from './core/resolvePath';
 import { ResponseContentParserType } from './types/contentTypes.types';
 import {
   RegistryOptions,
   RequestType,
   ResponseType,
-  SdkPathMap
+  SdkPathMap,
+  UniversalSdkTransportOptions
 } from './types/sdk.types';
 
 /**
@@ -25,14 +33,31 @@ export class UniversalSdk {
   private registryOpenApiJson: Record<string, OpenAPIObject> | undefined;
   private registryOpenApiHash: string | undefined;
   private sdkPathMap: SdkPathMap | undefined;
+  private responseSchemas: ResponseSchemas;
 
+  /**
+   * A responseAjvFactory isolates referenced schemas per registry document.
+   * Without it, the supplied AJV instance (including custom keywords) is reused;
+   * conflicting explicit schema IDs fail rather than replacing prior schemas.
+   */
   constructor(
     private host: string,
     private ajv: Ajv,
     private registryOptions: RegistryOptions,
     private contentTypeParserMap:
-      Record<string, ResponseContentParserType> | undefined
-  ) {}
+      Record<string, ResponseContentParserType> | undefined,
+    responseAjvFactory?: ResponseAjvFactory,
+    private zodRegexExecution?: ZodRegexExecution,
+    private transportOptions: UniversalSdkTransportOptions = {}
+  ) {
+    registerZodRegex(registerZodChecks(registerFactoryUriFormat(ajv)), zodRegexExecution);
+    this.responseSchemas = new ResponseSchemas(
+      ajv,
+      responseAjvFactory
+        ? (context) => registerZodRegex(registerZodChecks(registerFactoryUriFormat(responseAjvFactory(context))), zodRegexExecution)
+        : undefined
+    );
+  }
 
   /**
    * Creates an instance of UniversalSdk.
@@ -42,16 +67,54 @@ export class UniversalSdk {
   static async create(
     host: string,
     registryOptions: RegistryOptions,
-    contentTypeParserMap?: Record<string, ResponseContentParserType>
+    contentTypeParserMap?: Record<string, ResponseContentParserType>,
+    zodRegexExecution?: ZodRegexExecution,
+    transportOptions: UniversalSdkTransportOptions = {}
   ) {
-    const ajv = new Ajv({
-      coerceTypes: true,
-      allErrors: true,
-      strict: false
-    });
-    addFormats(ajv);
+    const createAjv: ResponseAjvFactory = (context) => {
+      if (context.dialect !== draft7 && context.dialect !== draft2020)
+        throw new Error(`Unsupported owned response schema dialect ${context.dialect}`);
+      const Constructor = context.dialect === draft2020 ? Ajv2020 : Ajv;
+      const ajv = new Constructor({
+        coerceTypes: true,
+        ownProperties: true,
+        allErrors: true,
+        strict: false
+      });
+      addFormats(ajv);
+      return ajv;
+    };
+    const sdk = new UniversalSdk(
+      host,
+      createAjv({ dialect: draft7, explicit: false }),
+      registryOptions,
+      contentTypeParserMap,
+      createAjv,
+      zodRegexExecution,
+      transportOptions
+    );
+    // Load the registry eagerly when it is reachable so portable client paths
+    // resolve from the start. A registry that is not up yet (services starting
+    // together) is not an error here: the first call loads it, as before.
+    try {
+      const initial = await refreshOpenApi(host, registryOptions, undefined, transportOptions.fetch);
+      if (initial.updateRequired) {
+        sdk.registryOpenApiJson = initial.registryOpenApiJson;
+        sdk.registryOpenApiHash = initial.registryOpenApiHash;
+        sdk.sdkPathMap = initial.sdkPathMap;
+      }
+    } catch (error) {
+      // Retried on first use. A document supplied in-process is always
+      // reachable, so an invalid one is rejected now rather than on first use.
+      if ('raw' in registryOptions) throw error;
+    }
+    return sdk;
+  }
 
-    return new UniversalSdk(host, ajv, registryOptions, contentTypeParserMap);
+  isPortableSdkPath(path: string): boolean {
+    return Object.entries(this.sdkPathMap ?? {}).some(([key,target]) =>
+      (key === path || key.startsWith(`${path}.`)) &&
+      target.portableOperation !== undefined);
   }
 
   async executeFetchCall(
@@ -69,7 +132,7 @@ export class UniversalSdk {
     } & {
       version?: string;
     }
-  ): Promise<ResponseType> {
+  ): Promise<ResponseType | ForkLaunchSdkResponse<Record<number, unknown>>> {
     if (!this.host) {
       throw new Error('Host not initialized, please run .create(..) first');
     }
@@ -77,7 +140,8 @@ export class UniversalSdk {
     const refreshResult = await refreshOpenApi(
       this.host,
       this.registryOptions,
-      this.registryOpenApiHash
+      this.registryOpenApiHash,
+      this.transportOptions.fetch
     );
 
     if (refreshResult.updateRequired) {
@@ -97,7 +161,7 @@ export class UniversalSdk {
   async executeSdkCall(
     sdkPath: string,
     request?: RequestType
-  ): Promise<ResponseType> {
+  ): Promise<ResponseType | ForkLaunchSdkResponse<Record<number, unknown>>> {
     if (!this.host) {
       throw new Error('Host not initialized, please run .create(..) first');
     }
@@ -105,7 +169,8 @@ export class UniversalSdk {
     const refreshResult = await refreshOpenApi(
       this.host,
       this.registryOptions,
-      this.registryOpenApiHash
+      this.registryOpenApiHash,
+      this.transportOptions.fetch
     );
 
     if (refreshResult.updateRequired) {
@@ -130,10 +195,10 @@ export class UniversalSdk {
     if (fullSdkPath.length === 0) {
       throw new Error(`Sdk path not found: ${sdkPath}`);
     }
-    const { method, path, version } =
+    const { method, path, version, portableOperation } =
       this.sdkPathMap?.[fullSdkPath.join('.')] || {};
 
-    return this.execute(path, method, version, request);
+    return this.execute(path, method, version, request, portableOperation);
   }
 
   /**
@@ -142,22 +207,31 @@ export class UniversalSdk {
    * @param {string} route - The route path for the request.
    * @param {'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'} method - The HTTP method.
    * @param {RequestType} [request] - The request object.
-   * @returns {Promise<ResponseType>} - The response object.
+   * @returns {Promise<ResponseType | ForkLaunchSdkResponse<Record<number, unknown>>>} - The response object.
    */
   private async execute(
     path: string,
-    method:
-      | 'get'
-      | 'post'
-      | 'put'
-      | 'patch'
-      | 'delete'
-      | 'options'
-      | 'head'
-      | 'trace',
+    method: string,
     version: string,
-    request?: RequestType
-  ): Promise<ResponseType> {
+    request?: RequestType,
+    selected?: PortableOperation
+  ): Promise<ResponseType | ForkLaunchSdkResponse<Record<number, unknown>>> {
+    const operation = getRegistryOperation(this.registryOpenApiJson?.[version], path, method);
+    const descriptors = portableOperations(operation);
+    if (!selected && operation?.['x-forklaunch-operations'] !== undefined) {
+      throw new TypeError('Versioned portable route requires a typed SDK operation');
+    }
+    const descriptor = selected ?? descriptors[0];
+    if (descriptor) {
+      const normalize = (value: string) => value.replace(/:([^/]+)/g, '{$1}');
+      if (descriptor.method.toLowerCase() !== method || normalize(descriptor.path) !== normalize(path)) {
+        throw new TypeError('Portable operation does not match registry route');
+      }
+      return portableRequest<Record<number, unknown>>(
+        { ...this.transportOptions, baseUrl: this.host, zodRegexExecution: this.zodRegexExecution },
+        { ...descriptor, input: request || {} }
+      );
+    }
     const { params, body, query, headers } = request || {};
     let url = getSdkPath(this.host + path).replace(/([^:]\/)\/+/g, '$1');
 
@@ -230,7 +304,11 @@ export class UniversalSdk {
       url += queryString ? `?${queryString}` : '';
     }
 
-    const response = await fetch(encodeURI(url), {
+    // Registry discovery stays unsigned; API calls sign the final wire request.
+    const apiFetch = this.transportOptions.hmac
+      ? hmacSignedFetch({ ...this.transportOptions.hmac, fetch: this.transportOptions.fetch })
+      : (this.transportOptions.fetch ?? fetch);
+    const response = await apiFetch(url, {
       method: method?.toUpperCase(),
       headers: {
         ...headers,
@@ -241,13 +319,10 @@ export class UniversalSdk {
       body: parsedBody
     });
 
+    const responseDocument = this.registryOpenApiJson?.[version];
     const responseOpenApi =
       path != null && method != null
-        ? this.registryOpenApiJson?.[version]?.paths?.[
-            openApiCompliantPath(path)
-          ]?.[method?.toLowerCase() as typeof method]?.responses?.[
-            response.status
-          ]
+        ? getRegistryOperation(responseDocument, openApiCompliantPath(path), method)?.responses?.[response.status]
         : null;
 
     if (responseOpenApi == null) {
@@ -270,6 +345,12 @@ export class UniversalSdk {
         : 'application/json'
     ).split(';')[0];
 
+    const responsePointer = schemaPointer(
+      openApiCompliantPath(path),
+      method,
+      response.status,
+      contentType || mappedContentType
+    );
     let responseBody;
 
     switch (mappedContentType) {
@@ -293,7 +374,18 @@ export class UniversalSdk {
         break;
       }
       case 'text/event-stream': {
-        const ajv = this.ajv;
+        const validate = this.responseSchemas.validator(
+          responseDocument!,
+          responsePointer,
+          responseOpenApi.content?.[contentType || mappedContentType].schema
+        );
+        const coerce = (value: Record<string, unknown>) =>
+          this.responseSchemas.coerce(
+            responseDocument!,
+            responsePointer,
+            responseOpenApi.content?.[contentType || mappedContentType].schema,
+            value
+          );
         async function* streamEvents(
           reader: ReadableStreamDefaultReader<Uint8Array>
         ) {
@@ -316,19 +408,11 @@ export class UniversalSdk {
                   data: safeParse(data),
                   id: lastEventId
                 };
-                const isValidJson = ajv.validate(
-                  responseOpenApi.content?.[contentType || mappedContentType]
-                    .schema,
-                  json
-                );
+                const isValidJson = validate(json);
                 if (!isValidJson) {
                   throw new Error('Response does not match OpenAPI spec');
                 }
-                yield coerceSpecialTypes(
-                  json,
-                  responseOpenApi.content?.[contentType || mappedContentType]
-                    .schema
-                );
+                yield coerce(json);
               }
             }
           }
@@ -349,19 +433,11 @@ export class UniversalSdk {
                 data: safeParse(data),
                 id: id ?? lastEventId
               };
-              const isValidJson = ajv.validate(
-                responseOpenApi.content?.[contentType || mappedContentType]
-                  .schema,
-                json
-              );
+              const isValidJson = validate(json);
               if (!isValidJson) {
                 throw new Error('Response does not match OpenAPI spec');
               }
-              yield coerceSpecialTypes(
-                json,
-                responseOpenApi.content?.[contentType || mappedContentType]
-                  .schema
-              );
+              yield coerce(json);
             }
           }
         }
@@ -377,18 +453,22 @@ export class UniversalSdk {
       case 'application/json':
       default: {
         const json: Record<string, unknown> = await response.json();
-        const isValidJson = this.ajv.validate(
-          responseOpenApi.content?.[contentType || mappedContentType].schema,
-          json
+        const validate = this.responseSchemas.validator(
+          responseDocument!,
+          responsePointer,
+          responseOpenApi.content?.[contentType || mappedContentType].schema
         );
+        const isValidJson = validate(json);
         if (!isValidJson) {
           throw new Error(
-            `Response does not match OpenAPI spec: ${JSON.stringify(this.ajv.errors)}`
+            `Response does not match OpenAPI spec: ${JSON.stringify(validate.errors)}`
           );
         }
-        responseBody = coerceSpecialTypes(
-          json,
-          responseOpenApi.content?.[contentType || mappedContentType].schema
+        responseBody = this.responseSchemas.coerce(
+          responseDocument!,
+          responsePointer,
+          responseOpenApi.content?.[contentType || mappedContentType].schema,
+          json
         );
         break;
       }

@@ -409,7 +409,11 @@ const serviceDependencies = runtimeDependencies.chain({
     lifetime: Lifetime.Scoped,
     type: DatabaseWorkerProducer,
     factory: ({ EntityManager, DatabaseWorkerOptions }) =>
-      new DatabaseWorkerProducer(EntityManager, DatabaseWorkerOptions)
+      new DatabaseWorkerProducer(
+        EntityManager,
+        DatabaseWorkerOptions,
+        SampleWorkerEventRecord
+      )
   },
   SampleWorkerRedisProducer: {
     lifetime: Lifetime.Scoped,

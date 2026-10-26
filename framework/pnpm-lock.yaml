@@ -123,6 +123,9 @@ importers:
       '@mikro-orm/mongodb':
         specifier: 7.2.5
         version: 7.2.5(@mikro-orm/core@7.2.5)
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.32.1
+        version: 1.32.1(zod@4.6.7)
       '@opentelemetry/api':
         specifier: ^1.9.1
         version: 1.9.1
@@ -673,6 +676,9 @@ importers:
       ioredis:
         specifier: ^6.0.0
         version: 6.0.0
+      jose:
+        specifier: 6.2.12
+        version: 6.2.12
       testcontainers:
         specifier: ^12.2.1
         version: 12.2.1
@@ -710,12 +716,21 @@ importers:
       '@forklaunch/common':
         specifier: workspace:^
         version: link:../common
+      '@types/qs':
+        specifier: ^6.15.1
+        version: 6.15.1
       ajv:
         specifier: ^8.20.0
         version: 8.20.0
+      ajv-draft-04:
+        specifier: ^1.0.0
+        version: 1.0.0(ajv@8.20.0)
       ajv-formats:
         specifier: ^3.0.1
         version: 3.0.1(ajv@8.20.0)
+      qs:
+        specifier: ^6.16.0
+        version: 6.16.1
     devDependencies:
       '@types/node':
         specifier: ^26.6.5

@@ -429,7 +429,7 @@ forklaunch openapi export [OPTIONS]
 **Options:**
 | Option | Short | Description |
 | :----- | :---- | :---------- |
-| `--output <DIR>` | `-o` | Output directory (default: .forklaunch/openapi) |
+| `--output <DIR>` | `-o` | Also write `<DIR>/<service>/openapi.json` (default: each service's registered artifact; `.forklaunch/openapi/<service>/openapi.json` without one) |
 | `--path <PATH>` | `-p` | Path to application root (optional) |
 | `--help` | `-h` | Show help information |
 

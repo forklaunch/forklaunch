@@ -48,9 +48,7 @@ impl IntegrationsVisitor {
             "RedisClient" | "Redis" | "RedisCache" | "TtlCache" => Some("cache".to_string()),
 
             // Object Store (ObjectStore is the new token name, S3ObjectStore is legacy)
-            "ObjectStore" | "S3ObjectStore" | "S3Client" | "S3" => {
-                Some("objectstore".to_string())
-            }
+            "ObjectStore" | "S3ObjectStore" | "S3Client" | "S3" => Some("objectstore".to_string()),
 
             // Message Queue
             "KafkaClient" | "Kafka" | "QueueClient" => Some("messagequeue".to_string()),
@@ -141,8 +139,7 @@ impl<'a> Visit<'a> for IntegrationsVisitor {
     fn visit_variable_declaration(&mut self, decl: &VariableDeclaration<'a>) {
         // Look for: const runtimeDependencies = ...
         for declarator in &decl.declarations {
-            if let oxc_ast::ast::BindingPatternKind::BindingIdentifier(ident) = &declarator.id.kind
-            {
+            if let oxc_ast::ast::BindingPattern::BindingIdentifier(ident) = &declarator.id {
                 if ident.name == "runtimeDependencies" {
                     self.in_runtime_deps = true;
                     self.depth = 0;
@@ -218,7 +215,9 @@ pub fn extract_integrations_from_source(source_code: &str) -> Result<Vec<Integra
     let allocator = Allocator::default();
 
     let ParserReturn {
-        program, errors, ..
+        program,
+        diagnostics: errors,
+        ..
     } = Parser::new(
         &allocator,
         source_code,
@@ -226,7 +225,7 @@ pub fn extract_integrations_from_source(source_code: &str) -> Result<Vec<Integra
     )
     .parse();
 
-    if !errors.is_empty() {
+    if errors.has_errors() {
         log::debug!(
             "TypeScript parse errors during integrations scan: {:?}",
             errors

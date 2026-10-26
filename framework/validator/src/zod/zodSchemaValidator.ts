@@ -21,6 +21,9 @@ import {
   ZodType,
   ZodUnion
 } from 'zod/v3';
+import { requestBodyOpenApi } from './requestBodyOpenApi';
+import { markFactoryEmail } from './emailOpenApi';
+import { markFactoryUri } from './uriOpenApi';
 import { extendZodWithOpenApi } from '../../shims/zod-v3-openapi/zod-extensions';
 import { generateSchema } from '../../shims/zod-v3-openapi/zod-openapi';
 import {
@@ -112,16 +115,12 @@ export class ZodSchemaValidator implements SV<
       '^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$',
     example: 'a8b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6'
   });
-  email = z.string().email().openapi({
+  email = markFactoryEmail(z.string().email()).openapi({
     title: 'Email',
-    format: 'email',
-    pattern: '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$',
     example: 'a@b.com'
   });
-  uri = z.string().url().openapi({
+  uri = markFactoryUri(z.string().url()).openapi({
     title: 'URI',
-    format: 'uri',
-    pattern: '^[a-zA-Z][a-zA-Z\\d+-.]*:[^\\s]*$',
     example: 'https://forklaunch.com'
   });
   number = z
@@ -220,12 +219,10 @@ export class ZodSchemaValidator implements SV<
   });
   any = z.any().openapi({
     title: 'Any',
-    type: 'object',
     example: 'any'
   });
   unknown = z.unknown().openapi({
     title: 'Unknown',
-    type: 'object',
     example: 'unknown'
   });
   never = z.never().openapi({
@@ -521,6 +518,93 @@ export class ZodSchemaValidator implements SV<
             }
           })
         };
+  }
+
+  /** Root default factories are not evaluated or exported as default annotations.
+   * Nested schema export retains the existing general exporter behavior.
+   */
+  openapiRequestBody(schema: unknown): { required: boolean; schema: SchemaObject } {
+    return requestBodyOpenApi(
+      this.schemify(schema as ZodIdiomaticSchema),
+      (value) => this.openapi(value)
+    );
+  }
+
+  /** Explicit 2020-12 input-schema profile; root callbacks are not evaluated.
+   * By default, nested defaults/effects retain the general exporter's semantics.
+   * pureInput recursively omits computed defaults and rejects callback-dependent
+   * effects, pipelines, catch and lazy schemas without executing their callbacks.
+   * Explicit default annotations are retained; wrapper optionality is structural.
+   * Purity covers named validation/default callbacks on ordinary Zod schemas,
+   * not arbitrary getters, Proxies or shape thunks. Date keeps its wire projection.
+   * zodChecks emits a reserved consumer capability for UTF-16 length and ordered
+   * Zod remainder checks. Native consumers require the zod-checks Cargo feature;
+   * native String admission excludes lone UTF-16 surrogates. Explicit ordinary
+   * length/multipleOf annotations suppress corresponding synthesized assertions.
+   */
+  openapi2020(
+    schema: unknown,
+    options?: { pureInput?: boolean; zodChecks?: boolean; zodRegex?: boolean; zodDiagnostics?: boolean; diagnosticDefaults?: ReadonlyMap<unknown, unknown> }
+  ): SchemaObject & {
+    $schema: 'https://json-schema.org/draft/2020-12/schema';
+  } {
+    const schemified = this.schemify(schema as ZodIdiomaticSchema);
+    if (options?.pureInput || options?.zodDiagnostics) {
+      // The pure traversal is immutable and owns its cycle/depth/work guards.
+      // Cloning before those guards would recurse through cyclic schema graphs.
+      return generateSchema(schemified, false, '3.1', {
+        jsonSchemaDialect: 'https://json-schema.org/draft/2020-12/schema',
+        pureInput: true,
+        zodChecks: options.zodChecks,
+        zodRegex: options.zodRegex,
+        zodDiagnostics: options.zodDiagnostics,
+        diagnosticDefaults: options.diagnosticDefaults
+      }) as SchemaObject & {
+        $schema: 'https://json-schema.org/draft/2020-12/schema';
+      };
+    }
+    let current: unknown = schemified;
+    for (let depth = 0; current; depth++) {
+      if (depth > 64)
+        throw new Error('Explicit JSON Schema root wrapper budget exceeded');
+      const node = current as {
+        metaOpenApi?: { $schema?: string } | { $schema?: string }[];
+        _def: { typeName: string; innerType?: unknown; schema?: unknown };
+      };
+      const metadata = Array.isArray(node.metaOpenApi)
+        ? node.metaOpenApi
+        : [node.metaOpenApi];
+      if (
+        metadata.some(
+          (value) =>
+            value?.$schema !== undefined &&
+            (typeof value.$schema !== 'string' ||
+              value.$schema.replace(/#$/, '') !==
+                'https://json-schema.org/draft/2020-12/schema')
+        )
+      ) {
+        throw new Error(
+          'Schema annotation dialect conflicts with explicit JSON Schema export'
+        );
+      }
+      if (
+        ['ZodOptional', 'ZodNullable', 'ZodDefault'].includes(
+          node._def.typeName
+        )
+      )
+        current = node._def.innerType;
+      else if (node._def.typeName === 'ZodEffects') current = node._def.schema;
+      else break;
+    }
+    return requestBodyOpenApi(schemified, (value) =>
+      generateSchema((options?.zodChecks || options?.zodRegex) ? value : deepCloneWithoutUndefined(value), false, '3.1', {
+        jsonSchemaDialect: 'https://json-schema.org/draft/2020-12/schema',
+        zodChecks: options?.zodChecks,
+        zodRegex: options?.zodRegex
+      })
+    ).schema as SchemaObject & {
+      $schema: 'https://json-schema.org/draft/2020-12/schema';
+    };
   }
 
   /**

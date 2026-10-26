@@ -21,7 +21,7 @@ describe('PaymentLink Routes E2E Tests with PostgreSQL Container', () => {
     const setup = await setupTestDatabase();
     orm = setup.orm;
     redis = setup.redis;
-  }, 60000);
+  });
 
   beforeEach(async () => {
     await clearDatabase({ orm, redis });
@@ -32,7 +32,7 @@ describe('PaymentLink Routes E2E Tests with PostgreSQL Container', () => {
 
   afterAll(async () => {
     await cleanupTestDatabase();
-  }, 30000);
+  });
 
   describe('POST /payment-link - createPaymentLink', () => {
     it('should create a payment link successfully', async () => {
@@ -52,7 +52,6 @@ describe('PaymentLink Routes E2E Tests with PostgreSQL Container', () => {
         amount: mockPaymentLinkData.amount,
         paymentMethods: mockPaymentLinkData.paymentMethods,
         currency: mockPaymentLinkData.currency,
-        description: mockPaymentLinkData.description,
         status: mockPaymentLinkData.status,
         id: expect.any(String),
         createdAt: expect.any(Date),
@@ -189,7 +188,6 @@ describe('PaymentLink Routes E2E Tests with PostgreSQL Container', () => {
         amount: mockPaymentLinkData.amount,
         paymentMethods: mockPaymentLinkData.paymentMethods,
         currency: mockPaymentLinkData.currency,
-        description: mockPaymentLinkData.description,
         status: mockPaymentLinkData.status,
         createdAt: expect.any(Date),
         updatedAt: expect.any(Date)
@@ -257,7 +255,6 @@ describe('PaymentLink Routes E2E Tests with PostgreSQL Container', () => {
         amount: 14999,
         paymentMethods: [PaymentMethodEnum.CARD],
         currency: CurrencyEnum.GBP,
-        description: 'An updated test payment link',
         status: StatusEnum.COMPLETED
       };
 
@@ -275,7 +272,6 @@ describe('PaymentLink Routes E2E Tests with PostgreSQL Container', () => {
         amount: expect.any(Number),
         paymentMethods: updateData.paymentMethods,
         currency: updateData.currency,
-        description: updateData.description,
         status: updateData.status,
         createdAt: expect.any(Date),
         updatedAt: expect.any(Date)

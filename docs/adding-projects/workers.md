@@ -107,7 +107,7 @@ A worker follows the standard ForkLaunch service structure:
 │   └── seed.data.ts # seed data for new entity types (only relevant for database workers)
 ├── controllers
 │   └── newWorker.controller.ts # the controller for the worker, defining the API handlers
-├── eslint.config.mjs -> ../eslint.config.mjs # symlinked from parent for consistency
+├── .oxlint.config.json -> ../.oxlint.config.json # symlinked from parent for consistency
 ├── interfaces
 │   └── newWorker.interface.ts
 ├── mikro-orm.config.ts

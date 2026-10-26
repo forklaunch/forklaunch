@@ -26,7 +26,7 @@ forklaunch openapi export [options]
 
 **Options:**
 - `-p, --path <path>` - Path to application root (optional)
-- `-o, --output <dir>` - Output directory (default: `.forklaunch/openapi`)
+- `-o, --output <dir>` - Also write every spec to `<dir>/<service>/openapi.json`. By default each service writes only its registered OpenAPI artifact: its SDK folder (for example `src/<service>/sdk/typescript/openapi.json`), or `.forklaunch/openapi/<service>/openapi.json` for TypeScript services without a service-owned SDK.
 
 ## Basic Usage
 

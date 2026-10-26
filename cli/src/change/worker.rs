@@ -18,7 +18,9 @@ use super::core::{
 };
 use crate::{
     CliCommand,
-    change::core::change_database::{change_database_retention_script, change_database_seed_script},
+    change::core::change_database::{
+        change_database_retention_script, change_database_seed_script,
+    },
     constants::{
         Database, ERROR_FAILED_TO_PARSE_MANIFEST, ERROR_FAILED_TO_READ_DOCKER_COMPOSE,
         ERROR_FAILED_TO_READ_MANIFEST, ERROR_FAILED_TO_READ_PACKAGE_JSON, Infrastructure,
@@ -56,8 +58,8 @@ use crate::{
             package_json_constants::{
                 BULLMQ_VERSION, INFRASTRUCTURE_REDIS_VERSION, IOREDIS_VERSION,
                 MIKRO_ORM_CORE_VERSION, MIKRO_ORM_DATABASE_VERSION, MIKRO_ORM_MIGRATIONS_VERSION,
-                WORKER_BULLMQ_VERSION, WORKER_DATABASE_VERSION,
-                WORKER_KAFKA_VERSION, WORKER_REDIS_VERSION,
+                WORKER_BULLMQ_VERSION, WORKER_DATABASE_VERSION, WORKER_KAFKA_VERSION,
+                WORKER_REDIS_VERSION,
             },
             project_package_json::ProjectPackageJson,
         },
@@ -66,6 +68,7 @@ use crate::{
             RenderedTemplate, RenderedTemplatesCache, TEMPLATES_DIR, write_rendered_templates,
         },
     },
+    init::rust_project::{self, RustProjectKind},
     prompt::{ArrayCompleter, prompt_field_from_selections_with_validation},
 };
 
@@ -127,7 +130,8 @@ fn change_type(
     rendered_templates_cache: &mut RenderedTemplatesCache,
     removal_templates: &mut Vec<RemovalTemplate>,
 ) -> Result<()> {
-    let next_redis_partition = crate::core::manifest::next_available_redis_partition(&manifest_data.projects);
+    let next_redis_partition =
+        crate::core::manifest::next_available_redis_partition(&manifest_data.projects);
 
     let project_entry = manifest_data
         .projects
@@ -202,11 +206,8 @@ fn change_type(
                 Some(WORKER_BULLMQ_VERSION.to_string());
             dependencies.forklaunch_infrastructure_redis =
                 Some(INFRASTRUCTURE_REDIS_VERSION.to_string());
-            project_package_json
-                .dependencies
-                .as_mut()
-                .unwrap()
-                .ioredis = Some(IOREDIS_VERSION.to_string());
+            project_package_json.dependencies.as_mut().unwrap().ioredis =
+                Some(IOREDIS_VERSION.to_string());
             resources.cache = Some(WorkerType::RedisCache.to_string());
             resources.redis_partition = Some(next_redis_partition);
             let _ = add_redis_to_docker_compose(
@@ -215,7 +216,8 @@ fn change_type(
                 &mut environment,
                 next_redis_partition,
             );
-            env_local_content.redis_url = Some(format!("redis://localhost:6379/{}", next_redis_partition));
+            env_local_content.redis_url =
+                Some(format!("redis://localhost:6379/{}", next_redis_partition));
         }
         WorkerType::Database => {
             let db = database.unwrap();
@@ -333,11 +335,8 @@ fn change_type(
                 Some(WORKER_REDIS_VERSION.to_string());
             dependencies.forklaunch_infrastructure_redis =
                 Some(INFRASTRUCTURE_REDIS_VERSION.to_string());
-            project_package_json
-                .dependencies
-                .as_mut()
-                .unwrap()
-                .ioredis = Some(IOREDIS_VERSION.to_string());
+            project_package_json.dependencies.as_mut().unwrap().ioredis =
+                Some(IOREDIS_VERSION.to_string());
             resources.cache = Some(WorkerType::RedisCache.to_string());
             resources.redis_partition = Some(next_redis_partition);
             let _ = add_redis_to_docker_compose(
@@ -346,7 +345,8 @@ fn change_type(
                 &mut environment,
                 next_redis_partition,
             );
-            env_local_content.redis_url = Some(format!("redis://localhost:6379/{}", next_redis_partition));
+            env_local_content.redis_url =
+                Some(format!("redis://localhost:6379/{}", next_redis_partition));
         }
         WorkerType::Kafka => {
             dependencies.forklaunch_implementation_worker_kafka =
@@ -458,14 +458,26 @@ fn change_type(
         if is_database_worker {
             // Switch import from types file to entities
             content = content.replace(
-                &format!("import type {{ {}EventRecord }} from './domain/types/{}EventRecord.types';", pascal_case_name, camel_case_name),
-                &format!("import type {{ {}EventRecord }} from './persistence/entities';", pascal_case_name),
+                &format!(
+                    "import type {{ {}EventRecord }} from './domain/types/{}EventRecord.types';",
+                    pascal_case_name, camel_case_name
+                ),
+                &format!(
+                    "import type {{ {}EventRecord }} from './persistence/entities';",
+                    pascal_case_name
+                ),
             );
         } else {
             // Switch import from entities to types file
             content = content.replace(
-                &format!("import type {{ {}EventRecord }} from './persistence/entities';", pascal_case_name),
-                &format!("import type {{ {}EventRecord }} from './domain/types/{}EventRecord.types';", pascal_case_name, camel_case_name),
+                &format!(
+                    "import type {{ {}EventRecord }} from './persistence/entities';",
+                    pascal_case_name
+                ),
+                &format!(
+                    "import type {{ {}EventRecord }} from './domain/types/{}EventRecord.types';",
+                    pascal_case_name, camel_case_name
+                ),
             );
         }
 
@@ -607,7 +619,10 @@ This worker has been converted back to a service.
         },
     );
 
-    log_warn!(stdout, "Worker converted to service. See README-MIGRATION.md.");
+    log_warn!(
+        stdout,
+        "Worker converted to service. See README-MIGRATION.md."
+    );
 
     Ok(())
 }
@@ -670,6 +685,36 @@ impl CliCommand for WorkerCommand {
 
         let (app_root_path, project_name) = find_app_root_path(matches, RequiredLocation::Project)?;
         let manifest_path = app_root_path.join(".forklaunch").join("manifest.toml");
+        crate::init::rust_project::preflight_mixed_images(&app_root_path)?;
+        let rust_project_name = project_name
+            .clone()
+            .context("Project path is required for Rust worker changes")?;
+        if rust_project::is_rust_project(&app_root_path, &rust_project_name)? {
+            let name = matches.get_one::<String>("name").map(String::as_str);
+            if let Some(name) = name
+                && !validate_name(name)
+            {
+                anyhow::bail!("Worker name cannot be empty or include numbers or spaces");
+            }
+            let to_kind = match matches.get_one::<String>("to").map(String::as_str) {
+                Some("service") => Some(RustProjectKind::Service),
+                _ => None,
+            };
+            let changed_name = rust_project::change_rust_project(
+                &app_root_path,
+                &rust_project_name,
+                name,
+                matches.get_one::<String>("description").map(String::as_str),
+                matches.get_one::<String>("database").map(String::as_str),
+                matches.get_one::<String>("type").map(String::as_str),
+                to_kind,
+                matches.get_flag("dryrun"),
+            )?;
+            if !matches.get_flag("dryrun") {
+                log_ok!(stdout, "{} changed successfully!", changed_name);
+            }
+            return Ok(());
+        }
 
         let existing_manifest_data: WorkerManifestData = toml::from_str::<WorkerManifestData>(
             &rendered_templates_cache
@@ -787,7 +832,7 @@ impl CliCommand for WorkerCommand {
                         path: worker_base_path.parent().unwrap().join("package.json"),
                         content: serde_json::to_string_pretty(&application_package_json_to_write)?,
                         context: None,
-                    },
+                    }.preserving_json_layout(),
                 );
 
                 rendered_templates_cache.insert(
@@ -799,7 +844,7 @@ impl CliCommand for WorkerCommand {
                         path: worker_base_path.join("package.json"),
                         content: serde_json::to_string_pretty(&project_package_json_to_write)?,
                         context: None,
-                    },
+                    }.preserving_json_layout(),
                 );
 
                 let rendered_templates: Vec<RenderedTemplate> = rendered_templates_cache
@@ -975,6 +1020,10 @@ impl CliCommand for WorkerCommand {
         }
 
         if let Some(name) = name {
+            let old = worker_base_path.file_name().and_then(|name| name.to_str()).context("Invalid project directory")?;
+            if crate::sdk::typescript_build::preflight_lifecycle(&app_root_path, old)? {
+                anyhow::ensure!(old == name || !crate::sdk::typescript_build::has_contract_build(&app_root_path, &name)?, "Destination contract hook already exists");
+            }
             move_templates.push(change_name(
                 &worker_base_path,
                 &name,
@@ -1013,7 +1062,7 @@ impl CliCommand for WorkerCommand {
                 path: application_package_json_path.into(),
                 content: serde_json::to_string_pretty(&application_package_json_to_write)?,
                 context: None,
-            },
+            }.preserving_json_layout(),
         );
 
         rendered_templates_cache.insert(
@@ -1025,7 +1074,7 @@ impl CliCommand for WorkerCommand {
                 path: project_package_json_path.into(),
                 content: serde_json::to_string_pretty(&project_json_to_write)?,
                 context: None,
-            },
+            }.preserving_json_layout(),
         );
 
         let rendered_templates: Vec<RenderedTemplate> = rendered_templates_cache
@@ -1039,6 +1088,16 @@ impl CliCommand for WorkerCommand {
         move_template_files(&move_templates, dryrun, &mut stdout)?;
 
         if !dryrun {
+            let old = worker_base_path.file_name().and_then(|name| name.to_str()).context("Invalid project directory")?;
+            // Image planning reads the workspace members, so move the SDK
+            // member before the hook rename refreshes the images.
+            crate::init::rust_project::rename_typescript_sdk_member(
+                &app_root_path,
+                &worker_base_path,
+                &worker_base_path.with_file_name(&manifest_data.worker_name),
+            )?;
+            crate::sdk::typescript_build::rename_hook(&app_root_path, old, &manifest_data.worker_name)?;
+            crate::init::rust_project::refresh_mixed_images(&app_root_path)?;
             log_ok!(stdout, "{} changed successfully!", &manifest_data.app_name);
             format_code(&worker_base_path, &manifest_data.runtime.parse()?);
         }

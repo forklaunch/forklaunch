@@ -6,12 +6,6 @@ import {
   Plan,
   Subscription
 } from '../../persistence/entities';
-import {
-  BillingProviderEnum,
-  CurrencyEnum,
-  PaymentMethodEnum,
-  PlanCadenceEnum
-} from '../enum';
 
 // Billing Portal Types
 export type StripeBillingPortalEntities = {

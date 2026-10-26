@@ -14,7 +14,7 @@ describe('Twilio Webhook Routes E2E Tests with PostgreSQL Container', () => {
     const setup = await setupTestDatabase();
     orm = setup.orm;
     redis = setup.redis;
-  }, 60000);
+  });
 
   beforeEach(async () => {
     await clearDatabase({ orm, redis });
@@ -25,7 +25,7 @@ describe('Twilio Webhook Routes E2E Tests with PostgreSQL Container', () => {
 
   afterAll(async () => {
     await cleanupTestDatabase();
-  }, 30000);
+  });
 
   describe('POST /webhook - handleStatusCallback', () => {
     it('should map a delivered status callback onto the seeded record', async () => {

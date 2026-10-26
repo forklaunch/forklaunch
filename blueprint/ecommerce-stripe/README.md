@@ -125,3 +125,5 @@ pnpm test
 The suite uses testcontainers, so **Docker must be running**. It covers the
 full purchase loop (import → cart → order → transitions, including rejecting
 an illegal transition) and the webhook idempotency gate.
+
+Configured Stripe payment resumption checks the current payment ID/reference/order relation and fresh linked-order status before and after retrieving the existing client secret. Missing/mismatched/cancelled orders deny the response; no provider cancellation/refund or reference clearing occurs. The configured mapper selects only local relation, ID and status fields with identity-map refresh, and rejects an EntityManager inside an active transaction to avoid retaining a pre-cancellation snapshot across provider I/O. Custom mappers without this optional guard preserve legacy behavior. This consistency check is not tenant authorization, provider ownership proof or an atomic transaction across Stripe: previously issued secrets and cancellation after the final check remain possible.

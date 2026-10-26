@@ -68,7 +68,7 @@ impl<'a> Visit<'a> for GetEnvVarCollector {
                 if let Some(arg) = call.arguments.first() {
                     if let Some(Expression::StringLiteral(str_lit)) = arg.as_expression() {
                         self.found
-                            .push((str_lit.value.to_string(), call.span.start));
+                            .push((str_lit.value.display().to_string(), call.span.start));
                     }
                 }
             }
@@ -132,7 +132,7 @@ impl<'a> Visit<'a> for EnvVarVisitor {
                 if let Some(arg) = call.arguments.first() {
                     if let Some(Expression::StringLiteral(str_lit)) = arg.as_expression() {
                         self.env_vars.push(EnvVarUsage {
-                            var_name: str_lit.value.to_string(),
+                            var_name: str_lit.value.display().to_string(),
                             optional: None,
                         });
                     }
@@ -180,7 +180,7 @@ impl DefaultedEnvCollector {
                     if ident.name == "getEnvVar" {
                         if let Some(arg) = call.arguments.first() {
                             if let Some(Expression::StringLiteral(lit)) = arg.as_expression() {
-                                self.names.insert(lit.value.to_string());
+                                self.names.insert(lit.value.display().to_string());
                             }
                         }
                     }
@@ -300,7 +300,9 @@ pub fn extract_untyped_env_vars_from_source(source_code: &str) -> Result<Vec<Env
     let allocator = Allocator::default();
 
     let ParserReturn {
-        program, errors, ..
+        program,
+        diagnostics: errors,
+        ..
     } = Parser::new(
         &allocator,
         source_code,
@@ -308,7 +310,7 @@ pub fn extract_untyped_env_vars_from_source(source_code: &str) -> Result<Vec<Env
     )
     .parse();
 
-    if !errors.is_empty() {
+    if errors.has_errors() {
         log::debug!("TypeScript parse errors during env scan: {:?}", errors);
     }
 
@@ -331,7 +333,9 @@ pub fn extract_process_env_vars_from_source(source_code: &str) -> Result<Vec<Env
     let allocator = Allocator::default();
 
     let ParserReturn {
-        program, errors, ..
+        program,
+        diagnostics: errors,
+        ..
     } = Parser::new(
         &allocator,
         source_code,
@@ -339,7 +343,7 @@ pub fn extract_process_env_vars_from_source(source_code: &str) -> Result<Vec<Env
     )
     .parse();
 
-    if !errors.is_empty() {
+    if errors.has_errors() {
         log::debug!(
             "TypeScript parse errors during process.env scan: {:?}",
             errors
@@ -425,7 +429,9 @@ pub fn extract_env_vars_from_source(source_code: &str) -> Result<Vec<EnvVarUsage
     let allocator = Allocator::default();
 
     let ParserReturn {
-        program, errors, ..
+        program,
+        diagnostics: errors,
+        ..
     } = Parser::new(
         &allocator,
         source_code,
@@ -433,7 +439,7 @@ pub fn extract_env_vars_from_source(source_code: &str) -> Result<Vec<EnvVarUsage
     )
     .parse();
 
-    if !errors.is_empty() {
+    if errors.has_errors() {
         log::debug!("TypeScript parse errors during env scan: {:?}", errors);
     }
 

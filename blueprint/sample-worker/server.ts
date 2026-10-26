@@ -35,7 +35,8 @@ app.use(sampleWorkerRouter);
 app.registerSdks(sampleWorkerSdkClient);
 
 //! starts the server
-app.listen(port, host, () => {
+// hyper-express returns a Promise from listen; nothing awaits startup here.
+void app.listen(port, host, () => {
   openTelemetryCollector.info(
     `🎉 SampleWorker Server is running at ${protocol}://${host}:${port} 🎉.
     // An API reference can be accessed at ${protocol}://${host}:${port}/api/${version}${docsPath}`

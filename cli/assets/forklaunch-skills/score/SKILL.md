@@ -40,6 +40,7 @@ report-card contract.
 | `--no-share` | score online but skip minting the share link (newer CLIs) |
 | `--json` | the raw report card, for tooling (includes `remediationPrompt`) |
 | `--prompt` | print only the remediation prompt (no summary) |
+| `--prompt-scope not-met\|undecided\|both` | what the prompt covers: open findings and failed requirements, the requirements the reviewers could not decide (the agent first checks whether each is already met, makes it demonstrable if so, implements it if not), or both (default) |
 | `--pretty` | pretty-print the JSON |
 | `--min-score N` | exit non-zero if `overall` is below N — for CI |
 | `-p, --path <dir>` | app root (defaults to the manifest in the current directory) |

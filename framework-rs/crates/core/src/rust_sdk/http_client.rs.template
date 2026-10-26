@@ -1,0 +1,206 @@
+use std::fmt;
+{{#has_operations}}use std::collections::BTreeMap;{{/has_operations}}
+use forklaunch_universal_sdk as runtime;
+pub use runtime::{SdkError, SdkAuth, HmacSigner, SdkResponseWithHeaders};
+{{#has_multipart}}pub use runtime::{MultipartForm, MultipartPart};{{/has_multipart}}
+{{#has_multipart_response}}pub use runtime::{MultipartResponse, MultipartResponsePart};{{/has_multipart_response}}
+{{#has_sse}}pub use runtime::{SdkEventStream, sse};{{/has_sse}}
+pub type SdkRequest = runtime::SdkRequest{{#has_multipart}}<MultipartForm>{{/has_multipart}};
+type ClientRuntime = runtime::UniversalSdk{{#has_multipart}}<MultipartForm>{{/has_multipart}};
+
+{{! forklaunch:models}}{{{model_source}}}
+{{#operations}}
+#[derive({{^json_request_type}}Default, {{/json_request_type}}{{^multipart_request}}Clone, PartialEq, {{^typed_fields}}Eq, {{/typed_fields}}::serde::Serialize, ::serde::Deserialize{{/multipart_request}})]
+pub struct {{request_type}}{{#json_request_type}}<T = {{{json_request_type}}}>{{/json_request_type}} {
+{{^no_input}}    pub params: {{#params_type}}{{{params_type}}}{{/params_type}}{{^params_type}}BTreeMap<String, String>{{/params_type}},
+    pub query: {{#query_type}}{{{query_type}}}{{/query_type}}{{^query_type}}BTreeMap<String, String>{{/query_type}},
+{{/no_input}}    pub headers: {{#headers_type}}{{{headers_type}}}{{/headers_type}}{{^headers_type}}BTreeMap<String, String>{{/headers_type}},
+{{#has_body}}    pub body: Option<{{#multipart_request}}MultipartForm{{/multipart_request}}{{^multipart_request}}{{#binary_request}}Vec<u8>{{/binary_request}}{{^binary_request}}{{#json_request_type}}T{{/json_request_type}}{{^json_request_type}}String{{/json_request_type}}{{/binary_request}}{{/multipart_request}}>,{{/has_body}}
+}
+
+{{#json_request_type}}
+impl<T> Default for {{request_type}}<T> {
+    fn default() -> Self {
+        Self { params: Default::default(), query: Default::default(), headers: Default::default(), body: None }
+    }
+}
+{{/json_request_type}}
+impl{{#json_request_type}}<T>{{/json_request_type}} fmt::Debug for {{request_type}}{{#json_request_type}}<T>{{/json_request_type}} {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_struct("{{request_type}}")
+            .field("params", &"<redacted>")
+            .field("query", &"<redacted>")
+            .field("headers", &"<redacted>")
+{{#has_body}}            .field("has_body", &self.body.is_some()){{/has_body}}
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Debug{{^streaming_response}}, Clone, PartialEq, ::serde::Serialize, ::serde::Deserialize{{/streaming_response}})]
+pub enum {{responses_type}} {
+{{#responses}}
+    {{status_variant}}({{#headers_type}}SdkResponseWithHeaders<{{/headers_type}}{{{rust_response_type}}}{{#headers_type}}, {{{headers_type}}}>{{/headers_type}}),
+{{/responses}}
+{{^shared_response_decoders}}    Error { status: u16, message: String },{{/shared_response_decoders}}
+}
+
+{{/operations}}
+{{! forklaunch:client}}#[derive(Clone)]
+pub struct {{client_name}} {
+    runtime: ClientRuntime,
+}
+
+impl fmt::Debug for {{client_name}} {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_struct("{{client_name}}")
+            .field("runtime", &self.runtime).finish()
+    }
+}
+
+impl {{client_name}} {
+    #[must_use]
+    pub fn new(base_url: impl Into<String>) -> Self {
+        Self { runtime: ClientRuntime::new(base_url) }
+    }
+
+    /// Custom transports must enforce TLS verification and disable credential-bearing redirects.
+    #[must_use]
+    pub fn with_http_client(base_url: impl Into<String>, http: reqwest::Client) -> Self {
+        Self { runtime: ClientRuntime::with_http_client(base_url, http) }
+    }
+
+    /// Local development only: permits plaintext credentials outside loopback.
+    #[must_use]
+    pub fn with_plaintext_development_transport(mut self) -> Self {
+        self.runtime = self.runtime.with_plaintext_development_transport();
+        self
+    }
+    {{#has_multipart_response}}
+    pub fn with_multipart_response_limit(mut self, max_bytes: usize) -> Result<Self, SdkError> {
+        self.runtime = self.runtime.with_multipart_response_limit(max_bytes)?;
+        Ok(self)
+    }
+    {{/has_multipart_response}}
+    {{#has_sse}}
+    pub fn with_sse_event_limit(mut self, max_event_bytes: usize) -> Result<Self, SdkError> {
+        self.runtime = self.runtime.with_sse_event_limit(max_event_bytes)?;
+        Ok(self)
+    }
+    {{/has_sse}}
+    #[must_use]
+    pub fn with_default_header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        self.runtime = self.runtime.with_default_header(name, value);
+        self
+    }
+    #[must_use]
+    pub fn with_bearer_token(mut self, token: impl Into<String>) -> Self {
+        self.runtime = self.runtime.with_bearer_token(token);
+        self
+    }
+    #[must_use]
+    pub fn with_jwt(self, token: impl Into<String>) -> Self { self.with_bearer_token(token) }
+    #[must_use]
+    pub fn with_basic_auth(mut self, username: impl Into<String>, password: impl Into<String>) -> Self {
+        self.runtime = self.runtime.with_basic_auth(username, password);
+        self
+    }
+    /// One fixed `authorization` value; an HMAC credential verifies at most once.
+    /// Prefer `with_hmac_secret` for service-to-service calls.
+    #[must_use]
+    pub fn with_hmac_authorization(mut self, value: impl Into<String>) -> Self {
+        self.runtime = self.runtime.with_hmac_authorization(value);
+        self
+    }
+    /// Sign every request with the ForkLaunch request HMAC (`keyId=default`): the final
+    /// method, URL path, body bytes, a fresh timestamp and a random nonce.
+    #[must_use]
+    pub fn with_hmac_secret(mut self, secret: impl Into<Vec<u8>>) -> Self {
+        self.runtime = self.runtime.with_hmac_secret(secret);
+        self
+    }
+    /// Sign every request with a named server key.
+    #[must_use]
+    pub fn with_hmac_signer(mut self, signer: HmacSigner) -> Self {
+        self.runtime = self.runtime.with_hmac_signer(signer);
+        self
+    }
+    #[must_use]
+    pub fn with_auth_hook<F>(mut self, hook: F) -> Self
+    where F: Fn(&mut SdkRequest) + Send + Sync + 'static {
+        self.runtime = self.runtime.with_auth_hook(hook);
+        self
+    }
+
+{{#operations}}
+    {{#json_request_type}}
+    /// Serialize a schema-typed body before constructing the transport request.
+    pub fn {{method_name}}(&self, input: {{request_type}}) -> Result<SdkRequest, serde_json::Error> {
+        {{^typed_fields}}Ok({{/typed_fields}}self.{{execute_method_name}}_raw_request({{request_type}}::<String> {
+            params: input.params, query: input.query, headers: input.headers,
+            body: input.body.map(|body| {{#form_request}}runtime::encode_urlencoded(&body){{/form_request}}{{^form_request}}serde_json::to_string(&body){{/form_request}}).transpose()?,
+        }){{^typed_fields}}){{/typed_fields}}
+    }
+
+    /// Execute a schema-typed request. Raw encoded bytes require the explicit `_raw` method.
+    pub async fn {{execute_method_name}}(&self, input: {{request_type}}) -> Result<{{responses_type}}, SdkError> {
+        let input = {{request_type}}::<String> {
+            params: input.params, query: input.query, headers: input.headers,
+            body: input.body.map(|body| {{#form_request}}runtime::encode_urlencoded(&body){{/form_request}}{{^form_request}}serde_json::to_string(&body){{/form_request}}).transpose().map_err(SdkError::Encode)?,
+        };
+        self.{{execute_method_name}}_raw(input).await
+    }
+    {{/json_request_type}}
+    /// Construct a transport request{{#json_request_type}} from explicitly encoded wire data{{/json_request_type}}.
+{{^typed_fields}}    #[must_use]
+{{/typed_fields}}    pub fn {{#json_request_type}}{{execute_method_name}}_raw_request{{/json_request_type}}{{^json_request_type}}{{method_name}}{{/json_request_type}}(&self, input: {{request_type}}{{#json_request_type}}<String>{{/json_request_type}}) -> {{#typed_fields}}Result<SdkRequest, serde_json::Error>{{/typed_fields}}{{^typed_fields}}SdkRequest{{/typed_fields}} {
+        let path = runtime::path_with_params("{{{path}}}", &{{#no_input}}::std::collections::BTreeMap::new(){{/no_input}}{{^no_input}}{{#params_type}}runtime::request_fields(&input.params)?{{/params_type}}{{^params_type}}input.params{{/params_type}}{{/no_input}});
+        {{#typed_fields}}Ok({{/typed_fields}}SdkRequest {
+            method: "{{http_method}}",
+            url: format!("{}{}", self.runtime.base_url(), path),
+            query: {{#no_input}}::std::collections::BTreeMap::new(){{/no_input}}{{^no_input}}{{#query_type}}runtime::request_fields(&input.query)?{{/query_type}}{{^query_type}}input.query{{/query_type}}{{/no_input}},
+            headers: {{#headers_type}}runtime::request_fields(&input.headers)?{{/headers_type}}{{^headers_type}}input.headers{{/headers_type}},
+            body: {{^has_body}}None{{/has_body}}{{#has_body}}{{#multipart_request}}None{{/multipart_request}}{{^multipart_request}}{{#binary_request}}None{{/binary_request}}{{^binary_request}}input.body{{/binary_request}}{{/multipart_request}}{{/has_body}},
+            body_bytes: {{#binary_request}}input.body{{/binary_request}}{{^binary_request}}None{{/binary_request}},
+            {{{multipart_field}}}
+            {{^has_multipart}}multipart: None,{{/has_multipart}}
+            content_type: "{{{request_content_type}}}",
+        }{{#typed_fields}}){{/typed_fields}}
+    }
+
+    {{#no_input}}
+    /// Invoke this operation without request parameters or a body.
+    pub async fn {{execute_method_name}}(&self) -> Result<{{responses_type}}, SdkError> {
+        self.{{execute_method_name}}_with_options({{request_type}}::default()).await
+    }
+
+    /// Invoke this operation with per-request transport headers.
+    {{/no_input}}
+    pub async fn {{execute_method_name}}{{#no_input}}_with_options{{/no_input}}{{#json_request_type}}_raw{{/json_request_type}}(&self, input: {{request_type}}{{#json_request_type}}<String>{{/json_request_type}}) -> Result<{{responses_type}}, SdkError> {
+        let request = self.{{#json_request_type}}{{execute_method_name}}_raw_request{{/json_request_type}}{{^json_request_type}}{{method_name}}{{/json_request_type}}(input){{#typed_fields}}.map_err(SdkError::Encode)?{{/typed_fields}};
+        {{#version_metadata}}let (response, matched_versions) = self.runtime.execute_versioned{{#request_objects}}_with_fields{{/request_objects}}(request, {{{version_metadata}}}{{#request_objects}}, {{{request_objects}}}{{/request_objects}}).await?;{{/version_metadata}}
+        {{^version_metadata}}let response = self.runtime.execute{{#request_objects}}_with_fields{{/request_objects}}(request{{#request_objects}}, {{{request_objects}}}{{/request_objects}}).await?;{{/version_metadata}}
+        let status = response.status().as_u16();
+        let _content_type = runtime::response_content_type(&response)?;
+        {{#version_metadata}}matched_versions.validate_headers(status, &_content_type, response.headers())?;{{/version_metadata}}
+        match status {
+{{#responses}}
+            {{status_code}}{{^empty_response}} if _content_type == "{{{content_type}}}"{{/empty_response}} => {
+                {{#headers_type}}let headers=runtime::decode_response_headers::<{{{headers_type}}}>(response.headers(), {{{rust_header_rules}}})?;{{/headers_type}}
+                {{#empty_response}}let bytes=response.bytes().await?; {{#version_metadata}}if !bytes.is_empty(){return Err(SdkError::Contract("nonempty versioned empty response"));} matched_versions.validate_body(status,"",&serde_json::Value::Null)?;{{/version_metadata}}{{^version_metadata}}let _=bytes;{{/version_metadata}} let body=();{{/empty_response}}
+                {{#json_response}}{{#shared_response_decoders}}let body = runtime::decode_json_response(response, {{{rust_body_schema}}}, {{#version_metadata}}Some(&matched_versions){{/version_metadata}}{{^version_metadata}}None{{/version_metadata}}).await?;{{/shared_response_decoders}}{{^shared_response_decoders}}let value:serde_json::Value=serde_json::from_slice(&response.bytes().await?).map_err(|_|SdkError::Contract("invalid response JSON"))?;
+                {{#version_metadata}}matched_versions.validate_body(status, &_content_type, &value)?;{{/version_metadata}}
+                runtime::ResponseValidator::new({{{rust_body_schema}}})?.validate(&value)?;
+                let body=serde_json::from_value::<{{{rust_response_type}}}>(value).map_err(|_|SdkError::Contract("invalid typed response"))?;{{/shared_response_decoders}}{{/json_response}}
+                {{#text_response}}{{#shared_response_decoders}}let body = runtime::decode_text_response(response, {{{rust_body_schema}}}, {{#version_metadata}}Some(&matched_versions){{/version_metadata}}{{^version_metadata}}None{{/version_metadata}}).await?;{{/shared_response_decoders}}{{^shared_response_decoders}}let body=response.text().await?; {{#version_metadata}}matched_versions.validate_body(status, &_content_type, &serde_json::Value::String(body.clone()))?;{{/version_metadata}} runtime::ResponseValidator::new({{{rust_body_schema}}})?.validate(&serde_json::Value::String(body.clone()))?;{{/shared_response_decoders}}{{/text_response}}
+                {{#streaming_response}}let body=Box::new(SdkEventStream::from_response(response,self.runtime.sse_event_limit(), {{{rust_body_schema}}})?{{#version_metadata}}.with_matched_versions(matched_versions){{/version_metadata}});{{/streaming_response}}
+                {{#multipart_response}}let body=runtime::decode_multipart_response(response,self.runtime.multipart_response_limit()).await?;{{/multipart_response}}
+                {{#binary_response}}let body=response.bytes().await?.to_vec();{{/binary_response}}
+                Ok({{responses_type}}::{{status_variant}}({{#headers_type}}SdkResponseWithHeaders {body,headers}{{/headers_type}}{{^headers_type}}body{{/headers_type}}))
+            },
+{{/responses}}
+            _ => Err(SdkError::Contract("undeclared response status or content type")),
+        }
+    }
+
+{{/operations}}
+}
