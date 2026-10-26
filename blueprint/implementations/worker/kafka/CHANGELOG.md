@@ -1,5 +1,12 @@
 # @forklaunch/implementation-worker-kafka
 
+## 1.0.41
+
+### Patch Changes
+
+- 7d2b230: `KafkaWorkerProducer` waits for its connection before sending. It connected in the constructor without waiting, so a job enqueued right after startup (the first request a service handles, or a test) failed with "The producer is disconnected". A failed connection attempt is retried by the next send.
+- d2319b3: Mark intentionally unawaited calls (`failureHandler` on failed jobs, the Kafka producer `connect` and peek consumer `run`) with `void`. No behaviour change; this keeps type-aware lint clean in generated apps.
+
 ## 1.0.40
 
 ### Patch Changes

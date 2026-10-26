@@ -62,7 +62,7 @@ describe('openApiV3Generator tests', () => {
             tags: ['api'],
             summary: 'Test Contract: Test Contract Summary',
             parameters: [
-              { name: 'test', in: 'path', schema: { type: 'string' } },
+              { name: 'test', in: 'path', required: true, schema: { type: 'string' } },
               { name: 'test', in: 'header', schema: { type: 'string' } },
               { name: 'test', in: 'query', schema: { type: 'string' } }
             ],

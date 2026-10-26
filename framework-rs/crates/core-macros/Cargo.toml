@@ -1,0 +1,27 @@
+[package]
+description = "ForkLaunch Rust core macros APIs and runtime support"
+name = "forklaunch-core-macros"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "3", features = ["full", "visit-mut"] }
+proc-macro-crate = "3.5"
+forklaunch-common = { version = "0.2.5", path = "../common" }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+serde_json = "=1.0.151"
+# Repository-only backedge: Cargo omits unversioned dev paths from published
+# metadata, allowing the macro crate to be published before its public facade.
+forklaunch-core = { path = "../core", features = ["typed-schema", "schema-validation"] }

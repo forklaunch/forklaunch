@@ -1,0 +1,24 @@
+{
+  "crate": "ada-url",
+  "version": "3.2.4",
+  "crate_sha256": "b81cc7d6c05c6ca86ee1f5f0dba62348ac706aeebb190f42143c1a2a43f50e7a",
+  "ada_tag_commit": "010f7c45aeaff1205452e7da2df8702cf725fb3e",
+  "rust_tag_commit": "354b1e9aabaf8a3be22ee5df78cbaac57750d156",
+  "node": "24.2.0",
+  "sources": {
+    "crate-deps-ada.cpp": {
+      "sha256": "795deec03c2f3e0255192aea4ea4e514d226bad432d0ecc02083910b7f853192",
+      "identical_to": "node-ada.cpp"
+    },
+    "crate-deps-ada.h": {
+      "sha256": "f2617dff7601af06c5a807eae0d7f3bf79d3b0bc201316884f5f8c65784b3c3d",
+      "identical_to": "node-ada-version"
+    }
+  },
+  "license": "MIT OR Apache-2.0",
+  "source_urls": [
+    "https://github.com/ada-url/rust/tree/v3.2.4",
+    "https://github.com/nodejs/node/tree/v24.2.0/deps/ada"
+  ],
+  "note": "Dependency archives retain original MIT/Apache and embedded third-party notices; source hashes checked against the pinned Node distribution."
+}

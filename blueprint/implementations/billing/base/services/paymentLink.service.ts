@@ -131,10 +131,33 @@ export class BasePaymentLinkService<
 
     const cacheKey = this.createCacheKey(paymentLinkDto.id);
     const existingLink = (
-      await this.cache.readRecord<MapperEntities['PaymentLinkMapper']>(cacheKey)
+      await this.cache.readRecord<MapperDomains['PaymentLinkMapper']>(cacheKey)
     )?.value;
     if (!existingLink) {
       throw new Error('Payment link not found');
+    }
+    if (
+      !this.enableDatabaseBackup &&
+      this.mappers.UpdatePaymentLinkMapper.toCachedDto
+    ) {
+      if (existingLink.id !== paymentLinkDto.id) {
+        throw new Error('Cached payment link identity cannot change');
+      }
+      const updated = await this.mappers.UpdatePaymentLinkMapper.toCachedDto(
+        paymentLinkDto,
+        existingLink,
+        args[0] instanceof EntityManager ? args[0] : this.em,
+        ...(args[0] instanceof EntityManager ? args.slice(1) : args)
+      );
+      if (updated.id !== paymentLinkDto.id) {
+        throw new Error('Cached payment link identity cannot change');
+      }
+      await this.cache.putRecord({
+        key: cacheKey,
+        value: updated,
+        ttlMilliseconds: this.cache.getTtlMilliseconds()
+      });
+      return updated;
     }
     const paymentLink = await this.mappers.UpdatePaymentLinkMapper.toEntity(
       paymentLinkDto,
@@ -160,6 +183,27 @@ export class BasePaymentLinkService<
     return updatedLinkDto;
   }
 
+  private normalizeCachedPaymentLink(
+    value: MapperDomains['PaymentLinkMapper'],
+    cacheKey: string
+  ): MapperDomains['PaymentLinkMapper'] {
+    const normalize = this.mappers.PaymentLinkMapper.normalizeCachedDto;
+    if (!normalize) return value;
+    if (
+      !value ||
+      typeof value.id !== 'string' ||
+      !value.id.trim() ||
+      this.createCacheKey(value.id) !== cacheKey
+    ) {
+      throw new Error('Cached payment link identity does not match');
+    }
+    const normalized = normalize(value);
+    if (normalized.id !== value.id) {
+      throw new Error('Cached payment link identity cannot change');
+    }
+    return normalized;
+  }
+
   async getPaymentLink({
     id
   }: IdDto): Promise<MapperDomains['PaymentLinkMapper']> {
@@ -173,8 +217,7 @@ export class BasePaymentLinkService<
       throw new Error('Payment link not found');
     }
 
-    // Return cached DTO directly - no need to convert to entity and back
-    return paymentLink.value;
+    return this.normalizeCachedPaymentLink(paymentLink.value, cacheKey);
   }
 
   async expirePaymentLink({ id }: IdDto): Promise<void> {
@@ -224,19 +267,51 @@ export class BasePaymentLinkService<
   }
 
   async listPaymentLinks(
-    idsDto?: IdsDto
+    idsDto?: IdsDto,
+    maxValidatedRecords?: number
   ): Promise<MapperDomains['PaymentLinkMapper'][]> {
+    if (
+      maxValidatedRecords !== undefined &&
+      (!Number.isSafeInteger(maxValidatedRecords) ||
+        maxValidatedRecords < 1 ||
+        (idsDto?.ids?.length ?? 0) > maxValidatedRecords)
+    ) {
+      throw new Error('Configured payment link list exceeds its record limit');
+    }
+    if (
+      maxValidatedRecords !== undefined &&
+      idsDto?.ids?.some((id) => typeof id !== 'string' || !id.trim())
+    ) {
+      throw new Error('Invalid configured payment link identity');
+    }
     const keys =
       idsDto?.ids && idsDto.ids.length > 0
         ? idsDto?.ids.map((id) => this.createCacheKey(id))
         : await this.cache.listKeys(this.cacheKeyPrefix);
 
-    // Read cached DTOs directly - no need to convert to entity and back
+    if (
+      maxValidatedRecords !== undefined &&
+      keys.length > maxValidatedRecords
+    ) {
+      throw new Error('Configured payment link list exceeds its record limit');
+    }
+    // The opt-in bound also validates identities before provider reads.
     return Promise.all(
       keys.map(async (key) => {
         const paymentLink =
           await this.cache.readRecord<MapperDomains['PaymentLinkMapper']>(key);
-        return paymentLink.value;
+        if (
+          maxValidatedRecords !== undefined &&
+          (!paymentLink?.value ||
+            typeof paymentLink.value.id !== 'string' ||
+            !paymentLink.value.id.trim() ||
+            this.createCacheKey(paymentLink.value.id) !== key)
+        ) {
+          throw new Error(
+            'Cached payment link is missing or its identity does not match'
+          );
+        }
+        return this.normalizeCachedPaymentLink(paymentLink.value, key);
       })
     );
   }

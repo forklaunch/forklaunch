@@ -1,7 +1,7 @@
 use anyhow::{Result, bail};
 use oxc_ast::ast::{
-    BindingPatternKind, Declaration, Expression, ObjectPropertyKind, Program, PropertyKey,
-    Statement, TSSignature, TSType,
+    BindingPattern, Declaration, Expression, ObjectPropertyKind, Program, PropertyKey, Statement,
+    TSSignature, TSType,
 };
 
 pub(crate) fn inject_into_sdk_client_input<'a>(
@@ -21,12 +21,12 @@ fn inject_into_sdk_type_definition<'a>(
 ) -> Result<()> {
     for stmt in app_program_ast.body.iter_mut() {
         let export = match stmt {
-            Statement::ExportNamedDeclaration(export) => export,
+            Statement::ExportDeclaration(export) => export,
             _ => continue,
         };
 
         let ts_declaration = match &mut export.declaration {
-            Some(Declaration::TSTypeAliasDeclaration(ts_decl)) => ts_decl,
+            Declaration::TSTypeAliasDeclaration(ts_decl) => ts_decl,
             _ => continue,
         };
 
@@ -42,12 +42,12 @@ fn inject_into_sdk_type_definition<'a>(
 
         for injection_stmt in &mut injection_program_ast.body {
             let injection_export = match injection_stmt {
-                Statement::ExportNamedDeclaration(export) => export,
+                Statement::ExportDeclaration(export) => export,
                 _ => continue,
             };
 
             let injection_ts_declaration = match &mut injection_export.declaration {
-                Some(Declaration::TSTypeAliasDeclaration(ts_decl)) => ts_decl,
+                Declaration::TSTypeAliasDeclaration(ts_decl) => ts_decl,
                 _ => continue,
             };
 
@@ -62,7 +62,7 @@ fn inject_into_sdk_type_definition<'a>(
                 .filter_map(|m| match m {
                     TSSignature::TSPropertySignature(prop) => match &prop.key {
                         PropertyKey::StaticIdentifier(id) => Some(id.name.to_string()),
-                        PropertyKey::StringLiteral(lit) => Some(lit.value.to_string()),
+                        PropertyKey::StringLiteral(lit) => Some(lit.value.display().to_string()),
                         _ => None,
                     },
                     _ => None,
@@ -79,7 +79,7 @@ fn inject_into_sdk_type_definition<'a>(
                             }
                         }
                         PropertyKey::StringLiteral(lit) => {
-                            if existing_keys.contains(&lit.value.to_string()) {
+                            if existing_keys.contains(&lit.value.display().to_string()) {
                                 continue;
                             }
                         }
@@ -103,8 +103,8 @@ fn inject_into_sdk_client_object<'a>(
     for stmt in app_program_ast.body.iter_mut() {
         let var_declaration = match stmt {
             Statement::VariableDeclaration(decl) => decl,
-            Statement::ExportNamedDeclaration(export) => match &mut export.declaration {
-                Some(Declaration::VariableDeclaration(decl)) => decl,
+            Statement::ExportDeclaration(export) => match &mut export.declaration {
+                Declaration::VariableDeclaration(decl) => decl,
                 _ => continue,
             },
             _ => continue,
@@ -141,7 +141,7 @@ fn inject_into_sdk_client_object<'a>(
                 None => continue,
             };
 
-            let is_sdk_client_var = matches!(&decl.id.kind, BindingPatternKind::BindingIdentifier(id) if id.name.ends_with("SdkClient"));
+            let is_sdk_client_var = matches!(&decl.id, BindingPattern::BindingIdentifier(id) if id.name.ends_with("SdkClient"));
             if !is_sdk_client_var {
                 continue;
             }
@@ -149,8 +149,8 @@ fn inject_into_sdk_client_object<'a>(
             for injection_stmt in &mut injection_program_ast.body {
                 let injection_var_decl = match injection_stmt {
                     Statement::VariableDeclaration(decl) => decl,
-                    Statement::ExportNamedDeclaration(export) => match &mut export.declaration {
-                        Some(Declaration::VariableDeclaration(decl)) => decl,
+                    Statement::ExportDeclaration(export) => match &mut export.declaration {
+                        Declaration::VariableDeclaration(decl) => decl,
                         _ => continue,
                     },
                     _ => continue,
@@ -181,7 +181,7 @@ fn inject_into_sdk_client_object<'a>(
                                             Some(id.name.to_string())
                                         }
                                         PropertyKey::StringLiteral(lit) => {
-                                            Some(lit.value.to_string())
+                                            Some(lit.value.display().to_string())
                                         }
                                         _ => None,
                                     },
@@ -199,7 +199,9 @@ fn inject_into_sdk_client_object<'a>(
                                             }
                                         }
                                         PropertyKey::StringLiteral(lit) => {
-                                            if existing_keys.contains(&lit.value.to_string()) {
+                                            if existing_keys
+                                                .contains(&lit.value.display().to_string())
+                                            {
                                                 continue;
                                             }
                                         }

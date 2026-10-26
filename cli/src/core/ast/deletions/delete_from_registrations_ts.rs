@@ -3,7 +3,7 @@ use std::{collections::HashSet, path::Path};
 use anyhow::Result;
 use oxc_allocator::{Allocator, CloneIn, Vec};
 use oxc_ast::ast::{
-    Argument, BindingPatternKind, Expression, ObjectPropertyKind, Program, PropertyKey, SourceType,
+    Argument, BindingPattern, Expression, ObjectPropertyKind, Program, PropertyKey, SourceType,
     Statement,
 };
 use oxc_codegen::{Codegen, CodegenOptions};
@@ -114,8 +114,8 @@ pub(crate) fn delete_from_registrations_ts_worker_type<'a>(
                                     .params
                                     .items
                                     .first()
-                                    .map(|param| match &param.pattern.kind {
-                                        BindingPatternKind::ObjectPattern(object_pattern) => {
+                                    .map(|param| match &param.pattern {
+                                        BindingPattern::ObjectPattern(object_pattern) => {
                                             object_pattern.properties.iter().for_each(|prop| {
                                                 let key = match &prop.key {
                                                     PropertyKey::StaticIdentifier(identifier) => {
@@ -187,7 +187,7 @@ pub(crate) fn delete_from_registrations_ts_worker_type<'a>(
                             true
                         }
                     }),
-                allocator,
+                &allocator,
             );
         }
     }
@@ -269,7 +269,7 @@ pub(crate) fn delete_from_registrations_ts_config_injector<'a>(
                 _ => continue,
             };
 
-            let mut new_properties = Vec::new_in(allocator);
+            let mut new_properties = Vec::new_in(&allocator);
             object_expr.properties.iter().for_each(|prop| {
                 let prop = match prop {
                     ObjectPropertyKind::ObjectProperty(prop) => prop,

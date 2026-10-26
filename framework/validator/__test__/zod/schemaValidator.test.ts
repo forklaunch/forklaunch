@@ -282,6 +282,12 @@ describe('zod schema validator tests', () => {
     }
   });
 
+  test('null OpenAPI enum contains JSON null', () => {
+    const nullSchema = new ZodSchemaValidator().null;
+    expect(generateSchema(nullSchema).enum).toEqual([null]);
+    expect(generateSchema(z.null()).enum).toEqual([null]);
+  });
+
   test('openapi', async () => {
     const schemified = schemify(schema);
     const openApi = openapi(schemified);

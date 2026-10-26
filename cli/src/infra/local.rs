@@ -27,6 +27,13 @@ enum Addable {
     Capability(&'static super::capabilities::Capability),
 }
 
+
+/// Dependencies `infra add` ensures but `infra remove` leaves: every generated
+/// TypeScript service declares ioredis whether or not it has a cache, so
+/// removing it made an add/remove round trip drop a line that was there
+/// before the add.
+const CACHE_INDEPENDENT_DEPENDENCIES: &[&str] = &["ioredis"];
+
 fn parse_addable(name: &str) -> Result<Addable> {
     if let Some(capability) = super::capabilities::find(name) {
         return Ok(Addable::Capability(capability));
@@ -115,6 +122,7 @@ fn worker_events_note(
     projects: &[crate::core::manifest::ProjectEntry],
     worker: &str,
     capability: &super::capabilities::Capability,
+    native: bool,
 ) -> Option<String> {
     if !capability.receives_events {
         return None;
@@ -131,10 +139,15 @@ fn worker_events_note(
         return None;
     }
     let id = capability.id;
+    let handler = if native {
+        format!("capabilities/{id}.rs, served by its `-server` process")
+    } else {
+        format!("api/platformEvents/{id}.ts")
+    };
     Some(format!(
         "note: '{worker}' can call the {id} gateway, but {id} events are delivered over HTTP \
          to /platform-events/{id}, never to the worker process. The handler is in its server \
-         component (api/platformEvents/{id}.ts); if that is not reachable over HTTP where it is \
+         component ({handler}); if that is not reachable over HTTP where it is \
          deployed, also run `forklaunch infra add <service> {id}` on an HTTP service so the events \
          have somewhere to go."
     ))
@@ -183,9 +196,19 @@ fn change_infrastructure(matches: &ArgMatches, adding: bool) -> Result<()> {
         .iter()
         .find(|p| p.name == service)
         .with_context(|| format!("no project named '{service}' in the manifest"))?;
-    if project.r#type != ProjectType::Service {
+    let native = project
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata.language.as_deref())
+        == Some("rust")
+        || crate::init::rust_project::is_rust_project(&app_root, &service)?;
+    // A Rust worker's processes (the worker and its HTTP server) share the
+    // crate, so both get the cache or object store.
+    let accepted =
+        project.r#type == ProjectType::Service || (native && project.r#type == ProjectType::Worker);
+    if !accepted {
         bail!(
-            "'{service}' is not a service; `infra add` changes services (use `forklaunch change worker` for workers)"
+            "'{service}' is not a service; `infra add` changes services and Rust workers (use `forklaunch change worker` for TypeScript workers)"
         );
     }
     let id = wanted.to_string();
@@ -204,6 +227,10 @@ fn change_infrastructure(matches: &ArgMatches, adding: bool) -> Result<()> {
         (true, true) => bail!("'{service}' already has {id}"),
         (false, false) => bail!("'{service}' does not have {id}"),
         _ => {}
+    }
+
+    if native {
+        return super::native_local::change(matches, &app_root, &manifest, project, wanted, adding);
     }
 
     let app_name = manifest.app_name.clone();
@@ -260,6 +287,8 @@ fn change_infrastructure(matches: &ArgMatches, adding: bool) -> Result<()> {
         for (name, version) in dependencies {
             changed = if adding {
                 in_place::add_dependency(&changed, name, version)?
+            } else if CACHE_INDEPENDENT_DEPENDENCIES.contains(name) {
+                changed
             } else {
                 in_place::remove_dependency(&changed, name)?
             };
@@ -432,7 +461,35 @@ fn change_capability(
         })
         .collect();
 
-    let service_path = app_root.join(&manifest.modules_path).join(&service);
+    let native = project
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata.language.as_deref())
+        == Some("rust")
+        || crate::init::rust_project::is_rust_project(&app_root, &service)?;
+    let service_path = if native {
+        let relative = project
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.crate_path.clone())
+            .unwrap_or_else(|| format!("crates/{service}"));
+        let relative = std::path::Path::new(&relative);
+        if relative.components().any(|component| {
+            matches!(component, std::path::Component::ParentDir
+                | std::path::Component::RootDir | std::path::Component::Prefix(_))
+        }) {
+            bail!("Native capability crate path must remain within the application");
+        }
+        let relative: PathBuf = relative.components()
+            .filter(|component| !matches!(component, std::path::Component::CurDir)).collect();
+        let path = app_root.join(relative);
+        if !path.canonicalize()?.starts_with(app_root.canonicalize()?) {
+            bail!("Native capability crate path must remain within the application");
+        }
+        path
+    } else {
+        app_root.join(&manifest.modules_path).join(&service)
+    };
     let mut edit = CapabilityEdit::new(
         &app_root,
         &manifest.app_name,
@@ -444,6 +501,8 @@ fn change_capability(
     if is_worker {
         edit = edit.for_worker();
     }
+    edit.native = native;
+    edit.format_rust = native && adding;
     super::capabilities::apply(&mut edit, capability, adding)?;
 
     // The manifest: only the capability's entry in the service's
@@ -465,15 +524,34 @@ fn change_capability(
         }
         return Ok(());
     }
+    if native && adding {
+        crate::init::rust_project::ensure_native_infrastructure_sources(&app_root)?;
+    }
     edit.commit()?;
+    if native {
+        super::native_local::refresh_lockfile(&app_root);
+    }
     println!(
         "{} {} {service}: {}",
         if adding { "Added" } else { "Removed" },
         capability.id,
         capability.summary
     );
+    if adding && native {
+        let factory = if capability.id == "models" {
+            "models_client".to_owned()
+        } else {
+            format!("{}_client", capability.id)
+        };
+        let events = if capability.receives_events {
+            format!("; its events reach capabilities/{}.rs", capability.id)
+        } else {
+            String::new()
+        };
+        println!("  Call crate::capabilities::{factory}() from the project's code{events}");
+    }
     if adding && is_worker {
-        if let Some(note) = worker_events_note(&manifest.projects, &service, capability) {
+        if let Some(note) = worker_events_note(&manifest.projects, &service, capability, native) {
             eprintln!("{note}");
         }
     }
@@ -563,20 +641,20 @@ mod tests {
             project("jobs", "Worker", &["sms", "models"]),
             project("api", "Service", &["email"]),
         ];
-        let note = worker_events_note(&worker_only, "jobs", find("sms").unwrap()).unwrap();
+        let note = worker_events_note(&worker_only, "jobs", find("sms").unwrap(), false).unwrap();
         assert!(note.contains("delivered over HTTP"), "{note}");
         assert!(
             note.contains("forklaunch infra add <service> sms"),
             "{note}"
         );
         // Models have no events: nothing to say.
-        assert!(worker_events_note(&worker_only, "jobs", find("models").unwrap()).is_none());
+        assert!(worker_events_note(&worker_only, "jobs", find("models").unwrap(), false).is_none());
 
         let with_service = vec![
             project("jobs", "Worker", &["sms"]),
             project("api", "Service", &["sms"]),
         ];
-        assert!(worker_events_note(&with_service, "jobs", find("sms").unwrap()).is_none());
+        assert!(worker_events_note(&with_service, "jobs", find("sms").unwrap(), false).is_none());
     }
 
     #[test]
@@ -601,5 +679,295 @@ mod tests {
                 .to_string()
                 .contains("supported")
         );
+    }
+}
+
+/// `infra add` / `infra remove` on a generated Rust application (a service
+/// and a worker, see `tests/fixtures/rust_infra_app`).
+#[cfg(test)]
+mod rust_round_trip {
+    use std::{collections::BTreeMap, fs, path::Path};
+
+    use super::{AddCommand, RemoveCommand};
+    use crate::{CliCommand, core::docker::DockerCompose};
+
+    const CAPABILITIES: [&str; 8] = [
+        "cache",
+        "object-store",
+        "email",
+        "sms",
+        "whatsapp",
+        "voice",
+        "payments",
+        "models",
+    ];
+
+    fn fixture() -> tempfile::TempDir {
+        fn copy(from: &Path, to: &Path) {
+            fs::create_dir_all(to).unwrap();
+            for entry in fs::read_dir(from).unwrap().flatten() {
+                let target = to.join(entry.file_name());
+                if entry.path().is_dir() {
+                    copy(&entry.path(), &target);
+                } else {
+                    fs::copy(entry.path(), target).unwrap();
+                }
+            }
+        }
+        let root = tempfile::tempdir().unwrap();
+        copy(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/rust_infra_app"),
+            root.path(),
+        );
+        root
+    }
+
+    fn snapshot(root: &Path) -> BTreeMap<String, String> {
+        fn walk(root: &Path, dir: &Path, out: &mut BTreeMap<String, String>) {
+            for entry in fs::read_dir(dir).unwrap().flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    walk(root, &path, out);
+                } else {
+                    let key = path.strip_prefix(root).unwrap().display().to_string();
+                    out.insert(key, fs::read_to_string(&path).unwrap());
+                }
+            }
+        }
+        let mut out = BTreeMap::new();
+        walk(root, root, &mut out);
+        out
+    }
+
+    fn run(command: &dyn CliCommand, root: &Path, project: &str, capability: &str) {
+        let name = command.command().get_name().to_owned();
+        let matches = command
+            .command()
+            .version("test")
+            .try_get_matches_from([
+                name.as_str(),
+                project,
+                capability,
+                "--path",
+                root.to_str().unwrap(),
+            ])
+            .unwrap();
+        command
+            .handler(&matches)
+            .unwrap_or_else(|error| panic!("infra {name} {project} {capability}: {error:#}"));
+    }
+
+    fn compose(root: &Path) -> DockerCompose {
+        serde_yml::from_str(&fs::read_to_string(root.join("docker-compose.yaml")).unwrap()).unwrap()
+    }
+
+    fn env(compose: &DockerCompose, service: &str, key: &str) -> Option<String> {
+        compose.services[service]
+            .environment
+            .as_ref()?
+            .get(key)
+            .cloned()
+    }
+
+    /// Everything but `.env`, which keeps the field encryption key so values
+    /// encrypted under it stay readable when a store is added again.
+    fn without_kept_key(mut files: BTreeMap<String, String>) -> BTreeMap<String, String> {
+        if let Some(env) = files.get_mut(".env") {
+            *env = env
+                .lines()
+                .filter(|line| !line.starts_with("ENCRYPTION_KEY="))
+                .map(|line| format!("{line}\n"))
+                .collect();
+        }
+        files
+    }
+
+    #[test]
+    fn each_capability_round_trips_on_a_rust_service_and_worker() {
+        for project in ["notes", "jobs"] {
+            for capability in CAPABILITIES {
+                let root = fixture();
+                let before = snapshot(root.path());
+                run(&AddCommand, root.path(), project, capability);
+                let added = snapshot(root.path());
+                assert_ne!(added, before, "{project} {capability} changed nothing");
+                run(&RemoveCommand, root.path(), project, capability);
+                assert_eq!(
+                    without_kept_key(snapshot(root.path())),
+                    before,
+                    "{project} {capability} did not round-trip"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn every_capability_together_wires_each_process_and_removes_in_any_order() {
+        let root = fixture();
+        let root = root.path();
+        let before = snapshot(root);
+        for project in ["notes", "jobs"] {
+            for capability in CAPABILITIES {
+                run(&AddCommand, root, project, capability);
+            }
+        }
+        let wired = compose(root);
+        // Each project's Redis database is its own; a worker's two processes share one.
+        assert_eq!(
+            env(&wired, "notes", "REDIS_URL").as_deref(),
+            Some("redis://redis:6379/0")
+        );
+        for process in ["jobs", "jobs-server"] {
+            assert_eq!(
+                env(&wired, process, "REDIS_URL").as_deref(),
+                Some("redis://redis:6379/1")
+            );
+            assert_eq!(
+                env(&wired, process, "S3_BUCKET").as_deref(),
+                Some("demo-jobs-dev")
+            );
+            assert_eq!(
+                env(&wired, process, "PLATFORM_GATEWAY_URL").as_deref(),
+                Some("http://gateway-mock:8080")
+            );
+            let depends = wired.services[process].depends_on.as_ref().unwrap();
+            for dependency in ["redis", "minio-init", "gateway-mock"] {
+                assert!(
+                    depends.contains_key(dependency),
+                    "{process} -> {dependency}"
+                );
+            }
+        }
+        for process in ["notes", "jobs", "jobs-server"] {
+            assert_eq!(
+                env(&wired, process, "ENCRYPTION_KEY").as_deref(),
+                Some(crate::infra::native_local::ENCRYPTION_KEY_REFERENCE)
+            );
+        }
+        let buckets = crate::core::docker::minio_buckets(&wired);
+        for bucket in ["forklaunch-telemetry", "demo-notes-dev", "demo-jobs-dev"] {
+            assert!(
+                buckets.iter().any(|b| b == bucket),
+                "{bucket} in {buckets:?}"
+            );
+        }
+        // Events reach the HTTP process: the newest holder, the worker's server.
+        let mock = wired.services["gateway-mock"].environment.as_ref().unwrap();
+        assert_eq!(mock["MOCK_EVENTS_URL_EMAIL"], "http://jobs-server:3000");
+        assert!(!mock.contains_key("MOCK_EVENTS_URL_MODELS"));
+        // Host runs see the same settings.
+        let dotenv = fs::read_to_string(root.join(".env")).unwrap();
+        let key = dotenv
+            .lines()
+            .find_map(|line| line.strip_prefix("ENCRYPTION_KEY="))
+            .expect(".env holds the encryption key");
+        for (crate_dir, database) in [("src/notes", 0), ("src/jobs", 1)] {
+            let local = fs::read_to_string(root.join(crate_dir).join(".env.local")).unwrap();
+            for line in [
+                format!("REDIS_URL=redis://localhost:6379/{database}"),
+                format!("ENCRYPTION_KEY={key}"),
+                "S3_URL=http://localhost:9000".to_owned(),
+                "PLATFORM_GATEWAY_URL=http://localhost:18088".to_owned(),
+                "INSTANCE_HMAC_KEY=local-dev-instance-key".to_owned(),
+            ] {
+                assert!(local.lines().any(|l| l == line), "{crate_dir}: {line}");
+            }
+            let module =
+                fs::read_to_string(root.join(crate_dir).join("capabilities/mod.rs")).unwrap();
+            assert!(
+                module.contains("pub fn models_client() -> BlueprintResult<ModelGatewayClient>")
+            );
+            assert!(module.contains("pub fn email_client()"));
+        }
+        for (project, order) in [
+            (
+                "jobs",
+                [
+                    "models",
+                    "cache",
+                    "email",
+                    "object-store",
+                    "payments",
+                    "sms",
+                    "voice",
+                    "whatsapp",
+                ],
+            ),
+            (
+                "notes",
+                [
+                    "sms",
+                    "object-store",
+                    "whatsapp",
+                    "models",
+                    "cache",
+                    "payments",
+                    "voice",
+                    "email",
+                ],
+            ),
+        ] {
+            for capability in order {
+                run(&RemoveCommand, root, project, capability);
+            }
+        }
+        assert_eq!(without_kept_key(snapshot(root)), before);
+    }
+
+    #[test]
+    fn models_alone_writes_a_client_factory_and_no_event_route() {
+        let root = fixture();
+        let root = root.path();
+        let before = snapshot(root);
+        let routes = fs::read_to_string(root.join("src/notes/api/routes/mod.rs")).unwrap();
+        run(&AddCommand, root, "notes", "models");
+        let module = fs::read_to_string(root.join("src/notes/capabilities/mod.rs")).unwrap();
+        syn::parse_file(&module).unwrap();
+        assert!(module.contains("use forklaunch_core::http::model_gateway::ModelGatewayClient;"));
+        assert!(module.contains("Ok(ModelGatewayClient::new(instance_gateway()?))"));
+        assert!(!module.contains("platform_events"), "{module}");
+        assert!(!root.join("src/notes/capabilities/nonce_store.rs").exists());
+        assert!(!root.join("src/notes/capabilities/models.rs").exists());
+        assert!(
+            !root
+                .join("src/notes/api/controllers/platform_events.rs")
+                .exists()
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("src/notes/api/routes/mod.rs")).unwrap(),
+            routes
+        );
+        let cargo = fs::read_to_string(root.join("src/notes/Cargo.toml")).unwrap();
+        assert!(cargo.contains("\"instance-gateway\""));
+        let lib = fs::read_to_string(root.join("src/notes/lib.rs")).unwrap();
+        assert!(
+            lib.contains("pub mod bootstrapper;\npub mod capabilities;\npub mod config;"),
+            "{lib}"
+        );
+        let wired = compose(root);
+        assert_eq!(
+            env(&wired, "notes", "FORKLAUNCH_LOCAL_GATEWAY_MOCK").as_deref(),
+            Some("true")
+        );
+        assert!(wired.services.contains_key("gateway-mock"));
+        // An event capability beside it mounts the route; removing it takes
+        // the route back and keeps the models factory.
+        run(&AddCommand, root, "notes", "email");
+        assert!(
+            fs::read_to_string(root.join("src/notes/api/routes/mod.rs"))
+                .unwrap()
+                .contains(".with_managed_capabilities()?")
+        );
+        run(&RemoveCommand, root, "notes", "email");
+        assert_eq!(
+            fs::read_to_string(root.join("src/notes/api/routes/mod.rs")).unwrap(),
+            routes
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("src/notes/capabilities/mod.rs")).unwrap(),
+            module
+        );
+        run(&RemoveCommand, root, "notes", "models");
+        assert_eq!(snapshot(root), before);
     }
 }

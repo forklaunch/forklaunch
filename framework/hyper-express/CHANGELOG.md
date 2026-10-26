@@ -1,5 +1,21 @@
 # @forklaunch/hyper-express
 
+## 1.2.51
+
+### Patch Changes
+
+- d2319b3: Import `swagger-ui-dist/absolute-path.js` with its file extension, so the Swagger middleware loads under strict ESM resolution.
+- Updated dependencies [d2319b3]
+- Updated dependencies [d2319b3]
+- Updated dependencies [d2319b3]
+- Updated dependencies [cf365df]
+- Updated dependencies [f868861]
+- Updated dependencies [d2319b3]
+- Updated dependencies [d2319b3]
+  - @forklaunch/core@3.3.0
+  - @forklaunch/validator@1.3.0
+  - @forklaunch/ws@1.3.0
+
 ## 1.2.50
 
 ### Patch Changes

@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use crate::{
     constants::{Database, Formatter, Linter, Runtime, TestFramework},
@@ -17,7 +17,9 @@ pub(crate) const TYPES_NODE_VERSION: &str = "^26.6.5";
 // jest
 pub(crate) const JEST_VERSION: &str = "^30.5.2";
 // oxlint
-pub(crate) const OXLINT_VERSION: &str = "^0.16.6";
+pub(crate) const OXLINT_VERSION: &str = "^1.89.0";
+// oxlint-tsgolint
+pub(crate) const OXLINT_TSGOLINT_VERSION: &str = "^7.0.2004";
 // prettier
 pub(crate) const PRETTIER_VERSION: &str = "^3.9.10";
 // ts-jest
@@ -123,35 +125,81 @@ fn get_db_init(databases: &HashSet<Database>) -> Option<String> {
     }
 }
 
+/// The `docker compose up ...` prefix of a generated database script.
+///
+/// Every generated database service carries a compose healthcheck, so `--wait`
+/// blocks until it accepts connections instead of guessing with a fixed sleep
+/// (which lost the race on slow hosts and failed migrate:init with "Connection
+/// terminated unexpectedly"). One-shot initializers (`*-init`, e.g. MongoDB's
+/// replica-set setup) exit when done, which `--wait` reports as a failure, so
+/// they run attached afterwards and the next command starts once they finish.
+pub(crate) fn compose_up_command<S: AsRef<str>>(services: &[S]) -> String {
+    let mut ready = BTreeSet::new();
+    let mut initializers = BTreeSet::new();
+    for service in services {
+        let service = service.as_ref();
+        if service.ends_with("-init") {
+            initializers.insert(service);
+        } else {
+            ready.insert(service);
+        }
+    }
+    let mut commands = Vec::new();
+    if !ready.is_empty() {
+        commands.push(format!(
+            "docker compose up -d --wait {}",
+            ready.into_iter().collect::<Vec<_>>().join(" ")
+        ));
+    }
+    commands.extend(initializers.into_iter().map(|init| format!("docker compose up {init}")));
+    if commands.is_empty() {
+        commands.push("docker compose up".to_string());
+    }
+    commands.join(" && ")
+}
+
+/// Split a generated database script into the compose services its prefix
+/// starts and the command that follows. Understands the current
+/// [`compose_up_command`] shape and the older `docker compose up -d a -d b &&
+/// sleep 5 && ...` one, so existing applications are rewritten in place.
+pub(crate) fn split_compose_up_command(script: &str) -> (Vec<String>, String) {
+    let mut services = Vec::new();
+    let mut segments = script.split("&&").map(str::trim).peekable();
+    while let Some(segment) = segments.peek() {
+        if let Some(arguments) = segment.strip_prefix("docker compose up") {
+            services.extend(
+                arguments
+                    .split_whitespace()
+                    .filter(|argument| !argument.starts_with('-'))
+                    .map(str::to_string),
+            );
+        } else if !segment.starts_with("sleep ") {
+            break;
+        }
+        segments.next();
+    }
+    (services, segments.collect::<Vec<_>>().join(" && "))
+}
+
+fn compose_services(databases: &HashSet<Database>) -> Vec<String> {
+    let mut services = databases
+        .iter()
+        .filter(|db| !is_in_memory_database(db))
+        .map(|db| db.to_string())
+        .collect::<Vec<String>>();
+    services.extend(get_db_init(databases));
+    services
+}
+
 pub(crate) fn application_migrate_script<'a>(
     runtime: &Runtime,
     databases: &HashSet<Database>,
     migration_suffix: &'a str,
 ) -> String {
-    let package_manager = get_package_manager(runtime);
-    let db_init = get_db_init(databases);
-
-    let sleep = if migration_suffix == "init" {
-        "sleep 5 && "
-    } else {
-        ""
-    };
-
-    let mut databases = databases
-        .iter()
-        .filter(|db| !is_in_memory_database(db))
-        .map(|db| db.to_string())
-        .collect::<Vec<String>>();
-    if let Some(db_init) = db_init {
-        databases.push(db_init);
-    }
-
     format!(
-        "docker compose up{}{} && {}{} run migrate:{}",
-        if databases.len() > 0 { " -d " } else { "" },
-        databases.join(" -d "),
-        sleep,
-        package_manager,
+        "{} && {} run migrate:{}",
+        compose_up_command(&compose_services(databases)),
+        get_package_manager(runtime),
         migration_suffix
     )
 }
@@ -160,21 +208,10 @@ pub(crate) fn application_seed_script<'a>(
     runtime: &Runtime,
     databases: &HashSet<Database>,
 ) -> String {
-    let package_manager = get_package_manager(runtime);
-    let db_init = get_db_init(databases);
-
-    let mut databases = databases
-        .iter()
-        .map(|db| db.to_string())
-        .collect::<Vec<String>>();
-    if let Some(db_init) = db_init {
-        databases.push(db_init);
-    }
-
     format!(
-        "docker compose up -d {} && {} run seed",
-        databases.join(" -d "),
-        package_manager
+        "{} && {} run seed",
+        compose_up_command(&compose_services(databases)),
+        get_package_manager(runtime)
     )
 }
 
@@ -189,17 +226,19 @@ pub(crate) fn application_setup_script(runtime: &Runtime) -> String {
     }
 }
 
-pub(crate) fn application_test_script<'a>(
-    _runtime: &Runtime,
+pub(crate) fn application_test_script(
+    runtime: &Runtime,
     test_framework: &Option<TestFramework>,
 ) -> Option<String> {
-    match test_framework {
-        Some(test_framework_definition) => match test_framework_definition {
-            TestFramework::Jest => Some("pnpm jest --passWithNoTests".to_string()),
-            TestFramework::Vitest => Some("pnpm vitest --passWithNoTests".to_string()),
-        },
-        None => None,
-    }
+    let runner = match test_framework.as_ref()? {
+        TestFramework::Jest => "jest",
+        TestFramework::Vitest => "vitest",
+    };
+    let command = match runtime {
+        Runtime::Bun => "bun run --bun",
+        Runtime::Node => "pnpm",
+    };
+    Some(format!("{command} {runner} --passWithNoTests"))
 }
 
 pub(crate) fn application_up_packages_script(runtime: &Runtime) -> String {
@@ -232,46 +271,46 @@ pub(crate) const BUNRUN_VERSION: &str = "~1.2.25";
 // @forklaunch/common
 pub(crate) const COMMON_VERSION: &str = "~1.2.32";
 // @forklaunch/core
-pub(crate) const CORE_VERSION: &str = "~3.2.0";
+pub(crate) const CORE_VERSION: &str = "~3.3.0";
 // @forklaunch/express
-pub(crate) const EXPRESS_VERSION: &str = "~1.2.51";
+pub(crate) const EXPRESS_VERSION: &str = "~1.2.53";
 // @forklaunch/hyper-express
-pub(crate) const HYPER_EXPRESS_VERSION: &str = "~1.2.50";
+pub(crate) const HYPER_EXPRESS_VERSION: &str = "~1.2.51";
 // uWebSockets.js — a peer of @forklaunch/hyper-express rather than one of its
 // dependencies, so generated projects must declare it themselves. pnpm 11
 // blocks git-resolved SUBdependencies (ERR_PNPM_EXOTIC_SUBDEP); a direct one is
 // fine, and uWebSockets.js ships only from GitHub.
 pub(crate) const UWEBSOCKETS_VERSION: &str = "github:uNetworking/uWebSockets.js#v20.52.0";
 // @forklaunch/implementation-billing-base
-pub(crate) const BILLING_BASE_VERSION: &str = "~1.0.43";
+pub(crate) const BILLING_BASE_VERSION: &str = "~1.1.0";
 // @forklaunch/implementation-billing-stripe
-pub(crate) const BILLING_STRIPE_VERSION: &str = "~1.2.13";
+pub(crate) const BILLING_STRIPE_VERSION: &str = "~1.3.0";
 // @forklaunch/implementation-ecommerce-base
-pub(crate) const ECOMMERCE_BASE_VERSION: &str = "~1.0.15";
+pub(crate) const ECOMMERCE_BASE_VERSION: &str = "~1.0.16";
 // @forklaunch/implementation-ecommerce-paypal
 pub(crate) const ECOMMERCE_PAYPAL_VERSION: &str = "~1.0.10";
 // @forklaunch/implementation-ecommerce-stripe
-pub(crate) const ECOMMERCE_STRIPE_VERSION: &str = "~1.0.10";
+pub(crate) const ECOMMERCE_STRIPE_VERSION: &str = "~1.1.0";
 // @forklaunch/implementation-iam-base
-pub(crate) const IAM_BASE_VERSION: &str = "~1.0.42";
+pub(crate) const IAM_BASE_VERSION: &str = "~1.0.43";
 // @forklaunch/implementation-messaging-base
-pub(crate) const MESSAGING_BASE_VERSION: &str = "~1.1.9";
+pub(crate) const MESSAGING_BASE_VERSION: &str = "~1.1.10";
 // @forklaunch/implementation-messaging-twilio
-pub(crate) const MESSAGING_TWILIO_VERSION: &str = "~1.1.9";
+pub(crate) const MESSAGING_TWILIO_VERSION: &str = "~1.1.10";
 // @forklaunch/implementation-cac-base
 pub(crate) const CAC_BASE_VERSION: &str = "~0.2.9";
 // @forklaunch/implementation-worker-bullmq
-pub(crate) const WORKER_BULLMQ_VERSION: &str = "~1.0.40";
+pub(crate) const WORKER_BULLMQ_VERSION: &str = "~1.0.41";
 // @forklaunch/implementation-worker-redis
 pub(crate) const WORKER_REDIS_VERSION: &str = "~1.0.40";
 // @forklaunch/implementation-worker-database
-pub(crate) const WORKER_DATABASE_VERSION: &str = "~1.0.42";
+pub(crate) const WORKER_DATABASE_VERSION: &str = "~1.1.0";
 // @forklaunch/implementation-worker-kafka
-pub(crate) const WORKER_KAFKA_VERSION: &str = "~1.0.40";
+pub(crate) const WORKER_KAFKA_VERSION: &str = "~1.0.41";
 // @forklaunch/infrastructure-redis
-pub(crate) const INFRASTRUCTURE_REDIS_VERSION: &str = "~1.4.21";
+pub(crate) const INFRASTRUCTURE_REDIS_VERSION: &str = "~1.4.22";
 // @forklaunch/infrastructure-s3
-pub(crate) const INFRASTRUCTURE_S3_VERSION: &str = "~1.5.3";
+pub(crate) const INFRASTRUCTURE_S3_VERSION: &str = "~1.5.4";
 // @forklaunch/interfaces-billing
 pub(crate) const BILLING_INTERFACES_VERSION: &str = "~1.0.40";
 // @forklaunch/interfaces-ecommerce
@@ -287,11 +326,11 @@ pub(crate) const WORKER_INTERFACES_VERSION: &str = "~1.0.37";
 // @forklaunch/internal
 pub(crate) const INTERNAL_VERSION: &str = "~1.2.35";
 // @forklaunch/testing
-pub(crate) const TESTING_VERSION: &str = "~1.2.37";
+pub(crate) const TESTING_VERSION: &str = "~1.3.0";
 // @forklaunch/universal-sdk
-pub(crate) const UNIVERSAL_SDK_VERSION: &str = "~1.2.31";
+pub(crate) const UNIVERSAL_SDK_VERSION: &str = "~1.4.1";
 // @forklaunch/validator
-pub(crate) const VALIDATOR_VERSION: &str = "~1.2.33";
+pub(crate) const VALIDATOR_VERSION: &str = "~1.3.0";
 // @mikro-orm/core
 pub(crate) const MIKRO_ORM_CORE_VERSION: &str = "7.2.5";
 // @mikro-orm/migrations
@@ -436,16 +475,7 @@ pub(crate) fn project_test_script(
     runtime: &Runtime,
     test_framework: &Option<TestFramework>,
 ) -> Option<String> {
-    match runtime {
-        Runtime::Bun => None,
-        Runtime::Node => match test_framework {
-            Some(test_framework_definition) => match test_framework_definition {
-                TestFramework::Jest => Some("pnpm jest --passWithNoTests".to_string()),
-                TestFramework::Vitest => Some("pnpm vitest --passWithNoTests".to_string()),
-            },
-            None => None,
-        },
-    }
+    application_test_script(runtime, test_framework)
 }
 
 pub(crate) fn project_migrate_script(command: &str) -> String {
@@ -557,6 +587,70 @@ pub(crate) const BETTER_SQLITE_POSTINSTALL_SCRIPT: &str =
     "cd node_modules/better-sqlite3 && node-gyp configure && node-gyp build";
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn migrate_scripts_wait_for_database_health_instead_of_sleeping() {
+        let postgres = HashSet::from([Database::PostgreSQL]);
+        assert_eq!(
+            application_migrate_script(&Runtime::Bun, &postgres, "init"),
+            "docker compose up -d --wait postgresql && bun --filter='*' run migrate:init"
+        );
+        assert_eq!(
+            application_migrate_script(&Runtime::Node, &postgres, "up"),
+            "docker compose up -d --wait postgresql && pnpm -r --no-bail run migrate:up"
+        );
+        let mongo = HashSet::from([Database::MongoDB]);
+        assert_eq!(
+            application_migrate_script(&Runtime::Bun, &mongo, "init"),
+            "docker compose up -d --wait mongodb && docker compose up mongo-init && bun --filter='*' run migrate:init"
+        );
+        for databases in [&postgres, &mongo] {
+            assert!(!application_migrate_script(&Runtime::Node, databases, "init").contains("sleep"));
+        }
+        assert_eq!(
+            application_seed_script(&Runtime::Node, &postgres),
+            "docker compose up -d --wait postgresql && pnpm -r --no-bail run seed"
+        );
+    }
+
+    #[test]
+    fn compose_prefixes_round_trip_and_upgrade_the_sleep_form() {
+        let current = "docker compose up -d --wait mongodb postgresql && docker compose up mongo-init && bun --filter='*' run migrate:init";
+        let (services, rest) = split_compose_up_command(current);
+        assert_eq!(services, ["mongodb", "postgresql", "mongo-init"]);
+        assert_eq!(rest, "bun --filter='*' run migrate:init");
+        assert_eq!(format!("{} && {rest}", compose_up_command(&services)), current);
+
+        let legacy = "docker compose up -d postgresql -d mongodb -d mongo-init && sleep 5 && pnpm -r --no-bail run migrate:init";
+        let (services, rest) = split_compose_up_command(legacy);
+        assert_eq!(services, ["postgresql", "mongodb", "mongo-init"]);
+        assert_eq!(rest, "pnpm -r --no-bail run migrate:init");
+        assert_eq!(
+            compose_up_command(&services),
+            "docker compose up -d --wait mongodb postgresql && docker compose up mongo-init"
+        );
+        assert_eq!(compose_up_command::<&str>(&[]), "docker compose up");
+    }
+
+    #[test]
+    fn test_scripts_use_selected_runtime_and_runner_at_every_level() {
+        for (framework, runner) in [
+            (TestFramework::Vitest, "vitest"),
+            (TestFramework::Jest, "jest"),
+        ] {
+            for (runtime, command) in [(Runtime::Bun, "bun run --bun"), (Runtime::Node, "pnpm")] {
+                let expected = Some(format!("{command} {runner} --passWithNoTests"));
+                assert_eq!(
+                    application_test_script(&runtime, &Some(framework.clone())),
+                    expected
+                );
+                assert_eq!(
+                    project_test_script(&runtime, &Some(framework.clone())),
+                    expected
+                );
+            }
+        }
+        assert_eq!(project_test_script(&Runtime::Bun, &None), None);
+    }
     use super::*;
 
     /// The container has no `.env.local`; the defaults must not point at one,

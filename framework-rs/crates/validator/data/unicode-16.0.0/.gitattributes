@@ -1,0 +1,2 @@
+# Preserve exact hash-pinned upstream SpecialCasing data, including its final blank line.
+SpecialCasing.txt whitespace=-blank-at-eof

@@ -7,7 +7,9 @@ use serde_json::from_str as json_from_str;
 use crate::{
     constants::{Database, Infrastructure, InitializeType, WorkerType},
     core::{
-        ast::infrastructure::env::{extract_env_vars_from_source, extract_process_env_vars_from_source},
+        ast::infrastructure::env::{
+            extract_env_vars_from_source, extract_process_env_vars_from_source,
+        },
         package_json::project_package_json::ProjectPackageJson,
     },
 };

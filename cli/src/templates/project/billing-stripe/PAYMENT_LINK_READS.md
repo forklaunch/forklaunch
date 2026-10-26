@@ -1,0 +1,1 @@
+../../../../../blueprint/billing-stripe/PAYMENT_LINK_READS.md

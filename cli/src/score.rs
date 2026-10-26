@@ -48,6 +48,16 @@ use crate::{
 /// a hang.
 const POLL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const POLL_INTERVAL: Duration = Duration::from_secs(3);
+/// Consecutive status requests that may fail with a dropped connection, a
+/// timeout or a gateway error before the CLI gives up on a job that is still
+/// running on the server.
+const MAX_TRANSIENT_POLL_FAILURES: u32 = 10;
+
+/// Gateway errors from the proxy in front of the analysis API: the request
+/// never reached a handler, so asking again is safe.
+fn is_transient_status(status: u16) -> bool {
+    matches!(status, 502..=504)
+}
 
 #[derive(Debug)]
 pub(crate) struct ScoreCommand;
@@ -104,11 +114,25 @@ impl CliCommand for ScoreCommand {
                 .long("prompt")
                 .help(
                     "Print only the remediation prompt (the default output shows it after the summary): the \
-                     same prompt the website's \"Generate prompt\" builds (every finding \
-                     with its evidence and fix, the scored checklist, and the rescoring \
-                     loop). With --offline, a prompt built from the deterministic checks.",
+                     same prompt the website's \"Generate prompt\" builds (every open finding \
+                     with its evidence and fix, then the outstanding checklist items). \
+                     --prompt-scope chooses what it covers. With --offline, a prompt built \
+                     from the deterministic checks.",
                 )
                 .action(clap::ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("prompt_scope")
+                .long("prompt-scope")
+                .value_name("SCOPE")
+                .help(
+                    "What the remediation prompt covers: not-met (open findings and failed \
+                     requirements), undecided (requirements the reviewers could not decide: the \
+                     agent first checks whether each is already met, makes it demonstrable if so \
+                     and implements it if not), or both (the default). Ignored with --offline.",
+                )
+                .value_parser(["not-met", "undecided", "both"])
+                .default_value("both"),
         )
         .arg(
             Arg::new("min_score")
@@ -135,8 +159,13 @@ impl CliCommand for ScoreCommand {
             score_via_api(
                 &app_root,
                 &manifest.app_name,
+                manifest.platform_application_id.as_deref(),
                 !matches.get_flag("no_share"),
                 json_out || prompt_out,
+                matches
+                    .get_one::<String>("prompt_scope")
+                    .map(String::as_str)
+                    .unwrap_or("both"),
             )?
         };
         // The platform builds the prompt (the website's own builder); offline, or
@@ -229,8 +258,13 @@ fn studio_url(path: &str) -> String {
 fn score_via_api(
     app_root: &Path,
     app_name: &str,
+    // The platform application this project is bound to: its deployed instance
+    // counts decide the card's hosting criteria (read server-side as the caller).
+    application_id: Option<&str>,
     want_share: bool,
     quiet: bool,
+    // What the platform's remediation prompt covers: not-met, undecided or both.
+    prompt_scope: &str,
 ) -> Result<(Value, Option<String>, Option<String>)> {
     let auth = AuthMode::detect();
 
@@ -254,7 +288,10 @@ fn score_via_api(
     }
 
     let zip_base64 = base64::engine::general_purpose::STANDARD.encode(&archive);
-    let body = json!({ "appId": app_name, "zipBase64": zip_base64 });
+    let mut body = json!({ "appId": app_name, "zipBase64": zip_base64 });
+    if let Some(id) = application_id {
+        body["applicationId"] = Value::String(id.to_string());
+    }
 
     if !quiet {
         println!("  {} uploading for analysis…", dim("→"));
@@ -274,7 +311,7 @@ fn score_via_api(
         .context("analysis API returned no job id")?
         .to_string();
 
-    let job = poll_job(&auth, &job_id, quiet)?;
+    let job = poll_job(&auth, &job_id, prompt_scope, quiet)?;
     let card = job
         .get("reportCard")
         .cloned()
@@ -398,9 +435,20 @@ fn offline_prompt(card: &Value, offline: bool) -> String {
 }
 
 /// Poll until the job reaches a terminal state.
-fn poll_job(auth: &AuthMode, job_id: &str, quiet: bool) -> Result<Value> {
+/// The job status path, asking for the prompt in a scope. The default scope sends no
+/// parameter, so a platform that predates scopes is asked exactly what it was before.
+fn job_path(job_id: &str, prompt_scope: &str) -> String {
+    if prompt_scope == "not-met" {
+        format!("/job/{job_id}")
+    } else {
+        format!("/job/{job_id}?promptScope={prompt_scope}")
+    }
+}
+
+fn poll_job(auth: &AuthMode, job_id: &str, prompt_scope: &str, quiet: bool) -> Result<Value> {
     let started = Instant::now();
     let mut last_status = String::new();
+    let mut transient_failures = 0u32;
 
     loop {
         if started.elapsed() > POLL_TIMEOUT {
@@ -411,8 +459,32 @@ fn poll_job(auth: &AuthMode, job_id: &str, quiet: bool) -> Result<Value> {
             );
         }
 
-        let response = get_with_auth(auth, &studio_url(&format!("/job/{job_id}")))
-            .context("lost contact with the analysis API")?;
+        // The job keeps running on the server whatever happens to one status
+        // request, so a dropped connection, a timeout or a proxy 502/503/504
+        // (the service is busy while it scores, or restarting) is retried
+        // rather than abandoning the run.
+        let response = match get_with_auth(auth, &studio_url(&job_path(job_id, prompt_scope))) {
+            Ok(response) if is_transient_status(response.status().as_u16()) => {
+                transient_failures += 1;
+                if transient_failures > MAX_TRANSIENT_POLL_FAILURES {
+                    let status = response.status().as_u16();
+                    let text = response.text().unwrap_or_default();
+                    return Err(api_error(status, &text));
+                }
+                std::thread::sleep(POLL_INTERVAL);
+                continue;
+            }
+            Ok(response) => response,
+            Err(error) => {
+                transient_failures += 1;
+                if transient_failures > MAX_TRANSIENT_POLL_FAILURES {
+                    return Err(error.context("lost contact with the analysis API"));
+                }
+                std::thread::sleep(POLL_INTERVAL);
+                continue;
+            }
+        };
+        transient_failures = 0;
         let http_status = response.status();
         if !http_status.is_success() {
             let text = response.text().unwrap_or_default();
@@ -486,11 +558,21 @@ fn print_summary(card: &Value) {
 /// Built as a string rather than printed directly so the rendering rules below
 /// — which are the whole point of this command's default output — can be
 /// asserted rather than eyeballed.
+/// A 0-100 score as the card stores it: a whole number or a decimal (a
+/// category averages its items, e.g. 83.3). Rounded for display; `None` when
+/// absent or not a number.
+fn score_of(value: Option<&Value>) -> Option<u64> {
+    value
+        .and_then(Value::as_f64)
+        .filter(|score| score.is_finite())
+        .map(|score| score.clamp(0.0, 100.0).round() as u64)
+}
+
 fn render_summary(card: &Value) -> String {
     use std::fmt::Write as _;
     let mut out = String::new();
 
-    let overall = card.get("overall").and_then(Value::as_u64).unwrap_or(0);
+    let overall = score_of(card.get("overall")).unwrap_or(0);
     let _ = writeln!(out);
     let _ = writeln!(out, "  {}  {}/100", bold("Enterprise Readiness"), overall);
     if let Some(headline) = card.get("headline").and_then(Value::as_str) {
@@ -511,12 +593,18 @@ fn render_summary(card: &Value) -> String {
                 }
             };
 
-            if rail.get("pending").and_then(Value::as_bool).unwrap_or(false) {
-                let _ = writeln!(out, "  {:<16} {}", label, dim("not assessed"));
-                continue;
-            }
-
-            let score = rail.get("score").and_then(Value::as_u64).unwrap_or(0);
+            // `pending` marks a category with items still undecided. It can
+            // still carry a score from the items that were decided (93.8);
+            // a pending category whose score is missing or the 0 placeholder
+            // was not assessed at all.
+            let pending = rail.get("pending").and_then(Value::as_bool).unwrap_or(false);
+            let score = match score_of(rail.get("score")) {
+                Some(score) if !(pending && score == 0) => score,
+                _ => {
+                    let _ = writeln!(out, "  {:<16} {}", label, dim("not assessed"));
+                    continue;
+                }
+            };
             let items = rail.get("items").and_then(Value::as_array);
 
             // A rail can score 100 and still have unmet items: only findings
@@ -630,6 +718,33 @@ mod tests {
     use super::*;
 
     #[test]
+    fn summary_shows_decimal_scores_and_scores_of_incomplete_categories() {
+        let card = serde_json::json!({
+            "overall": 93,
+            "dimensions": {
+                "governance": { "score": 83.3, "pending": false, "items": [] },
+                "compliance": { "score": 93.8, "pending": true, "items": [] },
+                "security": { "pending": true, "items": [] }
+            }
+        });
+        let text = render_summary(&card);
+        assert!(text.contains("83/100"), "{text}");
+        assert!(text.contains("94/100"), "{text}");
+        assert!(!text.contains(" 0/100"), "{text}");
+        assert!(text.contains("not assessed"), "{text}");
+    }
+
+    #[test]
+    fn gateway_errors_are_transient_and_handler_errors_are_not() {
+        for status in [502, 503, 504] {
+            assert!(is_transient_status(status), "{status}");
+        }
+        for status in [400, 401, 402, 403, 404, 500] {
+            assert!(!is_transient_status(status), "{status}");
+        }
+    }
+
+    #[test]
     fn auth_failures_explain_the_tier_rather_than_the_status_code() {
         // A raw 401/402 tells the caller nothing about the anonymous → signed-in
         // → free-tier → credits ladder, and both have an offline escape hatch
@@ -656,6 +771,13 @@ mod tests {
         // a mismatch here 404s against a service that is up and healthy.
         assert!(studio_url("/zip").ends_with("/studio-orchestrator/analysis/zip"));
         assert!(studio_url("/share").ends_with("/studio-orchestrator/analysis/share"));
+    }
+
+    #[test]
+    fn the_prompt_scope_rides_on_the_job_poll_only_when_asked() {
+        assert_eq!(job_path("j1", "not-met"), "/job/j1");
+        assert_eq!(job_path("j1", "undecided"), "/job/j1?promptScope=undecided");
+        assert_eq!(job_path("j1", "both"), "/job/j1?promptScope=both");
     }
 
     #[test]

@@ -57,7 +57,15 @@ export function enrichBetterAuthApi<T extends BetterAuthOptions>(
     // Only this identity handler uses the service-owned encryption policy.
     const startTime = process.hrtime();
     await withAuthEncryptionPolicy(() =>
-      toNodeHandler(auth)(req as ExpressRequest, res as ExpressResponse)
+      // The core Request/Response are Express's or hyper-express's, depending
+      // on the app's HTTP framework. Hyper-express's declare no overlap with
+      // Node's IncomingMessage/ServerResponse, so a direct assertion is
+      // rejected there (TS2352). This is the cast the handler had before the
+      // Express-only direct assertion.
+      toNodeHandler(auth)(
+        req as unknown as ExpressRequest,
+        res as unknown as ExpressResponse
+      )
     );
 
     const attributes = {

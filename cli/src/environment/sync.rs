@@ -1,4 +1,9 @@
-use std::{collections::{HashMap, HashSet}, env, fs, io::Write, path::{Path, PathBuf}};
+use std::{
+    collections::{HashMap, HashSet},
+    env, fs,
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result};
 use clap::{ArgMatches, Command};
@@ -41,6 +46,12 @@ impl CliCommand for SyncCommand {
                     .help("Show what would be done without making changes")
                     .action(clap::ArgAction::SetTrue)
             )
+            .arg(
+                clap::Arg::new("base_path")
+                    .short('p')
+                    .long("path")
+                    .help("The application path"),
+            )
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
@@ -54,7 +65,8 @@ impl CliCommand for SyncCommand {
         }
 
         let current_dir = env::current_dir()?;
-        let workspace_root = find_workspace_root(&current_dir)?;
+        let start = matches.get_one::<String>("base_path").map_or(current_dir.clone(), |path| current_dir.join(path));
+        let workspace_root = find_workspace_root(&start)?;
         let modules_path = get_modules_path(&workspace_root)?;
 
         writeln!(stdout, "Workspace: {}", workspace_root.display())?;
@@ -64,13 +76,21 @@ impl CliCommand for SyncCommand {
         let manifest_content = fs::read_to_string(&manifest_path)
             .with_context(|| format!("Failed to read manifest: {}", manifest_path.display()))?;
         let manifest_data: ApplicationManifestData =
-            toml::from_str(&manifest_content)
-                .with_context(|| ERROR_FAILED_TO_PARSE_MANIFEST)?;
+            toml::from_str(&manifest_content).with_context(|| ERROR_FAILED_TO_PARSE_MANIFEST)?;
         let project_names: Vec<String> = manifest_data
             .projects
             .iter()
             .map(|p| p.name.clone())
             .collect();
+
+        // Rust processes: the generated local values `init` writes; anything
+        // only a person can supply is reported.
+        let native_gaps = if dry_run {
+            crate::init::rust_project::native_env_gaps(&workspace_root)?
+        } else {
+            crate::init::rust_project::sync_native_env(&workspace_root)?
+        };
+        super::validate::report_native_gaps(&native_gaps, &mut stdout)?;
 
         let rendered_templates_cache = RenderedTemplatesCache::new();
         let project_env_vars = find_all_env_vars(&modules_path, &rendered_templates_cache)?;

@@ -1,0 +1,28 @@
+[package]
+description = "ForkLaunch Rust validation APIs and runtime support"
+name = "forklaunch-validator"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[features]
+zod-regex = ["forklaunch-common/zod-regex"]
+default = []
+zod-uri = ["dep:ada-url"]
+
+[dependencies]
+ada-url = { version = "=3.2.4", optional = true }
+forklaunch-common = { version = "0.2.5", path = "../common", features = ["zod-checks"] }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "=1.0.151", features = ["float_roundtrip"] }
+ryu-js = "=1.0.3"
+schemars = "1.2"
+garde = { version = "0.23", features = ["derive"] }
+uuid = { version = "1", features = ["serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+[lints]
+workspace = true

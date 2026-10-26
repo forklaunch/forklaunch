@@ -1,0 +1,1 @@
+../../../../../framework-rs/crates/core/src/rust_sdk/http_client.rs.template
