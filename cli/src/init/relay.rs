@@ -165,6 +165,13 @@ fn build_iam_service_manifest_data(
     let database: Database = database_str.parse().unwrap_or(Database::PostgreSQL);
 
     ServiceManifestData {
+        language: manifest_data.language.clone(),
+        application_language: manifest_data.application_language.clone(),
+        sdk_targets: manifest_data.sdk_targets.clone(),
+        cargo_workspace: manifest_data.cargo_workspace.clone(),
+        contract_artifact_path: manifest_data.contract_artifact_path.clone(),
+        openapi_path: manifest_data.openapi_path.clone(),
+        asyncapi_path: manifest_data.asyncapi_path.clone(),
         id: manifest_data.id.clone(),
         cli_version: manifest_data.cli_version.clone(),
         app_name: manifest_data.app_name.clone(),
@@ -230,6 +237,7 @@ fn build_iam_service_manifest_data(
         is_database_enabled: true,
         platform_application_id: manifest_data.platform_application_id.clone(),
         platform_organization_id: manifest_data.platform_organization_id.clone(),
+        framework: manifest_data.framework.clone(),
         compliance: manifest_data.compliance.clone(),
 
         is_better_auth: iam_project.variant.as_deref() == Some(BETTER_AUTH_VARIANT),
@@ -749,7 +757,6 @@ mod tests {
     /// The generated endpoint files must be embedded in the binary (otherwise
     /// the scaffold panics) and must carry the security-critical contract: a
     /// root-basePath session-ingest route with internal HMAC access.
-    #[test]
     #[test]
     fn wiring_finds_its_place_without_naming_the_last_entry() {
         // The drifted case: an app that renamed the section comment, mounts

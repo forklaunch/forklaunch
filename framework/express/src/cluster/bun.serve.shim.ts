@@ -1521,9 +1521,12 @@ export function serveExpress(
         }
       } catch (error) {
         openTelemetryCollector.error('Request processing error:', error);
-        const message = development
-          ? (error as Error).message || String(error)
-          : 'Internal Server Error';
+        // Development shows the error message (never a stack or a stringified
+        // non-Error value); otherwise the generic text, as on Node.
+        const message =
+          development && error instanceof Error && error.message
+            ? error.message
+            : 'Internal Server Error';
         return new Response(message, {
           status: 500,
           headers: { 'content-type': 'text/plain' }

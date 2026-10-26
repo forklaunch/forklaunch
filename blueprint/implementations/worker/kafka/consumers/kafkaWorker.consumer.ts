@@ -80,7 +80,7 @@ export class KafkaWorkerConsumer<
             }
           ]);
         } catch (error) {
-          this.failureHandler([
+          void this.failureHandler([
             {
               value: events[0],
               error: error as Error
@@ -150,7 +150,7 @@ export class KafkaWorkerConsumer<
           });
 
           const messagePromise = new Promise<void>((resolve) => {
-            peekConsumer.run({
+            void peekConsumer.run({
               eachMessage: async ({ message }) => {
                 if (message.value && events.length < this.options.peekCount) {
                   const messageEvents = JSON.parse(

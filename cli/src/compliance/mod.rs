@@ -6,6 +6,7 @@ use crate::{CliCommand, core::command::command};
 mod audit;
 pub(crate) mod checks;
 pub(crate) mod deps;
+mod rust_artifact;
 mod tenancy;
 
 use audit::AuditCommand;
@@ -15,6 +16,7 @@ use tenancy::AuditTenancyCommand;
 pub(crate) struct ComplianceCommand {
     audit: AuditCommand,
     audit_tenancy: AuditTenancyCommand,
+    validate_artifacts: rust_artifact::ValidateArtifactsCommand,
 }
 
 impl ComplianceCommand {
@@ -22,6 +24,7 @@ impl ComplianceCommand {
         Self {
             audit: AuditCommand::new(),
             audit_tenancy: AuditTenancyCommand::new(),
+            validate_artifacts: rust_artifact::ValidateArtifactsCommand,
         }
     }
 }
@@ -34,6 +37,7 @@ impl CliCommand for ComplianceCommand {
         )
         .subcommand(self.audit.command())
         .subcommand(self.audit_tenancy.command())
+        .subcommand(self.validate_artifacts.command())
         .subcommand_required(true)
     }
 
@@ -41,6 +45,9 @@ impl CliCommand for ComplianceCommand {
         match matches.subcommand() {
             Some(("audit", sub_matches)) => self.audit.handler(sub_matches),
             Some(("audit-tenancy", sub_matches)) => self.audit_tenancy.handler(sub_matches),
+            Some(("validate-artifacts", sub_matches)) => {
+                self.validate_artifacts.handler(sub_matches)
+            }
             _ => unreachable!(),
         }
     }

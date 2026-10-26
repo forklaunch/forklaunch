@@ -2,7 +2,7 @@ use std::{fs::create_dir_all, path::Path};
 
 use anyhow::{Context, Result};
 use include_dir::{Dir, File};
-use ramhorns::Template;
+use ramhorns::{Content, Template};
 use regex::Regex;
 
 use super::{
@@ -58,6 +58,25 @@ fn forklaunch_replacements(app_name: &String, template: String) -> String {
     template.replace("@forklaunch/blueprint-", format!("@{app_name}/").as_str())
 }
 
+/// Shared rendering primitive for legacy manifests, native scaffolds and SDKs.
+/// Language-specific replacements and file ownership stay with their callers.
+pub(crate) fn render_template<T: Content>(source: &str, data: &T) -> Result<String> {
+    Ok(Template::new(source)?.render(data))
+}
+
+pub(crate) fn render_embedded_template<T: Content>(
+    template_path: &str,
+    data: &T,
+) -> Result<String> {
+    let source = TEMPLATES_DIR
+        .get_file(template_path)
+        .with_context(|| format!("Missing embedded template {template_path}"))?
+        .contents_utf8()
+        .with_context(|| format!("Embedded template {template_path} is not UTF-8"))?;
+    render_template(source, data)
+        .with_context(|| format!("Failed to render embedded template {template_path}"))
+}
+
 pub(crate) fn generate_with_template(
     output_prefix: Option<&String>,
     template_dir: &PathIO,
@@ -96,25 +115,41 @@ pub(crate) fn generate_with_template(
                 &entry.path().to_string_lossy()
             )
         })?;
-        let tpl = Template::new(file_contents.clone())?;
         let rendered = match data {
-            ManifestData::Application(manifest_data) => {
-                forklaunch_replacements(&manifest_data.app_name, tpl.render(&manifest_data))
-            }
+            ManifestData::Application(manifest_data) => forklaunch_replacements(
+                &manifest_data.app_name,
+                render_template(&file_contents, manifest_data)?,
+            ),
             ManifestData::Service(manifest_data) => database_replacements(
                 &manifest_data.database,
-                forklaunch_replacements(&manifest_data.app_name, tpl.render(&manifest_data)),
+                forklaunch_replacements(
+                    &manifest_data.app_name,
+                    render_template(&file_contents, manifest_data)?,
+                ),
             ),
-            ManifestData::Library(manifest_data) => {
-                forklaunch_replacements(&manifest_data.app_name, tpl.render(&manifest_data))
-            }
-            ManifestData::Router(manifest_data) => {
-                forklaunch_replacements(&manifest_data.app_name, tpl.render(&manifest_data))
-            }
-            ManifestData::Worker(manifest_data) => {
-                forklaunch_replacements(&manifest_data.app_name, tpl.render(&manifest_data))
-            }
+            ManifestData::Library(manifest_data) => forklaunch_replacements(
+                &manifest_data.app_name,
+                render_template(&file_contents, manifest_data)?,
+            ),
+            ManifestData::Router(manifest_data) => forklaunch_replacements(
+                &manifest_data.app_name,
+                render_template(&file_contents, manifest_data)?,
+            ),
+            ManifestData::Worker(manifest_data) => forklaunch_replacements(
+                &manifest_data.app_name,
+                render_template(&file_contents, manifest_data)?,
+            ),
         };
+        // Blueprint schema factories use TypeBox locally; generated contracts must
+        // use the application's selected validator, just like registrations.
+        let validator = match data {
+            ManifestData::Application(data) => &data.validator,
+            ManifestData::Service(data) => &data.validator,
+            ManifestData::Library(data) => &data.validator,
+            ManifestData::Router(data) => &data.validator,
+            ManifestData::Worker(data) => &data.validator,
+        };
+        let rendered = rendered.replace("@forklaunch/validator/typebox", &format!("@forklaunch/validator/{validator}"));
         if !output_path.exists() {
             let output_path_str = output_path.file_name().unwrap().to_str().unwrap();
             let should_ignore = ignore_files
@@ -305,7 +340,12 @@ mod tests {
                 assert!(!server.contains("PERMISSIONS, ROLES"));
                 let controller = render("router/api/controllers/{{camel_case_name}}.controller.ts");
                 assert!(!controller.contains("const openTelemetryCollector"));
-                assert!(controller.contains("allowedRoles: new Set([ROLES.ADMIN])"));
+                assert!(controller.contains("bindRuntimeAuth("));
+                assert!(controller.contains("jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL"));
+                assert!(!controller.contains("ROLES.ADMIN"));
+                let contract = render("router/api/contracts/{{camel_case_name}}.contract.ts");
+                assert!(contract.contains("auth: { scheme: 'jwt', allowedRoles: ['admin'] }"));
+                assert!(contract.contains("access: 'protected'"));
                 for kind in ["service", "worker"] {
                     let utils = render(&format!("project/{kind}/__test__/test-utils.ts"));
                     assert_eq!(utils.contains("import { getEnvVar }"), database);
@@ -321,4 +361,32 @@ mod tests {
             }
         }
     }
+}
+
+/// One file of the TypeScript service template rendered for `data`, as init
+/// writes it (replacements and watermark included), or `None` when the
+/// template has no such file.
+pub(crate) fn render_service_template_file(
+    relative: &str,
+    data: &super::manifest::service::ServiceManifestData,
+) -> Result<Option<String>> {
+    let Some(file) = TEMPLATES_DIR.get_file(Path::new("project/service").join(relative)) else {
+        return Ok(None);
+    };
+    let source = file
+        .contents_utf8()
+        .with_context(|| format!("Template {relative} is not UTF-8"))?;
+    let rendered = database_replacements(
+        &data.database,
+        forklaunch_replacements(&data.app_name, render_template(source, data)?),
+    )
+    .replace(
+        "@forklaunch/validator/typebox",
+        &format!("@forklaunch/validator/{}", data.validator),
+    );
+    Ok(Some(super::watermark::apply_watermark(&RenderedTemplate {
+        path: Path::new(relative).to_path_buf(),
+        content: rendered,
+        context: None,
+    })?))
 }

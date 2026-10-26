@@ -52,10 +52,10 @@ const collectDatabaseFields = (error: unknown): Record<string, unknown> => {
 
     for (const field of DB_ERROR_FIELDS) {
       const value = current[field];
-      if (
-        found[field] === undefined &&
-        (typeof value === 'string' || typeof value === 'number')
-      ) {
+      // Database drivers report these as strings. Bun also puts a numeric
+      // `line`/`column` (the source position) on every Error, which must not
+      // shadow the driver's `column` further down the cause chain.
+      if (found[field] === undefined && typeof value === 'string') {
         found[field] = value;
       }
     }

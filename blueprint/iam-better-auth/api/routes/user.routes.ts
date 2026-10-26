@@ -1,3 +1,4 @@
+import { userContract } from '../contracts/user.contract';
 import { forklaunchRouter, schemaValidator } from '@forklaunch/blueprint-core';
 import { ci, tokens } from '../../bootstrapper';
 import {
@@ -10,25 +11,25 @@ import {
 const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 
 export const userRouter = forklaunchRouter(
-  '/user',
+  userContract.basePath,
   schemaValidator,
   openTelemetryCollector
 );
 
 export const surfaceRolesRoute = userRouter.get(
-  '/:id/surface-roles',
+  userContract.surfaceRoles.path,
   surfaceRoles
 );
 export const surfacePermissionsRoute = userRouter.get(
-  '/:id/surface-permissions',
+  userContract.surfacePermissions.path,
   surfacePermissions
 );
 
 export const surfaceScopedRolesRoute = userRouter.get(
-  '/:id/organizations/:organizationId/sessions/:sessionId/surface-roles',
+  userContract.surfaceScopedRoles.path,
   surfaceScopedRoles
 );
 export const surfaceScopedPermissionsRoute = userRouter.get(
-  '/:id/organizations/:organizationId/sessions/:sessionId/surface-permissions',
+  userContract.surfaceScopedPermissions.path,
   surfaceScopedPermissions
 );

@@ -10,11 +10,11 @@ import {
 describe('CheckoutSession Routes E2E Tests with PostgreSQL Container', () => {
   beforeAll(async () => {
     await setupTestDatabase();
-  }, 60000);
+  });
 
   afterAll(async () => {
     await cleanupTestDatabase();
-  }, 30000);
+  });
 
   describe('POST /checkout-session - createCheckoutSession', () => {
     it('should create a checkout session successfully', async () => {

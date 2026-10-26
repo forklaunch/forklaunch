@@ -1,0 +1,16 @@
+[workspace]
+resolver = "3"
+members = [
+    "src/notes",
+    "src/notes/.forklaunch/contracts",
+    "src/notes/sdk/rust",
+    "src/jobs",
+    "src/jobs/.forklaunch/contracts",
+    "src/jobs/sdk/rust",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+authors = ["ForkLaunch"]

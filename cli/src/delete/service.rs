@@ -32,7 +32,9 @@ use crate::{
         rendered_template::{RenderedTemplate, RenderedTemplatesCache, write_rendered_templates},
         tsconfig::remove_project_from_modules_tsconfig,
     },
+    init::rust_project::{self, RustProjectKind},
     prompt::{ArrayCompleter, prompt_for_confirmation, prompt_with_validation},
+    sdk::generate::regenerate_sdk_outputs_if_present,
 };
 
 #[derive(Debug)]
@@ -46,20 +48,20 @@ impl ServiceCommand {
 
 impl CliCommand for ServiceCommand {
     fn command(&self) -> Command {
-        command("service", "Initialize a new service")
+        command("service", "Delete a service")
             .alias("svc")
             .arg(Arg::new("name").help("The name of the service"))
             .arg(
                 Arg::new("base_path")
                     .short('p')
                     .long("path")
-                    .help("The application path to initialize the library in"),
+                    .help("The application path to delete the service from"),
             )
             .arg(
                 Arg::new("continue")
                     .short('c')
                     .long("continue")
-                    .help("Continue the eject operation")
+                    .help("Delete without asking for confirmation")
                     .action(ArgAction::SetTrue),
             )
     }
@@ -71,12 +73,10 @@ impl CliCommand for ServiceCommand {
 
         let (app_root_path, _) = find_app_root_path(matches, RequiredLocation::Application)?;
         let manifest_path = app_root_path.join(".forklaunch").join("manifest.toml");
+        crate::init::rust_project::preflight_mixed_images(&app_root_path)?;
 
-        let existing_manifest_data = toml::from_str::<ApplicationManifestData>(
-            &read_to_string(&manifest_path).with_context(|| ERROR_FAILED_TO_READ_MANIFEST)?,
-        )
-        .with_context(|| ERROR_FAILED_TO_PARSE_MANIFEST)?;
-
+        let project_names =
+            rust_project::registered_project_names(&app_root_path, RustProjectKind::Service)?;
         let service_name = prompt_with_validation(
             &mut line_editor,
             &mut stdout,
@@ -84,14 +84,41 @@ impl CliCommand for ServiceCommand {
             matches,
             "service name",
             None,
-            |input: &str| {
-                existing_manifest_data
-                    .projects
-                    .iter()
-                    .any(|project| project.name == input && project.r#type == ProjectType::Service)
-            },
+            |input: &str| project_names.contains(input),
             |_| "Service not found".to_string(),
         )?;
+
+        crate::sdk::typescript_build::preflight_lifecycle(&app_root_path, &service_name)?;
+        let sdk_manifest: toml::Value = toml::from_str(&read_to_string(&manifest_path)?)?;
+        let sdk_modules = sdk_manifest.get("modules_path").and_then(toml::Value::as_str).unwrap_or("src");
+        crate::init::rust_project::ensure_service_sdk_deletable(&app_root_path, &format!("{sdk_modules}/{service_name}"))?;
+
+        if rust_project::is_rust_project(&app_root_path, &service_name)? {
+            if !matches.get_flag("continue") {
+                let continue_delete = prompt_for_confirmation(
+                    &mut line_editor,
+                    "This operation is irreversible. Do you want to continue? (y/N) ",
+                )?;
+                if !continue_delete {
+                    log_error!(stdout, "Deletion cancelled");
+                    return Ok(());
+                }
+            }
+
+            rust_project::delete_rust_project(
+                &app_root_path,
+                RustProjectKind::Service,
+                &service_name,
+            )?;
+            regenerate_sdk_outputs_if_present(&app_root_path, &mut stdout)?;
+            log_ok!(stdout, "{} deleted successfully!", service_name);
+            return Ok(());
+        }
+
+        let existing_manifest_data = toml::from_str::<ApplicationManifestData>(
+            &read_to_string(&manifest_path).with_context(|| ERROR_FAILED_TO_READ_MANIFEST)?,
+        )
+        .with_context(|| ERROR_FAILED_TO_PARSE_MANIFEST)?;
 
         let service_base_path = prompt_base_path(
             &app_root_path,
@@ -105,11 +132,7 @@ impl CliCommand for ServiceCommand {
 
         let mut manifest_data = existing_manifest_data.initialize(
             InitializableManifestConfigMetadata::Application(ApplicationInitializationMetadata {
-                app_name: app_root_path
-                    .file_name()
-                    .unwrap()
-                    .to_string_lossy()
-                    .to_string(),
+                app_name: existing_manifest_data.app_name.clone(),
                 database: match existing_manifest_data
                     .projects
                     .iter()
@@ -214,6 +237,29 @@ impl CliCommand for ServiceCommand {
             }
         }
 
+        // The database's shared entries (core driver, workspace scripts,
+        // Compose service) go with the last project that uses it.
+        let mut released_files = Vec::new();
+        if let Ok(database) = manifest_data.database.parse::<crate::constants::Database>() {
+            released_files = crate::core::database::release_database(
+                &service_base_path,
+                &manifest_data.app_name,
+                &manifest_data.projects,
+                &database,
+                &service_name,
+                Some(&mut docker_compose),
+                &mut rendered_templates_cache,
+            )?;
+            rendered_templates_cache.insert(
+                docker_compose_path.to_string_lossy().to_string(),
+                RenderedTemplate {
+                    path: docker_compose_path.clone(),
+                    content: serde_yml::to_string(&docker_compose)?,
+                    context: Some(ERROR_FAILED_TO_WRITE_DOCKER_COMPOSE.to_string()),
+                },
+            );
+        }
+
         remove_project_from_client_sdk(
             &mut rendered_templates_cache,
             &service_base_path,
@@ -247,6 +293,16 @@ impl CliCommand for ServiceCommand {
             .map(|(_, template)| template)
             .collect();
         write_rendered_templates(&rendered_templates, false, &mut stdout)?;
+        for path in released_files {
+            std::fs::remove_file(&path)
+                .with_context(|| format!("Failed to remove {}", path.display()))?;
+        }
+
+        crate::sdk::typescript_build::remove_hook(&app_root_path, &service_name)?;
+        // The manifest entry is already gone, so remove_hook cannot find the
+        // generated Rust SDK member; image planning would trip over it.
+        crate::init::rust_project::remove_typescript_sdk_member(&app_root_path, &service_base_path.join(&service_name))?;
+        crate::init::rust_project::refresh_mixed_images(&app_root_path)?;
 
         log_ok!(stdout, "{} deleted successfully!", service_name);
 

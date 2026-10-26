@@ -10,7 +10,7 @@ export const CreateBillingPortalSchema = {
   customerId: string,
   uri: optional(string),
   expiresAt: date,
-  stripeFields: type<StripeCreateBillingPortalDto['stripeFields']>()
+  stripeFields: optional(type<StripeCreateBillingPortalDto['stripeFields']>())
 };
 
 export const UpdateBillingPortalSchema = {

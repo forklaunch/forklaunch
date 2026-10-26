@@ -14,6 +14,10 @@ export type StripeBillingPortalMappers<
     ) => Promise<Dto['BillingPortalMapper']>;
   };
   CreateBillingPortalMapper: {
+    /** Provider effects already occurred; validate shape before local persistence. */
+    validateProviderCreate?: (provider: Stripe.BillingPortal.Session) => Promise<void>;
+    /** Pure configured validation before any provider creation effects. */
+    validateCreate?: (dto: Dto['CreateBillingPortalMapper']) => Promise<void>;
     entity: Entities['CreateBillingPortalMapper'];
     toEntity: (
       dto: Dto['CreateBillingPortalMapper'],
@@ -24,6 +28,19 @@ export type StripeBillingPortalMappers<
   };
   UpdateBillingPortalMapper: {
     entity: Entities['UpdateBillingPortalMapper'];
+    /** Optional configured preflight before creating a replacement provider session. */
+    validateCachedUpdate?: (
+      dto: Dto['UpdateBillingPortalMapper'],
+      existing: Dto['BillingPortalMapper']
+    ) => Promise<void>;
+    /** Cache-only DTO update; preserve session/customer identities. */
+    toCachedDto?: (
+      dto: Dto['UpdateBillingPortalMapper'],
+      existing: Dto['BillingPortalMapper'],
+      em: EntityManager,
+      stripeSession: Stripe.BillingPortal.Session,
+      ...args: unknown[]
+    ) => Promise<Dto['BillingPortalMapper']>;
     toEntity: (
       dto: Dto['UpdateBillingPortalMapper'],
       em: EntityManager,

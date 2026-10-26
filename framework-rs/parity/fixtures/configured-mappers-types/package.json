@@ -1,0 +1,20 @@
+{
+  "name": "forklaunch-configured-mappers-type-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Isolated repository-pinned compiler and declarations for twelve configured billing/ecommerce roots",
+  "dependencies": {
+    "@types/body-parser": "1.19.6",
+    "@types/bun": "1.4.3",
+    "@types/busboy": "1.5.5",
+    "@types/cors": "2.8.19",
+    "@types/express": "5.0.6",
+    "@types/express-serve-static-core": "5.1.3",
+    "@types/node": "26.6.5",
+    "@types/qs": "6.15.1",
+    "@types/range-parser": "1.2.7",
+    "@types/swagger-ui-express": "4.1.8",
+    "typescript": "7.0.2",
+    "vitest": "5.0.5"
+  }
+}

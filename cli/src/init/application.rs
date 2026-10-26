@@ -15,21 +15,22 @@ use serde_yml::{from_str, to_string};
 use termcolor::{ColorChoice, StandardStream, WriteColor};
 use uuid::Uuid;
 
-use super::service::generate_service_package_json;
+use super::{rust_project, service::generate_service_package_json};
 use crate::{
     CliCommand,
     constants::{
         Database, ERROR_FAILED_TO_CREATE_DATABASE_EXPORT_INDEX_TS,
         ERROR_FAILED_TO_CREATE_GITIGNORE, ERROR_FAILED_TO_CREATE_LICENSE,
         ERROR_FAILED_TO_GENERATE_BUNFIG, ERROR_FAILED_TO_GENERATE_PNPM_WORKSPACE,
-        ERROR_FAILED_TO_PARSE_DOCKER_COMPOSE,
-        Formatter, HttpFramework, License, Linter, Module, ModulesPath,
-        Runtime, TestFramework, Validator, get_core_module_description,
-        get_monitoring_module_description, get_service_module_cache,
-        get_service_module_description, get_service_module_name,
-        get_client_sdk_module_description,
+        ERROR_FAILED_TO_PARSE_DOCKER_COMPOSE, Formatter, HttpFramework, License, Linter, Module,
+        SELECTABLE_LINTERS, ensure_selectable_linter, linter_value_parser,
+        Runtime, TestFramework, Validator, get_client_sdk_module_description,
+        get_core_module_description, get_monitoring_module_description, get_service_module_cache,
+        get_service_module_description, get_service_module_name, ensure_module_offered, module_value_parser, offered_modules,
     },
     core::{
+        bunfig::generate_bunfig,
+        client_sdk::get_client_sdk_additional_deps,
         command::command,
         database::{
             generate_index_ts_database_export, get_database_port, get_database_variants,
@@ -40,7 +41,7 @@ use crate::{
             find_docker_compose_path,
         },
         format::format_code,
-        github_configs::ensure_github_configs,
+        github_configs::reconcile_github_configs,
         gitignore::generate_gitignore,
         husky::create_or_merge_husky_pre_commit,
         license::generate_license,
@@ -58,33 +59,30 @@ use crate::{
                 AJV_VERSION, APP_DEV_BUILD_SCRIPT, APP_DEV_SCRIPT, APP_PREPARE_SCRIPT,
                 BETTER_AUTH_VERSION, BETTER_SQLITE3_VERSION, BIOME_VERSION, BUNRUN_VERSION,
                 COMMON_VERSION, CORE_VERSION, DOTENV_VERSION, ESLINT_VERSION, EXPRESS_VERSION,
-                GLOBALS_VERSION, HUSKY_VERSION, HYPER_EXPRESS_VERSION, UWEBSOCKETS_VERSION, JEST_TYPES_VERSION,
+                GLOBALS_VERSION, HUSKY_VERSION, HYPER_EXPRESS_VERSION, JEST_TYPES_VERSION,
                 JEST_VERSION, LINT_STAGED_VERSION, MIKRO_ORM_CORE_VERSION,
-                MIKRO_ORM_DATABASE_VERSION, MIKRO_ORM_MIGRATIONS_VERSION,
-                NODE_GYP_VERSION, OXLINT_VERSION, PRETTIER_VERSION,
-                PROJECT_BUILD_SCRIPT, PROJECT_DOCS_SCRIPT, SORT_PACKAGE_JSON_VERSION,
-                SQLITE3_VERSION, TS_JEST_VERSION, TS_NODE_VERSION, TSX_VERSION, TYPEBOX_VERSION,
-                TYPES_BUILD_SCRIPT, TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION, TYPES_EXPRESS_VERSION,
-                TYPES_NODE_VERSION, TYPES_QS_VERSION, TYPES_UUID_VERSION, TYPES_WATCH_SCRIPT,
+                MIKRO_ORM_DATABASE_VERSION, MIKRO_ORM_MIGRATIONS_VERSION, NODE_GYP_VERSION,
+                OXLINT_VERSION, OXLINT_TSGOLINT_VERSION, PRETTIER_VERSION, PROJECT_BUILD_SCRIPT, PROJECT_DOCS_SCRIPT,
+                SORT_PACKAGE_JSON_VERSION, SQLITE3_VERSION, TS_JEST_VERSION, TS_NODE_VERSION,
+                TSX_VERSION, TYPEBOX_VERSION, TYPES_BUILD_SCRIPT,
+                TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION, TYPES_EXPRESS_VERSION, TYPES_NODE_VERSION,
+                TYPES_QS_VERSION, TYPES_UUID_VERSION, TYPES_WATCH_SCRIPT,
                 TYPESCRIPT_ESLINT_VERSION, TYPESCRIPT_VERSION, UNIVERSAL_SDK_VERSION, UUID_VERSION,
-                VALIDATOR_VERSION, VITEST_VERSION, ZOD_VERSION, application_build_script,
-                application_clean_purge_script, application_clean_script, application_docs_script,
-                application_format_script, application_lint_fix_script, application_lint_script,
-                application_migrate_script, application_seed_script, application_setup_script,
-                application_test_script, application_up_packages_script, project_clean_script,
-                project_format_script, project_lint_fix_script, project_lint_script,
-                project_test_script,
+                UWEBSOCKETS_VERSION, VALIDATOR_VERSION, VITEST_VERSION, ZOD_VERSION,
+                application_build_script, application_clean_purge_script, application_clean_script,
+                application_docs_script, application_format_script, application_lint_fix_script,
+                application_lint_script, application_migrate_script, application_seed_script,
+                application_setup_script, application_test_script, application_up_packages_script,
+                project_clean_script, project_format_script, project_lint_fix_script,
+                project_lint_script, project_test_script,
             },
             project_package_json::{ProjectDependencies, ProjectDevDependencies, ProjectScripts},
         },
-        bunfig::generate_bunfig,
         pnpm_workspace::generate_pnpm_workspace,
         rendered_template::{RenderedTemplate, create_forklaunch_dir, write_rendered_templates},
         symlinks::generate_symlinks,
         template::{PathIO, generate_with_template, get_routers_from_standard_package},
-        token::get_token,
         tsconfig::generate_modules_tsconfig,
-        client_sdk::get_client_sdk_additional_deps,
         vscode::generate_vscode_settings,
     },
     prompt::{
@@ -98,8 +96,9 @@ fn use_generated_sdk_mode_for_init(
     manifest_data: &ApplicationManifestData,
     rendered_templates: &mut Vec<RenderedTemplate>,
 ) -> Result<()> {
-    use crate::core::rendered_template::RenderedTemplatesCache;
-    use crate::sdk::mode::apply_generated_sdk_mode_setup;
+    use crate::{
+        core::rendered_template::RenderedTemplatesCache, sdk::mode::apply_generated_sdk_mode_setup,
+    };
 
     let mut cache = RenderedTemplatesCache::new();
     for template in rendered_templates.drain(..) {
@@ -203,6 +202,11 @@ fn generate_application_package_json(
             } else {
                 None
             },
+            oxlint_tsgolint: if data.is_oxlint {
+                Some(OXLINT_TSGOLINT_VERSION.to_string())
+            } else {
+                None
+            },
             prettier: if data.is_prettier {
                 Some(PRETTIER_VERSION.to_string())
             } else {
@@ -260,11 +264,13 @@ fn generate_application_package_json(
             } else {
                 None
             },
-            additional_deps: HashMap::new(),
+            additional_deps: indexmap::IndexMap::new(),
         }),
         pnpm: None,
         patched_dependencies: None,
-        additional_entries: HashMap::new(),
+        additional_entries: if data.is_bun {
+            HashMap::from([("overrides".to_owned(), serde_json::to_value(crate::core::pnpm_workspace::framework_release_overrides())?)])
+        } else { HashMap::new() },
     };
 
     Ok(RenderedTemplate {
@@ -311,6 +317,10 @@ fn display_path(path: &Path) -> String {
 /// Nothing said so at the one moment the user is guaranteed to be looking: the
 /// end of `init`. Saying it once here is cheaper than every user rediscovering
 /// it, and cheaper than the support answer.
+/// Skills are opt-in; init only says how to add them for the user's coding agent.
+pub(crate) const CONTEXT_HINT: &str =
+    "  forklaunch context      add ForkLaunch skills for your coding agent (Claude Code, Codex, Cursor, ...)";
+
 fn next_steps(app_root: &Path, workspace_root: &Path, runtime: &str) -> String {
     let package_manager = if runtime == "bun" { "bun" } else { "pnpm" };
     let app = display_path(app_root);
@@ -320,7 +330,7 @@ fn next_steps(app_root: &Path, workspace_root: &Path, runtime: &str) -> String {
     // warn about — do not invent a distinction the user does not have.
     if app == workspace {
         return format!(
-            "\nNext steps\n  cd {app}\n  {package_manager} install\n  forklaunch score --offline\n"
+            "\nNext steps\n  cd {app}\n  {package_manager} install\n  forklaunch score --offline\n{CONTEXT_HINT}\n"
         );
     }
 
@@ -329,7 +339,7 @@ fn next_steps(app_root: &Path, workspace_root: &Path, runtime: &str) -> String {
          \n  {app:<width$}  forklaunch commands run here (.forklaunch/manifest.toml)\
          \n  {workspace:<width$}  {package_manager} commands run here (package.json, workspace root)\
          \n\
-         \nNext steps\n  cd {workspace} && {package_manager} install\n  cd {app} && forklaunch score --offline\n\
+         \nNext steps\n  cd {workspace} && {package_manager} install\n  cd {app} && forklaunch score --offline\n{CONTEXT_HINT}\n\
          \n`{package_manager} install` at {app} fails with a \"no package.json\" error.\n\
          That is the wrong directory, not a broken scaffold.\n",
         width = app.len().max(workspace.len())
@@ -352,7 +362,35 @@ impl CliCommand for ApplicationCommand {
                     .short('o')
                     .long("modules-path")
                     .help("The subpath where forklaunch modules will be initialized")
-                    .value_parser(ModulesPath::VARIANTS),
+                    .value_parser(["src", "src/modules", "modules"]),
+            )
+            .arg(
+                Arg::new("language")
+                    .long("language")
+                    .help("Legacy application language hint; select language on individual projects")
+                    .hide(true)
+                    .value_parser(rust_project::PROJECT_LANGUAGE_VARIANTS)
+                    .default_value("typescript"),
+            )
+            .arg(
+                Arg::new("framework-version")
+                    .long("framework-version")
+                    .conflicts_with("framework-path")
+                    .help("Use an exact published Rust framework version"),
+            )
+            .arg(
+                Arg::new("framework-path")
+                    .long("framework-path")
+                    .help("Reference a local framework-rs checkout in place for Rust development"),
+            )
+            .arg(
+                Arg::new("sdk-targets")
+                    .long("sdk-targets")
+                    .help("Optional SDK target override; defaults to TypeScript and Rust")
+                    .hide(true)
+                    .value_parser(rust_project::SDK_TARGET_VARIANTS)
+                    .num_args(1..)
+                    .action(ArgAction::Append),
             )
             .arg(
                 Arg::new("database")
@@ -380,7 +418,7 @@ impl CliCommand for ApplicationCommand {
                     .short('l')
                     .long("linter")
                     .help("The linter to use")
-                    .value_parser(Linter::VARIANTS),
+                    .value_parser(linter_value_parser()),
             )
             .arg(
                 Arg::new("http-framework")
@@ -408,7 +446,7 @@ impl CliCommand for ApplicationCommand {
                     .short('m')
                     .long("modules")
                     .help("Additional modules to include")
-                    .value_parser(Module::VARIANTS)
+                    .value_parser(module_value_parser())
                     .num_args(0..)
                     .action(ArgAction::Append),
             )
@@ -441,9 +479,11 @@ impl CliCommand for ApplicationCommand {
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        // TODO: Include basic token checks (expiration, permissions mapping) in this method, but retrieve token from parent command
-        let _token = get_token()?;
+        if rust_project::uses_rust_generation(matches) {
+            return rust_project::generate_rust_application(matches);
+        }
 
+        let framework_dependencies = rust_project::dependencies::configuration(matches)?;
         let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
@@ -488,32 +528,13 @@ impl CliCommand for ApplicationCommand {
             }
         };
 
-        let modules_path = if let Some(modules_path) = matches.get_one::<String>("modules-path") {
-            match modules_path.parse::<ModulesPath>()? {
-                ModulesPath::Src => Path::new("src").join("modules"),
-                ModulesPath::Modules => Path::new("modules").to_path_buf(),
-            }
-        } else if origin_path.join("src").exists() && origin_path.join("src").is_dir() {
-            Path::new("src").join("modules")
-        } else {
-            log_warn!(
-                stdout,
-                "No 'src' folder in project root. Please confirm where project files will be initialized."
-            );
-            let modules_path: String = prompt_with_validation(
-                &mut line_editor,
-                &mut stdout,
-                "modules-path",
-                matches,
-                "preferred modules path",
-                Some(&ModulesPath::VARIANTS),
-                |input| ModulesPath::VARIANTS.contains(&input),
-                |_| "Invalid path. Please provide a valid destination path.".to_string(),
-            )?;
-            match modules_path.parse::<ModulesPath>()? {
-                ModulesPath::Src => Path::new("src").join("modules"),
-                ModulesPath::Modules => Path::new("modules").to_path_buf(),
-            }
+        // New workspaces share one source root across project languages. Existing
+        // applications continue using their recorded modules_path unchanged.
+        let modules_path = match matches.get_one::<String>("modules-path").map(String::as_str) {
+            Some("modules") => PathBuf::from("modules"),
+            Some("src/modules") => PathBuf::from("src/modules"),
+            Some("src") | None => PathBuf::from("src"),
+            Some(other) => anyhow::bail!("Unsupported modules path: {other}"),
         };
 
         let generation_path = origin_path.join(&modules_path);
@@ -574,10 +595,11 @@ impl CliCommand for ApplicationCommand {
             "linter",
             matches,
             "linter",
-            Some(&Linter::VARIANTS),
+            Some(&SELECTABLE_LINTERS),
             |input| Linter::VARIANTS.contains(&input),
             |_| "Invalid linter type. Please try again".to_string(),
-        )?
+        )
+        .and_then(|linter| ensure_selectable_linter(&linter).map(|()| linter))?
         .parse()?;
 
         let http_framework: HttpFramework = if runtime == Runtime::Bun {
@@ -609,18 +631,18 @@ impl CliCommand for ApplicationCommand {
         };
 
         let test_framework: Option<TestFramework> = Some(
-                prompt_with_validation(
-                    &mut line_editor,
-                    &mut stdout,
-                    "test-framework",
-                    matches,
-                    "test framework",
-                    Some(&TestFramework::VARIANTS),
-                    |input| TestFramework::VARIANTS.contains(&input),
-                    |_| "Invalid test framework. Please try again".to_string(),
-                )?
-                .parse()?,
-            );
+            prompt_with_validation(
+                &mut line_editor,
+                &mut stdout,
+                "test-framework",
+                matches,
+                "test framework",
+                Some(&TestFramework::VARIANTS),
+                |input| TestFramework::VARIANTS.contains(&input),
+                |_| "Invalid test framework. Please try again".to_string(),
+            )?
+            .parse()?,
+        );
 
         let mut global_module_config = ModuleConfig {
             iam: None,
@@ -629,51 +651,54 @@ impl CliCommand for ApplicationCommand {
             messaging: None,
             cac: None,
             relay: None,
-            };
-        let mut modules: Vec<Module> = if matches.get_many::<String>("modules").is_none()
-            && std::io::stdin().is_terminal()
-        {
-            let mut modules_to_test;
-            loop {
-                global_module_config = ModuleConfig {
-                    iam: None,
-                    billing: None,
-                    ecommerce: None,
-                    messaging: None,
-                    cac: None,
-                    relay: None,
-                    };
-                modules_to_test = prompt_comma_separated_list(
-                    &mut line_editor,
-                    "modules",
-                    matches,
-                    &Module::VARIANTS,
-                    None,
-                    "modules",
-                    false,
-                )?
-                .iter()
-                .map(|module| module.parse().unwrap())
-                .collect();
-
-                if validate_modules(&modules_to_test, &mut global_module_config).is_ok() {
-                    break;
-                } else {
-                    log_warn!(stdout, "Invalid modules combination. Please try again.");
-                }
-            }
-            modules_to_test
-        } else if matches.get_many::<String>("modules").is_none() {
-            // Non-interactive mode with no --modules flag: default to empty
-            vec![]
-        } else {
-            let modules_to_test = match matches.get_many::<String>("modules") {
-                Some(values) => values.map(|module| module.parse().unwrap()).collect(),
-                None => vec![],
-            };
-            validate_modules(&modules_to_test, &mut global_module_config)?;
-            modules_to_test
         };
+        let mut modules: Vec<Module> =
+            if matches.get_many::<String>("modules").is_none() && std::io::stdin().is_terminal() {
+                let mut modules_to_test;
+                loop {
+                    global_module_config = ModuleConfig {
+                        iam: None,
+                        billing: None,
+                        ecommerce: None,
+                        messaging: None,
+                        cac: None,
+                        relay: None,
+                    };
+                    modules_to_test = prompt_comma_separated_list(
+                        &mut line_editor,
+                        "modules",
+                        matches,
+                        &offered_modules(),
+                        None,
+                        "modules",
+                        false,
+                    )?
+                    .iter()
+                    .map(|module| module.parse().unwrap())
+                    .collect();
+
+                    if validate_modules(&modules_to_test, &mut global_module_config).is_ok() {
+                        break;
+                    } else {
+                        log_warn!(stdout, "Invalid modules combination. Please try again.");
+                    }
+                }
+                modules_to_test
+            } else if matches.get_many::<String>("modules").is_none() {
+                // Non-interactive mode with no --modules flag: default to empty
+                vec![]
+            } else {
+                let modules_to_test = match matches.get_many::<String>("modules") {
+                    Some(values) => values.map(|module| module.parse().unwrap()).collect(),
+                    None => vec![],
+                };
+                validate_modules(&modules_to_test, &mut global_module_config)?;
+                modules_to_test
+            };
+
+        for module in &modules {
+            ensure_module_offered(module)?;
+        }
 
         // Relay is not a standalone service - it injects into an existing iam
         // service and so cannot be part of a fresh application scaffold. Point
@@ -687,18 +712,14 @@ impl CliCommand for ApplicationCommand {
             );
         }
 
-        modules.sort_by_key(|module| {
-            match module {
-                Module::BaseIam | Module::BetterAuthIam => 0,
-                Module::BaseBilling | Module::StripeBilling => 1,
-                Module::StripeEcommerce => 2,
-                Module::BaseMessaging | Module::TwilioMessaging => 3,
-                Module::BaseCac => 4,
-                Module::Relay => 5,
-            }
+        modules.sort_by_key(|module| match module {
+            Module::BaseIam | Module::BetterAuthIam => 0,
+            Module::BaseBilling | Module::StripeBilling => 1,
+            Module::StripeEcommerce => 2,
+            Module::BaseMessaging | Module::TwilioMessaging => 3,
+            Module::BaseCac => 4,
+            Module::Relay => 5,
         });
-
-        
 
         let description = prompt_without_validation(
             &mut line_editor,
@@ -866,8 +887,16 @@ impl CliCommand for ApplicationCommand {
             is_mssql: database == Database::MsSQL,
             is_mongo: database == Database::MongoDB,
             is_in_memory_database: is_in_memory_database(&database),
+            language: None,
+            application_language: None,
+            sdk_targets: rust_project::sdk_targets_from_matches(matches),
+            cargo_workspace: None,
+            contract_artifact_path: None,
+            openapi_path: None,
+            asyncapi_path: None,
             platform_application_id: None,
             platform_organization_id: None,
+            framework: None,
             compliance: None,
         };
 
@@ -943,11 +972,17 @@ impl CliCommand for ApplicationCommand {
 
         // One field-encryption key for the whole app: services share encrypted
         // cache records, so per-service keys would fail cross-service decrypts.
-        let generated_encryption_key =
-            crate::core::manifest::service::generate_random_secret(32);
+        let generated_encryption_key = crate::core::manifest::service::generate_random_secret(32);
 
         for template_dir in template_dirs {
             let mut service_data = ServiceManifestData {
+                language: data.language.clone(),
+                application_language: data.application_language.clone(),
+                sdk_targets: data.sdk_targets.clone(),
+                cargo_workspace: data.cargo_workspace.clone(),
+                contract_artifact_path: data.contract_artifact_path.clone(),
+                openapi_path: data.openapi_path.clone(),
+                asyncapi_path: data.asyncapi_path.clone(),
                 id: data.id.clone(),
                 cli_version: data.cli_version.clone(),
                 app_name: data.app_name.clone(),
@@ -1028,6 +1063,7 @@ impl CliCommand for ApplicationCommand {
                 is_database_enabled: true,
                 platform_application_id: data.platform_application_id.clone(),
                 platform_organization_id: data.platform_organization_id.clone(),
+                framework: data.framework.clone(),
                 compliance: data.compliance.clone(),
 
                 is_better_auth: template_dir.module_id == Some(Module::BetterAuthIam),
@@ -1057,8 +1093,12 @@ impl CliCommand for ApplicationCommand {
                     .module_id
                     .as_ref()
                     .is_some_and(|module| get_service_module_cache(module).is_some())
-                    || data.projects.iter().any(|project_entry| project_entry.name == "iam" || project_entry.name == "billing"),
-                is_type_needed: data.projects.iter().any(|project_entry| project_entry.name == "iam" || project_entry.name == "billing"),
+                    || data.projects.iter().any(|project_entry| {
+                        project_entry.name == "iam" || project_entry.name == "billing"
+                    }),
+                is_type_needed: data.projects.iter().any(|project_entry| {
+                    project_entry.name == "iam" || project_entry.name == "billing"
+                }),
 
                 // Default to false for application initialization, will be set by CLI flag
                 with_mappers: false,
@@ -1077,6 +1117,7 @@ impl CliCommand for ApplicationCommand {
                 service_data.is_billing = global_module_config.billing.is_some();
                 service_data.is_messaging = global_module_config.messaging.is_some();
                 service_data.is_cac = global_module_config.cac.is_some();
+                service_data.is_ecommerce = global_module_config.ecommerce.is_some();
                 service_data.is_better_auth = global_module_config
                     .iam
                     .as_ref()
@@ -1180,6 +1221,9 @@ impl CliCommand for ApplicationCommand {
                         forklaunch_common: Some(COMMON_VERSION.to_string()),
                         forklaunch_core: Some(CORE_VERSION.to_string()),
                         forklaunch_universal_sdk: Some(UNIVERSAL_SDK_VERSION.to_string()),
+                        // Inferred SDK client types (the Better Auth factory) name
+                        // the validator's schema types in declaration output.
+                        forklaunch_validator: Some(VALIDATOR_VERSION.to_string()),
                         better_auth: if global_module_config
                             .iam
                             .as_ref()
@@ -1210,7 +1254,8 @@ impl CliCommand for ApplicationCommand {
                             global_module_config.iam.is_some(),
                             global_module_config.messaging.is_some(),
                             global_module_config.cac.is_some(),
-                        ),
+                            global_module_config.ecommerce.is_some(),
+                        ).into_iter().collect(),
                         ..Default::default()
                     }),
                     _ => None,
@@ -1250,16 +1295,16 @@ impl CliCommand for ApplicationCommand {
                 },
                 match service_data.service_name.as_str() {
                     "core" => Some("lib/index.js".to_string()),
-                    "monitoring" => None,
-                    "client-sdk" => None,
+                    "monitoring" => Some("lib/index.js".to_string()),
+                    "client-sdk" => Some("dist/index.js".to_string()),
                     _ => None,
                 },
                 match service_data.service_name.as_str() {
-                    "client-sdk" => Some(None),
+                    "core" | "monitoring" => Some(Some("lib/index.d.ts".to_string())),
+                    "client-sdk" => Some(Some("dist/index.d.ts".to_string())),
                     _ => None,
                 },
             )?);
-
         }
 
         let docker_compose_path = if let Some(docker_compose_path) = &data.docker_compose_path {
@@ -1322,8 +1367,6 @@ impl CliCommand for ApplicationCommand {
             );
         }
 
-
-
         create_forklaunch_dir(
             &Path::new(&origin_path).to_string_lossy().to_string(),
             dryrun,
@@ -1351,19 +1394,13 @@ impl CliCommand for ApplicationCommand {
             dryrun,
         )?);
 
-        use_generated_sdk_mode_for_init(
-            &origin_path,
-            &data,
-            &mut rendered_templates,
-        )?;
-
-        rendered_templates.extend(
-            ensure_github_configs(&origin_path, &ManifestData::Application(&data))
-                .with_context(|| "Failed to generate GitHub config files")?,
-        );
+        use_generated_sdk_mode_for_init(&origin_path, &data, &mut rendered_templates)?;
 
         write_rendered_templates(&rendered_templates, dryrun, &mut stdout)
             .with_context(|| "Failed to write application files")?;
+        if !dryrun {
+            crate::core::forklaunch_state::write_framework(&origin_path, &framework_dependencies)?;
+        }
 
         additional_projects_dirs
             .into_iter()
@@ -1377,6 +1414,14 @@ impl CliCommand for ApplicationCommand {
             })?;
 
         if !dryrun {
+            rust_project::adopt_typescript_image(&origin_path)?;
+            if data.projects.iter().any(|project| project.name == "iam" && matches!(project.variant.as_deref(), Some("iam-base" | "iam-better-auth"))) {
+                crate::sdk::typescript_build::prepare_default_service(&origin_path, "iam", &data.runtime, true)?;
+                crate::init::rust_project::refresh_mixed_images(&origin_path)?;
+            }
+            // After the image and package-manager pin exist, so CI uses both.
+            reconcile_github_configs(&origin_path)
+                .with_context(|| "Failed to generate GitHub config files")?;
             log_ok!(stdout, "{} initialized successfully!", name);
             write!(
                 stdout,
@@ -1393,6 +1438,41 @@ impl CliCommand for ApplicationCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn application_needs_no_language_or_sdk_choice() {
+        let matches = ApplicationCommand::new().command().version("test")
+            .try_get_matches_from(["application", "example"]).unwrap();
+        assert_eq!(rust_project::sdk_targets_from_matches(&matches), ["typescript", "rust"]);
+        assert!(matches.get_one::<String>("modules-path").is_none());
+        for source in ["src", "src/modules", "modules"] {
+            assert!(ApplicationCommand::new().command().version("test")
+                .try_get_matches_from(["application", "example", "--modules-path", source]).is_ok());
+        }
+        let help = ApplicationCommand::new().command().version("test").render_long_help().to_string();
+        assert!(!help.contains("--language"));
+        assert!(!help.contains("--sdk-targets"));
+    }
+
+    #[test]
+    fn framework_dependency_choice_needs_no_application_language() {
+        let command = || ApplicationCommand::new().command().version("test");
+        let matches = command().try_get_matches_from(["application", "example", "--framework-version", "0.1.0"]).unwrap();
+        let config = rust_project::dependencies::configuration(&matches).unwrap();
+        assert_eq!(config["version"].as_str(), Some("0.1.0"));
+        assert!(config["blueprint_version"].as_str().is_some());
+        let invalid = command().try_get_matches_from(["application", "example", "--framework-version", "latest"]).unwrap();
+        assert!(rust_project::dependencies::configuration(&invalid).is_err());
+        assert!(command().try_get_matches_from(["application", "example", "--framework-version", "0.1.0", "--framework-path", "."]).is_err());
+        let default = command().try_get_matches_from(["application", "example"]).unwrap();
+        assert!(rust_project::dependencies::configuration(&default).unwrap()["version"].as_str().is_some());
+    }
+
+    #[test]
+    fn application_rejects_presets() {
+        let error = ApplicationCommand::new().command().version("test").try_get_matches_from(["application", "notes", "--preset", "fieldnotes"]).unwrap_err();
+        assert_eq!(error.kind(), clap::error::ErrorKind::UnknownArgument);
+    }
 
     fn build_command() -> Command {
         Command::new("application")
@@ -1415,7 +1495,9 @@ mod tests {
     #[test]
     fn modules_prompt_needed_when_name_provided_without_modules_flag() {
         let cmd = build_command();
-        let matches = cmd.try_get_matches_from(vec!["application", "my-app"]).unwrap();
+        let matches = cmd
+            .try_get_matches_from(vec!["application", "my-app"])
+            .unwrap();
         // With only a positional name arg, modules should not be present — prompt is needed
         assert!(matches.get_many::<String>("modules").is_none());
     }
@@ -1444,13 +1526,21 @@ mod tests {
         // This test documents the bug: the old condition `matches.ids().all(|id| id == "dryrun")`
         // returned false when a positional "name" arg was provided, skipping the module prompt.
         let cmd = build_command();
-        let matches = cmd.try_get_matches_from(vec!["application", "my-app"]).unwrap();
+        let matches = cmd
+            .try_get_matches_from(vec!["application", "my-app"])
+            .unwrap();
         // Old condition would have been false (because "name" id is present), incorrectly
         // skipping the prompt. The new condition correctly checks for modules absence.
         let old_condition = matches.ids().all(|id| id == "dryrun");
         let new_condition = matches.get_many::<String>("modules").is_none();
-        assert!(!old_condition, "old condition incorrectly returns false with name arg");
-        assert!(new_condition, "new condition correctly identifies modules prompt is needed");
+        assert!(
+            !old_condition,
+            "old condition incorrectly returns false with name arg"
+        );
+        assert!(
+            new_condition,
+            "new condition correctly identifies modules prompt is needed"
+        );
     }
 }
 
@@ -1476,11 +1566,7 @@ mod next_steps_tests {
 
     #[test]
     fn names_the_runtimes_own_package_manager() {
-        let bun = next_steps(
-            Path::new("/tmp/a"),
-            Path::new("/tmp/a/modules"),
-            "bun",
-        );
+        let bun = next_steps(Path::new("/tmp/a"), Path::new("/tmp/a/modules"), "bun");
         assert!(bun.contains("bun install"), "{bun}");
         assert!(!bun.contains("pnpm"), "{bun}");
     }

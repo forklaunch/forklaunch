@@ -13,11 +13,11 @@ import {
 describe('Plan Routes E2E Tests with PostgreSQL Container', () => {
   beforeAll(async () => {
     await setupTestDatabase();
-  }, 60000);
+  });
 
   afterAll(async () => {
     await cleanupTestDatabase();
-  }, 30000);
+  });
 
   describe('POST /plan - createPlan', () => {
     it('should create a plan successfully', async () => {

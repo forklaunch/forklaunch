@@ -48,7 +48,6 @@ struct SubscriptionInfo {
     status: Option<String>,
 }
 
-
 impl CliCommand for WhoAmICommand {
     fn command(&self) -> Command {
         command("whoami", "Get the current user")
@@ -67,10 +66,7 @@ impl CliCommand for WhoAmICommand {
             .with_context(|| "Failed to reach platform API")?;
 
         if !response.status().is_success() {
-            anyhow::bail!(
-                "Failed to fetch user info (HTTP {})",
-                response.status()
-            );
+            anyhow::bail!("Failed to fetch user info (HTTP {})", response.status());
         }
 
         let me: MeResponse = response

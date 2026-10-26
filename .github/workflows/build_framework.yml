@@ -8,11 +8,26 @@ on:
     paths:
       - 'framework/**'
   pull_request:
-    paths:
-      - 'framework/**'
+
+permissions:
+  contents: read
 
 jobs:
+  # Which suites this pull request can affect (.github/ci/impact.py). Pushes
+  # and dispatches run everything.
+  changes:
+    name: Changed paths
+    uses: ./.github/workflows/changes.yml
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      full: ${{ github.event_name != 'pull_request' }}
+
   build:
+    name: Build framework packages
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.impacts), 'framework')
     runs-on: ubuntu-latest
     container: ubuntu
 
@@ -25,9 +40,9 @@ jobs:
           node-version: '24'
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.4.0
         with:
-          version: 11.1.0
+          version: 11.28.7
 
       - name: Install system dependencies
         run: apt-get update && apt-get install -y git libatomic1
@@ -43,3 +58,21 @@ jobs:
       - name: Run tests
         working-directory: ./framework
         run: pnpm test
+
+  # The status to require: passes when the build passed or was not needed.
+  ok:
+    name: Build Framework
+    needs: [changes, build]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check the build passed or was not needed
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          RESULT: ${{ needs.build.result }}
+          NEEDED: ${{ contains(fromJSON(needs.changes.outputs.impacts || '["all"]'), 'framework') }}
+        run: |
+          echo "changes: $CHANGES, build: $RESULT (needed: $NEEDED)"
+          [ "$CHANGES" = success ] || exit 1
+          [ "$RESULT" = success ] || { [ "$RESULT" = skipped ] && [ "$NEEDED" = false ]; }

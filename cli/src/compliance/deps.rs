@@ -1,7 +1,7 @@
 //! Known-vulnerable and malicious dependencies, read from the app's lockfiles.
 //!
 //! Every package version pinned by a lockfile (npm, pnpm, yarn, bun; pip
-//! requirements pins, poetry, uv, Pipfile) is looked up in OSV, the database
+//! requirements pins, poetry, uv, Pipfile; crates.io Cargo packages) is looked up in OSV, the database
 //! behind `osv-scanner` that merges the GitHub advisories, the PyPA advisories
 //! and the OpenSSF malicious-packages feed. A version is either listed as
 //! affected or it is not, so the check is exact for what the database knows.
@@ -25,12 +25,16 @@ use sha2::{Digest, Sha256};
 
 use super::checks::{LocalFinding, Severity};
 
+mod cargo;
+
 const OSV_API: &str = "https://api.osv.dev/v1";
 /// OSV accepts up to 1,000 queries per batch.
 const BATCH: usize = 1000;
 const CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 const SKIP_DIRS: &[&str] = &[
     "node_modules",
+    "target",
+    ".forklaunch",
     ".git",
     "dist",
     "build",
@@ -64,10 +68,12 @@ pub(crate) struct Package {
 pub(crate) struct Inventory {
     pub(crate) packages: Vec<Package>,
     pub(crate) lockfiles: Vec<String>,
-    /// A `package.json` or `pyproject.toml` at the app root with no lockfile beside it.
+    /// An ecosystem manifest at the app root with no matching lockfile beside it.
     pub(crate) unpinned_manifest: Option<String>,
     /// Lockfiles found but not readable or parseable: their versions were never checked.
     pub(crate) unreadable: Vec<String>,
+    /// Packages whose registry or Git source cannot be queried by registry name/version.
+    pub(crate) unsupported: Vec<String>,
 }
 
 fn walk(root: &Path, names: &[&str]) -> Vec<PathBuf> {
@@ -233,6 +239,7 @@ pub(crate) fn inventory(root: &Path) -> Inventory {
     let mut packages = Vec::new();
     let mut lockfiles = BTreeSet::new();
     let mut unreadable = Vec::new();
+    let mut unsupported = Vec::new();
     let mut add = |eco: &'static str, name: String, version: String, file: &Path| {
         if !name.is_empty() && is_version(&version) {
             packages.push(Package {
@@ -490,24 +497,55 @@ pub(crate) fn inventory(root: &Path) -> Inventory {
         }
     }
 
+    cargo::collect(
+        root,
+        &mut lockfiles,
+        &mut unreadable,
+        &mut unsupported,
+        &mut add,
+    );
+
     packages.sort();
     packages
         .dedup_by(|a, b| a.ecosystem == b.ecosystem && a.name == b.name && a.version == b.version);
 
-    let has_root_lock = lockfiles.iter().any(|l| !l.contains('/'));
-    let unpinned_manifest = if has_root_lock {
-        None
-    } else {
-        ["package.json", "pyproject.toml"]
-            .into_iter()
-            .find(|m| root.join(m).is_file())
-            .map(str::to_string)
-    };
+    // A lockfile for one ecosystem does not pin another ecosystem's dependencies.
+    let unpinned_manifest = [
+        (
+            "package.json",
+            &[
+                "package-lock.json",
+                "npm-shrinkwrap.json",
+                "pnpm-lock.yaml",
+                "yarn.lock",
+                "bun.lock",
+                "bun.lockb",
+            ][..],
+        ),
+        (
+            "pyproject.toml",
+            &["poetry.lock", "uv.lock", "Pipfile.lock"][..],
+        ),
+        ("Cargo.toml", &["Cargo.lock"][..]),
+    ]
+    .into_iter()
+    .find(|(manifest, locks)| {
+        root.join(manifest).is_file()
+            && !locks.iter().any(|lock| lockfiles.contains(*lock))
+            && !(*manifest == "pyproject.toml"
+                && lockfiles.iter().any(|lock| {
+                    !lock.contains('/')
+                        && lock.starts_with("requirements")
+                        && lock.ends_with(".txt")
+                }))
+    })
+    .map(|(manifest, _)| manifest.to_string());
     Inventory {
         packages,
         lockfiles: lockfiles.into_iter().collect(),
         unpinned_manifest,
         unreadable,
+        unsupported,
     }
 }
 
@@ -745,6 +783,14 @@ fn scan_with(
             "Could not be read or parsed, so the versions it pins were not checked against the vulnerability database. Fix or regenerate the lockfile.".to_string(),
         ));
     }
+    if !inv.unsupported.is_empty() {
+        findings.push(finding(
+            Severity::Warning,
+            "dependency-scan-incomplete",
+            inv.unsupported.join(", "),
+            "Git and private-registry Cargo dependencies cannot be checked as crates.io releases. Audit their actual source and pinned revision separately.".to_string(),
+        ));
+    }
     if inv.packages.is_empty() {
         return findings;
     }
@@ -872,6 +918,153 @@ mod tests {
             .iter()
             .map(|p| format!("{}:{}@{}", p.ecosystem, p.name, p.version))
             .collect()
+    }
+
+    fn cargo_lock(version: &str, source: Option<&str>) -> String {
+        format!(
+            "{version}[[package]]\nname = \"example\"\nversion = \"1.2.3-beta.1+build\"\n{}",
+            source
+                .map(|source| format!("source = {source:?}\n"))
+                .unwrap_or_default()
+        )
+    }
+
+    #[test]
+    fn cargo_registry_versions_are_deduplicated_and_local_packages_are_excluded() {
+        for version in ["", "version = 3\n", "version = 4\n"] {
+            let lock = cargo_lock(
+                version,
+                Some("registry+https://github.com/rust-lang/crates.io-index"),
+            );
+            let local = cargo_lock(version, None);
+            let dir = app(&[
+                ("Cargo.lock", &lock),
+                ("service/Cargo.lock", &lock),
+                ("local/Cargo.lock", &local),
+            ]);
+            let inv = inventory(dir.path());
+            assert_eq!(names(&inv), ["crates.io:example@1.2.3-beta.1+build"]);
+            assert!(inv.unreadable.is_empty());
+            assert!(inv.unsupported.is_empty());
+            assert_eq!(inv.lockfiles.len(), 3);
+        }
+    }
+
+    #[test]
+    fn cargo_build_and_bundled_sources_are_not_application_dependencies() {
+        let lock = cargo_lock(
+            "version = 4\n",
+            Some("registry+https://github.com/rust-lang/crates.io-index"),
+        );
+        let dir = app(&[
+            ("Cargo.toml", "[workspace]"),
+            ("target/debug/Cargo.lock", &lock),
+            (".forklaunch/framework-rs/Cargo.lock", &lock),
+        ]);
+        let inv = inventory(dir.path());
+        assert!(inv.packages.is_empty());
+        assert!(inv.lockfiles.is_empty());
+        assert_eq!(inv.unpinned_manifest.as_deref(), Some("Cargo.toml"));
+    }
+
+    #[test]
+    fn cargo_git_and_private_registry_sources_report_incomplete_without_credentials() {
+        for source in [
+            "git+https://secret@example.com/repo#abc",
+            "registry+https://secret@example.com/index",
+        ] {
+            let lock = cargo_lock("version = 4\n", Some(source));
+            let dir = app(&[("Cargo.lock", &lock)]);
+            let findings = scan_with(dir.path(), "app", Lookup::CacheOnly, None);
+            assert_eq!(findings.len(), 1);
+            assert_eq!(findings[0].check, "dependency-scan-incomplete");
+            assert_eq!(
+                findings[0].subject,
+                "example@1.2.3-beta.1+build (Cargo.lock)"
+            );
+            assert!(!findings[0].message.contains("secret"));
+            assert!(!findings[0].subject.contains("secret"));
+        }
+    }
+
+    #[test]
+    fn malformed_and_future_cargo_lockfiles_report_incomplete() {
+        for body in [
+            "[broken",
+            "unrelated = true",
+            "version = 99",
+            "version = \"4\"",
+            "version = 4\npackage = \"wrong\"",
+            "[[package]]\nname = \"foo\"",
+            "[[package]]\nname = \"foo\"\nversion = \"wrong\"",
+        ] {
+            let dir = app(&[("Cargo.lock", body)]);
+            let inv = inventory(dir.path());
+            assert_eq!(inv.unreadable, ["Cargo.lock"], "{body}");
+            assert!(inv.packages.is_empty());
+        }
+        let dir = app(&[("Cargo.lock", "version = 4")]);
+        assert!(inventory(dir.path()).unreadable.is_empty());
+    }
+
+    #[test]
+    fn each_root_ecosystem_needs_its_own_lockfile() {
+        for (files, missing) in [
+            (
+                vec![("Cargo.toml", "[workspace]"), ("package-lock.json", "{}")],
+                "Cargo.toml",
+            ),
+            (
+                vec![("package.json", "{}"), ("Cargo.lock", "version = 4")],
+                "package.json",
+            ),
+            (
+                vec![
+                    ("pyproject.toml", "[project]"),
+                    ("Cargo.lock", "version = 4"),
+                ],
+                "pyproject.toml",
+            ),
+        ] {
+            assert_eq!(
+                inventory(app(&files).path()).unpinned_manifest.as_deref(),
+                Some(missing)
+            );
+        }
+    }
+
+    #[test]
+    fn cargo_offline_lookup_reports_incomplete_until_cached_and_uses_rustsec_details() {
+        let lock = cargo_lock(
+            "version = 4\n",
+            Some("registry+https://github.com/rust-lang/crates.io-index"),
+        );
+        let dir = app(&[("Cargo.lock", &lock)]);
+        let cache_dir = tempfile::tempdir().unwrap();
+        let cache = Some(cache_dir.path().to_path_buf());
+        let findings = scan_with(dir.path(), "app", Lookup::CacheOnly, cache.clone());
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].check, "dependency-scan-incomplete");
+        let pkg = &inventory(dir.path()).packages[0];
+        assert_eq!(query_key(pkg), "crates.io/example@1.2.3-beta.1+build");
+        write_cache(&cache, "q", &query_key(pkg), &json!(["RUSTSEC-2026-0000"]));
+        write_cache(
+            &cache,
+            "v",
+            "RUSTSEC-2026-0000",
+            &json!({
+                "summary": "Example advisory", "database_specific": {"severity": "HIGH"},
+                "affected": [{"package": {"ecosystem": "crates.io", "name": "example"},
+                    "ranges": [{"type": "SEMVER", "events": [{"introduced": "0"}, {"fixed": "1.2.4"}]}]}]
+            }),
+        );
+        let findings = scan_with(dir.path(), "app", Lookup::CacheOnly, cache.clone());
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].check, "dependency-vulnerable");
+        assert!(findings[0].message.contains("HIGH RUSTSEC-2026-0000"));
+        assert!(findings[0].message.contains("Fixed in 1.2.4"));
+        write_cache(&cache, "q", &query_key(pkg), &json!([]));
+        assert!(scan_with(dir.path(), "app", Lookup::CacheOnly, cache).is_empty());
     }
 
     #[test]

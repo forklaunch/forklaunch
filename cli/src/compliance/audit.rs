@@ -17,8 +17,8 @@ use crate::{
         ast::infrastructure::compliance::{scan_all_compliance, scan_entity_compliance},
         command::command,
         hmac::AuthMode,
-        static_analysis::route_analyzer,
         http_client::post_with_auth,
+        static_analysis::route_analyzer,
         validate::require_manifest,
     },
 };
@@ -34,58 +34,63 @@ impl AuditCommand {
 
 impl CliCommand for AuditCommand {
     fn command(&self) -> Command {
-        command(
-            "audit",
-            "Generate a point-in-time compliance audit report",
-        )
-        .arg(
-            Arg::new("base_path")
-                .short('p')
-                .long("path")
-                .help("The application path"),
-        )
-        .arg(
-            Arg::new("output")
-                .short('o')
-                .long("output")
-                .help("Output file path (JSON). If omitted, prints to terminal."),
-        )
-        .arg(
-            Arg::new("environment")
-                .short('e')
-                .long("environment")
-                .help("Environment name to associate with the report (e.g. production, staging)"),
-        )
-        .arg(
-            Arg::new("data_flow")
-                .long("data-flow")
-                .help("Show PCI cardholder data flow diagram (Mermaid)")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("risk_score")
-                .long("risk-score")
-                .help("Show risk score and findings")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("dpia")
-                .long("dpia")
-                .help("Show GDPR Data Protection Impact Assessment")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("json")
-                .long("json")
-                .help("Output raw JSON instead of formatted terminal output")
-                .action(ArgAction::SetTrue),
-        )
+        command("audit", "Generate a point-in-time compliance audit report")
+            .arg(
+                Arg::new("offline")
+                    .long("offline")
+                    .action(ArgAction::SetTrue)
+                    .help("Use cached dependency advisories and keep the audit local"),
+            )
+            .arg(
+                Arg::new("base_path")
+                    .short('p')
+                    .long("path")
+                    .help("The application path"),
+            )
+            .arg(
+                Arg::new("output")
+                    .short('o')
+                    .long("output")
+                    .help("Output file path (JSON). If omitted, prints to terminal."),
+            )
+            .arg(
+                Arg::new("environment").short('e').long("environment").help(
+                    "Environment name to associate with the report (e.g. production, staging)",
+                ),
+            )
+            .arg(
+                Arg::new("data_flow")
+                    .long("data-flow")
+                    .help("Show PCI cardholder data flow diagram (Mermaid)")
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new("risk_score")
+                    .long("risk-score")
+                    .help("Show risk score and findings")
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new("dpia")
+                    .long("dpia")
+                    .help("Show GDPR Data Protection Impact Assessment")
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new("json")
+                    .long("json")
+                    .help("Output raw JSON instead of formatted terminal output")
+                    .action(ArgAction::SetTrue),
+            )
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
         let (app_root, manifest) = require_manifest(matches)?;
 
+        let rust_declarations =
+            super::rust_artifact::scan(&app_root, &manifest.modules_path, &manifest.projects);
+        let offline = matches.get_flag("offline");
         let compliance = manifest.compliance.unwrap_or_default();
         let application_id = manifest.platform_application_id.clone();
         let environment_name = matches.get_one::<String>("environment").cloned();
@@ -99,16 +104,15 @@ impl CliCommand for AuditCommand {
         // Scan entity compliance data directly from source code
         let modules_path = &manifest.modules_path;
         let modules_path_buf = app_root.join(modules_path);
-        let (field_classifications, retention_policies) =
-            scan_all_compliance(&modules_path_buf)
-                .unwrap_or_else(|e| {
-                    let _ = writeln!(
-                        stdout,
-                        "[WARN] Failed to scan entity compliance metadata: {}",
-                        e
-                    );
-                    (Default::default(), Default::default())
-                });
+        let (field_classifications, retention_policies) = scan_all_compliance(&modules_path_buf)
+            .unwrap_or_else(|e| {
+                let _ = writeln!(
+                    stdout,
+                    "[WARN] Failed to scan entity compliance metadata: {}",
+                    e
+                );
+                (Default::default(), Default::default())
+            });
 
         // Which module owns each entity, and whether that module actually wires a
         // FieldEncryptor. Encryption at rest is NOT implied by the classification
@@ -117,7 +121,8 @@ impl CliCommand for AuditCommand {
         // tag it was given.
         let module_ctx = scan_module_encryption_context(&modules_path_buf);
 
-        let mut entity_names: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        let mut entity_names: std::collections::BTreeSet<String> =
+            std::collections::BTreeSet::new();
         entity_names.extend(field_classifications.keys().cloned());
         entity_names.extend(retention_policies.keys().cloned());
 
@@ -135,8 +140,7 @@ impl CliCommand for AuditCommand {
                                 // alike) — but only if the owning module registered an
                                 // encryptor.
                                 let encrypts = classification_encrypts(classification);
-                                let protected = encrypts
-                                    && module_ctx.entity_is_protected(&name);
+                                let protected = encrypts && module_ctx.entity_is_protected(&name);
                                 FieldReport {
                                     name: field_name.clone(),
                                     compliance: classification.clone(),
@@ -149,11 +153,10 @@ impl CliCommand for AuditCommand {
                 // `field_classifications` is a HashMap, so its fields iterate in a non-deterministic
                 // order — sort by name so the report (and `--json`) is byte-stable for the same code.
                 field_reports.sort_by(|a, b| a.name.cmp(&b.name));
-                let retention =
-                    retention_policies.get(&name).map(|r| RetentionReport {
-                        duration: r.duration.clone(),
-                        action: r.action.clone(),
-                    });
+                let retention = retention_policies.get(&name).map(|r| RetentionReport {
+                    duration: r.duration.clone(),
+                    action: r.action.clone(),
+                });
                 EntityReport {
                     module: module_ctx.entity_module.get(&name).cloned(),
                     name,
@@ -197,7 +200,10 @@ impl CliCommand for AuditCommand {
             if !specs_found {
                 // Write to stderr so stdout stays parseable for --json / --output
                 let mut stderr = StandardStream::stderr(ColorChoice::Always);
-                log_warn!(stderr, "No routes found in the source or in exported OpenAPI specs.");
+                log_warn!(
+                    stderr,
+                    "No routes found in the source or in exported OpenAPI specs."
+                );
             }
         }
 
@@ -207,7 +213,11 @@ impl CliCommand for AuditCommand {
             match super::checks::run_local_checks(&modules_path_buf) {
                 Ok(findings) => (findings, super::checks::LOCAL_CHECK_IDS.to_vec()),
                 Err(e) => {
-                    let _ = writeln!(stdout, "[WARN] Failed to run local compliance checks: {}", e);
+                    let _ = writeln!(
+                        stdout,
+                        "[WARN] Failed to run local compliance checks: {}",
+                        e
+                    );
                     let deps_only: Vec<&'static str> = super::checks::LOCAL_CHECK_IDS
                         .iter()
                         .copied()
@@ -220,7 +230,11 @@ impl CliCommand for AuditCommand {
         local_findings.extend(super::deps::scan(
             &app_root,
             &manifest.app_name,
-            super::deps::Lookup::Network,
+            if offline {
+                super::deps::Lookup::CacheOnly
+            } else {
+                super::deps::Lookup::Network
+            },
         ));
 
         // The same deterministic scan `compliance audit-tenancy` runs. Best
@@ -258,6 +272,8 @@ impl CliCommand for AuditCommand {
 
         // Build the local report
         let report = ComplianceReport {
+            rust_declarations,
+            local_check_coverage: "TypeScript source and dependency lockfiles; Rust declaration coverage is reported separately",
             generated_at: chrono::Utc::now().to_rfc3339(),
             routes,
             modules: module_ctx.module_reports(),
@@ -275,11 +291,19 @@ impl CliCommand for AuditCommand {
         };
 
         // Try to upload to platform API if credentials are available
-        let platform_response = upload_to_platform(
-            &report,
-            application_id.as_deref(),
-            environment_name.as_deref(),
-        );
+        let platform_response = if offline {
+            Err(anyhow::anyhow!("Offline audit: platform upload disabled"))
+        } else if !report.rust_declarations.projects.is_empty() {
+            Err(anyhow::anyhow!(
+                "Rust runtime coverage is unverified; platform scoring is not applied to declared-only artifacts"
+            ))
+        } else {
+            upload_to_platform(
+                &report,
+                application_id.as_deref(),
+                environment_name.as_deref(),
+            )
+        };
 
         // If --output is specified, write JSON to file
         if let Some(output_path) = matches.get_one::<String>("output") {
@@ -310,6 +334,26 @@ impl CliCommand for AuditCommand {
         // Pretty terminal output
         print_header(&mut stdout)?;
         print_summary(&mut stdout, &report, routes_audited)?;
+        for project in &report.rust_declarations.projects {
+            let count = project
+                .declarations
+                .as_ref()
+                .map_or(0, |a| a.entities.len());
+            writeln!(
+                stdout,
+                "  Rust {}: {} ({} storage declarations; {})",
+                project.project, project.status, count, project.artifact
+            )?;
+            if let Some(message) = project.diagnostic {
+                writeln!(stdout, "    {message}")?;
+            }
+        }
+        if !report.rust_declarations.projects.is_empty() {
+            writeln!(
+                stdout,
+                "  Rust encryption, tenant isolation, lifecycle and source freshness remain unverified by this declaration scan."
+            )?;
+        }
 
         match &platform_response {
             Ok(resp) => {
@@ -332,11 +376,7 @@ impl CliCommand for AuditCommand {
                 }
 
                 writeln!(stdout)?;
-                log_ok!(
-                    stdout,
-                    "Report saved to platform (id: {})",
-                    resp.id
-                );
+                log_ok!(stdout, "Report saved to platform (id: {})", resp.id);
             }
             Err(e) => {
                 // Fallback: local-only display
@@ -350,10 +390,12 @@ impl CliCommand for AuditCommand {
                     "Could not upload to platform: {}. Showing local data only.",
                     e
                 );
-                log_info!(
-                    stdout,
-                    "For risk scoring, data flow diagrams, and DPIA, log in with `forklaunch login` and set platform_application_id in manifest.toml"
-                );
+                if !offline && report.rust_declarations.projects.is_empty() {
+                    log_info!(
+                        stdout,
+                        "For risk scoring, data flow diagrams, and DPIA, log in with `forklaunch login` and set platform_application_id in manifest.toml"
+                    );
+                }
             }
         }
 
@@ -419,9 +461,18 @@ fn upload_to_platform(
 fn print_header(out: &mut StandardStream) -> Result<()> {
     writeln!(out)?;
     out.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)).set_bold(true))?;
-    writeln!(out, "╔══════════════════════════════════════════════════════════╗")?;
-    writeln!(out, "║             COMPLIANCE AUDIT REPORT                     ║")?;
-    writeln!(out, "╚══════════════════════════════════════════════════════════╝")?;
+    writeln!(
+        out,
+        "╔══════════════════════════════════════════════════════════╗"
+    )?;
+    writeln!(
+        out,
+        "║             COMPLIANCE AUDIT REPORT                     ║"
+    )?;
+    writeln!(
+        out,
+        "╚══════════════════════════════════════════════════════════╝"
+    )?;
     out.reset()?;
     Ok(())
 }
@@ -653,11 +704,7 @@ fn print_findings(out: &mut StandardStream, resp: &PlatformAuditResponse) -> Res
 
     writeln!(out)?;
     out.set_color(ColorSpec::new().set_fg(Some(Color::White)).set_bold(true))?;
-    writeln!(
-        out,
-        "  ── Findings ({}) ──",
-        resp.findings.len()
-    )?;
+    writeln!(out, "  ── Findings ({}) ──", resp.findings.len())?;
     out.reset()?;
 
     for finding in &resp.findings {
@@ -716,7 +763,11 @@ fn print_local_checks(out: &mut StandardStream, report: &ComplianceReport) -> Re
         out.reset()?;
 
         out.set_color(ColorSpec::new().set_fg(Some(Color::White)))?;
-        write!(out, " [{}] {}:{}", finding.check, finding.project, finding.subject)?;
+        write!(
+            out,
+            " [{}] {}:{}",
+            finding.check, finding.project, finding.subject
+        )?;
         out.reset()?;
 
         writeln!(out, " — {}", finding.message)?;
@@ -755,12 +806,19 @@ fn print_entities(out: &mut StandardStream, report: &ComplianceReport) -> Result
     writeln!(
         out,
         "  {:<field_col$} {:<class_col$} {:<enc_col$} {}",
-        "ENTITY.FIELD", "CLASSIFICATION", "ENCRYPTED", "STATUS",
+        "ENTITY.FIELD",
+        "CLASSIFICATION",
+        "ENCRYPTED",
+        "STATUS",
         field_col = field_col,
         class_col = class_col,
         enc_col = enc_col,
     )?;
-    writeln!(out, "  {}", "─".repeat(field_col + class_col + enc_col + 10))?;
+    writeln!(
+        out,
+        "  {}",
+        "─".repeat(field_col + class_col + enc_col + 10)
+    )?;
 
     for entity in &report.entities {
         for field in &entity.fields {
@@ -792,10 +850,20 @@ fn print_entities(out: &mut StandardStream, report: &ComplianceReport) -> Result
             )?;
 
             out.set_color(ColorSpec::new().set_fg(Some(classification_color)))?;
-            write!(out, "{:<width$} ", field.compliance.to_uppercase(), width = class_col)?;
+            write!(
+                out,
+                "{:<width$} ",
+                field.compliance.to_uppercase(),
+                width = class_col
+            )?;
             out.reset()?;
 
-            write!(out, "{:<width$} ", if field.encrypted { "yes" } else { "no" }, width = enc_col)?;
+            write!(
+                out,
+                "{:<width$} ",
+                if field.encrypted { "yes" } else { "no" },
+                width = enc_col
+            )?;
 
             out.set_color(ColorSpec::new().set_fg(Some(status.1)))?;
             writeln!(out, "{}", status.0)?;
@@ -816,7 +884,11 @@ fn print_routes(out: &mut StandardStream, report: &ComplianceReport) -> Result<(
     writeln!(out, "  ── Route Access Levels ──")?;
     out.reset()?;
 
-    writeln!(out, "  {:<8} {:<40} {:<18} {}", "METHOD", "PATH", "ACCESS", "AUTH")?;
+    writeln!(
+        out,
+        "  {:<8} {:<40} {:<18} {}",
+        "METHOD", "PATH", "ACCESS", "AUTH"
+    )?;
     writeln!(out, "  {}", "─".repeat(88))?;
 
     for route in &report.routes {
@@ -974,6 +1046,8 @@ fn format_key(key: &str) -> String {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ComplianceReport {
+    rust_declarations: super::rust_artifact::RustDeclarations,
+    local_check_coverage: &'static str,
     generated_at: String,
     routes: Vec<RouteReport>,
     /// Per-module encryption wiring. A module here with
@@ -1091,7 +1165,6 @@ impl ModuleEncryptionContext {
         out.sort_by(|a, b| a.name.cmp(&b.name));
         out
     }
-
 }
 
 /// Detect, per module, which entities it owns and whether it registers a
@@ -1240,11 +1313,41 @@ fn collect_routes_from_openapi(app_root: &Path, modules_path: &str) -> (Vec<Rout
         app_root.join("docs").join("openapi.json"),
     ];
 
-    // Specs written by `forklaunch openapi export` (default output directory):
-    // .forklaunch/openapi/<service>/openapi.json
+    // Specs written by `forklaunch openapi export`: each service's registered
+    // OpenAPI artifact (its SDK folder), else the legacy
+    // .forklaunch/openapi/<service>/openapi.json location.
+    let mut registered = std::collections::BTreeSet::new();
+    if let Some(manifest) = fs::read_to_string(app_root.join(".forklaunch/manifest.toml"))
+        .ok()
+        .and_then(|content| toml::from_str::<toml::Value>(&content).ok())
+    {
+        for project in manifest
+            .get("projects")
+            .and_then(toml::Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let (Some(name), Some(path)) = (
+                project.get("name").and_then(toml::Value::as_str),
+                crate::core::artifact_paths::project_path(
+                    project,
+                    crate::core::artifact_paths::Artifact::OpenApi,
+                ),
+            ) else {
+                continue;
+            };
+            let path = app_root.join(path);
+            if path.is_file() {
+                registered.insert(name.to_owned());
+                spec_paths.push(path);
+            }
+        }
+    }
     if let Ok(entries) = fs::read_dir(app_root.join(".forklaunch").join("openapi")) {
         for entry in entries.flatten() {
-            spec_paths.push(entry.path().join("openapi.json"));
+            if !registered.contains(entry.file_name().to_string_lossy().as_ref()) {
+                spec_paths.push(entry.path().join("openapi.json"));
+            }
         }
     }
 
@@ -1278,9 +1381,7 @@ fn parse_openapi_routes(path: &Path) -> Result<Vec<RouteReport>> {
             if let Some(methods_obj) = methods.as_object() {
                 for (method, operation) in methods_obj {
                     // Skip non-HTTP methods (e.g., "parameters")
-                    let http_methods = [
-                        "get", "post", "put", "patch", "delete", "head", "options",
-                    ];
+                    let http_methods = ["get", "post", "put", "patch", "delete", "head", "options"];
                     if !http_methods.contains(&method.as_str()) {
                         continue;
                     }

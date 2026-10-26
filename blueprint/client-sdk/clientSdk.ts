@@ -1,12 +1,12 @@
-import { BillingSdkClient } from '@forklaunch/blueprint-billing-base';
-import { BillingSdkClient as BillingStripeSdkClient } from '@forklaunch/blueprint-billing-stripe';
-import { IamSdkClient } from '@forklaunch/blueprint-iam-base';
-import {
+import type { BillingSdkClient } from '@forklaunch/blueprint-billing-base';
+import type { BillingSdkClient as BillingStripeSdkClient } from '@forklaunch/blueprint-billing-stripe';
+import type { IamSdkClient } from '@forklaunch/blueprint-iam-base';
+import type {
   BetterAuthConfig,
   IamSdkClient as IamBetterAuthSdkClient
 } from '@forklaunch/blueprint-iam-better-auth';
-import { SampleWorkerSdkClient } from '@forklaunch/blueprint-sample-worker';
-import { RegistryOptions, universalSdk } from '@forklaunch/universal-sdk';
+import type { SampleWorkerSdkClient } from '@forklaunch/blueprint-sample-worker';
+import { type RegistryOptions, universalSdk } from '@forklaunch/universal-sdk';
 import { createAuthClient } from 'better-auth/client';
 import { inferAdditionalFields } from 'better-auth/client/plugins';
 
@@ -24,17 +24,24 @@ export const clientBillingStripeSdkClient =
 export const clientIamSdkClient = universalSdk<IamSdkClient>;
 export const clientIamBetterAuthSdkClient = async ({
   host,
-  registryOptions
+  registryOptions,
+  coreHost,
+  authBasePath
 }: {
   host: string;
   registryOptions: RegistryOptions;
+  /** Defaults to /api/auth; use / for root. A path in host takes precedence. */
+  authBasePath?: string;
+  /** Optional application-service URL; defaults to host, preserving proxy prefixes. */
+  coreHost?: string;
 }) => ({
   core: await universalSdk<IamBetterAuthSdkClient>({
-    host,
+    host: coreHost ?? host,
     registryOptions: registryOptions
   }),
   betterAuth: createAuthClient({
     baseURL: host,
+    basePath: authBasePath,
     // The Better Auth client always sends `credentials: 'include'`, so every
     // request is cookie-bearing and hits Better Auth's origin/CSRF guard.
     // Browsers set `Origin` automatically; non-browser runtimes (Node SDK

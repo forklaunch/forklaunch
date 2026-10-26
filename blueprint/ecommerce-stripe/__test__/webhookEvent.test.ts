@@ -32,11 +32,11 @@ describe('WebhookEventService idempotency gate', () => {
   // pull/start on a loaded machine; purchaseLoop pays the same cost.
   beforeAll(async () => {
     setup = await setupTestDatabase();
-  }, 180000);
+  });
 
   afterAll(async () => {
     await cleanupTestDatabase();
-  }, 30000);
+  });
 
   async function makeService() {
     const { WebhookEventService } = await import(

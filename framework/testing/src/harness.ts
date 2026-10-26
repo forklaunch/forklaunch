@@ -8,6 +8,7 @@ import {
   setupTestORM
 } from './database';
 import { setupTestEnvironment } from './environment';
+import { startTestJwtIssuer, TestJwtIssuer, TestJwtIssuerOptions } from './jwt';
 
 export interface BlueprintTestConfig {
   /**
@@ -59,6 +60,12 @@ export interface BlueprintTestConfig {
   customEnvVars?: Record<string, string>;
 
   /**
+   * Start a local RS256 JWKS issuer and point `JWKS_PUBLIC_KEY_URL` at it, so
+   * JWT-protected routes can be called with tokens from `result.jwt`.
+   */
+  jwt?: boolean | TestJwtIssuerOptions;
+
+  /**
    * Custom setup hook called after containers and ORM are initialized
    */
   onSetup?: (setup: TestSetupResult) => Promise<void>;
@@ -71,6 +78,8 @@ export interface TestSetupResult {
   s3Container?: StartedTestContainer;
   orm?: AnyMikroORM;
   redis?: Redis;
+  /** Present when the harness was configured with `jwt`. */
+  jwt?: TestJwtIssuer;
 }
 
 /**
@@ -153,29 +162,45 @@ export class BlueprintTestHarness {
     let redisContainer: StartedTestContainer | undefined;
     let kafkaContainer: StartedTestContainer | undefined;
     let s3Container: StartedTestContainer | undefined;
+    let jwt: TestJwtIssuer | undefined;
 
-    // Setup Redis container if needed (for both database and cache-only modes)
-    if (this.config.needsRedis) {
-      redisContainer = await this.containers.setupRedisContainer();
+    if (this.config.jwt) {
+      jwt = await startTestJwtIssuer(
+        this.config.jwt === true ? {} : this.config.jwt
+      );
     }
 
-    // Setup Kafka container if needed
-    if (this.config.needsKafka) {
-      kafkaContainer = await this.containers.setupKafkaContainer();
-    }
+    // Start every container the test needs at once: creating one can take
+    // tens of seconds on a busy Docker daemon, and they do not depend on each
+    // other, so the setup waits for the slowest rather than for their sum.
+    const databaseType =
+      this.config.databaseType && this.config.getConfig
+        ? this.config.databaseType
+        : undefined;
+    const [startedRedis, startedKafka, startedS3, startedDatabase] =
+      await Promise.all([
+        // Redis serves both database and cache-only modes.
+        this.config.needsRedis
+          ? this.containers.setupRedisContainer()
+          : undefined,
+        this.config.needsKafka
+          ? this.containers.setupKafkaContainer()
+          : undefined,
+        this.config.needsS3
+          ? this.containers.setupS3Container({
+              defaultBucket: this.config.s3Bucket
+            })
+          : undefined,
+        databaseType
+          ? this.containers.setupDatabaseContainer(databaseType)
+          : undefined
+      ]);
+    redisContainer = startedRedis;
+    kafkaContainer = startedKafka;
+    s3Container = startedS3;
 
-    // Setup S3 container if needed
-    if (this.config.needsS3) {
-      s3Container = await this.containers.setupS3Container({
-        defaultBucket: this.config.s3Bucket
-      });
-    }
-
-    if (this.config.databaseType && this.config.getConfig) {
-      const databaseType = this.config.databaseType;
-
-      // Setup database container
-      container = await this.containers.setupDatabaseContainer(databaseType);
+    if (databaseType && this.config.getConfig) {
+      container = startedDatabase ?? null;
 
       // Setup environment variables
       setupTestEnvironment({
@@ -184,6 +209,7 @@ export class BlueprintTestHarness {
         redis: redisContainer,
         kafka: kafkaContainer,
         s3: s3Container,
+        jwksPublicKeyUrl: jwt?.jwksUrl,
         customVars: this.config.customEnvVars
       });
 
@@ -206,6 +232,7 @@ export class BlueprintTestHarness {
         redis: redisContainer,
         kafka: kafkaContainer,
         s3: s3Container,
+        jwksPublicKeyUrl: jwt?.jwksUrl,
         customVars: this.config.customEnvVars
       });
     }
@@ -227,7 +254,8 @@ export class BlueprintTestHarness {
       kafkaContainer,
       s3Container,
       orm,
-      redis
+      redis,
+      jwt
     };
 
     // Call custom setup hook
@@ -248,6 +276,7 @@ export class BlueprintTestHarness {
     if (this.result?.orm) {
       await this.result.orm.close();
     }
+    await this.result?.jwt?.close();
     await this.containers.cleanup();
     this.result = undefined;
   }

@@ -32,7 +32,7 @@ forklaunch change application [OPTIONS]
 | `-N <name>` | Rename the application | _string_ |
 | `-v, --validator <validator>` | Schema validator | `zod`, `typebox` |
 | `-f, --formatter <formatter>` | Code formatter | `prettier`, `biome` |
-| `-l, --linter <linter>` | Linter | `eslint`, `oxlint` |
+| `-l, --linter <linter>` | Linter | `oxlint` (`eslint` is not selectable: typescript-eslint does not support TypeScript 7) |
 | `-F, --http-framework <framework>` | HTTP framework | `express`, `hyper-express` |
 | `-r, --runtime <runtime>` | Runtime environment | `node`, `bun` |
 | `-t, --test-framework <framework>` | Testing framework | `vitest`, `jest` |

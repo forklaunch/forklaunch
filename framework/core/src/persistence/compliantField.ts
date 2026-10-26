@@ -635,7 +635,12 @@ export class CompliantType extends CompliantTypeBase {
     _platform: Platform,
     context?: TransformContext
   ): string | null {
-    if (context?.fromQuery) {
+    // MikroORM sets `fromQuery` both for a `where` value and for the values
+    // a bulk update writes (`nativeUpdate`, `qb.update`), and tells them
+    // apart by `mode`. A `where` on this column would compare ciphertexts and
+    // never match, so it is refused; a value being written is sealed like
+    // any other. (Better Auth's adapter changes a password this way.)
+    if (context?.fromQuery && context.mode !== 'query-data') {
       throw new CompliantQueryError(
         `${this.spec.path} cannot be queried: declare it with .compliance('${this.spec.level}', { queryable: true }) to allow equality lookups`
       );
@@ -678,6 +683,14 @@ export class CompliantIndexType extends CompliantTypeBase {
     context?: TransformContext
   ): string | null {
     if (value === null || value === undefined) return null;
+    // A bulk update can write this column (the blind index) but not the
+    // hidden one beside it that holds the sealed value, so the two would
+    // disagree. Refused, with what to do instead.
+    if (context?.mode === 'query-data') {
+      throw new CompliantQueryError(
+        `${this.spec.path} is queryable, so a bulk update (nativeUpdate, qb.update) cannot set it: its sealed value lives in a second column the update does not write. Load the entity, assign the value and flush.`
+      );
+    }
     if (context?.fromQuery) {
       const key = context.key;
       if (

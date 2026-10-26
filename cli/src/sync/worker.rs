@@ -22,6 +22,7 @@ use crate::{
             },
         },
     },
+    init::rust_project::{self, RustProjectKind},
     prompt::{ArrayCompleter, prompt_for_confirmation},
 };
 
@@ -92,7 +93,11 @@ pub(crate) fn sync_worker_with_cache(
             log_ok!(stdout, "Removed orphaned worker '{}'", worker_name);
             return Ok(());
         } else {
-            log_error!(stdout, "Worker directory not found: {}", worker_path.display());
+            log_error!(
+                stdout,
+                "Worker directory not found: {}",
+                worker_path.display()
+            );
             bail!("Worker directory not found: {}", worker_path.display());
         }
     }
@@ -100,11 +105,20 @@ pub(crate) fn sync_worker_with_cache(
     let detected = detect_worker_config(&worker_path)?;
 
     // If project already exists in manifest, update resources if detection found new ones
-    if let Some(existing) = manifest_data.projects.iter_mut().find(|p| p.name == worker_name) {
+    if let Some(existing) = manifest_data
+        .projects
+        .iter_mut()
+        .find(|p| p.name == worker_name)
+    {
         let mut updated = false;
 
         // Re-detect database and update if found and not already set
-        if existing.resources.as_ref().and_then(|r| r.database.as_ref()).is_none() {
+        if existing
+            .resources
+            .as_ref()
+            .and_then(|r| r.database.as_ref())
+            .is_none()
+        {
             if let Some(db) = &detected.database {
                 let resources = existing.resources.get_or_insert_with(|| {
                     crate::core::manifest::ResourceInventory {
@@ -125,7 +139,12 @@ pub(crate) fn sync_worker_with_cache(
         for infra in &detected.infrastructure {
             match infra {
                 crate::constants::Infrastructure::Redis => {
-                    if existing.resources.as_ref().and_then(|r| r.cache.as_ref()).is_none() {
+                    if existing
+                        .resources
+                        .as_ref()
+                        .and_then(|r| r.cache.as_ref())
+                        .is_none()
+                    {
                         let resources = existing.resources.get_or_insert_with(|| {
                             crate::core::manifest::ResourceInventory {
                                 database: None,
@@ -141,7 +160,12 @@ pub(crate) fn sync_worker_with_cache(
                     }
                 }
                 crate::constants::Infrastructure::S3 => {
-                    if existing.resources.as_ref().and_then(|r| r.object_store.as_ref()).is_none() {
+                    if existing
+                        .resources
+                        .as_ref()
+                        .and_then(|r| r.object_store.as_ref())
+                        .is_none()
+                    {
                         let resources = existing.resources.get_or_insert_with(|| {
                             crate::core::manifest::ResourceInventory {
                                 database: None,
@@ -174,18 +198,19 @@ pub(crate) fn sync_worker_with_cache(
     let worker_type = resolve_worker_type(worker_name, &detected, matches, prompts_map, stdout)?;
 
     // Detect database if detected from code OR if worker type is Database
-    let database = if detected.database.is_some() || worker_type == crate::constants::WorkerType::Database {
-        Some(resolve_database_config(
-            worker_name,
-            &worker_path,
-            &detected,
-            matches,
-            prompts_map,
-            stdout,
-        )?)
-    } else {
-        None
-    };
+    let database =
+        if detected.database.is_some() || worker_type == crate::constants::WorkerType::Database {
+            Some(resolve_database_config(
+                worker_name,
+                &worker_path,
+                &detected,
+                matches,
+                prompts_map,
+                stdout,
+            )?)
+        } else {
+            None
+        };
 
     let description = resolve_description(worker_name, &worker_path, matches, prompts_map, stdout)?;
 
@@ -222,7 +247,8 @@ pub(crate) fn sync_worker_with_cache(
 impl CliCommand for WorkerSyncCommand {
     fn command(&self) -> clap::Command {
         use clap::Arg;
-        command("worker", "Sync a specific worker to application artifacts").arg(
+        command("worker", "Sync a specific worker to application artifacts")
+            .arg(
                 Arg::new("name")
                     .help("The name of the worker")
                     .required(true),
@@ -253,6 +279,12 @@ impl CliCommand for WorkerSyncCommand {
             };
 
         let (app_root_path, _) = find_app_root_path(matches, RequiredLocation::Application)?;
+        if rust_project::is_rust_project(&app_root_path, worker_name)? {
+            let mut stdout = StandardStream::stdout(ColorChoice::Always);
+            rust_project::sync_rust_project(&app_root_path, RustProjectKind::Worker, worker_name)?;
+            log_ok!(stdout, "Worker '{}' synced successfully", worker_name);
+            return Ok(());
+        }
 
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
         let mut rendered_templates_cache = RenderedTemplatesCache::new();

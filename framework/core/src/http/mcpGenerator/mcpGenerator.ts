@@ -176,7 +176,7 @@ export function generateMcpServer<
             const { contentType, body, params, query, headers } = args as {
               contentType?: string;
               params?: Record<string, string | number | boolean>;
-              body?: Record<string, unknown> | string;
+              body?: unknown;
               query?: Record<string, string | number | boolean>;
               headers?: Record<string, unknown>;
             };
@@ -195,10 +195,10 @@ export function generateMcpServer<
             let bodySchema;
             let responsesSchemas;
             if (route.contractDetails.versions) {
-              const version = route.contractDetails.versions[index];
+              const version = Object.values(route.contractDetails.versions)[index];
+              responsesSchemas = version.responses;
               if (version.body && schemaValidator.parse(inputSchema, args).ok) {
                 bodySchema = version.body;
-                responsesSchemas = version.responses;
               }
             } else {
               bodySchema = route.contractDetails.body;
@@ -213,7 +213,9 @@ export function generateMcpServer<
             if (discriminatedBody) {
               switch (discriminatedBody.parserType) {
                 case 'json': {
-                  parsedBody = safeStringify(body);
+                  // Tool arguments contain schema values, including JSON strings.
+                  // Raw signed bytes use the explicit text/file body contracts.
+                  parsedBody = body === undefined ? undefined : JSON.stringify(body);
                   break;
                 }
                 case 'text': {
@@ -283,11 +285,12 @@ export function generateMcpServer<
               url += queryString ? `?${queryString}` : '';
             }
 
-            const response = await fetch(encodeURI(url), {
+            const response = await fetch(url, {
               method: route.method.toUpperCase(),
               headers: {
                 ...headers,
-                ...(discriminatedBody?.contentType != 'multipart/form-data'
+                ...(discriminatedBody?.contentType != 'multipart/form-data' &&
+                  (contentType ?? discriminatedBody?.contentType) !== undefined
                   ? {
                       'Content-Type':
                         contentType ?? discriminatedBody?.contentType

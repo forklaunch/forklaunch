@@ -8,19 +8,37 @@ import {
   mockRoleResponse,
   mockUpdateUserData,
   mockUserData,
+  mountWithClaimsAuth,
   setupTestData,
   setupTestDatabase,
   TEST_TOKENS,
-  TestSetupResult
+  TestSetupResult,
+  withMiddlewares
 } from './test-utils';
+
+// The user setupTestData creates (organization 123e4567-...-426614174001).
+const TEST_USER_ID = '123e4567-e89b-12d3-a456-426614174000';
 
 describe('User Routes E2E Tests with PostgreSQL Container', () => {
   let orm: TestSetupResult['orm'];
+  let jwt: NonNullable<TestSetupResult['jwt']>;
+  // A session for the test user. The contract gates reads on the
+  // `platform:read` permission and writes on a `platform:read` role.
+  let authorization: `Bearer ${string}`;
 
   beforeAll(async () => {
     const setup = await setupTestDatabase();
     orm = setup.orm;
-  }, 60000);
+    if (!setup.jwt) throw new Error('JWT issuer not started');
+    jwt = setup.jwt;
+    authorization = await jwt.bearer({
+      sub: TEST_USER_ID,
+      roles: ['platform:read'],
+      permissions: ['platform:read']
+    });
+    const { userRouter } = await import('../api/routes/user.routes');
+    await mountWithClaimsAuth(userRouter);
+  });
 
   beforeEach(async () => {
     await clearDatabase({ orm });
@@ -31,7 +49,7 @@ describe('User Routes E2E Tests with PostgreSQL Container', () => {
 
   afterAll(async () => {
     await cleanupTestDatabase();
-  }, 30000);
+  });
 
   describe('POST /user - createUser', () => {
     it('should create a user successfully', async () => {
@@ -102,10 +120,10 @@ describe('User Routes E2E Tests with PostgreSQL Container', () => {
   describe('GET /user/:id - getUser', () => {
     it('should get a user successfully', async () => {
       const { getUserRoute } = await import('../api/routes/user.routes');
-      const response = await getUserRoute.sdk.getUser({
+      const response = await withMiddlewares(getUserRoute.sdk.getUser)({
         params: { id: '123e4567-e89b-12d3-a456-426614174000' },
         headers: {
-          authorization: TEST_TOKENS.AUTH
+          authorization
         }
       });
 
@@ -117,7 +135,9 @@ describe('User Routes E2E Tests with PostgreSQL Container', () => {
   describe('GET /user/batch - getBatchUsers', () => {
     it('should get multiple users successfully', async () => {
       const { getBatchUsersRoute } = await import('../api/routes/user.routes');
-      const response = await getBatchUsersRoute.sdk.getBatchUsers({
+      const response = await withMiddlewares(
+        getBatchUsersRoute.sdk.getBatchUsers
+      )({
         query: {
           ids: [
             '123e4567-e89b-12d3-a456-426614174000',
@@ -125,7 +145,7 @@ describe('User Routes E2E Tests with PostgreSQL Container', () => {
           ]
         },
         headers: {
-          authorization: TEST_TOKENS.AUTH
+          authorization
         }
       });
 
@@ -204,10 +224,10 @@ describe('User Routes E2E Tests with PostgreSQL Container', () => {
   describe('PUT /user - updateUser', () => {
     it('should update a user successfully', async () => {
       const { updateUserRoute } = await import('../api/routes/user.routes');
-      const response = await updateUserRoute.sdk.updateUser({
+      const response = await withMiddlewares(updateUserRoute.sdk.updateUser)({
         body: mockUpdateUserData,
         headers: {
-          authorization: TEST_TOKENS.AUTH
+          authorization
         }
       });
 
@@ -223,10 +243,12 @@ describe('User Routes E2E Tests with PostgreSQL Container', () => {
       );
       const batchUpdateData = [mockUpdateUserData];
 
-      const response = await updateBatchUsersRoute.sdk.updateBatchUsers({
+      const response = await withMiddlewares(
+        updateBatchUsersRoute.sdk.updateBatchUsers
+      )({
         body: batchUpdateData,
         headers: {
-          authorization: TEST_TOKENS.AUTH
+          authorization
         }
       });
 
@@ -238,10 +260,10 @@ describe('User Routes E2E Tests with PostgreSQL Container', () => {
   describe('DELETE /user/:id - deleteUser', () => {
     it('should delete a user successfully', async () => {
       const { deleteUserRoute } = await import('../api/routes/user.routes');
-      const response = await deleteUserRoute.sdk.deleteUser({
+      const response = await withMiddlewares(deleteUserRoute.sdk.deleteUser)({
         params: { id: '123e4567-e89b-12d3-a456-426614174000' },
         headers: {
-          authorization: TEST_TOKENS.AUTH
+          authorization
         }
       });
 
@@ -255,12 +277,14 @@ describe('User Routes E2E Tests with PostgreSQL Container', () => {
       const { deleteBatchUsersRoute } = await import(
         '../api/routes/user.routes'
       );
-      const response = await deleteBatchUsersRoute.sdk.deleteBatchUsers({
+      const response = await withMiddlewares(
+        deleteBatchUsersRoute.sdk.deleteBatchUsers
+      )({
         query: {
           ids: ['123e4567-e89b-12d3-a456-426614174000']
         },
         headers: {
-          authorization: TEST_TOKENS.AUTH
+          authorization
         }
       });
 
@@ -280,7 +304,9 @@ describe('User Routes E2E Tests with PostgreSQL Container', () => {
       });
 
       expect(response.code).toBe(200);
-      expect(response.response).toEqual(mockRoleResponse);
+      // Entities carry fields the schema does not list (retention
+      // bookkeeping), so match the schema's fields.
+      expect(response.response).toMatchObject(mockRoleResponse);
     });
   });
 
@@ -299,7 +325,52 @@ describe('User Routes E2E Tests with PostgreSQL Container', () => {
       );
 
       expect(response.code).toBe(200);
-      expect(response.response).toEqual(mockPermissionResponse);
+      // Entities carry fields the schema does not list (retention
+      // bookkeeping), so match the schema's fields.
+      expect(response.response).toMatchObject(mockPermissionResponse);
+    });
+  });
+
+  describe('JWT authentication', () => {
+    it('rejects a request without a token', async () => {
+      const { getUserRoute } = await import('../api/routes/user.routes');
+      const response = await withMiddlewares(getUserRoute.sdk.getUser)({
+        params: { id: TEST_USER_ID },
+        headers: {}
+      } as Parameters<typeof getUserRoute.sdk.getUser>[0]);
+
+      expect(response.code).toBe(401);
+    });
+
+    it('rejects an expired token', async () => {
+      const { getUserRoute } = await import('../api/routes/user.routes');
+      const response = await withMiddlewares(getUserRoute.sdk.getUser)({
+        params: { id: TEST_USER_ID },
+        headers: {
+          authorization: await jwt.bearer({
+            sub: TEST_USER_ID,
+            permissions: ['platform:read'],
+            expiresIn: -60
+          })
+        }
+      });
+
+      expect([401, 403]).toContain(response.code);
+    });
+
+    it('rejects a session without the required permission', async () => {
+      const { getUserRoute } = await import('../api/routes/user.routes');
+      const response = await withMiddlewares(getUserRoute.sdk.getUser)({
+        params: { id: TEST_USER_ID },
+        headers: {
+          authorization: await jwt.bearer({
+            sub: TEST_USER_ID,
+            permissions: []
+          })
+        }
+      });
+
+      expect(response.code).toBe(403);
     });
   });
 });

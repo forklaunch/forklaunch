@@ -1,0 +1,25 @@
+[package]
+name = "{{{name}}}"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "{{{description}}}"
+
+[dependencies]
+{{#uses_framework}}
+axum = {}
+tokio = { features = ["macros", "rt-multi-thread", "net", "signal"] }
+forklaunch-axum = { path = "{{{framework_rs_path}}}/crates/axum", features = ["mcp"] }
+forklaunch-common = { path = "{{{framework_rs_path}}}/crates/common" }
+forklaunch-core = {path = "{{{framework_rs_path}}}/crates/core", features = ["typed-schema", "openapi", "http", "otlp"] }
+{{/uses_framework}}
+{{#has_binary}}
+
+[dev-dependencies]
+tower = { features = ["util"] }
+
+[[bin]]
+name = "{{{name}}}"
+path = "src/main.rs"
+{{/has_binary}}

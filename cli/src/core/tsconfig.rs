@@ -4,8 +4,7 @@ use anyhow::{Context, Result};
 use serde_json::{Value, json, to_string_pretty};
 
 use super::rendered_template::RenderedTemplate;
-use crate::constants::TestFramework;
-use crate::core::manifest::application::ApplicationManifestData;
+use crate::{constants::TestFramework, core::manifest::application::ApplicationManifestData};
 
 pub(crate) fn generate_project_tsconfig(
     path_dir: &Path,

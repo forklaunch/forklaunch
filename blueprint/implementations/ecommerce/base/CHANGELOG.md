@@ -1,5 +1,11 @@
 # @forklaunch/implementation-ecommerce-base
 
+## 1.0.16
+
+### Patch Changes
+
+- d2319b3: Cart, inventory, order, payment, product and variant services no longer `await` MikroORM's synchronous `persist` inside their transactions. No behaviour change; the flush still happens when the transaction commits.
+
 ## 1.0.15
 
 ### Patch Changes

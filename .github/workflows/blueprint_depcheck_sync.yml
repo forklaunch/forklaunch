@@ -7,8 +7,12 @@
 # version that no longer exists, or pins an OLD one beside a new sibling and the
 # generated app installs two copies of a package it cannot have two of.
 #
+# `cargo_toml_constants.rs` does the same for generated Rust apps: the framework
+# and blueprint releases and the third-party crate versions their Cargo.toml
+# files get, checked against framework-rs and blueprint-rs.
+#
 # `check_blueprint_deps` already knows how to repair this; `--fix` rewrites the
-# constants file. This workflow exists so nobody has to remember that, and so
+# constants files. This workflow exists so nobody has to remember that, and so
 # the repair arrives as a reviewable diff rather than something a release
 # forgets to do.
 #
@@ -29,6 +33,8 @@ on:
     paths:
       - 'blueprint/**/package.json'
       - 'framework/**/package.json'
+      - 'framework-rs/**/Cargo.toml'
+      - 'blueprint-rs/**/Cargo.toml'
 
 concurrency:
   # One sync at a time; a second push must not race a branch update.
@@ -60,17 +66,20 @@ jobs:
         run: |
           set -euo pipefail
 
-          # The fixer writes exactly one file. Scope every git operation to it,
+          # The fixer writes only these files. Scope every git operation to them,
           # so a stray build artifact can never ride along into the commit.
-          CONSTANTS="cli/src/core/package_json/package_json_constants.rs"
+          CONSTANTS=(
+            "cli/src/core/package_json/package_json_constants.rs"
+            "cli/src/core/cargo_toml/cargo_toml_constants.rs"
+          )
 
-          if git diff --quiet -- "$CONSTANTS"; then
+          if git diff --quiet -- "${CONSTANTS[@]}"; then
             echo "Constants already match the blueprint packages; nothing to sync."
             exit 0
           fi
 
           echo "Drift found:"
-          git --no-pager diff --stat -- "$CONSTANTS"
+          git --no-pager diff --stat -- "${CONSTANTS[@]}"
 
           BRANCH="chore/blueprint-depcheck-sync"
 
@@ -104,7 +113,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "$BRANCH"
-          git add "$CONSTANTS"
+          git add "${CONSTANTS[@]}"
           git commit -F /tmp/commit-msg.txt
 
           # Force-push: this branch is a rolling snapshot of current drift, not a

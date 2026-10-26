@@ -71,7 +71,7 @@ export class BaseRoleService<
     );
 
     if (em) {
-      await em.persist(role);
+      em.persist(role);
     } else {
       await this.em.persist(role).flush();
     }
@@ -95,7 +95,7 @@ export class BaseRoleService<
     );
 
     if (em) {
-      await em.persist(roles);
+      em.persist(roles);
     } else {
       await this.em.persist(roles).flush();
     }
@@ -163,7 +163,7 @@ export class BaseRoleService<
     );
 
     if (em) {
-      await em.persist(role);
+      em.persist(role);
     } else {
       await this.em.persist(role).flush();
     }
@@ -187,7 +187,7 @@ export class BaseRoleService<
     );
 
     if (em) {
-      await em.persist(roles);
+      em.persist(roles);
     } else {
       await this.em.persist(roles).flush();
     }

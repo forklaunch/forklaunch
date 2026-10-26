@@ -1,3 +1,4 @@
+import { permissionContract } from '../contracts/permission.contract';
 import { forklaunchRouter, schemaValidator } from '@forklaunch/blueprint-core';
 import { ci, tokens } from '../../bootstrapper';
 import {
@@ -14,37 +15,40 @@ import {
 const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 
 export const permissionRouter = forklaunchRouter(
-  '/permission',
+  permissionContract.basePath,
   schemaValidator,
   openTelemetryCollector
 );
 
 export const createPermissionRoute = permissionRouter.post(
-  '/',
+  permissionContract.createPermission.path,
   createPermission
 );
 export const createBatchPermissionsRoute = permissionRouter.post(
-  '/batch',
+  permissionContract.createBatchPermissions.path,
   createBatchPermissions
 );
 export const getBatchPermissionsRoute = permissionRouter.get(
-  '/batch',
+  permissionContract.getBatchPermissions.path,
   getBatchPermissions
 );
-export const getPermissionRoute = permissionRouter.get('/:id', getPermission);
+export const getPermissionRoute = permissionRouter.get(
+  permissionContract.getPermission.path,
+  getPermission
+);
 export const updatePermissionRoute = permissionRouter.put(
-  '/',
+  permissionContract.updatePermission.path,
   updatePermission
 );
 export const updateBatchPermissionsRoute = permissionRouter.put(
-  '/batch',
+  permissionContract.updateBatchPermissions.path,
   updateBatchPermissions
 );
 export const deleteBatchPermissionsRoute = permissionRouter.delete(
-  '/batch',
+  permissionContract.deleteBatchPermissions.path,
   deleteBatchPermissions
 );
 export const deletePermissionRoute = permissionRouter.delete(
-  '/:id',
+  permissionContract.deletePermission.path,
   deletePermission
 );

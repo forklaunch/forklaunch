@@ -54,6 +54,7 @@ mod context;
 mod delete;
 mod depcheck;
 mod deploy;
+mod dev;
 mod dlq;
 mod drift;
 mod eject;
@@ -63,6 +64,7 @@ mod infra;
 mod init;
 mod integrate;
 mod login;
+mod model;
 mod logout;
 mod managed;
 mod notifiers;
@@ -98,6 +100,7 @@ fn main() -> Result<()> {
     let delete = DeleteCommand::new();
     let depcheck = DepcheckCommand::new();
     let deploy = DeployCommand::new();
+    let dev = dev::DevCommand;
     let dlq = DlqCommand::new();
     let drift = DriftCommand::new();
     let eject = EjectCommand::new();
@@ -107,6 +110,7 @@ fn main() -> Result<()> {
     let app = AppCommand::new();
     let integrate = IntegrateCommand::new();
     let login = LoginCommand::new();
+    let model = model::ModelCommand;
     let logout = LogoutCommand::new();
     let managed = ManagedCommand::new();
     let notifiers = NotifiersCommand::new();
@@ -150,6 +154,7 @@ fn main() -> Result<()> {
         .subcommand(config.command())
         .subcommand(context.command())
         .subcommand(deploy.command())
+        .subcommand(dev.command())
         .subcommand(dlq.command())
         .subcommand(drift.command())
         .subcommand(environment.command())
@@ -160,6 +165,7 @@ fn main() -> Result<()> {
         .subcommand(org.command())
         .subcommand(release.command())
         .subcommand(login.command())
+        .subcommand(model.command())
         .subcommand(logout.command())
         .subcommand(managed.command())
         .subcommand(notifiers.command())
@@ -194,6 +200,7 @@ fn main() -> Result<()> {
         Some(("delete", sub_matches)) => delete.handler(sub_matches),
         Some(("depcheck", sub_matches)) => depcheck.handler(sub_matches),
         Some(("deploy", sub_matches)) => deploy.handler(sub_matches),
+        Some(("dev", sub_matches)) => dev.handler(sub_matches),
         Some(("dlq", sub_matches)) => dlq.handler(sub_matches),
         Some(("drift", sub_matches)) => drift.handler(sub_matches),
         Some(("eject", sub_matches)) => eject.handler(sub_matches),
@@ -205,6 +212,7 @@ fn main() -> Result<()> {
         Some(("org", sub_matches)) => org.handler(sub_matches),
         Some(("release", sub_matches)) => release.handler(sub_matches),
         Some(("login", sub_matches)) => login.handler(sub_matches),
+        Some(("model", sub_matches)) => model.handler(sub_matches),
         Some(("logout", sub_matches)) => logout.handler(sub_matches),
         Some(("managed", sub_matches)) => managed.handler(sub_matches),
         Some(("notifiers", sub_matches)) => notifiers.handler(sub_matches),

@@ -1,0 +1,4572 @@
+[
+  {
+    "routes": [
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": true,
+        "method": "POST",
+        "name": "Create Plan",
+        "operation": "createPlan",
+        "params": [],
+        "path": "/plan",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "List Plans",
+        "operation": "listPlans",
+        "params": [],
+        "path": "/plan",
+        "query": [
+          "ids"
+        ],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Get Plan",
+        "operation": "getPlan",
+        "params": [
+          "id"
+        ],
+        "path": "/plan/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": true,
+        "method": "PUT",
+        "name": "Update Plan",
+        "operation": "updatePlan",
+        "params": [],
+        "path": "/plan",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "DELETE",
+        "name": "Delete Plan",
+        "operation": "deletePlan",
+        "params": [
+          "id"
+        ],
+        "path": "/plan/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": true,
+        "method": "POST",
+        "name": "Create Subscription",
+        "operation": "createSubscription",
+        "params": [],
+        "path": "/subscription",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "List Subscriptions",
+        "operation": "listSubscriptions",
+        "params": [],
+        "path": "/subscription",
+        "query": [
+          "ids"
+        ],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Get User Subscription",
+        "operation": "getUserSubscription",
+        "params": [
+          "id"
+        ],
+        "path": "/subscription/user/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Get Organization Subscription",
+        "operation": "getOrganizationSubscription",
+        "params": [
+          "id"
+        ],
+        "path": "/subscription/organization/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Cancel Subscription",
+        "operation": "cancelSubscription",
+        "params": [
+          "id"
+        ],
+        "path": "/subscription/:id/cancel",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Resume Subscription",
+        "operation": "resumeSubscription",
+        "params": [
+          "id"
+        ],
+        "path": "/subscription/:id/resume",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Get Subscription",
+        "operation": "getSubscription",
+        "params": [
+          "id"
+        ],
+        "path": "/subscription/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": true,
+        "method": "PUT",
+        "name": "Update Subscription",
+        "operation": "updateSubscription",
+        "params": [
+          "id"
+        ],
+        "path": "/subscription/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "DELETE",
+        "name": "Delete Subscription",
+        "operation": "deleteSubscription",
+        "params": [
+          "id"
+        ],
+        "path": "/subscription/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": true,
+        "method": "POST",
+        "name": "Create Checkout Session",
+        "operation": "createCheckoutSession",
+        "params": [],
+        "path": "/checkout-session",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Get Checkout Session",
+        "operation": "getCheckoutSession",
+        "params": [
+          "id"
+        ],
+        "path": "/checkout-session/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Expire Checkout Session",
+        "operation": "expireCheckoutSession",
+        "params": [
+          "id"
+        ],
+        "path": "/checkout-session/:id/expire",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Handle Checkout Success",
+        "operation": "handleCheckoutSuccess",
+        "params": [
+          "id"
+        ],
+        "path": "/checkout-session/:id/success",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Handle Checkout Failure",
+        "operation": "handleCheckoutFailure",
+        "params": [
+          "id"
+        ],
+        "path": "/checkout-session/:id/failure",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": true,
+        "method": "POST",
+        "name": "Create Payment Link",
+        "operation": "createPaymentLink",
+        "params": [],
+        "path": "/payment-link",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "List Payment Links",
+        "operation": "listPaymentLinks",
+        "params": [],
+        "path": "/payment-link",
+        "query": [
+          "ids"
+        ],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Handle Payment Success",
+        "operation": "handlePaymentSuccess",
+        "params": [
+          "id"
+        ],
+        "path": "/payment-link/:id/success",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Handle Payment Failure",
+        "operation": "handlePaymentFailure",
+        "params": [
+          "id"
+        ],
+        "path": "/payment-link/:id/failure",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Get Payment Link",
+        "operation": "getPaymentLink",
+        "params": [
+          "id"
+        ],
+        "path": "/payment-link/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": true,
+        "method": "PUT",
+        "name": "Update Payment Link",
+        "operation": "updatePaymentLink",
+        "params": [
+          "id"
+        ],
+        "path": "/payment-link/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "DELETE",
+        "name": "Expire Payment Link",
+        "operation": "expirePaymentLink",
+        "params": [
+          "id"
+        ],
+        "path": "/payment-link/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "protected",
+        "auth": {
+          "allowedRoles": [
+            "admin"
+          ],
+          "method": "jwt"
+        },
+        "body": true,
+        "method": "POST",
+        "name": "Create Billing Portal Session",
+        "operation": "createBillingPortalSession",
+        "params": [],
+        "path": "/billing-portal",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "protected",
+        "auth": {
+          "allowedRoles": [
+            "admin"
+          ],
+          "method": "jwt"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Get Billing Portal Session",
+        "operation": "getBillingPortalSession",
+        "params": [
+          "id"
+        ],
+        "path": "/billing-portal/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "protected",
+        "auth": {
+          "allowedRoles": [
+            "admin"
+          ],
+          "method": "jwt"
+        },
+        "body": true,
+        "method": "PUT",
+        "name": "Update Billing Portal Session",
+        "operation": "updateBillingPortalSession",
+        "params": [
+          "id"
+        ],
+        "path": "/billing-portal/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "protected",
+        "auth": {
+          "allowedRoles": [
+            "admin"
+          ],
+          "method": "jwt"
+        },
+        "body": false,
+        "method": "DELETE",
+        "name": "Expire Billing Portal Session",
+        "operation": "expireBillingPortalSession",
+        "params": [
+          "id"
+        ],
+        "path": "/billing-portal/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "protected",
+        "auth": {
+          "allowedRoles": [
+            "system"
+          ],
+          "method": "jwt"
+        },
+        "body": false,
+        "method": "DELETE",
+        "name": "EraseUserData",
+        "operation": "eraseuserdata",
+        "params": [
+          "userId"
+        ],
+        "path": "/compliance/erase/:userId",
+        "query": [],
+        "statuses": [
+          200,
+          404
+        ]
+      },
+      {
+        "access": "protected",
+        "auth": {
+          "allowedRoles": [
+            "system"
+          ],
+          "method": "jwt"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "ExportUserData",
+        "operation": "exportuserdata",
+        "params": [
+          "userId"
+        ],
+        "path": "/compliance/export/:userId",
+        "query": [],
+        "statuses": [
+          200,
+          404
+        ]
+      }
+    ],
+    "schemas": {
+      "BillingPortalSchema": {
+        "properties": {
+          "createdAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "customerId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "expiresAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "id": {
+            "example": "a8b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6",
+            "format": "uuid",
+            "pattern": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$",
+            "title": "UUID",
+            "type": [
+              "string"
+            ]
+          },
+          "providerFields": {
+            "example": "unknown",
+            "title": "Unknown"
+          },
+          "updatedAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "uri": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "customerId",
+          "expiresAt"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "CheckoutSessionSchema": {
+        "properties": {
+          "cancelRedirectUri": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "createdAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "currency": {
+            "enum": [
+              "USD",
+              "EUR",
+              "GBP",
+              "CAD",
+              "AUD",
+              "CHF",
+              "JPY",
+              "SEK",
+              "NOK",
+              "DKK",
+              "CZK",
+              "PLN",
+              "HUF",
+              "RON",
+              "BGN",
+              "RUB",
+              "INR",
+              "BRL",
+              "ZAR",
+              "MXN",
+              "CNY",
+              "HKD",
+              "TWD",
+              "SGD",
+              "THB",
+              "TRY",
+              "RSD",
+              "HRK",
+              "ISK",
+              "BAM"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "customerId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "expiresAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "id": {
+            "example": "a8b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6",
+            "format": "uuid",
+            "pattern": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$",
+            "title": "UUID",
+            "type": [
+              "string"
+            ]
+          },
+          "paymentMethods": {
+            "items": {
+              "enum": [
+                "ach",
+                "credit_card",
+                "debit_card",
+                "wire",
+                "apple_pay",
+                "google_pay",
+                "paypal"
+              ],
+              "type": [
+                "string"
+              ]
+            },
+            "type": [
+              "array"
+            ]
+          },
+          "providerFields": {
+            "example": "unknown",
+            "title": "Unknown"
+          },
+          "status": {
+            "enum": [
+              "PENDING",
+              "SUCCESS",
+              "CREATED",
+              "UPDATED",
+              "COMPLETED",
+              "CANCELLED",
+              "FAILED",
+              "EXPIRED"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "successRedirectUri": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "updatedAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "uri": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "customerId",
+          "paymentMethods",
+          "currency",
+          "expiresAt",
+          "status"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "CreateBillingPortalSchema": {
+        "properties": {
+          "customerId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "expiresAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "providerFields": {
+            "example": "unknown",
+            "title": "Unknown"
+          },
+          "uri": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "customerId",
+          "expiresAt"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "CreateCheckoutSessionSchema": {
+        "properties": {
+          "cancelRedirectUri": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "currency": {
+            "enum": [
+              "USD",
+              "EUR",
+              "GBP",
+              "CAD",
+              "AUD",
+              "CHF",
+              "JPY",
+              "SEK",
+              "NOK",
+              "DKK",
+              "CZK",
+              "PLN",
+              "HUF",
+              "RON",
+              "BGN",
+              "RUB",
+              "INR",
+              "BRL",
+              "ZAR",
+              "MXN",
+              "CNY",
+              "HKD",
+              "TWD",
+              "SGD",
+              "THB",
+              "TRY",
+              "RSD",
+              "HRK",
+              "ISK",
+              "BAM"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "customerId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "expiresAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "paymentMethods": {
+            "items": {
+              "enum": [
+                "ach",
+                "credit_card",
+                "debit_card",
+                "wire",
+                "apple_pay",
+                "google_pay",
+                "paypal"
+              ],
+              "type": [
+                "string"
+              ]
+            },
+            "type": [
+              "array"
+            ]
+          },
+          "providerFields": {
+            "example": "unknown",
+            "title": "Unknown"
+          },
+          "status": {
+            "enum": [
+              "PENDING",
+              "SUCCESS",
+              "CREATED",
+              "UPDATED",
+              "COMPLETED",
+              "CANCELLED",
+              "FAILED",
+              "EXPIRED"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "successRedirectUri": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "uri": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "customerId",
+          "paymentMethods",
+          "currency",
+          "expiresAt",
+          "status"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "CreatePaymentLinkSchema": {
+        "properties": {
+          "amount": {
+            "example": 123,
+            "title": "Number",
+            "type": [
+              "number"
+            ]
+          },
+          "currency": {
+            "enum": [
+              "USD",
+              "EUR",
+              "GBP",
+              "CAD",
+              "AUD",
+              "CHF",
+              "JPY",
+              "SEK",
+              "NOK",
+              "DKK",
+              "CZK",
+              "PLN",
+              "HUF",
+              "RON",
+              "BGN",
+              "RUB",
+              "INR",
+              "BRL",
+              "ZAR",
+              "MXN",
+              "CNY",
+              "HKD",
+              "TWD",
+              "SGD",
+              "THB",
+              "TRY",
+              "RSD",
+              "HRK",
+              "ISK",
+              "BAM"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "paymentMethods": {
+            "items": {
+              "enum": [
+                "ach",
+                "credit_card",
+                "debit_card",
+                "wire",
+                "apple_pay",
+                "google_pay",
+                "paypal"
+              ],
+              "type": [
+                "string"
+              ]
+            },
+            "type": [
+              "array"
+            ]
+          },
+          "providerFields": {
+            "example": "unknown",
+            "title": "Unknown"
+          },
+          "status": {
+            "enum": [
+              "PENDING",
+              "SUCCESS",
+              "CREATED",
+              "UPDATED",
+              "COMPLETED",
+              "CANCELLED",
+              "FAILED",
+              "EXPIRED"
+            ],
+            "type": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "amount",
+          "paymentMethods",
+          "currency",
+          "status"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "CreatePlanSchema": {
+        "properties": {
+          "active": {
+            "example": true,
+            "title": "Boolean",
+            "type": [
+              "boolean"
+            ]
+          },
+          "billingProvider": {
+            "enum": [
+              "none",
+              "stripe",
+              "adyen"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "cadence": {
+            "enum": [
+              "WEEKLY",
+              "BIWEEKLY",
+              "MONTHLY",
+              "ANNUALLY"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "currency": {
+            "enum": [
+              "USD",
+              "EUR",
+              "GBP",
+              "CAD",
+              "AUD",
+              "CHF",
+              "JPY",
+              "SEK",
+              "NOK",
+              "DKK",
+              "CZK",
+              "PLN",
+              "HUF",
+              "RON",
+              "BGN",
+              "RUB",
+              "INR",
+              "BRL",
+              "ZAR",
+              "MXN",
+              "CNY",
+              "HKD",
+              "TWD",
+              "SGD",
+              "THB",
+              "TRY",
+              "RSD",
+              "HRK",
+              "ISK",
+              "BAM"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "description": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "externalId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "features": {
+            "items": {
+              "example": "a string",
+              "title": "String",
+              "type": [
+                "string"
+              ]
+            },
+            "type": [
+              "array"
+            ]
+          },
+          "name": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "price": {
+            "example": 123,
+            "title": "Number",
+            "type": [
+              "number"
+            ]
+          },
+          "providerFields": {
+            "example": "unknown",
+            "title": "Unknown"
+          }
+        },
+        "required": [
+          "name",
+          "price",
+          "cadence",
+          "currency",
+          "externalId",
+          "billingProvider",
+          "active"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "CreateSubscriptionSchema": {
+        "properties": {
+          "active": {
+            "example": true,
+            "title": "Boolean",
+            "type": [
+              "boolean"
+            ]
+          },
+          "billingProvider": {
+            "enum": [
+              "none",
+              "stripe",
+              "adyen"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "description": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "endDate": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "externalId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "partyId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "partyType": {
+            "enum": [
+              "user",
+              "organization"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "productId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "providerFields": {
+            "example": "unknown",
+            "title": "Unknown"
+          },
+          "startDate": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "status": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "partyId",
+          "partyType",
+          "productId",
+          "active",
+          "externalId",
+          "startDate",
+          "status",
+          "billingProvider"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "PaymentLinkSchema": {
+        "properties": {
+          "amount": {
+            "example": 123,
+            "title": "Number",
+            "type": [
+              "number"
+            ]
+          },
+          "createdAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "currency": {
+            "enum": [
+              "USD",
+              "EUR",
+              "GBP",
+              "CAD",
+              "AUD",
+              "CHF",
+              "JPY",
+              "SEK",
+              "NOK",
+              "DKK",
+              "CZK",
+              "PLN",
+              "HUF",
+              "RON",
+              "BGN",
+              "RUB",
+              "INR",
+              "BRL",
+              "ZAR",
+              "MXN",
+              "CNY",
+              "HKD",
+              "TWD",
+              "SGD",
+              "THB",
+              "TRY",
+              "RSD",
+              "HRK",
+              "ISK",
+              "BAM"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "id": {
+            "example": "a8b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6",
+            "format": "uuid",
+            "pattern": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$",
+            "title": "UUID",
+            "type": [
+              "string"
+            ]
+          },
+          "paymentMethods": {
+            "items": {
+              "enum": [
+                "ach",
+                "credit_card",
+                "debit_card",
+                "wire",
+                "apple_pay",
+                "google_pay",
+                "paypal"
+              ],
+              "type": [
+                "string"
+              ]
+            },
+            "type": [
+              "array"
+            ]
+          },
+          "providerFields": {
+            "example": "unknown",
+            "title": "Unknown"
+          },
+          "status": {
+            "enum": [
+              "PENDING",
+              "SUCCESS",
+              "CREATED",
+              "UPDATED",
+              "COMPLETED",
+              "CANCELLED",
+              "FAILED",
+              "EXPIRED"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "updatedAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "amount",
+          "paymentMethods",
+          "currency",
+          "status"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "PlanSchema": {
+        "properties": {
+          "active": {
+            "example": true,
+            "title": "Boolean",
+            "type": [
+              "boolean"
+            ]
+          },
+          "billingProvider": {
+            "enum": [
+              "none",
+              "stripe",
+              "adyen"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "cadence": {
+            "enum": [
+              "WEEKLY",
+              "BIWEEKLY",
+              "MONTHLY",
+              "ANNUALLY"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "createdAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "currency": {
+            "enum": [
+              "USD",
+              "EUR",
+              "GBP",
+              "CAD",
+              "AUD",
+              "CHF",
+              "JPY",
+              "SEK",
+              "NOK",
+              "DKK",
+              "CZK",
+              "PLN",
+              "HUF",
+              "RON",
+              "BGN",
+              "RUB",
+              "INR",
+              "BRL",
+              "ZAR",
+              "MXN",
+              "CNY",
+              "HKD",
+              "TWD",
+              "SGD",
+              "THB",
+              "TRY",
+              "RSD",
+              "HRK",
+              "ISK",
+              "BAM"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "description": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "externalId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "features": {
+            "items": {
+              "example": "a string",
+              "title": "String",
+              "type": [
+                "string"
+              ]
+            },
+            "type": [
+              "array"
+            ]
+          },
+          "id": {
+            "example": "a8b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6",
+            "format": "uuid",
+            "pattern": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$",
+            "title": "UUID",
+            "type": [
+              "string"
+            ]
+          },
+          "name": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "price": {
+            "example": 123,
+            "title": "Number",
+            "type": [
+              "number"
+            ]
+          },
+          "providerFields": {
+            "example": "unknown",
+            "title": "Unknown"
+          },
+          "updatedAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "price",
+          "cadence",
+          "currency",
+          "externalId",
+          "active"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "SubscriptionSchema": {
+        "properties": {
+          "active": {
+            "example": true,
+            "title": "Boolean",
+            "type": [
+              "boolean"
+            ]
+          },
+          "billingProvider": {
+            "enum": [
+              "none",
+              "stripe",
+              "adyen"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "createdAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "description": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "endDate": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "externalId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "id": {
+            "example": "a8b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6",
+            "format": "uuid",
+            "pattern": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$",
+            "title": "UUID",
+            "type": [
+              "string"
+            ]
+          },
+          "partyId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "partyType": {
+            "enum": [
+              "user",
+              "organization"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "productId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "providerFields": {
+            "example": "unknown",
+            "title": "Unknown"
+          },
+          "startDate": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "status": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "updatedAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "partyId",
+          "partyType",
+          "productId",
+          "active",
+          "externalId",
+          "startDate",
+          "status"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "UpdateBillingPortalSchema": {
+        "properties": {
+          "expiresAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "id": {
+            "example": "a8b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6",
+            "format": "uuid",
+            "pattern": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$",
+            "title": "UUID",
+            "type": [
+              "string"
+            ]
+          },
+          "providerFields": {
+            "example": "unknown",
+            "title": "Unknown"
+          },
+          "uri": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "UpdatePaymentLinkSchema": {
+        "properties": {
+          "amount": {
+            "example": 123,
+            "title": "Number",
+            "type": [
+              "number"
+            ]
+          },
+          "currency": {
+            "enum": [
+              "USD",
+              "EUR",
+              "GBP",
+              "CAD",
+              "AUD",
+              "CHF",
+              "JPY",
+              "SEK",
+              "NOK",
+              "DKK",
+              "CZK",
+              "PLN",
+              "HUF",
+              "RON",
+              "BGN",
+              "RUB",
+              "INR",
+              "BRL",
+              "ZAR",
+              "MXN",
+              "CNY",
+              "HKD",
+              "TWD",
+              "SGD",
+              "THB",
+              "TRY",
+              "RSD",
+              "HRK",
+              "ISK",
+              "BAM"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "id": {
+            "example": "a8b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6",
+            "format": "uuid",
+            "pattern": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$",
+            "title": "UUID",
+            "type": [
+              "string"
+            ]
+          },
+          "paymentMethods": {
+            "items": {
+              "enum": [
+                "ach",
+                "credit_card",
+                "debit_card",
+                "wire",
+                "apple_pay",
+                "google_pay",
+                "paypal"
+              ],
+              "type": [
+                "string"
+              ]
+            },
+            "type": [
+              "array"
+            ]
+          },
+          "providerFields": {
+            "example": "unknown",
+            "title": "Unknown"
+          },
+          "status": {
+            "enum": [
+              "PENDING",
+              "SUCCESS",
+              "CREATED",
+              "UPDATED",
+              "COMPLETED",
+              "CANCELLED",
+              "FAILED",
+              "EXPIRED"
+            ],
+            "type": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "UpdatePlanSchema": {
+        "properties": {
+          "active": {
+            "example": true,
+            "title": "Boolean",
+            "type": [
+              "boolean"
+            ]
+          },
+          "billingProvider": {
+            "enum": [
+              "none",
+              "stripe",
+              "adyen"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "cadence": {
+            "enum": [
+              "WEEKLY",
+              "BIWEEKLY",
+              "MONTHLY",
+              "ANNUALLY"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "currency": {
+            "enum": [
+              "USD",
+              "EUR",
+              "GBP",
+              "CAD",
+              "AUD",
+              "CHF",
+              "JPY",
+              "SEK",
+              "NOK",
+              "DKK",
+              "CZK",
+              "PLN",
+              "HUF",
+              "RON",
+              "BGN",
+              "RUB",
+              "INR",
+              "BRL",
+              "ZAR",
+              "MXN",
+              "CNY",
+              "HKD",
+              "TWD",
+              "SGD",
+              "THB",
+              "TRY",
+              "RSD",
+              "HRK",
+              "ISK",
+              "BAM"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "description": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "externalId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "features": {
+            "items": {
+              "example": "a string",
+              "title": "String",
+              "type": [
+                "string"
+              ]
+            },
+            "type": [
+              "array"
+            ]
+          },
+          "id": {
+            "example": "a8b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6",
+            "format": "uuid",
+            "pattern": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$",
+            "title": "UUID",
+            "type": [
+              "string"
+            ]
+          },
+          "name": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "price": {
+            "example": 123,
+            "title": "Number",
+            "type": [
+              "number"
+            ]
+          },
+          "providerFields": {
+            "example": "unknown",
+            "title": "Unknown"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "UpdateSubscriptionSchema": {
+        "properties": {
+          "active": {
+            "example": true,
+            "title": "Boolean",
+            "type": [
+              "boolean"
+            ]
+          },
+          "billingProvider": {
+            "enum": [
+              "none",
+              "stripe",
+              "adyen"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "description": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "endDate": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "externalId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "id": {
+            "example": "a8b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6",
+            "format": "uuid",
+            "pattern": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$",
+            "title": "UUID",
+            "type": [
+              "string"
+            ]
+          },
+          "partyId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "partyType": {
+            "enum": [
+              "user",
+              "organization"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "productId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "providerFields": {
+            "example": "unknown",
+            "title": "Unknown"
+          },
+          "startDate": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "status": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": [
+          "object"
+        ]
+      }
+    },
+    "variant": "base"
+  },
+  {
+    "routes": [
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": true,
+        "method": "POST",
+        "name": "Create Plan",
+        "operation": "createPlan",
+        "params": [],
+        "path": "/plan",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "List Plans",
+        "operation": "listPlans",
+        "params": [],
+        "path": "/plan",
+        "query": [
+          "ids"
+        ],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Get Plan",
+        "operation": "getPlan",
+        "params": [
+          "id"
+        ],
+        "path": "/plan/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": true,
+        "method": "PUT",
+        "name": "Update Plan",
+        "operation": "updatePlan",
+        "params": [],
+        "path": "/plan",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "DELETE",
+        "name": "Delete Plan",
+        "operation": "deletePlan",
+        "params": [
+          "id"
+        ],
+        "path": "/plan/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": true,
+        "method": "POST",
+        "name": "Create Subscription",
+        "operation": "createSubscription",
+        "params": [],
+        "path": "/subscription",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "List Subscriptions",
+        "operation": "listSubscriptions",
+        "params": [],
+        "path": "/subscription",
+        "query": [
+          "ids"
+        ],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Get User Subscription",
+        "operation": "getUserSubscription",
+        "params": [
+          "id"
+        ],
+        "path": "/subscription/user/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Get Organization Subscription",
+        "operation": "getOrganizationSubscription",
+        "params": [
+          "id"
+        ],
+        "path": "/subscription/organization/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Cancel Subscription",
+        "operation": "cancelSubscription",
+        "params": [
+          "id"
+        ],
+        "path": "/subscription/:id/cancel",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Resume Subscription",
+        "operation": "resumeSubscription",
+        "params": [
+          "id"
+        ],
+        "path": "/subscription/:id/resume",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Get Subscription",
+        "operation": "getSubscription",
+        "params": [
+          "id"
+        ],
+        "path": "/subscription/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": true,
+        "method": "PUT",
+        "name": "Update Subscription",
+        "operation": "updateSubscription",
+        "params": [
+          "id"
+        ],
+        "path": "/subscription/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "DELETE",
+        "name": "Delete Subscription",
+        "operation": "deleteSubscription",
+        "params": [
+          "id"
+        ],
+        "path": "/subscription/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": true,
+        "method": "POST",
+        "name": "Create Checkout Session",
+        "operation": "createCheckoutSession",
+        "params": [],
+        "path": "/checkout-session",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Get Checkout Session",
+        "operation": "getCheckoutSession",
+        "params": [
+          "id"
+        ],
+        "path": "/checkout-session/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Expire Checkout Session",
+        "operation": "expireCheckoutSession",
+        "params": [
+          "id"
+        ],
+        "path": "/checkout-session/:id/expire",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Handle Checkout Success",
+        "operation": "handleCheckoutSuccess",
+        "params": [
+          "id"
+        ],
+        "path": "/checkout-session/:id/success",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Handle Checkout Failure",
+        "operation": "handleCheckoutFailure",
+        "params": [
+          "id"
+        ],
+        "path": "/checkout-session/:id/failure",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": true,
+        "method": "POST",
+        "name": "Create Payment Link",
+        "operation": "createPaymentLink",
+        "params": [],
+        "path": "/payment-link",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "List Payment Links",
+        "operation": "listPaymentLinks",
+        "params": [],
+        "path": "/payment-link",
+        "query": [
+          "ids"
+        ],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Handle Payment Success",
+        "operation": "handlePaymentSuccess",
+        "params": [
+          "id"
+        ],
+        "path": "/payment-link/:id/success",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Handle Payment Failure",
+        "operation": "handlePaymentFailure",
+        "params": [
+          "id"
+        ],
+        "path": "/payment-link/:id/failure",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Get Payment Link",
+        "operation": "getPaymentLink",
+        "params": [
+          "id"
+        ],
+        "path": "/payment-link/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": true,
+        "method": "PUT",
+        "name": "Update Payment Link",
+        "operation": "updatePaymentLink",
+        "params": [
+          "id"
+        ],
+        "path": "/payment-link/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "internal",
+        "auth": {
+          "allowedRoles": [],
+          "method": "hmac"
+        },
+        "body": false,
+        "method": "DELETE",
+        "name": "Expire Payment Link",
+        "operation": "expirePaymentLink",
+        "params": [
+          "id"
+        ],
+        "path": "/payment-link/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "protected",
+        "auth": {
+          "allowedRoles": [
+            "admin"
+          ],
+          "method": "jwt"
+        },
+        "body": true,
+        "method": "POST",
+        "name": "Create Billing Portal Session",
+        "operation": "createBillingPortalSession",
+        "params": [],
+        "path": "/billing-portal",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "protected",
+        "auth": {
+          "allowedRoles": [
+            "admin"
+          ],
+          "method": "jwt"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "Get Billing Portal Session",
+        "operation": "getBillingPortalSession",
+        "params": [
+          "id"
+        ],
+        "path": "/billing-portal/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "protected",
+        "auth": {
+          "allowedRoles": [
+            "admin"
+          ],
+          "method": "jwt"
+        },
+        "body": true,
+        "method": "PUT",
+        "name": "Update Billing Portal Session",
+        "operation": "updateBillingPortalSession",
+        "params": [
+          "id"
+        ],
+        "path": "/billing-portal/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "protected",
+        "auth": {
+          "allowedRoles": [
+            "admin"
+          ],
+          "method": "jwt"
+        },
+        "body": false,
+        "method": "DELETE",
+        "name": "Expire Billing Portal Session",
+        "operation": "expireBillingPortalSession",
+        "params": [
+          "id"
+        ],
+        "path": "/billing-portal/:id",
+        "query": [],
+        "statuses": [
+          200
+        ]
+      },
+      {
+        "access": "protected",
+        "auth": {
+          "allowedRoles": [
+            "system"
+          ],
+          "method": "jwt"
+        },
+        "body": false,
+        "method": "DELETE",
+        "name": "EraseUserData",
+        "operation": "eraseuserdata",
+        "params": [
+          "userId"
+        ],
+        "path": "/compliance/erase/:userId",
+        "query": [],
+        "statuses": [
+          200,
+          404
+        ]
+      },
+      {
+        "access": "protected",
+        "auth": {
+          "allowedRoles": [
+            "system"
+          ],
+          "method": "jwt"
+        },
+        "body": false,
+        "method": "GET",
+        "name": "ExportUserData",
+        "operation": "exportuserdata",
+        "params": [
+          "userId"
+        ],
+        "path": "/compliance/export/:userId",
+        "query": [],
+        "statuses": [
+          200,
+          404
+        ]
+      },
+      {
+        "access": "public",
+        "body": true,
+        "method": "POST",
+        "name": "handleWebhookEvent",
+        "operation": "handlewebhookevent",
+        "params": [],
+        "path": "/webhook",
+        "query": [],
+        "statuses": [
+          200,
+          400
+        ]
+      },
+      {
+        "access": "public",
+        "body": true,
+        "method": "POST",
+        "name": "ReceivePlatformEvent",
+        "operation": "receiveplatformevent",
+        "params": [
+          "feature"
+        ],
+        "path": "/platform-events/:feature",
+        "query": [],
+        "statuses": [
+          200,
+          401,
+          404
+        ]
+      }
+    ],
+    "schemas": {
+      "BillingPortalSchema": {
+        "properties": {
+          "createdAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "customerId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "expiresAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "id": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "stripeFields": {
+            "example": "any",
+            "title": "Any"
+          },
+          "updatedAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "uri": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "customerId",
+          "expiresAt"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "CheckoutSessionSchema": {
+        "properties": {
+          "cancelRedirectUri": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "createdAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "currency": {
+            "enum": [
+              "USD",
+              "EUR",
+              "JPY",
+              "GBP",
+              "AUD",
+              "CAD",
+              "CHF",
+              "CNY",
+              "AED",
+              "ARS",
+              "BAM",
+              "BDT",
+              "BGN",
+              "BOB",
+              "BRL",
+              "CLP",
+              "COP",
+              "CRC",
+              "CZK",
+              "DKK",
+              "DZD",
+              "EGP",
+              "ETB",
+              "GEL",
+              "GTQ",
+              "HKD",
+              "HUF",
+              "IDR",
+              "ILS",
+              "INR",
+              "ISK",
+              "JMD",
+              "KES",
+              "KHR",
+              "KRW",
+              "KZT",
+              "LAK",
+              "LKR",
+              "MAD",
+              "MMK",
+              "MXN",
+              "MYR",
+              "NGN",
+              "NOK",
+              "NPR",
+              "NZD",
+              "PEN",
+              "PHP",
+              "PKR",
+              "PLN",
+              "PYG",
+              "QAR",
+              "RON",
+              "RSD",
+              "RUB",
+              "SAR",
+              "SEK",
+              "SGD",
+              "THB",
+              "TRY",
+              "TWD",
+              "TZS",
+              "UAH",
+              "UGX",
+              "UYU",
+              "VND",
+              "ZAR",
+              "ZMW"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "customerId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "expiresAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "id": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "metadata": {
+            "example": "unknown",
+            "title": "Unknown"
+          },
+          "paymentMethods": {
+            "items": {
+              "enum": [
+                "affirm",
+                "afterpay_clearpay",
+                "alipay",
+                "alma",
+                "au_becs_debit",
+                "bacs_debit",
+                "bancontact",
+                "billie",
+                "blik",
+                "boleto",
+                "card",
+                "cashapp",
+                "eps",
+                "fpx",
+                "giropay",
+                "grabpay",
+                "ideal",
+                "klarna",
+                "konbini",
+                "link",
+                "mobilepay",
+                "multibanco",
+                "oxxo",
+                "p24",
+                "pay_by_bank",
+                "paynow",
+                "paypal",
+                "pix",
+                "promptpay",
+                "satispay",
+                "sepa_debit",
+                "sofort",
+                "swish",
+                "twint",
+                "us_bank_account",
+                "wechat_pay",
+                "zip"
+              ],
+              "type": [
+                "string"
+              ]
+            },
+            "type": [
+              "array"
+            ]
+          },
+          "status": {
+            "enum": [
+              "PENDING",
+              "SUCCESS",
+              "CREATED",
+              "UPDATED",
+              "COMPLETED",
+              "CANCELLED",
+              "FAILED",
+              "EXPIRED"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "stripeFields": {
+            "example": "any",
+            "title": "Any"
+          },
+          "successRedirectUri": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "updatedAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "uri": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "customerId",
+          "currency",
+          "paymentMethods",
+          "expiresAt",
+          "status"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "CreateBillingPortalSchema": {
+        "properties": {
+          "customerId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "expiresAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "id": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "stripeFields": {
+            "example": "any",
+            "title": "Any"
+          },
+          "uri": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "customerId",
+          "expiresAt"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "CreateCheckoutSessionSchema": {
+        "properties": {
+          "cancelRedirectUri": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "currency": {
+            "enum": [
+              "USD",
+              "EUR",
+              "JPY",
+              "GBP",
+              "AUD",
+              "CAD",
+              "CHF",
+              "CNY",
+              "AED",
+              "ARS",
+              "BAM",
+              "BDT",
+              "BGN",
+              "BOB",
+              "BRL",
+              "CLP",
+              "COP",
+              "CRC",
+              "CZK",
+              "DKK",
+              "DZD",
+              "EGP",
+              "ETB",
+              "GEL",
+              "GTQ",
+              "HKD",
+              "HUF",
+              "IDR",
+              "ILS",
+              "INR",
+              "ISK",
+              "JMD",
+              "KES",
+              "KHR",
+              "KRW",
+              "KZT",
+              "LAK",
+              "LKR",
+              "MAD",
+              "MMK",
+              "MXN",
+              "MYR",
+              "NGN",
+              "NOK",
+              "NPR",
+              "NZD",
+              "PEN",
+              "PHP",
+              "PKR",
+              "PLN",
+              "PYG",
+              "QAR",
+              "RON",
+              "RSD",
+              "RUB",
+              "SAR",
+              "SEK",
+              "SGD",
+              "THB",
+              "TRY",
+              "TWD",
+              "TZS",
+              "UAH",
+              "UGX",
+              "UYU",
+              "VND",
+              "ZAR",
+              "ZMW"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "customerId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "expiresAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "id": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "paymentMethods": {
+            "items": {
+              "enum": [
+                "affirm",
+                "afterpay_clearpay",
+                "alipay",
+                "alma",
+                "au_becs_debit",
+                "bacs_debit",
+                "bancontact",
+                "billie",
+                "blik",
+                "boleto",
+                "card",
+                "cashapp",
+                "eps",
+                "fpx",
+                "giropay",
+                "grabpay",
+                "ideal",
+                "klarna",
+                "konbini",
+                "link",
+                "mobilepay",
+                "multibanco",
+                "oxxo",
+                "p24",
+                "pay_by_bank",
+                "paynow",
+                "paypal",
+                "pix",
+                "promptpay",
+                "satispay",
+                "sepa_debit",
+                "sofort",
+                "swish",
+                "twint",
+                "us_bank_account",
+                "wechat_pay",
+                "zip"
+              ],
+              "type": [
+                "string"
+              ]
+            },
+            "type": [
+              "array"
+            ]
+          },
+          "status": {
+            "enum": [
+              "PENDING",
+              "SUCCESS",
+              "CREATED",
+              "UPDATED",
+              "COMPLETED",
+              "CANCELLED",
+              "FAILED",
+              "EXPIRED"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "stripeFields": {
+            "example": "any",
+            "title": "Any"
+          },
+          "successRedirectUri": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "uri": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "customerId",
+          "currency",
+          "paymentMethods",
+          "expiresAt",
+          "status"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "CreatePaymentLinkSchema": {
+        "properties": {
+          "amount": {
+            "example": 123,
+            "title": "Number",
+            "type": [
+              "number"
+            ]
+          },
+          "currency": {
+            "enum": [
+              "USD",
+              "EUR",
+              "JPY",
+              "GBP",
+              "AUD",
+              "CAD",
+              "CHF",
+              "CNY",
+              "AED",
+              "ARS",
+              "BAM",
+              "BDT",
+              "BGN",
+              "BOB",
+              "BRL",
+              "CLP",
+              "COP",
+              "CRC",
+              "CZK",
+              "DKK",
+              "DZD",
+              "EGP",
+              "ETB",
+              "GEL",
+              "GTQ",
+              "HKD",
+              "HUF",
+              "IDR",
+              "ILS",
+              "INR",
+              "ISK",
+              "JMD",
+              "KES",
+              "KHR",
+              "KRW",
+              "KZT",
+              "LAK",
+              "LKR",
+              "MAD",
+              "MMK",
+              "MXN",
+              "MYR",
+              "NGN",
+              "NOK",
+              "NPR",
+              "NZD",
+              "PEN",
+              "PHP",
+              "PKR",
+              "PLN",
+              "PYG",
+              "QAR",
+              "RON",
+              "RSD",
+              "RUB",
+              "SAR",
+              "SEK",
+              "SGD",
+              "THB",
+              "TRY",
+              "TWD",
+              "TZS",
+              "UAH",
+              "UGX",
+              "UYU",
+              "VND",
+              "ZAR",
+              "ZMW"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "id": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "paymentMethods": {
+            "items": {
+              "enum": [
+                "affirm",
+                "afterpay_clearpay",
+                "alipay",
+                "alma",
+                "au_becs_debit",
+                "bacs_debit",
+                "bancontact",
+                "billie",
+                "blik",
+                "boleto",
+                "card",
+                "cashapp",
+                "eps",
+                "fpx",
+                "giropay",
+                "grabpay",
+                "ideal",
+                "klarna",
+                "konbini",
+                "link",
+                "mobilepay",
+                "multibanco",
+                "oxxo",
+                "p24",
+                "pay_by_bank",
+                "paynow",
+                "paypal",
+                "pix",
+                "promptpay",
+                "satispay",
+                "sepa_debit",
+                "sofort",
+                "swish",
+                "twint",
+                "us_bank_account",
+                "wechat_pay",
+                "zip"
+              ],
+              "type": [
+                "string"
+              ]
+            },
+            "type": [
+              "array"
+            ]
+          },
+          "status": {
+            "enum": [
+              "PENDING",
+              "SUCCESS",
+              "CREATED",
+              "UPDATED",
+              "COMPLETED",
+              "CANCELLED",
+              "FAILED",
+              "EXPIRED"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "stripeFields": {
+            "additionalProperties": true,
+            "properties": {
+              "line_items": {
+                "items": {
+                  "additionalProperties": {},
+                  "type": [
+                    "object"
+                  ]
+                },
+                "type": [
+                  "array"
+                ]
+              }
+            },
+            "required": [
+              "line_items"
+            ],
+            "type": [
+              "object"
+            ]
+          }
+        },
+        "required": [
+          "amount",
+          "currency",
+          "paymentMethods",
+          "status",
+          "stripeFields"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "CreatePlanSchema": {
+        "properties": {
+          "active": {
+            "example": true,
+            "title": "Boolean",
+            "type": [
+              "boolean"
+            ]
+          },
+          "billingProvider": {
+            "enum": [
+              "stripe"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "cadence": {
+            "enum": [
+              "week",
+              "month",
+              "year"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "currency": {
+            "enum": [
+              "USD",
+              "EUR",
+              "JPY",
+              "GBP",
+              "AUD",
+              "CAD",
+              "CHF",
+              "CNY",
+              "AED",
+              "ARS",
+              "BAM",
+              "BDT",
+              "BGN",
+              "BOB",
+              "BRL",
+              "CLP",
+              "COP",
+              "CRC",
+              "CZK",
+              "DKK",
+              "DZD",
+              "EGP",
+              "ETB",
+              "GEL",
+              "GTQ",
+              "HKD",
+              "HUF",
+              "IDR",
+              "ILS",
+              "INR",
+              "ISK",
+              "JMD",
+              "KES",
+              "KHR",
+              "KRW",
+              "KZT",
+              "LAK",
+              "LKR",
+              "MAD",
+              "MMK",
+              "MXN",
+              "MYR",
+              "NGN",
+              "NOK",
+              "NPR",
+              "NZD",
+              "PEN",
+              "PHP",
+              "PKR",
+              "PLN",
+              "PYG",
+              "QAR",
+              "RON",
+              "RSD",
+              "RUB",
+              "SAR",
+              "SEK",
+              "SGD",
+              "THB",
+              "TRY",
+              "TWD",
+              "TZS",
+              "UAH",
+              "UGX",
+              "UYU",
+              "VND",
+              "ZAR",
+              "ZMW"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "description": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "externalId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "features": {
+            "items": {
+              "example": "a string",
+              "title": "String",
+              "type": [
+                "string"
+              ]
+            },
+            "type": [
+              "array"
+            ]
+          },
+          "id": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "name": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "price": {
+            "example": 123,
+            "title": "Number",
+            "type": [
+              "number"
+            ]
+          },
+          "stripeFields": {
+            "example": "any",
+            "title": "Any"
+          }
+        },
+        "required": [
+          "name",
+          "price",
+          "cadence",
+          "currency",
+          "externalId",
+          "billingProvider",
+          "active"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "CreateSubscriptionSchema": {
+        "properties": {
+          "active": {
+            "example": true,
+            "title": "Boolean",
+            "type": [
+              "boolean"
+            ]
+          },
+          "billingProvider": {
+            "enum": [
+              "stripe"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "description": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "endDate": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "externalId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "id": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "partyId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "partyType": {
+            "enum": [
+              "user",
+              "organization"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "productId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "startDate": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "status": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "stripeFields": {
+            "example": "any",
+            "title": "Any"
+          }
+        },
+        "required": [
+          "partyId",
+          "partyType",
+          "productId",
+          "active",
+          "externalId",
+          "startDate",
+          "status",
+          "billingProvider"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "PaymentLinkSchema": {
+        "properties": {
+          "amount": {
+            "example": 123,
+            "title": "Number",
+            "type": [
+              "number"
+            ]
+          },
+          "createdAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "currency": {
+            "enum": [
+              "USD",
+              "EUR",
+              "JPY",
+              "GBP",
+              "AUD",
+              "CAD",
+              "CHF",
+              "CNY",
+              "AED",
+              "ARS",
+              "BAM",
+              "BDT",
+              "BGN",
+              "BOB",
+              "BRL",
+              "CLP",
+              "COP",
+              "CRC",
+              "CZK",
+              "DKK",
+              "DZD",
+              "EGP",
+              "ETB",
+              "GEL",
+              "GTQ",
+              "HKD",
+              "HUF",
+              "IDR",
+              "ILS",
+              "INR",
+              "ISK",
+              "JMD",
+              "KES",
+              "KHR",
+              "KRW",
+              "KZT",
+              "LAK",
+              "LKR",
+              "MAD",
+              "MMK",
+              "MXN",
+              "MYR",
+              "NGN",
+              "NOK",
+              "NPR",
+              "NZD",
+              "PEN",
+              "PHP",
+              "PKR",
+              "PLN",
+              "PYG",
+              "QAR",
+              "RON",
+              "RSD",
+              "RUB",
+              "SAR",
+              "SEK",
+              "SGD",
+              "THB",
+              "TRY",
+              "TWD",
+              "TZS",
+              "UAH",
+              "UGX",
+              "UYU",
+              "VND",
+              "ZAR",
+              "ZMW"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "id": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "paymentMethods": {
+            "items": {
+              "enum": [
+                "affirm",
+                "afterpay_clearpay",
+                "alipay",
+                "alma",
+                "au_becs_debit",
+                "bacs_debit",
+                "bancontact",
+                "billie",
+                "blik",
+                "boleto",
+                "card",
+                "cashapp",
+                "eps",
+                "fpx",
+                "giropay",
+                "grabpay",
+                "ideal",
+                "klarna",
+                "konbini",
+                "link",
+                "mobilepay",
+                "multibanco",
+                "oxxo",
+                "p24",
+                "pay_by_bank",
+                "paynow",
+                "paypal",
+                "pix",
+                "promptpay",
+                "satispay",
+                "sepa_debit",
+                "sofort",
+                "swish",
+                "twint",
+                "us_bank_account",
+                "wechat_pay",
+                "zip"
+              ],
+              "type": [
+                "string"
+              ]
+            },
+            "type": [
+              "array"
+            ]
+          },
+          "status": {
+            "enum": [
+              "PENDING",
+              "SUCCESS",
+              "CREATED",
+              "UPDATED",
+              "COMPLETED",
+              "CANCELLED",
+              "FAILED",
+              "EXPIRED"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "stripeFields": {
+            "example": "any",
+            "title": "Any"
+          },
+          "updatedAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "amount",
+          "currency",
+          "paymentMethods",
+          "status"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "PlanSchema": {
+        "properties": {
+          "active": {
+            "example": true,
+            "title": "Boolean",
+            "type": [
+              "boolean"
+            ]
+          },
+          "billingProvider": {
+            "enum": [
+              "stripe"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "cadence": {
+            "enum": [
+              "week",
+              "month",
+              "year"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "createdAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "currency": {
+            "enum": [
+              "USD",
+              "EUR",
+              "JPY",
+              "GBP",
+              "AUD",
+              "CAD",
+              "CHF",
+              "CNY",
+              "AED",
+              "ARS",
+              "BAM",
+              "BDT",
+              "BGN",
+              "BOB",
+              "BRL",
+              "CLP",
+              "COP",
+              "CRC",
+              "CZK",
+              "DKK",
+              "DZD",
+              "EGP",
+              "ETB",
+              "GEL",
+              "GTQ",
+              "HKD",
+              "HUF",
+              "IDR",
+              "ILS",
+              "INR",
+              "ISK",
+              "JMD",
+              "KES",
+              "KHR",
+              "KRW",
+              "KZT",
+              "LAK",
+              "LKR",
+              "MAD",
+              "MMK",
+              "MXN",
+              "MYR",
+              "NGN",
+              "NOK",
+              "NPR",
+              "NZD",
+              "PEN",
+              "PHP",
+              "PKR",
+              "PLN",
+              "PYG",
+              "QAR",
+              "RON",
+              "RSD",
+              "RUB",
+              "SAR",
+              "SEK",
+              "SGD",
+              "THB",
+              "TRY",
+              "TWD",
+              "TZS",
+              "UAH",
+              "UGX",
+              "UYU",
+              "VND",
+              "ZAR",
+              "ZMW"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "description": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "externalId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "features": {
+            "items": {
+              "example": "a string",
+              "title": "String",
+              "type": [
+                "string"
+              ]
+            },
+            "type": [
+              "array"
+            ]
+          },
+          "id": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "name": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "price": {
+            "example": 123,
+            "title": "Number",
+            "type": [
+              "number"
+            ]
+          },
+          "stripeFields": {
+            "example": "any",
+            "title": "Any"
+          },
+          "updatedAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "price",
+          "cadence",
+          "currency",
+          "externalId",
+          "active"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "SubscriptionSchema": {
+        "properties": {
+          "active": {
+            "example": true,
+            "title": "Boolean",
+            "type": [
+              "boolean"
+            ]
+          },
+          "billingProvider": {
+            "enum": [
+              "stripe"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "createdAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "description": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "endDate": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "externalId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "id": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "partyId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "partyType": {
+            "enum": [
+              "user",
+              "organization"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "productId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "startDate": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "status": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "stripeFields": {
+            "example": "any",
+            "title": "Any"
+          },
+          "updatedAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "partyId",
+          "partyType",
+          "productId",
+          "active",
+          "externalId",
+          "startDate",
+          "status"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "UpdateBillingPortalSchema": {
+        "properties": {
+          "expiresAt": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "id": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "stripeFields": {
+            "example": "any",
+            "title": "Any"
+          },
+          "uri": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "UpdatePaymentLinkSchema": {
+        "properties": {
+          "amount": {
+            "example": 123,
+            "title": "Number",
+            "type": [
+              "number"
+            ]
+          },
+          "currency": {
+            "enum": [
+              "USD",
+              "EUR",
+              "JPY",
+              "GBP",
+              "AUD",
+              "CAD",
+              "CHF",
+              "CNY",
+              "AED",
+              "ARS",
+              "BAM",
+              "BDT",
+              "BGN",
+              "BOB",
+              "BRL",
+              "CLP",
+              "COP",
+              "CRC",
+              "CZK",
+              "DKK",
+              "DZD",
+              "EGP",
+              "ETB",
+              "GEL",
+              "GTQ",
+              "HKD",
+              "HUF",
+              "IDR",
+              "ILS",
+              "INR",
+              "ISK",
+              "JMD",
+              "KES",
+              "KHR",
+              "KRW",
+              "KZT",
+              "LAK",
+              "LKR",
+              "MAD",
+              "MMK",
+              "MXN",
+              "MYR",
+              "NGN",
+              "NOK",
+              "NPR",
+              "NZD",
+              "PEN",
+              "PHP",
+              "PKR",
+              "PLN",
+              "PYG",
+              "QAR",
+              "RON",
+              "RSD",
+              "RUB",
+              "SAR",
+              "SEK",
+              "SGD",
+              "THB",
+              "TRY",
+              "TWD",
+              "TZS",
+              "UAH",
+              "UGX",
+              "UYU",
+              "VND",
+              "ZAR",
+              "ZMW"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "id": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "paymentMethods": {
+            "items": {
+              "enum": [
+                "affirm",
+                "afterpay_clearpay",
+                "alipay",
+                "alma",
+                "au_becs_debit",
+                "bacs_debit",
+                "bancontact",
+                "billie",
+                "blik",
+                "boleto",
+                "card",
+                "cashapp",
+                "eps",
+                "fpx",
+                "giropay",
+                "grabpay",
+                "ideal",
+                "klarna",
+                "konbini",
+                "link",
+                "mobilepay",
+                "multibanco",
+                "oxxo",
+                "p24",
+                "pay_by_bank",
+                "paynow",
+                "paypal",
+                "pix",
+                "promptpay",
+                "satispay",
+                "sepa_debit",
+                "sofort",
+                "swish",
+                "twint",
+                "us_bank_account",
+                "wechat_pay",
+                "zip"
+              ],
+              "type": [
+                "string"
+              ]
+            },
+            "type": [
+              "array"
+            ]
+          },
+          "status": {
+            "enum": [
+              "PENDING",
+              "SUCCESS",
+              "CREATED",
+              "UPDATED",
+              "COMPLETED",
+              "CANCELLED",
+              "FAILED",
+              "EXPIRED"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "stripeFields": {
+            "example": "any",
+            "title": "Any"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "UpdatePlanSchema": {
+        "properties": {
+          "active": {
+            "example": true,
+            "title": "Boolean",
+            "type": [
+              "boolean"
+            ]
+          },
+          "billingProvider": {
+            "enum": [
+              "stripe"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "cadence": {
+            "enum": [
+              "week",
+              "month",
+              "year"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "currency": {
+            "enum": [
+              "USD",
+              "EUR",
+              "JPY",
+              "GBP",
+              "AUD",
+              "CAD",
+              "CHF",
+              "CNY",
+              "AED",
+              "ARS",
+              "BAM",
+              "BDT",
+              "BGN",
+              "BOB",
+              "BRL",
+              "CLP",
+              "COP",
+              "CRC",
+              "CZK",
+              "DKK",
+              "DZD",
+              "EGP",
+              "ETB",
+              "GEL",
+              "GTQ",
+              "HKD",
+              "HUF",
+              "IDR",
+              "ILS",
+              "INR",
+              "ISK",
+              "JMD",
+              "KES",
+              "KHR",
+              "KRW",
+              "KZT",
+              "LAK",
+              "LKR",
+              "MAD",
+              "MMK",
+              "MXN",
+              "MYR",
+              "NGN",
+              "NOK",
+              "NPR",
+              "NZD",
+              "PEN",
+              "PHP",
+              "PKR",
+              "PLN",
+              "PYG",
+              "QAR",
+              "RON",
+              "RSD",
+              "RUB",
+              "SAR",
+              "SEK",
+              "SGD",
+              "THB",
+              "TRY",
+              "TWD",
+              "TZS",
+              "UAH",
+              "UGX",
+              "UYU",
+              "VND",
+              "ZAR",
+              "ZMW"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "description": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "externalId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "features": {
+            "items": {
+              "example": "a string",
+              "title": "String",
+              "type": [
+                "string"
+              ]
+            },
+            "type": [
+              "array"
+            ]
+          },
+          "id": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "name": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "price": {
+            "example": 123,
+            "title": "Number",
+            "type": [
+              "number"
+            ]
+          },
+          "stripeFields": {
+            "example": "any",
+            "title": "Any"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": [
+          "object"
+        ]
+      },
+      "UpdateSubscriptionSchema": {
+        "properties": {
+          "active": {
+            "example": true,
+            "title": "Boolean",
+            "type": [
+              "boolean"
+            ]
+          },
+          "billingProvider": {
+            "enum": [
+              "stripe"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "description": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "endDate": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "externalId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "id": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "partyId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "partyType": {
+            "enum": [
+              "user",
+              "organization"
+            ],
+            "type": [
+              "string"
+            ]
+          },
+          "productId": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "startDate": {
+            "example": "2025-05-16T21:13:04.123Z",
+            "format": "date-time",
+            "title": "Date",
+            "type": "string"
+          },
+          "status": {
+            "example": "a string",
+            "title": "String",
+            "type": [
+              "string"
+            ]
+          },
+          "stripeFields": {
+            "example": "any",
+            "title": "Any"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": [
+          "object"
+        ]
+      }
+    },
+    "variant": "stripe"
+  }
+]

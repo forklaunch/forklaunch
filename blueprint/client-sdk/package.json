@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@forklaunch/common": "^1.2.32",
-    "@forklaunch/universal-sdk": "^1.2.31",
+    "@forklaunch/universal-sdk": "^1.4.1",
     "better-auth": "^1.7.11"
   },
   "devDependencies": {
@@ -28,7 +28,7 @@
     "@forklaunch/blueprint-iam-base": "workspace:^",
     "@forklaunch/blueprint-iam-better-auth": "workspace:^",
     "@forklaunch/blueprint-sample-worker": "workspace:^",
-    "@forklaunch/core": "^3.2.0",
+    "@forklaunch/core": "^3.3.0",
     "typescript": "^7.0.2"
   }
 }

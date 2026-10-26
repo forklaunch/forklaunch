@@ -20,7 +20,7 @@ use crate::{
         command::command,
         manifest::{
             ApplicationInitializationMetadata, InitializableManifestConfig,
-            InitializableManifestConfigMetadata, ManifestData, ProjectType,
+            InitializableManifestConfigMetadata, ManifestData,
             application::ApplicationManifestData, remove_project_definition_from_manifest,
         },
         package_json::remove_project_definition_to_package_json,
@@ -28,6 +28,7 @@ use crate::{
         rendered_template::{RenderedTemplate, write_rendered_templates},
         tsconfig::remove_project_from_modules_tsconfig,
     },
+    init::rust_project::{self, RustProjectKind},
     prompt::{ArrayCompleter, prompt_for_confirmation, prompt_with_validation},
 };
 
@@ -42,20 +43,20 @@ impl LibraryCommand {
 
 impl CliCommand for LibraryCommand {
     fn command(&self) -> Command {
-        command("library", "Initialize a new library")
+        command("library", "Delete a library")
             .alias("lib")
             .arg(Arg::new("name").help("The name of the library"))
             .arg(
                 Arg::new("base_path")
                     .short('p')
                     .long("path")
-                    .help("The application path to initialize the library in"),
+                    .help("The application path to delete the library from"),
             )
             .arg(
                 Arg::new("continue")
                     .short('c')
                     .long("continue")
-                    .help("Continue the eject operation")
+                    .help("Delete without asking for confirmation")
                     .action(ArgAction::SetTrue),
             )
     }
@@ -67,12 +68,10 @@ impl CliCommand for LibraryCommand {
 
         let (app_root_path, _) = find_app_root_path(matches, RequiredLocation::Application)?;
         let manifest_path = app_root_path.join(".forklaunch").join("manifest.toml");
+        crate::init::rust_project::preflight_mixed_images(&app_root_path)?;
 
-        let existing_manifest_data = toml::from_str::<ApplicationManifestData>(
-            &read_to_string(&manifest_path).with_context(|| ERROR_FAILED_TO_READ_MANIFEST)?,
-        )
-        .with_context(|| ERROR_FAILED_TO_PARSE_MANIFEST)?;
-
+        let project_names =
+            rust_project::registered_project_names(&app_root_path, RustProjectKind::Library)?;
         let library_name = prompt_with_validation(
             &mut line_editor,
             &mut stdout,
@@ -80,14 +79,48 @@ impl CliCommand for LibraryCommand {
             matches,
             "library name",
             None,
-            |input: &str| {
-                existing_manifest_data
-                    .projects
-                    .iter()
-                    .any(|project| project.name == input && project.r#type == ProjectType::Library)
-            },
+            |input: &str| project_names.contains(input),
             |_| "Library not found".to_string(),
         )?;
+
+        if crate::core::storefront::registered(&app_root_path, &library_name)? {
+            if !matches.get_flag("continue")
+                && !prompt_for_confirmation(
+                    &mut line_editor,
+                    "Delete this storefront and its captured assets? (y/N) ",
+                )?
+            {
+                return Ok(());
+            }
+            crate::core::storefront::delete(&app_root_path, &library_name)?;
+            log_ok!(stdout, "Storefront '{}' deleted", library_name);
+            return Ok(());
+        }
+        if rust_project::is_rust_project(&app_root_path, &library_name)? {
+            if !matches.get_flag("continue") {
+                let continue_delete = prompt_for_confirmation(
+                    &mut line_editor,
+                    "This operation is irreversible. Do you want to continue? (y/N) ",
+                )?;
+                if !continue_delete {
+                    log_error!(stdout, "Deletion cancelled");
+                    return Ok(());
+                }
+            }
+
+            rust_project::delete_rust_project(
+                &app_root_path,
+                RustProjectKind::Library,
+                &library_name,
+            )?;
+            log_ok!(stdout, "{} deleted successfully!", library_name);
+            return Ok(());
+        }
+
+        let existing_manifest_data = toml::from_str::<ApplicationManifestData>(
+            &read_to_string(&manifest_path).with_context(|| ERROR_FAILED_TO_READ_MANIFEST)?,
+        )
+        .with_context(|| ERROR_FAILED_TO_PARSE_MANIFEST)?;
 
         let library_base_path = prompt_base_path(
             &app_root_path,
@@ -160,6 +193,8 @@ impl CliCommand for LibraryCommand {
         );
 
         write_rendered_templates(&rendered_templates, false, &mut stdout)?;
+
+        crate::init::rust_project::refresh_mixed_images(&app_root_path)?;
 
         log_ok!(stdout, "{} deleted successfully!", library_name);
 

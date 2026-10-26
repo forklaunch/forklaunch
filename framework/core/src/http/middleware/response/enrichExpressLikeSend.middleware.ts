@@ -1,6 +1,7 @@
 import { AnySchemaValidator } from '@forklaunch/validator';
 import { ParsedQs } from 'qs';
 import { parse } from './parse.middleware';
+import { isValidationDiagnostic } from '../internal/validationDiagnostic';
 
 import {
   isAsyncGenerator,
@@ -98,6 +99,11 @@ export function enrichExpressLikeSend<
     return;
   }
 
+  if (typeof data === 'string' && isValidationDiagnostic(res)) {
+    originalSend.call(instance, data);
+    return;
+  }
+
   let responses;
   if (
     req.contractDetails.responses == null &&
@@ -111,7 +117,7 @@ export function enrichExpressLikeSend<
     if (req.contractDetails.responses != null) {
       responses = req.contractDetails.responses;
     } else {
-      responses = req.contractDetails.versions[req.version].responses;
+      responses = req.contractDetails.versions[req.version]?.responses ?? {};
     }
   }
 

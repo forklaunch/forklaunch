@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Deterministic `mktemp -d` for CI test scripts; see ../sitecustomize.py.
+# Only directory templates are handled; everything else goes to the system
+# mktemp unchanged. Each call still creates a new, empty, private directory.
+real=/usr/bin/mktemp
+[ -x "$real" ] || real=/bin/mktemp
+if [ "${FORKLAUNCH_STABLE_TMP:-}" != 1 ] || [ "$#" -gt 2 ] || [ "${1:-}" != -d ]; then
+    exec "$real" "$@"
+fi
+template="${2:-${TMPDIR:-/tmp}/tmp.XXXXXXXXXX}"
+case "$template" in
+    */*) ;;
+    *) exec "$real" "$@" ;;
+esac
+stem="${template%%XXX*}"
+if [ "$stem" = "$template" ]; then exec "$real" "$@"; fi
+rest="${template#"$stem"}"
+xs="${rest%%[!X]*}"
+tail="${rest#"$xs"}"
+number=0
+while :; do
+    path="${stem}fl$(printf '%04d' "$number")${tail}"
+    number=$((number + 1))
+    if mkdir -m 700 "$path" 2>/dev/null; then
+        printf '%s\n' "$path"
+        exit 0
+    fi
+    [ -e "$path" ] || exec "$real" "$@"
+done

@@ -19,7 +19,7 @@ describe('PaymentLink Routes E2E Tests with PostgreSQL Container', () => {
     const setup = await setupTestDatabase();
     orm = setup.orm;
     redis = setup.redis;
-  }, 60000);
+  });
 
   beforeEach(async () => {
     await clearDatabase({ orm, redis });
@@ -30,7 +30,7 @@ describe('PaymentLink Routes E2E Tests with PostgreSQL Container', () => {
 
   afterAll(async () => {
     await cleanupTestDatabase();
-  }, 30000);
+  });
 
   describe('POST /payment-link - createPaymentLink', () => {
     it('should create a payment link successfully', async () => {
@@ -252,7 +252,6 @@ describe('PaymentLink Routes E2E Tests with PostgreSQL Container', () => {
         amount: 14999,
         paymentMethods: ['credit_card' as const],
         currency: 'GBP' as const,
-        description: 'An updated test payment link',
         status: 'COMPLETED' as const
       };
 
@@ -270,7 +269,10 @@ describe('PaymentLink Routes E2E Tests with PostgreSQL Container', () => {
         amount: updateData.amount,
         paymentMethods: updateData.paymentMethods,
         currency: updateData.currency,
-        description: updateData.description,
+        // `description` is stored on the entity but is not part of the
+        // public payment link schemas (TypeScript or Rust), so an update
+        // cannot change it and keeps the value it was created with.
+        description: mockPaymentLinkData.description,
         status: updateData.status,
         createdAt: expect.any(Date),
         updatedAt: expect.any(Date)

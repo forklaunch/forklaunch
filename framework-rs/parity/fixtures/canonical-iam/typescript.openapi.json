@@ -1,0 +1,403 @@
+{
+  "components": {
+    "securitySchemes": {
+      "Authorization": {
+        "bearerFormat": "JWT",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "title": "API Definition",
+    "version": "latest"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/users": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": [
+                "integer"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "example": "a string",
+              "title": "String",
+              "type": [
+                "string"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "disabled": {
+                            "example": true,
+                            "title": "Boolean",
+                            "type": [
+                              "boolean"
+                            ]
+                          },
+                          "display_name": {
+                            "anyOf": [
+                              {
+                                "example": "a string",
+                                "title": "String",
+                                "type": [
+                                  "string"
+                                ]
+                              },
+                              {
+                                "enum": [
+                                  null
+                                ],
+                                "example": null,
+                                "title": "Null",
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "email": {
+                            "example": "a string",
+                            "title": "String",
+                            "type": [
+                              "string"
+                            ]
+                          },
+                          "id": {
+                            "example": "a string",
+                            "title": "String",
+                            "type": [
+                              "string"
+                            ]
+                          },
+                          "roles": {
+                            "items": {
+                              "example": "a string",
+                              "title": "String",
+                              "type": [
+                                "string"
+                              ]
+                            },
+                            "type": [
+                              "array"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "email",
+                          "disabled",
+                          "roles"
+                        ],
+                        "type": [
+                          "object"
+                        ]
+                      },
+                      "type": [
+                        "array"
+                      ]
+                    },
+                    "next_cursor": {
+                      "anyOf": [
+                        {
+                          "example": "a string",
+                          "title": "String",
+                          "type": [
+                            "string"
+                          ]
+                        },
+                        {
+                          "enum": [
+                            null
+                          ],
+                          "example": null,
+                          "title": "Null",
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": [
+                    "object"
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "example": "a string",
+                  "title": "String",
+                  "type": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "example": "a string",
+                  "title": "String",
+                  "type": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "example": "a string",
+                  "title": "String",
+                  "type": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "example": "a string",
+                  "title": "String",
+                  "type": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "example": "a string",
+                  "title": "String",
+                  "type": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "Authorization": []
+          }
+        ],
+        "summary": "List Users: List users",
+        "tags": [
+          "/"
+        ]
+      }
+    },
+    "/users/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "example": "a string",
+              "title": "String",
+              "type": [
+                "string"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "disabled": {
+                      "example": true,
+                      "title": "Boolean",
+                      "type": [
+                        "boolean"
+                      ]
+                    },
+                    "display_name": {
+                      "anyOf": [
+                        {
+                          "example": "a string",
+                          "title": "String",
+                          "type": [
+                            "string"
+                          ]
+                        },
+                        {
+                          "enum": [
+                            null
+                          ],
+                          "example": null,
+                          "title": "Null",
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "email": {
+                      "example": "a string",
+                      "title": "String",
+                      "type": [
+                        "string"
+                      ]
+                    },
+                    "id": {
+                      "example": "a string",
+                      "title": "String",
+                      "type": [
+                        "string"
+                      ]
+                    },
+                    "roles": {
+                      "items": {
+                        "example": "a string",
+                        "title": "String",
+                        "type": [
+                          "string"
+                        ]
+                      },
+                      "type": [
+                        "array"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "email",
+                    "disabled",
+                    "roles"
+                  ],
+                  "type": [
+                    "object"
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "example": "a string",
+                  "title": "String",
+                  "type": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "example": "a string",
+                  "title": "String",
+                  "type": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "example": "a string",
+                  "title": "String",
+                  "type": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "example": "a string",
+                  "title": "String",
+                  "type": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "Authorization": []
+          }
+        ],
+        "summary": "Get User: Get a user by id",
+        "tags": [
+          "/"
+        ]
+      }
+    }
+  },
+  "servers": [
+    {
+      "description": "Main Server",
+      "url": "http://127.0.0.1:0"
+    }
+  ],
+  "tags": [
+    {
+      "description": "/ Operations",
+      "name": "/"
+    }
+  ]
+}
