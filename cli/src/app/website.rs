@@ -100,8 +100,21 @@ fn mutation_request(
     }
     if let Some(domain) = matches.get_one::<String>("domain") {
         let domain = domain.trim();
-        if domain.is_empty() || domain.contains("://") || domain.contains('/') {
-            bail!("Use a hostname such as study.example.com, without a URL scheme or path.");
+        if domain.len() > 253
+            || !domain.contains('.')
+            || domain.split('.').any(|label| {
+                label.is_empty()
+                    || label.len() > 63
+                    || label.starts_with('-')
+                    || label.ends_with('-')
+                    || !label
+                        .bytes()
+                        .all(|c| c.is_ascii_alphanumeric() || c == b'-')
+            })
+        {
+            bail!(
+                "Use a hostname such as study.example.com, without a URL scheme, port, query, or path."
+            );
         }
         let mut payload = revision_payload(current, environment, region)?;
         payload["domain"] = domain.into();
@@ -168,7 +181,7 @@ fn read_response(response: reqwest::blocking::Response) -> Result<serde_json::Va
     if !response.status().is_success() {
         let status = response.status();
         let detail = match status.as_u16() {
-            403 => "permission denied; custom frontend domains require a Pro or Enterprise plan",
+            403 => "permission denied; check your application access and operation permissions",
             404 => "website route or application is unavailable on this server",
             409 => {
                 "website settings changed or the website is already published; read current settings before retrying"
@@ -218,6 +231,37 @@ mod tests {
             assert!(
                 mutation_request(&matches, &serde_json::json!({}), "production", "us-east-2")
                     .is_err()
+            );
+        }
+    }
+    #[test]
+    fn invalid_hostnames_never_prepare_writes() {
+        let current = serde_json::json!({"currentRevision":null,"pendingRevision":null});
+        for domain in [
+            "",
+            "https://study.example.com",
+            "study.example.com/path",
+            "study.example.com:443",
+            "study.example.com?test=1",
+            "study..example.com",
+            "-study.example.com",
+            "study.example.com#part",
+        ] {
+            let matches = WebsiteCommand::new()
+                .command()
+                .version("0.0.0")
+                .try_get_matches_from([
+                    "website",
+                    "--environment",
+                    "production",
+                    "--region",
+                    "us-east-2",
+                    &format!("--domain={domain}"),
+                ])
+                .unwrap();
+            assert!(
+                mutation_request(&matches, &current, "production", "us-east-2").is_err(),
+                "{domain}"
             );
         }
     }
