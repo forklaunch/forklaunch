@@ -18,11 +18,28 @@ pub(crate) struct PathIO {
     pub(crate) module_id: Option<Module>,
 }
 
+/// Files the OS drops next to real ones. `include_dir!` embeds whatever is on
+/// disk -- it does not consult .gitignore -- and several template directories
+/// are symlinks into `blueprint/`, so a single Finder visit to any of them
+/// bakes a binary `.DS_Store` into the next build. It is not a template and
+/// cannot be rendered, so it is dropped here rather than left to fail later.
+fn is_os_metadata_path(path: &Path) -> bool {
+    matches!(
+        path.file_name().and_then(|name| name.to_str()),
+        Some(".DS_Store" | "Thumbs.db" | "desktop.ini")
+    )
+}
+
+fn is_os_metadata(file: &File<'_>) -> bool {
+    is_os_metadata_path(file.path())
+}
+
 pub(crate) fn get_directory_filenames(path: &'_ PathIO) -> Result<Vec<&'_ File<'_>>> {
     Ok(TEMPLATES_DIR
         .get_dir(&path.input_path)
         .unwrap()
         .files()
+        .filter(|file| !is_os_metadata(file))
         .collect())
 }
 
@@ -35,12 +52,16 @@ pub(crate) fn get_directory_subdirectory_names(path: &'_ PathIO) -> Result<Vec<&
 }
 
 pub(crate) fn get_file_contents(filepath: &Path) -> Result<String> {
-    Ok(TEMPLATES_DIR
+    let path = filepath.to_string_lossy();
+    let file = TEMPLATES_DIR
         .get_file(filepath)
-        .unwrap()
-        .contents_utf8()
-        .unwrap()
-        .to_string())
+        .with_context(|| format!("No template file embedded at {path}"))?;
+    // Both of these used to be `unwrap()`, which reported a non-UTF-8 template
+    // as a bare `Option::unwrap()` panic naming no file -- the whole scaffold
+    // died and the offending path had to be hunted by hand.
+    file.contents_utf8()
+        .map(str::to_string)
+        .with_context(|| format!("Template file {path} is not valid UTF-8"))
 }
 
 fn database_replacements(database: &String, template: String) -> String {
@@ -360,6 +381,60 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// `include_dir!` embeds from the filesystem and ignores .gitignore, and
+    /// many template directories are symlinks into `blueprint/`. A Finder
+    /// visit to one of them leaves a binary `.DS_Store` that used to reach
+    /// `get_file_contents` and abort every `forklaunch init` -- for any
+    /// module, including a bare app -- with an `Option::unwrap()` panic that
+    /// named no file. CI never saw it because the junk only exists locally.
+    #[test]
+    fn os_metadata_files_are_not_treated_as_templates() {
+        let junk = ["\u{2e}DS_Store", "Thumbs.db", "desktop.ini"];
+        for name in junk {
+            assert!(
+                is_os_metadata_path(Path::new("project/core").join(name).as_path()),
+                "{name} must be filtered out of the template file list"
+            );
+        }
+        assert!(
+            !is_os_metadata_path(Path::new("project/core/package.json")),
+            "a real template must not be mistaken for OS metadata"
+        );
+    }
+
+    /// Every embedded template has to be renderable text; a binary one now
+    /// returns a named error instead of panicking.
+    #[test]
+    fn every_embedded_template_is_valid_utf8() {
+        fn walk(dir: &Dir<'_>, bad: &mut Vec<String>) {
+            for file in dir.files() {
+                if is_os_metadata(file) {
+                    continue;
+                }
+                if file.contents_utf8().is_none() {
+                    bad.push(file.path().to_string_lossy().to_string());
+                }
+            }
+            for sub in dir.dirs() {
+                walk(sub, bad);
+            }
+        }
+
+        let mut bad = Vec::new();
+        for file in TEMPLATES_DIR.files() {
+            if !is_os_metadata(file) && file.contents_utf8().is_none() {
+                bad.push(file.path().to_string_lossy().to_string());
+            }
+        }
+        for dir in TEMPLATES_DIR.dirs() {
+            walk(dir, &mut bad);
+        }
+        assert!(
+            bad.is_empty(),
+            "non-UTF-8 files are embedded as templates: {bad:?}"
+        );
     }
 }
 
