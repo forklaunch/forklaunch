@@ -409,7 +409,7 @@ forklaunch init app <app_name>
 --formatter <type>       # prettier, biome
 --linter <type>          # oxlint
 --modules <module>       # billing-base, billing-stripe, iam-base, iam-better-auth,
-                         # ecommerce-stripe, cac-base
+                         # ecommerce-stripe, cac-base, mlse-base
 --path <path>            # REQUIRED in practice — see below
 --modules-path <path>    # src/modules | modules
 
