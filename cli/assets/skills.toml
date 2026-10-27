@@ -34,6 +34,7 @@ include = [
   "development-guidelines",
   "framework",
   "frontend-patterns",
+  "expo-mobile",
   "getting-started",
   "imports-and-structure",
   "infra",
