@@ -48,7 +48,7 @@ try {
   await writeFile(path.join(temporary, 'tsconfig.json'), JSON.stringify({ compilerOptions: cliSdkCompilerOptions, include: ['runtime.ts'] }));
   execFileSync(tsc, ['--project', path.join(temporary, 'tsconfig.json')], { encoding: 'utf8', timeout: 120000 });
   const { request } = require(path.join(temporary, 'compiled/runtime.js'));
-  const { safeStringify } = await load('framework/common/src/safeStringify.ts');
+  const { safeStringify, toPlainString } = await load('framework/common/src/safeStringify.ts');
   const { openApiCompliantPath } = await load('framework/common/src/openApiCompliantPath.ts');
   const { getSdkPath } = await load('framework/universal-sdk/src/core/resolvePath.ts', { './regex': { generateStringFromRegex() { throw Error('unexpected regex'); } } });
   const specialTypes = await load('framework/universal-sdk/src/core/coerceSpecialTypes.ts');
@@ -57,7 +57,7 @@ try {
   const schemaAdapter = await load('framework/universal-sdk/src/core/ajvSchema.ts');
   const responseSchemas = await load('framework/universal-sdk/src/core/responseSchema.ts', { './coerceSpecialTypes': specialTypes, './coerceReferenced': referenced, './ajvSchema': schemaAdapter, './responseDialect': dialect });
   const uriFormat = await load('framework/universal-sdk/src/core/uriFormat.ts');
-  const { UniversalSdk } = await load('framework/universal-sdk/src/universalSdk.ts', { './core/responseDialect': dialect, './core/uriFormat': uriFormat, './core/responseSchema': responseSchemas, '@forklaunch/common': { safeStringify, openApiCompliantPath, safeParse: JSON.parse }, './core/coerceSpecialTypes': { coerceSpecialTypes: value => value }, './core/mapContentType': { mapContentType: value => value }, './core/openApi': { ...(await load('framework/universal-sdk/src/core/openApi.ts', { '@forklaunch/common': { safeStringify: JSON.stringify, openApiCompliantPath: value => value, safeParse: JSON.parse } })), refreshOpenApi() { throw Error('unexpected refresh'); } }, './core/resolvePath': { getSdkPath } });
+  const { UniversalSdk } = await load('framework/universal-sdk/src/universalSdk.ts', { './core/responseDialect': dialect, './core/uriFormat': uriFormat, './core/responseSchema': responseSchemas, '@forklaunch/common': { safeStringify, toPlainString, openApiCompliantPath, safeParse: JSON.parse }, './core/coerceSpecialTypes': { coerceSpecialTypes: value => value }, './core/mapContentType': { mapContentType: value => value }, './core/openApi': { ...(await load('framework/universal-sdk/src/core/openApi.ts', { '@forklaunch/common': { safeStringify, toPlainString: JSON.stringify, openApiCompliantPath: value => value, safeParse: JSON.parse } })), refreshOpenApi() { throw Error('unexpected refresh'); } }, './core/resolvePath': { getSdkPath } });
   const universal = new UniversalSdk('http://127.0.0.1:9000', new (external('ajv').default ?? external('ajv'))({ strict: false }), {}, undefined);
   universal.registryOpenApiJson = {
     latest: { paths: { '/upload': { post: {

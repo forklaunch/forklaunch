@@ -1,4 +1,9 @@
-import { isNever, isRecord, safeStringify } from '@forklaunch/common';
+import {
+  isNever,
+  isRecord,
+  safeStringify,
+  toPlainString
+} from '@forklaunch/common';
 import { string, ZodSchemaValidator, ZodType } from '@forklaunch/validator/zod';
 import { FastMCP } from 'fastmcp';
 import http from 'http';
@@ -223,7 +228,8 @@ export function generateMcpServer<
                   break;
                 }
                 case 'file': {
-                  parsedBody = Buffer.from(safeStringify(body));
+                  // a string body is the file's contents, not JSON
+                  parsedBody = Buffer.from(toPlainString(body));
                   break;
                 }
                 case 'multipart': {
@@ -259,7 +265,7 @@ export function generateMcpServer<
                     parsedBody = new URLSearchParams(
                       Object.entries(body).map(([key, value]) => [
                         key,
-                        safeStringify(value)
+                        toPlainString(value)
                       ])
                     );
                   } else {
@@ -279,7 +285,7 @@ export function generateMcpServer<
               const queryString = new URLSearchParams(
                 Object.entries(query).map(([key, value]) => [
                   key,
-                  safeStringify(value)
+                  toPlainString(value)
                 ])
               ).toString();
               url += queryString ? `?${queryString}` : '';
