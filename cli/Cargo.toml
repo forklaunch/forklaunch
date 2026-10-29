@@ -24,7 +24,7 @@ base64 = "0.23.1"
 # Development session-signing keys for generated Rust IAM modules (already linked via rustls).
 aws-lc-rs = "1"
 clap = { version = "4.6.7", features = ["cargo"] }
-convert_case = "0.8.0"
+convert_case = "0.12.0"
 futures-io = "0.3.34"
 include_dir = { version = "0.7.4", features = ["glob"] }
 indexmap = { version = "2.14.2", features = ["serde"] }
