@@ -44,7 +44,7 @@
     "@forklaunch/hyper-express-fork": "^6.18.1",
     "@forklaunch/validator": "workspace:^",
     "@forklaunch/ws": "workspace:^",
-    "@scalar/express-api-reference": "^0.10.30",
+    "@scalar/express-api-reference": "^0.10.31",
     "cors": "^2.8.6",
     "live-directory": "^3.0.3",
     "openapi3-ts": "^4.6.2",
