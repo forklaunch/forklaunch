@@ -44,7 +44,7 @@
   "dependencies": {
     "@mikro-orm/core": "7.2.5",
     "ioredis": "^6.0.0",
-    "jose": "6.2.12",
+    "jose": "6.2.13",
     "testcontainers": "^12.2.1"
   },
   "devDependencies": {
