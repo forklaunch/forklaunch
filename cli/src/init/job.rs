@@ -107,7 +107,7 @@ fn generate(root: &Path, name: &str, dryrun: bool) -> Result<()> {
         fs::write(
             destination.join("evals.json"),
             serde_json::to_string_pretty(
-                &json!({"schemaVersion":1,"cases":[{"id":"word-count","input":{"text":"one two three"},"expected":{"wordCount":3,"text":"one two three"}}]}),
+                &json!({"schemaVersion":1,"cases":[{"id":"word-count","input":{"text":"one two three"},"expected":{"wordCount":3}}]}),
             )? + "\n",
         )?;
         fs::write(

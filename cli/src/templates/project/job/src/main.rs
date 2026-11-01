@@ -9,7 +9,7 @@ fn execute(input: Value) -> Result<Value, String> {
         .get("text")
         .and_then(Value::as_str)
         .ok_or("Provide text to summarize.")?;
-    Ok(json!({"wordCount": text.split_whitespace().count(), "text": text}))
+    Ok(json!({"wordCount": text.split_whitespace().count()}))
 }
 fn main() {
     let mut input = String::new();
