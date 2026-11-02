@@ -255,6 +255,18 @@ export type ExpressLikeApplicationOptions<
          */
         path?: `/${string}`;
         /**
+         * Session handling when MCP is served on the application port.
+         * `stateless` (default) lets any worker or task answer any request.
+         * `stateful` keeps sessions in process memory, so it needs a single
+         * worker and, behind a load balancer, sticky sessions.
+         */
+        sessions?: 'stateless' | 'stateful';
+        /**
+         * Stateful sessions with no request for this long are closed.
+         * Defaults to 15 minutes.
+         */
+        sessionIdleTimeoutMs?: number;
+        /**
          * Additional options for FastMCP.
          */
         options?: ConstructorParameters<typeof FastMCP>[0];

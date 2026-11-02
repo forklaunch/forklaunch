@@ -1020,8 +1020,8 @@ initialization, discovery and tool calls, including signed calls, rejected
 credentials and Origins, and graceful shutdown. Generated services use
 `serve_with_default_mcp(listener, shutdown)` to coordinate both surfaces.
 `MCP_LISTENER=shared` (the Rust default) keeps MCP on the HTTP listener.
-`MCP_LISTENER=separate` binds MCP on the HTTP port plus 2000, matching the
-TypeScript fallback. `MCP_PORT` overrides that port (`0` selects an ephemeral
+`MCP_LISTENER=separate` binds MCP on the HTTP port plus 2000, matching
+TypeScript's separate mode (TypeScript also shares the HTTP port by default). `MCP_PORT` overrides that port (`0` selects an ephemeral
 port); `MCP_HOST` accepts a hostname or IP and defaults to the HTTP listener's
 bound IP. Either override also selects separate mode when `MCP_LISTENER` is
 absent. Explicit shared mode rejects these listener overrides.
