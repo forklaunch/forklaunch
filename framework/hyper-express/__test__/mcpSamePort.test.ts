@@ -67,7 +67,7 @@ async function start(
   app: ReturnType<typeof buildApp>,
   port: number
 ): Promise<() => Promise<void>> {
-  await app.listen(port, 'localhost');
+  await app.listen(port, '127.0.0.1');
   return async () => {
     app.internal.shutdown();
   };
@@ -84,7 +84,7 @@ async function startRoundRobinProxy(
     const target = upstreamPorts[next++ % upstreamPorts.length];
     const upstream = http.request(
       {
-        host: 'localhost',
+        host: '127.0.0.1',
         port: target,
         path: req.url,
         method: req.method,
@@ -104,7 +104,7 @@ async function startRoundRobinProxy(
     });
     req.pipe(upstream);
   });
-  server.listen(port, 'localhost');
+  server.listen(port, '127.0.0.1');
   await new Promise<void>((resolve) => server.once('listening', resolve));
   return () =>
     new Promise<void>((resolve) => {
@@ -195,7 +195,7 @@ class RawMcpClient {
 }
 
 async function connect(port: number, headers?: Record<string, string>) {
-  const client = new RawMcpClient(`http://localhost:${port}/mcp`, headers);
+  const client = new RawMcpClient(`http://127.0.0.1:${port}/mcp`, headers);
   await client.request('initialize', {
     protocolVersion: '2025-06-18',
     capabilities: {},
@@ -233,11 +233,11 @@ describe('MCP served on the application port (hyper-express)', () => {
   });
 
   it('serves the API, health and MCP on the same port', async () => {
-    const api = await fetch(`http://localhost:${PORT}/greetings/ada`);
+    const api = await fetch(`http://127.0.0.1:${PORT}/greetings/ada`);
     expect(api.status).toBe(200);
     expect(await api.json()).toEqual({ greeting: 'hello ada' });
 
-    const health = await fetch(`http://localhost:${PORT}/health`);
+    const health = await fetch(`http://127.0.0.1:${PORT}/health`);
     expect(health.status).toBe(200);
 
     const { client } = await connect(PORT);
@@ -255,7 +255,7 @@ describe('MCP served on the application port (hyper-express)', () => {
 
   it('does not open a second listener on PORT + 2000', async () => {
     await expect(
-      fetch(`http://localhost:${PORT + 2000}/mcp`, {
+      fetch(`http://127.0.0.1:${PORT + 2000}/mcp`, {
         method: 'POST',
         headers: mcpHeaders,
         body: initializeBody
@@ -264,7 +264,7 @@ describe('MCP served on the application port (hyper-express)', () => {
   });
 
   it('is stateless by default: no session id, any request stands alone', async () => {
-    const initialize = await fetch(`http://localhost:${PORT}/mcp`, {
+    const initialize = await fetch(`http://127.0.0.1:${PORT}/mcp`, {
       method: 'POST',
       headers: mcpHeaders,
       body: initializeBody
@@ -273,7 +273,7 @@ describe('MCP served on the application port (hyper-express)', () => {
     expect(initialize.headers.get('mcp-session-id')).toBeNull();
     await initialize.text();
 
-    const list = await fetch(`http://localhost:${PORT}/mcp`, {
+    const list = await fetch(`http://127.0.0.1:${PORT}/mcp`, {
       method: 'POST',
       headers: { ...mcpHeaders, 'mcp-protocol-version': '2025-06-18' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' })
@@ -281,7 +281,7 @@ describe('MCP served on the application port (hyper-express)', () => {
     expect(list.status).toBe(200);
     expect(await list.text()).toContain('GetGreeting');
 
-    const stream = await fetch(`http://localhost:${PORT}/mcp`, {
+    const stream = await fetch(`http://127.0.0.1:${PORT}/mcp`, {
       method: 'GET',
       headers: { Accept: 'text/event-stream' }
     });
@@ -371,7 +371,7 @@ describe('MCP stateful sessions (hyper-express)', () => {
     expect(a.transport.sessionId).toBeDefined();
     expect(a.transport.sessionId).not.toBe(b.transport.sessionId);
 
-    const unknown = await fetch(`http://localhost:${PORT}/mcp`, {
+    const unknown = await fetch(`http://127.0.0.1:${PORT}/mcp`, {
       method: 'POST',
       headers: { ...mcpHeaders, 'mcp-session-id': 'not-a-session' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' })
@@ -379,7 +379,7 @@ describe('MCP stateful sessions (hyper-express)', () => {
     expect(unknown.status).toBe(404);
 
     await a.transport.terminateSession();
-    const afterDelete = await fetch(`http://localhost:${PORT}/mcp`, {
+    const afterDelete = await fetch(`http://127.0.0.1:${PORT}/mcp`, {
       method: 'POST',
       headers: {
         ...mcpHeaders,
@@ -397,7 +397,7 @@ describe('MCP stateful sessions (hyper-express)', () => {
   });
 
   it('rejects requests other than initialize without a session', async () => {
-    const response = await fetch(`http://localhost:${PORT}/mcp`, {
+    const response = await fetch(`http://127.0.0.1:${PORT}/mcp`, {
       method: 'POST',
       headers: mcpHeaders,
       body: JSON.stringify({ jsonrpc: '2.0', id: 4, method: 'tools/list' })
@@ -411,7 +411,7 @@ describe('MCP stateful sessions (hyper-express)', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    const expired = await fetch(`http://localhost:${PORT}/mcp`, {
+    const expired = await fetch(`http://127.0.0.1:${PORT}/mcp`, {
       method: 'POST',
       headers: {
         ...mcpHeaders,
@@ -446,7 +446,7 @@ describe('MCP on the application port with authenticate (hyper-express)', () => 
   });
 
   it('returns 401 without a valid token', async () => {
-    const response = await fetch(`http://localhost:${PORT}/mcp`, {
+    const response = await fetch(`http://127.0.0.1:${PORT}/mcp`, {
       method: 'POST',
       headers: mcpHeaders,
       body: initializeBody
