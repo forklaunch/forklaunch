@@ -79,7 +79,8 @@ try {
       'content-type': 'application/json',
       accept: 'application/json, text/event-stream'
     },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'ping' })
+    body: JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'ping' }),
+    signal: AbortSignal.timeout(10000)
   });
   await probe.arrayBuffer();
   if (probe.status === 404) mcp = legacyMcp;

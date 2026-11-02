@@ -583,8 +583,8 @@ Both validators support the same natural object notation (`{ name: string }`), t
 ForkLaunch auto-generates a Model Context Protocol (MCP) server from your handlers when using the Zod validator. This enables AI agents (Claude, etc.) to discover and call your API.
 
 - **Served at:** `/mcp` on the application's own port (same origin as the API)
-- **Sessions:** stateless by default, so any worker or replica can answer; `mcp: { sessions: 'stateful' }` keeps in-memory sessions (single worker, sticky load balancing; idle sessions close after `sessionIdleTimeoutMs`, default 15 minutes)
-- **Auth:** `mcp: { authenticate }` gates every MCP request (401 otherwise); the caller's `Authorization`, `x-correlation-id` and trace headers are forwarded to the routes tools call, so route auth applies to the caller
+- **Sessions (shared listener):** stateless by default, so any worker or replica can answer; `mcp: { sessions: 'stateful' }` keeps in-memory sessions (single worker, sticky load balancing; idle sessions close after `sessionIdleTimeoutMs`, default 15 minutes)
+- **Auth:** `mcp: { authenticate }` gates every MCP request (401 otherwise); on the shared listener, the caller's `Authorization`, `x-correlation-id` and trace headers are forwarded to the routes tools call, so route auth applies to the caller
 - **Separate listener (legacy):** set `mcp.port`, `MCP_PORT` or `MCP_LISTENER=separate` to serve MCP on its own port (default application port + 2000); deployments do not front that port
 - **Configuration** in `forklaunchExpress()`:
   ```typescript

@@ -72,7 +72,10 @@ export async function writeFetchResponse(
   res.on('close', () => body.destroy());
   await new Promise<void>((resolve) => {
     body.on('end', resolve);
-    body.on('error', () => resolve());
+    body.on('error', () => {
+      res.destroy();
+      resolve();
+    });
     body.on('close', resolve);
     body.pipe(res);
   });

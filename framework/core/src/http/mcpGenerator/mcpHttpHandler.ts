@@ -92,7 +92,7 @@ export function createMcpHttpHandler(
         for (const [id, entry] of sessions) {
           if (entry.lastSeen < cutoff) {
             sessions.delete(id);
-            void entry.session.close();
+            entry.session.close().catch(() => undefined);
           }
         }
       },
@@ -137,7 +137,7 @@ export function createMcpHttpHandler(
     const closeSession = () => {
       if (!closed) {
         closed = true;
-        void session.close();
+        session.close().catch(() => undefined);
       }
     };
 
@@ -275,6 +275,6 @@ export function isSeparateMcpListener(configuredPort?: number) {
   return (
     process.env.MCP_LISTENER === 'separate' ||
     configuredPort != null ||
-    process.env.MCP_PORT != null
+    Boolean(Number(process.env.MCP_PORT))
   );
 }
