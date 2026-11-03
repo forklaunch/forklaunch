@@ -201,7 +201,43 @@ FORKLAUNCH_CLI=$PWD/target/release/forklaunch bash tests/init_billing_stripe.sh
 ```
 
 The CLI release itself is a tag, `cli-vX.Y.Z` (`cli_release.yml` reads the
-version from the tag; `Cargo.toml` stays `0.0.0`).
+version from the tag; `Cargo.toml` stays `0.0.0`). Prefer letting the workflow
+make the tag (next section).
+
+## Rust crates and the CLI (CI)
+
+Rust crates go through **Rust Crate Release** (`rust_release.yml`), the CLI
+through **CLI Release** (`cli_release.yml`). framework-rs and blueprint-rs
+share one version: the blueprint pins exact framework versions, so every
+framework release needs a blueprint release that repins it.
+
+1. `gh workflow run rust_release.yml -f stage=version -f version=X.Y.Z`
+   (from main). It runs `scripts/rust_release.py bump --version X.Y.Z`, which
+   moves both workspaces, every path pin (keeping `=`), and `cli/Cargo.toml`;
+   refreshes the three lockfiles; runs `check_blueprint_deps --fix` so the
+   CLI's generated Cargo versions follow; checks nothing else changed; pushes
+   `release/rust-X.Y.Z` and opens the PR. If Actions may not open PRs in the
+   repository, the run prints the compare link: open the PR from it.
+2. Review and merge the PR.
+3. `gh workflow run rust_release.yml -f stage=release -f scope=framework -f publish=true`
+   from main. It verifies, creates `rust-vX.Y.Z` and its GitHub release on the
+   verified commit, then uploads in dependency order with
+   `CARGO_REGISTRY_TOKEN` (falls back to the organization's `CARGO_TOKEN`).
+   Vendored crates whose versions did not change need
+   `-f reuse_verified_release_tag=<the last rust-v* release that has
+   verification assets>`, or publish refuses their fresh repackaging.
+4. The same with `-f scope=blueprint`. It verifies against the framework now on
+   crates.io and creates `rust-blueprint-vX.Y.Z`.
+5. `gh workflow run cli_release.yml -f version=A.B.C -f release=true` from
+   main. Preflight fails unless the commit is on main, `check_blueprint_deps`
+   passes, and `rust_release.py check-published --scope all` finds every
+   generated crate version on crates.io. After the five builds pass it creates
+   `cli-vA.B.C`, the GitHub release, and publishes npm and crates.io. Without
+   `release=true` a dispatch only builds. Pushing a `cli-v*` tag still works and
+   runs the same preflight.
+
+A half-finished publish is resumed by re-running the same dispatch: versions
+crates.io already has are verified and skipped.
 
 ## Traps
 
