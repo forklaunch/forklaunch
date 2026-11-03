@@ -6,8 +6,9 @@ use forklaunch_axum::native;
 
 pub fn http_router(state: AppState) -> ApplicationResult<Router> {
     let registry = contracts::registry();
-    let router = native::with_openapi(
-        routes::router()?, &registry, &state.config.docs_path, &state.config.version,
+    // DOCS_PATH is a suffix, matching the TypeScript service convention.
+    let router = native::with_docs(
+        routes::router()?, &registry, &format!("/api/{}{}", state.config.version, state.config.docs_path), &state.config.version,
     )?.with_state(state);
     Ok(router)
 }

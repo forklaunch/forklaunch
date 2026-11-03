@@ -36,7 +36,7 @@ pub(super) fn templates(
             "persistence/mod.rs" => template.content = "pub mod entities;\npub mod compliance_schema;\npub mod database;\nmod repository;\npub use repository::PostgresRepository;\n".into(),
             "persistence/entities/mod.rs" => template.content = "pub use super::compliance_schema::StoredRecord;\n".into(),
             "Makefile" => template.content.push_str("\n.PHONY: migrate\nmigrate:\n\t$(CARGO) run --package $(PACKAGE) -- --migrate\n"),
-            "__test__/http.rs" => template.content = template.content.replace("#[tokio::test]", "#[tokio::test]\n#[ignore = \"requires migrated PostgreSQL, restricted DATABASE_URL, TENANT_ID and encryption keys\"]").replace("::config::ServiceConfig::default()).unwrap()", "::config::ServiceConfig::default()).await.unwrap()"),
+            "__test__/http.rs" => template.content = template.content.replace("#[tokio::test]", "#[tokio::test]\n#[ignore = \"requires migrated PostgreSQL, restricted DATABASE_URL, TENANT_ID and encryption keys\"]").replace("::config::ServiceConfig::default()).unwrap()", "::config::ServiceConfig::default()).await.unwrap()").replace("::register(config).unwrap()", "::register(config).await.unwrap()"),
             _ => {}
         }
     }

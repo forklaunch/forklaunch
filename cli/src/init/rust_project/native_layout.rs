@@ -145,8 +145,10 @@ pub(super) fn service_templates(
             path: dir.join(file),
             content: {
                 let source = render_rust_template(&format!("rust/project/native-service/{file}"), &data);
-                if file == "application.rs" && native_docs {
-                    source.replace("native::with_openapi(", "native::with_docs(")
+                if file == "application.rs" && !native_docs {
+                    source.replace("native::with_docs(", "native::with_openapi(")
+                } else if file == "__test__/http.rs" && !native_docs {
+                    source.replace("text/html", "application/json")
                 } else { source }
             },
             context: None,

@@ -37,7 +37,7 @@ functions. A service without `--database` uses the in-memory starter. Selecting
 `--database postgresql` generates its PostgreSQL repository and service-local
 migrations; configure the database and encryption settings before running it.
 
-The service serves `/health`, `/users`, `/openapi.json`, and a Scalar documentation UI at `/docs`. `HOST`, `PORT`, `PROTOCOL`, `VERSION`, `DOCS_PATH`, `RUST_LOG` and `MCP_ENABLED` are required; optional `PUBLIC_ORIGIN`, `DOCS_SERVER_URLS` and `DOCS_SERVER_DESCRIPTIONS` default to the listener's own address. Generated configuration has no in-code defaults (see [Configuration](#configuration)). Ctrl-C and SIGTERM stop the HTTP server gracefully.
+The service serves `/health`, `/users`, `/openapi.json`, and a Scalar documentation UI at `/api/v1/docs`. `DOCS_PATH` is the suffix under `/api/{VERSION}`: for example, `VERSION=v2` and `DOCS_PATH=/reference` serve the UI at `/api/v2/reference`. The unversioned `/docs` route is not mounted. `HOST`, `PORT`, `PROTOCOL`, `VERSION`, `DOCS_PATH`, `RUST_LOG` and `MCP_ENABLED` are required; optional `PUBLIC_ORIGIN`, `DOCS_SERVER_URLS` and `DOCS_SERVER_DESCRIPTIONS` default to the listener's own address. Generated configuration has no in-code defaults (see [Configuration](#configuration)). Ctrl-C and SIGTERM stop the HTTP server gracefully.
 
 Network requests use Axum and the same contract handlers as `local_router`. Path parameters, decoded URL queries, headers, binary bodies, body limits, CORS, and request IDs pass through the framework adapter.
 
