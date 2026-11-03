@@ -165,6 +165,11 @@ jobs:
             python3 scripts/rust_release.py hydrate --repository "$GITHUB_REPOSITORY" --tag "$PRIOR_RELEASE_TAG" --output "$RUNNER_TEMP/prior-rust-release"
             reuse=(--reuse-verified-release "$RUNNER_TEMP/prior-rust-release")
           fi
+          # Release runs keep crates.io archives for versions already published.
+          # Pull requests skip that: main normally has unreleased changes at its version.
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            reuse+=(--reuse-published)
+          fi
           python3 scripts/rust_release.py prepare --scope "${{ matrix.scope }}" --output "$RUNNER_TEMP/rust-release" "${reuse[@]}"
       - name: Install staged registry crates and verify (framework also starts HTTP/MCP)
         run: python3 scripts/rust_release.py verify --output "$RUNNER_TEMP/rust-release" --target-dir "$RUNNER_TEMP/rust-release-target"

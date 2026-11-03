@@ -375,7 +375,7 @@ def validate_archive_reuse(output: Path, package: dict):
 
 
 def prepare(output: Path, allow_dirty: bool, scope: str = "framework", reuse_verified_release: Path | None = None,
-            reuse_registry: bool = True):
+            reuse_registry: bool = False):
     plan = release_plan(scope=scope)
     previous = verified_release_archives(reuse_verified_release) if reuse_verified_release is not None else None
     dirty = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT).strip())
@@ -605,6 +605,9 @@ def main():
     parser.add_argument("--allow-dirty", action="store_true")
     parser.add_argument("--reuse-verified-release", type=Path,
                         help="Prepare only: reuse exact prior verified/published archives after fresh packaged-content comparison")
+    parser.add_argument("--reuse-published", action="store_true",
+                        help="Prepare only: keep crates.io archives for versions already published (release runs). "
+                             "Pull requests leave this off: unreleased changes at the current version are expected there")
     parser.add_argument("--scope", choices=["framework", "blueprint", "all"], default="framework",
                         help="Package scope; 'all' lists both inventories but cannot be prepared or published")
     parser.add_argument("--tag")
@@ -641,7 +644,8 @@ def main():
         if args.output is None:
             parser.error("prepare requires --output (a new directory)")
         prepare(args.output.resolve(), args.allow_dirty, args.scope,
-                args.reuse_verified_release.resolve() if args.reuse_verified_release is not None else None)
+                args.reuse_verified_release.resolve() if args.reuse_verified_release is not None else None,
+                args.reuse_published)
     elif args.command == "verify":
         if args.output is None or args.target_dir is None:
             parser.error("verify requires --output (prepared release) and --target-dir")

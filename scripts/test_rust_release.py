@@ -374,7 +374,7 @@ class ReleaseTests(unittest.TestCase):
                 patch.object(release.subprocess, "check_output", side_effect=[b"", "b" * 40]), \
                 patch.object(release, "published_version", return_value=entry), \
                 patch.object(release, "registry_archive", return_value=published):
-            release.prepare(output, False)
+            release.prepare(output, False, reuse_registry=True)
         prepared = json.loads((output / "release.json").read_text())["packages"][0]
         self.assertEqual((output / prepared["archive"]).read_bytes(), published)
         self.assertEqual(prepared["verifiedArchiveReuse"]["sourceRegistry"], "crates.io")
@@ -390,7 +390,7 @@ class ReleaseTests(unittest.TestCase):
                 patch.object(release, "published_version", return_value=entry), \
                 patch.object(release, "registry_archive", return_value=published), \
                 self.assertRaisesRegex(ValueError, "bump its version"):
-            release.prepare(self.root / "changed", False)
+            release.prepare(self.root / "changed", False, reuse_registry=True)
 
     def test_reuse_rejects_changed_files_and_requires_bound_complete_prior_receipts(self):
         old = self.archive(self.manifest(), {"forklaunch-a-0.1.0/.cargo_vcs_info.json": b"old"})
