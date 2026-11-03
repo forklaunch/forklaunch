@@ -223,9 +223,11 @@ framework release needs a blueprint release that repins it.
    from main. It verifies, creates `rust-vX.Y.Z` and its GitHub release on the
    verified commit, then uploads in dependency order with
    `CARGO_REGISTRY_TOKEN` (falls back to the organization's `CARGO_TOKEN`).
-   Vendored crates whose versions did not change need
-   `-f reuse_verified_release_tag=<the last rust-v* release that has
-   verification assets>`, or publish refuses their fresh repackaging.
+   Crates whose version did not change (the vendored ones) are not
+   re-uploaded: `prepare` downloads their crates.io archive, proves the fresh
+   packaging has the same files (ignoring Cargo's lockfile and VCS info), and
+   carries the registry's bytes. Changed content at an unchanged version fails
+   with "bump its version".
 4. The same with `-f scope=blueprint`. It verifies against the framework now on
    crates.io and creates `rust-blueprint-vX.Y.Z`.
 5. `gh workflow run cli_release.yml -f version=A.B.C -f release=true` from

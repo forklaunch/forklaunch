@@ -358,6 +358,40 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "checksum"):
             release.validate_archive_reuse(output, entry)
 
+    def test_prepare_keeps_the_published_registry_archive_for_unchanged_versions(self):
+        published = self.archive(self.manifest(), {"forklaunch-a-0.1.0/.cargo_vcs_info.json": b"published commit",
+                                                   "forklaunch-a-0.1.0/Cargo.lock": b"registry lock"})
+        fresh = self.archive(self.manifest(), {"forklaunch-a-0.1.0/.cargo_vcs_info.json": b"new commit"})
+        output = self.root / "next"
+        package = {"name": "forklaunch-a", "version": "0.1.0", "manifest": "framework-rs/crates/a/Cargo.toml", "dependencies": []}
+        def package_current(command, **kwargs):
+            archive = output / "cargo-target/package/forklaunch-a-0.1.0.crate"
+            archive.parent.mkdir(parents=True, exist_ok=True)
+            archive.write_bytes(fresh)
+        entry = {"vers": "0.1.0", "cksum": hashlib.sha256(published).hexdigest()}
+        with patch.object(release, "ROOT", self.root), patch.object(release, "release_plan", return_value=[dict(package)]), \
+                patch.object(release, "run", side_effect=package_current), \
+                patch.object(release.subprocess, "check_output", side_effect=[b"", "b" * 40]), \
+                patch.object(release, "published_version", return_value=entry), \
+                patch.object(release, "registry_archive", return_value=published):
+            release.prepare(output, False)
+        prepared = json.loads((output / "release.json").read_text())["packages"][0]
+        self.assertEqual((output / prepared["archive"]).read_bytes(), published)
+        self.assertEqual(prepared["verifiedArchiveReuse"]["sourceRegistry"], "crates.io")
+        release.validate_archive_reuse(output, prepared)
+        changed = self.archive(self.manifest(), {"forklaunch-a-0.1.0/src/lib.rs": b"changed"})
+        def package_changed(command, **kwargs):
+            archive = self.root / "changed/cargo-target/package/forklaunch-a-0.1.0.crate"
+            archive.parent.mkdir(parents=True, exist_ok=True)
+            archive.write_bytes(changed)
+        with patch.object(release, "ROOT", self.root), patch.object(release, "release_plan", return_value=[dict(package)]), \
+                patch.object(release, "run", side_effect=package_changed), \
+                patch.object(release.subprocess, "check_output", side_effect=[b"", "b" * 40]), \
+                patch.object(release, "published_version", return_value=entry), \
+                patch.object(release, "registry_archive", return_value=published), \
+                self.assertRaisesRegex(ValueError, "bump its version"):
+            release.prepare(self.root / "changed", False)
+
     def test_reuse_rejects_changed_files_and_requires_bound_complete_prior_receipts(self):
         old = self.archive(self.manifest(), {"forklaunch-a-0.1.0/.cargo_vcs_info.json": b"old"})
         previous, prior = self.previous_release(old)

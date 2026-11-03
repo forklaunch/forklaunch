@@ -374,7 +374,8 @@ def validate_archive_reuse(output: Path, package: dict):
         raise ValueError("Reused archive provenance does not match fresh packaged contents")
 
 
-def prepare(output: Path, allow_dirty: bool, scope: str = "framework", reuse_verified_release: Path | None = None):
+def prepare(output: Path, allow_dirty: bool, scope: str = "framework", reuse_verified_release: Path | None = None,
+            reuse_registry: bool = True):
     plan = release_plan(scope=scope)
     previous = verified_release_archives(reuse_verified_release) if reuse_verified_release is not None else None
     dirty = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT).strip())
@@ -399,6 +400,8 @@ def prepare(output: Path, allow_dirty: bool, scope: str = "framework", reuse_ver
                     raise ValueError(f"Packaged path dependency remains: {package['name']}")
         if previous is not None:
             reuse_verified_archive(output, package, previous)
+        if reuse_registry:
+            reuse_registry_archive(output, package)
     report = {
         "schemaVersion": 1,
         "scope": scope,
@@ -499,14 +502,57 @@ def wait_for_version(package: dict, timeout: float = 180):
         time.sleep(2)
 
 
-def verify_published_archive(output: Path, package: dict, entry: dict) -> str:
-    from rust_registry import checked_archive, safe_members
+def registry_archive(package: dict, entry: dict) -> bytes:
+    """Download a published archive and check it against the index checksum."""
     name, version = package["name"], package["version"]
     with urlopen(f"https://static.crates.io/crates/{name}/{name}-{version}.crate", timeout=30) as response:
         published = response.read(32 * 1024 * 1024)
-    checksum = hashlib.sha256(published).hexdigest()
-    if checksum != entry["cksum"]:
+    if hashlib.sha256(published).hexdigest() != entry["cksum"]:
         raise ValueError(f"Published archive checksum mismatch: {name}")
+    return published
+
+
+def reuse_registry_archive(output: Path, package: dict):
+    """Keep an already-published version's exact crates.io archive.
+
+    Unchanged crates (the vendored ones) keep their version across releases.
+    Fresh packaging differs from the published archive only in Cargo-generated
+    files, so after proving the packaged contents are equal the release carries
+    the registry's bytes, and publish then finds the version already uploaded.
+    """
+    from rust_registry import checked_archive
+    if "verifiedArchiveReuse" in package:
+        return
+    entry = published_version(package)
+    if entry is None:
+        return
+    published = registry_archive(package, entry)
+    fresh_bytes = checked_archive(output, package)
+    fresh_files = comparable_package_files(fresh_bytes, package)
+    if fresh_files != comparable_package_files(published, package):
+        raise ValueError(f"Cannot reuse changed package at unchanged version: {package['name']} {package['version']}; bump its version")
+    fresh = output / "fresh-packages" / f"{package['name']}-{package['version']}.crate"
+    fresh.parent.mkdir(exist_ok=True)
+    fresh.write_bytes(fresh_bytes)
+    package["verifiedArchiveReuse"] = {
+        "sourceRegistry": "crates.io",
+        "sourceArchiveSha256": entry["cksum"],
+        "sourceRegistrySha256": entry["cksum"],
+        "freshArchive": str(fresh.relative_to(output)),
+        "freshArchiveSha256": package["sha256"],
+        "comparedFiles": len(fresh_files),
+        "packagedContentSha256": hashlib.sha256(json.dumps(fresh_files, sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
+        "ignoredGeneratedFiles": ["Cargo.lock", ".cargo_vcs_info.json"],
+    }
+    (output / package["archive"]).write_bytes(published)
+    package["sha256"] = entry["cksum"]
+
+
+def verify_published_archive(output: Path, package: dict, entry: dict) -> str:
+    from rust_registry import checked_archive, safe_members
+    name, version = package["name"], package["version"]
+    published = registry_archive(package, entry)
+    checksum = entry["cksum"]
 
     def files(data):
         with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:

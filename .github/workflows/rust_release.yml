@@ -49,7 +49,7 @@ on:
         type: boolean
         default: false
       reuse_verified_release_tag:
-        description: 'Optional prior public rust-vVERSION release for unchanged package versions; fresh packaged contents must match'
+        description: 'Optional prior public rust-vVERSION release for unchanged package versions (crates.io archives are reused automatically); fresh packaged contents must match'
         type: string
         default: ''
 
