@@ -116,17 +116,24 @@ impl ModelGatewayStream {
         self.frame = Vec::new();
         self.cursor = 0;
     }
-    /// Reads the next JSON item, skipping malformed/non-data frames. Exact `[DONE]`
-    /// ends the stream. A missing/empty body ends without emitting an item.
+    /// Reads the next model chunk. Exact `[DONE]` ends the stream successfully;
+    /// comment-only and empty `data:` frames are skipped. Matching the TypeScript
+    /// reader, a partial or failed answer is never success: invalid JSON, a value
+    /// that is not a chunk object with a `choices` array, a truthy `error` field,
+    /// or a body that ends before `[DONE]` fails the stream with status 502.
     /// # Errors
-    /// Limit/time/transport failures terminate the stream with sanitized errors.
+    /// Invalid/interrupted streams and limit/time/transport failures terminate the
+    /// stream with sanitized errors and status 502. Items already returned stay with the caller.
     /// Dropping this future does not replace explicit stream cancel/drop.
     pub async fn next(&mut self) -> Result<Option<Value>, ModelGatewayError> {
         let result = self.next_inner().await;
-        if result.is_err() {
+        result.map_err(|mut error| {
             self.cancel();
-        }
-        result
+            // Like the TypeScript reader, any failure after the stream opened
+            // (transport, time or size) is reported as an interrupted 502.
+            error.status.get_or_insert(502);
+            error
+        })
     }
     async fn next_inner(&mut self) -> Result<Option<Value>, ModelGatewayError> {
         loop {
@@ -139,7 +146,7 @@ impl ModelGatewayStream {
                 self.cursor += 1;
                 if let Some(separator) = boundary_end(&self.frame) {
                     self.frame.truncate(self.frame.len() - separator);
-                    let event = self.take_frame(false)?;
+                    let event = self.take_frame()?;
                     match event {
                         Event::Value(value) => return Ok(Some(value)),
                         Event::Done => {
@@ -147,6 +154,9 @@ impl ModelGatewayStream {
                             return Ok(None);
                         }
                         Event::Skip => {}
+                        Event::Invalid => {
+                            return Err(stream_error("model_gateway_stream_invalid"));
+                        }
                     }
                 } else if self.frame.len() > self.limits.frame_bytes + 3 {
                     return Err(limit_error());
@@ -163,28 +173,29 @@ impl ModelGatewayStream {
             if let Some(chunk) = chunk {
                 self.pending = chunk;
             } else {
-                let tail = if self.frame.is_empty() {
-                    Event::Skip
-                } else {
-                    self.take_frame(true)?
-                };
-                self.cancel();
-                return Ok(match tail {
-                    Event::Value(value) => Some(value),
-                    Event::Skip | Event::Done => None,
-                });
+                // A body that ends without an exact, terminated [DONE] is a
+                // partial answer, including any unterminated trailing frame.
+                return Err(stream_error("model_gateway_stream_interrupted"));
             }
         }
     }
-    fn take_frame(&mut self, tail: bool) -> Result<Event, ModelGatewayError> {
+    fn take_frame(&mut self) -> Result<Event, ModelGatewayError> {
         self.frames += 1;
         if self.frames > self.limits.frames || self.frame.len() > self.limits.frame_bytes {
             return Err(limit_error());
         }
         let bytes = std::mem::take(&mut self.frame);
-        let result = decode_event(&bytes, self.initial, tail);
+        let result = decode_event(&bytes, self.initial);
         self.initial = false;
         Ok(result)
+    }
+}
+/// Invalid or interrupted answers carry the same 502 the TypeScript reader uses.
+fn stream_error(code: &str) -> ModelGatewayError {
+    ModelGatewayError {
+        code: code.into(),
+        status: Some(502),
+        retry_after_seconds: None,
     }
 }
 fn limit_error() -> ModelGatewayError {
@@ -205,71 +216,59 @@ enum Event {
     Skip,
     Done,
     Value(Value),
+    Invalid,
 }
 fn js_whitespace(c: char) -> bool {
     matches!(c,'\u{0009}'..='\u{000d}'|'\u{0020}'|'\u{00a0}'|'\u{1680}'|'\u{2000}'..='\u{200a}'|'\u{2028}'|'\u{2029}'|'\u{202f}'|'\u{205f}'|'\u{3000}'|'\u{feff}')
 }
-// The actual TextDecoder uses stream:true and is never flushed at EOF.
-fn incomplete_tail_removed(bytes: &[u8]) -> &[u8] {
-    let mut offset = 0;
-    while offset < bytes.len() {
-        match std::str::from_utf8(&bytes[offset..]) {
-            Ok(_) => break,
-            Err(error) => {
-                offset += error.valid_up_to();
-                if let Some(length) = error.error_len() {
-                    offset += length;
-                } else {
-                    return &bytes[..offset];
-                }
-            }
-        }
+/// JavaScript truthiness of a JSON value, for the reader's `value.error` check.
+fn js_truthy(value: &Value) -> bool {
+    match value {
+        Value::Null => false,
+        Value::Bool(value) => *value,
+        Value::Number(number) => number.as_f64().is_some_and(|value| value != 0.0),
+        Value::String(text) => !text.is_empty(),
+        Value::Array(_) | Value::Object(_) => true,
     }
-    bytes
 }
-fn decode_event(bytes: &[u8], initial: bool, tail: bool) -> Event {
-    let bytes = if tail {
-        incomplete_tail_removed(bytes)
-    } else {
-        bytes
-    };
+fn decode_event(bytes: &[u8], initial: bool) -> Event {
     let decoded = String::from_utf8_lossy(bytes);
     let decoded = if initial {
         decoded.strip_prefix('\u{feff}').unwrap_or(&decoded)
     } else {
         &decoded
     };
-    let data = if tail {
-        let tail = decoded.trim_matches(js_whitespace);
-        let Some(data) = tail.strip_prefix("data:") else {
-            return Event::Skip;
-        };
-        data.trim_start_matches(js_whitespace).to_owned()
-    } else {
-        decoded
-            .split_inclusive('\n')
-            .filter_map(|line| {
-                let line = if let Some(line) = line.strip_suffix('\n') {
-                    line.strip_suffix('\r').unwrap_or(line)
-                } else {
-                    line
-                };
-                line.strip_prefix("data:")
-                    .map(|value| value.trim_start_matches(js_whitespace))
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
+    let data = decoded
+        .split_inclusive('\n')
+        .filter_map(|line| {
+            let line = if let Some(line) = line.strip_suffix('\n') {
+                line.strip_suffix('\r').unwrap_or(line)
+            } else {
+                line
+            };
+            line.strip_prefix("data:")
+                .map(|value| value.trim_start_matches(js_whitespace))
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    if data.is_empty() {
+        return Event::Skip;
+    }
     if data == "[DONE]" {
         return Event::Done;
     }
-    match serde_json::from_str::<Value>(&data) {
-        Ok(mut value) => {
-            normalize_browser_numbers(&mut value);
-            Event::Value(value)
-        }
-        Err(_) => Event::Skip,
+    let Ok(mut value) = serde_json::from_str::<Value>(&data) else {
+        return Event::Invalid;
+    };
+    let chunk = value.as_object().is_some_and(|object| {
+        object.get("choices").is_some_and(Value::is_array)
+            && !object.get("error").is_some_and(js_truthy)
+    });
+    if !chunk {
+        return Event::Invalid;
     }
+    normalize_browser_numbers(&mut value);
+    Event::Value(value)
 }
 #[cfg(test)]
 mod tests;
