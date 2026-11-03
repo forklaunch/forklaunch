@@ -184,7 +184,7 @@ fn process_settings(root: &Path, name: &str) -> Result<BTreeSet<String>> {
         .iter()
         .filter(|(key, service)| *key == name || worker::producer_owner(service) == Some(name))
         .flat_map(|(_, service)| service.environment.iter().flatten().map(|(key, _)| key.clone()))
-        .chain(["MIGRATION_DATABASE_URL".to_owned(), "SQLX_OFFLINE".to_owned(), "PUBLIC_ORIGIN".to_owned()])
+        .chain(["MIGRATION_DATABASE_URL".to_owned(), "SQLX_OFFLINE".to_owned(), "PUBLIC_ORIGIN".to_owned(), "MCP_ALLOWED_HOSTS".to_owned()])
         .collect())
 }
 
