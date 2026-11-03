@@ -6,13 +6,13 @@ use serde::{Deserialize, Serialize};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 use crate::{
+    CliCommand,
     constants::get_observability_api_url,
     core::{
         command::command,
         http_client::{get, post},
         validate::{require_integration, require_manifest},
     },
-    CliCommand,
 };
 
 // ── Top-level command ─────────────────────────────────────────────────────────
@@ -95,7 +95,8 @@ impl CliCommand for MetricsCommand {
                 print_promql(&response)?;
             }
         } else {
-            let response = fetch_all_application_metrics(&application_id, &environment, &time_range)?;
+            let response =
+                fetch_all_application_metrics(&application_id, &environment, &time_range)?;
             if json_output {
                 println!("{}", serde_json::to_string_pretty(&response)?);
             } else {
@@ -150,20 +151,35 @@ fn fetch_application_metrics(
 /// Fetch each metric the display shows, since the endpoint only populates one
 /// per request. A failure on any single metric is not fatal — that row simply
 /// renders as "-" rather than losing the whole command.
-fn fetch_all_application_metrics(
+pub(super) fn fetch_all_application_metrics(
     application_id: &str,
     environment: &str,
     time_range: &str,
 ) -> Result<ApplicationMonitoringResponse> {
+    collect_application_metrics(|chart_type| {
+        fetch_application_metrics(application_id, environment, time_range, chart_type)
+    })
+}
+
+fn collect_application_metrics(
+    mut fetch: impl FnMut(&str) -> Result<ApplicationMonitoringResponse>,
+) -> Result<ApplicationMonitoringResponse> {
     let mut merged = ApplicationMonitoringResponse::default();
     let mut latency = LatencyMetric::default();
     let mut any_latency = false;
+    let mut latency_units = Vec::new();
+    let mut latency_availability = Vec::new();
     let mut succeeded = false;
     let mut first_err: Option<anyhow::Error> = None;
 
-    for chart_type in ["requestRate", "errorRate", "latencyP50", "latencyP95", "latencyP99"] {
-        let r = match fetch_application_metrics(application_id, environment, time_range, chart_type)
-        {
+    for chart_type in [
+        "requestRate",
+        "errorRate",
+        "latencyP50",
+        "latencyP95",
+        "latencyP99",
+    ] {
+        let r = match fetch(chart_type) {
             Ok(r) => {
                 succeeded = true;
                 r
@@ -180,7 +196,10 @@ fn fetch_all_application_metrics(
             }
         };
         match chart_type {
-            "requestRate" => merged.request_rate = r.request_rate,
+            "requestRate" => {
+                merged.available = r.available;
+                merged.request_rate = r.request_rate;
+            }
             "errorRate" => {
                 merged.error_rate = r.error_rate;
                 // uptime is derived from errorRate server-side, so it is only
@@ -188,15 +207,39 @@ fn fetch_all_application_metrics(
                 merged.uptime = r.uptime;
             }
             "latencyP50" => {
-                latency.p50 = r.latency.and_then(|l| l.p50);
+                if let Some(l) = r.latency {
+                    latency.p50 = if l.available == Some(false) {
+                        None
+                    } else {
+                        l.p50
+                    };
+                    latency_units.push(l.unit);
+                    latency_availability.push(l.available);
+                }
                 any_latency |= latency.p50.is_some();
             }
             "latencyP95" => {
-                latency.p95 = r.latency.and_then(|l| l.p95);
+                if let Some(l) = r.latency {
+                    latency.p95 = if l.available == Some(false) {
+                        None
+                    } else {
+                        l.p95
+                    };
+                    latency_units.push(l.unit);
+                    latency_availability.push(l.available);
+                }
                 any_latency |= latency.p95.is_some();
             }
             "latencyP99" => {
-                latency.p99 = r.latency.and_then(|l| l.p99);
+                if let Some(l) = r.latency {
+                    latency.p99 = if l.available == Some(false) {
+                        None
+                    } else {
+                        l.p99
+                    };
+                    latency_units.push(l.unit);
+                    latency_availability.push(l.available);
+                }
                 any_latency |= latency.p99.is_some();
             }
             _ => {}
@@ -209,6 +252,18 @@ fn fetch_all_application_metrics(
         }
     }
 
+    // Shared metadata must agree across the independently fetched percentiles.
+    // One missing or unavailable percentile must not relabel the others.
+    if latency_units.len() == 3 && latency_units.iter().all(|unit| unit == &latency_units[0]) {
+        latency.unit = latency_units[0].clone();
+    }
+    if latency_availability.len() == 3
+        && latency_availability
+            .iter()
+            .all(|value| value == &latency_availability[0])
+    {
+        latency.available = latency_availability[0];
+    }
     merged.latency = if any_latency { Some(latency) } else { None };
     Ok(merged)
 }
@@ -229,8 +284,7 @@ fn fetch_promql(
         "timeRange": time_range,
     });
 
-    let response = post(&url, body)
-        .with_context(|| "Failed to reach observability API")?;
+    let response = post(&url, body).with_context(|| "Failed to reach observability API")?;
 
     if !response.status().is_success() {
         let status = response.status();
@@ -392,10 +446,10 @@ fn print_promql(response: &PromQLResponse) -> Result<()> {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct MetricValue {
-    value: Option<f64>,
-    unit: Option<String>,
-    available: Option<bool>,
+pub(super) struct MetricValue {
+    pub(super) value: Option<f64>,
+    pub(super) unit: Option<String>,
+    pub(super) available: Option<bool>,
 }
 
 /// The observability API sends these metrics as bare JSON numbers —
@@ -450,30 +504,32 @@ impl<'de> Deserialize<'de> for MetricValue {
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct LatencyMetric {
+pub(super) struct LatencyMetric {
     #[serde(default)]
-    p50: Option<f64>,
+    pub(super) p50: Option<f64>,
     #[serde(default)]
-    p95: Option<f64>,
+    pub(super) p95: Option<f64>,
     #[serde(default)]
-    p99: Option<f64>,
+    pub(super) p99: Option<f64>,
     #[serde(default)]
-    unit: Option<String>,
+    pub(super) unit: Option<String>,
     #[serde(default)]
-    available: Option<bool>,
+    pub(super) available: Option<bool>,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ApplicationMonitoringResponse {
+pub(super) struct ApplicationMonitoringResponse {
     #[serde(default)]
-    request_rate: MetricValue,
+    pub(super) available: Option<bool>,
     #[serde(default)]
-    error_rate: MetricValue,
+    pub(super) request_rate: MetricValue,
     #[serde(default)]
-    latency: Option<LatencyMetric>,
+    pub(super) error_rate: MetricValue,
     #[serde(default)]
-    uptime: MetricValue,
+    pub(super) latency: Option<LatencyMetric>,
+    #[serde(default)]
+    pub(super) uptime: MetricValue,
 }
 
 impl Default for MetricValue {
@@ -653,4 +709,79 @@ mod tests {
         assert!(resp.latency.is_none());
     }
 
+    #[test]
+    fn collects_each_chart_instead_of_displaying_other_charts_placeholders() {
+        let mut requested = Vec::new();
+        let response = collect_application_metrics(|chart| {
+            requested.push(chart.to_string());
+            let mut value = serde_json::json!({
+                "requestRate": 0, "errorRate": 0, "uptime": 100,
+                "latency": {"p50": 0, "p95": 0, "p99": 0}
+            });
+            match chart {
+                "requestRate" => value["requestRate"] = serde_json::json!(31.52),
+                "errorRate" => {
+                    value["errorRate"] = serde_json::json!(2.0);
+                    value["uptime"] = serde_json::json!(98.0);
+                }
+                "latencyP50" => value["latency"]["p50"] = serde_json::json!(2500.0),
+                "latencyP95" => value["latency"]["p95"] = serde_json::json!(4750.0),
+                "latencyP99" => value["latency"]["p99"] = serde_json::json!(4950.0),
+                _ => panic!("unexpected chart"),
+            }
+            Ok(serde_json::from_value(value)?)
+        })
+        .unwrap();
+        assert_eq!(
+            requested,
+            [
+                "requestRate",
+                "errorRate",
+                "latencyP50",
+                "latencyP95",
+                "latencyP99"
+            ]
+        );
+        assert_eq!(response.request_rate.value, Some(31.52));
+        assert_eq!(response.error_rate.value, Some(2.0));
+        assert_eq!(response.uptime.value, Some(98.0));
+        let latency = response.latency.unwrap();
+        assert_eq!(latency.p95, Some(4750.0));
+        assert!(latency.unit.is_none());
+        assert!(response.available.is_none());
+    }
+
+    #[test]
+    fn failed_chart_is_missing_instead_of_another_charts_zero() {
+        let response = collect_application_metrics(|chart| {
+            if chart == "latencyP95" { anyhow::bail!("latency unavailable"); }
+            Ok(serde_json::from_value(serde_json::json!({"requestRate": 12,"latency":{"p50":0,"p95":0,"p99":0},"errorRate":0,"uptime":100}))?)
+        }).unwrap();
+        assert_eq!(response.latency.unwrap().p95, None);
+    }
+
+    #[test]
+    fn total_monitoring_failure_remains_an_error() {
+        let result = collect_application_metrics(|_| anyhow::bail!("authentication rejected"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("authentication rejected")
+        );
+    }
+    #[test]
+    fn unavailable_percentile_does_not_hide_available_percentiles() {
+        let response = collect_application_metrics(|chart| {
+            Ok(serde_json::from_value(serde_json::json!({
+                "latency": {"p50": 10, "p95": 30, "p99": 50, "unit": "ms", "available": chart != "latencyP95"}
+            }))?)
+        }).unwrap();
+        let latency = response.latency.unwrap();
+        assert_eq!(latency.p50, Some(10.0));
+        assert_eq!(latency.p95, None);
+        assert_eq!(latency.p99, Some(50.0));
+        assert_eq!(latency.available, None);
+        assert_eq!(latency.unit.as_deref(), Some("ms"));
+    }
 }
