@@ -28,8 +28,8 @@ impl ValidateCommand {
 impl CliCommand for ValidateCommand {
     fn command(&self) -> Command {
         Command::new("validate")
-            .about("Check all workspace projects for missing environment variables")
-            .long_about("Validates that all environment variables referenced in registrations.ts files, and the required settings of Rust processes in docker-compose.yaml, have corresponding entries in .env files")
+            .about("Check all workspace projects for missing required environment variables")
+            .long_about("Checks required runtime environment variables and the required settings of Rust processes in docker-compose.yaml for corresponding entries in .env files. Optional settings may remain unset.")
             .arg(
                 clap::Arg::new("base_path")
                     .short('p')
@@ -128,6 +128,7 @@ pub(crate) fn report_native_gaps(gaps: &[(String, String)], stdout: &mut Standar
 struct ProjectValidationResult {
     missing_vars: Vec<EnvVarUsage>,
     defined_vars: Vec<String>,
+    unset_optional_vars: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -166,10 +167,13 @@ fn validate_project(
 ) -> Result<ProjectValidationResult> {
     let mut missing_vars = Vec::new();
     let mut defined_vars = Vec::new();
+    let mut unset_optional_vars = Vec::new();
 
     for env_var in env_vars {
         if is_env_var_defined(project_path, &env_var.var_name)? {
             defined_vars.push(env_var.var_name.clone());
+        } else if env_var.optional == Some(true) {
+            unset_optional_vars.push(env_var.var_name.clone());
         } else {
             missing_vars.push(env_var.clone());
         }
@@ -178,6 +182,7 @@ fn validate_project(
     Ok(ProjectValidationResult {
         missing_vars,
         defined_vars,
+        unset_optional_vars,
     })
 }
 
@@ -301,11 +306,15 @@ fn display_scoped_var_status(
     // Check if this variable is defined in any of the projects that use it
     let mut is_defined = false;
     let mut is_missing = false;
+    let mut is_unset_optional = false;
 
     for project_name in &var.used_by {
         if let Some(project_result) = results.projects.get(project_name) {
             if project_result.defined_vars.contains(&var.name) {
                 is_defined = true;
+            }
+            if project_result.unset_optional_vars.contains(&var.name) {
+                is_unset_optional = true;
             }
             if project_result
                 .missing_vars
@@ -322,6 +331,8 @@ fn display_scoped_var_status(
         log_write!(stdout, Color::Red, "  [MISSING] {}", var.name);
     } else if is_defined {
         log_write!(stdout, Color::Green, "  [OK] {}", var.name);
+    } else if is_unset_optional {
+        log_write!(stdout, Color::Green, "  [OPTIONAL] {} (not set)", var.name);
     } else {
         log_write!(stdout, Color::Yellow, "  [UNKNOWN] {}", var.name);
     }
@@ -332,6 +343,62 @@ fn display_scoped_var_status(
 
     writeln!(stdout)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn optional_settings_without_values_do_not_fail_validation() {
+        let root = tempfile::tempdir().unwrap();
+        let optional = EnvVarUsage {
+            var_name: "OPTIONAL_CACHE_LIMIT".into(),
+            optional: Some(true),
+        };
+        let result = validate_project(root.path(), &[optional]).unwrap();
+        assert!(result.missing_vars.is_empty());
+        assert_eq!(result.unset_optional_vars, vec!["OPTIONAL_CACHE_LIMIT"]);
+        let mut results = ValidationResults::new();
+        results.add_project_result("backend".into(), result);
+        assert!(!results.has_missing_vars());
+        assert_eq!(results.total_missing_count(), 0);
+    }
+
+    #[test]
+    fn required_and_unknown_settings_still_fail_validation() {
+        let root = tempfile::tempdir().unwrap();
+        let vars = vec![
+            EnvVarUsage {
+                var_name: "REQUIRED_TOKEN".into(),
+                optional: Some(false),
+            },
+            EnvVarUsage {
+                var_name: "UNKNOWN_TOKEN".into(),
+                optional: None,
+            },
+        ];
+        let result = validate_project(root.path(), &vars).unwrap();
+        assert_eq!(result.missing_vars.len(), 2);
+        let mut results = ValidationResults::new();
+        results.add_project_result("backend".into(), result);
+        assert!(results.has_missing_vars());
+        assert_eq!(results.total_missing_count(), 2);
+    }
+
+    #[test]
+    fn explicit_values_for_optional_settings_are_preserved() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join(".env.local"), "OPTIONAL_CACHE_LIMIT=0\n").unwrap();
+        let optional = EnvVarUsage {
+            var_name: "OPTIONAL_CACHE_LIMIT".into(),
+            optional: Some(true),
+        };
+        let result = validate_project(root.path(), &[optional]).unwrap();
+        assert_eq!(result.defined_vars, vec!["OPTIONAL_CACHE_LIMIT"]);
+        assert!(result.unset_optional_vars.is_empty());
+        assert!(result.missing_vars.is_empty());
+    }
 }
 
 fn analyze_env_hierarchy(

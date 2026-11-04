@@ -14,17 +14,16 @@ use crate::core::rendered_template::RenderedTemplatesCache;
 #[derive(Debug, Clone)]
 pub struct EnvVarUsage {
     pub var_name: String,
-    /// Declared optionality, taken from the config-injector `type:` property
-    /// wrapping this read.
+    /// Optionality of this read. A config-injector `type:` declaration takes
+    /// precedence; an untyped read can be optional through its own fallback.
     ///
     /// `None` means the sighting carried no type information at all — a bare
     /// `getEnvVar` or `process.env` read outside a config-injector chain. Such a
     /// sighting folds to "required": an undeclared read is precisely the case
     /// this design refuses to guess about.
     ///
-    /// An inline fallback (`getEnvVar('X') ?? 'default'`) deliberately does
-    /// *not* make a variable optional: the app would start on a value nobody
-    /// chose. Only a schema-level `optional(...)` counts.
+    /// A fallback never overrides an explicitly required schema declaration,
+    /// and never changes another read of the same variable into an optional one.
     pub optional: Option<bool>,
 }
 
@@ -34,6 +33,7 @@ pub struct EnvVarVisitor {
     /// config-injector property. The generic call pass consults this so a typed
     /// read is not recorded a second time as an untyped sighting.
     consumed_calls: HashSet<u32>,
+    defaulted_reads: HashSet<u32>,
 }
 
 impl EnvVarVisitor {
@@ -41,6 +41,7 @@ impl EnvVarVisitor {
         Self {
             env_vars: Vec::new(),
             consumed_calls: HashSet::new(),
+            defaulted_reads: HashSet::new(),
         }
     }
 }
@@ -133,7 +134,10 @@ impl<'a> Visit<'a> for EnvVarVisitor {
                     if let Some(Expression::StringLiteral(str_lit)) = arg.as_expression() {
                         self.env_vars.push(EnvVarUsage {
                             var_name: str_lit.value.display().to_string(),
-                            optional: None,
+                            optional: self
+                                .defaulted_reads
+                                .contains(&call.span.start)
+                                .then_some(true),
                         });
                     }
                 }
@@ -144,7 +148,7 @@ impl<'a> Visit<'a> for EnvVarVisitor {
     }
 }
 
-/// Env var names whose read supplies its own default: `process.env.X ?? 12`,
+/// Env read spans that supply their own default: `process.env.X ?? 12`,
 /// `getEnvVar('X') || 'public'`.
 ///
 /// A bare read folds to required because the scanner cannot see whether the
@@ -158,7 +162,7 @@ impl<'a> Visit<'a> for EnvVarVisitor {
 /// Only the left-hand side counts. `someOtherThing ?? process.env.X` is a
 /// read of X as the fallback, and nothing defaults X itself.
 struct DefaultedEnvCollector {
-    names: HashSet<String>,
+    reads: HashSet<u32>,
 }
 
 impl DefaultedEnvCollector {
@@ -169,7 +173,7 @@ impl DefaultedEnvCollector {
                     if inner.property.name == "env" {
                         if let Expression::Identifier(ident) = &inner.object {
                             if ident.name == "process" {
-                                self.names.insert(member.property.name.to_string());
+                                self.reads.insert(member.span.start);
                             }
                         }
                     }
@@ -179,8 +183,8 @@ impl DefaultedEnvCollector {
                 if let Expression::Identifier(ident) = &call.callee {
                     if ident.name == "getEnvVar" {
                         if let Some(arg) = call.arguments.first() {
-                            if let Some(Expression::StringLiteral(lit)) = arg.as_expression() {
-                                self.names.insert(lit.value.display().to_string());
+                            if let Some(Expression::StringLiteral(_)) = arg.as_expression() {
+                                self.reads.insert(call.span.start);
                             }
                         }
                     }
@@ -213,9 +217,7 @@ fn supplies_a_value(expr: &Expression<'_>) -> bool {
         Expression::Identifier(ident) => ident.name != "undefined",
         Expression::ParenthesizedExpression(inner) => supplies_a_value(&inner.expression),
         // `void 0` is `undefined` written the long way.
-        Expression::UnaryExpression(unary) => {
-            unary.operator != oxc_ast::ast::UnaryOperator::Void
-        }
+        Expression::UnaryExpression(unary) => unary.operator != oxc_ast::ast::UnaryOperator::Void,
         _ => true,
     }
 }
@@ -234,7 +236,7 @@ impl<'a> Visit<'a> for DefaultedEnvCollector {
     }
 }
 
-fn defaulted_env_names(source_code: &str) -> HashSet<String> {
+fn defaulted_env_reads(source_code: &str) -> HashSet<u32> {
     let allocator = Allocator::default();
     let ParserReturn { program, .. } = Parser::new(
         &allocator,
@@ -244,21 +246,23 @@ fn defaulted_env_names(source_code: &str) -> HashSet<String> {
     .parse();
 
     let mut collector = DefaultedEnvCollector {
-        names: HashSet::new(),
+        reads: HashSet::new(),
     };
     collector.visit_program(&program);
-    collector.names
+    collector.reads
 }
 
 /// Visitor that extracts `process.env.IDENTIFIER` usage from source code.
 pub struct ProcessEnvVisitor {
     pub env_vars: Vec<EnvVarUsage>,
+    defaulted_reads: HashSet<u32>,
 }
 
 impl ProcessEnvVisitor {
     pub fn new() -> Self {
         Self {
             env_vars: Vec::new(),
+            defaulted_reads: HashSet::new(),
         }
     }
 }
@@ -275,9 +279,12 @@ impl<'a> Visit<'a> for ProcessEnvVisitor {
                         if ident.name == "process" {
                             self.env_vars.push(EnvVarUsage {
                                 var_name: property_name,
-                                // A `process.env` read carries no declared
-                                // type; it folds to required.
-                                optional: None,
+                                // Only this read's own fallback can make it
+                                // optional; another read of the name cannot.
+                                optional: self
+                                    .defaulted_reads
+                                    .contains(&static_member.span.start)
+                                    .then_some(true),
                             });
                         }
                     }
@@ -292,8 +299,8 @@ impl<'a> Visit<'a> for ProcessEnvVisitor {
 /// Collects `getEnvVar('NAME')` reads without attributing a declared type.
 ///
 /// The whole-tree sweep uses this rather than [`extract_env_vars_from_source`]:
-/// outside a config-injector chain there is no `type:` to read, so every
-/// sighting it produces is untyped by construction. Declared optionality is
+/// outside a config-injector chain there is no `type:` to read. Only a read's
+/// own fallback can make an ordinary sighting optional. Declared optionality is
 /// read from a project's `registrations.ts` and root `mikro-orm.config.ts`;
 /// ordinary source files retain this conservative untyped extraction.
 pub fn extract_untyped_env_vars_from_source(source_code: &str) -> Result<Vec<EnvVarUsage>> {
@@ -317,13 +324,13 @@ pub fn extract_untyped_env_vars_from_source(source_code: &str) -> Result<Vec<Env
     let mut collector = GetEnvVarCollector { found: Vec::new() };
     collector.visit_program(&program);
 
-    let defaulted = defaulted_env_names(source_code);
+    let defaulted = defaulted_env_reads(source_code);
 
     Ok(collector
         .found
         .into_iter()
-        .map(|(var_name, _)| EnvVarUsage {
-            optional: defaulted.contains(&var_name).then_some(true),
+        .map(|(var_name, span)| EnvVarUsage {
+            optional: defaulted.contains(&span).then_some(true),
             var_name,
         })
         .collect())
@@ -351,25 +358,17 @@ pub fn extract_process_env_vars_from_source(source_code: &str) -> Result<Vec<Env
     }
 
     let mut visitor = ProcessEnvVisitor::new();
+    visitor.defaulted_reads = defaulted_env_reads(source_code);
     visitor.visit_program(&program);
 
-    let defaulted = defaulted_env_names(source_code);
-
-    Ok(visitor
-        .env_vars
-        .into_iter()
-        .map(|usage| EnvVarUsage {
-            optional: defaulted
-                .contains(&usage.var_name)
-                .then_some(true)
-                .or(usage.optional),
-            ..usage
-        })
-        .collect())
+    Ok(visitor.env_vars)
 }
 
-/// Recursively find all `.ts` source files under a directory,
-/// excluding `node_modules`, `.d.ts` files, and test directories.
+fn is_test_directory(name: &str) -> bool {
+    matches!(name, "test" | "tests" | "__test__" | "__tests__")
+}
+
+/// Recursively find runtime `.ts` source files, excluding test sources.
 fn find_all_source_files(project_path: &Path) -> Result<Vec<std::path::PathBuf>> {
     let mut source_files = Vec::new();
     walk_source_files(project_path, &mut source_files)?;
@@ -389,8 +388,7 @@ fn walk_source_files(dir: &Path, files: &mut Vec<std::path::PathBuf>) -> Result<
     if dir_name == "node_modules"
         || dir_name == "dist"
         || dir_name == ".git"
-        || dir_name == "__test__"
-        || dir_name == "__tests__"
+        || is_test_directory(&dir_name)
     {
         return Ok(());
     }
@@ -407,7 +405,13 @@ fn walk_source_files(dir: &Path, files: &mut Vec<std::path::PathBuf>) -> Result<
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default();
 
-            if file_name.ends_with(".ts") && !file_name.ends_with(".d.ts") {
+            // Test setup/cleanup assigns and deletes process.env values. Those
+            // are not runtime requirements, even when tests live beside code.
+            if file_name.ends_with(".ts")
+                && !file_name.ends_with(".d.ts")
+                && !file_name.ends_with(".test.ts")
+                && !file_name.ends_with(".spec.ts")
+            {
                 files.push(path);
             }
         }
@@ -444,6 +448,7 @@ pub fn extract_env_vars_from_source(source_code: &str) -> Result<Vec<EnvVarUsage
     }
 
     let mut visitor = EnvVarVisitor::new();
+    visitor.defaulted_reads = defaulted_env_reads(source_code);
     visitor.visit_program(&program);
 
     Ok(visitor.env_vars)
@@ -565,21 +570,7 @@ pub fn find_all_env_vars(
                         // those declarations as bare reads invents requirements.
                         // Other files still use the conservative untyped scan.
                         let vars = if source_file == &path.join("mikro-orm.config.ts") {
-                            let defaulted = defaulted_env_names(&source_code);
-                            extract_env_vars_from_source(&source_code).map(|vars| {
-                                vars.into_iter()
-                                    .map(|mut usage| {
-                                        // Preserve existing fallback handling for
-                                        // untyped reads; never override a required type.
-                                        if usage.optional.is_none()
-                                            && defaulted.contains(&usage.var_name)
-                                        {
-                                            usage.optional = Some(true);
-                                        }
-                                        usage
-                                    })
-                                    .collect()
-                            })
+                            extract_env_vars_from_source(&source_code)
                         } else {
                             extract_untyped_env_vars_from_source(&source_code)
                         };
@@ -617,6 +608,12 @@ fn find_registrations_files(modules_path: &Path) -> Result<Vec<std::path::PathBu
         let path = entry.path();
 
         if path.is_dir() {
+            if path
+                .file_name()
+                .is_some_and(|name| is_test_directory(&name.to_string_lossy()))
+            {
+                continue;
+            }
             let registrations_path = path.join("registrations.ts");
             if registrations_path.exists() {
                 registrations_files.push(registrations_path);
@@ -644,6 +641,101 @@ fn get_project_name_from_path(file_path: &Path) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_defaulted_helper_setting_is_not_required_by_test_setup() {
+        let root = tempfile::tempdir().unwrap();
+        let backend = root.path().join("backend");
+        fs::create_dir_all(backend.join("tests/claim-workspace")).unwrap();
+        fs::write(
+            backend.join("cache.ts"),
+            r#"
+            function integerEnv(name: string, fallback: number): number {
+                const raw = process.env[name]?.trim();
+                if (!raw) return fallback;
+                const parsed = Number.parseInt(raw, 10);
+                return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+            }
+            const bytes = integerEnv('VERSION_CONTENT_CACHE_MAX_BYTES', 256 * 1024 * 1024);
+        "#,
+        )
+        .unwrap();
+        fs::write(
+            backend.join("tests/claim-workspace/cache.unit.test.ts"),
+            r#"
+            process.env.VERSION_CONTENT_CACHE_MAX_BYTES = '1000';
+            delete process.env.VERSION_CONTENT_CACHE_MAX_BYTES;
+        "#,
+        )
+        .unwrap();
+        let result = find_all_env_vars(root.path(), &RenderedTemplatesCache::new()).unwrap();
+        assert!(
+            result
+                .values()
+                .flatten()
+                .all(|usage| usage.var_name != "VERSION_CONTENT_CACHE_MAX_BYTES")
+        );
+    }
+
+    #[test]
+    fn test_test_sources_do_not_create_deployment_requirements() {
+        let root = tempfile::tempdir().unwrap();
+        let backend = root.path().join("backend");
+        fs::create_dir_all(backend.join("services")).unwrap();
+        fs::write(
+            backend.join("services/cache.ts"),
+            "const limit = process.env.CACHE_LIMIT ?? 268435456; const token = process.env.REQUIRED_TOKEN;",
+        ).unwrap();
+        for relative in [
+            "tests/claim-workspace/cache.unit.test.ts",
+            "test/setup.ts",
+            "__tests__/setup.ts",
+            "__test__/setup.ts",
+            "services/cache.test.ts",
+            "services/cache.spec.ts",
+        ] {
+            let path = backend.join(relative);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(
+                path,
+                "process.env.CACHE_LIMIT = '0'; delete process.env.TEST_ONLY;",
+            )
+            .unwrap();
+        }
+        // A tests-only workspace package must not acquire runtime requirements
+        // through either the source sweep or the registrations pass.
+        fs::create_dir(root.path().join("tests")).unwrap();
+        fs::write(
+            root.path().join("tests/registrations.ts"),
+            "const token = getEnvVar('TEST_PACKAGE_TOKEN');",
+        )
+        .unwrap();
+        let result = find_all_env_vars(root.path(), &RenderedTemplatesCache::new()).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result["backend"].len(), 2);
+        assert_eq!(optionality(&result["backend"], "CACHE_LIMIT"), Some(true));
+        assert_eq!(
+            optionality(&result["backend"], "REQUIRED_TOKEN"),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn test_runtime_files_in_nested_non_test_directories_are_still_scanned() {
+        let root = tempfile::tempdir().unwrap();
+        let backend = root.path().join("backend");
+        fs::create_dir_all(backend.join("domain/testimonials")).unwrap();
+        fs::write(
+            backend.join("domain/testimonials/service.ts"),
+            "const token = process.env.REQUIRED_TOKEN;",
+        )
+        .unwrap();
+        let result = find_all_env_vars(root.path(), &RenderedTemplatesCache::new()).unwrap();
+        assert_eq!(
+            optionality(&result["backend"], "REQUIRED_TOKEN"),
+            Some(false)
+        );
+    }
 
     #[test]
     fn test_extract_env_vars_basic() {
@@ -1109,7 +1201,7 @@ const value = configured ?? process.env.FALLBACK_ONLY;
         // a variable the code genuinely needs sailed through the platform's
         // config gate and failed at runtime instead. Only a fallback that
         // supplies a value makes a read optional.
-        let defaulted = defaulted_env_names(
+        let vars = extract_process_env_vars_from_source(
             r#"
             const a = process.env.NO_VALUE_COALESCE ?? undefined;
             const b = process.env.NO_VALUE_OR || undefined;
@@ -1119,17 +1211,34 @@ const value = configured ?? process.env.FALLBACK_ONLY;
             const f = process.env.BOOL_FALLBACK ?? false;
             const g = process.env.CONST_FALLBACK ?? DEFAULT_PATH;
             "#,
-        );
+        )
+        .unwrap();
 
-        assert!(!defaulted.contains("NO_VALUE_COALESCE"));
-        assert!(!defaulted.contains("NO_VALUE_OR"));
-        assert!(!defaulted.contains("NULL_FALLBACK"));
+        assert_eq!(optionality(&vars, "NO_VALUE_COALESCE"), None);
+        assert_eq!(optionality(&vars, "NO_VALUE_OR"), None);
+        assert_eq!(optionality(&vars, "NULL_FALLBACK"), None);
 
         // Everything that does supply a value keeps counting, including a
         // non-literal fallback — `?? DEFAULT_PATH` is a real default.
-        assert!(defaulted.contains("STRING_FALLBACK"));
-        assert!(defaulted.contains("NUMBER_FALLBACK"));
-        assert!(defaulted.contains("BOOL_FALLBACK"));
-        assert!(defaulted.contains("CONST_FALLBACK"));
+        assert_eq!(optionality(&vars, "STRING_FALLBACK"), Some(true));
+        assert_eq!(optionality(&vars, "NUMBER_FALLBACK"), Some(true));
+        assert_eq!(optionality(&vars, "BOOL_FALLBACK"), Some(true));
+        assert_eq!(optionality(&vars, "CONST_FALLBACK"), Some(true));
+    }
+
+    #[test]
+    fn test_a_default_does_not_hide_a_required_read_in_the_same_file() {
+        let source = r#"
+            const optionalProcess = process.env.SHARED_PROCESS ?? 'fallback';
+            const requiredProcess = process.env.SHARED_PROCESS;
+            const optionalGetter = getEnvVar('SHARED_GETTER') || 'fallback';
+            const requiredGetter = getEnvVar('SHARED_GETTER');
+        "#;
+        let process = fold_sightings(extract_process_env_vars_from_source(source).unwrap());
+        let untyped = fold_sightings(extract_untyped_env_vars_from_source(source).unwrap());
+        let declarations = fold_sightings(extract_env_vars_from_source(source).unwrap());
+        assert_eq!(optionality(&process, "SHARED_PROCESS"), Some(false));
+        assert_eq!(optionality(&untyped, "SHARED_GETTER"), Some(false));
+        assert_eq!(optionality(&declarations, "SHARED_GETTER"), Some(false));
     }
 }
