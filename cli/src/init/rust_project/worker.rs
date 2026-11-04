@@ -475,6 +475,7 @@ pub(super) fn compose(root: &Path, name: &str, backend: Backend) -> Result<()> {
         environment.insert("PORT".into(), "3000".into());
         environment.insert("MCP_ENABLED".into(), "true".into());
         environment.entry("PUBLIC_ORIGIN".into()).or_insert_with(|| format!("http://localhost:{producer_port}"));
+        environment.entry("MCP_ALLOWED_HOSTS".into()).or_insert_with(|| "localhost".into());
         // Internal callers sign producer requests with the shared service key.
         environment.entry("INTERNAL_HMAC_SECRET_KEY".into()).or_insert_with(|| "${INTERNAL_HMAC_SECRET_KEY:?Configure the shared internal service HMAC key}".into());
         let consumer = compose.services[name].clone();
@@ -483,7 +484,7 @@ pub(super) fn compose(root: &Path, name: &str, backend: Backend) -> Result<()> {
         // (a backend change); its own listener settings stay.
         let environment = producer.environment.get_or_insert_with(IndexMap::new);
         for (key, value) in consumer.environment.iter().flatten() {
-            if !matches!(key.as_str(), "HOST" | "PORT" | "MCP_ENABLED" | "PUBLIC_ORIGIN") {
+            if !matches!(key.as_str(), "HOST" | "PORT" | "MCP_ENABLED" | "PUBLIC_ORIGIN" | "MCP_ALLOWED_HOSTS") {
                 environment.entry(key.clone()).or_insert_with(|| value.clone());
             }
         }
