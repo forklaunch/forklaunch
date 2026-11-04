@@ -30,6 +30,7 @@ export * from './handlers/typedHandler';
 export * from './httpStatusCodes';
 export * from './interfaces/expressLikeRouter.interface';
 export * from './mcpGenerator/mcpGenerator';
+export * from './mcpGenerator/mcpHttpHandler';
 export * from './middleware/request/createContext.middleware';
 export * from './middleware/response/enrichExpressLikeSend.middleware';
 export * from './openApiV3Generator/openApiV3Generator';

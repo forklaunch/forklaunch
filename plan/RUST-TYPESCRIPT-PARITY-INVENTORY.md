@@ -6640,10 +6640,13 @@ no-match handler outcomes remain outside this finite profile's evidence.
 
 ModelGatewayClient now sends the fixed signed POST
 /models/chat/completions/stream and returns an incremental ModelGatewayStream.
-Its async next emits opaque JSON items, skips malformed/non-data frames and stops
-on exact [DONE]. Framing matches actual TypeScript LF/CRLF/mixed delimiters,
-multiline data, tail quirks, initial BOM, Unicode trim and incomplete final UTF-8
-(the upstream decoder does not flush at EOF). Unsafe finite integers are actual
+Its async next emits chunk objects and stops on exact [DONE]. Since 2026-11-03 it
+follows the strict TypeScript reader (#457): invalid JSON, values that are not
+objects with a `choices` array, a truthy `error`, or a body ending before a
+terminated [DONE] fail with status 502, as does any later transport, time or size
+failure; items already returned stay with the caller. Comment-only and empty data
+frames are skipped. Framing matches actual TypeScript LF/CRLF/mixed delimiters,
+multiline data, initial BOM and Unicode trim. Unsafe finite integers are actual
 rounded f64 values with bit checks rather than serialization-only comparisons.
 Overflowing numbers and lone UTF-16 surrogates remain outside native JSON.
 

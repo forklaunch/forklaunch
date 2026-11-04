@@ -1,58 +1,90 @@
 use super::*;
 use serde_json::json;
-#[test]
-fn decoder_matches_actual_data_lines_tail_and_utf8_rules() {
-    for (bytes, initial, tail, expected) in [
-        (
-            b"data: {\"id\":\ndata: \"x\"}".as_slice(),
-            true,
-            false,
-            Some(json!({"id":"x"})),
-        ),
-        (b"data: {\"id\":\ndata: \"x\"}".as_slice(), true, true, None),
-        (
-            b"data: \"ok\"\xe2\x82".as_slice(),
-            true,
-            true,
-            Some(json!("ok")),
-        ),
-        (
-            b"data: \"\xff\"".as_slice(),
-            true,
-            false,
-            Some(json!("\u{fffd}")),
-        ),
-        (
-            b"\xef\xbb\xbfdata: null".as_slice(),
-            true,
-            false,
-            Some(Value::Null),
-        ),
-        (b"\xef\xbb\xbfdata: null".as_slice(), false, false, None),
-        ("data: \u{0085}null".as_bytes(), true, false, None),
-        (
-            "data: \u{00a0}null".as_bytes(),
-            true,
-            false,
-            Some(Value::Null),
-        ),
-        (b"data: [DONE] ".as_slice(), true, false, None),
-    ] {
-        let got = match decode_event(bytes, initial, tail) {
-            Event::Value(value) => Some(value),
-            Event::Skip => None,
-            Event::Done => panic!("unexpected DONE"),
-        };
-        assert_eq!(got, expected);
+fn decoded(bytes: &[u8], initial: bool) -> &'static str {
+    match decode_event(bytes, initial) {
+        Event::Value(_) => "value",
+        Event::Skip => "skip",
+        Event::Done => "done",
+        Event::Invalid => "invalid",
     }
-    assert!(matches!(
-        decode_event(b"data: [DONE]", true, false),
-        Event::Done
-    ));
-    assert!(matches!(
-        decode_event(b"data: [DONE]\r", true, false),
-        Event::Skip
-    ));
+}
+#[test]
+fn decoder_accepts_only_chunks_and_exact_done() {
+    let chunk = decode_event(b"data: {\"id\":\ndata: \"x\",\"choices\":[]}", true);
+    let Event::Value(value) = chunk else {
+        panic!("multiline chunk")
+    };
+    assert_eq!(value, json!({"id":"x","choices":[]}));
+    for (bytes, initial, expected) in [
+        (b"data: [DONE]".as_slice(), true, "done"),
+        (b": comment".as_slice(), true, "skip"),
+        (b"data:".as_slice(), true, "skip"),
+        (
+            b"\xef\xbb\xbfdata: {\"choices\":[]}".as_slice(),
+            true,
+            "value",
+        ),
+        // Only the stream's first frame may begin with a byte-order mark.
+        (b"\xef\xbb\xbfdata: [DONE]".as_slice(), false, "skip"),
+        ("data: \u{00a0}{\"choices\":[]}".as_bytes(), true, "value"),
+        ("data: \u{0085}{\"choices\":[]}".as_bytes(), true, "invalid"),
+        (b"data: {\"choices\":[\"\xff\"]}".as_slice(), true, "value"),
+        (b"data: [DONE] ".as_slice(), true, "invalid"),
+        (b"data: [DONE]\r".as_slice(), true, "invalid"),
+        (b"data: bad".as_slice(), true, "invalid"),
+        (b"data: null".as_slice(), true, "invalid"),
+        (b"data: 0".as_slice(), true, "invalid"),
+        (b"data: [1]".as_slice(), true, "invalid"),
+        (b"data: {\"ok\":true}".as_slice(), true, "invalid"),
+        (b"data: {\"choices\":{}}".as_slice(), true, "invalid"),
+        (
+            b"data: {\"choices\":[],\"error\":{}}".as_slice(),
+            true,
+            "invalid",
+        ),
+        (
+            b"data: {\"choices\":[],\"error\":\"x\"}".as_slice(),
+            true,
+            "invalid",
+        ),
+        (
+            b"data: {\"choices\":[],\"error\":1}".as_slice(),
+            true,
+            "invalid",
+        ),
+        (
+            b"data: {\"choices\":[],\"error\":null}".as_slice(),
+            true,
+            "value",
+        ),
+        (
+            b"data: {\"choices\":[],\"error\":false}".as_slice(),
+            true,
+            "value",
+        ),
+        (
+            b"data: {\"choices\":[],\"error\":0}".as_slice(),
+            true,
+            "value",
+        ),
+        (
+            b"data: {\"choices\":[],\"error\":-0}".as_slice(),
+            true,
+            "value",
+        ),
+        (
+            b"data: {\"choices\":[],\"error\":\"\"}".as_slice(),
+            true,
+            "value",
+        ),
+    ] {
+        assert_eq!(
+            decoded(bytes, initial),
+            expected,
+            "{:?}",
+            String::from_utf8_lossy(bytes)
+        );
+    }
 }
 #[test]
 fn limits_reject_unbounded_profiles_and_delimiters_match_actual_regex() {
@@ -82,11 +114,17 @@ fn limits_reject_unbounded_profiles_and_delimiters_match_actual_regex() {
 #[test]
 fn streamed_numbers_use_browser_rounding_without_losing_negative_zero() {
     for (text, bits) in [
-        ("data: 9007199254740993", 0x4340_0000_0000_0000_u64),
-        ("data: -0", 0x8000_0000_0000_0000_u64),
+        (
+            "data: {\"choices\":[9007199254740993]}",
+            0x4340_0000_0000_0000_u64,
+        ),
+        ("data: {\"choices\":[-0]}", 0x8000_0000_0000_0000_u64),
     ] {
-        let Event::Value(Value::Number(number)) = decode_event(text.as_bytes(), true, false) else {
-            panic!("numeric event")
+        let Event::Value(value) = decode_event(text.as_bytes(), true) else {
+            panic!("numeric chunk")
+        };
+        let Value::Number(number) = &value["choices"][0] else {
+            panic!("number")
         };
         assert!(number.is_f64());
         assert_eq!(number.as_f64().unwrap().to_bits(), bits);

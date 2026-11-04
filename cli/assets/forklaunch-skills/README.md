@@ -98,6 +98,7 @@ Full version in `AGENTS.md` and `CLAUDE.md`.
 - `/observability` — OTel wiring, metrics definitions, security events, alert rules, notifiers, telemetry retention.
 
 ### Frontend
+- `/expo-mobile` — Create a mobile foundation with Expo Router, secure sign-in, and optional assistant through the CLI.
 - `/frontend-patterns` — Pages, SDK client, useApi/useMutation hooks, auth, feature gating, forms, tables.
 - `/tanstack` — TanStack Start: routing, server functions, SSR, data loading.
 - `/design-system` — Design philosophy router: Stripe, Linear, Robinhood, Fidelity, Clinical, Airbnb, Retool, Notion.

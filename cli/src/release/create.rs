@@ -580,7 +580,7 @@ impl CliCommand for CreateCommand {
             if openapi_file.exists() {
                 let content = read_to_string(&openapi_file)?;
                 let spec: Value = serde_json::from_str(&content)?;
-                openapi_specs.insert(project.name.clone(), spec);
+                openapi_specs.insert(project.name.clone(), versioned_openapi_spec(spec));
             }
         }
 
@@ -1248,6 +1248,17 @@ impl CliCommand for CreateCommand {
         }
 
         Ok(())
+    }
+}
+
+/// The platform stores a service's spec keyed by API version. TypeScript exports
+/// already have that shape; Rust services export one bare OpenAPI document,
+/// which goes under the unversioned key.
+fn versioned_openapi_spec(spec: Value) -> Value {
+    if spec.get("openapi").is_some_and(Value::is_string) {
+        serde_json::json!({ "": spec })
+    } else {
+        spec
     }
 }
 
@@ -2679,6 +2690,14 @@ fn is_platform_managed_var(var_name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn bare_openapi_documents_are_keyed_unversioned() {
+        let bare = serde_json::json!({"openapi": "3.1.0", "paths": {}});
+        assert_eq!(versioned_openapi_spec(bare.clone()), serde_json::json!({"": bare}));
+        let versioned = serde_json::json!({"v1": {"openapi": "3.1.0", "paths": {}}});
+        assert_eq!(versioned_openapi_spec(versioned.clone()), versioned);
+    }
+
     use tempfile::TempDir;
 
     use super::*;
