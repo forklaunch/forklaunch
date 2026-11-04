@@ -130,6 +130,90 @@ def release_plan(root: Path = ROOT, scope: str = "framework") -> list[dict]:
     return order
 
 
+# Manifests outside the two workspaces that depend on their crates by path.
+DEPENDENT_MANIFESTS = ("cli/Cargo.toml",)
+SEMVER = re.compile(r"\d+\.\d+\.\d+")
+WORKSPACE_VERSION = re.compile(r'(\[workspace\.package\][^\[]*?^version\s*=\s*")([^"]+)(")', re.M | re.S)
+INLINE_TABLE = re.compile(r"\{[^{}]*\}")
+DOTTED_DEPENDENCY = re.compile(r"^\[[^\]\n]*dependencies\.[^\]\n]+\]\n(?:(?!\[).*\n?)*", re.M)
+PATH_KEY = re.compile(r'(?<![\w-])"?path"?\s*=\s*"([^"]+)"')
+VERSION_KEY = re.compile(r'((?<![\w-])"?version"?\s*=\s*")(=?)([^"]+)(")')
+
+
+def version_key(version: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in version.split("."))
+
+
+def bump(version: str, root: Path = ROOT) -> list[Path]:
+    """Move framework-rs and blueprint-rs to one new version, together.
+
+    The blueprint pins exact framework versions, so a framework release always
+    needs a blueprint release that repins it; both workspaces share a version.
+    Crates that inherit the workspace version move, and every path dependency
+    on them is repinned (keeping its `=` when it had one). Vendored crates keep
+    their own versions. Returns the manifests that changed.
+    """
+    if not SEMVER.fullmatch(version):
+        raise ValueError(f"Version must be MAJOR.MINOR.PATCH: {version}")
+    for scope in SCOPES:
+        current = scope_version(scope, root)
+        if version_key(version) <= version_key(current):
+            raise ValueError(f"{SCOPES[scope]} is already at {current}; choose a version above it")
+    changed = []
+    for workspace in SCOPES.values():
+        path = root / workspace / "Cargo.toml"
+        text = path.read_text()
+        updated, count = WORKSPACE_VERSION.subn(lambda m: m.group(1) + version + m.group(3), text, count=1)
+        if count != 1:
+            raise ValueError(f"No [workspace.package] version in {path}")
+        path.write_text(updated)
+        changed.append(path)
+    crates = sorted(p for workspace in SCOPES.values() for p in (root / workspace / "crates").rglob("Cargo.toml"))
+    # The CLI builds against the framework by path and publishes to crates.io too.
+    manifests = crates + [path for path in (root / manifest for manifest in DEPENDENT_MANIFESTS) if path.exists()]
+    moving = set()
+    for path in crates:
+        package = tomllib.loads(path.read_text()).get("package", {})
+        if isinstance(package.get("version"), dict) and package["version"].get("workspace"):
+            moving.add(path.parent.resolve())
+
+    def repin(manifest: Path, block: str) -> str:
+        target = PATH_KEY.search(block)
+        if not target or (manifest.parent / target.group(1)).resolve() not in moving:
+            return block
+        return VERSION_KEY.sub(lambda m: m.group(1) + m.group(2) + version + m.group(4), block, count=1)
+
+    for path in manifests:
+        text = path.read_text()
+        updated = INLINE_TABLE.sub(lambda m: repin(path, m.group(0)), text)
+        updated = DOTTED_DEPENDENCY.sub(lambda m: repin(path, m.group(0)), updated)
+        if updated != text:
+            path.write_text(updated)
+            changed.append(path)
+    # Prove the result is a consistent release graph before anyone commits it.
+    for scope in SCOPES:
+        for package in release_plan(root, scope):
+            if package["version"] != version and package["name"] not in vendored_names(root):
+                raise ValueError(f"{package['name']} did not move to {version}")
+    return changed
+
+
+def vendored_names(root: Path) -> set[str]:
+    names = set()
+    for workspace in SCOPES.values():
+        for path in (root / workspace / "crates").rglob("Cargo.toml"):
+            package = tomllib.loads(path.read_text()).get("package", {})
+            if isinstance(package.get("version"), str):
+                names.add(package.get("name", ""))
+    return names
+
+
+def unpublished(scope: str, root: Path = ROOT) -> list[str]:
+    """Packages of this scope's checked-out version that crates.io does not have."""
+    return [f"{package['name']} {package['version']}" for package in release_plan(root, scope)
+            if published_version(package) is None]
+
+
 def run(command: list[str], **kwargs):
     subprocess.run(command, check=True, **kwargs)
 
@@ -290,7 +374,8 @@ def validate_archive_reuse(output: Path, package: dict):
         raise ValueError("Reused archive provenance does not match fresh packaged contents")
 
 
-def prepare(output: Path, allow_dirty: bool, scope: str = "framework", reuse_verified_release: Path | None = None):
+def prepare(output: Path, allow_dirty: bool, scope: str = "framework", reuse_verified_release: Path | None = None,
+            reuse_registry: bool = False):
     plan = release_plan(scope=scope)
     previous = verified_release_archives(reuse_verified_release) if reuse_verified_release is not None else None
     dirty = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT).strip())
@@ -315,6 +400,8 @@ def prepare(output: Path, allow_dirty: bool, scope: str = "framework", reuse_ver
                     raise ValueError(f"Packaged path dependency remains: {package['name']}")
         if previous is not None:
             reuse_verified_archive(output, package, previous)
+        if reuse_registry:
+            reuse_registry_archive(output, package)
     report = {
         "schemaVersion": 1,
         "scope": scope,
@@ -415,14 +502,57 @@ def wait_for_version(package: dict, timeout: float = 180):
         time.sleep(2)
 
 
-def verify_published_archive(output: Path, package: dict, entry: dict) -> str:
-    from rust_registry import checked_archive, safe_members
+def registry_archive(package: dict, entry: dict) -> bytes:
+    """Download a published archive and check it against the index checksum."""
     name, version = package["name"], package["version"]
     with urlopen(f"https://static.crates.io/crates/{name}/{name}-{version}.crate", timeout=30) as response:
         published = response.read(32 * 1024 * 1024)
-    checksum = hashlib.sha256(published).hexdigest()
-    if checksum != entry["cksum"]:
+    if hashlib.sha256(published).hexdigest() != entry["cksum"]:
         raise ValueError(f"Published archive checksum mismatch: {name}")
+    return published
+
+
+def reuse_registry_archive(output: Path, package: dict):
+    """Keep an already-published version's exact crates.io archive.
+
+    Unchanged crates (the vendored ones) keep their version across releases.
+    Fresh packaging differs from the published archive only in Cargo-generated
+    files, so after proving the packaged contents are equal the release carries
+    the registry's bytes, and publish then finds the version already uploaded.
+    """
+    from rust_registry import checked_archive
+    if "verifiedArchiveReuse" in package:
+        return
+    entry = published_version(package)
+    if entry is None:
+        return
+    published = registry_archive(package, entry)
+    fresh_bytes = checked_archive(output, package)
+    fresh_files = comparable_package_files(fresh_bytes, package)
+    if fresh_files != comparable_package_files(published, package):
+        raise ValueError(f"Cannot reuse changed package at unchanged version: {package['name']} {package['version']}; bump its version")
+    fresh = output / "fresh-packages" / f"{package['name']}-{package['version']}.crate"
+    fresh.parent.mkdir(exist_ok=True)
+    fresh.write_bytes(fresh_bytes)
+    package["verifiedArchiveReuse"] = {
+        "sourceRegistry": "crates.io",
+        "sourceArchiveSha256": entry["cksum"],
+        "sourceRegistrySha256": entry["cksum"],
+        "freshArchive": str(fresh.relative_to(output)),
+        "freshArchiveSha256": package["sha256"],
+        "comparedFiles": len(fresh_files),
+        "packagedContentSha256": hashlib.sha256(json.dumps(fresh_files, sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
+        "ignoredGeneratedFiles": ["Cargo.lock", ".cargo_vcs_info.json"],
+    }
+    (output / package["archive"]).write_bytes(published)
+    package["sha256"] = entry["cksum"]
+
+
+def verify_published_archive(output: Path, package: dict, entry: dict) -> str:
+    from rust_registry import checked_archive, safe_members
+    name, version = package["name"], package["version"]
+    published = registry_archive(package, entry)
+    checksum = entry["cksum"]
 
     def files(data):
         with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
@@ -469,17 +599,21 @@ def publish(output: Path, tag: str, upload: bool):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["plan", "prepare", "verify", "publish", "hydrate"])
+    parser.add_argument("command", choices=["plan", "prepare", "verify", "publish", "hydrate", "bump", "check-published"])
     parser.add_argument("--output", type=Path)
     parser.add_argument("--target-dir", type=Path)
     parser.add_argument("--allow-dirty", action="store_true")
     parser.add_argument("--reuse-verified-release", type=Path,
                         help="Prepare only: reuse exact prior verified/published archives after fresh packaged-content comparison")
+    parser.add_argument("--reuse-published", action="store_true",
+                        help="Prepare only: keep crates.io archives for versions already published (release runs). "
+                             "Pull requests leave this off: unreleased changes at the current version are expected there")
     parser.add_argument("--scope", choices=["framework", "blueprint", "all"], default="framework",
                         help="Package scope; 'all' lists both inventories but cannot be prepared or published")
     parser.add_argument("--tag")
     parser.add_argument("--repository", help="Hydrate only: explicit GitHub owner/repository")
     parser.add_argument("--upload", action="store_true", help="Actually upload crates (publish only)")
+    parser.add_argument("--version", help="Bump only: the new shared version of framework-rs and blueprint-rs")
     parser.add_argument("--framework-release", type=Path,
                         help="Verify only: serve this prepared framework release beside an unpublished blueprint release")
     args = parser.parse_args()
@@ -489,6 +623,17 @@ def main():
         parser.error("--repository applies only to hydrate")
     if args.command == "plan":
         print(json.dumps(release_plan(scope=args.scope), indent=2))
+    elif args.command == "bump":
+        if args.version is None:
+            parser.error("bump requires --version MAJOR.MINOR.PATCH")
+        for path in bump(args.version):
+            print(f"updated {path.relative_to(ROOT)}")
+    elif args.command == "check-published":
+        scopes = tuple(SCOPES) if args.scope == "all" else (args.scope,)
+        missing = [entry for scope in scopes for entry in unpublished(scope)]
+        if missing:
+            raise SystemExit("Not on crates.io yet: " + ", ".join(missing))
+        print("Every " + "/".join(scopes) + " crate at the checked-out version is on crates.io")
     elif args.command == "hydrate":
         if args.output is None or args.repository is None or args.tag is None:
             parser.error("hydrate requires --output (a new directory), --repository and --tag")
@@ -499,7 +644,8 @@ def main():
         if args.output is None:
             parser.error("prepare requires --output (a new directory)")
         prepare(args.output.resolve(), args.allow_dirty, args.scope,
-                args.reuse_verified_release.resolve() if args.reuse_verified_release is not None else None)
+                args.reuse_verified_release.resolve() if args.reuse_verified_release is not None else None,
+                args.reuse_published)
     elif args.command == "verify":
         if args.output is None or args.target_dir is None:
             parser.error("verify requires --output (prepared release) and --target-dir")

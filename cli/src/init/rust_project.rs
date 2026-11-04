@@ -2780,6 +2780,9 @@ fn rust_docker_service(
             "PUBLIC_ORIGIN".to_string(),
             format!("http://localhost:{port}"),
         );
+        // Declared so deploys pass it through: the framework reads it while
+        // serving /mcp, so it never appears in service code.
+        environment.insert("MCP_ALLOWED_HOSTS".to_string(), "localhost".to_string());
     }
     if matches!(kind, RustProjectKind::Worker) {
         environment.insert("QUEUE_NAME".to_string(), format!("{app_name}-{name}-dev"));

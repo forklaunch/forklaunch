@@ -110,7 +110,7 @@ impl Verifier {
                     router.application = true;
                     return Ok(Value::Router(router));
                 }
-                if name == "with_openapi" {
+                if name == "with_openapi" || name == "with_docs" {
                     ensure!(
                         !call
                             .args
@@ -121,7 +121,7 @@ impl Verifier {
                     );
                     ensure!(
                         self.resolver
-                            .routing_method(source, &path.path, "with_openapi")?,
+                            .routing_method(source, &path.path, &name)?,
                         "Unresolved framework docs adapter"
                     );
                     return self.expression(
