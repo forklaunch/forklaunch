@@ -1,0 +1,8 @@
+{
+  "name": "storefront-migrate",
+  "description": "Clone a live Shopify or Squarespace storefront into a faithful, browsable offline copy, verify it against the live site feature by feature, repair what can be repaired, and wire it to the ForkLaunch ecommerce module so it takes real orders.",
+  "version": "0.2.0",
+  "author": {
+    "name": "ForkLaunch"
+  }
+}
