@@ -8,7 +8,10 @@ const CONSTANTS: &str = "../../../../cli/src/core/cargo_toml/cargo_toml_constant
 const FRAMEWORK: &str = "../../../../framework-rs";
 const BLUEPRINT: &str = "../../../../blueprint-rs";
 
-pub fn verify_crate_versions(fix_mode: bool) -> Result<(), String> {
+/// The CLI's FRAMEWORK_VERSION and BLUEPRINT_VERSION name published crates, so
+/// they may trail the workspaces while a version is merged but not yet on
+/// crates.io. `rust_released` says it is out, and they must match.
+pub fn verify_crate_versions(fix_mode: bool, rust_released: bool) -> Result<(), String> {
     let framework_version = workspace_version(FRAMEWORK)?;
     let blueprint_version = workspace_version(BLUEPRINT)?;
     let mut requirements: BTreeMap<String, Vec<String>> = BTreeMap::new();
@@ -40,10 +43,14 @@ pub fn verify_crate_versions(fix_mode: bool) -> Result<(), String> {
         let mut current = None;
         if let Some(version) = constant(line, "FRAMEWORK_VERSION") {
             current = Some(version);
-            expected = Some((format!("framework-rs {framework_version}"), framework_version.clone()));
+            if rust_released || !trails(version, &framework_version) {
+                expected = Some((format!("framework-rs {framework_version}"), framework_version.clone()));
+            }
         } else if let Some(version) = constant(line, "BLUEPRINT_VERSION") {
             current = Some(version);
-            expected = Some((format!("blueprint-rs {blueprint_version}"), blueprint_version.clone()));
+            if rust_released || !trails(version, &blueprint_version) {
+                expected = Some((format!("blueprint-rs {blueprint_version}"), blueprint_version.clone()));
+            }
         } else if let Some((name, version)) = registry_entry(line) {
             current = Some(version);
             match requirements.get(name).and_then(|versions| newest(versions)) {
@@ -79,6 +86,11 @@ pub fn verify_crate_versions(fix_mode: bool) -> Result<(), String> {
         }
     }
     if errors.is_empty() { Ok(()) } else { Err(errors.join("\n")) }
+}
+
+fn trails(version: &str, workspace: &str) -> bool {
+    let parts = |value: &str| value.split('.').map(|part| part.parse::<u64>().unwrap_or(0)).collect::<Vec<_>>();
+    parts(version) < parts(workspace)
 }
 
 fn workspace_version(workspace: &str) -> Result<String, String> {
@@ -167,6 +179,14 @@ mod tests {
         assert_eq!(range("0.13"), "0.13");
         assert_eq!(newest(&["0.12".into(), "0.13".into(), "0.9".into()]), Some("0.13"));
         assert_eq!(newest(&["=1.0.151".into(), "1".into()]), Some("=1.0.151"));
+    }
+
+    #[test]
+    fn published_versions_may_trail_the_workspace_but_not_lead_it() {
+        assert!(trails("0.2.5", "0.2.6"));
+        assert!(trails("0.2.9", "0.2.10"));
+        assert!(!trails("0.2.6", "0.2.6"));
+        assert!(!trails("0.2.7", "0.2.6"));
     }
 
     #[test]

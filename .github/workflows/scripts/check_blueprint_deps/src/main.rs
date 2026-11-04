@@ -9,6 +9,8 @@ mod check_cargo_deps;
 fn main() {
     let args: Vec<String> = env::args().collect();
     let fix_mode = args.iter().any(|arg| arg == "--fix" || arg == "-f");
+    // The Rust crates are on crates.io at the workspace version, so the CLI must use it.
+    let rust_released = args.iter().any(|arg| arg == "--rust-released");
 
     if fix_mode {
         println!("Running in fix mode - will update package.json files with correct versions");
@@ -55,7 +57,7 @@ fn main() {
         &implementation_refs.concat(),
         fix_mode,
     );
-    let crate_versions = check_cargo_deps::verify_crate_versions(fix_mode);
+    let crate_versions = check_cargo_deps::verify_crate_versions(fix_mode, rust_released);
     let mut failed = false;
     for (kind, result) in [("package", package_versions), ("crate", crate_versions)] {
         match result {
