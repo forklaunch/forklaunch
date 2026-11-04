@@ -1,6 +1,7 @@
 import { getEnvVar, safeStringify } from '@forklaunch/common';
 import {
   ATTR_HTTP_RESPONSE_STATUS_CODE,
+  createMcpHttpHandler,
   DocsConfiguration,
   ExpressLikeApplicationOptions,
   ForklaunchExpressLikeApplication,
@@ -9,6 +10,7 @@ import {
   generateOpenApiSpecs,
   isForklaunchRequest,
   isPortBound,
+  isSeparateMcpListener,
   meta,
   MetricsDefinition,
   OPENAPI_DEFAULT_VERSION,
@@ -35,6 +37,7 @@ import swaggerUi from 'swagger-ui-express';
 import { startBunCluster } from './cluster/bun.cluster';
 import { startNodeCluster } from './cluster/node.cluster';
 import { contentParse } from './middleware/content.parse.middleware';
+import { toFetchRequest, writeFetchResponse } from './mcpBridge';
 import { enrichResponseTransmission } from './middleware/enrichResponseTransmission.middleware';
 import { ExpressApplicationOptions } from './types/expressOptions.types';
 
@@ -193,10 +196,13 @@ export class Application<
         version,
         additionalTools,
         contentTypeMapping,
-        authenticate
+        authenticate,
+        sessions,
+        sessionIdleTimeoutMs
       } = this.mcpConfiguration ?? {};
       const zodSchemaValidator = this.schemaValidator;
-      const finalMcpPort = mcpPort ?? port + 2000;
+      const finalMcpPort =
+        mcpPort ?? (Number(process.env.MCP_PORT) || port + 2000);
 
       const mcpServer = generateMcpServer(
         zodSchemaValidator,
@@ -215,7 +221,25 @@ export class Application<
         additionalTools(mcpServer);
       }
 
-      if (
+      if (!isSeparateMcpListener(mcpPort)) {
+        const mcpHandler = createMcpHttpHandler(mcpServer, {
+          authenticate,
+          sessions,
+          sessionIdleTimeoutMs,
+          workerCount: this.hostingConfiguration?.workerCount
+        });
+        this.internal.all(mcpPath ?? '/mcp', async (req, res, next) => {
+          try {
+            const response = await mcpHandler.handle(
+              await toFetchRequest(req, protocol),
+              req
+            );
+            await writeFetchResponse(response, res);
+          } catch (error) {
+            next(error);
+          }
+        });
+      } else if (
         this.hostingConfiguration?.workerCount &&
         this.hostingConfiguration.workerCount > 1
       ) {

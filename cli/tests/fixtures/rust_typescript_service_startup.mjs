@@ -8,7 +8,10 @@ const [app, modules = 'modules'] = process.argv.slice(2);
 assert.ok(app);
 const port = await freePortPair();
 const base = `http://127.0.0.1:${port}`;
-const mcp = `http://127.0.0.1:${port + 2000}/mcp`;
+// Frameworks with same-port MCP serve it at /mcp on PORT; older ones on
+// PORT + 2000. The probe below picks whichever the installed version serves.
+let mcp = `${base}/mcp`;
+const legacyMcp = `http://127.0.0.1:${port + 2000}/mcp`;
 const service = join(app, modules, 'legacy-api');
 const env = {
   ...Object.fromEntries(
@@ -70,6 +73,17 @@ try {
   assert.equal(response?.status, 200, output);
   const expected = await response.json();
   assert.equal(expected.message, 'LegacyApi');
+  const probe = await fetch(mcp, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream'
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'ping' }),
+    signal: AbortSignal.timeout(10000)
+  });
+  await probe.arrayBuffer();
+  if (probe.status === 404) mcp = legacyMcp;
   const initialized = await rpc('initialize', {
     protocolVersion: '2024-11-05',
     capabilities: {},
