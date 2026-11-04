@@ -10,7 +10,7 @@ fi
 mkdir -p output/init-mlse
 cd output/init-mlse
 
-RUST_BACKTRACE=1 $FL init application mlse-node -p mlse-node -o src/modules -d postgresql -f prettier -l eslint -v zod -F express -r node -t vitest -m mlse-base -D "Test library" -A "Rohin Bhargava" -L 'AGPL-3.0'
+RUST_BACKTRACE=1 $FL init application mlse-node -p mlse-node -o src/modules -d postgresql -f prettier -l oxlint -v zod -F express -r node -t vitest -m mlse-base -D "Test library" -A "Rohin Bhargava" -L 'AGPL-3.0'
 
 # corpus maintenance scripts and the evaluation set ship with the module
 for f in scripts/refresh-corpus.ts scripts/load-mesh.ts scripts/run-eval.ts scripts/enforce-retention.ts eval/gold-set.example.json; do
