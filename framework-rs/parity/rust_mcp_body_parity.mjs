@@ -14,7 +14,7 @@ let captured;
 const wireServer=createServer((request,response)=>{const chunks=[];request.on('data',chunk=>chunks.push(chunk));request.on('end',()=>{captured={body:Buffer.concat(chunks),contentType:request.headers['content-type']??null,contentLength:request.headers['content-length']??null};response.writeHead(200,{'content-type':'application/json'});response.end('{"ok":true}');});});
 await new Promise(resolve=>wireServer.listen(0,'127.0.0.1',resolve));
 async function fetcher(_url,init){return fetch('http://127.0.0.1:'+wireServer.address().port,init);}
-async function load(file,imports={}){const exports={};vm.runInNewContext(ts.transpileModule(await readFile(path.join(root,file),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,require(name){if(name in imports)return imports[name];throw Error('Unexpected runtime import '+name);},fetch:fetcher,Buffer,URL,URLSearchParams,FormData,Blob});return exports;}
+async function load(file,imports={}){const exports={};vm.runInNewContext(ts.transpileModule(await readFile(path.join(root,file),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,require(name){if(name in imports)return imports[name];throw Error('Unexpected runtime import '+name);},fetch:fetcher,Buffer,Headers,URL,URLSearchParams,FormData,Blob});return exports;}
 try{
  const {safeStringify}=await load('framework/common/src/safeStringify.ts');
  const {unpackRouters}=await load('framework/core/src/http/router/unpackRouters.ts');
