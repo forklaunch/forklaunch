@@ -44,7 +44,7 @@
     "@forklaunch/core": "workspace:^",
     "@forklaunch/validator": "workspace:^",
     "@types/ws": "^8.18.2",
-    "ws": "^8.22.0"
+    "ws": "^8.22.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -55,7 +55,7 @@
     "tsup": "^9.0.0",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2",
-    "typescript-eslint": "^8.72.0",
+    "typescript-eslint": "^8.72.1",
     "zod": "^4.6.7"
   }
 }
