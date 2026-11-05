@@ -209,7 +209,7 @@ jobs:
             framework=(--framework-release "$RUNNER_TEMP/rust-release-framework")
           fi
           python3 scripts/rust_release.py verify --output "$RUNNER_TEMP/rust-release" --target-dir "$RUNNER_TEMP/rust-release-target" "${framework[@]}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: rust-crate-release-${{ matrix.scope }}-${{ github.sha }}
           retention-days: 30
@@ -288,7 +288,7 @@ jobs:
         run: gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/rust-release/publication.json" --clobber
       - name: Preserve publication receipt, including partial releases
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rust-${{ inputs.scope }}-publication-${{ github.sha }}
           if-no-files-found: ignore
