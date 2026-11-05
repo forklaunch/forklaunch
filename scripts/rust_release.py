@@ -130,8 +130,9 @@ def release_plan(root: Path = ROOT, scope: str = "framework") -> list[dict]:
     return order
 
 
-# Manifests outside the two workspaces that depend on their crates by path.
-DEPENDENT_MANIFESTS = ("cli/Cargo.toml",)
+# The CLI builds against the framework by path, but packaging it resolves that
+# dependency on crates.io, so it only moves once the crates are published.
+CLI_MANIFEST = "cli/Cargo.toml"
 SEMVER = re.compile(r"\d+\.\d+\.\d+")
 WORKSPACE_VERSION = re.compile(r'(\[workspace\.package\][^\[]*?^version\s*=\s*")([^"]+)(")', re.M | re.S)
 INLINE_TABLE = re.compile(r"\{[^{}]*\}")
@@ -168,27 +169,9 @@ def bump(version: str, root: Path = ROOT) -> list[Path]:
             raise ValueError(f"No [workspace.package] version in {path}")
         path.write_text(updated)
         changed.append(path)
-    crates = sorted(p for workspace in SCOPES.values() for p in (root / workspace / "crates").rglob("Cargo.toml"))
-    # The CLI builds against the framework by path and publishes to crates.io too.
-    manifests = crates + [path for path in (root / manifest for manifest in DEPENDENT_MANIFESTS) if path.exists()]
-    moving = set()
-    for path in crates:
-        package = tomllib.loads(path.read_text()).get("package", {})
-        if isinstance(package.get("version"), dict) and package["version"].get("workspace"):
-            moving.add(path.parent.resolve())
-
-    def repin(manifest: Path, block: str) -> str:
-        target = PATH_KEY.search(block)
-        if not target or (manifest.parent / target.group(1)).resolve() not in moving:
-            return block
-        return VERSION_KEY.sub(lambda m: m.group(1) + m.group(2) + version + m.group(4), block, count=1)
-
-    for path in manifests:
-        text = path.read_text()
-        updated = INLINE_TABLE.sub(lambda m: repin(path, m.group(0)), text)
-        updated = DOTTED_DEPENDENCY.sub(lambda m: repin(path, m.group(0)), updated)
-        if updated != text:
-            path.write_text(updated)
+    moving = workspace_crates(root)
+    for path in workspace_manifests(root):
+        if repin(path, moving, version):
             changed.append(path)
     # Prove the result is a consistent release graph before anyone commits it.
     for scope in SCOPES:
@@ -196,6 +179,41 @@ def bump(version: str, root: Path = ROOT) -> list[Path]:
             if package["version"] != version and package["name"] not in vendored_names(root):
                 raise ValueError(f"{package['name']} did not move to {version}")
     return changed
+
+
+def workspace_manifests(root: Path) -> list[Path]:
+    return sorted(p for workspace in SCOPES.values() for p in (root / workspace / "crates").rglob("Cargo.toml"))
+
+
+def workspace_crates(root: Path) -> set[Path]:
+    """Directories of the crates that inherit the workspace version."""
+    moving = set()
+    for path in workspace_manifests(root):
+        package = tomllib.loads(path.read_text()).get("package", {})
+        if isinstance(package.get("version"), dict) and package["version"].get("workspace"):
+            moving.add(path.parent.resolve())
+    return moving
+
+
+def repin(manifest: Path, moving: set[Path], version: str) -> bool:
+    """Point every path dependency on a moving crate at version; True if the file changed."""
+    def block(match: re.Match) -> str:
+        text = match.group(0)
+        target = PATH_KEY.search(text)
+        if not target or (manifest.parent / target.group(1)).resolve() not in moving:
+            return text
+        return VERSION_KEY.sub(lambda m: m.group(1) + m.group(2) + version + m.group(4), text, count=1)
+
+    text = manifest.read_text()
+    updated = DOTTED_DEPENDENCY.sub(block, INLINE_TABLE.sub(block, text))
+    if updated != text:
+        manifest.write_text(updated)
+    return updated != text
+
+
+def pin_cli(root: Path = ROOT) -> bool:
+    """Move the CLI to the framework version, once that version is on crates.io."""
+    return repin(root / CLI_MANIFEST, workspace_crates(root), scope_version("framework", root))
 
 
 def vendored_names(root: Path) -> set[str]:
@@ -599,7 +617,7 @@ def publish(output: Path, tag: str, upload: bool):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["plan", "prepare", "verify", "publish", "hydrate", "bump", "check-published"])
+    parser.add_argument("command", choices=["plan", "prepare", "verify", "publish", "hydrate", "bump", "pin-cli", "check-published"])
     parser.add_argument("--output", type=Path)
     parser.add_argument("--target-dir", type=Path)
     parser.add_argument("--allow-dirty", action="store_true")
@@ -628,6 +646,8 @@ def main():
             parser.error("bump requires --version MAJOR.MINOR.PATCH")
         for path in bump(args.version):
             print(f"updated {path.relative_to(ROOT)}")
+    elif args.command == "pin-cli":
+        print(f"{CLI_MANIFEST} {'updated' if pin_cli() else 'already current'}")
     elif args.command == "check-published":
         scopes = tuple(SCOPES) if args.scope == "all" else (args.scope,)
         missing = [entry for scope in scopes for entry in unpublished(scope)]

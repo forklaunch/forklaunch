@@ -63,8 +63,12 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(text.count('version = "=0.1.1"'), 2)
         self.assertIn('features = ["http"]', text)
         self.assertEqual(release.release_plan(self.root, "blueprint")[0]["externalDependencies"], ["forklaunch-core@0.1.1"])
+        # Packaging the CLI resolves on crates.io, so it waits for the publish.
+        self.assertIn('forklaunch-core = { version = "0.1.0"', cli.read_text())
+        self.assertTrue(release.pin_cli(self.root))
         self.assertIn('forklaunch-core = { version = "0.1.1"', cli.read_text())
         self.assertIn('serde = { version = "0.1.0" }', cli.read_text())
+        self.assertFalse(release.pin_cli(self.root))
         for stale in ("0.1.1", "0.1.0", "1.0"):
             with self.assertRaisesRegex(ValueError, "already at|MAJOR.MINOR.PATCH"):
                 release.bump(stale, self.root)
