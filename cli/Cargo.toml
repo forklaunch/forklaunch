@@ -32,7 +32,7 @@ log = "0.4.34"
 oxc_allocator = "0.155.0"
 oxc_ast = { version = "0.155.0", features = ["serialize"] }
 oxc_codegen = "0.155.0"
-oxc_parser = "0.155.0"
+oxc_parser = "0.156.0"
 oxc_ast_visit = "0.155.0"
 oxc_span = "0.155.0"
 paste = "1.0.15"
