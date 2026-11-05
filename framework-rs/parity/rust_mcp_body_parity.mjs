@@ -21,7 +21,7 @@ try{
  const discriminate=await load('framework/core/src/http/router/discriminateBody.ts');
  class ZodSchemaValidator{file={};string={};schemify(value){return value;}isInstanceOf(){return false;}}
  class FastMCP{tools=[];addTool(tool){this.tools.push(tool);}}
- const mcpHttpHandler=await load('framework/core/src/http/mcpGenerator/mcpHttpHandler.ts',{'@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js':{},async_hooks:{AsyncLocalStorage:class{}},crypto:{},fastmcp:{},http:{}});
+ const mcpHttpHandler=await load('framework/core/src/http/mcpGenerator/mcpHttpHandler.ts',{'@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js':{},async_hooks:require('node:async_hooks'),crypto:{},fastmcp:{},http:{}});
  const {generateMcpServer}=await load('framework/core/src/http/mcpGenerator/mcpGenerator.ts',{'@forklaunch/common':{safeStringify,isRecord:value=>value!==null&&typeof value==='object'&&!Array.isArray(value),isNever(){throw Error('Unexpected discriminator');}},'@forklaunch/validator/zod':{ZodSchemaValidator,string:{startsWith:()=>({})}},fastmcp:{FastMCP},'../router/discriminateBody':discriminate,'../router/unpackRouters':{unpackRouters},'./mcpHttpHandler':mcpHttpHandler});
  const cases=[];
  for(const body of [{plain:'hello',unicode:'水💬',empty:''},{multi:'a\nb\rc\r\nd'},{'a"\r\nX-Test: value':'payload','percent%':'x'},{}])cases.push({kind:'multipart',arguments:{body}});
