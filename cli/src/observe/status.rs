@@ -1,17 +1,17 @@
-use std::{collections::BTreeMap, io::Write};
+use std::io::Write;
 
 use anyhow::{Context, Result};
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
+use super::metrics::{ApplicationMonitoringResponse, MetricValue, fetch_all_application_metrics};
+
 use crate::{
     CliCommand,
-    constants::get_observability_api_url,
     core::{
         command::command,
-        http_client::get,
         validate::{require_integration, require_manifest},
     },
 };
@@ -61,7 +61,7 @@ impl CliCommand for StatusCommand {
             .to_string();
         let json_output = matches.get_flag("json");
 
-        let monitoring = fetch_application_monitoring(&application_id, &environment)?;
+        let monitoring = fetch_all_application_metrics(&application_id, &environment, "1h")?;
         let status = ObserveStatus::from_monitoring(environment, monitoring);
 
         if json_output {
@@ -72,31 +72,6 @@ impl CliCommand for StatusCommand {
 
         Ok(())
     }
-}
-
-fn fetch_application_monitoring(
-    application_id: &str,
-    environment: &str,
-) -> Result<ApplicationMonitoringResponse> {
-    let api_url = get_observability_api_url();
-    let url = format!(
-        "{}/applications/{}/monitoring?environment={}&timeRange=1h",
-        api_url, application_id, environment
-    );
-
-    let response = get(&url).with_context(|| "Failed to reach observability API")?;
-    let status = response.status();
-
-    if !status.is_success() {
-        let body = response
-            .text()
-            .unwrap_or_else(|_| "unknown error".to_string());
-        anyhow::bail!("Observability API returned {} — {}", status, body);
-    }
-
-    response
-        .json()
-        .with_context(|| "Failed to parse observability status response")
 }
 
 fn print_status(status: &ObserveStatus) -> Result<()> {
@@ -180,7 +155,7 @@ impl ObserveStatus {
             environment,
             overall_status,
             signals,
-            metrics: monitoring.metrics(),
+            metrics: status_metrics(&monitoring),
         }
     }
 }
@@ -245,106 +220,65 @@ struct StatusMetric {
     display_value: String,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ApplicationMonitoringResponse {
-    request_rate: f64,
-    latency: LatencyResponse,
-    error_rate: f64,
-    uptime: f64,
-    #[serde(default)]
-    available: Option<bool>,
-    #[serde(flatten)]
-    additional_metrics: BTreeMap<String, Value>,
-}
-
-#[derive(Debug, Deserialize)]
-struct LatencyResponse {
-    p95: f64,
-    #[serde(flatten)]
-    additional_percentiles: BTreeMap<String, Value>,
-}
-
-impl ApplicationMonitoringResponse {
-    fn metrics(&self) -> Vec<StatusMetric> {
-        let mut metrics = vec![
-            StatusMetric::number("requestRate", "Request rate", self.request_rate, "req/s"),
-            StatusMetric::number("errorRate", "Error rate", self.error_rate, "%"),
-            StatusMetric::number("latency.p95", "Latency p95", self.latency.p95, "ms"),
-            StatusMetric::number("uptime", "Uptime", self.uptime, "%"),
-        ];
-
-        for (name, value) in &self.latency.additional_percentiles {
-            metrics.push(StatusMetric::from_value(
-                format!("latency.{name}"),
-                format!("Latency {}", metric_label(name)),
-                value.clone(),
-                Some("ms"),
-            ));
-        }
-
-        for (name, value) in &self.additional_metrics {
-            metrics.push(StatusMetric::from_value(
-                name.clone(),
-                metric_label(name),
-                value.clone(),
-                None,
-            ));
-        }
-
-        metrics
-    }
-}
-
-impl StatusMetric {
-    fn number(name: &str, label: &str, value: f64, unit: &str) -> Self {
-        Self {
-            name: name.to_string(),
-            label: label.to_string(),
-            value: Value::from(value),
-            display_value: format!("{value:.2} {unit}"),
-        }
-    }
-
-    fn from_value(name: String, label: String, value: Value, unit: Option<&str>) -> Self {
-        let display_value = match (&value, unit) {
-            (Value::Number(number), Some(unit)) => format!("{number} {unit}"),
-            (Value::Number(number), None) => number.to_string(),
-            (Value::String(value), _) => value.clone(),
-            (Value::Bool(value), _) => value.to_string(),
-            _ => value.to_string(),
-        };
-
-        Self {
+fn status_metrics(monitoring: &ApplicationMonitoringResponse) -> Vec<StatusMetric> {
+    let mut metrics = vec![
+        status_metric("requestRate", "Request rate", &monitoring.request_rate),
+        status_metric("errorRate", "Error rate", &monitoring.error_rate),
+    ];
+    for (name, label, value) in [
+        (
+            "latency.p95",
+            "Latency p95",
+            monitoring.latency.as_ref().and_then(|l| l.p95),
+        ),
+        (
+            "latency.p50",
+            "Latency p50",
+            monitoring.latency.as_ref().and_then(|l| l.p50),
+        ),
+        (
+            "latency.p99",
+            "Latency p99",
+            monitoring.latency.as_ref().and_then(|l| l.p99),
+        ),
+    ] {
+        metrics.push(status_metric(
             name,
             label,
-            value,
-            display_value,
-        }
+            &MetricValue {
+                value,
+                unit: monitoring.latency.as_ref().and_then(|l| l.unit.clone()),
+                available: monitoring.latency.as_ref().and_then(|l| l.available),
+            },
+        ));
     }
+    metrics.push(status_metric("uptime", "Uptime", &monitoring.uptime));
+    metrics
 }
 
-fn metric_label(name: &str) -> String {
-    let mut label = String::new();
-
-    for (index, char) in name.chars().enumerate() {
-        if index == 0 {
-            label.push(char.to_ascii_uppercase());
-        } else if char == '_' || char == '-' {
-            label.push(' ');
-        } else if char.is_ascii_uppercase() {
-            label.push(' ');
-            label.push(char.to_ascii_lowercase());
-        } else {
-            label.push(char);
-        }
+fn status_metric(name: &str, label: &str, metric: &MetricValue) -> StatusMetric {
+    let value = if metric.available == Some(false) {
+        None
+    } else {
+        metric.value
+    };
+    let display_value = match value {
+        Some(value) => match metric.unit.as_deref() {
+            Some(unit) => format!("{value:.2} {unit}"),
+            None => format!("{value:.2}"),
+        },
+        None => "unavailable".to_string(),
+    };
+    StatusMetric {
+        name: name.to_string(),
+        label: label.to_string(),
+        value: value.map(Value::from).unwrap_or(Value::Null),
+        display_value,
     }
-
-    label
 }
 
 fn classify_metrics(monitoring: &ApplicationMonitoringResponse) -> SignalHealth {
-    match monitoring.available {
+    match monitoring.available.or(monitoring.request_rate.available) {
         Some(true) => SignalHealth::Healthy,
         Some(false) | None => SignalHealth::Unknown,
     }
@@ -355,17 +289,14 @@ mod tests {
     use super::*;
 
     fn monitoring(error_rate: f64, p95: f64, uptime: f64) -> ApplicationMonitoringResponse {
-        ApplicationMonitoringResponse {
-            request_rate: 12.0,
-            latency: LatencyResponse {
-                p95,
-                additional_percentiles: BTreeMap::new(),
-            },
-            error_rate,
-            uptime,
-            available: Some(true),
-            additional_metrics: BTreeMap::new(),
-        }
+        serde_json::from_value(serde_json::json!({
+            "requestRate": 12.0,
+            "latency": {"p95": p95},
+            "errorRate": error_rate,
+            "uptime": uptime,
+            "available": true
+        }))
+        .unwrap()
     }
 
     #[test]
@@ -415,17 +346,43 @@ mod tests {
     }
 
     #[test]
-    fn includes_additional_metrics_in_display_order() {
-        let mut monitoring = monitoring(0.2, 120.0, 99.95);
-        monitoring
-            .additional_metrics
-            .insert("queueDepth".to_string(), Value::from(42));
+    fn does_not_invent_units_for_scalar_api_values() {
+        let status =
+            ObserveStatus::from_monitoring("dev".to_string(), monitoring(0.2, 4750.0, 99.95));
+        let p95 = status
+            .metrics
+            .iter()
+            .find(|m| m.name == "latency.p95")
+            .unwrap();
+        assert_eq!(p95.value, Value::from(4750.0));
+        assert_eq!(p95.display_value, "4750.00");
+        assert!(!status.metrics[0].display_value.contains("req/s"));
+    }
 
-        let status = ObserveStatus::from_monitoring("dev".to_string(), monitoring);
+    #[test]
+    fn missing_metric_stays_unavailable_instead_of_zero() {
+        let response: ApplicationMonitoringResponse = serde_json::from_str("{}").unwrap();
+        let status = ObserveStatus::from_monitoring("dev".to_string(), response);
+        assert!(status.metrics.iter().all(|m| m.value.is_null()));
+        assert!(
+            status
+                .metrics
+                .iter()
+                .all(|m| m.display_value == "unavailable")
+        );
+        assert_eq!(status.overall_status, SignalHealth::Unknown);
+    }
 
-        assert_eq!(status.metrics.len(), 5);
-        assert_eq!(status.metrics[4].name, "queueDepth");
-        assert_eq!(status.metrics[4].label, "Queue depth");
-        assert_eq!(status.metrics[4].display_value, "42");
+    #[test]
+    fn preserves_explicit_units_and_unavailability() {
+        let response = serde_json::from_value(serde_json::json!({
+            "requestRate": {"value": 12.0, "unit": "req/min", "available": true},
+            "latency": {"p95": 30.0, "unit": "ms", "available": false}
+        }))
+        .unwrap();
+        let status = ObserveStatus::from_monitoring("dev".to_string(), response);
+        assert_eq!(status.metrics[0].display_value, "12.00 req/min");
+        assert_eq!(status.metrics[2].display_value, "unavailable");
+        assert!(status.metrics[2].value.is_null());
     }
 }
