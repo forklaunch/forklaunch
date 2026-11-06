@@ -42,21 +42,21 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@mikro-orm/core": "7.2.5",
+    "@mikro-orm/core": "7.2.6",
     "ioredis": "^6.0.0",
-    "jose": "6.2.12",
+    "jose": "6.2.15",
     "testcontainers": "^12.2.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^26.6.5",
-    "globals": "^17.13.0",
+    "@types/node": "^26.6.6",
+    "globals": "^17.14.0",
     "prettier": "^3.9.10",
     "ts-node": "^10.9.2",
     "tsup": "^9.0.0",
     "typescript": "^7.0.2",
-    "typescript-eslint": "^8.72.0",
-    "vitest": "^5.0.5"
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.1.0"
   },
   "peerDependencies": {
     "vitest": "^3.0.0"
