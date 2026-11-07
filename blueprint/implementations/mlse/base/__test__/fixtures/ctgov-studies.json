@@ -1,0 +1,166 @@
+{
+  "studies": [
+    {
+      "protocolSection": {
+        "identificationModule": {
+          "nctId": "NCT06177873",
+          "orgStudyIdInfo": {
+            "id": "501100004951"
+          },
+          "organization": {
+            "fullName": "Ataturk University",
+            "class": "OTHER"
+          },
+          "briefTitle": "Effect of Foot Bath on Pain, Anxiety, Sleep and Comfort Level",
+          "officialTitle": "Effect of Foot Bath on Pain, Anxiety, Sleep and Comfort Level: Randomized Control"
+        },
+        "statusModule": {
+          "statusVerifiedDate": "2025-12",
+          "overallStatus": "COMPLETED",
+          "expandedAccessInfo": {
+            "hasExpandedAccess": false
+          },
+          "startDateStruct": {
+            "date": "2022-01-01",
+            "type": "ACTUAL"
+          },
+          "primaryCompletionDateStruct": {
+            "date": "2022-11-30",
+            "type": "ACTUAL"
+          },
+          "completionDateStruct": {
+            "date": "2022-11-30",
+            "type": "ACTUAL"
+          },
+          "studyFirstSubmitDate": "2023-11-28",
+          "studyFirstSubmitQcDate": "2023-12-10",
+          "studyFirstPostDateStruct": {
+            "date": "2023-12-20",
+            "type": "ACTUAL"
+          },
+          "lastUpdateSubmitDate": "2025-12-05",
+          "lastUpdatePostDateStruct": {
+            "date": "2025-12-11",
+            "type": "ACTUAL"
+          }
+        },
+        "sponsorCollaboratorsModule": {
+          "responsibleParty": {
+            "type": "SPONSOR_INVESTIGATOR",
+            "investigatorFullName": "Dilek GÜRÇAYIR",
+            "investigatorTitle": "Assistant professor",
+            "investigatorAffiliation": "Ataturk University"
+          },
+          "leadSponsor": {
+            "name": "Dilek GÜRÇAYIR",
+            "class": "OTHER"
+          }
+        },
+        "oversightModule": {
+          "oversightHasDmc": false,
+          "isFdaRegulatedDrug": false,
+          "isFdaRegulatedDevice": false
+        },
+        "descriptionModule": {
+          "briefSummary": "This study was planned and will conducted to determine the effect of hot foot bath on pain, anxiety, sleep and comfort levels in patients undergoing laparoscopic cholecystectomy.\n\nResearch hypotheses H1: A hot foot bath reduces postoperative pain in patients undergoing laparoscopic cholecystectomy.\n\nH2: A hot foot bath reduces postoperative anxiety in patients undergoing laparoscopic cholecystectomy.\n\nH3: A hot foot bath improves postoperative sleep in patients undergoing laparoscopic cholecystectomy.\n\nH4: A hot foot bath improves postoperative comfort in patients undergoing laparoscopic cholecystectomy.",
+          "detailedDescription": "Nurses play an important role in patients; pain management during the peroperative period. In this process, non-steroidal anti-inflammatory drugs, opioids, patient-controlled analgesia and local anesthetics can be used pharmacologically in pain management. However, it has been reported in the literature that using pharmacological and non-pharmacological applications together in pain management has better positive effects on the patient. Hot application, cold application, transcutaneous electrical nerve stimulation, massage, reiki, music therapy, aromatherapy are some of the non-pharmacological applications used to relieve pain in the postoperative period.\n\nHot application is one of the effec"
+        },
+        "conditionsModule": {
+          "conditions": [
+            "Laparoscopic Cholecystectomy"
+          ],
+          "keywords": [
+            "foot bath",
+            "pain",
+            "anxiety",
+            "comfort",
+            "sleep"
+          ]
+        },
+        "designModule": {
+          "studyType": "INTERVENTIONAL",
+          "phases": [
+            "NA"
+          ],
+          "designInfo": {
+            "allocation": "RANDOMIZED",
+            "interventionModel": "PARALLEL",
+            "primaryPurpose": "SUPPORTIVE_CARE",
+            "maskingInfo": {
+              "masking": "NONE"
+            }
+          },
+          "enrollmentInfo": {
+            "count": 108,
+            "type": "ACTUAL"
+          }
+        },
+        "armsInterventionsModule": {
+          "armGroups": [
+            {
+              "label": "intervention group",
+              "type": "EXPERIMENTAL",
+              "description": "Hot water foot bath will applied to intervention group.",
+              "interventionNames": [
+                "Other: foot bath"
+              ]
+            },
+            {
+              "label": "control group",
+              "type": "NO_INTERVENTION",
+              "description": "Patients in the control group will not have a hot water foot bath and the scales will be applied at the same hours as the patients in the experimental group."
+            }
+          ],
+          "interventions": [
+            {
+              "type": "OTHER",
+              "name": "foot bath",
+              "description": "On the morning of surgery, the purpose of the study will be explained to the patients and their written consent will be obtained. Then, Introductory Information Form, STAI and VASS were applied. The pain level of the patients will be evaluated with VAS-Pain 4 hours after the surgery. SAI and VAS-Comfort will be applied to patients with pain level 4 and above. Then, patients in the experimental group will receive a hot water foot bath for 20 minutes. Before the hot water foot bath, patients will be lifted from their beds and placed on the chair in the room. Hot water will be poured into the foot bath tub and the patient will be asked to put his feet in the water. The water level will be adjusted to include the patients ankles. The temperature of the water will be constantly checked with a water thermometer and kept at 41-42 °C. A hot water foot bath will be applied for 20 minutes and then the patients feet will be dried with a towel.",
+              "armGroupLabels": [
+                "intervention group"
+              ]
+            }
+          ]
+        },
+        "outcomesModule": {
+          "primaryOutcomes": [
+            {
+              "measure": "Visual Analog pain scale",
+              "description": "Zero is equivalent to no pain and 10 indicates the worst possible pain.",
+              "timeFrame": "4 hours after the surgery, after the application at the 5th, 30th, 60th and 120th minutes."
+            },
+            {
+              "measure": "Visual Analog Comfort scale",
+              "description": "Zero is equivalent to no comfort and 10 indicates the worst possible comfort.",
+              "timeFrame": "4 hours after the surgery, after the application at the 5th, 30th, 60th and 120th minutes."
+            },
+            {
+              "measure": "Visual Analog Sleep Scale",
+              "description": "Zero is equivalent to the best sleep and 1000 indicates the worst possible sleep.",
+              "timeFrame": "On the surgery morning, first day after surgery."
+            },
+            {
+              "measure": "The State-Trait Anxiety Inventory Form (STAI)",
+              "description": "20 is equivalent to no anxiety and 80 indicates the worst possible anxiety.",
+              "timeFrame": "4 hours after the surgery, after the application at the 5th, 30th, 60th and 120th minutes."
+            }
+          ]
+        },
+        "eligibilityModule": {
+          "eligibilityCriteria": "Inclusion Criteria:\n\n* 18 years of age or older\n* Patients did not have any psychological disorders, cancer, hypertension or heart disease and did not use any medication related to these diseases\n* Patients used the same type of analgesic for pain control in the postoperative period,\n* Patients had a VAS pain level of 4 or above, had no foot pain\n* Patients who did not have wounds, infections or infectious diseases\n* Patients who did not develop any complications before, during and after surgery were\n\nExclusion Criteria:\n\n* Patients who developed any complications before, during or after surgery\n* Patients who had drains were not included in the study.",
+          "healthyVolunteers": false,
+          "sex": "ALL",
+          "minimumAge": "18 Years",
+          "stdAges": [
+            "ADULT",
+            "OLDER_ADULT"
+          ]
+        },
+        "ipdSharingStatementModule": {
+          "ipdSharing": "NO"
+        }
+      },
+      "hasResults": false
+    }
+  ]
+}

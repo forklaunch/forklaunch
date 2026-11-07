@@ -125,7 +125,7 @@ INERT = [
     Rule(['framework/.changeset/**', 'blueprint/.changeset/**']),
     # Workflows that are not pull-request checks, or filter themselves.
     Rule(['.github/dependabot.yml',
-          '.github/workflows/{cli_release,rust_release,ts_release,rust_parity,blueprint_depcheck_sync}.yml',
+          '.github/workflows/{cli_release,rust_release,ts_release,rust_parity,blueprint_depcheck_sync,mlse_tests}.yml',
           '.github/workflows/scripts/ts_release/**', '.github/workflows/scripts/parity_shards.py']),
     # Release and maintenance scripts, run by the release workflows above or
     # by hand.
@@ -203,7 +203,7 @@ RULES = [
     Rule([f'blueprint/{_alternatives(BLUEPRINT_MIXED_MODULES)}/**',
           f'blueprint/{_alternatives(BLUEPRINT_APPLICATION_FILES)}'], E2E_RUST, CLI_TESTS),
     # Linked into cli/src/templates/project, or read by CLI unit tests.
-    Rule(['blueprint/{billing-base,billing-stripe,ecommerce-stripe,messaging-base,messaging-twilio,monitoring}/**',
+    Rule(['blueprint/{billing-base,billing-stripe,ecommerce-stripe,messaging-base,messaging-twilio,mlse-base,monitoring}/**',
           'blueprint/pnpm-workspace.yaml', 'blueprint/*/.gitignore'], CLI_TESTS),
 
     # --- Rust framework and blueprint ----------------------------------------

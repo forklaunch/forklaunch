@@ -910,7 +910,7 @@ pub(crate) fn ensure_minio_buckets(docker_compose: &mut DockerCompose, app_name:
 /// provisioned by the generated `postgresql-provision` job.
 pub(crate) fn postgresql_service(app_name: &str) -> DockerService {
     DockerService {
-        image: Some("postgres:latest".to_string()),
+        image: Some(DEFAULT_POSTGRES_IMAGE.to_string()),
         container_name: Some(format!("{}-postgresql", app_name)),
         hostname: Some("postgresql".to_string()),
         restart: Some(Restart::UnlessStopped),
@@ -1605,6 +1605,34 @@ echo 'Topic {}-{}-dev ready'"#,
     Ok(docker_compose)
 }
 
+/// The PostgreSQL image every application uses unless a module needs more.
+pub(crate) const DEFAULT_POSTGRES_IMAGE: &str = "postgres:latest";
+/// PostgreSQL with the pgvector extension, needed by the mlse module's vector
+/// search. The major version (18) and Debian base (trixie) match what
+/// `postgres:latest` resolves to, so an existing application's data volume
+/// and collations stay compatible when it is switched over. Bump both
+/// together.
+pub(crate) const PGVECTOR_POSTGRES_IMAGE: &str = "pgvector/pgvector:pg18-trixie";
+
+/// Chooses the image for the application's single shared PostgreSQL service.
+///
+/// The service is rewritten every time a service or worker is added, so the
+/// choice has to be sticky: once any service needs pgvector, later additions
+/// must keep it, or adding an unrelated module would silently drop the
+/// extension out from under mlse. The pgvector image is the official
+/// PostgreSQL image plus the extension, so every other service keeps working
+/// on it unchanged.
+pub(crate) fn postgres_image(needs_pgvector: bool, existing: Option<&DockerService>) -> String {
+    let existing_has_pgvector = existing
+        .and_then(|service| service.image.as_deref())
+        .is_some_and(|image| image.starts_with("pgvector/"));
+    if needs_pgvector || existing_has_pgvector {
+        PGVECTOR_POSTGRES_IMAGE.to_string()
+    } else {
+        DEFAULT_POSTGRES_IMAGE.to_string()
+    }
+}
+
 pub(crate) fn add_database_to_docker_compose(
     manifest_data: &ManifestData,
     docker_compose: &mut DockerCompose,
@@ -1659,9 +1687,12 @@ pub(crate) fn add_database_to_docker_compose(
     if !active_databases.contains(&database.as_str()) {
         match database.parse()? {
             Database::PostgreSQL => {
-                docker_compose
-                    .services
-                    .insert("postgresql".to_string(), postgresql_service(app_name));
+                let mut service = postgresql_service(app_name);
+                service.image = Some(postgres_image(
+                    matches!(manifest_data, ManifestData::Service(service_data) if service_data.is_mlse),
+                    docker_compose.services.get("postgresql"),
+                ));
+                docker_compose.services.insert("postgresql".to_string(), service);
                 environment.insert("DB_NAME".to_string(), format!("{}-{}-dev", app_name, name));
                 environment.insert("DB_HOST".to_string(), "postgresql".to_string());
                 environment.insert("DB_USER".to_string(), "postgresql".to_string());
@@ -3179,6 +3210,54 @@ depends_on:
             HealthTest::List(parts) => parts.join(" "),
             HealthTest::String(cmd) => cmd.clone(),
         }
+    }
+
+    fn service_with_image(image: &str) -> DockerService {
+        DockerService {
+            image: Some(image.to_string()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_postgres_image_defaults_to_plain_postgres() {
+        assert_eq!(postgres_image(false, None), DEFAULT_POSTGRES_IMAGE);
+        assert_eq!(
+            postgres_image(false, Some(&service_with_image(DEFAULT_POSTGRES_IMAGE))),
+            DEFAULT_POSTGRES_IMAGE
+        );
+    }
+
+    #[test]
+    fn test_postgres_image_uses_pgvector_for_mlse() {
+        assert_eq!(postgres_image(true, None), PGVECTOR_POSTGRES_IMAGE);
+    }
+
+    /// Adding mlse to an application that already runs plain postgres must
+    /// upgrade the shared service, not leave it without the extension.
+    #[test]
+    fn test_postgres_image_upgrades_existing_plain_postgres_for_mlse() {
+        assert_eq!(
+            postgres_image(true, Some(&service_with_image(DEFAULT_POSTGRES_IMAGE))),
+            PGVECTOR_POSTGRES_IMAGE
+        );
+    }
+
+    /// The shared service is rewritten whenever any service is added, so a
+    /// later non-mlse addition must not downgrade it back to plain postgres.
+    #[test]
+    fn test_postgres_image_keeps_pgvector_when_a_later_service_is_added() {
+        assert_eq!(
+            postgres_image(false, Some(&service_with_image(PGVECTOR_POSTGRES_IMAGE))),
+            PGVECTOR_POSTGRES_IMAGE
+        );
+    }
+
+    #[test]
+    fn test_pgvector_image_matches_default_postgres_major() {
+        // postgres:latest is PostgreSQL 18 on Debian trixie; keep the pgvector
+        // tag on the same major and OS so volumes and collations stay valid.
+        assert!(PGVECTOR_POSTGRES_IMAGE.ends_with(":pg18-trixie"));
     }
 
     /// Regression test for the production outage this stack was migrated to

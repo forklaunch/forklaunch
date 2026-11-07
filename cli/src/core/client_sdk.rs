@@ -253,6 +253,7 @@ pub(crate) fn get_client_sdk_additional_deps(
     is_messaging_enabled: bool,
     is_cac_enabled: bool,
     is_ecommerce_enabled: bool,
+    is_mlse_enabled: bool,
 ) -> HashMap<String, String> {
     let mut additional_deps = HashMap::new();
 
@@ -270,6 +271,9 @@ pub(crate) fn get_client_sdk_additional_deps(
     }
     if is_ecommerce_enabled {
         additional_deps.insert(format!("@{app_name}/ecommerce"), "workspace:*".to_string());
+    }
+    if is_mlse_enabled {
+        additional_deps.insert(format!("@{app_name}/mlse"), "workspace:*".to_string());
     }
     additional_deps
 }
@@ -537,10 +541,14 @@ mod compliance_tests {
     #[test]
     fn client_sdk_depends_on_every_module_package_it_exports() {
         // compliance.ts imports `<module>SdkClient` from clientSdk.ts for every
-        // db-backed module, so the client SDK must depend on ecommerce too.
-        let deps = get_client_sdk_additional_deps(&"shop".to_string(), true, true, false, false, true);
+        // db-backed module, so the client SDK must depend on ecommerce and
+        // mlse too.
+        let deps = get_client_sdk_additional_deps(&"shop".to_string(), true, true, false, false, true, false);
         assert_eq!(deps.get("@shop/ecommerce").map(String::as_str), Some("workspace:*"));
-        let deps = get_client_sdk_additional_deps(&"shop".to_string(), true, true, false, false, false);
+        let deps = get_client_sdk_additional_deps(&"shop".to_string(), true, true, false, false, false, false);
+        assert!(!deps.contains_key("@shop/ecommerce"));
+        let deps = get_client_sdk_additional_deps(&"shop".to_string(), true, true, false, false, false, true);
+        assert_eq!(deps.get("@shop/mlse").map(String::as_str), Some("workspace:*"));
         assert!(!deps.contains_key("@shop/ecommerce"));
     }
 
