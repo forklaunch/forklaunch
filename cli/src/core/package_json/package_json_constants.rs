@@ -13,7 +13,7 @@ pub(crate) const ESLINT_VERSION: &str = "^10.0.1";
 // @types/jest
 pub(crate) const JEST_TYPES_VERSION: &str = "^30.0.0";
 // @types/node
-pub(crate) const TYPES_NODE_VERSION: &str = "^26.6.5";
+pub(crate) const TYPES_NODE_VERSION: &str = "^26.6.6";
 // jest
 pub(crate) const JEST_VERSION: &str = "^30.5.2";
 // oxlint
@@ -33,7 +33,7 @@ pub(crate) const VITEST_VERSION: &str = "^5.0.5";
 
 // Application package.json dependencies constants
 // globals
-pub(crate) const GLOBALS_VERSION: &str = "^17.13.0";
+pub(crate) const GLOBALS_VERSION: &str = "^17.14.0";
 // husky
 pub(crate) const HUSKY_VERSION: &str = "^9.1.7";
 // lint-staged
