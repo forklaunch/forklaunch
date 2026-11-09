@@ -1,7 +1,10 @@
+use agent::AgentCommand;
 use anyhow::Result;
 use application::ApplicationCommand;
 use clap::{ArgMatches, Command};
+use frontend::FrontendCommand;
 use library::LibraryCommand;
+use job::JobCommand;
 use module::ModuleCommand;
 use router::RouterCommand;
 use service::ServiceCommand;
@@ -9,18 +12,26 @@ use worker::WorkerCommand;
 
 use crate::{CliCommand, core::command::command};
 
+pub(crate) mod agent;
 pub(crate) mod application;
+pub(crate) mod frontend;
 pub(crate) mod library;
+pub(crate) mod job;
 pub(crate) mod module;
 pub(crate) mod relay;
 pub(crate) mod router;
+pub(crate) mod rust_project;
 pub(crate) mod service;
 pub(crate) mod storefront;
+mod typescript_workspace;
 pub(crate) mod worker;
 
 // TODO: add injected token into struct
 #[derive(Debug)]
 pub(crate) struct InitCommand {
+    frontend: FrontendCommand,
+    job: JobCommand,
+    agent: AgentCommand,
     application: ApplicationCommand,
     library: LibraryCommand,
     module: ModuleCommand,
@@ -32,6 +43,9 @@ pub(crate) struct InitCommand {
 impl InitCommand {
     pub(crate) fn new() -> Self {
         Self {
+            frontend: FrontendCommand::new(),
+            job: JobCommand::new(),
+            agent: AgentCommand::new(),
             application: ApplicationCommand::new(),
             library: LibraryCommand::new(),
             module: ModuleCommand::new(),
@@ -47,6 +61,9 @@ impl CliCommand for InitCommand {
         command("init", "Initialize a new forklaunch project")
             .alias("add")
             .subcommand_required(true)
+            .subcommand(self.frontend.command())
+            .subcommand(self.job.command())
+            .subcommand(self.agent.command())
             .subcommand(self.application.command())
             .subcommand(self.library.command())
             .subcommand(self.module.command())
@@ -56,7 +73,13 @@ impl CliCommand for InitCommand {
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
+        if typescript_workspace::attach_if_needed(matches)? {
+            return Ok(());
+        }
         match matches.subcommand() {
+            Some(("job", sub_matches)) => self.job.handler(sub_matches),
+            Some(("frontend", sub_matches)) => self.frontend.handler(sub_matches),
+            Some(("agent", sub_matches)) => self.agent.handler(sub_matches),
             Some(("application", sub_matches)) => self.application.handler(sub_matches),
             Some(("library", sub_matches)) => self.library.handler(sub_matches),
             Some(("module", sub_matches)) => self.module.handler(sub_matches),

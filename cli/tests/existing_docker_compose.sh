@@ -57,7 +57,7 @@ RUST_BACKTRACE=1 $FL init application test-app \
     -d "postgresql" \
     -v "zod" \
     -f "prettier" \
-    -l "eslint" \
+    -l "oxlint" \
     -F "express" \
     -r "node" \
     -t "vitest" \
@@ -109,7 +109,8 @@ if ! grep -q "hostname: test-service" infra/docker-compose.yaml; then
     exit 1
 fi
 
-if ! grep -q "image: test-app-test-service-node:latest" infra/docker-compose.yaml; then
+# Services share the application's TypeScript image (Dockerfile.typescript).
+if ! grep -q "image: test-app-typescript:local" infra/docker-compose.yaml; then
     echo "ERROR: test-service image not found"
     exit 1
 fi

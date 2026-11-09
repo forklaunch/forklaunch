@@ -260,6 +260,34 @@ describe('compliant fields', () => {
     });
   });
 
+  it('seals a value written by a bulk update, and refuses one it cannot keep in step', async () => {
+    const id = await seed();
+    await inTenant(TENANT, async () => {
+      const em = orm.em.fork();
+      const from = sql.length;
+      // A non-queryable field: sealed on the way into the database.
+      await em.nativeUpdate(Patient, { id }, { name: 'Jane Roe' });
+      expect(writes(from).join('\n')).not.toContain('Jane Roe');
+      const [row] = await em
+        .getConnection()
+        .execute('select name from patient where id = ?', [id]);
+      expect(String((row as { name: string }).name)).not.toContain('Jane Roe');
+      const loaded = await orm.em.fork().findOneOrFail(Patient, id);
+      expect(loaded.name.deanon).toBe('Jane Roe');
+
+      // A queryable field keeps its sealed value in a second column the
+      // update would not write.
+      await expect(
+        em.nativeUpdate(Patient, { id }, { email: 'jane@elsewhere.com' })
+      ).rejects.toThrow(/bulk update/);
+      // Still refused in `where`.
+      // @ts-expect-error -- `name` is not queryable
+      await expect(em.nativeUpdate(Patient, { name: 'Jane Roe' }, { visits: 4 })).rejects.toThrow(
+        /cannot be queried/
+      );
+    });
+  });
+
   it('enforces uniqueness on the blind index', async () => {
     await seed();
     await expect(seed()).rejects.toThrow(/UNIQUE/i);

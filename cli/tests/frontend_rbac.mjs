@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import { ROLES, ROLE_PERMISSIONS, PLATFORM_ADMIN_ROLES, PLATFORM_EDITOR_ROLES, PLATFORM_VIEWER_ROLES, PLATFORM_SYSTEM_ROLES, PERMISSIONS } from '../../blueprint/core/auth/rbac.ts';
+assert(PLATFORM_ADMIN_ROLES.has(ROLES.OWNER));
+assert(PLATFORM_EDITOR_ROLES.has(ROLES.OWNER));
+assert(PLATFORM_VIEWER_ROLES.has(ROLES.OWNER));
+assert(!PLATFORM_SYSTEM_ROLES.has(ROLES.OWNER));
+assert(!PLATFORM_ADMIN_ROLES.has(ROLES.VIEWER));
+assert(!PLATFORM_ADMIN_ROLES.has(ROLES.EDITOR));
+assert(ROLE_PERMISSIONS[ROLES.OWNER].includes(PERMISSIONS.PLATFORM_WRITE));
+assert(!ROLE_PERMISSIONS[ROLES.VIEWER].includes(PERMISSIONS.PLATFORM_WRITE));
+console.log('Owner can administer their app; ordinary roles retain their limits.');

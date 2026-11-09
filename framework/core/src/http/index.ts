@@ -1,3 +1,4 @@
+export * from './bindRuntimeAuth';
 export type { ParsedQs } from 'qs';
 export * from './application/expressLikeApplication';
 export * from './cluster/cluster.types';
@@ -29,6 +30,7 @@ export * from './handlers/typedHandler';
 export * from './httpStatusCodes';
 export * from './interfaces/expressLikeRouter.interface';
 export * from './mcpGenerator/mcpGenerator';
+export * from './mcpGenerator/mcpHttpHandler';
 export * from './middleware/request/createContext.middleware';
 export * from './middleware/response/enrichExpressLikeSend.middleware';
 export * from './openApiV3Generator/openApiV3Generator';
@@ -53,3 +55,6 @@ export * from './rateLimit/index';
 export * from './types/sdk.types';
 export { MapToSdk } from './types/sdk.types';
 export * from './types/typedHandler.types';
+
+export * from './registerDelegatedSurface';
+export * from './localModelGatewayClient';

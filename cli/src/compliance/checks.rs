@@ -1606,9 +1606,25 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
         let sources = read_production_sources(&project_path);
         let registrations =
             fs::read_to_string(project_path.join("registrations.ts")).unwrap_or_default();
-        let wired = registrations.contains("S3ObjectStore");
+        // A Rust crate holds what `infra add` wrote in its own sources: the
+        // object-store factory and the capability client factories.
+        let rust_root = rust_source_root(&project_path);
+        let wired = match &rust_root {
+            Some(root) => root.join("infrastructure/s3.rs").is_file(),
+            None => registrations.contains("S3ObjectStore"),
+        };
+        let rust_capabilities = rust_root
+            .as_ref()
+            .and_then(|root| fs::read_to_string(root.join("capabilities/mod.rs")).ok())
+            .unwrap_or_default();
         if let Some(declared_in) = declared.as_ref().and_then(|d| d.get(&project)) {
             let message = match (*declared_in, wired) {
+                (true, false) if rust_root.is_some() => Some(
+                    "the manifest declares an object store but the crate has no infrastructure/s3.rs factory — run `forklaunch infra add <service> object-store`",
+                ),
+                (false, true) if rust_root.is_some() => Some(
+                    "the crate has an infrastructure/s3.rs object store but the manifest declares no object store — the platform will not provision a bucket or grant access to one",
+                ),
                 (true, false) => Some(
                     "the manifest declares an object store but registrations.ts registers no S3ObjectStore — the service has nothing to call it with",
                 ),
@@ -1637,9 +1653,18 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
                 // A registration only counts as the capability in a service that
                 // reads the gateway contract: billing-stripe's own keyed
                 // `StripeClient` is ordinary Stripe, not undeclared payments.
-                let is_wired = registrations
-                    .contains(&format!("{}:", capability.registration_key))
-                    && (is_declared || is_managed_instance(&project_path, &sources));
+                let factory = if capability.id == "models" {
+                    "fn models_client(".to_owned()
+                } else {
+                    format!("fn {}_client(", capability.id)
+                };
+                let registered = if rust_root.is_some() {
+                    rust_capabilities.contains(&factory)
+                } else {
+                    registrations.contains(&format!("{}:", capability.registration_key))
+                };
+                let is_wired =
+                    registered && (is_declared || is_managed_instance(&project_path, &sources));
                 // A managed template may enable the model gateway for the whole
                 // product (`managed template update --gateway-*`) and build the
                 // client by hand: the platform serves it without a manifest
@@ -1648,6 +1673,16 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
                     && !is_declared
                     && is_managed_instance(&project_path, &sources);
                 let message = match (is_declared, is_wired && !template_models) {
+                    (true, false) if rust_root.is_some() => Some(format!(
+                        "the manifest declares {} but capabilities/mod.rs has no {}) — the service has nothing to call it with",
+                        capability.id,
+                        factory.trim_start_matches("fn ")
+                    )),
+                    (false, true) if rust_root.is_some() => Some(format!(
+                        "capabilities/mod.rs builds {}) but the manifest does not declare {} — the platform will not provision it for this service",
+                        factory.trim_start_matches("fn "),
+                        capability.id
+                    )),
                     (true, false) => Some(format!(
                         "the manifest declares {} but registrations.ts registers no {} — the service has nothing to call it with",
                         capability.id, capability.registration_key
@@ -2044,6 +2079,17 @@ mod voice_tests {
             assert!(LOCAL_CHECK_IDS.contains(&id));
         }
     }
+}
+
+/// The source root of a Rust project crate (`lib.rs` beside `Cargo.toml`,
+/// or under `src/`); None for a TypeScript project.
+fn rust_source_root(project_path: &Path) -> Option<std::path::PathBuf> {
+    if !project_path.join("Cargo.toml").is_file() || project_path.join("registrations.ts").is_file() {
+        return None;
+    }
+    [project_path.to_path_buf(), project_path.join("src")]
+        .into_iter()
+        .find(|root| root.join("lib.rs").is_file())
 }
 
 #[cfg(test)]
@@ -2776,6 +2822,47 @@ mod payments_tests {
                 "getEnvVar('INSTANCE_HMAC_KEY'); StripeClient: { factory: () => createStripeClient({ Stripe }) }"
             ),
             vec!["payments"]
+        );
+    }
+
+    #[test]
+    fn a_rust_crate_is_wired_by_the_factories_infra_add_writes() {
+        let write = |name: &str, files: &[(&str, &str)]| {
+            let root = std::env::temp_dir().join(format!("fl-rust-wiring-{name}"));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(root.join(".forklaunch")).unwrap();
+            let crate_dir = root.join("src/modules/notes");
+            std::fs::write(
+                root.join(".forklaunch/manifest.toml"),
+                "app_name = \"demo\"\n\n[[projects]]\nname = \"notes\"\n[projects.resources]\nobject_store = \"s3\"\ncapabilities = [\"models\", \"email\"]\n",
+            )
+            .unwrap();
+            for (path, text) in [("Cargo.toml", "[package]\nname = \"notes\"\n"), ("lib.rs", "pub mod capabilities;\n")]
+                .iter()
+                .chain(files)
+            {
+                std::fs::create_dir_all(crate_dir.join(path).parent().unwrap()).unwrap();
+                std::fs::write(crate_dir.join(path), text).unwrap();
+            }
+            let mut checks: Vec<String> = run_local_checks(&root.join("src/modules"))
+                .unwrap()
+                .into_iter()
+                .filter(|f| f.check == "capability-wiring" || f.check == "object-store-wiring")
+                .map(|f| format!("{}:{}", f.check, f.subject))
+                .collect();
+            checks.sort();
+            let _ = std::fs::remove_dir_all(&root);
+            checks
+        };
+        let module = "pub fn email_client() -> X { todo!() }\npub fn models_client() -> Y { todo!() }\n";
+        assert!(write("wired", &[("capabilities/mod.rs", module), ("infrastructure/s3.rs", "")]).is_empty());
+        assert_eq!(
+            write("unwired", &[]),
+            vec![
+                "capability-wiring:email",
+                "capability-wiring:models",
+                "object-store-wiring:registrations.ts"
+            ]
         );
     }
 

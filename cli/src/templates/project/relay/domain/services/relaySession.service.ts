@@ -163,9 +163,17 @@ export class RelaySessionService {
       return null;
     }
 
-    handoff.consumedAt = new Date();
-    this.em.persist(handoff);
-    await this.em.flush();
+    // A read followed by flush lets two request managers redeem one ticket.
+    // Claim it with one conditional write, including expiry at claim time.
+    const consumedAt = new Date();
+    const claimed = await this.em.nativeUpdate(
+      RelaySessionHandoff,
+      { id: ticketId, consumedAt: null, expiresAt: { $gt: consumedAt } },
+      { consumedAt }
+    );
+    if (claimed !== 1) {
+      return null;
+    }
 
     const redirectTo = sanitizeRedirectPath(handoff.redirectTo);
     if (!handoff.ownerUserId) {

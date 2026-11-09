@@ -22,6 +22,13 @@ export type BillingPortalMappers<
   };
   UpdateBillingPortalMapper: {
     entity: MapperEntities['UpdateBillingPortalMapper'];
+    /** Cache-only DTO update; preserve session/customer identities. */
+    toCachedDto?: (
+      dto: MapperDomains['UpdateBillingPortalMapper'],
+      existing: MapperDomains['BillingPortalMapper'],
+      em: EntityManager,
+      ...args: unknown[]
+    ) => Promise<MapperDomains['BillingPortalMapper']>;
     toEntity: (
       dto: MapperDomains['UpdateBillingPortalMapper'],
       em: EntityManager,

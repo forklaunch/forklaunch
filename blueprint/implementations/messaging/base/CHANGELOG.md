@@ -1,5 +1,11 @@
 # @forklaunch/implementation-messaging-base
 
+## 1.1.10
+
+### Patch Changes
+
+- d2319b3: SMS services no longer `await` MikroORM's synchronous `persist` inside their transactions. No behaviour change.
+
 ## 1.1.9
 
 ### Patch Changes

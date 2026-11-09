@@ -76,7 +76,7 @@ export class BasePaymentService<
       ...(args[0] instanceof EntityManager ? args.slice(1) : args)
     );
     await (em ?? this.em).transactional(async (innerEm) => {
-      await innerEm.persist(payment);
+      innerEm.persist(payment);
     });
     return this.mappers.PaymentMapper.toDto(payment);
   }
@@ -148,7 +148,7 @@ export class BasePaymentService<
     if (payment.status !== PaymentStatus.SUCCEEDED) {
       entityManager.assign(payment, { status: PaymentStatus.SUCCEEDED });
       await entityManager.transactional(async (innerEm) => {
-        await innerEm.persist(payment);
+        innerEm.persist(payment);
       });
     }
     return this.mappers.PaymentMapper.toDto(
@@ -177,7 +177,7 @@ export class BasePaymentService<
     if (payment.status !== PaymentStatus.SUCCEEDED) {
       entityManager.assign(payment, { status: PaymentStatus.FAILED });
       await entityManager.transactional(async (innerEm) => {
-        await innerEm.persist(payment);
+        innerEm.persist(payment);
       });
     }
     return this.mappers.PaymentMapper.toDto(

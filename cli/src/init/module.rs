@@ -6,14 +6,14 @@ use convert_case::{Case, Casing};
 use rustyline::{Editor, history::DefaultHistory};
 use termcolor::{ColorChoice, StandardStream, WriteColor};
 
-use super::service::generate_service_package_json;
+use super::{rust_project, service::generate_service_package_json, storefront::StorefrontCommand};
 use crate::{
     CliCommand,
     constants::{
         Database, ERROR_FAILED_TO_CREATE_PACKAGE_JSON, ERROR_FAILED_TO_GENERATE_PNPM_WORKSPACE,
         ERROR_FAILED_TO_PARSE_MANIFEST, ERROR_FAILED_TO_READ_MANIFEST,
         ERROR_FAILED_TO_WRITE_DOCKER_COMPOSE, ERROR_FAILED_TO_WRITE_MANIFEST, Module, Runtime,
-        get_service_module_cache, get_service_module_description, get_service_module_name,
+        get_service_module_cache, get_service_module_description, get_service_module_name, ensure_module_offered, module_value_parser, offered_modules,
     },
     core::{
         ast::injections::inject_into_client_sdk::ClientSdkSpecialCase,
@@ -41,8 +41,6 @@ use crate::{
     prompt::{ArrayCompleter, prompt_with_validation},
 };
 
-use super::storefront::StorefrontCommand;
-
 #[derive(Debug)]
 pub(super) struct ModuleCommand {
     storefront: StorefrontCommand,
@@ -63,6 +61,13 @@ impl CliCommand for ModuleCommand {
             .subcommand(self.storefront.command())
             .arg(Arg::new("name").help("The name of the module"))
             .arg(
+                Arg::new("language")
+                    .long("language")
+                    .help("Project language to generate")
+                    .value_parser(rust_project::PROJECT_LANGUAGE_VARIANTS)
+                    .default_value("typescript"),
+            )
+            .arg(
                 Arg::new("base_path")
                     .short('p')
                     .long("path")
@@ -72,7 +77,7 @@ impl CliCommand for ModuleCommand {
                 Arg::new("module")
                     .short('m')
                     .long("module")
-                    .value_parser(Module::VARIANTS)
+                    .value_parser(module_value_parser())
                     .help("The module to initialize"),
             )
             .arg(
@@ -99,6 +104,9 @@ impl CliCommand for ModuleCommand {
         // kind. Leaf behaviour (`init module -m …`) is unchanged.
         if let Some(("storefront", sub_matches)) = matches.subcommand() {
             return self.storefront.handler(sub_matches);
+        }
+        if rust_project::uses_rust_generation(matches) {
+            return rust_project::generate_rust_module(matches);
         }
         let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
@@ -134,7 +142,7 @@ impl CliCommand for ModuleCommand {
             "module",
             matches,
             "module",
-            Some(&Module::VARIANTS),
+            Some(&offered_modules()),
             |input| {
                 let mut modules = manifest_data.projects.iter().filter_map(|project| {
                     if let Some(variant) = &project.variant {
@@ -148,6 +156,7 @@ impl CliCommand for ModuleCommand {
             |input| format!("Conflicting module type selected. You will not be able to add this module without deleting the existing module, {}", get_service_module_name(&input.parse().unwrap())),
         )?
         .parse()?;
+        ensure_module_offered(&module)?;
 
         // The relay module is not a new service - it injects the managed-apps
         // OAuth session-ingest endpoint into the app's existing iam service, so
@@ -186,11 +195,16 @@ impl CliCommand for ModuleCommand {
         // shared cache records; mint one only for key-less apps.
         let generated_encryption_key =
             crate::core::env_defaults::find_existing_encryption_key(&base_path)
-                .unwrap_or_else(|| {
-                    crate::core::manifest::service::generate_random_secret(32)
-                });
+                .unwrap_or_else(|| crate::core::manifest::service::generate_random_secret(32));
 
         let mut service_data = ServiceManifestData {
+            language: manifest_data.language.clone(),
+            application_language: manifest_data.application_language.clone(),
+            sdk_targets: manifest_data.sdk_targets.clone(),
+            cargo_workspace: manifest_data.cargo_workspace.clone(),
+            contract_artifact_path: manifest_data.contract_artifact_path.clone(),
+            openapi_path: manifest_data.openapi_path.clone(),
+            asyncapi_path: manifest_data.asyncapi_path.clone(),
             id: manifest_data.id.clone(),
             cli_version: manifest_data.cli_version.clone(),
             app_name: name.clone(),
@@ -262,6 +276,7 @@ impl CliCommand for ModuleCommand {
             is_database_enabled: true,
             platform_application_id: manifest_data.platform_application_id.clone(),
             platform_organization_id: manifest_data.platform_organization_id.clone(),
+            framework: manifest_data.framework.clone(),
             compliance: manifest_data.compliance.clone(),
 
             is_better_auth: module.clone() == Module::BetterAuthIam,
@@ -300,9 +315,10 @@ impl CliCommand for ModuleCommand {
 
             iam_secret: None,
 
-            // These will be properly generated when initialized
-            generated_better_auth_secret: String::new(),
-            generated_hmac_secret: String::new(),
+            generated_better_auth_secret: crate::core::manifest::service::generate_random_secret(32),
+            // Share the app's HMAC secret so modules verify each other's requests.
+            generated_hmac_secret: crate::core::env_defaults::find_existing_hmac_secret(&base_path)
+                .unwrap_or_else(|| crate::core::manifest::service::generate_random_secret(32)),
             generated_encryption_key,
             otel_token: "OtelCollector".to_string(),
         };
@@ -442,6 +458,11 @@ impl CliCommand for ModuleCommand {
                 &mut service_data,
                 dryrun,
             )?;
+            if matches!(module, Module::BaseIam | Module::BetterAuthIam) {
+                crate::sdk::typescript_build::prepare_default_service(&app_root_path, "iam", &service_data.runtime, true)?;
+            }
+            rust_project::record_typescript_language(&app_root_path, &get_service_module_name(&module))?;
+            rust_project::refresh_mixed_images(&app_root_path)?;
             log_ok!(
                 stdout,
                 "{} initialized successfully!",

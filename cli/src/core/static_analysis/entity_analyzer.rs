@@ -69,18 +69,20 @@ impl EntityAnalyzer {
             .with_typescript(true);
 
         let ParserReturn {
-            program, errors, ..
+            program,
+            diagnostics: errors,
+            ..
         } = Parser::new(&allocator, &source, source_type).parse();
 
-        if !errors.is_empty() {
+        if errors.has_errors() {
             anyhow::bail!("Failed to parse entity file: {:?}", errors);
         }
 
         let mut entities = Vec::new();
 
         for stmt in &program.body {
-            if let Statement::ExportNamedDeclaration(export_decl) = stmt {
-                if let Some(Declaration::VariableDeclaration(var_decl)) = &export_decl.declaration {
+            if let Statement::ExportDeclaration(export_decl) = stmt {
+                if let Declaration::VariableDeclaration(var_decl) = &export_decl.declaration {
                     for declarator in &var_decl.declarations {
                         if let Some(init) = &declarator.init {
                             if Self::is_define_entity_call(init) {
@@ -140,7 +142,7 @@ impl EntityAnalyzer {
                 match key {
                     "name" => {
                         if let Expression::StringLiteral(lit) = &obj_prop.value {
-                            name = lit.value.as_str().to_string();
+                            name = lit.value.as_str().unwrap_or_default().to_string();
                         }
                     }
                     "properties" => {
@@ -201,16 +203,15 @@ impl EntityAnalyzer {
     /// If the expression is an arrow function, unwrap to its body expression
     fn unwrap_arrow_function<'a>(expr: &'a Expression<'a>) -> &'a Expression<'a> {
         if let Expression::ArrowFunctionExpression(arrow) = expr {
-            // expression: true means it's a concise body (no braces)
-            if arrow.expression {
-                if let Some(Statement::ExpressionStatement(expr_stmt)) =
-                    arrow.body.statements.first()
-                {
-                    return &expr_stmt.expression;
-                }
+            // A concise body (no braces) is the expression itself
+            if let Some(body_expr) = arrow.get_expression() {
+                return body_expr;
             }
             // For arrow functions with block body, try to extract the return expression
-            if let Some(Statement::ReturnStatement(ret)) = arrow.body.statements.first() {
+            if let Some(Statement::ReturnStatement(ret)) = arrow
+                .get_function_body()
+                .and_then(|body| body.statements.first())
+            {
                 if let Some(arg) = &ret.argument {
                     return arg;
                 }
@@ -297,8 +298,7 @@ impl EntityAnalyzer {
             }
             "manyToMany" => {
                 result.relation_type = Some(RelationType::ManyToMany);
-                result.type_name =
-                    format!("Collection<{}>", Self::extract_relation_target(call));
+                result.type_name = format!("Collection<{}>", Self::extract_relation_target(call));
                 result.is_collection = true;
             }
             "oneToOne" => {

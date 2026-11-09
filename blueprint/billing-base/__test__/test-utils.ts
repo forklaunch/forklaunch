@@ -31,7 +31,11 @@ export const setupTestDatabase = async (): Promise<TestSetupResult> => {
     },
     databaseType: getEnvVar('DATABASE_TYPE') as DatabaseType,
     useMigrations: false,
-    needsRedis: true
+    needsRedis: true,
+    // registrations.ts requires IAM_URL; the tests never call IAM.
+    customEnvVars: {
+      IAM_URL: 'http://localhost:8000'
+    }
   });
 
   return await harness.setup();

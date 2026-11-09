@@ -1,0 +1,10 @@
+[package]
+name = "fieldnotes-notes"
+
+[dependencies]
+framework = { package = "forklaunch-axum", version = "0.1", default-features = false, features = ["native-streams", "native-server"] }
+fieldnotes-contracts = { path = "domain" }
+axum = { version = "0.8", features = ["ws", "multipart"] }
+
+[lib]
+path = "lib.rs"

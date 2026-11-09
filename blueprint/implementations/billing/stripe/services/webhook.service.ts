@@ -52,6 +52,15 @@ export type StripeWebhookEventShape = {
 const isActiveStatus = (status: Stripe.Subscription.Status): boolean =>
   status === 'active' || status === 'trialing';
 
+// Stripe's created timestamp is Unix seconds. Keep our five-minute application
+// expiry within four-digit RFC3339 years; this does not extend the provider URL.
+const portalExpiry = (created: number): Date => {
+  if (!Number.isSafeInteger(created) || created < 0 || created > 253402300499) {
+    throw new Error('Billing webhook payload is invalid');
+  }
+  return new Date((created + 300) * 1000);
+};
+
 export class StripeWebhookService<
   SchemaValidator extends AnySchemaValidator,
   StatusEnum,
@@ -241,7 +250,7 @@ export class StripeWebhookService<
           {
             id: event.data.object.id,
             customerId: event.data.object.customer,
-            expiresAt: new Date(event.data.object.created + 5 * 60 * 1000),
+            expiresAt: portalExpiry(event.data.object.created),
             uri: event.data.object.url
           }
         );

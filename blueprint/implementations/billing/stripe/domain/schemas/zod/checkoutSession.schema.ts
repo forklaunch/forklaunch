@@ -25,12 +25,14 @@ export const CreateCheckoutSessionSchema = <
   customerId: string,
   currency: enum_(CurrencyEnum),
   paymentMethods: array(enum_(PaymentMethodEnum)),
-  uri: string,
+  uri: optional(string),
   successRedirectUri: optional(string),
   cancelRedirectUri: optional(string),
   expiresAt: date,
   status: enum_(StatusEnum),
-  stripeFields: type<StripeCreateCheckoutSessionDto<T>['stripeFields']>()
+  stripeFields: optional(
+    type<StripeCreateCheckoutSessionDto<T>['stripeFields']>()
+  )
 });
 
 export const UpdateCheckoutSessionSchema = <
@@ -60,7 +62,7 @@ export const CheckoutSessionSchema = <T extends Record<string, LiteralSchema>>(
   currency: enum_(CurrencyEnum),
   metadata: optional(unknown),
   paymentMethods: array(enum_(PaymentMethodEnum)),
-  uri: string,
+  uri: optional(string),
   successRedirectUri: optional(string),
   cancelRedirectUri: optional(string),
   expiresAt: date,

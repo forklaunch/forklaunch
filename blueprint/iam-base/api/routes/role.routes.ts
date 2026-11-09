@@ -1,3 +1,4 @@
+import { roleContract } from '../contracts/role.contract';
 import { forklaunchRouter, schemaValidator } from '@forklaunch/blueprint-core';
 import { ci, tokens } from '../../bootstrapper';
 import {
@@ -14,22 +15,37 @@ import {
 const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 
 export const roleRouter = forklaunchRouter(
-  '/role',
+  roleContract.basePath,
   schemaValidator,
   openTelemetryCollector
 );
 
-export const createRoleRoute = roleRouter.post('/', createRole);
+export const createRoleRoute = roleRouter.post(
+  roleContract.createRole.path,
+  createRole
+);
 export const createBatchRolesRoute = roleRouter.post(
-  '/batch',
+  roleContract.createBatchRoles.path,
   createBatchRoles
 );
-export const getBatchRolesRoute = roleRouter.get('/batch', getBatchRoles);
-export const getRoleRoute = roleRouter.get('/:id', getRole);
-export const updateRoleRoute = roleRouter.put('/', updateRole);
-export const updateBatchRolesRoute = roleRouter.put('/batch', updateBatchRoles);
+export const getBatchRolesRoute = roleRouter.get(
+  roleContract.getBatchRoles.path,
+  getBatchRoles
+);
+export const getRoleRoute = roleRouter.get(roleContract.getRole.path, getRole);
+export const updateRoleRoute = roleRouter.put(
+  roleContract.updateRole.path,
+  updateRole
+);
+export const updateBatchRolesRoute = roleRouter.put(
+  roleContract.updateBatchRoles.path,
+  updateBatchRoles
+);
 export const deleteBatchRolesRoute = roleRouter.delete(
-  '/batch',
+  roleContract.deleteBatchRoles.path,
   deleteBatchRoles
 );
-export const deleteRoleRoute = roleRouter.delete('/:id', deleteRole);
+export const deleteRoleRoute = roleRouter.delete(
+  roleContract.deleteRole.path,
+  deleteRole
+);

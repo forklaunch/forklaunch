@@ -1,5 +1,31 @@
 # @forklaunch/universal-sdk
 
+## 1.4.1
+
+### Patch Changes
+
+- 78d65e2: Typed SDK calls accept a `content-type` header on bodyless responses (HEAD, 204, 205, 304) when the operation declares an empty response. Real servers commonly label these; the client previously rejected them as an undeclared content type.
+- 48a22be: `hmacSignedFetch` stays assignable to Bun's `typeof fetch`: the signed wrapper now carries `preconnect` and forwards it to the underlying fetch when that fetch has one.
+- 303eb29: The portable runtime type-checks its `qs` import with or without `esModuleInterop`, and SSE events whose data is not JSON are delivered as text again.
+- 1d79034: `universalSdk({ registryOptions: { raw } })` rejects an invalid in-process registry document at creation again. 1.4.0 deferred every registry error to the first call so an unreachable registry would not fail creation; a supplied document is always reachable.
+
+## 1.4.0
+
+### Minor Changes
+
+- d2319b3: Per-request HMAC signing for internal (`access: 'internal'`) routes. Pass `hmac: { secretKey, keyId? }` to `universalSdk` (or the portable runtime config) and every API request is signed with a fresh timestamp and random nonce over the final method, full URL path (no query) and body bytes. Registry discovery stays unsigned. `createHmacAuthorization` and `hmacSignedFetch` (with the `HmacSigningOptions` type) expose the same signer for hand-written calls; they use Web Crypto, so they run in browsers, Node and Bun. The signed path is the full wire path that `@forklaunch/core` now verifies by default.
+
+  Also: response validation accepts the native integer formats Rust services emit (`int8` to `uint128`, `uint`, `int`) as bounds checks instead of warning about unknown formats, and versioned multipart bodies iterate `FormData` with `forEach` so they work in runtimes without `FormData` iterators.
+
+  Two 1.3.0 regressions are fixed. Creating an SDK no longer fails when the registry is not reachable yet; it loads on the first call, as it did before 1.3.0. Two routes sharing an `operationId` resolve to the last one again, instead of throwing "Duplicate SDK operation path".
+
+## 1.3.0
+
+### Minor Changes
+
+- Shared Rust and TypeScript SDK runtime: portable operations (`x-forklaunch-operation`), response dialects, SSE and multipart transports, registry refresh and query/mutation helpers, used by SDKs generated for Rust services.
+- Dependency refresh (from 1.2.30): `@types/node`, `prettier`, `tsup` 9.
+
 ## 1.2.31
 
 ### Patch Changes

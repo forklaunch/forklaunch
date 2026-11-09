@@ -2,9 +2,7 @@ use std::{fs::exists, path::Path};
 
 use anyhow::{Context, Result};
 use oxc_allocator::{Allocator, CloneIn, HashMap, Vec};
-use oxc_ast::ast::{
-    Declaration, ObjectPropertyKind, PropertyKey, SourceType, Statement,
-};
+use oxc_ast::ast::{Declaration, ObjectPropertyKind, PropertyKey, SourceType, Statement};
 use oxc_codegen::{Codegen, CodegenOptions};
 
 use crate::{
@@ -17,18 +15,20 @@ use crate::{
 
 /// Default property names that are part of the base properties templates
 /// and should not be copied as user-defined properties.
-const BASE_PROPERTY_NAMES: &[&str] = &["id", "_id", "createdAt", "updatedAt", "retentionAnonymizedAt"];
+const BASE_PROPERTY_NAMES: &[&str] = &[
+    "id",
+    "_id",
+    "createdAt",
+    "updatedAt",
+    "retentionAnonymizedAt",
+];
 
 /// Default import sources that are part of the base properties templates
 /// and should not be copied as user-defined imports.
 /// Note: @forklaunch/core/persistence is NOT excluded here because users may
 /// add extra specifiers (e.g., RetentionDuration). Duplicate `fp` specifiers
 /// are handled by BASE_IMPORT_SPECIFIERS below.
-const BASE_IMPORT_SOURCES: &[&str] = &[
-    "@mikro-orm/core",
-    "@mikro-orm/mongodb",
-    "uuid",
-];
+const BASE_IMPORT_SOURCES: &[&str] = &["@mikro-orm/core", "@mikro-orm/mongodb", "uuid"];
 
 /// Import specifiers from @forklaunch/core/persistence that already exist
 /// in the base properties templates. If the user's source has ONLY these
@@ -72,6 +72,35 @@ pub(crate) fn transform_base_entity_ts(
         .context(error_failed_to_read_file(&base_entity_to_copy_path))?;
     let base_entity_to_copy_text = template.content;
 
+    // A source file still as generated carries nothing of the user's to copy:
+    // the target is its template, verbatim, so switching database kinds and
+    // back returns the generated file byte for byte.
+    let generated = |name: &str| -> Option<String> {
+        let source = TEMPLATES_DIR
+            .get_file(Path::new("project").join("core").join("persistence").join(name))?
+            .contents_utf8()?
+            .to_string();
+        Some(source)
+    };
+    if let (Some(copy_template), Some(create_template)) = (
+        generated(base_entity_file_name_to_copy),
+        generated(base_entity_file_name_to_create),
+    ) {
+        let watermarked = crate::core::watermark::apply_watermark(
+            &crate::core::rendered_template::RenderedTemplate {
+                path: base_entity_to_copy_path.clone(),
+                content: copy_template.clone(),
+                context: None,
+            },
+        )?;
+        if base_entity_to_copy_text.trim() == watermarked.trim()
+            || base_entity_to_copy_text.trim() == copy_template.trim()
+        {
+            // Rendered as init renders it (the renderer drops the final newline).
+            return Ok(Some(ramhorns::Template::new(create_template.as_str())?.render(&())));
+        }
+    }
+
     let base_entity_to_copy_program = parse_ast_program(
         &allocator,
         &base_entity_to_copy_text,
@@ -79,14 +108,14 @@ pub(crate) fn transform_base_entity_ts(
     );
 
     // Extract user-defined imports (not part of the base template)
-    let mut user_defined_imports = Vec::new_in(&allocator);
+    let mut user_defined_imports = Vec::new_in(&&allocator);
     for stmt in base_entity_to_copy_program.body.iter() {
         let import = match stmt {
             Statement::ImportDeclaration(import) => import,
             _ => continue,
         };
 
-        let source = import.source.value.as_str();
+        let source = import.source.value.as_str().unwrap_or_default();
 
         // Fully excluded sources — never copy
         if BASE_IMPORT_SOURCES.contains(&source) {
@@ -98,13 +127,11 @@ pub(crate) fn transform_base_entity_ts(
         // (e.g., `RetentionDuration`), keep the import so those aren't lost.
         if source == FORKLAUNCH_PERSISTENCE_SOURCE {
             if let Some(specifiers) = &import.specifiers {
-                let all_base = specifiers.iter().all(|s| {
-                    match s {
-                        oxc_ast::ast::ImportDeclarationSpecifier::ImportSpecifier(spec) => {
-                            BASE_PERSISTENCE_SPECIFIERS.contains(&spec.local.name.as_str())
-                        }
-                        _ => false,
+                let all_base = specifiers.iter().all(|s| match s {
+                    oxc_ast::ast::ImportDeclarationSpecifier::ImportSpecifier(spec) => {
+                        BASE_PERSISTENCE_SPECIFIERS.contains(&spec.local.name.as_str())
                     }
+                    _ => false,
                 });
                 if all_base {
                     continue;
@@ -116,15 +143,18 @@ pub(crate) fn transform_base_entity_ts(
     }
 
     // Extract user-defined properties from the exported object literal
-    let mut user_defined_properties = HashMap::new_in(&allocator);
+    // Keyed by `&str` (not `Ident`) so the hashing, and therefore the order the
+    // properties are re-inserted in, matches the previous `Atom`-keyed map.
+    let mut user_defined_properties: HashMap<&str, ObjectPropertyKind> =
+        HashMap::new_in(&&allocator);
     for stmt in base_entity_to_copy_program.body.iter() {
         let export_decl = match stmt {
-            Statement::ExportNamedDeclaration(export) => export,
+            Statement::ExportDeclaration(export) => export,
             _ => continue,
         };
 
         let var_decl = match &export_decl.declaration {
-            Some(Declaration::VariableDeclaration(var_decl)) => var_decl,
+            Declaration::VariableDeclaration(var_decl) => var_decl,
             _ => continue,
         };
 
@@ -135,7 +165,7 @@ pub(crate) fn transform_base_entity_ts(
                         if let PropertyKey::StaticIdentifier(id) = &obj_prop.key {
                             if !BASE_PROPERTY_NAMES.contains(&id.name.as_str()) {
                                 user_defined_properties.insert(
-                                    id.name.clone(),
+                                    id.name.as_str(),
                                     ObjectPropertyKind::ObjectProperty(
                                         obj_prop.clone_in(&allocator),
                                     ),
@@ -179,12 +209,12 @@ pub(crate) fn transform_base_entity_ts(
     // Inject user-defined properties into the target object literal
     for stmt in base_entity_to_create_program.body.iter_mut() {
         let export_decl = match stmt {
-            Statement::ExportNamedDeclaration(export) => export,
+            Statement::ExportDeclaration(export) => export,
             _ => continue,
         };
 
         let var_decl = match &mut export_decl.declaration {
-            Some(Declaration::VariableDeclaration(var_decl)) => var_decl,
+            Declaration::VariableDeclaration(var_decl) => var_decl,
             _ => continue,
         };
 
@@ -220,18 +250,12 @@ mod tests {
         let persistence_dir = temp_dir.path().join("core").join("persistence");
         create_dir_all(&persistence_dir).expect("Failed to create persistence directory");
 
-        write(
-            persistence_dir.join("sql.base.properties.ts"),
-            sql_content,
-        )
-        .expect("Failed to write sql.base.properties.ts");
+        write(persistence_dir.join("sql.base.properties.ts"), sql_content)
+            .expect("Failed to write sql.base.properties.ts");
 
         if let Some(nosql) = nosql_content {
-            write(
-                persistence_dir.join("nosql.base.properties.ts"),
-                nosql,
-            )
-            .expect("Failed to write nosql.base.properties.ts");
+            write(persistence_dir.join("nosql.base.properties.ts"), nosql)
+                .expect("Failed to write nosql.base.properties.ts");
         }
 
         temp_dir
@@ -250,8 +274,7 @@ export const sqlBaseProperties = {
         let temp_dir = create_temp_structure(sql_content, Some("existing"));
         let cache = RenderedTemplatesCache::new();
 
-        let result =
-            transform_base_entity_ts(&cache, temp_dir.path(), &Database::MongoDB);
+        let result = transform_base_entity_ts(&cache, temp_dir.path(), &Database::MongoDB);
 
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -271,8 +294,7 @@ export const sqlBaseProperties = {
         let temp_dir = create_temp_structure(sql_content, None);
         let cache = RenderedTemplatesCache::new();
 
-        let result =
-            transform_base_entity_ts(&cache, temp_dir.path(), &Database::MongoDB);
+        let result = transform_base_entity_ts(&cache, temp_dir.path(), &Database::MongoDB);
 
         assert!(result.is_ok());
         let code = result.unwrap().unwrap();
@@ -300,8 +322,7 @@ export const sqlBaseProperties = {
         let temp_dir = create_temp_structure(sql_content, None);
         let cache = RenderedTemplatesCache::new();
 
-        let result =
-            transform_base_entity_ts(&cache, temp_dir.path(), &Database::MongoDB);
+        let result = transform_base_entity_ts(&cache, temp_dir.path(), &Database::MongoDB);
 
         assert!(result.is_ok());
         let code = result.unwrap().unwrap();
@@ -330,8 +351,7 @@ export const sqlBaseProperties = {
         let temp_dir = create_temp_structure(sql_content, None);
         let cache = RenderedTemplatesCache::new();
 
-        let result =
-            transform_base_entity_ts(&cache, temp_dir.path(), &Database::MongoDB);
+        let result = transform_base_entity_ts(&cache, temp_dir.path(), &Database::MongoDB);
 
         assert!(result.is_ok());
         let code = result.unwrap().unwrap();
@@ -368,8 +388,7 @@ export const nosqlBaseProperties = {
 
         let cache = RenderedTemplatesCache::new();
 
-        let result =
-            transform_base_entity_ts(&cache, temp_dir.path(), &Database::PostgreSQL);
+        let result = transform_base_entity_ts(&cache, temp_dir.path(), &Database::PostgreSQL);
 
         assert!(result.is_ok());
         let code = result.unwrap().unwrap();

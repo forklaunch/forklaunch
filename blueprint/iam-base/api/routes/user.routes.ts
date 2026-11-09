@@ -1,3 +1,4 @@
+import { userContract } from '../contracts/user.contract';
 import { forklaunchRouter, schemaValidator } from '@forklaunch/blueprint-core';
 import { ci, tokens } from '../../bootstrapper';
 import {
@@ -16,30 +17,45 @@ import {
 const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 
 export const userRouter = forklaunchRouter(
-  '/user',
+  userContract.basePath,
   schemaValidator,
   openTelemetryCollector
 );
 
-export const createUserRoute = userRouter.post('/', createUser);
+export const createUserRoute = userRouter.post(
+  userContract.createUser.path,
+  createUser
+);
 export const createBatchUsersRoute = userRouter.post(
-  '/batch',
+  userContract.createBatchUsers.path,
   createBatchUsers
 );
-export const getBatchUsersRoute = userRouter.get('/batch', getBatchUsers);
+export const getBatchUsersRoute = userRouter.get(
+  userContract.getBatchUsers.path,
+  getBatchUsers
+);
 export const surfaceRolesRoute = userRouter.get(
-  '/:id/surface-roles',
+  userContract.surfaceRoles.path,
   surfaceRoles
 );
 export const surfacePermissionsRoute = userRouter.get(
-  '/:id/surface-permissions',
+  userContract.surfacePermissions.path,
   surfacePermissions
 );
-export const getUserRoute = userRouter.get('/:id', getUser);
-export const updateUserRoute = userRouter.put('/', updateUser);
-export const updateBatchUsersRoute = userRouter.put('/batch', updateBatchUsers);
+export const getUserRoute = userRouter.get(userContract.getUser.path, getUser);
+export const updateUserRoute = userRouter.put(
+  userContract.updateUser.path,
+  updateUser
+);
+export const updateBatchUsersRoute = userRouter.put(
+  userContract.updateBatchUsers.path,
+  updateBatchUsers
+);
 export const deleteBatchUsersRoute = userRouter.delete(
-  '/batch',
+  userContract.deleteBatchUsers.path,
   deleteBatchUsers
 );
-export const deleteUserRoute = userRouter.delete('/:id', deleteUser);
+export const deleteUserRoute = userRouter.delete(
+  userContract.deleteUser.path,
+  deleteUser
+);

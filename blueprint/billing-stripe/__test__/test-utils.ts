@@ -17,12 +17,32 @@ import dotenv from 'dotenv';
 import * as path from 'path';
 import { PartyEnum } from '../domain/enum/party.enum';
 import { StatusEnum } from '../domain/enum/status.enum';
+import './stripe-mock';
+import { startStripeStub, StripeStub } from './stripe-stub';
 
 export { TEST_TOKENS, TestSetupResult };
 
 let harness: BlueprintTestHarness;
+let stripeStub: StripeStub | undefined;
 
 dotenv.config({ path: path.join(__dirname, '../.env.test') });
+
+/**
+ * Tests talk to an in-memory Stripe stub unless STRIPE_LIVE_TESTS=1, which
+ * runs them against the Stripe test API with the STRIPE_API_KEY you provide.
+ */
+const liveStripe = process.env.STRIPE_LIVE_TESTS === '1';
+if (liveStripe && !process.env.STRIPE_API_KEY) {
+  throw new Error(
+    'STRIPE_LIVE_TESTS=1 needs a Stripe test-mode STRIPE_API_KEY'
+  );
+}
+
+const stripeApiKey = () =>
+  liveStripe ? getEnvVar('STRIPE_API_KEY') : 'sk_test_forklaunch_stub';
+const stripeWebhookSecret = () =>
+  (liveStripe ? process.env.STRIPE_WEBHOOK_SECRET : undefined) ||
+  'whsec_forklaunch_stub';
 
 export const setupTestDatabase = async (): Promise<TestSetupResult> => {
   harness = new BlueprintTestHarness({
@@ -40,12 +60,15 @@ export const setupTestDatabase = async (): Promise<TestSetupResult> => {
     useMigrations: false,
     needsRedis: true,
     customEnvVars: {
-      STRIPE_API_KEY: getEnvVar('STRIPE_API_KEY'),
-      STRIPE_WEBHOOK_SECRET: getEnvVar('STRIPE_WEBHOOK_SECRET')
+      // registrations.ts requires IAM_URL; the tests never call IAM.
+      IAM_URL: 'http://localhost:8000',
+      STRIPE_API_KEY: stripeApiKey(),
+      STRIPE_WEBHOOK_SECRET: stripeWebhookSecret()
     },
     onSetup: async () => {
+      if (!liveStripe) stripeStub = await startStripeStub();
       const Stripe = (await import('stripe')).default;
-      const stripe = new Stripe(getEnvVar('STRIPE_API_KEY'));
+      const stripe = new Stripe(stripeApiKey());
 
       const paymentMethod = await stripe.paymentMethods.create({
         type: 'card',
@@ -87,6 +110,8 @@ export const cleanupTestDatabase = async (): Promise<void> => {
   if (harness) {
     await harness.cleanup();
   }
+  await stripeStub?.close();
+  stripeStub = undefined;
 };
 
 export async function clearDatabase(options?: {

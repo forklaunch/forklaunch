@@ -109,7 +109,7 @@ pub(crate) fn transform_mikroorm_config_ts(
                     _ => continue,
                 };
 
-                let mut new_properties = Vec::new_in(&allocator);
+                let mut new_properties = Vec::new_in(&&allocator);
                 let mut visited_properties = HashSet::new();
 
                 for prop in expression.properties.iter() {
@@ -237,7 +237,7 @@ pub(crate) fn transform_mikroorm_config_ts(
                     _ => continue,
                 };
 
-                let mut new_properties = Vec::new_in(&allocator);
+                let mut new_properties = Vec::new_in(&&allocator);
                 let mut visited_properties = HashSet::new();
 
                 for property in expression.properties.iter_mut() {

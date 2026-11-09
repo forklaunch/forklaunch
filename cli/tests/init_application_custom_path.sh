@@ -14,7 +14,7 @@ RUST_BACKTRACE=1 $FL init application "test-app-current" \
     -d "postgresql" \
     -v "zod" \
     -f "prettier" \
-    -l "eslint" \
+    -l "oxlint" \
     -F "express" \
     -r "node" \
     -t "vitest" \
@@ -37,7 +37,7 @@ RUST_BACKTRACE=1 $FL init application "test-app-custom" \
     -d "postgresql" \
     -v "zod" \
     -f "prettier" \
-    -l "eslint" \
+    -l "oxlint" \
     -F "express" \
     -r "node" \
     -t "vitest" \

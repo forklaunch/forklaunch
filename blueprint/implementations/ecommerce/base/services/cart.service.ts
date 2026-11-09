@@ -140,7 +140,7 @@ export class BaseCartService<
       ...(args[0] instanceof EntityManager ? args.slice(1) : args)
     );
     await (em ?? this.em).transactional(async (innerEm) => {
-      await innerEm.persist(cart);
+      innerEm.persist(cart);
     });
     const dto = await this.mappers.CartMapper.toDto(cart);
     await this.warmCache(dto);
@@ -223,7 +223,7 @@ export class BaseCartService<
     }
     entityManager.assign(cart, { items });
     await entityManager.transactional(async (innerEm) => {
-      await innerEm.persist(cart);
+      innerEm.persist(cart);
     });
     const dto = await this.mappers.CartMapper.toDto(
       cart as InferEntity<MapperEntities['CartMapper']>
@@ -249,7 +249,7 @@ export class BaseCartService<
     );
     entityManager.assign(cart, { items });
     await entityManager.transactional(async (innerEm) => {
-      await innerEm.persist(cart);
+      innerEm.persist(cart);
     });
     const dto = await this.mappers.CartMapper.toDto(
       cart as InferEntity<MapperEntities['CartMapper']>
@@ -269,7 +269,7 @@ export class BaseCartService<
     );
     entityManager.assign(cart, { items: [] });
     await entityManager.transactional(async (innerEm) => {
-      await innerEm.persist(cart);
+      innerEm.persist(cart);
     });
     await this.warmCache(
       await this.mappers.CartMapper.toDto(

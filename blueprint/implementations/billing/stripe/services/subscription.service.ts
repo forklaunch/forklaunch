@@ -88,6 +88,8 @@ export class StripeSubscriptionService<
     subscriptionDto: StripeCreateSubscriptionDto<PartyType>,
     em?: EntityManager
   ): Promise<Dto['SubscriptionMapper']> {
+    await this.mappers.CreateSubscriptionMapper.validateCreate?.(subscriptionDto);
+
     const subscription = await this.stripeClient.subscriptions.create({
       ...subscriptionDto.stripeFields,
       customer: subscriptionDto.partyId,
@@ -97,6 +99,8 @@ export class StripeSubscriptionService<
         }
       ]
     });
+
+    await this.mappers.CreateSubscriptionMapper.validateProviderCreate?.(subscription);
 
     return await this.baseSubscriptionService.createSubscription(
       {
@@ -121,6 +125,10 @@ export class StripeSubscriptionService<
     const stripeSubscription = await this.stripeClient.subscriptions.retrieve(
       subscriptionEntity.externalId
     );
+    await this.mappers.SubscriptionMapper.validateProviderRead?.(
+      subscriptionEntity.externalId,
+      stripeSubscription
+    );
     subscriptionEntity.stripeFields = stripeSubscription;
     return subscriptionEntity;
   }
@@ -137,6 +145,10 @@ export class StripeSubscriptionService<
     const stripeSubscription = await this.stripeClient.subscriptions.retrieve(
       subscriptionEntity.externalId
     );
+    await this.mappers.SubscriptionMapper.validateProviderRead?.(
+      subscriptionEntity.externalId,
+      stripeSubscription
+    );
     subscriptionEntity.stripeFields = stripeSubscription;
     return subscriptionEntity;
   }
@@ -152,6 +164,10 @@ export class StripeSubscriptionService<
     }
     const stripeSubscription = await this.stripeClient.subscriptions.retrieve(
       subscriptionEntity.externalId
+    );
+    await this.mappers.SubscriptionMapper.validateProviderRead?.(
+      subscriptionEntity.externalId,
+      stripeSubscription
     );
     subscriptionEntity.stripeFields = stripeSubscription;
     return subscriptionEntity;
@@ -172,10 +188,25 @@ export class StripeSubscriptionService<
       throw new Error('Subscription not found');
     }
 
+    await this.mappers.UpdateSubscriptionMapper.validateUpdate?.(
+      subscriptionDto,
+      subscriptionEntity
+    );
+
     const existingStripeSubscription =
       await this.stripeClient.subscriptions.retrieve(
         subscriptionEntity.externalId
       );
+
+    await this.mappers.SubscriptionMapper.validateProviderRead?.(
+      subscriptionEntity.externalId,
+      existingStripeSubscription
+    );
+
+    await this.mappers.UpdateSubscriptionMapper.validateProviderUpdate?.(
+      subscriptionDto,
+      existingStripeSubscription
+    );
 
     const updatedSubscription = await this.stripeClient.subscriptions.update(
       subscriptionEntity.externalId,
@@ -186,6 +217,11 @@ export class StripeSubscriptionService<
           plan: subscriptionDto.productId || item.plan?.id
         }))
       }
+    );
+
+    await this.mappers.SubscriptionMapper.validateProviderRead?.(
+      subscriptionEntity.externalId,
+      updatedSubscription
     );
 
     const updatedSubscriptionEntity =
@@ -231,9 +267,14 @@ export class StripeSubscriptionService<
     const stripeSubscriptions = await Promise.all(
       subscriptions.map(async (subscription) => {
         try {
-          return await this.stripeClient.subscriptions.retrieve(
+          const provider = await this.stripeClient.subscriptions.retrieve(
             subscription.externalId
           );
+          await this.mappers.SubscriptionMapper.validateProviderRead?.(
+            subscription.externalId,
+            provider
+          );
+          return provider;
         } catch {
           return null;
         }

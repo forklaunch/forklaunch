@@ -1,5 +1,61 @@
 # @forklaunch/core
 
+## 3.5.0
+
+### Minor Changes
+
+- f047dec: Serve MCP at `/mcp` (or `mcp.path`) on the application port, the way Rust services do, instead of a second listener on `MCP_PORT` / `PORT + 2000`. A separate listener is still used when `mcp.port`, `MCP_PORT` or `MCP_LISTENER=separate` is set; set `MCP_LISTENER=separate` to keep MCP clients that point at `PORT + 2000` working. Sessions are stateless by default so any worker or task can answer; `mcp.sessions: 'stateful'` keeps in-memory sessions (single worker only) that close after `sessionIdleTimeoutMs` (default 15 minutes) idle. A failed `authenticate` returns 401 with `WWW-Authenticate: Bearer`, and hyper-express now applies `authenticate`. Tools forward the caller's `Authorization`, `x-correlation-id` and trace headers to the routes they call; a header the tool supplies wins.
+
+### Patch Changes
+
+- eb7c292: Pass the OpenTelemetry metric reader through `metricReaders`, which replaces the removed `metricReader` option
+
+## 3.4.0
+
+### Minor Changes
+
+- ba5099d: Add `@forklaunch/core/agent`: the runtime behind `forklaunch init agent`. Tools in the MCP shape (`toolFactory`, `localTools`), app services as tools from their OpenAPI documents (`serviceTools`), external MCP servers over streamable HTTP (`mcpServer`), a tool-calling loop over the model gateway with streaming events, and stateless approvals for tools that are not read-only (AES-GCM sealed continuations).
+- ee4ac9e: Add a server-side local model client that uses a desktop relay or the CLI's selected account to obtain app-scoped credentials. Explicit ForkLaunch API keys take precedence; credentials stay in memory. Add bounded text streaming to the preview client, with interruption detection and cancellation.
+
+### Patch Changes
+
+- d0d3049: Payments: `createPaymentsClient()` gains `payouts({ limit })` (the connected account's balance, recent payouts, bank and payout schedule; read-only, empty before onboarding) and `dashboardLink()` (Stripe's own page for changing the bank and getting tax forms; 409 before onboarding), with the `PaymentsPayouts`, `PaymentsPayout` and `PaymentsMoney` types. The gateway mock serves both routes.
+
+## 3.3.0
+
+### Minor Changes
+
+- d2319b3: Contract, documentation and validation fixes:
+
+  - New exports from `@forklaunch/core/http`: `bindRuntimeAuth` (binds JWT or HMAC credentials to a portable auth policy and rejects bindings that try to override the policy) and `registerDelegatedSurface` (registers provider-owned routes, such as Better Auth's, and keeps them out of generated endpoint SDKs).
+  - OpenAPI: path parameters are marked `required`; security requirements name the scheme that is declared (the auth header name, or `basic`) with an empty scope list; `undefined`/`void` responses have no `content`; a request body is optional when its schema is optional (through the validator's new `openapiRequestBody`).
+  - Response validation: in `error` mode, a status code the contract does not declare is a 500 (`Undocumented response status`) instead of being validated against a missing schema; `warning` mode still sends and logs it. Framework diagnostics are no longer re-validated against the failing route.
+  - Request validation errors (400) are sent as `text/plain`, matching their body.
+  - MCP tools: versioned routes pick the version by position, keep response schemas for bodyless routes, send JSON bodies with `JSON.stringify` (JSON strings included), stop double-encoding URLs, and omit `Content-Type` when there is no body.
+  - AsyncAPI: plain JSON Schema payloads are normalized to object-form schemas, non-Draft-7 dialects are wrapped in a Multi Format Schema Object, channel and message `$ref`s are JSON-pointer escaped, and empty channel addresses or ones containing `?`/`#` are rejected.
+  - WebSocket schema parsing treats only an `undefined` schema as "no schema".
+
+- d2319b3: HMAC request verification now accepts signatures over the full wire path: the request URL without its query string, router mount included, e.g. `POST /payment-link`. That is the path the Rust verifiers and the new `@forklaunch/universal-sdk` signers sign. Express routers used to verify only the router-relative `req.path` (`/`). That form is still accepted, so existing callers keep working, but it is deprecated because a relative path is not bound to its mount; the first time a request uses it, the server logs a warning. Set `HMAC_ACCEPT_MOUNT_RELATIVE_PATHS=false` to reject it once every caller signs the full path.
+
+### Patch Changes
+
+- d2319b3: `stripeGatewayFetch` keeps Bun's `fetch.preconnect` (pointed at the gateway origin) when the runtime has it, so the Stripe SDK works on Bun. The `forklaunch-gateway-mock` binary adds the scoped payments context routes (`POST /payments/context`, `/payments/context/checkout-read`, `/payments/context/payment-link-read`, `/payments/context/paused-subscription-read`) that managed billing uses for verified checkout, payment-link and paused-subscription reads.
+- cf365df: `@forklaunch/testing`:
+
+  - `startTestJwtIssuer()` starts a local RS256 issuer that serves its JWKS over HTTP (default path `/api/auth/jwks`, as IAM serves it) and mints tokens with `sub`, `tenant_id`, `roles` and `permissions` claims, mirroring the Rust IAM's session tokens. `BlueprintTestHarness` takes `jwt: true` (or issuer options) to start one, point `JWKS_PUBLIC_KEY_URL` at it and return it as `setup.jwt`. `surfaceFromTestClaims` gives routers `surfaceRoles` / `surfacePermissions` that read those claims. Previously `JWKS_PUBLIC_KEY_URL` always pointed at `localhost:3000`, which nothing serves in a generated app, so JWT-protected routes could not be exercised in tests.
+  - The harness starts the containers a test needs (database, Redis, Kafka, S3) concurrently instead of one after another.
+  - Postgres and Redis containers wait for their "ready" log line rather than the default port check. The port check runs `docker exec`, which never settles under the Bun runtime, so every Redis-backed test hook in a Bun app hung until it timed out. Postgres also no longer reports ready during its init-time restart.
+  - The Kafka container advertises the host port clients actually reach (a free port bound up front) and waits for the broker to start, so producers in tests can connect; the KRaft cluster id default is now a valid one.
+
+  `@forklaunch/core`:
+
+  - Local SDK calls with `executeMiddlewares: true` run the middleware chain the way a server does: a middleware that answers the request itself (an auth 401/403) ends it before the controller runs, async hyper-express middlewares that take no `next` continue when they resolve, and the stand-in request/response carry what the express and hyper-express adapters read (`getHeaders`, `locals`, hyper-express's status/header fields and body readers). Before, every middleware ran even after one had responded, the controller then overwrote the response, and the express and hyper-express response enrichment crashed on the stand-in response.
+  - Response validation for a default error status (400/401/403/404/500) no longer crashes with TypeBox when the route declares that status: a compiled TypeBox schema cannot be a union member, so the declared schema and the string message are tried in turn. Zod output is unchanged.
+
+- f868861: - The managed gateway clients (`createModelGatewayClient`, `createSmsClient`, `createWhatsAppClient`, `createVoiceClient`, `createStripeClient`, and the shared `instanceGatewaySettings`) no longer say they are only for managed instances. Their refusal names the managed gateway settings (`PLATFORM_GATEWAY_URL`, `INSTANCE_ID`, `INSTANCE_HMAC_KEY`), which the platform sets for a managed instance and, at deploy, for a component of a regular app that declares the capability (`forklaunch infra add <service> <capability>`). Code that matched the old message text ("managed mode", "not a managed instance") should match on the error's settings names instead.
+- Updated dependencies [d2319b3]
+  - @forklaunch/validator@1.3.0
+
 ## 3.2.0
 
 ### Minor Changes

@@ -32,7 +32,9 @@ use crate::{
         rendered_template::{RenderedTemplate, RenderedTemplatesCache, write_rendered_templates},
         tsconfig::remove_project_from_modules_tsconfig,
     },
+    init::rust_project::{self, RustProjectKind},
     prompt::{ArrayCompleter, prompt_for_confirmation, prompt_with_validation},
+    sdk::generate::regenerate_sdk_outputs_if_present,
 };
 
 #[derive(Debug)]
@@ -46,20 +48,20 @@ impl WorkerCommand {
 
 impl CliCommand for WorkerCommand {
     fn command(&self) -> Command {
-        command("worker", "Initialize a new worker")
+        command("worker", "Delete a worker")
             .alias("wrkr")
             .arg(Arg::new("name").help("The name of the worker"))
             .arg(
                 Arg::new("base_path")
                     .short('p')
                     .long("path")
-                    .help("The application path to initialize the library in"),
+                    .help("The application path to delete the worker from"),
             )
             .arg(
                 Arg::new("continue")
                     .short('c')
                     .long("continue")
-                    .help("Continue the eject operation")
+                    .help("Delete without asking for confirmation")
                     .action(ArgAction::SetTrue),
             )
     }
@@ -71,12 +73,10 @@ impl CliCommand for WorkerCommand {
 
         let (app_root_path, _) = find_app_root_path(matches, RequiredLocation::Application)?;
         let manifest_path = app_root_path.join(".forklaunch").join("manifest.toml");
+        crate::init::rust_project::preflight_mixed_images(&app_root_path)?;
 
-        let existing_manifest_data = toml::from_str::<ApplicationManifestData>(
-            &read_to_string(&manifest_path).with_context(|| ERROR_FAILED_TO_READ_MANIFEST)?,
-        )
-        .with_context(|| ERROR_FAILED_TO_PARSE_MANIFEST)?;
-
+        let project_names =
+            rust_project::registered_project_names(&app_root_path, RustProjectKind::Worker)?;
         let worker_name = prompt_with_validation(
             &mut line_editor,
             &mut stdout,
@@ -84,14 +84,38 @@ impl CliCommand for WorkerCommand {
             matches,
             "worker name",
             None,
-            |input: &str| {
-                existing_manifest_data
-                    .projects
-                    .iter()
-                    .any(|project| project.name == input && project.r#type == ProjectType::Worker)
-            },
+            |input: &str| project_names.contains(input),
             |_| "Worker not found".to_string(),
         )?;
+
+        crate::sdk::typescript_build::preflight_lifecycle(&app_root_path, &worker_name)?;
+
+        if rust_project::is_rust_project(&app_root_path, &worker_name)? {
+            if !matches.get_flag("continue") {
+                let continue_delete = prompt_for_confirmation(
+                    &mut line_editor,
+                    "This operation is irreversible. Do you want to continue? (y/N) ",
+                )?;
+                if !continue_delete {
+                    log_error!(stdout, "Deletion cancelled");
+                    return Ok(());
+                }
+            }
+
+            rust_project::delete_rust_project(
+                &app_root_path,
+                RustProjectKind::Worker,
+                &worker_name,
+            )?;
+            regenerate_sdk_outputs_if_present(&app_root_path, &mut stdout)?;
+            log_ok!(stdout, "{} deleted successfully!", worker_name);
+            return Ok(());
+        }
+
+        let existing_manifest_data = toml::from_str::<ApplicationManifestData>(
+            &read_to_string(&manifest_path).with_context(|| ERROR_FAILED_TO_READ_MANIFEST)?,
+        )
+        .with_context(|| ERROR_FAILED_TO_PARSE_MANIFEST)?;
 
         let worker_base_path = prompt_base_path(
             &app_root_path,
@@ -212,6 +236,29 @@ impl CliCommand for WorkerCommand {
             }
         }
 
+        // The database's shared entries (core driver, workspace scripts,
+        // Compose service) go with the last project that uses it.
+        let mut released_files = Vec::new();
+        if let Ok(database) = manifest_data.database.parse::<crate::constants::Database>() {
+            released_files = crate::core::database::release_database(
+                &worker_base_path,
+                &manifest_data.app_name,
+                &manifest_data.projects,
+                &database,
+                &worker_name,
+                Some(&mut docker_compose),
+                &mut rendered_templates_cache,
+            )?;
+            rendered_templates_cache.insert(
+                docker_compose_path.to_string_lossy().to_string(),
+                RenderedTemplate {
+                    path: docker_compose_path.clone(),
+                    content: serde_yml::to_string(&docker_compose)?,
+                    context: Some(ERROR_FAILED_TO_WRITE_DOCKER_COMPOSE.to_string()),
+                },
+            );
+        }
+
         remove_project_from_client_sdk(
             &mut rendered_templates_cache,
             &worker_base_path,
@@ -238,6 +285,16 @@ impl CliCommand for WorkerCommand {
             .map(|(_, template)| template)
             .collect();
         write_rendered_templates(&rendered_templates, false, &mut stdout)?;
+        for path in released_files {
+            std::fs::remove_file(&path)
+                .with_context(|| format!("Failed to remove {}", path.display()))?;
+        }
+
+        crate::sdk::typescript_build::remove_hook(&app_root_path, &worker_name)?;
+        // The manifest entry is already gone, so remove_hook cannot find the
+        // generated Rust SDK member; image planning would trip over it.
+        crate::init::rust_project::remove_typescript_sdk_member(&app_root_path, &worker_base_path.join(&worker_name))?;
+        crate::init::rust_project::refresh_mixed_images(&app_root_path)?;
 
         log_ok!(stdout, "{} deleted successfully!", worker_name);
 

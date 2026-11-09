@@ -20,9 +20,8 @@ pub(crate) fn move_template_files(
     for move_template in move_templates {
         if !dryrun {
             if exists(&move_template.path)? {
-                rename(&move_template.path, &move_template.target).with_context(|| {
-                    format!("Failed to move {}", move_template.path.display())
-                })?;
+                rename(&move_template.path, &move_template.target)
+                    .with_context(|| format!("Failed to move {}", move_template.path.display()))?;
             }
         } else {
             writeln!(

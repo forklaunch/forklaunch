@@ -1,0 +1,41 @@
+import assert from 'node:assert/strict';
+import {mkdtempSync,writeFileSync,mkdirSync,rmSync,symlinkSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {spawnSync} from 'node:child_process';
+import {createRequire} from 'node:module';
+import {actualValidator} from './rust_actual_validator_fixture.mjs';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
+const {validator,statics,ts}=actualValidator(root);
+const schema=validator.openapi(statics.uri);
+const scratch=mkdtempSync(path.join(tmpdir(),'fl-uri-sdk-'));
+const cargo=(args)=>{const r=spawnSync('cargo',args,{encoding:'utf8',timeout:300000,maxBuffer:32*1024*1024,env:{...process.env,CARGO_INCREMENTAL:'0'}});assert.equal(r.status,0,r.stderr);return r.stdout;};
+try {
+ const artifact={formatVersion:1,title:'URI',version:'1',sockets:{uri:{path:'/uri',clientMessages:{value:{shape:schema}},serverMessages:{value:{shape:schema}}}}};
+ const input=path.join(scratch,'socket.json');writeFileSync(input,JSON.stringify(artifact));
+ const denied=spawnSync('cargo',['run','--quiet','--manifest-path',path.join(root,'framework-rs/Cargo.toml'),'-p','forklaunch-core','--features','build,asyncapi-import','--example','typescript_socket_artifacts','--',input,'all'],{encoding:'utf8',timeout:300000,env:{...process.env,CARGO_INCREMENTAL:'0'}});
+ assert.notEqual(denied.status,0);assert.equal(denied.stdout,'');assert.match(denied.stderr,/requires the forklaunch-core zod-uri feature/);
+ const generated=JSON.parse(cargo(['run','--quiet','--manifest-path',path.join(root,'framework-rs/Cargo.toml'),'-p','forklaunch-core','--features','build,asyncapi-import','--features','zod-uri','--example','typescript_socket_artifacts','--',input,'all']));
+ const source=generated.typescript.socket_uri+'\nexport {socketValidator};';
+ const socketDependencies=process.env.FORKLAUNCH_TEST_SOCKET_DEPENDENCIES??'/private/tmp/fl-binary-socket-dependencies';
+ symlinkSync(path.join(socketDependencies,'node_modules'),path.join(scratch,'node_modules'),'dir');
+ writeFileSync(path.join(scratch,'client.ts'),generated.typescript.socket_uri);
+ writeFileSync(path.join(scratch,'tsconfig.json'),JSON.stringify({compilerOptions:{strict:true,noEmit:true,target:'ES2022',module:'NodeNext',moduleResolution:'NodeNext',skipLibCheck:false},files:['client.ts']}));
+ const typed=spawnSync(process.execPath,[process.env.TSC_BIN??path.join(socketDependencies,'node_modules/typescript/bin/tsc'),'-p',path.join(scratch,'tsconfig.json')],{encoding:'utf8',timeout:60000});
+ assert.equal(typed.status,0,typed.stdout+typed.stderr);
+
+ const require=createRequire(path.join(process.env.FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES??'/private/tmp/fl-canonical-http-dependencies','package.json'));
+ const socketRequire=createRequire(path.join(process.env.FORKLAUNCH_TEST_SOCKET_DEPENDENCIES??'/private/tmp/fl-binary-socket-dependencies','package.json'));
+ const runtimeRequire=spec=>{try{return require(spec)}catch(error){if(error.code!=='MODULE_NOT_FOUND')throw error;return socketRequire(spec)}};
+ const exports={};new Function('exports','require',ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(exports,runtimeRequire);
+ const check=exports.socketValidator(schema);
+ const values=[' https://example.com/a b ','http://a\u061db.test','http://a\u0c5cb.test','mailto:a@b','relative','https://'];
+ for(const value of values)assert.equal(check(value),validator.parse(statics.uri,value).ok);
+ mkdirSync(path.join(scratch,'src'));writeFileSync(path.join(scratch,'src/client.rs'),generated.rust.socket_uri);
+ writeFileSync(path.join(scratch,'Cargo.toml'),`[package]\nname="uri-generated-sdk-proof"\nversion="0.0.0"\nedition="2024"\n[workspace]\n[features]\nzod-uri=["forklaunch-ws/zod-uri"]\n[dependencies]\nforklaunch-ws={path=${JSON.stringify(path.join(root,'framework-rs/crates/ws'))},features=["transport","json-schema"]}\nserde={version="1",features=["derive"]}\nserde_json="=1.0.151"\ntokio={version="1",features=["net"]}\ntokio-tungstenite="0.30"\n`);
+ writeFileSync(path.join(scratch,'src/main.rs'),`mod client;\nfn main(){\n#[cfg(not(feature="zod-uri"))] assert!(client::SocketClient::schemas().is_err());\n#[cfg(feature="zod-uri")] {let _schemas=client::SocketClient::schemas().unwrap(); let schema=serde_json::from_str(${JSON.stringify(JSON.stringify(schema))}).unwrap();let codec=forklaunch_ws::codec::PayloadCodec::<String>::json_schema(&schema).unwrap();\n${values.map(value=>`let value=${JSON.stringify(value)}.to_owned();let encoded=codec.encode(&value);assert_eq!(encoded.is_ok(),${validator.parse(statics.uri,value).ok});if let Ok(bytes)=encoded {assert_eq!(codec.decode(&bytes).unwrap(),value);}`).join('\n')}\n}\n}`);
+ cargo(['run','--quiet','--manifest-path',path.join(scratch,'Cargo.toml')]);
+ cargo(['run','--quiet','--manifest-path',path.join(scratch,'Cargo.toml'),'--features','zod-uri']);
+ console.log(`PASS actual generated TS socket and generated Rust schemas: ${values.length} URI cases, feature-off explicit rejection, feature-on original-value codec admission`);
+} finally {rmSync(scratch,{recursive:true,force:true});}

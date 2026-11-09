@@ -59,8 +59,9 @@ pub(crate) fn names_in_pulled_config(content: &str) -> HashSet<String> {
 
 /// Every variable name declared by a component in the local workspace.
 ///
-/// `None` means the workspace could not be scanned — no modules directory, no
-/// `registrations.ts` anywhere, or a parse failure. That is "we cannot tell",
+/// TypeScript source declarations and registered Rust project `.env.example`
+/// declarations are unioned. `None` means no declarations could be scanned,
+/// or a parse failure. That is "we cannot tell",
 /// which must never be reported as "this variable is undeclared".
 pub(crate) fn names_declared_in_workspace(app_root: &Path) -> Option<HashSet<String>> {
     let workspace_root = find_workspace_root(app_root).ok()?;
@@ -68,17 +69,29 @@ pub(crate) fn names_declared_in_workspace(app_root: &Path) -> Option<HashSet<Str
     let rendered_templates_cache = RenderedTemplatesCache::new();
     let project_env_vars = find_all_env_vars(&modules_path, &rendered_templates_cache).ok()?;
 
-    if project_env_vars.is_empty() {
-        return None;
+    let mut names: HashSet<String> = project_env_vars
+        .values().flatten().map(|usage| usage.var_name.clone()).collect();
+    // Native services declare environment configuration in their checked-in
+    // examples. Read names only, never local credentials or dependency trees.
+    let manifest: toml::Value = toml::from_str(
+        &std::fs::read_to_string(workspace_root.join(".forklaunch/manifest.toml")).ok()?
+    ).ok()?;
+    if let Some(projects) = manifest.get("projects").and_then(toml::Value::as_array) {
+        for project in projects {
+            let Some(metadata) = project.get("metadata") else { continue };
+            if metadata.get("language").and_then(toml::Value::as_str) != Some("rust") { continue; }
+            let Some(path) = metadata.get("cratePath").and_then(toml::Value::as_str) else { continue };
+            let directory = workspace_root.join(path);
+            let Ok(directory) = directory.canonicalize() else { continue };
+            if !directory.starts_with(&workspace_root) { continue; }
+            let example = directory.join(".env.example");
+            if example.is_symlink() { continue; }
+            if let Ok(content) = std::fs::read_to_string(example) {
+                names.extend(names_in_pulled_config(&content));
+            }
+        }
     }
-
-    Some(
-        project_env_vars
-            .values()
-            .flatten()
-            .map(|usage| usage.var_name.clone())
-            .collect(),
-    )
+    (!names.is_empty()).then_some(names)
 }
 
 /// Decide whether `key` is a name something is known to read, given the two
@@ -203,6 +216,19 @@ pub(crate) fn confirm_if_undeclared(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn native_configuration_names_use_registered_examples_only() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join(".forklaunch")).unwrap();
+        std::fs::create_dir_all(root.path().join("src/api")).unwrap();
+        std::fs::create_dir_all(root.path().join("src/unregistered")).unwrap();
+        std::fs::write(root.path().join(".forklaunch/manifest.toml"), "modules_path='src'\n[[projects]]\nname='api'\n[projects.metadata]\nlanguage='rust'\ncratePath='src/api'\n").unwrap();
+        std::fs::write(root.path().join("src/api/.env.example"), "DATABASE_URL=\nTENANT_ID=\n").unwrap();
+        std::fs::write(root.path().join("src/api/.env.local"), "SECRET_ONLY=hidden\n").unwrap();
+        std::fs::write(root.path().join("src/unregistered/.env.example"), "UNREGISTERED=\n").unwrap();
+        let names = names_declared_in_workspace(root.path()).unwrap();
+        assert_eq!(names, HashSet::from(["DATABASE_URL".to_owned(), "TENANT_ID".to_owned()]));
+    }
     use super::*;
 
     fn set_of(names: &[&str]) -> HashSet<String> {

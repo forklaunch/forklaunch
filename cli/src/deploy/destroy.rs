@@ -7,7 +7,9 @@ use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 
 use crate::{
     CliCommand,
-    constants::{ERROR_FAILED_TO_SEND_REQUEST, get_platform_management_api_url, get_platform_ui_url},
+    constants::{
+        ERROR_FAILED_TO_SEND_REQUEST, get_platform_management_api_url, get_platform_ui_url,
+    },
     core::{
         command::command,
         http_client,
@@ -98,8 +100,13 @@ impl CliCommand for DestroyCommand {
 
         let wait = !matches.get_flag("no-wait");
 
-        log_header!(stdout, Color::Red, "DESTROYING INFRASTRUCTURE: {} ({}) [{}]",
-            environment, region, mode
+        log_header!(
+            stdout,
+            Color::Red,
+            "DESTROYING INFRASTRUCTURE: {} ({}) [{}]",
+            environment,
+            region,
+            mode
         );
         writeln!(stdout)?;
 
@@ -129,7 +136,8 @@ impl CliCommand for DestroyCommand {
 
             let dashboard_url = format!(
                 "{}/dashboard/deployments/{}",
-                get_platform_ui_url(), deployment.id
+                get_platform_ui_url(),
+                deployment.id
             );
 
             if wait {
@@ -172,7 +180,11 @@ impl CliCommand for DestroyCommand {
                 .text()
                 .unwrap_or_else(|_| "Unknown error".to_string());
 
-            log_error!(stdout, "Failed to destroy infrastructure (Status: {})", status);
+            log_error!(
+                stdout,
+                "Failed to destroy infrastructure (Status: {})",
+                status
+            );
 
             anyhow::bail!(
                 "Failed to destroy infrastructure: {} (Status: {})",

@@ -10,7 +10,7 @@ fi
 mkdir -p output/init-service
 cd output/init-service
 
-RUST_BACKTRACE=1 $FL init application service-test-node-application -p service-test-node-application -o src/modules -d postgresql -f prettier -l eslint -v zod -F express -r node -t vitest -m billing-base -m iam-base -D "Test service" -A "Rohin Bhargava" -L 'AGPL-3.0'
+RUST_BACKTRACE=1 $FL init application service-test-node-application -p service-test-node-application -o src/modules -d postgresql -f prettier -l oxlint -v zod -F express -r node -t vitest -m billing-base -m iam-base -D "Test service" -A "Rohin Bhargava" -L 'AGPL-3.0'
 RUST_BACKTRACE=1 $FL init service svc-test -d postgresql -p service-test-node-application/src/modules -D "Test service"
 RUST_BACKTRACE=1 $FL init service svc-test-mongodb -d mongodb -p service-test-node-application/src/modules -D "Test service"
 

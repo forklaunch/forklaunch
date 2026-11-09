@@ -1,4 +1,4 @@
-import { string{{#is_worker}}, boolean, number{{/is_worker}} } from '@{{app_name}}/core';
+import { string{{#is_worker}}, boolean, number{{/is_worker}} } from '@forklaunch/validator/{{validator}}';
 
 // idiomatic validator schema defines the request schema. This should extend the request type
 export const {{pascal_case_name}}RequestSchema = { 

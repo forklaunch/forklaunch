@@ -32,7 +32,8 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Readable } from 'stream';
 
-const ENCRYPTED_PREFIXES = ['v1:', 'v2:', 'v3:'] as const;
+// v4 is the randomized, stamped envelope native (Rust) writers produce.
+const ENCRYPTED_PREFIXES = ['v1:', 'v2:', 'v3:', 'v4:'] as const;
 
 function isEncrypted(value: string): boolean {
   return ENCRYPTED_PREFIXES.some((p) => value.startsWith(p));

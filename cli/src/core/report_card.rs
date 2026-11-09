@@ -530,12 +530,13 @@ fn remedy(check: &str) -> Option<String> {
         }
         "dependency-lockfile-missing" => {
             "Commit the package manager's lockfile (pnpm-lock.yaml, bun.lock, package-lock.json, \
-             yarn.lock, poetry.lock or uv.lock) so every install gets the same, checkable versions."
+             yarn.lock, poetry.lock, uv.lock or Cargo.lock) so every install gets the same, checkable versions."
         }
         "dependency-scan-incomplete" => {
             "Fix any lockfile the finding names, unset FORKLAUNCH_NO_ADVISORY_LOOKUP if it is \
              set, and run `forklaunch compliance audit` with network access so pinned versions \
-             can be looked up in the advisory database."
+             can be looked up in the advisory database. Audit unsupported Git/private-registry \
+             sources at their pinned revisions separately."
         }
         _ => return None,
     };

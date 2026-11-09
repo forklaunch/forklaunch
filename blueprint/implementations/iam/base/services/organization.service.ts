@@ -84,7 +84,7 @@ export class BaseOrganizationService<
     );
 
     if (em) {
-      await em.persist(organization);
+      em.persist(organization);
     } else {
       await this.em.persist(organization).flush();
     }
@@ -131,7 +131,7 @@ export class BaseOrganizationService<
       );
 
     if (em) {
-      await em.persist(updatedOrganization);
+      em.persist(updatedOrganization);
     } else {
       await this.em.persist(updatedOrganization).flush();
     }

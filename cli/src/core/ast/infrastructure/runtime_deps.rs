@@ -85,8 +85,7 @@ impl<'a> Visit<'a> for RuntimeDepsVisitor {
     fn visit_variable_declaration(&mut self, decl: &VariableDeclaration<'a>) {
         // Look for: const runtimeDependencies = ...
         for declarator in &decl.declarations {
-            if let oxc_ast::ast::BindingPatternKind::BindingIdentifier(ident) = &declarator.id.kind
-            {
+            if let oxc_ast::ast::BindingPattern::BindingIdentifier(ident) = &declarator.id {
                 if ident.name == "runtimeDependencies" {
                     self.in_runtime_deps = true;
 
@@ -134,7 +133,9 @@ pub fn extract_runtime_deps_from_source(source_code: &str) -> Result<Vec<Runtime
     let allocator = Allocator::default();
 
     let ParserReturn {
-        program, errors, ..
+        program,
+        diagnostics: errors,
+        ..
     } = Parser::new(
         &allocator,
         source_code,
@@ -142,7 +143,7 @@ pub fn extract_runtime_deps_from_source(source_code: &str) -> Result<Vec<Runtime
     )
     .parse();
 
-    if !errors.is_empty() {
+    if errors.has_errors() {
         log::debug!(
             "TypeScript parse errors during runtime deps scan: {:?}",
             errors
@@ -279,10 +280,7 @@ const runtimeDependencies = environmentConfig.chain({
             deps.iter()
                 .any(|d| d.name == "MikroORM" && d.resource_type == ResourceType::Database)
         );
-        assert!(
-            !deps.iter()
-                .any(|d| d.name == "EntityManager")
-        );
+        assert!(!deps.iter().any(|d| d.name == "EntityManager"));
     }
 
     #[test]

@@ -1,3 +1,11 @@
+# CLI release. Two ways in:
+#   - push a cli-vX.Y.Z tag on a main commit, or
+#   - run this workflow from main with version=X.Y.Z and release=true: it creates
+#     the tag on the dispatched commit after the preflight and builds pass.
+# A dispatch with release=false only builds (no tag, GitHub release or publish).
+# Preflight: the commit is on main, the CLI's generated npm/Cargo versions match
+# the framework and blueprint workspaces, and every Rust crate version the CLI
+# generates is already on crates.io.
 name: CLI Release
 
 permissions:
@@ -11,45 +19,80 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g., cli-v0.2.0) - leave empty to use latest CLI tag'
+        description: 'Version without prefix (e.g. 1.35.0). Required when release=true'
         required: false
         default: ''
-      use_latest_tag:
-        description: 'Use latest CLI tag'
+      release:
+        description: 'Create tag cli-vVERSION on this main commit, publish the GitHub release, npm and crates.io'
         type: boolean
-        default: true
-  
+        default: false
+
 jobs:
   resolve_version:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      publish: ${{ steps.version.outputs.publish }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Set version
         id: version
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          INPUT_RELEASE: ${{ github.event.inputs.release }}
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            if [[ "${{ github.event.inputs.use_latest_tag }}" == "true" ]]; then
-              latest_tag=$(git tag -l "cli-v*" | sort -V | tail -1)
-              echo "version=${latest_tag#cli-v}" >> $GITHUB_OUTPUT
-            elif [[ -n "${{ github.event.inputs.version }}" ]]; then
-              echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-            else
-              echo "Error: Version is required when not using latest tag" >&2
-              exit 1
-            fi
-          elif [[ "${{ github.event_name }}" == "push" ]]; then
-            tag_name="${{ github.ref_name }}"
-            echo "version=${tag_name#cli-v}" >> $GITHUB_OUTPUT
-          else
-            echo "version=${GITHUB_REF#refs/tags/cli-v}" >> $GITHUB_OUTPUT
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            echo "version=${GITHUB_REF_NAME#cli-v}" >> "$GITHUB_OUTPUT"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          version="$INPUT_VERSION"
+          if [[ -z "$version" ]]; then
+            latest=$(git tag -l "cli-v*" | sort -V | tail -1)
+            version="${latest#cli-v}"
+          fi
+          version="${version#cli-v}"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::version must be X.Y.Z, got '$version'"; exit 1; }
+          if [[ "$INPUT_RELEASE" == "true" ]]; then
+            [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "::error::release=true runs from main only"; exit 1; }
+            if existing=$(git rev-parse --verify --quiet "refs/tags/cli-v$version^{commit}"); then
+              [[ "$existing" == "$GITHUB_SHA" ]] || { echo "::error::cli-v$version already exists on another commit"; exit 1; }
+            fi
+            latest=$(git tag -l "cli-v*" | sort -V | tail -1)
+            if [[ -n "$latest" && "cli-v$version" != "$latest" ]] && [[ "$(printf '%s\n%s\n' "$latest" "cli-v$version" | sort -V | tail -1)" != "cli-v$version" ]]; then
+              echo "::error::cli-v$version is not above the latest release $latest"; exit 1
+            fi
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  preflight:
+    needs: resolve_version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Commit is on main
+        run: |
+          git fetch --quiet origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || { echo "::error::$GITHUB_SHA is not on main"; exit 1; }
+      - name: Generated versions match the framework and blueprint
+        working-directory: .github/workflows/scripts/check_blueprint_deps
+        run: cargo run --quiet -- --rust-released
+      - name: Generated Rust crate versions are on crates.io
+        run: python3 scripts/rust_release.py check-published --scope all
 
   build:
-    needs: resolve_version
+    needs: [resolve_version, preflight]
     strategy:
       matrix:
         include:
@@ -127,10 +170,30 @@ jobs:
           name: ${{ matrix.artifact }}
           path: cli/${{ matrix.artifact }}
 
-  upload-assets:
-    needs: build
+  tag:
+    needs: [resolve_version, build]
+    if: needs.resolve_version.outputs.publish == 'true'
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/cli-v')
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Create the release tag on the built commit (dispatch only)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          TAG: cli-v${{ needs.resolve_version.outputs.version }}
+        run: |
+          if git rev-parse --verify --quiet "refs/tags/$TAG" > /dev/null; then
+            echo "$TAG already on $GITHUB_SHA"
+          else
+            git tag "$TAG" "$GITHUB_SHA"
+            git push origin "refs/tags/$TAG"
+          fi
+
+  upload-assets:
+    needs: [resolve_version, tag]
+    runs-on: ubuntu-latest
+    if: needs.resolve_version.outputs.publish == 'true'
     
     steps:
       - name: Download all artifacts
@@ -143,15 +206,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
+          tag_name: cli-v${{ needs.resolve_version.outputs.version }}
+          name: cli-v${{ needs.resolve_version.outputs.version }}
           draft: false
           prerelease: false
           generate_release_notes: true
           files: artifacts/*/forklaunch-*
 
   npm-publish:
-    needs: [build, resolve_version]
+    needs: [build, resolve_version, tag]
+    if: needs.resolve_version.outputs.publish == 'true'
     runs-on: ubuntu-latest
     
     steps:

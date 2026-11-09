@@ -8,6 +8,7 @@ import {
 } from '@forklaunch/testing';
 import { EntityManager } from '@mikro-orm/core';
 import dotenv from 'dotenv';
+import { existsSync, readdirSync } from 'fs';
 import * as path from 'path';
 
 export { TEST_TOKENS, TestSetupResult };
@@ -15,6 +16,16 @@ export { TEST_TOKENS, TestSetupResult };
 let harness: BlueprintTestHarness;
 
 dotenv.config({ path: path.join(__dirname, '../.env.test') });
+
+const migrationsPath = path.join(__dirname, '../migrations');
+// A generated app starts with an empty migrations directory (`pnpm
+// migrate:init` writes the first one for the chosen database), so build the
+// schema from the entities until a migration exists.
+const hasMigrations =
+  existsSync(migrationsPath) &&
+  readdirSync(migrationsPath).some((file) =>
+    /^Migration.*\.(js|ts)$/.test(file)
+  );
 
 export const setupTestDatabase = async (): Promise<TestSetupResult> => {
   harness = new BlueprintTestHarness({
@@ -29,8 +40,8 @@ export const setupTestDatabase = async (): Promise<TestSetupResult> => {
       return { ...config, discovery: { ...config.discovery } };
     },
     databaseType: getEnvVar('DATABASE_TYPE') as DatabaseType,
-    useMigrations: true,
-    migrationsPath: path.join(__dirname, '../migrations'),
+    useMigrations: hasMigrations,
+    migrationsPath,
     customEnvVars: {
       CORS_ORIGINS: getEnvVar('CORS_ORIGINS')
     }

@@ -1,0 +1,115 @@
+name: Changed paths
+
+# Shared by every pull-request workflow: lists the changed paths and runs
+# .github/ci/impact.py, which maps them to the suites they can affect. Callers
+# gate their jobs on the outputs. A full run (push to main, schedule, a
+# dispatch asking for it) skips the classification and selects everything.
+on:
+  workflow_call:
+    inputs:
+      full:
+        description: 'Select every suite regardless of which paths changed'
+        type: boolean
+        default: false
+    outputs:
+      full:
+        description: "'true' on a full run"
+        value: ${{ jobs.classify.outputs.full }}
+      impacts:
+        description: 'JSON array of impacts (see .github/ci/impact.py)'
+        value: ${{ jobs.classify.outputs.impacts }}
+      codeql:
+        description: 'JSON array of CodeQL languages to analyse'
+        value: ${{ jobs.classify.outputs.codeql }}
+      typescript:
+        description: "'true' when a TypeScript E2E job is selected"
+        value: ${{ jobs.classify.outputs.typescript }}
+      rust:
+        description: "'true' when a Rust E2E job is selected"
+        value: ${{ jobs.classify.outputs.rust }}
+      typescript-matrix:
+        description: 'TypeScript E2E jobs (matrix include)'
+        value: ${{ jobs.classify.outputs.typescript-matrix }}
+      rust-matrix:
+        description: 'Rust E2E jobs (matrix include)'
+        value: ${{ jobs.classify.outputs.rust-matrix }}
+      build-cli:
+        description: "'true' when any E2E job needs the CLI binary"
+        value: ${{ jobs.classify.outputs.build-cli }}
+      packaged-cli:
+        description: "'true' when Verify packaged CLI should run"
+        value: ${{ jobs.classify.outputs.packaged-cli }}
+
+permissions:
+  contents: read
+
+jobs:
+  classify:
+    name: Changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      full: ${{ steps.mode.outputs.full }}
+      impacts: ${{ steps.impact.outputs.impacts }}
+      codeql: ${{ steps.impact.outputs.codeql }}
+      typescript: ${{ steps.impact.outputs.typescript }}
+      rust: ${{ steps.impact.outputs.rust }}
+      typescript-matrix: ${{ steps.impact.outputs.typescript-matrix }}
+      rust-matrix: ${{ steps.impact.outputs.rust-matrix }}
+      build-cli: ${{ steps.impact.outputs.build-cli }}
+      packaged-cli: ${{ steps.impact.outputs.packaged-cli }}
+    steps:
+      - name: Decide between a full and a filtered run
+        id: mode
+        env:
+          FULL: ${{ inputs.full }}
+        run: echo "full=$FULL" >> "$GITHUB_OUTPUT"
+
+      # Pull requests list their files through the API and need only the
+      # rules and the E2E layout; a filtered dispatch compares the branch with
+      # the default branch and needs the history.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: ${{ (steps.mode.outputs.full != 'true' && github.event_name != 'pull_request') && '0' || '1' }}
+          sparse-checkout: |
+            .github/ci
+            cli/tests
+
+      # The API lists at most 3000 files; a pull request that large runs
+      # everything rather than trusting a truncated list.
+      - name: List changed paths
+        id: files
+        if: steps.mode.outputs.full != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/changed.txt"
+          if [ "$EVENT" = pull_request ]; then
+            gh api --paginate "repos/$REPO/pulls/$PR/files?per_page=100" \
+              --jq '.[] | .filename, (.previous_filename // empty)' > "$out"
+          else
+            git fetch --no-tags --quiet origin "$DEFAULT_BRANCH"
+            git diff --name-only --no-renames "origin/$DEFAULT_BRANCH...HEAD" > "$out"
+          fi
+          count=$(wc -l < "$out" | tr -d ' ')
+          echo "$count changed paths"
+          if [ "$count" -ge 3000 ]; then echo "too-many=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Map changed paths to suites
+        id: impact
+        env:
+          FULL: ${{ steps.mode.outputs.full == 'true' || steps.files.outputs.too-many == 'true' }}
+        run: |
+          if [ "$FULL" = true ]; then
+            python3 .github/ci/impact.py --full
+          else
+            python3 .github/ci/impact.py --list "$RUNNER_TEMP/changed.txt"
+          fi

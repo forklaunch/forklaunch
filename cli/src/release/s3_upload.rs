@@ -1,6 +1,4 @@
-use std::collections::HashMap;
-use std::io::Write;
-use std::{fs::File, path::Path};
+use std::{collections::HashMap, fs::File, io::Write, path::Path};
 
 use anyhow::{Context, Result, bail};
 use flate2::{Compression, write::GzEncoder};
@@ -257,8 +255,8 @@ pub(crate) fn get_openapi_upload_urls(
 pub(crate) fn upload_json_to_s3(json_value: &Value, presigned_url: &str) -> Result<()> {
     let client = Client::new();
 
-    let json_bytes = serde_json::to_vec(json_value)
-        .with_context(|| "Failed to serialize JSON for S3 upload")?;
+    let json_bytes =
+        serde_json::to_vec(json_value).with_context(|| "Failed to serialize JSON for S3 upload")?;
 
     let response = client
         .put(presigned_url)
@@ -281,4 +279,101 @@ pub(crate) fn upload_json_to_s3(json_value: &Value, presigned_url: &str) -> Resu
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::{self, File};
+
+    use flate2::read::GzDecoder;
+    use tar::Archive;
+    use tempfile::TempDir;
+
+    use super::create_app_tarball;
+
+    #[test]
+    fn create_app_tarball_includes_generated_rust_and_typescript_sdks() {
+        let temp_dir = TempDir::new().unwrap();
+        let app_root = temp_dir.path();
+        fs::create_dir_all(app_root.join(".forklaunch")).unwrap();
+        fs::create_dir_all(app_root.join("crates").join("accounts").join("src")).unwrap();
+        fs::create_dir_all(
+            app_root
+                .join("sdks")
+                .join("rust")
+                .join("accounts-sdk")
+                .join("src"),
+        )
+        .unwrap();
+        fs::create_dir_all(app_root.join("sdks").join("typescript").join("src")).unwrap();
+        fs::create_dir_all(app_root.join("target").join("debug")).unwrap();
+        fs::create_dir_all(app_root.join("node_modules").join("ignored")).unwrap();
+
+        fs::write(app_root.join(".gitignore"), "target\n").unwrap();
+        fs::write(app_root.join("Cargo.toml"), "[workspace]\n").unwrap();
+        fs::write(
+            app_root
+                .join("crates")
+                .join("accounts")
+                .join("src")
+                .join("lib.rs"),
+            "pub fn accounts() {}\n",
+        )
+        .unwrap();
+        fs::write(
+            app_root
+                .join("sdks")
+                .join("rust")
+                .join("accounts-sdk")
+                .join("src")
+                .join("lib.rs"),
+            "pub struct AccountsClient;\n",
+        )
+        .unwrap();
+        fs::write(
+            app_root
+                .join("sdks")
+                .join("typescript")
+                .join("src")
+                .join("index.ts"),
+            "export const sdk = {};\n",
+        )
+        .unwrap();
+        fs::write(app_root.join("target").join("debug").join("ignored"), "ignored").unwrap();
+        fs::write(
+            app_root
+                .join("node_modules")
+                .join("ignored")
+                .join("package.json"),
+            "{}",
+        )
+        .unwrap();
+
+        let tarball_path = app_root.join(".forklaunch").join("release-code.tar.gz");
+        create_app_tarball(app_root, app_root, &tarball_path).unwrap();
+
+        let tarball = File::open(tarball_path).unwrap();
+        let decoder = GzDecoder::new(tarball);
+        let mut archive = Archive::new(decoder);
+        let mut entries = archive
+            .entries()
+            .unwrap()
+            .map(|entry| {
+                entry
+                    .unwrap()
+                    .path()
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+        entries.sort();
+
+        assert!(entries.contains(&"Cargo.toml".to_string()));
+        assert!(entries.contains(&"crates/accounts/src/lib.rs".to_string()));
+        assert!(entries.contains(&"sdks/rust/accounts-sdk/src/lib.rs".to_string()));
+        assert!(entries.contains(&"sdks/typescript/src/index.ts".to_string()));
+        assert!(!entries.iter().any(|entry| entry.starts_with("target/")));
+        assert!(!entries.iter().any(|entry| entry.starts_with("node_modules/")));
+    }
 }

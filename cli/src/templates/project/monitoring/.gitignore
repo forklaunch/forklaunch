@@ -1,1 +1,11 @@
-../../../../../blueprint/monitoring/.gitignore
+node_modules
+.idea
+.DS_Store
+
+dist
+lib
+
+.vscode
+
+*dist
+*lib

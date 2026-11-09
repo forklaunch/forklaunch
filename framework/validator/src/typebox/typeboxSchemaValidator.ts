@@ -310,12 +310,10 @@ export class TypeboxSchemaValidator implements SV<
     title: 'Undefined'
   });
   any: TAny = Type.Any({
-    type: 'object',
     example: 'any',
     title: 'Any'
   });
   unknown: TUnknown = Type.Unknown({
-    type: 'object',
     example: 'unknown',
     title: 'Unknown'
   });
@@ -720,6 +718,12 @@ export class TypeboxSchemaValidator implements SV<
             }
           })
         };
+  }
+
+  /** Optional markers describe presence; default annotations do not imply it. */
+  openapiRequestBody(schema: unknown): { required: boolean; schema: SchemaObject } {
+    const input = this.schemify(schema as TIdiomaticSchema);
+    return { required: !KindGuard.IsOptional(input), schema: this.openapi(input) };
   }
 
   /**

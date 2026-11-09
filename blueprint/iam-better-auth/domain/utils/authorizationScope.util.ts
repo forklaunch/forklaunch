@@ -35,10 +35,13 @@ export function getAuthorizationScope(
   };
 }
 
-/** Every scope component is bound into the HMAC-signed route path. */
+/**
+ * The full request path (including the `/user` router mount) the HMAC
+ * verifier checks; every scope component is bound into it.
+ */
 export function authorizationScopePath(
   scope: AuthorizationScope,
   resource: 'roles' | 'permissions'
 ): string {
-  return `/${encodeURIComponent(scope.userId)}/organizations/${encodeURIComponent(scope.organizationId)}/sessions/${encodeURIComponent(scope.sessionId)}/surface-${resource}`;
+  return `/user/${encodeURIComponent(scope.userId)}/organizations/${encodeURIComponent(scope.organizationId)}/sessions/${encodeURIComponent(scope.sessionId)}/surface-${resource}`;
 }

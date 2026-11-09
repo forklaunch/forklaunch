@@ -6,6 +6,28 @@ user-invokable: true
 
 # ForkLaunch CLI Skill
 
+## Frontend domain controls
+
+With a CLI version supporting website domain actions, use the website command
+for the static frontend; `app domain` continues to configure application/service
+DNS. Every action is scoped to an environment and region:
+
+```bash
+fl app website --environment production --region us-east-2
+fl app website --environment production --region us-east-2 --enable
+fl app website --environment production --region us-east-2 --domain study.example.com
+fl app website --environment production --region us-east-2 --check-domain
+fl app website --environment production --region us-east-2 --remove-domain
+```
+
+The read returns the published URL, pending change, DNS validation records, and
+certificate status. Connect/remove stage changes; deploy a saved release after
+validation to publish them. The CLI first reads current revisions and includes
+both in the write. On conflicts or ambiguous write failures, read status before
+retrying. Custom frontend domains require Pro or Enterprise. `--disable` is only
+available before the first website publication. CLI 1.33.0 predates the domain
+flags; check `fl app website --help` before using them.
+
 ## Prerequisites
 
 Before running any `forklaunch` command, verify the CLI is installed:
@@ -111,6 +133,7 @@ Studio CLI command blocks are scaffold-only. They may contain:
 - `forklaunch init application ...`
 - `forklaunch init service ...`
 - `forklaunch init worker ...`
+- `forklaunch init agent ...`
 - `forklaunch init library ...`
 - `forklaunch init router ...`
 - exactly one package install command after all init commands: `pnpm install` for Node runtime or `bun install` for Bun runtime
@@ -177,7 +200,7 @@ Use these lessons when repairing or planning generated ForkLaunch Studio apps:
 | `--validator` | Yes | `zod`, `typebox` |
 | `--http-framework` | Yes | `express`, `hyper-express` |
 | `--formatter` | Yes | `prettier`, `biome` |
-| `--linter` | Yes | `eslint`, `oxlint` |
+| `--linter` | Yes | `oxlint` (`eslint` rejected: no TypeScript 7 support) |
 | `--test-framework` | Yes | `vitest`, `jest` |
 | `--license` | Yes | `MIT`, `Apache-2.0`, `none`, etc. |
 | `--author` | Yes | Author name string |
@@ -213,6 +236,22 @@ Adds an isolated module under `src/modules/<name>/` with:
 ### `forklaunch init worker`
 
 Same as service but with BullMQ/Kafka worker infrastructure instead of HTTP routes.
+
+### `forklaunch init agent`
+
+Adds an AI agent: a service with `variant = "agent"` that serves
+`GET /api/v1/agent/tools`, `POST /api/v1/agent/tasks` and `/tasks/stream`,
+plus `agent.config.ts` and a `tools/` folder. Needs IAM in the app.
+
+```bash
+forklaunch init agent assistant --path ./src/modules \
+  --description "Order assistant" --instructions "You help staff with orders." \
+  --service orders --mcp linear=https://mcp.linear.app/mcp
+```
+
+`--service` and `--mcp` repeat. See `/agents` for adding tools.
+`--language rust` generates a Rust agent on the framework agent runtime
+instead: tools live in `agent/tools/` and sources in `agent/mod.rs`.
 
 ### `forklaunch init library`
 
@@ -390,9 +429,9 @@ forklaunch init app <app_name>
 --http-framework <type>  # express, hyper-express (bun forces express)
 --test-framework <type>  # vitest, jest
 --formatter <type>       # prettier, biome
---linter <type>          # eslint, oxlint
+--linter <type>          # oxlint
 --modules <module>       # billing-base, billing-stripe, iam-base, iam-better-auth,
-                         # ecommerce-stripe, messaging-base, messaging-twilio, cac-base
+                         # ecommerce-stripe, cac-base
 --path <path>            # REQUIRED in practice — see below
 --modules-path <path>    # src/modules | modules
 
@@ -494,7 +533,7 @@ forklaunch change application [--path <app_root>]
 --runtime bun|node
 --http-framework express|hyper-express
 --formatter prettier|biome
---linter eslint|oxlint
+--linter oxlint
 --test-framework vitest|jest
 --validator zod|typebox
 -N <name>                # Rename the application
@@ -1106,7 +1145,8 @@ forklaunch openapi export
 
 # Options:
 -p, --path <base_path>  # Path to application root (optional)
--o, --output <output>   # Output directory (default: .forklaunch/openapi)
+-o, --output <output>   # Also write <output>/<service>/openapi.json (default: each service's
+                        # registered artifact, e.g. src/<service>/sdk/typescript/openapi.json)
 
 # Examples:
 forklaunch openapi export
@@ -1402,7 +1442,7 @@ forklaunch change application
 --runtime bun|node
 --http-framework express|hyper-express
 --formatter prettier|biome
---linter eslint|oxlint
+--linter oxlint
 --test-framework vitest|jest
 --validator zod|typebox
 --dry-run              # Preview changes without applying
@@ -1822,8 +1862,11 @@ Forklaunch auto-generates:
 
 Specs are available at:
 
-- `.forklaunch/openapi/<module>/openapi.json`
-- `.forklaunch/openapi/<module>/asyncapi.json`
+- each service's SDK folder (`<service>/sdk/typescript/` for Rust services, `<service>/sdk/` for
+  TypeScript services with a service-owned SDK): `contract.json`, `openapi.json`, `asyncapi.json`
+- `.forklaunch/openapi/<module>/openapi.json` for TypeScript services without a service-owned SDK
+
+`.forklaunch/` itself holds only `manifest.toml`.
 
 ## Handler Contract Details & Typed req/res
 

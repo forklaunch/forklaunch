@@ -26,9 +26,7 @@ const processEvents: WorkerProcessFunction<{{pascal_case_name}}EventRecord> =
 
     for (const event of events) {
       try {
-        openTelemetryCollector.info(
-          `processing message from ${ci.resolve(tokens.QUEUE_NAME)}: ${event.message}`
-        );
+        openTelemetryCollector.info('Processing worker message');
         event.processed = true;
       } catch (error) {
         failedEvents.push({
@@ -44,12 +42,8 @@ const processEvents: WorkerProcessFunction<{{pascal_case_name}}EventRecord> =
 const processErrors: WorkerFailureHandler<{{pascal_case_name}}EventRecord> = async (
   events
 ) => {
-  events.forEach((event) => {
-    openTelemetryCollector.error(
-      event.error,
-      'error processing message',
-      event.value
-    );
+  events.forEach(() => {
+    openTelemetryCollector.error('Worker message processing failed');
   });
 };
 
