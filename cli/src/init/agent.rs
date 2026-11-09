@@ -527,6 +527,17 @@ impl CliCommand for AgentCommand {
             .with_context(|| "Failed to write the agent files")?;
 
         if !dryrun {
+            // Like `init service`: a mixed application reads a project without a
+            // language as native, which leaves the agent out of the TypeScript
+            // production image, and the shared images must list the new package.
+            crate::sdk::typescript_build::prepare_default_service(
+                &app_root_path,
+                &agent_name,
+                &service_data.runtime,
+                service_data.is_iam_configured,
+            )?;
+            rust_project::record_typescript_language(&app_root_path, &agent_name)?;
+            rust_project::refresh_mixed_images(&app_root_path)?;
             stdout.set_color(termcolor::ColorSpec::new().set_fg(Some(termcolor::Color::Green)))?;
             writeln_ok(&mut stdout, &agent_name)?;
             stdout.reset()?;
