@@ -3,6 +3,7 @@
 // coding/compliance SME should review before this fixture is treated as
 // authoritative for anything beyond demoing the scrubbing engine's logic.
 // See plan/cac/MEDICAL-CODING-IMPLEMENTATION-PLAN.md §6, §12 item 3.
+import { normalizeCode } from './codeNormalization';
 import {
   CPT_SHAPED_MUE_CAPS,
   CPT_SHAPED_PTP_CONFLICTS
@@ -16,9 +17,13 @@ import {
 // proving there's no format assumption baked in.
 export const MOCK_NCCI_PTP_CONFLICTS: ReadonlyArray<
   readonly [string, string]
-> = [['PROC-001', 'PROC-002'], ...CPT_SHAPED_PTP_CONFLICTS];
+> = [['PROC-001', 'PROC-002'], ...CPT_SHAPED_PTP_CONFLICTS].map(
+  ([a, b]) => [normalizeCode(a), normalizeCode(b)] as const
+);
 
-export function isPtpConflict(codeA: string, codeB: string): boolean {
+export function isPtpConflict(rawA: string, rawB: string): boolean {
+  const codeA = normalizeCode(rawA);
+  const codeB = normalizeCode(rawB);
   return MOCK_NCCI_PTP_CONFLICTS.some(
     ([a, b]) =>
       (a === codeA && b === codeB) || (a === codeB && b === codeA)
@@ -27,7 +32,8 @@ export function isPtpConflict(codeA: string, codeB: string): boolean {
 
 // NCCI MUE — the maximum plausible unit count for a single mock procedure
 // code on one date of service. Codes not listed here have no mock unit cap.
-export const MOCK_NCCI_MUE_CAPS: Record<string, number> = {
+// Keyed by normalized code (see normalizeCode).
+const MUE_CAPS_AS_WRITTEN: Record<string, number> = {
   'PROC-001': 1,
   'PROC-002': 1,
   'PROC-003': 3,
@@ -41,3 +47,10 @@ export const MOCK_NCCI_MUE_CAPS: Record<string, number> = {
   'PROC-011': 2,
   ...CPT_SHAPED_MUE_CAPS
 };
+
+export const MOCK_NCCI_MUE_CAPS: Record<string, number> = Object.fromEntries(
+  Object.entries(MUE_CAPS_AS_WRITTEN).map(([code, cap]) => [
+    normalizeCode(code),
+    cap
+  ])
+);

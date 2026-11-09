@@ -26,6 +26,11 @@ export const Icd10Code = defineComplianceEntity({
     description: fp.string().compliance('none'),
     // The CDC/NCHS release this row came from — effective October 1 each
     // year (§7).
+    // TODO: validation and retirement ignore date of service. The table
+    // holds one release, so once the October release retires a code,
+    // re-scrubbing a September visit flags a code that was valid that day.
+    // Keeping each code's effective and end dates and checking them against
+    // the encounter date would fix it. See implementation-cac-base README.
     effectiveDate: fp.datetime().nullable().compliance('none')
   }
 });

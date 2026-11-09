@@ -150,3 +150,10 @@ TODO:
    load CMS NCCI PTP/MUE files and their MAC's LCD crosswalks.
 2. Move the CPT-shaped fixture out of the default tables, into the tests
    that use it.
+3. Check codes against the date of service. cac-base's reference tables
+   (`icd10_code`, `hcpcs_code`, `cpt_code`) hold only the current release:
+   a refresh removes retired codes, and validation never looks at
+   `effectiveDate`. So once the October 1 ICD-10-CM release retires a code,
+   re-scrubbing a September visit denies a code that was valid on that day.
+   The fix is to keep each code's effective and end dates instead of
+   deleting it, and validate against the encounter's date.

@@ -3,7 +3,8 @@ import { normalizeCode } from '../domain/codeNormalization';
 import {
   newParseStats,
   parseCodeThenDescriptionLines,
-  parseCsvRows
+  parseCsvRows,
+  parseHcpcsReleaseRows
 } from '../persistence/etl/csvRowSource';
 import { columnIndexFromEnv, flagFromEnv } from '../persistence/etl/env';
 
@@ -66,6 +67,54 @@ describe('parseCsvRows', () => {
     await expect(
       collect(parseCsvRows(Readable.from(['A00,Cholera']), { code: Number('abc'), description: 1 }))
     ).rejects.toThrow(/code must be a column index/);
+  });
+});
+
+describe('parseHcpcsReleaseRows (CMS HCPCS Level II release)', () => {
+  it('reads procedure records, joins continuation lines and leaves out modifiers', async () => {
+    const file = [
+      'HCPC,SEQNUM,RECID,LONG DESCRIPTION,SHORT DESCRIPTION',
+      'A0021,00100,3,"Ambulance service, outside state per mile, transport","Outside state ambulance serv"',
+      'A0021,00200,4,"(Medicaid only)",',
+      'J3490,00100,3,"Unclassified drugs","Drugs unclassified injection"',
+      'AA,00100,7,"Anesthesia services performed personally by anesthesiologist","Anes perf by anesthesiologist"',
+      'AA,00200,8,"(continued modifier text)",'
+    ].join('\r\n');
+    const stats = newParseStats();
+    const rows = await collect(parseHcpcsReleaseRows(Readable.from([file]), stats));
+    expect(rows).toEqual([
+      {
+        code: 'A0021',
+        description: 'Ambulance service, outside state per mile, transport (Medicaid only)'
+      },
+      { code: 'J3490', description: 'Unclassified drugs' }
+    ]);
+    expect(stats.skipped).toBe(0);
+  });
+
+  it('finds the columns by header name, in any order', async () => {
+    const file = ['RECID,LONG DESCRIPTION,HCPC', '3,"Unclassified drugs",J3490'].join('\n');
+    const rows = await collect(parseHcpcsReleaseRows(Readable.from([file])));
+    expect(rows).toEqual([{ code: 'J3490', description: 'Unclassified drugs' }]);
+  });
+
+  it('counts a record it does not recognize as skipped', async () => {
+    const file = [
+      'HCPC,SEQNUM,RECID,LONG DESCRIPTION',
+      'J3490,00100,3,"Unclassified drugs"',
+      'G0438,00100,9,"Annual wellness visit"',
+      'G0439,00100,3,'
+    ].join('\n');
+    const stats = newParseStats();
+    const rows = await collect(parseHcpcsReleaseRows(Readable.from([file]), stats));
+    expect(rows.map((r) => r.code)).toEqual(['J3490']);
+    expect(stats.skipped).toBe(2);
+  });
+
+  it('reads a plain code,description CSV when the CMS headers are absent', async () => {
+    const file = ['code,description', 'J3490,"Unclassified drugs"'].join('\n');
+    const rows = await collect(parseHcpcsReleaseRows(Readable.from([file])));
+    expect(rows).toEqual([{ code: 'J3490', description: 'Unclassified drugs' }]);
   });
 });
 

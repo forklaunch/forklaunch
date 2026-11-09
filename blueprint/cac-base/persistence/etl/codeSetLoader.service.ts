@@ -24,8 +24,10 @@ export interface CodeSetLoadResult {
 
 const DEFAULT_BATCH_SIZE = 1000;
 // A full release smaller than this share of the rows already loaded is
-// treated as a truncated file, and nothing is retired.
-const MIN_RELEASE_SHARE = 0.5;
+// treated as a truncated file, and nothing is retired. A year's ICD-10-CM
+// changes touch a few percent of the table, so a release that is more than
+// 10% smaller than what is loaded is far more likely cut off than real.
+const MIN_RELEASE_SHARE = 0.9;
 
 /**
  * Streams already-parsed rows from any source into a code-set reference
@@ -39,7 +41,10 @@ const MIN_RELEASE_SHARE = 0.5;
  * Codes are stored normalized (see normalizeCode). A code that appears
  * twice in one release is loaded once, the later row winning. With
  * `replaceRelease`, codes absent from the release are removed afterwards,
- * so a code retired by CDC/CMS stops validating.
+ * so a code retired by CDC/CMS stops validating. Nothing is removed when
+ * any line of the release was skipped: a code on a malformed line would
+ * otherwise be deleted, and every claim using it denied, until the next
+ * successful refresh.
  */
 export class CodeSetLoaderService {
   constructor(
@@ -77,6 +82,9 @@ export class CodeSetLoaderService {
       rowsRetired: 0
     };
     const loaded = new Set<string>();
+    // rows whose code is empty once normalized; counted with the row
+    // source's own skipped lines
+    let blankCodes = 0;
     // keyed by code: Postgres refuses an upsert that touches one row twice
     // ("ON CONFLICT DO UPDATE command cannot affect row a second time")
     let batch = new Map<string, CodeSetRow>();
@@ -109,7 +117,10 @@ export class CodeSetLoaderService {
     for await (const row of rows) {
       result.rowsRead += 1;
       const code = normalizeCode(row.code);
-      if (!code) continue;
+      if (!code) {
+        blankCodes += 1;
+        continue;
+      }
       // a code also seen in an earlier, already-flushed batch is upserted
       // again, which is harmless; within one batch the later row wins
       batch.set(code, { ...row, code });
@@ -119,9 +130,14 @@ export class CodeSetLoaderService {
       }
     }
     await flushBatch();
-    result.rowsSkipped = options.skipped?.() ?? 0;
+    result.rowsSkipped = (options.skipped?.() ?? 0) + blankCodes;
 
-    if (options.replaceRelease) {
+    if (options.replaceRelease && result.rowsSkipped > 0) {
+      this.otel.warn(
+        '[CodeSetLoaderService] Lines were skipped; not retiring any codes',
+        { entity: options.tableName, rowsSkipped: result.rowsSkipped }
+      );
+    } else if (options.replaceRelease) {
       result.rowsRetired = await this.retireMissing(options.tableName, loaded, organizationId);
     }
 
@@ -148,7 +164,7 @@ export class CodeSetLoaderService {
     const existing = Number(count);
     if (existing > 0 && loaded.size < existing * MIN_RELEASE_SHARE) {
       throw new Error(
-        `Refusing to retire codes from ${table}: the release has ${loaded.size} codes but ${existing} are loaded. A full release is never under half the current table; is the file truncated?`
+        `Refusing to retire codes from ${table}: the release has ${loaded.size} codes but ${existing} are loaded. A full release is never under ${MIN_RELEASE_SHARE * 100}% of the current table; is the file truncated?`
       );
     }
     // One array parameter, not one per code: a release has tens of

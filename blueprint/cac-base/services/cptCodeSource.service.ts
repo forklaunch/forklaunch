@@ -1,5 +1,6 @@
 import { CptCodeSource } from '@forklaunch/implementation-cac-base/services';
 import { EntityManager } from '@mikro-orm/postgresql';
+import { normalizeCode } from '../domain/codeNormalization';
 import { CptCode } from '../persistence/entities/cptCode.entity';
 
 // The concrete, ready-to-use CptCodeSource: looks codes up against the
@@ -15,7 +16,11 @@ export class EntityManagerCptCodeSource implements CptCodeSource {
     private readonly organizationId: string
   ) {}
 
-  async lookup(code: string) {
+  // The loader stores codes normalized (see normalizeCode), so the lookup
+  // has to use the same form or a code typed with a stray space or in
+  // lower case would read as unknown.
+  async lookup(rawCode: string) {
+    const code = normalizeCode(rawCode);
     const found = await this.em.findOne(CptCode, {
       code,
       organizationId: this.organizationId

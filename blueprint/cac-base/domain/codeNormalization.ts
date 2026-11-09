@@ -1,7 +1,5 @@
-// ICD-10-CM and HCPCS codes are stored and compared in one canonical form:
-// no dot, no whitespace, upper case. The CDC release files omit the dot
-// (E119) while clinicians and claims write it (E11.9), and an exact-string
-// lookup would call one of them invalid.
-export function normalizeCode(code: string): string {
-  return code.replace(/[\s.]/g, '').toUpperCase();
-}
+// One definition, shared with the scrubbing rule tables in
+// implementation-cac-base, so the reference tables, the claim path and the
+// rules all normalize the same way: no dot, no whitespace, upper case
+// (E11.9, e119 and " E119" all become E119).
+export { normalizeCode } from '@forklaunch/implementation-cac-base/services';

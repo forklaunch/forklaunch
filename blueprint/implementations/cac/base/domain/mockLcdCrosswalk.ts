@@ -6,11 +6,15 @@
 // Illustrative only — a coding/compliance SME should review this crosswalk
 // before treating it as more than a scrubbing-engine test fixture. See
 // plan/cac/MEDICAL-CODING-IMPLEMENTATION-PLAN.md §6, §12 item 3.
+import { normalizeCode } from './codeNormalization';
 import { CPT_SHAPED_LCD_CROSSWALK } from './cptShapedFixture';
 
 // Includes both the "PROC-XXX" placeholder entries and the CPT-*shaped*
-// synthetic entry (§5 readiness bar) — same lookup, same function.
-export const MOCK_LCD_CROSSWALK: Record<string, ReadonlyArray<string>> = {
+// synthetic entry (§5 readiness bar) — same lookup, same function. Written
+// with dots for readability; MOCK_LCD_CROSSWALK below is the same table
+// keyed by normalized codes (see normalizeCode), so E119, e11.9 and E11.9
+// all justify PROC-005.
+const LCD_CROSSWALK_AS_WRITTEN: Record<string, ReadonlyArray<string>> = {
   // Office Visit — justified by an acute condition needing evaluation.
   'PROC-001': ['J06.9'], // Acute upper respiratory infection, unspecified
   // Annual Physical Exam — justified by a routine/preventive encounter.
@@ -36,18 +40,29 @@ export const MOCK_LCD_CROSSWALK: Record<string, ReadonlyArray<string>> = {
   ...CPT_SHAPED_LCD_CROSSWALK
 };
 
+export const MOCK_LCD_CROSSWALK: Record<string, ReadonlyArray<string>> =
+  Object.fromEntries(
+    Object.entries(LCD_CROSSWALK_AS_WRITTEN).map(([procedure, diagnoses]) => [
+      normalizeCode(procedure),
+      diagnoses.map(normalizeCode)
+    ])
+  );
+
 export function isMedicallyNecessary(
   procedureCode: string,
   diagnosisCodes: ReadonlyArray<string>
 ): boolean {
   // own entries only: "toString" is not a procedure code
-  const justifyingDiagnoses = Object.hasOwn(MOCK_LCD_CROSSWALK, procedureCode)
-    ? MOCK_LCD_CROSSWALK[procedureCode]
+  const procedure = normalizeCode(procedureCode);
+  const justifyingDiagnoses = Object.hasOwn(MOCK_LCD_CROSSWALK, procedure)
+    ? MOCK_LCD_CROSSWALK[procedure]
     : undefined;
   if (!justifyingDiagnoses) {
     // No mock crosswalk entry for this procedure — nothing to check against,
     // so it isn't flagged as medically unnecessary by this mock data.
     return true;
   }
-  return diagnosisCodes.some((code) => justifyingDiagnoses.includes(code));
+  return diagnosisCodes.some((code) =>
+    justifyingDiagnoses.includes(normalizeCode(code))
+  );
 }

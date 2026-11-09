@@ -2,6 +2,7 @@ import {
   isMedicallyNecessary,
   MOCK_LCD_CROSSWALK
 } from '../domain/mockLcdCrosswalk';
+import { normalizeCode } from '../domain/codeNormalization';
 import { isPtpConflict, MOCK_NCCI_MUE_CAPS } from '../domain/mockNcciRules';
 
 export type DenialReasonCategory =
@@ -39,10 +40,19 @@ export interface ScrubbingResult {
 // the code data underneath changes.
 export class ScrubbingService {
   scrub(
-    lines: ReadonlyArray<ScrubClaimLine>,
-    diagnosisCodes: ReadonlyArray<string>
+    rawLines: ReadonlyArray<ScrubClaimLine>,
+    rawDiagnosisCodes: ReadonlyArray<string>
   ): ScrubbingResult {
     const findings: ScrubbingFinding[] = [];
+
+    // The rule tables are keyed by normalized code, so the claim's codes
+    // are normalized once here: E119, e11.9 and E11.9 are one diagnosis,
+    // and the same procedure written two ways is one MUE bucket.
+    const lines = rawLines.map((line) => ({
+      ...line,
+      procedureCode: normalizeCode(line.procedureCode)
+    }));
+    const diagnosisCodes = rawDiagnosisCodes.map(normalizeCode);
 
     // Required fields — structural completeness (CO-16: "claim/service lacks
     // information", always paired with a RARC naming what's missing), not

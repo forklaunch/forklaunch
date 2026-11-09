@@ -204,6 +204,32 @@ describe('ScrubbingService', () => {
     );
   });
 
+  it('matches rule tables however a code is written', () => {
+    // the crosswalk justifies PROC-005 with E11.9; E119 is the CDC form
+    for (const diagnosis of ['E11.9', 'E119', 'e11.9', ' E119 ']) {
+      expect([diagnosis, scrubbing.scrub([{ procedureCode: 'PROC-005', units: 1 }], [diagnosis])])
+        .toEqual([diagnosis, { clean: true, findings: [] }]);
+    }
+    // the same procedure written two ways is one MUE bucket (cap 1)
+    const mue = scrubbing.scrub(
+      [
+        { procedureCode: 'PROC-005', units: 1 },
+        { procedureCode: 'proc-005', units: 1 }
+      ],
+      ['E119']
+    );
+    expect(mue.findings.map((f) => f.category)).toEqual(['ncci_mue']);
+    // PTP pairs match whatever the case
+    const ptp = scrubbing.scrub(
+      [
+        { procedureCode: 'proc-001', units: 1 },
+        { procedureCode: 'PROC-002', units: 1 }
+      ],
+      ['J06.9', 'Z00.00']
+    );
+    expect(ptp.findings.map((f) => f.category)).toEqual(['ncci_ptp']);
+  });
+
   it('does not take inherited object keys for rule entries', () => {
     const result = scrubbing.scrub(
       [

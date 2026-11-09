@@ -4,19 +4,20 @@ import {
   CodeSetLoaderService,
   CodeSetLoadResult
 } from './codeSetLoader.service';
-import { CsvColumnMap, newParseStats, parseCsvRows } from './csvRowSource';
+import {
+  CsvColumnMap,
+  newParseStats,
+  parseCsvRows,
+  parseHcpcsReleaseRows
+} from './csvRowSource';
 
 // CMS publishes HCPCS Level II quarterly (Jan/Apr/Jul/Oct) — §7. Same
 // loader shape as ICD-10-CM (loadIcd10Codes) — HCPCS just has a tighter
-// refresh cadence. The default map reads a comma-delimited export with a
-// header row (code, description); CMS's own release is a spreadsheet, so
-// export it to CSV or pass the map that matches your file.
-const DEFAULT_COLUMN_MAP: CsvColumnMap = {
-  code: 0,
-  description: 1,
-  hasHeader: true
-};
-
+// refresh cadence. CMS ships the release as a spreadsheet; export it to CSV
+// and it is read as published (HCPC, SEQNUM, RECID, LONG DESCRIPTION...,
+// see parseHcpcsReleaseRows): continuation rows are joined and modifier
+// rows left out. A plain code,description CSV with a header row also
+// works. Pass a columnMap to read any other layout.
 export async function loadHcpcsCodes(
   loader: CodeSetLoaderService,
   source: Readable,
@@ -25,7 +26,9 @@ export async function loadHcpcsCodes(
   const stats = newParseStats();
   return loader.load(
     HcpcsCode,
-    parseCsvRows(source, options.columnMap ?? DEFAULT_COLUMN_MAP, stats),
+    options.columnMap
+      ? parseCsvRows(source, options.columnMap, stats)
+      : parseHcpcsReleaseRows(source, stats),
     {
       tableName: 'hcpcs_code',
       replaceRelease: options.replaceRelease,

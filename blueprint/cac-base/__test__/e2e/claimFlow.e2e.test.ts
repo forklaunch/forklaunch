@@ -846,6 +846,39 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
       expect(scrubbed.body).toEqual({ status: 'ready', denials: [] });
     });
 
+    it('a diagnosis justifies a crosswalked procedure however either code is written', async () => {
+      // PROC-005 is justified by E11.9 in mockLcdCrosswalk.ts. E119 is the
+      // CDC file's form and the stored form; all of these must scrub ready,
+      // not CO-50 from the crosswalk or CO-16 from the reference tables.
+      const cases = [
+        ['E11.9', 'PROC-005'],
+        ['E119', 'PROC-005'],
+        ['e11.9', 'PROC-005'],
+        [' E119 ', 'proc-005']
+      ];
+      for (const [index, [icd10Code, procedureCode]] of cases.entries()) {
+        const encounterId = await seedEncounter(forkPostgresEm(setup), {
+          mrn: `E2E-NORMALIZED-00${index}`,
+          icd10Code,
+          procedureCode
+        });
+        const built = await call(baseUrl, '/claim/build', {
+          method: 'POST',
+          body: { encounterId },
+          token: jwt
+        });
+        const scrubbed = await call(baseUrl, `/claim/${(built.body as { id: string }).id}/scrub`, {
+          method: 'POST',
+          token: jwt
+        });
+        expect([icd10Code, procedureCode, scrubbed.body]).toEqual([
+          icd10Code,
+          procedureCode,
+          { status: 'ready', denials: [] }
+        ]);
+      }
+    });
+
     it('a claim scrubbed ready on mock codes stays ready after a CPT license is activated', async () => {
       const em = forkPostgresEm(setup);
       const encounterId = await seedEncounter(em, {
@@ -944,25 +977,43 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
           )
       ).map((r) => `${r.code}=${r.description}`);
 
+    // Synthetic CPT-shaped codes only (see cptShapedFixture.ts in
+    // implementation-cac-base): 4 digits + T, far above any assigned
+    // Category III code, with made-up descriptions. No real CPT content.
+    const release = (count: number) =>
+      Array.from({ length: count }, (_, i) => `998${i}T,Synthetic code ${i}`);
+
     it('loads a code repeated within one batch once, the later row winning', async () => {
-      const result = await loadCpt(['99213,Office visit', '99214,Longer visit', '99213,"Office visit, established"']);
+      const result = await loadCpt(['9980T,First', '9981T,Second', '9980T,"First, revised"']);
       expect(result.rowsUpserted).toBe(2);
-      expect(await cptCodes()).toEqual(['99213=Office visit, established', '99214=Longer visit']);
+      expect(await cptCodes()).toEqual(['9980T=First, revised', '9981T=Second']);
     });
 
     it('counts lines it cannot use instead of skipping them silently', async () => {
-      const result = await loadCpt(['99213,Office visit', 'no description here']);
+      const result = await loadCpt(['9980T,First', 'no description here']);
       expect(result.rowsSkipped).toBe(1);
     });
 
     it('removes codes a full release no longer contains, and refuses a truncated release', async () => {
-      await loadCpt(['99213,a', '99214,b', '99215,c', '99216,d']);
-      const result = await loadCpt(['99213,a', '99214,b', '99215,c'], true);
+      await loadCpt(release(10));
+      const result = await loadCpt(release(9), true);
       expect(result.rowsRetired).toBe(1);
-      expect(await cptCodes()).toEqual(['99213=a', '99214=b', '99215=c']);
+      expect(await cptCodes()).toHaveLength(9);
+      expect(await cptCodes()).not.toContain('9989T=Synthetic code 9');
 
-      await expect(loadCpt(['99213,a'], true)).rejects.toThrow(/truncated/);
-      expect(await cptCodes()).toHaveLength(3);
+      // 7 of 9 is under the 90% floor: treated as a cut-off file
+      await expect(loadCpt(release(7), true)).rejects.toThrow(/truncated/);
+      expect(await cptCodes()).toHaveLength(9);
+    });
+
+    it('retires nothing from a release with a malformed line', async () => {
+      await loadCpt(release(10));
+      // a full release in which the line for 9989T is broken
+      const result = await loadCpt([...release(9), '9989T'], true);
+      expect(result.rowsSkipped).toBe(1);
+      expect(result.rowsRetired).toBe(0);
+      expect(await cptCodes()).toHaveLength(10);
+      expect(await cptCodes()).toContain('9989T=Synthetic code 9');
     });
   });
 });

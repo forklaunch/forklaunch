@@ -141,3 +141,85 @@ export async function* parseCodeThenDescriptionLines(
     yield { code, description };
   }
 }
+
+// RECID values in the CMS HCPCS Level II release: 3 starts a procedure
+// code's record and 4 continues its long description; 7 and 8 are the
+// same for modifiers, which are not procedure codes and are not loaded.
+const HCPCS_RECID_PROCEDURE = '3';
+const HCPCS_RECID_PROCEDURE_CONTINUED = '4';
+const HCPCS_RECID_MODIFIER = new Set(['7', '8']);
+
+/**
+ * Parses a CSV export of the CMS HCPCS Level II release
+ * (HCPC2026_JAN_ANWEB and similar). Columns are found by header name, so
+ * extra or reordered columns are fine:
+ *
+ *   HCPC,SEQNUM,RECID,LONG DESCRIPTION,SHORT DESCRIPTION,...
+ *   A0021,00100,3,"Ambulance service, outside state per mile, transport",...
+ *   A0021,00200,4,"(Medicaid only)",...
+ *
+ * A long description longer than one record continues on RECID 4 rows;
+ * those are joined onto the code's description. Modifier rows (RECID 7
+ * and 8) are left out. A row with any other RECID, or without a code or
+ * description, counts as skipped.
+ *
+ * Without HCPC and RECID headers, the file is read as a plain
+ * code,description CSV with a header row.
+ */
+export async function* parseHcpcsReleaseRows(
+  source: Readable,
+  stats?: ParseStats
+): AsyncIterable<CodeSetRow> {
+  const rl = createInterface({ input: source, crlfDelay: Infinity });
+  let lineNumber = 0;
+  let layout:
+    | { kind: 'cms'; code: number; recid: number; description: number }
+    | { kind: 'plain' }
+    | undefined;
+  let pending: CodeSetRow | undefined;
+
+  for await (const line of rl) {
+    lineNumber += 1;
+    if (line.trim().length === 0) continue;
+    const fields = splitLine(line, ',');
+
+    if (!layout) {
+      const headers = fields.map((h) => h.trim().toUpperCase());
+      const code = headers.indexOf('HCPC');
+      const recid = headers.indexOf('RECID');
+      const description = headers.indexOf('LONG DESCRIPTION');
+      layout =
+        code >= 0 && recid >= 0 && description >= 0
+          ? { kind: 'cms', code, recid, description }
+          : { kind: 'plain' };
+      continue;
+    }
+
+    if (layout.kind === 'plain') {
+      const code = fields[0]?.trim();
+      const description = fields[1]?.trim();
+      if (!code || !description) {
+        recordSkip(stats, lineNumber);
+        continue;
+      }
+      yield { code, description };
+      continue;
+    }
+
+    const code = fields[layout.code]?.trim();
+    const recid = fields[layout.recid]?.trim();
+    const description = fields[layout.description]?.trim();
+    if (recid && HCPCS_RECID_MODIFIER.has(recid)) continue;
+    if (recid === HCPCS_RECID_PROCEDURE_CONTINUED && pending && code === pending.code) {
+      if (description) pending.description += ` ${description}`;
+      continue;
+    }
+    if (recid !== HCPCS_RECID_PROCEDURE || !code || !description) {
+      recordSkip(stats, lineNumber);
+      continue;
+    }
+    if (pending) yield pending;
+    pending = { code, description };
+  }
+  if (pending) yield pending;
+}

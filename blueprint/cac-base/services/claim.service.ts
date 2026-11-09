@@ -8,6 +8,7 @@ import type {
   ScrubbingFinding
 } from '@forklaunch/implementation-cac-base/services';
 import { EntityManager } from '@mikro-orm/postgresql';
+import { normalizeCode } from '../domain/codeNormalization';
 import { ClaimStatus } from '../domain/enum/claimStatus.enum';
 import { CodeSetProviderType } from '../domain/enum/codeSetProviderType.enum';
 import { DenialReasonCategory } from '../domain/enum/denialReasonCategory.enum';
@@ -108,15 +109,19 @@ export class ClaimService {
       return null;
     }
 
+    // Codes are normalized once, here, before the provider lookup, the
+    // reference-table checks and scrub(): the reference tables and the
+    // scrubbing rule tables are all keyed by normalized code, so E119,
+    // e11.9 and E11.9 must reach every layer as the same code.
     const lines = claim.encounter.charges
       .getItems()
       .map((charge) => ({
-        procedureCode: charge.procedureCode,
+        procedureCode: normalizeCode(charge.procedureCode),
         units: charge.units
       }));
     const diagnosisCodes = claim.encounter.diagnoses
       .getItems()
-      .map((diagnosis) => diagnosis.icd10Code);
+      .map((diagnosis) => normalizeCode(diagnosis.icd10Code));
 
     // Unknown-procedure-code check. ScrubbingService is a pure function
     // with no DB dependency (see the class comment above) and can't answer
