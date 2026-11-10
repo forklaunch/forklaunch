@@ -815,9 +815,13 @@ forklaunch compliance docs download <documentId>... [--approved] [--format md|pd
 forklaunch compliance docs download --all [--include approved|latest] [--format md|pdf|both] [--app <applicationId>] [-o file.zip]
 ```
 
-Documents carry Mermaid diagrams (data flow per system, release flow). PDFs are
-rendered by the platform with the diagrams drawn; markdown keeps the diagram as
-editable Mermaid text. Edit diagrams as text, never as images.
+Diagrams are ```architecture blocks: JSON with `layout` (`layers` for a system,
+`flow` for a process), `nodes` (`id`, `label`, `kind`: client, gateway, service,
+worker with `parent`, database, cache, objectstore, queue, search, integration,
+step, decision, end; optional `detail`) and `edges` (`from`, `to`, optional
+`label`). The dashboard and the PDFs draw them with the same renderer. Edit the
+JSON, never an image; regenerating rebuilds them from platform records.
+```mermaid blocks also render, for diagrams people add by hand.
 
 Agent workflow for filling in a document:
 
