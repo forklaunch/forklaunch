@@ -792,8 +792,13 @@ When uploaded, the platform computes:
 The Document Center writes audit documents (SOC 2, HIPAA, ISO 27001, GDPR,
 PCI DSS) from the platform's records of the organization's apps: data-flow and
 data inventory, infrastructure controls and gaps, subprocessors, change log,
-secure development policy, onboarding and offboarding. Anything the platform
-cannot prove is left as `[Needs input: ...]` for a person to answer.
+secure development policy, onboarding and offboarding, backup and disaster
+recovery, encryption and key management, logging and monitoring, network
+security, GDPR records of processing, and a privacy facts sheet (the facts a
+privacy policy must state, not the policy itself). Anything the platform
+cannot prove is left as `[Needs input: ...]` for a person to answer. People
+and HR policies (code of conduct, training, acceptable use) are left to the
+organization's compliance tool.
 
 Two kinds of document:
 
@@ -813,7 +818,17 @@ forklaunch compliance docs show <documentId>           # newest markdown to stdo
 forklaunch compliance docs save <documentId> --file doc.md [--base-version N] [--note "..."]
 forklaunch compliance docs download <documentId>... [--approved] [--format md|pdf|both] [-o dir]
 forklaunch compliance docs download --all [--include approved|latest] [--format md|pdf|both] [--app <applicationId>] [-o file.zip]
+forklaunch compliance docs push <documentId>... [--json]   # approved version to Oneleet
+forklaunch compliance docs push --all                     # every approved document
 ```
+
+`push` sends a document's approved version (as a PDF) to the organization's
+Oneleet workspace, attached to each Oneleet control that document type is
+evidence for, or to the evidence library when the workspace has none of them.
+Drafts are refused. Oneleet is connected once in the dashboard (Compliance,
+then Documents) with a service key that has the `WRITE_EVIDENCE` scope; the key
+is stored encrypted and never returned. A 409 means Oneleet is not connected
+or the document has no approved version.
 
 Diagrams are ```architecture blocks: JSON with `layout` (`layers` for a system,
 `flow` for a process), `nodes` (`id`, `label`, `kind`: client, gateway, service,

@@ -4,7 +4,8 @@
 //! system document with its own set of applications) can be listed,
 //! generated, regenerated, shown, saved and downloaded. Approval is left to a
 //! person in the dashboard on purpose: an agent can draft and refresh
-//! evidence, but a named human signs it off.
+//! evidence, but a named human signs it off. `push` sends approved versions
+//! to the organization's connected Oneleet workspace; drafts are never sent.
 
 use std::{
     fs,
@@ -74,6 +75,23 @@ struct DocumentDetail {
     approved_version: Option<u32>,
     content: String,
     open_inputs: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PushedControl {
+    control_id: String,
+    title: String,
+    evidence_id: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PushResult {
+    document_id: String,
+    version: u32,
+    file_name: String,
+    controls: Vec<PushedControl>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -315,6 +333,25 @@ impl CliCommand for DocsCommand {
                     .help("Directory (markdown) or file path (zip). Default: current directory"),
             ),
         )
+        .subcommand(
+            command(
+                "push",
+                "Send approved versions to Oneleet, attached to the controls each document is evidence for (connect Oneleet in the dashboard first)",
+            )
+            .arg(
+                Arg::new("document_id")
+                    .num_args(0..)
+                    .help("Document IDs to send"),
+            )
+            .arg(
+                Arg::new("all")
+                    .long("all")
+                    .help("Send every approved document in the organization")
+                    .action(ArgAction::SetTrue)
+                    .conflicts_with("document_id"),
+            )
+            .arg(json_flag()),
+        )
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
@@ -326,6 +363,7 @@ impl CliCommand for DocsCommand {
             Some(("show", m)) => show(m),
             Some(("save", m)) => save(m),
             Some(("download", m)) => download(m),
+            Some(("push", m)) => push(m),
             _ => unreachable!(),
         }
     }
@@ -455,6 +493,67 @@ fn regenerate(m: &ArgMatches) -> Result<()> {
     }
     if failed > 0 {
         bail!("{failed} of {} document(s) failed to regenerate", ids.len());
+    }
+    Ok(())
+}
+
+fn push_one(id: &str) -> Result<PushResult> {
+    let url = format!("{}/{}/push", base(), urlencoding::encode(id));
+    let response =
+        http_client::post(&url, json!({})).with_context(|| ERROR_FAILED_TO_SEND_REQUEST)?;
+    if !response.status().is_success() {
+        return Err(fail(&format!("Failed to send {id} to Oneleet"), response));
+    }
+    response.json().context("Failed to parse push response")
+}
+
+fn push(m: &ArgMatches) -> Result<()> {
+    let ids = if m.get_flag("all") {
+        // Only approved documents: a draft would be refused anyway.
+        let ids: Vec<String> = fetch_catalog(None)?
+            .into_iter()
+            .flat_map(|e| e.documents)
+            .filter(|d| d.approved_version.is_some())
+            .map(|d| d.document_id)
+            .collect();
+        if ids.is_empty() {
+            bail!("No approved documents to send. Approve documents in the dashboard first.");
+        }
+        ids
+    } else {
+        requested_ids(m)?
+    };
+    let mut done = Vec::new();
+    let mut failed = 0;
+    for id in &ids {
+        match push_one(id) {
+            Ok(result) => {
+                if !m.get_flag("json") {
+                    let target = if result.controls.is_empty() {
+                        "the evidence library".to_string()
+                    } else {
+                        result
+                            .controls
+                            .iter()
+                            .map(|c| c.title.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    };
+                    println!("{}  v{} -> {target}", result.file_name, result.version);
+                }
+                done.push(result);
+            }
+            Err(e) => {
+                failed += 1;
+                eprintln!("{e:#}");
+            }
+        }
+    }
+    if m.get_flag("json") {
+        println!("{}", serde_json::to_string_pretty(&done)?);
+    }
+    if failed > 0 {
+        bail!("{failed} of {} document(s) were not sent", ids.len());
     }
     Ok(())
 }
@@ -645,6 +744,34 @@ mod tests {
                 .try_get_matches_from(["docs", "regenerate", "--all", "--apps", "x"])
                 .is_err()
         );
+    }
+
+    #[test]
+    fn push_takes_ids_or_all_but_not_both() {
+        assert!(
+            docs_cmd()
+                .try_get_matches_from(["docs", "push", "--all"])
+                .is_ok()
+        );
+        assert!(
+            docs_cmd()
+                .try_get_matches_from(["docs", "push", "a"])
+                .is_ok()
+        );
+        assert!(
+            docs_cmd()
+                .try_get_matches_from(["docs", "push", "a", "--all"])
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn push_result_deserializes() {
+        let r: PushResult = serde_json::from_str(
+            r#"{"documentId":"d","version":3,"fileName":"x-v3.pdf","controls":[{"controlId":"c","title":"Automated backups","evidenceId":"e"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(r.controls[0].title, "Automated backups");
     }
 
     fn download_matches(args: &[&str]) -> ArgMatches {
