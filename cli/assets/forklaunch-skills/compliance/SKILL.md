@@ -1,6 +1,6 @@
 ---
 name: compliance
-description: "Compliance: fp property builder, defineComplianceEntity, access levels, audit CLI, encryption, tenant isolation, DPIA."
+description: "Compliance: fp property builder, defineComplianceEntity, access levels, audit CLI, compliance documents (docs CLI), encryption, tenant isolation, DPIA."
 user-invokable: true
 ---
 
@@ -18,6 +18,7 @@ Use when the user asks about:
 - Tenant isolation (MikroORM filters, PostgreSQL RLS)
 - Audit logging
 - The `forklaunch compliance audit` CLI command
+- Compliance documents for audits and security reviews (`forklaunch compliance docs`)
 - Compliance reports in the portal
 - GDPR erasure/export endpoints
 - Data residency enforcement
@@ -785,6 +786,54 @@ When uploaded, the platform computes:
 - **Findings** (severity: critical/high/medium/low with point values)
 - **PCI Data Flow Diagram** (Mermaid format)
 - **DPIA** (GDPR Data Protection Impact Assessment with data inventory, mitigations, cross-border analysis)
+
+## Compliance Documents (`forklaunch compliance docs`)
+
+The Document Center writes audit documents (SOC 2, HIPAA, ISO 27001, GDPR,
+PCI DSS) from the platform's records of the organization's apps: data-flow and
+data inventory, infrastructure controls and gaps, subprocessors, change log,
+secure development policy, onboarding and offboarding. Anything the platform
+cannot prove is left as `[Needs input: ...]` for a person to answer.
+
+Two kinds of document:
+
+- **Company-wide** (policies, subprocessors): one per organization. `generate`
+  adds a version to it.
+- **Per system** (data flow, infrastructure controls, change log): each copy
+  covers its own set of applications. `generate` makes a new copy; the default
+  scope is the apps that declare a compliance framework.
+
+```bash
+forklaunch compliance docs list [--app <applicationId>] [--json]
+forklaunch compliance docs generate <type> [--apps id1,id2] [--title "Hospital review"] [--json]
+forklaunch compliance docs regenerate <documentId>... [--json]
+forklaunch compliance docs regenerate --all            # every document configuration
+forklaunch compliance docs regenerate <documentId> --apps id1,id2   # change a system copy's scope
+forklaunch compliance docs show <documentId>           # newest markdown to stdout
+forklaunch compliance docs save <documentId> --file doc.md [--base-version N] [--note "..."]
+forklaunch compliance docs download <documentId>... [--approved] [--format md|pdf|both] [-o dir]
+forklaunch compliance docs download --all [--include approved|latest] [--format md|pdf|both] [--app <applicationId>] [-o file.zip]
+```
+
+Documents carry Mermaid diagrams (data flow per system, release flow). PDFs are
+rendered by the platform with the diagrams drawn; markdown keeps the diagram as
+editable Mermaid text. Edit diagrams as text, never as images.
+
+Agent workflow for filling in a document:
+
+1. `docs list --json` to find the document and its open inputs.
+2. `docs show <id> > doc.md`, then replace each `[Needs input: ...]` only with
+   facts the user stated or the repository proves. Leave the rest as markers.
+3. `docs save <id> --file doc.md --note "what changed"`. A 409 means someone
+   saved since you read it: show again and re-apply.
+4. Tell the user what is still open. **Do not approve**: approval is a named
+   person's sign-off in the dashboard (Compliance, then Documents), and the CLI
+   has no approve command on purpose.
+
+Never write that an app "is compliant" or "certified"; documents describe
+controls and auditors decide. After infrastructure or integration changes,
+`docs regenerate --all` refreshes every document from current records (new
+versions; earlier ones stay in history).
 
 ## Portal Compliance Page
 

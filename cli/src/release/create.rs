@@ -190,6 +190,41 @@ struct CreateReleaseRequest {
     /// webhook already matched the push to an env via the branch matrix).
     #[serde(rename = "targetEnvironment", skip_serializing_if = "Option::is_none")]
     target_environment: Option<String>,
+    /// The release's regulated fields (classification, real encryption,
+    /// retention), scanned from this release's source. The platform's
+    /// compliance documents describe the release deployed to each environment
+    /// from this, so the inventory always matches the code that is running.
+    #[serde(rename = "fieldInventory", skip_serializing_if = "Option::is_none")]
+    field_inventory: Option<FieldInventory>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FieldInventory {
+    generated_at: String,
+    entities: Vec<crate::compliance::audit::EntityReport>,
+}
+
+/// Scan the release's source for its field inventory. Never fails the release:
+/// a scan error is reported and the release goes out without an inventory.
+fn scan_release_field_inventory(
+    modules_path: &std::path::Path,
+    stdout: &mut termcolor::StandardStream,
+) -> Result<Option<FieldInventory>> {
+    match crate::compliance::audit::scan_field_inventory(modules_path) {
+        Ok(entities) => Ok(Some(FieldInventory {
+            generated_at: chrono::Utc::now().to_rfc3339(),
+            entities,
+        })),
+        Err(e) => {
+            log_warn!(
+                stdout,
+                "Could not scan regulated fields for the compliance inventory: {}",
+                e
+            );
+            Ok(None)
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -1223,7 +1258,9 @@ impl CliCommand for CreateCommand {
                 manifest_json.len()
             );
 
-            upload_release(&application_id, release_manifest, &auth_mode)?;
+            let field_inventory =
+                scan_release_field_inventory(&app_root.join(&manifest.modules_path), &mut stdout)?;
+            upload_release(&application_id, release_manifest, field_inventory, &auth_mode)?;
 
             log_ok!(stdout, "Uploaded release to platform");
         }
@@ -1426,11 +1463,13 @@ fn install_and_build_for_release(
 fn upload_release(
     application_id: &str,
     manifest: ReleaseManifest,
+    field_inventory: Option<FieldInventory>,
     auth_mode: &AuthMode,
 ) -> Result<()> {
     let request_body = CreateReleaseRequest {
         application_id: application_id.to_string(),
         manifest,
+        field_inventory,
         released_by: None, // TODO: Get from token
         target_environment: std::env::var("FORKLAUNCH_TARGET_ENVIRONMENT")
             .ok()
