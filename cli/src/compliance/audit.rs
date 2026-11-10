@@ -14,7 +14,7 @@ use crate::{
     CliCommand,
     constants::get_platform_management_api_url,
     core::{
-        ast::infrastructure::compliance::{scan_all_compliance, scan_entity_compliance},
+        ast::infrastructure::compliance::{RetentionInfo, scan_all_compliance, scan_entity_compliance},
         command::command,
         hmac::AuthMode,
         http_client::post_with_auth,
@@ -121,50 +121,8 @@ impl CliCommand for AuditCommand {
         // tag it was given.
         let module_ctx = scan_module_encryption_context(&modules_path_buf);
 
-        let mut entity_names: std::collections::BTreeSet<String> =
-            std::collections::BTreeSet::new();
-        entity_names.extend(field_classifications.keys().cloned());
-        entity_names.extend(retention_policies.keys().cloned());
-
-        let entities: Vec<EntityReport> = entity_names
-            .into_iter()
-            .map(|name| {
-                let mut field_reports: Vec<FieldReport> = field_classifications
-                    .get(&name)
-                    .map(|fields| {
-                        fields
-                            .iter()
-                            .map(|(field_name, classification)| {
-                                // All three classified levels encrypt (the framework's
-                                // `wrapClassified` applies EncryptedType to pii/phi/pci
-                                // alike) — but only if the owning module registered an
-                                // encryptor.
-                                let encrypts = classification_encrypts(classification);
-                                let protected = encrypts && module_ctx.entity_is_protected(&name);
-                                FieldReport {
-                                    name: field_name.clone(),
-                                    compliance: classification.clone(),
-                                    encrypted: protected,
-                                }
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                // `field_classifications` is a HashMap, so its fields iterate in a non-deterministic
-                // order — sort by name so the report (and `--json`) is byte-stable for the same code.
-                field_reports.sort_by(|a, b| a.name.cmp(&b.name));
-                let retention = retention_policies.get(&name).map(|r| RetentionReport {
-                    duration: r.duration.clone(),
-                    action: r.action.clone(),
-                });
-                EntityReport {
-                    module: module_ctx.entity_module.get(&name).cloned(),
-                    name,
-                    fields: field_reports,
-                    retention,
-                }
-            })
-            .collect();
+        let entities =
+            build_entity_reports(&field_classifications, &retention_policies, &module_ctx);
 
         // Every route, read from the source: each contract's access level and auth, plus routes
         // registered outside the framework. Exported OpenAPI specs are the fallback for apps
@@ -1039,6 +997,73 @@ fn format_key(key: &str) -> String {
     result
 }
 
+/// Every entity's classified fields (and whether the owning module really
+/// encrypts them) and its retention rule. Shared by `compliance audit` and by
+/// `release create`, which attaches it to the release as the field inventory
+/// the platform's compliance documents describe.
+fn build_entity_reports(
+    field_classifications: &HashMap<String, HashMap<String, String>>,
+    retention_policies: &HashMap<String, RetentionInfo>,
+    module_ctx: &ModuleEncryptionContext,
+) -> Vec<EntityReport> {
+    let mut entity_names: std::collections::BTreeSet<String> =
+        std::collections::BTreeSet::new();
+    entity_names.extend(field_classifications.keys().cloned());
+    entity_names.extend(retention_policies.keys().cloned());
+
+    entity_names
+        .into_iter()
+        .map(|name| {
+            let mut field_reports: Vec<FieldReport> = field_classifications
+                .get(&name)
+                .map(|fields| {
+                    fields
+                        .iter()
+                        .map(|(field_name, classification)| {
+                            // All three classified levels encrypt (the framework's
+                            // `wrapClassified` applies EncryptedType to pii/phi/pci
+                            // alike) — but only if the owning module registered an
+                            // encryptor.
+                            let encrypts = classification_encrypts(classification);
+                            let protected = encrypts && module_ctx.entity_is_protected(&name);
+                            FieldReport {
+                                name: field_name.clone(),
+                                compliance: classification.clone(),
+                                encrypted: protected,
+                            }
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            // `field_classifications` is a HashMap, so its fields iterate in a non-deterministic
+            // order — sort by name so the report (and `--json`) is byte-stable for the same code.
+            field_reports.sort_by(|a, b| a.name.cmp(&b.name));
+            let retention = retention_policies.get(&name).map(|r| RetentionReport {
+                duration: r.duration.clone(),
+                action: r.action.clone(),
+            });
+            EntityReport {
+                module: module_ctx.entity_module.get(&name).cloned(),
+                name,
+                fields: field_reports,
+                retention,
+            }
+        })
+        .collect()
+}
+
+/// Scan an application's modules for its field inventory (see
+/// `build_entity_reports`).
+pub(crate) fn scan_field_inventory(modules_path: &Path) -> Result<Vec<EntityReport>> {
+    let (field_classifications, retention_policies) = scan_all_compliance(modules_path)?;
+    let module_ctx = scan_module_encryption_context(modules_path);
+    Ok(build_entity_reports(
+        &field_classifications,
+        &retention_policies,
+        &module_ctx,
+    ))
+}
+
 // ---------------------------------------------------------------------------
 // Report types
 // ---------------------------------------------------------------------------
@@ -1228,9 +1253,9 @@ struct ModuleReport {
     classified_field_count: usize,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct EntityReport {
+pub(crate) struct EntityReport {
     name: String,
     /// Module that declares this entity — lets a consumer attribute an
     /// unprotected field to the module whose wiring caused it.
@@ -1241,16 +1266,16 @@ struct EntityReport {
     retention: Option<RetentionReport>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct RetentionReport {
+pub(crate) struct RetentionReport {
     duration: String,
     action: String,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct FieldReport {
+pub(crate) struct FieldReport {
     name: String,
     compliance: String,
     encrypted: bool,
