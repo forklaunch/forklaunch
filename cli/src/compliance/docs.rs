@@ -354,6 +354,36 @@ impl CliCommand for DocsCommand {
         )
         .subcommand(
             command(
+                "inputs",
+                "List the questions documents still need answered (one answer fills every document that asks it)",
+            )
+            .arg(
+                Arg::new("all")
+                    .long("all")
+                    .help("Include questions already answered")
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(json_flag()),
+        )
+        .subcommand(
+            command(
+                "answer",
+                "Answer questions for the whole organization: written into every document that asks, and kept when documents are regenerated",
+            )
+            .arg(
+                Arg::new("answer")
+                    .num_args(0..)
+                    .help("key=value pairs (keys from `docs inputs`). An empty value forgets a saved answer"),
+            )
+            .arg(
+                Arg::new("file")
+                    .long("file")
+                    .help("JSON file of { \"key\": \"answer\" } (use - for stdin)"),
+            )
+            .arg(json_flag()),
+        )
+        .subcommand(
+            command(
                 "delete",
                 "Delete documents that were never approved (duplicate copies, mistakes)",
             )
@@ -377,6 +407,8 @@ impl CliCommand for DocsCommand {
             Some(("download", m)) => download(m),
             Some(("push", m)) => push(m),
             Some(("delete", m)) => delete(m),
+            Some(("inputs", m)) => inputs(m),
+            Some(("answer", m)) => answer(m),
             _ => unreachable!(),
         }
     }
@@ -506,6 +538,157 @@ fn regenerate(m: &ArgMatches) -> Result<()> {
     }
     if failed > 0 {
         bail!("{failed} of {} document(s) failed to regenerate", ids.len());
+    }
+    Ok(())
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DocumentInput {
+    key: String,
+    question: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    answer: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    suggestion: Option<String>,
+    documents: Vec<InputDocument>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct InputDocument {
+    id: String,
+    title: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct InputsResponse {
+    inputs: Vec<DocumentInput>,
+}
+
+fn inputs(m: &ArgMatches) -> Result<()> {
+    let response = http_client::get(&format!("{}/inputs", base()))
+        .with_context(|| ERROR_FAILED_TO_SEND_REQUEST)?;
+    if !response.status().is_success() {
+        return Err(fail("Failed to list inputs", response));
+    }
+    let mut inputs = response
+        .json::<InputsResponse>()
+        .context("Failed to parse inputs response")?
+        .inputs;
+    if !m.get_flag("all") {
+        inputs.retain(|i| i.answer.is_none());
+    }
+    if m.get_flag("json") {
+        println!("{}", serde_json::to_string_pretty(&inputs)?);
+        return Ok(());
+    }
+    if inputs.is_empty() {
+        println!("Every question is answered.");
+        return Ok(());
+    }
+    for input in &inputs {
+        println!("{}", input.key);
+        println!("    {}", input.question);
+        if let Some(answer) = &input.answer {
+            println!("    answered: {answer}");
+        }
+        if let Some(suggestion) = &input.suggestion {
+            println!("    known to the platform: {suggestion}");
+        }
+        if !input.documents.is_empty() {
+            let titles: Vec<&str> = input.documents.iter().map(|d| d.title.as_str()).collect();
+            println!("    asked by: {}", titles.join("; "));
+        }
+    }
+    println!(
+        "\nAnswer with: forklaunch compliance docs answer <key>=\"<answer>\" ...   (or --file answers.json)"
+    );
+    Ok(())
+}
+
+/// `key=value` pairs and/or a JSON object file, merged (pairs win).
+fn collect_answers(m: &ArgMatches) -> Result<serde_json::Map<String, Value>> {
+    let mut answers = serde_json::Map::new();
+    if let Some(path) = m.get_one::<String>("file") {
+        let text = if path == "-" {
+            std::io::read_to_string(std::io::stdin()).context("Failed to read stdin")?
+        } else {
+            fs::read_to_string(path).with_context(|| format!("Failed to read {path}"))?
+        };
+        let parsed: Value = serde_json::from_str(&text).context("The answers file is not JSON")?;
+        let Value::Object(map) = parsed else {
+            bail!("The answers file must be a JSON object of key -> answer");
+        };
+        for (key, value) in map {
+            let Value::String(text) = value else {
+                bail!("The answer for `{key}` must be a string");
+            };
+            answers.insert(key, Value::String(text));
+        }
+    }
+    for pair in m
+        .get_many::<String>("answer")
+        .map(|v| v.cloned().collect::<Vec<_>>())
+        .unwrap_or_default()
+    {
+        let Some((key, value)) = pair.split_once('=') else {
+            bail!("`{pair}` is not key=value (keys come from `forklaunch compliance docs inputs`)");
+        };
+        answers.insert(key.trim().to_string(), Value::String(value.to_string()));
+    }
+    if answers.is_empty() {
+        bail!(
+            "Give key=value pairs or --file answers.json (keys come from `forklaunch compliance docs inputs`)"
+        );
+    }
+    Ok(answers)
+}
+
+fn answer(m: &ArgMatches) -> Result<()> {
+    let answers = collect_answers(m)?;
+    let response = http_client::put(
+        &format!("{}/inputs", base()),
+        json!({ "answers": Value::Object(answers) }),
+    )
+    .with_context(|| ERROR_FAILED_TO_SEND_REQUEST)?;
+    if !response.status().is_success() {
+        return Err(fail("Failed to save answers", response));
+    }
+    let result: Value = response.json().context("Failed to parse answer response")?;
+    if m.get_flag("json") {
+        println!("{}", serde_json::to_string_pretty(&result)?);
+    } else {
+        let list = |k: &str| -> Vec<String> {
+            result[k]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        println!("Saved {} answer(s).", list("saved").len());
+        for doc in result["updated"].as_array().into_iter().flatten() {
+            println!(
+                "{}  v{}  ({} filled)",
+                doc["title"].as_str().unwrap_or(""),
+                doc["version"],
+                doc["filled"]
+            );
+        }
+    }
+    let unknown: Vec<&str> = result["unknown"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|v| v.as_str())
+        .collect();
+    if !unknown.is_empty() {
+        bail!(
+            "No document asks: {}. Keys come from `forklaunch compliance docs inputs`.",
+            unknown.join(", ")
+        );
     }
     Ok(())
 }
@@ -810,6 +993,22 @@ mod tests {
         )
         .unwrap();
         assert_eq!(r.controls[0].title, "Automated backups");
+    }
+
+    #[test]
+    fn answers_merge_pairs_and_reject_malformed() {
+        let m = docs_cmd()
+            .try_get_matches_from(["docs", "answer", "owner-name-and-role=Ada, CEO", "x=a=b"])
+            .unwrap();
+        let answers = collect_answers(m.subcommand_matches("answer").unwrap()).unwrap();
+        assert_eq!(answers["owner-name-and-role"], "Ada, CEO");
+        assert_eq!(answers["x"], "a=b");
+        let bad = docs_cmd()
+            .try_get_matches_from(["docs", "answer", "novalue"])
+            .unwrap();
+        assert!(collect_answers(bad.subcommand_matches("answer").unwrap()).is_err());
+        let none = docs_cmd().try_get_matches_from(["docs", "answer"]).unwrap();
+        assert!(collect_answers(none.subcommand_matches("answer").unwrap()).is_err());
     }
 
     #[test]

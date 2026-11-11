@@ -850,14 +850,29 @@ and the PDFs draw them with the same renderer. Edit the
 JSON, never an image; regenerating rebuilds them from platform records.
 ```mermaid blocks also render, for diagrams people add by hand.
 
-Agent workflow for filling in a document:
+Agent workflow for filling in documents (answer once, every document updates):
 
-1. `docs list --json` to find the document and its open inputs.
-2. `docs show <id> > doc.md`, then replace each `[Needs input: ...]` only with
-   facts the user stated or the repository proves. Leave the rest as markers.
-3. `docs save <id> --file doc.md --note "what changed"`. A 409 means someone
-   saved since you read it: show again and re-apply.
-4. Tell the user what is still open. **Do not approve**: approval is a named
+```bash
+forklaunch compliance docs inputs --json          # every open question: key, question, suggestion, documents asking it
+forklaunch compliance docs answer owner-name-and-role="Ada Diaz, CTO" review-cadence-for-example-every-quarter="Every quarter"
+forklaunch compliance docs answer --file answers.json   # { "key": "answer", ... }; - reads stdin
+```
+
+1. `docs inputs --json`. Each entry has a `key`, the `question`, the documents
+   that ask it, and sometimes a `suggestion` (what the platform already knows,
+   such as the organization's admins). A suggestion is a hint, not an answer.
+2. Answer only from what the user told you or the repository proves (CI
+   workflow files for required checks, branch protection settings, a
+   CODEOWNERS file, IaC for backup retention). Ask the user for the rest in
+   one batch; do not guess people, dates, targets or cadences.
+3. `docs answer key=value ...`. Answers are saved for the organization, written
+   into every document that asks that question (a new version, earlier edits
+   kept), and filled in automatically whenever a document is regenerated.
+   An empty value forgets a saved answer.
+4. For wording changes beyond an answer: `docs show <id> > doc.md`, edit,
+   `docs save <id> --file doc.md --note "what changed"` (409 = someone saved
+   since you read it; show again and re-apply).
+5. Tell the user what is still open. **Do not approve**: approval is a named
    person's sign-off in the dashboard (Compliance, then Documents), and the CLI
    has no approve command on purpose.
 
