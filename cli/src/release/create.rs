@@ -203,6 +203,9 @@ struct CreateReleaseRequest {
 struct FieldInventory {
     generated_at: String,
     entities: Vec<crate::compliance::audit::EntityReport>,
+    /// Cache and object-store writes found in the code: what each service keeps in a
+    /// cache (and for how long) or a bucket, and whether it is encrypted per tenant.
+    storage: Vec<crate::core::static_analysis::storage_analyzer::StorageUsage>,
 }
 
 /// Scan the release's source for its field inventory. Never fails the release:
@@ -215,6 +218,9 @@ fn scan_release_field_inventory(
         Ok(entities) => Ok(Some(FieldInventory {
             generated_at: chrono::Utc::now().to_rfc3339(),
             entities,
+            storage: crate::core::static_analysis::storage_analyzer::scan_storage_usage(
+                modules_path,
+            ),
         })),
         Err(e) => {
             log_warn!(
