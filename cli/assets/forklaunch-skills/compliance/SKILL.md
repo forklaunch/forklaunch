@@ -820,6 +820,7 @@ forklaunch compliance docs download <documentId>... [--approved] [--format md|pd
 forklaunch compliance docs download --all [--include approved|latest] [--format md|pdf|both] [--app <applicationId>] [-o file.zip]
 forklaunch compliance docs push <documentId>... [--json]   # approved version to Oneleet
 forklaunch compliance docs push --all                     # every approved document
+forklaunch compliance docs delete <documentId>...         # only documents never approved
 ```
 
 `push` sends a document's approved version (as a PDF) to the organization's
