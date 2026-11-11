@@ -8,6 +8,7 @@ import {
   ProcedureCodeDto,
   ProcedureCodeLookupDto
 } from '@forklaunch/interfaces-cac/types';
+import { normalizeCode } from '../domain/codeNormalization';
 import { MOCK_PROCEDURE_CODES } from '../domain/mockProcedureCodes';
 
 export class MockProcedureCodeProvider implements CodeSetProvider {
@@ -26,7 +27,10 @@ export class MockProcedureCodeProvider implements CodeSetProvider {
       code
     });
 
-    return MOCK_PROCEDURE_CODES[code];
+    const normalized = normalizeCode(code);
+    return Object.hasOwn(MOCK_PROCEDURE_CODES, normalized)
+      ? MOCK_PROCEDURE_CODES[normalized]
+      : undefined;
   }
 
   describe(): CodeSetDescriptorDto {

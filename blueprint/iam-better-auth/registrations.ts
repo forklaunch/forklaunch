@@ -4,7 +4,6 @@ import {
 } from './domain/utils/authorizationScope.util';
 import {
   array,
-  ExpressApplicationOptions,
   number,
   optional,
   promise,
@@ -13,6 +12,7 @@ import {
   string,
   type
 } from '@forklaunch/blueprint-core';
+import type { ExpressApplicationOptions } from '@forklaunch/blueprint-core';
 import { Metrics, metrics } from '@forklaunch/blueprint-monitoring';
 import { OpenTelemetryCollector, SessionObject } from '@forklaunch/core/http';
 import {
