@@ -1,4 +1,12 @@
-import { AnswerResponseDto } from '@forklaunch/interfaces-mlse/types';
+// The parts of an answer spokenSummary reads. The module's answer response
+// has this shape; it is declared here so the HTTP types can change without
+// a release of this package.
+export type SpokenAnswer = {
+  kind: string;
+  message?: string;
+  sections: { status: string; sentences: { text: string }[] }[];
+  sources: unknown[];
+};
 
 export type IdentifierRemoval = {
   text: string;
@@ -60,7 +68,7 @@ const MAX_SPOKEN_WORDS = 70;
  * not read out, but every sentence spoken is one that passed verification
  * and is shown with its sources.
  */
-export function spokenSummary(answer: AnswerResponseDto): string {
+export function spokenSummary(answer: SpokenAnswer): string {
   if (answer.kind !== 'answer' && answer.kind !== 'label_range') {
     return answer.message ?? 'No answer is available.';
   }
