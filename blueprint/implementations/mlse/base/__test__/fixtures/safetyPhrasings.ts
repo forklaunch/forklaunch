@@ -29,7 +29,10 @@ export const SAFETY_PHRASINGS: {
       'she is choking please help',
       // from the #421 review: each was a literature answer before
       'chest pain radiating to left arm right now',
-      'patient with slurred speech and face drooping right now'
+      'patient with slurred speech and face drooping right now',
+      'chest pain and left arm numbness',
+      'crushing chest pain spreading to the jaw',
+      'he has chest pressure and his left arm is numb'
     ]
   },
   {
@@ -76,6 +79,8 @@ export const SAFETY_PHRASINGS: {
       'facial droop differential diagnosis',
       'slurred speech causes in older adults',
       'patients who cannot breathe after extubation',
+      'chest pain differential diagnosis in young adults',
+      'arm pain after vaccination',
       'management of acetaminophen overdose',
       'does aspirin help prevent stroke',
       'urgent cholecystectomy outcomes',

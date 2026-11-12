@@ -21,6 +21,11 @@ export type SafetyRuleLists = {
   // body ("I can't breathe", "my face is drooping"). No sign it is happening
   // now is needed; someone telling us is enough.
   acuteOnItsOwn: string[];
+  // A heart attack's signs together: any chest sign with any spreading or
+  // arm sign in the same query ("chest pain and left arm numbness"), with
+  // no person or time needed.
+  chestSigns: string[];
+  chestSpreadSigns: string[];
   // An emergency as soon as it is told about one person, even in the past
   // tense ("my 3-year-old swallowed my pills"). Chronic conditions are not
   // here: "my patient had a stroke last year" is a literature question.
@@ -152,6 +157,29 @@ export const DEFAULT_SAFETY_RULES: SafetyRules = {
     'i m slurring',
     'i am slurring'
   ],
+  chestSigns: [
+    'chest pain',
+    'chest pressure',
+    'chest tightness',
+    'chest hurts',
+    'chest is tight',
+    'chest feels tight',
+    'pain in my chest',
+    'pain in the chest',
+    'crushing chest'
+  ],
+  chestSpreadSigns: [
+    'left arm',
+    'arm is numb',
+    'arm numbness',
+    'numb arm',
+    'arm pain',
+    'pain in my arm',
+    'radiating to',
+    'spreading to',
+    'jaw pain',
+    'pain in my jaw'
+  ],
   acuteForAPerson: [
     'swallowed',
     'ingested',
@@ -273,6 +301,8 @@ const LIST_KEYS: (keyof SafetyRuleLists)[] = [
   'happeningNow',
   'happeningNowAnywhere',
   'acuteOnItsOwn',
+  'chestSigns',
+  'chestSpreadSigns',
   'acuteForAPerson',
   'someone',
   'selfHarm',

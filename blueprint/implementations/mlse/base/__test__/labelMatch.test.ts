@@ -102,6 +102,29 @@ describe('labelsForQueryDrug, against store brands named after the indication', 
     ).toBe(false);
   });
 
+  it('titles an openFDA label that has a brand but no generic name so it never matches', async () => {
+    const body = JSON.stringify({
+      results: [
+        {
+          set_id: 'synthetic-brand-only',
+          effective_time: '20250101',
+          dosage_and_administration: ['Adults: 2 tablets.'],
+          openfda: { brand_name: ['Pain Relief'], manufacturer_name: ['Acme'] }
+        }
+      ]
+    });
+    const fetchImpl: FetchLike = async () => ({ ok: true, status: 200, text: async () => body });
+    const [label] = await new OpenFdaFetcher(fetchImpl).fetchDocuments({ term: 'x', limit: 1 });
+    expect(label.title).toBe('Pain Relief, generic name not listed — Acme');
+    expect(labelsForQueryDrug([label], 'what is the dose of ibuprofen for pain relief', ['ibuprofen', 'pain', 'relief'])).toEqual([]);
+    expect(labelsForQueryDrug([label], 'pain relief dose', ['pain', 'relief'])).toEqual([]);
+  });
+
+  it('never reads a brand with no generic name as a drug name', () => {
+    expect(labelIsForQueryDrug('Pain Relief, generic name not listed — Acme', 'pain relief dose')).toBe(false);
+    expect(labelsForQueryDrug([{ title: 'Pain Relief, generic name not listed — Acme' }], 'pain relief dose', ['pain', 'relief'])).toEqual([]);
+  });
+
   it('quotes nothing when the named drug has no label and only the brand matches', async () => {
     expect(
       await dosingLabelsFor('what is the dose of naproxen for pain relief')
