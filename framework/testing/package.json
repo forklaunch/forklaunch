@@ -42,9 +42,9 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@mikro-orm/core": "7.2.7",
+    "@mikro-orm/core": "7.2.8",
     "ioredis": "^6.0.0",
-    "jose": "6.2.15",
+    "jose": "6.2.16",
     "testcontainers": "^12.2.1"
   },
   "devDependencies": {
