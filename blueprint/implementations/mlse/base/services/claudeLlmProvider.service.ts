@@ -1,4 +1,6 @@
-import Anthropic from '@anthropic-ai/sdk';
+// Type only: the SDK is an optional peer, loaded when a Claude provider is
+// made, so deployments that use Ollama need not install it.
+import type Anthropic from '@anthropic-ai/sdk';
 import { LlmProvider } from '@forklaunch/interfaces-mlse/interfaces';
 import {
   EmbedRequestDto,
@@ -55,7 +57,7 @@ export class LlmRefusalError extends Error {
  * sentence's citations and numbers against the evidence.
  */
 export class ClaudeLlmProvider extends LlmProviderBase {
-  private readonly client: Anthropic;
+  private readonly client: Promise<Anthropic>;
   private readonly model: string;
   private readonly effort: ClaudeEffort;
   private readonly embeddings: Pick<LlmProvider, 'embed' | 'describe'>;
@@ -65,13 +67,12 @@ export class ClaudeLlmProvider extends LlmProviderBase {
     if (!options.client && !options.apiKey) {
       throw new Error('ClaudeLlmProvider needs an API key (LLM_API_KEY)');
     }
-    this.client =
-      options.client ??
-      new Anthropic({
-        apiKey: options.apiKey,
-        timeout: options.timeoutMs ?? 120_000,
-        maxRetries: options.maxRetries ?? 2
-      });
+    this.client = options.client
+      ? Promise.resolve(options.client)
+      : loadClient(options);
+    // a missing SDK is reported on the first answer; until then the
+    // rejection must not count as unhandled
+    this.client.catch(() => undefined);
     this.model = options.model || DEFAULT_CLAUDE_MODEL;
     this.effort = options.effort ?? 'high';
     this.embeddings = options.embeddings;
@@ -83,7 +84,8 @@ export class ClaudeLlmProvider extends LlmProviderBase {
     evidence,
     maxTokens
   }: GenerateRequestDto): Promise<GenerateResponseDto> {
-    const stream = this.client.beta.messages.stream({
+    const client = await this.client;
+    const stream = client.beta.messages.stream({
       model: this.model,
       // one answer section is short; the cap leaves room for thinking while
       // bounding what a single call can cost
@@ -126,4 +128,20 @@ export class ClaudeLlmProvider extends LlmProviderBase {
       embeddingDimensions: embeddings.embeddingDimensions
     };
   }
+}
+
+async function loadClient(options: ClaudeLlmProviderOptions): Promise<Anthropic> {
+  let sdk: typeof import('@anthropic-ai/sdk');
+  try {
+    sdk = await import('@anthropic-ai/sdk');
+  } catch {
+    throw new Error(
+      'LLM_PROVIDER=claude needs the @anthropic-ai/sdk package; add it to the application'
+    );
+  }
+  return new sdk.default({
+    apiKey: options.apiKey,
+    timeout: options.timeoutMs ?? 120_000,
+    maxRetries: options.maxRetries ?? 2
+  });
 }
