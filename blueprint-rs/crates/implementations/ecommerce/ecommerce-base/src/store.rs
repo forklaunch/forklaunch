@@ -399,13 +399,11 @@ fn unique(record: &Record) -> Vec<(Field, &str)> {
         Record::Payment(value) => value
             .provider_ref
             .as_deref()
-            .map(|id| vec![(Field::ProviderRef, id)])
-            .unwrap_or_default(),
+            .map_or_else(Vec::new, |id| vec![(Field::ProviderRef, id)]),
         Record::Order(value) if value.status == OrderStatus::Pending => value
             .cart_id
             .as_deref()
-            .map(|id| vec![(Field::CartId, id)])
-            .unwrap_or_default(),
+            .map_or_else(Vec::new, |id| vec![(Field::CartId, id)]),
         _ => Vec::new(),
     }
 }
