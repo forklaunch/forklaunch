@@ -203,11 +203,13 @@ const environmentConfig = configInjector.chain({
     type: optional(string),
     value: getEnvVar('LLM_PROVIDER') ?? ''
   },
-  // Search embeddings: 'ollama' (free, local) or 'fake' (development)
+  // Search embeddings: 'ollama' (free, local) or 'fake' (development).
+  // No default, like LLM_PROVIDER: unset stops the service at startup, so a
+  // deployment never runs vector search on fake embeddings unknowingly.
   EMBEDDING_PROVIDER: {
     lifetime: Lifetime.Singleton,
     type: optional(string),
-    value: getEnvVar('EMBEDDING_PROVIDER') || 'fake'
+    value: getEnvVar('EMBEDDING_PROVIDER') ?? ''
   },
   // each client supplies its own Anthropic API key
   LLM_API_KEY: {
@@ -342,7 +344,9 @@ const serviceDependencies = runtimeDependencies.chain({
           break;
         default:
           throw new Error(
-            `EMBEDDING_PROVIDER '${EMBEDDING_PROVIDER}' is not supported; use 'ollama' or 'fake'`
+            EMBEDDING_PROVIDER
+              ? `EMBEDDING_PROVIDER '${EMBEDDING_PROVIDER}' is not supported; use 'ollama' or 'fake'`
+              : `EMBEDDING_PROVIDER is not set; use 'ollama' or 'fake'`
           );
       }
 

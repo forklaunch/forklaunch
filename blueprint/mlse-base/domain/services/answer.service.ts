@@ -20,7 +20,7 @@ import {
   EMERGENCY_MESSAGE,
   INSUFFICIENT_EVIDENCE_MARKER,
   isDosingSection,
-  labelIsForQueryDrug,
+  labelsForQueryDrug,
   LlmProvider,
   keySentences,
   passageIsAbout,
@@ -286,7 +286,8 @@ export class AnswerService {
 
   // The label's dosing section for the drug named in the query, quoted as
   // written. No AI and no arithmetic. A label is used only when the query
-  // names its drug exactly (labelIsForQueryDrug), and only its "Dosage and
+  // names its drug exactly (labelsForQueryDrug: by generic name, or by a
+  // brand only when that brand can mean one drug), and only its "Dosage and
   // Administration" section, never "Overdosage". A query about one patient
   // never leaves the service: only stored labels are searched for it.
   private async labelDosing(
@@ -320,10 +321,10 @@ export class AnswerService {
       });
       for (const r of results) found.set(r.passageId, r);
     }
-    const cited = [...found.values()]
-      .filter((r) => r.licenseScope !== 'metadata_only' && isDosingSection(r.sectionPath))
-      .filter((r) => labelIsForQueryDrug(r.title, request.query))
-      .slice(0, LABEL_PASSAGES);
+    const dosing = [...found.values()].filter(
+      (r) => r.licenseScope !== 'metadata_only' && isDosingSection(r.sectionPath)
+    );
+    const cited = labelsForQueryDrug(dosing, request.query, drugTerms).slice(0, LABEL_PASSAGES);
     if (cited.length === 0) {
       return { sections: [section], cited: [] };
     }
