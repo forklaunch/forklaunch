@@ -174,6 +174,10 @@ function acuteNow(words: string[], rules: SafetyRules): string | undefined {
       !EVENT_AS_TIME.has(words[e.start - 1] ?? '')
   );
   if (events.length === 0) return undefined;
+  const anywhere = containsPhrase(words, rules.happeningNowAnywhere);
+  if (anywhere) {
+    return `acute event "${events[0].phrase}" happening "${anywhere}"`;
+  }
   const nows = occurrences(words, rules.happeningNow);
   for (const event of events) {
     for (const now of nows) {
@@ -296,6 +300,13 @@ export function classifyQuery(
   const selfHarm = containsPhrase(words, rules.selfHarm);
   if (selfHarm) {
     return result('emergency_pattern', `risk of self-harm ("${selfHarm}")`);
+  }
+  const own = containsPhrase(words, rules.acuteOnItsOwn);
+  if (own) {
+    return result(
+      'emergency_pattern',
+      `acute sign told by the asker ("${own}")`
+    );
   }
   const now = acuteNow(words, rules);
   if (now) {
