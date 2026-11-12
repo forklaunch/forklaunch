@@ -1,5 +1,41 @@
-import type { HmacNonceCache, HmacNonceStore } from './hmacReplayProtection';
-import type { JwtVerificationOptions } from './types/contractDetails.types';
+/*
+ * This file must stay self-contained: no imports.
+ *
+ * `blueprint/core/auth/bindRuntimeAuth.ts` is a symlink to it, and the CLI
+ * copies the blueprint's core into every generated app, where the rest of
+ * this package's source does not exist. An import from a sibling file builds
+ * here and then fails in every generated app ("Cannot find module"). So the
+ * few types it needs are declared below, structurally identical to
+ * `JwtVerificationOptions` (types/contractDetails.types.ts) and to
+ * `HmacNonceStore` / `HmacNonceCache` (hmacReplayProtection.ts). The test
+ * beside this file fails if an import is added.
+ */
+
+/** Optional JWT checks; the same shape as `JwtVerificationOptions`. */
+type JwtVerificationOptions = {
+  /** Algorithms a token may use; derived from the key when omitted. */
+  readonly algorithms?: readonly string[];
+  /** Required `iss` claim (any one of, when a list). Unchecked when unset. */
+  readonly issuer?: string | readonly string[];
+  /** Required `aud` claim (any one of, when a list). Unchecked when unset. */
+  readonly audience?: string | readonly string[];
+};
+
+/** A store of used nonces; the same shape as `HmacNonceStore`. */
+type HmacNonceStore = {
+  claim(key: string, ttlMs: number): boolean | Promise<boolean>;
+};
+
+/**
+ * A cache usable as a nonce store; structurally a `TtlCache` (peekRecord and
+ * putRecord, and putRecordIfAbsent when the cache has an atomic claim).
+ */
+type HmacNonceCache = {
+  // Method syntax on purpose: it keeps any real TtlCache assignable here.
+  peekRecord(key: string): unknown;
+  putRecord(record: never): unknown;
+  putRecordIfAbsent?(record: never): unknown;
+};
 
 /** Portable policy shared by contract compilation and runtime authentication. */
 export type PortableJwtPolicy = {

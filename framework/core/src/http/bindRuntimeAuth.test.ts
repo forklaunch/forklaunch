@@ -1,5 +1,22 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { bindRuntimeAuth } from './bindRuntimeAuth';
+
+describe('bindRuntimeAuth source file', () => {
+  it('stays self-contained, because it is copied alone into generated apps', () => {
+    // blueprint/core/auth/bindRuntimeAuth.ts is a symlink to this file and the
+    // CLI copies it into every generated app without its siblings.
+    const source = readFileSync(
+      fileURLToPath(new URL('./bindRuntimeAuth.ts', import.meta.url)),
+      'utf8'
+    );
+    const imports = source
+      .split('\n')
+      .filter((line) => /^\s*(import|export)\b.*\bfrom\s+['"]/.test(line));
+    expect(imports).toEqual([]);
+  });
+});
 
 describe('portable authentication policy', () => {
   it('binds runtime keys while preserving portable roles and headers', () => {
