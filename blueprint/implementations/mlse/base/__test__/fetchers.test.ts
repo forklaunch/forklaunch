@@ -106,7 +106,7 @@ describe('ClinicalTrialsFetcher', () => {
 describe('PubMedFetcher', () => {
   const run = async () => {
     const { fetchImpl, requests } = recordedFetch([
-      ['esearch.fcgi', JSON.stringify({ esearchresult: { idlist: ['42785763', '42784035', '10000001'] } })],
+      ['esearch.fcgi', JSON.stringify({ esearchresult: { idlist: ['10000002', '10000003', '10000001'] } })],
       ['efetch.fcgi', fixture('pubmed-efetch.xml')]
     ]);
     const docs = await new PubMedFetcher(fetchImpl, ncbi).fetchDocuments({
@@ -128,8 +128,8 @@ describe('PubMedFetcher', () => {
   it('parses citations, case-report flags and MeSH descriptors', async () => {
     const { docs } = await run();
     const [first] = docs;
-    expect(docs.map((d) => d.externalId)).toEqual(['42785763', '42784035', '10000001']);
-    expect(first.url).toBe('https://pubmed.ncbi.nlm.nih.gov/42785763/');
+    expect(docs.map((d) => d.externalId)).toEqual(['10000002', '10000003', '10000001']);
+    expect(first.url).toBe('https://pubmed.ncbi.nlm.nih.gov/10000002/');
     expect(first.isCaseReport).toBe(true);
     expect(first.title.length).toBeGreaterThan(10);
     expect(first.sections[0].path.startsWith('Abstract')).toBe(true);
