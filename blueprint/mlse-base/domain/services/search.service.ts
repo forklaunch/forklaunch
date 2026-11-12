@@ -13,11 +13,13 @@ import {
 import {
   CitablePassageDto,
   LicenseScope,
-  LiveSourceResultDto,
+  LiveSourceResultDto
+} from '@forklaunch/interfaces-mlse/types';
+import {
   SearchRequestDto,
   SearchResponseDto,
   SearchResultDto
-} from '@forklaunch/interfaces-mlse/types';
+} from '../types/search.types';
 import { EntityManager } from '@mikro-orm/core';
 
 // Shared with ContentSourceResolver so search and the admin view apply the

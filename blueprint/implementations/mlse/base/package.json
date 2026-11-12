@@ -39,16 +39,20 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.128.0",
-    "@forklaunch/common": "^1.2.32",
     "@forklaunch/core": "^3.3.0",
     "@forklaunch/interfaces-mlse": "workspace:^",
-    "@forklaunch/internal": "^1.2.35",
-    "@forklaunch/validator": "^1.3.0",
-    "@mikro-orm/core": "7.2.5",
     "fast-xml-parser": "^5.11.1"
   },
+  "peerDependencies": {
+    "@anthropic-ai/sdk": "^0.128.0"
+  },
+  "peerDependenciesMeta": {
+    "@anthropic-ai/sdk": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
     "depcheck": "^1.4.7",
     "prettier": "^3.9.10",
     "typedoc": "^0.28.20",

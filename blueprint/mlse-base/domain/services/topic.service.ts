@@ -15,7 +15,7 @@ import {
   queryTerms,
   selectEvidence
 } from '@forklaunch/implementation-mlse-base/services';
-import { SearchResultDto } from '@forklaunch/interfaces-mlse/types';
+import { SearchResultDto } from '../types/search.types';
 import { EntityManager } from '@mikro-orm/core';
 import { CaseStudy } from '../../persistence/entities/caseStudy.entity';
 import { Document } from '../../persistence/entities/document.entity';

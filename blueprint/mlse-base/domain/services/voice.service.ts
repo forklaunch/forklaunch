@@ -7,7 +7,7 @@ import {
   removeIdentifiers,
   spokenSummary
 } from '@forklaunch/implementation-mlse-base/services';
-import { AnswerResponseDto } from '@forklaunch/interfaces-mlse/types';
+import { AnswerResponseDto } from '../types/answer.types';
 import { EntityManager } from '@mikro-orm/core';
 import { VoiceSetting } from '../../persistence/entities/voiceSetting.entity';
 import { countMetric } from '../metrics';

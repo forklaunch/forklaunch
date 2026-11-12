@@ -6,7 +6,7 @@ import {
   schemaValidator,
   string
 } from '@forklaunch/blueprint-core';
-import { AnswerRequestDto } from '@forklaunch/interfaces-mlse/types';
+import { AnswerRequestDto } from '../../domain/types/answer.types';
 import { ci, tokens } from '../../bootstrapper';
 import { TopicNotFoundError } from '../../domain/services/topic.service';
 

@@ -43,6 +43,7 @@
     "topic:refresh": "DOTENV_FILE_PATH=.env.local pnpm tsx scripts/refresh-topics.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
     "@forklaunch/blueprint-core": "workspace:^",
     "@forklaunch/blueprint-monitoring": "workspace:^",
     "@forklaunch/common": "^1.2.32",

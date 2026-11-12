@@ -36,16 +36,18 @@ import {
   verifyDraft
 } from '@forklaunch/implementation-mlse-base/services';
 import {
+  CitablePassageDto,
+  QueryClassificationDto
+} from '@forklaunch/interfaces-mlse/types';
+import {
   AnswerKind,
   AnswerResearchDto,
   AnswerRequestDto,
   AnswerResponseDto,
   AnswerSectionDto,
-  AnswerStreamEventDto,
-  CitablePassageDto,
-  SearchResultDto,
-  QueryClassificationDto
-} from '@forklaunch/interfaces-mlse/types';
+  AnswerStreamEventDto
+} from '../types/answer.types';
+import { SearchResultDto } from '../types/search.types';
 import { EntityManager } from '@mikro-orm/core';
 import { countMetric } from '../metrics';
 import { NO_ORGANIZATION_TENANT, tenantEm } from '../tenantEm';

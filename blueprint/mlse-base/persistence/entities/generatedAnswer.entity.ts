@@ -1,6 +1,6 @@
 import { sqlBaseProperties } from '@forklaunch/blueprint-core';
 import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
-import type { AnswerSectionDto } from '@forklaunch/interfaces-mlse/types';
+import type { AnswerSectionDto } from '../../domain/types/answer.types';
 import type { InferEntity } from '@mikro-orm/core';
 
 export type RemovedSentenceRecord = {

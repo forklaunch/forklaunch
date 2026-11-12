@@ -1304,31 +1304,19 @@ importers:
 
   implementations/mlse/base:
     dependencies:
-      '@anthropic-ai/sdk':
-        specifier: ^0.128.0
-        version: 0.128.0(zod@4.6.7)
-      '@forklaunch/common':
-        specifier: ^1.2.32
-        version: 1.2.32
       '@forklaunch/core':
         specifier: ^3.3.0
         version: 3.3.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.5))(supports-color@8.1.1)
       '@forklaunch/interfaces-mlse':
         specifier: workspace:^
         version: link:../../../interfaces/mlse
-      '@forklaunch/internal':
-        specifier: ^1.2.35
-        version: 1.2.35
-      '@forklaunch/validator':
-        specifier: ^1.3.0
-        version: 1.3.0
-      '@mikro-orm/core':
-        specifier: 7.2.5
-        version: 7.2.5
       fast-xml-parser:
         specifier: ^5.11.1
         version: 5.12.0
     devDependencies:
+      '@anthropic-ai/sdk':
+        specifier: ^0.128.0
+        version: 0.128.0(zod@4.6.7)
       depcheck:
         specifier: ^1.4.7
         version: 1.4.7(supports-color@8.1.1)
@@ -1908,6 +1896,9 @@ importers:
 
   mlse-base:
     dependencies:
+      '@anthropic-ai/sdk':
+        specifier: ^0.128.0
+        version: 0.128.0(zod@4.6.7)
       '@forklaunch/blueprint-core':
         specifier: workspace:^
         version: link:../core
@@ -4272,9 +4263,6 @@ packages:
   '@smithy/core@3.36.2':
     resolution: {integrity: sha512-oRw0rB9QSUiCZfEs23G5F4Af+b2rQt1lItIICWu5IejFNd+uPM8SWqiKLMpQ6bX1Q7slsLbjuoE2niErFtkVPQ==}
     engines: {node: '>=18.0.0'}
-    deprecated: |-
-      Deprecated due to a bug in custom logger data redaction. Upgrade to the latest version. If you used a custom logger with this
-        version, review your logs and rotate any credentials or other secrets. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/credential-provider-imds@4.5.2':
     resolution: {integrity: sha512-A9uSdn72ozbRUSit0eib0TW7nXuNPlaeM0zcGkJ+nE6tFcSDbnmtwoxbTCFBukVQcszDAyvsd7+rTduPTXpygg==}
@@ -7205,7 +7193,6 @@ packages:
 
   node-abort-controller@3.1.1:
     resolution: {integrity: sha512-AGK2yQKIjRuqnc6VkX2Xj5d+QW8xZ87pa1UK6yA6ouUyuxfHuMP6umE5QK7UmTeOAymo+Zx1Fxiuw9rVx8taHQ==}
-    deprecated: This package is no longer needed on supported Node.js versions. Node.js 16+ includes AbortController and AbortSignal as built-in globals. All Node.js versions requiring this polyfill are end-of-life. Use the built-in globals instead.
 
   node-addon-api@7.1.1:
     resolution: {integrity: sha512-5m3bsyrjFWE1xf7nz7YXdN4udnVtXK6/Yfgn5qnahL6bCkf2yKt4k3nuTKAtT4r3IG8JNR2ncsIMdZuAzJjHQQ==}

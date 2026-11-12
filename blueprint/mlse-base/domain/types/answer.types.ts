@@ -1,5 +1,8 @@
-import { QueryClass } from './query.types';
-import { CitablePassageDto } from './search.types';
+// The answer endpoint's request, response and stream event shapes.
+import type {
+  CitablePassageDto,
+  QueryClass
+} from '@forklaunch/interfaces-mlse/types';
 
 export type AnswerRequestDto = {
   query: string;
@@ -56,11 +59,7 @@ export type AnswerSectionDto = {
 // quoted without AI; boundary and emergency: fixed messages;
 // source_not_found: the query names a source MLSE does not hold
 export type AnswerKind =
-  | 'answer'
-  | 'label_range'
-  | 'boundary'
-  | 'emergency'
-  | 'source_not_found';
+  'answer' | 'label_range' | 'boundary' | 'emergency' | 'source_not_found';
 
 // What was searched and how much of it was about the question.
 export type AnswerResearchDto = {
@@ -94,8 +93,17 @@ export type AnswerResponseDto = {
 };
 
 export type AnswerStreamEventDto =
-  | { type: 'start'; queryClass: QueryClass; kind: AnswerKind; message?: string }
+  | {
+      type: 'start';
+      queryClass: QueryClass;
+      kind: AnswerKind;
+      message?: string;
+    }
   // the sections that will follow, sent before drafting starts
-  | { type: 'plan'; sections: { key: string; label: string }[]; topicType?: 'condition' | 'medication' | 'procedure' }
+  | {
+      type: 'plan';
+      sections: { key: string; label: string }[];
+      topicType?: 'condition' | 'medication' | 'procedure';
+    }
   | { type: 'section'; section: AnswerSectionDto }
   | { type: 'done'; answer: AnswerResponseDto };

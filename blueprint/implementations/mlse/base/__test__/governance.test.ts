@@ -1,10 +1,9 @@
 import { SourceFetcher } from '@forklaunch/interfaces-mlse/interfaces';
-import { AnswerResponseDto } from '@forklaunch/interfaces-mlse/types';
 import { LicensedContentAdapter } from '../services/licensedContentAdapter.service';
 import { LiveRetrievalService } from '../services/liveRetrieval.service';
 import { licenseScopeFor } from '../services/licenseGate.service';
 import { SourceFetcherRegistry } from '../services/sourceFetcherRegistry.service';
-import { isValidCareArea, removeIdentifiers, spokenSummary } from '../services/voice.service';
+import { isValidCareArea, removeIdentifiers, SpokenAnswer, spokenSummary } from '../services/voice.service';
 
 describe('removeIdentifiers', () => {
   it('removes names, record numbers, dates and contact details', () => {
@@ -31,12 +30,8 @@ describe('removeIdentifiers', () => {
 });
 
 describe('spokenSummary', () => {
-  const answer = (overrides: Partial<AnswerResponseDto>): AnswerResponseDto => ({
-    answerId: 'a',
-    query: 'q',
-    queryClass: 'literature_lookup',
+  const answer = (overrides: Partial<SpokenAnswer>): SpokenAnswer => ({
     kind: 'answer',
-    notice: '',
     sections: [],
     sources: [],
     ...overrides
@@ -52,17 +47,17 @@ describe('spokenSummary', () => {
     const spoken = spokenSummary(
       answer({
         sections: [
-          { key: 'blood', label: 'Blood', status: 'answered', removed: 0, sentences: [{ text: 'Median blood loss was 20 mL.', citations: ['c1'] }] },
-          { key: 'positioning', label: 'Positioning', status: 'insufficient_evidence', removed: 0, sentences: [] }
+          { status: 'answered', sentences: [{ text: 'Median blood loss was 20 mL.' }] },
+          { status: 'insufficient_evidence', sentences: [] }
         ],
-        sources: [{} as AnswerResponseDto['sources'][number], {} as AnswerResponseDto['sources'][number]]
+        sources: [{}, {}]
       })
     );
     expect(spoken).toBe('Median blood loss was 20 mL. All 2 sources are on screen.');
   });
 
   it('never reads out label text', () => {
-    expect(spokenSummary(answer({ kind: 'label_range', sources: [{} as AnswerResponseDto['sources'][number]] }))).toBe(
+    expect(spokenSummary(answer({ kind: 'label_range', sources: [{}] }))).toBe(
       'The label dosing section is on screen, quoted as written. The source is on screen.'
     );
   });
