@@ -19,6 +19,9 @@ done
 for s in corpus:refresh mesh:load eval:run retention:enforce; do
     grep -q "\"$s\"" mlse-node/src/modules/mlse/package.json || { echo "missing script $s"; exit 1; }
 done
+# implementation-mlse-base takes the Anthropic SDK as an optional peer, so the
+# app installs it for LLM_PROVIDER=claude
+grep -q '"@anthropic-ai/sdk"' mlse-node/src/modules/mlse/package.json || { echo "missing @anthropic-ai/sdk"; exit 1; }
 
 cd mlse-node/src/modules
 

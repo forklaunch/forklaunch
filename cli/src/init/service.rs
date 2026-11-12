@@ -58,7 +58,7 @@ use crate::{
                 DOTENV_VERSION, ESLINT_VERSION, EXPRESS_VERSION, HYPER_EXPRESS_VERSION,
                 IAM_BASE_VERSION, IAM_INTERFACES_VERSION, INFRASTRUCTURE_REDIS_VERSION,
                 MESSAGING_BASE_VERSION, MESSAGING_INTERFACES_VERSION, MESSAGING_TWILIO_VERSION,
-                MLSE_BASE_VERSION, MLSE_INTERFACES_VERSION,
+                MLSE_BASE_VERSION, MLSE_INTERFACES_VERSION, ANTHROPIC_SDK_VERSION,
                 INFRASTRUCTURE_S3_VERSION, INTERNAL_VERSION, IOREDIS_VERSION, JOSE_VERSION,
                 MIKRO_ORM_CLI_VERSION, MIKRO_ORM_CORE_VERSION, MIKRO_ORM_DATABASE_VERSION,
                 MIKRO_ORM_MIGRATIONS_VERSION,
@@ -804,7 +804,17 @@ pub(crate) fn generate_service_package_json(
                 },
                 pino: Some(PINO_VERSION.to_string()),
                 ioredis: Some(IOREDIS_VERSION.to_string()),
-                additional_deps: indexmap::IndexMap::new(),
+                // implementation-mlse-base takes the Anthropic SDK as an
+                // optional peer; the mlse app offers LLM_PROVIDER=claude, so
+                // it installs the SDK itself
+                additional_deps: if manifest_data.is_mlse {
+                    indexmap::IndexMap::from([(
+                        "@anthropic-ai/sdk".to_string(),
+                        ANTHROPIC_SDK_VERSION.to_string(),
+                    )])
+                } else {
+                    indexmap::IndexMap::new()
+                },
             }
         }),
         dev_dependencies: Some(if let Some(dev_dependencies) = dev_dependencies_override {

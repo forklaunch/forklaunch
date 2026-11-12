@@ -361,6 +361,8 @@ pub(crate) const DOTENV_VERSION: &str = "^18.0.8";
 pub(crate) const JOSE_VERSION: &str = "^6.2.12";
 // sqlite3
 pub(crate) const SQLITE3_VERSION: &str = "^6.0.1";
+// @anthropic-ai/sdk
+pub(crate) const ANTHROPIC_SDK_VERSION: &str = "^0.128.0";
 // stripe
 pub(crate) const STRIPE_VERSION: &str = "^22.6.2";
 // uuid
