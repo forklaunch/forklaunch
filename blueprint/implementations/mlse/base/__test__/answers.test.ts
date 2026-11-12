@@ -1,4 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { readFileSync } from 'node:fs';
+import * as path from 'node:path';
 import { ANSWER_INSTRUCTIONS, INSUFFICIENT_EVIDENCE_MARKER } from '../domain/answerPrompt';
 import { verifyDraft } from '../services/citationVerifier.service';
 import {
@@ -263,6 +265,42 @@ describe('ClaudeLlmProvider', () => {
     expect(params.messages[0].content.match(/<\/passage>/gi)).toHaveLength(1);
     expect(params.messages[0].content.match(/<\/evidence>/gi)).toHaveLength(1);
     expect(params.messages[0].content).toContain('&lt;/PASSAGE&gt;');
+  });
+
+  // The real SDK against a streamed response in the API's wire format (a
+  // synthetic body, no real call): fails if the SDK stops accepting the
+  // model, the fallback beta or the request shape, or stops parsing the stream.
+  it('sends the model and fallback beta through the real SDK, and reads the stream', async () => {
+    const sse = readFileSync(path.join(__dirname, 'fixtures', 'claude-stream.sse'), 'utf-8');
+    const requests: { url: string; headers: Headers; body: Record<string, unknown> }[] = [];
+    const fetchImpl = async (url: string | URL | Request, init?: RequestInit) => {
+      requests.push({
+        url: String(url),
+        headers: new Headers(init?.headers),
+        body: JSON.parse(String(init?.body))
+      });
+      return new Response(sse, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+    };
+    const client = new Anthropic({ apiKey: 'test-key', fetch: fetchImpl as typeof fetch, maxRetries: 0 });
+    const provider = new ClaudeLlmProvider({ apiKey: 'test-key', client, embeddings: new FakeLlmProvider(8) });
+
+    const response = await provider.generate({ instructions: 'rules', prompt: 'Question: blood loss', evidence: [] });
+
+    expect(response).toEqual({ text: 'Blood loss was 20 mL. [P1]', model: 'claude-opus-5' });
+    expect(requests).toHaveLength(1);
+    const [request] = requests;
+    expect(new URL(request.url).pathname).toBe('/v1/messages');
+    expect(new URL(request.url).searchParams.get('beta')).toBe('true');
+    expect(request.headers.get('anthropic-beta')).toBe('server-side-fallback-2026-07-01');
+    expect(request.body).toMatchObject({
+      model: 'claude-opus-5',
+      stream: true,
+      fallbacks: 'default',
+      thinking: { type: 'adaptive' },
+      output_config: { effort: 'high' }
+    });
+    // the beta list travels as a header, never in the body
+    expect(request.body).not.toHaveProperty('betas');
   });
 
   it('raises a refusal instead of returning partial text', async () => {
