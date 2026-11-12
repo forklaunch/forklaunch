@@ -254,9 +254,18 @@ pub(crate) fn get_routers_from_standard_package(package: Module) -> Option<Vec<S
         // Skeleton only so far — patient/encounter/claim/eligibility/remittance/
         // codeSet routers land in later phases (see plan/cac/), not this PR.
         Module::BaseCac => None,
-        // mlse routers are registered here once the search, answer and entity
-        // controllers land.
-        Module::BaseMlse => None,
+        // In the order mlse-base's server.ts mounts them.
+        Module::BaseMlse => Some(vec![
+            String::from("source"),
+            String::from("document"),
+            String::from("search"),
+            String::from("topic"),
+            String::from("answer"),
+            String::from("voice"),
+            String::from("savedSearch"),
+            String::from("governance"),
+            String::from("compliance"),
+        ]),
         // Relay injects its router directly into an existing iam service
         // (init/relay.rs); it never goes through the standard-package manifest
         // path, so it declares no routers here.
@@ -277,7 +286,7 @@ mod tests {
     /// ones it does. That is how "subscription" survived here with no
     /// subscription route, while checkout shipped undeclared.
     ///
-    /// Only ecommerce is asserted. billing-stripe and iam-base drift the same
+    /// Only ecommerce and mlse are asserted. billing-stripe and iam-base drift the same
     /// way today on main — billing omits compliance, iam omits compliance and
     /// discovery — and correcting those belongs with those modules, not here.
     fn routers_in_template(project: &str) -> Vec<String> {
@@ -300,6 +309,13 @@ mod tests {
             get_routers_from_standard_package(Module::StripeEcommerce).unwrap_or_default();
         declared.sort();
         assert_eq!(declared, routers_in_template("ecommerce-stripe"));
+    }
+
+    #[test]
+    fn mlse_declares_exactly_the_routers_it_ships() {
+        let mut declared = get_routers_from_standard_package(Module::BaseMlse).unwrap_or_default();
+        declared.sort();
+        assert_eq!(declared, routers_in_template("mlse-base"));
     }
     #[test]
     fn emitted_service_and_worker_templates_keep_only_used_dependencies() {
