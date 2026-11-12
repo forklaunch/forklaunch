@@ -73,6 +73,14 @@ export class LiveRetrievalService {
     return this.liveSourceKeys.filter((key) => this.fetchers.has(key) && !this.onRequestOnly.has(key));
   }
 
+  /**
+   * Sends `term` to the live sources. It does not classify it: callers pass
+   * source query syntax and single drug names, not the user's question, so
+   * the question must be classified first and only a literature or dose
+   * question may reach this. A query about one patient must never be sent
+   * (search with `live: false`). ImageSearchService, which takes the user's
+   * own text, classifies it itself.
+   */
   async retrieve(term: string, sourceKeys?: string[]): Promise<LiveRetrievalResult> {
     const keys = this.liveSourceKeys.filter(
       (key) =>

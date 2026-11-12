@@ -155,6 +155,28 @@ describe('charts', () => {
     }
   });
 
+  it('uses only image paths on Open-i itself, never a full or protocol-relative URL', async () => {
+    const item = (imgLarge: string, imgGrid150?: string) => ({
+      uid: `PMC${imgLarge.length}`,
+      pmcid: String(400 + imgLarge.length),
+      title: 'Appendectomy in adults',
+      licenseURL: 'https://creativecommons.org/licenses/by/4.0/',
+      imgLarge,
+      ...(imgGrid150 ? { imgGrid150 } : {}),
+      image: { id: 'F1', caption: 'Appendectomy specimen', modalityMajor: 'ph' }
+    });
+    const body = JSON.stringify({
+      list: [
+        item('https://elsewhere.example/a.png'),
+        item('//elsewhere.example/b.png'),
+        item('/imgs/512/1/ok.png', '//elsewhere.example/thumb.png')
+      ]
+    });
+    const { images } = await new ImageSearchService(fakeFetch(body)).search('appendectomy');
+    expect(images.map((i) => i.imageUrl)).toEqual(['https://openi.nlm.nih.gov/imgs/512/1/ok.png']);
+    expect(images[0].thumbnailUrl).toBe('https://openi.nlm.nih.gov/imgs/512/1/ok.png');
+  });
+
   it('leaves charts out unless asked for them or for diagrams', async () => {
     const body = JSON.stringify({
       list: ['Appendectomy specimen', 'Flowchart of appendectomy patients'].map((caption, i) => ({

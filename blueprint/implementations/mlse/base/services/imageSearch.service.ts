@@ -253,9 +253,11 @@ export class ImageSearchService {
   }
 
   private toImage(item: OpenIItem): MedicalImage | undefined {
+    // image paths are joined to Open-i's own address, so only a path on that
+    // site is used ("/imgs/..."), never a full or protocol-relative URL
     const licenseUrl = item.licenseURL?.trim();
     if (!licenseUrl || licenseScopeFor(licenseUrl) !== 'full_text') return undefined;
-    if (!item.imgLarge || !item.pmcid || !/^\d+$/.test(item.pmcid)) return undefined;
+    if (!isSitePath(item.imgLarge) || !item.pmcid || !/^\d+$/.test(item.pmcid)) return undefined;
     const pmcid = `PMC${item.pmcid}`;
     const modality = item.image?.modalityMajor;
     const panels = (item.image?.modalityMinor ?? '')
@@ -265,7 +267,7 @@ export class ImageSearchService {
     return {
       id: `${item.uid ?? pmcid}:${item.image?.id ?? item.imgLarge}`,
       caption: plainText(item.image?.caption),
-      thumbnailUrl: `${this.baseUrl}${item.imgGrid150 ?? item.imgLarge}`,
+      thumbnailUrl: `${this.baseUrl}${isSitePath(item.imgGrid150) ? item.imgGrid150 : item.imgLarge}`,
       imageUrl: `${this.baseUrl}${item.imgLarge}`,
       title: plainText(item.title),
       articleUrl: `https://pmc.ncbi.nlm.nih.gov/articles/${pmcid}/`,
@@ -279,4 +281,9 @@ export class ImageSearchService {
       licenseUrl
     };
   }
+}
+
+// "/imgs/512/1.png", not "https://elsewhere" or "//elsewhere"
+function isSitePath(path: string | undefined): path is string {
+  return path !== undefined && path.startsWith('/') && !path.startsWith('//');
 }
