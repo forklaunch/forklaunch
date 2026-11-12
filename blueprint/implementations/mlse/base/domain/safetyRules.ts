@@ -14,6 +14,13 @@ export type SafetyRuleLists = {
   // Phrases, not single words: "now", "help" or "urgent" alone also appear
   // in literature questions ("does aspirin help prevent stroke").
   happeningNow: string[];
+  // Signs it is happening now that cover the whole query, however far from
+  // the event: "chest pain radiating to my left arm right now".
+  happeningNowAnywhere: string[];
+  // An emergency on its own: the asker describing an acute sign in their own
+  // body ("I can't breathe", "my face is drooping"). No sign it is happening
+  // now is needed; someone telling us is enough.
+  acuteOnItsOwn: string[];
   // An emergency as soon as it is told about one person, even in the past
   // tense ("my 3-year-old swallowed my pills"). Chronic conditions are not
   // here: "my patient had a stroke last year" is a literature question.
@@ -59,7 +66,7 @@ const FAMILY = [
 ];
 
 export const DEFAULT_SAFETY_RULES: SafetyRules = {
-  version: '2026-10-08',
+  version: '2026-11-12',
   status: 'draft',
   acuteEvents: [
     'overdose',
@@ -69,7 +76,10 @@ export const DEFAULT_SAFETY_RULES: SafetyRules = {
     'not breathing',
     'stopped breathing',
     'can t breathe',
+    'cant breathe',
     'cannot breathe',
+    'can not breathe',
+    'struggling to breathe',
     'not responding',
     'unresponsive',
     'collapsed',
@@ -85,7 +95,13 @@ export const DEFAULT_SAFETY_RULES: SafetyRules = {
     'poisoned',
     'swallowed',
     'chest pain',
-    'stroke'
+    'stroke',
+    // stroke signs
+    'face drooping',
+    'face is drooping',
+    'facial droop',
+    'facial drooping',
+    'slurred speech'
   ],
   happeningNow: [
     'right now',
@@ -112,6 +128,29 @@ export const DEFAULT_SAFETY_RULES: SafetyRules = {
     'need help',
     'what do i do',
     'asap'
+  ],
+  happeningNowAnywhere: ['right now', 'happening now', 'asap'],
+  acuteOnItsOwn: [
+    'i can t breathe',
+    'i cant breathe',
+    'i cannot breathe',
+    'i can not breathe',
+    'i m struggling to breathe',
+    'i am struggling to breathe',
+    'i m choking',
+    'i am choking',
+    'my throat is closing',
+    'my throat is swelling',
+    'my chest hurts',
+    'my chest is tight',
+    'my chest feels tight',
+    'my chest is in pain',
+    'my left arm is numb',
+    'my face is drooping',
+    'my face is numb',
+    'my speech is slurred',
+    'i m slurring',
+    'i am slurring'
   ],
   acuteForAPerson: [
     'swallowed',
@@ -232,6 +271,8 @@ export const DEFAULT_SAFETY_RULES: SafetyRules = {
 const LIST_KEYS: (keyof SafetyRuleLists)[] = [
   'acuteEvents',
   'happeningNow',
+  'happeningNowAnywhere',
+  'acuteOnItsOwn',
   'acuteForAPerson',
   'someone',
   'selfHarm',
