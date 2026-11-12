@@ -89,7 +89,7 @@ fn is_production_ts(path: &Path) -> bool {
         && !name.contains(".spec.")
 }
 
-fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+pub(crate) fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };

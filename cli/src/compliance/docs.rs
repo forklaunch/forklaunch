@@ -352,6 +352,18 @@ impl CliCommand for DocsCommand {
             )
             .arg(json_flag()),
         )
+        .subcommand(
+            command(
+                "delete",
+                "Delete documents that were never approved (duplicate copies, mistakes)",
+            )
+            .arg(
+                Arg::new("document_id")
+                    .num_args(1..)
+                    .required(true)
+                    .help("Document IDs to delete"),
+            ),
+        )
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
@@ -364,6 +376,7 @@ impl CliCommand for DocsCommand {
             Some(("save", m)) => save(m),
             Some(("download", m)) => download(m),
             Some(("push", m)) => push(m),
+            Some(("delete", m)) => delete(m),
             _ => unreachable!(),
         }
     }
@@ -495,6 +508,31 @@ fn regenerate(m: &ArgMatches) -> Result<()> {
         bail!("{failed} of {} document(s) failed to regenerate", ids.len());
     }
     Ok(())
+}
+
+fn delete(m: &ArgMatches) -> Result<()> {
+    let ids = requested_ids_only(m);
+    let mut failed = 0;
+    for id in &ids {
+        let url = format!("{}/{}", base(), urlencoding::encode(id));
+        let response = http_client::delete(&url).with_context(|| ERROR_FAILED_TO_SEND_REQUEST)?;
+        if response.status().is_success() {
+            println!("{id}  deleted");
+        } else {
+            failed += 1;
+            eprintln!("{:#}", fail(&format!("Failed to delete {id}"), response));
+        }
+    }
+    if failed > 0 {
+        bail!("{failed} of {} document(s) were not deleted", ids.len());
+    }
+    Ok(())
+}
+
+fn requested_ids_only(m: &ArgMatches) -> Vec<String> {
+    m.get_many::<String>("document_id")
+        .map(|v| v.cloned().collect())
+        .unwrap_or_default()
 }
 
 fn push_one(id: &str) -> Result<PushResult> {
@@ -772,6 +810,16 @@ mod tests {
         )
         .unwrap();
         assert_eq!(r.controls[0].title, "Automated backups");
+    }
+
+    #[test]
+    fn delete_needs_an_id() {
+        assert!(docs_cmd().try_get_matches_from(["docs", "delete"]).is_err());
+        assert!(
+            docs_cmd()
+                .try_get_matches_from(["docs", "delete", "a", "b"])
+                .is_ok()
+        );
     }
 
     fn download_matches(args: &[&str]) -> ArgMatches {

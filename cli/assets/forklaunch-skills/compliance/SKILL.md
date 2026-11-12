@@ -820,6 +820,7 @@ forklaunch compliance docs download <documentId>... [--approved] [--format md|pd
 forklaunch compliance docs download --all [--include approved|latest] [--format md|pdf|both] [--app <applicationId>] [-o file.zip]
 forklaunch compliance docs push <documentId>... [--json]   # approved version to Oneleet
 forklaunch compliance docs push --all                     # every approved document
+forklaunch compliance docs delete <documentId>...         # only documents never approved
 ```
 
 `push` sends a document's approved version (as a PDF) to the organization's
@@ -830,11 +831,22 @@ then Documents) with a service key that has the `WRITE_EVIDENCE` scope; the key
 is stored encrypted and never returned. A 409 means Oneleet is not connected
 or the document has no approved version.
 
-Diagrams are ```architecture blocks: JSON with `layout` (`layers` for a system,
-`flow` for a process), `nodes` (`id`, `label`, `kind`: client, gateway, service,
+What the documents read from code comes with each release: `release create`
+attaches the field inventory (regulated fields per entity, their service and
+retention rule) and a storage scan (every `TtlCache` / `ObjectStore` write:
+key prefix, TTL, and whether a tenant context encrypts it per tenant). An
+entity with regulated fields and no `retention` is reported as "kept until
+deleted", so declaring `retention: { duration, action }` on the entity is what
+changes the Data Retention Schedule.
+
+Diagrams are ```architecture blocks: JSON with `layout` (`boundaries` for a
+system's data flow, `layers` for a simple stack, `flow` for a process),
+`boundary` (the cloud network's label, boundaries only), `nodes` (`id`, `label`, `kind`: client, gateway, service,
 worker with `parent`, database, cache, objectstore, queue, search, integration,
 step, decision, end; optional `detail`) and `edges` (`from`, `to`, optional
-`label`). The dashboard and the PDFs draw them with the same renderer. Edit the
+`label`, and `tone`: `restricted` for health or payment data, `personal` for
+personal data). Service-to-service edges are drawn as API calls. The dashboard
+and the PDFs draw them with the same renderer. Edit the
 JSON, never an image; regenerating rebuilds them from platform records.
 ```mermaid blocks also render, for diagrams people add by hand.
 
