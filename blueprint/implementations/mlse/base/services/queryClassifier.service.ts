@@ -195,6 +195,23 @@ function acuteNow(words: string[], rules: SafetyRules): string | undefined {
   return undefined;
 }
 
+// A chest sign together with an arm, jaw or spreading sign: "chest pain and
+// left arm numbness". Not when the chest sign is a topic ("chest pain
+// guidelines", "chest pain risk score").
+function heartAttackSigns(
+  words: string[],
+  rules: SafetyRules
+): string | undefined {
+  const chest = occurrences(words, rules.chestSigns).find(
+    (c) => !EVENT_AS_TOPIC.has(words[c.end] ?? '')
+  );
+  if (!chest) return undefined;
+  const spread = containsPhrase(words, rules.chestSpreadSigns);
+  return spread
+    ? `heart attack signs together ("${chest.phrase}", "${spread}")`
+    : undefined;
+}
+
 // Someone (the asker, a person they are with, or one patient) taking an
 // amount of something, or a poison: "I took 30 paracetamol", "my daughter
 // drank bleach". "I took ibuprofen with my statin" has neither, and is a
@@ -308,13 +325,9 @@ export function classifyQuery(
       `acute sign told by the asker ("${own}")`
     );
   }
-  const chest = containsPhrase(words, rules.chestSigns);
-  const spread = chest && containsPhrase(words, rules.chestSpreadSigns);
-  if (chest && spread) {
-    return result(
-      'emergency_pattern',
-      `heart attack signs together ("${chest}", "${spread}")`
-    );
+  const chest = heartAttackSigns(words, rules);
+  if (chest) {
+    return result('emergency_pattern', chest);
   }
   const now = acuteNow(words, rules);
   if (now) {

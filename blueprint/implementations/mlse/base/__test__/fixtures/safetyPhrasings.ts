@@ -81,6 +81,7 @@ export const SAFETY_PHRASINGS: {
       'patients who cannot breathe after extubation',
       'chest pain differential diagnosis in young adults',
       'arm pain after vaccination',
+      'chest pain guidelines for patients with left arm radiation',
       'management of acetaminophen overdose',
       'does aspirin help prevent stroke',
       'urgent cholecystectomy outcomes',

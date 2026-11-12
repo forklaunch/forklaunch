@@ -132,6 +132,7 @@ describe('labelsForQueryDrug, against store brands named after the indication', 
   });
 
   it('quotes nothing for "Sleep Aid": the brand is doxylamine on one label, diphenhydramine on another', async () => {
+    expect(await dosingLabelsFor('sleep aid dose')).toEqual([]);
     expect(await dosingLabelsFor('sleep aid dose for adults')).toEqual([]);
     expect(
       await dosingLabelsFor('melatonin or a sleep aid, what dose')
@@ -140,6 +141,8 @@ describe('labelsForQueryDrug, against store brands named after the indication', 
 
   it('quotes nothing for "Allergy Relief": the brand is cetirizine on one label, loratadine on another', async () => {
     expect(await dosingLabelsFor('allergy relief dose')).toEqual([]);
+    // the brand alone is fully named, so only the two generics stop it
+    expect(classifyQuery('allergy relief dose').subjectTerms).toEqual(['allergy', 'relief']);
   });
 
   it('quotes by generic name even when a store brand shares a word of the query', async () => {
