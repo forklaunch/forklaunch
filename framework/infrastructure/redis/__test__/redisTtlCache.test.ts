@@ -44,6 +44,23 @@ describe('redisTtlCache', () => {
     }
   }, 30000);
 
+  it('putRecordIfAbsent writes once, atomically, and expires', async () => {
+    const claim = () =>
+      cache.putRecordIfAbsent({
+        key: 'claim:once',
+        value: 1,
+        ttlMilliseconds: 300
+      });
+    // Twenty simultaneous claims of one key: exactly one wins.
+    const results = await Promise.all(Array.from({ length: 20 }, claim));
+    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(await claim()).toBe(false);
+    expect(await cache.peekRecord('claim:once')).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(await claim()).toBe(true);
+    await cache.deleteRecord('claim:once');
+  });
+
   it('put', async () => {
     await cache.putRecord({ key, value, ttlMilliseconds });
   });
