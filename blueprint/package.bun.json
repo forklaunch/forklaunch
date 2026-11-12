@@ -43,8 +43,5 @@
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vitest": "^2.1.8"
-  },
-  "patchedDependencies": {
-    "@jercle/yargonaut@1.1.5": "./patches/@jercle__yargonaut.patch"
   }
 }

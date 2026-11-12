@@ -667,6 +667,8 @@ pub(crate) fn get_service_module_cache(service_type: &Module) -> Option<String> 
 pub(crate) const DIRS_TO_IGNORE: &[&str] = &[
     "node_modules",
     "assets",
+    // No longer generated (the yargonaut patch went away with MikroORM 7), but
+    // apps created by older CLI versions still have this folder.
     "patches",
     ".git",
     ".github",
