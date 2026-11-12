@@ -330,7 +330,16 @@ export type ExpressLikeApplicationOptions<
         discreteVersions?: boolean;
       };
   /**
-   * CORS configuration options.
+   * CORS configuration options, used exactly as given.
+   *
+   * Leave this out to get the secure default: only the origins listed in the
+   * `CORS_ORIGINS` environment variable (comma separated) are allowed; when
+   * that is unset, no cross-origin request is allowed in production and only
+   * localhost origins are allowed elsewhere.
+   *
+   * WARNING: an object without `origin`, including an empty `cors: {}`,
+   * allows EVERY origin (`Access-Control-Allow-Origin: *`). Name the origins:
+   * `cors: { origin: ['https://app.example.com'] }`.
    */
   cors?: CorsOptions;
 };

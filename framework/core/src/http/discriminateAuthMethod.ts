@@ -1,8 +1,20 @@
-import { safeStringify } from '@forklaunch/common';
 import { AnySchemaValidator } from '@forklaunch/validator';
 import { JWK, JWTPayload, jwtVerify } from 'jose';
 import { ParsedQs } from 'qs';
 import { createHmacToken } from './createHmacToken';
+import {
+  hmacNonceKey,
+  hmacNonceTtlMs,
+  isHmacTimestampFresh,
+  resolveHmacMaxSkewMs,
+  resolveHmacNonceStore,
+  timingSafeEqualStrings
+} from './hmacReplayProtection';
+import {
+  jwtAlgorithmsForPublicKey,
+  jwtAlgorithmsForSharedSecret,
+  jwtClaimChecks
+} from './jwtAlgorithms';
 import { isBasicAuthMethod } from './guards/isBasicAuthMethod';
 import { isHmacMethod } from './guards/isHmacMethod';
 import { isJwtAuthMethod } from './guards/isJwtAuthMethod';
@@ -154,7 +166,8 @@ export async function discriminateAuthMethod<
           timestamp,
           nonce,
           signature,
-          secretKey
+          secretKey,
+          keyId
         }: {
           method: string;
           path: string;
@@ -163,6 +176,7 @@ export async function discriminateAuthMethod<
           nonce: string;
           signature: string;
           secretKey: string;
+          keyId?: string;
         }) => Promise<boolean | undefined>;
       };
     }
@@ -181,11 +195,20 @@ export async function discriminateAuthMethod<
     let verificationFunction: (
       token: string
     ) => Promise<JWTPayload | undefined>;
+    // Issuer and audience are checked only when the app configured them.
+    // Resolved per verification so a bad setting rejects the token (and is
+    // logged with the failure) instead of crashing the request.
+    const claimChecks = () => jwtClaimChecks(jwt);
     if ('signatureKey' in jwt) {
       verificationFunction = async (token) => {
+        // The algorithm list is always pinned: HS256 unless configured.
         const { payload } = await jwtVerify(
           token,
-          new Uint8Array(Buffer.from(jwt.signatureKey))
+          new Uint8Array(Buffer.from(jwt.signatureKey)),
+          {
+            ...claimChecks(),
+            algorithms: jwtAlgorithmsForSharedSecret(jwt.algorithms)
+          }
         );
         return payload;
       };
@@ -203,7 +226,13 @@ export async function discriminateAuthMethod<
         let lastError: unknown;
         for (const key of jwks) {
           try {
-            const { payload } = await jwtVerify(token, key);
+            // Pinned per key to asymmetric algorithms only, so a token
+            // cannot pick `none` or an HMAC algorithm keyed on public
+            // material (algorithm confusion).
+            const { payload } = await jwtVerify(token, key, {
+              ...claimChecks(),
+              algorithms: jwtAlgorithmsForPublicKey(key, jwt.algorithms)
+            });
             return payload;
           } catch (error) {
             lastError = error;
@@ -224,10 +253,19 @@ export async function discriminateAuthMethod<
       }
     };
   } else if (isHmacMethod(auth)) {
+    const maxSkewMs = resolveHmacMaxSkewMs(auth.hmac.maxSkewMs);
+    const configuredNonceStore = auth.hmac.nonceStore;
     authMethod = {
       type: 'hmac' as const,
       auth: {
         secretKeys: auth.hmac.secretKeys,
+        /**
+         * Accepts a signed request only when its timestamp is inside the
+         * skew window, its signature matches (constant-time compare) and
+         * its nonce has not been used before. The nonce is claimed last, and
+         * only for a valid signature, so a `false` for one candidate path
+         * never burns the nonce for the next.
+         */
         verificationFunction: async ({
           method,
           path,
@@ -235,7 +273,8 @@ export async function discriminateAuthMethod<
           timestamp,
           nonce,
           signature,
-          secretKey
+          secretKey,
+          keyId
         }: {
           method: string;
           path: string;
@@ -244,7 +283,43 @@ export async function discriminateAuthMethod<
           nonce: string;
           signature: string;
           secretKey: string;
+          /** Scopes the nonce to the signing key. */
+          keyId?: string;
         }) => {
+          const reject = (reason: string) => {
+            // Never log the expected signature or the body: the first is a
+            // valid credential for this exact request, the second may hold
+            // protected data.
+            openTelemetryCollector?.debug('[HMAC Verification Failed]', {
+              reason,
+              method,
+              path,
+              keyId,
+              timestamp:
+                timestamp instanceof Date && !Number.isNaN(timestamp.getTime())
+                  ? timestamp.toISOString()
+                  : 'invalid',
+              bodyType: body ? typeof body : 'undefined'
+            });
+            return false;
+          };
+
+          if (typeof secretKey !== 'string' || secretKey.length === 0) {
+            return reject('unknown key');
+          }
+          if (
+            typeof nonce !== 'string' ||
+            nonce.length === 0 ||
+            typeof signature !== 'string'
+          ) {
+            return reject('missing nonce or signature');
+          }
+
+          const now = Date.now();
+          if (!isHmacTimestampFresh(timestamp, now, maxSkewMs)) {
+            return reject('stale or invalid timestamp');
+          }
+
           const computedSignature = createHmacToken({
             method,
             path,
@@ -253,27 +328,29 @@ export async function discriminateAuthMethod<
             nonce,
             secretKey
           });
-
-          const isValid = computedSignature === signature;
-
-          if (!isValid) {
-            const errorInfo = {
-              method,
-              path,
-              timestamp: timestamp.toISOString(),
-              nonce,
-              receivedSignature: signature,
-              computedSignature
-            };
-
-            openTelemetryCollector?.debug('[HMAC Verification Failed]', {
-              ...errorInfo,
-              bodyType: body ? typeof body : 'undefined',
-              body: body ? safeStringify(body) : 'undefined'
-            });
+          if (!timingSafeEqualStrings(computedSignature, signature)) {
+            return reject('signature mismatch');
           }
 
-          return isValid;
+          let firstUse: boolean;
+          try {
+            firstUse = await resolveHmacNonceStore(configuredNonceStore).claim(
+              hmacNonceKey(keyId, nonce),
+              hmacNonceTtlMs(timestamp, now, maxSkewMs)
+            );
+          } catch (error) {
+            // A nonce store that cannot answer fails closed.
+            openTelemetryCollector?.error(
+              '[HMAC Nonce Store Failed]',
+              error instanceof Error ? error.message : String(error)
+            );
+            return reject('nonce store unavailable');
+          }
+          if (firstUse !== true) {
+            return reject('replayed nonce');
+          }
+
+          return true;
         }
       }
     };
