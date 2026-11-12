@@ -20,6 +20,22 @@ export interface TtlCache {
   ): Promise<void>;
 
   /**
+   * Puts a record into the cache only if its key is not already present, as
+   * one atomic step, and answers whether it was written: `true` for the
+   * first writer, `false` when the key already exists (the stored record is
+   * left untouched). Used for single-use claims such as HMAC nonces and
+   * idempotency keys, where a separate check followed by a write would let
+   * two callers both win.
+   *
+   * Optional, so existing cache implementations keep compiling. A cache that
+   * cannot do this atomically must leave it undefined rather than emulate it.
+   */
+  putRecordIfAbsent?<T>(
+    cacheRecord: TtlCacheRecord<T>,
+    compliance?: ComplianceContext
+  ): Promise<boolean>;
+
+  /**
    * Puts a batch of records into the cache.
    */
   putBatchRecords<T>(

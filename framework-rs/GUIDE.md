@@ -92,6 +92,30 @@ different purposes: HMAC verification does not itself make a financial or relay
 operation idempotent. Route-specific HMAC key policies can replace the default
 policy for one method/path without granting those keys access elsewhere.
 
+**Signed requests are accepted once (behaviour change after 0.2.5).**
+`module_auth::HmacJwksAuth::authenticate` now rejects a request whose nonce was
+already used inside the five-minute timestamp window, in addition to the
+existing signature and freshness checks. Callers must sign every request,
+including retries, with a fresh nonce (`forklaunch_universal_sdk::HmacSigner`
+and the TypeScript `universalSdk({ hmac })` already do); a client that reuses a
+nonce or caches the `authorization` header is now refused. Used nonces are kept
+in a bounded in-memory store (`request_hmac::InMemoryNonceStore`, 100,000
+entries) that protects **one process only**: a service that runs several copies
+must supply a shared, atomic store with
+`HmacJwksAuth::with_nonce_store(|key, expiry_unix_millis| ...)` (for Redis,
+`SET key 1 NX PXAT expiry`) for full protection. An unavailable store rejects
+the request. `verify_hmac_payload_for_route` and a hand-written
+`OriginalBodySignedPolicy` still own their replay policy;
+`HmacAuthorization::nonce_claim` gives them the same key and expiry.
+
+**CORS is denied by default (behaviour change after 0.2.5).** A router whose
+`RouterConfig` sets neither `cors` nor `typescript_cors` used to answer every
+origin with `Access-Control-Allow-Origin: *`. It now allows only the origins in
+the comma-separated `CORS_ORIGINS` setting, and none when that is unset. A
+service with a browser frontend on another origin must set
+`CORS_ORIGINS=https://your-ui` or pass `RouterConfig.cors`. The TypeScript CORS
+profile no longer sends `Access-Control-Allow-Credentials` with a wildcard origin.
+
 Generic cookie sessions use the optional `cookie-session` adapter and explicit
 CSRF/origin policy described in [the README](README.md#optional-browser-sessions).
 Better Auth uses its own cookie/session adapter in the blueprint workspace.

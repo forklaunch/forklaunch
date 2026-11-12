@@ -220,10 +220,32 @@ async function checkAuthorizationToken<
         return invalidAuthorizationTokenFormat;
       }
 
+      // A missing or malformed timestamp is rejected before anything is
+      // computed; the freshness window itself is enforced by the verifier.
+      const requestTimestamp = new Date(parsedTimestamp);
+      if (Number.isNaN(requestTimestamp.getTime())) {
+        return invalidAuthorizationTokenFormat;
+      }
+
+      // Only keys the app configured: an unknown key id (or an inherited
+      // property name such as `constructor`) is a rejection, not a crash.
+      const secretKeys = collapsedAuthorizationMethod.hmac.secretKeys;
+      const secretKey = Object.prototype.hasOwnProperty.call(
+        secretKeys,
+        parsedKeyId
+      )
+        ? secretKeys[parsedKeyId]
+        : undefined;
+      if (typeof secretKey !== 'string' || secretKey.length === 0) {
+        return invalidAuthorizationSignature;
+      }
+
       // The signed path is the full wire path without the query string, as the
       // Rust verifiers and the universal-sdk signers use. The router-relative
       // `req.path` that older callers signed is deprecated but still accepted
       // unless HMAC_ACCEPT_MOUNT_RELATIVE_PATHS=false (it is not bound to a mount).
+      // The verifier also enforces the timestamp window and claims the nonce
+      // (once, for the path whose signature matched) to reject replays.
       let verificationResult = false;
       const signedPaths = hmacSignedPaths(req);
       for (const path of signedPaths) {
@@ -231,10 +253,11 @@ async function checkAuthorizationToken<
           method: req?.method ?? '',
           path,
           body: req?._rawBody ?? req?.body,
-          timestamp: new Date(parsedTimestamp),
+          timestamp: requestTimestamp,
           nonce: parsedNonce,
           signature: parsedSignature,
-          secretKey: collapsedAuthorizationMethod.hmac.secretKeys[parsedKeyId]
+          secretKey,
+          keyId: parsedKeyId
         }));
         if (verificationResult) {
           if (path !== signedPaths[0]) warnMountRelativeHmacPath();

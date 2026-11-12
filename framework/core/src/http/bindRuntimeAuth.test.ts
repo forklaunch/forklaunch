@@ -66,4 +66,88 @@ describe('portable authentication policy', () => {
       )
     ).toThrow();
   });
+
+  it('carries JWT verification settings through to the bound contract', () => {
+    const policy = { auth: { scheme: 'jwt', allowedRoles: ['admin'] } } as const;
+    const bound = bindRuntimeAuth(policy, {
+      signatureKey: 'private',
+      algorithms: ['HS512'],
+      issuer: 'https://id.example.com',
+      audience: ['api', 'admin-api']
+    });
+    expect(bound.auth.jwt).toEqual({
+      signatureKey: 'private',
+      algorithms: ['HS512'],
+      issuer: 'https://id.example.com',
+      audience: ['api', 'admin-api']
+    });
+    expect(
+      bindRuntimeAuth(policy, {
+        jwksPublicKeyUrl: 'https://identity.test/jwks',
+        algorithms: ['RS256'],
+        issuer: undefined
+      }).auth.jwt
+    ).toEqual({
+      jwksPublicKeyUrl: 'https://identity.test/jwks',
+      algorithms: ['RS256']
+    });
+    // The key is still required, and bad settings fail at bind time.
+    for (const binding of [
+      { algorithms: ['HS256'] },
+      { signatureKey: 'private', algorithms: [] },
+      { signatureKey: 'private', algorithms: 'HS256' },
+      { signatureKey: 'private', algorithms: [''] },
+      { signatureKey: 'private', issuer: '' },
+      { signatureKey: 'private', audience: [] },
+      { signatureKey: 'private', audience: [1] },
+      { signatureKey: 'private', unknownOption: true }
+    ]) {
+      expect(() => bindRuntimeAuth(policy, binding as never)).toThrow(
+        'Invalid runtime authentication binding'
+      );
+    }
+  });
+
+  it('carries HMAC replay settings through to the bound contract', () => {
+    const policy = { auth: { scheme: 'hmac' } } as const;
+    const nonceStore = { claim: async () => true };
+    const bound = bindRuntimeAuth(policy, {
+      secretKeys: { current: 'private' },
+      maxSkewMs: 60_000,
+      nonceStore
+    });
+    expect(bound.auth.hmac.maxSkewMs).toBe(60_000);
+    expect(bound.auth.hmac.nonceStore).toBe(nonceStore);
+    expect(bound.auth.hmac.secretKeys.current).toBe('private');
+
+    const cache = { putRecordIfAbsent: async () => true };
+    expect(
+      bindRuntimeAuth(policy, {
+        secretKeys: { current: 'private' },
+        nonceStore: cache as never
+      }).auth.hmac.nonceStore
+    ).toBe(cache);
+    expect(
+      bindRuntimeAuth(policy, {
+        secretKeys: { current: 'private' },
+        maxSkewMs: undefined
+      }).auth.hmac
+    ).toEqual({ secretKeys: { current: 'private' } });
+
+    for (const binding of [
+      { maxSkewMs: 60_000 },
+      { secretKeys: { current: 'private' }, maxSkewMs: 0 },
+      { secretKeys: { current: 'private' }, maxSkewMs: -1 },
+      { secretKeys: { current: 'private' }, maxSkewMs: Infinity },
+      { secretKeys: { current: 'private' }, maxSkewMs: '300000' },
+      { secretKeys: { current: 'private' }, nonceStore: {} },
+      { secretKeys: { current: 'private' }, nonceStore: null },
+      { secretKeys: { current: 'private' }, nonceStore: { peekRecord() {} } },
+      { secretKeys: { current: 'private' }, unknownOption: true }
+    ]) {
+      expect(() => bindRuntimeAuth(policy, binding as never)).toThrow(
+        'Invalid runtime authentication binding'
+      );
+    }
+  });
 });
