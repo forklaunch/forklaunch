@@ -3,26 +3,16 @@
 "@forklaunch/implementation-mlse-base": patch
 ---
 
-Add the mlse (medical literature search) module: `ContentSourceProvider` and `LlmProvider` contracts, a `PublicCorpusProvider` serving the free, commercially usable sources (openFDA, DailyMed, ClinicalTrials.gov, MeSH, PubMed, PubMed Central Open Access), a per-document license gate that stores full text only for CC0, CC BY, CC BY-SA and public-domain works, and a deterministic development AI provider.
+First release of the mlse (medical literature search) packages, which back the `mlse-base` module.
 
-The safety classifier reads its phrase lists from `DEFAULT_SAFETY_RULES` (versioned, marked draft until a clinician review), which a deployment can extend with `parseSafetyRuleAdditions` and `useSafetyRuleAdditions` but never weaken. It also catches self-harm, first-person and third-party ingestion with an amount or a poison, and clinicians' shorthand ("pt is 67M").
+`@forklaunch/interfaces-mlse` holds the contracts an implementation provides (`ContentSourceProvider`, `SourceFetcher`, `LlmProvider`, `Reranker`) and the document, retrieval, query and model types they use. The module's HTTP request and response shapes live in the module, not here.
 
-Embedding requests can say whether the texts are search queries or passages (`purpose`); the Ollama provider then adds the task instruction `nomic-embed-text` was trained with.
+`@forklaunch/implementation-mlse-base` provides:
 
-The procedure question framework now holds only hint words that fit any procedure; `frameworkItems(framework, topicHints)` adds a topic's own words. `selectEvidence` takes `wholeTerm` so topic pages count a document only when it names the topic in full.
-
-PMC searches now rank by relevance, as PubMed searches did, and PMC articles drop declaration sections (funding, ethics, consent, competing interests, AI use) by heading as well as by type.
-
-`itemFitRank` ranks a page's items for a passage by embedding similarity to each item's question, and on topic pages (`wholeTerm`) a word of the topic's name no longer counts as a hint.
-
-`splitAspectQuery` separates a question about one part of a topic ("procedure for heart attack") into the topic and the aspect asked about.
-
-`ImageSearchService` finds figures from open-access articles through NLM Open-i, like a web search's image results: only figures licensed for commercial reuse (CC0, CC BY, CC BY-SA), each with its caption, article and license, filterable by type (photo, x-ray, CT, MRI, ultrasound, microscopy, diagram). Queries about a patient are not sent.
-
-`findStepFigures` finds openly licensed figures that show one step of a procedure (an incision, a cut, an anastomosis), judged by caption: photos and drawings of the operation, not imaging, histology, animal studies, charts or the healed wound. `MedicalImage.panels` says what a multi-panel figure shows.
-
-Image search leaves charts and diagrams out unless asked for (`charts`, or `type: diagram`), judged by caption since Open-i labels many of them photos; `isChart` makes that call.
-
-`GuidelineFetcher` (source `guidelines`) finds clinical practice guidelines from the last ten years through PubMed, storing a guideline in full when its PubMed Central copy is openly licensed for commercial reuse and as an abstract excerpt otherwise (most society guidelines). PubMed records carry their `pmcid`, and `PmcOaFetcher.fetchOpenAccess` downloads only the open-access articles among a list. Live retrieval can give a slow source its own budget (`sourceTimeoutsMs`) and query it only when named (`onRequestOnly`).
-
-A source that answers "too many requests" (HTTP 429) is asked once more a second later, since NCBI's limit is shared by every client using it.
+- Fetchers for free, commercially usable sources: PubMed, PubMed Central Open Access, clinical practice guidelines, MedlinePlus, ClinicalTrials.gov, openFDA, DailyMed, MeSH and NLM Open-i figures. Every request has a deadline, and NCBI's rate limit can be shared through Redis.
+- A per-document license gate that stores full text only for CC0, CC BY, CC BY-SA and public-domain works.
+- A deterministic safety classifier that decides whether a query reaches the AI: emergencies, self-harm, prescription requests, questions about one patient and dose questions. Its phrase lists are versioned (`DEFAULT_SAFETY_RULES`, draft until clinician review), and a deployment can add to them but never weaken them. It ships with an evaluation set of phrasings.
+- Label matching that quotes a drug label's dosing section only for the drug the query names, by generic name.
+- Checks that every drafted sentence's citations, numbers, negation and comparison direction match its sources.
+- Model providers: Ollama (free, local), Claude (the Anthropic SDK is an optional peer) and a deterministic fake for development.
+- Ranking, MeSH expansion, question frameworks for topic pages, and voice summaries.
