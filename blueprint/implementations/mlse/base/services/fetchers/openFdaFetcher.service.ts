@@ -131,9 +131,20 @@ export class OpenFdaFetcher implements SourceFetcher {
     const generic = label.openfda?.generic_name?.[0];
     const brand = label.openfda?.brand_name?.[0];
     const manufacturer = label.openfda?.manufacturer_name?.[0];
-    const name = [brand ?? generic, generic && brand && generic !== brand.toUpperCase() ? `(${generic.toLowerCase()})` : undefined]
+    // A brand without a generic name is written so it can never pass for
+    // one: "Pain Relief" alone would read as the drug's name, and the label
+    // matcher quotes dosing only for a drug it can name.
+    const name = [
+      brand ?? generic,
+      generic && brand && generic !== brand.toUpperCase()
+        ? `(${generic.toLowerCase()})`
+        : brand && !generic
+          ? ', generic name not listed'
+          : undefined
+    ]
       .filter(Boolean)
-      .join(' ');
+      .join(' ')
+      .replace(' ,', ',');
 
     return {
       sourceKey: this.sourceKey,

@@ -308,6 +308,14 @@ export function classifyQuery(
       `acute sign told by the asker ("${own}")`
     );
   }
+  const chest = containsPhrase(words, rules.chestSigns);
+  const spread = chest && containsPhrase(words, rules.chestSpreadSigns);
+  if (chest && spread) {
+    return result(
+      'emergency_pattern',
+      `heart attack signs together ("${chest}", "${spread}")`
+    );
+  }
   const now = acuteNow(words, rules);
   if (now) {
     return result('emergency_pattern', now);
