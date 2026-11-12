@@ -14,5 +14,5 @@ First release of the mlse (medical literature search) packages, which back the `
 - A deterministic safety classifier that decides whether a query reaches the AI: emergencies, self-harm, prescription requests, questions about one patient and dose questions. Its phrase lists are versioned (`DEFAULT_SAFETY_RULES`, draft until clinician review), and a deployment can add to them but never weaken them. It ships with an evaluation set of phrasings.
 - Label matching that quotes a drug label's dosing section only for the drug the query names, by generic name.
 - Checks that every drafted sentence's citations, numbers, negation and comparison direction match its sources.
-- Model providers: Ollama (free, local), Claude (the Anthropic SDK is an optional peer) and a deterministic fake for development.
+- Model providers: Ollama (free, local), Anthropic (its SDK is an optional peer) and a deterministic fake for development.
 - Ranking, MeSH expansion, question frameworks for topic pages, and voice summaries.
