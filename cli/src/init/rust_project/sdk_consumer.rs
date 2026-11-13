@@ -3,9 +3,15 @@ use super::*;
 
 /// Predeclare a service-owned client crate so the first workspace build has a
 /// complete, acyclic graph: SDK -> host declarations, never SDK -> server.
-/// What a generated TypeScript SDK holds before its service has been built.
-pub(super) const TYPESCRIPT_SDK_PLACEHOLDER: &str =
-    "// Generated when this service is built. Until then the SDK is empty.\nexport {};\n";
+/// What a generated TypeScript SDK holds before its service has been built:
+/// the client type other packages import by name (client-sdk does, as
+/// `<Service>SdkClient`), with no methods yet.
+pub(super) fn typescript_sdk_placeholder(name: &str) -> String {
+    format!(
+        "// Generated when this service is built. Until then the SDK has no methods.\nexport type {}SdkClient = Record<string, never>;\n",
+        name.to_case(Case::Pascal)
+    )
+}
 
 pub(super) fn local_templates(dir: &Path, name: &str, host: &Path) -> Vec<RenderedTemplate> {
     local_templates_with_registry(dir, name, host, "contracts::registry()", &[])
@@ -125,7 +131,7 @@ include!(concat!(env!("OUT_DIR"), "/generated.rs"));
         }
         files.push(RenderedTemplate {
             path: dir.join("sdk/typescript").join(file),
-            content: TYPESCRIPT_SDK_PLACEHOLDER.into(),
+            content: typescript_sdk_placeholder(name),
             context: None,
         });
     }
@@ -827,7 +833,11 @@ mod tests {
                 .iter()
                 .find(|template| template.path == dir.join("sdk/typescript").join(file))
                 .unwrap_or_else(|| panic!("no placeholder {file}"));
-            assert_eq!(placeholder.content, TYPESCRIPT_SDK_PLACEHOLDER);
+            assert!(
+                placeholder
+                    .content
+                    .contains("export type NotesSdkClient = Record<string, never>;")
+            );
         }
         let cargo: Value = toml::from_str(
             &files
