@@ -1,9 +1,21 @@
 rm -rf lib/eject
 mkdir -p lib/eject/domain
 
-cp -r domain/schemas/zod lib/eject/domain/schemas
-cp domain/schemas/index.ts lib/eject/domain/schemas
-find lib/eject/domain/schemas -type f -name "*.ts" -exec perl -i -pe "s|'\.\.\/\.\.|'\.\.|g" {} \;
+# Not every implementation has zod schemas (cac, mlse and the ecommerce
+# providers do not); copying a missing one only logs an error.
+if [ -d "domain/schemas/zod" ]; then
+  cp -r domain/schemas/zod lib/eject/domain/schemas
+  cp domain/schemas/index.ts lib/eject/domain/schemas
+  find lib/eject/domain/schemas -type f -name "*.ts" -exec perl -i -pe "s|'\.\.\/\.\.|'\.\.|g" {} \;
+fi
+
+# Files directly in domain/ that services import ("../domain/http"); an
+# ejected package without them does not compile.
+for f in domain/*.ts; do
+  if [ -f "$f" ]; then
+    cp "$f" lib/eject/domain/
+  fi
+done
 
 if [ -d "services" ]; then
   cp -r services lib/eject/services
