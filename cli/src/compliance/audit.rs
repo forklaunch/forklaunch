@@ -14,7 +14,9 @@ use crate::{
     CliCommand,
     constants::get_platform_management_api_url,
     core::{
-        ast::infrastructure::compliance::{RetentionInfo, scan_all_compliance, scan_entity_compliance},
+        ast::infrastructure::compliance::{
+            RetentionInfo, scan_all_compliance, scan_entity_compliance,
+        },
         command::command,
         hmac::AuthMode,
         http_client::post_with_auth,
@@ -1006,8 +1008,7 @@ fn build_entity_reports(
     retention_policies: &HashMap<String, RetentionInfo>,
     module_ctx: &ModuleEncryptionContext,
 ) -> Vec<EntityReport> {
-    let mut entity_names: std::collections::BTreeSet<String> =
-        std::collections::BTreeSet::new();
+    let mut entity_names: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     entity_names.extend(field_classifications.keys().cloned());
     entity_names.extend(retention_policies.keys().cloned());
 

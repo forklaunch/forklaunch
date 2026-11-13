@@ -653,9 +653,7 @@ pub(crate) fn get_service_module_cache(service_type: &Module) -> Option<String> 
     match service_type {
         Module::BaseBilling | Module::StripeBilling => Some(Infrastructure::Redis.to_string()),
         // The messaging blueprint's registrations wire a RedisTtlCache.
-        Module::BaseMessaging | Module::TwilioMessaging => {
-            Some(Infrastructure::Redis.to_string())
-        }
+        Module::BaseMessaging | Module::TwilioMessaging => Some(Infrastructure::Redis.to_string()),
         // The ecommerce blueprint reads REDIS_URL at startup for both the cart
         // cache and the order-event queue, and exits if it is unset.
         Module::StripeEcommerce => Some(Infrastructure::Redis.to_string()),
@@ -715,7 +713,12 @@ mod tests {
     fn messaging_modules_are_retired_but_still_parse() {
         for module in RETIRED_MODULES {
             let parsed = module.parse::<Module>().unwrap();
-            assert!(ensure_module_offered(&parsed).unwrap_err().to_string().contains("managed gateway"));
+            assert!(
+                ensure_module_offered(&parsed)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("managed gateway")
+            );
             assert!(!offered_modules().contains(&module));
         }
         assert!(ensure_module_offered(&Module::BaseCac).is_ok());

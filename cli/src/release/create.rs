@@ -323,10 +323,11 @@ impl CliCommand for CreateCommand {
         let application_id = if let Some(id) = matches.get_one::<uuid::Uuid>("application-id") {
             let token = crate::core::validate::require_auth()?;
             let id = id.to_string();
-            if matches.get_one::<String>("prebuilt-openapi").is_some() && manifest
-                .platform_application_id
-                .as_ref()
-                .is_some_and(|saved| saved != &id)
+            if matches.get_one::<String>("prebuilt-openapi").is_some()
+                && manifest
+                    .platform_application_id
+                    .as_ref()
+                    .is_some_and(|saved| saved != &id)
             {
                 bail!("The selected application differs from the integrated application");
             }
@@ -1266,7 +1267,12 @@ impl CliCommand for CreateCommand {
 
             let field_inventory =
                 scan_release_field_inventory(&app_root.join(&manifest.modules_path), &mut stdout)?;
-            upload_release(&application_id, release_manifest, field_inventory, &auth_mode)?;
+            upload_release(
+                &application_id,
+                release_manifest,
+                field_inventory,
+                &auth_mode,
+            )?;
 
             log_ok!(stdout, "Uploaded release to platform");
         }
@@ -1522,7 +1528,10 @@ fn upload_release(
         );
     }
 
-    if let Some(id) = parsed_response.get("id").and_then(serde_json::Value::as_str) {
+    if let Some(id) = parsed_response
+        .get("id")
+        .and_then(serde_json::Value::as_str)
+    {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
         log_info!(stdout, "Release ID: {}", id);
     }
@@ -1807,7 +1816,9 @@ fn infer_component_details(
     // Development transport policies are booleans, never connection metadata.
     // In particular DATABASE_* must not infer the database-name property, and
     // local compose defaults must not become production passthrough values.
-    if key_upper.ends_with("_ALLOW_PLAINTEXT_DEVELOPMENT") || key_upper.ends_with("_DATABASE_BACKUP") {
+    if key_upper.ends_with("_ALLOW_PLAINTEXT_DEVELOPMENT")
+        || key_upper.ends_with("_DATABASE_BACKUP")
+    {
         return None;
     }
 
@@ -1891,7 +1902,10 @@ fn infer_component_details(
         let (passthrough, optional) = compose_interpolation(value);
         // Compose requirements are not values, and empty optional defaults
         // must remain absent instead of shipping interpolation syntax.
-        if optional == Some(false) || (optional.is_some() && passthrough.is_empty()) || passthrough.contains("${") {
+        if optional == Some(false)
+            || (optional.is_some() && passthrough.is_empty())
+            || passthrough.contains("${")
+        {
             return None;
         }
         let passthrough_value = Some(passthrough);
@@ -2298,14 +2312,20 @@ const CLI_GENERATED_KEY_VARS: &[&str] = &["HMAC_SECRET_KEY", "ENCRYPTION_KEY_HEX
 /// `${X:-d}`/`${X-d}` → (`d`, optional), `${X:?m}`/`${X?m}` → (empty, required).
 /// Any other value is a literal and carries no requirement hint.
 fn compose_interpolation(value: &str) -> (String, Option<bool>) {
-    let Some(inner) = value.strip_prefix("${").and_then(|rest| rest.strip_suffix('}')) else {
+    let Some(inner) = value
+        .strip_prefix("${")
+        .and_then(|rest| rest.strip_suffix('}'))
+    else {
         return (value.to_owned(), None);
     };
     let name_end = inner
         .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
         .unwrap_or(inner.len());
     let operator = &inner[name_end..];
-    if let Some(default) = operator.strip_prefix(":-").or_else(|| operator.strip_prefix('-')) {
+    if let Some(default) = operator
+        .strip_prefix(":-")
+        .or_else(|| operator.strip_prefix('-'))
+    {
         return (default.to_owned(), Some(true));
     }
     if operator.starts_with(":?") || operator.starts_with('?') {
@@ -2738,7 +2758,10 @@ mod tests {
     #[test]
     fn bare_openapi_documents_are_keyed_unversioned() {
         let bare = serde_json::json!({"openapi": "3.1.0", "paths": {}});
-        assert_eq!(versioned_openapi_spec(bare.clone()), serde_json::json!({"": bare}));
+        assert_eq!(
+            versioned_openapi_spec(bare.clone()),
+            serde_json::json!({"": bare})
+        );
         let versioned = serde_json::json!({"v1": {"openapi": "3.1.0", "paths": {}}});
         assert_eq!(versioned_openapi_spec(versioned.clone()), versioned);
     }
@@ -2749,11 +2772,26 @@ mod tests {
 
     #[test]
     fn compose_interpolations_map_to_defaults_and_requirements() {
-        assert_eq!(compose_interpolation("${RUST_LOG:-info}"), ("info".into(), Some(true)));
-        assert_eq!(compose_interpolation("${STRIPE_API_KEY:-}"), (String::new(), Some(true)));
-        assert_eq!(compose_interpolation("${TENANT_ID:?Configure a tenant}"), (String::new(), Some(false)));
-        assert_eq!(compose_interpolation("http://iam:8002"), ("http://iam:8002".into(), None));
-        assert_eq!(compose_interpolation("prefix-${X:-y}"), ("prefix-${X:-y}".into(), None));
+        assert_eq!(
+            compose_interpolation("${RUST_LOG:-info}"),
+            ("info".into(), Some(true))
+        );
+        assert_eq!(
+            compose_interpolation("${STRIPE_API_KEY:-}"),
+            (String::new(), Some(true))
+        );
+        assert_eq!(
+            compose_interpolation("${TENANT_ID:?Configure a tenant}"),
+            (String::new(), Some(false))
+        );
+        assert_eq!(
+            compose_interpolation("http://iam:8002"),
+            ("http://iam:8002".into(), None)
+        );
+        assert_eq!(
+            compose_interpolation("prefix-${X:-y}"),
+            ("prefix-${X:-y}".into(), None)
+        );
     }
 
     #[test]
@@ -2771,27 +2809,39 @@ mod tests {
         fs::write(
             temp_dir.path().join("docker-compose.yaml"),
             create_test_docker_compose(vec![("my-service", vars)]),
-        ).unwrap();
+        )
+        .unwrap();
         let manifest = create_test_manifest(vec![("my-service", ProjectType::Service)]);
         let (components, compose_vars) = build_env_var_component_map(temp_dir.path(), &manifest);
         for key in switches {
-            assert!(!components.contains_key(key), "{key} is a policy, not a connection");
+            assert!(
+                !components.contains_key(key),
+                "{key} is a policy, not a connection"
+            );
             assert!(compose_vars["my-service"].contains(&(key.into(), "false".into())));
         }
-        assert!(matches!(components["DB_HOST"].0, EnvironmentVariableComponentType::Database));
+        assert!(matches!(
+            components["DB_HOST"].0,
+            EnvironmentVariableComponentType::Database
+        ));
     }
 
     #[test]
     fn compose_passthrough_uses_defaults_but_never_required_placeholders() {
         let temp_dir = TempDir::new().unwrap();
-        fs::write(temp_dir.path().join("docker-compose.yaml"), create_test_docker_compose(vec![(
-            "my-service", vec![
-                ("TENANT_ID", "${IAM_TENANT_ID:?Configure a trusted tenant}"),
-                ("CORS_ORIGINS", "${CORS_ORIGINS:-}"),
-                ("RUST_LOG", "${RUST_LOG:-info}"),
-                ("CUSTOM_REGION", "${CUSTOM_REGION}"),
-            ],
-        )])).unwrap();
+        fs::write(
+            temp_dir.path().join("docker-compose.yaml"),
+            create_test_docker_compose(vec![(
+                "my-service",
+                vec![
+                    ("TENANT_ID", "${IAM_TENANT_ID:?Configure a trusted tenant}"),
+                    ("CORS_ORIGINS", "${CORS_ORIGINS:-}"),
+                    ("RUST_LOG", "${RUST_LOG:-info}"),
+                    ("CUSTOM_REGION", "${CUSTOM_REGION}"),
+                ],
+            )]),
+        )
+        .unwrap();
         let manifest = create_test_manifest(vec![("my-service", ProjectType::Service)]);
         let (components, _) = build_env_var_component_map(temp_dir.path(), &manifest);
         assert!(!components.contains_key("TENANT_ID"));
@@ -2814,14 +2864,42 @@ mod tests {
 
     #[test]
     fn explicit_application_is_supported_for_local_uploads() {
-        let args = ["create", "--local", "--version", "1.0.0", "--application-id", "00000000-0000-4000-8000-000000000001", "--yes"];
-        assert!(CreateCommand::new().command().version("test").try_get_matches_from(args).is_ok());
+        let args = [
+            "create",
+            "--local",
+            "--version",
+            "1.0.0",
+            "--application-id",
+            "00000000-0000-4000-8000-000000000001",
+            "--yes",
+        ];
+        assert!(
+            CreateCommand::new()
+                .command()
+                .version("test")
+                .try_get_matches_from(args)
+                .is_ok()
+        );
     }
 
     #[test]
     fn explicit_application_requires_local_mode() {
-        let args = ["create", "--git", "--version", "1.0.0", "--application-id", "00000000-0000-4000-8000-000000000001", "--yes"];
-        assert!(CreateCommand::new().command().version("test").try_get_matches_from(args).is_err());
+        let args = [
+            "create",
+            "--git",
+            "--version",
+            "1.0.0",
+            "--application-id",
+            "00000000-0000-4000-8000-000000000001",
+            "--yes",
+        ];
+        assert!(
+            CreateCommand::new()
+                .command()
+                .version("test")
+                .try_get_matches_from(args)
+                .is_err()
+        );
     }
 
     fn create_test_manifest(projects: Vec<(&str, ProjectType)>) -> ApplicationManifestData {

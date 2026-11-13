@@ -31,16 +31,11 @@ impl CliCommand for ExportCommand {
                     .short('p')
                     .help("Path to application root (optional)"),
             )
-            .arg(
-                Arg::new("output")
-                    .long("output")
-                    .short('o')
-                    .help(
-                        "Also write every spec to <output>/<service>/openapi.json. By default each \
+            .arg(Arg::new("output").long("output").short('o').help(
+                "Also write every spec to <output>/<service>/openapi.json. By default each \
                          service writes its own registered OpenAPI artifact (its SDK folder; \
                          .forklaunch/openapi/<service>/openapi.json for services without one)",
-                    ),
-            )
+            ))
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
@@ -55,9 +50,8 @@ impl CliCommand for ExportCommand {
             .get_one::<String>("output")
             .map(|output| app_root.join(output));
         if let Some(output_path) = &output_path {
-            create_dir_all(output_path).with_context(|| {
-                format!("Failed to create output directory: {:?}", output_path)
-            })?;
+            create_dir_all(output_path)
+                .with_context(|| format!("Failed to create output directory: {:?}", output_path))?;
         }
 
         log_info!(stdout, "Exporting OpenAPI specifications...");

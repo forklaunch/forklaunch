@@ -39,8 +39,14 @@ mod tests {
     #[test]
     fn mit_license_names_the_year_and_the_application() {
         let manifest: ApplicationManifestData = toml::from_str("id='x'\ncli_version='1.0.0'\napp_name='zebra'\nmodules_path='src'\nruntime='node'\nformatter='prettier'\nlinter='oxlint'\nvalidator='zod'\nhttp_framework='express'\ntest_framework='vitest'\napp_description='d'\nauthor='a'\nlicense='MIT'\nprojects=[]\nproject_peer_topology={}\n").unwrap();
-        let license = generate_license(Path::new("."), &manifest).unwrap().unwrap().content;
+        let license = generate_license(Path::new("."), &manifest)
+            .unwrap()
+            .unwrap()
+            .content;
         let year = chrono::Utc::now().format("%Y").to_string();
-        assert!(license.contains(&format!("Copyright (c) {year} zebra\n")), "{license}");
+        assert!(
+            license.contains(&format!("Copyright (c) {year} zebra\n")),
+            "{license}"
+        );
     }
 }

@@ -13,7 +13,8 @@ use crate::{
         Database, ERROR_FAILED_TO_CREATE_PACKAGE_JSON, ERROR_FAILED_TO_GENERATE_PNPM_WORKSPACE,
         ERROR_FAILED_TO_PARSE_MANIFEST, ERROR_FAILED_TO_READ_MANIFEST,
         ERROR_FAILED_TO_WRITE_DOCKER_COMPOSE, ERROR_FAILED_TO_WRITE_MANIFEST, Module, Runtime,
-        get_service_module_cache, get_service_module_description, get_service_module_name, ensure_module_offered, module_value_parser, offered_modules,
+        ensure_module_offered, get_service_module_cache, get_service_module_description,
+        get_service_module_name, module_value_parser, offered_modules,
     },
     core::{
         ast::injections::inject_into_client_sdk::ClientSdkSpecialCase,
@@ -315,7 +316,9 @@ impl CliCommand for ModuleCommand {
 
             iam_secret: None,
 
-            generated_better_auth_secret: crate::core::manifest::service::generate_random_secret(32),
+            generated_better_auth_secret: crate::core::manifest::service::generate_random_secret(
+                32,
+            ),
             // Share the app's HMAC secret so modules verify each other's requests.
             generated_hmac_secret: crate::core::env_defaults::find_existing_hmac_secret(&base_path)
                 .unwrap_or_else(|| crate::core::manifest::service::generate_random_secret(32)),
@@ -459,9 +462,17 @@ impl CliCommand for ModuleCommand {
                 dryrun,
             )?;
             if matches!(module, Module::BaseIam | Module::BetterAuthIam) {
-                crate::sdk::typescript_build::prepare_default_service(&app_root_path, "iam", &service_data.runtime, true)?;
+                crate::sdk::typescript_build::prepare_default_service(
+                    &app_root_path,
+                    "iam",
+                    &service_data.runtime,
+                    true,
+                )?;
             }
-            rust_project::record_typescript_language(&app_root_path, &get_service_module_name(&module))?;
+            rust_project::record_typescript_language(
+                &app_root_path,
+                &get_service_module_name(&module),
+            )?;
             rust_project::refresh_mixed_images(&app_root_path)?;
             log_ok!(
                 stdout,

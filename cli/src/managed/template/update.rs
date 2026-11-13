@@ -1,18 +1,18 @@
 use std::io::Write;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 use super::feature_settings;
 use crate::{
+    CliCommand,
     core::command::command,
     managed::{
-        client::{patch_json, print_dryrun, require_managed_mode, resolve_managed_auth, Missing},
-        types::{parse_app_claim_hook, AppTemplate, CLUSTER_TYPES, TEMPLATE_STATUSES},
+        client::{Missing, patch_json, print_dryrun, require_managed_mode, resolve_managed_auth},
+        types::{AppTemplate, CLUSTER_TYPES, TEMPLATE_STATUSES, parse_app_claim_hook},
     },
-    CliCommand,
 };
 
 /// The fields `PATCH /managed-mode/templates/:slug` accepts, plus the two output flags.

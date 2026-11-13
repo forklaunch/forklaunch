@@ -112,7 +112,11 @@ pub fn sync_all_projects(
     let mut orphaned_projects = vec![];
     for project in &manifest_data.projects {
         if !crate::core::storefront::is_capture(project)
-            && project.metadata.as_ref().and_then(|metadata| metadata.language.as_deref()) != Some("rust")
+            && project
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.language.as_deref())
+                != Some("rust")
             && !DIRS_TO_IGNORE.contains(&project.name.as_str())
             && !existing_folders.contains(&project.name)
         {
@@ -206,10 +210,16 @@ pub fn sync_all_projects(
         if confirm_all {
             let answers = confirmed_prompts.entry(project_name.clone()).or_default();
             for key in ["override_description", "override_worker_type"] {
-                answers.entry(key.to_owned()).or_insert_with(|| "n".to_owned());
+                answers
+                    .entry(key.to_owned())
+                    .or_insert_with(|| "n".to_owned());
             }
         }
-        let prompts_map = if confirm_all { &confirmed_prompts } else { prompts_map };
+        let prompts_map = if confirm_all {
+            &confirmed_prompts
+        } else {
+            prompts_map
+        };
 
         writeln!(stdout)?;
         log_info!(stdout, "Processing: {}", project_name);
@@ -336,7 +346,8 @@ pub fn sync_all_projects(
                         }
                     }
                     Err(error) => {
-                        return Err(error).with_context(|| format!("Failed to sync project {project_name}"));
+                        return Err(error)
+                            .with_context(|| format!("Failed to sync project {project_name}"));
                     }
                 }
             }
@@ -365,7 +376,8 @@ pub fn sync_all_projects(
                         }
                     }
                     Err(error) => {
-                        return Err(error).with_context(|| format!("Failed to sync project {project_name}"));
+                        return Err(error)
+                            .with_context(|| format!("Failed to sync project {project_name}"));
                     }
                 }
             }
@@ -394,7 +406,8 @@ pub fn sync_all_projects(
                         }
                     }
                     Err(error) => {
-                        return Err(error).with_context(|| format!("Failed to sync project {project_name}"));
+                        return Err(error)
+                            .with_context(|| format!("Failed to sync project {project_name}"));
                     }
                 }
             }
@@ -416,12 +429,15 @@ fn regenerate_native_app_sdks_after_sync(
     stdout: &mut StandardStream,
 ) -> Result<()> {
     // Each service refreshes its registered artifacts; no shared export folder.
-    let exported_services =
-        openapi_export::export_all_services(app_root_path, manifest, None).context(
+    let exported_services = openapi_export::export_all_services(app_root_path, manifest, None)
+        .context(
             "Project sync completed, but contract/OpenAPI export failed before SDK regeneration",
         )?;
     if exported_services.is_empty() {
-        log_info!(stdout, "No HTTP services or workers found for SDK regeneration");
+        log_info!(
+            stdout,
+            "No HTTP services or workers found for SDK regeneration"
+        );
         return Ok(());
     }
     let targets = &manifest.sdk_targets;

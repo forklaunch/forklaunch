@@ -151,7 +151,11 @@ pub(crate) fn compose_up_command<S: AsRef<str>>(services: &[S]) -> String {
             ready.into_iter().collect::<Vec<_>>().join(" ")
         ));
     }
-    commands.extend(initializers.into_iter().map(|init| format!("docker compose up {init}")));
+    commands.extend(
+        initializers
+            .into_iter()
+            .map(|init| format!("docker compose up {init}")),
+    );
     if commands.is_empty() {
         commands.push("docker compose up".to_string());
     }
@@ -604,7 +608,9 @@ mod tests {
             "docker compose up -d --wait mongodb && docker compose up mongo-init && bun --filter='*' run migrate:init"
         );
         for databases in [&postgres, &mongo] {
-            assert!(!application_migrate_script(&Runtime::Node, databases, "init").contains("sleep"));
+            assert!(
+                !application_migrate_script(&Runtime::Node, databases, "init").contains("sleep")
+            );
         }
         assert_eq!(
             application_seed_script(&Runtime::Node, &postgres),
@@ -618,7 +624,10 @@ mod tests {
         let (services, rest) = split_compose_up_command(current);
         assert_eq!(services, ["mongodb", "postgresql", "mongo-init"]);
         assert_eq!(rest, "bun --filter='*' run migrate:init");
-        assert_eq!(format!("{} && {rest}", compose_up_command(&services)), current);
+        assert_eq!(
+            format!("{} && {rest}", compose_up_command(&services)),
+            current
+        );
 
         let legacy = "docker compose up -d postgresql -d mongodb -d mongo-init && sleep 5 && pnpm -r --no-bail run migrate:init";
         let (services, rest) = split_compose_up_command(legacy);

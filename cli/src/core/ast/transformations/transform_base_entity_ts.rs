@@ -77,7 +77,12 @@ pub(crate) fn transform_base_entity_ts(
     // back returns the generated file byte for byte.
     let generated = |name: &str| -> Option<String> {
         let source = TEMPLATES_DIR
-            .get_file(Path::new("project").join("core").join("persistence").join(name))?
+            .get_file(
+                Path::new("project")
+                    .join("core")
+                    .join("persistence")
+                    .join(name),
+            )?
             .contents_utf8()?
             .to_string();
         Some(source)
@@ -97,7 +102,9 @@ pub(crate) fn transform_base_entity_ts(
             || base_entity_to_copy_text.trim() == copy_template.trim()
         {
             // Rendered as init renders it (the renderer drops the final newline).
-            return Ok(Some(ramhorns::Template::new(create_template.as_str())?.render(&())));
+            return Ok(Some(
+                ramhorns::Template::new(create_template.as_str())?.render(&()),
+            ));
         }
     }
 

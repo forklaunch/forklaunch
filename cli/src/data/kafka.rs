@@ -114,7 +114,9 @@ impl CliCommand for TopicsCommand {
         command("topics", "List topics").arg(resource_arg())
     }
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        let resource = matches.get_one::<String>("resource").context("--resource is required")?;
+        let resource = matches
+            .get_one::<String>("resource")
+            .context("--resource is required")?;
         let url = explorer_url(resource, "/topics");
         print_pretty(&check(
             get(&url).with_context(|| "Failed to reach observability API")?,
@@ -134,7 +136,11 @@ impl CliCommand for CreateTopicCommand {
         command("create-topic", "Create a topic")
             .arg(resource_arg())
             .arg(Arg::new("name").required(true).help("Topic name"))
-            .arg(Arg::new("partitions").long("partitions").help("Partition count"))
+            .arg(
+                Arg::new("partitions")
+                    .long("partitions")
+                    .help("Partition count"),
+            )
             .arg(
                 Arg::new("replication_factor")
                     .long("replication-factor")
@@ -142,23 +148,28 @@ impl CliCommand for CreateTopicCommand {
             )
     }
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        let resource = matches.get_one::<String>("resource").context("--resource is required")?;
-        let name = matches.get_one::<String>("name").context("name is required")?;
+        let resource = matches
+            .get_one::<String>("resource")
+            .context("--resource is required")?;
+        let name = matches
+            .get_one::<String>("name")
+            .context("name is required")?;
         let mut body = serde_json::json!({ "topicName": name });
         if let Some(p) = matches.get_one::<String>("partitions") {
             body["partitions"] = serde_json::Value::from(
-                p.parse::<u32>().context("--partitions must be an integer")?,
+                p.parse::<u32>()
+                    .context("--partitions must be an integer")?,
             );
         }
         if let Some(r) = matches.get_one::<String>("replication_factor") {
             body["replicationFactor"] = serde_json::Value::from(
-                r.parse::<u32>().context("--replication-factor must be an integer")?,
+                r.parse::<u32>()
+                    .context("--replication-factor must be an integer")?,
             );
         }
         let url = explorer_url(resource, "/topics");
         print_pretty(&check(
-            post(&url, body)
-                .with_context(|| "Failed to reach observability API")?,
+            post(&url, body).with_context(|| "Failed to reach observability API")?,
         )?)
     }
 }
@@ -177,12 +188,15 @@ impl CliCommand for DeleteTopicCommand {
             .arg(Arg::new("name").required(true).help("Topic name"))
     }
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        let resource = matches.get_one::<String>("resource").context("--resource is required")?;
-        let name = matches.get_one::<String>("name").context("name is required")?;
+        let resource = matches
+            .get_one::<String>("resource")
+            .context("--resource is required")?;
+        let name = matches
+            .get_one::<String>("name")
+            .context("name is required")?;
         let url = explorer_url(resource, &format!("/topics/{}", urlencoding::encode(name)));
         print_pretty(&check(
-            delete(&url)
-                .with_context(|| "Failed to reach observability API")?,
+            delete(&url).with_context(|| "Failed to reach observability API")?,
         )?)
     }
 }
@@ -194,9 +208,9 @@ fn parse_config_entries<'a, I: Iterator<Item = &'a String>>(
         .map(|entries| {
             entries
                 .map(|e| {
-                    let (n, v) = e
-                        .split_once('=')
-                        .with_context(|| format!("--config '{}' must be in <name>=<value> form", e))?;
+                    let (n, v) = e.split_once('=').with_context(|| {
+                        format!("--config '{}' must be in <name>=<value> form", e)
+                    })?;
                     if n.is_empty() {
                         bail!("--config '{}' has an empty name", e);
                     }
@@ -245,15 +259,21 @@ impl CliCommand for UpdateTopicConfigCommand {
             )
     }
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        let resource = matches.get_one::<String>("resource").context("--resource is required")?;
-        let name = matches.get_one::<String>("name").context("name is required")?;
+        let resource = matches
+            .get_one::<String>("resource")
+            .context("--resource is required")?;
+        let name = matches
+            .get_one::<String>("name")
+            .context("name is required")?;
         let configs =
             parse_config_entries(matches.get_many::<String>("config").map(|v| v.into_iter()))?;
         let body = serde_json::json!({ "configs": configs });
-        let url = explorer_url(resource, &format!("/topics/{}/config", urlencoding::encode(name)));
+        let url = explorer_url(
+            resource,
+            &format!("/topics/{}/config", urlencoding::encode(name)),
+        );
         print_pretty(&check(
-            patch(&url, body)
-                .with_context(|| "Failed to reach observability API")?,
+            patch(&url, body).with_context(|| "Failed to reach observability API")?,
         )?)
     }
 }
@@ -270,15 +290,30 @@ impl CliCommand for MessagesCommand {
         command("messages", "Read messages from a topic")
             .arg(resource_arg())
             .arg(Arg::new("name").required(true).help("Topic name"))
-            .arg(Arg::new("partition").long("partition").help("Partition number"))
+            .arg(
+                Arg::new("partition")
+                    .long("partition")
+                    .help("Partition number"),
+            )
             .arg(Arg::new("offset").long("offset").help("Start offset"))
             .arg(Arg::new("count").long("count").help("Max messages to read"))
-            .arg(Arg::new("timestamp").long("timestamp").help("Seek to this timestamp"))
+            .arg(
+                Arg::new("timestamp")
+                    .long("timestamp")
+                    .help("Seek to this timestamp"),
+            )
     }
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        let resource = matches.get_one::<String>("resource").context("--resource is required")?;
-        let name = matches.get_one::<String>("name").context("name is required")?;
-        let mut url = explorer_url(resource, &format!("/topics/{}/messages", urlencoding::encode(name)));
+        let resource = matches
+            .get_one::<String>("resource")
+            .context("--resource is required")?;
+        let name = matches
+            .get_one::<String>("name")
+            .context("name is required")?;
+        let mut url = explorer_url(
+            resource,
+            &format!("/topics/{}/messages", urlencoding::encode(name)),
+        );
         let mut params = Vec::new();
         for (flag, key) in [
             ("partition", "partition"),
@@ -314,9 +349,16 @@ impl CliCommand for TopicMetadataCommand {
             .arg(Arg::new("name").required(true).help("Topic name"))
     }
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        let resource = matches.get_one::<String>("resource").context("--resource is required")?;
-        let name = matches.get_one::<String>("name").context("name is required")?;
-        let url = explorer_url(resource, &format!("/topics/{}/metadata", urlencoding::encode(name)));
+        let resource = matches
+            .get_one::<String>("resource")
+            .context("--resource is required")?;
+        let name = matches
+            .get_one::<String>("name")
+            .context("name is required")?;
+        let url = explorer_url(
+            resource,
+            &format!("/topics/{}/metadata", urlencoding::encode(name)),
+        );
         print_pretty(&check(
             get(&url).with_context(|| "Failed to reach observability API")?,
         )?)
@@ -337,12 +379,22 @@ impl CliCommand for ProduceCommand {
             .arg(Arg::new("name").required(true).help("Topic name"))
             .arg(Arg::new("value").required(true).help("Message value"))
             .arg(Arg::new("key").long("key").help("Message key"))
-            .arg(Arg::new("partition").long("partition").help("Target partition"))
+            .arg(
+                Arg::new("partition")
+                    .long("partition")
+                    .help("Target partition"),
+            )
     }
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        let resource = matches.get_one::<String>("resource").context("--resource is required")?;
-        let name = matches.get_one::<String>("name").context("name is required")?;
-        let value = matches.get_one::<String>("value").context("value is required")?;
+        let resource = matches
+            .get_one::<String>("resource")
+            .context("--resource is required")?;
+        let name = matches
+            .get_one::<String>("name")
+            .context("name is required")?;
+        let value = matches
+            .get_one::<String>("value")
+            .context("value is required")?;
         let mut body = serde_json::json!({ "topicName": name, "value": value });
         if let Some(k) = matches.get_one::<String>("key") {
             body["key"] = serde_json::Value::String(k.clone());
@@ -354,8 +406,7 @@ impl CliCommand for ProduceCommand {
         }
         let url = explorer_url(resource, "/produce");
         print_pretty(&check(
-            post(&url, body)
-                .with_context(|| "Failed to reach observability API")?,
+            post(&url, body).with_context(|| "Failed to reach observability API")?,
         )?)
     }
 }
@@ -372,7 +423,9 @@ impl CliCommand for ConsumerGroupsCommand {
         command("consumer-groups", "List consumer groups").arg(resource_arg())
     }
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        let resource = matches.get_one::<String>("resource").context("--resource is required")?;
+        let resource = matches
+            .get_one::<String>("resource")
+            .context("--resource is required")?;
         let url = explorer_url(resource, "/consumer-groups");
         print_pretty(&check(
             get(&url).with_context(|| "Failed to reach observability API")?,
@@ -389,33 +442,46 @@ impl ResetOffsetsCommand {
 }
 impl CliCommand for ResetOffsetsCommand {
     fn command(&self) -> Command {
-        command("reset-offsets", "Reset a consumer group's offsets for a topic")
-            .arg(resource_arg())
-            .arg(Arg::new("group").required(true).help("Consumer group id"))
-            .arg(
-                Arg::new("topic")
-                    .long("topic")
-                    .required(true)
-                    .help("Topic name"),
-            )
-            .arg(
-                Arg::new("target")
-                    .long("target")
-                    .required(true)
-                    .help("earliest, latest, or a specific offset"),
-            )
+        command(
+            "reset-offsets",
+            "Reset a consumer group's offsets for a topic",
+        )
+        .arg(resource_arg())
+        .arg(Arg::new("group").required(true).help("Consumer group id"))
+        .arg(
+            Arg::new("topic")
+                .long("topic")
+                .required(true)
+                .help("Topic name"),
+        )
+        .arg(
+            Arg::new("target")
+                .long("target")
+                .required(true)
+                .help("earliest, latest, or a specific offset"),
+        )
     }
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        let resource = matches.get_one::<String>("resource").context("--resource is required")?;
-        let group = matches.get_one::<String>("group").context("group is required")?;
-        let topic = matches.get_one::<String>("topic").context("--topic is required")?;
-        let target = matches.get_one::<String>("target").context("--target is required")?;
+        let resource = matches
+            .get_one::<String>("resource")
+            .context("--resource is required")?;
+        let group = matches
+            .get_one::<String>("group")
+            .context("group is required")?;
+        let topic = matches
+            .get_one::<String>("topic")
+            .context("--topic is required")?;
+        let target = matches
+            .get_one::<String>("target")
+            .context("--target is required")?;
         validate_reset_target(target)?;
         let body = serde_json::json!({ "topicName": topic, "target": target });
-        let url = explorer_url(resource, &format!("/consumer-groups/{}/offsets", urlencoding::encode(group)));
+        let url = explorer_url(
+            resource,
+            &format!("/consumer-groups/{}/offsets", urlencoding::encode(group)),
+        );
         print_pretty(&check(
-            post(&url, body)
-                .with_context(|| "Failed to reach observability API")?,
+            post(&url, body).with_context(|| "Failed to reach observability API")?,
         )?)
     }
 }
@@ -435,7 +501,11 @@ mod tests {
 
     #[test]
     fn topics_requires_resource() {
-        assert!(kafka_cmd().try_get_matches_from(["kafka", "topics"]).is_err());
+        assert!(
+            kafka_cmd()
+                .try_get_matches_from(["kafka", "topics"])
+                .is_err()
+        );
         assert!(
             kafka_cmd()
                 .try_get_matches_from(["kafka", "topics", "--resource", "res-1"])
@@ -453,8 +523,15 @@ mod tests {
         assert!(
             kafka_cmd()
                 .try_get_matches_from([
-                    "kafka", "reset-offsets", "--resource", "res-1", "group-1", "--topic", "orders",
-                    "--target", "earliest"
+                    "kafka",
+                    "reset-offsets",
+                    "--resource",
+                    "res-1",
+                    "group-1",
+                    "--topic",
+                    "orders",
+                    "--target",
+                    "earliest"
                 ])
                 .is_ok()
         );
@@ -491,7 +568,14 @@ mod tests {
         );
         assert!(
             kafka_cmd()
-                .try_get_matches_from(["kafka", "produce", "--resource", "res-1", "orders", "hello"])
+                .try_get_matches_from([
+                    "kafka",
+                    "produce",
+                    "--resource",
+                    "res-1",
+                    "orders",
+                    "hello"
+                ])
                 .is_ok()
         );
     }

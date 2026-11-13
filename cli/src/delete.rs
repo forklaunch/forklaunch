@@ -62,11 +62,26 @@ mod tests {
     fn delete_subcommands_describe_deletion() {
         let command = DeleteCommand::new().command();
         for subcommand in command.get_subcommands() {
-            let about = subcommand.get_about().map(ToString::to_string).unwrap_or_default();
-            assert!(about.starts_with("Delete "), "{}: {about}", subcommand.get_name());
+            let about = subcommand
+                .get_about()
+                .map(ToString::to_string)
+                .unwrap_or_default();
+            assert!(
+                about.starts_with("Delete "),
+                "{}: {about}",
+                subcommand.get_name()
+            );
             for argument in subcommand.get_arguments() {
-                let help = argument.get_help().map(ToString::to_string).unwrap_or_default();
-                assert!(!help.contains("initialize") && !help.contains("eject"), "{} --{}: {help}", subcommand.get_name(), argument.get_id());
+                let help = argument
+                    .get_help()
+                    .map(ToString::to_string)
+                    .unwrap_or_default();
+                assert!(
+                    !help.contains("initialize") && !help.contains("eject"),
+                    "{} --{}: {help}",
+                    subcommand.get_name(),
+                    argument.get_id()
+                );
             }
         }
     }

@@ -241,7 +241,12 @@ mod tests {
         assert!(
             status_cmd()
                 .try_get_matches_from([
-                    "status", "svc:database", "-e", "dev", "--metrics", "--config"
+                    "status",
+                    "svc:database",
+                    "-e",
+                    "dev",
+                    "--metrics",
+                    "--config"
                 ])
                 .is_err()
         );
@@ -262,7 +267,10 @@ mod tests {
         }"#;
         let series: MetricSeries = serde_json::from_str(json).unwrap();
         assert_eq!(series.values.last(), Some(&15.7));
-        assert_eq!(series.timestamps.last().map(String::as_str), Some("2024-01-15T10:05:00Z"));
+        assert_eq!(
+            series.timestamps.last().map(String::as_str),
+            Some("2024-01-15T10:05:00Z")
+        );
     }
 
     #[test]

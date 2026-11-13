@@ -129,7 +129,11 @@ impl CliCommand for EjectCommand {
         stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true))?;
         write!(stdout, "  Generated")?;
         stdout.reset()?;
-        writeln!(stdout, "  infrastructure for release {}", result.release_info.version)?;
+        writeln!(
+            stdout,
+            "  infrastructure for release {}",
+            result.release_info.version
+        )?;
 
         if let Some(path) = output {
             writeln!(stdout, "  Pulumi code written to {}", path)?;
@@ -215,7 +219,13 @@ mod tests {
         assert!(
             eject_cmd()
                 .try_get_matches_from([
-                    "eject", "--release", "1.0.0", "-e", "production", "-r", "us-east-1"
+                    "eject",
+                    "--release",
+                    "1.0.0",
+                    "-e",
+                    "production",
+                    "-r",
+                    "us-east-1"
                 ])
                 .is_ok()
         );
@@ -224,7 +234,13 @@ mod tests {
     #[test]
     fn output_and_json_are_mutually_exclusive() {
         let base = [
-            "eject", "--release", "1.0.0", "-e", "production", "-r", "us-east-1",
+            "eject",
+            "--release",
+            "1.0.0",
+            "-e",
+            "production",
+            "-r",
+            "us-east-1",
         ];
         assert!(
             eject_cmd()
@@ -238,9 +254,7 @@ mod tests {
         );
         assert!(
             eject_cmd()
-                .try_get_matches_from(
-                    base.iter().chain(["--output", "out.ts", "--json"].iter())
-                )
+                .try_get_matches_from(base.iter().chain(["--output", "out.ts", "--json"].iter()))
                 .is_err()
         );
     }

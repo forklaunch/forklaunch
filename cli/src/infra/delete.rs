@@ -86,17 +86,25 @@ impl CliCommand for DeleteCommand {
                 "This will PERMANENTLY DELETE {} ({}) and its AWS infrastructure.",
                 detail.name, detail.r#type
             );
-            println!("This action cannot be undone — no snapshot is taken automatically before deletion.");
+            println!(
+                "This action cannot be undone — no snapshot is taken automatically before deletion."
+            );
             println!();
 
             let typed: String = Input::with_theme(&ColorfulTheme::default())
-                .with_prompt(format!("Type the resource name ({}) to confirm", detail.name))
+                .with_prompt(format!(
+                    "Type the resource name ({}) to confirm",
+                    detail.name
+                ))
                 .allow_empty(true)
                 .interact_text()
                 .with_context(|| "Failed to read confirmation")?;
 
             if typed != detail.name {
-                bail!("confirmation did not match '{}' — aborted, nothing was deleted", detail.name);
+                bail!(
+                    "confirmation did not match '{}' — aborted, nothing was deleted",
+                    detail.name
+                );
             }
         }
 

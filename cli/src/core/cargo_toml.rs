@@ -22,18 +22,29 @@ pub(crate) fn version(name: &str) -> Option<&'static str> {
 /// source its registry version, keeping the manifest's formatting.
 pub(crate) fn fill(source: &str) -> Result<String> {
     // An unparseable manifest is the application's to fix; Cargo reports it.
-    let Ok(mut document) = source.parse::<toml_edit::DocumentMut>() else { return Ok(source.into()) };
+    let Ok(mut document) = source.parse::<toml_edit::DocumentMut>() else {
+        return Ok(source.into());
+    };
     let mut changed = false;
     let mut tables: Vec<&mut toml_edit::Item> = Vec::new();
     let root = document.as_table_mut();
-    let (workspace, rest): (Vec<_>, Vec<_>) =
-        root.iter_mut().partition(|(key, _)| key.get() == "workspace");
+    let (workspace, rest): (Vec<_>, Vec<_>) = root
+        .iter_mut()
+        .partition(|(key, _)| key.get() == "workspace");
     for (key, item) in rest {
         if DEPENDENCY_TABLES.contains(&key.get()) {
             tables.push(item);
         } else if key.get() == "target" {
-            for (_, target) in item.as_table_like_mut().into_iter().flat_map(|table| table.iter_mut()) {
-                for (key, item) in target.as_table_like_mut().into_iter().flat_map(|table| table.iter_mut()) {
+            for (_, target) in item
+                .as_table_like_mut()
+                .into_iter()
+                .flat_map(|table| table.iter_mut())
+            {
+                for (key, item) in target
+                    .as_table_like_mut()
+                    .into_iter()
+                    .flat_map(|table| table.iter_mut())
+                {
                     if DEPENDENCY_TABLES.contains(&key.get()) {
                         tables.push(item);
                     }
@@ -42,22 +53,36 @@ pub(crate) fn fill(source: &str) -> Result<String> {
         }
     }
     for (_, item) in workspace {
-        if let Some(item) = item.as_table_like_mut().and_then(|table| table.get_mut("dependencies")) {
+        if let Some(item) = item
+            .as_table_like_mut()
+            .and_then(|table| table.get_mut("dependencies"))
+        {
             tables.push(item);
         }
     }
     for table in tables {
-        let Some(table) = table.as_table_like_mut() else { continue };
+        let Some(table) = table.as_table_like_mut() else {
+            continue;
+        };
         for (name, dependency) in table.iter_mut() {
             changed |= fill_dependency(name.get(), dependency)?;
         }
     }
-    Ok(if changed { document.to_string() } else { source.into() })
+    Ok(if changed {
+        document.to_string()
+    } else {
+        source.into()
+    })
 }
 
 fn fill_dependency(name: &str, dependency: &mut toml_edit::Item) -> Result<bool> {
-    let Some(spec) = dependency.as_table_like() else { return Ok(false) };
-    if ["version", "path", "git", "workspace"].iter().any(|key| spec.contains_key(key)) {
+    let Some(spec) = dependency.as_table_like() else {
+        return Ok(false);
+    };
+    if ["version", "path", "git", "workspace"]
+        .iter()
+        .any(|key| spec.contains_key(key))
+    {
         return Ok(false);
     }
     let Some(version) = version(name) else {
@@ -87,12 +112,27 @@ mod tests {
         let source = "[dependencies]\nserde_json = {}\ntokio = { features = [\"net\"] }\nlocal = { path = \"../local\" }\nuuid = \"1\"\n\n[target.'cfg(unix)'.dev-dependencies]\naxum = {}\n";
         let filled = fill(source).unwrap();
         let manifest: toml::Value = toml::from_str(&filled).unwrap();
-        assert_eq!(manifest["dependencies"]["serde_json"].as_str(), version("serde_json"));
-        assert_eq!(manifest["dependencies"]["tokio"]["version"].as_str(), version("tokio"));
-        assert_eq!(manifest["dependencies"]["tokio"]["features"][0].as_str(), Some("net"));
+        assert_eq!(
+            manifest["dependencies"]["serde_json"].as_str(),
+            version("serde_json")
+        );
+        assert_eq!(
+            manifest["dependencies"]["tokio"]["version"].as_str(),
+            version("tokio")
+        );
+        assert_eq!(
+            manifest["dependencies"]["tokio"]["features"][0].as_str(),
+            Some("net")
+        );
         assert!(manifest["dependencies"]["local"].get("version").is_none());
-        assert_eq!(manifest["target"]["cfg(unix)"]["dev-dependencies"]["axum"].as_str(), version("axum"));
-        assert!(filled.contains("tokio = { version = "), "version leads the inline table: {filled}");
+        assert_eq!(
+            manifest["target"]["cfg(unix)"]["dev-dependencies"]["axum"].as_str(),
+            version("axum")
+        );
+        assert!(
+            filled.contains("tokio = { version = "),
+            "version leads the inline table: {filled}"
+        );
         assert_eq!(fill(&filled).unwrap(), filled);
     }
 
@@ -106,7 +146,14 @@ mod tests {
     fn templates_leave_versions_to_the_registry() {
         let templates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/templates/rust");
         let mut checked = 0;
-        for kind in ["application", "billing", "cac", "ecommerce", "iam", "project"] {
+        for kind in [
+            "application",
+            "billing",
+            "cac",
+            "ecommerce",
+            "iam",
+            "project",
+        ] {
             let path = templates.join(kind).join("Cargo.toml.template");
             let source = std::fs::read_to_string(&path).unwrap();
             let mut section = String::new();
@@ -115,13 +162,27 @@ mod tests {
                     section = line.trim_matches(['[', ']']).to_owned();
                     continue;
                 }
-                let Some((name, spec)) = line.split_once('=') else { continue };
+                let Some((name, spec)) = line.split_once('=') else {
+                    continue;
+                };
                 let (name, spec) = (name.trim(), spec.trim());
-                if !DEPENDENCY_TABLES.iter().any(|table| section.ends_with(table)) || spec.contains("path") {
+                if !DEPENDENCY_TABLES
+                    .iter()
+                    .any(|table| section.ends_with(table))
+                    || spec.contains("path")
+                {
                     continue;
                 }
-                assert!(!spec.starts_with('"') && !spec.contains("version"), "{name} in {} pins its own version", path.display());
-                assert!(version(name).is_some(), "{name} in {} has no registry version", path.display());
+                assert!(
+                    !spec.starts_with('"') && !spec.contains("version"),
+                    "{name} in {} pins its own version",
+                    path.display()
+                );
+                assert!(
+                    version(name).is_some(),
+                    "{name} in {} has no registry version",
+                    path.display()
+                );
                 checked += 1;
             }
         }

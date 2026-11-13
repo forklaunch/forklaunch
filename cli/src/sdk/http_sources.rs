@@ -24,9 +24,10 @@ pub(super) fn read(root: &Path) -> Result<BTreeSet<String>> {
         toml::from_str(&source).context("Failed to read the application manifest")?;
     let shared = root.join(super::layout::rust(root)?);
     let typescript = root.join(super::layout::typescript(root)?);
-    let recorded: BTreeSet<String> = fs::read_to_string(super::layout::source(root, &typescript)?.join(RECORD))
-        .map(|text| text.lines().map(str::to_owned).collect())
-        .unwrap_or_default();
+    let recorded: BTreeSet<String> =
+        fs::read_to_string(super::layout::source(root, &typescript)?.join(RECORD))
+            .map(|text| text.lines().map(str::to_owned).collect())
+            .unwrap_or_default();
     let mut services = BTreeSet::new();
     for project in manifest
         .get("projects")
@@ -56,7 +57,13 @@ pub(super) fn record<'a>(source: &Path, names: impl Iterator<Item = &'a str>) ->
     let mut names: Vec<&str> = names.collect();
     names.sort_unstable();
     names.dedup();
-    super::write_if_changed(source.join(RECORD), names.iter().map(|name| format!("{name}\n")).collect::<String>())?;
+    super::write_if_changed(
+        source.join(RECORD),
+        names
+            .iter()
+            .map(|name| format!("{name}\n"))
+            .collect::<String>(),
+    )?;
     Ok(())
 }
 

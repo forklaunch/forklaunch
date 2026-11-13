@@ -562,15 +562,21 @@ mod tests {
 
     #[test]
     fn each_missing_half_says_which_half_is_missing() {
-        assert!(parse_app_claim_hook("/internal/claim/mint")
-            .unwrap_err()
-            .contains("<component>:<path>"));
-        assert!(parse_app_claim_hook(":/mint")
-            .unwrap_err()
-            .contains("no component"));
-        assert!(parse_app_claim_hook("iam:")
-            .unwrap_err()
-            .contains("no path"));
+        assert!(
+            parse_app_claim_hook("/internal/claim/mint")
+                .unwrap_err()
+                .contains("<component>:<path>")
+        );
+        assert!(
+            parse_app_claim_hook(":/mint")
+                .unwrap_err()
+                .contains("no component")
+        );
+        assert!(
+            parse_app_claim_hook("iam:")
+                .unwrap_err()
+                .contains("no path")
+        );
     }
 
     #[test]

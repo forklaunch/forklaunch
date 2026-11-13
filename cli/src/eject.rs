@@ -230,7 +230,9 @@ fn perform_string_replacements(
         if file.file_name() != "package.json" {
             let file_path = file.path();
             let relative_path_difference = get_relative_path(
-                file_path.parent().context("Ejected source must have a parent directory")?,
+                file_path
+                    .parent()
+                    .context("Ejected source must have a parent directory")?,
                 base_path,
             );
 

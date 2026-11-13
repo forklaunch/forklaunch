@@ -34,7 +34,9 @@ pub(crate) fn stamp(body: &str) -> String {
 /// unchanged since it was generated. `None` means the file is not generated.
 pub(crate) fn stamped(content: &str) -> Option<bool> {
     let (header, body) = content.split_once('\n')?;
-    let digest = header.strip_prefix(STAMP_PREFIX)?.strip_suffix(STAMP_SUFFIX)?;
+    let digest = header
+        .strip_prefix(STAMP_PREFIX)?
+        .strip_suffix(STAMP_SUFFIX)?;
     Some(digest == sha256_hex(body))
 }
 
@@ -60,7 +62,10 @@ pub(crate) fn framework(root: &Path) -> Option<toml::Value> {
     let manifest = fs::read_to_string(root.join(MANIFEST))
         .ok()
         .and_then(|source| toml::from_str::<toml::Value>(&source).ok())?;
-    manifest.get("framework").filter(|table| table.is_table()).cloned()
+    manifest
+        .get("framework")
+        .filter(|table| table.is_table())
+        .cloned()
 }
 
 pub(crate) fn has_framework(root: &Path) -> bool {
@@ -71,8 +76,8 @@ pub(crate) fn has_framework(root: &Path) -> bool {
 /// formatting.
 pub(crate) fn write_framework(root: &Path, config: &toml::Table) -> Result<()> {
     let path = root.join(MANIFEST);
-    let source = fs::read_to_string(&path)
-        .with_context(|| format!("Failed to read {}", path.display()))?;
+    let source =
+        fs::read_to_string(&path).with_context(|| format!("Failed to read {}", path.display()))?;
     let mut document: toml_edit::DocumentMut = source.parse()?;
     let mut table = toml_edit::Table::new();
     for key in ["version", "blueprint_version", "path"] {
@@ -114,6 +119,9 @@ mod tests {
         write_framework(root.path(), &config).unwrap();
         let text = fs::read_to_string(root.path().join(MANIFEST)).unwrap();
         assert!(text.starts_with("# keep\n"), "{text}");
-        assert_eq!(framework(root.path()).unwrap()["version"].as_str(), Some("0.1.3"));
+        assert_eq!(
+            framework(root.path()).unwrap()["version"].as_str(),
+            Some("0.1.3")
+        );
     }
 }

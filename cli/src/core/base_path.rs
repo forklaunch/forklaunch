@@ -60,7 +60,9 @@ pub(crate) fn prompt_base_path(
     // spins at 100% CPU forever. This is the `forklaunch init router -p src/modules/<missing>`
     // hang — confirmed via live /proc snapshot (state=R, no output). Fail fast with a clear,
     // actionable error instead of looping.
-    if (!base_path.exists() || !check_base_path(&base_path, path_count)) && !std::io::stdin().is_terminal() {
+    if (!base_path.exists() || !check_base_path(&base_path, path_count))
+        && !std::io::stdin().is_terminal()
+    {
         bail!(
             "base path '{}' does not exist (or has no forklaunch manifest above it) and stdin is \
              not a TTY to prompt for a correction. Create the target module first, e.g. \

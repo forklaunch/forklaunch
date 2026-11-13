@@ -292,7 +292,8 @@ impl CliCommand for LibraryCommand {
                 path: application_package_json_path.to_path_buf(),
                 content: serde_json::to_string_pretty(&application_package_json_to_write)?,
                 context: None,
-            }.preserving_json_layout(),
+            }
+            .preserving_json_layout(),
         );
 
         rendered_templates_cache.insert(
@@ -313,7 +314,8 @@ impl CliCommand for LibraryCommand {
                 path: project_package_json_path.into(),
                 content: serde_json::to_string_pretty(&project_json_to_write)?,
                 context: None,
-            }.preserving_json_layout(),
+            }
+            .preserving_json_layout(),
         );
 
         let rendered_templates: Vec<RenderedTemplate> = rendered_templates_cache

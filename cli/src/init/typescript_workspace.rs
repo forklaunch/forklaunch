@@ -136,7 +136,10 @@ fn merge_workspace(stage: &Path, template: &Path, original: &Value) -> Result<()
     let generated: Value = toml::from_str(&fs::read_to_string(
         template.join(".forklaunch/manifest.toml"),
     )?)?;
-    let modules = generated.get("modules_path").and_then(Value::as_str).context("Missing source root")?;
+    let modules = generated
+        .get("modules_path")
+        .and_then(Value::as_str)
+        .context("Missing source root")?;
     let table = manifest
         .as_table_mut()
         .context("Manifest must be a table")?;
@@ -237,12 +240,20 @@ fn merge_workspace(stage: &Path, template: &Path, original: &Value) -> Result<()
     }
     fs::write(manifest_path, toml::to_string_pretty(&manifest)?)?;
 
-    let native_relative = original.get("dockerfile").and_then(Value::as_str).unwrap_or("Dockerfile");
+    let native_relative = original
+        .get("dockerfile")
+        .and_then(Value::as_str)
+        .unwrap_or("Dockerfile");
     let native_dockerfile = output_path(stage, Path::new(native_relative))?;
-    let native_default = super::rust_project::render_static_rust_template("rust/application/Dockerfile");
-    let marked = crate::core::watermark::apply_watermark(&crate::core::rendered_template::RenderedTemplate {
-        path: native_dockerfile.clone(), content: native_default.clone(), context: None,
-    })?;
+    let native_default =
+        super::rust_project::render_static_rust_template("rust/application/Dockerfile");
+    let marked = crate::core::watermark::apply_watermark(
+        &crate::core::rendered_template::RenderedTemplate {
+            path: native_dockerfile.clone(),
+            content: native_default.clone(),
+            context: None,
+        },
+    )?;
     let owned_native = fs::read_to_string(&native_dockerfile).is_ok_and(|actual| {
         actual.trim_end() == native_default.trim_end() || actual.trim_end() == marked.trim_end()
     });
@@ -278,11 +289,27 @@ fn merge_workspace(stage: &Path, template: &Path, original: &Value) -> Result<()
         }
     }
     if owned_native {
-        if let Some(services) = compose.get_mut("services").and_then(serde_yml::Value::as_mapping_mut) {
+        if let Some(services) = compose
+            .get_mut("services")
+            .and_then(serde_yml::Value::as_mapping_mut)
+        {
             for service in services.values_mut() {
-                if let Some(build) = service.get_mut("build").and_then(serde_yml::Value::as_mapping_mut) {
-                    if build.get("dockerfile").and_then(serde_yml::Value::as_str).is_some_and(|path| path.trim_start_matches("./") == native_relative.trim_start_matches("./")) {
-                        build.insert(serde_yml::Value::String("dockerfile".into()), serde_yml::Value::String("Dockerfile.rust".into()));
+                if let Some(build) = service
+                    .get_mut("build")
+                    .and_then(serde_yml::Value::as_mapping_mut)
+                {
+                    if build
+                        .get("dockerfile")
+                        .and_then(serde_yml::Value::as_str)
+                        .is_some_and(|path| {
+                            path.trim_start_matches("./")
+                                == native_relative.trim_start_matches("./")
+                        })
+                    {
+                        build.insert(
+                            serde_yml::Value::String("dockerfile".into()),
+                            serde_yml::Value::String("Dockerfile.rust".into()),
+                        );
                     }
                 }
             }
@@ -293,8 +320,9 @@ fn merge_workspace(stage: &Path, template: &Path, original: &Value) -> Result<()
     // Both package trees participate in the root workspace. Keep existing SDK
     // scripts and custom commands, adding only missing TypeScript tooling.
     let package_path = stage.join("package.json");
-    let mut generated_package: Json =
-        serde_json::from_str(&fs::read_to_string(template.join(modules).join("package.json"))?)?;
+    let mut generated_package: Json = serde_json::from_str(&fs::read_to_string(
+        template.join(modules).join("package.json"),
+    )?)?;
     // Tool configuration lives with the TypeScript modules. Root build includes
     // the native workspace and shared SDK; other TS commands retain that cwd.
     if let Some(scripts) = generated_package
@@ -320,7 +348,10 @@ fn merge_workspace(stage: &Path, template: &Path, original: &Value) -> Result<()
         }
         // The TypeScript image installs from the nested modules workspace and
         // copies its lockfile, so a root install must produce that one too.
-        scripts.insert("postinstall".into(), Json::String(format!("pnpm --dir {modules} install")));
+        scripts.insert(
+            "postinstall".into(),
+            Json::String(format!("pnpm --dir {modules} install")),
+        );
     }
     let mut package: Json = if package_path.exists() {
         serde_json::from_str(&fs::read_to_string(&package_path)?)?
@@ -368,13 +399,20 @@ fn merge_workspace(stage: &Path, template: &Path, original: &Value) -> Result<()
     fs::write(workspace_path, serde_yml::to_string(&workspace)?)?;
     if owned_native {
         let destination = stage.join("Dockerfile.rust");
-        if destination.exists() && fs::read_to_string(&destination)?.trim_end() != native_default.trim_end() {
+        if destination.exists()
+            && fs::read_to_string(&destination)?.trim_end() != native_default.trim_end()
+        {
             bail!("Owned Rust Dockerfile conflicts with existing shared image");
         }
         fs::write(&destination, native_default)?;
-        if native_dockerfile != destination { fs::remove_file(&native_dockerfile)?; }
+        if native_dockerfile != destination {
+            fs::remove_file(&native_dockerfile)?;
+        }
         manifest.as_table_mut().unwrap().remove("dockerfile");
-        fs::write(stage.join(".forklaunch/manifest.toml"), toml::to_string_pretty(&manifest)?)?;
+        fs::write(
+            stage.join(".forklaunch/manifest.toml"),
+            toml::to_string_pretty(&manifest)?,
+        )?;
     }
     if stage.join(".dockerignore").is_file() && !stage.join("Dockerfile.rust.dockerignore").exists()
     {
@@ -436,7 +474,11 @@ pub(super) fn attach_if_needed(matches: &ArgMatches) -> Result<bool> {
     if original.get("runtime").and_then(Value::as_str) != Some("tokio") {
         return Ok(false);
     }
-    let modules = if original.get("modules_path").and_then(Value::as_str) == Some("src") { "src" } else { "modules" };
+    let modules = if original.get("modules_path").and_then(Value::as_str) == Some("src") {
+        "src"
+    } else {
+        "modules"
+    };
     if root.join(modules).join("package.json").exists() {
         bail!("Cannot initialize the TypeScript workspace: source root already has package.json");
     }
@@ -553,7 +595,10 @@ pub(super) fn attach_if_needed(matches: &ArgMatches) -> Result<bool> {
         if fs::symlink_metadata(stage.join(relative)).is_err() {
             let destination = output_path(&root, relative)?;
             if &contents(&destination, &root, &root)? != previous {
-                bail!("Application changed during initialization: {}", destination.display());
+                bail!(
+                    "Application changed during initialization: {}",
+                    destination.display()
+                );
             }
             removed.push(destination);
         }
@@ -572,8 +617,11 @@ pub(super) fn attach_if_needed(matches: &ArgMatches) -> Result<bool> {
         copy_file(&source, &destination, &stage, &root)?;
     }
     for destination in removed {
-        if dryrun { println!("Would remove {}", destination.display()); }
-        else { fs::remove_file(destination)?; }
+        if dryrun {
+            println!("Would remove {}", destination.display());
+        } else {
+            fs::remove_file(destination)?;
+        }
     }
     if !dryrun {
         println!(

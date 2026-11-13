@@ -111,9 +111,15 @@ pub(crate) fn regenerate_client_sdk_compliance(
         let factory = format!("{}SdkClient", camel);
         let type_alias = format!("{}Client", pascal);
 
-        let native = project.metadata.as_ref().and_then(|metadata| metadata.language.as_deref()) == Some("rust");
+        let native = project
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.language.as_deref())
+            == Some("rust");
         // Only the TypeScript Better Auth factory wraps its API in `core`.
-        let is_better_auth = !native && project.name == "iam" && project.variant.as_deref() == Some("iam-better-auth");
+        let is_better_auth = !native
+            && project.name == "iam"
+            && project.variant.as_deref() == Some("iam-better-auth");
         let access = if is_better_auth {
             format!("config.{}.core.compliance", camel)
         } else {
@@ -127,9 +133,13 @@ pub(crate) fn regenerate_client_sdk_compliance(
             format!("ComplianceClient<{erase_response}, {export_response}>")
         } else {
             imports.push(factory.clone());
-            type_aliases.push(format!("type {type_alias} = Awaited<ReturnType<typeof {factory}>>;"));
+            type_aliases.push(format!(
+                "type {type_alias} = Awaited<ReturnType<typeof {factory}>>;"
+            ));
             if is_better_auth {
-                format!("{type_alias} & {{ core: RequireCompliance<{type_alias}['core'], {erase_response}, {export_response}> }}")
+                format!(
+                    "{type_alias} & {{ core: RequireCompliance<{type_alias}['core'], {erase_response}, {export_response}> }}"
+                )
             } else {
                 format!("RequireCompliance<{type_alias}, {erase_response}, {export_response}>")
             }
@@ -137,8 +147,13 @@ pub(crate) fn regenerate_client_sdk_compliance(
         config_fields.push(format!("  {camel}: {client_type};"));
         let checked_access = if is_better_auth {
             format!("config.{camel}?.core?.compliance")
-        } else { format!("config.{camel}?.compliance") };
-        client_checks.push(format!("    {{ name: {}, client: {checked_access} }}", serde_json::to_string(&project.name)?));
+        } else {
+            format!("config.{camel}?.compliance")
+        };
+        client_checks.push(format!(
+            "    {{ name: {}, client: {checked_access} }}",
+            serde_json::to_string(&project.name)?
+        ));
         destructure_names.push(camel.clone());
         erase_calls.push(format!(
             "        {}.eraseUserData({{ params: {{ userId }}, headers }})",
@@ -538,9 +553,14 @@ mod compliance_tests {
     fn client_sdk_depends_on_every_module_package_it_exports() {
         // compliance.ts imports `<module>SdkClient` from clientSdk.ts for every
         // db-backed module, so the client SDK must depend on ecommerce too.
-        let deps = get_client_sdk_additional_deps(&"shop".to_string(), true, true, false, false, true);
-        assert_eq!(deps.get("@shop/ecommerce").map(String::as_str), Some("workspace:*"));
-        let deps = get_client_sdk_additional_deps(&"shop".to_string(), true, true, false, false, false);
+        let deps =
+            get_client_sdk_additional_deps(&"shop".to_string(), true, true, false, false, true);
+        assert_eq!(
+            deps.get("@shop/ecommerce").map(String::as_str),
+            Some("workspace:*")
+        );
+        let deps =
+            get_client_sdk_additional_deps(&"shop".to_string(), true, true, false, false, false);
         assert!(!deps.contains_key("@shop/ecommerce"));
     }
 
