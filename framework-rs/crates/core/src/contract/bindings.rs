@@ -97,7 +97,9 @@ pub trait PublicEndpointDefinition: EndpointDefinition {}
 /// service) operations. Implementing it is a promise that the policy's
 /// `authorize_body` authenticates the **original request bytes** (for example
 /// with `forklaunch_core::auth::request_hmac::HmacAuthorization::verify_at`) and
-/// atomically rejects a replayed nonce before any typed body reaches the handler.
+/// atomically rejects a replayed nonce before any typed body reaches the handler
+/// (claim `HmacAuthorization::nonce_claim` in a store shared by every copy of
+/// the service; `request_hmac::InMemoryNonceStore` protects one process only).
 /// The marker is not a proof of policy correctness.
 ///
 /// ```ignore

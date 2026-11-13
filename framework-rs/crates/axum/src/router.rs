@@ -133,7 +133,8 @@ pub struct RouterConfig {
     pub description: Option<String>,
     /// `OpenAPI` servers advertised in the generated document.
     pub servers: Vec<OpenApiServer>,
-    /// CORS policy; defaults to a permissive policy when unset.
+    /// CORS policy. When unset, cross-origin access is denied unless the
+    /// comma-separated `CORS_ORIGINS` setting names the allowed origins.
     pub cors: Option<CorsLayer>,
     /// TypeScript CORS profile; mutually exclusive with `cors`.
     pub typescript_cors: Option<TypeScriptCors>,
@@ -2584,8 +2585,9 @@ mod extended_method_tests {
             .await
             .unwrap();
         assert_eq!(preflight.status(), StatusCode::OK);
+        // No CORS policy is configured, so no origin is allowed.
         assert!(
-            preflight
+            !preflight
                 .headers()
                 .contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN)
         );

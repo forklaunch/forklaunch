@@ -408,10 +408,16 @@ mod tests {
         write(dir.path(), &value);
         let report = scan(dir.path(), "src", &[project("notes", "src/notes")]);
         assert_eq!(report.projects[0].status, "valid-declarations");
-        assert_eq!(report.projects[0].encryption_verification, "unknown", "A binding is a declaration, not encryption proof");
+        assert_eq!(
+            report.projects[0].encryption_verification, "unknown",
+            "A binding is a declaration, not encryption proof"
+        );
         value["entities"][0]["binding"] = json!({"kind":"declarations-only"});
         write(dir.path(), &value);
-        assert_eq!(scan(dir.path(), "src", &[project("notes", "src/notes")]).projects[0].status, "valid-declarations");
+        assert_eq!(
+            scan(dir.path(), "src", &[project("notes", "src/notes")]).projects[0].status,
+            "valid-declarations"
+        );
         for binding in [
             json!({"kind":"protected-model","protectedMembers":[{"member":"phone","purpose":"p"}]}),
             json!({"kind":"protected-model","protectedMembers":[]}),
@@ -419,7 +425,10 @@ mod tests {
         ] {
             value["entities"][0]["binding"] = binding;
             write(dir.path(), &value);
-            assert_eq!(scan(dir.path(), "src", &[project("notes", "src/notes")]).projects[0].status, "invalid");
+            assert_eq!(
+                scan(dir.path(), "src", &[project("notes", "src/notes")]).projects[0].status,
+                "invalid"
+            );
         }
     }
     #[test]
@@ -429,12 +438,21 @@ mod tests {
         let legacy = dir.path().join("src/notes").join(LEGACY_ARTIFACT);
         fs::write(&legacy, "stale legacy output").unwrap();
         let row = &scan(dir.path(), "src", &[project("notes", "src/notes")]).projects[0];
-        assert_eq!((row.status, row.artifact.as_str()), ("valid-declarations", "src/notes/.forklaunch/compliance.json"));
+        assert_eq!(
+            (row.status, row.artifact.as_str()),
+            (
+                "valid-declarations",
+                "src/notes/.forklaunch/compliance.json"
+            )
+        );
         fs::remove_file(dir.path().join("src/notes").join(ARTIFACT)).unwrap();
         fs::write(&legacy, artifact().to_string()).unwrap();
         let row = &scan(dir.path(), "src", &[project("notes", "src/notes")]).projects[0];
-        assert_eq!((row.status, row.artifact.as_str()), ("valid-declarations", "src/notes/compliance.json"),
-            "Applications built before the move remain discoverable");
+        assert_eq!(
+            (row.status, row.artifact.as_str()),
+            ("valid-declarations", "src/notes/compliance.json"),
+            "Applications built before the move remain discoverable"
+        );
     }
     #[test]
     fn parser_rejects_oversize_versions_and_path_escape() {

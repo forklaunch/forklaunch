@@ -11,7 +11,12 @@ const END: &str = "// </forklaunch:service-sdk-types>";
 
 pub(super) fn reconcile(root: &Path) -> Result<()> {
     let manifest = read_manifest_value(&root.join(".forklaunch/manifest.toml"))?;
-    let modules = root.join(manifest.get("modules_path").and_then(Value::as_str).unwrap_or("src"));
+    let modules = root.join(
+        manifest
+            .get("modules_path")
+            .and_then(Value::as_str)
+            .unwrap_or("src"),
+    );
     let sdk = modules.join("client-sdk");
     if !sdk.join("clientSdk.ts").is_file() || !sdk.join("package.json").is_file() {
         return Ok(());

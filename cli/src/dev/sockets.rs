@@ -116,7 +116,11 @@ impl Exports {
                             &root,
                             metadata.as_ref(),
                             "openapiPath",
-                            artifact_paths::default_path(name, metadata.as_ref(), Artifact::OpenApi),
+                            artifact_paths::default_path(
+                                name,
+                                metadata.as_ref(),
+                                Artifact::OpenApi,
+                            ),
                         )?,
                     ),
                     ("socket", socket.clone()),

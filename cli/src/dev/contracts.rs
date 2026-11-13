@@ -53,11 +53,17 @@ pub(super) fn resolved_output(path: &Path) -> Result<PathBuf> {
 /// and OpenAPI artifacts (`build::service_sdks_at`).
 fn build_emits_artifacts(root: &Path, project: &toml::Value) -> bool {
     let metadata = project.get("metadata");
-    let field = |name: &str| metadata.and_then(|m| m.get(name)).and_then(toml::Value::as_str);
+    let field = |name: &str| {
+        metadata
+            .and_then(|m| m.get(name))
+            .and_then(toml::Value::as_str)
+    };
     if field("language") != Some("rust") || field("sdkLayout") != Some("project-local-v1") {
         return false;
     }
-    let Some(crate_path) = field("cratePath") else { return false };
+    let Some(crate_path) = field("cratePath") else {
+        return false;
+    };
     std::fs::read_to_string(root.join(crate_path).join("sdk/rust/build.rs"))
         .is_ok_and(|source| source.contains("service_sdks_at("))
 }
@@ -150,7 +156,10 @@ pub(super) fn enable(
         let export = script(&scratch, &paths[0], &paths[1])?;
         if change["entrypoint"][0] == "forklaunch-native-run" {
             // Reloading processes export before every in-place restart.
-            plans.push((service.clone(), Startup::Prestart(export.replace('$', "$$"))));
+            plans.push((
+                service.clone(),
+                Startup::Prestart(export.replace('$', "$$")),
+            ));
             continue;
         }
         let startup = change["entrypoint"][2]

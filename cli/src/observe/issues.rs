@@ -294,8 +294,7 @@ fn post_acknowledge(issue_id: &str, acknowledged_by: &str) -> Result<AckResponse
     );
 
     let body = serde_json::json!({ "acknowledgedBy": acknowledged_by });
-    let response = post(&url, body)
-        .with_context(|| "Failed to reach observability API")?;
+    let response = post(&url, body).with_context(|| "Failed to reach observability API")?;
 
     if !response.status().is_success() {
         let http_status = response.status();
@@ -319,8 +318,7 @@ fn post_resolve(issue_id: &str, resolved_by: &str) -> Result<ResolveResponse> {
     );
 
     let body = serde_json::json!({ "resolvedBy": resolved_by });
-    let response = post(&url, body)
-        .with_context(|| "Failed to reach observability API")?;
+    let response = post(&url, body).with_context(|| "Failed to reach observability API")?;
 
     if !response.status().is_success() {
         let http_status = response.status();
@@ -429,7 +427,11 @@ fn print_ack_result(issue_id: &str, acknowledged_by: &str, _response: &AckRespon
     Ok(())
 }
 
-fn print_resolve_result(issue_id: &str, resolved_by: &str, _response: &ResolveResponse) -> Result<()> {
+fn print_resolve_result(
+    issue_id: &str,
+    resolved_by: &str,
+    _response: &ResolveResponse,
+) -> Result<()> {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
     writeln!(stdout)?;
@@ -572,7 +574,8 @@ mod tests {
 
     #[test]
     fn resolve_response_deserializes_partial() {
-        let json = r#"{"id": "iss-001", "resolvedAt": "2024-01-15T10:05:00Z", "resolvedBy": "alice"}"#;
+        let json =
+            r#"{"id": "iss-001", "resolvedAt": "2024-01-15T10:05:00Z", "resolvedBy": "alice"}"#;
         let response: ResolveResponse = serde_json::from_str(json).unwrap();
         assert_eq!(response.id.as_deref(), Some("iss-001"));
         assert_eq!(response.resolved_by.as_deref(), Some("alice"));

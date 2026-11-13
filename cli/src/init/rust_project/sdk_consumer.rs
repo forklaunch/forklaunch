@@ -3,6 +3,10 @@ use super::*;
 
 /// Predeclare a service-owned client crate so the first workspace build has a
 /// complete, acyclic graph: SDK -> host declarations, never SDK -> server.
+/// What a generated TypeScript SDK holds before its service has been built.
+pub(super) const TYPESCRIPT_SDK_PLACEHOLDER: &str =
+    "// Generated when this service is built. Until then the SDK is empty.\nexport {};\n";
+
 pub(super) fn local_templates(dir: &Path, name: &str, host: &Path) -> Vec<RenderedTemplate> {
     local_templates_with_registry(dir, name, host, "contracts::registry()", &[])
 }
@@ -54,9 +58,10 @@ forklaunch-core = {{ path = "{framework}/crates/core", features = ["build"] }}
 "#
     );
     let client = "Client";
-    let environment = environment.iter().map(|name| {
-        format!("    println!(\"cargo:rerun-if-env-changed={name}\");\n")
-    }).collect::<String>();
+    let environment = environment
+        .iter()
+        .map(|name| format!("    println!(\"cargo:rerun-if-env-changed={name}\");\n"))
+        .collect::<String>();
     let build = format!(
         r#"use std::{{env, error::Error, path::PathBuf}};
 
@@ -108,6 +113,22 @@ include!(concat!(env!("OUT_DIR"), "/generated.rs"));
         .unwrap_or_else(|| "app".into());
     files.push(RenderedTemplate {path:dir.join("sdk/typescript/package.json"), content:serde_json::to_string_pretty(&json!({"name":format!("@{app}/{name}"),"version":"0.1.0","private":true,"type":"module","exports":{".":{"types":"./index.ts"},"./sdk":{"types":"./sdk.ts"}},"scripts":{"build":"tsc --noEmit"},"devDependencies":{"typescript":"5.9.3","@forklaunch/universal-sdk":crate::core::package_json::package_json_constants::UNIVERSAL_SDK_VERSION}})).unwrap()+"\n",context:None});
     files.push(RenderedTemplate {path:dir.join("sdk/typescript/tsconfig.json"), content:"{\"compilerOptions\":{\"strict\":true,\"module\":\"NodeNext\",\"moduleResolution\":\"NodeNext\",\"target\":\"ES2022\",\"noEmit\":true},\"include\":[\"*.ts\"]}\n".into(),context:None});
+    // The service's build writes the real index.ts and sdk.ts. Until its first
+    // build these stand in for them, so the package type-checks in a fresh
+    // workspace (`pnpm -r build` otherwise fails with TS18003: no inputs) and
+    // anything that imports it resolves.
+    for file in ["index.ts", "sdk.ts"] {
+        // Never over a real one: this also runs when an existing service is
+        // laid out again.
+        if dir.join("sdk/typescript").join(file).exists() {
+            continue;
+        }
+        files.push(RenderedTemplate {
+            path: dir.join("sdk/typescript").join(file),
+            content: TYPESCRIPT_SDK_PLACEHOLDER.into(),
+            context: None,
+        });
+    }
     files
 }
 
@@ -125,8 +146,19 @@ fn service_sdk_path(root: &Path, manifest: &Value, service: &str) -> Option<Path
 
 fn aggregate_directory(root: &Path) -> Result<PathBuf> {
     let path = root.join(".forklaunch/manifest.toml");
-    let manifest = if path.is_file() { read_manifest_value(&path)? } else { Value::Table(Map::new()) };
-    Ok(root.join(manifest.get("modules_path").and_then(Value::as_str).unwrap_or("src")).join("client-sdk/rust"))
+    let manifest = if path.is_file() {
+        read_manifest_value(&path)?
+    } else {
+        Value::Table(Map::new())
+    };
+    Ok(root
+        .join(
+            manifest
+                .get("modules_path")
+                .and_then(Value::as_str)
+                .unwrap_or("src"),
+        )
+        .join("client-sdk/rust"))
 }
 
 pub(super) fn generate(matches: &ArgMatches, services: Vec<String>) -> Result<()> {
@@ -140,7 +172,13 @@ pub(super) fn generate(matches: &ArgMatches, services: Vec<String>) -> Result<()
     .canonicalize()?;
     let manifest_path = root.join(".forklaunch/manifest.toml");
     let mut manifest = read_manifest_value(&manifest_path)?;
-    let relative = format!("{}/client-sdk/rust", manifest.get("modules_path").and_then(Value::as_str).unwrap_or("src"));
+    let relative = format!(
+        "{}/client-sdk/rust",
+        manifest
+            .get("modules_path")
+            .and_then(Value::as_str)
+            .unwrap_or("src")
+    );
     let dir = root.join(&relative);
     if dir.join("Cargo.toml").exists() {
         bail!("Rust SDK consumer already exists; preserve its customizations");
@@ -156,7 +194,12 @@ pub(super) fn generate(matches: &ArgMatches, services: Vec<String>) -> Result<()
         generate_local_aggregate(&root, &mut manifest, &name, &services, dryrun)?;
         if !dryrun {
             let mut stdout = StandardStream::stdout(ColorChoice::Always);
-            log_ok!(stdout, "Generated Rust SDK library {} at {}", name, dir.display());
+            log_ok!(
+                stdout,
+                "Generated Rust SDK library {} at {}",
+                name,
+                dir.display()
+            );
         }
         return Ok(());
     }
@@ -270,7 +313,12 @@ pub(super) fn generate(matches: &ArgMatches, services: Vec<String>) -> Result<()
     write_manifest_value(&manifest_path, &manifest)?;
     add_cargo_member(&root, &relative, false)?;
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
-    log_ok!(stdout, "Generated Rust SDK library {} at {}", name, dir.display());
+    log_ok!(
+        stdout,
+        "Generated Rust SDK library {} at {}",
+        name,
+        dir.display()
+    );
     Ok(())
 }
 
@@ -281,7 +329,13 @@ fn generate_local_aggregate(
     services: &[String],
     dryrun: bool,
 ) -> Result<()> {
-    let relative = format!("{}/client-sdk/rust", manifest.get("modules_path").and_then(Value::as_str).unwrap_or("src"));
+    let relative = format!(
+        "{}/client-sdk/rust",
+        manifest
+            .get("modules_path")
+            .and_then(Value::as_str)
+            .unwrap_or("src")
+    );
     let dir = root.join(&relative);
     let mut cargo: toml_edit::DocumentMut = format!("[package]\nname={name:?}\nversion='0.1.0'\nedition='2024'\n[lib]\npath='lib.rs'\n[dependencies]\n").parse()?;
     let mut exports = "//! Public service SDK exports.\n#![forbid(unsafe_code)]\npub mod extensions;\n// The application extension module starts empty.\n#[allow(unused_imports)]\npub use extensions::*;\n".to_owned();
@@ -456,15 +510,28 @@ pub(super) fn rename_service(
 /// Refresh service identity in already emitted local artifacts before recompiling SDKs.
 pub(super) fn rename_local_artifacts(root: &Path, old: &str, new: &str) -> Result<bool> {
     let manifest = read_manifest_value(&root.join(".forklaunch/manifest.toml"))?;
-    let Some(metadata) = project_table(&manifest, new).and_then(|project| project.get("metadata")) else { return Ok(false); };
-    if metadata.get("sdkLayout").and_then(Value::as_str) != Some("project-local-v1") { return Ok(false); }
+    let Some(metadata) = project_table(&manifest, new).and_then(|project| project.get("metadata"))
+    else {
+        return Ok(false);
+    };
+    if metadata.get("sdkLayout").and_then(Value::as_str) != Some("project-local-v1") {
+        return Ok(false);
+    }
     let mut contract_present = false;
     for key in ["contractArtifactPath", "openapiPath"] {
-        let Some(relative) = metadata.get(key).and_then(Value::as_str) else { continue; };
+        let Some(relative) = metadata.get(key).and_then(Value::as_str) else {
+            continue;
+        };
         let path = crate::core::application_output::output_path(root, Path::new(relative))?;
-        if !path.is_file() { continue; }
+        if !path.is_file() {
+            continue;
+        }
         let mut artifact: JsonValue = serde_json::from_str(&read_to_string(&path)?)?;
-        if artifact.pointer("/service/name").and_then(JsonValue::as_str) == Some(old) {
+        if artifact
+            .pointer("/service/name")
+            .and_then(JsonValue::as_str)
+            == Some(old)
+        {
             artifact["service"]["name"] = new.into();
         }
         if artifact.pointer("/info/title").and_then(JsonValue::as_str) == Some(old) {
@@ -473,7 +540,11 @@ pub(super) fn rename_local_artifacts(root: &Path, old: &str, new: &str) -> Resul
         if let Some(paths) = artifact.get_mut("paths").and_then(JsonValue::as_object_mut) {
             for path in paths.values_mut().filter_map(JsonValue::as_object_mut) {
                 for operation in path.values_mut() {
-                    if operation.pointer("/x-forklaunch-operation/service").and_then(JsonValue::as_str) == Some(old) {
+                    if operation
+                        .pointer("/x-forklaunch-operation/service")
+                        .and_then(JsonValue::as_str)
+                        == Some(old)
+                    {
                         operation["x-forklaunch-operation"]["service"] = new.into();
                     }
                 }
@@ -529,7 +600,8 @@ pub(crate) fn reconcile_local_aggregate(root: &Path) -> Result<()> {
             .and_then(toml_edit::Item::as_table_like)
             .is_some_and(|deps| {
                 deps.iter().any(|(name, dep)| {
-                    name == alias || dep.get("package").and_then(toml_edit::Item::as_str) == Some(&package)
+                    name == alias
+                        || dep.get("package").and_then(toml_edit::Item::as_str) == Some(&package)
                 })
             });
         if present {
@@ -573,7 +645,11 @@ fn remove_from_local_aggregate(root: &Path, dir: &Path, service_path: &str) -> R
         .filter(|(_, dep)| {
             dep.get("path")
                 .and_then(toml_edit::Item::as_str)
-                .is_some_and(|path| dir.join(path).canonicalize().is_ok_and(|path| path == local))
+                .is_some_and(|path| {
+                    dir.join(path)
+                        .canonicalize()
+                        .is_ok_and(|path| path == local)
+                })
         })
         .map(|(name, _)| name.to_owned())
         .collect::<Vec<_>>();
@@ -629,7 +705,9 @@ pub(super) fn ensure_service_deletable(root: &Path, service_path: &str) -> Resul
                 })
             })
         {
-            bail!("Service SDK is referenced by the Rust client aggregate; remove or update that dependency before deleting the service");
+            bail!(
+                "Service SDK is referenced by the Rust client aggregate; remove or update that dependency before deleting the service"
+            );
         }
     }
     let Some(expected) = contracts_layout::directory(&root.join(service_path)) else {
@@ -743,6 +821,14 @@ mod tests {
         let dir = root.join("src/notes");
         let host = dir.join(".forklaunch/contracts");
         let files = local_templates(&dir, "notes", &host);
+        // A fresh SDK package must type-check before the service's first build.
+        for file in ["index.ts", "sdk.ts"] {
+            let placeholder = files
+                .iter()
+                .find(|template| template.path == dir.join("sdk/typescript").join(file))
+                .unwrap_or_else(|| panic!("no placeholder {file}"));
+            assert_eq!(placeholder.content, TYPESCRIPT_SDK_PLACEHOLDER);
+        }
         let cargo: Value = toml::from_str(
             &files
                 .iter()
@@ -777,15 +863,21 @@ mod tests {
             Some("../../notes/sdk/rust")
         );
         assert!(!aggregate.join("build.rs").exists());
-        assert!(read_to_string(aggregate.join("lib.rs"))
-            .unwrap()
-            .contains("pub use notes;"));
+        assert!(
+            read_to_string(aggregate.join("lib.rs"))
+                .unwrap()
+                .contains("pub use notes;")
+        );
         // The generated aggregate drops a deleted service's re-export instead of blocking.
         ensure_service_deletable(root, "src/notes").unwrap();
         let cargo: Value =
             toml::from_str(&read_to_string(aggregate.join("Cargo.toml")).unwrap()).unwrap();
         assert!(cargo["dependencies"].get("notes").is_none());
-        assert!(!read_to_string(aggregate.join("lib.rs")).unwrap().contains("pub use notes"));
+        assert!(
+            !read_to_string(aggregate.join("lib.rs"))
+                .unwrap()
+                .contains("pub use notes")
+        );
     }
 
     #[test]
@@ -812,12 +904,16 @@ mod tests {
         .unwrap();
         assert!(ensure_service_deletable(root, "src/api").is_err());
         rename_service(root, "src/api", "src/records", "api", "records").unwrap();
-        assert!(read_to_string(sdk.join("Cargo.toml"))
-            .unwrap()
-            .contains("../../records-contracts"));
-        assert!(read_to_string(sdk.join("build.rs"))
-            .unwrap()
-            .contains("../../records-contracts"));
+        assert!(
+            read_to_string(sdk.join("Cargo.toml"))
+                .unwrap()
+                .contains("../../records-contracts")
+        );
+        assert!(
+            read_to_string(sdk.join("build.rs"))
+                .unwrap()
+                .contains("../../records-contracts")
+        );
     }
     #[test]
     fn bound_contract_prevents_delete_and_rename_updates_source() {
@@ -848,9 +944,11 @@ mod tests {
         let manifest = read_to_string(sdk.join("Cargo.toml")).unwrap();
         assert!(manifest.contains("../../renamed-api/domain"));
         assert!(manifest.contains("renamed-api-contracts"));
-        assert!(read_to_string(sdk.join("build.rs"))
-            .unwrap()
-            .contains("../../renamed-api/domain"));
+        assert!(
+            read_to_string(sdk.join("build.rs"))
+                .unwrap()
+                .contains("../../renamed-api/domain")
+        );
         assert!(ensure_service_deletable(root, "src/renamed-api").is_err());
         write(sdk.join("Cargo.toml"), "[build-dependencies]\n").unwrap();
         assert!(ensure_service_deletable(root, "src/renamed-api").is_ok());

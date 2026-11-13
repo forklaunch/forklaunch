@@ -608,9 +608,7 @@ fn compose(report: &mut Analysis, root: &Path, filter: Option<&str>) {
                 );
             }
             if let Some(receipt) = generated_image {
-                let expected_image = receipt
-                    .get("image")
-                    .and_then(serde_json::Value::as_str);
+                let expected_image = receipt.get("image").and_then(serde_json::Value::as_str);
                 let is_managed = service
                     .get("image")
                     .and_then(serde_json::Value::as_str)
@@ -991,8 +989,18 @@ mod tests {
     #[test]
     fn generated_shared_image_commands_are_checked_but_custom_images_are_not_adopted() {
         let root = tempfile::tempdir().unwrap();
-        put(root.path(), ".forklaunch/manifest.toml", "app_name = \"demo\"\nruntime = \"node\"\n");
-        put(root.path(), "Dockerfile.rust", &crate::core::forklaunch_state::stamp("FROM scratch\nCOPY --from=builder /app/target/release/notes /app/bin/notes\n"));
+        put(
+            root.path(),
+            ".forklaunch/manifest.toml",
+            "app_name = \"demo\"\nruntime = \"node\"\n",
+        );
+        put(
+            root.path(),
+            "Dockerfile.rust",
+            &crate::core::forklaunch_state::stamp(
+                "FROM scratch\nCOPY --from=builder /app/target/release/notes /app/bin/notes\n",
+            ),
+        );
         put(
             root.path(),
             "compose.yaml",
@@ -1010,7 +1018,11 @@ mod tests {
             "services:\n  notes:\n    image: demo-rust:local\n    command: ['/app/bin/notes', 'migrate']\n",
         );
         assert!(!inspect(root.path(), "src", &[], Some("mixed"), None).has_errors());
-        put(root.path(), "Dockerfile.rust", "FROM custom\nCOPY --from=builder /app/target/release/notes /app/bin/notes\n");
+        put(
+            root.path(),
+            "Dockerfile.rust",
+            "FROM custom\nCOPY --from=builder /app/target/release/notes /app/bin/notes\n",
+        );
         put(
             root.path(),
             "compose.yaml",
@@ -1022,7 +1034,11 @@ mod tests {
     #[test]
     fn typescript_managed_processes_require_commands_and_successful_migrations() {
         let root = tempfile::tempdir().unwrap();
-        put(root.path(), ".forklaunch/manifest.toml", "app_name = \"demo\"\nruntime = \"node\"\n");
+        put(
+            root.path(),
+            ".forklaunch/manifest.toml",
+            "app_name = \"demo\"\nruntime = \"node\"\n",
+        );
         let plan = serde_json::json!({
             "processes":[{"directory":"notes","entries":["server"],"database":"postgresql"}],
             "services":{"notes":{"directory":"notes","entry":"server"}}
@@ -1059,7 +1075,9 @@ mod tests {
                 .any(|d| d.code == "FLR-LAYOUT-007")
         );
         // An edited generated Dockerfile keeps its stamp but no longer matches it.
-        let edited = std::fs::read_to_string(root.path().join("Dockerfile.typescript")).unwrap().replace("FROM node:22", "FROM custom");
+        let edited = std::fs::read_to_string(root.path().join("Dockerfile.typescript"))
+            .unwrap()
+            .replace("FROM node:22", "FROM custom");
         put(root.path(), "Dockerfile.typescript", &edited);
         let report = inspect(root.path(), "src", &[], Some("mixed"), None);
         assert!(!report.has_errors());

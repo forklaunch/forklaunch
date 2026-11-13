@@ -187,16 +187,31 @@ fn run_sdk_watch(
             continue;
         }
 
-        let root = app_root.canonicalize().unwrap_or_else(|_| app_root.to_path_buf());
+        let root = app_root
+            .canonicalize()
+            .unwrap_or_else(|_| app_root.to_path_buf());
         let changed: Vec<String> = fingerprint
             .iter()
             .filter(|(path, digest)| last_fingerprint.get(*path) != Some(*digest))
             .map(|(path, _)| path)
-            .chain(last_fingerprint.keys().filter(|path| !fingerprint.contains_key(*path)))
-            .map(|path| path.strip_prefix(&root).unwrap_or(path).display().to_string())
+            .chain(
+                last_fingerprint
+                    .keys()
+                    .filter(|path| !fingerprint.contains_key(*path)),
+            )
+            .map(|path| {
+                path.strip_prefix(&root)
+                    .unwrap_or(path)
+                    .display()
+                    .to_string()
+            })
             .collect();
         last_fingerprint = fingerprint;
-        log_info!(stdout, "{source} artifacts changed ({}); regenerating SDKs", changed.join(", "));
+        log_info!(
+            stdout,
+            "{source} artifacts changed ({}); regenerating SDKs",
+            changed.join(", ")
+        );
         if let Err(error) =
             generate_sdk_outputs_while_watching(app_root, target, source, selected_service, stdout)
         {
@@ -556,8 +571,15 @@ openapiPath = "src/api/sdk/openapi.json"
         assert!(!public.contains_key(&openapi.canonicalize().unwrap()));
         assert!(development.contains_key(&openapi.canonicalize().unwrap()));
         let mut stdout = StandardStream::stdout(ColorChoice::Never);
-        crate::sdk::generate::generate_or_check_sdk_outputs(root, "rust", "all-openapi", None, false, &mut stdout)
-            .unwrap();
+        crate::sdk::generate::generate_or_check_sdk_outputs(
+            root,
+            "rust",
+            "all-openapi",
+            None,
+            false,
+            &mut stdout,
+        )
+        .unwrap();
         let models = root.join("src/api/sdk/rust/models.rs");
         assert!(
             fs::read_to_string(&models)
@@ -570,8 +592,15 @@ openapiPath = "src/api/sdk/openapi.json"
             development
         );
         assert_eq!(artifact_fingerprint(root, "all", None).unwrap(), public);
-        crate::sdk::generate::generate_or_check_sdk_outputs(root, "rust", "all-openapi", None, false, &mut stdout)
-            .unwrap();
+        crate::sdk::generate::generate_or_check_sdk_outputs(
+            root,
+            "rust",
+            "all-openapi",
+            None,
+            false,
+            &mut stdout,
+        )
+        .unwrap();
         assert!(
             fs::read_to_string(&models)
                 .unwrap()
@@ -582,8 +611,15 @@ openapiPath = "src/api/sdk/openapi.json"
                 .unwrap()
                 .contains("stale compiled contract")
         );
-        crate::sdk::generate::generate_or_check_sdk_outputs(root, "rust", "all-openapi", None, true, &mut stdout)
-            .unwrap();
+        crate::sdk::generate::generate_or_check_sdk_outputs(
+            root,
+            "rust",
+            "all-openapi",
+            None,
+            true,
+            &mut stdout,
+        )
+        .unwrap();
     }
 
     #[test]

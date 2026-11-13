@@ -40,7 +40,8 @@ const RUNTIME_BLOCK: &str = "const configInjector = createConfigInjector(SchemaV
     }
 });";
 
-pub(crate) const EVENTS_HANDLER: &str = "import type { EmailEventData, PlatformEvent } from '@forklaunch/core/http';
+pub(crate) const EVENTS_HANDLER: &str =
+    "import type { EmailEventData, PlatformEvent } from '@forklaunch/core/http';
 
 /**
  * Email delivery events from the ForkLaunch platform (Amazon SES), verified

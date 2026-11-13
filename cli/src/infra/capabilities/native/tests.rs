@@ -6,20 +6,24 @@ fn billing_registry_fixture() -> String {
         name: &'static str,
         stripe: bool,
     }
-    ramhorns::Template::new(include_str!("../../../templates/rust/billing/api/contracts/registry.rs"))
-        .unwrap()
-        .render(&Context {
-            name: "billing",
-            stripe: true,
-        })
+    ramhorns::Template::new(include_str!(
+        "../../../templates/rust/billing/api/contracts/registry.rs"
+    ))
+    .unwrap()
+    .render(&Context {
+        name: "billing",
+        stripe: true,
+    })
 }
 
 #[test]
 fn builtin_capability_registry_handles_profile_builders_without_runtime_imports() {
     for source in [
         billing_registry_fixture(),
-        include_str!("../../../templates/rust/iam/api/contracts/registry.rs").replace("{{{name}}}", "identity"),
-        include_str!("../../../templates/rust/cac/api/contracts/registry.rs").replace("{{{name}}}", "codes"),
+        include_str!("../../../templates/rust/iam/api/contracts/registry.rs")
+            .replace("{{{name}}}", "identity"),
+        include_str!("../../../templates/rust/cac/api/contracts/registry.rs")
+            .replace("{{{name}}}", "codes"),
     ] {
         let source = format!(
             "// App-owned registry note: keep this formatting.\n{source}\nconst USER_NOTE: &str = \"registry {{ text }}\";\n"
@@ -74,11 +78,13 @@ fn builtin_capability_registry_handles_profile_builders_without_runtime_imports(
     )
     .unwrap();
     syn::parse_file(&runtime).unwrap();
-    assert!(runtime.contains("pub use crate::api::contracts::registry::platform_events::{contracts, register_contracts};"));
-    assert!(!runtime.contains("pub fn contracts()"));
     assert!(runtime.contains(
-        "return next.run(Request::from_parts(parts, Body::from(body))).await;"
+        "pub use crate::api::contracts::registry::platform_events::{contracts, register_contracts};"
     ));
+    assert!(!runtime.contains("pub fn contracts()"));
+    assert!(
+        runtime.contains("return next.run(Request::from_parts(parts, Body::from(body))).await;")
+    );
     assert!(runtime.contains("nonce_store::store()"));
 }
 
@@ -114,14 +120,8 @@ fn builtin_capabilities_share_build_contracts_and_preserve_owned_removal() {
                 .iter()
                 .map(|value| (*value).to_owned())
                 .collect::<Vec<_>>();
-            let mut edit = CapabilityEdit::new(
-                root.path(),
-                "test",
-                "billing",
-                &service,
-                caps.clone(),
-                caps,
-            );
+            let mut edit =
+                CapabilityEdit::new(root.path(), "test", "billing", &service, caps.clone(), caps);
             edit.native = true;
             apply(&mut edit, super::super::find(name).unwrap(), adding).unwrap();
             edit.commit().unwrap();
@@ -147,16 +147,14 @@ fn builtin_capabilities_share_build_contracts_and_preserve_owned_removal() {
         );
         assert!(!service.join("api/contracts/platform_events.rs").exists());
         change("email", &["email"], true);
-        let installed =
-            std::fs::read_to_string(service.join("api/contracts/registry.rs")).unwrap();
+        let installed = std::fs::read_to_string(service.join("api/contracts/registry.rs")).unwrap();
         assert_eq!(installed.matches(BUILTIN_REGISTRY_MARKER).count(), 2);
         assert_eq!(
             std::fs::read_to_string(service.join("sdk.rs")).unwrap(),
             sdk
         );
         let manifest: toml::Value =
-            toml::from_str(&std::fs::read_to_string(service.join("Cargo.toml")).unwrap())
-                .unwrap();
+            toml::from_str(&std::fs::read_to_string(service.join("Cargo.toml")).unwrap()).unwrap();
         for scope in ["dependencies", "build-dependencies"] {
             assert_eq!(
                 manifest[scope]["forklaunch-core"]["version"].as_str(),
@@ -185,13 +183,11 @@ fn builtin_capabilities_share_build_contracts_and_preserve_owned_removal() {
         change("email", &["sms"], false);
         assert!(service.join("api/contracts/platform_events.rs").exists());
         change("sms", &[], false);
-        let removed =
-            std::fs::read_to_string(service.join("api/contracts/registry.rs")).unwrap();
+        let removed = std::fs::read_to_string(service.join("api/contracts/registry.rs")).unwrap();
         if authored_edits {
             assert!(
-                removed.contains(
-                    "// App-owned after infra add\npub const APP_MARKER: bool = true;"
-                )
+                removed
+                    .contains("// App-owned after infra add\npub const APP_MARKER: bool = true;")
             );
             assert!(!removed.contains("platform_events"));
             let manifest: toml::Value =
@@ -245,9 +241,15 @@ fn payments_dependency_follows_the_framework_selection() {
     for (path, text) in [
         ("Cargo.toml", cargo.to_owned()),
         ("lib.rs", "pub mod api;\n".to_owned()),
-        ("server.rs", "pub fn server() { router.serve_with_default_mcp(listener, registry); }\n".to_owned()),
+        (
+            "server.rs",
+            "pub fn server() { router.serve_with_default_mcp(listener, registry); }\n".to_owned(),
+        ),
         // A module that does not already depend on Stripe billing.
-        ("api/contracts/registry.rs", include_str!("../../../templates/rust/iam/api/contracts/registry.rs").to_owned()),
+        (
+            "api/contracts/registry.rs",
+            include_str!("../../../templates/rust/iam/api/contracts/registry.rs").to_owned(),
+        ),
     ] {
         std::fs::write(service.join(path), text).unwrap();
     }
@@ -258,8 +260,12 @@ fn payments_dependency_follows_the_framework_selection() {
     .unwrap();
     std::fs::write(root.path().join("docker-compose.yaml"), "services:\n  billing:\n    image: test-rust\n    environment:\n      PORT: '8000'\nvolumes: {}\nnetworks: {}\n").unwrap();
     let change = |caps: &[&str], adding: bool| {
-        let caps = caps.iter().map(|value| (*value).to_owned()).collect::<Vec<_>>();
-        let mut edit = CapabilityEdit::new(root.path(), "test", "billing", &service, caps.clone(), caps);
+        let caps = caps
+            .iter()
+            .map(|value| (*value).to_owned())
+            .collect::<Vec<_>>();
+        let mut edit =
+            CapabilityEdit::new(root.path(), "test", "billing", &service, caps.clone(), caps);
         edit.native = true;
         apply(&mut edit, super::super::find("payments").unwrap(), adding).unwrap();
         edit.commit().unwrap();
@@ -273,7 +279,10 @@ fn payments_dependency_follows_the_framework_selection() {
     assert_eq!(stripe["version"].as_str(), Some("=0.1.1"));
     assert!(stripe.get("path").is_none());
     change(&[], false);
-    assert_eq!(std::fs::read_to_string(service.join("Cargo.toml")).unwrap(), cargo);
+    assert_eq!(
+        std::fs::read_to_string(service.join("Cargo.toml")).unwrap(),
+        cargo
+    );
 }
 
 #[test]
@@ -311,13 +320,27 @@ fn native_capabilities_stay_inside_the_shared_http_mcp_security_wrapper() {
 #[test]
 fn capability_imports_follow_module_docs() {
     let server = include_str!("../../../templates/rust/project/module/server.rs");
-    let wired = after_inner_docs(server, "use crate::capabilities::ManagedCapabilitiesRouterExt;\n");
+    let wired = after_inner_docs(
+        server,
+        "use crate::capabilities::ManagedCapabilitiesRouterExt;\n",
+    );
     syn::parse_file(&wired).unwrap();
     assert!(wired.starts_with("//! "));
-    assert_eq!(wired.replace("use crate::capabilities::ManagedCapabilitiesRouterExt;\n", ""), server);
-    assert_eq!(after_inner_docs("fn main() {}\n", "use a;\n"), "use a;\nfn main() {}\n");
-    assert_eq!(after_inner_docs("/*\n * Generated\n */\n\n//! Doc.\nuse b;\n", "use a;\n"),
-        "/*\n * Generated\n */\n\n//! Doc.\nuse a;\nuse b;\n");
+    assert_eq!(
+        wired.replace(
+            "use crate::capabilities::ManagedCapabilitiesRouterExt;\n",
+            ""
+        ),
+        server
+    );
+    assert_eq!(
+        after_inner_docs("fn main() {}\n", "use a;\n"),
+        "use a;\nfn main() {}\n"
+    );
+    assert_eq!(
+        after_inner_docs("/*\n * Generated\n */\n\n//! Doc.\nuse b;\n", "use a;\n"),
+        "/*\n * Generated\n */\n\n//! Doc.\nuse a;\nuse b;\n"
+    );
 }
 
 #[test]
@@ -333,10 +356,8 @@ fn capabilities_bind_every_generated_listener_entrypoint_and_legacy_mount() {
     }
     assert!(with_capability_router("router.into_router()").is_err());
     assert!(
-        with_capability_router(
-            "a.into_router_with_default_mcp(); b.serve_with_default_mcp(x,y)"
-        )
-        .is_err()
+        with_capability_router("a.into_router_with_default_mcp(); b.serve_with_default_mcp(x,y)")
+            .is_err()
     );
 }
 
@@ -348,18 +369,58 @@ fn dependency_features_come_off_as_they_went_on() {
         "[dependencies.forklaunch-core]\nfeatures = [\n    \"typed-schema\",\n    \"otlp\",\n]\nversion = \"=0.1.3\"\n",
     ] {
         let mut cargo: DocumentMut = before.parse().unwrap();
-        ensure_dependency_feature(&mut cargo, "dependencies", "forklaunch-core", "instance-gateway").unwrap();
+        ensure_dependency_feature(
+            &mut cargo,
+            "dependencies",
+            "forklaunch-core",
+            "instance-gateway",
+        )
+        .unwrap();
         assert_ne!(cargo.to_string(), before);
-        release_dependency_feature(&mut cargo, "dependencies", "forklaunch-core", "instance-gateway").unwrap();
+        release_dependency_feature(
+            &mut cargo,
+            "dependencies",
+            "forklaunch-core",
+            "instance-gateway",
+        )
+        .unwrap();
         assert_eq!(cargo.to_string(), before);
     }
     // A feature the developer added alongside stays.
-    let mut cargo: DocumentMut = "[dependencies]\nforklaunch-core = \"=0.1.0\"\n".parse().unwrap();
-    ensure_dependency_feature(&mut cargo, "dependencies", "forklaunch-core", "instance-gateway").unwrap();
-    ensure_dependency_feature(&mut cargo, "dependencies", "forklaunch-core", "stripe-webhook").unwrap();
-    release_dependency_feature(&mut cargo, "dependencies", "forklaunch-core", "instance-gateway").unwrap();
-    let features = cargo["dependencies"]["forklaunch-core"]["features"].as_array().unwrap();
-    assert_eq!(features.iter().filter_map(|value| value.as_str()).collect::<Vec<_>>(), ["stripe-webhook"]);
+    let mut cargo: DocumentMut = "[dependencies]\nforklaunch-core = \"=0.1.0\"\n"
+        .parse()
+        .unwrap();
+    ensure_dependency_feature(
+        &mut cargo,
+        "dependencies",
+        "forklaunch-core",
+        "instance-gateway",
+    )
+    .unwrap();
+    ensure_dependency_feature(
+        &mut cargo,
+        "dependencies",
+        "forklaunch-core",
+        "stripe-webhook",
+    )
+    .unwrap();
+    release_dependency_feature(
+        &mut cargo,
+        "dependencies",
+        "forklaunch-core",
+        "instance-gateway",
+    )
+    .unwrap();
+    let features = cargo["dependencies"]["forklaunch-core"]["features"]
+        .as_array()
+        .unwrap();
+    assert_eq!(
+        features
+            .iter()
+            .filter_map(|value| value.as_str())
+            .collect::<Vec<_>>(),
+        ["stripe-webhook"]
+    );
 }
 
 #[test]
@@ -374,20 +435,45 @@ fn dependencies_are_released_only_in_their_generated_form() {
     release_dependency(&mut edit, &cargo_path, &mut cargo, STRIPE, add).unwrap();
     assert_eq!(cargo.to_string(), before);
     // A changed specification is the developer's.
-    let mut cargo: DocumentMut = format!("{before}{STRIPE} = {{ path = \"../stripe\", features = [\"postgres-identity\"] }}\n").parse().unwrap();
+    let mut cargo: DocumentMut = format!(
+        "{before}{STRIPE} = {{ path = \"../stripe\", features = [\"postgres-identity\"] }}\n"
+    )
+    .parse()
+    .unwrap();
     let edited = cargo.to_string();
     release_dependency(&mut edit, &cargo_path, &mut cargo, STRIPE, add).unwrap();
     assert_eq!(cargo.to_string(), edited);
     // As is one other code still uses.
-    let cargo: DocumentMut = format!("{before}[features]\nbound = [\"{STRIPE}/postgres-identity\"]\n").parse().unwrap();
+    let cargo: DocumentMut =
+        format!("{before}[features]\nbound = [\"{STRIPE}/postgres-identity\"]\n")
+            .parse()
+            .unwrap();
     assert!(dependency_in_use(root.path(), &cargo, STRIPE, &[]));
     let cargo: DocumentMut = before.parse().unwrap();
     assert!(!dependency_in_use(root.path(), &cargo, STRIPE, &[]));
     std::fs::create_dir_all(root.path().join("capabilities")).unwrap();
-    std::fs::write(root.path().join("capabilities/mod.rs"), "use forklaunch_billing_stripe::client;\n").unwrap();
-    assert!(!dependency_in_use(root.path(), &cargo, STRIPE, &[root.path().join("capabilities")]));
-    std::fs::write(root.path().join("billing.rs"), "use forklaunch_billing_stripe::client;\n").unwrap();
-    assert!(dependency_in_use(root.path(), &cargo, STRIPE, &[root.path().join("capabilities")]));
+    std::fs::write(
+        root.path().join("capabilities/mod.rs"),
+        "use forklaunch_billing_stripe::client;\n",
+    )
+    .unwrap();
+    assert!(!dependency_in_use(
+        root.path(),
+        &cargo,
+        STRIPE,
+        &[root.path().join("capabilities")]
+    ));
+    std::fs::write(
+        root.path().join("billing.rs"),
+        "use forklaunch_billing_stripe::client;\n",
+    )
+    .unwrap();
+    assert!(dependency_in_use(
+        root.path(),
+        &cargo,
+        STRIPE,
+        &[root.path().join("capabilities")]
+    ));
 }
 
 #[test]
@@ -423,7 +509,11 @@ fn deletion_reads_a_manifest_document_and_releases_only_the_last_gateway() {
         env.insert("MOCK_EVENTS_URL_EMAIL".into(), "http://removed:8000".into());
         env.insert("MOCK_EVENTS_URL_SMS".into(), "http://other:8123".into());
         compose.services.insert(GATEWAY_MOCK_SERVICE.into(), mock);
-        std::fs::write(root.path().join("docker-compose.yaml"), serde_yml::to_string(&compose).unwrap()).unwrap();
+        std::fs::write(
+            root.path().join("docker-compose.yaml"),
+            serde_yml::to_string(&compose).unwrap(),
+        )
+        .unwrap();
         cleanup_deleted_native_service(root.path(), "removed", &["email".into()]).unwrap();
         let compose: DockerCompose = serde_yml::from_str(
             &std::fs::read_to_string(root.path().join("docker-compose.yaml")).unwrap(),
@@ -441,7 +531,10 @@ fn deletion_reads_a_manifest_document_and_releases_only_the_last_gateway() {
             assert!(!env.contains_key("MOCK_EVENTS_URL_EMAIL"));
         }
         if another_service {
-            let env = compose.services[GATEWAY_MOCK_SERVICE].environment.as_ref().unwrap();
+            let env = compose.services[GATEWAY_MOCK_SERVICE]
+                .environment
+                .as_ref()
+                .unwrap();
             assert_eq!(env["MOCK_EVENTS_URL_SMS"], "http://other:8123");
         }
     }
@@ -452,18 +545,13 @@ fn models_render_a_gateway_client_factory_without_an_event_handler() {
     for native_router in [false, true] {
         let alone = render_module_with_layout(&["models".into()], native_router).unwrap();
         syn::parse_file(&alone).unwrap();
-        assert!(
-            alone.contains("use forklaunch_core::http::model_gateway::ModelGatewayClient;")
-        );
-        assert!(
-            alone.contains("pub fn models_client() -> BlueprintResult<ModelGatewayClient>")
-        );
+        assert!(alone.contains("use forklaunch_core::http::model_gateway::ModelGatewayClient;"));
+        assert!(alone.contains("pub fn models_client() -> BlueprintResult<ModelGatewayClient>"));
         assert!(!alone.contains("platform_events"), "{alone}");
         assert!(!alone.contains("nonce_store"), "{alone}");
         assert!(alone.starts_with(BEGIN) && alone.ends_with(END));
         let beside =
-            render_module_with_layout(&["models".into(), "email".into()], native_router)
-                .unwrap();
+            render_module_with_layout(&["models".into(), "email".into()], native_router).unwrap();
         assert!(beside.contains("model_gateway::ModelGatewayClient"));
         assert!(beside.contains("pub fn models_client()"));
         // Models have no events: the dispatch table lists email only.

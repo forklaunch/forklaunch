@@ -9,7 +9,7 @@ use super::{
     manifest::ManifestData,
     rendered_template::{RenderedTemplate, TEMPLATES_DIR},
 };
-use crate::constants::{error_failed_to_create_dir, Module};
+use crate::constants::{Module, error_failed_to_create_dir};
 
 #[derive(Debug, Clone)]
 pub(crate) struct PathIO {
@@ -149,7 +149,10 @@ pub(crate) fn generate_with_template(
             ManifestData::Router(data) => &data.validator,
             ManifestData::Worker(data) => &data.validator,
         };
-        let rendered = rendered.replace("@forklaunch/validator/typebox", &format!("@forklaunch/validator/{validator}"));
+        let rendered = rendered.replace(
+            "@forklaunch/validator/typebox",
+            &format!("@forklaunch/validator/{validator}"),
+        );
         if !output_path.exists() {
             let output_path_str = output_path.file_name().unwrap().to_str().unwrap();
             let should_ignore = ignore_files
@@ -403,9 +406,11 @@ pub(crate) fn render_service_template_file(
         "@forklaunch/validator/typebox",
         &format!("@forklaunch/validator/{}", data.validator),
     );
-    Ok(Some(super::watermark::apply_watermark(&RenderedTemplate {
-        path: Path::new(relative).to_path_buf(),
-        content: rendered,
-        context: None,
-    })?))
+    Ok(Some(super::watermark::apply_watermark(
+        &RenderedTemplate {
+            path: Path::new(relative).to_path_buf(),
+            content: rendered,
+            context: None,
+        },
+    )?))
 }

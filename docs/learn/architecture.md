@@ -28,9 +28,6 @@ description: The directory structure and module layout of a ForkLaunch applicati
     ├── assets/
     │   └── logo.svg # ForkLaunch logo
     │
-    ├── patches/
-    │   └── @jercle__yargonaut.patch # Dependency patch
-    │
     ├── core/
     │   ├── package.json
     │   ├── index.ts # Main entry point

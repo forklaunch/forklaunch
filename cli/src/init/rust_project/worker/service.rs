@@ -152,7 +152,9 @@ pub(in crate::init::rust_project) fn templates(
         .find(|file| file.path == dir.join("bootstrapper.rs"))
         .context("producer bootstrapper")?;
     anyhow::ensure!(
-        bootstrapper.content.contains("pub async fn run() -> ApplicationResult {\n"),
+        bootstrapper
+            .content
+            .contains("pub async fn run() -> ApplicationResult {\n"),
         "Unexpected producer bootstrapper layout"
     );
     bootstrapper.content = bootstrapper.content.replacen(
@@ -287,13 +289,21 @@ pub fn mount(router:ContractRouter<AppState>)->Result<ContractRouter<AppState>,S
     contracts::enqueue::Bindings { enqueue: contracts::enqueue::Enqueue::bind_authorized(ProducerAuthorization,enqueue) }.mount(router)
 }
 "#.into()});
-    files.push(RenderedTemplate {path:dir.join("api/controllers/enqueue.rs"),context:None,content:PRODUCER_POLICY.into()});
+    files.push(RenderedTemplate {
+        path: dir.join("api/controllers/enqueue.rs"),
+        context: None,
+        content: PRODUCER_POLICY.into(),
+    });
     append(
         files,
         &dir.join("domain/services/mod.rs"),
         "\npub mod replay;\n",
     )?;
-    files.push(RenderedTemplate {path:dir.join("domain/services/replay.rs"),context:None,content:replay_store(apalis, backend)});
+    files.push(RenderedTemplate {
+        path: dir.join("domain/services/replay.rs"),
+        context: None,
+        content: replay_store(apalis, backend),
+    });
     replay_wiring(files, dir, apalis, backend)?;
     append(
         files,
@@ -301,7 +311,9 @@ pub fn mount(router:ContractRouter<AppState>)->Result<ContractRouter<AppState>,S
         "\npub mod producer;\n",
     )?;
     let (imports, submit) = if apalis {
-        ("use apalis_core::backend::TaskSink;\nuse apalis_core::task::{builder::TaskBuilder,task_id::TaskId};\nuse apalis_postgres::{Config,PostgresStorage};\nuse forklaunch_worker_interface::SealedEvent;\nuse crate::consumer::registrations;", r#"
+        (
+            "use apalis_core::backend::TaskSink;\nuse apalis_core::task::{builder::TaskBuilder,task_id::TaskId};\nuse apalis_postgres::{Config,PostgresStorage};\nuse forklaunch_worker_interface::SealedEvent;\nuse crate::consumer::registrations;",
+            r#"
     let pool=registrations::pool(false).await.map_err(|_|EndpointError::Unavailable)?;
     let mut queue=PostgresStorage::<SealedEvent>::new(&pool)
         .with_config(Config::default().queue(env!("CARGO_PKG_NAME")));
@@ -310,7 +322,8 @@ pub fn mount(router:ContractRouter<AppState>)->Result<ContractRouter<AppState>,S
     let result=queue.push_task(task).await.map_err(|_|EndpointError::Unavailable);
     pool.close().await;
     result?;
-"#)
+"#,
+        )
     } else {
         leased_submit(backend)
     };
@@ -410,7 +423,9 @@ pub async fn enqueue(_state:State<AppState>,tenant:Uuid,input:WorkInput)->Result
 /// The producer's shared replay store: PostgreSQL for database queues, Redis for
 /// Redis queues. Kafka producers have no shared store, so the default is per process.
 fn replay_store(apalis: bool, backend: Backend) -> String {
-    let postgres = |pool: &str| format!(r#"//! One-time nonce claims for signed internal calls, shared by every producer replica.
+    let postgres = |pool: &str| {
+        format!(
+            r#"//! One-time nonce claims for signed internal calls, shared by every producer replica.
 //! `--migrate` creates `forklaunch_request_nonces`; the runtime role needs INSERT, UPDATE
 //! and DELETE on it. Expired claims are reclaimed in place and pruned opportunistically.
 use forklaunch_axum::native::EndpointError;
@@ -430,9 +445,13 @@ pub async fn claim(nonce:&str,expires_unix_millis:i64)->Result<bool,EndpointErro
     pool.close().await;
     Ok(claimed.map_err(|_|EndpointError::Unavailable)?.rows_affected()==1)
 }}
-"#);
+"#
+        )
+    };
     if apalis {
-        return postgres("    let pool=crate::consumer::registrations::pool(false).await.map_err(|_|EndpointError::Unavailable)?;");
+        return postgres(
+            "    let pool=crate::consumer::registrations::pool(false).await.map_err(|_|EndpointError::Unavailable)?;",
+        );
     }
     match backend {
         Backend::Postgres => postgres(r#"    let url=forklaunch_core::config::required::<String>("DATABASE_URL").map_err(|_|EndpointError::Unavailable)?;
@@ -481,7 +500,12 @@ pub async fn claim(nonce:&str,expires_unix_millis:i64)->Result<bool,EndpointErro
 }
 
 /// Create the PostgreSQL replay table on `--migrate`, and give Redis producers a client.
-fn replay_wiring(files: &mut [RenderedTemplate], dir: &Path, apalis: bool, backend: Backend) -> Result<()> {
+fn replay_wiring(
+    files: &mut [RenderedTemplate],
+    dir: &Path,
+    apalis: bool,
+    backend: Backend,
+) -> Result<()> {
     if apalis {
         let migrations = files
             .iter_mut()
@@ -494,7 +518,10 @@ fn replay_wiring(files: &mut [RenderedTemplate], dir: &Path, apalis: bool, backe
             "PostgresStorage::setup(pool).await?; Ok(())",
             "PostgresStorage::setup(pool).await?; crate::domain::services::replay::migrate(pool).await?; Ok(())",
         );
-        anyhow::ensure!(migrations.content.contains("replay::migrate"), "apalis migration hook");
+        anyhow::ensure!(
+            migrations.content.contains("replay::migrate"),
+            "apalis migration hook"
+        );
         return Ok(());
     }
     match backend {
@@ -507,7 +534,10 @@ fn replay_wiring(files: &mut [RenderedTemplate], dir: &Path, apalis: bool, backe
                 "PostgresWorkerQueue::migrate(&pool).await?;",
                 "PostgresWorkerQueue::migrate(&pool).await?;\n        crate::domain::services::replay::migrate(&pool).await?;",
             );
-            anyhow::ensure!(worker.content.contains("replay::migrate"), "database migration hook");
+            anyhow::ensure!(
+                worker.content.contains("replay::migrate"),
+                "database migration hook"
+            );
         }
         Backend::Redis => {
             let cargo = files

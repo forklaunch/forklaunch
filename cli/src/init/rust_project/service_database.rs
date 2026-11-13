@@ -8,7 +8,9 @@ pub(super) fn templates(
 ) -> Result<Vec<RenderedTemplate>> {
     let data = rust_crate_template_data(name, "PostgreSQL service", true);
     for template in &mut templates {
-        let Ok(relative) = template.path.strip_prefix(dir) else { continue };
+        let Ok(relative) = template.path.strip_prefix(dir) else {
+            continue;
+        };
         let relative = relative.to_string_lossy();
         match relative.as_ref() {
             "Cargo.toml" => {
@@ -75,15 +77,40 @@ pub(super) fn compose(root: &Path, name: &str) -> Result<()> {
     let env = service.environment.get_or_insert_with(IndexMap::new);
     let prefix = name.to_case(Case::UpperSnake);
     for (variable, value) in [
-        ("DATABASE_URL", format!("${{{prefix}_DATABASE_URL:?Configure a restricted service PostgreSQL role}}")),
-        ("TENANT_ID", format!("${{{prefix}_TENANT_ID:?Configure a trusted tenant UUID}}")),
-        ("STORAGE_ENCRYPTION_NAMESPACE", format!("${{{prefix}_STORAGE_ENCRYPTION_NAMESPACE:?Configure a stable service storage namespace}}")),
-        ("ENCRYPTION_KEY_HEX", "${ENCRYPTION_KEY_HEX:?Configure encryption key}".into()),
+        (
+            "DATABASE_URL",
+            format!("${{{prefix}_DATABASE_URL:?Configure a restricted service PostgreSQL role}}"),
+        ),
+        (
+            "TENANT_ID",
+            format!("${{{prefix}_TENANT_ID:?Configure a trusted tenant UUID}}"),
+        ),
+        (
+            "STORAGE_ENCRYPTION_NAMESPACE",
+            format!(
+                "${{{prefix}_STORAGE_ENCRYPTION_NAMESPACE:?Configure a stable service storage namespace}}"
+            ),
+        ),
+        (
+            "ENCRYPTION_KEY_HEX",
+            "${ENCRYPTION_KEY_HEX:?Configure encryption key}".into(),
+        ),
         ("ENCRYPTION_KEY_ID", "${ENCRYPTION_KEY_ID:-primary}".into()),
-        ("ENCRYPTION_PREVIOUS_KEYS_JSON", "${ENCRYPTION_PREVIOUS_KEYS_JSON:-}".into()),
-        ("ENCRYPTION_LEGACY_KEY_HEX", "${ENCRYPTION_LEGACY_KEY_HEX:-disabled}".into()),
-        ("DATABASE_ALLOW_PLAINTEXT_DEVELOPMENT", "${DATABASE_ALLOW_PLAINTEXT_DEVELOPMENT:-false}".into()),
-    ] { env.insert(variable.into(), value); }
+        (
+            "ENCRYPTION_PREVIOUS_KEYS_JSON",
+            "${ENCRYPTION_PREVIOUS_KEYS_JSON:-}".into(),
+        ),
+        (
+            "ENCRYPTION_LEGACY_KEY_HEX",
+            "${ENCRYPTION_LEGACY_KEY_HEX:-disabled}".into(),
+        ),
+        (
+            "DATABASE_ALLOW_PLAINTEXT_DEVELOPMENT",
+            "${DATABASE_ALLOW_PLAINTEXT_DEVELOPMENT:-false}".into(),
+        ),
+    ] {
+        env.insert(variable.into(), value);
+    }
     write(path, yaml_to_string(&compose)?)?;
     Ok(())
 }

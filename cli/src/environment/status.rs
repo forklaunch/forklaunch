@@ -207,8 +207,12 @@ pub(crate) fn platform_selector<'a>(
     match (environment, region) {
         (Some(env), Some(reg)) => Ok(Some((env.as_str(), reg.as_str()))),
         (None, None) => Ok(None),
-        (Some(_), None) => bail!("--environment was given without --region; pass both to ask the platform, or neither for local state"),
-        (None, Some(_)) => bail!("--region was given without --environment; pass both to ask the platform, or neither for local state"),
+        (Some(_), None) => bail!(
+            "--environment was given without --region; pass both to ask the platform, or neither for local state"
+        ),
+        (None, Some(_)) => bail!(
+            "--region was given without --environment; pass both to ask the platform, or neither for local state"
+        ),
     }
 }
 
@@ -476,11 +480,19 @@ mod tests {
 
         // And the classification that follows from each.
         assert_eq!(
-            classify(is_pulumi_injected("MONITORING_URL", &from_manifest), false, None),
+            classify(
+                is_pulumi_injected("MONITORING_URL", &from_manifest),
+                false,
+                None
+            ),
             Classification::PlatformManaged
         );
         assert_eq!(
-            classify(is_pulumi_injected("MONITORING_URL", &from_scan), false, None),
+            classify(
+                is_pulumi_injected("MONITORING_URL", &from_scan),
+                false,
+                None
+            ),
             Classification::NeedsValue
         );
     }

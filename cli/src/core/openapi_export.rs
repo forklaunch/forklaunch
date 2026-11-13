@@ -415,7 +415,8 @@ pub(crate) fn export_all_services(
             iam_port,
         )?;
 
-        let mut document: serde_json::Value = serde_json::from_str(&fs::read_to_string(&openapi_file)?)?;
+        let mut document: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&openapi_file)?)?;
         // The framework exports either one document or a map keyed by API
         // version (the unversioned API is keyed ""); normalize every document.
         let documents: Vec<&mut serde_json::Value> = if document.get("openapi").is_some() {
@@ -428,7 +429,10 @@ pub(crate) fn export_all_services(
         };
         for document in documents {
             portable::enrich_imported(document, &service.name).with_context(|| {
-                format!("Failed to normalize TypeScript OpenAPI for {}", service.name)
+                format!(
+                    "Failed to normalize TypeScript OpenAPI for {}",
+                    service.name
+                )
             })?;
         }
         fs::write(&openapi_file, serde_json::to_string_pretty(&document)?)?;
@@ -522,11 +526,16 @@ pub(crate) fn export_all_rust_services(
         }
 
         let output_file = outputs.exported(service_name)?.to_path_buf();
-        let service_output_dir = output_file.parent().context("OpenAPI output parent missing")?;
+        let service_output_dir = output_file
+            .parent()
+            .context("OpenAPI output parent missing")?;
         fs::create_dir_all(service_output_dir)
             .with_context(|| format!("Failed to create directory: {:?}", service_output_dir))?;
-        let contract_path =
-            app_root.join(artifact_paths::path(service_name, metadata, Artifact::Contract));
+        let contract_path = app_root.join(artifact_paths::path(
+            service_name,
+            metadata,
+            Artifact::Contract,
+        ));
         if let Some(contract_dir) = contract_path.parent() {
             fs::create_dir_all(contract_dir)
                 .with_context(|| format!("Failed to create {}", contract_dir.display()))?;
@@ -655,7 +664,11 @@ fn export_rust_service_artifacts(
         );
     }
     compiler_metadata::restore(
-        app_root, crate_path, service_name, contract_output, &mut artifact,
+        app_root,
+        crate_path,
+        service_name,
+        contract_output,
+        &mut artifact,
     )?;
     let mut document = serde_json::from_slice(&fs::read(&staged_openapi)?)?;
     if artifact["sdkCompiler"] == "forklaunch.sdk.http.v1" {
@@ -1116,7 +1129,11 @@ openapiPath = "../must-not-plan-worker.json"
                 .unwrap()
                 .is_empty()
         );
-        assert!(export_all_rust_services(root, Some(&output)).unwrap().is_empty());
+        assert!(
+            export_all_rust_services(root, Some(&output))
+                .unwrap()
+                .is_empty()
+        );
         assert!(!output.exists());
         let serialized = toml::to_string(&manifest).unwrap();
         assert_eq!(serialized.matches("contractExport = false").count(), 2);

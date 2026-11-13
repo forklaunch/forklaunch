@@ -181,7 +181,11 @@ fn change_database(
         }
         cache.insert(
             path.to_string_lossy().to_string(),
-            RenderedTemplate { path, content: after, context: None },
+            RenderedTemplate {
+                path,
+                content: after,
+                context: None,
+            },
         );
         Ok(true)
     };
@@ -259,7 +263,10 @@ fn change_database(
         .get_mut(&migration)
         .and_then(|service| service.depends_on.as_mut())
     {
-        if Database::VARIANTS.iter().any(|variant| depends_on.contains_key(*variant)) {
+        if Database::VARIANTS
+            .iter()
+            .any(|variant| depends_on.contains_key(*variant))
+        {
             replace_database_dependency(depends_on, database);
         }
     }
@@ -269,19 +276,19 @@ fn change_database(
 
     let mikro_orm_config_path = base_path.join("mikro-orm.config.ts");
     if !rerender("mikro-orm.config.ts", rendered_templates_cache)? {
-    rendered_templates_cache.insert(
-        mikro_orm_config_path.to_string_lossy(),
-        RenderedTemplate {
-            path: mikro_orm_config_path.clone(),
-            content: transform_mikroorm_config_ts(
-                rendered_templates_cache,
-                &base_path,
-                &Some(existing_database),
-                database,
-            )?,
-            context: None,
-        },
-    );
+        rendered_templates_cache.insert(
+            mikro_orm_config_path.to_string_lossy(),
+            RenderedTemplate {
+                path: mikro_orm_config_path.clone(),
+                content: transform_mikroorm_config_ts(
+                    rendered_templates_cache,
+                    &base_path,
+                    &Some(existing_database),
+                    database,
+                )?,
+                context: None,
+            },
+        );
     }
 
     // Update registrations.ts import source for database-specific package
@@ -363,16 +370,26 @@ fn change_database(
     // migrate/seed compose services gain the new database, and lose the old
     // one when no other project still uses it.
     let workspace = base_path.parent().unwrap();
-    let old_in_use = crate::core::database::database_in_use(&manifest_data.projects, &existing_database);
+    let old_in_use =
+        crate::core::database::database_in_use(&manifest_data.projects, &existing_database);
     if let Some(scripts) = application_package_json.scripts.as_mut() {
         crate::core::database::set_database_in_application_scripts(scripts, database, true);
         if !old_in_use {
-            crate::core::database::set_database_in_application_scripts(scripts, &existing_database, false);
+            crate::core::database::set_database_in_application_scripts(
+                scripts,
+                &existing_database,
+                false,
+            );
         }
     }
     crate::core::database::set_core_database(workspace, database, true, rendered_templates_cache)?;
     if !old_in_use {
-        crate::core::database::set_core_database(workspace, &existing_database, false, rendered_templates_cache)?;
+        crate::core::database::set_core_database(
+            workspace,
+            &existing_database,
+            false,
+            rendered_templates_cache,
+        )?;
     }
 
     Ok(())
@@ -991,7 +1008,7 @@ export interface {pascal_case_name}EventRecord extends WorkerEventEntity {{
 
     let env_local_path = base_path.join(".env.local");
     let mut env_local_content =
-                    read_env_local_or_default(rendered_templates_cache, &env_local_path)?;
+        read_env_local_or_default(rendered_templates_cache, &env_local_path)?;
     env_local_content.queue_name =
         Some(format!("{}-{}-queue", manifest_data.app_name, project_name));
     rendered_templates_cache.insert(
@@ -1227,7 +1244,9 @@ impl CliCommand for ServiceCommand {
             };
             let infrastructure = crate::infra::native_local::requested(matches);
             if to_kind.is_some() && infrastructure.is_some() {
-                anyhow::bail!("Change native service infrastructure before converting it to a worker");
+                anyhow::bail!(
+                    "Change native service infrastructure before converting it to a worker"
+                );
             }
             let changed_name = rust_project::change_rust_project(
                 &app_root_path,
@@ -1245,7 +1264,13 @@ impl CliCommand for ServiceCommand {
                 } else {
                     changed_name.as_str()
                 };
-                crate::infra::native_local::reconcile(matches, &app_root_path, service, &desired, true)?;
+                crate::infra::native_local::reconcile(
+                    matches,
+                    &app_root_path,
+                    service,
+                    &desired,
+                    true,
+                )?;
             }
             if !matches.get_flag("dryrun") {
                 log_ok!(stdout, "{} changed successfully!", changed_name);
@@ -1390,7 +1415,8 @@ impl CliCommand for ServiceCommand {
                         path: service_base_path.join("package.json"),
                         content: serde_json::to_string_pretty(&project_package_json_to_write)?,
                         context: None,
-                    }.preserving_json_layout(),
+                    }
+                    .preserving_json_layout(),
                 );
 
                 let rendered_templates: Vec<RenderedTemplate> = rendered_templates_cache
@@ -1576,9 +1602,19 @@ impl CliCommand for ServiceCommand {
         }
 
         if let Some(name) = name {
-            let old = service_base_path.file_name().and_then(|name| name.to_str()).context("Invalid project directory")?;
+            let old = service_base_path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .context("Invalid project directory")?;
             if crate::sdk::typescript_build::preflight_lifecycle(&app_root_path, old)? {
-                anyhow::ensure!(old == name || !crate::sdk::typescript_build::has_contract_build(&app_root_path, &name)?, "Destination contract hook already exists");
+                anyhow::ensure!(
+                    old == name
+                        || !crate::sdk::typescript_build::has_contract_build(
+                            &app_root_path,
+                            &name
+                        )?,
+                    "Destination contract hook already exists"
+                );
             }
             move_templates.push(change_name(
                 &service_base_path,
@@ -1618,7 +1654,8 @@ impl CliCommand for ServiceCommand {
                 path: application_package_json_path.into(),
                 content: serde_json::to_string_pretty(&application_package_json_to_write)?,
                 context: None,
-            }.preserving_json_layout(),
+            }
+            .preserving_json_layout(),
         );
 
         rendered_templates_cache.insert(
@@ -1630,7 +1667,8 @@ impl CliCommand for ServiceCommand {
                 path: project_package_json_path.into(),
                 content: serde_json::to_string_pretty(&project_json_to_write)?,
                 context: None,
-            }.preserving_json_layout(),
+            }
+            .preserving_json_layout(),
         );
 
         let rendered_templates: Vec<RenderedTemplate> = rendered_templates_cache
@@ -1643,7 +1681,10 @@ impl CliCommand for ServiceCommand {
         move_template_files(&move_templates, dryrun, &mut stdout)?;
 
         if !dryrun {
-            let old = service_base_path.file_name().and_then(|name| name.to_str()).context("Invalid project directory")?;
+            let old = service_base_path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .context("Invalid project directory")?;
             // Image planning reads the workspace members, so move the SDK
             // member before the hook rename refreshes the images.
             crate::init::rust_project::rename_typescript_sdk_member(
@@ -1651,7 +1692,11 @@ impl CliCommand for ServiceCommand {
                 &service_base_path,
                 &service_base_path.with_file_name(&manifest_data.service_name),
             )?;
-            crate::sdk::typescript_build::rename_hook(&app_root_path, old, &manifest_data.service_name)?;
+            crate::sdk::typescript_build::rename_hook(
+                &app_root_path,
+                old,
+                &manifest_data.service_name,
+            )?;
             crate::init::rust_project::refresh_mixed_images(&app_root_path)?;
             log_ok!(
                 stdout,

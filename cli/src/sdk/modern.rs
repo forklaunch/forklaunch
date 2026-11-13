@@ -33,8 +33,18 @@ pub(super) fn compile(service: &str, artifact: &Value) -> Result<CompiledSdk> {
         forklaunch_core::build::http_artifact_sources(&serde_json::to_string(artifact)?, service)?;
     let rust_module = match artifact.get("rustOutputLayout") {
         None => false,
-        Some(value) if value.as_str() == Some("service-module") && artifact.get("rustClientName").and_then(Value::as_str).is_some() => true,
-        Some(_) => bail!("Unsupported Rust SDK layout or missing client name; rebuild the service contract"),
+        Some(value)
+            if value.as_str() == Some("service-module")
+                && artifact
+                    .get("rustClientName")
+                    .and_then(Value::as_str)
+                    .is_some() =>
+        {
+            true
+        }
+        Some(_) => bail!(
+            "Unsupported Rust SDK layout or missing client name; rebuild the service contract"
+        ),
     };
     Ok(CompiledSdk {
         rust_module,
@@ -82,8 +92,22 @@ mod tests {
         assert!(compiled.rust.contains("read_note"));
         assert!(compiled.typescript.contains("minLength"));
         assert!(compiled.rust.contains("minLength"));
-        assert_eq!(compiled.typescript_files.keys().map(String::as_str).collect::<Vec<_>>(), ["client.ts", "index.ts", "models.ts", "runtime.ts"]);
-        assert_eq!(compiled.rust_files.keys().map(String::as_str).collect::<Vec<_>>(), ["client.rs", "lib.rs", "models.rs", "schemas.rs"]);
+        assert_eq!(
+            compiled
+                .typescript_files
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["client.ts", "index.ts", "models.ts", "runtime.ts"]
+        );
+        assert_eq!(
+            compiled
+                .rust_files
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["client.rs", "lib.rs", "models.rs", "schemas.rs"]
+        );
         assert!(!compiled.request_multipart);
         assert!(!compiled.response_multipart);
         let mut invalid = artifact;

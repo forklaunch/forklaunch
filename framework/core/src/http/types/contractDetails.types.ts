@@ -10,6 +10,7 @@ import {
   UnboxedObjectSchema
 } from '@forklaunch/validator';
 import { JWK, JWTPayload } from 'jose';
+import type { HmacNonceCache, HmacNonceStore } from '../hmacReplayProtection';
 import {
   ExpressLikeAuthMapper,
   ExpressLikeSchemaAuthMapper,
@@ -312,8 +313,30 @@ export type BasicAuthMethods = {
   readonly hmac?: never;
 };
 
+/**
+ * Optional checks applied when the framework verifies a JWT itself (every
+ * `jwt` key source). All are optional; existing configurations keep working.
+ */
+export type JwtVerificationOptions = {
+  /**
+   * The signature algorithms a token may use. The framework always pins the
+   * list; when omitted it is derived from the key:
+   * - `signatureKey` (shared HMAC secret): `HS256` only.
+   * - `jwksPublicKey` / `jwksPublicKeyUrl`: the asymmetric algorithms that
+   *   fit the key (the key's own `alg` when it declares one).
+   *
+   * `none` is never accepted, and HMAC algorithms (`HS*`) are never accepted
+   * for a public key or JWKS, whatever is listed here.
+   */
+  readonly algorithms?: readonly string[];
+  /** Required `iss` claim (any one of, when a list). Unchecked when unset. */
+  readonly issuer?: string | readonly string[];
+  /** Required `aud` claim (any one of, when a list). Unchecked when unset. */
+  readonly audience?: string | readonly string[];
+};
+
 export type JwtAuthMethods = {
-  jwt:
+  jwt: (
     | {
         readonly jwksPublicKey: JWK;
       }
@@ -322,7 +345,9 @@ export type JwtAuthMethods = {
       }
     | {
         readonly signatureKey: string;
-      };
+      }
+  ) &
+    JwtVerificationOptions;
   readonly basic?: never;
   readonly hmac?: never;
 };
@@ -330,6 +355,24 @@ export type JwtAuthMethods = {
 export type HmacMethods = {
   readonly hmac: {
     readonly secretKeys: Record<string, string>;
+    /**
+     * How far the request timestamp may be from this server's clock, in
+     * either direction, in milliseconds. Default: 5 minutes. A request
+     * outside the window, or with a missing or malformed timestamp, is
+     * rejected.
+     */
+    readonly maxSkewMs?: number;
+    /**
+     * Where used nonces are remembered, so a captured request cannot be
+     * sent twice inside the window. Default: a bounded in-memory store that
+     * protects a single process only. An app that runs several copies must
+     * pass a shared store here for full protection: a `TtlCache` that
+     * implements `putRecordIfAbsent` (the Redis cache does; the claim is
+     * atomic), or an `HmacNonceStore`. A `TtlCache` without
+     * `putRecordIfAbsent` is accepted but falls back to a non-atomic check
+     * followed by a write.
+     */
+    readonly nonceStore?: HmacNonceStore | HmacNonceCache;
   };
 
   readonly sessionSchema?: never;

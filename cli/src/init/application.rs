@@ -23,10 +23,11 @@ use crate::{
         ERROR_FAILED_TO_CREATE_GITIGNORE, ERROR_FAILED_TO_CREATE_LICENSE,
         ERROR_FAILED_TO_GENERATE_BUNFIG, ERROR_FAILED_TO_GENERATE_PNPM_WORKSPACE,
         ERROR_FAILED_TO_PARSE_DOCKER_COMPOSE, Formatter, HttpFramework, License, Linter, Module,
-        SELECTABLE_LINTERS, ensure_selectable_linter, linter_value_parser,
-        Runtime, TestFramework, Validator, get_client_sdk_module_description,
-        get_core_module_description, get_monitoring_module_description, get_service_module_cache,
-        get_service_module_description, get_service_module_name, ensure_module_offered, module_value_parser, offered_modules,
+        Runtime, SELECTABLE_LINTERS, TestFramework, Validator, ensure_module_offered,
+        ensure_selectable_linter, get_client_sdk_module_description, get_core_module_description,
+        get_monitoring_module_description, get_service_module_cache,
+        get_service_module_description, get_service_module_name, linter_value_parser,
+        module_value_parser, offered_modules,
     },
     core::{
         bunfig::generate_bunfig,
@@ -62,9 +63,9 @@ use crate::{
                 GLOBALS_VERSION, HUSKY_VERSION, HYPER_EXPRESS_VERSION, JEST_TYPES_VERSION,
                 JEST_VERSION, LINT_STAGED_VERSION, MIKRO_ORM_CORE_VERSION,
                 MIKRO_ORM_DATABASE_VERSION, MIKRO_ORM_MIGRATIONS_VERSION, NODE_GYP_VERSION,
-                OXLINT_VERSION, OXLINT_TSGOLINT_VERSION, PRETTIER_VERSION, PROJECT_BUILD_SCRIPT, PROJECT_DOCS_SCRIPT,
-                SORT_PACKAGE_JSON_VERSION, SQLITE3_VERSION, TS_JEST_VERSION, TS_NODE_VERSION,
-                TSX_VERSION, TYPEBOX_VERSION, TYPES_BUILD_SCRIPT,
+                OXLINT_TSGOLINT_VERSION, OXLINT_VERSION, PRETTIER_VERSION, PROJECT_BUILD_SCRIPT,
+                PROJECT_DOCS_SCRIPT, SORT_PACKAGE_JSON_VERSION, SQLITE3_VERSION, TS_JEST_VERSION,
+                TS_NODE_VERSION, TSX_VERSION, TYPEBOX_VERSION, TYPES_BUILD_SCRIPT,
                 TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION, TYPES_EXPRESS_VERSION, TYPES_NODE_VERSION,
                 TYPES_QS_VERSION, TYPES_UUID_VERSION, TYPES_WATCH_SCRIPT,
                 TYPESCRIPT_ESLINT_VERSION, TYPESCRIPT_VERSION, UNIVERSAL_SDK_VERSION, UUID_VERSION,
@@ -269,8 +270,13 @@ fn generate_application_package_json(
         pnpm: None,
         patched_dependencies: None,
         additional_entries: if data.is_bun {
-            HashMap::from([("overrides".to_owned(), serde_json::to_value(crate::core::pnpm_workspace::framework_release_overrides())?)])
-        } else { HashMap::new() },
+            HashMap::from([(
+                "overrides".to_owned(),
+                serde_json::to_value(crate::core::pnpm_workspace::framework_release_overrides())?,
+            )])
+        } else {
+            HashMap::new()
+        },
     };
 
     Ok(RenderedTemplate {
@@ -318,8 +324,7 @@ fn display_path(path: &Path) -> String {
 /// end of `init`. Saying it once here is cheaper than every user rediscovering
 /// it, and cheaper than the support answer.
 /// Skills are opt-in; init only says how to add them for the user's coding agent.
-pub(crate) const CONTEXT_HINT: &str =
-    "  forklaunch context      add ForkLaunch skills for your coding agent (Claude Code, Codex, Cursor, ...)";
+pub(crate) const CONTEXT_HINT: &str = "  forklaunch context      add ForkLaunch skills for your coding agent (Claude Code, Codex, Cursor, ...)";
 
 fn next_steps(app_root: &Path, workspace_root: &Path, runtime: &str) -> String {
     let package_manager = if runtime == "bun" { "bun" } else { "pnpm" };
@@ -367,7 +372,9 @@ impl CliCommand for ApplicationCommand {
             .arg(
                 Arg::new("language")
                     .long("language")
-                    .help("Legacy application language hint; select language on individual projects")
+                    .help(
+                        "Legacy application language hint; select language on individual projects",
+                    )
                     .hide(true)
                     .value_parser(rust_project::PROJECT_LANGUAGE_VARIANTS)
                     .default_value("typescript"),
@@ -530,7 +537,10 @@ impl CliCommand for ApplicationCommand {
 
         // New workspaces share one source root across project languages. Existing
         // applications continue using their recorded modules_path unchanged.
-        let modules_path = match matches.get_one::<String>("modules-path").map(String::as_str) {
+        let modules_path = match matches
+            .get_one::<String>("modules-path")
+            .map(String::as_str)
+        {
             Some("modules") => PathBuf::from("modules"),
             Some("src/modules") => PathBuf::from("src/modules"),
             Some("src") | None => PathBuf::from("src"),
@@ -1267,7 +1277,9 @@ impl CliCommand for ApplicationCommand {
                             global_module_config.cac.is_some(),
                             global_module_config.ecommerce.is_some(),
                             global_module_config.mlse.is_some(),
-                        ).into_iter().collect(),
+                        )
+                        .into_iter()
+                        .collect(),
                         ..Default::default()
                     }),
                     _ => None,
@@ -1427,8 +1439,19 @@ impl CliCommand for ApplicationCommand {
 
         if !dryrun {
             rust_project::adopt_typescript_image(&origin_path)?;
-            if data.projects.iter().any(|project| project.name == "iam" && matches!(project.variant.as_deref(), Some("iam-base" | "iam-better-auth"))) {
-                crate::sdk::typescript_build::prepare_default_service(&origin_path, "iam", &data.runtime, true)?;
+            if data.projects.iter().any(|project| {
+                project.name == "iam"
+                    && matches!(
+                        project.variant.as_deref(),
+                        Some("iam-base" | "iam-better-auth")
+                    )
+            }) {
+                crate::sdk::typescript_build::prepare_default_service(
+                    &origin_path,
+                    "iam",
+                    &data.runtime,
+                    true,
+                )?;
                 crate::init::rust_project::refresh_mixed_images(&origin_path)?;
             }
             // After the image and package-manager pin exist, so CI uses both.
@@ -1453,15 +1476,30 @@ mod tests {
 
     #[test]
     fn application_needs_no_language_or_sdk_choice() {
-        let matches = ApplicationCommand::new().command().version("test")
-            .try_get_matches_from(["application", "example"]).unwrap();
-        assert_eq!(rust_project::sdk_targets_from_matches(&matches), ["typescript", "rust"]);
+        let matches = ApplicationCommand::new()
+            .command()
+            .version("test")
+            .try_get_matches_from(["application", "example"])
+            .unwrap();
+        assert_eq!(
+            rust_project::sdk_targets_from_matches(&matches),
+            ["typescript", "rust"]
+        );
         assert!(matches.get_one::<String>("modules-path").is_none());
         for source in ["src", "src/modules", "modules"] {
-            assert!(ApplicationCommand::new().command().version("test")
-                .try_get_matches_from(["application", "example", "--modules-path", source]).is_ok());
+            assert!(
+                ApplicationCommand::new()
+                    .command()
+                    .version("test")
+                    .try_get_matches_from(["application", "example", "--modules-path", source])
+                    .is_ok()
+            );
         }
-        let help = ApplicationCommand::new().command().version("test").render_long_help().to_string();
+        let help = ApplicationCommand::new()
+            .command()
+            .version("test")
+            .render_long_help()
+            .to_string();
         assert!(!help.contains("--language"));
         assert!(!help.contains("--sdk-targets"));
     }
@@ -1469,20 +1507,45 @@ mod tests {
     #[test]
     fn framework_dependency_choice_needs_no_application_language() {
         let command = || ApplicationCommand::new().command().version("test");
-        let matches = command().try_get_matches_from(["application", "example", "--framework-version", "0.1.0"]).unwrap();
+        let matches = command()
+            .try_get_matches_from(["application", "example", "--framework-version", "0.1.0"])
+            .unwrap();
         let config = rust_project::dependencies::configuration(&matches).unwrap();
         assert_eq!(config["version"].as_str(), Some("0.1.0"));
         assert!(config["blueprint_version"].as_str().is_some());
-        let invalid = command().try_get_matches_from(["application", "example", "--framework-version", "latest"]).unwrap();
+        let invalid = command()
+            .try_get_matches_from(["application", "example", "--framework-version", "latest"])
+            .unwrap();
         assert!(rust_project::dependencies::configuration(&invalid).is_err());
-        assert!(command().try_get_matches_from(["application", "example", "--framework-version", "0.1.0", "--framework-path", "."]).is_err());
-        let default = command().try_get_matches_from(["application", "example"]).unwrap();
-        assert!(rust_project::dependencies::configuration(&default).unwrap()["version"].as_str().is_some());
+        assert!(
+            command()
+                .try_get_matches_from([
+                    "application",
+                    "example",
+                    "--framework-version",
+                    "0.1.0",
+                    "--framework-path",
+                    "."
+                ])
+                .is_err()
+        );
+        let default = command()
+            .try_get_matches_from(["application", "example"])
+            .unwrap();
+        assert!(
+            rust_project::dependencies::configuration(&default).unwrap()["version"]
+                .as_str()
+                .is_some()
+        );
     }
 
     #[test]
     fn application_rejects_presets() {
-        let error = ApplicationCommand::new().command().version("test").try_get_matches_from(["application", "notes", "--preset", "fieldnotes"]).unwrap_err();
+        let error = ApplicationCommand::new()
+            .command()
+            .version("test")
+            .try_get_matches_from(["application", "notes", "--preset", "fieldnotes"])
+            .unwrap_err();
         assert_eq!(error.kind(), clap::error::ErrorKind::UnknownArgument);
     }
 

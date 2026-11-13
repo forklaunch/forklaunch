@@ -51,7 +51,11 @@ pub(crate) fn preserve_json_layout_renamed(
                 // Keys kept from the original, in its order.
                 let mut keys: std::vec::Vec<(String, Value)> = std::vec::Vec::new();
                 for (key, value) in before {
-                    let key = if after.contains_key(key) { key.clone() } else { rename(key) };
+                    let key = if after.contains_key(key) {
+                        key.clone()
+                    } else {
+                        rename(key)
+                    };
                     if let Some(new) = after.get(&key) {
                         keys.push((key, ordered(value, new, rename)));
                     }
@@ -76,7 +80,9 @@ pub(crate) fn preserve_json_layout_renamed(
                     .iter()
                     .enumerate()
                     .map(|(i, value)| {
-                        before.get(i).map_or_else(|| value.clone(), |old| ordered(old, value, rename))
+                        before
+                            .get(i)
+                            .map_or_else(|| value.clone(), |old| ordered(old, value, rename))
                     })
                     .collect(),
             ),
@@ -295,7 +301,8 @@ mod layout_tests {
     #[test]
     fn unchanged_content_keeps_its_bytes_and_changes_keep_key_order() {
         let original = "{\n  \"name\": \"a\",\n  \"dependencies\": {\"@app/core\": \"workspace:*\", \"zod\": \"1\"}\n}\n";
-        let same = "{\"dependencies\":{\"zod\":\"1\",\"@app/core\":\"workspace:*\"},\"name\":\"a\"}";
+        let same =
+            "{\"dependencies\":{\"zod\":\"1\",\"@app/core\":\"workspace:*\"},\"name\":\"a\"}";
         assert_eq!(preserve_json_layout(original, same), original);
         let changed = "{\"dependencies\":{\"zod\":\"2\",\"@app/core\":\"workspace:*\",\"uuid\":\"1\"},\"name\":\"a\"}";
         assert_eq!(

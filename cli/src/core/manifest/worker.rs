@@ -207,8 +207,14 @@ impl InitializableManifestConfig for WorkerManifestData {
             worker_type: worker_type.to_string(),
             worker_type_lowercase: worker_type.to_string().to_lowercase(),
             default_worker_options: get_default_worker_options(&worker_type),
-            worker_consumer_factory: get_worker_consumer_factory(&worker_type, &worker_name.to_case(Case::Pascal)),
-            worker_producer_factory: get_worker_producer_factory(&worker_type, &worker_name.to_case(Case::Pascal)),
+            worker_consumer_factory: get_worker_consumer_factory(
+                &worker_type,
+                &worker_name.to_case(Case::Pascal),
+            ),
+            worker_producer_factory: get_worker_producer_factory(
+                &worker_type,
+                &worker_name.to_case(Case::Pascal),
+            ),
 
             is_iam_configured: self.projects.iter().any(|project_entry| {
                 if project_entry.name == "iam" {

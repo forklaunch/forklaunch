@@ -5,7 +5,7 @@ use forklaunch_core::auth::{
     AuthError, JwtClaims, Principal,
     jwt::RemoteJwks,
     parse_bearer,
-    request_hmac::{HmacAuthorization, SignedBody},
+    request_hmac::{DEFAULT_MAX_SKEW, HmacAuthorization, InMemoryNonceStore, SignedBody},
 };
 use forklaunch_core::contract::{AuthConfig, RouteContract};
 use forklaunch_core::http::{Body, FrameworkRequest};
@@ -19,16 +19,33 @@ use std::{
 };
 type RolesFuture = Pin<Box<dyn Future<Output = Result<Vec<String>, AuthError>> + Send>>;
 type RolesResolver = Arc<dyn Fn(serde_json::Value) -> RolesFuture + Send + Sync>;
+type NonceFuture = Pin<Box<dyn Future<Output = Result<bool, AuthError>> + Send>>;
+type NonceClaim = Arc<dyn Fn(String, i64) -> NonceFuture + Send + Sync>;
+
+fn unix_millis_now() -> Result<i64, AuthError> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| AuthError::InvalidCredentials)?;
+    i64::try_from(now.as_millis()).map_err(|_| AuthError::InvalidCredentials)
+}
 
 /// Trusted server-owned keys and JWT policy. Secret bytes are never formatted.
 /// Default roles come only from verified issuer claims. Configure a resolver to
 /// surface roles from a trusted IAM service rather than installing a role stub.
+///
+/// HMAC requests are accepted once: the timestamp must be within five minutes
+/// of the server clock, the signature must verify (constant-time), and the
+/// nonce must not have been used before inside that window. By default used
+/// nonces are remembered in a bounded in-memory store, which protects A SINGLE
+/// PROCESS only; a service that runs several copies must supply a shared store
+/// with [`HmacJwksAuth::with_nonce_store`] for full replay protection.
 pub struct HmacJwksAuth {
     secret: Vec<u8>,
     jwks: RemoteJwks,
     validation: Validation,
     roles: RolesResolver,
     max_skew: Duration,
+    nonces: NonceClaim,
     route_hmac_keys: BTreeMap<(String, String), BTreeMap<String, Vec<u8>>>,
 }
 
@@ -73,9 +90,37 @@ impl HmacJwksAuth {
                         .map_err(|_| AuthError::InvalidCredentials)
                 })
             }),
-            max_skew: Duration::from_secs(300),
+            max_skew: DEFAULT_MAX_SKEW,
+            nonces: {
+                let store = Arc::new(InMemoryNonceStore::default());
+                Arc::new(move |key, expiry| {
+                    let claimed = unix_millis_now().map(|now| store.claim(&key, expiry, now));
+                    Box::pin(std::future::ready(claimed))
+                })
+            },
             route_hmac_keys: BTreeMap::new(),
         })
+    }
+
+    /// Remember used nonces in a store shared by every copy of the service,
+    /// replacing the per-process in-memory default.
+    ///
+    /// `claim(key, expiry_unix_millis)` must atomically record `key` until the
+    /// expiry and answer `Ok(true)` only for the first caller (for Redis:
+    /// `SET key 1 NX PXAT expiry`, which answers `OK` only once). It is called
+    /// only after the signature and timestamp have verified. `Ok(false)` or an
+    /// error rejects the request: an unavailable store fails closed.
+    #[must_use]
+    pub fn with_nonce_store<F, R, E>(mut self, claim: F) -> Self
+    where
+        F: Fn(String, i64) -> R + Send + Sync + 'static,
+        R: Future<Output = Result<bool, E>> + Send + 'static,
+    {
+        self.nonces = Arc::new(move |key, expiry| {
+            let claimed = claim(key, expiry);
+            Box::pin(async move { claimed.await.map_err(|_| AuthError::InvalidCredentials) })
+        });
+        self
     }
 
     /// Replace the default HMAC key policy for one declared method and path.
@@ -108,7 +153,8 @@ impl HmacJwksAuth {
     /// Verify an application-owned canonical payload with this route's immutable
     /// server key policy. Keys are never returned. The caller owns parsing, wire
     /// canonicalization and freshness/replay policy; the ordinary `authenticate`
-    /// method retains its existing strict header and five-minute freshness checks.
+    /// method keeps its strict header, five-minute freshness and single-use
+    /// nonce checks. This method claims no nonce.
     /// # Errors
     /// Distinguishes absent server keys from invalid signatures without exposing
     /// key material. A service principal is returned only after MAC verification.
@@ -184,9 +230,7 @@ impl HmacJwksAuth {
                 Body::Text(text) => SignedBody::Text(text),
                 Body::Binary(bytes) => SignedBody::Bytes(bytes),
             };
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map_err(|_| AuthError::InvalidCredentials)?;
+            let now = unix_millis_now()?;
             let secret = if let Some(policy) = self
                 .route_hmac_keys
                 .get(&(contract.method.as_str().into(), contract.path.clone()))
@@ -204,9 +248,15 @@ impl HmacJwksAuth {
                 request.method.as_str(),
                 &request.path,
                 body,
-                i64::try_from(now.as_millis()).map_err(|_| AuthError::InvalidCredentials)?,
+                now,
                 self.max_skew,
             ) {
+                return Err(AuthError::InvalidCredentials);
+            }
+            // Claimed only after the signature and timestamp verified, so a
+            // forged request can never use up a genuine caller's nonce.
+            let (nonce, expiry) = authorization.nonce_claim(self.max_skew)?;
+            if !(self.nonces)(nonce, expiry).await? {
                 return Err(AuthError::InvalidCredentials);
             }
             let subject = format!("service:{}", authorization.key_id());

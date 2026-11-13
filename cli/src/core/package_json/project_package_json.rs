@@ -361,10 +361,16 @@ impl Serialize for ProjectDependencies {
         let mut databases: Vec<&Database> = self.databases.iter().collect();
         databases.sort_by_key(|database| database.to_string());
         if let Some(ref v) = self.mikro_orm_migrations {
-            if databases.iter().any(|database| **database != Database::MongoDB) {
+            if databases
+                .iter()
+                .any(|database| **database != Database::MongoDB)
+            {
                 map.serialize_entry("@mikro-orm/migrations", v)?;
             }
-            if databases.iter().any(|database| **database == Database::MongoDB) {
+            if databases
+                .iter()
+                .any(|database| **database == Database::MongoDB)
+            {
                 map.serialize_entry("@mikro-orm/migrations-mongodb", v)?;
             }
         }

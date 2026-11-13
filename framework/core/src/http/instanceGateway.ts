@@ -1,6 +1,13 @@
 import { createHmacToken } from './createHmacToken';
 import { generateHmacAuthHeaders } from './generateHmacAuthHeaders';
-import { timingSafeEqual } from 'crypto';
+import {
+  DEFAULT_HMAC_MAX_SKEW_MS,
+  hmacNonceKey,
+  hmacNonceTtlMs,
+  InMemoryHmacNonceStore,
+  isHmacTimestampFresh,
+  timingSafeEqualStrings
+} from './hmacReplayProtection';
 
 /**
  * The managed gateway (the instance gateway): how a ForkLaunch app reaches
@@ -37,7 +44,7 @@ export const PLATFORM_EVENT_KEY_ID = 'platform';
 /** Where a service receives platform events, per feature. */
 export const PLATFORM_EVENTS_PATH = '/platform-events';
 
-const MAX_SKEW_MS = 5 * 60 * 1000;
+const MAX_SKEW_MS = DEFAULT_HMAC_MAX_SKEW_MS;
 
 export interface InstanceGatewayOptions {
   /** Platform base URL. Default: `PLATFORM_GATEWAY_URL`. */
@@ -196,7 +203,9 @@ export class PlatformEventVerificationError extends Error {
   override readonly name = 'PlatformEventVerificationError';
 }
 
-const seenEventNonces = new Map<string, number>();
+// Bounded, and per process: see `InMemoryHmacNonceStore`. Handlers also
+// dedupe on the event id, which covers deliveries that reach other copies.
+const seenEventNonces = new InMemoryHmacNonceStore();
 
 /**
  * Verify an event the platform delivered and return it.
@@ -239,36 +248,31 @@ export function verifyPlatformEvent<Data = Record<string, unknown>>(
   }
   const timestamp = new Date(ts);
   const now = (options.now ?? Date.now)();
-  if (
-    Number.isNaN(timestamp.getTime()) ||
-    Math.abs(now - timestamp.getTime()) > MAX_SKEW_MS
-  ) {
+  if (!isHmacTimestampFresh(timestamp, now, MAX_SKEW_MS)) {
     throw new PlatformEventVerificationError('Stale or invalid timestamp');
   }
-  const expected = Buffer.from(
-    createHmacToken({
-      secretKey: hmacKey,
-      method: request.method.toUpperCase(),
-      path: request.path,
-      body: request.body,
-      timestamp,
-      nonce
-    })
-  );
-  const received = Buffer.from(signature);
-  if (
-    expected.length !== received.length ||
-    !timingSafeEqual(expected, received)
-  ) {
+  const expected = createHmacToken({
+    secretKey: hmacKey,
+    method: request.method.toUpperCase(),
+    path: request.path,
+    body: request.body,
+    timestamp,
+    nonce
+  });
+  if (!timingSafeEqualStrings(expected, signature)) {
     throw new PlatformEventVerificationError('Invalid signature');
   }
-  for (const [seen, at] of seenEventNonces) {
-    if (now - at > MAX_SKEW_MS) seenEventNonces.delete(seen);
-  }
-  if (seenEventNonces.has(nonce)) {
+  // Claimed only after the signature verified, and remembered until the
+  // signed timestamp can no longer pass the freshness check.
+  if (
+    !seenEventNonces.claim(
+      hmacNonceKey(keyId, nonce),
+      hmacNonceTtlMs(timestamp, now, MAX_SKEW_MS),
+      now
+    )
+  ) {
     throw new PlatformEventVerificationError('Replayed delivery');
   }
-  seenEventNonces.set(nonce, now);
 
   const parsed =
     typeof request.body === 'string' || Buffer.isBuffer(request.body)

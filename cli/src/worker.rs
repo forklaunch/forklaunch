@@ -1,7 +1,7 @@
 use action::ActionCommand;
-use events::EventsCommand;
 use anyhow::Result;
 use clap::{ArgMatches, Command};
+use events::EventsCommand;
 
 use crate::{CliCommand, core::command::command};
 
@@ -75,7 +75,11 @@ mod tests {
 
     #[test]
     fn pause_requires_worker_id() {
-        assert!(worker_cmd().try_get_matches_from(["worker", "pause"]).is_err());
+        assert!(
+            worker_cmd()
+                .try_get_matches_from(["worker", "pause"])
+                .is_err()
+        );
         assert!(
             worker_cmd()
                 .try_get_matches_from(["worker", "pause", "worker-1"])

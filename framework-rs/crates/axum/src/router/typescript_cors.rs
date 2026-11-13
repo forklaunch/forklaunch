@@ -118,7 +118,13 @@ impl TypeScriptCors {
             }
             TypeScriptCorsOrigin::Disabled | TypeScriptCorsOrigin::Delegate(_) => return headers,
         }
-        if self.credentials {
+        // A wildcard origin is never sent together with credentials (browsers
+        // refuse the pair); the credentials header is the one withheld, as in
+        // the TypeScript cors middleware.
+        let wildcard = headers
+            .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+            .is_some_and(|value| value == "*");
+        if self.credentials && !wildcard {
             headers.insert(
                 header::ACCESS_CONTROL_ALLOW_CREDENTIALS,
                 HeaderValue::from_static("true"),
@@ -180,6 +186,51 @@ fn joined(headers: &HeaderMap, name: header::HeaderName) -> Option<HeaderValue> 
     present.then(|| HeaderValue::from_bytes(&bytes).expect("joining valid header values"))
 }
 
+/// The comma-separated allow-list of browser origins, as in TypeScript.
+const CORS_ORIGINS_ENV: &str = "CORS_ORIGINS";
+
+/// The CORS policy when the application configured none: cross-origin access
+/// is denied unless the application names its origins.
+///
+/// `setting` is the `CORS_ORIGINS` value. Listed origins are allowed exactly
+/// (the response echoes the origin and varies on it); a listed `*` is an
+/// explicit request for any origin. Unset or empty allows no origin: no
+/// `Access-Control-Allow-Origin` is sent, so browsers on other origins cannot
+/// read responses. Credentials are never allowed by this default; pass
+/// `RouterConfig::cors` for that.
+fn default_cors_layer(setting: Option<&str>) -> tower_http::cors::CorsLayer {
+    use tower_http::cors::{AllowHeaders, AllowOrigin, CorsLayer};
+    let listed: Vec<&str> = setting
+        .unwrap_or_default()
+        .split(',')
+        .map(|origin| origin.trim().trim_end_matches('/'))
+        .filter(|origin| !origin.is_empty())
+        .collect();
+    let origins: Vec<HeaderValue> = listed
+        .iter()
+        .filter(|origin| **origin != "*")
+        .filter_map(|origin| HeaderValue::from_str(origin).ok())
+        .collect();
+    let origin = if listed.contains(&"*") {
+        AllowOrigin::any()
+    } else if origins.is_empty() {
+        return CorsLayer::new();
+    } else {
+        AllowOrigin::list(origins)
+    };
+    CorsLayer::new()
+        .allow_origin(origin)
+        .allow_methods([
+            Method::GET,
+            Method::HEAD,
+            Method::PUT,
+            Method::PATCH,
+            Method::POST,
+            Method::DELETE,
+        ])
+        .allow_headers(AllowHeaders::mirror_request())
+}
+
 pub(super) fn wrap(
     router: Router,
     native: Option<tower_http::cors::CorsLayer>,
@@ -192,7 +243,8 @@ pub(super) fn wrap(
     if let Some(config) = typescript {
         return wrap_typescript(router, config);
     }
-    let cors = native.unwrap_or_else(tower_http::cors::CorsLayer::permissive);
+    let cors = native
+        .unwrap_or_else(|| default_cors_layer(std::env::var(CORS_ORIGINS_ENV).ok().as_deref()));
     router.layer(middleware::from_fn(move |request: Request, next: Next| {
         let cors = cors.clone();
         async move {

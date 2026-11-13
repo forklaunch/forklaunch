@@ -43,14 +43,7 @@ where
     {
         return Err(AuthError::InvalidCredentials);
     }
-    let expiry = auth
-        .timestamp_unix_millis()
-        .checked_add(
-            i64::try_from(max_skew.as_millis()).map_err(|_| AuthError::InvalidCredentials)?,
-        )
-        .ok_or(AuthError::InvalidCredentials)?;
-    // Length prefix prevents ambiguous key/nonce pairs.
-    let nonce = format!("{}:{}{}", key_id.len(), key_id, auth.nonce());
+    let (nonce, expiry) = auth.nonce_claim(max_skew)?;
     if !claim(nonce, expiry)
         .await
         .map_err(|_| AuthError::InvalidCredentials)?
@@ -58,6 +51,109 @@ where
         return Err(AuthError::InvalidCredentials);
     }
     Ok(())
+}
+
+/// How far a request timestamp may be from the server clock, either way.
+pub const DEFAULT_MAX_SKEW: Duration = Duration::from_secs(300);
+
+/// How many nonces [`InMemoryNonceStore`] remembers by default.
+pub const DEFAULT_NONCE_STORE_MAX_ENTRIES: usize = 100_000;
+
+/// The default nonce store: a bounded map in this process's memory.
+///
+/// IMPORTANT: this protects a SINGLE PROCESS only. Every copy of the service
+/// has its own map, so when a service runs several copies (replicas, workers)
+/// a captured request can be replayed once against each other copy inside the
+/// freshness window, and the memory is lost on restart. A service that runs
+/// more than one copy needs a shared store with an atomic claim (for Redis,
+/// `SET key 1 NX PXAT expiry`) for full protection.
+///
+/// Bounded: entries leave when their expiry passes, and when the store is full
+/// the entry that expires soonest is dropped to make room. Only requests that
+/// carried a valid signature are ever stored, so only a holder of the key can
+/// fill it.
+pub struct InMemoryNonceStore {
+    max_entries: usize,
+    entries: std::sync::Mutex<NonceEntries>,
+}
+
+#[derive(Default)]
+struct NonceEntries {
+    expiry_by_key: std::collections::HashMap<String, i64>,
+    by_expiry: std::collections::BTreeSet<(i64, String)>,
+}
+
+impl Default for InMemoryNonceStore {
+    fn default() -> Self {
+        Self::with_max_entries(DEFAULT_NONCE_STORE_MAX_ENTRIES)
+    }
+}
+
+impl fmt::Debug for InMemoryNonceStore {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("InMemoryNonceStore")
+            .field("max_entries", &self.max_entries)
+            .finish_non_exhaustive()
+    }
+}
+
+impl InMemoryNonceStore {
+    /// A store holding at most `max_entries` nonces (at least one).
+    #[must_use]
+    pub fn with_max_entries(max_entries: usize) -> Self {
+        Self {
+            max_entries: max_entries.max(1),
+            entries: std::sync::Mutex::default(),
+        }
+    }
+
+    /// Number of nonces currently remembered.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.entries
+            .lock()
+            .map_or(0, |entries| entries.expiry_by_key.len())
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Record `key` until `expiry_unix_millis` and answer whether this caller is
+    /// the first to use it: `true` once, `false` for every later call until the
+    /// expiry has passed. Fails closed (answers `false`) if the store is unusable.
+    #[must_use]
+    pub fn claim(&self, key: &str, expiry_unix_millis: i64, now_unix_millis: i64) -> bool {
+        let Ok(mut entries) = self.entries.lock() else {
+            return false;
+        };
+        while let Some((expiry, _)) = entries.by_expiry.first() {
+            if *expiry > now_unix_millis {
+                break;
+            }
+            if let Some((_, expired)) = entries.by_expiry.pop_first() {
+                entries.expiry_by_key.remove(&expired);
+            }
+        }
+        if entries.expiry_by_key.contains_key(key) {
+            return false;
+        }
+        while entries.expiry_by_key.len() >= self.max_entries {
+            let Some((_, soonest)) = entries.by_expiry.pop_first() else {
+                break;
+            };
+            entries.expiry_by_key.remove(&soonest);
+        }
+        entries
+            .expiry_by_key
+            .insert(key.to_owned(), expiry_unix_millis);
+        entries
+            .by_expiry
+            .insert((expiry_unix_millis, key.to_owned()));
+        true
+    }
 }
 
 #[cfg(test)]
@@ -126,6 +222,27 @@ impl<'a> HmacAuthorization<'a> {
     #[must_use]
     pub const fn nonce(&self) -> &str {
         self.nonce
+    }
+
+    /// The nonce store key and its expiry (Unix milliseconds) for this
+    /// credential. The key includes the length-prefixed key ID, so no two
+    /// (key ID, nonce) pairs collide. The expiry is the last moment this
+    /// signature could still pass a freshness check of `max_skew`, measured
+    /// from the signed timestamp (a future-dated request stays fresh longer).
+    /// Claim it only after the signature has verified.
+    /// # Errors
+    /// Rejects an expiry that cannot be represented.
+    pub fn nonce_claim(&self, max_skew: Duration) -> Result<(String, i64), AuthError> {
+        let expiry = self
+            .timestamp_unix_millis()
+            .checked_add(
+                i64::try_from(max_skew.as_millis()).map_err(|_| AuthError::InvalidCredentials)?,
+            )
+            .ok_or(AuthError::InvalidCredentials)?;
+        Ok((
+            format!("{}:{}{}", self.key_id.len(), self.key_id, self.nonce),
+            expiry,
+        ))
     }
     #[must_use]
     pub fn timestamp_unix_millis(&self) -> i64 {

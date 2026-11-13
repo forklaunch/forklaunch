@@ -175,7 +175,10 @@ impl CliCommand for ScoreCommand {
         if json_out {
             let mut out = card_json.clone();
             if let Some(object) = out.as_object_mut() {
-                object.insert("remediationPrompt".to_string(), Value::String(prompt.clone()));
+                object.insert(
+                    "remediationPrompt".to_string(),
+                    Value::String(prompt.clone()),
+                );
             }
             let serialized = if pretty {
                 serde_json::to_string_pretty(&out)?
@@ -197,7 +200,9 @@ impl CliCommand for ScoreCommand {
             println!("  {}", bold("Remediation prompt"));
             println!(
                 "  {}",
-                dim("(`forklaunch score --prompt` prints only this; `--json` carries it as remediationPrompt)")
+                dim(
+                    "(`forklaunch score --prompt` prints only this; `--json` carries it as remediationPrompt)"
+                )
             );
             println!();
             println!("{prompt}");
@@ -340,7 +345,11 @@ fn offline_prompt(card: &Value, offline: bool) -> String {
     let _ = writeln!(
         out,
         "Harden this repository against its ForkLaunch report card{}.",
-        if offline { " (offline: deterministic wiring checks only)" } else { "" }
+        if offline {
+            " (offline: deterministic wiring checks only)"
+        } else {
+            ""
+        }
     );
     let _ = writeln!(
         out,
@@ -374,10 +383,20 @@ fn offline_prompt(card: &Value, offline: bool) -> String {
     let mut outstanding: Vec<(String, &Value)> = Vec::new();
     if let Some(dimensions) = card.get("dimensions").and_then(Value::as_object) {
         for (rail, dim) in dimensions {
-            for f in dim.get("findings").and_then(Value::as_array).into_iter().flatten() {
+            for f in dim
+                .get("findings")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
                 findings.push((rail.clone(), f));
             }
-            for item in dim.get("items").and_then(Value::as_array).into_iter().flatten() {
+            for item in dim
+                .get("items")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
                 if matches!(
                     item.get("status").and_then(Value::as_str),
                     Some("unmet" | "pending")
@@ -387,7 +406,9 @@ fn offline_prompt(card: &Value, offline: bool) -> String {
             }
         }
     }
-    findings.sort_by_key(|(_, f)| severity_rank(f.get("severity").and_then(Value::as_str).unwrap_or("")));
+    findings.sort_by_key(|(_, f)| {
+        severity_rank(f.get("severity").and_then(Value::as_str).unwrap_or(""))
+    });
 
     let _ = writeln!(out, "\nFINDINGS");
     if findings.is_empty() {
@@ -399,15 +420,26 @@ fn offline_prompt(card: &Value, offline: bool) -> String {
     let mut grouped: Vec<(&String, &Value, usize)> = Vec::new();
     for (rail, f) in &findings {
         match grouped.iter_mut().find(|(r, g, _)| {
-            *r == rail && text(g, "title") == text(f, "title") && text(g, "detail") == text(f, "detail")
+            *r == rail
+                && text(g, "title") == text(f, "title")
+                && text(g, "detail") == text(f, "detail")
         }) {
             Some(entry) => entry.2 += 1,
             None => grouped.push((rail, f, 1)),
         }
     }
     for (rail, f, count) in &grouped {
-        let times = if *count > 1 { format!(" (x{count})") } else { String::new() };
-        let _ = writeln!(out, "- [{rail}; {}] {}{times}", text(f, "severity"), text(f, "title"));
+        let times = if *count > 1 {
+            format!(" (x{count})")
+        } else {
+            String::new()
+        };
+        let _ = writeln!(
+            out,
+            "- [{rail}; {}] {}{times}",
+            text(f, "severity"),
+            text(f, "title")
+        );
         let detail = text(f, "detail");
         if !detail.is_empty() {
             let _ = writeln!(out, "  Evidence: {detail}");
@@ -416,7 +448,11 @@ fn offline_prompt(card: &Value, offline: bool) -> String {
         let _ = writeln!(
             out,
             "  Remediation: {}",
-            if fix.is_empty() { "Inspect the cited code, find the root cause and repair it with a regression test." } else { &fix }
+            if fix.is_empty() {
+                "Inspect the cited code, find the root cause and repair it with a regression test."
+            } else {
+                &fix
+            }
         );
     }
 
@@ -425,7 +461,12 @@ fn offline_prompt(card: &Value, offline: bool) -> String {
         let _ = writeln!(out, "- None.");
     }
     for (rail, item) in &outstanding {
-        let _ = writeln!(out, "- [{rail}] {}: {}", text(item, "label"), text(item, "status"));
+        let _ = writeln!(
+            out,
+            "- [{rail}] {}: {}",
+            text(item, "label"),
+            text(item, "status")
+        );
         let detail = text(item, "detail");
         if !detail.is_empty() {
             let _ = writeln!(out, "  Evidence: {detail}");
@@ -597,7 +638,10 @@ fn render_summary(card: &Value) -> String {
             // still carry a score from the items that were decided (93.8);
             // a pending category whose score is missing or the 0 placeholder
             // was not assessed at all.
-            let pending = rail.get("pending").and_then(Value::as_bool).unwrap_or(false);
+            let pending = rail
+                .get("pending")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
             let score = match score_of(rail.get("score")) {
                 Some(score) if !(pending && score == 0) => score,
                 _ => {
@@ -885,7 +929,10 @@ mod tests {
             .find(|line| line.contains("Governance"))
             .expect("governance rail should render");
         assert!(!governance_line.contains("/100"), "{governance_line}");
-        assert!(!governance_line.contains("outstanding"), "{governance_line}");
+        assert!(
+            !governance_line.contains("outstanding"),
+            "{governance_line}"
+        );
     }
 }
 
