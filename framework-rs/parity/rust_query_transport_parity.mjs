@@ -29,17 +29,17 @@ async function load(file,imports={}) {
  return loadSync(path.join(root,file),imports,new Map());
 }
 try {
- const {safeStringify}=await load('framework/common/src/safeStringify.ts');
+ const {safeStringify,toPlainString}=await load('framework/common/src/safeStringify.ts');
  const {openApiCompliantPath}=await load('framework/common/src/openApiCompliantPath.ts');
  const {unpackRouters}=await load('framework/core/src/http/router/unpackRouters.ts');
  const {getSdkPath}=await load('framework/universal-sdk/src/core/resolvePath.ts',{'./regex':{generateStringFromRegex(){throw Error('unexpected regex');}}});
  class ZodSchemaValidator {schemify(value){return value;}}
  class FastMCP {tools=[];addTool(tool){this.tools.push(tool);}}
- const {generateMcpServer}=await load('framework/core/src/http/mcpGenerator/mcpGenerator.ts',{'@forklaunch/common':{safeStringify,isRecord:value=>value!==null&&typeof value==='object'&&!Array.isArray(value),isNever:()=>false},'@forklaunch/validator/zod':{ZodSchemaValidator,string:{startsWith:()=>({})}},fastmcp:{FastMCP},'../router/discriminateBody':{discriminateBody(){throw Error('unexpected body');},discriminateResponseBodies:()=>({200:{contentType:'application/json'}})},'../router/unpackRouters':{unpackRouters}});
+ const {generateMcpServer}=await load('framework/core/src/http/mcpGenerator/mcpGenerator.ts',{'@forklaunch/common':{safeStringify,toPlainString,isRecord:value=>value!==null&&typeof value==='object'&&!Array.isArray(value),isNever:()=>false},'@forklaunch/validator/zod':{ZodSchemaValidator,string:{startsWith:()=>({})}},fastmcp:{FastMCP},'../router/discriminateBody':{discriminateBody(){throw Error('unexpected body');},discriminateResponseBodies:()=>({200:{contentType:'application/json'}})},'../router/unpackRouters':{unpackRouters}});
  const app={basePath:'/',routers:[],routes:[{method:'get',path:'/query/:id',contractDetails:{name:'Read Query',summary:'Read query',params:{id:{}},query:{},responses:{200:{}},options:{mcp:true}}}]};
  const mcp=generateMcpServer(new ZodSchemaValidator(),'http','127.0.0.1',9000,'1.0.0',app);
  assert.equal(mcp.tools.length,1);
- const {UniversalSdk}=await load('framework/universal-sdk/src/universalSdk.ts',{'@forklaunch/common':{safeStringify,openApiCompliantPath,safeParse:JSON.parse},'./core/coerceSpecialTypes':{coerceSpecialTypes:value=>value},'./core/mapContentType':{mapContentType:value=>value},'./core/openApi':{...(await load('framework/universal-sdk/src/core/openApi.ts',{'@forklaunch/common':{safeStringify,openApiCompliantPath,safeParse:JSON.parse}})),refreshOpenApi(){throw Error('unexpected refresh');}},'./core/resolvePath':{getSdkPath}});
+ const {UniversalSdk}=await load('framework/universal-sdk/src/universalSdk.ts',{'@forklaunch/common':{safeStringify,toPlainString,openApiCompliantPath,safeParse:JSON.parse},'./core/coerceSpecialTypes':{coerceSpecialTypes:value=>value},'./core/mapContentType':{mapContentType:value=>value},'./core/openApi':{...(await load('framework/universal-sdk/src/core/openApi.ts',{'@forklaunch/common':{safeStringify,toPlainString,openApiCompliantPath,safeParse:JSON.parse}})),refreshOpenApi(){throw Error('unexpected refresh');}},'./core/resolvePath':{getSdkPath}});
  const AjvClass=external('ajv').default??external('ajv');
  const universal=new UniversalSdk('http://127.0.0.1:9000',new AjvClass({strict:false}),{},undefined);
  universal.registryOpenApiJson={latest:{paths:{'/query/{id}':{get:{responses:{200:{content:{'application/json':{schema:{}}}}}}}}}};

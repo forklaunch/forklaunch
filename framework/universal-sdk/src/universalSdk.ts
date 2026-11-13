@@ -1,4 +1,6 @@
-import portableRequest, { hmacSignedFetch, type ForkLaunchSdkResponse } from './portableRuntime';
+// toPlainString comes from the bundled runtime (the same source as
+// @forklaunch/common's), so this package doesn't need a newer common to build.
+import portableRequest, { hmacSignedFetch, toPlainString, type ForkLaunchSdkResponse } from './portableRuntime';
 import { portableOperations, type PortableOperation } from './core/portableOperation';
 import { registerZodRegex, type ZodRegexExecution } from './core/zodRegex';
 import {
@@ -275,11 +277,11 @@ export class UniversalSdk {
                   key,
                   item instanceof Blob || item instanceof File
                     ? item
-                    : safeStringify(item)
+                    : toPlainString(item)
                 );
               }
             } else {
-              formData.append(key, safeStringify(value));
+              formData.append(key, toPlainString(value));
             }
           }
         }
@@ -289,7 +291,7 @@ export class UniversalSdk {
         parsedBody = new URLSearchParams(
           Object.entries(body.urlEncodedForm).map(([key, value]) => [
             key,
-            safeStringify(value)
+            toPlainString(value)
           ])
         );
       } else {
@@ -299,7 +301,7 @@ export class UniversalSdk {
 
     if (query) {
       const queryString = new URLSearchParams(
-        Object.entries(query).map(([key, value]) => [key, safeStringify(value)])
+        Object.entries(query).map(([key, value]) => [key, toPlainString(value)])
       ).toString();
       url += queryString ? `?${queryString}` : '';
     }

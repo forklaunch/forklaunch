@@ -413,7 +413,7 @@ fn build_request_with_body_omission(
         let query = query.as_object().ok_or("query must be an object")?;
         let mut encoded = form_urlencoded::Serializer::new(String::new());
         for (name, value) in query {
-            // TypeScript safeStringify preserves strings and serializes JSON
+            // TypeScript toPlainString keeps strings unquoted and serializes JSON
             // composites into one query value, including empty arrays.
             let value = value
                 .as_str()

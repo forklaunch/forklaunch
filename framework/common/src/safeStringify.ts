@@ -1,4 +1,46 @@
 /**
+ * Converts a value to the plain string a header, form field or query parameter
+ * expects: a string is returned as-is, numbers, booleans, `null` and
+ * `undefined` go through `String()`, and anything else is handed to
+ * `safeStringify`.
+ *
+ * Delegating the non-primitive case keeps the special-type handling
+ * `safeStringify` already has (Error, BigInt, Map, Set, RegExp, Date, typed
+ * arrays, functions, symbols). This is exactly what these callers did before
+ * `safeStringify` started quoting strings, so the values that go over the wire
+ * are unchanged.
+ *
+ * A value that cannot be serialized, such as a circular structure, comes back
+ * as an `[Unserializable: ...]` message. That message can contain newlines, so
+ * it is not a valid header value.
+ *
+ * @param value - The value to convert
+ * @returns A plain string representation
+ *
+ * @example
+ * ```typescript
+ * toPlainString('hello');        // 'hello' (not '"hello"')
+ * toPlainString(123);            // '123'
+ * toPlainString(true);           // 'true'
+ * toPlainString(null);           // 'null'
+ * toPlainString({ a: 1 });       // '{"a":1}' (objects are JSON-stringified)
+ * toPlainString([1, 2]);         // '[1,2]' (arrays are JSON-stringified)
+ * ```
+ */
+export function toPlainString(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (value == null) {
+    return String(value);
+  }
+  return safeStringify(value);
+}
+
+/**
  * Safely stringifies any JavaScript value, handling special cases like:
  * - Error objects
  * - BigInt
@@ -25,10 +67,7 @@
  * ```
  */
 export function safeStringify(arg: unknown): string {
-  if (typeof arg === 'string') {
-    return arg;
-  }
-
+  // Handle null/undefined
   if (arg == null) {
     return String(arg);
   }
