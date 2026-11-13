@@ -6,6 +6,7 @@ import {
   ParamsDictionary,
   VersionSchema
 } from '@forklaunch/core/http';
+import type { Response as HyperExpressResponse } from '@forklaunch/hyper-express-fork';
 import { AnySchemaValidator } from '@forklaunch/validator';
 import { ParsedQs } from 'qs';
 import { InternalRequest, InternalResponse } from '../types/hyperExpress.types';
@@ -51,7 +52,9 @@ export function enrichResponseTransmission<SV extends AnySchemaValidator>(
 ) {
   const originalSend = res.send;
   const originalJson = res.json;
-  const originalSetHeader = res.setHeader;
+  // hyper-express's own setHeader, which takes one value or several
+  const originalSetHeader =
+    res.setHeader as unknown as HyperExpressResponse['setHeader'];
 
   /**
    * Intercepts and enhances the JSON response method.
@@ -151,12 +154,11 @@ export function enrichResponseTransmission<SV extends AnySchemaValidator>(
    * ```
    */
   res.setHeader = function (name: string, value: unknown | unknown[]) {
-    let stringifiedValue;
-    if (Array.isArray(value)) {
-      stringifiedValue = value.map((v) => toPlainString(v)).join('\n');
-    } else {
-      stringifiedValue = toPlainString(value);
-    }
+    // hyper-express writes each array entry as its own header line, so
+    // multiple values are passed through rather than joined into one
+    const stringifiedValue = Array.isArray(value)
+      ? value.map((v) => headerValue(name, v))
+      : headerValue(name, value);
     return originalSetHeader.call(this, name, stringifiedValue);
   };
 
@@ -187,4 +189,18 @@ export function enrichResponseTransmission<SV extends AnySchemaValidator>(
   };
 
   next();
+}
+
+/**
+ * A header value as a plain string. CR, LF and NUL are refused, as Node's
+ * `setHeader` refuses them under express: uWebSockets writes header values
+ * as given, so one of these characters would end the header early and let
+ * the rest of the value add headers of its own (response splitting).
+ */
+export function headerValue(name: string, value: unknown): string {
+  const text = toPlainString(value);
+  if (/[\r\n\0]/.test(text)) {
+    throw new TypeError(`Invalid character in header content ["${name}"]`);
+  }
+  return text;
 }
