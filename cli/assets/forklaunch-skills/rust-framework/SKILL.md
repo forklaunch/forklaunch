@@ -6,6 +6,8 @@ user-invokable: true
 
 # Rust Forklaunch applications
 
+To add endpoints and storage to a generated Rust service, start from the compiled, worked example in `/rust-service-recipes`; this page explains the policies behind it.
+
 Use this guidance for projects whose `.forklaunch/manifest.toml` selects Rust or mixed languages. TypeScript framework examples do not establish Rust API availability. Inspect the project's Cargo dependencies and exported APIs before implementing an abstraction.
 
 ## Structure and contracts
