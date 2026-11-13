@@ -28,23 +28,23 @@ use crate::core::{
     template::render_embedded_template,
 };
 
-mod conversion;
-mod kind_change;
-mod library_rename;
-mod discovery;
-pub(crate) mod dependencies;
-mod mixed;
 mod agent;
 mod auth_env;
+mod contracts_layout;
+mod conversion;
+pub(crate) mod dependencies;
+mod discovery;
+mod kind_change;
 mod language_images;
+mod library_rename;
 mod local_runtime;
-mod typescript_image;
+mod mixed;
 mod modules;
 mod native_layout;
 mod native_mappers;
-mod contracts_layout;
-mod service_database;
 mod sdk_consumer;
+mod service_database;
+mod typescript_image;
 
 pub(crate) fn ensure_service_sdk_deletable(root: &Path, service_path: &str) -> Result<()> {
     sdk_consumer::ensure_service_deletable(root, service_path)
@@ -52,14 +52,19 @@ pub(crate) fn ensure_service_sdk_deletable(root: &Path, service_path: &str) -> R
 pub(crate) fn reconcile_rust_client_aggregate(root: &Path) -> Result<()> {
     sdk_consumer::reconcile_local_aggregate(root)
 }
-pub(crate) fn rename_service_sdk_dependency(root: &Path, old_path: &str, new_path: &str, old: &str, new: &str) -> Result<()> {
+pub(crate) fn rename_service_sdk_dependency(
+    root: &Path,
+    old_path: &str,
+    new_path: &str,
+    old: &str,
+    new: &str,
+) -> Result<()> {
     sdk_consumer::rename_service(root, old_path, new_path, old, new)
 }
 
 mod sdk_typescript;
 mod worker;
 pub(crate) use modules::generate_rust_module;
-
 
 /// Formats generated Rust with the application's rustfmt settings.
 pub(crate) fn format_rust_source(path: &Path, source: &str) -> String {
@@ -130,8 +135,8 @@ fn normalize_sdk_targets<'a>(targets: impl IntoIterator<Item = &'a str>) -> Vec<
 }
 
 pub(crate) use language_images::summary as rust_image_summary;
-pub(crate) use typescript_image::summary as typescript_image_summary;
 pub(crate) use typescript_image::planned_processes as typescript_planned_processes;
+pub(crate) use typescript_image::summary as typescript_image_summary;
 
 pub(crate) fn adopt_typescript_image(root: &Path) -> Result<()> {
     typescript_image::adopt_image(root)
@@ -174,10 +179,16 @@ pub(crate) fn record_typescript_language(root: &Path, name: &str) -> Result<()> 
     if document.get("language").and_then(|item| item.as_str()) != Some("mixed") {
         return Ok(());
     }
-    let Some(projects) = document.get_mut("projects").and_then(|item| item.as_array_of_tables_mut()) else {
+    let Some(projects) = document
+        .get_mut("projects")
+        .and_then(|item| item.as_array_of_tables_mut())
+    else {
         return Ok(());
     };
-    let Some(project) = projects.iter_mut().find(|project| project.get("name").and_then(|item| item.as_str()) == Some(name)) else {
+    let Some(project) = projects
+        .iter_mut()
+        .find(|project| project.get("name").and_then(|item| item.as_str()) == Some(name))
+    else {
         return Ok(());
     };
     let metadata = project
@@ -195,10 +206,18 @@ pub(crate) fn record_typescript_language(root: &Path, name: &str) -> Result<()> 
 
 pub(crate) fn refresh_mixed_images(root: &Path) -> Result<()> {
     let path = root.join(".forklaunch/manifest.toml");
-    if path.is_file() && (read_manifest_value(&path)?.get("language").and_then(Value::as_str) == Some("mixed") || crate::sdk::typescript_build::any_contract_builds(root)?) {
+    if path.is_file()
+        && (read_manifest_value(&path)?
+            .get("language")
+            .and_then(Value::as_str)
+            == Some("mixed")
+            || crate::sdk::typescript_build::any_contract_builds(root)?)
+    {
         language_images::preflight(root)?;
         language_images::reconcile(root)?;
-    } else if path.is_file() && typescript_image::managed_image(root).is_some_and(|(_, unchanged)| unchanged) {
+    } else if path.is_file()
+        && typescript_image::managed_image(root).is_some_and(|(_, unchanged)| unchanged)
+    {
         // A pure TypeScript application's generated image lists every
         // package and process; adding or removing one must refresh it, as
         // the mixed path above does. An edited image is the user's.
@@ -241,10 +260,17 @@ pub(crate) fn generate_rust_application(matches: &ArgMatches) -> Result<()> {
         .iter()
         .find(|module| modules::TYPESCRIPT_ONLY_MODULES.contains(&module.as_str()))
     {
-        bail!("{module} is a TypeScript module; add it with `forklaunch init module --module {module}`. Rust services call it through its generated Rust SDK");
+        bail!(
+            "{module} is a TypeScript module; add it with `forklaunch init module --module {module}`. Rust services call it through its generated Rust SDK"
+        );
     }
-    if modules.iter().any(|module| modules::BuiltinModule::from_variant(module).is_none()) {
-        bail!("Rust application module generation supports iam-base, cac-base, ecommerce-stripe, billing-base and billing-stripe");
+    if modules
+        .iter()
+        .any(|module| modules::BuiltinModule::from_variant(module).is_none())
+    {
+        bail!(
+            "Rust application module generation supports iam-base, cac-base, ecommerce-stripe, billing-base and billing-stripe"
+        );
     }
     if !modules.is_empty()
         && option(matches, "database").is_some_and(|database| database != "postgresql")
@@ -412,7 +438,10 @@ pub(crate) fn generate_rust_service(matches: &ArgMatches) -> Result<()> {
 }
 
 pub(crate) fn generate_rust_agent(matches: &ArgMatches) -> Result<()> {
-    let name = matches.get_one::<String>("name").context("Agent name is required")?.clone();
+    let name = matches
+        .get_one::<String>("name")
+        .context("Agent name is required")?
+        .clone();
     let dryrun = matches.get_flag("dryrun");
     let servers = agent::mcp_servers(matches)?;
     let app_root = find_manifest_root(
@@ -431,7 +460,9 @@ pub(crate) fn generate_rust_agent(matches: &ArgMatches) -> Result<()> {
     agent::sources(
         &app_root,
         &name,
-        matches.get_one::<String>("instructions").map(String::as_str),
+        matches
+            .get_one::<String>("instructions")
+            .map(String::as_str),
         &services,
         &servers,
     )?;
@@ -444,7 +475,13 @@ pub(crate) fn generate_rust_worker(matches: &ArgMatches) -> Result<()> {
 }
 
 pub(crate) fn generate_rust_library(matches: &ArgMatches) -> Result<()> {
-    if let Some(services)=matches.try_get_many::<String>("sdk-services").ok().flatten() { return sdk_consumer::generate(matches,services.cloned().collect()); }
+    if let Some(services) = matches
+        .try_get_many::<String>("sdk-services")
+        .ok()
+        .flatten()
+    {
+        return sdk_consumer::generate(matches, services.cloned().collect());
+    }
     generate_rust_project(matches, RustProjectKind::Library)
 }
 
@@ -483,11 +520,21 @@ pub(crate) fn generate_rust_router(matches: &ArgMatches) -> Result<()> {
         let flat = service_path.join("lib.rs").exists();
         let shared = shared_module_contracts(&service_path);
         let registry = service_path.join("api/contracts/registry.rs");
-        let lib = read_to_string(if shared { registry } else { service_path.join(if flat { "sdk.rs" } else { "src/lib.rs" }) })?;
-        let (main, hook) = if shared {
-            (read_to_string(service_path.join("api/routes/mod.rs"))?, "extensions::register_router(")
+        let lib = read_to_string(if shared {
+            registry
         } else {
-            (read_to_string(service_path.join(if flat { "server.rs" } else { "src/main.rs" }))?, "routes::register_router(")
+            service_path.join(if flat { "sdk.rs" } else { "src/lib.rs" })
+        })?;
+        let (main, hook) = if shared {
+            (
+                read_to_string(service_path.join("api/routes/mod.rs"))?,
+                "extensions::register_router(",
+            )
+        } else {
+            (
+                read_to_string(service_path.join(if flat { "server.rs" } else { "src/main.rs" }))?,
+                "routes::register_router(",
+            )
         };
         if !lib.contains("routes::contracts()") || !main.contains(hook) {
             bail!(
@@ -508,12 +555,24 @@ pub(crate) fn generate_rust_router(matches: &ArgMatches) -> Result<()> {
         &route_file,
         &if builtin && shared_module_contracts(&service_path) {
             let source = native_router_rs(&router_name);
-            let (contract, handler) = source.split_once("pub fn register(").context("module route template")?;
-            write_text_file_preserving_existing(&service_path.join("api/contracts/extensions").join(format!("{router_module}.rs")),
+            let (contract, handler) = source
+                .split_once("pub fn register(")
+                .context("module route template")?;
+            write_text_file_preserving_existing(
+                &service_path
+                    .join("api/contracts/extensions")
+                    .join(format!("{router_module}.rs")),
                 // Declarations compile in the contract host, which has no
                 // runtime dependencies; handler imports stay with the handler.
-                &contract.replace("use forklaunch_axum::ForkLaunchRouter;", "").replace("use axum::Json;\n", ""), dryrun, &mut stdout)?;
-            format!("use axum::Json;\nuse forklaunch_axum::ForkLaunchRouter;\npub use crate::api::contracts::extensions::{router_module}::{{contract, contracts, ROUTE_NAME}};\npub fn register({handler}")
+                &contract
+                    .replace("use forklaunch_axum::ForkLaunchRouter;", "")
+                    .replace("use axum::Json;\n", ""),
+                dryrun,
+                &mut stdout,
+            )?;
+            format!(
+                "use axum::Json;\nuse forklaunch_axum::ForkLaunchRouter;\npub use crate::api::contracts::extensions::{router_module}::{{contract, contracts, ROUTE_NAME}};\npub fn register({handler}"
+            )
         } else if builtin {
             native_router_rs(&router_name)
         } else {
@@ -739,14 +798,18 @@ fn migrate_compliance_artifact(crate_dir: &Path) -> Result<()> {
         .find(|line| line.contains(WRITE))
         .context("Expected compliance write")?;
     let indent = &line[..line.len() - line.trim_start().len()];
-    let create = "std::fs::create_dir_all(path.parent().expect(\"crate-local artifact directory\"))?;";
+    let create =
+        "std::fs::create_dir_all(path.parent().expect(\"crate-local artifact directory\"))?;";
     let statements = if line.trim() == WRITE {
         format!("{create}\n{indent}{WRITE}")
     } else {
         format!("{create} {WRITE}")
     };
     let updated = source
-        .replace(RERUN, "println!(\"cargo:rerun-if-changed=.forklaunch/compliance.json\");")
+        .replace(
+            RERUN,
+            "println!(\"cargo:rerun-if-changed=.forklaunch/compliance.json\");",
+        )
         .replace(JOIN, ".join(\".forklaunch/compliance.json\")")
         .replace(WRITE, &statements);
     write(&build, native_layout::format_source(&build, &updated))?;
@@ -763,8 +826,8 @@ pub(crate) fn sync_rust_project(app_root: &Path, kind: RustProjectKind, name: &s
         bail!("Project {name} is not a Rust project; refusing native sync cleanup");
     }
     let manifest = read_manifest_value(&app_root.join(".forklaunch/manifest.toml"))?;
-    let crate_path = discovery::path(app_root, &manifest, name)?
-        .context("Missing Rust project path")?;
+    let crate_path =
+        discovery::path(app_root, &manifest, name)?.context("Missing Rust project path")?;
     let crate_dir = app_root.join(&crate_path);
     if !crate_dir.join("Cargo.toml").exists() {
         delete_rust_project(app_root, kind, name)?;
@@ -781,11 +844,21 @@ pub(crate) fn sync_rust_project(app_root: &Path, kind: RustProjectKind, name: &s
     if let Some(host) = contracts_layout::directory(&crate_dir) {
         if host.join("Cargo.toml").is_file() {
             let host = host.canonicalize()?;
-            add_cargo_member(app_root, &host.strip_prefix(app_root.canonicalize()?)?.to_string_lossy(), false)?;
+            add_cargo_member(
+                app_root,
+                &host
+                    .strip_prefix(app_root.canonicalize()?)?
+                    .to_string_lossy(),
+                false,
+            )?;
         }
     }
     if crate_dir.join("sdk/rust/Cargo.toml").is_file() {
-        add_cargo_member(app_root, &format!("{}/sdk/rust", crate_path.display()), false)?;
+        add_cargo_member(
+            app_root,
+            &format!("{}/sdk/rust", crate_path.display()),
+            false,
+        )?;
     }
     if let Some(module) = modules::module_kind(app_root, name)? {
         modules::ensure_module_compose(app_root, name, module, false)?;
@@ -808,8 +881,16 @@ pub(crate) fn sync_rust_project(app_root: &Path, kind: RustProjectKind, name: &s
     }
     let flat = crate_dir.join("lib.rs").exists();
     let templates = if flat && kind == RustProjectKind::Service {
-        let host = contracts_layout::directory(&crate_dir).context("Missing service contracts")?.canonicalize()?;
-        add_cargo_member(app_root, &host.strip_prefix(app_root.canonicalize()?)?.to_string_lossy(), false)?;
+        let host = contracts_layout::directory(&crate_dir)
+            .context("Missing service contracts")?
+            .canonicalize()?;
+        add_cargo_member(
+            app_root,
+            &host
+                .strip_prefix(app_root.canonicalize()?)?
+                .to_string_lossy(),
+            false,
+        )?;
         // As init does: the mapper module is opt-in (`--mappers`), so a sync
         // must not add the placeholder `domain/mappers/mod.rs` that nothing
         // declares. A project with mappers already has the file.
@@ -875,7 +956,9 @@ pub(crate) fn sync_all_rust_projects(app_root: &Path, stdout: &mut StandardStrea
     }
     for relative in discovery::roots(&manifest) {
         let directory = app_root.join(relative);
-        if !directory.is_dir() { continue; }
+        if !directory.is_dir() {
+            continue;
+        }
         for entry in std::fs::read_dir(directory)? {
             let entry = entry?;
             if entry.path().join("Cargo.toml").is_file()
@@ -912,7 +995,13 @@ fn warn_if_workspace_empty(app_root: &Path) -> Result<()> {
     let empty = read_to_string(app_root.join("Cargo.toml"))
         .ok()
         .and_then(|source| source.parse::<toml_edit::DocumentMut>().ok())
-        .and_then(|cargo| cargo.get("workspace")?.get("members")?.as_array().map(|members| members.is_empty()))
+        .and_then(|cargo| {
+            cargo
+                .get("workspace")?
+                .get("members")?
+                .as_array()
+                .map(|members| members.is_empty())
+        })
         .unwrap_or(false);
     if empty {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
@@ -965,8 +1054,15 @@ fn delete_rust_project_inner(
     remove_cargo_member(app_root, &format!("{crate_path}/.forklaunch/contracts"))?;
     if let Some(host) = contracts_layout::directory(&app_root.join(&crate_path)) {
         let host = host.canonicalize()?;
-        remove_cargo_member(app_root, &host.strip_prefix(app_root.canonicalize()?)?.to_string_lossy())?;
-        if host.parent() == app_root.canonicalize()?.join(&crate_path).parent() { remove_path_if_exists(&host)?; }
+        remove_cargo_member(
+            app_root,
+            &host
+                .strip_prefix(app_root.canonicalize()?)?
+                .to_string_lossy(),
+        )?;
+        if host.parent() == app_root.canonicalize()?.join(&crate_path).parent() {
+            remove_path_if_exists(&host)?;
+        }
     }
     remove_cargo_member(app_root, &format!("{crate_path}/domain"))?;
     remove_cargo_member(app_root, &format!("{crate_path}/sdk/rust"))?;
@@ -978,7 +1074,9 @@ fn delete_rust_project_inner(
     if kind == RustProjectKind::Library {
         remove_registered_library_dependency(app_root, &manifest, name, &crate_path)?;
     }
-    if reconcile { ensure_rust_local_library_dependencies(app_root, false)?; }
+    if reconcile {
+        ensure_rust_local_library_dependencies(app_root, false)?;
+    }
 
     let crate_dir = app_root.join(&crate_path);
     if crate_dir.exists() {
@@ -1082,10 +1180,21 @@ pub(crate) fn change_rust_project(
         .and_then(kind_from_manifest_type)
         .unwrap_or(RustProjectKind::Library);
     let target_kind = to_kind.unwrap_or(current_kind);
-    if target_kind == RustProjectKind::Service && let Some(database) = database {
-        if database != "postgresql" { bail!("Rust service storage supports PostgreSQL only"); }
-        if modules::module_kind(app_root,current_name)?.is_none() && !app_root.join(&current_crate_path).join("persistence/database.rs").is_file() {
-            bail!("Existing in-memory storage requires an explicit migration; initialize a new service with --database postgresql");
+    if target_kind == RustProjectKind::Service
+        && let Some(database) = database
+    {
+        if database != "postgresql" {
+            bail!("Rust service storage supports PostgreSQL only");
+        }
+        if modules::module_kind(app_root, current_name)?.is_none()
+            && !app_root
+                .join(&current_crate_path)
+                .join("persistence/database.rs")
+                .is_file()
+        {
+            bail!(
+                "Existing in-memory storage requires an explicit migration; initialize a new service with --database postgresql"
+            );
         }
     }
     let current_backend = if current_kind == RustProjectKind::Worker {
@@ -1116,10 +1225,13 @@ pub(crate) fn change_rust_project(
         })
         .unwrap_or("database");
     let target_backend = worker::Backend::from_options(target_worker_type, target_database);
-    if target_kind == RustProjectKind::Worker && target_backend.is_none()
+    if target_kind == RustProjectKind::Worker
+        && target_backend.is_none()
         && (current_kind != target_kind || worker_type.is_some() || database.is_some())
     {
-        bail!("Unsupported Rust worker backend: {target_worker_type}/{target_database}; supported backends are PostgreSQL database, Redis, Kafka, and BullMQ");
+        bail!(
+            "Unsupported Rust worker backend: {target_worker_type}/{target_database}; supported backends are PostgreSQL database, Redis, Kafka, and BullMQ"
+        );
     }
     let keep_persistent_worker = persistent_worker
         && target_kind == RustProjectKind::Worker
@@ -1166,7 +1278,10 @@ pub(crate) fn change_rust_project(
             metadata.get("workerService").and_then(Value::as_bool) == Some(true)
                 && metadata.get("workerRuntime").and_then(Value::as_str) != Some("apalis")
         });
-    if current_kind == RustProjectKind::Worker && target_kind == RustProjectKind::Worker && convert_worker && producer_worker
+    if current_kind == RustProjectKind::Worker
+        && target_kind == RustProjectKind::Worker
+        && convert_worker
+        && producer_worker
         && let (Some(from), Some(to)) = (current_backend, target_backend)
     {
         // Check the backend change against the current name first so a
@@ -1176,15 +1291,37 @@ pub(crate) fn change_rust_project(
             worker::change_producer_backend(app_root, current_name, from, to, true)?;
         }
         let name = if current_name != target_name || description.is_some() {
-            change_rust_project(app_root, current_name, new_name, description, None, None, None, dryrun)?
+            change_rust_project(
+                app_root,
+                current_name,
+                new_name,
+                description,
+                None,
+                None,
+                None,
+                dryrun,
+            )?
         } else {
             current_name.to_owned()
         };
-        let planned = worker::change_producer_backend(app_root, if dryrun { current_name } else { &name }, from, to, dryrun)?;
+        let planned = worker::change_producer_backend(
+            app_root,
+            if dryrun { current_name } else { &name },
+            from,
+            to,
+            dryrun,
+        )?;
         if dryrun {
             let mut planned = planned;
-            planned.extend([".forklaunch/manifest.toml".into(), "docker-compose.yaml".into(), ".env".into()]);
-            crate::core::rendered_template::log_dryrun_plan(&mut StandardStream::stdout(ColorChoice::Always), &planned)?;
+            planned.extend([
+                ".forklaunch/manifest.toml".into(),
+                "docker-compose.yaml".into(),
+                ".env".into(),
+            ]);
+            crate::core::rendered_template::log_dryrun_plan(
+                &mut StandardStream::stdout(ColorChoice::Always),
+                &planned,
+            )?;
         }
         return Ok(name);
     }
@@ -1192,7 +1329,9 @@ pub(crate) fn change_rust_project(
         && persistent_module.is_none()
         && contracts_layout::is_native_service(&app_root.join(&current_crate_path));
     let kind_change = match (current_kind, target_kind) {
-        (RustProjectKind::Service, RustProjectKind::Worker) if native_service => Some(Some(target_backend.context("Choose the worker type (-t database|redis|kafka)")?)),
+        (RustProjectKind::Service, RustProjectKind::Worker) if native_service => Some(Some(
+            target_backend.context("Choose the worker type (-t database|redis|kafka)")?,
+        )),
         (RustProjectKind::Worker, RustProjectKind::Service) if producer_worker => Some(None),
         _ => None,
     };
@@ -1204,13 +1343,30 @@ pub(crate) fn change_rust_project(
             kind_change::change_kind(app_root, current_name, backend, true)?;
         }
         let name = if current_name != target_name || description.is_some() {
-            change_rust_project(app_root, current_name, new_name, description, None, None, None, dryrun)?
+            change_rust_project(
+                app_root,
+                current_name,
+                new_name,
+                description,
+                None,
+                None,
+                None,
+                dryrun,
+            )?
         } else {
             current_name.to_owned()
         };
-        let planned = kind_change::change_kind(app_root, if dryrun { current_name } else { &name }, backend, dryrun)?;
+        let planned = kind_change::change_kind(
+            app_root,
+            if dryrun { current_name } else { &name },
+            backend,
+            dryrun,
+        )?;
         if dryrun {
-            crate::core::rendered_template::log_dryrun_plan(&mut StandardStream::stdout(ColorChoice::Always), &planned)?;
+            crate::core::rendered_template::log_dryrun_plan(
+                &mut StandardStream::stdout(ColorChoice::Always),
+                &planned,
+            )?;
         }
         return Ok(name);
     }
@@ -1224,7 +1380,10 @@ pub(crate) fn change_rust_project(
     if current_name != target_name {
         if project_table(&manifest, target_name).is_some()
             || app_root.join(&target_crate_path).exists()
-            || app_root.join(&target_crate_path).with_file_name(format!("{target_name}-contracts")).exists()
+            || app_root
+                .join(&target_crate_path)
+                .with_file_name(format!("{target_name}-contracts"))
+                .exists()
         {
             bail!("Project destination {target_name} already exists");
         }
@@ -1255,29 +1414,51 @@ pub(crate) fn change_rust_project(
     if dryrun {
         let mut planned = vec![".forklaunch/manifest.toml".to_string()];
         if current_name != target_name {
-            planned.insert(0, format!("{target_crate_path} (moved from {current_crate_path})"));
+            planned.insert(
+                0,
+                format!("{target_crate_path} (moved from {current_crate_path})"),
+            );
             planned.push("Cargo.toml (workspace members)".into());
         }
         if description.is_some() {
             planned.push(format!("{target_crate_path}/Cargo.toml"));
         }
-        if current_name != target_name || current_kind != target_kind || worker_type.is_some() || database.is_some() {
+        if current_name != target_name
+            || current_kind != target_kind
+            || worker_type.is_some()
+            || database.is_some()
+        {
             planned.extend([
                 format!("{target_crate_path} sources"),
-                manifest.get("docker_compose_path").and_then(Value::as_str).unwrap_or("docker-compose.yaml").to_string(),
+                manifest
+                    .get("docker_compose_path")
+                    .and_then(Value::as_str)
+                    .unwrap_or("docker-compose.yaml")
+                    .to_string(),
                 ".env".into(),
                 "package.json (scripts)".into(),
                 "generated SDK and contract outputs".into(),
             ]);
         }
-        crate::core::rendered_template::log_dryrun_plan(&mut StandardStream::stdout(ColorChoice::Always), &planned)?;
+        crate::core::rendered_template::log_dryrun_plan(
+            &mut StandardStream::stdout(ColorChoice::Always),
+            &planned,
+        )?;
         return Ok(target_name.to_string());
     }
 
     language_images::preflight(app_root)?;
     let library_edits = if current_kind == RustProjectKind::Library && current_name != target_name {
-        library_rename::plan(app_root, &current_crate_path, &target_crate_path, current_name, target_name)?
-    } else { Vec::new() };
+        library_rename::plan(
+            app_root,
+            &current_crate_path,
+            &target_crate_path,
+            current_name,
+            target_name,
+        )?
+    } else {
+        Vec::new()
+    };
     if current_name != target_name {
         let from = app_root.join(&current_crate_path);
         let to = app_root.join(&target_crate_path);
@@ -1288,16 +1469,33 @@ pub(crate) fn change_rust_project(
         }
         replace_cargo_member(app_root, &current_crate_path, &target_crate_path)?;
         if to.join(".forklaunch/contracts/Cargo.toml").is_file() {
-            replace_cargo_member(app_root, &format!("{current_crate_path}/.forklaunch/contracts"), &format!("{target_crate_path}/.forklaunch/contracts"))?;
+            replace_cargo_member(
+                app_root,
+                &format!("{current_crate_path}/.forklaunch/contracts"),
+                &format!("{target_crate_path}/.forklaunch/contracts"),
+            )?;
         }
         update_package_name(&to.join("Cargo.toml"), target_name)?;
-        sdk_consumer::rename_service(app_root,&current_crate_path,&target_crate_path,current_name,target_name)?;
+        sdk_consumer::rename_service(
+            app_root,
+            &current_crate_path,
+            &target_crate_path,
+            current_name,
+            target_name,
+        )?;
         let old_host = from.with_file_name(format!("{current_name}-contracts"));
         if old_host.join("Cargo.toml").is_file() {
             let new_host = to.with_file_name(format!("{target_name}-contracts"));
-            anyhow::ensure!(!new_host.exists(), "Contract package rename destination exists");
+            anyhow::ensure!(
+                !new_host.exists(),
+                "Contract package rename destination exists"
+            );
             rename(&old_host, &new_host)?;
-            replace_cargo_member(app_root, &old_host.strip_prefix(app_root)?.to_string_lossy(), &new_host.strip_prefix(app_root)?.to_string_lossy())?;
+            replace_cargo_member(
+                app_root,
+                &old_host.strip_prefix(app_root)?.to_string_lossy(),
+                &new_host.strip_prefix(app_root)?.to_string_lossy(),
+            )?;
             native_layout::rename_project(&new_host, current_name, target_name)?;
         }
         if to.join("lib.rs").exists() {
@@ -1379,7 +1577,8 @@ pub(crate) fn change_rust_project(
             }
         }
         if contracts_layout::is_native_service(&app_root.join(&target_crate_path))
-            || contracts_layout::has_local_sdk(&app_root.join(&target_crate_path)) {
+            || contracts_layout::has_local_sdk(&app_root.join(&target_crate_path))
+        {
             contracts_layout::set_artifact_paths(metadata, target_name);
         }
         if metadata
@@ -1425,7 +1624,8 @@ pub(crate) fn change_rust_project(
     }
 
     for (path, source) in library_edits {
-        write(&path, source).with_context(|| format!("Failed to update library consumer {}", path.display()))?;
+        write(&path, source)
+            .with_context(|| format!("Failed to update library consumer {}", path.display()))?;
     }
 
     let crate_dir = app_root.join(&target_crate_path);
@@ -1556,7 +1756,11 @@ fn rename_rust_project_outputs(root: &Path, old: &str, new: &str) -> Result<()> 
         remove_cargo_member(root, &old_member)?;
         remove_path_if_exists(&root.join(&old_member))?;
         let source = if root
-            .join(artifact_paths::application_path(root, new, Artifact::Contract))
+            .join(artifact_paths::application_path(
+                root,
+                new,
+                Artifact::Contract,
+            ))
             .exists()
         {
             "contract"
@@ -1575,7 +1779,11 @@ fn rename_rust_project_outputs(root: &Path, old: &str, new: &str) -> Result<()> 
     crate::sdk::generate::cleanup_service_generated_files(root, old)?;
     if local_artifacts {
         return crate::sdk::generate::generate_or_check_sdk_outputs(
-            root, "all", "contract", Some(new), false,
+            root,
+            "all",
+            "contract",
+            Some(new),
+            false,
             &mut StandardStream::stdout(ColorChoice::Always),
         );
     }
@@ -1607,7 +1815,10 @@ pub(crate) fn change_rust_application(
     let previous_name = previous_name.unwrap_or(&current_name).to_string();
 
     if dryrun {
-        let compose = manifest.get("docker_compose_path").and_then(Value::as_str).unwrap_or("docker-compose.yaml");
+        let compose = manifest
+            .get("docker_compose_path")
+            .and_then(Value::as_str)
+            .unwrap_or("docker-compose.yaml");
         let mut planned = vec![".forklaunch/manifest.toml".to_string()];
         if author.is_some() || license.is_some() {
             planned.push("Cargo.toml".into());
@@ -1615,30 +1826,50 @@ pub(crate) fn change_rust_application(
         if app_root.join("README.md").is_file() && (new_name.is_some() || description.is_some()) {
             planned.push("README.md".into());
         } else if new_name.is_some() {
-            planned.push(format!("{}/README.md", manifest.get("modules_path").and_then(Value::as_str).unwrap_or("src")));
+            planned.push(format!(
+                "{}/README.md",
+                manifest
+                    .get("modules_path")
+                    .and_then(Value::as_str)
+                    .unwrap_or("src")
+            ));
         }
         if new_name.is_some() {
-            planned.extend([compose.to_string(), ".env".into(), "<crate>/.env.local".into(), "<crate>/**/package.json".into()]);
+            planned.extend([
+                compose.to_string(),
+                ".env".into(),
+                "<crate>/.env.local".into(),
+                "<crate>/**/package.json".into(),
+            ]);
         }
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
         crate::core::rendered_template::log_dryrun_plan(&mut stdout, &planned)?;
         return Ok(target_name);
     }
 
-    if new_name.is_some() { language_images::preflight(app_root)?; }
+    if new_name.is_some() {
+        language_images::preflight(app_root)?;
+    }
 
     let root = manifest
         .as_table_mut()
         .context("ForkLaunch manifest root must be a TOML table")?;
     if new_name.is_some() {
         root.insert("app_name".to_string(), Value::String(target_name.clone()));
-        if let Some(topology) = root.get_mut("project_peer_topology").and_then(Value::as_table_mut)
+        if let Some(topology) = root
+            .get_mut("project_peer_topology")
+            .and_then(Value::as_table_mut)
             && previous_name != target_name
             && let Some(group) = topology.remove(&previous_name)
         {
             topology.insert(target_name.clone(), group);
         }
-        for project in root.get_mut("projects").and_then(Value::as_array_mut).into_iter().flatten() {
+        for project in root
+            .get_mut("projects")
+            .and_then(Value::as_array_mut)
+            .into_iter()
+            .flatten()
+        {
             if let Some(description) = project.get_mut("description")
                 && let Some(text) = description.as_str()
             {
@@ -1747,9 +1978,16 @@ pub(crate) fn change_rust_router(
         .with_context(|| format!("Failed to update Rust router {new_name}"))?;
         let project_dir = app_root.join(&crate_path);
         let shared_module = shared_module_contracts(&project_dir);
-        let contracts_dir = if shared_module { project_dir.join("api/contracts/extensions") } else { project_dir.join("src/contracts") };
+        let contracts_dir = if shared_module {
+            project_dir.join("api/contracts/extensions")
+        } else {
+            project_dir.join("src/contracts")
+        };
         if shared_module {
-            let source = read_to_string(&new_file)?.replace(&format!("extensions::{old_module}::"), &format!("extensions::{new_module}::"));
+            let source = read_to_string(&new_file)?.replace(
+                &format!("extensions::{old_module}::"),
+                &format!("extensions::{new_module}::"),
+            );
             write(&new_file, source)?;
         }
         if contracts_dir.join("mod.rs").exists() {
@@ -1764,7 +2002,10 @@ pub(crate) fn change_rust_router(
                     .into_owned()
                     .replace(&format!("/{existing_name}"), &format!("/{new_name}"))
                     .replace(&format!("\"{existing_name}\""), &format!("\"{new_name}\""))
-                    .replace(&format!("Get {}", existing_name.to_case(Case::Title)), &format!("Get {}", new_name.to_case(Case::Title)))
+                    .replace(
+                        &format!("Get {}", existing_name.to_case(Case::Title)),
+                        &format!("Get {}", new_name.to_case(Case::Title)),
+                    )
                     .replace(
                         &format!("List {}", existing_name.to_case(Case::Title)),
                         &format!("List {}", new_name.to_case(Case::Title)),
@@ -1772,7 +2013,15 @@ pub(crate) fn change_rust_router(
                 rename(&old_contract, &new_contract)?;
                 write(new_contract, source)?;
             }
-            if shared_module { rewrite_module_extensions(&contracts_dir, false, &mut StandardStream::stdout(ColorChoice::Always))?; } else { rewrite_contracts_mod(&contracts_dir)?; }
+            if shared_module {
+                rewrite_module_extensions(
+                    &contracts_dir,
+                    false,
+                    &mut StandardStream::stdout(ColorChoice::Always),
+                )?;
+            } else {
+                rewrite_contracts_mod(&contracts_dir)?;
+            }
         }
         rewrite_routes_mod(
             &routes_dir,
@@ -1820,14 +2069,26 @@ pub(crate) fn delete_rust_router(
             .with_context(|| format!("Failed to remove {}", route_file.display()))?;
     }
     let project_dir = app_root.join(&crate_path);
-        let shared_module = shared_module_contracts(&project_dir);
-        let contracts_dir = if shared_module { project_dir.join("api/contracts/extensions") } else { project_dir.join("src/contracts") };
+    let shared_module = shared_module_contracts(&project_dir);
+    let contracts_dir = if shared_module {
+        project_dir.join("api/contracts/extensions")
+    } else {
+        project_dir.join("src/contracts")
+    };
     if contracts_dir.join("mod.rs").exists() {
         let contract = contracts_dir.join(format!("{router_module}.rs"));
         if contract.exists() {
             remove_file(contract)?;
         }
-        if shared_module { rewrite_module_extensions(&contracts_dir, false, &mut StandardStream::stdout(ColorChoice::Always))?; } else { rewrite_contracts_mod(&contracts_dir)?; }
+        if shared_module {
+            rewrite_module_extensions(
+                &contracts_dir,
+                false,
+                &mut StandardStream::stdout(ColorChoice::Always),
+            )?;
+        } else {
+            rewrite_contracts_mod(&contracts_dir)?;
+        }
     }
     rewrite_routes_mod(
         &routes_dir,
@@ -1841,8 +2102,12 @@ pub(crate) fn delete_rust_router(
 
 fn generate_rust_project(matches: &ArgMatches, kind: RustProjectKind) -> Result<()> {
     let dryrun = matches.get_flag("dryrun");
-    if kind == RustProjectKind::Service && option(matches, "database").is_some_and(|database| database != "postgresql") {
-        bail!("Rust service storage currently supports explicit --database postgresql; omit --database for the in-memory starter");
+    if kind == RustProjectKind::Service
+        && option(matches, "database").is_some_and(|database| database != "postgresql")
+    {
+        bail!(
+            "Rust service storage currently supports explicit --database postgresql; omit --database for the in-memory starter"
+        );
     }
     let name = required_name(matches, kind.label())?;
     let description = option(matches, "description")
@@ -1857,7 +2122,12 @@ fn generate_rust_project(matches: &ArgMatches, kind: RustProjectKind) -> Result<
     let crate_path = crate_path_for_project(&manifest, &name)
         .map(PathBuf::from)
         .unwrap_or_else(|| {
-            let modules = Path::new(manifest.get("modules_path").and_then(Value::as_str).unwrap_or("src"));
+            let modules = Path::new(
+                manifest
+                    .get("modules_path")
+                    .and_then(Value::as_str)
+                    .unwrap_or("src"),
+            );
             if kind == RustProjectKind::Library {
                 modules.join("core").join(&name)
             } else {
@@ -1903,34 +2173,69 @@ fn generate_rust_project(matches: &ArgMatches, kind: RustProjectKind) -> Result<
         None
     };
     let native_layout = !crate_dir.join("src/lib.rs").exists();
-    let postgres = kind == RustProjectKind::Service && (option(matches, "database").as_deref() == Some("postgresql") || crate_dir.join("persistence/database.rs").is_file());
-    if postgres && (!native_layout || (crate_dir.join("Cargo.toml").is_file() && !crate_dir.join("persistence/database.rs").is_file())) {
-        bail!("Choose --database postgresql when initializing a new native service; existing storage requires an explicit migration");
+    let postgres = kind == RustProjectKind::Service
+        && (option(matches, "database").as_deref() == Some("postgresql")
+            || crate_dir.join("persistence/database.rs").is_file());
+    if postgres
+        && (!native_layout
+            || (crate_dir.join("Cargo.toml").is_file()
+                && !crate_dir.join("persistence/database.rs").is_file()))
+    {
+        bail!(
+            "Choose --database postgresql when initializing a new native service; existing storage requires an explicit migration"
+        );
     }
     let new_project = !crate_dir.join("Cargo.toml").exists();
     let existing_service = crate_dir.join("consumer/lib.rs").is_file();
-    let consumer_only = matches.try_get_one::<bool>("consumer-only").ok().flatten().copied().unwrap_or(false);
-    if existing_service && consumer_only { bail!("Removing an existing worker service requires an explicit process migration"); }
-    let worker_service = kind == RustProjectKind::Worker && native_layout && (existing_service || (new_project && !consumer_only));
-    let worker_contracts = kind == RustProjectKind::Worker && native_layout && backend.is_some() && (new_project || existing_service || contracts_layout::directory(&crate_dir).is_some());
-    if worker_contracts && new_project && contracts_layout::new_host_directory(&crate_dir).exists() { bail!("The worker contract destination already exists; choose another project name"); }
-    let existing_apalis=crate_dir.join("worker_hooks.rs").is_file() || crate_dir.join("consumer/worker_hooks.rs").is_file();
-    let apalis=kind==RustProjectKind::Worker && option(matches,"worker-runtime").map_or(existing_apalis,|runtime|runtime=="apalis");
-    if kind==RustProjectKind::Worker && (!new_project && apalis!=existing_apalis) { bail!("Changing worker runtime requires an explicit queue migration"); }
-    if apalis && (!native_layout || backend!=Some(worker::Backend::Postgres)) { bail!("Apalis requires a native PostgreSQL worker"); }
+    let consumer_only = matches
+        .try_get_one::<bool>("consumer-only")
+        .ok()
+        .flatten()
+        .copied()
+        .unwrap_or(false);
+    if existing_service && consumer_only {
+        bail!("Removing an existing worker service requires an explicit process migration");
+    }
+    let worker_service = kind == RustProjectKind::Worker
+        && native_layout
+        && (existing_service || (new_project && !consumer_only));
+    let worker_contracts = kind == RustProjectKind::Worker
+        && native_layout
+        && backend.is_some()
+        && (new_project || existing_service || contracts_layout::directory(&crate_dir).is_some());
+    if worker_contracts && new_project && contracts_layout::new_host_directory(&crate_dir).exists()
+    {
+        bail!("The worker contract destination already exists; choose another project name");
+    }
+    let existing_apalis = crate_dir.join("worker_hooks.rs").is_file()
+        || crate_dir.join("consumer/worker_hooks.rs").is_file();
+    let apalis = kind == RustProjectKind::Worker
+        && option(matches, "worker-runtime").map_or(existing_apalis, |runtime| runtime == "apalis");
+    if kind == RustProjectKind::Worker && (!new_project && apalis != existing_apalis) {
+        bail!("Changing worker runtime requires an explicit queue migration");
+    }
+    if apalis && (!native_layout || backend != Some(worker::Backend::Postgres)) {
+        bail!("Apalis requires a native PostgreSQL worker");
+    }
 
     if new_project && native_layout && (kind == RustProjectKind::Service || worker_service) {
         let host = contracts_layout::new_host_directory(&crate_dir);
-        anyhow::ensure!(!host.exists(), "Contract package destination already exists: {}", host.display());
+        anyhow::ensure!(
+            !host.exists(),
+            "Contract package destination already exists: {}",
+            host.display()
+        );
     }
 
     let templates = if kind == RustProjectKind::Service && native_layout {
         let templates = native_layout::service_templates(&crate_dir, &name, &description);
         if postgres {
             service_database::templates(&crate_dir, &name, templates)?
-        } else { templates }
+        } else {
+            templates
+        }
     } else if apalis {
-        worker::apalis_templates(&app_root,&crate_dir,&name,&description)?
+        worker::apalis_templates(&app_root, &crate_dir, &name, &description)?
     } else if let Some(backend) = backend {
         worker::templates(&app_root, &crate_dir, &name, &description, backend)?
     } else {
@@ -1942,8 +2247,34 @@ fn generate_rust_project(matches: &ArgMatches, kind: RustProjectKind) -> Result<
     } else {
         templates
     };
-    let templates = if worker_service { worker::service_templates(&crate_dir, &name, &description, templates, apalis, backend.context("Worker service requires a supported queue backend")?)? } else if worker_contracts { worker::consumer_contracts(&crate_dir,&name,templates)? } else { templates };
-    let templates = if native_layout { native_mappers::templates(&crate_dir, matches.try_get_one::<bool>("mappers").ok().flatten().copied().unwrap_or(false), templates)? } else { templates };
+    let templates = if worker_service {
+        worker::service_templates(
+            &crate_dir,
+            &name,
+            &description,
+            templates,
+            apalis,
+            backend.context("Worker service requires a supported queue backend")?,
+        )?
+    } else if worker_contracts {
+        worker::consumer_contracts(&crate_dir, &name, templates)?
+    } else {
+        templates
+    };
+    let templates = if native_layout {
+        native_mappers::templates(
+            &crate_dir,
+            matches
+                .try_get_one::<bool>("mappers")
+                .ok()
+                .flatten()
+                .copied()
+                .unwrap_or(false),
+            templates,
+        )?
+    } else {
+        templates
+    };
     let templates = native_layout::framework_paths(&app_root, templates);
     let templates = if native_layout {
         templates
@@ -1958,28 +2289,90 @@ fn generate_rust_project(matches: &ArgMatches, kind: RustProjectKind) -> Result<
     if native_layout && kind == RustProjectKind::Service {
         add_cargo_member(
             &app_root,
-            &contracts_layout::directory(&crate_dir).unwrap_or_else(|| contracts_layout::new_host_directory(&crate_dir)).strip_prefix(&app_root)?.to_string_lossy(),
+            &contracts_layout::directory(&crate_dir)
+                .unwrap_or_else(|| contracts_layout::new_host_directory(&crate_dir))
+                .strip_prefix(&app_root)?
+                .to_string_lossy(),
             dryrun,
         )?;
     }
-    if worker_contracts { add_cargo_member(&app_root, &contracts_layout::directory(&crate_dir).unwrap_or_else(|| contracts_layout::new_host_directory(&crate_dir)).strip_prefix(&app_root)?.to_string_lossy(), dryrun)?; }
-    if (kind == RustProjectKind::Service || worker_service) && contracts_layout::new_host_directory(&crate_dir).join("Cargo.toml").is_file() {
-        add_cargo_member(&app_root, &format!("{}/sdk/rust", crate_path.display()), dryrun)?;
+    if worker_contracts {
+        add_cargo_member(
+            &app_root,
+            &contracts_layout::directory(&crate_dir)
+                .unwrap_or_else(|| contracts_layout::new_host_directory(&crate_dir))
+                .strip_prefix(&app_root)?
+                .to_string_lossy(),
+            dryrun,
+        )?;
+    }
+    if (kind == RustProjectKind::Service || worker_service)
+        && contracts_layout::new_host_directory(&crate_dir)
+            .join("Cargo.toml")
+            .is_file()
+    {
+        add_cargo_member(
+            &app_root,
+            &format!("{}/sdk/rust", crate_path.display()),
+            dryrun,
+        )?;
     }
     add_project_to_manifest(&app_root, kind, &name, &description, matches, dryrun)?;
     if !dryrun {
         let path = app_root.join(".forklaunch/manifest.toml");
         let mut manifest = read_manifest_value(&path)?;
         if let Some(project) = project_table_mut(&mut manifest, &name) {
-            if contracts_layout::new_host_directory(&crate_dir).join("Cargo.toml").is_file() && (kind == RustProjectKind::Service || worker_service) {
-                project.get_mut("metadata").and_then(Value::as_table_mut).context("missing metadata")?.insert("sdkLayout".into(),Value::String("project-local-v1".into()));
+            if contracts_layout::new_host_directory(&crate_dir)
+                .join("Cargo.toml")
+                .is_file()
+                && (kind == RustProjectKind::Service || worker_service)
+            {
+                project
+                    .get_mut("metadata")
+                    .and_then(Value::as_table_mut)
+                    .context("missing metadata")?
+                    .insert("sdkLayout".into(), Value::String("project-local-v1".into()));
             }
-            if kind==RustProjectKind::Worker { project.get_mut("metadata").and_then(Value::as_table_mut).context("missing metadata")?.insert("workerService".into(), Value::Boolean(worker_service)); }
-            if kind==RustProjectKind::Worker && (new_project || existing_service) { project.get_mut("metadata").and_then(Value::as_table_mut).context("missing metadata")?.insert("contractExport".into(), Value::Boolean(worker_service)); }
-            if kind==RustProjectKind::Worker { project.get_mut("metadata").and_then(Value::as_table_mut).context("missing metadata")?.insert("workerRuntime".into(),Value::String(if apalis{"apalis"}else{"leased"}.into())); }
+            if kind == RustProjectKind::Worker {
+                project
+                    .get_mut("metadata")
+                    .and_then(Value::as_table_mut)
+                    .context("missing metadata")?
+                    .insert("workerService".into(), Value::Boolean(worker_service));
+            }
+            if kind == RustProjectKind::Worker && (new_project || existing_service) {
+                project
+                    .get_mut("metadata")
+                    .and_then(Value::as_table_mut)
+                    .context("missing metadata")?
+                    .insert("contractExport".into(), Value::Boolean(worker_service));
+            }
+            if kind == RustProjectKind::Worker {
+                project
+                    .get_mut("metadata")
+                    .and_then(Value::as_table_mut)
+                    .context("missing metadata")?
+                    .insert(
+                        "workerRuntime".into(),
+                        Value::String(if apalis { "apalis" } else { "leased" }.into()),
+                    );
+            }
             if new_project && kind == RustProjectKind::Service {
-                if !postgres { if let Some(resources)=project.get_mut("resources").and_then(Value::as_table_mut) { resources.remove("database"); } }
-                project.get_mut("metadata").and_then(Value::as_table_mut).context("missing metadata")?.insert("persistence".into(), Value::String(if postgres { "postgresql" } else { "memory" }.into()));
+                if !postgres {
+                    if let Some(resources) =
+                        project.get_mut("resources").and_then(Value::as_table_mut)
+                    {
+                        resources.remove("database");
+                    }
+                }
+                project
+                    .get_mut("metadata")
+                    .and_then(Value::as_table_mut)
+                    .context("missing metadata")?
+                    .insert(
+                        "persistence".into(),
+                        Value::String(if postgres { "postgresql" } else { "memory" }.into()),
+                    );
             }
             project
                 .get_mut("metadata")
@@ -1991,7 +2384,10 @@ fn generate_rust_project(matches: &ArgMatches, kind: RustProjectKind) -> Result<
                 );
             if contracts_layout::is_native_service(&crate_dir) {
                 contracts_layout::set_artifact_paths(
-                    project.get_mut("metadata").and_then(Value::as_table_mut).context("missing metadata")?,
+                    project
+                        .get_mut("metadata")
+                        .and_then(Value::as_table_mut)
+                        .context("missing metadata")?,
                     &name,
                 );
             }
@@ -2001,7 +2397,9 @@ fn generate_rust_project(matches: &ArgMatches, kind: RustProjectKind) -> Result<
     ensure_rust_local_library_dependencies(&app_root, dryrun)?;
     ensure_rust_docker_compose_project(&app_root, kind, &name, dryrun)?;
     ensure_rust_package_scripts(&app_root, kind, &name, dryrun)?;
-    if !dryrun && postgres { service_database::compose(&app_root, &name)?; }
+    if !dryrun && postgres {
+        service_database::compose(&app_root, &name)?;
+    }
     if !dryrun && let Some(backend) = backend {
         worker::mark(&app_root, &name, backend)?;
         worker::compose(&app_root, &name, backend)?;
@@ -2021,7 +2419,9 @@ fn generate_rust_project(matches: &ArgMatches, kind: RustProjectKind) -> Result<
         }
     }
 
-    if !dryrun { language_images::reconcile(&app_root)?; }
+    if !dryrun {
+        language_images::reconcile(&app_root)?;
+    }
     log_ok!(
         stdout,
         "Generated Rust {} {} at {}",
@@ -2051,7 +2451,9 @@ fn service_templates(crate_dir: &Path, name: &str, description: &str) -> Vec<Ren
     vec![
         RenderedTemplate {
             path: crate_dir.join("src/persistence/compliance_schema.rs"),
-            content: render_static_rust_template("rust/project/service/src/persistence/compliance_schema.rs"),
+            content: render_static_rust_template(
+                "rust/project/service/src/persistence/compliance_schema.rs",
+            ),
             context: None,
         },
         RenderedTemplate {
@@ -2522,7 +2924,8 @@ fn project_cargo_toml(name: &str, description: &str, has_binary: bool) -> String
 }
 
 fn service_cargo_toml(name: &str, description: &str) -> String {
-    let base = project_cargo_toml(name, description, true).replace("[dependencies]", "[dependencies]\nserde_json = {}");
+    let base = project_cargo_toml(name, description, true)
+        .replace("[dependencies]", "[dependencies]\nserde_json = {}");
     format!(
         "{base}\n[build-dependencies]\nforklaunch-core = {{ path = \"../../.forklaunch/framework-rs/crates/core\", features = [\"compliance-artifact\", \"typed-schema\", \"build\"] }}\n"
     )
@@ -2551,8 +2954,16 @@ pub(crate) fn application_manifest(
     )
 }
 
-fn mixed_typescript_sdk_templates(root_path: &Path, name: &str, sdk_targets: &[String]) -> Vec<RenderedTemplate> {
-    let target = if sdk_targets.iter().any(|target| target == "rust") { "all" } else { "typescript" };
+fn mixed_typescript_sdk_templates(
+    root_path: &Path,
+    name: &str,
+    sdk_targets: &[String],
+) -> Vec<RenderedTemplate> {
+    let target = if sdk_targets.iter().any(|target| target == "rust") {
+        "all"
+    } else {
+        "typescript"
+    };
     let package_name = name.to_case(Case::Kebab);
     vec![
         RenderedTemplate {
@@ -2690,9 +3101,10 @@ fn ensure_rust_local_env(app_root: &Path, crate_dir: &Path, name: &str) -> Resul
         ("RUST_LOG", "info"),
         ("MCP_ENABLED", "true"),
     ] {
-        let present = existing
-            .lines()
-            .any(|line| line.split_once('=').is_some_and(|(existing, _)| existing.trim() == key));
+        let present = existing.lines().any(|line| {
+            line.split_once('=')
+                .is_some_and(|(existing, _)| existing.trim() == key)
+        });
         if !present {
             content.push_str(&format!("{key}={value}\n"));
         }
@@ -2712,14 +3124,20 @@ fn remove_rust_docker_compose_project(app_root: &Path, name: &str) -> Result<()>
     compose.services.shift_remove(name);
     // The project's one-shot migration job goes with it.
     compose.services.shift_remove(&format!("{name}-migrate"));
-    compose
-        .services
-        .retain(|_, service| modules::ecommerce_worker_owner(service) != Some(name) && worker::producer_owner(service) != Some(name));
+    compose.services.retain(|_, service| {
+        modules::ecommerce_worker_owner(service) != Some(name)
+            && worker::producer_owner(service) != Some(name)
+    });
     // Nothing may wait on a removed process.
-    let removed: Vec<String> = [name.to_owned(), format!("{name}-migrate"), format!("{name}-server"), format!("{name}-seed")]
-        .into_iter()
-        .filter(|key| !compose.services.contains_key(key) || key.ends_with("-migrate"))
-        .collect();
+    let removed: Vec<String> = [
+        name.to_owned(),
+        format!("{name}-migrate"),
+        format!("{name}-server"),
+        format!("{name}-seed"),
+    ]
+    .into_iter()
+    .filter(|key| !compose.services.contains_key(key) || key.ends_with("-migrate"))
+    .collect();
     for service in compose.services.values_mut() {
         if let Some(depends) = service.depends_on.as_mut() {
             for key in &removed {
@@ -2731,7 +3149,11 @@ fn remove_rust_docker_compose_project(app_root: &Path, name: &str) -> Result<()>
         }
     }
     let seed = format!("{name}-seed");
-    if compose.services.get(&seed).is_some_and(|service| modules::is_seed_job(service, name)) {
+    if compose
+        .services
+        .get(&seed)
+        .is_some_and(|service| modules::is_seed_job(service, name))
+    {
         compose.services.shift_remove(&seed);
     }
     write(&compose_path, yaml_to_string(&compose)?)
@@ -2903,11 +3325,22 @@ fn ensure_rust_package_scripts(
             JsonValue::String(format!("cargo run -p {name}")),
         );
     }
-    if kind==RustProjectKind::Worker {
-        let manifest=read_manifest_value(&app_root.join(".forklaunch/manifest.toml"))?;
-        if project_table(&manifest,name).and_then(|project|project.get("metadata")).and_then(|metadata|metadata.get("workerService")).and_then(Value::as_bool)==Some(true) {
-            scripts.insert(format!("dev:{name}:worker"),JsonValue::String(format!("cargo run -p {name} --bin {name}-worker")));
-            scripts.insert(format!("dev:{name}:server"),JsonValue::String(format!("cargo run -p {name} --bin {name}")));
+    if kind == RustProjectKind::Worker {
+        let manifest = read_manifest_value(&app_root.join(".forklaunch/manifest.toml"))?;
+        if project_table(&manifest, name)
+            .and_then(|project| project.get("metadata"))
+            .and_then(|metadata| metadata.get("workerService"))
+            .and_then(Value::as_bool)
+            == Some(true)
+        {
+            scripts.insert(
+                format!("dev:{name}:worker"),
+                JsonValue::String(format!("cargo run -p {name} --bin {name}-worker")),
+            );
+            scripts.insert(
+                format!("dev:{name}:server"),
+                JsonValue::String(format!("cargo run -p {name} --bin {name}")),
+            );
         }
     }
 
@@ -2919,7 +3352,7 @@ fn ensure_rust_package_scripts(
             Err(_) => rendered,
         },
     )
-        .with_context(|| format!("Failed to update {}", package_path.display()))?;
+    .with_context(|| format!("Failed to update {}", package_path.display()))?;
     Ok(())
 }
 
@@ -2953,7 +3386,7 @@ fn remove_rust_package_scripts(app_root: &Path, name: &str) -> Result<()> {
             Err(_) => rendered,
         },
     )
-        .with_context(|| format!("Failed to update {}", package_path.display()))?;
+    .with_context(|| format!("Failed to update {}", package_path.display()))?;
     sdk_typescript::reconcile(app_root)
 }
 
@@ -3336,7 +3769,10 @@ fn update_rust_project_local_library_dependencies(
     let project_dir = app_root.join(&project.crate_path);
 
     dependencies.retain(|dependency_name, dependency| {
-        let package = dependency.get("package").and_then(Value::as_str).unwrap_or(dependency_name);
+        let package = dependency
+            .get("package")
+            .and_then(Value::as_str)
+            .unwrap_or(dependency_name);
         if library_names.contains(package) {
             return true;
         }
@@ -3360,22 +3796,38 @@ fn update_rust_project_local_library_dependencies(
         // Existing valid overrides and registry/git dependencies remain owned by the app.
         let mut referenced = false;
         for (alias, dependency) in dependencies.iter_mut() {
-            let package = dependency.get("package").and_then(Value::as_str).unwrap_or(alias);
-            if package != library.name { continue; }
+            let package = dependency
+                .get("package")
+                .and_then(Value::as_str)
+                .unwrap_or(alias);
+            if package != library.name {
+                continue;
+            }
             referenced = true;
             if let Some(path) = dependency_path(dependency)
                 && !project_dir.join(path).join("Cargo.toml").is_file()
                 && let Some(table) = dependency.as_table_mut()
             {
-                table.insert("path".into(), Value::String(relative_cargo_path(&project.crate_path, &library.crate_path)));
+                table.insert(
+                    "path".into(),
+                    Value::String(relative_cargo_path(
+                        &project.crate_path,
+                        &library.crate_path,
+                    )),
+                );
             }
         }
         // Existing dependency flags and explicit aliases belong to the application.
-        if referenced || dependencies.values().any(|dependency| {
-            dependency_path(dependency).is_some_and(|path| {
-                normalize_path(project_dir.join(path)) == normalize_path(app_root.join(&library.crate_path))
+        if referenced
+            || dependencies.values().any(|dependency| {
+                dependency_path(dependency).is_some_and(|path| {
+                    normalize_path(project_dir.join(path))
+                        == normalize_path(app_root.join(&library.crate_path))
+                })
             })
-        }) { continue; }
+        {
+            continue;
+        }
         let mut dependency = Map::new();
         dependency.insert(
             "path".to_string(),
@@ -3389,7 +3841,8 @@ fn update_rust_project_local_library_dependencies(
 
     let updated = edited_dependencies(&content, &cargo)?;
     if updated != content {
-        write(&cargo_path, updated).with_context(|| format!("Failed to update {}", cargo_path.display()))?;
+        write(&cargo_path, updated)
+            .with_context(|| format!("Failed to update {}", cargo_path.display()))?;
     }
     Ok(())
 }
@@ -3399,8 +3852,14 @@ fn update_rust_project_local_library_dependencies(
 fn edited_dependencies(content: &str, cargo: &Value) -> Result<String> {
     let original: Value = toml::from_str(content)?;
     let empty = Map::new();
-    let before = original.get("dependencies").and_then(Value::as_table).unwrap_or(&empty);
-    let after = cargo.get("dependencies").and_then(Value::as_table).unwrap_or(&empty);
+    let before = original
+        .get("dependencies")
+        .and_then(Value::as_table)
+        .unwrap_or(&empty);
+    let after = cargo
+        .get("dependencies")
+        .and_then(Value::as_table)
+        .unwrap_or(&empty);
     if before == after {
         return Ok(content.to_owned());
     }
@@ -3408,11 +3867,16 @@ fn edited_dependencies(content: &str, cargo: &Value) -> Result<String> {
     if !document.contains_key("dependencies") {
         document["dependencies"] = toml_edit::Item::Table(toml_edit::Table::new());
     }
-    let table = document["dependencies"].as_table_like_mut().context("Cargo dependencies")?;
+    let table = document["dependencies"]
+        .as_table_like_mut()
+        .context("Cargo dependencies")?;
     for key in before.keys().filter(|key| !after.contains_key(*key)) {
         table.remove(key);
     }
-    for (key, value) in after.iter().filter(|(key, value)| before.get(*key) != Some(*value)) {
+    for (key, value) in after
+        .iter()
+        .filter(|(key, value)| before.get(*key) != Some(*value))
+    {
         let item: toml_edit::DocumentMut = format!("value = {value}").parse()?;
         table.insert(key, item["value"].clone());
     }
@@ -3449,9 +3913,13 @@ fn remove_registered_library_dependency(
         };
         let previous_count = dependencies.len();
         dependencies.retain(|alias, dependency| {
-            let package = dependency.get("package").and_then(Value::as_str).unwrap_or(alias);
-            package != name || !dependency_path(dependency)
-                .is_some_and(|path| normalize_path(project_dir.join(path)) == removed_path)
+            let package = dependency
+                .get("package")
+                .and_then(Value::as_str)
+                .unwrap_or(alias);
+            package != name
+                || !dependency_path(dependency)
+                    .is_some_and(|path| normalize_path(project_dir.join(path)) == removed_path)
         });
         if dependencies.len() != previous_count {
             write(&cargo_path, toml::to_string_pretty(&cargo)?)
@@ -3534,11 +4002,23 @@ fn detect_rust_project_kind(app_root: &Path, name: &str) -> Result<RustProjectKi
         return Ok(kind);
     }
 
-    let crate_dir = app_root.join(discovery::path(app_root, &manifest, name)?.context("Missing Rust project path")?);
-    if ["consumer/worker.rs", "consumer/worker_hooks.rs", "worker.rs", "src/jobs/mod.rs"].iter().any(|path| crate_dir.join(path).is_file()) {
+    let crate_dir = app_root
+        .join(discovery::path(app_root, &manifest, name)?.context("Missing Rust project path")?);
+    if [
+        "consumer/worker.rs",
+        "consumer/worker_hooks.rs",
+        "worker.rs",
+        "src/jobs/mod.rs",
+    ]
+    .iter()
+    .any(|path| crate_dir.join(path).is_file())
+    {
         return Ok(RustProjectKind::Worker);
     }
-    if ["api/routes/mod.rs", "src/routes/mod.rs"].iter().any(|path| crate_dir.join(path).is_file()) {
+    if ["api/routes/mod.rs", "src/routes/mod.rs"]
+        .iter()
+        .any(|path| crate_dir.join(path).is_file())
+    {
         return Ok(RustProjectKind::Service);
     }
     Ok(RustProjectKind::Library)
@@ -3582,8 +4062,14 @@ fn remove_project_from_manifest_value(
 
 fn cleanup_missing_rust_projects(app_root: &Path) -> Result<()> {
     let manifest = read_manifest_value(&app_root.join(".forklaunch/manifest.toml"))?;
-    let missing: Vec<_> = rust_workspace_projects(&manifest).into_iter()
-        .filter(|project| !app_root.join(&project.crate_path).join("Cargo.toml").is_file())
+    let missing: Vec<_> = rust_workspace_projects(&manifest)
+        .into_iter()
+        .filter(|project| {
+            !app_root
+                .join(&project.crate_path)
+                .join("Cargo.toml")
+                .is_file()
+        })
         .collect();
     for project in &missing {
         delete_rust_project_inner(app_root, project.kind, &project.name, false)?;
@@ -3619,12 +4105,21 @@ pub(crate) fn remove_cargo_member(app_root: &Path, member: &str) -> Result<()> {
 
 /// A renamed TypeScript project keeps its generated Rust SDK crate (a root
 /// workspace member) under the new directory.
-pub(crate) fn rename_typescript_sdk_member(app_root: &Path, old_dir: &Path, new_dir: &Path) -> Result<()> {
+pub(crate) fn rename_typescript_sdk_member(
+    app_root: &Path,
+    old_dir: &Path,
+    new_dir: &Path,
+) -> Result<()> {
     if !app_root.join("Cargo.toml").exists() {
         return Ok(());
     }
     let relative = |dir: &Path| -> Result<String> {
-        Ok(dir.strip_prefix(app_root).unwrap_or(dir).join("sdk/rust").to_string_lossy().into_owned())
+        Ok(dir
+            .strip_prefix(app_root)
+            .unwrap_or(dir)
+            .join("sdk/rust")
+            .to_string_lossy()
+            .into_owned())
     };
     let (current, target) = (relative(old_dir)?, relative(new_dir)?);
     let listed = read_to_string(app_root.join("Cargo.toml"))?
@@ -3632,7 +4127,11 @@ pub(crate) fn rename_typescript_sdk_member(app_root: &Path, old_dir: &Path, new_
         .get("workspace")
         .and_then(|workspace| workspace.get("members"))
         .and_then(toml_edit::Item::as_array)
-        .is_some_and(|members| members.iter().any(|member| member.as_str() == Some(current.as_str())));
+        .is_some_and(|members| {
+            members
+                .iter()
+                .any(|member| member.as_str() == Some(current.as_str()))
+        });
     if listed {
         replace_cargo_member(app_root, &current, &target)?;
     }
@@ -3738,13 +4237,20 @@ fn update_rust_root_cargo_metadata(
     let cargo_path = app_root.join("Cargo.toml");
     let existing = read_to_string(&cargo_path)
         .with_context(|| format!("Failed to read {}", cargo_path.display()))?;
-    write(&cargo_path, cargo_metadata_source(&existing, author, license)?)
-        .with_context(|| format!("Failed to update {}", cargo_path.display()))
+    write(
+        &cargo_path,
+        cargo_metadata_source(&existing, author, license)?,
+    )
+    .with_context(|| format!("Failed to update {}", cargo_path.display()))
 }
 
 /// The workspace manifest with new `[workspace.package]` authors/license, the
 /// rest of the file (member order, comments, key order) as written.
-fn cargo_metadata_source(existing: &str, author: Option<&str>, license: Option<&str>) -> Result<String> {
+fn cargo_metadata_source(
+    existing: &str,
+    author: Option<&str>,
+    license: Option<&str>,
+) -> Result<String> {
     let mut cargo = existing
         .parse::<toml_edit::DocumentMut>()
         .context("Failed to parse the root Cargo.toml")?;
@@ -3771,13 +4277,21 @@ fn cargo_metadata_source(existing: &str, author: Option<&str>, license: Option<&
     Ok(cargo.to_string())
 }
 
-fn update_rust_readme(app_root: &Path, previous_name: &str, target_name: &str, description: Option<&str>) -> Result<()> {
+fn update_rust_readme(
+    app_root: &Path,
+    previous_name: &str,
+    target_name: &str,
+    description: Option<&str>,
+) -> Result<()> {
     let readme_path = app_root.join("README.md");
     if !readme_path.exists() {
         // The workspace README lives with the modules; only its generated
         // title follows a rename.
         let modules = read_manifest_value(&app_root.join(".forklaunch/manifest.toml"))?
-            .get("modules_path").and_then(Value::as_str).unwrap_or("src").to_string();
+            .get("modules_path")
+            .and_then(Value::as_str)
+            .unwrap_or("src")
+            .to_string();
         let path = app_root.join(modules).join("README.md");
         if let Ok(existing) = read_to_string(&path)
             && let Some(rest) = existing.strip_prefix(&format!("# {previous_name}\n"))
@@ -3813,7 +4327,10 @@ fn ensure_service_shape(crate_dir: &Path, name: &str) -> Result<()> {
     create_dir_all(crate_dir.join("src/persistence"))?;
     let compliance = crate_dir.join("src/persistence/compliance_schema.rs");
     if !compliance.exists() {
-        write(&compliance, "//! Conversion requires an explicit audit of existing owned storage.\npub fn declarations() -> Vec<forklaunch_core::persistence::compliance::ComplianceEntity> {\n    compile_error!(\"Declare the converted service owned storage before emitting compliance metadata\");\n}\n")?;
+        write(
+            &compliance,
+            "//! Conversion requires an explicit audit of existing owned storage.\npub fn declarations() -> Vec<forklaunch_core::persistence::compliance::ComplianceEntity> {\n    compile_error!(\"Declare the converted service owned storage before emitting compliance metadata\");\n}\n",
+        )?;
     }
     write(
         crate_dir.join("build.rs"),
@@ -3834,9 +4351,17 @@ fn ensure_service_shape(crate_dir: &Path, name: &str) -> Result<()> {
     let cargo_path = crate_dir.join("Cargo.toml");
     let manifest = read_to_string(&cargo_path)?;
     let mut manifest: toml::Value = toml::from_str(&manifest)?;
-    let features = manifest["dependencies"]["forklaunch-core"].as_table_mut().unwrap()
-        .entry("features").or_insert_with(|| toml::Value::Array(Vec::new())).as_array_mut().unwrap();
-    if !features.iter().any(|feature| feature.as_str() == Some("typed-schema")) {
+    let features = manifest["dependencies"]["forklaunch-core"]
+        .as_table_mut()
+        .unwrap()
+        .entry("features")
+        .or_insert_with(|| toml::Value::Array(Vec::new()))
+        .as_array_mut()
+        .unwrap();
+    if !features
+        .iter()
+        .any(|feature| feature.as_str() == Some("typed-schema"))
+    {
         features.push(toml::Value::String("typed-schema".into()));
     }
     let generated: toml::Value = toml::from_str(&service_cargo_toml(name, ""))?;
@@ -3959,7 +4484,10 @@ fn rewrite_routes_mod(routes_dir: &Path, dryrun: bool, stdout: &mut StandardStre
     } else {
         routes_mod_rs(&modules)
     };
-    if let Some(project) = routes_dir.ancestors().find(|directory| directory.join("Cargo.toml").is_file()) {
+    if let Some(project) = routes_dir
+        .ancestors()
+        .find(|directory| directory.join("Cargo.toml").is_file())
+    {
         if shared_module_contracts(project) {
             rewrite_module_extensions(&project.join("api/contracts/extensions"), dryrun, stdout)?;
         }
@@ -3968,12 +4496,25 @@ fn rewrite_routes_mod(routes_dir: &Path, dryrun: bool, stdout: &mut StandardStre
 }
 
 fn shared_module_contracts(project: &Path) -> bool {
-    read_to_string(project.join("sdk.rs")).is_ok_and(|source| source.contains("pub use crate::api::contracts::registry::*"))
+    read_to_string(project.join("sdk.rs"))
+        .is_ok_and(|source| source.contains("pub use crate::api::contracts::registry::*"))
 }
 
-fn rewrite_module_extensions(directory: &Path, dryrun: bool, stdout: &mut StandardStream) -> Result<()> {
-    let modules = rust_route_modules(directory)?.into_iter().filter(|module| directory.join(format!("{module}.rs")).is_file()).collect::<Vec<_>>();
-    write_text_file(&directory.join("mod.rs"), &modules::extension_contracts_mod(&modules), dryrun, stdout)
+fn rewrite_module_extensions(
+    directory: &Path,
+    dryrun: bool,
+    stdout: &mut StandardStream,
+) -> Result<()> {
+    let modules = rust_route_modules(directory)?
+        .into_iter()
+        .filter(|module| directory.join(format!("{module}.rs")).is_file())
+        .collect::<Vec<_>>();
+    write_text_file(
+        &directory.join("mod.rs"),
+        &modules::extension_contracts_mod(&modules),
+        dryrun,
+        stdout,
+    )
 }
 
 fn rust_route_modules(routes_dir: &Path) -> Result<Vec<String>> {
@@ -4061,8 +4602,7 @@ fn write_manifest_value(path: &Path, value: &Value) -> Result<()> {
     if let Ok(original) = read_to_string(path) {
         content = crate::core::manifest::preserve_manifest_layout(&original, &content);
     }
-    write(path, content)
-        .with_context(|| format!("Failed to write {}", path.display()))
+    write(path, content).with_context(|| format!("Failed to write {}", path.display()))
 }
 
 fn write_rust_rendered_templates(
@@ -4184,7 +4724,11 @@ mod workspace_tests {
     fn applications_without_a_selection_get_the_published_release() {
         let root = tempfile::tempdir().unwrap();
         std::fs::create_dir(root.path().join(".forklaunch")).unwrap();
-        std::fs::write(root.path().join(".forklaunch/manifest.toml"), "modules_path = \"src\"\n").unwrap();
+        std::fs::write(
+            root.path().join(".forklaunch/manifest.toml"),
+            "modules_path = \"src\"\n",
+        )
+        .unwrap();
         let cargo_path = root.path().join("Cargo.toml");
         let original = "# application-owned workspace\n[workspace]\nmembers = []\n";
         std::fs::write(&cargo_path, original).unwrap();
@@ -4204,8 +4748,14 @@ mod workspace_tests {
         let mut cargo: Value = toml::from_str(source).unwrap();
         let dependencies = cargo["dependencies"].as_table_mut().unwrap();
         dependencies.remove("old");
-        dependencies.insert("shared".into(), toml::from_str::<Value>("path = '../core/shared'").unwrap());
-        assert_eq!(edited_dependencies(source, &cargo).unwrap(), "# mine\n[package]\nname = \"api\"\n\n[dependencies]\naxum = \"0.8\"\nshared = { path = \"../core/shared\" }\n");
+        dependencies.insert(
+            "shared".into(),
+            toml::from_str::<Value>("path = '../core/shared'").unwrap(),
+        );
+        assert_eq!(
+            edited_dependencies(source, &cargo).unwrap(),
+            "# mine\n[package]\nname = \"api\"\n\n[dependencies]\naxum = \"0.8\"\nshared = { path = \"../core/shared\" }\n"
+        );
         let unchanged: Value = toml::from_str(source).unwrap();
         assert_eq!(edited_dependencies(source, &unchanged).unwrap(), source);
     }
@@ -4214,7 +4764,12 @@ mod workspace_tests {
     fn application_metadata_keeps_the_workspace_manifest_layout() {
         let source = "[workspace]\nresolver = \"3\"\nmembers = [\n    \"src/b\",\n    \"src/a\",\n]\n\n[workspace.package]\nversion = \"0.1.0\"\nlicense = \"MIT\"\nauthors = [\"ForkLaunch\"]\n";
         let updated = cargo_metadata_source(source, Some("Jane Doe"), Some("Apache-2.0")).unwrap();
-        assert_eq!(updated, source.replace("\"MIT\"", "\"Apache-2.0\"").replace("[\"ForkLaunch\"]", "[\"Jane Doe\"]"));
+        assert_eq!(
+            updated,
+            source
+                .replace("\"MIT\"", "\"Apache-2.0\"")
+                .replace("[\"ForkLaunch\"]", "[\"Jane Doe\"]")
+        );
     }
 
     #[test]
@@ -4262,7 +4817,10 @@ models = { path = "../../vendor/models" }
         let cargo: Value = toml::from_str(&read_to_string(api).unwrap()).unwrap();
         assert!(cargo["dependencies"].get("models").is_none());
         assert!(cargo["dependencies"].get("domain_models").is_none());
-        assert_eq!(cargo["dependencies"]["external_models"]["path"].as_str(), Some("../../vendor/models"));
+        assert_eq!(
+            cargo["dependencies"]["external_models"]["path"].as_str(),
+            Some("../../vendor/models")
+        );
         assert_eq!(
             cargo["dependencies"]["manual"]["path"].as_str(),
             Some("../../shared/manual")
@@ -4404,7 +4962,10 @@ mod compliance_artifact_tests {
         // Build scripts exactly as earlier releases generated them.
         const NATIVE_SERVICE: &str = "mod build_assets;\n#[path = \"persistence/compliance_schema.rs\"]\nmod compliance_schema;\nfn main() -> Result<(), Box<dyn std::error::Error>> {\n    println!(\"cargo:rerun-if-changed=persistence/compliance_schema.rs\");\n    println!(\"cargo:rerun-if-changed=compliance.json\");\n    let path = std::path::PathBuf::from(std::env::var(\"CARGO_MANIFEST_DIR\")?).join(\"compliance.json\");\n    let metadata = forklaunch_core::persistence::compliance::compliance_manifest(&compliance_schema::declarations()).to_string();\n    if std::fs::read_to_string(&path).ok().as_deref() != Some(metadata.as_str()) {\n        std::fs::write(path, metadata)?;\n    }\n    println!(\"cargo:rerun-if-changed=domain/schemas\");\n    println!(\"cargo:rerun-if-changed=api/contracts\");\n    println!(\"cargo:rerun-if-changed=sdk.rs\");\n    println!(\"cargo:rerun-if-changed=build_assets.rs\");\n    let evidence = forklaunch_core::build::provenance::ServiceBuild::capture(&[])?;\n    let output = forklaunch_core::build::service_sdks(&contracts::registry(), \"{{{name}}}\", \"ForkLaunchClient\")?;\n    let evidence = evidence.include_assets(&build_assets::declared_assets(&output)?)?;\n    let evidence = if let Some(bindings) = build_assets::binding_declarations()? { evidence.with_bindings(bindings) } else { evidence };\n    build_assets::emit(&output)?;\n    evidence.record(\"{{{name}}}\", &output)?;\n    Ok(())\n}\n";
         const APALIS_WORKER: &str = "#[path = \"persistence/compliance_schema.rs\"]\nmod compliance_schema;\nmod build_assets;\nfn main() -> Result<(), Box<dyn std::error::Error>> {\n    println!(\"cargo:rerun-if-changed=persistence/compliance_schema.rs\");\n    println!(\"cargo:rerun-if-changed=compliance.json\");\n    println!(\"cargo:rerun-if-changed=build_assets.rs\");\n    let metadata = forklaunch_core::persistence::compliance::compliance_manifest(&compliance_schema::declarations()).to_string();\n    let path = std::path::Path::new(env!(\"CARGO_MANIFEST_DIR\")).join(\"compliance.json\");\n    if std::fs::read_to_string(&path).ok().as_deref() != Some(metadata.as_str()) { std::fs::write(path, metadata)?; }\n    build_assets::generate()\n}\n";
-        for (template, legacy) in [("native-service", NATIVE_SERVICE), ("apalis-worker", APALIS_WORKER)] {
+        for (template, legacy) in [
+            ("native-service", NATIVE_SERVICE),
+            ("apalis-worker", APALIS_WORKER),
+        ] {
             let root = tempfile::tempdir().unwrap();
             let legacy = legacy.to_owned();
             assert!(!legacy.contains("create_dir_all"), "{template}");
@@ -4412,15 +4973,28 @@ mod compliance_artifact_tests {
             write(root.path().join("compliance.json"), "{}").unwrap();
             migrate_compliance_artifact(root.path()).unwrap();
             let migrated = read_to_string(root.path().join("build.rs")).unwrap();
-            assert_eq!(migrated.matches(".forklaunch/compliance.json").count(), 2, "{template}");
-            assert!(migrated.contains("create_dir_all(path.parent()"), "{template}");
+            assert_eq!(
+                migrated.matches(".forklaunch/compliance.json").count(),
+                2,
+                "{template}"
+            );
+            assert!(
+                migrated.contains("create_dir_all(path.parent()"),
+                "{template}"
+            );
             syn::parse_file(&migrated).unwrap();
             assert!(!root.path().join("compliance.json").exists());
 
-            let custom = legacy.replace(".join(\"compliance.json\")", ".join(\"audit/compliance.json\")");
+            let custom = legacy.replace(
+                ".join(\"compliance.json\")",
+                ".join(\"audit/compliance.json\")",
+            );
             write(root.path().join("build.rs"), &custom).unwrap();
             migrate_compliance_artifact(root.path()).unwrap();
-            assert_eq!(read_to_string(root.path().join("build.rs")).unwrap(), custom);
+            assert_eq!(
+                read_to_string(root.path().join("build.rs")).unwrap(),
+                custom
+            );
         }
     }
 }
@@ -4438,33 +5012,60 @@ mod local_env_tests {
         record_typescript_language(root.path(), "ecommerce").unwrap();
         record_typescript_language(root.path(), "billing").unwrap();
         let value = read_manifest_value(&root.path().join(".forklaunch/manifest.toml")).unwrap();
-        let language = |index: usize| value["projects"][index]["metadata"]["language"].as_str().map(str::to_owned);
+        let language = |index: usize| {
+            value["projects"][index]["metadata"]["language"]
+                .as_str()
+                .map(str::to_owned)
+        };
         assert_eq!(language(0).as_deref(), Some("typescript"));
         assert_eq!(language(1).as_deref(), Some("rust"));
         // TypeScript-only applications are left as they are.
         let plain = "[[projects]]\nname = \"ecommerce\"\n";
         write(root.path().join(".forklaunch/manifest.toml"), plain).unwrap();
         record_typescript_language(root.path(), "ecommerce").unwrap();
-        assert_eq!(read_to_string(root.path().join(".forklaunch/manifest.toml")).unwrap(), plain);
+        assert_eq!(
+            read_to_string(root.path().join(".forklaunch/manifest.toml")).unwrap(),
+            plain
+        );
     }
 
     #[test]
     fn http_processes_get_their_required_settings_and_keep_existing_values() {
         let root = tempfile::tempdir().unwrap();
         let mut compose = DockerCompose::default();
-        compose.services.insert("api".into(), rust_docker_service("app", "api", RustProjectKind::Service, Some(8004)));
+        compose.services.insert(
+            "api".into(),
+            rust_docker_service("app", "api", RustProjectKind::Service, Some(8004)),
+        );
         let worker = rust_docker_service("app", "jobs", RustProjectKind::Worker, None);
-        assert!(!worker.environment.as_ref().unwrap().contains_key("MCP_ENABLED"));
+        assert!(
+            !worker
+                .environment
+                .as_ref()
+                .unwrap()
+                .contains_key("MCP_ENABLED")
+        );
         compose.services.insert("jobs".into(), worker);
         let mut producer = rust_docker_service("app", "jobs-server", RustProjectKind::Worker, None);
         producer.ports = Some(vec!["127.0.0.1:8005:3000".into()]);
         compose.services.insert("jobs-server".into(), producer);
-        write(root.path().join("docker-compose.yaml"), yaml_to_string(&compose).unwrap()).unwrap();
-        assert_eq!(compose.services["api"].environment.as_ref().unwrap()["MCP_ENABLED"], "true");
+        write(
+            root.path().join("docker-compose.yaml"),
+            yaml_to_string(&compose).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            compose.services["api"].environment.as_ref().unwrap()["MCP_ENABLED"],
+            "true"
+        );
 
         let api = root.path().join("api");
         create_dir_all(&api).unwrap();
-        write(api.join(".env.local"), "PORT=9999\nREDIS_URL=redis://localhost:6379").unwrap();
+        write(
+            api.join(".env.local"),
+            "PORT=9999\nREDIS_URL=redis://localhost:6379",
+        )
+        .unwrap();
         ensure_rust_local_env(root.path(), &api, "api").unwrap();
         assert_eq!(
             read_to_string(api.join(".env.local")).unwrap(),
@@ -4474,7 +5075,11 @@ mod local_env_tests {
         let jobs = root.path().join("jobs");
         create_dir_all(&jobs).unwrap();
         ensure_rust_local_env(root.path(), &jobs, "jobs").unwrap();
-        assert!(read_to_string(jobs.join(".env.local")).unwrap().contains("PORT=8005\n"));
+        assert!(
+            read_to_string(jobs.join(".env.local"))
+                .unwrap()
+                .contains("PORT=8005\n")
+        );
 
         let consumer = root.path().join("consumer");
         create_dir_all(&consumer).unwrap();

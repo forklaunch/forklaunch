@@ -1,7 +1,7 @@
 use super::*;
 mod event_package;
 mod service;
-pub(super) use service::{templates as service_templates,consumer_contracts};
+pub(super) use service::{consumer_contracts, templates as service_templates};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Backend {
@@ -52,14 +52,32 @@ pub(super) fn backend(root: &Path, name: &str) -> Result<Option<Backend>> {
     let directory = root
         .join(crate_path_for_project(&manifest, name).unwrap_or_else(|| format!("crates/{name}")));
     let cargo: Value = toml::from_str(&read_to_string(directory.join("Cargo.toml"))?)?;
-    if cargo.get("dependencies").and_then(|dependencies| dependencies.get("apalis-postgres")).is_some() {
+    if cargo
+        .get("dependencies")
+        .and_then(|dependencies| dependencies.get("apalis-postgres"))
+        .is_some()
+    {
         return Ok(Some(Backend::Postgres));
     }
     // Current workers keep runtime processors in consumer/, with service exports at the root.
-    let native_source = ["consumer/worker.rs", "consumer/worker_hooks.rs", "worker.rs"]
-        .into_iter().filter_map(|file| read_to_string(directory.join(file)).ok()).collect::<Vec<_>>().join("\n");
-    for (marker, backend) in [("BullMqConsumer", Backend::Redis), ("PostgresWorkerQueue", Backend::Postgres), ("KafkaWorker", Backend::Kafka), ("RedisLeasedQueue", Backend::Redis)] {
-        if native_source.contains(marker) { return Ok(Some(backend)); }
+    let native_source = [
+        "consumer/worker.rs",
+        "consumer/worker_hooks.rs",
+        "worker.rs",
+    ]
+    .into_iter()
+    .filter_map(|file| read_to_string(directory.join(file)).ok())
+    .collect::<Vec<_>>()
+    .join("\n");
+    for (marker, backend) in [
+        ("BullMqConsumer", Backend::Redis),
+        ("PostgresWorkerQueue", Backend::Postgres),
+        ("KafkaWorker", Backend::Kafka),
+        ("RedisLeasedQueue", Backend::Redis),
+    ] {
+        if native_source.contains(marker) {
+            return Ok(Some(backend));
+        }
     }
     if directory.join("src/handler.rs").exists() {
         let source = read_to_string(directory.join("src/main.rs"))?;
@@ -111,9 +129,16 @@ pub(super) fn templates(
             context: None,
         });
     }
-    for (destination, source) in [("src/event_contract.rs", "event_contract.rs"), ("persistence/compliance_schema.rs", "compliance_schema.rs"), ("build.rs", "build.rs")] {
-        templates.push(RenderedTemplate { path: crate_dir.join(destination),
-            content: render_rust_template(&format!("rust/leased-worker/{source}"), &data), context: None });
+    for (destination, source) in [
+        ("src/event_contract.rs", "event_contract.rs"),
+        ("persistence/compliance_schema.rs", "compliance_schema.rs"),
+        ("build.rs", "build.rs"),
+    ] {
+        templates.push(RenderedTemplate {
+            path: crate_dir.join(destination),
+            content: render_rust_template(&format!("rust/leased-worker/{source}"), &data),
+            context: None,
+        });
     }
     templates.push(RenderedTemplate {
         path: crate_dir.join("src/events.rs"),
@@ -190,12 +215,23 @@ fn cargo_with_backend(
     {
         core_features.push("otlp");
     }
-    if !core_features.iter().any(|feature| feature.as_str() == Some("encryption")) { core_features.push("encryption"); }
+    if !core_features
+        .iter()
+        .any(|feature| feature.as_str() == Some("encryption"))
+    {
+        core_features.push("encryption");
+    }
     // Shared module types (errors, paging, audit context) are framework `domain`.
-    if !core_features.iter().any(|feature| feature.as_str() == Some("domain")) { core_features.push("domain"); }
+    if !core_features
+        .iter()
+        .any(|feature| feature.as_str() == Some("domain"))
+    {
+        core_features.push("domain");
+    }
     cargo["dependencies"]["serde_json"] = toml_edit::value(toml_edit::InlineTable::new());
     cargo["package"]["build"] = toml_edit::value("build.rs");
-    cargo["dependencies"]["forklaunch-worker-interface"]["features"] = toml_edit::value(toml_edit::Array::from_iter(["schema"]));
+    cargo["dependencies"]["forklaunch-worker-interface"]["features"] =
+        toml_edit::value(toml_edit::Array::from_iter(["schema"]));
     let mut schema = toml_edit::InlineTable::new();
     schema.insert("features", toml_edit::Array::from_iter(["uuid1"]).into());
     cargo["dependencies"]["schemars"] = toml_edit::value(schema);
@@ -206,11 +242,25 @@ fn cargo_with_backend(
         cargo["dependencies"][name] = toml_edit::value(dependency);
     }
 
-    for name in ["forklaunch-core", "forklaunch-worker-interface", "serde", "serde_json", "uuid", "zeroize", "schemars"] {
+    for name in [
+        "forklaunch-core",
+        "forklaunch-worker-interface",
+        "serde",
+        "serde_json",
+        "uuid",
+        "zeroize",
+        "schemars",
+    ] {
         cargo["build-dependencies"][name] = cargo["dependencies"][name].clone();
     }
-    cargo["dependencies"]["forklaunch-worker-interface"]["features"] = toml_edit::value(toml_edit::Array::from_iter(["schema", "telemetry"]));
-    cargo["build-dependencies"]["forklaunch-core"]["features"] = toml_edit::value(toml_edit::Array::from_iter(["compliance-artifact", "encryption", "build"]));
+    cargo["dependencies"]["forklaunch-worker-interface"]["features"] =
+        toml_edit::value(toml_edit::Array::from_iter(["schema", "telemetry"]));
+    cargo["build-dependencies"]["forklaunch-core"]["features"] =
+        toml_edit::value(toml_edit::Array::from_iter([
+            "compliance-artifact",
+            "encryption",
+            "build",
+        ]));
 
     if backend == Backend::Kafka {
         let mut dependency = toml_edit::InlineTable::new();
@@ -241,7 +291,8 @@ pub(super) fn convert(root: &Path, name: &str, backend: Backend) -> Result<()> {
     let directory = root
         .join(crate_path_for_project(&manifest, name).unwrap_or_else(|| format!("crates/{name}")));
     if directory.join("lib.rs").exists() {
-        let description = cargo_description(&directory.join("Cargo.toml"))?.unwrap_or_else(|| "Durable worker".into());
+        let description = cargo_description(&directory.join("Cargo.toml"))?
+            .unwrap_or_else(|| "Durable worker".into());
         let templates = templates(root, &directory, name, &description, backend)?;
         let templates =
             native_layout::flatten(&directory, name, RustProjectKind::Worker, templates);
@@ -249,7 +300,9 @@ pub(super) fn convert(root: &Path, name: &str, backend: Backend) -> Result<()> {
             && contracts_layout::directory(&directory).is_some()
         {
             consumer_contracts(&directory, name, templates)?
-        } else { templates };
+        } else {
+            templates
+        };
         let templates = native_mappers::templates(&directory, false, templates)?;
         let templates = native_layout::framework_paths(root, templates);
         native_layout::apply_conversion(&directory, RustProjectKind::Worker, templates)?;
@@ -264,11 +317,24 @@ pub(super) fn convert(root: &Path, name: &str, backend: Backend) -> Result<()> {
     let data = rust_crate_template_data(name, "Durable worker", true);
     create_dir_all(directory.join("persistence"))?;
     if !directory.join("persistence/compliance_schema.rs").exists() {
-        write(directory.join("persistence/compliance_schema.rs"), render_rust_template("rust/leased-worker/compliance_schema.rs", &data))?;
+        write(
+            directory.join("persistence/compliance_schema.rs"),
+            render_rust_template("rust/leased-worker/compliance_schema.rs", &data),
+        )?;
     }
-    write(directory.join("src/event_contract.rs"), render_rust_template("rust/leased-worker/event_contract.rs", &data))?;
-    write(directory.join("build.rs"), render_rust_template("rust/leased-worker/build.rs", &data).replace("domain/schemas/event_contract.rs", "src/event_contract.rs"))?;
-    write(directory.join("src/events.rs"), render_rust_template("rust/leased-worker/events.rs", &data))?;
+    write(
+        directory.join("src/event_contract.rs"),
+        render_rust_template("rust/leased-worker/event_contract.rs", &data),
+    )?;
+    write(
+        directory.join("build.rs"),
+        render_rust_template("rust/leased-worker/build.rs", &data)
+            .replace("domain/schemas/event_contract.rs", "src/event_contract.rs"),
+    )?;
+    write(
+        directory.join("src/events.rs"),
+        render_rust_template("rust/leased-worker/events.rs", &data),
+    )?;
     write(
         directory.join("src/main.rs"),
         render_rust_template(&format!("rust/{}/main.rs", backend.template()), &data),
@@ -389,20 +455,53 @@ pub(super) fn compose(root: &Path, name: &str, backend: Backend) -> Result<()> {
     // earlier shared `WORKER_` names. Explicit application values remain untouched.
     for owner in [prefix.as_str(), "WORKER"] {
         for (key, expected, keep) in [
-            ("DATABASE_URL", format!("${{{owner}_DATABASE_URL:?Configure a restricted PostgreSQL role}}"), backend == Backend::Postgres),
-            ("REDIS_URL", format!("${{{owner}_REDIS_URL:?Configure Redis}}"), backend == Backend::Redis),
-            ("KAFKA_BROKERS", format!("${{{owner}_KAFKA_BROKERS:?Configure Kafka brokers}}"), backend == Backend::Kafka),
-            ("KAFKA_TRANSACTIONAL_ID", format!("${{{owner}_KAFKA_TRANSACTIONAL_ID:?Configure a stable unique identity for {name}}}"), backend == Backend::Kafka),
-            ("KAFKA_PUBLISHER_ID", format!("${{{owner}_KAFKA_PUBLISHER_ID:?Configure a stable publisher identity for {name}}}"), backend == Backend::Kafka),
-            ("REDIS_KEY_PREFIX", format!("${{{owner}_REDIS_KEY_PREFIX:?Configure the application Redis ACL namespace}}"), false),
+            (
+                "DATABASE_URL",
+                format!("${{{owner}_DATABASE_URL:?Configure a restricted PostgreSQL role}}"),
+                backend == Backend::Postgres,
+            ),
+            (
+                "REDIS_URL",
+                format!("${{{owner}_REDIS_URL:?Configure Redis}}"),
+                backend == Backend::Redis,
+            ),
+            (
+                "KAFKA_BROKERS",
+                format!("${{{owner}_KAFKA_BROKERS:?Configure Kafka brokers}}"),
+                backend == Backend::Kafka,
+            ),
+            (
+                "KAFKA_TRANSACTIONAL_ID",
+                format!(
+                    "${{{owner}_KAFKA_TRANSACTIONAL_ID:?Configure a stable unique identity for {name}}}"
+                ),
+                backend == Backend::Kafka,
+            ),
+            (
+                "KAFKA_PUBLISHER_ID",
+                format!(
+                    "${{{owner}_KAFKA_PUBLISHER_ID:?Configure a stable publisher identity for {name}}}"
+                ),
+                backend == Backend::Kafka,
+            ),
+            (
+                "REDIS_KEY_PREFIX",
+                format!(
+                    "${{{owner}_REDIS_KEY_PREFIX:?Configure the application Redis ACL namespace}}"
+                ),
+                false,
+            ),
         ] {
-            if !keep && env.get(key) == Some(&expected) { env.shift_remove(key); }
+            if !keep && env.get(key) == Some(&expected) {
+                env.shift_remove(key);
+            }
         }
     }
     let native_apalis = project_table(&manifest, name)
         .and_then(|project| project.get("metadata"))
         .and_then(|metadata| metadata.get("workerRuntime"))
-        .and_then(Value::as_str) == Some("apalis");
+        .and_then(Value::as_str)
+        == Some("apalis");
     if native_apalis {
         env.entry("DATABASE_ALLOW_PLAINTEXT_DEVELOPMENT".into())
             .or_insert_with(|| "${DATABASE_ALLOW_PLAINTEXT_DEVELOPMENT:-false}".into());
@@ -416,8 +515,9 @@ pub(super) fn compose(root: &Path, name: &str, backend: Backend) -> Result<()> {
         Backend::Kafka => {
             env.entry("KAFKA_BROKERS".into())
                 .or_insert_with(|| format!("${{{prefix}_KAFKA_BROKERS:?Configure Kafka brokers}}"));
-            env.entry("WORKER_NAMESPACE".into())
-                .or_insert_with(|| format!("${{{prefix}_NAMESPACE:?Configure a worker namespace}}"));
+            env.entry("WORKER_NAMESPACE".into()).or_insert_with(|| {
+                format!("${{{prefix}_NAMESPACE:?Configure a worker namespace}}")
+            });
             env.entry("KAFKA_TRANSACTIONAL_ID".into()).or_insert_with(|| format!("${{{prefix}_KAFKA_TRANSACTIONAL_ID:?Configure a stable unique identity for {name}}}"));
             // The producer (`POST /jobs`, `--enqueue`) publishes under its own identity.
             env.entry("KAFKA_PUBLISHER_ID".into()).or_insert_with(|| format!("${{{prefix}_KAFKA_PUBLISHER_ID:?Configure a stable publisher identity for {name}}}"));
@@ -426,8 +526,9 @@ pub(super) fn compose(root: &Path, name: &str, backend: Backend) -> Result<()> {
             env.entry("REDIS_URL".into())
                 .or_insert_with(|| format!("${{{prefix}_REDIS_URL:?Configure Redis}}"));
             if backend == Backend::Redis {
-                env.entry("WORKER_NAMESPACE".into())
-                    .or_insert_with(|| format!("${{{prefix}_NAMESPACE:?Configure a worker namespace}}"));
+                env.entry("WORKER_NAMESPACE".into()).or_insert_with(|| {
+                    format!("${{{prefix}_NAMESPACE:?Configure a worker namespace}}")
+                });
             }
         }
     }
@@ -437,59 +538,116 @@ pub(super) fn compose(root: &Path, name: &str, backend: Backend) -> Result<()> {
     let runner: &[(&str, &str)] = match backend {
         _ if native_apalis => &[],
         Backend::Postgres | Backend::Redis => &[
-            ("WORKER_MAX_ATTEMPTS", "3"), ("WORKER_BACKOFF_SECONDS", "30"), ("WORKER_CONCURRENCY", "1"),
-            ("WORKER_BATCH_SIZE", "1"), ("WORKER_POLL_MS", "250"), ("WORKER_LEASE_MS", "30000"),
-            ("WORKER_RENEW_MS", "10000"), ("WORKER_DRAIN_MS", "30000"),
+            ("WORKER_MAX_ATTEMPTS", "3"),
+            ("WORKER_BACKOFF_SECONDS", "30"),
+            ("WORKER_CONCURRENCY", "1"),
+            ("WORKER_BATCH_SIZE", "1"),
+            ("WORKER_POLL_MS", "250"),
+            ("WORKER_LEASE_MS", "30000"),
+            ("WORKER_RENEW_MS", "10000"),
+            ("WORKER_DRAIN_MS", "30000"),
         ],
         Backend::Kafka => &[
-            ("KAFKA_GROUP_ID", "workers"), ("KAFKA_PARTITIONS", "3"), ("KAFKA_REPLICATION_FACTOR", "1"),
-            ("KAFKA_OPERATION_TIMEOUT_MS", "5000"), ("KAFKA_SESSION_TIMEOUT_MS", "10000"),
-            ("WORKER_MAX_PAYLOAD_BYTES", "1048576"), ("WORKER_MAX_ATTEMPTS", "3"),
-            ("WORKER_BACKOFF_SECONDS", "30"), ("WORKER_HANDLER_TIMEOUT_MS", "300000"), ("WORKER_DRAIN_MS", "30000"),
+            ("KAFKA_GROUP_ID", "workers"),
+            ("KAFKA_PARTITIONS", "3"),
+            ("KAFKA_REPLICATION_FACTOR", "1"),
+            ("KAFKA_OPERATION_TIMEOUT_MS", "5000"),
+            ("KAFKA_SESSION_TIMEOUT_MS", "10000"),
+            ("WORKER_MAX_PAYLOAD_BYTES", "1048576"),
+            ("WORKER_MAX_ATTEMPTS", "3"),
+            ("WORKER_BACKOFF_SECONDS", "30"),
+            ("WORKER_HANDLER_TIMEOUT_MS", "300000"),
+            ("WORKER_DRAIN_MS", "30000"),
         ],
     };
     if !native_apalis {
-        env.entry("WORKER_QUEUE".into()).or_insert_with(|| name.into());
+        env.entry("WORKER_QUEUE".into())
+            .or_insert_with(|| name.into());
     }
     for (key, value) in runner {
         env.entry((*key).into()).or_insert_with(|| (*value).into());
     }
     for (name, value) in [
-        ("WORKER_ALLOW_PLAINTEXT_DEVELOPMENT", "${WORKER_ALLOW_PLAINTEXT_DEVELOPMENT:-false}"),
-        ("ENCRYPTION_KEY_HEX", "${ENCRYPTION_KEY_HEX:?Configure a 32-byte worker encryption key}"),
+        (
+            "WORKER_ALLOW_PLAINTEXT_DEVELOPMENT",
+            "${WORKER_ALLOW_PLAINTEXT_DEVELOPMENT:-false}",
+        ),
+        (
+            "ENCRYPTION_KEY_HEX",
+            "${ENCRYPTION_KEY_HEX:?Configure a 32-byte worker encryption key}",
+        ),
         ("ENCRYPTION_KEY_ID", "${ENCRYPTION_KEY_ID:-primary}"),
-        ("ENCRYPTION_PREVIOUS_KEYS_JSON", "${ENCRYPTION_PREVIOUS_KEYS_JSON:-}"),
-        ("ENCRYPTION_LEGACY_KEY_HEX", "${ENCRYPTION_LEGACY_KEY_HEX:-disabled}"),
-    ] { env.entry(name.into()).or_insert_with(|| value.into()); }
-    let has_service = project_table(&manifest, name).and_then(|project|project.get("metadata")).and_then(|metadata|metadata.get("workerService")).and_then(Value::as_bool) == Some(true);
+        (
+            "ENCRYPTION_PREVIOUS_KEYS_JSON",
+            "${ENCRYPTION_PREVIOUS_KEYS_JSON:-}",
+        ),
+        (
+            "ENCRYPTION_LEGACY_KEY_HEX",
+            "${ENCRYPTION_LEGACY_KEY_HEX:-disabled}",
+        ),
+    ] {
+        env.entry(name.into()).or_insert_with(|| value.into());
+    }
+    let has_service = project_table(&manifest, name)
+        .and_then(|project| project.get("metadata"))
+        .and_then(|metadata| metadata.get("workerService"))
+        .and_then(Value::as_bool)
+        == Some(true);
     if has_service {
-        service.command = Some(DockerCommand::Multiple(vec![format!("./target/release/{name}-worker")]));
+        service.command = Some(DockerCommand::Multiple(vec![format!(
+            "./target/release/{name}-worker"
+        )]));
         let mut producer = service.clone();
-        producer.command = Some(DockerCommand::Multiple(vec![format!("./target/release/{name}")]));
+        producer.command = Some(DockerCommand::Multiple(vec![format!(
+            "./target/release/{name}"
+        )]));
         producer.hostname = Some(format!("{name}-server"));
         producer.container_name = None;
-        producer.additional_properties.insert("x-forklaunch-worker-for".into(), serde_yml::Value::String(name.into()));
+        producer.additional_properties.insert(
+            "x-forklaunch-worker-for".into(),
+            serde_yml::Value::String(name.into()),
+        );
         producer.ports = Some(vec![format!("127.0.0.1:{producer_port}:3000")]);
         let environment = producer.environment.get_or_insert_with(IndexMap::new);
         environment.insert("HOST".into(), "0.0.0.0".into());
         environment.insert("PORT".into(), "3000".into());
         environment.insert("MCP_ENABLED".into(), "true".into());
-        environment.entry("PUBLIC_ORIGIN".into()).or_insert_with(|| format!("http://localhost:{producer_port}"));
-        environment.entry("MCP_ALLOWED_HOSTS".into()).or_insert_with(|| "localhost".into());
+        environment
+            .entry("PUBLIC_ORIGIN".into())
+            .or_insert_with(|| format!("http://localhost:{producer_port}"));
+        environment
+            .entry("MCP_ALLOWED_HOSTS".into())
+            .or_insert_with(|| "localhost".into());
         // Internal callers sign producer requests with the shared service key.
-        environment.entry("INTERNAL_HMAC_SECRET_KEY".into()).or_insert_with(|| "${INTERNAL_HMAC_SECRET_KEY:?Configure the shared internal service HMAC key}".into());
+        environment
+            .entry("INTERNAL_HMAC_SECRET_KEY".into())
+            .or_insert_with(|| {
+                "${INTERNAL_HMAC_SECRET_KEY:?Configure the shared internal service HMAC key}".into()
+            });
         let consumer = compose.services[name].clone();
-        let producer = compose.services.entry(format!("{name}-server")).or_insert(producer);
+        let producer = compose
+            .services
+            .entry(format!("{name}-server"))
+            .or_insert(producer);
         // An existing producer gains the queue settings the consumer gained
         // (a backend change); its own listener settings stay.
         let environment = producer.environment.get_or_insert_with(IndexMap::new);
         for (key, value) in consumer.environment.iter().flatten() {
-            if !matches!(key.as_str(), "HOST" | "PORT" | "MCP_ENABLED" | "PUBLIC_ORIGIN" | "MCP_ALLOWED_HOSTS") {
-                environment.entry(key.clone()).or_insert_with(|| value.clone());
+            if !matches!(
+                key.as_str(),
+                "HOST" | "PORT" | "MCP_ENABLED" | "PUBLIC_ORIGIN" | "MCP_ALLOWED_HOSTS"
+            ) {
+                environment
+                    .entry(key.clone())
+                    .or_insert_with(|| value.clone());
             }
         }
         for (key, condition) in consumer.depends_on.iter().flatten() {
-            producer.depends_on.get_or_insert_with(IndexMap::new).entry(key.clone()).or_insert_with(|| condition.clone());
+            producer
+                .depends_on
+                .get_or_insert_with(IndexMap::new)
+                .entry(key.clone())
+                .or_insert_with(|| condition.clone());
         }
         repair_legacy_producer_origin(producer, name);
     }
@@ -502,14 +660,19 @@ pub(super) fn rename_sources(root: &Path, old: &str, new: &str) -> Result<()> {
     let directory = root
         .join(crate_path_for_project(&manifest, new).unwrap_or_else(|| format!("crates/{new}")));
     if directory.join("consumer/lib.rs").is_file() {
-        let cargo_path=directory.join("Cargo.toml");
-        let mut cargo:toml_edit::DocumentMut=read_to_string(&cargo_path)?.parse()?;
-        if let Some(binaries)=cargo.get_mut("bin").and_then(toml_edit::Item::as_array_of_tables_mut) {
+        let cargo_path = directory.join("Cargo.toml");
+        let mut cargo: toml_edit::DocumentMut = read_to_string(&cargo_path)?.parse()?;
+        if let Some(binaries) = cargo
+            .get_mut("bin")
+            .and_then(toml_edit::Item::as_array_of_tables_mut)
+        {
             for binary in binaries.iter_mut() {
-                if binary.get("path").and_then(toml_edit::Item::as_str)==Some("worker.rs") { binary["name"]=toml_edit::value(format!("{new}-worker")); }
+                if binary.get("path").and_then(toml_edit::Item::as_str) == Some("worker.rs") {
+                    binary["name"] = toml_edit::value(format!("{new}-worker"));
+                }
             }
         }
-        write(cargo_path,cargo.to_string())?;
+        write(cargo_path, cargo.to_string())?;
     }
     for relative in ["src/main.rs", "tests/smoke.rs"] {
         let path = directory.join(relative);
@@ -534,7 +697,10 @@ pub(super) fn rename_sources(root: &Path, old: &str, new: &str) -> Result<()> {
     let example = directory.join(".env.example");
     if example.is_file() {
         let source = read_to_string(&example)?;
-        let renamed = source.replace(&format!("\nWORKER_QUEUE={old}\n"), &format!("\nWORKER_QUEUE={new}\n"));
+        let renamed = source.replace(
+            &format!("\nWORKER_QUEUE={old}\n"),
+            &format!("\nWORKER_QUEUE={new}\n"),
+        );
         if renamed != source {
             write(&example, renamed)?;
         }
@@ -542,7 +708,9 @@ pub(super) fn rename_sources(root: &Path, old: &str, new: &str) -> Result<()> {
     let path = root.join("docker-compose.yaml");
     let mut compose = read_or_create_rust_docker_compose(&path)?;
     for service in [old.to_owned(), format!("{old}-server")] {
-        if let Some(queue) = compose.services.get_mut(&service)
+        if let Some(queue) = compose
+            .services
+            .get_mut(&service)
             .and_then(|service| service.environment.as_mut())
             .and_then(|env| env.get_mut("WORKER_QUEUE"))
             .filter(|queue| queue.as_str() == old)
@@ -554,16 +722,29 @@ pub(super) fn rename_sources(root: &Path, old: &str, new: &str) -> Result<()> {
         if producer_owner(&producer) == Some(old) {
             producer.hostname = Some(format!("{new}-server"));
             repair_legacy_producer_origin(&mut producer, old);
-            producer.command = Some(DockerCommand::Multiple(vec![format!("./target/release/{new}")]));
-            producer.additional_properties.insert("x-forklaunch-worker-for".into(), serde_yml::Value::String(new.into()));
+            producer.command = Some(DockerCommand::Multiple(vec![format!(
+                "./target/release/{new}"
+            )]));
+            producer.additional_properties.insert(
+                "x-forklaunch-worker-for".into(),
+                serde_yml::Value::String(new.into()),
+            );
             compose.services.insert(format!("{new}-server"), producer);
-        } else { compose.services.insert(format!("{old}-server"), producer); }
+        } else {
+            compose.services.insert(format!("{old}-server"), producer);
+        }
     }
     if let Some(mut service) = compose.services.shift_remove(old) {
         service.hostname = Some(new.to_owned());
         let consumer = directory.join("consumer/lib.rs").is_file();
-        let binary = if consumer { format!("{new}-worker") } else { new.to_owned() };
-        service.command = Some(DockerCommand::Multiple(vec![format!("./target/release/{binary}")]));
+        let binary = if consumer {
+            format!("{new}-worker")
+        } else {
+            new.to_owned()
+        };
+        service.command = Some(DockerCommand::Multiple(vec![format!(
+            "./target/release/{binary}"
+        )]));
         compose.services.insert(new.to_owned(), service);
     }
     write(path, yaml_to_string(&compose)?)?;
@@ -596,15 +777,41 @@ pub async fn process_job(_event: SealedEvent, _state: ::apalis::prelude::Data<Jo
 }
 "#;
 
-pub(super) fn apalis_templates(root: &Path, dir: &Path, name: &str, description: &str) -> Result<Vec<RenderedTemplate>> {
-    let data=rust_crate_template_data(name,description,true);
-    let relative=crate::core::relative_path::get_relative_path(dir,&root.join(".forklaunch/framework-rs")).to_string_lossy().replace('\\',"/");
-    let worker_path=crate::core::relative_path::get_relative_path(dir,&root.join(".forklaunch/blueprint-rs/crates/interfaces/worker-interface")).to_string_lossy().replace('\\',"/");
-    let mut files=Vec::new();
-    for file in ["main.rs","lib.rs","bootstrapper.rs","worker.rs","worker_hooks.rs","registrations.rs","build.rs"] {
-        files.push(RenderedTemplate{path:dir.join(file),content:render_rust_template(&format!("rust/apalis-worker/{file}"),&data),context:None});
+pub(super) fn apalis_templates(
+    root: &Path,
+    dir: &Path,
+    name: &str,
+    description: &str,
+) -> Result<Vec<RenderedTemplate>> {
+    let data = rust_crate_template_data(name, description, true);
+    let relative =
+        crate::core::relative_path::get_relative_path(dir, &root.join(".forklaunch/framework-rs"))
+            .to_string_lossy()
+            .replace('\\', "/");
+    let worker_path = crate::core::relative_path::get_relative_path(
+        dir,
+        &root.join(".forklaunch/blueprint-rs/crates/interfaces/worker-interface"),
+    )
+    .to_string_lossy()
+    .replace('\\', "/");
+    let mut files = Vec::new();
+    for file in [
+        "main.rs",
+        "lib.rs",
+        "bootstrapper.rs",
+        "worker.rs",
+        "worker_hooks.rs",
+        "registrations.rs",
+        "build.rs",
+    ] {
+        files.push(RenderedTemplate {
+            path: dir.join(file),
+            content: render_rust_template(&format!("rust/apalis-worker/{file}"), &data),
+            context: None,
+        });
     }
-    let cargo=format!(r#"[package]
+    let cargo = format!(
+        r#"[package]
 name = {name:?}
 version = "0.1.0"
 edition = "2024"
@@ -634,9 +841,10 @@ serde_json = {{}}
 uuid = {{ features = ["serde"] }}
 schemars = {{ features = ["uuid1"] }}
 zeroize = {{}}
-"#);
+"#
+    );
     let cargo = crate::core::cargo_toml::fill(&cargo)?;
-    let event=render_rust_template("rust/leased-worker/event_contract.rs",&data);
+    let event = render_rust_template("rust/leased-worker/event_contract.rs", &data);
     for (path,content) in [
         ("Cargo.toml",cargo),
         ("domain/mod.rs","pub mod services;\npub mod schemas;\npub use schemas::event_contract::{WorkInput,WorkEvent};\n".into()),
@@ -658,7 +866,10 @@ zeroize = {{}}
 
 /// Ownership marker prevents deleting unrelated similarly named Compose services.
 pub(super) fn producer_owner(service: &DockerService) -> Option<&str> {
-    service.additional_properties.get("x-forklaunch-worker-for")?.as_str()
+    service
+        .additional_properties
+        .get("x-forklaunch-worker-for")?
+        .as_str()
 }
 
 // Only replace the obsolete generated internal hostname. Application origins and
@@ -719,11 +930,18 @@ fn producer_loopback_origin(service: &DockerService) -> Option<String> {
 }
 
 /// A producer worker's generated files for `backend`, as `init worker` writes them.
-pub(super) fn producer_templates(root: &Path, dir: &Path, name: &str, description: &str, backend: Backend) -> Result<Vec<RenderedTemplate>> {
+pub(super) fn producer_templates(
+    root: &Path,
+    dir: &Path,
+    name: &str,
+    description: &str,
+    backend: Backend,
+) -> Result<Vec<RenderedTemplate>> {
     let worker = templates(root, dir, name, description, backend)?;
     let worker = native_layout::flatten(dir, name, RustProjectKind::Worker, worker);
     let files = service_templates(dir, name, description, worker, false, backend)?;
-    let files = native_mappers::templates(dir, dir.join("domain/mappers/health.rs").is_file(), files)?;
+    let files =
+        native_mappers::templates(dir, dir.join("domain/mappers/health.rs").is_file(), files)?;
     Ok(native_layout::framework_paths(root, files))
 }
 
@@ -731,10 +949,20 @@ pub(super) fn producer_templates(root: &Path, dir: &Path, name: &str, descriptio
 /// backend. Only files still exactly as generated for the current backend are
 /// replaced, application-added Cargo dependencies are kept, and Compose and
 /// `.env` follow. Anything customized stops the change before a write.
-pub(super) fn change_producer_backend(root: &Path, name: &str, from: Backend, to: Backend, dryrun: bool) -> Result<Vec<String>> {
+pub(super) fn change_producer_backend(
+    root: &Path,
+    name: &str,
+    from: Backend,
+    to: Backend,
+    dryrun: bool,
+) -> Result<Vec<String>> {
     let manifest = read_manifest_value(&root.join(".forklaunch/manifest.toml"))?;
-    let dir = root.join(crate_path_for_project(&manifest, name).context("Worker crate path missing")?);
-    anyhow::ensure!(dir.join("consumer/lib.rs").is_file(), "Worker {name} is not a producer worker");
+    let dir =
+        root.join(crate_path_for_project(&manifest, name).context("Worker crate path missing")?);
+    anyhow::ensure!(
+        dir.join("consumer/lib.rs").is_file(),
+        "Worker {name} is not a producer worker"
+    );
     let description = cargo_description(&dir.join("Cargo.toml"))?.unwrap_or_default();
     let current = producer_templates(root, &dir, name, &description, from)?;
     let target = producer_templates(root, &dir, name, &description, to)?;
@@ -745,13 +973,32 @@ pub(super) fn change_producer_backend(root: &Path, name: &str, from: Backend, to
     mark(root, name, to)?;
     switch_compose_backend(root, name, from, to)?;
     compose(root, name, to)?;
-    local_runtime::prune_project_env(root, name, &[
-        "DATABASE_URL", "MIGRATION_DATABASE_URL", "SQLX_OFFLINE", "REDIS_URL", "WORKER_NAMESPACE",
-        "KAFKA_BROKERS", "KAFKA_TRANSACTIONAL_ID", "KAFKA_PUBLISHER_ID", "KAFKA_GROUP_ID", "KAFKA_PARTITIONS",
-        "KAFKA_REPLICATION_FACTOR", "KAFKA_OPERATION_TIMEOUT_MS", "KAFKA_SESSION_TIMEOUT_MS",
-        "WORKER_MAX_PAYLOAD_BYTES", "WORKER_HANDLER_TIMEOUT_MS", "WORKER_BATCH_SIZE", "WORKER_POLL_MS",
-        "WORKER_LEASE_MS", "WORKER_RENEW_MS", "WORKER_CONCURRENCY",
-    ])?;
+    local_runtime::prune_project_env(
+        root,
+        name,
+        &[
+            "DATABASE_URL",
+            "MIGRATION_DATABASE_URL",
+            "SQLX_OFFLINE",
+            "REDIS_URL",
+            "WORKER_NAMESPACE",
+            "KAFKA_BROKERS",
+            "KAFKA_TRANSACTIONAL_ID",
+            "KAFKA_PUBLISHER_ID",
+            "KAFKA_GROUP_ID",
+            "KAFKA_PARTITIONS",
+            "KAFKA_REPLICATION_FACTOR",
+            "KAFKA_OPERATION_TIMEOUT_MS",
+            "KAFKA_SESSION_TIMEOUT_MS",
+            "WORKER_MAX_PAYLOAD_BYTES",
+            "WORKER_HANDLER_TIMEOUT_MS",
+            "WORKER_BATCH_SIZE",
+            "WORKER_POLL_MS",
+            "WORKER_LEASE_MS",
+            "WORKER_RENEW_MS",
+            "WORKER_CONCURRENCY",
+        ],
+    )?;
     Ok(planned)
 }
 
@@ -762,28 +1009,73 @@ fn switch_compose_backend(root: &Path, name: &str, from: Backend, to: Backend) -
     let mut compose = read_or_create_rust_docker_compose(&path)?;
     let prefix = name.to_case(Case::UpperSnake);
     let generated: &[(&str, String)] = &match from {
-        Backend::Postgres => vec![("DATABASE_URL", format!("${{{prefix}_DATABASE_URL:?Configure a restricted PostgreSQL role}}"))],
+        Backend::Postgres => vec![(
+            "DATABASE_URL",
+            format!("${{{prefix}_DATABASE_URL:?Configure a restricted PostgreSQL role}}"),
+        )],
         Backend::Redis => vec![
-            ("REDIS_URL", format!("${{{prefix}_REDIS_URL:?Configure Redis}}")),
-            ("WORKER_NAMESPACE", format!("${{{prefix}_NAMESPACE:?Configure a worker namespace}}")),
+            (
+                "REDIS_URL",
+                format!("${{{prefix}_REDIS_URL:?Configure Redis}}"),
+            ),
+            (
+                "WORKER_NAMESPACE",
+                format!("${{{prefix}_NAMESPACE:?Configure a worker namespace}}"),
+            ),
         ],
         Backend::Kafka => vec![
-            ("KAFKA_BROKERS", format!("${{{prefix}_KAFKA_BROKERS:?Configure Kafka brokers}}")),
-            ("WORKER_NAMESPACE", format!("${{{prefix}_NAMESPACE:?Configure a worker namespace}}")),
-            ("KAFKA_TRANSACTIONAL_ID", format!("${{{prefix}_KAFKA_TRANSACTIONAL_ID:?Configure a stable unique identity for {name}}}")),
-            ("KAFKA_PUBLISHER_ID", format!("${{{prefix}_KAFKA_PUBLISHER_ID:?Configure a stable publisher identity for {name}}}")),
+            (
+                "KAFKA_BROKERS",
+                format!("${{{prefix}_KAFKA_BROKERS:?Configure Kafka brokers}}"),
+            ),
+            (
+                "WORKER_NAMESPACE",
+                format!("${{{prefix}_NAMESPACE:?Configure a worker namespace}}"),
+            ),
+            (
+                "KAFKA_TRANSACTIONAL_ID",
+                format!(
+                    "${{{prefix}_KAFKA_TRANSACTIONAL_ID:?Configure a stable unique identity for {name}}}"
+                ),
+            ),
+            (
+                "KAFKA_PUBLISHER_ID",
+                format!(
+                    "${{{prefix}_KAFKA_PUBLISHER_ID:?Configure a stable publisher identity for {name}}}"
+                ),
+            ),
         ],
     };
     let leased = |backend: Backend| backend != Backend::Kafka;
     let runner: &[(&str, &str)] = match (leased(from), leased(to)) {
-        (true, false) => &[("WORKER_BATCH_SIZE", "1"), ("WORKER_POLL_MS", "250"), ("WORKER_LEASE_MS", "30000"), ("WORKER_RENEW_MS", "10000"), ("WORKER_CONCURRENCY", "1")],
-        (false, true) => &[("KAFKA_GROUP_ID", "workers"), ("KAFKA_PARTITIONS", "3"), ("KAFKA_REPLICATION_FACTOR", "1"), ("KAFKA_OPERATION_TIMEOUT_MS", "5000"), ("KAFKA_SESSION_TIMEOUT_MS", "10000"), ("WORKER_MAX_PAYLOAD_BYTES", "1048576"), ("WORKER_HANDLER_TIMEOUT_MS", "300000")],
+        (true, false) => &[
+            ("WORKER_BATCH_SIZE", "1"),
+            ("WORKER_POLL_MS", "250"),
+            ("WORKER_LEASE_MS", "30000"),
+            ("WORKER_RENEW_MS", "10000"),
+            ("WORKER_CONCURRENCY", "1"),
+        ],
+        (false, true) => &[
+            ("KAFKA_GROUP_ID", "workers"),
+            ("KAFKA_PARTITIONS", "3"),
+            ("KAFKA_REPLICATION_FACTOR", "1"),
+            ("KAFKA_OPERATION_TIMEOUT_MS", "5000"),
+            ("KAFKA_SESSION_TIMEOUT_MS", "10000"),
+            ("WORKER_MAX_PAYLOAD_BYTES", "1048576"),
+            ("WORKER_HANDLER_TIMEOUT_MS", "300000"),
+        ],
         _ => &[],
     };
     // Redis and Kafka both name their worker namespace.
-    let generated: Vec<(&str, String)> = generated.iter().filter(|(key, _)| !(*key == "WORKER_NAMESPACE" && to != Backend::Postgres)).cloned().collect();
+    let generated: Vec<(&str, String)> = generated
+        .iter()
+        .filter(|(key, _)| !(*key == "WORKER_NAMESPACE" && to != Backend::Postgres))
+        .cloned()
+        .collect();
     let generated = generated.as_slice();
-    let processes: Vec<String> = compose.services.iter()
+    let processes: Vec<String> = compose
+        .services
+        .iter()
         .filter(|(key, service)| *key == name || producer_owner(service) == Some(name))
         .map(|(key, _)| key.clone())
         .collect();
@@ -791,16 +1083,26 @@ fn switch_compose_backend(root: &Path, name: &str, from: Backend, to: Backend) -
         let service = compose.services.get_mut(key).unwrap();
         if let Some(env) = service.environment.as_mut() {
             env.retain(|variable, value| {
-                !generated.iter().any(|(generated, expected)| generated == variable && expected == value)
-                    && !runner.iter().any(|(generated, expected)| generated == variable && expected == value)
+                !generated
+                    .iter()
+                    .any(|(generated, expected)| generated == variable && expected == value)
+                    && !runner
+                        .iter()
+                        .any(|(generated, expected)| generated == variable && expected == value)
             });
         }
         // The broker the process no longer reads.
         let env = service.environment.clone().unwrap_or_default();
         if let Some(depends) = service.depends_on.as_mut() {
-            if from == Backend::Redis && !env.contains_key("REDIS_URL") { depends.shift_remove("redis"); }
-            if from == Backend::Kafka && !env.contains_key("KAFKA_BROKERS") { depends.shift_remove("kafka"); }
-            if depends.is_empty() { service.depends_on = None; }
+            if from == Backend::Redis && !env.contains_key("REDIS_URL") {
+                depends.shift_remove("redis");
+            }
+            if from == Backend::Kafka && !env.contains_key("KAFKA_BROKERS") {
+                depends.shift_remove("kafka");
+            }
+            if depends.is_empty() {
+                service.depends_on = None;
+            }
         }
     }
     // The previous backend's migration job (tables or topics) is regenerated
@@ -810,7 +1112,9 @@ fn switch_compose_backend(root: &Path, name: &str, from: Backend, to: Backend) -
     for service in compose.services.values_mut() {
         if let Some(depends) = service.depends_on.as_mut() {
             depends.shift_remove(&migrate);
-            if depends.is_empty() { service.depends_on = None; }
+            if depends.is_empty() {
+                service.depends_on = None;
+            }
         }
     }
     write(&path, yaml_to_string(&compose)?)?;
@@ -858,11 +1162,7 @@ mod tests {
 
     #[test]
     fn worker_producer_origin_uses_published_loopback_for_every_backend_and_reinit() {
-        for backend in [
-            Backend::Postgres,
-            Backend::Redis,
-            Backend::Kafka,
-        ] {
+        for backend in [Backend::Postgres, Backend::Redis, Backend::Kafka] {
             let root = fixture("jobs");
             compose(root.path(), "jobs", backend).unwrap();
             let initial = producer(root.path(), "jobs");
@@ -887,7 +1187,9 @@ mod tests {
         ] {
             let root = fixture("jobs");
             compose(root.path(), "jobs", backend).unwrap();
-            let compose = read_or_create_rust_docker_compose(&root.path().join("docker-compose.yaml")).unwrap();
+            let compose =
+                read_or_create_rust_docker_compose(&root.path().join("docker-compose.yaml"))
+                    .unwrap();
             for service in ["jobs", "jobs-server"] {
                 let env = compose.services[service].environment.as_ref().unwrap();
                 assert_eq!(env["WORKER_QUEUE"], "jobs", "{service}");

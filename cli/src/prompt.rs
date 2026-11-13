@@ -311,14 +311,16 @@ where
                 log_ok!(
                     stdout,
                     "Using pre-provided answer for {}: {}",
-                    matches_key, pre_answer
+                    matches_key,
+                    pre_answer
                 );
                 return Ok(pre_answer.clone());
             } else {
                 log_warn!(
                     stdout,
                     "Pre-provided answer '{}' for {} is invalid, prompting for input",
-                    pre_answer, matches_key
+                    pre_answer,
+                    matches_key
                 );
             }
         }
@@ -352,7 +354,8 @@ pub(crate) fn prompt_without_validation_with_answers(
             log_ok!(
                 stdout,
                 "Using pre-provided answer for {}: {}",
-                matches_key, pre_answer
+                matches_key,
+                pre_answer
             );
             return Ok(pre_answer.clone());
         }

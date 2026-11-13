@@ -293,7 +293,10 @@ impl CliCommand for WorkerCommand {
         crate::sdk::typescript_build::remove_hook(&app_root_path, &worker_name)?;
         // The manifest entry is already gone, so remove_hook cannot find the
         // generated Rust SDK member; image planning would trip over it.
-        crate::init::rust_project::remove_typescript_sdk_member(&app_root_path, &worker_base_path.join(&worker_name))?;
+        crate::init::rust_project::remove_typescript_sdk_member(
+            &app_root_path,
+            &worker_base_path.join(&worker_name),
+        )?;
         crate::init::rust_project::refresh_mixed_images(&app_root_path)?;
 
         log_ok!(stdout, "{} deleted successfully!", worker_name);

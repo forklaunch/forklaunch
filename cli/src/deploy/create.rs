@@ -641,7 +641,6 @@ fn collect_app_var_keys(blocked_error: &DeploymentBlockedError) -> HashSet<Strin
     app_var_keys
 }
 
-
 /// Best-effort check for whether this application has any prior deployment. Used only to
 /// decide whether to print the one-line managed-mode hint on a first deploy, so any
 /// uncertainty (request failure, unexpected shape) resolves to `false` and the hint is
@@ -960,7 +959,11 @@ impl CliCommand for CreateCommand {
                     .cloned()
                     .unwrap_or_else(|| "centralized".to_string()),
             ),
-            force_refresh: if matches.get_flag("full") { Some(true) } else { None },
+            force_refresh: if matches.get_flag("full") {
+                Some(true)
+            } else {
+                None
+            },
             cluster_type: matches.get_one::<String>("cluster-type").cloned(),
             force_single_app_deploy: if force { Some(true) } else { None },
         };
@@ -1321,7 +1324,10 @@ impl CliCommand for CreateCommand {
                 } else {
                     writeln!(stdout)?;
                     writeln!(stdout, "Deployment started; not waiting for it to finish.")?;
-                    writeln!(stdout, "This exit code says nothing about the deployment's outcome.")?;
+                    writeln!(
+                        stdout,
+                        "This exit code says nothing about the deployment's outcome."
+                    )?;
                     writeln!(
                         stdout,
                         "  Follow it:  forklaunch deploy info --deployment {}",
@@ -1346,12 +1352,17 @@ impl CliCommand for CreateCommand {
                 // Printing the same "this is the first deployment" header for both
                 // told a user who had already chosen at `app create` that they had
                 // never chosen, and silently dropped the server's explanation.
-                let rejected_choice =
-                    selection_required.message.starts_with("cluster_unavailable");
+                let rejected_choice = selection_required
+                    .message
+                    .starts_with("cluster_unavailable");
 
                 writeln!(stdout)?;
                 if rejected_choice {
-                    log_header!(stdout, Color::Yellow, "That cluster isn't available for this app");
+                    log_header!(
+                        stdout,
+                        Color::Yellow,
+                        "That cluster isn't available for this app"
+                    );
                     writeln!(stdout)?;
                     writeln!(
                         stdout,
@@ -1362,12 +1373,23 @@ impl CliCommand for CreateCommand {
                             .trim()
                     )?;
                     writeln!(stdout)?;
-                    writeln!(stdout, "  Pick another placement for {} ({}):", environment, region)?;
+                    writeln!(
+                        stdout,
+                        "  Pick another placement for {} ({}):",
+                        environment, region
+                    )?;
                 } else {
                     log_header!(stdout, Color::Cyan, "First deploy — choose a cluster");
                     writeln!(stdout)?;
-                    writeln!(stdout, "  This is the first deployment of this application to {} ({}).", environment, region)?;
-                    writeln!(stdout, "  Pick where its compute should run (estimates are monthly, compute only):")?;
+                    writeln!(
+                        stdout,
+                        "  This is the first deployment of this application to {} ({}).",
+                        environment, region
+                    )?;
+                    writeln!(
+                        stdout,
+                        "  Pick where its compute should run (estimates are monthly, compute only):"
+                    )?;
                 }
                 writeln!(stdout)?;
                 for opt in &selection_required.cluster_options {
@@ -1395,7 +1417,10 @@ impl CliCommand for CreateCommand {
                     .filter(|o| o.available)
                     .collect();
                 if available.is_empty() {
-                    bail!("No cluster options are available: {}", selection_required.message);
+                    bail!(
+                        "No cluster options are available: {}",
+                        selection_required.message
+                    );
                 }
 
                 if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
@@ -1419,7 +1444,11 @@ impl CliCommand for CreateCommand {
                     .default(0)
                     .interact()?;
                 request_body.cluster_type = Some(available[selection].cluster_type.clone());
-                log_ok!(stdout, "Selected cluster: {}", available[selection].cluster_type);
+                log_ok!(
+                    stdout,
+                    "Selected cluster: {}",
+                    available[selection].cluster_type
+                );
                 writeln!(stdout)?;
                 continue;
             } else if status.as_u16() == 400 {

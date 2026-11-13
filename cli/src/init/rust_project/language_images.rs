@@ -4,7 +4,8 @@ use std::collections::{BTreeSet, VecDeque};
 use super::*;
 use crate::core::forklaunch_state;
 
-pub(super) const RDS_CA_BUNDLE_URL: &str = "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem";
+pub(super) const RDS_CA_BUNDLE_URL: &str =
+    "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem";
 pub(super) const RDS_CA_BUNDLE_PATH: &str = "/app/certs/rds-global-bundle.pem";
 
 fn contained(root: &Path, path: &Path) -> Result<PathBuf> {
@@ -52,7 +53,8 @@ fn dependencies(value: &Value) -> Vec<(&str, &Value)> {
 /// named build contexts, so its crates are provided rather than copied from
 /// the application. Anything else outside the application is refused.
 fn provided(external: &[PathBuf], path: &Path) -> bool {
-    path.canonicalize().is_ok_and(|path| external.iter().any(|context| path.starts_with(context)))
+    path.canonicalize()
+        .is_ok_and(|path| external.iter().any(|context| path.starts_with(context)))
 }
 
 /// Dockerfile lines for a local framework checkout: empty named stages that
@@ -70,7 +72,11 @@ pub(super) fn framework_inputs(root: &Path) -> Result<(String, String)> {
         let path = path.to_string_lossy();
         copies.push_str(&format!(
             "COPY --from={name} {}\nCOPY --from={name} {}\n",
-            serde_json::to_string(&vec!["Cargo.tom[l]".to_owned(), "Cargo.loc[k]".to_owned(), format!("{path}/")])?,
+            serde_json::to_string(&vec![
+                "Cargo.tom[l]".to_owned(),
+                "Cargo.loc[k]".to_owned(),
+                format!("{path}/")
+            ])?,
             serde_json::to_string(&vec!["crates".to_owned(), format!("{path}/crates")])?,
         ));
     }
@@ -81,7 +87,11 @@ pub(super) fn plan(root: &Path) -> Result<(String, Vec<String>, Vec<String>)> {
     let framework = super::local_runtime::framework_contexts(root);
     let external: Vec<PathBuf> = framework
         .iter()
-        .flat_map(|(_, contexts)| contexts.iter().filter_map(|(_, path)| path.canonicalize().ok()))
+        .flat_map(|(_, contexts)| {
+            contexts
+                .iter()
+                .filter_map(|(_, path)| path.canonicalize().ok())
+        })
         .collect();
     let root = root.canonicalize()?;
     let cargo: Value = toml::from_str(&read_to_string(root.join("Cargo.toml"))?)?;
@@ -236,9 +246,15 @@ pub(super) fn plan(root: &Path) -> Result<(String, Vec<String>, Vec<String>)> {
     // Optional roots stay optional; never create packages to satisfy COPY.
     let sdk_root = root.join(crate::sdk::sdk_base(&root)?);
     if sdk_root.exists() {
-        anyhow::ensure!(sdk_root.is_dir(), "Generated SDK Docker input must be a directory");
+        anyhow::ensure!(
+            sdk_root.is_dir(),
+            "Generated SDK Docker input must be a directory"
+        );
         let canonical = contained(&root, &sdk_root)?;
-        anyhow::ensure!(canonical == sdk_root, "Generated SDK Docker input must not be a symbolic alias");
+        anyhow::ensure!(
+            canonical == sdk_root,
+            "Generated SDK Docker input must not be a symbolic alias"
+        );
         directories.insert(canonical);
     }
     let mut inputs: Vec<String> = files.into_iter().collect();
@@ -285,7 +301,9 @@ pub(super) fn plan(root: &Path) -> Result<(String, Vec<String>, Vec<String>)> {
     docker.push_str("ENV SQLX_OFFLINE=true\nARG CARGO_BUILD_JOBS=2\nRUN cargo build --locked --release --workspace --bins");
     docker.push_str("\nFROM debian:bookworm-slim AS runtime\nWORKDIR /app\nRUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*\n");
     // Deployed PostgreSQL URLs verify the server against the AWS RDS CA bundle.
-    docker.push_str(&format!("ADD --chmod=0644 {RDS_CA_BUNDLE_URL} {RDS_CA_BUNDLE_PATH}\n"));
+    docker.push_str(&format!(
+        "ADD --chmod=0644 {RDS_CA_BUNDLE_URL} {RDS_CA_BUNDLE_PATH}\n"
+    ));
     // ADD --chmod also applies to a newly created parent in BuildKit. Restore
     // directory traversal before the image switches to its non-root user.
     docker.push_str("RUN chmod 0755 /app/certs\n");
@@ -310,10 +328,17 @@ pub(crate) fn summary(root: &Path) -> Option<(String, Vec<String>, bool)> {
     // The runtime stage copies exactly the binaries the image can run.
     let binaries = source
         .lines()
-        .filter_map(|line| line.strip_prefix("COPY --from=builder /app/target/release/")?.split_once(' '))
+        .filter_map(|line| {
+            line.strip_prefix("COPY --from=builder /app/target/release/")?
+                .split_once(' ')
+        })
         .map(|(binary, _)| binary.to_owned())
         .collect();
-    Some((format!("{}-rust:local", rust_app_name(root).ok()?), binaries, unchanged))
+    Some((
+        format!("{}-rust:local", rust_app_name(root).ok()?),
+        binaries,
+        unchanged,
+    ))
 }
 
 pub(super) fn preflight(root: &Path) -> Result<()> {
@@ -347,8 +372,12 @@ pub(super) fn reconcile(root: &Path) -> Result<()> {
 /// The TypeScript client SDK's compliance aggregate lists every database
 /// service; native renames and deletes keep it current like TypeScript ones.
 fn refresh_client_compliance(root: &Path) -> Result<()> {
-    let Ok(source) = read_to_string(root.join(".forklaunch/manifest.toml")) else { return Ok(()) };
-    let Ok(manifest) = toml::from_str::<crate::core::manifest::application::ApplicationManifestData>(&source) else {
+    let Ok(source) = read_to_string(root.join(".forklaunch/manifest.toml")) else {
+        return Ok(());
+    };
+    let Ok(manifest) =
+        toml::from_str::<crate::core::manifest::application::ApplicationManifestData>(&source)
+    else {
         return Ok(());
     };
     let modules = root.join(&manifest.modules_path);
@@ -356,7 +385,11 @@ fn refresh_client_compliance(root: &Path) -> Result<()> {
         return Ok(());
     }
     let mut cache = crate::core::rendered_template::RenderedTemplatesCache::new();
-    crate::core::client_sdk::regenerate_client_sdk_compliance(&mut cache, &modules, &manifest.projects)?;
+    crate::core::client_sdk::regenerate_client_sdk_compliance(
+        &mut cache,
+        &modules,
+        &manifest.projects,
+    )?;
     for (_, template) in cache.drain() {
         let content = crate::core::watermark::apply_watermark(&template)?;
         if read_to_string(&template.path).ok().as_deref() != Some(content.as_str()) {
@@ -555,18 +588,43 @@ mod tests {
         let checkout = tempfile::tempdir().unwrap();
         let framework = checkout.path().join("framework-rs");
         create_dir_all(framework.join("crates/core")).unwrap();
-        write(framework.join("Cargo.toml"), "[workspace]\nmembers=['crates/core']\n").unwrap();
-        write(framework.join("crates/core/Cargo.toml"), "[package]\nname='forklaunch-core'\nversion='0.2.0'\n").unwrap();
-        write(root.path().join(".forklaunch/manifest.toml"), format!("language='mixed'\napp_name='demo'\n[framework]\npath='{}'\n", framework.display())).unwrap();
+        write(
+            framework.join("Cargo.toml"),
+            "[workspace]\nmembers=['crates/core']\n",
+        )
+        .unwrap();
+        write(
+            framework.join("crates/core/Cargo.toml"),
+            "[package]\nname='forklaunch-core'\nversion='0.2.0'\n",
+        )
+        .unwrap();
+        write(
+            root.path().join(".forklaunch/manifest.toml"),
+            format!(
+                "language='mixed'\napp_name='demo'\n[framework]\npath='{}'\n",
+                framework.display()
+            ),
+        )
+        .unwrap();
         write(root.path().join("src/api/Cargo.toml"), format!("[package]\nname='api'\nversion='0.1.0'\n[[bin]]\nname='api'\npath='main.rs'\n[dependencies]\nforklaunch-core={{path='{}'}}\n", framework.join("crates/core").display())).unwrap();
         let (docker, inputs, _) = plan(root.path()).unwrap();
         assert!(docker.contains("FROM scratch AS framework\n"), "{docker}");
-        assert!(docker.contains(&format!("COPY --from=framework [\"crates\",\"{}/crates\"]", framework.display())), "{docker}");
+        assert!(
+            docker.contains(&format!(
+                "COPY --from=framework [\"crates\",\"{}/crates\"]",
+                framework.display()
+            )),
+            "{docker}"
+        );
         assert!(!inputs.iter().any(|input| input.contains("framework-rs")));
         super::super::local_runtime::reconcile(root.path()).unwrap();
-        let compose = read_or_create_rust_docker_compose(&root.path().join("docker-compose.yaml")).unwrap();
+        let compose =
+            read_or_create_rust_docker_compose(&root.path().join("docker-compose.yaml")).unwrap();
         let build = compose.services["api"].build.as_ref().unwrap();
-        assert_eq!(build.additional_properties["additional_contexts"]["framework"].as_str(), Some(framework.to_str().unwrap()));
+        assert_eq!(
+            build.additional_properties["additional_contexts"]["framework"].as_str(),
+            Some(framework.to_str().unwrap())
+        );
     }
 
     #[test]
@@ -578,7 +636,11 @@ mod tests {
         let compose =
             read_or_create_rust_docker_compose(&root.path().join("docker-compose.yaml")).unwrap();
         for name in ["api", "jobs"] {
-            assert_eq!(compose.services[name].image.as_deref(), Some("demo-rust:local"), "{name}");
+            assert_eq!(
+                compose.services[name].image.as_deref(),
+                Some("demo-rust:local"),
+                "{name}"
+            );
         }
         assert_eq!(compose.services["cache"].image.as_deref(), Some("redis:7"));
     }
@@ -609,12 +671,22 @@ mod tests {
         for modules in ["src", "backend/domains"] {
             let root = fixture();
             let manifest = root.path().join(".forklaunch/manifest.toml");
-            write(&manifest, format!("{}modules_path='{modules}'\n", read_to_string(&manifest).unwrap())).unwrap();
+            write(
+                &manifest,
+                format!(
+                    "{}modules_path='{modules}'\n",
+                    read_to_string(&manifest).unwrap()
+                ),
+            )
+            .unwrap();
             let relative = crate::sdk::sdk_base(root.path()).unwrap();
             let directory = root.path().join(&relative);
             let input = format!("{}/", relative.display());
             assert!(!plan(root.path()).unwrap().1.contains(&input));
-            assert!(!directory.exists(), "planning must not create optional SDK roots");
+            assert!(
+                !directory.exists(),
+                "planning must not create optional SDK roots"
+            );
             create_dir_all(&directory).unwrap();
             assert!(plan(root.path()).unwrap().1.contains(&input));
 
@@ -622,10 +694,20 @@ mod tests {
             let cargo_path = root.path().join("Cargo.toml");
             let original = read_to_string(&cargo_path).unwrap();
             let mut cargo: Value = toml::from_str(&original).unwrap();
-            cargo["workspace"]["members"].as_array_mut().unwrap().push(
-                Value::String(format!("{}/rust/missing-websocket-sdk", relative.display())));
+            cargo["workspace"]["members"]
+                .as_array_mut()
+                .unwrap()
+                .push(Value::String(format!(
+                    "{}/rust/missing-websocket-sdk",
+                    relative.display()
+                )));
             write(&cargo_path, toml::to_string(&cargo).unwrap()).unwrap();
-            assert!(plan(root.path()).unwrap_err().to_string().contains("Cargo member pattern has no packages"));
+            assert!(
+                plan(root.path())
+                    .unwrap_err()
+                    .to_string()
+                    .contains("Cargo member pattern has no packages")
+            );
             write(cargo_path, original).unwrap();
 
             #[cfg(unix)]
@@ -633,10 +715,20 @@ mod tests {
                 remove_dir_all(&directory).unwrap();
                 let external = tempfile::tempdir().unwrap();
                 std::os::unix::fs::symlink(external.path(), &directory).unwrap();
-                assert!(plan(root.path()).unwrap_err().to_string().contains("escapes application"));
+                assert!(
+                    plan(root.path())
+                        .unwrap_err()
+                        .to_string()
+                        .contains("escapes application")
+                );
                 remove_file(&directory).unwrap();
                 std::os::unix::fs::symlink(root.path(), &directory).unwrap();
-                assert!(plan(root.path()).unwrap_err().to_string().contains("symbolic alias"));
+                assert!(
+                    plan(root.path())
+                        .unwrap_err()
+                        .to_string()
+                        .contains("symbolic alias")
+                );
             }
         }
     }

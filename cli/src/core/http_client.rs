@@ -191,12 +191,8 @@ fn make_hmac_request_with_sign_path(
     sign_path: &str,
     body: Option<Value>,
 ) -> Result<Response> {
-    let auth_header = generate_hmac_auth_header(
-        secret_key,
-        method.as_str(),
-        sign_path,
-        body.as_ref(),
-    )?;
+    let auth_header =
+        generate_hmac_auth_header(secret_key, method.as_str(), sign_path, body.as_ref())?;
 
     let client = Client::new();
     let mut request = client
@@ -232,13 +228,9 @@ pub fn post_with_auth_and_sign_path(
 ) -> Result<Response> {
     match auth_mode {
         AuthMode::Jwt => post(url, body),
-        AuthMode::Hmac { secret_key } => make_hmac_request_with_sign_path(
-            secret_key,
-            Method::POST,
-            url,
-            sign_path,
-            Some(body),
-        ),
+        AuthMode::Hmac { secret_key } => {
+            make_hmac_request_with_sign_path(secret_key, Method::POST, url, sign_path, Some(body))
+        }
     }
 }
 

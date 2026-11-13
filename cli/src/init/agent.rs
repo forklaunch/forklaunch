@@ -569,7 +569,10 @@ mod tests {
                 url: "https://mcp.linear.app/mcp".into()
             }
         );
-        assert_eq!(parse_mcp_server("my_linear=https://x").unwrap().name, "my_linear");
+        assert_eq!(
+            parse_mcp_server("my_linear=https://x").unwrap().name,
+            "my_linear"
+        );
         assert!(parse_mcp_server("linear").is_err());
         assert!(parse_mcp_server("_linear=https://x").is_err());
         assert!(parse_mcp_server("Linear=https://x").is_err());

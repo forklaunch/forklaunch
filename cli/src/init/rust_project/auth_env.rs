@@ -10,10 +10,10 @@
 //!
 //! Development values (a fresh RSA key, key id, issuer, audience and seed
 //! password) are written to the git-ignored root `.env` by `local_runtime`.
-use base64::Engine;
-use indexmap::IndexMap;
 use aws_lc_rs::encoding::{AsDer, Pkcs8V1Der};
 use aws_lc_rs::rsa::{KeyPair, KeySize};
+use base64::Engine;
+use indexmap::IndexMap;
 
 use super::*;
 
@@ -50,7 +50,9 @@ fn is_rust(project: &toml::Table) -> bool {
 
 fn iam_project(manifest: &Value) -> Option<String> {
     projects(manifest)
-        .find(|project| project.get("variant").and_then(Value::as_str) == Some("iam-base") && is_rust(project))
+        .find(|project| {
+            project.get("variant").and_then(Value::as_str) == Some("iam-base") && is_rust(project)
+        })
         .and_then(|project| project.get("name").and_then(Value::as_str))
         .map(str::to_owned)
 }
@@ -59,7 +61,9 @@ fn iam_project(manifest: &Value) -> Option<String> {
 /// as opposed to prebuilt modules, which configure their own auth.
 fn custom_services(manifest: &Value) -> Vec<String> {
     projects(manifest)
-        .filter(|project| project.get("type").and_then(Value::as_str) == Some("Service") && is_rust(project))
+        .filter(|project| {
+            project.get("type").and_then(Value::as_str) == Some("Service") && is_rust(project)
+        })
         .filter(|project| {
             project
                 .get("variant")
@@ -78,7 +82,12 @@ fn ensure(env: &mut IndexMap<String, String>, key: &str, value: impl Into<String
 /// The compose service of the first module of `variants`, in either language.
 fn module_service(manifest: &Value, compose: &DockerCompose, variants: &[&str]) -> Option<String> {
     projects(manifest)
-        .filter(|project| project.get("variant").and_then(Value::as_str).is_some_and(|variant| variants.contains(&variant)))
+        .filter(|project| {
+            project
+                .get("variant")
+                .and_then(Value::as_str)
+                .is_some_and(|variant| variants.contains(&variant))
+        })
         .filter_map(|project| project.get("name").and_then(Value::as_str))
         .find(|name| compose.services.contains_key(*name))
         .map(str::to_owned)
@@ -89,18 +98,31 @@ fn service_urls(manifest: &Value, compose: &DockerCompose) -> IndexMap<String, S
     projects(manifest)
         .filter_map(|project| project.get("name").and_then(Value::as_str))
         .filter_map(|name| {
-            let port = compose.services.get(name)?.environment.as_ref()?.get("PORT")?;
-            Some((format!("{}_URL", name.to_case(Case::UpperSnake)), format!("http://{name}:{port}")))
+            let port = compose
+                .services
+                .get(name)?
+                .environment
+                .as_ref()?
+                .get("PORT")?;
+            Some((
+                format!("{}_URL", name.to_case(Case::UpperSnake)),
+                format!("http://{name}:{port}"),
+            ))
         })
         .collect()
 }
 
 /// Variables a TypeScript project's config injector reads (`registrations.ts`).
 fn typescript_reads(root: &Path, manifest: &Value, project: &str) -> Vec<String> {
-    let modules = manifest.get("modules_path").and_then(Value::as_str).unwrap_or("src");
+    let modules = manifest
+        .get("modules_path")
+        .and_then(Value::as_str)
+        .unwrap_or("src");
     read_to_string(root.join(modules).join(project).join("registrations.ts"))
         .ok()
-        .and_then(|source| crate::core::ast::infrastructure::env::extract_env_vars_from_source(&source).ok())
+        .and_then(|source| {
+            crate::core::ast::infrastructure::env::extract_env_vars_from_source(&source).ok()
+        })
         .map(|usages| usages.into_iter().map(|usage| usage.var_name).collect())
         .unwrap_or_default()
 }
@@ -128,20 +150,35 @@ fn typescript_consumers(root: &Path, manifest: &Value, compose: &mut DockerCompo
     let module_env = |module: &Option<String>, key: &str| {
         module
             .as_ref()
-            .and_then(|name| compose.services.get(name)?.environment.as_ref()?.get(key).cloned())
+            .and_then(|name| {
+                compose
+                    .services
+                    .get(name)?
+                    .environment
+                    .as_ref()?
+                    .get(key)
+                    .cloned()
+            })
             .filter(|value| !unset(value))
     };
-    let hmac = module_env(&iam, "HMAC_SECRET_KEY").or_else(|| module_env(&billing, "HMAC_SECRET_KEY"));
+    let hmac =
+        module_env(&iam, "HMAC_SECRET_KEY").or_else(|| module_env(&billing, "HMAC_SECRET_KEY"));
     let jwks = module_env(&iam, "JWKS_PUBLIC_KEY_URL");
     let urls = service_urls(manifest, compose);
-    let modules = manifest.get("modules_path").and_then(Value::as_str).unwrap_or("src");
+    let modules = manifest
+        .get("modules_path")
+        .and_then(Value::as_str)
+        .unwrap_or("src");
     for project in &typescript {
         let reads = typescript_reads(root, manifest, project);
         let local = env_values(&root.join(modules).join(project).join(".env.local"));
         let own_url = format!("{}_URL", project.to_case(Case::UpperSnake));
         for (name, service) in compose.services.iter_mut() {
-            let owned = !native.contains(name) && (name == project || name.starts_with(&format!("{project}-")));
-            let Some(env) = service.environment.as_mut().filter(|_| owned) else { continue };
+            let owned = !native.contains(name)
+                && (name == project || name.starts_with(&format!("{project}-")));
+            let Some(env) = service.environment.as_mut().filter(|_| owned) else {
+                continue;
+            };
             let mut wanted: Vec<String> = reads.clone();
             // Without a readable injector, wire what the generator declared;
             // it declares HMAC_SECRET_KEY only on IAM/billing consumers.
@@ -157,7 +194,9 @@ fn typescript_consumers(root: &Path, manifest: &Value, compose: &mut DockerCompo
                     "HMAC_SECRET_KEY" => hmac.clone(),
                     "JWKS_PUBLIC_KEY_URL" => jwks.clone(),
                     "STRIPE_API_KEY" | "STRIPE_WEBHOOK_SECRET" => Some(format!("${{{key}:-}}")),
-                    _ if urls.contains_key(&key) => urls.get(&key).filter(|_| key != own_url).cloned(),
+                    _ if urls.contains_key(&key) => {
+                        urls.get(&key).filter(|_| key != own_url).cloned()
+                    }
                     _ => local.get(&key).and_then(|value| from_local(&key, value)),
                 };
                 if let Some(value) = value {
@@ -177,7 +216,10 @@ fn from_local(key: &str, value: &str) -> Option<String> {
     if value.is_empty() || value.contains("localhost") || value.contains("127.0.0.1") {
         return None;
     }
-    let secret = ["SECRET", "PASSWORD", "TOKEN", "PRIVATE"].iter().any(|word| key.contains(word)) || key.ends_with("_KEY");
+    let secret = ["SECRET", "PASSWORD", "TOKEN", "PRIVATE"]
+        .iter()
+        .any(|word| key.contains(word))
+        || key.ends_with("_KEY");
     Some(match (secret, unset(value)) {
         (false, _) => value.to_owned(),
         (true, true) => format!("${{{key}:-{value}}}"),
@@ -202,11 +244,24 @@ pub(super) fn compose(root: &Path) -> Result<()> {
     if let Some(iam) = &iam {
         let service = compose.services.get_mut(iam).expect("IAM compose service");
         let env = service.environment.get_or_insert_with(IndexMap::new);
-        let signing = ["SESSION_JWT_PRIVATE_KEY_PEM", "SESSION_JWT_KEY_ID", "SESSION_JWT_ISSUER", "SESSION_JWT_AUDIENCE"];
+        let signing = [
+            "SESSION_JWT_PRIVATE_KEY_PEM",
+            "SESSION_JWT_KEY_ID",
+            "SESSION_JWT_ISSUER",
+            "SESSION_JWT_AUDIENCE",
+        ];
         // All four or none: an application that removed them chose opaque sessions.
         if !signing.iter().any(|key| env.contains_key(*key)) {
-            ensure(env, "SESSION_JWT_PRIVATE_KEY_PEM", "${IAM_SESSION_JWT_PRIVATE_KEY_PEM:?Configure the IAM session signing key}");
-            ensure(env, "SESSION_JWT_KEY_ID", "${IAM_SESSION_JWT_KEY_ID:?Configure the IAM session signing key id}");
+            ensure(
+                env,
+                "SESSION_JWT_PRIVATE_KEY_PEM",
+                "${IAM_SESSION_JWT_PRIVATE_KEY_PEM:?Configure the IAM session signing key}",
+            );
+            ensure(
+                env,
+                "SESSION_JWT_KEY_ID",
+                "${IAM_SESSION_JWT_KEY_ID:?Configure the IAM session signing key id}",
+            );
             ensure(env, "SESSION_JWT_ISSUER", ISSUER);
             ensure(env, "SESSION_JWT_AUDIENCE", AUDIENCE);
         }
@@ -218,14 +273,20 @@ pub(super) fn compose(root: &Path) -> Result<()> {
                 && let Some(binary) = command.first()
             {
                 let mut environment = source.environment.clone().unwrap_or_default();
-                environment.insert(SEED_PASSWORD.into(), format!("${{{SEED_PASSWORD}:?Set the seeded IAM admin password}}"));
+                environment.insert(
+                    SEED_PASSWORD.into(),
+                    format!("${{{SEED_PASSWORD}:?Set the seeded IAM admin password}}"),
+                );
                 let service = DockerService {
                     image: source.image.clone(),
                     restart: Some(Restart::No),
                     environment: Some(environment),
                     networks: source.networks.clone(),
                     working_dir: source.working_dir.clone(),
-                    command: Some(DockerCommand::Multiple(vec![binary.clone(), "--seed".into()])),
+                    command: Some(DockerCommand::Multiple(vec![
+                        binary.clone(),
+                        "--seed".into(),
+                    ])),
                     ..Default::default()
                 };
                 compose.services.insert(seed, service);
@@ -239,7 +300,11 @@ pub(super) fn compose(root: &Path) -> Result<()> {
         if custom.contains(name) {
             if iam.is_some() {
                 let prefix = name.to_case(Case::UpperSnake);
-                ensure(env, "JWKS_PUBLIC_KEY_URL", format!("${{{prefix}_JWKS_PUBLIC_KEY_URL:?Configure trusted JWKS}}"));
+                ensure(
+                    env,
+                    "JWKS_PUBLIC_KEY_URL",
+                    format!("${{{prefix}_JWKS_PUBLIC_KEY_URL:?Configure trusted JWKS}}"),
+                );
             }
             ensure(env, "CORS_ORIGINS", CORS);
         }
@@ -311,11 +376,23 @@ pub(super) fn local_envs(root: &Path) -> Result<()> {
     let jwks = iam_project(&manifest)
         .and_then(|iam| compose.services.get(&iam))
         .and_then(|iam| iam.ports.as_deref())
-        .and_then(|ports| ports.iter().find_map(|port| crate::core::docker::compose_host_port(port)))
+        .and_then(|ports| {
+            ports
+                .iter()
+                .find_map(|port| crate::core::docker::compose_host_port(port))
+        })
         .map(|port| format!("http://localhost:{port}/api/auth/jwks"));
     for project in projects(&manifest).filter(|project| is_rust(project)) {
-        let Some(name) = project.get("name").and_then(Value::as_str) else { continue };
-        let Some(env) = compose.services.get(name).and_then(|service| service.environment.as_ref()) else { continue };
+        let Some(name) = project.get("name").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(env) = compose
+            .services
+            .get(name)
+            .and_then(|service| service.environment.as_ref())
+        else {
+            continue;
+        };
         if !env.contains_key("JWKS_PUBLIC_KEY_URL") {
             continue;
         }
@@ -357,7 +434,8 @@ mod tests {
 
     #[test]
     fn typescript_consumers_use_the_rust_modules_wiring() {
-        let manifest: Value = toml::from_str(r#"
+        let manifest: Value = toml::from_str(
+            r#"
 [[projects]]
 name = "iam"
 variant = "iam-base"
@@ -374,7 +452,9 @@ name = "jobs"
 language = "typescript"
 [[projects]]
 name = "svc-native"
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let mut compose: DockerCompose = yaml_from_str(r#"
 services:
   iam:
@@ -414,7 +494,11 @@ services:
             .collect();
         let dir = root.join("src").join(project);
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("registrations.ts"), format!("const env = configInjector.chain({{\n{entries}}});\n")).unwrap();
+        std::fs::write(
+            dir.join("registrations.ts"),
+            format!("const env = configInjector.chain({{\n{entries}}});\n"),
+        )
+        .unwrap();
     }
 
     /// A mixed app with TypeScript IAM, Rust billing and TypeScript consumers:
@@ -423,11 +507,33 @@ services:
     #[test]
     fn typescript_consumers_use_modules_of_either_language() {
         let root = tempfile::tempdir().unwrap();
-        registrations(root.path(), "reminders", &["IAM_URL", "BILLING_URL", "HMAC_SECRET_KEY", "JWKS_PUBLIC_KEY_URL", "REDIS_URL"]);
-        registrations(root.path(), "ecommerce", &[
-            "STRIPE_API_KEY", "STRIPE_WEBHOOK_SECRET", "HMAC_SECRET_KEY", "PORT", "PAYPAL_BASE_URL",
-            "PAYPAL_CLIENT_SECRET", "PAYPAL_WEBHOOK_ID", "ORDER_EVENT_QUEUE", "REDIS_URL", "SIGNING_KEY",
-        ]);
+        registrations(
+            root.path(),
+            "reminders",
+            &[
+                "IAM_URL",
+                "BILLING_URL",
+                "HMAC_SECRET_KEY",
+                "JWKS_PUBLIC_KEY_URL",
+                "REDIS_URL",
+            ],
+        );
+        registrations(
+            root.path(),
+            "ecommerce",
+            &[
+                "STRIPE_API_KEY",
+                "STRIPE_WEBHOOK_SECRET",
+                "HMAC_SECRET_KEY",
+                "PORT",
+                "PAYPAL_BASE_URL",
+                "PAYPAL_CLIENT_SECRET",
+                "PAYPAL_WEBHOOK_ID",
+                "ORDER_EVENT_QUEUE",
+                "REDIS_URL",
+                "SIGNING_KEY",
+            ],
+        );
         std::fs::write(
             root.path().join("src/ecommerce/.env.local"),
             "STRIPE_API_KEY=replace-with-stripe-api-key\nPAYPAL_BASE_URL=https://api-m.sandbox.paypal.com\n\
@@ -435,8 +541,13 @@ services:
              ORDER_EVENT_QUEUE=order-events\nREDIS_URL=redis://localhost:6379/0\nSIGNING_KEY=real-secret\n",
         )
         .unwrap();
-        registrations(root.path(), "iam", &["HMAC_SECRET_KEY", "JWKS_PUBLIC_KEY_URL", "PORT"]);
-        let manifest: Value = toml::from_str(r#"
+        registrations(
+            root.path(),
+            "iam",
+            &["HMAC_SECRET_KEY", "JWKS_PUBLIC_KEY_URL", "PORT"],
+        );
+        let manifest: Value = toml::from_str(
+            r#"
 language = "mixed"
 modules_path = "src"
 [[projects]]
@@ -458,7 +569,9 @@ language = "typescript"
 name = "reminders"
 [projects.metadata]
 language = "typescript"
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let mut compose: DockerCompose = yaml_from_str(r#"
 services:
   iam:
@@ -481,21 +594,39 @@ services:
             assert_eq!(worker["IAM_URL"], "http://iam:8001");
             assert_eq!(worker["BILLING_URL"], "http://billing:8002");
             assert_eq!(worker["HMAC_SECRET_KEY"], "shared");
-            assert_eq!(worker["JWKS_PUBLIC_KEY_URL"], "http://iam:8001/api/auth/jwks");
+            assert_eq!(
+                worker["JWKS_PUBLIC_KEY_URL"],
+                "http://iam:8001/api/auth/jwks"
+            );
         }
         assert_eq!(env("reminders-server")["REDIS_URL"], "redis://redis:6379/1");
         for service in ["ecommerce", "ecommerce-worker"] {
             let service = env(service);
             assert_eq!(service["STRIPE_API_KEY"], "${STRIPE_API_KEY:-}");
-            assert_eq!(service["STRIPE_WEBHOOK_SECRET"], "${STRIPE_WEBHOOK_SECRET:-}");
+            assert_eq!(
+                service["STRIPE_WEBHOOK_SECRET"],
+                "${STRIPE_WEBHOOK_SECRET:-}"
+            );
             // Only what the injector reads.
             assert!(!service.contains_key("IAM_URL"));
             // `.env.local` settings are copied; secrets only as `.env` references.
-            assert_eq!(service["PAYPAL_BASE_URL"], "https://api-m.sandbox.paypal.com");
-            assert_eq!(service["PAYPAL_WEBHOOK_ID"], "replace-with-paypal-webhook-id");
+            assert_eq!(
+                service["PAYPAL_BASE_URL"],
+                "https://api-m.sandbox.paypal.com"
+            );
+            assert_eq!(
+                service["PAYPAL_WEBHOOK_ID"],
+                "replace-with-paypal-webhook-id"
+            );
             assert_eq!(service["ORDER_EVENT_QUEUE"], "order-events");
-            assert_eq!(service["PAYPAL_CLIENT_SECRET"], "${PAYPAL_CLIENT_SECRET:-replace-with-paypal-client-secret}");
-            assert_eq!(service["SIGNING_KEY"], "${SIGNING_KEY:?Set SIGNING_KEY in .env}");
+            assert_eq!(
+                service["PAYPAL_CLIENT_SECRET"],
+                "${PAYPAL_CLIENT_SECRET:-replace-with-paypal-client-secret}"
+            );
+            assert_eq!(
+                service["SIGNING_KEY"],
+                "${SIGNING_KEY:?Set SIGNING_KEY in .env}"
+            );
             assert!(!service.contains_key("REDIS_URL"));
         }
         // A module never points at itself, and Rust modules are left alone.
@@ -508,18 +639,37 @@ services:
     fn development_values_are_fresh_and_single_line() {
         let key = local_value("IAM_SESSION_JWT_PRIVATE_KEY_PEM", "app").unwrap();
         assert!(!key.contains('\n'));
-        let pem = String::from_utf8(base64::engine::general_purpose::STANDARD.decode(&key).unwrap()).unwrap();
+        let pem = String::from_utf8(
+            base64::engine::general_purpose::STANDARD
+                .decode(&key)
+                .unwrap(),
+        )
+        .unwrap();
         assert!(pem.starts_with("-----BEGIN PRIVATE KEY-----\n"));
         assert!(pem.ends_with("-----END PRIVATE KEY-----\n"));
         assert!(pem.lines().all(|line| line.len() <= 64));
         // The PEM body is the PKCS#8 DER aws-lc-rs (and so jsonwebtoken) parses back.
-        let body: String = pem.lines().filter(|line| !line.starts_with("-----")).collect();
-        let der = base64::engine::general_purpose::STANDARD.decode(body).unwrap();
+        let body: String = pem
+            .lines()
+            .filter(|line| !line.starts_with("-----"))
+            .collect();
+        let der = base64::engine::general_purpose::STANDARD
+            .decode(body)
+            .unwrap();
         assert!(KeyPair::from_pkcs8(&der).is_ok());
-        assert_ne!(local_value("IAM_SESSION_JWT_PRIVATE_KEY_PEM", "app").unwrap(), key);
-        assert_eq!(local_value("IAM_SESSION_JWT_KEY_ID", "app").as_deref(), Some("app-dev-1"));
+        assert_ne!(
+            local_value("IAM_SESSION_JWT_PRIVATE_KEY_PEM", "app").unwrap(),
+            key
+        );
+        assert_eq!(
+            local_value("IAM_SESSION_JWT_KEY_ID", "app").as_deref(),
+            Some("app-dev-1")
+        );
         assert_eq!(local_value("JWT_ISSUER", "app").as_deref(), Some("app-iam"));
-        assert_eq!(local_value("JWT_AUDIENCE", "app").as_deref(), Some("app-api"));
+        assert_eq!(
+            local_value("JWT_AUDIENCE", "app").as_deref(),
+            Some("app-api")
+        );
         let password = local_value(SEED_PASSWORD, "app").unwrap();
         assert_eq!(password.len(), 24);
         assert_ne!(local_value(SEED_PASSWORD, "app").unwrap(), password);

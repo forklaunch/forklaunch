@@ -40,24 +40,59 @@ pub(super) fn source(root: &Path, directory: &Path) -> Result<PathBuf> {
 }
 
 pub(super) fn typescript_authored(root: &Path, service: &str) -> Result<bool> {
-    let manifest: toml::Value = toml::from_str(&fs::read_to_string(root.join(".forklaunch/manifest.toml"))?)?;
-    Ok(manifest.get("projects").and_then(toml::Value::as_array).and_then(|projects| projects.iter().find(|project| project.get("name").and_then(toml::Value::as_str) == Some(service)))
-        .and_then(|project| project.get("metadata")).is_some_and(|metadata| metadata.get("sdkLayout").and_then(toml::Value::as_str) == Some("project-local-v1") && metadata.get("language").and_then(toml::Value::as_str) != Some("rust")))
+    let manifest: toml::Value =
+        toml::from_str(&fs::read_to_string(root.join(".forklaunch/manifest.toml"))?)?;
+    Ok(manifest
+        .get("projects")
+        .and_then(toml::Value::as_array)
+        .and_then(|projects| {
+            projects
+                .iter()
+                .find(|project| project.get("name").and_then(toml::Value::as_str) == Some(service))
+        })
+        .and_then(|project| project.get("metadata"))
+        .is_some_and(|metadata| {
+            metadata.get("sdkLayout").and_then(toml::Value::as_str) == Some("project-local-v1")
+                && metadata.get("language").and_then(toml::Value::as_str) != Some("rust")
+        }))
 }
 
 /// Resolve explicitly generated service-owned SDK output without redirecting
 /// older applications or custom SDK layouts.
 pub(super) fn local_sdk(root: &Path, service: &str, language: &str) -> Result<Option<PathBuf>> {
     let manifest = root.join(".forklaunch/manifest.toml");
-    if !manifest.is_file() { return Ok(None); }
+    if !manifest.is_file() {
+        return Ok(None);
+    }
     let manifest: toml::Value = toml::from_str(&fs::read_to_string(manifest)?)?;
-    let project = manifest.get("projects").and_then(toml::Value::as_array).and_then(|projects| projects.iter().find(|project| project.get("name").and_then(toml::Value::as_str) == Some(service)));
-    let Some(metadata) = project.and_then(|project| project.get("metadata")) else { return Ok(None); };
-    if metadata.get("sdkLayout").and_then(toml::Value::as_str) != Some("project-local-v1") { return Ok(None); }
+    let project = manifest
+        .get("projects")
+        .and_then(toml::Value::as_array)
+        .and_then(|projects| {
+            projects
+                .iter()
+                .find(|project| project.get("name").and_then(toml::Value::as_str) == Some(service))
+        });
+    let Some(metadata) = project.and_then(|project| project.get("metadata")) else {
+        return Ok(None);
+    };
+    if metadata.get("sdkLayout").and_then(toml::Value::as_str) != Some("project-local-v1") {
+        return Ok(None);
+    }
     let authored = metadata.get("language").and_then(toml::Value::as_str) != Some("rust");
-    let path = metadata.get("cratePath").or_else(|| metadata.get("staticPath")).and_then(toml::Value::as_str).ok_or_else(|| anyhow::anyhow!("Service-local SDK requires project path metadata"))?;
-    let relative = if authored && language == "typescript" { Path::new(path).join("sdk") } else { Path::new(path).join("sdk").join(language) };
-    Ok(Some(crate::core::application_output::output_path(root, &relative)?))
+    let path = metadata
+        .get("cratePath")
+        .or_else(|| metadata.get("staticPath"))
+        .and_then(toml::Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("Service-local SDK requires project path metadata"))?;
+    let relative = if authored && language == "typescript" {
+        Path::new(path).join("sdk")
+    } else {
+        Path::new(path).join("sdk").join(language)
+    };
+    Ok(Some(crate::core::application_output::output_path(
+        root, &relative,
+    )?))
 }
 
 #[cfg(test)]
@@ -68,9 +103,20 @@ mod tests {
     fn unrelated_generation_receipts_do_not_redirect_sdk_output() {
         let root = tempfile::tempdir().unwrap();
         fs::create_dir_all(root.path().join(".forklaunch")).unwrap();
-        fs::write(root.path().join(".forklaunch/manifest.toml"), "language = 'rust'\nmodules_path = 'src'\n").unwrap();
-        fs::write(root.path().join("generation.json"), "application-owned receipt; not compiler configuration").unwrap();
-        assert_eq!(typescript(root.path()).unwrap(), Path::new("src/client-sdk/typescript"));
+        fs::write(
+            root.path().join(".forklaunch/manifest.toml"),
+            "language = 'rust'\nmodules_path = 'src'\n",
+        )
+        .unwrap();
+        fs::write(
+            root.path().join("generation.json"),
+            "application-owned receipt; not compiler configuration",
+        )
+        .unwrap();
+        assert_eq!(
+            typescript(root.path()).unwrap(),
+            Path::new("src/client-sdk/typescript")
+        );
     }
 
     #[test]

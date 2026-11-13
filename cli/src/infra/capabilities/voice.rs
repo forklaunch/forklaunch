@@ -23,7 +23,8 @@ pub(crate) static VOICE: Capability = Capability {
 const IMPORT_SOURCE: &str = "@forklaunch/core/http";
 #[cfg(test)]
 const IMPORT_NAMES: &[&str] = &["createVoiceClient", "VoiceClient"];
-const IMPORT_LINE: &str = "import { createVoiceClient, VoiceClient } from \"@forklaunch/core/http\";";
+const IMPORT_LINE: &str =
+    "import { createVoiceClient, VoiceClient } from \"@forklaunch/core/http\";";
 
 const RUNTIME_BLOCK: &str = "const configInjector = createConfigInjector(SchemaValidator(), {
     VoiceClient: {

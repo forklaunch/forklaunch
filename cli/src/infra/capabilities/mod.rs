@@ -16,7 +16,9 @@
 //! capability's file only says what is particular to it.
 
 mod native;
-pub(crate) use native::{cleanup_deleted_native_service, compose_processes, rename_native_capabilities};
+pub(crate) use native::{
+    cleanup_deleted_native_service, compose_processes, rename_native_capabilities,
+};
 pub(crate) use native::{
     dependency_in_use, ensure_dependency as ensure_native_dependency, release_dependency,
 };
@@ -30,11 +32,11 @@ use std::{
 use anyhow::{Context, Result, bail};
 
 pub(crate) mod email;
-pub(crate) mod sms;
-pub(crate) mod whatsapp;
-pub(crate) mod voice;
-pub(crate) mod payments;
 pub(crate) mod models;
+pub(crate) mod payments;
+pub(crate) mod sms;
+pub(crate) mod voice;
+pub(crate) mod whatsapp;
 
 use super::in_place;
 use crate::core::docker::{DependencyCondition, DependsOn, DockerCompose, DockerService};
@@ -77,7 +79,11 @@ pub(crate) static CAPABILITIES: &[&Capability] = &[
 /// capability's own, then the shared gateway wiring (on remove in reverse,
 /// so remove takes back exactly what add wrote). `edit` carries the
 /// capabilities as they are after the change.
-pub(crate) fn apply(edit: &mut CapabilityEdit, capability: &Capability, adding: bool) -> Result<()> {
+pub(crate) fn apply(
+    edit: &mut CapabilityEdit,
+    capability: &Capability,
+    adding: bool,
+) -> Result<()> {
     if edit.native {
         return native::apply(edit, capability, adding);
     }
@@ -181,11 +187,12 @@ impl CapabilityEdit {
     /// Rust sources are staged in the application's rustfmt style, so its CI
     /// format check passes on code capabilities add.
     pub(crate) fn write(&mut self, path: PathBuf, content: String) {
-        let content = if self.format_rust && path.extension().is_some_and(|extension| extension == "rs") {
-            crate::init::rust_project::format_rust_source(&path, &content)
-        } else {
-            content
-        };
+        let content =
+            if self.format_rust && path.extension().is_some_and(|extension| extension == "rs") {
+                crate::init::rust_project::format_rust_source(&path, &content)
+            } else {
+                content
+            };
         self.staged.insert(path, Some(content));
     }
 
@@ -219,7 +226,8 @@ impl CapabilityEdit {
                         fs::remove_file(&path).with_context(|| format!("removing {path:?}"))?;
                         // A directory add created for the file goes with it.
                         if let Some(parent) = path.parent()
-                            && fs::read_dir(parent).is_ok_and(|mut entries| entries.next().is_none())
+                            && fs::read_dir(parent)
+                                .is_ok_and(|mut entries| entries.next().is_none())
                         {
                             fs::remove_dir(parent)?;
                         }
@@ -246,7 +254,10 @@ impl CapabilityEdit {
 
     /// Removal keeps a file edited since add wrote it.
     pub(crate) fn note_kept(&self, path: &Path) {
-        eprintln!("note: kept {} (edited since `infra add`)", self.display(path));
+        eprintln!(
+            "note: kept {} (edited since `infra add`)",
+            self.display(path)
+        );
     }
 
     /// Removal keeps a setting `what` in `path` that no longer holds the value add wrote.
@@ -642,15 +653,18 @@ impl CapabilityEdit {
             .filter(|l| l.starts_with("import ") || l.starts_with("} from "))
             .filter(|l| l.contains(" from "))
             .collect();
-        let semi = if import_ends.is_empty() || import_ends.iter().any(|l| l.trim_end().ends_with(';')) {
-            ";"
-        } else {
-            ""
-        };
+        let semi =
+            if import_ends.is_empty() || import_ends.iter().any(|l| l.trim_end().ends_with(';')) {
+                ";"
+            } else {
+                ""
+            };
         let last_import = lines
             .iter()
             .rposition(|l| l.starts_with("import ") || l.starts_with("} from "));
-        let import = format!("import {{ platformEventsRouter }} from {q}./api/routes/platformEvents.routes{q}{semi}\n");
+        let import = format!(
+            "import {{ platformEventsRouter }} from {q}./api/routes/platformEvents.routes{q}{semi}\n"
+        );
         let mut out = String::new();
         if last_import.is_none() {
             out.push_str(&import);
@@ -662,7 +676,10 @@ impl CapabilityEdit {
                 Some(import.clone())
             } else if !used && line.trim_start().starts_with("app.use(") {
                 used = true;
-                let indent: String = line.chars().take_while(|c| *c == ' ' || *c == '\t').collect();
+                let indent: String = line
+                    .chars()
+                    .take_while(|c| *c == ' ' || *c == '\t')
+                    .collect();
                 Some(format!("{indent}app.use(platformEventsRouter){semi}\n"))
             } else {
                 None
@@ -779,7 +796,10 @@ fn render(template: &str, app_name: &str) -> String {
 /// a comma-separated list, one entry per project that holds the feature
 /// (the mock delivers each event to every entry).
 fn events_var(feature: &str) -> String {
-    format!("MOCK_EVENTS_URL_{}", feature.to_uppercase().replace('-', "_"))
+    format!(
+        "MOCK_EVENTS_URL_{}",
+        feature.to_uppercase().replace('-', "_")
+    )
 }
 
 fn events_url(compose: &DockerCompose, service_key: &str) -> Option<String> {
@@ -994,7 +1014,8 @@ const GATEWAY_ENV_BLOCK: &str = "const configInjector = createConfigInjector(Sch
     }
 });";
 
-const PLATFORM_EVENTS_ROUTES: &str = "import { forklaunchRouter, schemaValidator } from '@{{app_name}}/core';
+const PLATFORM_EVENTS_ROUTES: &str =
+    "import { forklaunchRouter, schemaValidator } from '@{{app_name}}/core';
 import { ci, tokens } from '../../bootstrapper';
 import { receivePlatformEvent } from '../controllers/platformEvents.controller';
 
@@ -1013,7 +1034,8 @@ export const receivePlatformEventRoute = platformEventsRouter.post(
 );
 ";
 
-const PLATFORM_EVENTS_CONTROLLER: &str = "import { handlers, schemaValidator, string } from '@{{app_name}}/core';
+const PLATFORM_EVENTS_CONTROLLER: &str =
+    "import { handlers, schemaValidator, string } from '@{{app_name}}/core';
 import {
   PlatformEventVerificationError,
   verifyPlatformEvent

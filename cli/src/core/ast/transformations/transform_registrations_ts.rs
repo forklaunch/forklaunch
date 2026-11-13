@@ -1067,7 +1067,12 @@ const serviceDependencies = runtimeDependencies.chain({
         // Keyless by default: credentials come from the task role when deployed.
         assert!(transformed_code.contains("s3ClientConfig({"));
         assert!(transformed_code.contains("S3ObjectStore, s3ClientConfig"));
-        for key in ["S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_URL", "S3_PREFIX"] {
+        for key in [
+            "S3_ACCESS_KEY_ID",
+            "S3_SECRET_ACCESS_KEY",
+            "S3_URL",
+            "S3_PREFIX",
+        ] {
             let at = transformed_code.find(&format!("{key}: {{")).expect(key);
             assert!(
                 transformed_code[at..at + 120].contains("optional(string)"),

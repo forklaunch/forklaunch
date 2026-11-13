@@ -51,17 +51,17 @@ use crate::{
                 AJV_VERSION, APP_BILLING_VERSION, APP_CORE_VERSION, APP_IAM_VERSION,
                 APP_MONITORING_VERSION, BETTER_SQLITE3_VERSION, BIOME_VERSION, BULLMQ_VERSION,
                 COMMON_VERSION, CORE_VERSION, DOTENV_VERSION, ESLINT_VERSION, EXPRESS_VERSION,
-                HYPER_EXPRESS_VERSION, UWEBSOCKETS_VERSION, INFRASTRUCTURE_REDIS_VERSION, INTERNAL_VERSION,
+                HYPER_EXPRESS_VERSION, INFRASTRUCTURE_REDIS_VERSION, INTERNAL_VERSION,
                 IOREDIS_VERSION, MIKRO_ORM_CLI_VERSION, MIKRO_ORM_CORE_VERSION,
                 MIKRO_ORM_DATABASE_VERSION, MIKRO_ORM_MIGRATIONS_VERSION, MIKRO_ORM_SEEDER_VERSION,
-                OXLINT_VERSION, OXLINT_TSGOLINT_VERSION, PINO_VERSION, PRETTIER_VERSION, PROJECT_BUILD_SCRIPT,
-                PROJECT_DOCS_SCRIPT, PROJECT_SEED_SCRIPT, SQLITE3_VERSION, TESTING_VERSION,
-                TSX_VERSION, TYPEBOX_VERSION, TYPEDOC_VERSION,
+                OXLINT_TSGOLINT_VERSION, OXLINT_VERSION, PINO_VERSION, PRETTIER_VERSION,
+                PROJECT_BUILD_SCRIPT, PROJECT_DOCS_SCRIPT, PROJECT_SEED_SCRIPT, SQLITE3_VERSION,
+                TESTING_VERSION, TSX_VERSION, TYPEBOX_VERSION, TYPEDOC_VERSION,
                 TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION, TYPES_EXPRESS_VERSION, TYPES_JEST_VERSION,
                 TYPES_QS_VERSION, TYPES_UUID_VERSION, TYPESCRIPT_ESLINT_VERSION,
-                UNIVERSAL_SDK_VERSION, UUID_VERSION, VALIDATOR_VERSION, WORKER_BULLMQ_VERSION,
-                WORKER_DATABASE_VERSION, WORKER_INTERFACES_VERSION, WORKER_KAFKA_VERSION,
-                WORKER_REDIS_VERSION, ZOD_VERSION, project_clean_script,
+                UNIVERSAL_SDK_VERSION, UUID_VERSION, UWEBSOCKETS_VERSION, VALIDATOR_VERSION,
+                WORKER_BULLMQ_VERSION, WORKER_DATABASE_VERSION, WORKER_INTERFACES_VERSION,
+                WORKER_KAFKA_VERSION, WORKER_REDIS_VERSION, ZOD_VERSION, project_clean_script,
                 project_dev_local_worker_script, project_dev_server_script,
                 project_dev_worker_client_script, project_format_script, project_lint_fix_script,
                 project_lint_script, project_migrate_script, project_start_server_script,
@@ -128,7 +128,11 @@ fn generate_basic_worker(
     // compliance endpoints authenticate via IAM-issued JWTs
     // (JWKS_PUBLIC_KEY_URL is only registered when IAM is configured)
     if !manifest_data.is_iam_configured {
-        for file in ["compliance.controller.ts", "compliance.routes.ts", "compliance.contract.ts"] {
+        for file in [
+            "compliance.controller.ts",
+            "compliance.routes.ts",
+            "compliance.contract.ts",
+        ] {
             if !ignore_files.iter().any(|f| f == file) {
                 ignore_files.push(file.to_string());
             }
@@ -738,8 +742,12 @@ impl CliCommand for WorkerCommand {
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        if matches.get_flag("consumer-only") && !rust_project::uses_rust_generation(matches) { anyhow::bail!("--consumer-only is available for Rust worker generation only"); }
-        if matches.contains_id("worker-runtime") && !rust_project::uses_rust_generation(matches) { anyhow::bail!("--runtime is available for Rust worker generation only"); }
+        if matches.get_flag("consumer-only") && !rust_project::uses_rust_generation(matches) {
+            anyhow::bail!("--consumer-only is available for Rust worker generation only");
+        }
+        if matches.contains_id("worker-runtime") && !rust_project::uses_rust_generation(matches) {
+            anyhow::bail!("--runtime is available for Rust worker generation only");
+        }
         if rust_project::uses_rust_generation(matches) {
             return rust_project::generate_rust_worker(matches);
         }
@@ -996,9 +1004,10 @@ impl CliCommand for WorkerCommand {
             generated_hmac_secret: String::new(),
             // Reuse the app's field-encryption key (services and workers share
             // encrypted cache records); mint one only for key-less apps.
-            generated_encryption_key:
-                crate::core::env_defaults::find_existing_encryption_key(&base_path)
-                    .unwrap_or_else(|| crate::core::manifest::service::generate_random_secret(32)),
+            generated_encryption_key: crate::core::env_defaults::find_existing_encryption_key(
+                &base_path,
+            )
+            .unwrap_or_else(|| crate::core::manifest::service::generate_random_secret(32)),
             otel_token: "OtelCollector".to_string(),
         };
 

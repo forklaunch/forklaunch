@@ -147,7 +147,15 @@ pub(crate) fn generate_or_check_sdk_outputs(
     check: bool,
     stdout: &mut StandardStream,
 ) -> Result<()> {
-    generate_or_check(app_root, target, source, selected_service, check, false, stdout)
+    generate_or_check(
+        app_root,
+        target,
+        source,
+        selected_service,
+        check,
+        false,
+        stdout,
+    )
 }
 
 /// Watch passes generate what exists: a TypeScript service whose OpenAPI export
@@ -160,7 +168,15 @@ pub(crate) fn generate_sdk_outputs_while_watching(
     selected_service: Option<&str>,
     stdout: &mut StandardStream,
 ) -> Result<()> {
-    generate_or_check(app_root, target, source, selected_service, false, true, stdout)
+    generate_or_check(
+        app_root,
+        target,
+        source,
+        selected_service,
+        false,
+        true,
+        stdout,
+    )
 }
 
 fn generate_or_check(
@@ -1504,9 +1520,12 @@ fn local_typescript_aggregate(
 ) -> Result<()> {
     let sdk_root = app_root.join(super::layout::typescript(app_root)?);
     let manifest_path = sdk_root.join("package.json");
-    let Ok(source) = read_to_string(&manifest_path) else { return Ok(()) };
+    let Ok(source) = read_to_string(&manifest_path) else {
+        return Ok(());
+    };
     let mut package: serde_json::Value = serde_json::from_str(&source)?;
-    if package.get("name").and_then(serde_json::Value::as_str) != Some("@forklaunch-generated/sdk") {
+    if package.get("name").and_then(serde_json::Value::as_str) != Some("@forklaunch-generated/sdk")
+    {
         return Ok(());
     }
     let mut names = services
@@ -1516,8 +1535,12 @@ fn local_typescript_aggregate(
     if partial {
         let manifest = read_manifest(app_root)?;
         for project in super::http_sources::projects(&manifest, None) {
-            let Some(name) = project.get("name").and_then(Value::as_str) else { continue };
-            let Some(local) = super::layout::local_sdk(app_root, name, "typescript")? else { continue };
+            let Some(name) = project.get("name").and_then(Value::as_str) else {
+                continue;
+            };
+            let Some(local) = super::layout::local_sdk(app_root, name, "typescript")? else {
+                continue;
+            };
             if local.join("package.json").is_file() {
                 names.insert(name.to_owned());
             }
@@ -1525,9 +1548,15 @@ fn local_typescript_aggregate(
     }
     let mut packages = std::collections::BTreeMap::new();
     for service in &names {
-        let Some(local) = super::layout::local_sdk(app_root, service, "typescript")? else { continue };
-        let local: serde_json::Value = serde_json::from_str(&read_to_string(local.join("package.json"))?)?;
-        let name = local.get("name").and_then(serde_json::Value::as_str).context("Service SDK package name")?;
+        let Some(local) = super::layout::local_sdk(app_root, service, "typescript")? else {
+            continue;
+        };
+        let local: serde_json::Value =
+            serde_json::from_str(&read_to_string(local.join("package.json"))?)?;
+        let name = local
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .context("Service SDK package name")?;
         packages.insert(service.clone(), name.to_owned());
     }
     let mut index = String::new();
@@ -1536,7 +1565,9 @@ fn local_typescript_aggregate(
     for (service, package_name) in &packages {
         let client = format!("{}SdkClient", service.to_case(Case::Pascal));
         let camel = service.to_case(Case::Camel);
-        index.push_str(&format!("export type {{ {client} }} from '{package_name}';\n"));
+        index.push_str(&format!(
+            "export type {{ {client} }} from '{package_name}';\n"
+        ));
         fields.push_str(&format!("  {camel}: import('{package_name}').{client};\n"));
         factories.push_str(&format!(
             "/** Connect to `{service}`. Internal routes need `hmac: {{ secretKey }}` with its HMAC key. */\nexport const {camel}SdkClient = (options: ServiceClientOptions) =>\n  connectService<ForkLaunchSdk['{camel}']>(options);\n"
@@ -1689,7 +1720,10 @@ fn generate_typescript_sdk_scoped(
         }
     }
     super::write_if_changed(source.join("index.ts"), typescript_sdk(services)?)?;
-    super::http_sources::record(&source, services.iter().map(|service| service.name.as_str()))?;
+    super::http_sources::record(
+        &source,
+        services.iter().map(|service| service.name.as_str()),
+    )?;
     // Bun requires literal members to exist. Publish the actual SDK package
     // before recording its workspace membership.
     super::workspace::include_typescript_sdk(app_root)
@@ -2323,7 +2357,10 @@ fn rust_sdk_cargo_for_layout(
         .unwrap_or(root.join(super::layout::rust(root)?).join(package));
     let framework = root.join(".forklaunch/framework-rs");
     // `diff_paths` gives no answer for one relative and one absolute path.
-    let (framework, directory) = (std::path::absolute(&framework)?, std::path::absolute(&directory)?);
+    let (framework, directory) = (
+        std::path::absolute(&framework)?,
+        std::path::absolute(&directory)?,
+    );
     let relative = pathdiff::diff_paths(framework.join("crates/core"), &directory)
         .context("SDK framework dependency path")?;
     let mut document = cargo.parse::<toml_edit::DocumentMut>()?;
@@ -2648,9 +2685,20 @@ mod compiler_config_tests {
             Some("schema-validation")
         );
         // Framework crates resolve from the registry; nothing is vendored.
-        assert!(cargo["dependencies"]["forklaunch-core"].get("path").is_none());
-        assert!(cargo["dependencies"]["forklaunch-core"]["version"].as_str().is_some_and(|version| version.starts_with('=')));
-        assert!(!root.path().join("vendor").exists() && !root.path().join(".forklaunch/framework-rs").exists());
+        assert!(
+            cargo["dependencies"]["forklaunch-core"]
+                .get("path")
+                .is_none()
+        );
+        assert!(
+            cargo["dependencies"]["forklaunch-core"]["version"]
+                .as_str()
+                .is_some_and(|version| version.starts_with('='))
+        );
+        assert!(
+            !root.path().join("vendor").exists()
+                && !root.path().join(".forklaunch/framework-rs").exists()
+        );
         check_sdk_outputs(root.path(), "rust", &[service]).unwrap();
         check_sdk_outputs(root.path(), "typescript", &[]).unwrap();
     }

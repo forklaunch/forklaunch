@@ -6,13 +6,13 @@ use serde::{Deserialize, Serialize};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 use crate::{
+    CliCommand,
     constants::get_observability_api_url,
     core::{
         command::command,
         http_client::{get, post},
         validate::{require_integration, require_manifest},
     },
-    CliCommand,
 };
 
 // ── Top-level command ─────────────────────────────────────────────────────────
@@ -95,7 +95,8 @@ impl CliCommand for MetricsCommand {
                 print_promql(&response)?;
             }
         } else {
-            let response = fetch_all_application_metrics(&application_id, &environment, &time_range)?;
+            let response =
+                fetch_all_application_metrics(&application_id, &environment, &time_range)?;
             if json_output {
                 println!("{}", serde_json::to_string_pretty(&response)?);
             } else {
@@ -161,7 +162,13 @@ fn fetch_all_application_metrics(
     let mut succeeded = false;
     let mut first_err: Option<anyhow::Error> = None;
 
-    for chart_type in ["requestRate", "errorRate", "latencyP50", "latencyP95", "latencyP99"] {
+    for chart_type in [
+        "requestRate",
+        "errorRate",
+        "latencyP50",
+        "latencyP95",
+        "latencyP99",
+    ] {
         let r = match fetch_application_metrics(application_id, environment, time_range, chart_type)
         {
             Ok(r) => {
@@ -229,8 +236,7 @@ fn fetch_promql(
         "timeRange": time_range,
     });
 
-    let response = post(&url, body)
-        .with_context(|| "Failed to reach observability API")?;
+    let response = post(&url, body).with_context(|| "Failed to reach observability API")?;
 
     if !response.status().is_success() {
         let status = response.status();
@@ -652,5 +658,4 @@ mod tests {
         assert!(resp.request_rate.value.is_none());
         assert!(resp.latency.is_none());
     }
-
 }

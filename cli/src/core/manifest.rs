@@ -137,7 +137,10 @@ pub(crate) fn strip_retired_manifest_keys(text: &str) -> String {
     let Ok(mut doc) = text.parse::<toml_edit::DocumentMut>() else {
         return text.to_string();
     };
-    if !RETIRED_MANIFEST_KEYS.iter().any(|key| doc.contains_key(key)) {
+    if !RETIRED_MANIFEST_KEYS
+        .iter()
+        .any(|key| doc.contains_key(key))
+    {
         return text.to_string();
     }
     // The first key carries the header comment as its decor; hand it on.
@@ -146,7 +149,12 @@ pub(crate) fn strip_retired_manifest_keys(text: &str) -> String {
         .next()
         .map(|(key, _)| key.to_string())
         .filter(|key| RETIRED_MANIFEST_KEYS.contains(&key.as_str()))
-        .and_then(|key| doc.key(&key).and_then(|k| k.leaf_decor().prefix()).and_then(|p| p.as_str()).map(str::to_owned));
+        .and_then(|key| {
+            doc.key(&key)
+                .and_then(|k| k.leaf_decor().prefix())
+                .and_then(|p| p.as_str())
+                .map(str::to_owned)
+        });
     for key in RETIRED_MANIFEST_KEYS {
         doc.remove(key);
     }
@@ -175,14 +183,22 @@ pub(crate) fn preserve_manifest_layout(original: &str, rendered: &str) -> String
     if before == after {
         return original.to_string();
     }
-    let (Ok(source), Ok(mut doc)) = (original.parse::<DocumentMut>(), rendered.parse::<DocumentMut>()) else {
+    let (Ok(source), Ok(mut doc)) = (
+        original.parse::<DocumentMut>(),
+        rendered.parse::<DocumentMut>(),
+    ) else {
         return rendered.to_string();
     };
     fn order(table: &mut Table, source: &Table) {
-        let rank: HashMap<String, usize> =
-            source.iter().enumerate().map(|(i, (key, _))| (key.to_string(), i)).collect();
+        let rank: HashMap<String, usize> = source
+            .iter()
+            .enumerate()
+            .map(|(i, (key, _))| (key.to_string(), i))
+            .collect();
         table.sort_values_by(|a, _, b, _| {
-            rank.get(a.get()).unwrap_or(&usize::MAX).cmp(rank.get(b.get()).unwrap_or(&usize::MAX))
+            rank.get(a.get())
+                .unwrap_or(&usize::MAX)
+                .cmp(rank.get(b.get()).unwrap_or(&usize::MAX))
         });
         for (key, item) in table.iter_mut() {
             match (item, source.get(key.get())) {
@@ -193,7 +209,9 @@ pub(crate) fn preserve_manifest_layout(original: &str, rendered: &str) -> String
                         let name = inner.get("name").and_then(Item::as_str).map(str::to_owned);
                         let matched = name
                             .and_then(|name| {
-                                sources.iter().find(|t| t.get("name").and_then(Item::as_str) == Some(name.as_str()))
+                                sources.iter().find(|t| {
+                                    t.get("name").and_then(Item::as_str) == Some(name.as_str())
+                                })
                             })
                             .or_else(|| sources.get(i));
                         if let Some(source) = matched {
@@ -228,7 +246,12 @@ pub(crate) fn preserve_manifest_layout(original: &str, rendered: &str) -> String
     // the original had it, whichever key comes first after sorting.
     fn first_prefix(table: &Table) -> Option<String> {
         let (key, _) = table.iter().next()?;
-        table.key(key)?.leaf_decor().prefix()?.as_str().map(str::to_owned)
+        table
+            .key(key)?
+            .leaf_decor()
+            .prefix()?
+            .as_str()
+            .map(str::to_owned)
     }
     fn set_first_prefix(table: &mut Table, prefix: &str) {
         if let Some((mut key, _)) = table.iter_mut().next() {
@@ -269,7 +292,12 @@ pub(crate) fn next_available_redis_partition(projects: &[ProjectEntry]) -> u32 {
 #[derive(Debug, Serialize, Deserialize, Content, Clone, Default)]
 pub(crate) struct ProjectMetadata {
     /// Explicit generated service SDK ownership; absent retains legacy layouts.
-    #[serde(rename="sdkLayout", alias="sdk_layout", default, skip_serializing_if="Option::is_none")]
+    #[serde(
+        rename = "sdkLayout",
+        alias = "sdk_layout",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub(crate) sdk_layout: Option<String>,
     /// Explicit opt-out for components without a framework HTTP contract exporter.
     /// Absent means enabled, preserving existing service and worker behavior.
@@ -348,12 +376,20 @@ pub(crate) struct ProjectMetadata {
         skip_serializing_if = "Option::is_none"
     )]
     pub(crate) worker_type: Option<String>,
-    #[serde(rename="workerRuntime",default,skip_serializing_if="Option::is_none")]
+    #[serde(
+        rename = "workerRuntime",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub(crate) worker_runtime: Option<String>,
     /// Worker project owns an independently runnable producer HTTP/MCP service.
-    #[serde(rename="workerService",default,skip_serializing_if="Option::is_none")]
+    #[serde(
+        rename = "workerService",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub(crate) worker_service: Option<bool>,
-    #[serde(default,skip_serializing_if="Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) persistence: Option<String>,
     /// Generated durable worker supports a separate control-only executable role.
     #[serde(
@@ -866,12 +902,17 @@ mod retired_key_tests {
 
     #[test]
     fn stray_snake_case_name_is_dropped_and_the_header_kept() {
-        let stray = format!("{HEADER}snake_case_name = \"accounts\"\nsdkTargets = [\"typescript\"]\napp_name = \"zebra\"\n\n[[projects]]\nname = \"accounts\"\n");
-        let clean = format!("{HEADER}sdkTargets = [\"typescript\"]\napp_name = \"zebra\"\n\n[[projects]]\nname = \"accounts\"\n");
+        let stray = format!(
+            "{HEADER}snake_case_name = \"accounts\"\nsdkTargets = [\"typescript\"]\napp_name = \"zebra\"\n\n[[projects]]\nname = \"accounts\"\n"
+        );
+        let clean = format!(
+            "{HEADER}sdkTargets = [\"typescript\"]\napp_name = \"zebra\"\n\n[[projects]]\nname = \"accounts\"\n"
+        );
         assert_eq!(strip_retired_manifest_keys(&stray), clean);
         assert_eq!(strip_retired_manifest_keys(&clean), clean);
         // A project's own key of that name is not top-level and stays.
-        let nested = "app_name = \"zebra\"\n\n[[projects]]\nname = \"a\"\nsnake_case_name = \"a\"\n";
+        let nested =
+            "app_name = \"zebra\"\n\n[[projects]]\nname = \"a\"\nsnake_case_name = \"a\"\n";
         assert_eq!(strip_retired_manifest_keys(nested), nested);
     }
 
@@ -882,10 +923,14 @@ mod retired_key_tests {
         let reordered = "# Generated by ForkLaunch\n\nid = \"x\"\napp_name = \"zebra\"\n\n[project_peer_topology]\nzebra = [\"a\"]\n\n[[projects]]\ntype = \"Service\"\nname = \"a\"\n\n[projects.resources]\ndatabase = \"postgresql\"\n\n[[projects]]\ntype = \"Library\"\nname = \"b\"\n";
         assert_eq!(preserve_manifest_layout(original, reordered), original);
         // A change keeps the order, and a new key follows the existing ones.
-        let changed = reordered.replace("id = \"x\"\n", "id = \"x\"\nlicense = \"MIT\"\n").replace("\"Library\"", "\"Worker\"");
+        let changed = reordered
+            .replace("id = \"x\"\n", "id = \"x\"\nlicense = \"MIT\"\n")
+            .replace("\"Library\"", "\"Worker\"");
         assert_eq!(
             preserve_manifest_layout(original, &changed),
-            original.replace("id = \"x\"\n", "id = \"x\"\nlicense = \"MIT\"\n").replace("\"Library\"", "\"Worker\"")
+            original
+                .replace("id = \"x\"\n", "id = \"x\"\nlicense = \"MIT\"\n")
+                .replace("\"Library\"", "\"Worker\"")
         );
     }
 
@@ -893,8 +938,16 @@ mod retired_key_tests {
     fn service_and_worker_data_do_not_serialize_derived_names() {
         let manifest = "id='x'\ncli_version='1.0.0'\napp_name='demo'\nmodules_path='src'\nruntime='node'\nformatter='prettier'\nlinter='oxlint'\nvalidator='zod'\nhttp_framework='express'\ntest_framework='vitest'\napp_description='d'\nauthor='a'\nlicense='MIT'\nsnake_case_name='old'\nprojects=[]\nproject_peer_topology={}\n";
         let service: ServiceManifestData = toml::from_str(manifest).unwrap();
-        assert!(!to_string_pretty(&service).unwrap().contains("snake_case_name"));
+        assert!(
+            !to_string_pretty(&service)
+                .unwrap()
+                .contains("snake_case_name")
+        );
         let worker: WorkerManifestData = toml::from_str(manifest).unwrap();
-        assert!(!to_string_pretty(&worker).unwrap().contains("snake_case_name"));
+        assert!(
+            !to_string_pretty(&worker)
+                .unwrap()
+                .contains("snake_case_name")
+        );
     }
 }

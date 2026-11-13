@@ -188,7 +188,9 @@ fn write_bundle(dest: &Path, files: &[&File], mdc: bool) -> Result<()> {
     if mdc {
         body.push_str("---\ndescription: ForkLaunch framework conventions and skills\nalwaysApply: true\n---\n\n");
     }
-    body.push_str("# ForkLaunch Skill Pack\n\nFollow these conventions when building this ForkLaunch app.\n");
+    body.push_str(
+        "# ForkLaunch Skill Pack\n\nFollow these conventions when building this ForkLaunch app.\n",
+    );
     for f in files {
         body.push_str(&format!(
             "\n\n<!-- ===== {} ===== -->\n\n",

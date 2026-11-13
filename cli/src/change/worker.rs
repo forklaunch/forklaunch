@@ -832,7 +832,8 @@ impl CliCommand for WorkerCommand {
                         path: worker_base_path.parent().unwrap().join("package.json"),
                         content: serde_json::to_string_pretty(&application_package_json_to_write)?,
                         context: None,
-                    }.preserving_json_layout(),
+                    }
+                    .preserving_json_layout(),
                 );
 
                 rendered_templates_cache.insert(
@@ -844,7 +845,8 @@ impl CliCommand for WorkerCommand {
                         path: worker_base_path.join("package.json"),
                         content: serde_json::to_string_pretty(&project_package_json_to_write)?,
                         context: None,
-                    }.preserving_json_layout(),
+                    }
+                    .preserving_json_layout(),
                 );
 
                 let rendered_templates: Vec<RenderedTemplate> = rendered_templates_cache
@@ -1020,9 +1022,19 @@ impl CliCommand for WorkerCommand {
         }
 
         if let Some(name) = name {
-            let old = worker_base_path.file_name().and_then(|name| name.to_str()).context("Invalid project directory")?;
+            let old = worker_base_path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .context("Invalid project directory")?;
             if crate::sdk::typescript_build::preflight_lifecycle(&app_root_path, old)? {
-                anyhow::ensure!(old == name || !crate::sdk::typescript_build::has_contract_build(&app_root_path, &name)?, "Destination contract hook already exists");
+                anyhow::ensure!(
+                    old == name
+                        || !crate::sdk::typescript_build::has_contract_build(
+                            &app_root_path,
+                            &name
+                        )?,
+                    "Destination contract hook already exists"
+                );
             }
             move_templates.push(change_name(
                 &worker_base_path,
@@ -1062,7 +1074,8 @@ impl CliCommand for WorkerCommand {
                 path: application_package_json_path.into(),
                 content: serde_json::to_string_pretty(&application_package_json_to_write)?,
                 context: None,
-            }.preserving_json_layout(),
+            }
+            .preserving_json_layout(),
         );
 
         rendered_templates_cache.insert(
@@ -1074,7 +1087,8 @@ impl CliCommand for WorkerCommand {
                 path: project_package_json_path.into(),
                 content: serde_json::to_string_pretty(&project_json_to_write)?,
                 context: None,
-            }.preserving_json_layout(),
+            }
+            .preserving_json_layout(),
         );
 
         let rendered_templates: Vec<RenderedTemplate> = rendered_templates_cache
@@ -1088,7 +1102,10 @@ impl CliCommand for WorkerCommand {
         move_template_files(&move_templates, dryrun, &mut stdout)?;
 
         if !dryrun {
-            let old = worker_base_path.file_name().and_then(|name| name.to_str()).context("Invalid project directory")?;
+            let old = worker_base_path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .context("Invalid project directory")?;
             // Image planning reads the workspace members, so move the SDK
             // member before the hook rename refreshes the images.
             crate::init::rust_project::rename_typescript_sdk_member(
@@ -1096,7 +1113,11 @@ impl CliCommand for WorkerCommand {
                 &worker_base_path,
                 &worker_base_path.with_file_name(&manifest_data.worker_name),
             )?;
-            crate::sdk::typescript_build::rename_hook(&app_root_path, old, &manifest_data.worker_name)?;
+            crate::sdk::typescript_build::rename_hook(
+                &app_root_path,
+                old,
+                &manifest_data.worker_name,
+            )?;
             crate::init::rust_project::refresh_mixed_images(&app_root_path)?;
             log_ok!(stdout, "{} changed successfully!", &manifest_data.app_name);
             format_code(&worker_base_path, &manifest_data.runtime.parse()?);
@@ -1179,7 +1200,11 @@ type = "bullmq"
         let tmp = TempDir::new().unwrap();
         let base = tmp.path();
 
-        write(base.join("registrations.ts"), BULLMQ_WORKER_REGISTRATIONS_TS).unwrap();
+        write(
+            base.join("registrations.ts"),
+            BULLMQ_WORKER_REGISTRATIONS_TS,
+        )
+        .unwrap();
         write(base.join(".env.local"), "").unwrap();
 
         let raw: WorkerManifestData = toml::from_str(BULLMQ_WORKER_MANIFEST_TOML).unwrap();

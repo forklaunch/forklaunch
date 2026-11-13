@@ -56,8 +56,14 @@ SCRIPT
 /// against the release's published SHA-256 and cached in its own image layer.
 const WATCHEXEC_VERSION: &str = "2.7.4";
 const WATCHEXEC_SHA256: [(&str, &str); 2] = [
-    ("x86_64", "00a4be01add74acfaa37978081b331d60f4691f7e39b2028e5301242d61a464b"),
-    ("aarch64", "8596e3082e7116d4438f71f3e8eb1ad25d39dc4fe8560d2b1240af86e0c56df8"),
+    (
+        "x86_64",
+        "00a4be01add74acfaa37978081b331d60f4691f7e39b2028e5301242d61a464b",
+    ),
+    (
+        "aarch64",
+        "8596e3082e7116d4438f71f3e8eb1ad25d39dc4fe8560d2b1240af86e0c56df8",
+    ),
 ];
 
 /// `forklaunch-native-rebuild`: the reload builder's command. It builds the
@@ -165,7 +171,11 @@ impl Reload {
         }
         // Docker Desktop and OrbStack bind mounts do not reliably deliver host
         // edits as inotify events inside containers; Linux hosts do.
-        let default = if cfg!(target_os = "linux") { None } else { Some(500) };
+        let default = if cfg!(target_os = "linux") {
+            None
+        } else {
+            Some(500)
+        };
         let poll_ms = match std::env::var("FORKLAUNCH_DEV_POLL_MS") {
             Ok(value) if value == "0" || value.eq_ignore_ascii_case("off") => None,
             Ok(value) => Some(
@@ -472,7 +482,9 @@ impl CliCommand for DevCommand {
         // Fail before Compose starts anything: a taken host port otherwise leaves
         // a container created with no published port that still looks healthy.
         let starting: Vec<String> =
-            active_services(&planned, &selected, !matches.get_flag("no_deps"))?.into_iter().collect();
+            active_services(&planned, &selected, !matches.get_flag("no_deps"))?
+                .into_iter()
+                .collect();
         crate::core::host_ports::preflight(&planned, &starting)?;
         let mut run = Process::new(&docker);
         run.args(["compose", "--project-directory"])
@@ -498,8 +510,7 @@ impl CliCommand for DevCommand {
         if !selected.is_empty() && planned["services"].get(NATIVE_BUILD).is_some() {
             run.arg(NATIVE_BUILD);
         }
-        run
-            .current_dir(&root)
+        run.current_dir(&root)
             .stdin(Stdio::null())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit());
@@ -535,7 +546,9 @@ impl CliCommand for DevCommand {
 fn uses_compose_watch(compose: &Value) -> bool {
     compose["services"].as_object().is_some_and(|services| {
         services.values().any(|service| {
-            service["develop"]["watch"].as_array().is_some_and(|rules| !rules.is_empty())
+            service["develop"]["watch"]
+                .as_array()
+                .is_some_and(|rules| !rules.is_empty())
         })
     })
 }
@@ -674,10 +687,17 @@ fn metadata_watch_ignores(
         for relative in [
             paths::path(name, table, Artifact::AsyncApi),
             paths::path(name, table, Artifact::SocketContract),
-            paths::socket_registry_marker(name, table).to_string_lossy().into_owned(),
-            paths::socket_receipt(name, table, "asyncapi").to_string_lossy().into_owned(),
+            paths::socket_registry_marker(name, table)
+                .to_string_lossy()
+                .into_owned(),
+            paths::socket_receipt(name, table, "asyncapi")
+                .to_string_lossy()
+                .into_owned(),
         ] {
-            outputs.insert(contracts::resolved_output(&output_path(root, Path::new(&relative))?)?);
+            outputs.insert(contracts::resolved_output(&output_path(
+                root,
+                Path::new(&relative),
+            )?)?);
         }
         for (field, alias) in [
             ("contractArtifactPath", "contract_artifact_path"),
@@ -854,10 +874,16 @@ pub(super) fn watch_native_path(compose: &mut Value, root: &Path, path: &Path) -
     }
     let target = container_path(root, path);
     let watched = entrypoint.windows(2).any(|pair| {
-        pair[0] == "-w" && pair[1].as_str().is_some_and(|existing| target.starts_with(existing))
+        pair[0] == "-w"
+            && pair[1]
+                .as_str()
+                .is_some_and(|existing| target.starts_with(existing))
     });
     if !watched {
-        let separator = entrypoint.iter().position(|value| value == "--").unwrap_or(entrypoint.len());
+        let separator = entrypoint
+            .iter()
+            .position(|value| value == "--")
+            .unwrap_or(entrypoint.len());
         entrypoint.insert(separator, json!(target));
         entrypoint.insert(separator, json!("-w"));
     }
@@ -1085,7 +1111,13 @@ fn plan_with(
     // resolves features identically: after one warm-up build each start (and
     // each watch restart that changed nothing it uses) is a no-op.
     let mut selection = BTreeSet::new();
-    for service in compose["services"].as_object().unwrap().iter().filter(|(name, _)| active.contains(*name)).map(|(_, s)| s) {
+    for service in compose["services"]
+        .as_object()
+        .unwrap()
+        .iter()
+        .filter(|(name, _)| active.contains(*name))
+        .map(|(_, s)| s)
+    {
         let binary = service
             .get("command")
             .and_then(Value::as_array)
@@ -1093,7 +1125,9 @@ fn plan_with(
             .and_then(Value::as_str)
             .and_then(|path| Path::new(path).file_name())
             .and_then(|name| name.to_str());
-        if let Some((binary, package)) = binary.and_then(|binary| native.get(binary).map(|package| (binary, package))) {
+        if let Some((binary, package)) =
+            binary.and_then(|binary| native.get(binary).map(|package| (binary, package)))
+        {
             selection.insert((package.clone(), binary.to_owned()));
         }
     }
@@ -1108,8 +1142,11 @@ fn plan_with(
     let image = format!("forklaunch-dev-{project}-native:local");
     let mut changes = serde_json::Map::new();
     let services = compose["services"].as_object_mut().unwrap();
-    let one_shots: BTreeSet<String> =
-        services.keys().filter(|name| one_shot(services, name)).cloned().collect();
+    let one_shots: BTreeSet<String> = services
+        .keys()
+        .filter(|name| one_shot(services, name))
+        .cloned()
+        .collect();
     for (name, service) in services.iter_mut() {
         if !active.contains(name) {
             continue;
@@ -1171,7 +1208,7 @@ fn plan_with(
         }
         let _ = package;
         let entrypoint = match reload {
-            Reload::Off => json!(["sh","-c",format!("{build_command} && exec \"$@\""),"--"]),
+            Reload::Off => json!(["sh", "-c", format!("{build_command} && exec \"$@\""), "--"]),
             Reload::Watch { .. } if one_shots.contains(name) => json!(["forklaunch-native-run"]),
             Reload::Watch { .. } => json!(["forklaunch-native-run", "--watch"]),
         };
@@ -1224,7 +1261,10 @@ fn plan_with(
         // healthcheck applies unchanged.
         if !watching
             && let Some(healthcheck) = object.get_mut("healthcheck").and_then(Value::as_object_mut)
-            && !healthcheck.get("disable").and_then(Value::as_bool).unwrap_or(false)
+            && !healthcheck
+                .get("disable")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
         {
             healthcheck.insert("start_period".into(), json!("900s"));
             healthcheck.insert("start_interval".into(), json!("2s"));
@@ -1278,7 +1318,9 @@ fn plan_with(
                     }
                 }
             }
-            builder["entrypoint"] = json!(watch_builder(root, manifest, &watched, &arguments, poll_ms)?);
+            builder["entrypoint"] = json!(watch_builder(
+                root, manifest, &watched, &arguments, poll_ms
+            )?);
             builder["restart"] = json!("unless-stopped");
             // Healthy after the first successful build; it stays healthy while
             // later builds run or fail, since the processes keep serving.
@@ -1300,7 +1342,10 @@ fn plan_with(
                 .entry("depends_on")
                 .or_insert(json!({}));
             if let Some(depends) = depends.as_object_mut() {
-                depends.insert(NATIVE_BUILD.into(), json!({"condition":condition,"required":true}));
+                depends.insert(
+                    NATIVE_BUILD.into(),
+                    json!({"condition":condition,"required":true}),
+                );
             }
         }
         services.insert(NATIVE_BUILD.into(), builder);
@@ -1382,7 +1427,11 @@ fn supervise(
                 eprintln!(
                     "forklaunch dev: Compose did not stop within {}s; {}",
                     since.elapsed().as_secs(),
-                    if escalated == 1 { "forcing it to stop" } else { "killing it" }
+                    if escalated == 1 {
+                        "forcing it to stop"
+                    } else {
+                        "killing it"
+                    }
                 );
                 #[cfg(unix)]
                 {
@@ -1392,7 +1441,11 @@ fn supervise(
                     };
                     let id = i32::try_from(child.id()).context("Invalid Compose process ID")?;
                     if id > 1 {
-                        let signal = if escalated == 1 { Signal::SIGINT } else { Signal::SIGKILL };
+                        let signal = if escalated == 1 {
+                            Signal::SIGINT
+                        } else {
+                            Signal::SIGKILL
+                        };
                         let _ = killpg(Pid::from_raw(id), signal);
                     }
                 }
@@ -1483,25 +1536,52 @@ mod tests {
         let (root, manifest, mut compose) = fixture();
         fs::write(root.path().join("services/native-api/Cargo.toml"),
             "[package]\nname='native-core'\n[[bin]]\nname='native-api'\n[[bin]]\nname='events-consumer'\n").unwrap();
-        compose["services"]["native-outbox"]["command"] = json!(["./target/release/events-consumer"]);
-        compose["services"]["native-api"]["healthcheck"] = json!({"test":["CMD","true"],"start_period":"40s"});
+        compose["services"]["native-outbox"]["command"] =
+            json!(["./target/release/events-consumer"]);
+        compose["services"]["native-api"]["healthcheck"] =
+            json!({"test":["CMD","true"],"start_period":"40s"});
         let (planned, changes) = plan(root.path(), &manifest, compose, &[], true).unwrap();
         let services = &planned["services"];
-        let build = "forklaunch-native-build --package native-core --bin events-consumer --bin native-api";
+        let build =
+            "forklaunch-native-build --package native-core --bin events-consumer --bin native-api";
         assert_eq!(services[NATIVE_BUILD]["entrypoint"][2], build);
-        assert_eq!(services[NATIVE_BUILD]["environment"]["SQLX_OFFLINE"], "true");
+        assert_eq!(
+            services[NATIVE_BUILD]["environment"]["SQLX_OFFLINE"],
+            "true"
+        );
         for name in ["native-api", "native-outbox"] {
             // Identical Cargo invocations resolve features identically, so each
             // start after the warm-up is a no-op instead of a racing compile.
-            assert_eq!(services[name]["entrypoint"][2], format!("{build} && exec \"$@\""));
-            assert_eq!(services[name]["image"], "forklaunch-dev-test-app-native:local");
-            assert_eq!(services[name]["depends_on"][NATIVE_BUILD]["condition"], "service_completed_successfully");
+            assert_eq!(
+                services[name]["entrypoint"][2],
+                format!("{build} && exec \"$@\"")
+            );
+            assert_eq!(
+                services[name]["image"],
+                "forklaunch-dev-test-app-native:local"
+            );
+            assert_eq!(
+                services[name]["depends_on"][NATIVE_BUILD]["condition"],
+                "service_completed_successfully"
+            );
             assert_eq!(services[name]["environment"]["SQLX_OFFLINE"], "true");
-            assert!(services[name]["environment"].get("CARGO_INCREMENTAL").is_none());
+            assert!(
+                services[name]["environment"]
+                    .get("CARGO_INCREMENTAL")
+                    .is_none()
+            );
         }
-        assert_eq!(services["native-api"]["healthcheck"]["start_period"], "900s");
+        assert_eq!(
+            services["native-api"]["healthcheck"]["start_period"],
+            "900s"
+        );
         assert!(changes.get(NATIVE_BUILD).is_none());
-        assert!(!services[NATIVE_BUILD]["build"]["dockerfile_inline"].as_str().unwrap().contains("COPY . ."));
+        assert!(
+            !services[NATIVE_BUILD]["build"]["dockerfile_inline"]
+                .as_str()
+                .unwrap()
+                .contains("COPY . .")
+        );
     }
 
     #[test]
@@ -1509,14 +1589,17 @@ mod tests {
         let (root, manifest, mut compose) = fixture();
         fs::write(root.path().join("services/native-api/Cargo.toml"),
             "[package]\nname='native-core'\n[[bin]]\nname='native-api'\n[[bin]]\nname='events-consumer'\n").unwrap();
-        compose["services"]["native-outbox"]["command"] = json!(["./target/release/events-consumer"]);
-        compose["services"]["native-migrate"] = json!({"command":["./target/release/native-api","--migrate"],"restart":"no"});
+        compose["services"]["native-outbox"]["command"] =
+            json!(["./target/release/events-consumer"]);
+        compose["services"]["native-migrate"] =
+            json!({"command":["./target/release/native-api","--migrate"],"restart":"no"});
         let healthcheck = json!({"test":["CMD","true"],"start_period":"40s"});
         compose["services"]["native-api"]["healthcheck"] = healthcheck.clone();
         let authored = json!({"action":"sync","path":"assets","target":"/app/assets"});
         compose["services"]["native-outbox"]["develop"] = json!({"watch":[authored]});
         let reload = Reload::Watch { poll_ms: Some(500) };
-        let (mut planned, changes) = plan_with(root.path(), &manifest, compose, &[], true, reload).unwrap();
+        let (mut planned, changes) =
+            plan_with(root.path(), &manifest, compose, &[], true, reload).unwrap();
         let services = &planned["services"];
         let builder = services[NATIVE_BUILD]["entrypoint"].as_array().unwrap();
         let text: Vec<&str> = builder.iter().map(|v| v.as_str().unwrap()).collect();
@@ -1524,50 +1607,107 @@ mod tests {
         assert!(text.contains(&"--poll=500ms") && text.contains(&"--on-busy-update=queue"));
         let separator = text.iter().position(|v| *v == "--").unwrap();
         // One Cargo invocation for the whole selection, as in the warm-up.
-        assert_eq!(text[separator + 1..].join(" "),
-            "forklaunch-native-rebuild --package native-core --bin events-consumer --bin native-api");
+        assert_eq!(
+            text[separator + 1..].join(" "),
+            "forklaunch-native-rebuild --package native-core --bin events-consumer --bin native-api"
+        );
         // Watched paths are container paths: each crate and the shared library.
-        let watched: Vec<&str> = text.windows(2).filter(|p| p[0] == "-w").map(|p| p[1]).collect();
-        for path in ["/app/services/native-api", "/app/shared/models", "/app/Cargo.toml"] {
+        let watched: Vec<&str> = text
+            .windows(2)
+            .filter(|p| p[0] == "-w")
+            .map(|p| p[1])
+            .collect();
+        for path in [
+            "/app/services/native-api",
+            "/app/shared/models",
+            "/app/Cargo.toml",
+        ] {
             assert!(watched.contains(&path), "{path} not watched: {watched:?}");
         }
         assert!(text.contains(&"**/target/**"));
         assert_eq!(services[NATIVE_BUILD]["restart"], "unless-stopped");
         // No Compose rebuild rule: it would recreate every dependent container.
         assert!(services[NATIVE_BUILD].get("develop").is_none());
-        assert!(services[NATIVE_BUILD]["healthcheck"]["test"].to_string().contains("forklaunch-native-ready"));
+        assert!(
+            services[NATIVE_BUILD]["healthcheck"]["test"]
+                .to_string()
+                .contains("forklaunch-native-ready")
+        );
         for name in ["native-api", "native-outbox"] {
-            assert_eq!(services[name]["entrypoint"], json!(["forklaunch-native-run", "--watch"]));
-            assert_eq!(services[name]["depends_on"][NATIVE_BUILD]["condition"], "service_healthy");
+            assert_eq!(
+                services[name]["entrypoint"],
+                json!(["forklaunch-native-run", "--watch"])
+            );
+            assert_eq!(
+                services[name]["depends_on"][NATIVE_BUILD]["condition"],
+                "service_healthy"
+            );
         }
         // One-shot jobs run once, after the build, and complete.
-        assert_eq!(services["native-migrate"]["entrypoint"], json!(["forklaunch-native-run"]));
-        assert_eq!(services["native-migrate"]["command"][0], "/app/target/debug/native-api");
+        assert_eq!(
+            services["native-migrate"]["entrypoint"],
+            json!(["forklaunch-native-run"])
+        );
+        assert_eq!(
+            services["native-migrate"]["command"][0],
+            "/app/target/debug/native-api"
+        );
         // No Compose restart rules: reloads happen inside the containers.
         assert!(services["native-api"].get("develop").is_none());
-        assert_eq!(services["native-outbox"]["develop"]["watch"], json!([authored]));
-        assert!(!uses_compose_watch(&json!({"services":{"native-api":services["native-api"].clone()}})));
+        assert_eq!(
+            services["native-outbox"]["develop"]["watch"],
+            json!([authored])
+        );
+        assert!(!uses_compose_watch(
+            &json!({"services":{"native-api":services["native-api"].clone()}})
+        ));
         // Authored healthchecks apply unchanged; the old process serves during rebuilds.
         assert_eq!(services["native-api"]["healthcheck"], healthcheck);
         assert!(changes["native-api"].get("develop").is_none());
-        let dockerfile = services[NATIVE_BUILD]["build"]["dockerfile_inline"].as_str().unwrap();
+        let dockerfile = services[NATIVE_BUILD]["build"]["dockerfile_inline"]
+            .as_str()
+            .unwrap();
         assert!(dockerfile.contains(&format!("v{WATCHEXEC_VERSION}/")));
         for (_, sha) in WATCHEXEC_SHA256 {
             assert!(dockerfile.contains(sha));
         }
-        assert!(dockerfile.contains("forklaunch-native-rebuild") && dockerfile.contains("forklaunch-native-run"));
+        assert!(
+            dockerfile.contains("forklaunch-native-rebuild")
+                && dockerfile.contains("forklaunch-native-run")
+        );
         // Without a reload builder nothing is added to the plan.
         let mut plain = json!({"services":{"api":{}}});
-        assert!(!watch_native_path(&mut plain, root.path(), &root.path().join("sdk")));
+        assert!(!watch_native_path(
+            &mut plain,
+            root.path(),
+            &root.path().join("sdk")
+        ));
         assert_eq!(plain, json!({"services":{"api":{}}}));
         // Later SDK paths join the builder's watch list, before its command.
         let sdk = root.path().canonicalize().unwrap().join("sdks/rust");
-        assert!(watch_native_path(&mut planned, &root.path().canonicalize().unwrap(), &sdk));
-        let builder = planned["services"][NATIVE_BUILD]["entrypoint"].as_array().unwrap().clone();
+        assert!(watch_native_path(
+            &mut planned,
+            &root.path().canonicalize().unwrap(),
+            &sdk
+        ));
+        let builder = planned["services"][NATIVE_BUILD]["entrypoint"]
+            .as_array()
+            .unwrap()
+            .clone();
         let separator = builder.iter().position(|v| v == "--").unwrap();
         assert_eq!(builder[separator - 1], "/app/sdks/rust");
-        assert!(watch_native_path(&mut planned, &root.path().canonicalize().unwrap(), &sdk));
-        assert_eq!(planned["services"][NATIVE_BUILD]["entrypoint"].as_array().unwrap().len(), builder.len());
+        assert!(watch_native_path(
+            &mut planned,
+            &root.path().canonicalize().unwrap(),
+            &sdk
+        ));
+        assert_eq!(
+            planned["services"][NATIVE_BUILD]["entrypoint"]
+                .as_array()
+                .unwrap()
+                .len(),
+            builder.len()
+        );
     }
 
     #[cfg(unix)]
@@ -1575,8 +1715,12 @@ mod tests {
     fn rebuild_script_stamps_only_relinked_binaries() {
         // Exercise the script body the image installs, against a fake build.
         let script = NATIVE_REBUILD_SCRIPT
-            .split_once("\n").unwrap().1
-            .rsplit_once("SCRIPT\n").unwrap().0
+            .split_once("\n")
+            .unwrap()
+            .1
+            .rsplit_once("SCRIPT\n")
+            .unwrap()
+            .0
             .replace("/app/target", "$FIXTURE")
             .replace("/tmp/forklaunch-native-ready", "$FIXTURE/ready");
         let root = tempfile::tempdir().unwrap();
@@ -1588,33 +1732,57 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&build, fs::Permissions::from_mode(0o755)).unwrap();
         let run = |relink: &str, fail: &str| {
-            let output = Process::new("sh").arg("-c").arg(&script).arg("forklaunch-native-rebuild")
+            let output = Process::new("sh")
+                .arg("-c")
+                .arg(&script)
+                .arg("forklaunch-native-rebuild")
                 .args(["--package", "core", "--bin", "api", "--bin", "worker"])
-                .env("FIXTURE", root.path()).env("RELINK", relink).env("FAIL", fail)
-                .env("PATH", format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()))
-                .output().unwrap();
-            (output.status.success(), String::from_utf8_lossy(&output.stdout).into_owned())
+                .env("FIXTURE", root.path())
+                .env("RELINK", relink)
+                .env("FAIL", fail)
+                .env(
+                    "PATH",
+                    format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+                )
+                .output()
+                .unwrap();
+            (
+                output.status.success(),
+                String::from_utf8_lossy(&output.stdout).into_owned(),
+            )
         };
         let (ok, out) = run("api worker", "0");
         assert!(ok && out.contains("restarting: api worker"), "{out}");
         assert!(root.path().join("ready").is_file());
-        let stamp = |name: &str| fs::read_to_string(root.path().join(format!("forklaunch-dev/{name}.ready"))).unwrap();
+        let stamp = |name: &str| {
+            fs::read_to_string(root.path().join(format!("forklaunch-dev/{name}.ready"))).unwrap()
+        };
         let worker = stamp("worker");
         let (ok, out) = run("api", "0");
-        assert!(ok && out.contains("restarting: api") && !out.contains("worker"), "{out}");
+        assert!(
+            ok && out.contains("restarting: api") && !out.contains("worker"),
+            "{out}"
+        );
         assert_eq!(stamp("worker"), worker);
         let (ok, out) = run("", "0");
         assert!(ok && out.contains("nothing"), "{out}");
         let api = stamp("api");
         let (ok, _) = run("api", "1");
         assert!(!ok);
-        assert_eq!(stamp("api"), api, "a failed build must not restart anything");
+        assert_eq!(
+            stamp("api"),
+            api,
+            "a failed build must not restart anything"
+        );
     }
 
     #[test]
     fn reload_mode_follows_no_watch_and_poll_override() {
         assert_eq!(Reload::from_environment(true).unwrap(), Reload::Off);
-        assert!(matches!(Reload::from_environment(false).unwrap(), Reload::Watch { .. }));
+        assert!(matches!(
+            Reload::from_environment(false).unwrap(),
+            Reload::Watch { .. }
+        ));
     }
 
     #[test]
