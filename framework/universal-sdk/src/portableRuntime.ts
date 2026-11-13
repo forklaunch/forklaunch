@@ -123,9 +123,13 @@ export function forkLaunchMutationOptions<Input, Result extends { status: number
  *
  * Delegating the non-primitive case keeps the special-type handling
  * `safeStringify` already has (Error, BigInt, Map, Set, RegExp, Date, typed
- * arrays, functions, symbols, circular references). This is exactly what
- * these callers did before `safeStringify` started quoting strings, so the
- * values that go over the wire are unchanged.
+ * arrays, functions, symbols). This is exactly what these callers did before
+ * `safeStringify` started quoting strings, so the values that go over the wire
+ * are unchanged.
+ *
+ * A value that cannot be serialized, such as a circular structure, comes back
+ * as an `[Unserializable: ...]` message. That message can contain newlines, so
+ * it is not a valid header value.
  *
  * @param value - The value to convert
  * @returns A plain string representation

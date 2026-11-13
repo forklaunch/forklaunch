@@ -365,9 +365,11 @@ function safeStringify(arg: unknown): string
 Converts a value to the plain string a header, form field or query parameter
 expects: strings are returned as-is, numbers, booleans, `null` and `undefined`
 go through `String()`, and everything else is handed to `safeStringify`, so
-`Error`, `BigInt`, `Map`, `Set`, `RegExp`, `Date`, typed arrays, functions,
-symbols and circular references keep the representation they have always had
-on the wire.
+`Error`, `BigInt`, `Map`, `Set`, `RegExp`, `Date`, typed arrays, functions and
+symbols keep the representation they have always had on the wire. A value that
+cannot be serialized, such as a circular structure, becomes an
+`[Unserializable: ...]` message, which can contain newlines and so is not a
+valid header value.
 
 ```typescript
 import { toPlainString } from '@forklaunch/common';
