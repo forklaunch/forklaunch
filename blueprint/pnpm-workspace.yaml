@@ -13,18 +13,21 @@ packages:
   - iam-better-auth
   - messaging-base
   - messaging-twilio
+  - mlse-base
   - sample-worker
   - interfaces/billing
   - interfaces/cac
   - interfaces/ecommerce
   - interfaces/iam
   - interfaces/messaging
+  - interfaces/mlse
   - interfaces/worker
   - implementations/billing/base
   - implementations/billing/stripe
   - implementations/messaging/base
   - implementations/messaging/twilio
   - implementations/cac/base
+  - implementations/mlse/base
   - implementations/ecommerce/base
   - implementations/ecommerce/stripe
   - implementations/ecommerce/paypal

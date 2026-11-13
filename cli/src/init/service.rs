@@ -48,28 +48,30 @@ use crate::{
         package_json::{
             add_project_definition_to_package_json,
             package_json_constants::{
-                AJV_VERSION, APP_BILLING_VERSION, APP_CORE_VERSION, APP_IAM_VERSION,
-                APP_MONITORING_VERSION, BETTER_AUTH_MIKRO_ORM_VERSION, BETTER_AUTH_VERSION,
-                BETTER_SQLITE3_VERSION, BILLING_BASE_VERSION, BILLING_INTERFACES_VERSION,
-                BILLING_STRIPE_VERSION, BIOME_VERSION, CAC_BASE_VERSION, CAC_INTERFACES_VERSION,
-                COMMON_VERSION, CORE_VERSION, DOTENV_VERSION, ECOMMERCE_BASE_VERSION,
-                ECOMMERCE_INTERFACES_VERSION, ECOMMERCE_PAYPAL_VERSION, ECOMMERCE_STRIPE_VERSION,
-                ESLINT_VERSION, EXPRESS_VERSION, HYPER_EXPRESS_VERSION, IAM_BASE_VERSION,
-                IAM_INTERFACES_VERSION, INFRASTRUCTURE_REDIS_VERSION, INFRASTRUCTURE_S3_VERSION,
-                INTERNAL_VERSION, IOREDIS_VERSION, JOSE_VERSION, MESSAGING_BASE_VERSION,
+                AJV_VERSION, ANTHROPIC_SDK_VERSION, APP_BILLING_VERSION, APP_CORE_VERSION,
+                APP_IAM_VERSION, APP_MONITORING_VERSION, BETTER_AUTH_MIKRO_ORM_VERSION,
+                BETTER_AUTH_VERSION, BETTER_SQLITE3_VERSION, BILLING_BASE_VERSION,
+                BILLING_INTERFACES_VERSION, BILLING_STRIPE_VERSION, BIOME_VERSION,
+                CAC_BASE_VERSION, CAC_INTERFACES_VERSION, COMMON_VERSION, CORE_VERSION,
+                DOTENV_VERSION, ECOMMERCE_BASE_VERSION, ECOMMERCE_INTERFACES_VERSION,
+                ECOMMERCE_PAYPAL_VERSION, ECOMMERCE_STRIPE_VERSION, ESLINT_VERSION,
+                EXPRESS_VERSION, HYPER_EXPRESS_VERSION, IAM_BASE_VERSION, IAM_INTERFACES_VERSION,
+                INFRASTRUCTURE_REDIS_VERSION, INFRASTRUCTURE_S3_VERSION, INTERNAL_VERSION,
+                IOREDIS_VERSION, JOSE_VERSION, MESSAGING_BASE_VERSION,
                 MESSAGING_INTERFACES_VERSION, MESSAGING_TWILIO_VERSION, MIKRO_ORM_CLI_VERSION,
                 MIKRO_ORM_CORE_VERSION, MIKRO_ORM_DATABASE_VERSION, MIKRO_ORM_MIGRATIONS_VERSION,
-                MIKRO_ORM_SEEDER_VERSION, OPENTELEMETRY_API_VERSION, OXLINT_TSGOLINT_VERSION,
-                OXLINT_VERSION, PINO_VERSION, PRETTIER_VERSION, PROJECT_BUILD_SCRIPT,
-                PROJECT_DOCS_SCRIPT, PROJECT_SEED_SCRIPT, SQLITE3_VERSION, STRIPE_VERSION,
-                TESTING_VERSION, TSX_VERSION, TYPEBOX_VERSION, TYPEDOC_VERSION,
-                TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION, TYPES_EXPRESS_VERSION, TYPES_JEST_VERSION,
-                TYPES_QS_VERSION, TYPES_UUID_VERSION, TYPESCRIPT_ESLINT_VERSION,
-                UNIVERSAL_SDK_VERSION, UUID_VERSION, UWEBSOCKETS_VERSION, VALIDATOR_VERSION,
-                WORKER_INTERFACES_VERSION, WORKER_REDIS_VERSION, ZOD_VERSION, project_clean_script,
-                project_dev_local_script, project_dev_local_worker_script,
-                project_dev_server_script, project_dev_worker_client_script, project_format_script,
-                project_lint_fix_script, project_lint_script, project_migrate_script,
+                MIKRO_ORM_SEEDER_VERSION, MLSE_BASE_VERSION, MLSE_INTERFACES_VERSION,
+                OPENTELEMETRY_API_VERSION, OXLINT_TSGOLINT_VERSION, OXLINT_VERSION, PINO_VERSION,
+                PRETTIER_VERSION, PROJECT_BUILD_SCRIPT, PROJECT_DOCS_SCRIPT, PROJECT_SEED_SCRIPT,
+                SQLITE3_VERSION, STRIPE_VERSION, TESTING_VERSION, TSX_VERSION, TYPEBOX_VERSION,
+                TYPEDOC_VERSION, TYPES_EXPRESS_SERVE_STATIC_CORE_VERSION, TYPES_EXPRESS_VERSION,
+                TYPES_JEST_VERSION, TYPES_QS_VERSION, TYPES_UUID_VERSION,
+                TYPESCRIPT_ESLINT_VERSION, UNIVERSAL_SDK_VERSION, UUID_VERSION,
+                UWEBSOCKETS_VERSION, VALIDATOR_VERSION, WORKER_INTERFACES_VERSION,
+                WORKER_REDIS_VERSION, ZOD_VERSION, project_clean_script, project_dev_local_script,
+                project_dev_local_worker_script, project_dev_server_script,
+                project_dev_worker_client_script, project_format_script, project_lint_fix_script,
+                project_lint_script, project_migrate_script, project_mlse_scripts,
                 project_retention_enforce_script, project_start_server_script,
                 project_start_worker_script, project_test_script, project_up_latest_script,
             },
@@ -307,6 +309,7 @@ pub(crate) fn service_manifest_data(
         is_billing: false,
         is_messaging: false,
         is_cac: false,
+        is_mlse: false,
         is_cache_enabled: infrastructure.contains(&Infrastructure::Redis),
         platform_application_id: manifest_data.platform_application_id.clone(),
         platform_organization_id: manifest_data.platform_organization_id.clone(),
@@ -479,6 +482,7 @@ pub(crate) fn generate_service_package_json(
                 || manifest_data.is_billing
                 || manifest_data.is_messaging
                 || manifest_data.is_cac
+                || manifest_data.is_mlse
             {
                 Some("./dist/index.js".to_string())
             } else {
@@ -490,6 +494,7 @@ pub(crate) fn generate_service_package_json(
                 || manifest_data.is_billing
                 || manifest_data.is_messaging
                 || manifest_data.is_cac
+                || manifest_data.is_mlse
             {
                 Some("./dist/index.d.ts".to_string())
             } else {
@@ -566,6 +571,13 @@ pub(crate) fn generate_service_package_json(
                     ))
                 } else {
                     None
+                },
+                additional_scripts: if manifest_data.is_mlse {
+                    project_mlse_scripts(&manifest_data.runtime.parse()?)
+                        .into_iter()
+                        .collect()
+                } else {
+                    HashMap::new()
                 },
                 ..Default::default()
             }
@@ -709,18 +721,29 @@ pub(crate) fn generate_service_package_json(
                 } else {
                     None
                 },
+                forklaunch_implementation_mlse_base: if manifest_data.is_mlse {
+                    Some(MLSE_BASE_VERSION.to_string())
+                } else {
+                    None
+                },
+                forklaunch_interfaces_mlse: if manifest_data.is_mlse {
+                    Some(MLSE_INTERFACES_VERSION.to_string())
+                } else {
+                    None
+                },
                 forklaunch_implementation_worker_bullmq: None,
                 forklaunch_implementation_worker_database: None,
                 forklaunch_implementation_worker_kafka: None,
-                // The ecommerce module ships an order-event worker (worker.ts)
-                // that consumes a Redis-backed queue, so it needs the worker
-                // packages even though it is a service, not a worker project.
-                forklaunch_implementation_worker_redis: if manifest_data.is_ecommerce {
+                // Modules that ship a worker (ecommerce's order-event worker,
+                // mlse's corpus-ingestion worker) consume a Redis-backed queue,
+                // so they need the worker packages even though they are
+                // services, not worker projects.
+                forklaunch_implementation_worker_redis: if manifest_data.ships_worker {
                     Some(WORKER_REDIS_VERSION.to_string())
                 } else {
                     None
                 },
-                forklaunch_interfaces_worker: if manifest_data.is_ecommerce {
+                forklaunch_interfaces_worker: if manifest_data.ships_worker {
                     Some(WORKER_INTERFACES_VERSION.to_string())
                 } else {
                     None
@@ -793,7 +816,17 @@ pub(crate) fn generate_service_package_json(
                 },
                 pino: Some(PINO_VERSION.to_string()),
                 ioredis: Some(IOREDIS_VERSION.to_string()),
-                additional_deps: indexmap::IndexMap::new(),
+                // implementation-mlse-base takes the Anthropic SDK as an
+                // optional peer; the mlse app offers LLM_PROVIDER=claude, so
+                // it installs the SDK itself
+                additional_deps: if manifest_data.is_mlse {
+                    indexmap::IndexMap::from([(
+                        "@anthropic-ai/sdk".to_string(),
+                        ANTHROPIC_SDK_VERSION.to_string(),
+                    )])
+                } else {
+                    indexmap::IndexMap::new()
+                },
             }
         }),
         dev_dependencies: Some(if let Some(dev_dependencies) = dev_dependencies_override {
