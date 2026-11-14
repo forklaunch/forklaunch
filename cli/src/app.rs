@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::{ArgMatches, Command};
+use compute::ComputeCommand;
 use controller::ControllerCommand;
 use create::CreateCommand;
 use domain::DomainCommand;
@@ -13,6 +14,7 @@ use website::WebsiteCommand;
 
 use crate::{CliCommand, core::command::command};
 
+mod compute;
 mod controller;
 mod create;
 mod domain;
@@ -27,6 +29,7 @@ mod website;
 #[derive(Debug)]
 pub(crate) struct AppCommand {
     create: CreateCommand,
+    compute: ComputeCommand,
     services: ServicesCommand,
     domain: DomainCommand,
     hosting: HostingCommand,
@@ -42,6 +45,7 @@ impl AppCommand {
     pub(crate) fn new() -> Self {
         Self {
             create: CreateCommand::new(),
+            compute: ComputeCommand::new(),
             services: ServicesCommand::new(),
             domain: DomainCommand::new(),
             hosting: HostingCommand::new(),
@@ -60,6 +64,7 @@ impl CliCommand for AppCommand {
         command("app", "Manage platform applications")
             .subcommand_required(true)
             .subcommand(self.create.command())
+            .subcommand(self.compute.command())
             .subcommand(self.services.command())
             .subcommand(self.domain.command())
             .subcommand(self.hosting.command())
@@ -74,6 +79,7 @@ impl CliCommand for AppCommand {
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         match matches.subcommand() {
             Some(("create", matches)) => self.create.handler(matches),
+            Some(("compute", matches)) => self.compute.handler(matches),
             Some(("services", matches)) => self.services.handler(matches),
             Some(("domain", matches)) => self.domain.handler(matches),
             Some(("hosting", matches)) => self.hosting.handler(matches),
