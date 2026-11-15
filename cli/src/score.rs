@@ -746,6 +746,30 @@ fn render_summary(card: &Value) -> String {
         let _ = writeln!(out);
     }
 
+    // The card comes back as soon as it is scored; the source review (data
+    // flows, packages, known vulnerabilities) may still be running. Say so:
+    // their absence from a finished-looking report otherwise reads as "none".
+    let review_note = match card
+        .pointer("/deferredSourceReview/status")
+        .and_then(Value::as_str)
+    {
+        Some("pending") => Some(
+            "Source review still running: data flows, packages and known \
+             vulnerabilities are added to this report card on the dashboard when it \
+             finishes. The scores and findings above are final.",
+        ),
+        Some("failed") => Some(
+            "The source review did not finish, so this report has no data flows or \
+             known vulnerabilities. Scores and findings are not affected. Run the \
+             score again to review the source.",
+        ),
+        _ => None,
+    };
+    if let Some(note) = review_note {
+        let _ = writeln!(out, "  {}", dim(note));
+        let _ = writeln!(out);
+    }
+
     out
 }
 
@@ -822,6 +846,25 @@ mod tests {
         assert_eq!(job_path("j1", "not-met"), "/job/j1");
         assert_eq!(job_path("j1", "undecided"), "/job/j1?promptScope=undecided");
         assert_eq!(job_path("j1", "both"), "/job/j1?promptScope=both");
+    }
+
+    #[test]
+    fn a_card_scored_before_its_source_review_says_the_review_is_still_running() {
+        let card = |status: &str| {
+            json!({
+                "overall": 72,
+                "deferredSourceReview": { "reviewKey": "k", "status": status }
+            })
+        };
+        let pending = render_summary(&card("pending"));
+        assert!(pending.contains("Source review still running"));
+        assert!(pending.contains("scores and findings above are final"));
+        assert!(render_summary(&card("failed")).contains("source review did not finish"));
+        // Finished, or a card that never deferred: nothing to add.
+        for quiet in [card("complete"), json!({ "overall": 72 })] {
+            let out = render_summary(&quiet);
+            assert!(!out.contains("ource review"), "{out}");
+        }
     }
 
     #[test]
