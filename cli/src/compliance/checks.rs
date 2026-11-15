@@ -15,7 +15,10 @@ use anyhow::Result;
 use serde::Serialize;
 
 use crate::core::ast::infrastructure::compliance::scan_entity_compliance;
-use crate::core::static_analysis::route_analyzer;
+use crate::core::static_analysis::{
+    route_analyzer, rust_entity_analyzer::scan_rust_entity_compliance,
+    rust_route_analyzer::rust_production_files,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -37,16 +40,46 @@ pub(crate) struct LocalFinding {
 /// What the offline checks found to read. A check that fires nothing has
 /// passed only if there was something for it to look at: an app with no
 /// ForkLaunch routes has not shown that every endpoint requires sign-in.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub(crate) struct LocalEvidence {
-    /// Routes the route scanner read (framework contracts and raw registrations).
+    /// Routes the route scanner read (framework contracts and raw
+    /// registrations), TypeScript and Rust together.
     pub(crate) routes: usize,
-    /// Entities declared with compliance classifications.
+    /// Entities declared with compliance classifications, TypeScript and Rust
+    /// together.
     pub(crate) entities: usize,
     /// Projects wired the ForkLaunch way (`registrations.ts`, or a Rust crate
     /// with a `capabilities` module).
     pub(crate) projects: usize,
+    /// The part of `routes` read from Rust sources.
+    pub(crate) rust_routes: usize,
+    /// The part of `rust_routes` declared through ForkLaunch contracts, which
+    /// the framework validates; a raw Axum route is not one.
+    pub(crate) rust_contract_routes: usize,
+    /// The part of `entities` declared in Rust crates. Only the checks in
+    /// `RUST_ENTITY_CHECKS` read these.
+    pub(crate) rust_entities: usize,
+    /// Rust types that classify members without binding them to protected
+    /// storage, as `Entity.member (project/file:line)`. Whether those members
+    /// are stored as ciphertext cannot be decided from source.
+    pub(crate) rust_unbound: Vec<String>,
 }
+
+/// The entity-driven checks that read Rust services. Every other check that
+/// hangs off classified entities looks for TypeScript wiring only
+/// (`registrations.ts`, `server.ts`, `.deanon` in `.ts` sources), so on a
+/// Rust entity it has decided nothing and must not be reported as a pass.
+///
+/// `encryptor-registration` on Rust reads the protected-model binding:
+/// `#[compliance(persisted)]` makes every classified member a ciphertext-only
+/// `ProtectedField`, or the crate does not compile. That is the Rust
+/// counterpart of a registered field encryptor, and it can only be confirmed,
+/// never refuted: a type that classifies members without the binding may
+/// still be encrypted by other means (a sealed queue envelope, an adapter of
+/// the app's own), so it is recorded in `LocalEvidence::rust_unbound` as
+/// undecided instead of failed.
+pub(crate) const RUST_ENTITY_CHECKS: &[&str] =
+    &["encryptor-registration", "possible-misclassification"];
 
 #[cfg(test)]
 impl LocalEvidence {
@@ -56,6 +89,7 @@ impl LocalEvidence {
             routes: 1,
             entities: 1,
             projects: 1,
+            ..Self::default()
         }
     }
 }
@@ -66,15 +100,41 @@ pub(crate) fn local_evidence(modules_path: &Path) -> LocalEvidence {
     let Ok(entries) = fs::read_dir(modules_path) else {
         return evidence;
     };
-    for entry in entries.flatten() {
+    let mut entries: Vec<_> = entries.flatten().collect();
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
         let project_path = entry.path();
         if !project_path.is_dir() {
             continue;
         }
-        evidence.routes += route_analyzer::scan_routes(&project_path).routes.len();
-        evidence.entities += scan_entity_compliance(&project_path)
-            .unwrap_or_default()
-            .len();
+        for route in route_analyzer::scan_routes(&project_path).routes {
+            evidence.routes += 1;
+            if route.file.ends_with(".rs") {
+                evidence.rust_routes += 1;
+                if route.source == route_analyzer::RouteSource::Contract {
+                    evidence.rust_contract_routes += 1;
+                }
+            }
+        }
+        let rust_entities = scan_rust_entity_compliance(&project_path);
+        let project = entry.file_name().to_string_lossy().to_string();
+        for entity in &rust_entities {
+            if !entity.classified.is_empty() && !entity.protected {
+                evidence.rust_unbound.push(format!(
+                    "{}.{} ({}/{}:{})",
+                    entity.info.entity_name,
+                    entity.classified.join("/"),
+                    project,
+                    entity.file,
+                    entity.line
+                ));
+            }
+        }
+        evidence.rust_entities += rust_entities.len();
+        evidence.entities += rust_entities.len()
+            + scan_entity_compliance(&project_path)
+                .unwrap_or_default()
+                .len();
         let rust_wired = rust_source_root(&project_path)
             .is_some_and(|root| root.join("capabilities/mod.rs").is_file());
         if project_path.join("registrations.ts").is_file() || rust_wired {
@@ -729,6 +789,43 @@ pub(crate) fn stripe_webhook_unverified(sources: &str) -> bool {
         .any(|v| sources.contains(v))
 }
 
+/// A Rust service's production sources, concatenated.
+fn read_rust_production_sources(project_path: &Path) -> String {
+    let mut out = String::new();
+    for (_, file) in rust_production_files(project_path) {
+        if let Ok(text) = fs::read_to_string(file) {
+            out.push_str(&text);
+            out.push('\n');
+        }
+    }
+    out
+}
+
+/// The Rust counterpart of `stripe_webhook_unverified`: the sources receive
+/// Stripe webhook events (they read the `stripe-signature` header or name
+/// Stripe event types) and nothing verifies one. Verification is the
+/// framework's `StripeWebhookVerifier`, a platform-relayed event checked with
+/// `PlatformEventVerifier`, or a Stripe SDK's `construct_event`.
+pub(crate) fn rust_stripe_webhook_unverified(sources: &str) -> bool {
+    let lower = sources.to_lowercase();
+    let receives = [
+        "stripe-signature",
+        "checkout.session.completed",
+        "invoice.payment_succeeded",
+        "customer.subscription.",
+    ]
+    .iter()
+    .any(|marker| lower.contains(marker));
+    receives
+        && ![
+            "StripeWebhookVerifier",
+            "PlatformEventVerifier",
+            "construct_event",
+        ]
+        .iter()
+        .any(|verifier| sources.contains(verifier))
+}
+
 /// Index of the bracket that closes a group opened just before `from`.
 fn closing_bracket(text: &str, from: usize) -> usize {
     let mut depth = 1i32;
@@ -1221,6 +1318,10 @@ fn call_args(rest: &str) -> &str {
     rest
 }
 
+/// Starts a `route-scan-incomplete` finding about routes that were read but
+/// not decided (as opposed to a file that could not be parsed).
+pub(crate) const UNDECIDED_ROUTES: &str = "Declares ";
+
 /// Marks a `whatsapp-protected-data` finding on a service whose entities hold
 /// phi; the report card scores those critical.
 pub(crate) const WHATSAPP_PHI_MARKER: &str = "entities hold health data (phi)";
@@ -1237,10 +1338,13 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
     // anywhere in the app may be it.
     let app_has_phi = fs::read_dir(modules_path)?.flatten().any(|entry| {
         entry.path().is_dir()
-            && scan_entity_compliance(&entry.path())
+            && (scan_entity_compliance(&entry.path())
                 .unwrap_or_default()
                 .iter()
                 .any(|e| e.field_classifications.values().any(|c| c == "phi"))
+                || scan_rust_entity_compliance(&entry.path())
+                    .iter()
+                    .any(|e| e.info.field_classifications.values().any(|c| c == "phi")))
     });
 
     for entry in fs::read_dir(modules_path)? {
@@ -1266,21 +1370,60 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
                 message: "Could not be fully parsed, so routes declared in it may be missing from the route list. Fix the syntax error, or check this file's routes by hand.".to_string(),
             });
         }
+        // Declarations the Rust reader found but could not decide, one finding per file.
+        let mut undecided: std::collections::BTreeMap<&str, Vec<&route_analyzer::UndecidedRoute>> =
+            Default::default();
+        for route in &route_scan.undecided {
+            undecided
+                .entry(route.file.as_str())
+                .or_default()
+                .push(route);
+        }
+        for (file, routes) in undecided {
+            let first = routes[0];
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.clone(),
+                check: "route-scan-incomplete".to_string(),
+                subject: file.to_string(),
+                message: format!(
+                    "{UNDECIDED_ROUTES}{} route(s) the offline reader could not decide, so they are missing from the route list: {} ({}:{}) because {}{}. Check {} by hand.",
+                    routes.len(),
+                    first.what,
+                    first.file,
+                    first.line,
+                    first.why,
+                    if routes.len() > 1 {
+                        format!(" (and {} more)", routes.len() - 1)
+                    } else {
+                        String::new()
+                    },
+                    if routes.len() > 1 { "them" } else { "it" },
+                ),
+            });
+        }
         for route in route_scan.routes {
             let at = format!(
                 "{} {} ({}:{})",
                 route.method, route.path, route.file, route.line
             );
+            let rust = route.file.ends_with(".rs");
             if route.missing_auth() {
+                let access = route.access.as_deref().unwrap_or("(none)");
                 findings.push(LocalFinding {
                     severity: Severity::Warning,
                     project: project.clone(),
                     check: "route-auth-missing".to_string(),
                     subject: at,
-                    message: format!(
-                        "Declares access '{}' but no auth method, so the framework lets callers in without a credential. Add an auth block (e.g. auth: jwtAuth(ROLES)) or mark the route access: 'public' if it is meant to be open.",
-                        route.access.as_deref().unwrap_or("(none)")
-                    ),
+                    message: if rust {
+                        format!(
+                            "Declares access '{access}' but no auth method: the contract has no .with_auth(..) and the endpoint is mounted without an authorization policy, so nothing states how callers prove who they are (the Rust framework then refuses the mount or rejects every call). Mount it with bind_authorized(policy, handler) or add .with_auth(..), or declare it #[access(Public)] if it is meant to be open."
+                        )
+                    } else {
+                        format!(
+                            "Declares access '{access}' but no auth method, so the framework lets callers in without a credential. Add an auth block (e.g. auth: jwtAuth(ROLES)) or mark the route access: 'public' if it is meant to be open."
+                        )
+                    },
                 });
             } else if route.source == route_analyzer::RouteSource::OutsideFramework {
                 findings.push(LocalFinding {
@@ -1288,7 +1431,11 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
                     project: project.clone(),
                     check: "route-outside-framework".to_string(),
                     subject: at,
-                    message: "Registered on the raw application with an inline handler, so ForkLaunch's access levels, auth and validation do not apply. Confirm it is meant to be open, or declare it with handlers.* and a contract.".to_string(),
+                    message: if rust {
+                        "Registered directly on an Axum router, so ForkLaunch's access levels, auth and validation do not apply to it. Confirm it is protected some other way or is meant to be open, or declare it as a contract endpoint (#[forklaunch_core::contract::api]) and mount it on a ContractRouter.".to_string()
+                    } else {
+                        "Registered on the raw application with an inline handler, so ForkLaunch's access levels, auth and validation do not apply. Confirm it is meant to be open, or declare it with handlers.* and a contract.".to_string()
+                    },
                 });
             }
         }
@@ -1455,6 +1602,35 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
                         message: format!(
                             "entities hold health data (phi) and this service calls an AI provider directly ({}) — run `forklaunch infra add <service> models` and call models through the injected ModelGatewayClient (the managed gateway offers HIPAA products only BAA-covered models), or confirm the provider has signed a BAA covering this use",
                             providers.join(", ")
+                        ),
+                    });
+                }
+            }
+        }
+
+        // 6b. Sensitive-field heuristics on a Rust crate's entities, read from
+        //     the `ComplianceMetadata` derive on each stored type. Whether
+        //     their classified members are bound to protected storage is
+        //     reported through `LocalEvidence`, not as a finding: source can
+        //     confirm the binding but cannot show its absence means plaintext.
+        let rust_entities = scan_rust_entity_compliance(&project_path);
+        for entity in &rust_entities {
+            // Sensitive-field heuristics, on the member names as declared.
+            let mut fields: Vec<_> = entity.info.field_classifications.iter().collect();
+            fields.sort();
+            for (field, classification) in fields {
+                if classification != "none" {
+                    continue;
+                }
+                if let Some(suggested) = suggest_classification(field) {
+                    findings.push(LocalFinding {
+                        severity: Severity::Info,
+                        project: project.clone(),
+                        check: "possible-misclassification".to_string(),
+                        subject: format!("{}.{}", entity.info.entity_name, field),
+                        message: format!(
+                            "field name suggests '{}' data but it is classified 'none' — review the classification",
+                            suggested
                         ),
                     });
                 }
@@ -1637,6 +1813,16 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
                 check: "stripe-webhook-unverified".to_string(),
                 subject: "webhook".to_string(),
                 message: "this service handles Stripe webhook events but never verifies a signature — check Stripe's with stripe.webhooks.constructEvent(rawBody, signature, secret), or, in managed mode, receive them as platform events verified with verifyPlatformEvent".to_string(),
+            });
+        }
+        // The same question of a Rust service's sources.
+        if rust_stripe_webhook_unverified(&read_rust_production_sources(&project_path)) {
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.clone(),
+                check: "stripe-webhook-unverified".to_string(),
+                subject: "webhook".to_string(),
+                message: "this service handles Stripe webhook events but never verifies a signature — check the raw body against the stripe-signature header with StripeWebhookVerifier (forklaunch_core::http::stripe_webhook) before acting on the event, or, in managed mode, receive them as platform events verified with PlatformEventVerifier".to_string(),
             });
         }
 
@@ -3727,5 +3913,270 @@ export const PatientEntity = defineComplianceEntity({
                 "{id} missing from LOCAL_CHECK_IDS"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod rust_service_tests {
+    use super::*;
+
+    const CONTROLLER: &str = r#"
+#[forklaunch_core::contract::api]
+pub mod contract {
+    #[access(Authenticated)]
+    pub fn create_note() -> Endpoint<JsonBody<NoteInput>, JsonBody<Note>> {
+        Endpoint::new("Create Note", "Create a note", HttpMethod::Post, "/notes", 201).unwrap()
+    }
+    pub fn health() -> Endpoint<NoBody, JsonBody<Health>> {
+        Endpoint::new("Get Health", "Reports health", HttpMethod::Get, "/health", 200).unwrap()
+    }
+    pub fn export() -> Endpoint<NoBody, TextBody> {
+        Endpoint::new("Export", "Export", HttpMethod::Get, "/export", 200).unwrap().with_access(AccessLevel::Protected)
+    }
+}
+"#;
+    const ROUTES: &str = r#"
+use crate::api::controllers::notes::contract::{Bindings, CreateNote, Export, Health};
+pub fn mount(router: ContractRouter<AppState>, auth: &BearerSession) -> Result<ContractRouter<AppState>, String> {
+    Bindings {
+        create_note: CreateNote::bind_authorized(auth.clone(), create_note),
+        health: Health::bind(health),
+        export: Export::bind(export),
+    }
+    .mount(router)
+}
+"#;
+    const ENTITIES: &str = r#"
+#[derive(Debug, ComplianceMetadata)]
+#[compliance(entity = "Note", persisted)]
+pub struct StoredNote {
+    #[compliance(level = "none")]
+    pub id: Uuid,
+    #[compliance(level = "none")]
+    pub email: String,
+    #[compliance(level = "pii", purpose = "note-title-v1")]
+    pub title_ciphertext: ProtectedField,
+}
+#[derive(ComplianceMetadata)]
+#[compliance(entity = "SealedEvent")]
+struct QueueEnvelope {
+    #[compliance(level = "none")]
+    channel: String,
+    #[compliance(level = "phi")]
+    ciphertext: String,
+}
+"#;
+
+    fn workspace(name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("fl-rust-service-checks-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        for (path, text) in files {
+            let path = dir.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
+        dir
+    }
+
+    fn found(dir: &Path) -> Vec<(String, String)> {
+        let mut findings: Vec<_> = run_local_checks(dir)
+            .unwrap()
+            .into_iter()
+            .map(|f| (f.check, f.subject))
+            .collect();
+        findings.sort();
+        findings
+    }
+
+    #[test]
+    fn a_forklaunch_rust_service_is_read_for_routes_and_classifications() {
+        let dir = workspace(
+            "framework",
+            &[
+                ("notes/Cargo.toml", "[package]\nname = \"notes\"\n"),
+                ("notes/lib.rs", "pub mod api;\npub mod capabilities;\n"),
+                ("notes/capabilities/mod.rs", ""),
+                ("notes/api/controllers/notes.rs", CONTROLLER),
+                ("notes/api/routes/notes.rs", ROUTES),
+                ("notes/persistence/entities/stored_note.rs", ENTITIES),
+            ],
+        );
+        let evidence = local_evidence(&dir);
+        assert_eq!(
+            (
+                evidence.routes,
+                evidence.rust_routes,
+                evidence.rust_contract_routes
+            ),
+            (3, 3, 3)
+        );
+        assert_eq!((evidence.entities, evidence.rust_entities), (2, 2));
+        assert_eq!(evidence.projects, 1);
+        assert_eq!(
+            evidence.rust_unbound,
+            vec!["SealedEvent.ciphertext (notes/persistence/entities/stored_note.rs:14)"],
+            "a classified type with no protected binding is undecided, and named"
+        );
+        assert_eq!(
+            found(&dir),
+            vec![
+                (
+                    "possible-misclassification".to_string(),
+                    "Note.email".to_string()
+                ),
+                (
+                    "route-auth-missing".to_string(),
+                    "GET /export (api/controllers/notes.rs:11)".to_string()
+                ),
+            ],
+            "the authenticated route bound with a policy and the public health route pass; \
+             the protected route mounted with the public bind does not"
+        );
+        // Health data in a Rust entity counts as health data for the app.
+        let texting = workspace(
+            "phi",
+            &[
+                ("notes/persistence/entities/stored_note.rs", ENTITIES),
+                (
+                    "web/notify.ts",
+                    "await sms.send({ to, body: `Result: ${record.result.deanon}` });",
+                ),
+            ],
+        );
+        let sms = run_local_checks(&texting)
+            .unwrap()
+            .into_iter()
+            .find(|f| f.check == "sms-protected-data")
+            .expect("the TypeScript check still runs");
+        assert!(
+            sms.message.starts_with("health data (phi)"),
+            "{}",
+            sms.message
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&texting);
+    }
+
+    #[test]
+    fn raw_axum_routes_are_outside_the_framework_and_broken_files_are_reported() {
+        let dir = workspace(
+            "axum",
+            &[
+                (
+                    "backend/api/src/main.rs",
+                    "fn app() -> Router { Router::new().route(\"/api/healthz\", get(health)).route(\"/api/users\", get(list).post(create)) }",
+                ),
+                (
+                    "backend/api/src/broken.rs",
+                    "fn app() -> Router { Router::new().route(\"/x\", ",
+                ),
+                (
+                    "backend/api/src/wrapped.rs",
+                    "fn plan() -> RouteContract { secure(RouteContract::put(\"Plan\", \"Plan\", \"/plan\")) }",
+                ),
+            ],
+        );
+        let evidence = local_evidence(&dir);
+        assert_eq!(
+            (
+                evidence.routes,
+                evidence.rust_routes,
+                evidence.rust_contract_routes
+            ),
+            (3, 3, 0)
+        );
+        assert_eq!((evidence.entities, evidence.projects), (0, 0));
+        assert_eq!(
+            found(&dir),
+            vec![
+                (
+                    "route-outside-framework".to_string(),
+                    "GET /api/healthz (api/src/main.rs:1)".to_string()
+                ),
+                (
+                    "route-outside-framework".to_string(),
+                    "GET /api/users (api/src/main.rs:1)".to_string()
+                ),
+                (
+                    "route-outside-framework".to_string(),
+                    "POST /api/users (api/src/main.rs:1)".to_string()
+                ),
+                (
+                    "route-scan-incomplete".to_string(),
+                    "api/src/broken.rs".to_string()
+                ),
+                (
+                    "route-scan-incomplete".to_string(),
+                    "api/src/wrapped.rs".to_string()
+                ),
+            ]
+        );
+        let undecided = run_local_checks(&dir)
+            .unwrap()
+            .into_iter()
+            .find(|f| f.subject == "api/src/wrapped.rs")
+            .unwrap();
+        assert!(
+            undecided
+                .message
+                .contains("PUT /plan (api/src/wrapped.rs:1)")
+                && undecided.message.contains("could not decide"),
+            "{}",
+            undecided.message
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_typescript_workspace_counts_no_rust_evidence() {
+        let dir = workspace(
+            "typescript",
+            &[
+                ("svc/registrations.ts", ""),
+                (
+                    "svc/api/controllers/a.controller.ts",
+                    "export const a = handlers.get(schemaValidator, '/a', { name: 'A', access: 'public', responses: {} }, async () => {});",
+                ),
+            ],
+        );
+        let evidence = local_evidence(&dir);
+        assert_eq!(
+            evidence,
+            LocalEvidence {
+                routes: 1,
+                projects: 1,
+                ..LocalEvidence::default()
+            }
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_unverified_stripe_webhook_is_found_in_rust_sources() {
+        let handler = "async fn stripe(headers: HeaderMap, body: Bytes) -> Response { let signature = headers.get(\"stripe-signature\"); apply(body).await }";
+        let unverified = workspace("stripe-unverified", &[("billing/api/webhook.rs", handler)]);
+        assert!(
+            found(&unverified)
+                .iter()
+                .any(|(check, _)| check == "stripe-webhook-unverified")
+        );
+        let verified = workspace(
+            "stripe-verified",
+            &[
+                ("billing/api/webhook.rs", handler),
+                (
+                    "billing/api/state.rs",
+                    "struct Backend { webhook: Option<StripeWebhookVerifier> }",
+                ),
+            ],
+        );
+        assert!(
+            found(&verified)
+                .iter()
+                .all(|(check, _)| check != "stripe-webhook-unverified")
+        );
+        assert!(!rust_stripe_webhook_unverified("fn health() {}"));
+        let _ = std::fs::remove_dir_all(&unverified);
+        let _ = std::fs::remove_dir_all(&verified);
     }
 }

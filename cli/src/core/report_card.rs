@@ -35,6 +35,12 @@
 //! routes, no classified entities, no ForkLaunch-wired project), the item is
 //! `unassessed` and scores zero: an app that never adopted the framework has
 //! not shown that every endpoint requires sign-in.
+//!
+//! The same holds for a Rust service whose evidence a check does not read.
+//! Routes and data classifications are read from Rust source, but most of the
+//! entity-driven checks look only for TypeScript wiring. Where no check on an
+//! item reads Rust, the item is `unassessed` with a reason that says so, and a
+//! TypeScript-only check on an otherwise decided item is `skipped`, not `pass`.
 
 use serde::Serialize;
 
@@ -124,9 +130,53 @@ const CRITERIA: &[Criterion] = &[
     },
 ];
 
+/// Why the offline checks could not decide a criterion.
+struct Unassessed {
+    /// Shown on the checklist item.
+    why: String,
+    /// Shown on each of the item's checks.
+    check: String,
+    /// The reason is about Rust services (a check that does not read them yet,
+    /// or a declaration source alone cannot decide), not an empty workspace.
+    rust_unread: bool,
+}
+
+/// How a `route-scan-incomplete` finding starts when the file was read but a
+/// route declared in it could not be decided.
+const UNDECIDED_ROUTES: &str = crate::compliance::checks::UNDECIDED_ROUTES;
+const NOTHING_TO_READ: &str = "Nothing for this check to read.";
+const RUST_UNREAD: &str = "This check does not read Rust services yet.";
+const UNBOUND: &str = "Not decided: a Rust type classifies members without a protected-model \
+                       binding, and source alone does not show how they are stored.";
+
+/// The criteria decided from classified entities.
+const ENTITY_CRITERIA: &[&str] = &[
+    "cmp-encryption-at-rest",
+    "cmp-data-classification",
+    "sec-tenant-isolation",
+    "gov-data-retention",
+    "gdpr-erasure",
+];
+
+/// Whether any check on `criterion` reads Rust entities.
+fn reads_rust_entities(criterion: &str) -> bool {
+    checks_for_criterion(criterion)
+        .iter()
+        .any(|check| crate::compliance::checks::RUST_ENTITY_CHECKS.contains(check))
+}
+
 /// Why the offline checks could not decide a criterion: the workspace holds
-/// nothing they read. `None` when there was something to look at.
-fn missing_evidence(criterion: &str, evidence: &LocalEvidence) -> Option<&'static str> {
+/// nothing they read, or holds it only in a form they do not read yet. `None`
+/// when there was something to look at.
+///
+/// # Rust services
+///
+/// A check that only looks for TypeScript wiring has decided nothing about a
+/// Rust entity, so finding nothing there is not a pass. A criterion none of
+/// whose checks read Rust is unassessed as soon as any classified entity is
+/// declared in Rust, even when TypeScript entities in the same app passed: the
+/// item covers the whole app, and part of it was not read.
+fn missing_evidence(criterion: &str, evidence: &LocalEvidence) -> Option<Unassessed> {
     let no_routes = "No routes were found for the offline checks to read, so nothing shows \
                      which endpoints require sign-in or validate their input. Declare routes \
                      with ForkLaunch contracts, or run `forklaunch score` online for a full \
@@ -138,18 +188,87 @@ fn missing_evidence(criterion: &str, evidence: &LocalEvidence) -> Option<&'stati
     let no_projects = "No ForkLaunch-wired service or worker was found, so there is no declared \
                        construction to check. Run `forklaunch score` online for a full source \
                        review.";
+    let nothing = |why: &str| {
+        Some(Unassessed {
+            why: why.to_string(),
+            check: NOTHING_TO_READ.to_string(),
+            rust_unread: false,
+        })
+    };
+    let rust_unread = |why: &str| {
+        Some(Unassessed {
+            why: why.to_string(),
+            check: RUST_UNREAD.to_string(),
+            rust_unread: true,
+        })
+    };
     match criterion {
-        "sec-authn" | "sec-input-validation" if evidence.routes == 0 => Some(no_routes),
-        "cmp-encryption-at-rest"
-        | "cmp-data-classification"
-        | "sec-tenant-isolation"
-        | "gov-data-retention"
-        | "gdpr-erasure"
-            if evidence.entities == 0 =>
+        "sec-authn" | "sec-input-validation" if evidence.routes == 0 => nothing(no_routes),
+        // Routes were read, but every one is a raw Rust route: the framework
+        // validates what a contract declares, and none of these has one.
+        "sec-input-validation"
+            if evidence.routes == evidence.rust_routes && evidence.rust_contract_routes == 0 =>
         {
-            Some(no_entities)
+            Some(Unassessed {
+                why: "Every route found is registered directly on a Rust router, outside \
+                      ForkLaunch contracts, so nothing the offline checks read shows that \
+                      incoming data is validated. Declare the routes as contract endpoints, or \
+                      run `forklaunch score` online for a full source review."
+                    .to_string(),
+                check: "No route is declared through a ForkLaunch contract, so this check \
+                        passing would not show that input is validated."
+                    .to_string(),
+                rust_unread: false,
+            })
         }
-        "gov-construction" if evidence.projects == 0 => Some(no_projects),
+        id if ENTITY_CRITERIA.contains(&id) && evidence.entities == 0 => nothing(no_entities),
+        // The Rust encryption check confirms a protected-model binding. A
+        // classified type without one is neither confirmed nor refuted.
+        "cmp-encryption-at-rest" if !evidence.rust_unbound.is_empty() => Some(Unassessed {
+            why: format!(
+                "{} Rust type(s) classify members without binding them to protected storage \
+                 (no #[compliance(persisted)] model with ProtectedField members): {}. The \
+                 source does not show whether those members are stored as ciphertext, so the \
+                 offline check cannot decide this item. Bind them to a protected model, or run \
+                 `forklaunch score` online for a full source review.",
+                evidence.rust_unbound.len(),
+                evidence.rust_unbound.join(", ")
+            ),
+            check: UNBOUND.to_string(),
+            rust_unread: true,
+        }),
+        "sec-tenant-isolation" if evidence.rust_entities > 0 => rust_unread(
+            "Classified entities are declared in Rust services, and the offline \
+             tenant-isolation checks only read TypeScript wiring (setupTenantFilter, setupRls, \
+             wrapEmWithTenantContext). The Rust check does not exist yet, so nothing read here \
+             shows that the Rust services keep one customer's rows from another. Run \
+             `forklaunch score` online for a full source review.",
+        ),
+        "gov-data-retention" if evidence.rust_entities > 0 => rust_unread(
+            "Classified entities are declared in Rust services. Rust entities declare no \
+             retention policy the offline checks can read (the framework's own compliance \
+             artifact reports lifecycle coverage as unknown), and the offline retention check \
+             only looks for the TypeScript RetentionService. The Rust check does not exist \
+             yet. Run `forklaunch score` online for a full source review.",
+        ),
+        "gdpr-erasure" if evidence.rust_entities > 0 => rust_unread(
+            "Classified entities are declared in Rust services, and the offline erasure check \
+             only looks for the TypeScript ComplianceDataService. The Rust check does not \
+             exist yet, so nothing read here shows that export and erasure requests reach the \
+             data the Rust services hold. Run `forklaunch score` online for a full source \
+             review.",
+        ),
+        id if ENTITY_CRITERIA.contains(&id)
+            && evidence.rust_entities > 0
+            && !reads_rust_entities(id) =>
+        {
+            rust_unread(
+                "Classified entities are declared in Rust services, and none of the offline \
+                 checks on this item reads Rust yet. Run `forklaunch score` online for a full \
+                 source review.",
+            )
+        }
+        "gov-construction" if evidence.projects == 0 => nothing(no_projects),
         _ => None,
     }
 }
@@ -625,7 +744,20 @@ pub(crate) fn build_local_report_card(
                 severity: severity.to_string(),
                 title: format!("{} ({})", item_label(&finding.check), finding.project),
                 detail: finding.message.clone(),
-                fix: remedy(&finding.check),
+                fix: if finding.check == "route-scan-incomplete"
+                    && finding.message.starts_with(UNDECIDED_ROUTES)
+                {
+                    // The file parsed; its contracts are finished somewhere
+                    // the reader does not follow.
+                    Some(
+                        "Set each contract's access level and auth where it is declared \
+                         (.with_access(..).with_auth(..) on the constructor, or #[access(..)] \
+                         on a contract endpoint), or check the listed routes by hand."
+                            .to_string(),
+                    )
+                } else {
+                    remedy(&finding.check)
+                },
                 source: "cli".to_string(),
                 criterion: criterion_for_check(&finding.check).map(|(id, _)| id.to_string()),
             });
@@ -637,6 +769,8 @@ pub(crate) fn build_local_report_card(
         // everywhere it was evaluated.
         let mut items: Vec<CardItem> = Vec::new();
         let mut unassessed = 0usize;
+        // Whether an item is unassessed for a reason specific to Rust services.
+        let mut rust_unread = false;
         for crit in CRITERIA.iter().filter(|c| c.rail == *rail) {
             let mut checks = Vec::new();
             let mut failed = false;
@@ -687,12 +821,54 @@ pub(crate) fn build_local_report_card(
             } else {
                 missing_evidence(crit.id, evidence)
             };
-            if let Some(why) = nothing_to_read {
+            // A check that only reads TypeScript says so rather than report a
+            // pass on Rust entities it never looked at, whatever the item's
+            // status turns out to be.
+            let mut not_read = 0usize;
+            if ENTITY_CRITERIA.contains(&crit.id) && evidence.rust_entities > 0 {
+                let typescript_entities = evidence.entities > evidence.rust_entities;
+                for check in checks.iter_mut().filter(|check| check.status == "pass") {
+                    if check.id == "encryptor-registration" {
+                        if !evidence.rust_unbound.is_empty() {
+                            check.status = "skipped".to_string();
+                            check.detail = UNBOUND.to_string();
+                        }
+                    } else if !crate::compliance::checks::RUST_ENTITY_CHECKS
+                        .contains(&check.id.as_str())
+                    {
+                        not_read += 1;
+                        if typescript_entities {
+                            check.detail = format!(
+                                "No problems found in the TypeScript services. {RUST_UNREAD}"
+                            );
+                        } else {
+                            check.status = "skipped".to_string();
+                            check.detail = RUST_UNREAD.to_string();
+                        }
+                    }
+                }
+            }
+            if let Some(unread) = &nothing_to_read {
                 unassessed += 1;
-                detail = Some(why.to_string());
+                rust_unread |= unread.rust_unread;
+                detail = Some(unread.why.clone());
                 for check in &mut checks {
                     check.status = "skipped".to_string();
-                    check.detail = "Nothing for this check to read.".to_string();
+                    check.detail = unread.check.clone();
+                }
+            } else if !failed && !review {
+                // The item is decided by the checks that read Rust.
+                if not_read > 0 && detail.is_none() {
+                    detail = Some(format!(
+                        "Decided for the Rust services by the checks that read Rust ({}). {} other check(s) on this item only read TypeScript and say nothing about the Rust services.",
+                        crate::compliance::checks::RUST_ENTITY_CHECKS
+                            .iter()
+                            .filter(|id| checks.iter().any(|check| check.id == **id))
+                            .copied()
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                        not_read
+                    ));
                 }
             }
             items.push(CardItem {
@@ -721,7 +897,13 @@ pub(crate) fn build_local_report_card(
             score * (items.len() - unassessed) as f64 / items.len() as f64
         };
 
-        let summary = if unassessed > 0 {
+        let summary = if unassessed > 0 && rust_unread {
+            format!(
+                "{} of {} item(s) could not be assessed offline; each says why (nothing to read, or a Rust service the checks cannot decide yet). They score zero.",
+                unassessed,
+                items.len()
+            )
+        } else if unassessed > 0 {
             format!(
                 "{} of {} item(s) could not be assessed: the offline checks found nothing to read. They score zero.",
                 unassessed,
@@ -848,6 +1030,7 @@ mod tests {
             routes: 4,
             entities: 2,
             projects: 1,
+            ..LocalEvidence::default()
         }
     }
 
@@ -895,6 +1078,7 @@ mod tests {
             routes: 3,
             entities: 0,
             projects: 1,
+            ..LocalEvidence::default()
         };
         let card = build_local_report_card("demo", 1, &[], &evidence, at());
         let status = |rail: &str, id: &str| {
@@ -910,6 +1094,210 @@ mod tests {
         assert_eq!(status("governance", "gov-construction"), "met");
         assert_eq!(status("compliance", "cmp-encryption-at-rest"), "unassessed");
         assert_eq!(card.dimensions["compliance"].score, 0);
+    }
+
+    fn item<'c>(card: &'c ReportCard, rail: &str, id: &str) -> &'c CardItem {
+        card.dimensions[rail]
+            .items
+            .iter()
+            .find(|i| i.criterion.as_deref() == Some(id))
+            .unwrap()
+    }
+
+    /// A Rust service's routes and classifications are read, so the items
+    /// those decide are assessed. The entity checks that only look for
+    /// TypeScript wiring have decided nothing about it: their items stay
+    /// unassessed and say the Rust check does not exist yet.
+    #[test]
+    fn a_rust_service_is_met_only_where_a_check_read_rust() {
+        let evidence = LocalEvidence {
+            routes: 6,
+            rust_routes: 6,
+            rust_contract_routes: 6,
+            entities: 3,
+            rust_entities: 3,
+            projects: 1,
+            ..LocalEvidence::default()
+        };
+        let card = build_local_report_card("notes", 1, &[], &evidence, at());
+        for (rail, id) in [
+            ("security", "sec-authn"),
+            ("security", "sec-input-validation"),
+            ("compliance", "cmp-encryption-at-rest"),
+            ("compliance", "cmp-data-classification"),
+            ("governance", "gov-construction"),
+        ] {
+            assert_eq!(item(&card, rail, id).status, "met", "{id}");
+        }
+        for (rail, id) in [
+            ("security", "sec-tenant-isolation"),
+            ("governance", "gov-data-retention"),
+            ("governance", "gdpr-erasure"),
+        ] {
+            let unread = item(&card, rail, id);
+            assert_eq!(unread.status, "unassessed", "{id}");
+            let why = unread.detail.as_deref().unwrap();
+            assert!(
+                why.contains("Rust") && why.contains("does not exist yet"),
+                "{id}: {why}"
+            );
+            assert!(
+                unread
+                    .checks
+                    .iter()
+                    .all(|c| c.status == "skipped" && c.detail == RUST_UNREAD),
+                "{id}"
+            );
+        }
+        // On a decided item, a TypeScript-only check is skipped, not passed.
+        let classification = item(&card, "compliance", "cmp-data-classification");
+        let status = |id: &str| {
+            classification
+                .checks
+                .iter()
+                .find(|c| c.id == id)
+                .unwrap()
+                .status
+                .as_str()
+        };
+        assert_eq!(status("possible-misclassification"), "pass");
+        assert_eq!(status("sms-protected-data"), "skipped");
+        assert!(
+            classification
+                .detail
+                .as_deref()
+                .unwrap()
+                .contains("possible-misclassification"),
+            "the item names the check that decided it"
+        );
+        let encryption = item(&card, "compliance", "cmp-encryption-at-rest");
+        assert_eq!(
+            encryption
+                .checks
+                .iter()
+                .filter(|c| c.status == "pass")
+                .map(|c| c.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["encryptor-registration"]
+        );
+        assert_eq!(card.dimensions["governance"].score, 33);
+        assert!(card.dimensions["governance"].summary.contains("Rust"));
+    }
+
+    /// TypeScript entities that pass do not vouch for Rust entities beside them.
+    #[test]
+    fn a_mixed_app_is_not_met_on_the_strength_of_its_typescript_half() {
+        let evidence = LocalEvidence {
+            entities: 5,
+            rust_entities: 2,
+            ..read()
+        };
+        let card = build_local_report_card("mixed", 2, &[], &evidence, at());
+        assert_eq!(
+            item(&card, "governance", "gov-data-retention").status,
+            "unassessed"
+        );
+        assert_eq!(
+            item(&card, "compliance", "cmp-encryption-at-rest").status,
+            "met"
+        );
+        let better_auth = item(&card, "compliance", "cmp-encryption-at-rest")
+            .checks
+            .iter()
+            .find(|c| c.id == "better-auth-encryption-context")
+            .unwrap();
+        assert_eq!(better_auth.status, "pass");
+        assert!(better_auth.detail.contains("TypeScript services"));
+        // A failure found in the TypeScript half still decides the item.
+        let failed = build_local_report_card(
+            "mixed",
+            2,
+            &[finding("retention-wiring", Severity::Warning)],
+            &evidence,
+            at(),
+        );
+        assert_eq!(
+            item(&failed, "governance", "gov-data-retention").status,
+            "unmet"
+        );
+    }
+
+    /// A classified Rust type with no protected binding is neither confirmed
+    /// encrypted nor shown to be plaintext.
+    #[test]
+    fn an_unbound_rust_classification_leaves_encryption_undecided() {
+        let evidence = LocalEvidence {
+            entities: 2,
+            rust_entities: 2,
+            rust_unbound: vec!["SealedEvent.ciphertext (insights/queue.rs:15)".to_string()],
+            ..read()
+        };
+        let card = build_local_report_card("notes", 1, &[], &evidence, at());
+        let encryption = item(&card, "compliance", "cmp-encryption-at-rest");
+        assert_eq!(encryption.status, "unassessed");
+        assert!(
+            encryption
+                .detail
+                .as_deref()
+                .unwrap()
+                .contains("SealedEvent.ciphertext (insights/queue.rs:15)")
+        );
+        assert_eq!(
+            item(&card, "compliance", "cmp-data-classification").status,
+            "met"
+        );
+    }
+
+    /// A file that parsed but holds routes the reader could not decide is
+    /// not told to fix a syntax error.
+    #[test]
+    fn undecided_routes_get_their_own_remedy() {
+        let mut undecided = finding("route-scan-incomplete", Severity::Warning);
+        undecided.message =
+            format!("{UNDECIDED_ROUTES}2 route(s) the offline reader could not decide");
+        let unparsed = finding("route-scan-incomplete", Severity::Warning);
+        let card = build_local_report_card("demo", 1, &[undecided, unparsed], &read(), at());
+        let fixes: Vec<_> = card.dimensions["security"]
+            .findings
+            .iter()
+            .map(|f| f.fix.clone().unwrap())
+            .collect();
+        assert!(fixes[0].contains(".with_access(..)") && !fixes[0].contains("syntax"));
+        assert!(fixes[1].contains("syntax error"));
+        assert_eq!(item(&card, "security", "sec-authn").status, "pending");
+    }
+
+    /// Raw Rust routes are something to read for sign-in, but none of them
+    /// shows that input is validated.
+    #[test]
+    fn raw_rust_routes_do_not_show_input_validation() {
+        let evidence = LocalEvidence {
+            routes: 14,
+            rust_routes: 14,
+            ..LocalEvidence::default()
+        };
+        let outside = finding("route-outside-framework", Severity::Info);
+        let card = build_local_report_card("axum", 1, &[outside], &evidence, at());
+        assert_eq!(item(&card, "security", "sec-authn").status, "pending");
+        let validation = item(&card, "security", "sec-input-validation");
+        assert_eq!(validation.status, "unassessed");
+        assert!(
+            validation
+                .detail
+                .as_deref()
+                .unwrap()
+                .contains("outside ForkLaunch contracts")
+        );
+        // One contract route among them is evidence the framework validates.
+        let with_contract = LocalEvidence {
+            rust_contract_routes: 1,
+            ..evidence
+        };
+        let card = build_local_report_card("axum", 1, &[], &with_contract, at());
+        assert_eq!(
+            item(&card, "security", "sec-input-validation").status,
+            "met"
+        );
     }
 
     fn at() -> String {
