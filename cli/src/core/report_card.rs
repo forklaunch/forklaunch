@@ -27,10 +27,18 @@
 //! they are marked `pending` and excluded from the weighted average, and the
 //! card carries a `caveat` saying so. The online `score` replaces this with the
 //! platform's full agent-scored card.
+//!
+//! # Nothing to read is not a pass
+//!
+//! A check that fires nothing has passed only where it had something to look
+//! at. When the workspace holds none of what a criterion's checks read (no
+//! routes, no classified entities, no ForkLaunch-wired project), the item is
+//! `unassessed` and scores zero: an app that never adopted the framework has
+//! not shown that every endpoint requires sign-in.
 
 use serde::Serialize;
 
-use crate::compliance::checks::{LocalFinding, Severity};
+use crate::compliance::checks::{LocalEvidence, LocalFinding, Severity};
 
 /// Bump only alongside the TypeScript `REPORT_CARD_SCHEMA_VERSION`.
 const SCHEMA_VERSION: u32 = 2;
@@ -115,6 +123,36 @@ const CRITERIA: &[Criterion] = &[
         label: "The app builds cleanly to its declared parameters (construction check passes)",
     },
 ];
+
+/// Why the offline checks could not decide a criterion: the workspace holds
+/// nothing they read. `None` when there was something to look at.
+fn missing_evidence(criterion: &str, evidence: &LocalEvidence) -> Option<&'static str> {
+    let no_routes = "No routes were found for the offline checks to read, so nothing shows \
+                     which endpoints require sign-in or validate their input. Declare routes \
+                     with ForkLaunch contracts, or run `forklaunch score` online for a full \
+                     source review.";
+    let no_entities = "No entities with data classifications were found, so nothing shows how \
+                       sensitive data is stored, isolated, kept or erased. Declare entities with \
+                       ForkLaunch compliance fields, or run `forklaunch score` online for a full \
+                       source review.";
+    let no_projects = "No ForkLaunch-wired service or worker was found, so there is no declared \
+                       construction to check. Run `forklaunch score` online for a full source \
+                       review.";
+    match criterion {
+        "sec-authn" | "sec-input-validation" if evidence.routes == 0 => Some(no_routes),
+        "cmp-encryption-at-rest"
+        | "cmp-data-classification"
+        | "sec-tenant-isolation"
+        | "gov-data-retention"
+        | "gdpr-erasure"
+            if evidence.entities == 0 =>
+        {
+            Some(no_entities)
+        }
+        "gov-construction" if evidence.projects == 0 => Some(no_projects),
+        _ => None,
+    }
+}
 
 /// What a check's finding means for its criterion. Mirrors `onFinding` in the
 /// platform's `LOCAL_CHECKS`.
@@ -315,8 +353,9 @@ pub(crate) struct CardItemCheck {
 pub(crate) struct CardItem {
     /// The platform criterion's exact label.
     pub(crate) label: String,
-    /// `met` (every check on it passed), `unmet` (a check failed) or `pending`
-    /// (a check asks for review). Only `unmet` is settled by a check alone:
+    /// `met` (every check on it passed), `unmet` (a check failed), `pending`
+    /// (a check asks for review) or `unassessed` (the checks found nothing to
+    /// read; scores zero). Only `unmet` is settled by a check alone:
     /// the offline checks are partial, so a pass is evidence, not proof.
     pub(crate) status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -551,6 +590,7 @@ pub(crate) fn build_local_report_card(
     app_name: &str,
     module_count: usize,
     findings: &[LocalFinding],
+    evidence: &LocalEvidence,
     generated_at: String,
 ) -> ReportCard {
     let mut dimensions = std::collections::BTreeMap::new();
@@ -596,6 +636,7 @@ pub(crate) fn build_local_report_card(
         // for a review check, asks for review); one that never fired passed
         // everywhere it was evaluated.
         let mut items: Vec<CardItem> = Vec::new();
+        let mut unassessed = 0usize;
         for crit in CRITERIA.iter().filter(|c| c.rail == *rail) {
             let mut checks = Vec::new();
             let mut failed = false;
@@ -639,12 +680,29 @@ pub(crate) fn build_local_report_card(
                     },
                 });
             }
+            // No check fired and there was nothing for them to read: that is
+            // absence of evidence, and it scores zero rather than passing.
+            let nothing_to_read = if failed || review {
+                None
+            } else {
+                missing_evidence(crit.id, evidence)
+            };
+            if let Some(why) = nothing_to_read {
+                unassessed += 1;
+                detail = Some(why.to_string());
+                for check in &mut checks {
+                    check.status = "skipped".to_string();
+                    check.detail = "Nothing for this check to read.".to_string();
+                }
+            }
             items.push(CardItem {
                 label: crit.label.to_string(),
                 status: if failed {
                     "unmet"
                 } else if review {
                     "pending"
+                } else if nothing_to_read.is_some() {
+                    "unassessed"
                 } else {
                     "met"
                 }
@@ -655,7 +713,21 @@ pub(crate) fn build_local_report_card(
             });
         }
 
-        let summary = if card_findings.is_empty() {
+        // Each unassessed item earns nothing: the rail keeps only the share
+        // of its score that the assessed items account for.
+        let score = if items.is_empty() {
+            score
+        } else {
+            score * (items.len() - unassessed) as f64 / items.len() as f64
+        };
+
+        let summary = if unassessed > 0 {
+            format!(
+                "{} of {} item(s) could not be assessed: the offline checks found nothing to read. They score zero.",
+                unassessed,
+                items.len()
+            )
+        } else if card_findings.is_empty() {
             format!("No deterministic {rail} findings across {module_count} module(s).")
         } else {
             format!(
@@ -705,7 +777,16 @@ pub(crate) fn build_local_report_card(
     };
 
     let total = findings.len();
-    let headline = if total == 0 {
+    let unassessed_items = dimensions
+        .values()
+        .flat_map(|d| d.items.iter())
+        .filter(|i| i.status == "unassessed")
+        .count();
+    let headline = if unassessed_items > 0 {
+        format!(
+            "{app_name}: {unassessed_items} checklist item(s) could not be assessed offline and score zero; {total} deterministic finding(s) across {module_count} module(s)."
+        )
+    } else if total == 0 {
         format!(
             "{app_name}: no deterministic compliance or security findings across {module_count} module(s)."
         )
@@ -723,7 +804,8 @@ pub(crate) fn build_local_report_card(
                  from static analysis of the checklist items those checks cover; scalability \
                  and observability need judgement a source read cannot supply and are left \
                  unassessed rather than scored zero. The overall score is weighted across the \
-                 scored rails only. All five rails need an agent's judgement, which the studio \
+                 scored rails only. A checklist item whose checks found nothing to read is \
+                 unassessed and scores zero. All five rails need an agent's judgement, which the studio \
                  surface provides."
             .to_string(),
         phase: "audit".to_string(),
@@ -760,13 +842,83 @@ mod tests {
         }
     }
 
+    /// A workspace with something for every check to read.
+    fn read() -> LocalEvidence {
+        LocalEvidence {
+            routes: 4,
+            entities: 2,
+            projects: 1,
+        }
+    }
+
+    /// An app with no ForkLaunch code: nothing fired because nothing was
+    /// read. That must score zero, never full marks.
+    #[test]
+    fn nothing_to_read_scores_zero_not_full_marks() {
+        let card = build_local_report_card("loandesk", 3, &[], &LocalEvidence::default(), at());
+        for (rail, id) in [
+            ("security", "sec-authn"),
+            ("security", "sec-tenant-isolation"),
+            ("security", "sec-input-validation"),
+            ("compliance", "cmp-encryption-at-rest"),
+            ("compliance", "cmp-data-classification"),
+            ("governance", "gov-data-retention"),
+            ("governance", "gdpr-erasure"),
+            ("governance", "gov-construction"),
+        ] {
+            let item = card.dimensions[rail]
+                .items
+                .iter()
+                .find(|i| i.criterion.as_deref() == Some(id))
+                .unwrap();
+            assert_eq!(item.status, "unassessed", "{id}");
+            assert!(item.detail.is_some(), "{id} must say why");
+            assert!(item.checks.iter().all(|c| c.status == "skipped"), "{id}");
+        }
+        assert_eq!(card.dimensions["compliance"].score, 0);
+        assert_eq!(card.dimensions["governance"].score, 0);
+        // Dependencies are judged from lockfiles, so that one item still counts.
+        assert_eq!(card.dimensions["security"].score, 25);
+        assert!(card.overall < 15, "overall was {}", card.overall);
+        assert!(
+            card.headline.contains("could not be assessed"),
+            "{}",
+            card.headline
+        );
+    }
+
+    /// Evidence is per criterion: routes without entities settles sign-in but
+    /// not encryption.
+    #[test]
+    fn evidence_is_judged_per_criterion() {
+        let evidence = LocalEvidence {
+            routes: 3,
+            entities: 0,
+            projects: 1,
+        };
+        let card = build_local_report_card("demo", 1, &[], &evidence, at());
+        let status = |rail: &str, id: &str| {
+            card.dimensions[rail]
+                .items
+                .iter()
+                .find(|i| i.criterion.as_deref() == Some(id))
+                .unwrap()
+                .status
+                .clone()
+        };
+        assert_eq!(status("security", "sec-authn"), "met");
+        assert_eq!(status("governance", "gov-construction"), "met");
+        assert_eq!(status("compliance", "cmp-encryption-at-rest"), "unassessed");
+        assert_eq!(card.dimensions["compliance"].score, 0);
+    }
+
     fn at() -> String {
         "2026-01-01T00:00:00Z".to_string()
     }
 
     #[test]
     fn a_clean_workspace_scores_full_marks_on_the_rails_it_can_judge() {
-        let card = build_local_report_card("demo", 3, &[], at());
+        let card = build_local_report_card("demo", 3, &[], &read(), at());
         assert_eq!(card.overall, 100);
         assert_eq!(card.dimensions["compliance"].score, 100);
         assert_eq!(card.dimensions["security"].score, 100);
@@ -778,7 +930,7 @@ mod tests {
     /// the offline card and the website's "Checked" half list the same lines.
     #[test]
     fn items_use_platform_criterion_ids_and_exact_labels() {
-        let card = build_local_report_card("demo", 1, &[], at());
+        let card = build_local_report_card("demo", 1, &[], &read(), at());
         let expected = [
             (
                 "compliance",
@@ -904,6 +1056,7 @@ mod tests {
             "demo",
             1,
             &[finding("tenant-em-wiring", Severity::Warning)],
+            &read(),
             at(),
         );
         let item = card.dimensions["compliance"]
@@ -939,6 +1092,7 @@ mod tests {
             "demo",
             1,
             &[finding("possible-misclassification", Severity::Info)],
+            &read(),
             at(),
         );
         let item = card.dimensions["compliance"]
@@ -971,6 +1125,7 @@ mod tests {
             "demo",
             1,
             &[finding("dependency-scan-incomplete", Severity::Warning)],
+            &read(),
             at(),
         );
         let item = card.dimensions["security"]
@@ -993,7 +1148,7 @@ mod tests {
         let mut critical = finding("dependency-vulnerable", Severity::Warning);
         critical.message = "CRITICAL GHSA-c: y".to_string();
         findings.push(critical);
-        let card = build_local_report_card("demo", 1, &findings, at());
+        let card = build_local_report_card("demo", 1, &findings, &read(), at());
         assert_eq!(card.dimensions["security"].score, 70);
     }
 
@@ -1004,6 +1159,7 @@ mod tests {
             "demo",
             1,
             &[finding("route-scan-incomplete", Severity::Warning)],
+            &read(),
             at(),
         );
         let security = &card.dimensions["security"];
@@ -1026,7 +1182,7 @@ mod tests {
     fn unassessed_rails_are_pending_not_zero_scores() {
         // Scoring them 0 would cap every card at 50 and read as failure rather
         // than absence -- the distinction the `pending` flag exists to make.
-        let card = build_local_report_card("demo", 1, &[], at());
+        let card = build_local_report_card("demo", 1, &[], &read(), at());
         for rail in ["scalability", "observability"] {
             assert_eq!(card.dimensions[rail].pending, Some(true), "{rail}");
         }
@@ -1042,6 +1198,7 @@ mod tests {
             "demo",
             1,
             &[finding("tenant-context-half-wired", Severity::Warning)],
+            &read(),
             at(),
         );
         // Same rail (sec-tenant-isolation), ordinary severity.
@@ -1049,6 +1206,7 @@ mod tests {
             "demo",
             1,
             &[finding("tenant-isolation-wiring", Severity::Warning)],
+            &read(),
             at(),
         );
 
@@ -1072,6 +1230,7 @@ mod tests {
                 finding("tenant-em-wiring", Severity::Warning),
                 finding("retention-wiring", Severity::Warning),
             ],
+            &read(),
             at(),
         );
         // Rails follow the criterion: tenant-em-wiring binds the encryption
@@ -1086,7 +1245,7 @@ mod tests {
         let many: Vec<LocalFinding> = (0..20)
             .map(|_| finding("tenant-context-half-wired", Severity::Warning))
             .collect();
-        let card = build_local_report_card("demo", 1, &many, at());
+        let card = build_local_report_card("demo", 1, &many, &read(), at());
         assert_eq!(card.dimensions["security"].score, 0);
     }
 
@@ -1096,6 +1255,7 @@ mod tests {
             "demo",
             1,
             &[finding("possible-misclassification", Severity::Info)],
+            &read(),
             at(),
         );
         assert_eq!(card.dimensions["compliance"].score, 100);
@@ -1105,7 +1265,7 @@ mod tests {
 
     #[test]
     fn passing_checks_are_listed_as_met_so_the_checklist_shows_work_done() {
-        let card = build_local_report_card("demo", 1, &[], at());
+        let card = build_local_report_card("demo", 1, &[], &read(), at());
         let security = &card.dimensions["security"];
         assert!(!security.items.is_empty());
         assert!(security.items.iter().all(|i| i.status == "met"));
@@ -1117,6 +1277,7 @@ mod tests {
             "demo",
             1,
             &[finding("tenant-context-half-wired", Severity::Warning)],
+            &read(),
             at(),
         );
         let f = &card.dimensions["security"].findings[0];
@@ -1130,7 +1291,7 @@ mod tests {
 
     #[test]
     fn the_card_declares_the_contract_version_and_audit_phase() {
-        let card = build_local_report_card("demo", 1, &[], at());
+        let card = build_local_report_card("demo", 1, &[], &read(), at());
         assert_eq!(card.schema_version, SCHEMA_VERSION);
         assert_eq!(card.phase, "audit");
         // The caveat is the only thing standing between a partial score and
@@ -1219,9 +1380,15 @@ mod wiring_score_tests {
 
     #[test]
     fn a_direct_ai_provider_on_phi_costs_critical_points_on_compliance() {
-        let clean = build_local_report_card("app", 1, &[], "t".to_string());
-        let card =
-            build_local_report_card("app", 1, &[finding("ai-provider-direct")], "t".to_string());
+        let clean =
+            build_local_report_card("app", 1, &[], &LocalEvidence::everything(), "t".to_string());
+        let card = build_local_report_card(
+            "app",
+            1,
+            &[finding("ai-provider-direct")],
+            &LocalEvidence::everything(),
+            "t".to_string(),
+        );
         let before = clean.dimensions["compliance"].score;
         let after = card.dimensions["compliance"].score;
         assert_eq!(before - after, 30, "critical = 30 points");
@@ -1248,10 +1415,17 @@ mod wiring_score_tests {
             "app",
             1,
             &[finding("email-provider-direct-in-managed")],
+            &LocalEvidence::everything(),
             "t".to_string(),
         );
         assert_eq!(card.dimensions["governance"].score, 85);
-        let card = build_local_report_card("app", 1, &[phi], "t".to_string());
+        let card = build_local_report_card(
+            "app",
+            1,
+            &[phi],
+            &LocalEvidence::everything(),
+            "t".to_string(),
+        );
         let item = card.dimensions["compliance"]
             .items
             .iter()
@@ -1278,7 +1452,13 @@ mod wiring_score_tests {
             severity_for(&finding("whatsapp-provider-direct-in-managed")),
             "high"
         );
-        let card = build_local_report_card("app", 1, &[phi], "t".to_string());
+        let card = build_local_report_card(
+            "app",
+            1,
+            &[phi],
+            &LocalEvidence::everything(),
+            "t".to_string(),
+        );
         let item = card.dimensions["compliance"]
             .items
             .iter()
@@ -1293,6 +1473,7 @@ mod wiring_score_tests {
             "app",
             1,
             &[finding("whatsapp-provider-direct-in-managed")],
+            &LocalEvidence::everything(),
             "t".to_string(),
         );
         assert_eq!(card.dimensions["governance"].score, 85, "high = 15 points");
@@ -1305,6 +1486,7 @@ mod wiring_score_tests {
             "app",
             1,
             &[finding("managed-provider-credentials")],
+            &LocalEvidence::everything(),
             "t".to_string(),
         );
         let item = card.dimensions["governance"]

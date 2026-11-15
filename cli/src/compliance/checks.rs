@@ -34,6 +34,56 @@ pub(crate) struct LocalFinding {
     pub(crate) message: String,
 }
 
+/// What the offline checks found to read. A check that fires nothing has
+/// passed only if there was something for it to look at: an app with no
+/// ForkLaunch routes has not shown that every endpoint requires sign-in.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct LocalEvidence {
+    /// Routes the route scanner read (framework contracts and raw registrations).
+    pub(crate) routes: usize,
+    /// Entities declared with compliance classifications.
+    pub(crate) entities: usize,
+    /// Projects wired the ForkLaunch way (`registrations.ts`, or a Rust crate
+    /// with a `capabilities` module).
+    pub(crate) projects: usize,
+}
+
+#[cfg(test)]
+impl LocalEvidence {
+    /// A workspace with something for every check to read.
+    pub(crate) fn everything() -> Self {
+        Self {
+            routes: 1,
+            entities: 1,
+            projects: 1,
+        }
+    }
+}
+
+/// Count what `run_local_checks` has to read under `modules_path`.
+pub(crate) fn local_evidence(modules_path: &Path) -> LocalEvidence {
+    let mut evidence = LocalEvidence::default();
+    let Ok(entries) = fs::read_dir(modules_path) else {
+        return evidence;
+    };
+    for entry in entries.flatten() {
+        let project_path = entry.path();
+        if !project_path.is_dir() {
+            continue;
+        }
+        evidence.routes += route_analyzer::scan_routes(&project_path).routes.len();
+        evidence.entities += scan_entity_compliance(&project_path)
+            .unwrap_or_default()
+            .len();
+        let rust_wired = rust_source_root(&project_path)
+            .is_some_and(|root| root.join("capabilities/mod.rs").is_file());
+        if project_path.join("registrations.ts").is_file() || rust_wired {
+            evidence.projects += 1;
+        }
+    }
+    evidence
+}
+
 /// Entrypoint files that host a runtime and therefore must wire tenant
 /// isolation when the project owns a database.
 const ENTRYPOINTS: &[&str] = &["server.ts", "worker.ts"];
@@ -3422,8 +3472,13 @@ mod sms_tests {
             "domain/services/remind.service.ts: smsClient.send (line 3)"
         );
         assert!(f.message.starts_with("health data"));
-        let card =
-            crate::core::report_card::build_local_report_card("app", 1, &findings, "t".into());
+        let card = crate::core::report_card::build_local_report_card(
+            "app",
+            1,
+            &findings,
+            &LocalEvidence::everything(),
+            "t".into(),
+        );
         let json = serde_json::to_string(&card).unwrap();
         assert!(json.contains("\"severity\":\"critical\""), "{json}");
 

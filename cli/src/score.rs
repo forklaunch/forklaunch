@@ -78,7 +78,7 @@ impl CliCommand for ScoreCommand {
             Arg::new("base_path")
                 .short('p')
                 .long("path")
-                .help("Application root path (defaults to the current directory's manifest)"),
+                .help("Application root path (defaults to the current directory). A folder with no ForkLaunch manifest is scored as an app that is not on ForkLaunch."),
         )
         .arg(
             Arg::new("offline")
@@ -135,6 +135,16 @@ impl CliCommand for ScoreCommand {
                 .default_value("both"),
         )
         .arg(
+            Arg::new("job")
+                .long("job")
+                .value_name("JOB_ID")
+                .help(
+                    "Pick up an analysis that is already running or finished, by the job id a \
+                     timed-out run printed, instead of uploading again.",
+                )
+                .conflicts_with("offline"),
+        )
+        .arg(
             Arg::new("min_score")
                 .long("min-score")
                 .help("Exit non-zero if the overall score is below this (0-100). For CI gating.")
@@ -143,7 +153,8 @@ impl CliCommand for ScoreCommand {
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        let (app_root, manifest) = require_manifest(matches)?;
+        let workspace = Workspace::locate(matches)?;
+        let app_root = workspace.root.clone();
         let json_out = matches.get_flag("json");
         let pretty = matches.get_flag("pretty");
 
@@ -151,15 +162,26 @@ impl CliCommand for ScoreCommand {
         let offline = matches.get_flag("offline");
         let (card_json, share_url, remote_prompt) = if offline {
             (
-                offline_card(&app_root, &manifest.app_name, &manifest.modules_path)?,
+                offline_card(&app_root, &workspace.app_name, &workspace.modules_path)?,
                 None,
                 None,
             )
+        } else if let Some(job_id) = matches.get_one::<String>("job") {
+            collect_job(
+                &AuthMode::detect(),
+                job_id,
+                !matches.get_flag("no_share"),
+                json_out || prompt_out,
+                matches
+                    .get_one::<String>("prompt_scope")
+                    .map(String::as_str)
+                    .unwrap_or("both"),
+            )?
         } else {
             score_via_api(
                 &app_root,
-                &manifest.app_name,
-                manifest.platform_application_id.as_deref(),
+                &workspace.app_name,
+                workspace.platform_application_id.as_deref(),
                 !matches.get_flag("no_share"),
                 json_out || prompt_out,
                 matches
@@ -179,6 +201,9 @@ impl CliCommand for ScoreCommand {
                     "remediationPrompt".to_string(),
                     Value::String(prompt.clone()),
                 );
+                if let Some(url) = &share_url {
+                    object.insert("shareUrl".to_string(), Value::String(url.clone()));
+                }
             }
             let serialized = if pretty {
                 serde_json::to_string_pretty(&out)?
@@ -226,6 +251,75 @@ impl CliCommand for ScoreCommand {
     }
 }
 
+/// The folder being scored. A ForkLaunch app is described by its manifest; any
+/// other folder is scored as it stands, named after its directory, so an app
+/// that is not on ForkLaunch yet can still be graded.
+struct Workspace {
+    root: std::path::PathBuf,
+    app_name: String,
+    /// Relative to `root`; empty when there is no manifest (each top-level
+    /// directory is then read as a project).
+    modules_path: String,
+    platform_application_id: Option<String>,
+}
+
+impl Workspace {
+    fn locate(matches: &ArgMatches) -> Result<Self> {
+        let cwd = std::env::current_dir().context("could not read the current directory")?;
+        let start = match matches.get_one::<String>("base_path") {
+            Some(path) if cwd.join(path).is_dir() => cwd.join(path),
+            Some(path) => anyhow::bail!("{path} is not a directory"),
+            None => cwd,
+        };
+        if crate::core::base_path::find_nearest_manifest_from(&start).is_some() {
+            let (root, manifest) = require_manifest(matches)?;
+            return Ok(Self {
+                root,
+                app_name: manifest.app_name,
+                modules_path: manifest.modules_path,
+                platform_application_id: manifest.platform_application_id,
+            });
+        }
+        let root = start.canonicalize().unwrap_or(start);
+        let app_name = unmanifested_app_name(&root);
+        eprintln!(
+            "  {}",
+            dim(&format!(
+                "No .forklaunch/manifest.toml here: scoring {} as an app that is not on ForkLaunch.",
+                root.display()
+            ))
+        );
+        Ok(Self {
+            root,
+            app_name,
+            modules_path: String::new(),
+            platform_application_id: None,
+        })
+    }
+}
+
+/// An app name from a directory name: lowercase letters, digits and dashes.
+fn unmanifested_app_name(root: &Path) -> String {
+    let raw = root
+        .file_name()
+        .map(|name| name.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    let mut name = String::new();
+    for c in raw.chars() {
+        if c.is_ascii_alphanumeric() {
+            name.push(c);
+        } else if !name.ends_with('-') {
+            name.push('-');
+        }
+    }
+    let name = name.trim_matches('-').to_string();
+    if name.is_empty() {
+        "app".to_string()
+    } else {
+        name
+    }
+}
+
 /// Deterministic-only card, built locally. No network, no auth, no cost.
 fn offline_card(app_root: &Path, app_name: &str, modules_path: &str) -> Result<Value> {
     let modules_root = app_root.join(modules_path);
@@ -246,8 +340,9 @@ fn offline_card(app_root: &Path, app_name: &str, modules_path: &str) -> Result<V
         })
         .unwrap_or(0);
 
+    let evidence = crate::compliance::checks::local_evidence(&modules_root);
     let card: ReportCard =
-        build_local_report_card(app_name, module_count, &findings, iso8601_now());
+        build_local_report_card(app_name, module_count, &findings, &evidence, iso8601_now());
     Ok(json!(card))
 }
 
@@ -316,7 +411,20 @@ fn score_via_api(
         .context("analysis API returned no job id")?
         .to_string();
 
-    let job = poll_job(&auth, &job_id, prompt_scope, quiet)?;
+    collect_job(&auth, &job_id, want_share, quiet, prompt_scope)
+}
+
+/// Wait for an analysis job and return its card, share link and prompt. Also
+/// the whole of `--job`: a run that outlived the wait is picked up by its id
+/// instead of being uploaded and paid for again.
+fn collect_job(
+    auth: &AuthMode,
+    job_id: &str,
+    want_share: bool,
+    quiet: bool,
+    prompt_scope: &str,
+) -> Result<(Value, Option<String>, Option<String>)> {
+    let job = poll_job(auth, job_id, prompt_scope, quiet)?;
     let card = job
         .get("reportCard")
         .cloned()
@@ -327,7 +435,7 @@ fn score_via_api(
         .map(str::to_string);
 
     let share_url = if want_share {
-        mint_share(&auth, &job_id).unwrap_or(None)
+        mint_share(auth, job_id).unwrap_or(None)
     } else {
         None
     };
@@ -399,7 +507,7 @@ fn offline_prompt(card: &Value, offline: bool) -> String {
             {
                 if matches!(
                     item.get("status").and_then(Value::as_str),
-                    Some("unmet" | "pending")
+                    Some("unmet" | "pending" | "unassessed")
                 ) {
                     outstanding.push((rail.clone(), item));
                 }
@@ -494,8 +602,8 @@ fn poll_job(auth: &AuthMode, job_id: &str, prompt_scope: &str, quiet: bool) -> R
     loop {
         if started.elapsed() > POLL_TIMEOUT {
             anyhow::bail!(
-                "analysis did not finish within {} minutes. It may still complete — check the \
-                 dashboard, or poll job {job_id} directly.",
+                "analysis did not finish within {} minutes. It is still running on the server: pick \
+                 it up with `forklaunch score --job {job_id}`.",
                 POLL_TIMEOUT.as_secs() / 60
             );
         }
@@ -665,7 +773,7 @@ fn render_summary(card: &Value) -> String {
                         .filter(|item| {
                             matches!(
                                 item.get("status").and_then(Value::as_str),
-                                Some("unmet" | "pending")
+                                Some("unmet" | "pending" | "unassessed")
                             )
                         })
                         .count()
@@ -695,7 +803,13 @@ fn render_summary(card: &Value) -> String {
                         _ => "-",
                     };
                     let text = item.get("label").and_then(Value::as_str).unwrap_or("");
-                    let _ = writeln!(out, "      {} {}", marker, text);
+                    // Nothing to read is not a pass: say so on the line, since
+                    // "-" alone reads as a failed check.
+                    let note = match item.get("status").and_then(Value::as_str) {
+                        Some("unassessed") => dim("  (nothing to check: scores 0)"),
+                        _ => String::new(),
+                    };
+                    let _ = writeln!(out, "      {} {}{}", marker, text, note);
                 }
             }
             if let Some(findings) = rail.get("findings").and_then(Value::as_array)
@@ -958,6 +1072,34 @@ mod tests {
 
     /// A rail the CLI cannot judge must stay "not assessed" — never 0/100, and
     /// never carry an outstanding count it did not compute.
+    /// A folder with no manifest is named after its directory.
+    #[test]
+    fn an_unmanifested_folder_is_named_after_its_directory() {
+        assert_eq!(
+            unmanifested_app_name(Path::new("/tmp/Loan Desk_v2")),
+            "loan-desk-v2"
+        );
+        assert_eq!(unmanifested_app_name(Path::new("/")), "app");
+    }
+
+    /// An item the checks had nothing to read for is outstanding and says why
+    /// on its own line: a bare "-" would read as a failed check.
+    #[test]
+    fn an_unassessed_item_is_outstanding_and_explained() {
+        let card = json!({
+            "overall": 0,
+            "dimensions": { "security": { "score": 0, "items": [
+                { "status": "unassessed", "label": "Every endpoint requires sign-in" }
+            ]}}
+        });
+        let rendered = render_summary(&card);
+        assert!(rendered.contains("1 item outstanding"), "{rendered}");
+        assert!(
+            rendered.contains("nothing to check: scores 0"),
+            "{rendered}"
+        );
+    }
+
     #[test]
     fn a_pending_rail_is_not_given_a_score() {
         let rendered = render_summary(&json!({
