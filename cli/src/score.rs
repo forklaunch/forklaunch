@@ -805,7 +805,17 @@ fn render_summary(card: &Value) -> String {
                     let text = item.get("label").and_then(Value::as_str).unwrap_or("");
                     // Nothing to read is not a pass: say so on the line, since
                     // "-" alone reads as a failed check.
+                    // An item can also be unassessed because what there is to
+                    // check is in a Rust service the checks cannot decide yet;
+                    // its detail says so, and "nothing to check" would not be true.
+                    let about_rust = item
+                        .get("detail")
+                        .and_then(Value::as_str)
+                        .is_some_and(|detail| detail.contains("Rust "));
                     let note = match item.get("status").and_then(Value::as_str) {
+                        Some("unassessed") if about_rust => {
+                            dim("  (not decided for Rust services yet: scores 0)")
+                        }
                         Some("unassessed") => dim("  (nothing to check: scores 0)"),
                         _ => String::new(),
                     };
@@ -1098,6 +1108,23 @@ mod tests {
             rendered.contains("nothing to check: scores 0"),
             "{rendered}"
         );
+    }
+
+    #[test]
+    fn an_item_undecided_for_a_rust_service_does_not_claim_nothing_to_check() {
+        let card = json!({
+            "overall": 0,
+            "dimensions": { "governance": { "score": 0, "items": [
+                { "status": "unassessed", "label": "Users can request data export and erasure",
+                  "detail": "Classified entities are declared in Rust services, and the offline erasure check only looks for the TypeScript ComplianceDataService." }
+            ]}}
+        });
+        let rendered = render_summary(&card);
+        assert!(
+            rendered.contains("not decided for Rust services yet: scores 0"),
+            "{rendered}"
+        );
+        assert!(!rendered.contains("nothing to check"), "{rendered}");
     }
 
     #[test]
