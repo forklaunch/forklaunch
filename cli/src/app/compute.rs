@@ -9,11 +9,13 @@
 //! Say an app has an `api` that is busy all day and an `admin` service used an
 //! hour a week. `admin` belongs on scale to zero; `api` on always on.
 //!
-//! A new service starts on `auto`: the platform runs it scale to zero when it
-//! can run that way, and always on when it cannot (it serves WebSockets, or
-//! the application declares a compliance framework, for example). A service
-//! that already existed keeps running the way it does until someone changes
-//! it here.
+//! Every service is on `auto` unless someone says otherwise: the platform runs
+//! it scale to zero when it can run that way, and always on when it cannot (it
+//! serves WebSockets, or the application declares a compliance framework, for
+//! example). Scale to zero is the default; always on is the exception, and it
+//! carries a reason (`--reason`) so the next person knows why the service does
+//! not sleep. A service another service calls every minute, for instance,
+//! would never sleep and is cheaper kept always on.
 //!
 //! With no `--service`, this command shows each service's mode. With one or
 //! more, it records the change, which takes effect on the next deployment.
@@ -70,6 +72,30 @@ fn parse_service_modes(entries: &[&String]) -> Result<serde_json::Map<String, se
     Ok(modes)
 }
 
+/// The reason, attached to each service this command sets to always-on. A
+/// reason with nothing to attach to is a mistake worth saying out loud.
+fn always_on_reasons(
+    modes: &serde_json::Map<String, serde_json::Value>,
+    reason: Option<&String>,
+) -> Result<serde_json::Map<String, serde_json::Value>> {
+    let mut reasons = serde_json::Map::new();
+    let Some(reason) = reason.map(|r| r.trim()).filter(|r| !r.is_empty()) else {
+        return Ok(reasons);
+    };
+    for (service, mode) in modes {
+        if mode == "always-on" {
+            reasons.insert(
+                service.clone(),
+                serde_json::Value::String(reason.to_string()),
+            );
+        }
+    }
+    if reasons.is_empty() {
+        bail!("--reason explains always-on, and no service here is being set to always-on");
+    }
+    Ok(reasons)
+}
+
 #[derive(Debug)]
 pub(crate) struct ComputeCommand;
 
@@ -111,6 +137,10 @@ impl CliCommand for ComputeCommand {
                      (e.g. --service admin=scale-to-zero --service api=always-on)",
                 ),
         )
+        .arg(Arg::new("reason").long("reason").requires("service").help(
+            "Why the services set to always-on here do not sleep; shown beside them \
+                     from then on (e.g. --reason \"called every minute by the publisher\")",
+        ))
         .arg(
             Arg::new("base_path")
                 .short('p')
@@ -141,12 +171,15 @@ impl CliCommand for ComputeCommand {
                 api_url, application_id, environment, region
             ))
         } else {
+            let modes = parse_service_modes(&changes)?;
+            let reasons = always_on_reasons(&modes, matches.get_one::<String>("reason"))?;
             http_client::patch(
                 &format!("{}/applications/{}/compute", api_url, application_id),
                 serde_json::json!({
                     "environment": environment,
                     "region": region,
-                    "services": parse_service_modes(&changes)?,
+                    "services": modes,
+                    "reasons": reasons,
                 }),
             )
         }
@@ -230,7 +263,8 @@ struct ServiceCompute {
     mode: String,
     /// What that comes down to on a deployment made now.
     runs_as: String,
-    /// Why auto comes down to always-on, when it does.
+    /// Why the service runs always-on: what stopped auto, or the reason kept
+    /// with always-on.
     #[serde(default)]
     reason: Option<String>,
 }
@@ -316,6 +350,21 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(err.contains("not a compute mode"), "{err}");
+    }
+
+    #[test]
+    fn a_reason_goes_to_the_services_set_always_on_and_nowhere_else() {
+        let a = "api=always-on".to_string();
+        let b = "admin=scale-to-zero".to_string();
+        let modes = parse_service_modes(&[&a, &b]).unwrap();
+        let why = " called every minute ".to_string();
+        let reasons = always_on_reasons(&modes, Some(&why)).unwrap();
+        assert_eq!(reasons.len(), 1);
+        assert_eq!(reasons.get("api").unwrap(), "called every minute");
+        assert!(always_on_reasons(&modes, None).unwrap().is_empty());
+
+        let only_sleepers = parse_service_modes(&[&b]).unwrap();
+        assert!(always_on_reasons(&only_sleepers, Some(&why)).is_err());
     }
 
     #[test]
